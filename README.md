@@ -109,7 +109,7 @@ print(dataframe_text)
 
 ## Important Note
 
-Make sure to handle your OpenAI API key securely. Do not expose it in your code or share it publicly. It's recommended to set it as an environment variable as shown above.
+Make sure to handle your OpenAI API key securely. Do not expose it in your code or share it publicly. It's recommended to set it as an environment variable as shown above. For more instructions on how to get an OpenAI API key, check out [get_api_key.md](https://github.com/Broccolito/gptr/blob/main/get_api_key.md).
 
 ## Contribution
 
