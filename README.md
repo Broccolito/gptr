@@ -8,7 +8,13 @@ The `gptr` R package makes talking to ChatGPT in R super easy. It helps research
 
 ## Installation
 
-You can install the `gptr` package from GitHub using the `devtools` package. Make sure you have `devtools` installed:
+You can install gptr directly from CRAN:
+
+```R
+install.packages("gptr")
+```
+
+Alternatively, you can install the most recent `gptr` package from GitHub using the `devtools` package. Make sure you have `devtools` installed:
 
 ```R
 install.packages("devtools")
@@ -111,9 +117,9 @@ dataframe_text <- dataframe_to_text(mtcars)
 print(dataframe_text)
 ```
 
-## Important Note
+## Obtaining Your OpenAI API Key
 
-Make sure to handle your OpenAI API key securely. Do not expose it in your code or share it publicly. It's recommended to set it as an environment variable as shown above. For more instructions on how to get an OpenAI API key, check out [get_api_key.md](https://github.com/Broccolito/gptr/blob/main/get_api_key.md).
+To utilize the `gptr` package, you must first obtain an API key from OpenAI. Begin by creating an account on the OpenAI website. Post registration, navigate to the API section from the dropdown menu under your account name. Request API access by following the prompts and agreeing to the terms. After approval, retrieve your API key from the "Your API Keys" section. Securely store this key by setting it as an environment variable in your R session using the code `Sys.setenv(OPENAI_API_KEY = "your_openai_api_key_here")`. Ensure responsible handling of your API key, keeping it private and seeking assistance from OpenAI support if needed. Now, you are set to explore natural language processing with `gptr`.
 
 ## Contribution
 
