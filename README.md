@@ -1,4 +1,4 @@
-# gptr: An R Interface with the ChatGPT API
+# gptr: An R Interface with the ChatGPT API <a href='https://github.com/Broccolito/gptr'><img src='man/img/logo.png' align="right" height="140"/></a>
 
 Author: [Wanjun Gu](mailto:wanjun.gu@ucsf.edu)
 
