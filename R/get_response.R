@@ -39,7 +39,7 @@ get_response = function(user_input = "what is a p-value in statistics?",
     "Content-Type" = "application/json"
   )
   
-  data = paste0('{"model": "gpt-3.5-turbo", "messages": [
+  data = paste0('{"model": "', model, '", "messages": [
           {"role": "system", "content": "', system_specification, '"},
           {"role": "user", "content": "', user_input, '"}
           ]}')
