@@ -29,32 +29,32 @@ get_response = function(user_input = "what is a p-value in statistics?",
                         model = "gpt-3.5-turbo",
                         api_key = Sys.getenv("OPENAI_API_KEY"),
                         print_response = TRUE){
-  
+
   user_input = gsub(pattern = "\n", replacement = "", user_input)
   system_specification = gsub(pattern = "\n", replacement = "", system_specification)
-  
+
   url = "https://api.openai.com/v1/chat/completions"
   headers = c(
     "Authorization" = paste0("Bearer ", api_key),
     "Content-Type" = "application/json"
   )
-  
-  data = paste0('{"model": "gpt-3.5-turbo", "messages": [
+
+  data = paste0('{"model": "', model,'", "messages": [
           {"role": "system", "content": "', system_specification, '"},
           {"role": "user", "content": "', user_input, '"}
           ]}')
-  
+
   result = getURL(url, httpheader = headers, postfields = data)
   result = fromJSON(result)
-  
+
   if(print_response){
     if(!is.null(result$choices$message$content)){
       cat(result$choices$message$content)
     }
   }
-  
+
   return(result)
-  
+
 }
 
 
