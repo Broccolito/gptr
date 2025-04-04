@@ -1,7 +1,7 @@
 Package: gptr
 Type: Package
 Title: A Convenient R Interface with the OpenAI 'ChatGPT' API
-Version: 0.6.0
+Version: 0.7.0
 Authors@R: 
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7342-7000"))
