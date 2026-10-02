@@ -1,0 +1,13 @@
+
+Skills corpus: 180 SKILL.md files with valid frontmatter (157 unique names) under ~/.claude
+Description length: median 79 chars (p90 558); SKILL.md body (random 25, o200k): median 804 tokens (p90 3803, max 6173)
+
+Skills catalog cost in the system prompt (o200k):
+ n_skills pi_xml compact compact_desc250 pi05_budget_12000chars
+       10    948     473             305                    305
+       40   3727    1981            1346                   1346
+      157  14536    7878            5214                   2549
+ budget_3000tok_approx names_only
+                   252         51
+                  1102        213
+                  1946        830

@@ -1,0 +1,19 @@
+Warning message:
+In summary.lm(stats::lm(f, data = d)) :
+  essentially perfect fit: summary may be unreliable
+Warning message:
+In chisq.test(table(mtcars$cyl, mtcars$am)) :
+  Chi-squared approximation may be incorrect
+class              chunks     chars
+print_df              47     77139
+print_tibble          46     43725
+str                  109     28432
+summary_lm            24     16762
+print_misc            14      5434
+errors                60      9798
+json                 102    167816
+csv                   46     53812
+r_code               254    446321
+markdown             101    320804
+cjk                   90    352250
+cjk_mixed_output       4      8273

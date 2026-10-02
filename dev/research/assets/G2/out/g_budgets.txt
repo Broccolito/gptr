@@ -1,0 +1,31 @@
+Large r results, o200k tokens after each truncation rule:
+                               output   chars   full pi_tail_2000l_50KB head_tail_2000l_50000c
+ print(df) 20k rows (max.print 99999) 1040061 598113              29072                  27930
+              str(list of 400 models)   10538   5627               5650                   5627
+           300 warnings + final error   17367   4817               4841                   4817
+              summary() of 60 lm fits   37657  16279              16304                  16279
+ tok_budget_8000 tok_budget_4000 tok_budget_2000
+            9286            4633            2306
+            5627            4230            2130
+            4817            3139            1571
+            6931            3498            1760
+
+The final error survives: Pi tail TRUE, head+tail TRUE, token budget 2000 TRUE
+The column header survives: Pi tail FALSE, head+tail TRUE, token budget 4000 TRUE
+
+Read results with line numbers (token overhead vs plain text):
+               content files lines plain  cat_n    bar hashline
+         R/HTML source    44  3287 57175 +18.7% +11.5%   +27.1%
+              Markdown    12  2177 32186 +25.8% +12.3%   +31.3%
+ CSV (first 300 lines)     1   300  4627 +25.9%  +6.5%   +24.2%
+
+Edit tool result for the 20 revisions of part (a) (o200k):
+  message only: median 14 | + diff -U0: median 111 (max 330) | + diff -U3: median 191 (max 538)
+  for comparison, the edit CALLS themselves (model output): median 124 tokens
+
+Plot image cost (tokens) by size; files written to out/ for visual inspection:
+           size  bytes claude5x claude_std gpt5x gemini25 gemini3_default
+    768x512 @96 192294      532        532   461      258            1120
+   768x512 @120 204317      532        532   461      258            1120
+  1000x700 @120 294648      900        900   845      516            1120
+ 1400x1000 @144 458424     1800       1551  1690     1032            1120

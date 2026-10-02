@@ -1,0 +1,34 @@
+Per-tool declaration cost (Anthropic shape, o200k):
+          bash           read              r           edit          write 
+           110            153            254            239             85 
+          grep           find             ls      r_inspect            ask 
+           233            178             96            143            335 
+         agent       artifact         r_lean apply_patch_fn 
+           199            350             88             71 
+apply_patch as Responses custom grammar tool: 252
+<r_performance> section: 406; <artifacts> section: 360; Pi <docs> section: 248
+
+Prefix tokens (o200k) = system prompt + tools, serialised as each provider's request fields:
+                             preset n_tools system anthropic responses chat
+     pi-4 (Pi default, with <docs>)       4    547      1175      1187 1204
+                   pi-4 (no <docs>)       4    299       919       931  948
+           gptr-4 read,r,edit,write       4    767      1544      1556 1573
+             gptr-7 (+grep,find,ls)       7    804      2096      2117 2140
+     gptr-7 without <r_performance>       7    398      1675      1696 1719
+     gptr-10 (+r_inspect,ask,agent)      10    840      2816      2846 2876
+   gptr-11 (+artifact, <artifacts>)      11   1221      3570      3603 3635
+ gptr-7 apply_patch (no edit/write)       6    671      1705      1900 1744
+   gptr-lean-4 (short r, no r_perf)       4    361       957       969  986
+ gemini resp_ns resp_strict
+   1192    1211        1240
+    936     955         984
+   1561    1580        1609
+   2116    2141        2253
+   1695    1720        1832
+   2839    2870        3070
+   3594    3627        3877
+   1724    1924        2014
+    974     993        1017
+
+Anthropic adds a fixed tool-use system prompt when tools are present (286 tokens on Opus/Sonnet 5.5, report 07 section 2.1);
+the JSON above is the payload proxy, not the provider's internal rendering.

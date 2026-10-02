@@ -1,0 +1,119 @@
+
+## shell command: line counts of data files
+$ wc -l data/*.csv
+      33 data/cars.csv
+    5001 data/sales.csv
+    5034 total
+> sapply(Sys.glob("data/*.csv"), \(f) length(readLines(f)))
+ data/cars.csv data/sales.csv 
+            33           5001 
+
+## shell script with arguments
+$ scripts/prep.sh data out
+cars.csv:       33 lines
+sales.csv:     5001 lines
+done
+> sh("scripts/prep.sh", c("data", "out"))
+cars.csv:       33 lines
+sales.csv:     5001 lines
+done
+
+## git: last 5 commits
+$ git log -5 --oneline
+60a7394 Add analysis step 6
+a900d09 Add analysis step 5
+dc4e545 Add analysis step 4
+71d2763 Add analysis step 3
+3b76b43 Add analysis step 2
+> sh("git", c("log", "-5", "--oneline"))
+60a7394 Add analysis step 6
+a900d09 Add analysis step 5
+dc4e545 Add analysis step 4
+71d2763 Add analysis step 3
+3b76b43 Add analysis step 2
+
+## Python on an in-memory R object
+$ python3 -c "import csv, statistics; r = [float(x['revenue']) for x in csv.DictReader(open('data/sales.csv'))]; print(round(statistics.pstdev(r), 2), round(statistics.median(r), 2))"
+551.46 1053.79
+> py("import statistics\nresult = [round(statistics.pstdev(x), 2), round(statistics.median(x), 2)]", x = sales$revenue)
+[1]  551.46 1053.79
+
+## SQL on SQLite
+$ sqlite3 -header -column data/sales.sqlite "SELECT region, ROUND(SUM(revenue), 2) AS revenue FROM sales GROUP BY region ORDER BY revenue DESC"
+region  revenue   
+------  ----------
+South   1436746.14
+West    1374920.38
+North   1366753.6 
+East    1294167.04
+> sql("SELECT region, ROUND(SUM(revenue), 2) AS revenue FROM sales GROUP BY region ORDER BY revenue DESC", DBI::dbConnect(RSQLite::SQLite(), "data/sales.sqlite"))
+  region revenue
+1  South 1436746
+2   West 1374920
+3  North 1366754
+4   East 1294167
+
+## SQL on a CSV file (duckdb)
+$ NA
+(no duckdb CLI installed; n/a)
+> sql("SELECT month, AVG(price) AS avg_price FROM 'data/sales.csv' GROUP BY month ORDER BY avg_price DESC LIMIT 3")
+  month avg_price
+1   Sep  28.16950
+2   Mar  27.92250
+3   May  27.89166
+running: bash  -c "for f in data/*.csv; do echo \"\$f \$(head -1 \$f | tr ',' '\\n' | wc -l)\"; done"
+
+## knitr engine chunk (bash)
+$ for f in data/*.csv; do echo "$f $(head -1 $f | tr ',' '\n' | wc -l)"; done
+data/cars.csv       12
+data/sales.csv        5
+> eng("bash", "for f in data/*.csv; do echo \"$f $(head -1 $f | tr ',' '\\n' | wc -l)\"; done")
+data/cars.csv       12
+data/sales.csv        5
+ 
+Warning message:
+call dbDisconnect() when finished working with a connection 
+
+Tokens (o200k): tool-call arguments and result text per task
+                                     task bash_call bash_result r_call r_result
+ shell command: line counts of data files        10          22     23       17
+              shell script with arguments        10          18     19       18
+                      git: last 5 commits        11          50     22       50
+          Python on an in-memory R object        60           8     42       13
+                            SQL on SQLite        39          42     47       35
+               SQL on a CSV file (duckdb)        NA          NA     34       34
+                knitr engine chunk (bash)        35          15     45       17
+
+Sums over the tasks both can run: bash 165 call + 155 result; r 198 call + 150 result
+Fixed prefix cost: bash tool declaration 110 tokens (Pi's schema; Anthropic's own bash tool adds 325) vs <r_helpers> section 105 tokens
+
+## composed pipeline in one r call
+log = sh("git", c("log", "--format=%s"))$stdout |> strsplit("\n") |> unlist()
+rev = sql("SELECT region, SUM(revenue) AS rev FROM 'data/sales.csv' GROUP BY region")
+sdev = py("import statistics\nresult = statistics.pstdev(x)", x = rev$rev)
+list(commits = length(log), top_region = rev$region[which.max(rev$rev)], sd_between_regions = round(sdev, 1))
+$commits
+[1] 6
+
+$top_region
+[1] "South"
+
+$sd_between_regions
+[1] 50563.6
+
+
+## the same with four bash calls
+$ git log --format=%s | wc -l
+       6
+$ sqlite3 -header -csv data/sales.sqlite "SELECT region, SUM(revenue) AS rev FROM sales GROUP BY region" > out/rev.csv && cat out/rev.csv
+region,rev
+East,1294167.04
+North,1366753.6
+South,1436746.14
+West,1374920.38
+$ python3 -c "import csv, statistics; r=[float(x['rev']) for x in csv.DictReader(open('out/rev.csv'))]; print(statistics.pstdev(r))"
+50563.56576218982
+$ sort -t, -k2 -nr out/rev.csv | head -1
+South,1436746.14
+
+Pipeline: r = 1 call, 117 call + 34 result tokens; bash = 4 calls, 120 call + 52 result tokens (and the results are text, not R objects)

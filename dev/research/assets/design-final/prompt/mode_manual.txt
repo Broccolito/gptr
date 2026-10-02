@@ -1,0 +1,3 @@
+<mode name="manual">
+Manual mode is on: the user approves each action that changes a file or an object. Group related changes into one call so there is one approval, and say in one line what the call will change.
+</mode>

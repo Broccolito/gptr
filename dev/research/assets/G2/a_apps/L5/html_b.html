@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Inventory</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .warehouses { display: flex; gap: 32px; }
+    .warehouse { flex: 1; border: 1px solid #ccc; border-radius: 6px; padding: 12px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #eee; padding: 4px 8px; text-align: left; }
+    input[type=number] { width: 90px; }
+    #total { font-size: 18px; font-weight: bold; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Inventory</h1>
+  <div class="warehouses">
+    <div class="warehouse" id="a"></div>
+    <div class="warehouse" id="b"></div>
+  </div>
+  <p id="total"></p>
+  <script>
+    function formatMoney(x) {
+      return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    class Warehouse {
+      constructor(id, title, rows, onChange) {
+        this.id = id;
+        this.title = title;
+        this.rows = rows;
+        this.onChange = onChange;
+        this.render();
+      }
+
+      value() {
+        return this.rows.reduce(function (sum, row) { return sum + row.price * row.stock; }, 0);
+      }
+
+      render() {
+        var self = this;
+        var $root = $("#" + this.id).empty();
+        $root.append($("<h3>").text(this.title));
+        var $table = $("<table>").attr("id", this.id + "-table");
+        $table.append("<thead><tr><th>product</th><th>price</th><th>stock</th></tr></thead>");
+        var $body = $("<tbody>");
+        this.rows.forEach(function (row, i) {
+          var $tr = $("<tr>");
+          $tr.append($("<td>").text(row.product));
+          ["price", "stock"].forEach(function (key) {
+            var $input = $("<input type='number' min='0'>").val(row[key]).attr("data-row", i).attr("data-key", key);
+            $input.on("input change", function () {
+              self.rows[i][key] = parseFloat($(this).val()) || 0;
+              self.update();
+            });
+            $tr.append($("<td>").append($input));
+          });
+          $body.append($tr);
+        });
+        $table.append($body);
+        $root.append($table);
+        $root.append($("<p>").attr("id", this.id + "-value"));
+        this.update();
+      }
+
+      update() {
+        $("#" + this.id + "-value").text("Stock value: " + formatMoney(this.value()));
+        if (this.onChange) this.onChange();
+      }
+    }
+
+    var warehouses = [];
+
+    function updateTotal() {
+      var total = warehouses.reduce(function (sum, w) { return sum + w.value(); }, 0);
+      $("#total").text("Total stock value: " + formatMoney(total));
+    }
+
+    $(document).ready(function () {
+      $.when($.getJSON("data/inv_a.json"), $.getJSON("data/inv_b.json")).done(function (a, b) {
+        warehouses.push(new Warehouse("a", "Warehouse A", a[0], updateTotal));
+        warehouses.push(new Warehouse("b", "Warehouse B", b[0], updateTotal));
+        updateTotal();
+      });
+    });
+  </script>
+</body>
+</html>

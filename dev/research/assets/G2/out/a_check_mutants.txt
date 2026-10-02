@@ -1,0 +1,48 @@
+L1 shiny_a  parse=ok http200=TRUE steps=0/1 js_err=0 out_err=0 log_err=0 => FAIL (16.1s)
+                          step    ok
+1 table rows sorted, formatted FALSE
+                                                                                                                        detail
+1 East|1196|47,772|1,294,167.04||North|1253|50,228|1,366,753.60||West|1254|49,978|1,374,920.38||South|1297|52,098|1,436,746.14
+L1 html_a   parse=ok http200=TRUE steps=0/1 js_err=0 out_err=0 log_err=0 => FAIL (15.3s)
+                          step    ok
+1 table rows sorted, formatted FALSE
+                                                                                                                        detail
+1 East|1196|47,772|1,294,167.04||North|1253|50,228|1,366,753.60||West|1254|49,978|1,374,920.38||South|1297|52,098|1,436,746.14
+L2 shiny_a  parse=ok http200=TRUE steps=1/2 js_err=0 out_err=0 log_err=0 => FAIL (16.3s)
+                          step    ok      detail
+2 select North -> count + bars FALSE 3747 orders
+L2 html_a   parse=ok http200=TRUE steps=0/2 js_err=0 out_err=0 log_err=0 => FAIL (30.8s)
+                          step    ok      detail
+1           initial count 5000 FALSE 5001 orders
+2 select North -> count + bars FALSE 1254 orders
+L3 shiny_a  parse=ok http200=TRUE steps=2/3 js_err=0 out_err=0 log_err=0 => FAIL (17.0s)
+                                      step    ok                         detail
+1 value boxes (All) + trend chart + 3 tabs FALSE 5,472,587.16 ; 200,076 ; 27.16
+L3 html_a   parse=ok http200=TRUE steps=2/3 js_err=0 out_err=0 log_err=0 => FAIL (15.7s)
+                      step    ok detail
+3 Data tab -> 10 West rows FALSE      9
+L4 shiny_a  parse=ok http200=TRUE steps=2/3 js_err=0 out_err=0 log_err=0 => FAIL (17.1s)
+                                         step    ok
+2 mouse brush -> count and table match bounds FALSE
+                                                                                                                                                                                                    detail
+2 0 selected ; AMC Javelin|Dodge Challenger|Duster 360|Ferrari Dino|Ford Pantera L|Hornet 4 Drive|Hornet Sportabout|Maserati Bora|Mazda RX4|Mazda RX4 Wag|Merc 230|Merc 240D|Merc 280|Merc 280C|Merc 450SL
+L4 html_a   parse=ok http200=TRUE steps=2/3 js_err=0 out_err=0 log_err=0 => FAIL (16.2s)
+                                         step    ok
+2 mouse brush -> count and table match bounds FALSE
+                                                                                                                                                                                                    detail
+2 14 selected ; Ferrari Dino|Ford Pantera L|Hornet 4 Drive|Hornet Sportabout|Mazda RX4|Mazda RX4 Wag|Merc 230|Merc 240D|Merc 280|Merc 280C|Merc 450SL|Pontiac Firebird|Valiant|Volvo 142E ; [2.58130794546
+L5 shiny_a  parse=ok http200=TRUE steps=1/2 js_err=0 out_err=0 log_err=0 => FAIL (16.3s)
+                                       step    ok
+2 edit A row 1 stock=100 -> A value + total FALSE
+                                                 detail
+2 Stock value: 13,133.25 ; Total stock value: 14,544.25
+L5 html_a   parse=ok http200=TRUE steps=0/2 js_err=0 out_err=0 log_err=0 => FAIL (30.4s)
+                                       step    ok
+1             initial module values + total FALSE
+2 edit A row 1 stock=100 -> A value + total FALSE
+                                                                       detail
+1 Stock value: 1,277.25 ; Stock value: 1,411.00 ; Total stock value: 1,277.25
+2                         Stock value: 1,253.25 ; Total stock value: 1,253.25
+[1] TRUE
+
+PASS 0 of 10 apps

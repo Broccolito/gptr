@@ -1,0 +1,44 @@
+Baseline over 13 golden transcripts computed in 0.13 s (pure R, no tokenizer):
+          case requests prefix input_total output_total cost_cached
+       task1_S        7   2706       23536          319     0.01553
+ task1_S-quiet        7   2706       22092          334     0.01470
+       task1_C        2   2706        5922          217     0.00904
+       task2_S        7   2706       22890          269     0.01387
+       task2_C        2   2706        5871          159     0.00833
+       task3_S       12   2706       44941          425     0.02418
+       task3_C        6   2706       19634          271     0.01559
+       task4_S        4   2706       13744          424     0.01548
+       task4_C        2   2706        7070          348     0.01262
+       task5_S        5   2706       58774          194     0.04044
+       task5_C        2   2706        6530          289     0.01102
+       task6_S       16   2706       83044          564     0.03611
+       task6_C        9   2706       28302          471     0.01683
+
+1) unchanged harness: TRUE 
+
+2) r tool description grew by 12 sentences -> condition class: gptr_error_token_regression, gptr_error, error, condition 
+ Token-efficiency regression:
+  task1_S: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task1_S-quiet: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task1_C: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task2_S: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task2_C: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task3_S: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task3_C: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task4_S: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task4_C: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task5_S: prefix 2706 -> 2959 (+9.3%, tolerance 2%)
+  task5_C: prefix 2706 -> 2959 (+9. 
+
+3) budgets during a replay of task 6 (style S):
+   [gptr_error_budget_tokens] Token budget: 34,739 used + 6,356 for the next request would exceed 40,000. 
+   [gptr_error_budget_turns] Turn budget reached: 5 of 5 requests. 
+   [gptr_error_budget_context] Context budget: next request ~4,073 tokens > 3,500; compact or fork. 
+   [gptr_error_budget_cost] Cost budget reached: $0.0316 of $0.0300. 
+
+Usage records (task 6 S, fake provider): 16 rows; columns: time, session, agent, provider, model, route, input, output, cache_read, cache_write_5m, cache_write_1h, reasoning, cost, est_prefix, est_history, est_new
+ input output cache_read      cost est_prefix
+  2749     31          0 0.0058080       2706
+    43     35       2749 0.0009858       2706
+    47     29       2792 0.0009424       2706
+    53     30       2839 0.0009738       2706

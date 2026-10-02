@@ -1,0 +1,3 @@
+<system1>
+For fast typed judgements call a System 1 model from R instead of reasoning over each item yourself: gptr("Is this abstract about a randomised trial?", abstracts, model = jev) returns a logical vector with attr(, "prob"); with choices = c("a", "b", "c") it returns one choice per input. Calls are vectorised, so pass all items at once. Use them inside if, for and while, and check items with probabilities near 0.5 yourself. Keep open-ended reasoning, writing and code for yourself.
+</system1>

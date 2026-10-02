@@ -1,0 +1,29 @@
+Corpora: GitHub MCP server 125 tools (commit 85598ba, toolsnaps), Claude Code `claude mcp serve` 29 tools
+Direct declaration per tool (o200k): GitHub median 169 (p10 75, p90 424); Claude Code median 600 (p90 2061)
+
+MCP exposure cost in the request prefix (o200k):
+      corpus n_tools direct_anthropic direct_responses_ns r_catalog_3000
+      github       0                0                   0              0
+      github      10             1591                1638            503
+      github      50            11361               11528           2285
+      github     125            28534               28926           2285
+ claude-code      29            31706                  NA           1672
+ r_catalog_unbounded r_sig_no_desc names_only deferred_search_tool
+                   0             0          0                    0
+                 503           346         43                   67
+                2547          1731        214                   67
+                6221          4190        566                   67
+                1672           890         81                   58
+
+Example catalog lines:
+<r_functions>
+MCP tools are R functions; call them inside r and reduce results before printing. mcp_search("query") finds more; mcp_describe("github", "tool") shows a full schema.
+github:
+  mcp$github$get_tag(owner: string, repo: string, tag: string)  # Get details about a specific git tag in a GitHub repository
+  mcp$github$search_pull_requests(fields?: string[], order?: string, owner?: string, page?: number, perPage?: number, query: string, repo?: string, sort?: string)  # Search for pull requests in GitHub repositories using issues search syntax already scoped to is:pr
+  mcp$github$list_issue_fields(owner: string, repo?: string)  # List issue fields for a repository or organization. Returns field definitions including name, type (text, number, dat...
+
+last lines of the 50-tool catalog under the 3000-token budget:
+  mcp$github$get_team_members(org: string, team_slug: string)  # Get member usernames of a specific team in an organization.
+  (6 more github tools: use mcp_search())
+</r_functions>

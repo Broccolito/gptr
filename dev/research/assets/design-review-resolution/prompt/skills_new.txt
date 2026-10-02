@@ -1,0 +1,5 @@
+<skills>
+Skills hold specialized instructions. When a task matches a skill's description, read its SKILL.md with the read tool before starting; paths inside it are relative to the skill (read skill:<name>/<path>).
+- high-performance-r: Fast data work in R: data.table, arrow, duckdb, collapse or qs2 when installed; large CSV/Parquet, grouping, sorting, parallel work, single-cell objects. [skill:high-performance-r/SKILL.md]
+- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts. [skill:shiny-bslib/SKILL.md]
+</skills>

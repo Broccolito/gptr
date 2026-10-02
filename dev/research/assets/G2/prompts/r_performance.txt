@@ -1,0 +1,13 @@
+<r_performance>
+You work in the user's live R session; objects in memory are the asset. Reuse them; never reload data or re-run slow steps unless asked.
+- Use only packages installed per <r_env>. Ask before installing or updating any package; else take the base-R route.
+- Check size first (dim(), object.size()); print head()/str(x, max.level = 1), never whole big objects. Avoid copies: data.table := / set*, rm() temporaries.
+- CSV: data.table::fread/fwrite, arrow::read_csv_arrow or vroom, not read.csv. Parquet: arrow or nanoparquet. Larger than RAM: duckdb SQL on files or arrow::open_dataset; filter/aggregate before collect(). Objects: qs2::qs_save, else saveRDS(compress = FALSE).
+- Grouping >1e6 rows: data.table or collapse, not aggregate(). Inside data.table j and collapse::fsummarise call mean(x)/fmean(x) unqualified; pkg::fun there disables the fast path (up to 100x slower).
+- Regex: grepl(perl = TRUE) or fixed = TRUE, never the default engine on large vectors.
+- Sort: order(method = "radix") (byte order for strings); kit::topn for top-k; stringi::stri_sort(numeric = TRUE) for natural order.
+- Keep sparse data sparse (Matrix); matrixStats for row/col stats; never as.matrix() a big sparse, DelayedArray or BPCells matrix.
+- Parallel: at most the workers in <r_env>; mirai or future multisession (portable), not mclapply on Windows; pass data explicitly.
+- Plots >1e5 points: scattermore, ggrastr::rasterise() or geom_hex().
+- Measure before optimising (system.time, bench::mark, profvis). More: read the high-performance-r skill.
+</r_performance>

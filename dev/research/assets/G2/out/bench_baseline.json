@@ -1,0 +1,106 @@
+[
+  {
+    "case": "task1_S",
+    "requests": 7,
+    "prefix": 2706,
+    "input_total": 23536,
+    "output_total": 319,
+    "cost_cached": 0.01553
+  },
+  {
+    "case": "task1_S-quiet",
+    "requests": 7,
+    "prefix": 2706,
+    "input_total": 22092,
+    "output_total": 334,
+    "cost_cached": 0.0147
+  },
+  {
+    "case": "task1_C",
+    "requests": 2,
+    "prefix": 2706,
+    "input_total": 5922,
+    "output_total": 217,
+    "cost_cached": 0.00904
+  },
+  {
+    "case": "task2_S",
+    "requests": 7,
+    "prefix": 2706,
+    "input_total": 22890,
+    "output_total": 269,
+    "cost_cached": 0.01387
+  },
+  {
+    "case": "task2_C",
+    "requests": 2,
+    "prefix": 2706,
+    "input_total": 5871,
+    "output_total": 159,
+    "cost_cached": 0.00833
+  },
+  {
+    "case": "task3_S",
+    "requests": 12,
+    "prefix": 2706,
+    "input_total": 44941,
+    "output_total": 425,
+    "cost_cached": 0.02418
+  },
+  {
+    "case": "task3_C",
+    "requests": 6,
+    "prefix": 2706,
+    "input_total": 19634,
+    "output_total": 271,
+    "cost_cached": 0.01559
+  },
+  {
+    "case": "task4_S",
+    "requests": 4,
+    "prefix": 2706,
+    "input_total": 13744,
+    "output_total": 424,
+    "cost_cached": 0.01548
+  },
+  {
+    "case": "task4_C",
+    "requests": 2,
+    "prefix": 2706,
+    "input_total": 7070,
+    "output_total": 348,
+    "cost_cached": 0.01262
+  },
+  {
+    "case": "task5_S",
+    "requests": 5,
+    "prefix": 2706,
+    "input_total": 58774,
+    "output_total": 194,
+    "cost_cached": 0.04044
+  },
+  {
+    "case": "task5_C",
+    "requests": 2,
+    "prefix": 2706,
+    "input_total": 6530,
+    "output_total": 289,
+    "cost_cached": 0.01102
+  },
+  {
+    "case": "task6_S",
+    "requests": 16,
+    "prefix": 2706,
+    "input_total": 83044,
+    "output_total": 564,
+    "cost_cached": 0.03611
+  },
+  {
+    "case": "task6_C",
+    "requests": 9,
+    "prefix": 2706,
+    "input_total": 28302,
+    "output_total": 471,
+    "cost_cached": 0.01683
+  }
+]

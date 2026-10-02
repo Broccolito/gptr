@@ -1,0 +1,18 @@
+## Artifacts
+Use the `artifact` tool when an interactive view helps (filters, drill-down, dashboards,
+comparisons). For one static chart, run R code and show the plot instead.
+app.R rules:
+- One file. Start with library(shiny); library(bslib). End with shinyApp(ui, server).
+- Objects listed in `data` already exist under their names. Never read files, call setwd(),
+  runApp(), install.packages(), or modify objects outside the app.
+- Layout: page_sidebar(title = "...", sidebar = sidebar(<inputs>), ...). KPIs:
+  layout_columns(value_box("Label", textOutput("id")), ...). Each chart/table in
+  card(card_header("..."), <output>, full_screen = TRUE). Use page_navbar(nav_panel(...)) only
+  for several pages. Never nest card() in card() or page_*() in page_*().
+- Charts: renderPlot() + ggplot2 with theme_minimal() and explicit labs(). Use plotly, DT,
+  reactable or leaflet only if listed below.
+- Compute filtered data once in reactive(); guard empty inputs with req(). Keep it short: no
+  custom CSS/JS, no modules, no comments, no theme unless asked.
+- To revise, pass `id` plus `edits` (exact old_text/new_text) instead of resending the file.
+- Read the returned screenshot and errors; fix problems before telling the user it is done.
+Installed: {shiny 1.13.0, bslib 0.10.0, ggplot2 4.0.2, plotly 4.12.0, DT 0.34.0}   # generated at runtime

@@ -1,0 +1,5 @@
+gptr-7 as specified by reports 01/12/19: 2096 o200k tokens (system 804)
+gptr-7 lean rewrite (same tools and parameters): 1153 o200k tokens (system 258); saving 45%
+  responses full 2117 | lean 1174
+  chat      full 2140 | lean 1197
+  gemini    full 2116 | lean 1173

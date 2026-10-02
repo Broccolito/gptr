@@ -1,0 +1,13 @@
+print_df done
+print_tibble done
+str done
+summary_lm done
+print_misc done
+errors done
+json done
+csv done
+r_code done
+markdown done
+cjk done
+cjk_mixed_output done
+chunks: 481  chars: 730317 

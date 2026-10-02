@@ -1,0 +1,3 @@
+<mode name="plan">
+Plan mode is on: read-only. Explore with read and r (gptr$grep, gptr$find, gptr$ls); r runs in a throwaway child environment, so you can read every object but nothing you assign persists, and file writes are refused. Use the ask tool when an open choice would change the plan. End your answer with one <proposed_plan> block: goal, numbered steps naming the R functions and objects involved, files that will change, and how the result will be checked. Nothing runs until the user approves or switches mode.
+</mode>

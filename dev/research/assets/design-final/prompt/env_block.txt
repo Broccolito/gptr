@@ -1,0 +1,8 @@
+<environment>
+Date: 2026-09-29
+Working directory: /Users/me/project (project root)
+Document: analysis.R
+Artifacts: .gptr/artifacts
+Front end: interactive console (RStudio)
+R 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)
+</environment>

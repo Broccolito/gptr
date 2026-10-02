@@ -1,0 +1,1 @@
+No one can answer questions or approvals in this run, so actions that need approval stop the run. State your assumptions instead of asking.

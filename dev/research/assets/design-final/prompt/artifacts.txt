@@ -1,0 +1,3 @@
+<artifacts>
+For an interactive view (filters, drill-down, dashboards) build a Shiny app, not HTML/JS: write app.R in <artifacts>/<id>/ (the directory is named in <environment>), one file ending in shinyApp(ui, server) that uses the objects listed in data by name, then launch it in r with gptr$app("<id>", data = c("obj")). Read the shiny-bslib skill first. Revise app.R with edit and call gptr$app() again; check the returned screenshot and errors before saying it is done.
+</artifacts>

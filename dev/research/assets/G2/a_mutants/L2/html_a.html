@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Revenue by month</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body class="container py-4">
+<h2>Revenue by month</h2>
+<label for="region" class="form-label">Region</label>
+<select id="region" class="form-select w-auto mb-2"><option>All</option></select>
+<p id="n"></p>
+<div id="chart" style="height:400px"></div>
+<script>
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+let sales = [];
+function draw() {
+  const r = document.getElementById("region").value;
+  const rows = r === "All" ? sales : sales.filter(d => d.region === r);
+  document.getElementById("n").textContent = `${rows.length + 1} orders`;
+  const rev = Object.fromEntries(MONTHS.map(m => [m, 0]));
+  rows.forEach(d => rev[d.month] += d.revenue);
+  Plotly.react("chart", [{type: "bar", x: MONTHS, y: MONTHS.map(m => rev[m])}],
+               {yaxis: {title: "Revenue"}, margin: {t: 20}});
+}
+fetch("data/sales.json").then(r => r.json()).then(d => {
+  sales = d;
+  const sel = document.getElementById("region");
+  [...new Set(d.map(x => x.region))].sort().forEach(r => sel.add(new Option(r)));
+  sel.addEventListener("change", draw);
+  draw();
+});
+</script>
+</body>
+</html>

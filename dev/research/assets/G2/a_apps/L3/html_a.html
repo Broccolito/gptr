@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sales dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body class="container-fluid py-3">
+<h2>Sales dashboard</h2>
+<div class="row">
+  <div class="col-md-3">
+    <label for="region" class="form-label">Region</label>
+    <select id="region" class="form-select"><option>All</option></select>
+  </div>
+  <div class="col-md-9">
+    <div class="row g-3 mb-3">
+      <div class="col"><div class="card card-body"><div>Total revenue</div><h3 id="vb_revenue"></h3></div></div>
+      <div class="col"><div class="card card-body"><div>Total units</div><h3 id="vb_units"></h3></div></div>
+      <div class="col"><div class="card card-body"><div>Average price</div><h3 id="vb_price"></h3></div></div>
+    </div>
+    <ul class="nav nav-tabs">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-trend">Trend</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-regions">Regions</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-data">Data</button></li>
+    </ul>
+    <div class="tab-content pt-2">
+      <div class="tab-pane show active" id="tab-trend"><div id="trend" style="height:400px"></div></div>
+      <div class="tab-pane" id="tab-regions"><div id="regions" style="height:400px"></div></div>
+      <div class="tab-pane" id="tab-data">
+        <table class="table table-sm" id="data"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const COLS = ["region","month","units","price","revenue"];
+const fmt = (x, d) => x.toLocaleString("en-US", {minimumFractionDigits: d, maximumFractionDigits: d});
+const sum = (rows, k) => rows.reduce((s, r) => s + r[k], 0);
+let sales = [];
+function update() {
+  const r = document.getElementById("region").value;
+  const rows = r === "All" ? sales : sales.filter(d => d.region === r);
+  document.getElementById("vb_revenue").textContent = fmt(sum(rows, "revenue"), 2);
+  document.getElementById("vb_units").textContent = fmt(sum(rows, "units"), 0);
+  document.getElementById("vb_price").textContent = (sum(rows, "price") / rows.length).toFixed(2);
+  const byMonth = MONTHS.map(m => sum(rows.filter(d => d.month === m), "revenue"));
+  Plotly.react("trend", [{x: MONTHS, y: byMonth, mode: "lines+markers"}], {margin: {t: 20}});
+  document.querySelector("#data thead").innerHTML = "<tr>" + COLS.map(c => `<th>${c}</th>`).join("") + "</tr>";
+  document.querySelector("#data tbody").innerHTML = rows.slice(0, 10)
+    .map(d => "<tr>" + COLS.map(c => `<td>${d[c]}</td>`).join("") + "</tr>").join("");
+}
+fetch("data/sales.json").then(r => r.json()).then(d => {
+  sales = d;
+  const regions = [...new Set(d.map(x => x.region))].sort();
+  const sel = document.getElementById("region");
+  regions.forEach(r => sel.add(new Option(r)));
+  sel.addEventListener("change", update);
+  Plotly.newPlot("regions", [{type: "bar", x: regions,
+    y: regions.map(g => sum(d.filter(x => x.region === g), "revenue"))}], {margin: {t: 20}});
+  update();
+});
+document.querySelector('[data-bs-target="#tab-regions"]')
+  .addEventListener("shown.bs.tab", () => Plotly.Plots.resize("regions"));
+</script>
+</body>
+</html>

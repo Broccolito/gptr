@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Revenue by month</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .controls { margin-bottom: 10px; }
+    #chart { width: 100%; height: 450px; }
+  </style>
+</head>
+<body>
+  <h1>Revenue by month</h1>
+  <div class="controls">
+    <label for="region">Region</label>
+    <select id="region">
+      <option value="All">All</option>
+      <option value="East">East</option>
+      <option value="North">North</option>
+      <option value="South">South</option>
+      <option value="West">West</option>
+    </select>
+  </div>
+  <p id="n"></p>
+  <div id="chart"></div>
+  <script>
+    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var allRows = [];
+
+    function monthlyRevenue(rows) {
+      var totals = {};
+      MONTHS.forEach(function (m) { totals[m] = 0; });
+      rows.forEach(function (row) { totals[row.month] += row.revenue; });
+      return MONTHS.map(function (m) { return totals[m]; });
+    }
+
+    function update() {
+      var region = $("#region").val();
+      var rows = region === "All" ? allRows : allRows.filter(function (row) { return row.region === region; });
+      $("#n").text(rows.length + " orders");
+      var trace = { x: MONTHS, y: monthlyRevenue(rows), type: "bar", marker: { color: "darkorange" } };
+      var layout = { xaxis: { title: "Month" }, yaxis: { title: "Revenue" }, margin: { t: 30 } };
+      Plotly.newPlot("chart", [trace], layout, { responsive: true });
+    }
+
+    $(document).ready(function () {
+      $.getJSON("data/sales.json", function (rows) {
+        allRows = rows;
+        $("#region").on("change", update);
+        update();
+      });
+    });
+  </script>
+</body>
+</html>

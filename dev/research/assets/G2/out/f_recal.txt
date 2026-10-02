@@ -1,0 +1,23 @@
+81 request deltas (new tool results and user text between two requests), 13 transcripts x 3 providers
+
+o200k       delta error (median |err|, p90 |err|, total bias) on deltas >= 150 tokens (n=20):
+   chars4       47.9%   56.8%  -25.6%
+   class_raw    21.5%   41.4%  +14.2%
+   class_prior  21.5%   41.4%  +14.2%
+   recal        15.0%   50.7%  +13.1%
+cl100k      delta error (median |err|, p90 |err|, total bias) on deltas >= 150 tokens (n=20):
+   chars4       47.9%   56.8%  -25.2%
+   class_raw    21.1%   41.1%  +14.7%
+   class_prior  21.1%   41.1%  +14.7%
+   recal        16.1%   48.2%  +13.6%
+claude-like delta error (median |err|, p90 |err|, total bias) on deltas >= 150 tokens (n=20):
+   chars4       62.7%   69.3%  -44.6%
+   class_raw    30.0%   42.4%  -15.0%
+   class_prior  25.7%   35.9%  +10.5%
+   recal        19.0%   45.6%   +9.9%
+
+Claude-like provider, error of the predicted full context (usage-anchored; n = 68 requests):
+   chars4      median 0.70%, max 23.91%
+   class_raw   median 0.29%, max 13.97%
+   class_prior median 0.37%, max 19.95%
+   recal       median 0.31%, max 19.95%

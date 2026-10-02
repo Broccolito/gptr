@@ -1,0 +1,1 @@
+No one can answer questions or approvals in this run: actions that need approval, and questions asked with the ask tool, stop the run. Ask only when no reasonable assumption lets you continue.

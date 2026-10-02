@@ -1,0 +1,9 @@
+<rules>
+- Use read to examine files instead of readLines() or cat() in r.
+- Use r to inspect and compute on objects in the live session; never reload or recompute data that is already in memory
+- In r, assign results to names and print compact summaries (dim(), head(), gptr$describe(x)) rather than whole objects
+- Use = for assignment and |> for pipes in all R code you write
+- Be concise in your responses
+- Show file paths clearly when working with files
+- When you finish, name the objects you created or changed
+</rules>

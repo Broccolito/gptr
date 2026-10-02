@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sales dashboard</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; display: flex; }
+    #sidebar { width: 220px; padding: 20px; background: #f4f4f4; min-height: 100vh; }
+    #main { flex: 1; padding: 20px; }
+    .boxes { display: flex; gap: 16px; margin-bottom: 20px; }
+    .box { flex: 1; padding: 16px; border-radius: 8px; background: #2c7be5; color: white; }
+    .box .label { font-size: 14px; opacity: 0.8; }
+    .box .value { font-size: 26px; font-weight: bold; }
+    .tabs button { padding: 8px 16px; border: none; background: #ddd; cursor: pointer; }
+    .tabs button.active { background: #2c7be5; color: white; }
+    .tab { display: none; padding-top: 12px; }
+    .tab.active { display: block; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>Sales dashboard</h2>
+    <label for="region">Region</label><br>
+    <select id="region">
+      <option value="All">All</option>
+      <option value="East">East</option>
+      <option value="North">North</option>
+      <option value="South">South</option>
+      <option value="West">West</option>
+    </select>
+  </div>
+  <div id="main">
+    <div class="boxes">
+      <div class="box"><div class="label">Total revenue</div><div class="value" id="vb_revenue"></div></div>
+      <div class="box"><div class="label">Total units</div><div class="value" id="vb_units"></div></div>
+      <div class="box"><div class="label">Average price</div><div class="value" id="vb_price"></div></div>
+    </div>
+    <div class="tabs">
+      <button class="active" data-tab="trend-tab">Trend</button>
+      <button data-tab="regions-tab">Regions</button>
+      <button data-tab="data-tab">Data</button>
+    </div>
+    <div class="tab active" id="trend-tab"><div id="trend"></div></div>
+    <div class="tab" id="regions-tab"><div id="regions"></div></div>
+    <div class="tab" id="data-tab"><table id="data" class="display" style="width:100%"></table></div>
+  </div>
+  <script>
+    var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var allRows = [];
+    var dataTable = null;
+
+    function money(x) {
+      return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function sumBy(rows, key) {
+      var total = 0;
+      rows.forEach(function (row) { total += row[key]; });
+      return total;
+    }
+
+    function update() {
+      var region = $("#region").val();
+      var rows = region === "All" ? allRows : allRows.filter(function (row) { return row.region === region; });
+      $("#vb_revenue").text(money(sumBy(rows, "revenue")));
+      $("#vb_units").text(sumBy(rows, "units").toLocaleString("en-US"));
+      $("#vb_price").text((sumBy(rows, "price") / rows.length).toFixed(2));
+
+      var monthly = MONTHS.map(function (m) {
+        return sumBy(rows.filter(function (row) { return row.month === m; }), "revenue");
+      });
+      Plotly.newPlot("trend", [{ x: MONTHS, y: monthly, type: "scatter", mode: "lines+markers" }],
+        { xaxis: { title: "Month" }, yaxis: { title: "Revenue" } });
+
+      var tableRows = rows.slice(0, 10).map(function (row) {
+        return [row.region, row.month, row.units, row.price, row.revenue];
+      });
+      if (dataTable) {
+        dataTable.clear().rows.add(tableRows).draw();
+      } else {
+        dataTable = $("#data").DataTable({
+          data: tableRows,
+          columns: [{ title: "region" }, { title: "month" }, { title: "units" }, { title: "price" }, { title: "revenue" }],
+          paging: false, searching: false, info: false
+        });
+      }
+    }
+
+    function drawRegions() {
+      var regions = ["East", "North", "South", "West"];
+      var totals = regions.map(function (g) {
+        return sumBy(allRows.filter(function (row) { return row.region === g; }), "revenue");
+      });
+      Plotly.newPlot("regions", [{ x: regions, y: totals, type: "bar" }],
+        { xaxis: { title: "Region" }, yaxis: { title: "Revenue" } });
+    }
+
+    $(document).ready(function () {
+      $(".tabs button").on("click", function () {
+        $(".tabs button").removeClass("active");
+        $(".tab").removeClass("active");
+        $(this).addClass("active");
+        $("#" + $(this).data("tab")).addClass("active");
+        window.dispatchEvent(new Event("resize"));
+      });
+      $.getJSON("data/sales.json", function (rows) {
+        allRows = rows;
+        $("#region").on("change", update);
+        drawRegions();
+        update();
+      });
+    });
+  </script>
+</body>
+</html>

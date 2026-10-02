@@ -1,0 +1,2002 @@
+[
+  {
+    "name": "actions_get.snap",
+    "path": "pkg/github/__toolsnaps__/actions_get.snap",
+    "sha": "661f379f5f3855bd6edb117f58c9798dca40da8d",
+    "size": 1620,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/actions_get.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/actions_get.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/661f379f5f3855bd6edb117f58c9798dca40da8d",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/actions_get.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/actions_get.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/661f379f5f3855bd6edb117f58c9798dca40da8d",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/actions_get.snap"
+    }
+  },
+  {
+    "name": "actions_list.snap",
+    "path": "pkg/github/__toolsnaps__/actions_list.snap",
+    "sha": "4df628bf850c4cfa9230a9b5d1a4c998bc661150",
+    "size": 4164,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/actions_list.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/actions_list.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4df628bf850c4cfa9230a9b5d1a4c998bc661150",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/actions_list.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/actions_list.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4df628bf850c4cfa9230a9b5d1a4c998bc661150",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/actions_list.snap"
+    }
+  },
+  {
+    "name": "actions_run_trigger.snap",
+    "path": "pkg/github/__toolsnaps__/actions_run_trigger.snap",
+    "sha": "0c859b86ecf52470f612916f33cc2ec59dfcc4b0",
+    "size": 1674,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/actions_run_trigger.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/actions_run_trigger.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/0c859b86ecf52470f612916f33cc2ec59dfcc4b0",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/actions_run_trigger.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/actions_run_trigger.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/0c859b86ecf52470f612916f33cc2ec59dfcc4b0",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/actions_run_trigger.snap"
+    }
+  },
+  {
+    "name": "add_comment_to_pending_review.snap",
+    "path": "pkg/github/__toolsnaps__/add_comment_to_pending_review.snap",
+    "sha": "4a6e6ca9baa2e76dde18630432965ef14f595475",
+    "size": 2209,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_comment_to_pending_review.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_comment_to_pending_review.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4a6e6ca9baa2e76dde18630432965ef14f595475",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_comment_to_pending_review.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_comment_to_pending_review.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4a6e6ca9baa2e76dde18630432965ef14f595475",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_comment_to_pending_review.snap"
+    }
+  },
+  {
+    "name": "add_issue_comment.snap",
+    "path": "pkg/github/__toolsnaps__/add_issue_comment.snap",
+    "sha": "a68494d4483dc011c5002ab98e41157c525da260",
+    "size": 1732,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_issue_comment.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_issue_comment.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a68494d4483dc011c5002ab98e41157c525da260",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_issue_comment.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_issue_comment.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a68494d4483dc011c5002ab98e41157c525da260",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_issue_comment.snap"
+    }
+  },
+  {
+    "name": "add_issue_comment_reaction.snap",
+    "path": "pkg/github/__toolsnaps__/add_issue_comment_reaction.snap",
+    "sha": "fea8434a6287e4815ac5496a8842ff6c375a8e68",
+    "size": 1108,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_issue_comment_reaction.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_issue_comment_reaction.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/fea8434a6287e4815ac5496a8842ff6c375a8e68",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_issue_comment_reaction.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_issue_comment_reaction.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/fea8434a6287e4815ac5496a8842ff6c375a8e68",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_issue_comment_reaction.snap"
+    }
+  },
+  {
+    "name": "add_issue_reaction.snap",
+    "path": "pkg/github/__toolsnaps__/add_issue_reaction.snap",
+    "sha": "49175d1412345fbee15be1b110eddcf2bc094ef6",
+    "size": 1068,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_issue_reaction.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_issue_reaction.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/49175d1412345fbee15be1b110eddcf2bc094ef6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_issue_reaction.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_issue_reaction.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/49175d1412345fbee15be1b110eddcf2bc094ef6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_issue_reaction.snap"
+    }
+  },
+  {
+    "name": "add_pull_request_review_comment.snap",
+    "path": "pkg/github/__toolsnaps__/add_pull_request_review_comment.snap",
+    "sha": "ae7450539d216bb69e19ea74446b207239c4d00a",
+    "size": 1892,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_pull_request_review_comment.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_pull_request_review_comment.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ae7450539d216bb69e19ea74446b207239c4d00a",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_pull_request_review_comment.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_pull_request_review_comment.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ae7450539d216bb69e19ea74446b207239c4d00a",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_pull_request_review_comment.snap"
+    }
+  },
+  {
+    "name": "add_pull_request_review_comment_reaction.snap",
+    "path": "pkg/github/__toolsnaps__/add_pull_request_review_comment_reaction.snap",
+    "sha": "aec4b384651e9d3b4b121d910f1351f0e8b140b8",
+    "size": 1211,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_pull_request_review_comment_reaction.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_pull_request_review_comment_reaction.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/aec4b384651e9d3b4b121d910f1351f0e8b140b8",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_pull_request_review_comment_reaction.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_pull_request_review_comment_reaction.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/aec4b384651e9d3b4b121d910f1351f0e8b140b8",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_pull_request_review_comment_reaction.snap"
+    }
+  },
+  {
+    "name": "add_reply_to_pull_request_comment.snap",
+    "path": "pkg/github/__toolsnaps__/add_reply_to_pull_request_comment.snap",
+    "sha": "a86ea3d4b5b77c8f7755c37d150e9f016efa010d",
+    "size": 1624,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_reply_to_pull_request_comment.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_reply_to_pull_request_comment.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a86ea3d4b5b77c8f7755c37d150e9f016efa010d",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_reply_to_pull_request_comment.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_reply_to_pull_request_comment.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a86ea3d4b5b77c8f7755c37d150e9f016efa010d",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_reply_to_pull_request_comment.snap"
+    }
+  },
+  {
+    "name": "add_sub_issue.snap",
+    "path": "pkg/github/__toolsnaps__/add_sub_issue.snap",
+    "sha": "a232507d4f67cf17201e12bddce954fa21300e58",
+    "size": 1058,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_sub_issue.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_sub_issue.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a232507d4f67cf17201e12bddce954fa21300e58",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/add_sub_issue.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/add_sub_issue.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a232507d4f67cf17201e12bddce954fa21300e58",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/add_sub_issue.snap"
+    }
+  },
+  {
+    "name": "assign_copilot_to_issue.snap",
+    "path": "pkg/github/__toolsnaps__/assign_copilot_to_issue.snap",
+    "sha": "5f44b2c6c2a33fe7ee5c23670d8000091f7e520f",
+    "size": 3498,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/assign_copilot_to_issue.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/assign_copilot_to_issue.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5f44b2c6c2a33fe7ee5c23670d8000091f7e520f",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/assign_copilot_to_issue.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/assign_copilot_to_issue.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5f44b2c6c2a33fe7ee5c23670d8000091f7e520f",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/assign_copilot_to_issue.snap"
+    }
+  },
+  {
+    "name": "assign_copilot_to_issue_with_intent.snap",
+    "path": "pkg/github/__toolsnaps__/assign_copilot_to_issue_with_intent.snap",
+    "sha": "956c2a8142e3172466598724e43c101afef84916",
+    "size": 4513,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/assign_copilot_to_issue_with_intent.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/assign_copilot_to_issue_with_intent.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/956c2a8142e3172466598724e43c101afef84916",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/assign_copilot_to_issue_with_intent.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/assign_copilot_to_issue_with_intent.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/956c2a8142e3172466598724e43c101afef84916",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/assign_copilot_to_issue_with_intent.snap"
+    }
+  },
+  {
+    "name": "create_branch.snap",
+    "path": "pkg/github/__toolsnaps__/create_branch.snap",
+    "sha": "e7964051408d585c7ade15985612a4886c5fa162",
+    "size": 749,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_branch.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_branch.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e7964051408d585c7ade15985612a4886c5fa162",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_branch.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_branch.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e7964051408d585c7ade15985612a4886c5fa162",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_branch.snap"
+    }
+  },
+  {
+    "name": "create_gist.snap",
+    "path": "pkg/github/__toolsnaps__/create_gist.snap",
+    "sha": "f91810bd00d0adf19fa019fce6be744c47999356",
+    "size": 791,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_gist.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_gist.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f91810bd00d0adf19fa019fce6be744c47999356",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_gist.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_gist.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f91810bd00d0adf19fa019fce6be744c47999356",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_gist.snap"
+    }
+  },
+  {
+    "name": "create_issue.snap",
+    "path": "pkg/github/__toolsnaps__/create_issue.snap",
+    "sha": "d7de24126554231a095c6fc9d307c29b0713cbf2",
+    "size": 1532,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_issue.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_issue.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d7de24126554231a095c6fc9d307c29b0713cbf2",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_issue.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_issue.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d7de24126554231a095c6fc9d307c29b0713cbf2",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_issue.snap"
+    }
+  },
+  {
+    "name": "create_or_update_file.snap",
+    "path": "pkg/github/__toolsnaps__/create_or_update_file.snap",
+    "sha": "faf468567d3abf17b47f6d1670633570965b0001",
+    "size": 2119,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_or_update_file.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_or_update_file.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/faf468567d3abf17b47f6d1670633570965b0001",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_or_update_file.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_or_update_file.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/faf468567d3abf17b47f6d1670633570965b0001",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_or_update_file.snap"
+    }
+  },
+  {
+    "name": "create_pull_request.snap",
+    "path": "pkg/github/__toolsnaps__/create_pull_request.snap",
+    "sha": "acb74bcd7a041ff1b0a71e0f860d9ce3428f3751",
+    "size": 1528,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_pull_request.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_pull_request.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/acb74bcd7a041ff1b0a71e0f860d9ce3428f3751",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_pull_request.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_pull_request.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/acb74bcd7a041ff1b0a71e0f860d9ce3428f3751",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_pull_request.snap"
+    }
+  },
+  {
+    "name": "create_pull_request_review.snap",
+    "path": "pkg/github/__toolsnaps__/create_pull_request_review.snap",
+    "sha": "f8bf3f12a8193ed1c146bd7b56d4549e7ca2b70c",
+    "size": 1354,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_pull_request_review.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_pull_request_review.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f8bf3f12a8193ed1c146bd7b56d4549e7ca2b70c",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_pull_request_review.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_pull_request_review.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f8bf3f12a8193ed1c146bd7b56d4549e7ca2b70c",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_pull_request_review.snap"
+    }
+  },
+  {
+    "name": "create_repository.snap",
+    "path": "pkg/github/__toolsnaps__/create_repository.snap",
+    "sha": "d13cc69aa19d23e3939304cbbd8747e1b97fa178",
+    "size": 1005,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_repository.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_repository.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d13cc69aa19d23e3939304cbbd8747e1b97fa178",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_repository.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_repository.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d13cc69aa19d23e3939304cbbd8747e1b97fa178",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_repository.snap"
+    }
+  },
+  {
+    "name": "create_repository_ruleset.snap",
+    "path": "pkg/github/__toolsnaps__/create_repository_ruleset.snap",
+    "sha": "81f2cadcb2608c6c05718c21220bbc4f57a29794",
+    "size": 4778,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_repository_ruleset.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_repository_ruleset.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/81f2cadcb2608c6c05718c21220bbc4f57a29794",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/create_repository_ruleset.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/create_repository_ruleset.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/81f2cadcb2608c6c05718c21220bbc4f57a29794",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/create_repository_ruleset.snap"
+    }
+  },
+  {
+    "name": "custom_properties_read.snap",
+    "path": "pkg/github/__toolsnaps__/custom_properties_read.snap",
+    "sha": "9a7ff10e9b13d1c07180169ec23de4dcc26c7acc",
+    "size": 1637,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/custom_properties_read.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/custom_properties_read.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9a7ff10e9b13d1c07180169ec23de4dcc26c7acc",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/custom_properties_read.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/custom_properties_read.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9a7ff10e9b13d1c07180169ec23de4dcc26c7acc",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/custom_properties_read.snap"
+    }
+  },
+  {
+    "name": "custom_properties_write.snap",
+    "path": "pkg/github/__toolsnaps__/custom_properties_write.snap",
+    "sha": "9c9df1f6ca83a8f0cff8f23d6f96527d67764768",
+    "size": 6923,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/custom_properties_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/custom_properties_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9c9df1f6ca83a8f0cff8f23d6f96527d67764768",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/custom_properties_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/custom_properties_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9c9df1f6ca83a8f0cff8f23d6f96527d67764768",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/custom_properties_write.snap"
+    }
+  },
+  {
+    "name": "delete_file.snap",
+    "path": "pkg/github/__toolsnaps__/delete_file.snap",
+    "sha": "4885c891d1f0aeca03815d6e90dd1fe413636fd6",
+    "size": 912,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/delete_file.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/delete_file.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4885c891d1f0aeca03815d6e90dd1fe413636fd6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/delete_file.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/delete_file.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4885c891d1f0aeca03815d6e90dd1fe413636fd6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/delete_file.snap"
+    }
+  },
+  {
+    "name": "delete_pending_pull_request_review.snap",
+    "path": "pkg/github/__toolsnaps__/delete_pending_pull_request_review.snap",
+    "sha": "f99f5d5632f35df42139d2e71b88418d18c35a33",
+    "size": 779,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/delete_pending_pull_request_review.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/delete_pending_pull_request_review.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f99f5d5632f35df42139d2e71b88418d18c35a33",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/delete_pending_pull_request_review.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/delete_pending_pull_request_review.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f99f5d5632f35df42139d2e71b88418d18c35a33",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/delete_pending_pull_request_review.snap"
+    }
+  },
+  {
+    "name": "delete_repository.snap",
+    "path": "pkg/github/__toolsnaps__/delete_repository.snap",
+    "sha": "a75845b3f48c1d13ba8852171765f2129d974a51",
+    "size": 615,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/delete_repository.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/delete_repository.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a75845b3f48c1d13ba8852171765f2129d974a51",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/delete_repository.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/delete_repository.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a75845b3f48c1d13ba8852171765f2129d974a51",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/delete_repository.snap"
+    }
+  },
+  {
+    "name": "discussion_comment_write.snap",
+    "path": "pkg/github/__toolsnaps__/discussion_comment_write.snap",
+    "sha": "eb730b48e78fbac588631c7d2758c39d409b76f2",
+    "size": 2132,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/discussion_comment_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/discussion_comment_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/eb730b48e78fbac588631c7d2758c39d409b76f2",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/discussion_comment_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/discussion_comment_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/eb730b48e78fbac588631c7d2758c39d409b76f2",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/discussion_comment_write.snap"
+    }
+  },
+  {
+    "name": "dismiss_notification.snap",
+    "path": "pkg/github/__toolsnaps__/dismiss_notification.snap",
+    "sha": "6b2e38afd70313f9fdb668cd302bb7aa9f1ee885",
+    "size": 654,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/dismiss_notification.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/dismiss_notification.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6b2e38afd70313f9fdb668cd302bb7aa9f1ee885",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/dismiss_notification.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/dismiss_notification.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6b2e38afd70313f9fdb668cd302bb7aa9f1ee885",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/dismiss_notification.snap"
+    }
+  },
+  {
+    "name": "find_duplicate_ff_duplicate_detection.snap",
+    "path": "pkg/github/__toolsnaps__/find_duplicate_ff_duplicate_detection.snap",
+    "sha": "ac95fd413895e7e32c087b4cc3934b14db9404b5",
+    "size": 1569,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/find_duplicate_ff_duplicate_detection.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/find_duplicate_ff_duplicate_detection.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ac95fd413895e7e32c087b4cc3934b14db9404b5",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/find_duplicate_ff_duplicate_detection.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/find_duplicate_ff_duplicate_detection.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ac95fd413895e7e32c087b4cc3934b14db9404b5",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/find_duplicate_ff_duplicate_detection.snap"
+    }
+  },
+  {
+    "name": "fork_repository.snap",
+    "path": "pkg/github/__toolsnaps__/fork_repository.snap",
+    "sha": "1373ef051981017742e0e19915dbe70a9976ab9c",
+    "size": 2559,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/fork_repository.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/fork_repository.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/1373ef051981017742e0e19915dbe70a9976ab9c",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/fork_repository.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/fork_repository.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/1373ef051981017742e0e19915dbe70a9976ab9c",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/fork_repository.snap"
+    }
+  },
+  {
+    "name": "get_code_quality_finding.snap",
+    "path": "pkg/github/__toolsnaps__/get_code_quality_finding.snap",
+    "sha": "84ccb948e477457a0d7b698b4bc706b3e33bde69",
+    "size": 719,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_code_quality_finding.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_code_quality_finding.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/84ccb948e477457a0d7b698b4bc706b3e33bde69",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_code_quality_finding.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_code_quality_finding.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/84ccb948e477457a0d7b698b4bc706b3e33bde69",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_code_quality_finding.snap"
+    }
+  },
+  {
+    "name": "get_code_scanning_alert.snap",
+    "path": "pkg/github/__toolsnaps__/get_code_scanning_alert.snap",
+    "sha": "907870b03d2f5e0a92bd64a404e1c4c756a4d517",
+    "size": 710,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_code_scanning_alert.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_code_scanning_alert.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/907870b03d2f5e0a92bd64a404e1c4c756a4d517",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_code_scanning_alert.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_code_scanning_alert.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/907870b03d2f5e0a92bd64a404e1c4c756a4d517",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_code_scanning_alert.snap"
+    }
+  },
+  {
+    "name": "get_commit.snap",
+    "path": "pkg/github/__toolsnaps__/get_commit.snap",
+    "sha": "ad6a805515f53f04e2adf016939a69c2d5b8edbc",
+    "size": 1479,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_commit.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_commit.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ad6a805515f53f04e2adf016939a69c2d5b8edbc",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_commit.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_commit.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ad6a805515f53f04e2adf016939a69c2d5b8edbc",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_commit.snap"
+    }
+  },
+  {
+    "name": "get_dependabot_alert.snap",
+    "path": "pkg/github/__toolsnaps__/get_dependabot_alert.snap",
+    "sha": "383e86a29efc400ecdd790e08a3872471af48ce6",
+    "size": 701,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_dependabot_alert.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_dependabot_alert.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/383e86a29efc400ecdd790e08a3872471af48ce6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_dependabot_alert.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_dependabot_alert.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/383e86a29efc400ecdd790e08a3872471af48ce6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_dependabot_alert.snap"
+    }
+  },
+  {
+    "name": "get_discussion.snap",
+    "path": "pkg/github/__toolsnaps__/get_discussion.snap",
+    "sha": "3f538d4e97a6cbb336ed7e7277b478e72210e7e2",
+    "size": 633,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_discussion.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_discussion.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/3f538d4e97a6cbb336ed7e7277b478e72210e7e2",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_discussion.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_discussion.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/3f538d4e97a6cbb336ed7e7277b478e72210e7e2",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_discussion.snap"
+    }
+  },
+  {
+    "name": "get_discussion_comments.snap",
+    "path": "pkg/github/__toolsnaps__/get_discussion_comments.snap",
+    "sha": "a2705c9bf1dd058be08d7c3c072fd3a5bddc1b27",
+    "size": 1215,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_discussion_comments.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_discussion_comments.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a2705c9bf1dd058be08d7c3c072fd3a5bddc1b27",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_discussion_comments.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_discussion_comments.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a2705c9bf1dd058be08d7c3c072fd3a5bddc1b27",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_discussion_comments.snap"
+    }
+  },
+  {
+    "name": "get_file_blame.snap",
+    "path": "pkg/github/__toolsnaps__/get_file_blame.snap",
+    "sha": "33a09fea884a833d2a4946fc1f9a7748f56cdbcb",
+    "size": 2044,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_file_blame.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_file_blame.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/33a09fea884a833d2a4946fc1f9a7748f56cdbcb",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_file_blame.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_file_blame.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/33a09fea884a833d2a4946fc1f9a7748f56cdbcb",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_file_blame.snap"
+    }
+  },
+  {
+    "name": "get_file_contents.snap",
+    "path": "pkg/github/__toolsnaps__/get_file_contents.snap",
+    "sha": "dec933c94d6c3e1142d6e7f83ee6778c4c1b13b3",
+    "size": 1664,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_file_contents.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_file_contents.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/dec933c94d6c3e1142d6e7f83ee6778c4c1b13b3",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_file_contents.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_file_contents.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/dec933c94d6c3e1142d6e7f83ee6778c4c1b13b3",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_file_contents.snap"
+    }
+  },
+  {
+    "name": "get_gist.snap",
+    "path": "pkg/github/__toolsnaps__/get_gist.snap",
+    "sha": "b4c053b5492da52abb4f1869fdd75809a7bbf6e0",
+    "size": 415,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_gist.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_gist.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/b4c053b5492da52abb4f1869fdd75809a7bbf6e0",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_gist.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_gist.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/b4c053b5492da52abb4f1869fdd75809a7bbf6e0",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_gist.snap"
+    }
+  },
+  {
+    "name": "get_global_security_advisory.snap",
+    "path": "pkg/github/__toolsnaps__/get_global_security_advisory.snap",
+    "sha": "74ec7947402a62ebf91b632a161571be216583c6",
+    "size": 468,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_global_security_advisory.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_global_security_advisory.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/74ec7947402a62ebf91b632a161571be216583c6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_global_security_advisory.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_global_security_advisory.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/74ec7947402a62ebf91b632a161571be216583c6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_global_security_advisory.snap"
+    }
+  },
+  {
+    "name": "get_job_logs.snap",
+    "path": "pkg/github/__toolsnaps__/get_job_logs.snap",
+    "sha": "575182c0b146f3a2e37a6db192345a7faa648047",
+    "size": 1236,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_job_logs.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_job_logs.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/575182c0b146f3a2e37a6db192345a7faa648047",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_job_logs.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_job_logs.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/575182c0b146f3a2e37a6db192345a7faa648047",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_job_logs.snap"
+    }
+  },
+  {
+    "name": "get_label.snap",
+    "path": "pkg/github/__toolsnaps__/get_label.snap",
+    "sha": "b2580385069f324e0ec7d3b208848c85b080e074",
+    "size": 662,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_label.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_label.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/b2580385069f324e0ec7d3b208848c85b080e074",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_label.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_label.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/b2580385069f324e0ec7d3b208848c85b080e074",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_label.snap"
+    }
+  },
+  {
+    "name": "get_latest_release.snap",
+    "path": "pkg/github/__toolsnaps__/get_latest_release.snap",
+    "sha": "4d4f0d103ef18912b9799cfaf139ef2bcaa28c63",
+    "size": 523,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_latest_release.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_latest_release.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4d4f0d103ef18912b9799cfaf139ef2bcaa28c63",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_latest_release.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_latest_release.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4d4f0d103ef18912b9799cfaf139ef2bcaa28c63",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_latest_release.snap"
+    }
+  },
+  {
+    "name": "get_me.snap",
+    "path": "pkg/github/__toolsnaps__/get_me.snap",
+    "sha": "4196c6734d00300c1705d07c27cc1cd62dc303ce",
+    "size": 546,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_me.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_me.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4196c6734d00300c1705d07c27cc1cd62dc303ce",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_me.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_me.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4196c6734d00300c1705d07c27cc1cd62dc303ce",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_me.snap"
+    }
+  },
+  {
+    "name": "get_notification_details.snap",
+    "path": "pkg/github/__toolsnaps__/get_notification_details.snap",
+    "sha": "2929ec2fc95578cdf58c975748f5cf879aaab61b",
+    "size": 607,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_notification_details.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_notification_details.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/2929ec2fc95578cdf58c975748f5cf879aaab61b",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_notification_details.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_notification_details.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/2929ec2fc95578cdf58c975748f5cf879aaab61b",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_notification_details.snap"
+    }
+  },
+  {
+    "name": "get_release_by_tag.snap",
+    "path": "pkg/github/__toolsnaps__/get_release_by_tag.snap",
+    "sha": "60e0a3a30b2530b02c89891d55d1a36f114437c7",
+    "size": 660,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_release_by_tag.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_release_by_tag.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/60e0a3a30b2530b02c89891d55d1a36f114437c7",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_release_by_tag.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_release_by_tag.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/60e0a3a30b2530b02c89891d55d1a36f114437c7",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_release_by_tag.snap"
+    }
+  },
+  {
+    "name": "get_repository_tree.snap",
+    "path": "pkg/github/__toolsnaps__/get_repository_tree.snap",
+    "sha": "6ba368f2f24018012f048b13c5ec88b6c6a40cd3",
+    "size": 1179,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_repository_tree.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_repository_tree.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6ba368f2f24018012f048b13c5ec88b6c6a40cd3",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_repository_tree.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_repository_tree.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6ba368f2f24018012f048b13c5ec88b6c6a40cd3",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_repository_tree.snap"
+    }
+  },
+  {
+    "name": "get_secret_scanning_alert.snap",
+    "path": "pkg/github/__toolsnaps__/get_secret_scanning_alert.snap",
+    "sha": "7d04cc5ca904014dc5da14c00f7e2a1b26b969f6",
+    "size": 716,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_secret_scanning_alert.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_secret_scanning_alert.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/7d04cc5ca904014dc5da14c00f7e2a1b26b969f6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_secret_scanning_alert.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_secret_scanning_alert.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/7d04cc5ca904014dc5da14c00f7e2a1b26b969f6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_secret_scanning_alert.snap"
+    }
+  },
+  {
+    "name": "get_tag.snap",
+    "path": "pkg/github/__toolsnaps__/get_tag.snap",
+    "sha": "bb2751c970517478b82a7cf06f264c4fa2ea19f1",
+    "size": 620,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_tag.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_tag.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bb2751c970517478b82a7cf06f264c4fa2ea19f1",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_tag.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_tag.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bb2751c970517478b82a7cf06f264c4fa2ea19f1",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_tag.snap"
+    }
+  },
+  {
+    "name": "get_team_members.snap",
+    "path": "pkg/github/__toolsnaps__/get_team_members.snap",
+    "sha": "a95be1ceda496bcade2f6fff72a54049528da028",
+    "size": 628,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_team_members.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_team_members.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a95be1ceda496bcade2f6fff72a54049528da028",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_team_members.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_team_members.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/a95be1ceda496bcade2f6fff72a54049528da028",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_team_members.snap"
+    }
+  },
+  {
+    "name": "get_teams.snap",
+    "path": "pkg/github/__toolsnaps__/get_teams.snap",
+    "sha": "49bc62ed9f806c500b51bac2f005e6a07de95b97",
+    "size": 480,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_teams.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_teams.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/49bc62ed9f806c500b51bac2f005e6a07de95b97",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/get_teams.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/get_teams.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/49bc62ed9f806c500b51bac2f005e6a07de95b97",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/get_teams.snap"
+    }
+  },
+  {
+    "name": "issue_dependency_read_ff_issue_dependencies.snap",
+    "path": "pkg/github/__toolsnaps__/issue_dependency_read_ff_issue_dependencies.snap",
+    "sha": "cf6c3662f1754397cdff655a983d97895ebd89b9",
+    "size": 1490,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_dependency_read_ff_issue_dependencies.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_dependency_read_ff_issue_dependencies.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/cf6c3662f1754397cdff655a983d97895ebd89b9",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/issue_dependency_read_ff_issue_dependencies.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_dependency_read_ff_issue_dependencies.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/cf6c3662f1754397cdff655a983d97895ebd89b9",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_dependency_read_ff_issue_dependencies.snap"
+    }
+  },
+  {
+    "name": "issue_dependency_write_ff_issue_dependencies.snap",
+    "path": "pkg/github/__toolsnaps__/issue_dependency_write_ff_issue_dependencies.snap",
+    "sha": "b907dff6cf83ca327d18e80770f9377e769ab2f5",
+    "size": 2180,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_dependency_write_ff_issue_dependencies.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_dependency_write_ff_issue_dependencies.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/b907dff6cf83ca327d18e80770f9377e769ab2f5",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/issue_dependency_write_ff_issue_dependencies.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_dependency_write_ff_issue_dependencies.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/b907dff6cf83ca327d18e80770f9377e769ab2f5",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_dependency_write_ff_issue_dependencies.snap"
+    }
+  },
+  {
+    "name": "issue_read.snap",
+    "path": "pkg/github/__toolsnaps__/issue_read.snap",
+    "sha": "faf6085a5e82d367d79c43c4c3b511d479c6630f",
+    "size": 1833,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_read.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_read.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/faf6085a5e82d367d79c43c4c3b511d479c6630f",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/issue_read.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_read.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/faf6085a5e82d367d79c43c4c3b511d479c6630f",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_read.snap"
+    }
+  },
+  {
+    "name": "issue_write.snap",
+    "path": "pkg/github/__toolsnaps__/issue_write.snap",
+    "sha": "20cc730f51c5dddf05d347009feb06166128bc28",
+    "size": 5243,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/20cc730f51c5dddf05d347009feb06166128bc28",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/issue_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/issue_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/20cc730f51c5dddf05d347009feb06166128bc28",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/issue_write.snap"
+    }
+  },
+  {
+    "name": "label_write.snap",
+    "path": "pkg/github/__toolsnaps__/label_write.snap",
+    "sha": "e9fdcf0d83fcb894834265089f34e1f49afccbec",
+    "size": 1504,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/label_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/label_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e9fdcf0d83fcb894834265089f34e1f49afccbec",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/label_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/label_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e9fdcf0d83fcb894834265089f34e1f49afccbec",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/label_write.snap"
+    }
+  },
+  {
+    "name": "list_branches.snap",
+    "path": "pkg/github/__toolsnaps__/list_branches.snap",
+    "sha": "912b49d1ba6b8bfad08d49eaa60fd1153750cfd3",
+    "size": 811,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_branches.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_branches.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/912b49d1ba6b8bfad08d49eaa60fd1153750cfd3",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_branches.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_branches.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/912b49d1ba6b8bfad08d49eaa60fd1153750cfd3",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_branches.snap"
+    }
+  },
+  {
+    "name": "list_code_scanning_alerts.snap",
+    "path": "pkg/github/__toolsnaps__/list_code_scanning_alerts.snap",
+    "sha": "df67380a35126b4af0123145deca06e33cbecf25",
+    "size": 1675,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_code_scanning_alerts.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_code_scanning_alerts.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/df67380a35126b4af0123145deca06e33cbecf25",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_code_scanning_alerts.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_code_scanning_alerts.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/df67380a35126b4af0123145deca06e33cbecf25",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_code_scanning_alerts.snap"
+    }
+  },
+  {
+    "name": "list_commits.snap",
+    "path": "pkg/github/__toolsnaps__/list_commits.snap",
+    "sha": "bc4ffd1753f1a3ea82dd995aa40874b7b23f76d6",
+    "size": 2279,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_commits.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_commits.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bc4ffd1753f1a3ea82dd995aa40874b7b23f76d6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_commits.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_commits.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bc4ffd1753f1a3ea82dd995aa40874b7b23f76d6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_commits.snap"
+    }
+  },
+  {
+    "name": "list_dependabot_alerts.snap",
+    "path": "pkg/github/__toolsnaps__/list_dependabot_alerts.snap",
+    "sha": "ff602b13e19f392d04c11af9eeed8fb132eecac3",
+    "size": 1367,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_dependabot_alerts.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_dependabot_alerts.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ff602b13e19f392d04c11af9eeed8fb132eecac3",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_dependabot_alerts.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_dependabot_alerts.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ff602b13e19f392d04c11af9eeed8fb132eecac3",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_dependabot_alerts.snap"
+    }
+  },
+  {
+    "name": "list_discussion_categories.snap",
+    "path": "pkg/github/__toolsnaps__/list_discussion_categories.snap",
+    "sha": "095973dc8b6804f4b45ff2b5dc6f874bd6e9165e",
+    "size": 647,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_discussion_categories.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_discussion_categories.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/095973dc8b6804f4b45ff2b5dc6f874bd6e9165e",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_discussion_categories.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_discussion_categories.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/095973dc8b6804f4b45ff2b5dc6f874bd6e9165e",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_discussion_categories.snap"
+    }
+  },
+  {
+    "name": "list_discussions.snap",
+    "path": "pkg/github/__toolsnaps__/list_discussions.snap",
+    "sha": "6a2afd7dc46f6ffba36df5165eaa7e1d0c3eaedc",
+    "size": 1484,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_discussions.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_discussions.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6a2afd7dc46f6ffba36df5165eaa7e1d0c3eaedc",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_discussions.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_discussions.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6a2afd7dc46f6ffba36df5165eaa7e1d0c3eaedc",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_discussions.snap"
+    }
+  },
+  {
+    "name": "list_gists.snap",
+    "path": "pkg/github/__toolsnaps__/list_gists.snap",
+    "sha": "8f09ff3880989caca26f8f55da955015b0f8e72a",
+    "size": 818,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_gists.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_gists.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/8f09ff3880989caca26f8f55da955015b0f8e72a",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_gists.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_gists.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/8f09ff3880989caca26f8f55da955015b0f8e72a",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_gists.snap"
+    }
+  },
+  {
+    "name": "list_global_security_advisories.snap",
+    "path": "pkg/github/__toolsnaps__/list_global_security_advisories.snap",
+    "sha": "687248f6e737540c8608c51c249b43de21dd4b47",
+    "size": 2298,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_global_security_advisories.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_global_security_advisories.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/687248f6e737540c8608c51c249b43de21dd4b47",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_global_security_advisories.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_global_security_advisories.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/687248f6e737540c8608c51c249b43de21dd4b47",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_global_security_advisories.snap"
+    }
+  },
+  {
+    "name": "list_issue_fields.snap",
+    "path": "pkg/github/__toolsnaps__/list_issue_fields.snap",
+    "sha": "df9ae47ba6d6dbe28aeafc177ce967fea51246cc",
+    "size": 938,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_issue_fields.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_issue_fields.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/df9ae47ba6d6dbe28aeafc177ce967fea51246cc",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_issue_fields.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_issue_fields.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/df9ae47ba6d6dbe28aeafc177ce967fea51246cc",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_issue_fields.snap"
+    }
+  },
+  {
+    "name": "list_issue_types.snap",
+    "path": "pkg/github/__toolsnaps__/list_issue_types.snap",
+    "sha": "c1ea3d515aaa3264d99d2d5b75e0f064716e5043",
+    "size": 769,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_issue_types.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_issue_types.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c1ea3d515aaa3264d99d2d5b75e0f064716e5043",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_issue_types.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_issue_types.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c1ea3d515aaa3264d99d2d5b75e0f064716e5043",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_issue_types.snap"
+    }
+  },
+  {
+    "name": "list_issues.snap",
+    "path": "pkg/github/__toolsnaps__/list_issues.snap",
+    "sha": "420577b1978775a547d93f0c3babb54d46204692",
+    "size": 3447,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_issues.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_issues.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/420577b1978775a547d93f0c3babb54d46204692",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_issues.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_issues.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/420577b1978775a547d93f0c3babb54d46204692",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_issues.snap"
+    }
+  },
+  {
+    "name": "list_label.snap",
+    "path": "pkg/github/__toolsnaps__/list_label.snap",
+    "sha": "37e45b15fb7e2a89b4a90b1b79a9dc28b05c55a7",
+    "size": 682,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_label.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_label.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/37e45b15fb7e2a89b4a90b1b79a9dc28b05c55a7",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_label.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_label.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/37e45b15fb7e2a89b4a90b1b79a9dc28b05c55a7",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_label.snap"
+    }
+  },
+  {
+    "name": "list_notifications.snap",
+    "path": "pkg/github/__toolsnaps__/list_notifications.snap",
+    "sha": "bb75d60427ef5bd55d3d924f1c5f3729b1b43f93",
+    "size": 2231,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_notifications.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_notifications.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bb75d60427ef5bd55d3d924f1c5f3729b1b43f93",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_notifications.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_notifications.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bb75d60427ef5bd55d3d924f1c5f3729b1b43f93",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_notifications.snap"
+    }
+  },
+  {
+    "name": "list_org_repository_security_advisories.snap",
+    "path": "pkg/github/__toolsnaps__/list_org_repository_security_advisories.snap",
+    "sha": "3646d86c34657f40ff6d706b02e1d51dae1e166a",
+    "size": 1033,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_org_repository_security_advisories.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_org_repository_security_advisories.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/3646d86c34657f40ff6d706b02e1d51dae1e166a",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_org_repository_security_advisories.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_org_repository_security_advisories.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/3646d86c34657f40ff6d706b02e1d51dae1e166a",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_org_repository_security_advisories.snap"
+    }
+  },
+  {
+    "name": "list_pull_requests.snap",
+    "path": "pkg/github/__toolsnaps__/list_pull_requests.snap",
+    "sha": "d37986d529cc883367367038a455955205bbf4ba",
+    "size": 2670,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_pull_requests.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_pull_requests.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d37986d529cc883367367038a455955205bbf4ba",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_pull_requests.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_pull_requests.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d37986d529cc883367367038a455955205bbf4ba",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_pull_requests.snap"
+    }
+  },
+  {
+    "name": "list_releases.snap",
+    "path": "pkg/github/__toolsnaps__/list_releases.snap",
+    "sha": "4eeef279e9292e12ff9526195e72a7a6db07eda5",
+    "size": 1397,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_releases.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_releases.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4eeef279e9292e12ff9526195e72a7a6db07eda5",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_releases.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_releases.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4eeef279e9292e12ff9526195e72a7a6db07eda5",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_releases.snap"
+    }
+  },
+  {
+    "name": "list_repository_collaborators.snap",
+    "path": "pkg/github/__toolsnaps__/list_repository_collaborators.snap",
+    "sha": "5af768fe052d1903b0b3bedfcfec0f48240af25e",
+    "size": 1395,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_repository_collaborators.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_repository_collaborators.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5af768fe052d1903b0b3bedfcfec0f48240af25e",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_repository_collaborators.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_repository_collaborators.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5af768fe052d1903b0b3bedfcfec0f48240af25e",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_repository_collaborators.snap"
+    }
+  },
+  {
+    "name": "list_repository_security_advisories.snap",
+    "path": "pkg/github/__toolsnaps__/list_repository_security_advisories.snap",
+    "sha": "50ec8db699a8c7a7f1df66510563714bb12889c9",
+    "size": 1150,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_repository_security_advisories.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_repository_security_advisories.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/50ec8db699a8c7a7f1df66510563714bb12889c9",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_repository_security_advisories.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_repository_security_advisories.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/50ec8db699a8c7a7f1df66510563714bb12889c9",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_repository_security_advisories.snap"
+    }
+  },
+  {
+    "name": "list_secret_scanning_alerts.snap",
+    "path": "pkg/github/__toolsnaps__/list_secret_scanning_alerts.snap",
+    "sha": "66aced9eaca479088595f91193ffc865b4068cea",
+    "size": 1569,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_secret_scanning_alerts.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_secret_scanning_alerts.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/66aced9eaca479088595f91193ffc865b4068cea",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_secret_scanning_alerts.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_secret_scanning_alerts.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/66aced9eaca479088595f91193ffc865b4068cea",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_secret_scanning_alerts.snap"
+    }
+  },
+  {
+    "name": "list_starred_repositories.snap",
+    "path": "pkg/github/__toolsnaps__/list_starred_repositories.snap",
+    "sha": "f4c37373e5b3e045f2cc4d0aa901e49a356b6234",
+    "size": 1210,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_starred_repositories.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_starred_repositories.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f4c37373e5b3e045f2cc4d0aa901e49a356b6234",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_starred_repositories.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_starred_repositories.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/f4c37373e5b3e045f2cc4d0aa901e49a356b6234",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_starred_repositories.snap"
+    }
+  },
+  {
+    "name": "list_tags.snap",
+    "path": "pkg/github/__toolsnaps__/list_tags.snap",
+    "sha": "6473040b1cf775c3b5e4a21549cd10fb82641b8d",
+    "size": 803,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_tags.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_tags.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6473040b1cf775c3b5e4a21549cd10fb82641b8d",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/list_tags.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/list_tags.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/6473040b1cf775c3b5e4a21549cd10fb82641b8d",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/list_tags.snap"
+    }
+  },
+  {
+    "name": "manage_notification_subscription.snap",
+    "path": "pkg/github/__toolsnaps__/manage_notification_subscription.snap",
+    "sha": "e062f2d25dd41ae9f613dd4ef3b9c0b8a2acc689",
+    "size": 818,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/manage_notification_subscription.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/manage_notification_subscription.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e062f2d25dd41ae9f613dd4ef3b9c0b8a2acc689",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/manage_notification_subscription.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/manage_notification_subscription.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e062f2d25dd41ae9f613dd4ef3b9c0b8a2acc689",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/manage_notification_subscription.snap"
+    }
+  },
+  {
+    "name": "manage_repository_notification_subscription.snap",
+    "path": "pkg/github/__toolsnaps__/manage_repository_notification_subscription.snap",
+    "sha": "7f4464860d72ee23bd2530d9be1cc2cdddcf9e00",
+    "size": 995,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/manage_repository_notification_subscription.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/manage_repository_notification_subscription.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/7f4464860d72ee23bd2530d9be1cc2cdddcf9e00",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/manage_repository_notification_subscription.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/manage_repository_notification_subscription.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/7f4464860d72ee23bd2530d9be1cc2cdddcf9e00",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/manage_repository_notification_subscription.snap"
+    }
+  },
+  {
+    "name": "mark_all_notifications_read.snap",
+    "path": "pkg/github/__toolsnaps__/mark_all_notifications_read.snap",
+    "sha": "42de313e4a683cdc785ef23c2d6294142d2426a1",
+    "size": 826,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/mark_all_notifications_read.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/mark_all_notifications_read.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/42de313e4a683cdc785ef23c2d6294142d2426a1",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/mark_all_notifications_read.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/mark_all_notifications_read.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/42de313e4a683cdc785ef23c2d6294142d2426a1",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/mark_all_notifications_read.snap"
+    }
+  },
+  {
+    "name": "merge_pull_request.snap",
+    "path": "pkg/github/__toolsnaps__/merge_pull_request.snap",
+    "sha": "35275cb0e830fdd65118b059d79146aef540f84b",
+    "size": 2988,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/merge_pull_request.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/merge_pull_request.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/35275cb0e830fdd65118b059d79146aef540f84b",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/merge_pull_request.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/merge_pull_request.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/35275cb0e830fdd65118b059d79146aef540f84b",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/merge_pull_request.snap"
+    }
+  },
+  {
+    "name": "projects_get.snap",
+    "path": "pkg/github/__toolsnaps__/projects_get.snap",
+    "sha": "1380e84d5d75c52711714bbc2e0c2e26017545c5",
+    "size": 2763,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/projects_get.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/projects_get.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/1380e84d5d75c52711714bbc2e0c2e26017545c5",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/projects_get.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/projects_get.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/1380e84d5d75c52711714bbc2e0c2e26017545c5",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/projects_get.snap"
+    }
+  },
+  {
+    "name": "projects_list.snap",
+    "path": "pkg/github/__toolsnaps__/projects_list.snap",
+    "sha": "c64737900f4dc77546254d9b52f3a8c3d2999589",
+    "size": 2955,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/projects_list.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/projects_list.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c64737900f4dc77546254d9b52f3a8c3d2999589",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/projects_list.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/projects_list.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c64737900f4dc77546254d9b52f3a8c3d2999589",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/projects_list.snap"
+    }
+  },
+  {
+    "name": "projects_write.snap",
+    "path": "pkg/github/__toolsnaps__/projects_write.snap",
+    "sha": "0ea38c2b0aaf6164ba52183386a4556d8418b0d5",
+    "size": 10533,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/projects_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/projects_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/0ea38c2b0aaf6164ba52183386a4556d8418b0d5",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/projects_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/projects_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/0ea38c2b0aaf6164ba52183386a4556d8418b0d5",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/projects_write.snap"
+    }
+  },
+  {
+    "name": "pull_request_read.snap",
+    "path": "pkg/github/__toolsnaps__/pull_request_read.snap",
+    "sha": "d518c7cad988c453c33c26fd7c5b546e242a7cf7",
+    "size": 3114,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/pull_request_read.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/pull_request_read.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d518c7cad988c453c33c26fd7c5b546e242a7cf7",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/pull_request_read.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/pull_request_read.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/d518c7cad988c453c33c26fd7c5b546e242a7cf7",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/pull_request_read.snap"
+    }
+  },
+  {
+    "name": "pull_request_review_write.snap",
+    "path": "pkg/github/__toolsnaps__/pull_request_review_write.snap",
+    "sha": "74ef80855943898b6c152e07927b15a851d3bb60",
+    "size": 2767,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/pull_request_review_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/pull_request_review_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/74ef80855943898b6c152e07927b15a851d3bb60",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/pull_request_review_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/pull_request_review_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/74ef80855943898b6c152e07927b15a851d3bb60",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/pull_request_review_write.snap"
+    }
+  },
+  {
+    "name": "push_files.snap",
+    "path": "pkg/github/__toolsnaps__/push_files.snap",
+    "sha": "798ad18451d1cbb88dc2b18974163d84c5a5723c",
+    "size": 1383,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/push_files.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/push_files.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/798ad18451d1cbb88dc2b18974163d84c5a5723c",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/push_files.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/push_files.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/798ad18451d1cbb88dc2b18974163d84c5a5723c",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/push_files.snap"
+    }
+  },
+  {
+    "name": "remove_issue_comment_reaction.snap",
+    "path": "pkg/github/__toolsnaps__/remove_issue_comment_reaction.snap",
+    "sha": "de53a1dae8fa7bce4c589c3bba4c423480095fe4",
+    "size": 974,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_issue_comment_reaction.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_issue_comment_reaction.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/de53a1dae8fa7bce4c589c3bba4c423480095fe4",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/remove_issue_comment_reaction.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_issue_comment_reaction.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/de53a1dae8fa7bce4c589c3bba4c423480095fe4",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_issue_comment_reaction.snap"
+    }
+  },
+  {
+    "name": "remove_issue_reaction.snap",
+    "path": "pkg/github/__toolsnaps__/remove_issue_reaction.snap",
+    "sha": "4222e308feaa86e8218520781f875c9aa2dd5ddb",
+    "size": 934,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_issue_reaction.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_issue_reaction.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4222e308feaa86e8218520781f875c9aa2dd5ddb",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/remove_issue_reaction.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_issue_reaction.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4222e308feaa86e8218520781f875c9aa2dd5ddb",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_issue_reaction.snap"
+    }
+  },
+  {
+    "name": "remove_pull_request_review_comment_reaction.snap",
+    "path": "pkg/github/__toolsnaps__/remove_pull_request_review_comment_reaction.snap",
+    "sha": "57514e648448d3223dacacfeb68051afd07bf8b6",
+    "size": 1075,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_pull_request_review_comment_reaction.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_pull_request_review_comment_reaction.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/57514e648448d3223dacacfeb68051afd07bf8b6",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/remove_pull_request_review_comment_reaction.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_pull_request_review_comment_reaction.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/57514e648448d3223dacacfeb68051afd07bf8b6",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_pull_request_review_comment_reaction.snap"
+    }
+  },
+  {
+    "name": "remove_sub_issue.snap",
+    "path": "pkg/github/__toolsnaps__/remove_sub_issue.snap",
+    "sha": "4f07c85f418e70135c6d2343bbb38455ef0a2e76",
+    "size": 925,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_sub_issue.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_sub_issue.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4f07c85f418e70135c6d2343bbb38455ef0a2e76",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/remove_sub_issue.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/remove_sub_issue.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4f07c85f418e70135c6d2343bbb38455ef0a2e76",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/remove_sub_issue.snap"
+    }
+  },
+  {
+    "name": "repository_ruleset_read.snap",
+    "path": "pkg/github/__toolsnaps__/repository_ruleset_read.snap",
+    "sha": "47b4c3742ddce53a00a3bf74a667fe35c526db42",
+    "size": 4587,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/repository_ruleset_read.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/repository_ruleset_read.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/47b4c3742ddce53a00a3bf74a667fe35c526db42",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/repository_ruleset_read.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/repository_ruleset_read.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/47b4c3742ddce53a00a3bf74a667fe35c526db42",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/repository_ruleset_read.snap"
+    }
+  },
+  {
+    "name": "reprioritize_sub_issue.snap",
+    "path": "pkg/github/__toolsnaps__/reprioritize_sub_issue.snap",
+    "sha": "bb981b74ea86baa24f82988e81f17c25d8674111",
+    "size": 1316,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/reprioritize_sub_issue.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/reprioritize_sub_issue.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bb981b74ea86baa24f82988e81f17c25d8674111",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/reprioritize_sub_issue.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/reprioritize_sub_issue.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bb981b74ea86baa24f82988e81f17c25d8674111",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/reprioritize_sub_issue.snap"
+    }
+  },
+  {
+    "name": "request_copilot_review.snap",
+    "path": "pkg/github/__toolsnaps__/request_copilot_review.snap",
+    "sha": "5e8ecdca19a29e1a2a5be53ea7aab5d8a863d31d",
+    "size": 2859,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/request_copilot_review.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/request_copilot_review.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5e8ecdca19a29e1a2a5be53ea7aab5d8a863d31d",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/request_copilot_review.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/request_copilot_review.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5e8ecdca19a29e1a2a5be53ea7aab5d8a863d31d",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/request_copilot_review.snap"
+    }
+  },
+  {
+    "name": "request_pull_request_reviewers.snap",
+    "path": "pkg/github/__toolsnaps__/request_pull_request_reviewers.snap",
+    "sha": "607f540d1bce27536873a24da5e8aeaa0c6504d0",
+    "size": 1001,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/request_pull_request_reviewers.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/request_pull_request_reviewers.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/607f540d1bce27536873a24da5e8aeaa0c6504d0",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/request_pull_request_reviewers.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/request_pull_request_reviewers.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/607f540d1bce27536873a24da5e8aeaa0c6504d0",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/request_pull_request_reviewers.snap"
+    }
+  },
+  {
+    "name": "resolve_review_thread.snap",
+    "path": "pkg/github/__toolsnaps__/resolve_review_thread.snap",
+    "sha": "5f2b21b36f47ae8285e296a702dc7e6bc59b6641",
+    "size": 581,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/resolve_review_thread.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/resolve_review_thread.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5f2b21b36f47ae8285e296a702dc7e6bc59b6641",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/resolve_review_thread.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/resolve_review_thread.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/5f2b21b36f47ae8285e296a702dc7e6bc59b6641",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/resolve_review_thread.snap"
+    }
+  },
+  {
+    "name": "search_code.snap",
+    "path": "pkg/github/__toolsnaps__/search_code.snap",
+    "sha": "00d4686712f79d204eed36ce8edffbc8e7dc5e05",
+    "size": 2097,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_code.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_code.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/00d4686712f79d204eed36ce8edffbc8e7dc5e05",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_code.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_code.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/00d4686712f79d204eed36ce8edffbc8e7dc5e05",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_code.snap"
+    }
+  },
+  {
+    "name": "search_commits.snap",
+    "path": "pkg/github/__toolsnaps__/search_commits.snap",
+    "sha": "8221dee4807eb33d307fde8addb37c306bee8566",
+    "size": 1945,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_commits.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_commits.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/8221dee4807eb33d307fde8addb37c306bee8566",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_commits.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_commits.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/8221dee4807eb33d307fde8addb37c306bee8566",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_commits.snap"
+    }
+  },
+  {
+    "name": "search_issues.snap",
+    "path": "pkg/github/__toolsnaps__/search_issues.snap",
+    "sha": "bbba9b0b95bb7f44e166561de478ba506d02177b",
+    "size": 2920,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_issues.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_issues.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bbba9b0b95bb7f44e166561de478ba506d02177b",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_issues.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_issues.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/bbba9b0b95bb7f44e166561de478ba506d02177b",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_issues.snap"
+    }
+  },
+  {
+    "name": "search_orgs.snap",
+    "path": "pkg/github/__toolsnaps__/search_orgs.snap",
+    "sha": "9796c6105d2fca4855547d9d7f2b7c84c885faeb",
+    "size": 1294,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_orgs.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_orgs.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9796c6105d2fca4855547d9d7f2b7c84c885faeb",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_orgs.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_orgs.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9796c6105d2fca4855547d9d7f2b7c84c885faeb",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_orgs.snap"
+    }
+  },
+  {
+    "name": "search_pull_requests.snap",
+    "path": "pkg/github/__toolsnaps__/search_pull_requests.snap",
+    "sha": "847168b471b0f26ae26140e84a1e7b5a67c9ffaf",
+    "size": 2744,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_pull_requests.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_pull_requests.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/847168b471b0f26ae26140e84a1e7b5a67c9ffaf",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_pull_requests.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_pull_requests.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/847168b471b0f26ae26140e84a1e7b5a67c9ffaf",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_pull_requests.snap"
+    }
+  },
+  {
+    "name": "search_repositories.snap",
+    "path": "pkg/github/__toolsnaps__/search_repositories.snap",
+    "sha": "23b1d5e839bcc543296c91f8224791679ecce769",
+    "size": 1649,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_repositories.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_repositories.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/23b1d5e839bcc543296c91f8224791679ecce769",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_repositories.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_repositories.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/23b1d5e839bcc543296c91f8224791679ecce769",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_repositories.snap"
+    }
+  },
+  {
+    "name": "search_users.snap",
+    "path": "pkg/github/__toolsnaps__/search_users.snap",
+    "sha": "27bd2eb0815244df19c360257f7cee35d37b3ed7",
+    "size": 1324,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_users.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_users.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/27bd2eb0815244df19c360257f7cee35d37b3ed7",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/search_users.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/search_users.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/27bd2eb0815244df19c360257f7cee35d37b3ed7",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/search_users.snap"
+    }
+  },
+  {
+    "name": "set_issue_fields.snap",
+    "path": "pkg/github/__toolsnaps__/set_issue_fields.snap",
+    "sha": "c5b89077acfe90524ec6d1a833d53b3094a3f96f",
+    "size": 3502,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/set_issue_fields.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/set_issue_fields.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c5b89077acfe90524ec6d1a833d53b3094a3f96f",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/set_issue_fields.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/set_issue_fields.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c5b89077acfe90524ec6d1a833d53b3094a3f96f",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/set_issue_fields.snap"
+    }
+  },
+  {
+    "name": "star_repository.snap",
+    "path": "pkg/github/__toolsnaps__/star_repository.snap",
+    "sha": "4344d0ee068b8150fd348d9c2ba9b788d239b8a5",
+    "size": 2045,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/star_repository.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/star_repository.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4344d0ee068b8150fd348d9c2ba9b788d239b8a5",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/star_repository.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/star_repository.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/4344d0ee068b8150fd348d9c2ba9b788d239b8a5",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/star_repository.snap"
+    }
+  },
+  {
+    "name": "sub_issue_write.snap",
+    "path": "pkg/github/__toolsnaps__/sub_issue_write.snap",
+    "sha": "9dc2776c3254cde7eb398e35d6fb35a4d6a81a38",
+    "size": 1972,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/sub_issue_write.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/sub_issue_write.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9dc2776c3254cde7eb398e35d6fb35a4d6a81a38",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/sub_issue_write.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/sub_issue_write.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/9dc2776c3254cde7eb398e35d6fb35a4d6a81a38",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/sub_issue_write.snap"
+    }
+  },
+  {
+    "name": "submit_pending_pull_request_review.snap",
+    "path": "pkg/github/__toolsnaps__/submit_pending_pull_request_review.snap",
+    "sha": "12438ffe7103d91f6dfd2430ac61215ea2dc9af4",
+    "size": 1108,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/submit_pending_pull_request_review.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/submit_pending_pull_request_review.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/12438ffe7103d91f6dfd2430ac61215ea2dc9af4",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/submit_pending_pull_request_review.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/submit_pending_pull_request_review.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/12438ffe7103d91f6dfd2430ac61215ea2dc9af4",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/submit_pending_pull_request_review.snap"
+    }
+  },
+  {
+    "name": "ui_get.snap",
+    "path": "pkg/github/__toolsnaps__/ui_get.snap",
+    "sha": "85b562156df6640598cb5a5540a6b51470f127c3",
+    "size": 1050,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/ui_get.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/ui_get.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/85b562156df6640598cb5a5540a6b51470f127c3",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/ui_get.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/ui_get.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/85b562156df6640598cb5a5540a6b51470f127c3",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/ui_get.snap"
+    }
+  },
+  {
+    "name": "unresolve_review_thread.snap",
+    "path": "pkg/github/__toolsnaps__/unresolve_review_thread.snap",
+    "sha": "fe40bab3e98bf9de4761a68da59931f3a5115831",
+    "size": 613,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/unresolve_review_thread.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/unresolve_review_thread.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/fe40bab3e98bf9de4761a68da59931f3a5115831",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/unresolve_review_thread.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/unresolve_review_thread.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/fe40bab3e98bf9de4761a68da59931f3a5115831",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/unresolve_review_thread.snap"
+    }
+  },
+  {
+    "name": "unstar_repository.snap",
+    "path": "pkg/github/__toolsnaps__/unstar_repository.snap",
+    "sha": "ac8262e22b1fdcccce9a02558d0b49e95c9d4870",
+    "size": 503,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/unstar_repository.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/unstar_repository.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ac8262e22b1fdcccce9a02558d0b49e95c9d4870",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/unstar_repository.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/unstar_repository.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ac8262e22b1fdcccce9a02558d0b49e95c9d4870",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/unstar_repository.snap"
+    }
+  },
+  {
+    "name": "update_gist.snap",
+    "path": "pkg/github/__toolsnaps__/update_gist.snap",
+    "sha": "c004a8bf14d6357d783ee9f01e7e1dfb17eae145",
+    "size": 753,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_gist.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_gist.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c004a8bf14d6357d783ee9f01e7e1dfb17eae145",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_gist.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_gist.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c004a8bf14d6357d783ee9f01e7e1dfb17eae145",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_gist.snap"
+    }
+  },
+  {
+    "name": "update_issue_assignees.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_assignees.snap",
+    "sha": "51a407c164a9687da2dc78c5a0b44e49ead2866e",
+    "size": 2661,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_assignees.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_assignees.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/51a407c164a9687da2dc78c5a0b44e49ead2866e",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_assignees.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_assignees.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/51a407c164a9687da2dc78c5a0b44e49ead2866e",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_assignees.snap"
+    }
+  },
+  {
+    "name": "update_issue_body.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_body.snap",
+    "sha": "e17043331d515c8cfdeb4daef5529c18b2593fb1",
+    "size": 886,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_body.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_body.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e17043331d515c8cfdeb4daef5529c18b2593fb1",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_body.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_body.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/e17043331d515c8cfdeb4daef5529c18b2593fb1",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_body.snap"
+    }
+  },
+  {
+    "name": "update_issue_comment.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_comment.snap",
+    "sha": "c8a1db29d2550bb6780ddd70ee0734e588a67c87",
+    "size": 991,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_comment.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_comment.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c8a1db29d2550bb6780ddd70ee0734e588a67c87",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_comment.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_comment.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/c8a1db29d2550bb6780ddd70ee0734e588a67c87",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_comment.snap"
+    }
+  },
+  {
+    "name": "update_issue_labels.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_labels.snap",
+    "sha": "2ad387758631e6f62c6b8561071aa84f94a3abcd",
+    "size": 2602,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_labels.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_labels.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/2ad387758631e6f62c6b8561071aa84f94a3abcd",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_labels.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_labels.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/2ad387758631e6f62c6b8561071aa84f94a3abcd",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_labels.snap"
+    }
+  },
+  {
+    "name": "update_issue_milestone.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_milestone.snap",
+    "sha": "cae51246b444988fe13b803268c32f7f156e4407",
+    "size": 932,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_milestone.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_milestone.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/cae51246b444988fe13b803268c32f7f156e4407",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_milestone.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_milestone.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/cae51246b444988fe13b803268c32f7f156e4407",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_milestone.snap"
+    }
+  },
+  {
+    "name": "update_issue_state.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_state.snap",
+    "sha": "2a26e8be641c8d38a49f88fe684ead6d0efb6674",
+    "size": 2692,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_state.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_state.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/2a26e8be641c8d38a49f88fe684ead6d0efb6674",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_state.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_state.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/2a26e8be641c8d38a49f88fe684ead6d0efb6674",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_state.snap"
+    }
+  },
+  {
+    "name": "update_issue_title.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_title.snap",
+    "sha": "48c74d98ef5f5df05eda2aaa6bebf7ceb49346fc",
+    "size": 876,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_title.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_title.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/48c74d98ef5f5df05eda2aaa6bebf7ceb49346fc",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_title.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_title.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/48c74d98ef5f5df05eda2aaa6bebf7ceb49346fc",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_title.snap"
+    }
+  },
+  {
+    "name": "update_issue_type.snap",
+    "path": "pkg/github/__toolsnaps__/update_issue_type.snap",
+    "sha": "fbe8c90bb1612239af92d5be07046219bbd32a9e",
+    "size": 2164,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_type.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_type.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/fbe8c90bb1612239af92d5be07046219bbd32a9e",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_issue_type.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_issue_type.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/fbe8c90bb1612239af92d5be07046219bbd32a9e",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_issue_type.snap"
+    }
+  },
+  {
+    "name": "update_pull_request.snap",
+    "path": "pkg/github/__toolsnaps__/update_pull_request.snap",
+    "sha": "ae037a3e0dfc6828c40b0329041feec1237640fc",
+    "size": 1714,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ae037a3e0dfc6828c40b0329041feec1237640fc",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_pull_request.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/ae037a3e0dfc6828c40b0329041feec1237640fc",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request.snap"
+    }
+  },
+  {
+    "name": "update_pull_request_body.snap",
+    "path": "pkg/github/__toolsnaps__/update_pull_request_body.snap",
+    "sha": "00b4fb978a6abfa98e47bd89718b440822db13ac",
+    "size": 911,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_body.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_body.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/00b4fb978a6abfa98e47bd89718b440822db13ac",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_pull_request_body.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_body.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/00b4fb978a6abfa98e47bd89718b440822db13ac",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_body.snap"
+    }
+  },
+  {
+    "name": "update_pull_request_branch.snap",
+    "path": "pkg/github/__toolsnaps__/update_pull_request_branch.snap",
+    "sha": "633ce6fb88be5f43525c38f1a3404dc250baa077",
+    "size": 833,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_branch.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_branch.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/633ce6fb88be5f43525c38f1a3404dc250baa077",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_pull_request_branch.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_branch.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/633ce6fb88be5f43525c38f1a3404dc250baa077",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_branch.snap"
+    }
+  },
+  {
+    "name": "update_pull_request_draft_state.snap",
+    "path": "pkg/github/__toolsnaps__/update_pull_request_draft_state.snap",
+    "sha": "653fa3398fe51ca7c1c5494207d6874d68675120",
+    "size": 946,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_draft_state.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_draft_state.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/653fa3398fe51ca7c1c5494207d6874d68675120",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_pull_request_draft_state.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_draft_state.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/653fa3398fe51ca7c1c5494207d6874d68675120",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_draft_state.snap"
+    }
+  },
+  {
+    "name": "update_pull_request_state.snap",
+    "path": "pkg/github/__toolsnaps__/update_pull_request_state.snap",
+    "sha": "440533e9b791613820bbc8f65c64a6a90b9e1038",
+    "size": 980,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_state.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_state.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/440533e9b791613820bbc8f65c64a6a90b9e1038",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_pull_request_state.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_state.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/440533e9b791613820bbc8f65c64a6a90b9e1038",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_state.snap"
+    }
+  },
+  {
+    "name": "update_pull_request_title.snap",
+    "path": "pkg/github/__toolsnaps__/update_pull_request_title.snap",
+    "sha": "1ac5455f77cc2d3d0fa656f045bed8e1ded8aa03",
+    "size": 897,
+    "url": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_title.snap?ref=main",
+    "html_url": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_title.snap",
+    "git_url": "https://api.github.com/repos/github/github-mcp-server/git/blobs/1ac5455f77cc2d3d0fa656f045bed8e1ded8aa03",
+    "download_url": "https://raw.githubusercontent.com/github/github-mcp-server/main/pkg/github/__toolsnaps__/update_pull_request_title.snap",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/github/github-mcp-server/contents/pkg/github/__toolsnaps__/update_pull_request_title.snap?ref=main",
+      "git": "https://api.github.com/repos/github/github-mcp-server/git/blobs/1ac5455f77cc2d3d0fa656f045bed8e1ded8aa03",
+      "html": "https://github.com/github/github-mcp-server/blob/main/pkg/github/__toolsnaps__/update_pull_request_title.snap"
+    }
+  }
+]

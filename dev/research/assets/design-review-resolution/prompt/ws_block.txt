@@ -1,0 +1,8 @@
+<workspace env="globalenv" objects="6">
+pbmc     Seurat      3,012,448 cells x 33,538 features  5.1 GB
+qc_tbl   data.table  3,012,448 x 5  96 MB
+genes    character   length 33,538  2.1 MB
+markers  data.frame  4,211 x 7  1.2 MB
+meta     data.frame  12 x 4  3 KB
+cfg      list        length 6  2 KB
+</workspace>

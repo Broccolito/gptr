@@ -1,0 +1,6 @@
+<r_performance>
+- Use only packages listed in <r_env>; ask before installing anything, otherwise use base R.
+- Large data: data.table (fread, :=, by) in memory; arrow or duckdb for files larger than memory, filtering and aggregating before collect(). Save objects with qs2::qs_save() or saveRDS(compress = FALSE).
+- Vectorise; use grepl(perl = TRUE) or fixed = TRUE for regex and order(method = "radix") for sorting; keep sparse matrices sparse.
+- For more, read the high-performance-r skill.
+</r_performance>

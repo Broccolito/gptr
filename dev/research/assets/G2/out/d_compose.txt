@@ -1,0 +1,82 @@
+Per transcript (o200k tokens; cost in USD for one run of the task):
+ task   style requests tool_calls prefix tool_result_tok image_tok input_cum
+    1       S        7          6   2096            1322         0     19887
+    1 S-quiet        7          6   2096            1125         0     19167
+    1       C        2          1   2096             205         0      4714
+    2       S        7          6   2096             806         0     19709
+    2       C        2          1   2096             252         0      4772
+    3       S       12          9   2096            1468      1800     41650
+    3       C        6          3   2096             303      1800     16868
+    4       S        4          3   2096             641      1080     11938
+    4       C        2          1   2096             157      1080      5968
+    5       S        5          4   2286            9938         0     49149
+    5       C        2          1   2209             574         0      5334
+    6       S       16         11   2096            4352       900     83748
+    6       C        9          4   2096             696         0     24540
+ output last_context
+    287         3930
+    299         3745
+    228         2629
+    221         3380
+    159         2639
+    380         6066
+    273         4644
+    411         4406
+    350         3811
+    161        12527
+    277         3127
+    507         8245
+    451         3458
+
+Cost per run (USD), without / with prompt caching; Claude costs include a 1.35x tokenizer factor over o200k:
+ task   style sonnet55_nocache sonnet55_cache opus55_nocache opus55_cache
+    1       S           0.0576         0.0212         0.1151       0.0380
+    1 S-quiet           0.0558         0.0206         0.1116       0.0370
+    1       C           0.0158         0.0122         0.0316       0.0239
+    2       S           0.0562         0.0186         0.1124       0.0327
+    2       C           0.0150         0.0114         0.0301       0.0222
+    3       S           0.1176         0.0351         0.2352       0.0607
+    3       C           0.0492         0.0226         0.0985       0.0419
+    4       S           0.0378         0.0223         0.0756       0.0426
+    4       C           0.0208         0.0180         0.0417       0.0355
+    5       S           0.1349         0.0542         0.2698       0.0985
+    5       C           0.0181         0.0148         0.0363       0.0289
+    6       S           0.2330         0.0549         0.4659       0.0895
+    6       C           0.0723         0.0233         0.1447       0.0410
+ gpt61sol_nocache gpt61sol_cache gem38flash_nocache gem38flash_cache
+           0.0426         0.0141             0.0160           0.0160
+           0.0413         0.0137             0.0155           0.0155
+           0.0117         0.0089             0.0044           0.0044
+           0.0416         0.0121             0.0156           0.0156
+           0.0111         0.0082             0.0042           0.0042
+           0.0871         0.0225             0.0327           0.0299
+           0.0365         0.0155             0.0137           0.0137
+           0.0280         0.0158             0.0105           0.0105
+           0.0154         0.0131             0.0058           0.0058
+           0.0999         0.0365             0.0375           0.0143
+           0.0134         0.0107             0.0050           0.0050
+           0.1726         0.0331             0.0647           0.0280
+           0.0536         0.0152             0.0201           0.0201
+
+S / C ratios per task (S = separate tool calls, C = composed r evaluation):
+  task 1: requests 7 vs 2 | cumulative input 4.22x | output 1.26x | Sonnet 5.5 cost 3.65x uncached, 1.74x cached | GPT-6.1 Sol cached 1.58x | Gemini 3.8 Flash cached 3.64x
+  task 2: requests 7 vs 2 | cumulative input 4.13x | output 1.39x | Sonnet 5.5 cost 3.75x uncached, 1.63x cached | GPT-6.1 Sol cached 1.48x | Gemini 3.8 Flash cached 3.71x
+  task 3: requests 12 vs 6 | cumulative input 2.47x | output 1.39x | Sonnet 5.5 cost 2.39x uncached, 1.55x cached | GPT-6.1 Sol cached 1.45x | Gemini 3.8 Flash cached 2.18x
+  task 4: requests 4 vs 2 | cumulative input 2.00x | output 1.17x | Sonnet 5.5 cost 1.82x uncached, 1.24x cached | GPT-6.1 Sol cached 1.21x | Gemini 3.8 Flash cached 1.81x
+  task 5: requests 5 vs 2 | cumulative input 9.21x | output 0.58x | Sonnet 5.5 cost 7.45x uncached, 3.66x cached | GPT-6.1 Sol cached 3.41x | Gemini 3.8 Flash cached 2.86x
+  task 6: requests 16 vs 9 | cumulative input 3.41x | output 1.12x | Sonnet 5.5 cost 3.22x uncached, 2.36x cached | GPT-6.1 Sol cached 2.18x | Gemini 3.8 Flash cached 1.39x
+
+Task 1 verbosity vs composition: S 19887, S-quiet 19167, C 4714 cumulative input tokens
+
+All six tasks together:
+ style requests tool_calls input_cum output sonnet55_nocache sonnet55_cache
+     C       23         11     62196   1738           0.1912         0.1023
+     S       51         39    226081   1967           0.6371         0.2063
+ gpt61sol_cache gem38flash_cache
+         0.0716           0.0532
+         0.1341           0.1143
+S/C: requests 2.22x, cumulative input 3.63x, output 1.13x, Sonnet 5.5 uncached 3.33x, cached 2.02x
+Caching saves 68% (S) and 46% (C) of the Sonnet 5.5 bill; the prefix is 78% of cumulative input in C and 48% in S
+
+Nine cluster labels (north star 11): Jev ~383 input tokens per decision (o200k body x 3.16, calibrated on report 04a's 443-token request) = 3447 tokens, $0.000145 at $0.042/MTok, output free
+System 2 emulation through gptr: 2174 input tokens per decision (prefix + prompt) = 19566 for nine calls; Sonnet 5.5 $0.0534 uncached, $0.0141 with the prefix cached

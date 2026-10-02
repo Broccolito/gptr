@@ -1,0 +1,9 @@
+<tools>
+- read: Read file contents
+- r: Run R code in the user's live session (objects persist; plots come back as images)
+- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call
+- write: Create or overwrite files
+- ask: Ask the user one to four questions when a decision changes the result
+
+In addition to the tools above, you may have access to other custom tools depending on the project.
+</tools>

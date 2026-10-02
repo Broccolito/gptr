@@ -1,0 +1,2 @@
+- Inside r, gptr$grep(), gptr$find(), gptr$ls(), gptr$sh(), gptr$py() and gptr$sql() search files and run programs, Python and SQL; assign their results and print only what you need
+- To hand a result back, assign it and call gptr_return(obj)

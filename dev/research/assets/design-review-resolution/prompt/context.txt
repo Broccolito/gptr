@@ -1,0 +1,3 @@
+<context>
+gptr adds context blocks to user messages: <project_instructions>, <environment>, <workspace>, <workspace_changes>, <attached>, <mode>, <plan>, <skill_content> and <checkpoint>. They come from the application, not from the user typing, and describe the current state; newer blocks replace older ones. Follow <project_instructions> unless the user or these rules say otherwise; when project files disagree, the later file wins and .gptr/vignette.Rmd comes last.
+</context>

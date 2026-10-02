@@ -1,0 +1,181 @@
+Tokens (o200k) and facts found, per object and describer (12@B = report 12 gptr_describe at budget B):
+  object of tok 12@50 facts 12@50 tok 12@150 facts 12@150 tok 12@300
+ num_vec  6        60           6         60            6         60
+ chr_vec  4        38           4         38            4         38
+     fct  4        45           4         45            4         45
+   dates  4        35           2         35            2         35
+   times  4        53           2         53            2         53
+      df  8        54           5        193            8        193
+     tbl  8        58           5        197            8        197
+      dt  8        62           5        201            8        201
+     mat  6        58           5        165            6        165
+  sparse  5        64           2         91            2         91
+     lst  4        56           4         80            4         80
+  nested  5        44           2         44            2         44
+     env  4        37           4         37            4         37
+      fn  4        54           3         77            4         77
+  fit_lm  5        71           5         71            5         71
+ fit_glm  5        58           5         58            5         58
+     seu  6        45           2        122            6        122
+      r6  3        48           3         48            3         48
+     fml  2        19           1         19            1         19
+  altrep  3        62           3         62            3         62
+ facts 12@300 tok 12@600 facts 12@600 tok 10 facts 10 tok str() facts str()
+            6         60            6     32        4        25           1
+            4         38            4     32        3        17           2
+            4         45            4     23        3        32           1
+            2         35            2     37        4        34           2
+            2         53            2     30        2        54           2
+            8        193            8    125        7       187           6
+            8        197            8    129        7       223           6
+            8        201            8    113        7       189           6
+            6        165            6     35        2        29           3
+            2         91            2     30        1       213           4
+            4         80            4     41        4       395           4
+            2         44            2     28        2       188           4
+            4         37            4      8        1        14           1
+            4         77            4     22        2        19           3
+            5         71            5     83        1       294           4
+            5         58            5     87        2       455           3
+            6        122            6     32        3       548           6
+            3         48            3     11        1        53           3
+            1         19            1     12        1        20           2
+            3         62            3     32        2         3           0
+
+Totals over 20 objects:
+ describer tokens facts of facts_pct facts_per_100tok
+     12@50   1021    72 98      73.5             7.05
+    12@150   1696    87 98      88.8             5.13
+    12@300   1696    87 98      88.8             5.13
+    12@600   1696    87 98      88.8             5.13
+        10    942    59 98      60.2             6.26
+     str()   2992    63 98      64.3             2.11
+
+Budget adherence of report 12 (budget in tokens, fitted with 3.5 chars/token): actual o200k / budget
+  budget  50: median 1.08, max 1.42 (objects over budget: 12 of 20); chars per token median 2.43
+  budget 150: median 0.41, max 1.34 (objects over budget: 4 of 20); chars per token median 2.39
+  budget 300: median 0.20, max 0.67 (objects over budget: 0 of 20); chars per token median 2.39
+  budget 600: median 0.10, max 0.34 (objects over budget: 0 of 20); chars per token median 2.39
+
+Missing facts at budget 300 (report 12):
+ object               missing
+  dates   range_min,range_max
+  times   range_min,range_max
+ sparse dim,rownames,colnames
+ nested      depth2,leaf,deep
+    fml                  text
+
+ALTREP 1:1e9 described in 0.009 s without materialising (object.size 4000000048 bytes)
+
+Examples at budget 150:
+df: <data.frame> 100,000 x 7, 4.2 MB
+  $ id <integer> min 1, median 50000, max 1e+05; no NA
+  $ group <character> 3 unique, e.g. "a", "c", "b"; no NA
+  $ dose <numeric> min 0, median 5, max 10; no NA
+  $ response <numeric> min -4.505, median 0.002491, max 4.374; 0.5% NA
+  $ visit <Date> min 19358, median 19540, max 19723; no NA
+  $ site <factor> 12 levels, top: site11 (8501), site9 (8423), site12 (8421); no NA
+  $ treated <logical> 50269 TRUE; no NA 
+---
+sparse: <S4 dgCMatrix from Matrix> 8.3 MB
+  @i: <integer> length 600,000
+  @p: <integer> length 3,001
+  @Dim: <integer> length 2
+  @Dimnames: <list> length 2
+  @x: <numeric> length 600,000
+  @factors: <list> length 0 
+---
+seu: <S4 SeuratLike from .GlobalEnv> 9.3 MB
+  @assays: <list> length 1; names: RNA
+  @meta.data: <data.frame> 3,000 rows; names: orig.ident, nCount_RNA, nFeature_RNA, percent.mt
+  @active.ident: <factor> length 3,000
+  @reductions: <list> length 1; names: pca
+  @project.name: <character> length 1
+  @version: <character> length 1 
+---
+fml: <formula> length 3, 1.9 KB
+  typeof language 
+---
+dates: <Date> length 100,000, 781.5 KB
+  min 18628, median 19128, max 19628; no NA 
+---
+
+Workspace summary (21 objects, budget 600): 336 o200k tokens, 20 lines
+altrep <integer> length 1,000,000,000, 3.7 GB
+seu <SeuratLike> length 1, 9.3 MB
+sparse <dgCMatrix> length 60,000,000, 8.3 MB
+num_vec <numeric> length 1,002,000, 7.6 MB
+dt <data.table/data.frame> 100,000 x 7, 4.2 MB
+tbl <tbl_df/tbl/data.frame> 100,000 x 7, 4.2 MB
+df <data.frame> 100,000 x 7, 4.2 MB
+times <POSIXct/POSIXt> length 100,000, 781.8 KB
+chr_vec <character> length 100,000, 781.5 KB
+dates <Date> length 100,000, 781.5 KB
+mat <matrix/array> 1,000 x 50, 456.7 KB
+fct <factor> length 100,000, 391.4 KB
+fit_glm <glm/lm> length 30, 215.5 KB
+fit_lm <lm> length 12, 27.7 KB
+lst <list> length 4, 8.2 KB
+nested <list> length 2, 3.3 KB
+fml <formula> length 3, 1.9 KB
+env <environment> length 4
+fn <function> length 1
+r6 <Counter/R6> length 6
+Warning messages:
+1: In min(s, na.rm = TRUE) :
+  no non-missing arguments to min; returning Inf
+2: In max(s, na.rm = TRUE) :
+  no non-missing arguments to max; returning -Inf
+3: In min(s, na.rm = TRUE) :
+  no non-missing arguments to min; returning Inf
+4: In max(s, na.rm = TRUE) :
+  no non-missing arguments to max; returning -Inf
+5: In min(s, na.rm = TRUE) :
+  no non-missing arguments to min; returning Inf
+6: In max(s, na.rm = TRUE) :
+  no non-missing arguments to max; returning -Inf
+7: In min.default(c(NA_real_, NA_real_, NA_real_, NA_real_, NA_real_,  :
+  no non-missing arguments to min; returning Inf
+8: In max.default(c(NA_real_, NA_real_, NA_real_, NA_real_, NA_real_,  :
+  no non-missing arguments to max; returning -Inf
+
+
+=== G2 level-based describer (describe2) ===
+ budget tokens facts of facts_pct facts_per_100tok over_budget max_ratio
+     50    675    72 98      73.5            10.67           1      1.08
+    150   1152    89 98      90.8             7.73           0      1.00
+    300   1693    97 98      99.0             5.73           0      0.65
+    600   1693    97 98      99.0             5.73           0      0.32
+
+Missing facts per budget (describe2):
+  budget 50: df[stats,na]; tbl[colnames,types,stats,na,key_col]; dt[colnames,types,stats,key_col]; mat[values]; sparse[rownames,colnames]; lst[elem_class]; nested[leaf,deep]; env[methods]; fn[body]; fit_lm[fit_stat]; fit_glm[family,fit_stat]; seu[meta_dim,meta_cols,assay]; r6[methods]
+  budget 150: df[stats,na]; tbl[stats,na]; dt[stats]; nested[deep]; seu[meta_dim,meta_cols,assay]
+  budget 300: nested[deep]
+
+Examples (budget 50 and 150):
+[df @50] <data.frame> 100,000 x 7, 4.2 MB
+      id:int group:chr dose:dbl response:dbl visit:date site:fct treated:lgl
+[df @150] <data.frame> 100,000 x 7, 4.2 MB
+      id:int group:chr dose:dbl response:dbl visit:date site:fct treated:lgl
+[dates @50] <Date> length 100,000, 781.5 KB
+      2021-01-01 to 2023-09-28; no NA
+[dates @150] <Date> length 100,000, 781.5 KB
+      2021-01-01 to 2023-09-28; no NA
+[sparse @50] <dgCMatrix> 20,000 x 3,000 sparse, 600,000 non-zero (1.00%), 8.3 MB
+[sparse @150] <dgCMatrix> 20,000 x 3,000 sparse, 600,000 non-zero (1.00%), 8.3 MB
+      rownames G1, G2, G3 ...; colnames cell1, cell2, cell3 ...
+[seu @50] <S4 SeuratLike> 9.3 MB; slots: assays, meta.data, active.ident, reductions, project.name, version
+[seu @150] <S4 SeuratLike> 9.3 MB; slots: assays, meta.data, active.ident, reductions, project.name, version
+[fml @50] <formula> y ~ x + log(dose) + (1 | subject)
+[fml @150] <formula> y ~ x + log(dose) + (1 | subject)
+[nested @50] <list> length 2, 3.3 KB
+      names: project, settings
+[nested @150] <list> length 2, 3.3 KB
+      project: <list> length 2
+        name: <character> length 1 = pbmc
+        samples: <list> length 2
+          s1: <list> length 2
+          s2: <list> length 2
+      settings: <list> length 2
+        resolution: <numeric> length 1 = 0.8
+        dims: <numeric> length 1 = 30

@@ -1,0 +1,47 @@
+ level    impl lines chars o200k cl100k as_write_arg
+    L1 shiny_a    20   554   159    157          202
+    L1 shiny_b    25   725   197    196          242
+    L1  html_a    31  1150   356    349          415
+    L1  html_b    45  1580   447    437          523
+    L2 shiny_a    20   561   162    161          202
+    L2 shiny_b    38   855   233    232          300
+    L2  html_a    36  1381   410    395          476
+    L2  html_b    57  1900   564    561          665
+    L3 shiny_a    34  1268   348    349          421
+    L3 shiny_b    69  1917   526    525          656
+    L3  html_a    69  3623  1079   1051         1234
+    L3  html_b   119  4872  1417   1402         1646
+    L4 shiny_a    20   682   194    194          240
+    L4 shiny_b    49  1235   345    343          430
+    L4  html_a    46  1888   584    567          687
+    L4  html_b    95  3115   839    823         1013
+    L5 shiny_a    40  1205   320    320          388
+    L5 shiny_b    74  1935   530    530          662
+    L5  html_a    45  1803   542    525          635
+    L5  html_b    90  3055   838    827         1012
+
+Per level: mean of the two implementations per side (o200k), ratio html/shiny, and the range over
+the four cross pairs (html_x / shiny_y):
+  L1 shiny  178.0  html  401.5  ratio 2.26  pair range 1.81-2.81 | as write-call argument: ratio 2.11
+  L2 shiny  197.5  html  487.0  ratio 2.47  pair range 1.76-3.48 | as write-call argument: ratio 2.27
+  L3 shiny  437.0  html 1248.0  ratio 2.86  pair range 2.05-4.07 | as write-call argument: ratio 2.67
+  L4 shiny  269.5  html  711.5  ratio 2.64  pair range 1.69-4.32 | as write-call argument: ratio 2.54
+  L5 shiny  425.0  html  690.0  ratio 1.62  pair range 1.02-2.62 | as write-call argument: ratio 1.57
+  side o200k cl100k as_write_arg
+  html  7076   6937         8306
+ shiny  3014   3007         3743
+Overall html/shiny: o200k 2.35, cl100k 2.31, as write-call argument 2.22
+Tokenizer agreement: cl100k/o200k per file median 0.992 (range 0.963-1.003)
+JSON escaping in a write call: +24.7% shiny, +17.1% html (median over files)
+
+Growth curve (mean o200k per side by level index 1..5; least-squares slope per level):
+  shiny 178 -> 198 -> 437 -> 270 -> 425 | slope 57 tokens/level, intercept 132
+  html  402 -> 487 -> 1248 -> 712 -> 690 | slope 80 tokens/level, intercept 467
+
+Data transfer: what the model must emit/receive for the data (o200k)
+  sales (5000 x 5)       rows-JSON  127113 | columns-JSON   72125 | CSV   77122 | name 1 | name + schema line 25
+  sales[1:1000, ]        rows-JSON   25420 | columns-JSON   14432 | CSV   15429 | name 1 | name + schema line 25
+  sales[1:100, ]         rows-JSON    2546 | columns-JSON    1458 | CSV    1555 | name 1 | name + schema line 24
+  cars_df (32 x 12)      rows-JSON    2056 | columns-JSON    1157 | CSV    1181 | name 2 | name + schema line 48
+  inv_a + inv_b (16 x 3) rows-JSON     239 | columns-JSON     149 | CSV     162 | name 2 | name + schema line 19
+  sales x10 (50000 x 5)  rows-JSON 1651123 (linear in rows: 33.0 tokens/row)

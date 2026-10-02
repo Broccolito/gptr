@@ -1,0 +1,38 @@
+ level    impl n_edits edit_tok rewrite_tok rewrite_over_edit
+    L1 shiny_a       1      116         242               2.1
+    L1 shiny_b       2      108         276               2.6
+    L1  html_a       4      179         452               2.5
+    L1  html_b       4      209         563               2.7
+    L2 shiny_a       1       35         204               5.8
+    L2 shiny_b       1       43         312               7.3
+    L2  html_a       1       54         488               9.0
+    L2  html_b       1       45         664              14.8
+    L3 shiny_a       2      132         460               3.5
+    L3 shiny_b       3      152         700               4.6
+    L3  html_a       2      140        1296               9.3
+    L3  html_b       2      168        1702              10.1
+    L4 shiny_a       1       59         246               4.2
+    L4 shiny_b       2      115         440               3.8
+    L4  html_a       2       99         700               7.1
+    L4  html_b       1       64        1019              15.9
+    L5 shiny_a       2      136         433               3.2
+    L5 shiny_b       2      149         728               4.9
+    L5  html_a       3      265         713               2.7
+    L5  html_b       2      208        1100               5.3
+
+Mean per side (o200k output tokens of the tool-call arguments):
+ level edit_tok.html rewrite_tok.html edit_tok.shiny rewrite_tok.shiny
+    L1         194.0            507.5          112.0             259.0
+    L2          49.5            576.0           39.0             258.0
+    L3         154.0           1499.0          142.0             580.0
+    L4          81.5            859.5           87.0             343.0
+    L5         236.5            906.5          142.5             580.5
+ edit_html_over_shiny rewrite_html_over_shiny
+                 1.73                    1.96
+                 1.27                    2.23
+                 1.08                    2.58
+                 0.94                    2.51
+                 1.66                    1.56
+
+All levels: edit total shiny 1045 vs html 1431 (x1.37); rewrite total shiny 4041 vs html 8697 (x2.15)
+Rewrite / edit: shiny 3.9x, html 6.1x (sum over levels)
