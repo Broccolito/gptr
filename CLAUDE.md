@@ -2,6 +2,7 @@
 
 gptr 1.0 is a ground-up rebuild: an AI agent harness that lives inside the R session (CRAN package, pure R).
 All design material is under `dev/` and excluded from the package build.
+Machine-specific inventories belong in the ignored `dev/LOCAL_SETUP.md`, if needed.
 
 ## Read before working
 
@@ -24,8 +25,10 @@ overrides its body.
 - No compiled code in v1.
 - Tests are offline. Use the fake provider and helpers from P01. Live tests only run with
   `GPTR_LIVE_TESTS=true`.
-- The Jev (System One) key is in `/Users/wanjun/Downloads/jev-key.env` (variable `jev-key`). Load it only through
-  `gptr_env()` in live tests. Never print, log, copy or commit it.
+- Local credentials are in `.secrets/jev-key.env` (Jev variable `jev-key`) and
+  `.secrets/llm-passwords.env`. The directory is owner-only and excluded from Git and R builds.
+  Load keys only through `gptr_env()` in explicitly enabled live tests once implemented.
+  Never print, log, copy or commit them; preserve the ignore rules when replacing setup files.
 - Never write to `.GlobalEnv` by name, never leave `options()`, working directory, seed or env vars changed, and
   keep user objects copy-safe (architecture §6.4).
 - Commit one task at a time with the conventional message the plan gives.

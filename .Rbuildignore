@@ -5,3 +5,8 @@
 ^LICENSE\.md$
 ^dev$
 ^CLAUDE\.md$
+^\.secrets$
+^\.env($|\.)
+^.*\.env$
+^\.DS_Store$
+^gptr-discussion\.txt$

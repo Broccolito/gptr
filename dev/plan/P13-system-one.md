@@ -5129,7 +5129,7 @@ git commit -m "feat(s1): ship the tested Jev complexity router example"
 - Consumes: P03 `gptr_env(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE), override = FALSE, quiet = FALSE)` (maps `jev-key` to `TYPESAFE_API_KEY`, registers the value in the vault, never prints it); P08 `gptr_config(egress = list(typesafe = "ack"), .scope = "user")`; everything of Tasks 1-9.
 - Produces: the gated live check of 05 P13 acceptance 1 ("the live test skips unless `GPTR_LIVE_TESTS=true` and reads the key only through `gptr_env()`").
 
-The key file is the maintainer's (conventions §1: `/Users/wanjun/Downloads/jev-key.env`, one line `jev-key=<value>`), overridable with `GPTR_JEV_KEY_FILE`; it is read only by `gptr_env()`, and the test asserts the key never appears in printed output or in `meta`. About ten requests of about 300 input tokens at $0.042 per million.
+The key file is the maintainer's (conventions §1: `.secrets/jev-key.env` relative to the repository root, one line `jev-key=<value>`), overridable with `GPTR_JEV_KEY_FILE`; it is read only by `gptr_env()`, and the test asserts the key never appears in printed output or in `meta`. About ten requests of about 300 input tokens at $0.042 per million.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5144,7 +5144,7 @@ Create `tests/testthat/test-live-jev.R`:
 test_that("live: Jev answers decisions, choices and scores through gptr()", {
   skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))
   skip_on_cran()
-  key_file = Sys.getenv("GPTR_JEV_KEY_FILE", "/Users/wanjun/Downloads/jev-key.env")
+  key_file = Sys.getenv("GPTR_JEV_KEY_FILE", test_path("..", "..", ".secrets", "jev-key.env"))
   skip_if_not(file.exists(key_file), "no Jev key file")
   # "auto", not "live": live mode asks System 1 afresh and skips cache reads (ambiguity 6), and
   # the last call below must come from the cache; "auto" still lets misses reach the service

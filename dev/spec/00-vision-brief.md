@@ -91,7 +91,7 @@ the user is working in *is* the harness and *is* the history.
 - **REQ-13** System 1 provider: TypeSafe AI **Jev**
   (<https://typesafe.ai/blog/introducing-system-one-models-and-jev>). API key
   expected in a `.env` file. The maintainer's copy is
-  `/Users/wanjun/Downloads/jev-key.env` and holds one variable named
+  `.secrets/jev-key.env` relative to the repository root and holds one variable named
   `jev-key` (a non-standard name containing a hyphen). The conventional
   variable is `TYPESAFE_API_KEY` (the name Pi uses), so the `.env` loader must
   accept aliases such as `jev-key` / `JEV_API_KEY` and map them onto it. The
@@ -224,6 +224,7 @@ is not supported.
   ggplot2 etc.
 
 ## Known facts about the development machine
+Historical design-session snapshot; see `dev/LOCAL_SETUP.md` for the current inventory.
 - R 4.4.3 at `/usr/local/bin/R`. The repo's `.Rprofile` sources a non-existent
   `renv/activate.R`; use `Rscript --vanilla` when testing.
 - Installed and useful: httr2 1.2.2, curl 7.0.0, jsonlite 2.0.0, processx 3.8.6,
@@ -234,7 +235,7 @@ is not supported.
 - Not installed: mirai, nanonext, duckdb, collapse, qs2, httptest2, vcr,
   webfakes, mcptools, btw, quarto (R pkg and CLI), jupyter.
 - CLIs present: `claude`, `codex`, `node`, `npm`, `gh`.
-- The Jev key file is at `/Users/wanjun/Downloads/jev-key.env` (one variable,
+- The Jev key file is at `.secrets/jev-key.env` relative to the repository root (one variable,
   `jev-key`). Read it only through the package's `.env` loader during live
   System One tests; never print it.
 - Pi source (read-only reference) is <https://github.com/earendil-works/pi>,

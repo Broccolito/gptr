@@ -450,6 +450,10 @@ Replace the contents of `.Rbuildignore`:
 ^AGENTS\.md$
 ^\.claude$
 (^|/)\.DS_Store$
+^\.secrets$
+^\.env($|\.)
+^.*\.env$
+^gptr-discussion\.txt$
 ```
 
 Replace the contents of `.gitignore`:
@@ -463,7 +467,11 @@ Replace the contents of `.gitignore`:
 *.Rcheck/
 gptr_*.tar.gz
 .env
+.env.*
 *.env
+/.secrets/
+/gptr-discussion.txt
+/dev/LOCAL_SETUP.md
 /.gptr/
 /docs/
 ```

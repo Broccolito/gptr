@@ -2,6 +2,9 @@
 
 Everything needed to build gptr 1.0. The folder is excluded from the package build (`.Rbuildignore`).
 
+Historical machine snapshots in the plans and research may differ from your environment.
+Keep any current machine inventory in `LOCAL_SETUP.md` (ignored; not distributed with the repository).
+
 | Folder | Contents |
 |---|---|
 | `spec/` | Requirements and design. `00-vision-brief.md` (REQ-01..REQ-42), `01-decision-register.md` (settled decisions S-1..S-12, final decisions), `02-north-star-examples.md` (target user experience), `03-architecture.md`, `04-interface-contract.md`, `05-plan-decomposition.md`, `06-review-resolution.md`, and `proposals/` (the three competing architectures the design was synthesised from). |

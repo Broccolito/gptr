@@ -2,3 +2,16 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Local credentials
+/.secrets/
+.env
+.env.*
+*.env
+
+# Private source discussion
+/gptr-discussion.txt
+/dev/LOCAL_SETUP.md
+
+# macOS metadata
+.DS_Store

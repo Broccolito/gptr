@@ -4,6 +4,9 @@ Start here. This page tells an implementation session what to read, what to inst
 the 25 plans, the gate at the end of each milestone, and what is still open. Counts, commands and
 paths were checked against the plan files on 2026-10-01 (307 `### Task` headings in P01-P25).
 
+The preflight table below is the historical 2026-10-01 snapshot, not a current availability check.
+Verify tools locally and keep any machine-specific inventory in the ignored `dev/LOCAL_SETUP.md`.
+
 Quick start:
 
 1. Read the files of section 1, in order.
@@ -64,8 +67,9 @@ the maintainer (0.0.7 is in the CRAN archive as `rtiktoken_0.0.7.tar.gz`; Rust i
 
 Other one-time facts:
 
-- **Jev key.** `/Users/wanjun/Downloads/jev-key.env`, variable `jev-key`. Only opt-in live tests read
-  it, through `gptr_env()`. Never print, log, copy or commit it.
+- **Credentials.** `.secrets/jev-key.env` (variable `jev-key`) and `.secrets/llm-passwords.env`,
+  relative to the repository root. Only opt-in live tests read them through `gptr_env()` once
+  implemented. Never print, log, copy or commit them. Preserve the Git and R build exclusions.
 - **Old `.Rprofile`.** It sources a missing `renv/activate.R`; P01 Task 1 deletes it. Until then,
   always run `Rscript --vanilla`.
 - **Git.** Work on a feature branch (`gptr-1.0`) off `main`. One commit per task with the message the
@@ -73,9 +77,9 @@ Other one-time facts:
   (P01's `.gitignore` adds `.env` and `*.env`). Tag each milestone after its gate, for example
   `git tag -a gptr-1.0-m0 -m "M0 gate passed"`. Pushing, opening a pull request and pushing tags
   leave this machine: ask the maintainer first.
-- **Untracked design files.** `dev/` and `CLAUDE.md` are untracked today. Plans commit only their
-  own `dev/` files (`dev/style.R`, `dev/catalog/`, `dev/bench/`, `dev/release/`); whether to commit
-  `dev/spec`, `dev/plan` and `dev/research` is the maintainer's call.
+- **Versioned design files.** `dev/` and `CLAUDE.md` were committed on `gptr-1.0` and consolidated
+  into `main` on 2026-10-03. Plans should still commit only the files for their own task;
+  local machine inventories and raw source conversations remain ignored.
 - **Network.** P05 Task 6 downloads the models.dev catalog (about 5 MB; `--offline` builds a
   seed-only snapshot that must be rebuilt online before release). P25 Task 15 needs the network
   for URL checks, CI, win-builder and the submission. Tests never use the network.

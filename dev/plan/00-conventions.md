@@ -13,17 +13,17 @@ of `dev/spec/01-decision-register.md`; everything in this file is now fixed.
 
 ## 1. Environment
 
-- Development machine: macOS, R 4.4.3 at `/usr/local/bin/R`.
+- Verify the current R and tool inventory locally; historical development snapshots may differ.
 - Always run R non-interactively as `Rscript --vanilla`. The repository's old
   `.Rprofile` sources a missing `renv/activate.R`; the foundation plan deletes it.
-- Working directory for every command: the repository root
-  (`/Users/wanjun/Desktop/gptr`).
+- Working directory for every command: the repository root.
 - Never install packages into the user library from a plan step. If a plan
   needs a package that is not installed, the step says so and stops for the
   maintainer.
-- Secrets: the Jev key file is `/Users/wanjun/Downloads/jev-key.env`. It is read
-  only by live tests through `gptr_env()`; it is never printed, logged, copied or
-  committed.
+- Secrets: `.secrets/jev-key.env` and `.secrets/llm-passwords.env`, relative to the
+  repository root. Keep the directory mode `0700` and file modes `0600`, excluded
+  from Git and R package builds. Keys are read only by explicitly enabled live
+  tests through `gptr_env()` once implemented; never print, log, copy or commit them.
 
 ## 2. Commands
 
