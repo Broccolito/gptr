@@ -1,0 +1,11 @@
+linters: lintr::linters_with_defaults(
+    assignment_linter = lintr::assignment_linter(operator = c("=", "<<-")),
+    indentation_linter = NULL,
+    line_length_linter = lintr::line_length_linter(100L),
+    object_name_linter = lintr::object_name_linter(
+      styles = "snake_case",
+      regexes = c(s3 = "^(\\.DollarNames|knit_print|vec_[a-z0-9_]+)\\.[a-z0-9_]+$")
+    )
+  )
+encoding: "UTF-8"
+exclusions: list("tests/testthat/fixtures/docs")

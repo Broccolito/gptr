@@ -1,0 +1,64 @@
+gptr copyright and third-party notices
+======================================
+
+gptr is Copyright (c) 2026 Wanjun Gu and is released under the MIT license (see LICENSE).
+
+gptr contains material derived from the following MIT-licensed works. Their copyright notices
+and the MIT permission notice are reproduced below as that license requires.
+
+
+1. pi (https://github.com/earendil-works/pi)
+--------------------------------------------
+
+Copyright (c) 2025 Mario Zechner
+
+Derived material: the wording of the read, write and edit tool descriptions and parameter
+schemas, the edit guidelines, the context-overflow message patterns, the prompt-template
+grammar and the session-file field names.
+
+
+2. models.dev (https://github.com/sst/models.dev)
+-------------------------------------------------
+
+Copyright (c) the maintainers of SST
+
+Derived material: the pruned model catalog snapshot shipped in inst/extdata/.
+
+
+3. gitleaks (https://github.com/gitleaks/gitleaks)
+--------------------------------------------------
+
+Copyright (c) 2019 Zachary Rice
+
+Derived material: the shapes of the regular expressions used to recognise API keys and
+private keys in text that gptr redacts.
+
+
+MIT License (applies to the three works above)
+----------------------------------------------
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+Acknowledgements (ideas, no code copied)
+----------------------------------------
+
+The design of gptr credits ideas from the R packages ellmer (Posit, MIT), tidyllm and btw
+(Posit, MIT): structured tool definitions, streaming event kinds and tools for the live R
+session. No code from these packages is included.

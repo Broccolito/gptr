@@ -1,16 +1,80 @@
 Package: gptr
-Type: Package
-Title: A Convenient R Interface with the OpenAI 'ChatGPT' API
-Version: 0.7.0
-Authors@R: 
-    person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre"),
-           comment = c(ORCID = "0000-0002-7342-7000"))
-Description: A convenient interface with the OpenAI 'ChatGPT' API <https://openai.com/api>. 'gptr' allows you to interact with 'ChatGPT', a powerful language model, for various natural language processing tasks. The 'gptr' R package makes talking to 'ChatGPT' in R super easy. It helps researchers and data folks by simplifying the complicated stuff, like asking questions and getting answers. With 'gptr', you can use 'ChatGPT' in R without any hassle, making it simpler for everyone to do cool things with language!
+Title: Language Model Agents Inside the Live 'R' Session
+Version: 0.99.0.9000
+Authors@R: c(
+    person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0002-7342-7000")),
+    person("Mario", "Zechner", role = c("ctb", "cph"),
+           comment = "Author of 'pi' (MIT), from which tool texts and templates are derived")
+  )
+Description: Runs large language model agents inside the running 'R'
+    session, so that models inspect and modify objects that are already in
+    memory instead of re-running scripts from scratch. A single function,
+    gptr(), opens an interactive chat in the console or, given a prompt,
+    runs the agent loop and returns a value that can be piped into further
+    prompts. Supports the 'Anthropic', 'OpenAI' and 'Google Gemini'
+    application programming interfaces, 'OpenAI'-compatible endpoints, the
+    'Claude Code' and 'Codex' command line tools, and System One
+    typed-decision models such as 'Jev'
+    <https://typesafe.ai/blog/introducing-system-one-models-and-jev>, whose
+    calibrated yes/no, choice and score answers can be used directly in if()
+    and for() statements. Tools for reading, writing, editing and searching
+    files and for evaluating 'R' code are implemented in 'R'; skills,
+    extensions, Model Context Protocol ('MCP') servers, sub-agents and
+    'shiny' apps are supported. Sessions are recorded as 'R' scripts,
+    'R Markdown', 'Quarto' or 'Jupyter' documents that can be re-run.
+    Writing files and evaluating model-generated code require the user's
+    permission by default.
 License: MIT + file LICENSE
+URL: https://github.com/Broccolito/gptr
+BugReports: https://github.com/Broccolito/gptr/issues
+Depends:
+    R (>= 4.2.0)
+Imports:
+    callr (>= 3.7.0),
+    cli (>= 3.6.0),
+    curl (>= 6.0.0),
+    graphics,
+    grDevices,
+    jsonlite (>= 1.8.8),
+    methods,
+    processx (>= 3.8.0),
+    ps (>= 1.7.0),
+    rlang (>= 1.1.0),
+    stats,
+    tools,
+    utils,
+    yaml (>= 2.3.0)
+Suggests:
+    bslib,
+    chromote,
+    codetools,
+    data.table,
+    DBI,
+    duckdb,
+    httpuv,
+    keyring,
+    knitr,
+    later,
+    magick,
+    openssl,
+    ragg,
+    reticulate,
+    rmarkdown,
+    RSQLite,
+    rstudioapi,
+    shiny,
+    stringi,
+    testthat (>= 3.2.0),
+    vctrs,
+    withr
+Config/testthat/edition: 3
+Copyright: file inst/COPYRIGHTS
 Encoding: UTF-8
+Language: en-US
+NeedsCompilation: no
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
-Imports: 
-    jsonlite,
-    RCurl
-    
+RoxygenNote: 7.3.3
+SystemRequirements: Optional external programs: 'claude' (Claude Code)
+    and 'codex' (Codex) for subscription providers, 'quarto' for 'Quarto'
+    documents, and a 'Chrome'-family browser for app screenshots.
