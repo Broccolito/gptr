@@ -37,7 +37,14 @@ Maintained by the coordinator; remove an item only when its owning task lands it
 - **Early lanes.** P12 (all 10 tasks), P09 (Tasks 1-9) and P10 (Tasks 1-7) were run
   ahead of their declared dependencies, implementing only tasks whose real
   dependencies existed. Deferred: P09 Tasks 10-11 and P10 Tasks 8-13 (after P07/P08),
-  P12 plan acceptance (after P07).
+  P12 plan acceptance (after P07), **P15 Task 4** (needs P08's `settings_write("user_project",
+  ...)`; Tasks 1-3, 5, 6 are committed) and P15 Tasks 7-19. Early lanes also run for
+  P11 (Tasks 1-6), P17 (Tasks 1-3, 5, 7, 9) and P13 (Tasks 1-7); check each plan's progress
+  log for which tasks committed and which blocked.
+- **P13 IC-74 task (coordinator-added):** `07-local-ollama.md` section 6 makes P13 own
+  `R/s1-ollama.R` and its tests (native Clef/Clef Flash decisions, canonical answers,
+  images, cache/provenance, no key, per-server admission, calibration semantics). The plan
+  has no task for it: add it after P13 Task 8 (classifier route core) and before Task 9.
 - **P12:** two tests skip until P06's run engine (`session_run`) and P07's default
   `cache_policy`/`request.build` exist; P12 plan acceptance must show them running.
 - **P09 Task 8 temporary guard:** the test "the gptr shim reaches gptr:: when gptr is
