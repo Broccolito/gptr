@@ -842,8 +842,12 @@ test_that("scrub holds session and document writer locks throughout replacement"
   writeLines(session_lines(late), f)
   doc_lock = file.path(workspace_root(), "locks", cli::hash_sha1(path_key(f)))
   atomic = write_atomic
+  # path keys, not normalizePath(f): its backslashes on Windows never equal scrub's "/" paths
+  seen = new.env()
+  seen$rewrites = 0L
   testthat::local_mocked_bindings(write_atomic = function(path, content) {
-    if (identical(path, normalizePath(f))) {
+    if (identical(path_key(path), path_key(f))) {
+      seen$rewrites = seen$rewrites + 1L
       expect_true(dir.exists(paste0(f, ".lock")))
       expect_true(dir.exists(doc_lock))
       holder = readLines(file.path(paste0(f, ".lock"), "pid"), encoding = "UTF-8")
@@ -854,6 +858,7 @@ test_that("scrub holds session and document writer locks throughout replacement"
     atomic(path, content)
   })
   gptr_scrub(f, dry_run = FALSE)
+  expect_identical(seen$rewrites, 1L)
   expect_false(dir.exists(paste0(f, ".lock")))
   expect_false(dir.exists(doc_lock))
 })
@@ -928,7 +933,7 @@ test_that("scrub rereads after acquiring locks and releases locks after write er
   writeLines(late, f)
   atomic = write_atomic
   testthat::local_mocked_bindings(write_atomic = function(path, content) {
-    if (identical(path, normalizePath(f))) stop("synthetic write failure")
+    if (identical(path_key(path), path_key(f))) stop("synthetic write failure")
     atomic(path, content)
   })
   expect_error(gptr_scrub(f, dry_run = FALSE), "synthetic write failure")

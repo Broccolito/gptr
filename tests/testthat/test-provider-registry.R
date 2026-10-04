@@ -967,7 +967,49 @@ test_that("an overload before any delta is re-sent by P04's reactor on the same 
   expect_equal(log$done[[1]]$request_id, "q000000000001")
   expect_identical(nrow(srv$log()), 2L)
   r = reactor_get()
-  expect_false(exists(id, envir = r$transfers, inherits = FALSE))
+  # `done` is emitted at message_stop; P04 forgets the transfer once curl has read the end of
+  # the body, which may come one pump iteration later (hosted Linux, CI-3): wait, bounded
+  expect_true(reactor_pump(until = function() !exists(id, envir = r$transfers, inherits = FALSE),
+                           timeout = 30))
+  expect_length(log$done, 1L)
+  expect_identical(ls(r$tasks), character())
+})
+
+test_that("a transfer whose terminal event precedes the end of its body is still released", {
+  # Hosted Linux (CI-3): curl read the end of the body one pump iteration after message_stop.
+  # Holding each curl `done` until the next iteration makes that order certain here.
+  srv = local_mock_server("overload", attempts = 1L)
+  model = local_loop_adapter(srv$url)
+  log = local_stream_log()
+  held = new.env()
+  held$events = list()
+  queue_event = reactor_curl_event
+  multi_run = reactor_multi_run
+  local_mocked_bindings(
+    reactor_curl_event = function(tr, k, type, value) {
+      if (!identical(type, "done")) return(queue_event(tr, k, type, value))
+      held$events[[length(held$events) + 1L]] = list(tr = tr, k = k, value = value)
+      invisible(NULL)
+    },
+    reactor_multi_run = function(r) {
+      late = held$events
+      held$events = list()
+      for (ev in late) queue_event(ev$tr, ev$k, "done", ev$value)
+      multi_run(r)
+    }
+  )
+  id = provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 30))
+  r = reactor_get()
+  # the order took effect: the stream is over while its transfer still waits for the body's end
+  expect_true(exists(id, envir = r$transfers, inherits = FALSE))
+  expect_true(reactor_pump(until = function() !exists(id, envir = r$transfers, inherits = FALSE),
+                           timeout = 30))
+  expect_length(held$events, 0L)
+  expect_equal(log$types(), c("start", "retry_start", "retry_end", rep("text_delta", 3L),
+                              "done"))
+  expect_length(log$done, 1L)
+  expect_identical(nrow(srv$log()), 2L)
   expect_identical(ls(r$tasks), character())
 })
 

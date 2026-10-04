@@ -454,3 +454,122 @@ D-019 section are ASCII-only. Roxygen changed only in a `@noRd` block, so there 
 
 Still to be confirmed by the hosted Windows run of the pushed commit: the items under "To be
 confirmed" above. Review round 2 changes none of them.
+
+## Task CI-3 - Remaining hosted failures on Ubuntu, LC_ALL=C and Windows
+
+Hosted evidence (job logs fetched with `gh api .../actions/jobs/<id>/logs`): run 37193999181 on
+`489eb0b` (complete) and the jobs of run 37195622025 on `95dd9b8` that had completed when read
+once (its Windows release job was still running; not waited for).
+
+| Failure | Where | Cause |
+|---|---|---|
+| `test-provider-registry.R:970` "an overload before any delta is re-sent by P04's reactor on the same transfer": `exists(id, envir = r$transfers)` TRUE | 489eb0b: Ubuntu release, devel, oldrel-4, LC_ALL=C (`[ FAIL 1 \| WARN 0 \| SKIP 11 \| PASS 8249 ]` each); 95dd9b8: Ubuntu release, no-Suggests, devel, oldrel-1 (`[ FAIL 1 \| WARN 0 \| SKIP 15 \| PASS 8454 ]` each); earlier the connections job of run 37176542781 | a test race, not a product bug. The normaliser emits `done` at `message_stop` (from `on_bytes`); P04 forgets the transfer only when curl reports the end of the body. The mock writes the last event and the chunked terminator `0\r\n\r\n` as two writes, and on hosted Linux curl often read the terminator in the next pump iteration, after `reactor_pump(until = done)` had returned. Same diagnosis as P05 Task 11's "possible timing flake" note. Not locale-specific: the LC_ALL=C job failed on 489eb0b and passed on 95dd9b8 |
+| `test-auth-redact.R:934` "scrub rereads after acquiring locks and releases locks after write errors": "Expected `gptr_scrub(f, dry_run = FALSE)` to throw a error." | 489eb0b: Windows release and oldrel-4 (`[ FAIL 1 \| WARN 0 \| SKIP 22 \| PASS 8196 ]` each); 95dd9b8: Windows oldrel-4 (`[ FAIL 1 \| WARN 0 \| SKIP 26 \| PASS 8401 ]`) | non-portable test: the `write_atomic` mock compared the path with `normalizePath(f)`, which uses backslashes on Windows (`winslash = "\\"` by default), while `scrub_files()` hands `write_atomic()` `normalizePath(winslash = "/")` paths, so the synthetic failure never fired. The same comparison at `:846` ("scrub holds session and document writer locks throughout replacement") never matched on Windows either, so its lock expectations passed there without running |
+| NOTE "checking for detritus in the temp directory": `Rscript*` files | Windows release and oldrel-4 (9 files each, 489eb0b), Windows oldrel-4 again (9 files, 95dd9b8), Ubuntu devel once (`Rscript2b1c.Mup7ui`, 95dd9b8) | not fixed, see open items. A NOTE does not fail the gate (`error-on: "warning"`) |
+| `test-http-sse.R:126` INFRA-23 CPU `1.060 >= 1.000` | Windows release, only in the non-gating diagnostic stream; the test passed in R CMD check of both Windows jobs | not fixed, see open items |
+
+The Windows release hang is gone. The diagnostic stream of job 111411943327 ran every file in
+611 s ("files with failures: test-auth-redact.R, test-http-sse.R"), and R CMD check ran the tests
+in 498 s and wrote `Status: 1 ERROR, 1 NOTE`; oldrel-4 wrote the same status after 519 s. The
+CI-2 items to confirm: `test-proc-spawn.R` (0 failed, 3 skipped, 142 passed), `test-proc-supervise.R`
+(0 failed, 140 passed) and `test-http-reactor.R` (0 failed, 2 skipped, 193 passed) pass in the
+Windows release stream, and R CMD check on both Windows jobs failed only at `test-auth-redact.R:934`.
+macOS release passed in both runs, including the INFRA-01 gap test (`:557`) that CI-1 left open;
+its cause stays unexplained (two passing runs do not explain the earlier failure).
+
+What was built (tests only; no product, workflow or roxygen change):
+
+1. `tests/testthat/test-provider-registry.R`: the overload test no longer reads the transfer
+   table at the instant `done` fires. It pumps, bounded at 30 s, until P04 has forgotten the
+   transfer, then checks that the late end of the body added no second `done` and that no reactor
+   task is left. New test "a transfer whose terminal event precedes the end of its body is
+   still released": with `local_mocked_bindings()` on `reactor_curl_event()` and
+   `reactor_multi_run()`, every curl `done` event is held until the next pump iteration, which
+   reproduces the hosted Linux order deterministically on any OS. The test asserts that the
+   order took effect (the transfer still exists when `done` fires), then that the transfer is
+   forgotten within the bounded pump, no held event is left, the events are `start`,
+   `retry_start`, `retry_end`, three `text_delta`, `done`, there is exactly one `done`, the mock
+   saw two requests, and no task is left.
+2. `tests/testthat/test-auth-redact.R`: both `write_atomic` mocks compare
+   `path_key(path)` with `path_key(f)` (IC-51 path keys: forward slashes, symlinks resolved,
+   lower case on Windows and macOS). The lock test counts its matches and expects exactly one
+   rewrite, so a comparison that never matches can no longer pass without running its
+   expectations.
+
+Adaptations: none against a plan literal. Neither test is a plan literal (the overload test
+comes from P05 Task 10, the two scrub tests from P03's scrubber task), and both files are
+committed and owned by no plan lane in progress. The bounded wait does not weaken the test. A
+transfer that is never forgotten still fails: in the negative control below, both pump
+expectations fail after 30 s. The bound follows conventions section 7 (no wall-clock bound
+under 5 s). No D-entry: no product or contract behaviour changed.
+
+Red (actual):
+
+- `^provider-registry$` with the new test written in the old test's form (`expect_false(exists(
+  id, envir = r$transfers))` right after `done`): `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 721 ]`. The
+  failure is at `:1000` with the hosted message ("Expected `exists(id, envir = r$transfers,
+  inherits = FALSE)` to be FALSE", actual TRUE) (`task3-red-provider-registry.log`). The unchanged
+  original test passed locally: a probe ran it 20 times on macOS, and the transfer was gone when
+  `done` fired every time (script `race-probe.R` in the session scratchpad).
+- Windows path comparison, simulated on macOS (`task3-red-scrub-winpath-sim.log`, script
+  `scrub-winpath-sim.R` in the scratchpad). The `:931` mock was given the Windows form of
+  `normalizePath(f)` (backslashes). Result: "Expected `gptr_scrub(f, dry_run = FALSE)` to throw a
+  error.", the hosted message. The path-key comparison given the backslash form of `f` passed.
+  The Windows failure itself cannot be reproduced on macOS.
+
+Green (actual, `isolated-check.R`):
+
+- `^provider-registry$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 725 ]`, which is 716 + 1 + 8: one
+  added expectation in the overload test, whose `expect_false` became the pump's `expect_true`,
+  and 8 in the new test (`task3-green-provider-registry.log`).
+- `^auth-redact$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 405 ]`, 404 + the rewrite counter
+  (`task3-green-auth-redact.log`).
+- Both filters under `LC_ALL=C LANG=C` (`Sys.getlocale("LC_CTYPE")` is `C`): `[ FAIL 0 | WARN 0 |
+  SKIP 0 | PASS 1130 ]` (`task3-green-clocale.log`).
+- Negative control on a scratch `git archive HEAD` copy with this task's registry test file,
+  where `reactor_on_done()` never forgets a finished 2xx transfer: `[ FAIL 2 | WARN 0 | SKIP 0 |
+  PASS 723 ]`, at `:972` and `:1006` (both bounded pumps return FALSE)
+  (`task3-negctl-no-forget.log`).
+- Neighbours `^(provider-|auth-|http-reactor$)` (every user of the reactor glue, the mock server
+  and the scrubber): `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 3672 ]`. The skips are the keyring skip
+  (`test-auth-store.R:75`), the four "default cache_policy of builtin:prompt is not loaded" skips
+  and the two "P06's session_run() and P07's request.build are not loaded" skips
+  (`task3-neighbours.log`).
+- Full unfiltered offline suite (`isolated-check.R test '.'`, HEAD `95dd9b8` plus this task's
+  changes and the concurrent P06 and P09 working-tree edits): `[ FAIL 0 | WARN 0 | SKIP 10 |
+  PASS 8835 ]`, exit 0. The skips are the 7 above plus the three gated live round trips
+  (`test-live-anthropic.R:6`, `test-live-google.R:6`, `test-live-openai.R:6`)
+  (`task3-full.log`).
+
+Lint: `isolated-check.R lint` on `test-provider-registry.R` and `test-auth-redact.R` found no
+lints (`task3-lint.log`). Both files are ASCII-only. No roxygen or export change, so there was
+no `document` run.
+
+Logs: `dev/.validation/CI/task3-*.log`. The hosted job logs are not in the repository; refetch
+them by job id: 111411943172, 111411943314, 111411943327, 111411943330, 111411943420,
+111411943427 (run 37193999181) and 111416799359, 111416799388, 111416799402, 111416799424,
+111416799425 (run 37195622025).
+
+To be confirmed by the hosted run of the pushed commit: every Ubuntu job (release, devel,
+oldrel-1, oldrel-4, no-Suggests, LC_ALL=C) and the connections job pass `test-provider-registry.R`,
+and both Windows jobs pass `test-auth-redact.R`. With those, the R CMD check jobs should report
+`Status: OK` (Ubuntu) or a detritus NOTE only (Windows).
+
+Open items:
+
+- INFRA-23 on hosted Windows: 20,000 deltas took 1.060 s of CPU once (Windows release,
+  diagnostic stream of job 111411943327). The same test passed in R CMD check of both Windows
+  jobs. Locally (macOS, R 4.5.0) it takes 0.30-0.33 s: splitting about 0.17 s, `json_decode()`
+  of each event about 0.22 s. The 1 s target is named by the spec (decomposition P04 acceptance
+  5), so this task did not change the test. The hosted Windows runner is near the target. A P04
+  decision is needed: optimise the SSE split and decode path, or state how INFRA-23 is measured on
+  slow hosted runners. The diagnostic step does not gate the job.
+- Temp-directory detritus NOTE. The `Rscript*` names match the temporary file that the Rscript
+  front end writes for `-e` expressions and deletes after R exits. This is from reading R's
+  front end and is not verified on Windows. Many tests kill `Rscript --vanilla -e ...` children
+  (for example the `Sys.sleep(30)` children in `test-proc-spawn.R`, `test-proc-supervise.R`,
+  `test-http-reactor.R`, `test-ext-check.R`, `test-session-live.R`, and the real children of
+  `test-provider-registry.R`), so the front end cannot delete the file. Suggested fix, to be
+  verified on Windows: start every child the test kills with TMPDIR, TMP and TEMP in a
+  `withr::local_tempdir()`, as `local_mock_server()` already does, or from a script file instead
+  of `-e`. CRAN skips these tests (`skip_on_cran()`), and the gate fails only on warnings.
