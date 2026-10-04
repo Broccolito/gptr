@@ -78,13 +78,51 @@ local_hook = function(event, handler, session = NULL, .env = parent.frame()) {
   invisible(id)
 }
 
+#' Record events of the given types; returns an accessor `function(s = NULL)`
+local_events = function(types, .env = parent.frame()) {
+  log = new.env(parent = emptyenv())
+  log$events = list()
+  for (type in types) {
+    local_hook(type, function(event, ctx) {
+      log$events[[length(log$events) + 1L]] = event
+      NULL
+    }, .env = .env)
+  }
+  function(s = NULL) {
+    ev = log$events
+    if (is.null(s)) ev else Filter(function(e) identical(e$session, session_data(s)$id), ev)
+  }
+}
+
 #' Allow every tool call in the calling test (the IC-53 escape hatch, set outside the run)
 local_permissive = function(.env = parent.frame()) {
   local_gptr_options(unsafe_no_permissions = TRUE, .env = .env)
 }
 
-# local_events(), test_session(), test_run(), run_text() are restored from the Task 1
-# plan by their first dependent P06 tasks, once actual session/run functions exist.
+#' A fresh session on the fake provider (register one with local_fake_provider() first)
+test_session = function(mode = "auto", home = new.env(), model = "fake/fake-1", ...) {
+  session_new(model, mode, home = home, ...)
+}
+
+#' A stored session with one prompt turn, a tool round trip and unicode text, built by appends
+written_session = function(.env = parent.frame()) {
+  local_store(.env = .env)
+  s = test_session(home = globalenv())
+  d = session_data(s)
+  d$turns = 1L
+  call = block_tool_call("c1", "read", list(path = "R/a.R"))
+  session_append(s, entry_message(msg_user("Refactor a.R")))
+  session_append(s, entry_message(msg_assistant(list(call), api = "fake", provider = "fake",
+                                                model = "fake-1", stop_reason = "tool_use")))
+  session_append(s, entry_message(msg_tool_result("c1", "read", "contents of R/a.R",
+                                                  details = list(lines = 1L))))
+  session_append(s, entry_message(msg_assistant("All done \u2713", api = "fake", provider = "fake",
+                                                model = "fake-1")))
+  s
+}
+
+# test_run() (needs run_new(), P06 Task 5) and run_text() (needs session_run(), P06 Task 10)
+# are restored from the Task 1 plan by their first dependent tasks, once those functions exist.
 roles = function(s) vapply(s$messages, function(m) m$role, "")
 tool_results = function(s) Filter(function(m) identical(m$role, "tool_result"), s$messages)
 req_roles = function(req) vapply(req$messages, function(m) m$role, "")
