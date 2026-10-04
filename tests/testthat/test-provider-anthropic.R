@@ -802,3 +802,162 @@ test_that("end to end on the mock server: streaming, retry and abort (skip on CR
   expect_identical(vapply(r$message$content, function(b) b$name, ""), c("read", "r"))
   expect_identical(r$message$content[[2L]]$arguments, list(code = "1 + 1"))
 })
+
+# ---- conformance: check_adapter() and the check.adapter service (Task 3) -----------------------
+
+test_that("check_adapter() passes for anthropic-messages on its fixtures (acceptance 2)", {
+  res = check_adapter(adapter_get(api), fixtures = sse_dir(api))
+  expect_s3_class(res, "gptr_check")
+  expect_identical(names(res), c("target", "check", "ok", "message"))
+  expect_true(all(res$target == "adapter:anthropic-messages"))
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
+  expect_true("adapter.tool_choice" %in% res$check)
+  for (case in c("text", "thinking_tools", "error_midstream", "truncated", "refusal",
+                 "server_tool")) {
+    expect_true(paste0("adapter.", case, ".chunk_invariance") %in% res$check)
+  }
+  expect_true("adapter.thinking_tools.roundtrip" %in% res$check)
+  expect_false("adapter.truncated.roundtrip" %in% res$check)
+})
+
+test_that("check_adapter() fails a normaliser that throws and a forced tool_choice", {
+  good = adapter_get(api)
+  broken = good
+  broken$parse = function(model, opts) {
+    list(push = function(ev) stop("boom"), finish = function() NULL,
+         fail = function(cnd) NULL, message = function() NULL)
+  }
+  res = check_adapter(broken, fixtures = sse_dir(api))
+  expect_identical(sum(grepl("\\.no_condition$", res$check)), 6L)
+  expect_false(any(res$ok[grepl("\\.no_condition$", res$check)]))
+  pushy = good
+  pushy$build = function(model, context, opts) {
+    req = anthropic_build(model, context, opts)
+    req$body = sub("\"stream\":true",
+                   "\"stream\":true,\"tool_choice\":{\"type\":\"tool\",\"name\":\"read\"}",
+                   req$body, fixed = TRUE)
+    req
+  }
+  res = check_adapter(pushy, fixtures = sse_dir(api))
+  expect_false(res$ok[res$check == "adapter.tool_choice"])
+})
+
+test_that("check_adapter() fails when events differ from the golden file", {
+  dir = withr::local_tempdir()
+  file.copy(list.files(sse_dir(api), full.names = TRUE), dir)
+  path = file.path(dir, "text.events.json")
+  golden = json_decode(read_utf8(path)$text)
+  golden[[3L]]$delta = "Goodbye, "
+  write_utf8(path, json_encode(golden, pretty = TRUE))
+  res = check_adapter(adapter_get(api), fixtures = dir)
+  expect_false(res$ok[res$check == "adapter.text.golden_events"])
+  expect_true(res$ok[res$check == "adapter.refusal.golden_events"])
+})
+
+test_that("check_adapter() reports missing fixtures and skips inprocess and classifier adapters", {
+  res = check_adapter(adapter_get(api), fixtures = withr::local_tempdir())
+  expect_false(res$ok[res$check == "adapter.fixtures"])
+  fake = check_adapter(adapter_get("fake"))
+  expect_identical(fake$check, "adapter.replay")
+  expect_true(fake$ok)
+  # a classifier adapter (P13's typesafe-system-one shape): http_json with only `classify`,
+  # whose parse has the contract's signature (04 section 8.1: model, status, headers, body,
+  # questions)
+  cls_parse = function(model, status, headers, body, questions) NULL
+  cls = gptr_adapter("cls-fixture", transport = "http_json",
+                     classify = list(build = function(model, state, questions, opts) NULL,
+                                     parse = cls_parse))
+  res = check_adapter(cls)
+  expect_identical(res$check, "adapter.replay")
+  expect_true(res$ok)
+  expect_true(all(gptr_check(cls)$ok))
+})
+
+test_that("the check.adapter service makes gptr_check() replay the fixtures (acceptance 2)", {
+  expect_true(ext_service_has("check.adapter"))
+  a = adapter_get(api)
+  res = gptr_check(a)
+  expect_true(all(c("spec.class", "spec.fields", "adapter.text.golden_events") %in% res$check))
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
+})
+
+test_that("check_adapter() fails a normaliser that warns or messages; nothing reaches the caller", {
+  # 04 section 8.1: normalisers never signal R conditions after start, warnings included
+  noisy = adapter_get(api)
+  noisy$parse = function(model, opts) {
+    n = anthropic_normaliser(model, opts)
+    push = n$push
+    n$push = function(ev) {
+      warning("odd event")
+      push(ev)
+    }
+    n
+  }
+  res = expect_no_warning(check_adapter(noisy, fixtures = sse_dir(api)))
+  rows = grepl("\\.no_condition$", res$check)
+  expect_identical(sum(rows), 6L)
+  expect_false(any(res$ok[rows]))
+  expect_match(res$message[rows], "odd event", fixed = TRUE)
+  chatty = adapter_get(api)
+  chatty$parse = function(model, opts) {
+    n = anthropic_normaliser(model, opts)
+    fin = n$finish
+    n$finish = function() {
+      message("finishing")
+      fin()
+    }
+    n
+  }
+  res = expect_no_message(check_adapter(chatty, fixtures = sse_dir(api)))
+  expect_false(res$ok[res$check == "adapter.text.no_condition"])
+  expect_true(res$ok[res$check == "adapter.tool_choice"])
+  # signalCondition() establishes no muffle restart: no error is thrown, the caller's handlers
+  # see nothing, and the case still fails with its own message
+  for (cnd in list(simpleWarning("bare warning"), simpleMessage("bare message\n"))) {
+    bare = adapter_get(api)
+    bare$parse = function(model, opts) {
+      n = anthropic_normaliser(model, opts)
+      push = n$push
+      n$push = function(ev) {
+        signalCondition(cnd)
+        push(ev)
+      }
+      n
+    }
+    res = expect_no_condition(check_adapter(bare, fixtures = sse_dir(api)))
+    rows = grepl("\\.no_condition$", res$check)
+    expect_identical(sum(rows), 6L)
+    expect_false(any(res$ok[rows]))
+    expect_match(res$message[rows], "bare", fixed = TRUE)
+    chk = expect_no_condition(gptr_check(bare))
+    expect_false(chk$ok[chk$check == "adapter.text.no_condition"])
+  }
+})
+
+test_that("check_adapter() explains a failing build() and an empty replay; checks `fixtures`", {
+  expect_match(check_adapter(adapter_get("fake"))$message, "nothing to replay", fixed = TRUE)
+  failing = adapter_get(api)
+  failing$build = function(model, context, opts) stop("no body")
+  res = check_adapter(failing, fixtures = sse_dir(api))
+  expect_false(res$ok[res$check == "adapter.tool_choice"])
+  expect_match(res$message[res$check == "adapter.tool_choice"], "no body", fixed = TRUE)
+  expect_false(res$ok[res$check == "adapter.text.roundtrip"])
+  expect_error(check_adapter(adapter_get(api), fixtures = 1),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("check_adapter() replays .json fixtures of http_json adapters, not their goldens", {
+  dir = withr::local_tempdir()
+  for (f in c("one.json", "one.events.json", "one.message.json", "model.json")) {
+    write_utf8(file.path(dir, f), "{}")
+  }
+  quiet = function(model, opts) {
+    list(push = function(ev) FALSE, finish = function() NULL, fail = function(cnd) NULL,
+         message = function() NULL)
+  }
+  wire = gptr_adapter("json-fixture", transport = "http_json",
+                      build = function(model, context, opts) list(body = "{}"), parse = quiet)
+  res = check_adapter(wire, fixtures = dir)
+  per_case = res$check[res$check != "adapter.tool_choice"]
+  expect_identical(unique(sub("^adapter\\.(.*)\\.[a-z_]+$", "\\1", per_case)), "one")
+})

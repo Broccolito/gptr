@@ -676,19 +676,28 @@ behaviour now, which Task 10 (`run_request()`, `run_response()`, `run_budget_ext
 Validation: `progress/P06.md`, Task 5 (`test-session-budget.R`; the three added blocks failed 4
 times against the plan-literal source: three unclassed `if (NA)` errors and an `NA` token total).
 
-## D-026 - P12 conformance: no condition of any kind escapes, http_json goldens are not cases; classifier coverage open (2026-10-04)
+## D-026 - P12 conformance: no normaliser error, warning or message escapes, http_json goldens are not cases; classifier coverage open (2026-10-04)
 
 P12 Task 3's plan-literal `check_adapter()` (the `check.adapter` service behind `gptr_check()`
 for adapter specs, `R/provider-anthropic.R`) was changed in three ways. P02's `gptr_check()` and
 P24 consume it.
 
-1. **A warning or message from a normaliser fails `adapter.<case>.no_condition`.** 04 section
-   8.1 says "Normalisers never signal R conditions after `start`". The plan's replay caught only
-   errors. A normaliser that warned therefore passed the check, and its warnings reached the
-   caller of `check_adapter()` and `gptr_check()`. The new `adp_check_replay()` muffles warnings
-   and messages during the whole and chunked replays and records the first one as the case's
-   condition, so that case fails `.no_condition` and `.chunk_invariance` and nothing escapes.
-   `adp_replay()` is unchanged.
+1. **A warning or message from a normaliser fails the case.** 04 section 8.1 says "Normalisers
+   never signal R conditions after `start`". The plan's replay caught only errors. A normaliser
+   that warned therefore passed the check, and its warnings reached the caller of
+   `check_adapter()` and `gptr_check()`. The new `adp_check_replay()` wraps `adp_replay()` in
+   exiting `warning` and `message` handlers (`tryCatch()`), and `check_adapter()` uses it for the
+   whole and the chunked replays. The first such condition ends that replay and becomes its
+   condition, as an error already did:
+   - a condition in the whole replay fails `adapter.<case>.no_condition`, and the case's other
+     rows (`.event_order`, the goldens, `.chunk_invariance`, `.roundtrip`) are not produced;
+   - a condition that appears only in a chunked replay fails `.chunk_invariance`.
+
+   The handlers exit rather than muffle. A warning or message raised with `signalCondition()`
+   has no muffle restart: `invokeRestart("muffleWarning")` then threw "no 'restart'
+   'muffleWarning' found" out of `check_adapter()`, and `tryInvokeRestart()` would let the
+   condition go on to the caller's own calling handlers. With exiting handlers, nothing reaches
+   the caller in either case. `adp_replay()` is unchanged.
 2. **`http_json` fixtures exclude the golden files.** The plan selected `\.json$` files, which
    also match `<case>.events.json`, `<case>.message.json` and `model.json`. For an `http_json`
    adapter with a stream `parse`, those three were then replayed as extra cases. They are now
@@ -712,7 +721,10 @@ canonical `noul`/`choice`/`score` records of 07 section 3. Two things are missin
   `fixtures/jev/`).
 
 The coordinator or maintainer must decide whether that coverage belongs in `check_adapter()` once
-P13 provides these, or in P13's own conformance tests.
+P13 provides these, or in P13's own conformance tests. Until it has an owner, P12's plan
+acceptance should carry this point as open rather than record IC-74's P12 row as met.
 
 Validation: `progress/P12.md`, Task 3. The three added tests failed 7 + 1 + 1 assertions against
-the plan-literal source (269 escaped test warnings in the first run).
+the plan-literal source (269 escaped test warnings in the first run). The `signalCondition()`
+assertions of review round 1 failed 3 times against the muffling handlers, and 4 times with 216
+escaped test warnings against a `tryInvokeRestart()` variant.

@@ -1325,3 +1325,243 @@ builtin_anthropic = function(gptr) {
 }
 
 on_load(ext_declare_builtin("anthropic", builtin_anthropic))
+
+# ---- conformance: check_adapter() (the check.adapter service) ---------------------------------
+
+#' A request context of 04 section 8.1 for conformance builds: the assistant message `msg`
+#' followed by one result per tool call, with the tools those calls name
+#' @noRd
+adp_check_context = function(msg = NULL, tool_choice = "auto") {
+  calls = list()
+  if (!is.null(msg)) calls = Filter(function(b) identical(b$type, "tool_call"), msg$content)
+  tool_names = unique(c("read", vapply(calls, function(b) b$name, "")))
+  tools = lapply(tool_names, function(n) {
+    list(name = n, description = "A conformance fixture tool.",
+         input_schema = list(type = "object", properties = json_obj()))
+  })
+  msgs = list(msg_user("Run the conformance fixture.", timestamp = 0))
+  if (!is.null(msg)) {
+    msgs[[2L]] = msg
+    for (b in calls) {
+      msgs[[length(msgs) + 1L]] = msg_tool_result(b$id, b$name, "ok", timestamp = 0)
+    }
+  }
+  list(system = list(t0 = "You are a conformance fixture.", t1 = ""),
+       tools_json = json_verbatim(json_encode(tools)), tools = list(), messages = msgs,
+       cache_plan = list(anchors = c("t0", "project"), tail_ttl = "5m",
+                         key = "gptr:000000000000"),
+       params = list(max_tokens = 1024L, thinking = NULL, effort = NULL,
+                     tool_choice = tool_choice, returns = NULL, temperature = NULL),
+       session_id = "s0000000000", request_id = "q000000000000")
+}
+
+#' The opaque strings of a message that must reach the wire byte for byte (INFRA-07)
+#' @noRd
+adp_opaque_strings = function(msg) {
+  quoted = character()
+  verbatim = character()
+  for (b in msg$content) {
+    type = b$type %||% ""
+    if (type == "thinking") quoted = c(quoted, b$signature, b$data)
+    if (type == "tool_call") quoted = c(quoted, b$thought_signature)
+    if (type == "text" && !is.null(b$signature) && !startsWith(b$signature, "{")) {
+      quoted = c(quoted, b$signature)
+    }
+    if (type == "opaque") verbatim = c(verbatim, b$json)
+  }
+  list(quoted = quoted, verbatim = verbatim)
+}
+
+#' Byte-identical re-serialisation: the message and its JSON round trip (the session file)
+#' build the same body, with and without the memo, and every opaque string is on the wire
+#' verbatim
+#' @noRd
+adp_roundtrip = function(adapter, model, msg) {
+  opts = list(base_url = "http://127.0.0.1:1", memo = NULL)
+  b1 = adapter$build(model, adp_check_context(msg), opts)$body
+  msg2 = msg_from_json(json_decode(json_encode(msg_to_json(msg))))
+  b2 = adapter$build(model, adp_check_context(msg2), opts)$body
+  memo = new.env(parent = emptyenv())
+  mopts = list(base_url = "http://127.0.0.1:1", memo = memo)
+  b3 = adapter$build(model, adp_check_context(msg), mopts)$body
+  b4 = adapter$build(model, adp_check_context(msg), mopts)$body
+  s = adp_opaque_strings(msg)
+  needles = c(vapply(s$quoted, function(x) {
+    q = json_encode(x)
+    substr(q, 2L, nchar(q) - 1L)
+  }, ""), s$verbatim)
+  missing = needles[!vapply(needles, function(x) grepl(x, b1, fixed = TRUE), logical(1))]
+  same = identical(b1, b2) && identical(b1, b3) && identical(b1, b4)
+  message = ""
+  if (length(missing)) message = "an opaque value is not on the wire verbatim"
+  if (!same) message = "re-serialisation changed the request body"
+  list(ok = same && !length(missing), message = message)
+}
+
+#' Is a forced tool choice in a request body? (Anthropic, Responses, Chat and Gemini shapes)
+#' @noRd
+adp_body_forced = function(body) {
+  tc = body$tool_choice
+  adp_forced(tc) || identical(tc, "required") || identical(tc, "any") ||
+    identical(body$toolConfig$functionCallingConfig$mode, "ANY")
+}
+
+#' Does a list tool_choice stay off the wire while forced_tool_choice is FALSE? Checked with
+#' the model capability set to FALSE and, for adapters whose own capability is FALSE, with a
+#' model record that says nothing (IC-71)
+#' @noRd
+adp_check_tool_choice = function(adapter) {
+  ctx = adp_check_context(NULL, tool_choice = list(type = "tool", name = "read"))
+  opts = list(base_url = "http://127.0.0.1:1")
+  model = adp_fixture_model(adapter$api)
+  model$reasoning = FALSE
+  model$capabilities$forced_tool_choice = FALSE
+  ok = !adp_body_forced(json_decode(adapter$build(model, ctx, opts)$body))
+  if (isFALSE(adapter$capabilities$forced_tool_choice)) {
+    model$capabilities$forced_tool_choice = NULL
+    ok = ok && !adp_body_forced(json_decode(adapter$build(model, ctx, opts)$body))
+  }
+  ok
+}
+
+#' The fixture directory of an api: `fixtures`, else fixtures/sse/<api> under the test
+#' directory or the package sources
+#' @noRd
+adp_fixture_dir = function(api, fixtures = NULL) {
+  cands = fixtures
+  if (is.null(cands)) {
+    cands = c(file.path("fixtures", "sse", api),
+              file.path("tests", "testthat", "fixtures", "sse", api))
+  }
+  for (d in cands) if (nzchar(d) && dir.exists(d)) return(normalizePath(d, winslash = "/"))
+  NULL
+}
+
+#' adp_replay() for conformance: the first warning or message signalled while the normaliser
+#' runs ends the replay and becomes its condition, since normalisers signal no R condition at
+#' all (04 section 8.1); an error is already caught by adp_replay(). The handlers exit rather
+#' than muffle: a condition raised with signalCondition() has no muffle restart, and after a
+#' calling handler it would still reach the caller's handlers
+#' @noRd
+adp_check_replay = function(adapter, model, bytes, sizes) {
+  stopped = function(cnd) list(message = NULL, condition = cnd, events = list())
+  tryCatch(adp_replay(adapter, model, bytes, sizes), warning = stopped, message = stopped)
+}
+
+#' Compare an R value with a golden JSON file (key order ignored)
+#' @noRd
+adp_same_golden = function(x, path) {
+  if (!file.exists(path)) return(FALSE)
+  want = json_decode(read_utf8(path)$text)
+  identical(canonical_json(json_decode(json_encode(x))), canonical_json(want))
+}
+
+#' Conformance of an adapter (04 section 7.12; the check.adapter service of gptr_check())
+#'
+#' Replays every fixture (`<case>.sse`, or `.ndjson`, `.json`, `.jsonl` by transport) whole,
+#' byte by byte and in three deterministic pseudo-random chunkings; compares the events and
+#' the final message with `<case>.events.json` and `<case>.message.json`; checks one start
+#' first and one terminal event last and that no R condition escapes; checks the byte-identical
+#' re-serialisation of opaque data; and fails an adapter that sends a forced tool_choice while
+#' forced_tool_choice is FALSE (IC-71). An adapter without a stream normaliser (an `inprocess`
+#' generator, or a classifier whose `build`/`parse` live in `classify`) gives the one row
+#' `adapter.replay`.
+#' @param adapter A `gptr_adapter` spec.
+#' @param fixtures A fixture directory, or NULL for fixtures/sse/<api>.
+#' @return A `gptr_check` data frame (`target`, `check`, `ok`, `message`).
+#' @noRd
+check_adapter = function(adapter, fixtures = NULL) {
+  check_list(adapter, "adapter")
+  check_string(fixtures, "fixtures", null = TRUE)
+  api = adapter$api %||% adapter$name
+  target = paste0("adapter:", api)
+  rows = new.env(parent = emptyenv())
+  rows$check = character()
+  rows$ok = logical()
+  rows$message = character()
+  add = function(check, ok, message = "", note = "") {
+    rows$check = c(rows$check, check)
+    rows$ok = c(rows$ok, isTRUE(ok))
+    rows$message = c(rows$message, if (isTRUE(ok)) note else message)
+  }
+  frame = function() {
+    df = data.frame(target = rep(target, length(rows$check)), check = rows$check, ok = rows$ok,
+                    message = rows$message, stringsAsFactors = FALSE)
+    class(df) = c("gptr_check", "data.frame")
+    df
+  }
+  transport = adapter$transport %||% ""
+  # nothing to replay: inprocess generators, and classifier adapters whose build and parse live
+  # in `classify` (P13's typesafe-system-one: transport http_json, no stream normaliser)
+  streams = transport %in% c("http_sse", "http_ndjson", "http_json", "process_jsonl")
+  if (!streams || !is.function(adapter$parse)) {
+    add("adapter.replay", TRUE,
+        note = "nothing to replay: no stream normaliser (inprocess or classifier adapter)")
+    return(frame())
+  }
+  if (is.function(adapter$build)) {
+    sent = "a list tool_choice was sent although forced_tool_choice is FALSE"
+    tc = tryCatch(list(ok = adp_check_tool_choice(adapter), message = sent),
+                  error = function(e) {
+                    list(ok = FALSE, message = paste0("build() failed: ", conditionMessage(e)))
+                  })
+    add("adapter.tool_choice", tc$ok, tc$message)
+  }
+  dir = adp_fixture_dir(api, fixtures)
+  ext = switch(transport, http_sse = "sse", http_ndjson = "ndjson", http_json = "json",
+               process_jsonl = "jsonl")
+  files = if (is.null(dir)) character() else
+    list.files(dir, pattern = paste0("\\.", ext, "$"), full.names = TRUE)
+  # `.json` wire fixtures (http_json) share their extension with the golden files and model.json
+  is_golden = grepl("\\.(events|message)\\.json$", files) | basename(files) == "model.json"
+  files = files[!is_golden]
+  if (!length(files)) {
+    add("adapter.fixtures", FALSE,
+        paste0("no fixtures found for ", api, "; pass fixtures = <directory>"))
+    return(frame())
+  }
+  model = adp_fixture_model(api, dir)
+  for (f in sort(files)) {
+    case = sub(paste0("\\.", ext, "$"), "", basename(f))
+    bytes = readBin(f, "raw", file.size(f))
+    whole = adp_check_replay(adapter, model, bytes, length(bytes))
+    add(paste0("adapter.", case, ".no_condition"), is.null(whole$condition),
+        if (is.null(whole$condition)) "" else conditionMessage(whole$condition))
+    if (!is.null(whole$condition)) next
+    types = vapply(whole$events, function(e) e$type %||% "", "")
+    one_start = length(types) > 0L && types[[1L]] == "start" && sum(types == "start") == 1L
+    one_term = sum(types %in% c("done", "error")) == 1L &&
+      types[[length(types)]] %in% c("done", "error")
+    add(paste0("adapter.", case, ".event_order"), one_start && one_term,
+        paste0("event types: ", paste(types, collapse = " ")))
+    golden = lapply(whole$events, adp_golden_event)
+    add(paste0("adapter.", case, ".golden_events"),
+        adp_same_golden(golden, file.path(dir, paste0(case, ".events.json"))),
+        paste0("events differ from ", case, ".events.json"))
+    add(paste0("adapter.", case, ".golden_message"),
+        adp_same_golden(adp_golden_message(whole$message),
+                        file.path(dir, paste0(case, ".message.json"))),
+        paste0("the final message differs from ", case, ".message.json"))
+    sizes = list(1L, adp_chunk_sizes(paste0(case, "-1")), adp_chunk_sizes(paste0(case, "-2")),
+                 adp_chunk_sizes(paste0(case, "-3")))
+    invariant = TRUE
+    for (sz in sizes) {
+      r = adp_check_replay(adapter, model, bytes, sz)
+      if (!is.null(r$condition) || !identical(lapply(r$events, adp_golden_event), golden)) {
+        invariant = FALSE
+      }
+    }
+    add(paste0("adapter.", case, ".chunk_invariance"), invariant,
+        "events differ between chunkings of the same bytes")
+    ended = whole$message$stop_reason %||% "error"
+    if (is.function(adapter$build) && !(ended %in% c("error", "aborted"))) {
+      rt = tryCatch(adp_roundtrip(adapter, model, whole$message),
+                    error = function(e) list(ok = FALSE, message = conditionMessage(e)))
+      add(paste0("adapter.", case, ".roundtrip"), rt$ok, rt$message)
+    }
+  }
+  frame()
+}
+
+on_load(ext_service_set("check.adapter", check_adapter, provided_by = "P12",
+                        builtin = "anthropic"))
