@@ -1,0 +1,22 @@
+{
+  "stop_reason": "refusal",
+  "raw_stop_reason": "refusal",
+  "error_message": "The request was declined.",
+  "response_id": "msg_01REF",
+  "response_model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "I cannot help with that."
+    }
+  ],
+  "usage": {
+    "input": 30,
+    "output": 7,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 37
+  }
+}

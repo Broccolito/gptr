@@ -521,3 +521,45 @@ Later tasks that print usage must treat an unknown cost the same way (the plan's
 `sprintf("$%.4f", ...)` footers print `$NA`).
 
 Validation: `progress/P06.md`, Task 2 (`test-session-budget.R`).
+
+## D-022 - IC-74 usage in the P12 normaliser core; contract-typed stop reasons and errors (2026-10-03)
+
+P12 Task 1's literal `adp_usage()` predates IC-74 (07-local-ollama.md section 5: "Missing usage
+remains unknown"). Behaviours changed in the shared normaliser core (`R/provider-anthropic.R`),
+which every P12 adapter, P20's reuse of `anthropic_normaliser()` and P06's usage rows consume:
+
+1. **Unreported usage is unknown.** A stream that reported no usage at all (for example an error
+   before Anthropic's `message_start`, or an OpenAI-compatible server that sends no usage chunk)
+   gives a message whose counters, total and cost are `NA` (P05's `usage_as(NULL)`); the plan
+   wrote zeros. A reported value that is not a nonnegative number is `NA`; a field the provider
+   left out of a reported usage keeps P05's legacy zero (P05 Task 1's "genuine partial
+   observation" rule), so the hand-written golden usages are unchanged. Reported usage is merged
+   as a cumulative update (Anthropic's `message_delta`; report 03 section 2.5.1, the SDK's
+   MessageDeltaUsage): a JSON null keeps the value reported before it and is `NA` only when
+   nothing was reported before (`adp_usage_set()`), including the `cache_creation` split fields
+   (the plan's `%||% 0` made a null split field a known zero).
+2. **Cost only from price evidence.** The message's cost always comes from `usage_cost()` with the
+   model's dated prices: an unpriced model has an unknown cost (the plan kept `usage_new()`'s
+   constructor zero when the model had no `prices`), a declared zero rate (a local Ollama model)
+   a known zero; a price table `usage_cost()` refuses gives an unknown cost. On the `plan-cli`
+   route P20 must still set the cost from the CLI's reported `total_cost_usd` (D-015 point 3).
+3. **Contract-typed stop reasons and error types.** A non-string Anthropic `stop_reason` or error
+   `type` is mapped to `error`/`provider` (R's `switch()` would have picked an alternative by
+   position: `2` became `stop`, `5` became `auth`), and `raw_stop_reason` is stored as text
+   (04 section 4.2: chr(1)).
+4. **push() after a refused retry.** When the transport's `retry(info)` refuses at once and calls
+   `fail()` from inside it, `push()` returns `TRUE` (the terminal event was emitted, 04 section
+   8.1); the plan returned `FALSE`.
+5. **The 5-minute/1-hour cache split survives `message_delta`.** The current wire shape repeats
+   the cumulative `cache_creation_input_tokens` in `message_delta` without a `cache_creation`
+   object (report 07 section 3.14). The plan treated that bare total as a new split (every write
+   5-minute, `cache_write_1h = 0`), so 1-hour writes (gptr's BP1/BP2 default) were priced at the
+   5-minute rate. A bare total now updates the split (`anthropic_cache_total()`): a split that
+   adds up to it is kept, otherwise the known 1-hour writes are kept and the rest are 5-minute
+   writes; only when no split was ever reported is every write a 5-minute write (report 07
+   section 3.5). `usage.iterations` is not used (its relation to the top-level totals is not
+   verified).
+
+Validation: `progress/P12.md`, Task 1 (`test-provider-anthropic.R`; the four regression tests
+failed 9 assertions against the plan-literal source; the two review-round regression tests for
+points 1 and 5 failed 7 assertions before the fix).

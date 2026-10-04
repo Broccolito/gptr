@@ -1,0 +1,27 @@
+[
+  {
+    "type": "start",
+    "response_id": "msg_01REF"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "I cannot help with that."
+  },
+  {
+    "type": "text_end",
+    "index": 1,
+    "block": {
+      "type": "text",
+      "text": "I cannot help with that."
+    }
+  },
+  {
+    "type": "done",
+    "reason": "refusal"
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "stop_reason": "error",
+  "error_message": "The Anthropic stream ended before message_stop.",
+  "response_id": "msg_01CUT",
+  "response_model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "tool_call",
+      "id": "toolu_01C",
+      "name": "write",
+      "arguments": {},
+      "raw_arguments": "{\"path\": \"a.R\", \"content\": \"x = "
+    }
+  ],
+  "usage": {
+    "input": 25,
+    "output": 1,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 26
+  }
+}

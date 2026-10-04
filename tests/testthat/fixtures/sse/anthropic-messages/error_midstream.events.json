@@ -1,0 +1,23 @@
+[
+  {
+    "type": "start",
+    "response_id": "msg_01ERR"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "Partial ans"
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "overloaded",
+      "status": 529
+    }
+  }
+]

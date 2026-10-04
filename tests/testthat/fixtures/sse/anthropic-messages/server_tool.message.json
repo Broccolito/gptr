@@ -1,0 +1,29 @@
+{
+  "stop_reason": "stop",
+  "raw_stop_reason": "end_turn",
+  "response_id": "msg_01SRV",
+  "response_model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "opaque",
+      "json": "{\"type\":\"server_tool_use\",\"id\":\"srvtoolu_01\",\"name\":\"web_search\",\"input\":{\"query\":\"R 4.4 news\"}}"
+    },
+    {
+      "type": "opaque",
+      "json": "{\"type\":\"web_search_tool_result\",\"tool_use_id\":\"srvtoolu_01\",\"content\":[{\"type\":\"web_search_result\",\"url\":\"https://example.org/r\",\"title\":\"R news\",\"encrypted_content\":\"EqgfCioIARgB\"}]}"
+    },
+    {
+      "type": "text",
+      "text": "R 4.4 is out."
+    }
+  ],
+  "usage": {
+    "input": 40,
+    "output": 20,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 60
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "stop_reason": "stop",
+  "raw_stop_reason": "end_turn",
+  "response_id": "msg_01TEXT",
+  "response_model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "Hello, café — 😀."
+    }
+  ],
+  "usage": {
+    "input": 12,
+    "output": 9,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 21
+  }
+}

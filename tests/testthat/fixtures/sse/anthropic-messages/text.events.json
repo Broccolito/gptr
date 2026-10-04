@@ -1,0 +1,32 @@
+[
+  {
+    "type": "start",
+    "response_id": "msg_01TEXT"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "Hello, "
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "café — 😀."
+  },
+  {
+    "type": "text_end",
+    "index": 1,
+    "block": {
+      "type": "text",
+      "text": "Hello, café — 😀."
+    }
+  },
+  {
+    "type": "done",
+    "reason": "stop"
+  }
+]

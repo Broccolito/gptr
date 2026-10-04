@@ -1,0 +1,25 @@
+[
+  {
+    "type": "start",
+    "response_id": "msg_01CUT"
+  },
+  {
+    "type": "toolcall_start",
+    "index": 1,
+    "id": "toolu_01C",
+    "name": "write"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 1,
+    "delta": "{\"path\": \"a.R\", \"content\": \"x = "
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "network",
+      "status": null
+    }
+  }
+]

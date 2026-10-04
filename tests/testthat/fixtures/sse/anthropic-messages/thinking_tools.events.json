@@ -1,0 +1,115 @@
+[
+  {
+    "type": "start",
+    "response_id": "msg_01TOOLS"
+  },
+  {
+    "type": "thinking_start",
+    "index": 1
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "The user wants mpg by cyl. "
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "Aggregate in the session."
+  },
+  {
+    "type": "thinking_end",
+    "index": 1,
+    "block": {
+      "type": "thinking",
+      "thinking": "The user wants mpg by cyl. Aggregate in the session.",
+      "signature": "EqQBCgIYAhIM1gbcDa9GJwZA2b3hGgxBdjrkzLoky3dl1pkiMOYds=="
+    }
+  },
+  {
+    "type": "thinking_start",
+    "index": 2
+  },
+  {
+    "type": "thinking_end",
+    "index": 2,
+    "block": {
+      "type": "thinking",
+      "thinking": "",
+      "redacted": true,
+      "data": "EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpP"
+    }
+  },
+  {
+    "type": "text_start",
+    "index": 3
+  },
+  {
+    "type": "text_delta",
+    "index": 3,
+    "delta": "I will compute that."
+  },
+  {
+    "type": "text_end",
+    "index": 3,
+    "block": {
+      "type": "text",
+      "text": "I will compute that."
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "index": 4,
+    "id": "toolu_01A",
+    "name": "r"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 4,
+    "delta": "{\"code\": \"aggregate(mpg ~ cyl"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 4,
+    "delta": ", mtcars, mean)\"}"
+  },
+  {
+    "type": "toolcall_end",
+    "index": 4,
+    "block": {
+      "type": "tool_call",
+      "id": "toolu_01A",
+      "name": "r",
+      "arguments": {
+        "code": "aggregate(mpg ~ cyl, mtcars, mean)"
+      }
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "index": 5,
+    "id": "toolu_01B",
+    "name": "read"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 5,
+    "delta": "{\"path\":\"R/a.R\"}"
+  },
+  {
+    "type": "toolcall_end",
+    "index": 5,
+    "block": {
+      "type": "tool_call",
+      "id": "toolu_01B",
+      "name": "read",
+      "arguments": {
+        "path": "R/a.R"
+      }
+    }
+  },
+  {
+    "type": "done",
+    "reason": "tool_use"
+  }
+]

@@ -1,0 +1,27 @@
+[
+  {
+    "type": "start",
+    "response_id": "msg_01SRV"
+  },
+  {
+    "type": "text_start",
+    "index": 3
+  },
+  {
+    "type": "text_delta",
+    "index": 3,
+    "delta": "R 4.4 is out."
+  },
+  {
+    "type": "text_end",
+    "index": 3,
+    "block": {
+      "type": "text",
+      "text": "R 4.4 is out."
+    }
+  },
+  {
+    "type": "done",
+    "reason": "stop"
+  }
+]

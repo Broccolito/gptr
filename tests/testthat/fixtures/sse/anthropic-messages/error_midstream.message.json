@@ -1,0 +1,21 @@
+{
+  "stop_reason": "error",
+  "error_message": "overloaded_error: Overloaded",
+  "response_id": "msg_01ERR",
+  "response_model": "claude-sonnet-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "Partial ans"
+    }
+  ],
+  "usage": {
+    "input": 25,
+    "output": 1,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 26
+  }
+}
