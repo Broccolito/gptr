@@ -437,3 +437,180 @@ test_that("interactively a reached budget can be extended by the same amount (as
   expect_identical(s$status, "idle")
   expect_length(fake_requests(fake), 2L)
 })
+
+# ---------------------------------------------------------------- usage (gptr_usage)
+
+test_that("gptr_usage() aggregates by session, agent, model and route, counting each request once",
+          {
+  root = test_session()
+  child = test_session(kind = "child", parent = root)
+  rid = session_data(root)$id
+  cid = session_data(child)$id
+  usage_add(root, usage_fixture(rid, "q1", cost = 1))
+  usage_add(child, usage_fixture(cid, "q2", cost = 2, agent = "stats", route = "plan-cli"))
+  u = gptr_usage(list(root, child))
+  expect_s3_class(u, "gptr_usage")
+  expect_named(u, c("group", "requests", "input", "output", "cache_read", "cache_write", "cost"))
+  expect_identical(sort(u$group), sort(c(rid, cid)))
+  expect_equal(sum(u$cost), 3)
+  expect_equal(attr(u, "totals")[["requests"]], 2)
+  expect_identical(sort(gptr_usage(root, by = "agent")$group), c("main", "stats"))
+  expect_identical(gptr_usage(root, by = "model")$group, "fake/fake-1")
+  expect_identical(sort(gptr_usage(root, by = "route")$group), c("api", "plan-cli"))
+})
+
+test_that("gptr_usage() validates x, by and detail", {
+  expect_error(gptr_usage(42), class = "gptr_error_invalid_argument")
+  expect_error(gptr_usage(by = "colour"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_usage(detail = NA), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_usage() with x = NULL covers the live sessions of this process", {
+  s = test_session()
+  usage_add(s, usage_fixture(session_data(s)$id, "q-live-1"))
+  expect_true(session_data(s)$id %in% gptr_usage()$group)
+})
+
+test_that("gptr_usage() counts rows whose group is NA (process-level System 1 rows)", {
+  s = test_session()
+  usage_add(s, usage_fixture(session_data(s)$id, "q-na", cost = 0.5, agent = NA_character_))
+  u = gptr_usage(s, by = "agent")
+  expect_identical(u$requests, 1L)
+  expect_equal(u$cost, 0.5)
+})
+
+test_that("gptr_usage(detail = TRUE) returns the token ledger per request and component", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  s = test_session()
+  run_text(s, "hi")
+  led = gptr_usage(s, detail = TRUE)
+  expect_s3_class(led, "gptr_ledger")
+  expect_named(led, c("request_id", "component", "tokens", "cached"))
+  expect_true("transcript" %in% led$component)
+  expect_identical(unique(led$request_id), s$usage$request_id)
+})
+
+# ---------------------------------------------------------------- usage view: unknown usage (IC-74)
+
+test_that("gptr_usage() keeps unknown usage unknown in groups, totals and the footer (IC-74)", {
+  s = test_session()
+  sid = session_data(s)$id
+  usage_add(s, usage_fixture(sid, "q-known", cost = 0.25))
+  usage_add(s, usage_fixture(sid, "q-unpriced", cost = NA_real_, agent = "stats"))
+  u = gptr_usage(s, by = "agent")
+  expect_identical(u$group, c("main", "stats"))
+  expect_identical(u$cost, c(0.25, NA))
+  expect_identical(u$input, c(100, 100))
+  tot = attr(u, "totals")
+  expect_identical(tot[["cost"]], NA_real_)
+  expect_identical(tot[["requests"]], 2)
+  expect_identical(attr(u, "footer"), "2 requests, 200 tokens in, unknown cost")
+  printed = paste(utils::capture.output(print(u)), collapse = "\n")
+  expect_true(grepl("unknown cost", printed, fixed = TRUE))
+  expect_false(grepl("$NA", printed, fixed = TRUE))
+  # an unknown cache read makes its group's cache reads and the tokens in unknown, never zero
+  row = usage_fixture(sid, "q-cache", cost = 0)
+  row$cache_read = NA_real_
+  usage_add(s, row)
+  u = gptr_usage(s)
+  expect_identical(u$group, sid)
+  expect_identical(u$cache_read, NA_real_)
+  expect_identical(u$input, 300)
+  expect_identical(attr(u, "totals")[["cache_read"]], NA_real_)
+  expect_identical(attr(u, "footer"), "3 requests, unknown tokens in, unknown cost")
+})
+
+test_that("gptr_usage() keeps known zeros and prints an empty view as zero requests", {
+  s = test_session()
+  u = gptr_usage(s)
+  expect_s3_class(u, "gptr_usage")
+  expect_identical(nrow(u), 0L)
+  expect_identical(vapply(u, typeof, ""),
+                   c(group = "character", requests = "integer", input = "double",
+                     output = "double", cache_read = "double", cache_write = "double",
+                     cost = "double"))
+  expect_identical(attr(u, "totals")[["cost"]], 0)
+  expect_identical(attr(u, "footer"), "0 requests, 0 tokens in, $0.0000")
+  usage_add(s, usage_fixture(session_data(s)$id, "q-local", cost = 0, input = 1200))
+  u = gptr_usage(s)
+  expect_identical(u$cost, 0)
+  expect_identical(u$cache_write, 0)
+  expect_identical(attr(u, "footer"), "1 request, 1.2k tokens in, $0.0000")
+})
+
+test_that("gptr_usage(by = \"model\") groups an unknown provider or model as unknown", {
+  s = test_session()
+  sid = session_data(s)$id
+  usage_add(s, usage_fixture(sid, "q-m1"))
+  row = usage_fixture(sid, "q-m2")
+  row$model = NA_character_
+  usage_add(s, row)
+  row = usage_fixture(sid, "q-m3")
+  row$provider = NA_character_
+  usage_add(s, row)
+  u = gptr_usage(s, by = "model")
+  expect_identical(u$group, c("fake/fake-1", NA))
+  expect_identical(u$requests, c(1L, 2L))
+  expect_false("NA/NA" %in% u$group)
+})
+
+test_that("gptr_usage(x = NULL) adds the process System 1 log, counting each request once", {
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  s = test_session()
+  sid = session_data(s)$id
+  usage_add(s, usage_fixture(sid, "q-s1-shared", cost = 0.5, agent = "s1-probe"))
+  usage_log_append(rbind(
+    usage_fixture(NA_character_, "q-s1-only", cost = 0.25, agent = "s1-probe",
+                  route = "system-one"),
+    usage_fixture(sid, "q-s1-shared", cost = 0.5, agent = "s1-probe", route = "system-one")
+  ))
+  u = gptr_usage(by = "agent")
+  probe = u[u$group %in% "s1-probe", , drop = FALSE]
+  expect_identical(probe$requests, 2L)
+  expect_equal(probe$cost, 0.75)
+  expect_true(NA_character_ %in% gptr_usage()$group)
+  # an explicit x reads only its sessions, never the process log
+  expect_identical(gptr_usage(s, by = "agent")$requests, 1L)
+  expect_false(anyNA(gptr_usage(s)$group))
+})
+
+test_that("gptr_usage(detail = TRUE) reads the sessions' own ledgers, not their children's", {
+  root = test_session()
+  child = test_session(kind = "child", parent = root)
+  ledger_add(root, "q-root-1", list(t0 = 600, transcript = 40))
+  ledger_add(child, "q-child", list(t0 = 500, transcript = 30))
+  ledger_add(root, "q-root-2", list(t0 = 600, transcript = 70))
+  ledger_mark_cached(child, "q-child", cache_read = NA_real_)
+  # a child's request is not in the root's ledger (P14's /context reads the last row as the
+  # session's own last request), although usage_add() rolls the child's usage row up to the root
+  led = gptr_usage(root, detail = TRUE)
+  expect_identical(led$request_id, c("q-root-1", "q-root-1", "q-root-2", "q-root-2"))
+  expect_identical(led$request_id[[nrow(led)]], "q-root-2")
+  expect_identical(led$cached, c(FALSE, FALSE, FALSE, FALSE))
+  expect_identical(rownames(led), as.character(1:4))
+  led = gptr_usage(child, detail = TRUE)
+  expect_identical(led$request_id, c("q-child", "q-child"))
+  expect_identical(led$cached, c(NA, NA))
+  # several sessions: their own ledgers in the order given, each (request, component) once
+  led = gptr_usage(list(root, child, root), detail = TRUE)
+  expect_identical(nrow(led), 6L)
+  expect_identical(unique(led$request_id), c("q-root-1", "q-root-2", "q-child"))
+  expect_identical(rownames(led), as.character(1:6))
+  empty = gptr_usage(test_session(), detail = TRUE)
+  expect_s3_class(empty, "gptr_ledger")
+  expect_identical(nrow(empty), 0L)
+})
+
+test_that("gptr_usage() names the argument it refuses", {
+  s = test_session()
+  err = expect_error(gptr_usage(list(s, 1)), class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "x")
+  expect_error(gptr_usage(list()), class = "gptr_error_invalid_argument")
+  err = expect_error(gptr_usage(s, by = c("agent", "model")),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "by")
+  err = expect_error(gptr_usage(s, detail = "yes"), class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "detail")
+})

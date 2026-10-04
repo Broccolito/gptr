@@ -1532,3 +1532,30 @@ Validation: `progress/P09.md`, Task 2. Four blocks (21 expectations) and one cop
 to the plan's tests, which are unchanged. Against the plan-literal source the four blocks gave
 `[ FAIL 4 | WARN 1 | SKIP 0 | PASS 51 ]`. The final result for `env-snapshot|copy-eval` is
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 69 ]`, and `^env-snapshot$` under `LC_ALL=C` passes 66.
+
+## D-042 - P06 gptr_usage(): unknown usage prints as unknown, an unknown model is the NA group, the System 1 log is read without a catch-all (2026-10-04)
+
+P06 Task 11's literal `gptr_usage()` predates IC-74 (07-local-ollama.md section 5: "Missing usage
+remains unknown"). The behaviour now, which Task 15's `ctx$usage()`, P08's printing and P19's
+team and fan-out containers consume:
+
+1. **The footer prints unknown usage as unknown.** The cost goes through `format_cost()` (D-024):
+   `unknown cost` when any included cost is unknown, never `$NA`; the tokens in (input plus cache
+   reads) go through `format_count()`: `unknown tokens in`. A known zero stays `$0.0000`. One
+   request reads `1 request`. Group sums and the `totals` attribute stay the plan's `sum()`
+   without `na.rm`, so a group or total that includes an unknown value is `NA` (now tested).
+2. **`by = "model"` groups an unknown provider or model as `NA`.** The plan pasted
+   `provider/model`, which turned unknown parts into invented model names (`"NA/NA"`,
+   `"fake/NA"`) and split the unknown requests over several groups.
+3. **`x = NULL` reads P05's `usage_log()` without a catch-all.** The plan wrapped it in
+   `tryCatch(..., error = function(e) NULL)`, which would silently drop the System 1 requests
+   from the totals. `usage_log_append()` validates every row, so `usage_log()` does not fail on a
+   well-formed log; a failure now surfaces instead of an understated total.
+
+`detail = TRUE` is not a deviation: as planned, it binds the given sessions' own ledgers
+(`ledger_add()` writes to the requesting session only), so a child's requests are in the child's
+ledger and the last row is the session's own last request, which P14's `/context`
+(`cmd_context()`) reads. Contract 04 section 6.5 rolls children up only for `detail = FALSE`.
+
+Validation: `progress/P06.md`, Task 11 (`test-session-budget.R`; the added tests failed 7
+assertions against the plan-literal code, and every plan test passed against both).

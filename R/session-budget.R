@@ -362,3 +362,93 @@ budget_near = function(run) {
   }
   invisible(NULL)
 }
+
+# ---------------------------------------------------------------------------- usage (gptr_usage)
+
+#' Token usage and cost
+#'
+#' Aggregates the usage rows of sessions (children included, each request counted once) and, for
+#' `x = NULL`, of every live session of this process plus the process System 1 log. Reads only.
+#'
+#' Unknown usage stays unknown: a token count or cost that a provider did not report is `NA`,
+#' never zero, so a group or total that includes it is `NA` and the footer prints it as
+#' `unknown`. A known zero, such as the metered charge of a local model, stays zero. Rows without
+#' a session, agent, model or route (process-level System 1 calls) form the `NA` group.
+#'
+#' @param x A `gptr_session`, a list of sessions, or `NULL` (every live session of this process
+#'   and the System 1 log).
+#' @param by Grouping of the summary: `"session"`, `"agent"`, `"model"` or `"route"`.
+#' @param detail `FALSE`: a `gptr_usage` data frame (`group`, `requests`, `input`, `output`,
+#'   `cache_read`, `cache_write`, `cost`) with attribute `totals`; `TRUE`: the `gptr_ledger` per
+#'   request and context component (`request_id`, `component`, `tokens`, `cached`) of the
+#'   sessions' own requests, session by session in request order (a child's requests are in the
+#'   child's ledger).
+#' @return A `gptr_usage` or `gptr_ledger` data frame.
+#' @examples
+#' gptr_usage()
+#' @examplesIf exists("gptr", mode = "function")
+#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' gptr_usage(s)
+#' @export
+gptr_usage = function(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE) {
+  by = check_choice(by, c("session", "agent", "model", "route"), "by")
+  check_flag(detail, "detail")
+  sessions = usage_sessions(x)
+  if (detail) {
+    rows = do.call(rbind, c(list(ledger_empty()), lapply(sessions,
+                                                         function(s) session_data(s)$ledger)))
+    rows = rows[!duplicated(rows[c("request_id", "component")]), , drop = FALSE]
+    rownames(rows) = NULL
+    return(new_listing(rows, "gptr_ledger"))
+  }
+  rows = do.call(rbind, c(list(usage_empty()), lapply(sessions, function(s) session_data(s)$usage)))
+  if (is.null(x)) {
+    s1 = usage_log()
+    if (nrow(s1)) rows = rbind(rows, usage_conform(s1))
+  }
+  rows = rows[!duplicated(rows$request_id), , drop = FALSE]
+  group = usage_group(rows, by)
+  keys = unique(group)
+  # %in%, not ==, and unnamed results: a group may be NA (process-level System 1 rows have no
+  # session) and must still be counted; NA names would make data.frame() fail on its row names.
+  # sum() without na.rm: a group with an unknown value is unknown (IC-74)
+  agg = function(col) {
+    vapply(keys, function(k) sum(rows[[col]][group %in% k]), 1, USE.NAMES = FALSE)
+  }
+  df = data.frame(group = keys,
+                  requests = vapply(keys, function(k) sum(group %in% k), 1L, USE.NAMES = FALSE),
+                  input = agg("input"), output = agg("output"), cache_read = agg("cache_read"),
+                  cache_write = agg("cache_write_5m") + agg("cache_write_1h"), cost = agg("cost"),
+                  stringsAsFactors = FALSE)
+  rownames(df) = NULL
+  totals = usage_totals(rows)
+  n = as.integer(totals[["requests"]])
+  footer = paste0(n, if (n == 1L) " request, " else " requests, ",
+                  format_count(c(totals[["input"]], totals[["cache_read"]])), " tokens in, ",
+                  format_cost(totals[["cost"]]))
+  out = new_listing(df, "gptr_usage", footer = footer)
+  attr(out, "totals") = totals
+  out
+}
+
+#' The sessions gptr_usage() reads: every live one for NULL, else the given ones
+#' @noRd
+usage_sessions = function(x) {
+  if (is.null(x)) return(live_all())
+  if (inherits(x, "gptr_session")) return(list(x))
+  if (is.list(x) && length(x) && all(vapply(x, function(s) inherits(s, "gptr_session"),
+                                            NA))) return(x)
+  gptr_abort("`x` must be a gptr_session, a list of sessions or NULL", "invalid_argument",
+             arg = "x",
+             expected = "a gptr_session, a list of sessions or NULL")
+}
+
+#' The group of each usage row for gptr_usage(by =): a model is `provider/model`, and unknown
+#' (`NA`) when either part is unknown, never the string "NA/NA" (IC-74)
+#' @noRd
+usage_group = function(rows, by) {
+  if (!identical(by, "model")) return(rows[[by]])
+  group = paste(rows$provider, rows$model, sep = "/")
+  group[is.na(rows$provider) | is.na(rows$model)] = NA_character_
+  group
+}
