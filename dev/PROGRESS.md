@@ -5,6 +5,13 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Current state
 
+**PAUSED by the maintainer on 2026-10-03 at approximately 18:44 PDT.**
+All agents stopped; the one active retry check was interrupted. Resume only on
+explicit user direction. Read [the complete paused handoff](HANDOFF.md) first.
+It records the exact staged/unstaged files, recovery copies, interrupted checks,
+commit boundaries, model allocation and next actions. Implementation HEAD at
+pause: `17aad27`; latest published checkpoint: `55ec31d`.
+
 - Branch: `codex/gptr-1.0-implementation`, based on `17a95dd`.
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
@@ -24,16 +31,18 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
   checkpoint `55ec31d` passed 4,474 offline assertions, the complete connection
   comparison, and R CMD check with 0 errors/warnings/notes. It is published to
   draft PR #4. Hosted Linux jobs exposed 11 shared process/lock failures;
-  a targeted portability correction is in progress. Windows oldrel-4 passed.
+  correction `c8470f7` is committed with 333 focused passes and clean lint/review,
+  but new hosted verification is pending. Windows oldrel-4 passed.
   Hosted platform acceptance remains open. See
   [P02 integrated acceptance](progress/P02-acceptance.md).
 - All P03 tasks are committed through `dd58e45`: vault, whole/streaming redaction,
   dotenv loading, credential storage, child environments and advisory secret
   scanning, history handling, built-in integration and the preview-first
   persisted-file scrubber. Full P03 integration acceptance remains pending. D-010 records the streaming overflow rule that prevents raw leakage.
-- P04 Tasks 1–10 are committed through `54cb63d`: splitters, requests/retries,
+- P04 Tasks 1–11 are committed through `e7581b6`: splitters, requests/retries,
   supervision/jobs, reactor core, process execution, child pipes, rate limiting
-  and the opt-in wire log. HTTP/retry integration remains in progress.
+  and the opt-in wire log/HTTP transfers. Task 12 retries are saved uncommitted;
+  their follow-up green run was interrupted at pause and remains unverified.
 - P05's independent usage/pricing component is committed with IC-74 unknown-
   usage semantics. No later plan or milestone is declared complete from these
   dependency-ready components.
@@ -70,14 +79,14 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
-| M0 Foundation | P01–P04 | in progress | All P01 tasks passed focused checks; integrated acceptance underway |
+| M0 Foundation | P01–P04 | paused; acceptance pending | All P01 tasks passed focused checks; integrated acceptance underway |
 | M1 Offline session kernel | P05–P08 | pending | — |
 | M2 Live R agent and decisions | P09–P13 | pending | — |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
 | M5 Applications, benchmarks, release | P22–P25 | pending | — |
 
-## Active ownership
+## Paused ownership (resume only on instruction)
 
 The maintainer requested **Astra for implementation** and **Luna for testing**
 on 2026-10-03. Existing agents handed off at safe boundaries; their unfinished
