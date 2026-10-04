@@ -28,6 +28,14 @@ Resume log (newest last):
   `progress/P05.md`, `progress/P05-usage.md`, `progress/ci-hosted.md`.
 - Lanes now running: **P06** (session kernel, Tasks 2-16) and, in parallel, **P12**
   (native adapters; early lane on its P05-only dependencies, blocks if it needs P06/P07).
+- 2026-10-04: **P12 Tasks 1-10 committed** (`6e79edf` .. `95dd9b8`; each independently
+  reviewed; IC-74 usage unknowns in the normaliser core, D-022/D-023/D-029/D-031/D-032/D-035).
+  Two P12 tests skip until P06's run engine and P07's cache policy/request builder exist;
+  **P12 plan acceptance is deferred until after P07**. Hosted CI on `489eb0b`: macOS,
+  connections, no-Suggests, oldrel-1 and copy-safety now pass; remaining Ubuntu/C-locale/
+  Windows failures are handled by CI Task CI-3 (`progress/ci-hosted.md`).
+- Lanes now running: P06 (critical path), the P09 early lane (Tasks 1-9 where their real
+  dependencies exist; Tasks 10-11 after P07/P08) and CI-3.
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
