@@ -30,3 +30,21 @@ exact archive path are in ignored `dev/.validation/P02-acceptance/`.
 
 P01 hosted portability and full P02 acceptance remain pending; component-level
 checks and this initial suite do not close those gates.
+
+## Corrected coherent checkpoint
+
+Target: `55ec31dc99f2d991b4b2d495320b76af25735bf6` (includes the reviewed
+history and rate-limiter components committed between the initial snapshot and
+the harness correction). This is a fresh `git archive`, with its own receipt in
+`final-snapshot.json`; no uncommitted runtime source was overlaid.
+
+- `Rscript --vanilla dev/ci/isolated-check.R connections` passed **4,474
+  assertions, 0 failures, 0 test warnings, 1 expected keyring-installed skip**
+  in 74.7 seconds. The complete connection table remained identical.
+- `Rscript --vanilla dev/ci/isolated-check.R check <isolated-output>` passed
+  in 1m 26.6s with **0 errors, 0 warnings, 0 notes**. Same library, interpreter,
+  offline flags and pre-load isolation as the initial snapshot.
+- Checkpoint published to draft PR #4. Hosted run
+  [37167848633](https://github.com/Broccolito/gptr/actions/runs/37167848633)
+  targets this exact SHA. Hosted jobs are in progress; later commits are not
+  covered by these local results or by this hosted run.

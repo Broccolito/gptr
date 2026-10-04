@@ -20,8 +20,11 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
   [utilities](progress/P01-utilities.md), [provider/helpers](progress/P01-providers.md)
   and [infrastructure evidence](progress/P01-infrastructure.md) for results.
 - P02 Tasks 1–11 are committed through `e2a5f57`; focused acceptance passed
-  1,406 assertions with clean lint, docs and examples. An immutable combined
-  snapshot at that commit is undergoing full package acceptance.
+  1,406 assertions with clean lint, docs and examples. The corrected coherent
+  checkpoint `55ec31d` passed 4,474 offline assertions, the complete connection
+  comparison, and R CMD check with 0 errors/warnings/notes. It is published to
+  draft PR #4; hosted platform acceptance is in progress. See
+  [P02 integrated acceptance](progress/P02-acceptance.md).
 - P03 Tasks 1–3 and 6–10 are committed: vault, whole/streaming redaction,
   dotenv loading, credential storage, child environments and advisory secret
   scanning. History handling, retroactive scrubbing and built-in integration

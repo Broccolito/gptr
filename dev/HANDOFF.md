@@ -31,12 +31,15 @@ Updated: 2026-10-03. State: active implementation, P01 not yet complete.
 ## Next concrete work
 
 The earliest open gate is hosted P01 portability, now being revalidated together
-with the completed P02 implementation. Root captured immutable commit
-`e2a5f575197cb4ea5a2005a757d993017c7783a8`; its local receipt and raw logs live
+with the completed P02 implementation. Initial immutable commit `e2a5f57` passed R CMD check but exposed the standalone
+supervisor-FIFO gate mismatch. Corrected immutable checkpoint
+`55ec31dc99f2d991b4b2d495320b76af25735bf6` now passed 4,474 assertions,
+the complete connection comparison, and R CMD check with 0 errors/warnings/notes.
+Its local receipts and raw logs live
 under ignored `dev/.validation/P02-acceptance/`. This includes the installed-test
 mock correction (`d4aabfb`) and Windows/old-R harness corrections (`285deec`).
-The previous hosted run at `eea1e36` cannot validate them. Publish the coherent
-new snapshot after its checks and record exact-SHA hosted results.
+The previous hosted run at `eea1e36` cannot validate them. The corrected checkpoint is published to draft PR #4, hosted run
+`37167848633`; record exact-SHA hosted results when available.
 
 P03 committed tasks are 1–3 and 6–10. P04 committed tasks are 1–7. Read current
 ownership in `PROGRESS.md` before edits. P03 history/scrub/built-in integration
