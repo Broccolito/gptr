@@ -337,3 +337,654 @@ test_that("a stale credential ID is unavailable before dispatch", {
   expect_false(credential_usable(stale, "https://lab.example"))
   expect_error(provider_credential(provider), class = "gptr_error_no_key")
 })
+
+# ---- provider_stream(): HTTP transports on a scripted reactor ----------------------------
+
+# reactor_retry() follows P04's contract: re-send (TRUE) while nothing is committed, otherwise
+# fail the transfer through on_fail() (FALSE).
+local_mock_reactor = function(.env = parent.frame()) {
+  r = new.env()
+  r$http = list()
+  r$tasks = list()
+  r$retries = list()
+  r$cancelled = character()
+  testthat::local_mocked_bindings(
+    reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL,
+                            provider = NULL, retry = NULL) {
+      id = paste0("t", length(r$http) + 1L)
+      r$http[[id]] = list(spec = spec, on_bytes = on_bytes, on_done = on_done,
+                          on_fail = on_fail, on_headers = on_headers, retry = retry,
+                          provider = provider)
+      id
+    },
+    reactor_retry = function(id, info) {
+      r$retries[[length(r$retries) + 1L]] = list(id = id, info = info)
+      tr = r$http[[id]]
+      if (is.null(tr)) return(invisible(FALSE))
+      if (isTRUE(tr$retry$committed())) {
+        tr$on_fail(stream_condition("stream error: overloaded", c("overloaded", "provider"),
+                                    status = 529L))
+        return(invisible(FALSE))
+      }
+      invisible(TRUE)
+    },
+    reactor_task = function(fn, run = NULL) {
+      r$tasks[[length(r$tasks) + 1L]] = fn
+      paste0("t", 200L + length(r$tasks))
+    },
+    reactor_cancel = function(ids) {
+      r$cancelled = c(r$cancelled, ids)
+      invisible(length(ids))
+    },
+    reactor_now = function() 0,
+    .env = .env
+  )
+  r
+}
+
+sse = function(...) charToRaw(paste0("data: ", c(...), "\n\n", collapse = ""))
+
+# A tiny SSE adapter: data {"t":"text","v":...} is a delta, {"t":"overloaded"} a retryable error.
+# Like P12's normalisers it cannot know the request id (parse() sees no request context), so
+# its start and error events and its messages leave it NULL for provider_stream() to fill.
+local_stream_adapter = function(api = "test-sse", auth = NULL, build = NULL, seen = NULL,
+                                .env = parent.frame()) {
+  parse = function(model, opts) {
+    s = new.env()
+    s$text = character()
+    s$started = FALSE
+    current = function(stop = "stop") {
+      msg_assistant(list(block_text(paste(s$text, collapse = ""))), api = model$api,
+                    provider = model$provider, model = model$id, stop_reason = stop,
+                    timestamp = 1)
+    }
+    list(
+      push = function(ev) {
+        d = json_decode(ev$data)
+        if (!s$started) {
+          s$started = TRUE
+          opts$emit(ev_new("start", api = model$api, provider = model$provider,
+                           model = model$id, request_id = NULL, response_id = NULL))
+        }
+        if (identical(d$t, "overloaded")) {
+          opts$retry(list(class = "overloaded", status = 529L, retry_after = NULL))
+          return(FALSE)
+        }
+        if (identical(d$t, "retry")) {
+          opts$retry(list(class = d$class))
+          return(FALSE)
+        }
+        s$text = c(s$text, d$v)
+        opts$emit(ev_new("text_delta", index = 1L, delta = d$v))
+        FALSE
+      },
+      finish = function() {
+        m = current()
+        opts$emit(ev_new("done", reason = "stop", message = m, usage = NULL))
+        m
+      },
+      fail = function(cnd) {
+        if (is.environment(seen)) seen$cnd = cnd
+        m = current("error")
+        m$error_message = conditionMessage(cnd)
+        opts$emit(ev_new("error", reason = "error", message = m,
+                         error = list(class = class(cnd)[[1]], status = cnd$status,
+                                      request_id = NULL, retry_after = NULL)))
+        m
+      },
+      message = function() current()
+    )
+  }
+  build = build %||% function(model, context, opts) {
+    list(url = paste0(opts$base_url, "/v1/stream"), method = "POST",
+         headers = list(authorization = opts$credential), body = "{}", stream = "sse")
+  }
+  off1 = gptr_register(gptr_adapter(api, transport = "http_sse", build = build, parse = parse))
+  off2 = gptr_register(gptr_provider("streamtest", api = api, base_url = "https://stream.example",
+                                     auth = auth, models = list(list(id = "m1"))))
+  withr::defer({
+    off1()
+    off2()
+  }, envir = .env)
+  model_resolve("streamtest/m1")
+}
+
+local_stream_log = function() {
+  log = new.env()
+  log$events = list()
+  log$done = list()
+  log$emit = function(ev) {
+    log$events[[length(log$events) + 1L]] = ev
+  }
+  log$finish = function(msg) {
+    log$done[[length(log$done) + 1L]] = msg
+  }
+  log$types = function() vapply(log$events, function(e) e$type, "")
+  log
+}
+
+stream_context = function(text = "hi") {
+  list(system = list(t0 = "", t1 = ""), tools_json = NULL, tools = list(),
+       messages = list(msg_user(text, timestamp = 1)),
+       cache_plan = list(anchors = character(), tail_ttl = "5m", key = "k"),
+       params = list(max_tokens = 100L, thinking = NULL, effort = NULL, tool_choice = "auto",
+                     returns = NULL, temperature = NULL),
+       session_id = "s0000000000", request_id = "q000000000001", text = text)
+}
+
+# A stand-in for P06's gptr_run with the fields of 04 section 7.6 that provider_stream() reads.
+local_run = function(status = "requesting") {
+  run = new.env()
+  run$id = "r0000000001"
+  run$session = "s0000000000"
+  run$status = status
+  run$signal = new.env()
+  run$signal$aborted = FALSE
+  run$signal$reason = NULL
+  run
+}
+
+test_that("an SSE stream yields one start, the deltas in order and one done", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  log = local_stream_log()
+  id = provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_equal(id, "t1")
+  t1 = r$http[["t1"]]
+  expect_equal(t1$spec$url, "https://stream.example/v1/stream")
+  expect_equal(t1$spec$request_id, "q000000000001")
+  expect_equal(t1$spec$model, "m1")
+  expect_equal(t1$spec$session_id, "s0000000000")
+  expect_equal(t1$spec$idle_timeout, gptr_opt("idle_timeout"))
+  expect_equal(t1$provider, "streamtest")
+  expect_true(is.function(t1$retry$on_retry))
+  expect_false(t1$retry$committed())
+  t1$on_headers(200L, list())
+  t1$on_bytes(sse('{"t":"text","v":"Hel"}'))
+  expect_true(t1$retry$committed())
+  t1$on_bytes(sse('{"t":"text","v":"lo"}'))
+  t1$on_done(200L, list())
+  expect_equal(log$types(), c("start", "text_delta", "text_delta", "done"))
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "Hello")
+  # the request id the adapter cannot know is filled from the context (04 section 4.5)
+  expect_equal(log$events[[1]]$request_id, "q000000000001")
+  expect_equal(log$events[[4]]$message$request_id, "q000000000001")
+  expect_equal(log$done[[1]]$request_id, "q000000000001")
+  t1$on_done(200L, list())
+  t1$on_fail(stream_condition("late", "network"))
+  expect_length(log$done, 1L)
+})
+
+test_that("an in-stream retryable error before any delta is re-sent by the reactor", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  t1 = r$http[["t1"]]
+  t1$on_headers(200L, list())
+  t1$on_bytes(sse('{"t":"overloaded"}', '{"t":"text","v":"stale"}'))
+  expect_length(r$retries, 1L)
+  expect_equal(r$retries[[1]]$id, "t1")
+  expect_equal(r$retries[[1]]$info$class, "overloaded")
+  expect_false(t1$retry$committed())
+  # P04 waits, reports the retry and re-sends the spec: a second head means "start over"
+  t1$retry$on_retry("retry_start", list(attempt = 1L, delay = 0.5, class = "overloaded"))
+  t1$on_headers(200L, list())
+  t1$retry$on_retry("retry_end", list(attempt = 2L, ok = TRUE))
+  t1$on_bytes(sse('{"t":"text","v":"ok"}'))
+  t1$on_done(200L, list())
+  expect_named(r$http, "t1")
+  expect_equal(log$types(), c("start", "retry_start", "retry_end", "text_delta", "done"))
+  expect_equal(log$events[[2]]$delay, 0.5)
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "ok")
+})
+
+test_that("a retryable error after a delta ends the stream with the partial message", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  r$http[["t1"]]$on_bytes(sse('{"t":"text","v":"par"}', '{"t":"overloaded"}'))
+  expect_length(r$retries, 1L)
+  expect_equal(log$types()[[length(log$events)]], "error")
+  expect_equal(log$events[[length(log$events)]]$error$request_id, "q000000000001")
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$stop_reason, "error")
+  expect_equal(log$done[[1]]$request_id, "q000000000001")
+  expect_equal(msg_text(log$done[[1]]), "par")
+})
+
+test_that("setting the abort flag cancels the transfer and ends with an aborted message", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  log = local_stream_log()
+  signal = new.env()
+  signal$aborted = FALSE
+  signal$reason = "user"
+  provider_stream(model, stream_context(), list(signal = signal), emit = log$emit,
+                  done = log$finish)
+  r$http[["t1"]]$on_bytes(sse('{"t":"text","v":"part"}'))
+  watch = r$tasks[[1]]
+  expect_true(watch())
+  signal$aborted = TRUE
+  expect_false(watch())
+  expect_true("t1" %in% r$cancelled)
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$stop_reason, "aborted")
+  expect_equal(msg_text(log$done[[1]]), "part")
+  expect_equal(log$events[[length(log$events)]]$reason, "aborted")
+})
+
+test_that("a run that settles while its stream is open lets go of the stream", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  log = local_stream_log()
+  run = local_run("streaming")
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish, run = run)
+  watch = r$tasks[[1]]
+  expect_true(watch())
+  run$status = "error"
+  expect_false(watch())
+  r$http[["t1"]]$on_bytes(sse('{"t":"text","v":"late"}'))
+  expect_length(log$events, 0L)
+  expect_length(log$done, 0L)
+})
+
+test_that("an adapter that fails to build ends the stream with one error event", {
+  r = local_mock_reactor()
+  model = local_stream_adapter(api = "test-broken",
+                               build = function(model, context, opts) stop("bad request body"))
+  log = local_stream_log()
+  id = provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(is.na(id))
+  expect_equal(log$types(), "error")
+  expect_equal(log$done[[1]]$stop_reason, "error")
+  expect_equal(log$done[[1]]$provider, "streamtest")
+  expect_equal(log$done[[1]]$model, "m1")
+  expect_match(log$done[[1]]$error_message, "bad request body", fixed = TRUE)
+  expect_length(r$http, 0L)
+})
+
+test_that("a keyed provider without a credential is refused before anything starts", {
+  r = local_mock_reactor()
+  local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL)
+  withr::local_envvar(GPTR_P05_TEST_KEY = "")
+  model = local_stream_adapter(auth = "GPTR_P05_TEST_KEY")
+  log = local_stream_log()
+  expect_error(provider_stream(model, stream_context(), list(), emit = log$emit,
+                               done = log$finish),
+               class = "gptr_error_no_key")
+  expect_length(r$http, 0L)
+  expect_length(log$events, 0L)
+})
+
+test_that("a provider disabled in the settings is refused before anything starts", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  local_settings(providers = list(streamtest = list(enabled = FALSE)))
+  log = local_stream_log()
+  err = expect_error(provider_stream(model, stream_context(), list(), emit = log$emit,
+                                     done = log$finish),
+                     class = "gptr_error_not_available")
+  expect_equal(err$member, "streamtest")
+  expect_length(r$http, 0L)
+})
+
+test_that("a static-rate override from the settings reaches the limiter once (IC-64)", {
+  local_mock_reactor()
+  model = local_stream_adapter()
+  local_settings(providers = list(streamtest = list(rate = list(requests_per_s = 2))))
+  lim = new.env()
+  lim$n = 0L
+  lim$rate = NULL
+  local_mocked_bindings(
+    ratelimit_get = function(provider) list(rate = lim$rate),
+    ratelimit_set = function(provider, rate) {
+      lim$n = lim$n + 1L
+      lim$rate = rate
+      invisible(NULL)
+    }
+  )
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_equal(lim$n, 1L)
+  expect_equal(lim$rate, list(requests_per_s = 2))
+})
+
+test_that("adapters receive the injected gate, MCP dispatcher and tool-result builder (IC-33)", {
+  local_mock_reactor()
+  seen = new.env()
+  model = local_stream_adapter(build = function(model, context, opts) {
+    seen$opts = opts
+    list(url = "https://stream.example/v1/stream", method = "POST", headers = list(),
+         body = "{}", stream = "sse")
+  })
+  local_mocked_bindings(ext_service_has = function(name) FALSE)
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  o = seen$opts
+  expect_equal(o$gate(list(id = "c1", name = "r"))$decision, "deny")
+  expect_equal(o$mcp_dispatch(list(jsonrpc = "2.0", id = 7L))$error$code, -32601L)
+  tr = o$tool_result(gptr_tool_result("3 rows"), list(id = "c1", name = "r"))
+  expect_equal(tr$role, "tool_result")
+  expect_equal(tr$tool_call_id, "c1")
+  expect_true(all(vapply(list(o$emit, o$retry, o$send), is.function, NA)))
+  expect_true(is.environment(o$signal) && is.environment(o$state) && is.environment(o$memo))
+  expect_equal(o$base_url, "https://stream.example")
+  expect_null(o$credential)
+  expect_equal(o$provider$id, "streamtest")
+  mine = function(call) list(decision = "allow", reason = "test")
+  provider_stream(model, stream_context(), list(gate = mine), emit = log$emit, done = log$finish)
+  expect_identical(seen$opts$gate, mine)
+  run = local_run()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish, run = run)
+  expect_identical(seen$opts$signal, run$signal)
+  expect_equal(seen$opts$run, "r0000000001")
+  expect_equal(seen$opts$session, "s0000000000")
+})
+
+# ---- provider_stream(): beyond the plan's literal tests (IC-74, http_ndjson/http_json) ------
+
+test_that("NDJSON lines and a whole JSON body reach the normaliser", {
+  r = local_mock_reactor()
+  kind = new.env()
+  kind$stream = "ndjson"
+  model = local_stream_adapter(build = function(model, context, opts) {
+    list(url = "https://stream.example/v1/x", method = "POST", headers = list(), body = "{}",
+         stream = kind$stream)
+  })
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  t1 = r$http[["t1"]]
+  t1$on_headers(200L, list())
+  t1$on_bytes(charToRaw('{"t":"text","v":"a"}\n{"t":"text",'))
+  t1$on_bytes(charToRaw('"v":"b"}\n{"t":"text","v":"c"}'))
+  t1$on_done(200L, list())
+  expect_equal(log$types(), c("start", "text_delta", "text_delta", "text_delta", "done"))
+  expect_equal(msg_text(log$done[[1]]), "abc")
+  kind$stream = "json"
+  log2 = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log2$emit, done = log2$finish)
+  t2 = r$http[["t2"]]
+  t2$on_headers(200L, list())
+  t2$on_bytes(charToRaw('{"t":"text",'))
+  t2$on_bytes(charToRaw('"v":"whole"}'))
+  expect_length(log2$events, 0L)
+  t2$on_done(200L, list())
+  expect_equal(log2$types(), c("start", "text_delta", "done"))
+  expect_equal(msg_text(log2$done[[1]]), "whole")
+  kind$stream = "xml"
+  log3 = local_stream_log()
+  id = provider_stream(model, stream_context(), list(), emit = log3$emit, done = log3$finish)
+  expect_true(is.na(id))
+  expect_equal(log3$types(), "error")
+  expect_length(log3$done, 1L)
+  expect_length(r$http, 2L)
+})
+
+test_that("transport failures and normaliser errors end the stream exactly once", {
+  r = local_mock_reactor()
+  model = local_stream_adapter()
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  r$http[["t1"]]$on_fail(stream_condition("No first response byte for 120 s.",
+                                          c("timeout_first_byte", "timeout")))
+  expect_equal(log$types(), "error")
+  expect_equal(log$events[[1]]$error$class, "gptr_error_timeout_first_byte")
+  expect_equal(log$events[[1]]$error$request_id, "q000000000001")
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$stop_reason, "error")
+  # a normaliser that throws: one error event, and the live transfer is cancelled
+  log2 = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log2$emit, done = log2$finish)
+  t2 = r$http[["t2"]]
+  t2$on_headers(200L, list())
+  t2$on_bytes(sse("not json"))
+  t2$on_bytes(sse('{"t":"text","v":"late"}'))
+  t2$on_done(200L, list())
+  expect_equal(log2$types(), "error")
+  expect_equal(log2$events[[1]]$error$class, "gptr_error_internal")
+  expect_length(log2$done, 1L)
+  expect_true("t2" %in% r$cancelled)
+})
+
+test_that("a retry hint the reactor neither re-sends nor fails keeps its parent class", {
+  r = local_mock_reactor()
+  # P04 already forgot the transfer (a hint flushed at on_done, or any http_json body)
+  local_mocked_bindings(reactor_retry = function(id, info) invisible(FALSE))
+  seen = new.env()
+  model = local_stream_adapter(seen = seen)
+  hint = function(cls) {
+    log = local_stream_log()
+    provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+    t = r$http[[length(r$http)]]
+    t$on_headers(200L, list())
+    t$on_bytes(sse(paste0('{"t":"retry","class":"', cls, '"}')))
+    expect_equal(log$types(), c("start", "error"))
+    expect_length(log$done, 1L)
+    seen$cnd
+  }
+  # contract 2.2 / D-012: timeout_* classes have the parent timeout, every other one provider
+  cnd = hint("timeout_idle")
+  expect_true(inherits(cnd, "gptr_error_timeout_idle") && inherits(cnd, "gptr_error_timeout"))
+  expect_false(inherits(cnd, "gptr_error_provider"))
+  cnd = hint("overloaded")
+  expect_true(inherits(cnd, "gptr_error_overloaded") && inherits(cnd, "gptr_error_provider"))
+  expect_false(inherits(cnd, "gptr_error_timeout"))
+  expect_true(all(c("t1", "t2") %in% r$cancelled))
+})
+
+test_that("a decision-only model never streams as a conversation (IC-74)", {
+  r = local_mock_reactor()
+  local_mocked_bindings(provider_credential = function(provider) stop("credential looked up"),
+                        provider_preflight = function(...) stop("preflight reached"))
+  log = local_stream_log()
+  clef = model_resolve("ollama/clef-flash")
+  expect_equal(clef$type, "classifier")
+  err = expect_error(provider_stream(clef, stream_context(), list(), emit = log$emit,
+                                     done = log$finish),
+                     class = "gptr_error_not_available")
+  expect_equal(err$member, "ollama/clef-flash")
+  expect_match(conditionMessage(err), "decision-only", fixed = TRUE)
+  # a chat-typed model whose adapter only classifies is refused as well
+  decide = list(build = function(model, state, questions, opts) list(),
+                parse = function(model, status, headers, body, questions) list())
+  off = gptr_register(gptr_adapter("test-decide", transport = "http_json", classify = decide))
+  withr::defer(off())
+  model = local_stream_adapter()
+  model$api = "test-decide"
+  err = expect_error(provider_stream(model, stream_context(), list(), emit = log$emit,
+                                     done = log$finish),
+                     class = "gptr_error_not_available")
+  expect_equal(err$member, "test-decide")
+  expect_length(r$http, 0L)
+  expect_length(log$events, 0L)
+})
+
+test_that("the checked model of the request preflight reaches the adapter (IC-74)", {
+  local_mock_reactor()
+  seen = new.env()
+  model = local_stream_adapter(build = function(model, context, opts) {
+    seen$model = model
+    list(url = "https://stream.example/v1/stream", method = "POST", headers = list(),
+         body = "{}", stream = "sse")
+  })
+  local_mocked_bindings(provider_preflight = function(model, provider, safety = NULL) {
+    seen$safety = safety
+    seen$provider = provider$id
+    model$context = 4096
+    model
+  })
+  log = local_stream_log()
+  run = local_run()
+  run$opts = list(safety = list(ollama_local_only = FALSE))
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish, run = run)
+  expect_equal(seen$model$context, 4096)
+  expect_equal(seen$provider, "streamtest")
+  expect_false(seen$safety$ollama_local_only)
+  # no protected record: preflight's default (local-only) applies
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_null(seen$safety)
+  # a caller's record can only tighten the run's snapshot
+  provider_stream(model, stream_context(), list(safety = list(ollama_local_only = TRUE)),
+                  emit = log$emit, done = log$finish, run = run)
+  expect_true(seen$safety$ollama_local_only)
+  # a run without a snapshot counts as local-only, so a caller's record cannot relax it
+  provider_stream(model, stream_context(), list(safety = list(ollama_local_only = FALSE)),
+                  emit = log$emit, done = log$finish, run = local_run())
+  expect_true(seen$safety$ollama_local_only)
+  expect_error(provider_stream(model, stream_context(),
+                               list(safety = list(ollama_local_only = NA)),
+                               emit = log$emit, done = log$finish),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("an Ollama chat model fails before egress unless locality is established (IC-74)", {
+  r = local_mock_reactor()
+  seen = new.env()
+  seen$built = 0L
+  off = gptr_register(gptr_adapter(
+    "openai-completions", transport = "http_sse",
+    build = function(model, context, opts) {
+      seen$built = seen$built + 1L
+      stop("no payload may be built")
+    },
+    parse = function(model, opts) stop("no normaliser may be built")
+  ))
+  withr::defer(off())
+  local_mocked_bindings(provider_credential = function(provider) stop("credential looked up"))
+  log = local_stream_log()
+  go = function(model, opts = list(), run = NULL) {
+    provider_stream(model, stream_context(), opts, emit = log$emit, done = log$finish,
+                    run = run)
+  }
+  qwen = model_resolve("ollama/qwen3:1.7b")
+  err = expect_error(go(qwen), class = "gptr_error_not_available")
+  expect_match(conditionMessage(err), "model_prepare()", fixed = TRUE)
+  expect_error(go(model_resolve("ollama/qwen3:1.7b-cloud")), class = "gptr_error_untrusted")
+  relaxed = local_run()
+  relaxed$opts = list(safety = list(ollama_local_only = FALSE))
+  strict = local_run()
+  strict$opts = list(safety = list(ollama_local_only = TRUE))
+  local_settings(providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
+  err = expect_error(go(model_resolve("ollama/qwen3:1.7b")), class = "gptr_error_untrusted")
+  expect_equal(err$origin, "http://192.0.2.10:11434")
+  # per-request options cannot relax the run's protected snapshot
+  expect_error(go(qwen, list(safety = list(ollama_local_only = FALSE)), strict),
+               class = "gptr_error_untrusted")
+  # nor can they relax a run that carries no snapshot (missing record = local-only)
+  expect_error(go(qwen, list(safety = list(ollama_local_only = FALSE)), local_run()),
+               class = "gptr_error_untrusted")
+  # relaxing local-only never replaces discovery evidence
+  expect_error(go(qwen, run = relaxed), class = "gptr_error_not_available")
+  expect_equal(seen$built, 0L)
+  expect_length(r$http, 0L)
+  expect_length(log$events, 0L)
+  expect_length(log$done, 0L)
+})
+
+# ---- provider_stream(): P04's real reactor and P01's loopback mock server -------------------
+
+# A minimal Anthropic-shaped adapter for the mock's `overload` scenario: an SSE `error` event is
+# the in-stream overload a normaliser reports through opts$retry() (04 section 8.1)
+local_loop_adapter = function(url, .env = parent.frame()) {
+  parse = function(model, opts) {
+    s = new.env()
+    s$text = character()
+    s$done = FALSE
+    current = function(stop = "stop") {
+      msg_assistant(list(block_text(paste(s$text, collapse = ""))), api = model$api,
+                    provider = model$provider, model = model$id, stop_reason = stop,
+                    timestamp = 1)
+    }
+    list(
+      push = function(ev) {
+        d = json_decode(ev$data)
+        type = ev$event %||% ""
+        if (identical(type, "message_start")) {
+          opts$emit(ev_new("start", api = model$api, provider = model$provider,
+                           model = model$id, request_id = NULL, response_id = NULL))
+        } else if (identical(type, "content_block_delta")) {
+          s$text = c(s$text, d$delta$text)
+          opts$emit(ev_new("text_delta", index = 1L, delta = d$delta$text))
+        } else if (identical(type, "error")) {
+          opts$retry(list(class = "overloaded", status = 529L))
+        } else if (identical(type, "message_stop")) {
+          s$done = TRUE
+          opts$emit(ev_new("done", reason = "stop", message = current(), usage = NULL))
+          return(TRUE)
+        }
+        FALSE
+      },
+      finish = function() {
+        m = current()
+        if (!s$done) opts$emit(ev_new("done", reason = "stop", message = m, usage = NULL))
+        m
+      },
+      fail = function(cnd) {
+        m = current("error")
+        m$error_message = conditionMessage(cnd)
+        opts$emit(ev_new("error", reason = "error", message = m,
+                         error = list(class = class(cnd)[[1]], status = cnd$status,
+                                      request_id = NULL, retry_after = NULL)))
+        m
+      },
+      message = function() current()
+    )
+  }
+  build = function(model, context, opts) {
+    list(url = paste0(opts$base_url, "/v1/messages"), method = "POST",
+         headers = list(`content-type` = "application/json"),
+         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse")
+  }
+  off1 = gptr_register(gptr_adapter("test-loop", transport = "http_sse", build = build,
+                                    parse = parse))
+  off2 = gptr_register(gptr_provider("mockloop", api = "test-loop", base_url = url, local = TRUE,
+                                     offline = TRUE, models = list(list(id = "mock-1"))))
+  withr::defer({
+    off1()
+    off2()
+  }, envir = .env)
+  model_resolve("mockloop/mock-1")
+}
+
+test_that("an overload before any delta is re-sent by P04's reactor on the same transfer", {
+  srv = local_mock_server("overload", attempts = 1L)
+  model = local_loop_adapter(srv$url)
+  log = local_stream_log()
+  id = provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 30))
+  expect_equal(log$types(), c("start", "retry_start", "retry_end", rep("text_delta", 3L),
+                              "done"))
+  expect_equal(log$events[[2]]$class, "overloaded")
+  expect_equal(log$events[[2]]$attempt, 1L)
+  expect_true(log$events[[3]]$ok)
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "tok01 tok02 tok03 ")
+  expect_equal(log$done[[1]]$request_id, "q000000000001")
+  expect_identical(nrow(srv$log()), 2L)
+  r = reactor_get()
+  expect_false(exists(id, envir = r$transfers, inherits = FALSE))
+  expect_identical(ls(r$tasks), character())
+})
+
+test_that("an overload after a committed delta fails at once with the partial message", {
+  srv = local_mock_server("overload", attempts = 1L, after = 1L)
+  model = local_loop_adapter(srv$url)
+  log = local_stream_log()
+  provider_stream(model, stream_context(), list(), emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 30))
+  expect_equal(log$types(), c("start", "text_delta", "error"))
+  err = log$events[[3]]$error
+  expect_equal(err$class, "gptr_error_overloaded")
+  expect_equal(err$status, 529L)
+  expect_equal(err$request_id, "q000000000001")
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$stop_reason, "error")
+  expect_equal(msg_text(log$done[[1]]), "tok01 ")
+  expect_identical(nrow(srv$log()), 1L)
+  expect_identical(ls(reactor_get()$tasks), character())
+})

@@ -397,3 +397,580 @@ provider_credential = function(provider) {
                     " (for example with gptr_env()) or store one with gptr_login()."),
              "no_key", provider = id, variables = vars)
 }
+
+# ---- provider_stream(): the glue between the reactor and the adapters (04 sections 8.1, 8.4) ---
+
+#' A classed, unsignalled condition for stream failures (04 section 2.2, last paragraph)
+#'
+#' Built by P01's gptr_condition(), so the message passes the redaction hook like every other
+#' gptr condition (an adapter's error text may quote a request).
+#' @noRd
+stream_condition = function(message, class, ...) {
+  gptr_condition(message, class, "error", list(...))
+}
+
+#' The route of a model's messages (contract section 4.2)
+#' @noRd
+stream_route = function(model) {
+  switch(model[["type"]] %||% "chat", cli = "plan-cli", classifier = "system-one", "api")
+}
+
+#' Fail-closed defaults for the callbacks provider_stream() injects (IC-33)
+#' @noRd
+stream_gate_closed = function(call) {
+  list(decision = "deny", reason = "No permission gate is attached to this model stream.")
+}
+
+#' The default tool-result builder (P06 passes tool_result_message() in `opts` instead)
+#' @noRd
+stream_tool_result = function(result, call) {
+  content = result[["content"]] %||% list(block_text("(no output)"))
+  msg_tool_result(call[["id"]], call[["name"]], content, is_error = isTRUE(result[["is_error"]]),
+                  details = result[["details"]])
+}
+
+#' The MCP dispatcher bound to a session (the mcp.dispatch_local service of P18)
+#' @noRd
+stream_mcp_dispatch = function(session) {
+  force(session)
+  function(message) {
+    if (!ext_service_has("mcp.dispatch_local")) {
+      return(list(jsonrpc = "2.0", id = message[["id"]],
+                  error = list(code = -32601L, message = "gptr's MCP dispatcher is not loaded")))
+    }
+    ext_service_get("mcp.dispatch_local")(message, session)
+  }
+}
+
+#' Diagnostics for callback errors that must not escape a stream
+#' @noRd
+stream_diagnostic = function(event, e) {
+  tryCatch(registry_diagnostic("provider_stream", event, class(e)[[1]], conditionMessage(e)),
+           error = function(e2) NULL)
+  invisible(NULL)
+}
+
+#' Fill the request id an adapter cannot know (04 section 4.5: the `start` event, the `error`
+#' event's `error` list and the assistant message carry it; P12's normalisers emit NULL because
+#' `parse(model, opts)` sees no request context); an id the adapter set is kept
+#' @noRd
+stream_request_id = function(st, ev, type) {
+  rid = st$context[["request_id"]]
+  if (is.null(rid)) return(ev)
+  if (identical(type, "start")) ev[["request_id"]] = ev[["request_id"]] %||% rid
+  if (identical(type, "error") && is.list(ev[["error"]])) {
+    err = ev[["error"]]
+    err[["request_id"]] = err[["request_id"]] %||% rid
+    ev[["error"]] = err
+  }
+  if (type %in% c("done", "error") && is.list(ev[["message"]])) {
+    ev[["message"]][["request_id"]] = ev[["message"]][["request_id"]] %||% rid
+  }
+  ev
+}
+
+#' Emit one event: at most one start, the request id, commit tracking, terminal detection
+#' @noRd
+stream_emit = function(st, ev) {
+  if (st$finished) return(invisible(NULL))
+  type = ev[["type"]] %||% ""
+  if (identical(type, "start")) {
+    if (st$started) return(invisible(NULL))
+    st$started = TRUE
+  }
+  ev = stream_request_id(st, ev, type)
+  if (endsWith(type, "_delta")) st$committed = TRUE
+  tryCatch(st$acc$push(ev), error = function(e) NULL)
+  tryCatch(st$emit_cb(ev), error = function(e) stream_diagnostic("emit", e))
+  if (type %in% c("done", "error")) stream_finish(st, ev[["message"]])
+  invisible(NULL)
+}
+
+#' Deliver the final message exactly once (with the request id when the adapter left it out)
+#' @noRd
+stream_finish = function(st, msg) {
+  if (st$finished) return(invisible(FALSE))
+  st$finished = TRUE
+  rid = st$context[["request_id"]]
+  if (is.list(msg) && is.null(msg[["request_id"]]) && !is.null(rid)) msg[["request_id"]] = rid
+  tryCatch(st$done_cb(msg), error = function(e) stream_diagnostic("done", e))
+  invisible(TRUE)
+}
+
+#' The partial message known so far (normaliser, accumulator, or an empty message of the model)
+#'
+#' Before any `start` event the accumulator knows no api, provider or model (P01's acc_new()
+#' answers "unknown"), so the message is built from the model record instead.
+#' @noRd
+stream_partial = function(st) {
+  msg = if (is.null(st$norm)) NULL else tryCatch(st$norm$message(), error = function(e) NULL)
+  if (!is.list(msg) && st$started) {
+    msg = tryCatch(st$acc$message(), error = function(e) NULL)
+  }
+  if (is.list(msg)) return(msg)
+  m = st$model
+  msg_assistant(list(), api = m[["api"]] %||% "unknown", provider = m[["provider"]] %||% "unknown",
+                model = m[["id"]] %||% "unknown", stop_reason = "error",
+                route = stream_route(m), request_id = st$context[["request_id"]])
+}
+
+#' End the stream with a transport-level terminal event (setup failure, abort, missing end)
+#' @noRd
+stream_fail_local = function(st, reason, message, class, status = NA_integer_,
+                             retry_after = NULL) {
+  if (st$finished) return(invisible(NULL))
+  msg = stream_partial(st)
+  msg[["stop_reason"]] = reason
+  msg[["error_message"]] = message
+  ev = ev_new("error", reason = reason, message = msg,
+              error = list(class = class, status = status,
+                           request_id = st$context[["request_id"]], retry_after = retry_after))
+  stream_emit(st, ev)
+  if (!st$finished) stream_finish(st, msg)
+  invisible(NULL)
+}
+
+#' Cancel the stream's transfer, if it has one (a no-op once P04 forgot the transfer)
+#' @noRd
+stream_cancel = function(st) {
+  if (identical(st$transport, "http") && !is.na(st$id)) {
+    tryCatch(reactor_cancel(st$id), error = function(e) NULL)
+  }
+  invisible(NULL)
+}
+
+#' Hand a transport failure to the normaliser (which emits the terminal error event)
+#' @noRd
+stream_normaliser_fail = function(st, cnd) {
+  if (st$finished) return(invisible(NULL))
+  if (!is.null(st$norm)) {
+    tryCatch(st$norm$fail(cnd), error = function(e) stream_diagnostic("fail", e))
+  }
+  if (!st$finished) {
+    cls = sub("^gptr_error_", "", class(cnd)[[1]])
+    stream_fail_local(st, "error", conditionMessage(cnd), cls,
+                      status = cnd[["status"]] %||% NA_integer_,
+                      retry_after = cnd[["retry_after"]])
+  }
+  invisible(NULL)
+}
+
+#' End the stream for a failure found locally while its transfer may still be live (an adapter
+#' normaliser or a splitter failed, a retry hint could not be handed to the reactor): the
+#' normaliser's terminal event, then the transfer is cancelled so it holds no reactor slot
+#' @noRd
+stream_fail_live = function(st, cnd) {
+  stream_normaliser_fail(st, cnd)
+  stream_cancel(st)
+}
+
+#' A classed condition for an error caught inside the glue (a gptr condition is kept)
+#' @noRd
+stream_error_condition = function(e, detail) {
+  if (inherits(e, "gptr_error")) return(e)
+  stream_condition(conditionMessage(e), "internal", detail = detail)
+}
+
+#' Push one decoded unit into the normaliser; an error there ends the stream
+#' @noRd
+stream_push = function(st, unit) {
+  if (st$finished) return(invisible(NULL))
+  tryCatch(st$norm$push(unit), error = function(e) {
+    stream_fail_live(st, stream_condition(conditionMessage(e), "internal",
+                                          detail = "adapter normaliser push()"))
+  })
+  invisible(NULL)
+}
+
+#' End of input: the normaliser emits the terminal event (done, or error when truncated)
+#' @noRd
+stream_normaliser_finish = function(st) {
+  if (st$finished) return(invisible(NULL))
+  msg = tryCatch(st$norm$finish(), error = function(e) {
+    stream_normaliser_fail(st, stream_condition(conditionMessage(e), "internal",
+                                                detail = "adapter normaliser finish()"))
+    NULL
+  })
+  if (!st$finished) {
+    if (is.list(msg)) {
+      stream_finish(st, msg)
+    } else {
+      stream_fail_local(st, "error", "The stream ended without a terminal event.", "internal")
+    }
+  }
+  invisible(NULL)
+}
+
+#' Abort: cancel the transfer or kill the child, then an `aborted` terminal event
+#' @noRd
+stream_abort = function(st) {
+  if (st$finished) return(invisible(NULL))
+  if (!is.null(st$process)) {
+    # forget the child first, so its late output and exit reach no turn
+    if (identical(st$opts$state$process, st$process)) st$opts$state$process = NULL
+    tryCatch(kill_all(st$process), error = function(e) NULL)
+  }
+  stream_cancel(st)
+  reason = st$opts$signal$reason %||% "aborted"
+  stream_fail_local(st, "aborted", as.character(reason)[[1]], "aborted")
+}
+
+#' Has the caller's run settled (a terminal status of contract section 7.6)?
+#' @noRd
+stream_run_settled = function(run) {
+  if (!is.environment(run)) return(FALSE)
+  status = run[["status"]]
+  is.character(status) && length(status) == 1L &&
+    !status %in% c("queued", "requesting", "streaming", "tools", "boundary")
+}
+
+#' Let go of a stream whose run settled without it: no more events, no `done`
+#' @noRd
+stream_detach = function(st) {
+  if (st$finished) return(invisible(NULL))
+  st$finished = TRUE
+  stream_cancel(st)
+  st$emit_cb = function(ev) NULL
+  st$done_cb = function(msg) NULL
+  invisible(NULL)
+}
+
+#' A reactor task that turns `opts$signal$aborted` into stream_abort() and lets go of a stream
+#' whose run settled; returns the task id
+#' @noRd
+stream_watch = function(st) {
+  reactor_task(function() {
+    if (st$finished) return(FALSE)
+    if (isTRUE(st$opts$signal$aborted)) {
+      stream_abort(st)
+      return(FALSE)
+    }
+    if (stream_run_settled(st$run)) {
+      stream_detach(st)
+      return(FALSE)
+    }
+    TRUE
+  }, run = st$run)
+}
+
+#' The retry callback normalisers call for a retryable failure seen inside the stream
+#'
+#' HTTP transfers go to P04's reactor_retry(): it re-sends the same spec on the same transfer
+#' after its backoff while nothing was committed (on_retry() reports retry_start/retry_end), and
+#' otherwise fails the transfer through on_fail(). Other transports, and a hint the reactor
+#' refuses without failing the transfer, end the stream at once (04 section 8.1, `retry(info)`).
+#' @noRd
+stream_retry = function(st, info) {
+  if (st$finished) return(invisible(FALSE))
+  info = info %||% list()
+  sent = FALSE
+  if (identical(st$transport, "http") && !is.na(st$id)) {
+    sent = isTRUE(tryCatch(reactor_retry(st$id, info), error = function(e) FALSE))
+  }
+  if (st$finished) return(invisible(FALSE))
+  if (sent) {
+    st$hold = TRUE
+    return(invisible(TRUE))
+  }
+  cls = info[["class"]]
+  cls = if (is.character(cls) && length(cls) && !anyNA(cls) && all(nzchar(cls))) {
+    cls[[1]]
+  } else {
+    "overloaded"
+  }
+  # contract 2.2 (D-012), as reactor_retry(): timeout_* has the parent timeout, others provider
+  parent = if (grepl("^timeout(_|$)", cls)) "timeout" else "provider"
+  cnd = stream_condition(paste0("The provider reported a retryable failure (", cls, ")."),
+                         unique(c(cls, parent)), status = info[["status"]] %||% NA_integer_,
+                         retry_after = info[["retry_after"]])
+  stream_fail_live(st, cnd)
+  invisible(FALSE)
+}
+
+#' Write one JSON line to the stream's child (process_jsonl `opts$send`)
+#' @noRd
+stream_send = function(st, obj) {
+  p = st$process %||% st$opts$state$process
+  if (is.null(p)) return(invisible(FALSE))
+  write_all(p, paste0(json_encode(obj), "\n"))
+  invisible(TRUE)
+}
+
+#' The opts every adapter function receives (contract section 8.1)
+#'
+#' `gate`, `tool_result` and `mcp_dispatch` are the caller's (P06 passes the run's), else
+#' fail-closed defaults (IC-33).
+#' @noRd
+stream_opts = function(st, opts, session, run) {
+  signal = opts[["signal"]] %||% (if (is.environment(run)) run[["signal"]] else NULL)
+  if (is.null(signal)) {
+    signal = new.env(parent = emptyenv())
+    signal$aborted = FALSE
+    signal$reason = NULL
+  }
+  opts$emit = function(ev) stream_emit(st, ev)
+  opts$retry = function(info) stream_retry(st, info)
+  opts$send = function(obj) stream_send(st, obj)
+  opts$signal = signal
+  opts$state = opts[["state"]] %||% new.env(parent = emptyenv())
+  opts$memo = opts[["memo"]] %||% new.env(parent = emptyenv())
+  opts$gate = opts[["gate"]] %||% stream_gate_closed
+  opts$tool_result = opts[["tool_result"]] %||% stream_tool_result
+  opts$mcp_dispatch = opts[["mcp_dispatch"]] %||% stream_mcp_dispatch(session)
+  opts$session = session
+  opts$run = opts[["run"]] %||% (if (is.environment(run)) run[["id"]] else run)
+  opts$first_byte_timeout = opts[["first_byte_timeout"]] %||% gptr_opt("first_byte_timeout")
+  opts$idle_timeout = opts[["idle_timeout"]] %||% gptr_opt("idle_timeout")
+  opts$connect_timeout = opts[["connect_timeout"]] %||% gptr_opt("connect_timeout")
+  opts
+}
+
+#' The request spec of an HTTP adapter with the optional fields P04 reads (P04 plan, Task 11:
+#' `request_id`, `model`, `session_id` label the wire log and the conditions; the three timeouts
+#' override the options)
+#' @noRd
+stream_http_spec = function(st, spec) {
+  if (!is.list(spec)) {
+    gptr_abort("The adapter's build() returned no request spec.", "invalid_spec",
+               kind = "adapter", name = st$model[["api"]] %||% "", field = "build",
+               problem = "build() must return a request spec (a list)")
+  }
+  sid = st$opts[["session"]]
+  if (!is.character(sid) || length(sid) != 1L || is.na(sid)) sid = st$context[["session_id"]]
+  fill = list(request_id = st$context[["request_id"]], model = st$model[["id"]],
+              session_id = sid, connect_timeout = st$opts[["connect_timeout"]],
+              first_byte_timeout = st$opts[["first_byte_timeout"]],
+              idle_timeout = st$opts[["idle_timeout"]])
+  for (k in names(fill)) {
+    if (is.null(spec[[k]]) && !is.null(fill[[k]])) spec[[k]] = fill[[k]]
+  }
+  spec
+}
+
+#' A static-rate override of a provider: settings `providers.<id>.rate`, else the merged
+#' catalog's providers section (IC-64: "overridable by settings and catalog"); NULL when none
+#'
+#' A rate P04's limiter would refuse (ratelimit_rate()) is ignored.
+#' @noRd
+provider_rate_override = function(id) {
+  ok = function(r) {
+    is.list(r) && length(r) > 0L &&
+      !is.null(tryCatch(ratelimit_rate(r), gptr_error = function(e) NULL))
+  }
+  r = provider_settings(id)[["rate"]]
+  if (ok(r)) return(r)
+  r = tryCatch(catalog_get()$providers[[id]][["rate"]], error = function(e) NULL)
+  if (ok(r)) r else NULL
+}
+
+#' Feed a rate override into P04's limiter: ratelimit_set() refills the bucket, so it runs only
+#' when the override differs from the limiter's current static rate
+#' @noRd
+stream_rate_sync = function(id) {
+  if (!is.character(id) || length(id) != 1L || is.na(id)) return(invisible(FALSE))
+  rate = provider_rate_override(id)
+  if (is.null(rate)) return(invisible(FALSE))
+  current = tryCatch(ratelimit_get(id)$rate, error = function(e) NULL)
+  if (identical(current, rate)) return(invisible(FALSE))
+  ratelimit_set(id, rate)
+  invisible(TRUE)
+}
+
+#' HTTP transports (http_sse, http_ndjson, http_json): one transfer for the whole request
+#'
+#' P04 calls on_headers() once per attempt with a 2xx head; a second call follows a re-send
+#' (a transport retry or reactor_retry()) and resets the normaliser and the splitter. A
+#' splitter failure (for example a NUL byte) ends the stream like a normaliser failure.
+#' @noRd
+stream_http = function(st, adapter) {
+  st$transport = "http"
+  st$adapter = adapter
+  st$spec = stream_http_spec(st, adapter$build(st$model, st$context, st$opts))
+  kind = st$spec[["stream"]] %||%
+    switch(adapter[["transport"]] %||% "", http_ndjson = "ndjson", http_json = "json", "sse")
+  if (!is.character(kind) || length(kind) != 1L || !kind %in% c("sse", "ndjson", "json")) {
+    gptr_abort("The adapter's request spec names no known stream format.", "invalid_spec",
+               kind = "adapter", name = adapter[["api"]] %||% "", field = "stream",
+               problem = "stream must be \"sse\", \"ndjson\" or \"json\"")
+  }
+  reset = function() {
+    st$norm = adapter$parse(st$model, st$opts)
+    st$split = switch(kind, sse = sse_splitter(), ndjson = ndjson_splitter(), NULL)
+    st$body = list()
+    st$hold = FALSE
+  }
+  reset()
+  st$heads = 0L
+  on_headers = function(status, headers) {
+    if (st$finished) return(invisible(NULL))
+    st$heads = st$heads + 1L
+    if (st$heads > 1L) reset()
+    st$hold = FALSE
+  }
+  on_bytes = function(raw) {
+    if (st$finished || isTRUE(st$hold)) return(invisible(NULL))
+    if (identical(kind, "json")) {
+      st$body[[length(st$body) + 1L]] = raw
+      return(invisible(NULL))
+    }
+    units = tryCatch(st$split$push(raw), error = function(e) {
+      stream_fail_live(st, stream_error_condition(e, "stream splitter"))
+      list()
+    })
+    for (u in units) {
+      if (st$finished || isTRUE(st$hold)) break
+      stream_push(st, if (identical(kind, "ndjson")) list(data = u) else u)
+    }
+  }
+  on_done = function(status, headers) {
+    if (st$finished) return(invisible(NULL))
+    ok = tryCatch({
+      if (identical(kind, "json")) {
+        body = if (length(st$body)) do.call(c, st$body) else raw()
+        stream_push(st, list(data = raw_to_utf8(body), status = status, headers = headers))
+      } else {
+        rest = st$split$flush()
+        if (identical(kind, "ndjson")) {
+          for (u in rest) stream_push(st, list(data = u))
+        } else if (!is.null(rest)) {
+          stream_push(st, rest)
+        }
+      }
+      TRUE
+    }, error = function(e) {
+      stream_normaliser_fail(st, stream_error_condition(e, "stream end"))
+      FALSE
+    })
+    if (ok) stream_normaliser_finish(st)
+  }
+  on_fail = function(cnd) if (!st$finished) stream_normaliser_fail(st, cnd)
+  on_retry = function(type, info) {
+    if (!st$finished) stream_emit(st, do.call(ev_new, c(list(type), info)))
+  }
+  retry = list(max_attempts = as.integer(gptr_opt("max_attempts") %||% 4L),
+               committed = function() isTRUE(st$committed), on_retry = on_retry)
+  stream_rate_sync(st$model[["provider"]])
+  st$id = reactor_http(st$spec, on_bytes = on_bytes, on_done = on_done, on_fail = on_fail,
+                       on_headers = on_headers, run = st$run, provider = st$model[["provider"]],
+                       retry = retry)
+  stream_watch(st)
+  st$id
+}
+
+#' The stream driver of an adapter transport, or NULL when provider_stream() has none
+#' @noRd
+stream_driver = function(transport) {
+  switch(transport, http_sse = , http_ndjson = , http_json = stream_http, NULL)
+}
+
+#' The protected safety record for the request preflight (07-local-ollama.md section 2.1)
+#'
+#' The run's frozen option snapshot (`run$opts$safety`, contract section 7.6, IC-53) and the
+#' frozen record an internal caller passes as `opts$safety` (a caller that has no run object at
+#' hand). When a run is given, its snapshot is authoritative and a run without one counts as
+#' local-only, so `opts$safety` can only tighten it; the local-only policy holds unless every
+#' record present relaxes it, and a malformed record is refused (provider_preflight()'s reader).
+#' NULL when there is neither a run nor a record, which means local-only. P05 never builds this
+#' record from settings, model metadata or project data.
+#' @noRd
+stream_safety = function(opts, run) {
+  rs = NULL
+  if (is.environment(run)) {
+    ro = run[["opts"]]
+    rs = (if (is.list(ro)) ro[["safety"]]) %||% list(ollama_local_only = TRUE)
+  }
+  recs = Filter(Negate(is.null), list(rs, opts[["safety"]]))
+  if (!length(recs)) return(NULL)
+  list(ollama_local_only = any(vapply(recs, catalog_local_only, NA)))
+}
+
+#' Refuse a decision-only (classifier) model before anything starts (IC-74): it answers typed
+#' System One questions through s1_request() (P13), never a conversation
+#' @noRd
+stream_chat_model = function(model) {
+  if (!identical(model[["type"]], "classifier")) return(invisible(TRUE))
+  ref = model[["ref"]] %||% model[["id"]] %||% ""
+  gptr_abort(paste0("Model ", ref, " is a decision-only (classifier) model: it answers typed ",
+                    "System One questions and cannot hold a conversation. Choose a ",
+                    "conversational model."),
+             "not_available", member = ref, provided_by = "a conversational model")
+}
+
+#' The stream driver of a conversational adapter (IC-74), refused before anything starts when
+#' the adapter lacks the stream functions of its transport (a classifier-only adapter) or when
+#' provider_stream() has no driver for that transport
+#' @noRd
+stream_conversational = function(model, adapter) {
+  api = adapter[["api"]] %||% model[["api"]] %||% ""
+  transport = adapter[["transport"]] %||% "http_sse"
+  need = if (identical(transport, "inprocess")) "stream" else c("build", "parse")
+  if (!all(vapply(need, function(f) is.function(adapter[[f]]), NA))) {
+    gptr_abort(paste0("The adapter for the api ", api, " has no stream functions for its ",
+                      transport, " transport, so it cannot hold a conversation."),
+               "not_available", member = api, provided_by = "a conversational adapter")
+  }
+  driver = stream_driver(transport)
+  if (is.null(driver)) {
+    gptr_abort(paste0("provider_stream() has no driver for the ", transport,
+                      " transport of the api ", api, "."),
+               "not_available", member = transport, provided_by = "provider_stream()")
+  }
+  driver
+}
+
+#' Start one model request on the reactor (contract sections 7.5 and 8.4)
+#'
+#' Refuses a decision-only model, then looks up the adapter and provider (session-scoped
+#' records first; the provider's settings applied) and runs the pure request preflight
+#' (provider_preflight(), IC-74) with the run's protected safety record, before any credential
+#' lookup or payload construction; the checked model is the one the adapter sees. Then fills
+#' `opts` (credential, base URL, provider, emit/retry/send, signal, state, memo, the injected
+#' gate, MCP dispatcher and tool-result builder, timeouts) and runs the adapter's transport.
+#' Every event reaches `emit`; `done(msg)` is called exactly once with the final assistant
+#' message; nothing is thrown after the function returns. A classifier model, a missing or
+#' classifier-only adapter, a disabled provider (gptr_error_not_available), a refused preflight
+#' (gptr_error_not_available, gptr_error_untrusted) or a missing key (gptr_error_no_key) is
+#' signalled before anything starts; an adapter that fails while building the request ends the
+#' stream with an `error` event instead. Returns the transfer id, or NA when nothing started.
+#' @noRd
+provider_stream = function(model, context, opts, emit, done, run = NULL) {
+  opts = opts %||% list()
+  session = opts[["session"]] %||% (if (is.environment(run)) run[["session"]] else NULL)
+  scoped = function(kind, name) {
+    if (is.null(session) || is.null(name)) NULL else registry_get(kind, name, session = session)
+  }
+  stream_chat_model(model)
+  adapter = scoped("adapter", model[["api"]]) %||% adapter_get(model[["api"]])
+  driver = stream_conversational(model, adapter)
+  provider = provider_effective(scoped("provider", model[["provider"]])) %||%
+    provider_get(model[["provider"]])
+  if (isFALSE(provider[["enabled"]])) {
+    pid = provider[["id"]] %||% provider[["name"]]
+    gptr_abort(paste0("Provider ", pid, " is disabled in the settings (providers.", pid,
+                      ".enabled)."), "not_available", member = pid, provided_by = "settings")
+  }
+  model = provider_preflight(model, provider, stream_safety(opts, run))
+  opts$credential = provider_credential(provider)
+  opts$base_url = if (is.null(provider)) NULL else provider_base_url(provider)
+  opts$provider = provider
+  st = new.env(parent = emptyenv())
+  st$model = model
+  st$context = context
+  st$emit_cb = emit
+  st$done_cb = done
+  st$run = run
+  st$started = FALSE
+  st$committed = FALSE
+  st$finished = FALSE
+  st$transport = NA_character_
+  st$id = NA_character_
+  st$acc = acc_new()
+  st$opts = stream_opts(st, opts, session, run)
+  tryCatch(driver(st, adapter), error = function(e) {
+    cls = if (inherits(e, "gptr_error")) sub("^gptr_error_", "", class(e)[[1]]) else "internal"
+    cnd = stream_condition(conditionMessage(e), cls)
+    stream_cancel(st)
+    stream_fail_local(st, "error", conditionMessage(cnd), cls)
+    NA_character_
+  })
+}

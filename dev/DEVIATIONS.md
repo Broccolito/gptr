@@ -234,46 +234,96 @@ P05 Task 9's literal `usage_row()`/`usage_rollup()` predate IC-74 (07-local-olla
 Validation: `progress/P05-usage.md`, Task 9 (`test-provider-usage.R`; the evidence-priced row
 in `test-catalog-models.R`).
 
-## D-016 - Hosted CI corrections: INFRA-01 measurement, undeclared built-ins, old Windows R (2026-10-03)
+## D-016 - Hosted CI corrections: INFRA-01 clock, service test isolation, old Windows R (2026-10-03)
 
 Hosted run 37169255693 (`8e8d8e0`) and run 37170545611 (`a2ba302`) failed on every platform.
-CI Task CI-1 changes three behaviours of plan literals; contract and architecture targets stay.
+CI Task CI-1 changes how plan literals measure, isolate and check. Every contract, architecture
+and decomposition target and threshold stays, and no product behaviour changes.
 
-1. **INFRA-01 is measured on each stream's own schedule.** P04's tests anchored both targets at
-   the moment the transfers were queued, so connection setup and the mock server's accept/parse
-   time counted against them: hosted macOS measured 2.57 s and the hosted connection job 2.4830 s
-   and 2.553 s for six streams (limit 2.475 s), and one macOS delta gap exceeded 0.35 s. Locally
-   that setup is 0.06-0.12 s of a 2.34-2.37 s wall. The mock writes `message_start` with the
-   response head when it has read the request and delta i at `i * 0.25` s after it, so the
-   tests now measure from each stream's first event. "First delta within 0.35 s of the mock
-   writing it" (architecture 6.18) applies to every delta: its offset from its scheduled write
-   must stay below 0.35 s in either direction (late = stalled or slow delivery; early = the
-   first event came late; a batched stream has every delta far ahead of its schedule). "Six
-   streams of 1.00-2.25 s finish within 10% of the slowest" compares the span from the earliest
-   stream's first event to the last stream's end with 1.10 times the slowest stream's own span
-   (its first event to its end), which must itself be at least 2.25 - 0.35 s; serialised streams
-   (about 9.75 s) still fail. Both thresholds (0.35 s, 10%) are unchanged (D-011); synthetic
-   negative controls prove that a 0.4 s stall, a batched stream and serialised streams fail and
-   that 0.3 s of common connection setup does not. Locally: worst schedule offset 0.003-0.050 s,
-   six-stream ratio 1.000-1.004.
-2. **A built-in that no loaded plan declares is not filtered out.** Contract 7.0 makes a service
-   unavailable when absent or when its owning built-in is filtered out. P01's
-   `service_builtin_active()` also treated every built-in without records as filtered once the
-   registry listed any record, so P01's own test of a `describe` service (built-in `workspace`,
-   P09, not built yet) failed in every package run after P03/P05 built-ins began loading
-   records. Now a built-in without enabled records counts as filtered out only when it has
-   disabled records or is declared in `the$builtins` (declared but skipped by a filter, or
-   failed); a never-declared one stays active. Behaviour for every declared built-in is
-   unchanged. Consequence for P07 Task 2 and P08 Tasks 2/3/6: their bootstrap services become
-   available before their built-in is declared; their reviewed tests already avoid asserting
-   `not_available` there.
+1. **INFRA-01 is measured on the mock's own clock.** P04's tests anchored the targets at the
+   moment the client queued the transfers and compared raw arrival times. So connection setup,
+   the mock's request handling (about 0.04 s locally to build a response plan before scheduling
+   it) and any lateness in the mock's own writes all counted against gptr. Hosted macOS measured
+   2.57 s for six streams, and the hosted connection job measured 2.4830 s and 2.553 s (limit
+   2.475 s). Hosted macOS also had one consecutive delta gap of 0.35 s or more in both runs.
+   With `log_writes = TRUE`, the mock (`fixtures/mock_server.R`) now also logs the wall-clock
+   time just before it writes each response piece, and the SSE event the piece starts with.
+   `local_mock_server()` returns that log as `writes()`. This adds a member to contract 12.2's
+   list and changes nothing else; only the INFRA-01 tests enable it. The client records
+   wall-clock arrivals on the same clock. The targets, with the plan's thresholds:
+   - Architecture 6.18, "first delta within 0.35 s of the mock writing it": the latency
+     (arrival minus write) of every delta, not only the first, is below 0.35 s.
+   - Decomposition P04 acceptance 2 and P04 Global Constraints, "every inter-delta gap is under
+     0.35 s": the gap between consecutive deltas on the mock's 0.25 s cadence,
+     `0.25 + diff(latency)`, is below 0.35 s. When the mock writes on time this equals the raw
+     arrival gap. It nets out only the mock's own lateness, so gptr's delivery may still vary
+     by less than 0.1 s from one delta to the next, as before.
+   - "Six streams of 1.00-2.25 s finish within 10% of the slowest": from the first response
+     head the mocks wrote, which starts every stream's schedule, to the end of the last stream
+     at the callback, at most 1.10 * 9 * 0.25 = 2.475 s. The bound is the plan's. Only the
+     anchor moved, from the client's queue time to the first head write, which leaves out
+     connection setup and the mock's request handling. Contention that stretches every stream
+     still fails, and so do serialised streams.
+   - A latency below -0.05 s fails, because it means arrivals were matched to the wrong writes.
+   Synthetic controls pass on-time delivery and a mock write 0.11 s late. They fail a constant
+   1.5 s delivery delay, a 0.4 s stall, a delta held back 0.11 s (a 0.36 s gap) or 0.34 s,
+   batching, mismatched writes, six streams stretched to one delta per 0.375 s, and serialised
+   streams. On the real mock, a 1.5 s pause of the pump and a 0.4 s hold after delta 4 both
+   fail. The hold fails only on the gap, since its latency is 0.16 s. Local results over five
+   repetitions: latency 0.3-41 ms; gaps at most 0.254 s; the mock's own write lateness at most
+   2 ms after 37-42 ms of plan building; six-stream wall 2.268-2.273 s, against 2.34-2.37 s with
+   the plan's anchor. Open item (D-011): the hosted macOS gap failure is not explained by
+   connection setup, because a gap compares consecutive deltas. Its cause is unknown: either the
+   mock's own write lateness, which is now netted out, or gptr's delivery, which still fails. The
+   failure message now prints every latency and gap and the mock's own lateness. Read it on the
+   next hosted macOS run.
+2. **P01's service registration test is isolated from later built-ins.** In `test-aaa-state.R`,
+   "ext_service_set() registers and replaces services" registers a `describe` service owned by
+   built-in `workspace` (P09, not built yet). Once P02 is loaded, the plan's
+   `service_builtin_active()` counts a built-in without enabled records as filtered out
+   whenever the registry lists any records. So the test failed in every package run after the
+   P03/P05 built-ins began loading records (hosted `test-aaa-state.R:127-128`). The test now
+   mocks `service_builtin_active()` to `TRUE`, as its neighbour already does. It still tests
+   registration and replacement in the bootstrap table; the rule keeps its own plan tests. The
+   product rule stays the plan's, and P01 reads only `gptr_registry()`: contract 7.0 assigns
+   `the$builtins` to P02. In a complete build, each provider plan declares the built-in that owns
+   its services.
 3. **Windows R before 4.5.0 runs R CMD check without `_R_CHECK_THINGS_IN_OTHER_DIRS_`.** That
-   check reads `file.info()` owner columns, which Windows R has only from 4.5.0 (R NEWS); on
-   the oldrel-4 job (R 4.2.3) R CMD check aborted at its start and rcmdcheck still reported
-   success. The matrix entry sets it to `false` there only; every other configuration keeps it.
-   Every R CMD check job now fails unless `check/gptr.Rcheck/00check.log` has a `Status:` line,
-   every job has a time limit (120 minutes for R-devel, whose dependencies build from source
-   for about 65 minutes on a cold cache), and the connection gate runs the whole suite before
-   comparing the connection table, then fails on failed tests and on any leak (D-006).
+   check reads `file.info()` owner columns, which Windows R has only from 4.5.0 (R NEWS). On
+   the oldrel-4 job (R 4.2.3), R CMD check aborted at its start and rcmdcheck still reported
+   success. The matrix entry sets the variable to `false` there only; every other configuration
+   keeps it. Every R CMD check job now fails unless `check/gptr.Rcheck/00check.log` has a
+   `Status:` line. Every job has a time limit, 120 minutes for R-devel, whose dependencies build
+   from source for about 65 minutes on a cold cache. The connection gate runs the whole suite
+   before comparing the connection table, then fails on failed tests and on any leak (D-006).
 
 Validation: `progress/ci-hosted.md`, Task CI-1.
+
+## D-017 - IC-74 request preflight and decision-only refusal in provider_stream() (2026-10-03)
+
+P05 Task 10's literal `provider_stream()` predates IC-74. Behaviours changed, which P06, P07, P08,
+P13 and P05 Task 11 consume:
+
+1. **Preflight before egress.** `provider_stream()` calls `provider_preflight(model, provider,
+   safety)` (07-local-ollama.md section 2.1) after the adapter/provider/`enabled` checks and before
+   credential lookup and `build()`; the adapter and normaliser receive the checked model. A
+   refused preflight is signalled before anything starts (`gptr_error_not_available` or
+   `gptr_error_untrusted`, D-014), so a local-only selection never reaches the network.
+2. **The safety record.** Read from the run's frozen option snapshot `run$opts$safety` (contract
+   7.6, IC-53) and from `opts$safety`; only the field `ollama_local_only` is read. When a run is
+   given its snapshot is authoritative, and a run without one counts as local-only. Either record
+   can only tighten: local-only holds unless every record present says `FALSE`; a malformed
+   record is `gptr_error_invalid_argument`; no record means local-only. `opts$safety` therefore
+   relaxes the policy only for a caller with no run object at hand. P06/P08 must put
+   `ollama_local_only` into the run's safety snapshot (human user/session configuration only).
+3. **Decision-only models never stream.** A model with `type = "classifier"` is refused first
+   (`gptr_error_not_available`, `member` = the model ref, `provided_by = "a conversational
+   model"`), and so is an adapter without the stream functions of its transport (`member` = the
+   api). P01's `fake_classifier_stream()` is therefore no longer reached through
+   `provider_stream()`; System One requests go through `s1_request()` (contract 8.1).
+4. **Transport drivers.** `stream_driver()` maps `http_sse`/`http_ndjson`/`http_json` to the HTTP
+   driver; a transport without a driver is refused before anything starts (`not_available`,
+   `member` = the transport). Task 11 adds `inprocess` and `process_jsonl` there (the plan
+   literal referenced their functions before they existed).
+
+Validation: `progress/P05.md`, Task 10 (`test-provider-registry.R`).
