@@ -51,3 +51,25 @@ regressions use mocked OS operations, never live unrelated PIDs.
 - Independent narrow review closed with no actionable Task 4 findings. The reviewer
   verified seven source-only mocked cases, including one handle construction and
   the identical verified handle being signalled. No reviewer process tests ran.
+
+## Task 5 - job table and unload cleanup
+
+- Red: planned tests produced FAIL 5 / WARN 0 / SKIP 0 / PASS 68 before the job
+  implementation existed. Additional mocked cases reproduced twelve failures in
+  the historical implementation: invalid PID metadata, unavailable status reported
+  as terminal, and unload either missing unreadable-environment children or deleting
+  recovery markers despite unconfirmed cleanup.
+- Added the job table and public gptr_jobs() listing/stop entry point. PID metadata
+  must be one valid positive integer or NA. Terminal status after a requested stop
+  maps to stopped/aborted, while unavailable status remains unknown. Snapshotting
+  job records preserves rows whose stop callback removes its own registration.
+- Unload uses the stored original process object, or the validated record cleanup
+  fallback. It retains unconfirmed recovery markers. kill_all() rechecks that same
+  process after fallback cleanup rather than relying on its earlier liveness.
+- Final pure boundary suite: 51 assertions. Full focused suite passed FAIL 0 / WARN 0 /
+  SKIP 0 / PASS 104, exit 0, in 1.3 seconds using the isolated escalated test command.
+  Scoped lint on both owned files passed. Independent narrow review of the Task 5
+  diff and cleanup recheck closed with no actionable findings; no reviewer OS calls.
+- Generated gptr_jobs.Rd and its NAMESPACE export with pinned roxygen2 7.3.3 using
+  the isolated document action. Other active lanes' generated exports/manuals are
+  left unstaged; this commit includes only the gptr_jobs namespace addition.

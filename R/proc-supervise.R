@@ -34,7 +34,7 @@ jobs_env = function() {
 #' Valid process identity fields and marker names (fail closed before OS operations)
 #' @noRd
 proc_pid_valid = function(pid) {
-  is.numeric(pid) && length(pid) == 1L && is.finite(pid) && pid > 0 &&
+  is.numeric(pid) && !is.complex(pid) && length(pid) == 1L && is.finite(pid) && pid > 0 &&
     pid <= .Machine$integer.max && pid == floor(pid)
 }
 
@@ -46,7 +46,7 @@ proc_marker_valid = function(marker) {
 
 #' @noRd
 proc_time_valid = function(time) {
-  identical(time, "NA") || (is.numeric(time) && length(time) == 1L &&
+  identical(time, "NA") || (is.numeric(time) && !is.complex(time) && length(time) == 1L &&
     !is.nan(time) && (is.na(time) || (is.finite(time) && time > 0)))
 }
 
@@ -318,10 +318,10 @@ kill_all = function(p, grace = 2) {
     }, silent = TRUE)
   }
   try(p$kill(), silent = TRUE)
-  dead = !isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))
+  dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA))
   if (!is.null(rec)) {
     cleanup = proc_cleanup_record(rec)
-    dead = dead && cleanup$complete
+    dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA)) && cleanup$complete
   }
   invisible(dead)
 }
@@ -337,3 +337,162 @@ proc_pool_cap = function(n) {
 }
 
 on_load(proc_sweep())
+# ---- the job table and gptr_jobs() (IC-12, IC-36, IC-60) -----------------------------------
+
+#' The job kinds of the `gptr_jobs` listing (contract 5.12)
+#' @noRd
+job_kinds = c("session", "bg", "artifact", "mcp_serve", "worker", "cli")
+
+#' Add a row to the job table
+#'
+#' @param kind one of `job_kinds`.
+#' @param id,name chr(1) row id (unique; a second add replaces the row) and display name.
+#' @param pid int(1) or NA.
+#' @param stop zero-argument function. The stored stop also sets `stop_requested`, so a later
+#'   non-zero exit reads `stopped` (`bg`, `artifact`, `mcp_serve`) or `aborted` (`session`,
+#'   `worker`, `cli`), never `error` (IC-60).
+#' @param status zero-argument function returning the current status string.
+#' @return invisible(id)
+#' @noRd
+job_add = function(kind, id, name, pid = NA, stop, status = function() "running") {
+  kind = check_choice(kind, job_kinds, "kind")
+  check_string(id, "id")
+  check_string(name, "name", empty = TRUE)
+  check_function(stop, "stop")
+  check_function(status, "status")
+  missing_pid = (is.numeric(pid) || is.logical(pid)) && !is.complex(pid) &&
+    length(pid) == 1L && is.na(pid) && !is.nan(pid)
+  if (!missing_pid && !proc_pid_valid(pid)) {
+    arg_abort(pid, "pid", "one positive integer PID or NA")
+  }
+  je = jobs_env()
+  rec = new.env(parent = emptyenv())
+  rec$id = id
+  rec$kind = kind
+  rec$name = name
+  rec$pid = as.integer(pid)
+  rec$started = Sys.time()
+  rec$stop_requested = FALSE
+  rec$status_fun = status
+  stop_fun = stop
+  rec$stop = function() {
+    rec$stop_requested = TRUE
+    stop_fun()
+  }
+  assign(id, rec, envir = je$table)
+  je$order = c(setdiff(je$order, id), id)
+  invisible(id)
+}
+
+#' Remove a row from the job table
+#' @return invisible(lgl(1)) TRUE when the row existed
+#' @noRd
+job_remove = function(id) {
+  check_string(id, "id")
+  je = jobs_env()
+  found = exists(id, envir = je$table, inherits = FALSE)
+  if (found) rm(list = id, envir = je$table)
+  je$order = setdiff(je$order, id)
+  invisible(found)
+}
+
+#' The status of one job; a requested stop maps a finished job to `stopped` / `aborted`
+#' @noRd
+job_status = function(rec) {
+  st = tryCatch(rec$status_fun(), error = function(e) "unknown")
+  if (!is.character(st) || length(st) != 1L || is.na(st) || !nzchar(st)) st = "unknown"
+  if (isTRUE(rec$stop_requested) && !st %in% c("running", "waiting", "unknown")) {
+    st = if (rec$kind %in% c("artifact", "bg", "mcp_serve")) "stopped" else "aborted"
+  }
+  st
+}
+
+#' Job records as a data frame (`id`, `kind`, `name`, `pid`, `status`, `started`)
+#' @noRd
+job_frame = function(recs) {
+  if (!length(recs)) {
+    return(data.frame(id = character(), kind = character(), name = character(),
+                      pid = integer(), status = character(),
+                      started = as.POSIXct(character(), tz = "UTC"),
+                      stringsAsFactors = FALSE))
+  }
+  data.frame(id = vapply(recs, function(r) r$id, ""),
+             kind = vapply(recs, function(r) r$kind, ""),
+             name = vapply(recs, function(r) r$name, ""),
+             pid = vapply(recs, function(r) r$pid, 1L),
+             status = vapply(recs, job_status, ""),
+             started = do.call(c, lapply(recs, function(r) r$started)),
+             stringsAsFactors = FALSE)
+}
+
+#' The job table as a data frame
+#' @param kind NULL or chr of job kinds to keep.
+#' @return df `id`, `kind`, `name`, `pid`, `status`, `started`
+#' @noRd
+job_list = function(kind = NULL) {
+  je = jobs_env()
+  ids = je$order[vapply(je$order, exists, NA, envir = je$table, inherits = FALSE)]
+  recs = lapply(ids, function(id) je$table[[id]])
+  if (!is.null(kind)) recs = Filter(function(r) r$kind %in% kind, recs)
+  job_frame(recs)
+}
+
+#' List or stop gptr's background jobs and child processes
+#'
+#' Lists the job table of this R process: background sessions, `gptr$bg()` jobs, Shiny
+#' artifacts, the MCP server started by `gptr_mcp_serve()`, sub-agent workers and
+#' subscription-CLI children. A finished job whose stop was requested reads `stopped` or
+#' `aborted`, never `error`. Unavailable status information is shown as `unknown`.
+#'
+#' @param kill `TRUE` stops every job (sessions are cancelled, processes are killed together
+#'   with their process tree) and returns the table of what was stopped, invisibly.
+#' @return A `gptr_jobs` data frame with the columns `id`, `kind` (`session`, `bg`,
+#'   `artifact`, `mcp_serve`, `worker`, `cli`), `name`, `pid`, `status` and `started`.
+#' @section Options:
+#' Options of the transport and process layer (`?gptr_options` collects every option):
+#'
+#' - `gptr.max_active` (8): concurrent HTTP transfers (global).
+#' - `gptr.connect_timeout` (20), `gptr.first_byte_timeout` (120), `gptr.idle_timeout` (90):
+#'   seconds; there is no total timeout on streams.
+#' - `gptr.max_retry_delay` (60): seconds; a longer `retry-after` fails fast.
+#' - `gptr.max_attempts` (4): transport attempts per request.
+#' - `gptr.wire_log` (`FALSE`): `TRUE` writes one redacted JSON line per request start and end
+#'   to `<workspace root>/cache/tmp/wire-<session id>.jsonl`; a path must lie inside the
+#'   workspace root or `tempdir()`.
+#' - `gptr.supervise` (`NULL`): processx supervision of children; `NULL` means on, except under
+#'   R CMD check.
+#' - `gptr.stdin_timeout` (60): seconds a child may take to accept pending stdin bytes.
+#' @export
+#' @examples
+#' gptr_jobs()
+gptr_jobs = function(kill = FALSE) {
+  check_flag(kill, "kill")
+  if (!kill) return(new_listing(job_list(), "gptr_jobs"))
+  je = jobs_env()
+  recs = lapply(je$order, function(id) je$table[[id]])
+  recs = Filter(Negate(is.null), recs)
+  # stop functions may remove their own rows (P21), so the records are kept for the result
+  for (rec in recs) try(rec$stop(), silent = TRUE)
+  invisible(new_listing(job_frame(recs), "gptr_jobs"))
+}
+
+#' Unload cleanup: stop every job and kill the trees of every child this process spawned
+#' @noRd
+proc_unload = function() {
+  je = jobs_env()
+  for (id in je$order) {
+    rec = je$table[[id]]
+    if (!is.null(rec)) try(rec$stop(), silent = TRUE)
+  }
+  for (m in ls(je$procs)) {
+    process = je$handles[[m]]
+    if (!is.null(process)) {
+      try(kill_all(process), silent = TRUE)
+    } else {
+      try(proc_cleanup_record(je$procs[[m]]), silent = TRUE)
+    }
+  }
+  invisible(NULL)
+}
+
+on_load(on_unload(proc_unload))
