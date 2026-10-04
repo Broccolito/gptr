@@ -174,3 +174,114 @@ test_that("trust and the bound document fall back before P08 and P15 exist", {
   expect_false(prompt_trusted(tempdir()))
   expect_null(prompt_doc(s))
 })
+
+# ---- Task 3: presets ----------------------------------------------------------------------------
+
+test_that("the four presets are registered records (IC-69)", {
+  expect_true(all(c("minimal", "standard", "readonly", "extended") %in% registry_names("preset")))
+  expect_identical(registry_get("preset", "minimal")$preamble, "short")
+  expect_false(preset_includes(registry_get("preset", "minimal"), "r_session"))
+  expect_true(preset_includes(registry_get("preset", "standard"), "r_session"))
+  expect_true(preset_includes(registry_get("preset", "minimal"), "context"))
+  expect_error(preset_record("nope"), class = "gptr_error_invalid_argument")
+})
+
+test_that("preset_tools follows the presets and the ask rule (NS-12, IC-68)", {
+  expect_identical(preset_tools("minimal", human = TRUE), c("read", "r", "edit", "write"))
+  expect_identical(preset_tools("standard", human = TRUE, mode = "auto"),
+                   c("read", "r", "edit", "write", "ask"))
+  expect_identical(preset_tools("standard", human = FALSE, mode = "manual"),
+                   c("read", "r", "edit", "write", "ask"))
+  expect_identical(preset_tools("standard", human = FALSE, mode = "auto"),
+                   c("read", "r", "edit", "write"))
+  expect_identical(preset_tools("readonly", human = FALSE, mode = "plan"), c("read", "r"))
+  expect_identical(preset_tools("readonly", human = TRUE, mode = "plan"), c("read", "r", "ask"))
+  expect_identical(preset_tools("extended", human = FALSE, mode = "auto"),
+                   c("read", "r", "edit", "write", "grep", "find", "ls"))
+})
+
+test_that("modifiers and the tools setting add and remove tools in array order", {
+  expect_identical(preset_tools("minimal", FALSE, modifiers = c("+grep", "-edit")),
+                   c("read", "r", "write", "grep"))
+  local_gptr_options(tools = list(enable = "ls", disable = "write"))
+  expect_identical(preset_tools("minimal", FALSE), c("read", "r", "edit", "ls"))
+  expect_identical(prompt_tool_order(c("mcp__gh__search", "zeta", "ask", "read", "alpha")),
+                   c("read", "ask", "alpha", "zeta", "mcp__gh__search"))
+})
+
+test_that("the user's tools.presets maps a model glob to a preset", {
+  local_gptr_options(tools = list(presets = list("fake/*" = "minimal")))
+  expect_identical(preset_name(NULL, "fake/fake-1"), "minimal")
+  expect_identical(preset_name("extended", "fake/fake-1"), "extended")
+  expect_identical(preset_tools(NULL, FALSE, model = "fake/fake-1"),
+                   c("read", "r", "edit", "write"))
+})
+
+test_that("the shipped extended default applies only past break-even (IC-73)", {
+  haiku = list(provider = "anthropic", id = "claude-haiku-4-5", cache_min = 4096)
+  ref = "anthropic/claude-haiku-4-5"
+  expect_true(preset_shipped_applies(ref, haiku, 2000, TRUE, "chat"))
+  expect_false(preset_shipped_applies(ref, haiku, 2000, FALSE, "chat"))
+  expect_true(preset_shipped_applies(ref, haiku, 2000, FALSE, "child"))
+  expect_false(preset_shipped_applies(ref, haiku, 5000, TRUE, "chat"))
+  sonnet = list(provider = "anthropic", id = "claude-sonnet-5-5", cache_min = 512)
+  expect_false(preset_shipped_applies("anthropic/claude-sonnet-5-5", sonnet, 2000, TRUE, "chat"))
+  # the provider prior scales the o200k estimate: Claude 1.35 (3500 -> 4725), Gemini 1.10
+  # (3500 -> 3850, 3800 -> 4180); an unknown estimate never applies the default
+  expect_false(preset_shipped_applies(ref, haiku, 3500, TRUE, "chat"))
+  gem = list(provider = "google", id = "gemini-3-flash", cache_min = 4096)
+  expect_true(preset_shipped_applies("google/gemini-3-flash", gem, 3500, TRUE, "chat"))
+  expect_false(preset_shipped_applies("google/gemini-3-flash", gem, 3800, TRUE, "chat"))
+  expect_false(preset_shipped_applies(ref, haiku, NA_real_, TRUE, "chat"))
+})
+
+test_that("preset tools functions are called as P02 validates them (positional human, model)", {
+  posn = registry_add(gptr_spec("preset", "p07_posn", tools = function(h, m) {
+    c("read", if (isTRUE(h)) "ask", if (identical(m, "x/y")) "edit")
+  }), "user", 3L)
+  withr::defer(registry_remove(posn))
+  # `...` takes `mode` as the third positional argument (a named `mode` would match `model`)
+  dots = registry_add(gptr_spec("preset", "p07_dots", tools = function(human, model, ...) {
+    c("read", if (identical(list(...)[[1L]], "manual")) "ask")
+  }), "user", 3L)
+  withr::defer(registry_remove(dots))
+  third = registry_add(gptr_spec("preset", "p07_third", tools = function(h, m, md = NULL) {
+    c("read", if (identical(md, "manual")) "ask")
+  }), "user", 3L)
+  withr::defer(registry_remove(third))
+  expect_identical(preset_tools("p07_posn", TRUE, model = "x/y"), c("read", "edit", "ask"))
+  expect_identical(preset_tools("p07_posn", FALSE), "read")
+  expect_identical(preset_tools("p07_dots", FALSE, mode = "manual"), c("read", "ask"))
+  expect_identical(preset_tools("p07_third", FALSE, mode = "manual"), c("read", "ask"))
+  expect_identical(preset_tools("p07_third", FALSE, mode = "auto"), "read")
+})
+
+test_that("a session's rank-0 preset is found through preset_tools(session =) (IC-69)", {
+  s = p07_session()
+  sid = prompt_sid(s)
+  id = registry_add(gptr_spec("preset", "p07_domain", tools = c("read", "r")), "session", 0L,
+                    session = sid)
+  withr::defer(registry_remove(id))
+  expect_identical(preset_tools("p07_domain", FALSE, session = sid), c("read", "r"))
+  expect_error(preset_tools("p07_domain", FALSE), class = "gptr_error_invalid_argument")
+  cnd = expect_error(preset_record("nope", sid), class = "gptr_error_invalid_argument")
+  expect_match(cnd$expected, "p07_domain", fixed = TRUE)
+})
+
+test_that("empty and NA modifiers name no tool", {
+  base = c("read", "r", "edit", "write")
+  expect_identical(preset_tools("minimal", FALSE, modifiers = ""), base)
+  expect_identical(preset_tools("minimal", FALSE, modifiers = "+"), base)
+  expect_identical(preset_tools("minimal", FALSE, modifiers = c("+", "+grep")), c(base, "grep"))
+  expect_identical(preset_tools("minimal", FALSE, modifiers = NA_character_), base)
+})
+
+# builtin:prompt (declared below) owns the ctx.input service of Task 2: P01's
+# service_builtin_active() serves it only once the registry lists a builtin:prompt record.
+test_that("ctx$input reaches the ctx.input service once builtin:prompt is loaded", {
+  s = p07_session()
+  ctx = prompt_ctx(s)
+  expect_identical(ext_service_get("ctx.input"), prompt_input_get)
+  expect_identical(with_prompt_input(ctx, list(a = 1), function() ctx$input$a), 1)
+  expect_null(ctx$input)
+})

@@ -257,3 +257,193 @@ prompt_pending_flush = function(s) {
   for (m in q) session_append(s, prompt_operator_entry(m))
   invisible(length(q))
 }
+
+# ---- presets ------------------------------------------------------------------------------------
+
+#' Is `ask` declared? A human can answer, or a non-interactive manual run (NS-12, IC-68)
+#' @noRd
+preset_ask = function(human, mode) isTRUE(human) || identical(mode, "manual")
+
+#' The registered preset record `name`
+#' @noRd
+preset_record = function(name, session_id = NULL) {
+  rec = registry_get("preset", name, session = session_id)
+  if (is.null(rec)) {
+    known = registry_names("preset", session_id)
+    gptr_abort(paste0("Unknown preset '", name, "'."), "invalid_argument", arg = "preset",
+               expected = paste0("one of ", paste(known, collapse = ", ")))
+  }
+  rec
+}
+
+#' Does the preset record include section `name`? (named lgl or function(name); default TRUE)
+#' @noRd
+preset_includes = function(rec, name) {
+  s = rec$sections
+  if (is.null(s)) return(TRUE)
+  if (is.function(s)) return(isTRUE(s(name)))
+  if (!is.null(names(s)) && name %in% names(s)) return(isTRUE(as.logical(s[[name]])))
+  TRUE
+}
+
+#' Order direct tool names as contract section 9.1 "Array order"
+#' @noRd
+prompt_tool_order = function(names) {
+  core = c("read", "r", "edit", "write", "ask", "grep", "find", "ls")
+  names = unique(as.character(names))
+  first = intersect(core, names)
+  rest = setdiff(names, core)
+  mcp = rest[startsWith(rest, "mcp__")]
+  plug = setdiff(rest, mcp)
+  c(first, sort(plug, method = "radix"), sort(mcp, method = "radix"))
+}
+
+#' The user's `tools.presets` entry whose model glob matches `model`, or NULL
+#' @noRd
+preset_user_mapping = function(model, session = NULL) {
+  if (is.null(model) || !is.character(model) || !nzchar(model[1])) return(NULL)
+  map = setting_get("tools", session = session)$presets
+  for (g in names(map)) {
+    if (grepl(utils::glob2rx(g), model[1])) return(as.character(map[[g]])[1])
+  }
+  NULL
+}
+
+#' The preset of a session: explicit, else the user's tools.presets match, else setting `preset`
+#' @noRd
+preset_name = function(preset, model = NULL, session = NULL) {
+  if (!is.null(preset)) return(preset)
+  preset_user_mapping(model, session) %||%
+    setting_get("preset", session = session, default = "standard")
+}
+
+#' Call a preset's `tools` function the way P02's validator checks it (IC-69)
+#'
+#' `human` and `model` go by position (`spec_fn_accepts(tools, c("human", "model"))`). `mode` goes
+#' by name only to a formal named exactly `mode`; otherwise a function with `...` or a third
+#' formal gets it as the third positional argument (contract section 10.2
+#' `function(human, model, mode)`; P11 calls `tools(human, model, mode)`), and a two-argument
+#' function does not get it. A named `mode` would partially match a formal such as `model`.
+#' @noRd
+preset_call_tools = function(fun, human, model, mode) {
+  fa = names(formals(base::args(fun)))
+  extra = if ("mode" %in% fa) {
+    list(mode = mode)
+  } else if ("..." %in% fa || length(fa) >= 3L) {
+    list(mode)
+  } else {
+    list()
+  }
+  do.call(fun, c(list(isTRUE(human), model), extra))
+}
+
+#' Direct tool names of a preset (contract section 7.7)
+#'
+#' @param preset Preset name, or `NULL` for the configured one (the user's `tools.presets`
+#'   mapping for `model`, else setting `preset`).
+#' @param human `lgl(1)`: can a human answer questions?
+#' @param model `chr(1)` model reference or `NULL`.
+#' @param modifiers `chr`: `+name` adds a tool, `-name` removes one (settings `tools.enable`
+#'   and `tools.disable` are applied the same way); empty and `NA` entries are skipped.
+#' @param mode Permission mode or `NULL`.
+#' @param session Session id (or `<session>`) or `NULL`: its rank-0 presets (IC-69 session
+#'   scope) and its settings apply. A trailing extension of the contract section 7.7 signature.
+#' @return `chr` of tool names in array order.
+#' @noRd
+preset_tools = function(preset, human, model = NULL, modifiers = character(), mode = NULL,
+                        session = NULL) {
+  rec = preset_record(preset_name(preset, model, session), session)
+  tl = rec$tools
+  if (is.function(tl)) tl = preset_call_tools(tl, human, model, mode)
+  tools = unique(as.character(tl))
+  tools = tools[!is.na(tools) & nzchar(tools)]
+  st = setting_get("tools", session = session)
+  mods = c(as.character(modifiers),
+           if (length(st$enable)) paste0("+", unlist(st$enable)),
+           if (length(st$disable)) paste0("-", unlist(st$disable)))
+  for (m in mods) {
+    if (is.na(m) || !nzchar(m)) next
+    op = substr(m, 1L, 1L)
+    nm = if (op %in% c("+", "-")) substring(m, 2L) else m
+    if (!nzchar(nm)) next
+    tools = if (identical(op, "-")) setdiff(tools, nm) else union(tools, nm)
+  }
+  prompt_tool_order(tools)
+}
+
+#' Shipped `tools.presets` defaults (IC-73), applied only past break-even
+#' @noRd
+presets_shipped = c("google/gemini-3*" = "extended", "anthropic/claude-haiku-4-5*" = "extended")
+
+#' Provider prior of the token multiplier (architecture 12.5: OpenAI 1.00, Claude 1.35,
+#' Gemini 1.10; other providers 1.00)
+#' @noRd
+prompt_provider_prior = function(m) {
+  switch(m$provider %||% "", anthropic = 1.35, google = 1.10, 1.00)
+}
+
+#' Does the shipped `extended` default apply? (IC-73)
+#'
+#' Only for the models of `presets_shipped`, when the catalog's `cache_min` exceeds the projected
+#' standard prefix (estimate times the provider prior) and the session is expected to pass
+#' break-even: an interactive session or a fan-out child.
+#'
+#' @param model Model reference; `mrec` its record; `static` the estimated static prefix of the
+#'   standard composition; `human` lgl(1); `kind` the session kind.
+#' @noRd
+preset_shipped_applies = function(model, mrec, static, human, kind) {
+  if (is.null(model) || is.null(mrec)) return(FALSE)
+  hit = any(vapply(names(presets_shipped), function(g) grepl(utils::glob2rx(g), model), NA))
+  if (!hit) return(FALSE)
+  cache_min = as.numeric(mrec$cache_min %||% NA_real_)
+  if (!length(cache_min) || is.na(cache_min)) return(FALSE)
+  # an unknown (NA) or missing estimate is not zero (IC-74): the default does not apply
+  isTRUE(cache_min > static * prompt_provider_prior(mrec)) &&
+    (isTRUE(human) || isTRUE(kind %in% c("fanout", "child")))
+}
+
+#' Register the four preset records (IC-69)
+#'
+#' Section predicates read the record, never its name: `sections` switches sections off,
+#' `preamble` picks the preamble variant and the extra field `variants` asks for the full
+#' `r_performance` text (validators accept unknown fields, contract section 10.2). The `tools`
+#' functions take `mode = NULL`: P02's validator requires a `preset` tools function to be callable
+#' as `f(human, model)` (IC-69), and `preset_call_tools()` passes `mode` to every function that
+#' can take it (contract section 10.2).
+#' @noRd
+prompt_register_presets = function(gptr) {
+  minimal_off = c(r_session = FALSE, r_performance = FALSE, documents = FALSE,
+                  artifacts = FALSE, system1 = FALSE, skills = FALSE, mcp = FALSE,
+                  plugins = FALSE, r_env = FALSE)
+  gptr$register(gptr_spec("preset", "minimal", tools = c("read", "r", "edit", "write"),
+                          sections = minimal_off, preamble = "short"))
+  gptr$register(gptr_spec("preset", "standard",
+                          tools = function(human, model, mode = NULL) {
+                            c("read", "r", "edit", "write", if (preset_ask(human, mode)) "ask")
+                          },
+                          sections = function(name) TRUE, preamble = "standard"))
+  gptr$register(gptr_spec("preset", "readonly",
+                          tools = function(human, model, mode = NULL) {
+                            c("read", "r", if (preset_ask(human, mode)) "ask")
+                          },
+                          sections = function(name) TRUE, preamble = "standard"))
+  gptr$register(gptr_spec("preset", "extended",
+                          tools = function(human, model, mode = NULL) {
+                            c("read", "r", "edit", "write", if (preset_ask(human, mode)) "ask",
+                              "grep", "find", "ls")
+                          },
+                          sections = function(name) TRUE, preamble = "standard",
+                          variants = c(r_performance = "full")))
+  invisible(NULL)
+}
+#' The built-in `prompt` extension (contract sections 7.7 and 10.3)
+#'
+#' @param gptr The extension API object.
+#' @return `NULL`, invisibly.
+#' @noRd
+builtin_prompt = function(gptr) {
+  prompt_register_presets(gptr)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("prompt", builtin_prompt))
