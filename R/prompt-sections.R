@@ -1314,6 +1314,109 @@ prompt_section_patch = function(s, name, text = NULL) {
   invisible(s)
 }
 
+# ---- gptr_prompt() ------------------------------------------------------------------------------
+
+#' Text of the first user message on a session's active path, or NULL
+#' @noRd
+prompt_first_message_text = function(s) {
+  for (e in prompt_path(s)) {
+    if (identical(e$type, "message") && identical(e$message$role, "user")) {
+      txt = vapply(e$message$content, function(b) {
+        paste(as.character(b$text %||% ""), collapse = "\n")
+      }, "")
+      return(paste(txt[nzchar(txt)], collapse = "\n\n"))
+    }
+  }
+  NULL
+}
+
+#' Show the frozen system prompt, tool array and first message
+#'
+#' `gptr_prompt()` shows what gptr sends before the conversation: the two system blocks (T0,
+#' the static sections; T1, the machine and project sections), the tool array and the first
+#' user message, with an estimated token count per section. It makes no model call and writes
+#' nothing: a preview never consumes a pending plan and queues no message for the model.
+#'
+#' For a session, the view shows its frozen blocks (restored from its `gptr.frozen` entry when
+#' needed) and the text of its first user message, context blocks included. With `preset`, for a
+#' session that has not frozen its prompt yet, or for one whose next run freezes a fresh prompt
+#' (resumed from a file of another project or one that git tracks), it composes what would be
+#' frozen now.
+#'
+#' @param x For `gptr_prompt()`, a `gptr_session` (its frozen prompt and first message) or `NULL`
+#'   (what a new session would freeze now with the current settings); for `print()`, a
+#'   `gptr_prompt_view`.
+#' @param preset `NULL` or a preset name (`"minimal"`, `"standard"`, `"readonly"`, `"extended"`,
+#'   or one registered by a plugin or for the session) to preview instead of the frozen or
+#'   configured one.
+#' @param tokens `TRUE` to add estimated token counts per section.
+#' @param ... Unused.
+#' @return A `gptr_prompt_view`: a list with `system` (`list(t0, t1)`), `tools_json` (the tool
+#'   array as JSON text), `first_message` (text), `sections` (data frame `name`, `tier`,
+#'   `tokens`) and `total_tokens`; the attributes `preset` and `tool_names` name the preset and
+#'   the declared tools. `print()` shows each part with its token estimate and returns `x`
+#'   invisibly.
+#' @examples
+#' v = gptr_prompt(preset = "minimal")
+#' v$sections
+#' @export
+gptr_prompt = function(x = NULL, preset = NULL, tokens = TRUE) {
+  check_class(x, "gptr_session", "x", null = TRUE)
+  check_string(preset, "preset", null = TRUE)
+  check_flag(tokens, "tokens")
+  sid = prompt_sid(x)
+  # the presets the composition can resolve: registered ones and the session's own (IC-69)
+  if (!is.null(preset)) preset_record(preset, sid)
+  frozen = NULL
+  if (!is.null(x) && is.null(preset)) {
+    # what the next request sends: .d$frozen, else the gptr.frozen entry the next freeze
+    # restores (not stored here); NULL when a refreeze is pending (IC-52), so it composes
+    frozen = prompt_frozen_now(x)
+  }
+  if (is.null(frozen)) frozen = prompt_compose(x, list(preset = preset))
+  first = if (is.null(x)) NULL else prompt_first_message_text(x)
+  if (is.null(first)) {
+    blocks = context_first_message(x, list(turn = 1L, prompt = NULL, preview = TRUE))
+    first = paste(vapply(blocks, function(b) b$text, ""), collapse = "\n\n")
+  }
+  secs = frozen$sections[, c("name", "tier", "tokens")]
+  rownames(secs) = NULL
+  total = sum(secs$tokens) + prompt_est(frozen$tools_json, "json", sid) +
+    prompt_est(first, "prose", sid)
+  if (!tokens) {
+    secs$tokens = rep(NA_real_, nrow(secs))
+    total = NA_real_
+  }
+  structure(list(system = list(t0 = frozen$t0, t1 = frozen$t1), tools_json = frozen$tools_json,
+                 first_message = first, sections = secs, total_tokens = total),
+            preset = frozen$preset, tool_names = frozen$tool_names,
+            class = "gptr_prompt_view")
+}
+
+#' @rdname gptr_prompt
+#' @export
+print.gptr_prompt_view = function(x, ...) {
+  fmt = function(n) {
+    if (is.na(n)) "" else paste0(" (", format(round(n), big.mark = ","), " tokens)")
+  }
+  secs = x$sections
+  t1 = x$system$t1
+  tn = attr(x, "tool_names")
+  tools = if (length(tn)) paste(tn, collapse = ", ") else "(none)"
+  lines = c(paste0("gptr prompt, preset ", attr(x, "preset") %||% "", fmt(x$total_tokens)),
+            paste0("-- system block T0", fmt(sum(secs$tokens[secs$tier == "T0"])), " --"),
+            x$system$t0,
+            paste0("-- system block T1", fmt(sum(secs$tokens[secs$tier == "T1"])), " --"),
+            if (nzchar(t1)) t1,
+            paste0("-- tool array: ", tools, " --"),
+            "-- first user message --",
+            if (nzchar(x$first_message %||% "")) x$first_message,
+            "-- sections --",
+            utils::capture.output(print(secs, row.names = FALSE)))
+  msg_verbatim(lines)
+  invisible(x)
+}
+
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
 #'
 #' @param gptr The extension API object.

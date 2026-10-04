@@ -3784,11 +3784,12 @@ guarded expectations. Item 4 (review round 1): red `[ FAIL 15 | WARN 0 | SKIP 0 
 green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 127 ]`. Item 5 (review round 2): red
 `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 129 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 161 ]`.
 
-## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it), YAML aliases never expand without bound, an unreadable file never warns, and a ~name skills.paths entry is project content (2026-10-04)
+## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it), YAML aliases never expand without bound, an unreadable file never warns, a ~name skills.paths entry is project content, a name must match to its last character (P02's name rules now anchor with \z), and frontmatter text that would make yaml slow is refused before yaml runs (2026-10-04)
 
-P17 Task 2 (`R/skill-discover.R`), review rounds 1, 2 and 3. The plan-literal code changed in
-items 1, 2 and 4-7, and the plan's test file gained a temporary helper (item 3).
-Exported signatures, return shapes and the plan's 8 tests are unchanged.
+P17 Task 2 (`R/skill-discover.R`), review rounds 1, 2, 3 and 4. The plan-literal code changed in
+items 1, 2 and 4-9 (item 8 also changes P02's `R/ext-specs.R`), and the plan's test file gained
+a temporary helper (item 3). Exported signatures, return shapes and the plan's 8 tests are
+unchanged.
 
 1. **`skill_parse()` never throws.** R yaml reads `.na.character`, `.na`, `.na.integer` and
    `.na.real` as `NA`. An `NA` name or description passed the plan's `is.character()`,
@@ -3870,16 +3871,59 @@ Exported signatures, return shapes and the plan's 8 tests are unchanged.
    working directory, inside the project, and listed project content as `user` and visible in
    an untrusted project. Other `~name` entries are now relative entries: project roots,
    resolved against the project root and trust-gated like the rest of item 4.
+8. **A skill name must match `^[a-z0-9][a-z0-9-]*$` to its last character (contract 11.13;
+   review round 4; P02 code too).** P02's `kind_check_skill()` tested the name with
+   `grepl(..., perl = TRUE)`, and PCRE's `$` also matches before a final newline, so a name
+   ending in `"\n"` passed. YAML gives exactly that for `name: |` and `name: >` (block scalars
+   keep one final newline) and for `name: "x\n"`, and a directory name can end in a newline
+   too, so such a skill was listed and visible with a name that is not a valid skill name.
+   Two changes:
+   - `skill_parse()` refuses the name itself: a name outside `^[a-z0-9][a-z0-9-]*\z` (PCRE,
+     `\z` = the very end, matched on bytes) gives the diagnostic
+     `<path>: name must match ^[a-z0-9][a-z0-9-]*$ to its last character; the skill was skipped`
+     and `NULL`, after Pi's name warnings. A name the `skill` kind refuses (`Bad_Name`) is now
+     skipped by this check, with this diagnostic instead of `res_spec()`'s `invalid_spec` one.
+   - The root cause in P02 (`R/ext-specs.R`, plan complete, no active lane): every name and
+     version rule written with `perl = TRUE` and `$` now ends with `\z` (provider id, tool name
+     and namespace, skill, command, setting, env_alias, kind specs, `kind_define()` names, and
+     IC-74's `decision.server_min`). The error messages still show the rule with `$`. No other
+     P02 behaviour changes. `progress/P02.md` records it.
+9. **Frontmatter text that would make yaml slow is refused before yaml runs (contract 6.3 and
+   11.13, IC-52; review round 4; Task 1 code).** `yaml::yaml.load()` does work that grows faster
+   than its input, and `fm_yaml()` parses twice (typed and raw) before round 3's `fm_size_ok()`
+   can look at the result. Measured on this machine (two loads, as `fm_yaml()` did): 32,000
+   nested `[` in 64 KB took 6.3 s, 16,000 in 32 KB 1.6 s, 16,000 nested `- ` in 32 KB 1.0 s,
+   and a 17 KB map that merges a 1,000-key alias 2,000 times with `<<` took 11.0 s; the cost of
+   flow nesting grows with the square of the depth, so a 1 MB SKILL.md in an untrusted project
+   would take about half an hour. The new `fm_text_problem()` (`R/ext-plugins.R`) checks the
+   text first, and `fm_yaml()` returns `meta = NULL` with one of these error strings, so
+   `skill_parse()` skips the skill with that diagnostic and lists its siblings:
+   - more than 32,768 bytes: `invalid YAML frontmatter: too large (more than 32768 bytes)`;
+     real frontmatter is a few kilobytes (a skill description is at most 1,024 characters);
+   - more than 1,000 `[` and `{` characters in all (a bound on the flow depth that quoted
+     brackets cannot hide), or more than 64 `-` or `?` block entries in a row: `invalid YAML
+     frontmatter: too deeply nested (...)`;
+   - a merge key `<<:` with more than 4 alias references: `invalid YAML frontmatter: too many
+     aliases with a merge key (more than 4)`.
 
-Regression tests lock items 1, 2 and 4-7: seven appended to
-`tests/testthat/test-skill-discover.R` and three to `tests/testthat/test-ext-plugins.R`. Every
-later P17 count for `test-skill-discover.R` is 39 higher (10 from round 1, 10 from round 2, 19
-from round 3): Task 3's red 36 -> 75, 64 -> 103, 99 -> 138, and Task 12's combined count
-260 -> 299. Every later count for `test-ext-plugins.R` is 29 higher (D-072's 13, plus 6 from
-round 1 and 10 from round 3): 82 -> 111, 133 -> 162, 166 -> 195, 184 -> 213. Acceptance 1
-becomes 512, acceptance 2b 138 and acceptance 4c 351 (IC-74).
+   The patterns are ASCII and matched on bytes, so text that is not valid UTF-8 neither warns
+   nor errors. After the change the four documents above are refused in at most 0.012 s, and
+   the largest accepted map (3,600 keys, 31 KB) parses in 0.11 s. Text that passes may still
+   hold brackets inside quoted strings; only documents with more than 1,000 of them are
+   refused.
 
-Validation: `progress/P17.md`, Task 2, review rounds 1, 2 and 3. Round 1 red: `^skill-discover$`
+Regression tests lock items 1, 2 and 4-9: ten appended to
+`tests/testthat/test-skill-discover.R`, four to `tests/testthat/test-ext-plugins.R` and one to
+`tests/testthat/test-ext-specs.R` (P02, 20 expectations). Every later P17 count for
+`test-skill-discover.R` is 52 higher (10 from round 1, 10 from round 2, 19 from round 3, 13
+from round 4): Task 3's red 36 -> 88, 64 -> 116, 99 -> 151, and Task 12's combined count
+260 -> 312. Every later count for `test-ext-plugins.R` is 46 higher (D-072's 13, plus 6 from
+round 1, 10 from round 3 and 17 from round 4): 82 -> 128, 133 -> 179, 166 -> 212,
+184 -> 230. Acceptance 1 becomes 542, acceptance 2b 151, acceptance 3a 230 and acceptance 4c
+381 (IC-74). The round-4 test of a directory name ending in a newline skips on Windows and on
+a file system that refuses the name, like round 3's unreadable-file test.
+
+Validation: `progress/P17.md`, Task 2, review rounds 1, 2, 3 and 4. Round 1 red: `^skill-discover$`
 `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 33 ]` (both new tests stop with the `NA` error), and
 `^ext-plugins$` `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 82 ]`. Green: `[ FAIL 0 | WARN 0 | SKIP 0 |
 PASS 43 ]` and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 86 ]`. With item 2 reverted, the
@@ -3891,7 +3935,17 @@ read `user`, rank 3, trusted, visible); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS
 the unreadable file warned, `~bob/skills` read `user` and visible), and `^ext-plugins$`
 `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 90 ]`; green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 72 ]` and
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 96 ]`. With only the `fm_size_ok()` checks removed, the
-alias tests still fail (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 162 ]`). Lint clean.
+alias tests still fail (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 162 ]`).
+Round 4 (items 8 and 9) red: `^(skill-discover|ext-plugins|ext-specs)$`
+`[ FAIL 24 | WARN 0 | SKIP 0 | PASS 467 ]` (the three newline names were listed, the 40 KB
+text reached yaml, the deep and huge skills were listed, and P02 accepted every name and
+version ending in a newline). With the P02 change alone (before the pre-scan), the four
+`skill_parse()` name diagnostics and the three deep/huge expectations still fail
+(`^(skill-discover|ext-specs)$` `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 384 ]`); with everything but
+the P02 change, the P02 test fails (`[ FAIL 11 | WARN 0 | SKIP 0 | PASS 380 ]`). Green:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 504 ]` (skill-discover 85, ext-plugins 113, ext-specs 306);
+the whole suite `[ FAIL 1 | WARN 0 | SKIP 11 | PASS 13631 ]`, the failure being the
+pre-existing `test-zzz.R:301` of P15's `R/doc-blocks.R`. Lint clean.
 
 ## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen array will not declare is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
 
@@ -4177,3 +4231,33 @@ A scratch copy with the plan-literal choices (provider api, `calibrated = TRUE`,
 cap, `%||% 0`) and a nested pump that allows every run fails five tests
 (`dev/.validation/P13/task4-negative.log`). Lint is clean.
 
+## D-079 - P07 gptr_prompt(): a session's prompt kept only in gptr.frozen is shown from that entry, a preview never queues operator messages, `preset` is validated against the presets the session sees (2026-10-04)
+
+P07 Task 9 (`R/prompt-sections.R`, one statement of `R/prompt-context.R`). The export
+`gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)`, the five fields of `gptr_prompt_view`
+(contract 5.11) with the attributes `preset` and `tool_names`, `print.gptr_prompt_view()` and the
+plan's 22 expectations are unchanged.
+
+1. For a session whose `.d$frozen` is empty but whose active path holds a `gptr.frozen` entry, the
+   plan composed a fresh prompt with the current settings. Contract 6.6 shows "its frozen system
+   blocks", and the next `prompt_freeze()` restores that entry (Task 7) unless an IC-52 refreeze
+   is pending, so the view now takes `prompt_frozen_now()` (Task 8): `.d$frozen`, else `NULL`
+   when `.d$refreeze` is set (a foreign file resumed under IC-52 freezes a fresh prompt from the
+   current settings at its next run, so the view composes it, as the plan did), else
+   `prompt_frozen_restore()` (read only: nothing is stored). With the plan literal a session
+   frozen with `preset = "minimal"` showed the `standard` composition.
+2. A preview renders the first message with `preview = TRUE`, which already keeps a pending plan
+   (P11's `plan.pending`, `consume = FALSE`); `context_collect()` still queued every
+   operator-authority block as a `reminder` in the session's memo, so each call of
+   `gptr_prompt(s)` before the first run added one more reminder for the model. A preview now
+   drops them, as a call without a session did; the plan's own roxygen says the view "writes
+   nothing".
+3. `preset` is validated with `preset_record(preset, session_id)`, i.e. against the registered
+   presets plus the session's own rank-0 records (IC-69), the same lookup the composition uses;
+   the plan's `registry_get("preset", preset)` without the session refused a session preset that
+   the composition accepts. The error (class, message, `arg`, `expected`) is unchanged.
+
+Validation: `progress/P07.md`, Task 9. Four tests (24 expectations) were added; on the plan
+literal 5 expectations of the first three fail (`dev/.validation/P07/task9-plan-literal.log`),
+and the pending-refreeze test (review round 1) fails 3 on the first form of item 1
+(`task9-fix1-red.log`). Final `^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 372 ]`.

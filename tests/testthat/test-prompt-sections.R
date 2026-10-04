@@ -1161,3 +1161,124 @@ test_that("a member whose signature cannot be built is not registered", {
   msg = gptr_registry(diagnostics = TRUE)$message
   expect_true(any(grepl("Tool 'p07_badsig' was not added: ", msg, fixed = TRUE)))
 })
+
+# ---- Task 9: gptr_prompt() ----------------------------------------------------------------------
+
+test_that("gptr_prompt() previews a preset without a session", {
+  v = gptr_prompt(preset = "minimal")
+  expect_s3_class(v, "gptr_prompt_view")
+  expect_named(v, c("system", "tools_json", "first_message", "sections", "total_tokens"))
+  expect_identical(attr(v, "preset"), "minimal")
+  expect_true(startsWith(v$system$t0, prompt_text("preamble_short")))
+  expect_identical(names(v$system), c("t0", "t1"))
+  expect_identical(names(v$sections), c("name", "tier", "tokens"))
+  expect_true(is.numeric(v$total_tokens) && v$total_tokens > 0)
+  expect_match(v$first_message, "<environment>", fixed = TRUE)
+  expect_true(all(is.na(gptr_prompt(preset = "minimal", tokens = FALSE)$sections$tokens)))
+})
+
+test_that("gptr_prompt() shows a session's frozen prompt and first message", {
+  s = p07_session()
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  session_append(s, list(type = "message",
+                         message = msg_user(list(block_context("environment", "Date: x"),
+                                                 block_text("hello")))))
+  v = gptr_prompt(s)
+  expect_identical(v$system$t0, fr$t0)
+  expect_identical(v$tools_json, fr$tools_json)
+  expect_identical(v$first_message, "<environment>\nDate: x\n</environment>\n\nhello")
+  expect_identical(attr(gptr_prompt(s, preset = "minimal"), "preset"), "minimal")
+})
+
+test_that("gptr_prompt() validates its arguments", {
+  expect_error(gptr_prompt(preset = "nope"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_prompt(x = 1), class = "gptr_error_invalid_argument")
+  expect_error(gptr_prompt(tokens = NA), class = "gptr_error_invalid_argument")
+})
+
+test_that("printing a prompt view shows each part and returns it invisibly", {
+  v = gptr_prompt(preset = "minimal")
+  vis = NULL
+  # print() writes through P01's msg_verbatim(), i.e. cli::cli_verbatim(), whose output
+  # utils::capture.output() does not see inside testthat; cli::cli_fmt() collects it
+  out = paste(cli::cli_fmt({
+    vis = withVisible(print(v))
+  }), collapse = "\n")
+  expect_match(out, "system block T0", fixed = TRUE)
+  expect_match(out, "tool array", fixed = TRUE)
+  expect_match(out, "first user message", fixed = TRUE)
+  expect_match(out, prompt_text("preamble_short"), fixed = TRUE)
+  expect_false(vis$visible)
+  expect_identical(vis$value, v)
+})
+
+# A session whose .d$frozen is empty but whose active path holds a gptr.frozen entry freezes by
+# restoring that entry (prompt_freeze(), Task 7), so the view shows the restored prompt rather
+# than a fresh composition, and leaves .d$frozen and the transcript as they were.
+test_that("gptr_prompt() shows a prompt kept only in gptr.frozen and writes nothing", {
+  s = p07_session()
+  fr = prompt_freeze(s, list(interactive = FALSE, preset = "minimal"))
+  d = session_data(s)
+  d$frozen = NULL
+  n = length(d$entries)
+  v = gptr_prompt(s)
+  expect_identical(attr(v, "preset"), "minimal")
+  expect_identical(v$system$t0, fr$t0)
+  expect_identical(v$system$t1, fr$t1)
+  expect_identical(v$tools_json, fr$tools_json)
+  expect_identical(attr(v, "tool_names"), fr$tool_names)
+  expect_null(session_data(s)$frozen)
+  expect_length(session_data(s)$entries, n)
+})
+
+# A session with a pending refreeze (a foreign file resumed under IC-52: rebuild_fill() leaves
+# .d$frozen empty and sets .d$refreeze) freezes a fresh composition at its next run and never
+# restores the gptr.frozen entry on its path, so the view shows that composition.
+test_that("gptr_prompt() of a session with a pending refreeze shows the fresh composition", {
+  s = p07_session()
+  fr = prompt_freeze(s, list(interactive = FALSE, preset = "minimal"))
+  d = session_data(s)
+  d$frozen = NULL
+  d$refreeze = TRUE
+  n = length(d$entries)
+  v = gptr_prompt(s)
+  expect_identical(attr(v, "preset"), "standard")
+  expect_false(identical(v$system$t0, fr$t0))
+  expect_null(session_data(s)$frozen)
+  expect_true(session_data(s)$refreeze)
+  expect_length(session_data(s)$entries, n)
+  nx = prompt_freeze(s, list(interactive = FALSE, refreeze = TRUE))
+  expect_identical(nx$preset, "standard")
+  expect_identical(v$system$t0, nx$t0)
+  expect_identical(v$system$t1, nx$t1)
+  expect_identical(v$tools_json, nx$tools_json)
+  expect_identical(attr(v, "tool_names"), nx$tool_names)
+})
+
+# A preview of a session's first message neither consumes a pending plan nor queues the
+# operator-authority blocks the real first message would queue as reminders.
+test_that("a preview of a session queues no operator message and stores nothing", {
+  off = gptr_register(gptr_context_block("p07_note", function(ctx, budget) "Note.",
+                                         placement = "first", authority = "operator"))
+  withr::defer(off())
+  s = p07_session()
+  v = gptr_prompt(s)
+  expect_false(grepl("p07_note", v$first_message, fixed = TRUE))
+  expect_length(pending_of(s) %||% list(), 0L)
+  expect_null(session_data(s)$frozen)
+  expect_length(session_data(s)$entries, 0L)
+  context_first_message(s, list(turn = 1L, prompt = "x"))
+  expect_length(pending_of(s), 1L)
+})
+
+# preset = is validated against the presets the session sees, its own rank-0 records included
+# (IC-69), as the composition resolves them.
+test_that("gptr_prompt() accepts a session's own rank-0 preset (IC-69)", {
+  s = p07_session()
+  sid = session_data(s)$id
+  id = registry_add(gptr_spec("preset", "p07_own", tools = c("read", "r")), "session", 0L,
+                    session = sid)
+  withr::defer(registry_remove(id))
+  expect_identical(attr(gptr_prompt(s, preset = "p07_own"), "preset"), "p07_own")
+  expect_error(gptr_prompt(preset = "p07_own"), class = "gptr_error_invalid_argument")
+})

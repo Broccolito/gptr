@@ -134,7 +134,7 @@ context_last_hashes = function(s) {
 #'
 #' Blocks of specs with `authority = "operator"` are not user data: they are queued as operator
 #' `reminder` messages (rank >= 3 records only, IC-52; P02 validates the rank); a preview
-#' without a session drops them.
+#' (`input$preview`, as `gptr_prompt()` renders it) or a call without a session drops them.
 #' @noRd
 context_collect = function(s, specs, input, dedup) {
   sid = prompt_sid(s)
@@ -151,7 +151,9 @@ context_collect = function(s, specs, input, dedup) {
       # one reminder per spec, stored as one text (deduplicated next turn by that text's hash)
       txt = paste(vapply(out, function(b) b$text, ""), collapse = "\n\n")
       if (dedup && identical(context_text_hash(txt), last[[sp$name]])) next
-      if (!is.null(s)) prompt_pending_add(s, msg_operator("reminder", txt))
+      if (!is.null(s) && !isTRUE(input$preview)) {
+        prompt_pending_add(s, msg_operator("reminder", txt))
+      }
       next
     }
     if (dedup && identical(context_blocks_hash(out), last[[sp$name]])) next
