@@ -3319,3 +3319,49 @@ plan literal and the adapted code. Items 1-3 added 4 tests (19 expectations); ag
 literal they fail 6 (`dev/.validation/P07/task4-plan-literal2.log`). Items 4-6 added 4 tests
 (30 expectations); against the pre-review source they fail 20 (`task4-fix1-red2.log`). Final
 `^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 185 ]`.
+
+## D-066 - P07 context blocks: containment uses path_inside(), deduplication hashes the stored (redacted) form, an @file include never reads a control, protected or secret-shaped file, the update check cuts with the session's estimator (2026-10-04)
+
+P07 Task 5's plan-literal `R/prompt-context.R` was changed in four ways. Signatures, block
+formats, orders and budgets are unchanged.
+
+1. **Containment uses P01's `path_inside()`.** The plan tested
+   `!startsWith(path_rel(p, root), "..")` in `context_vignette_includes()`, `context_dirs()` and
+   the user-file label, but P01's real `path_rel()` returns the normalised absolute path (never
+   `..`) for a path outside the root. An `@../<dir>/rules.md` line in `.gptr/vignette.Rmd` naming
+   an existing file outside the project was therefore read into the prompt, against the plan's
+   own rule that such a line is dropped, and an inner directory named `..cache` was treated as
+   outside the root.
+2. **Deduplication hashes the form the transcript stores.** P06's `session_append()` redacts
+   every entry with the `persist` profile, while the plan hashed the freshly rendered text and
+   compared it with text read back from entries. A block holding a secret-shaped string (an
+   `sk-proj-` key in an AGENTS.md, a URL password in a plugin block, a bearer token in an operator
+   reminder) never matched and was sent again on every turn, breaking IC-38 ("a block whose text
+   hash equals the last emitted text of the same name ... is skipped") and the "announced once"
+   rule of `project_instructions_update`. `context_text_hash()` hashes `redact(text, "persist")`
+   (idempotent on stored text) in `context_blocks_hash()`, `context_last_hashes()`, the operator
+   reminder check, `context_sent_instructions()` and both comparisons of
+   `context_provide_update()`. The block text itself is unchanged; `ctx$input$last_hash` is this
+   hash. Task 13's `details$dropped` hashes the stored first-message block, which is equal under
+   idempotency; Task 13 should call `context_text_hash()` for it.
+3. **An `@file` include never reads a guarded file.** The plan included any existing file inside
+   the root, so a cloned project's `vignette.Rmd` with `@.env`, `@.secrets/k.env` or
+   `@.git/config` sent the user's own untracked secrets to the provider (with `trusted="false"`
+   in an untrusted project, but sent all the same), bypassing the level a model `read` of the
+   same file gets (04 section 9.4: 2 on a protected path) and `gptr.secret_guard`.
+   `context_file_guarded()` now drops the line when `path_class()` gives `control`, `critical`
+   or `protected` (it judges the path as written and its symlink target; IC-54) or the
+   root-relative path, as written or resolved, has the shape of P03's secret-file classifier
+   (`scan_secret_path_re`: `id_rsa`, `*.pem`/`*.key`, `credentials.json`, `.pgpass`, ...).
+   `instructions` and ordinary `workspace` files stay includable. A project located under a
+   protected directory (for example `~/.claude/...`) can then include nothing, as `path_class()`
+   makes every file there protected for the permission classifier as well.
+4. **The update check cuts with the session's estimator.** `context_provide_update()` truncates
+   each file with `prompt_truncate(..., "prose", sid)`, as `context_provide()` cut the first
+   message's block, so the change check compares like with like when a session-scoped estimator
+   exists. Identical with the default estimator.
+
+Validation: `progress/P07.md`, Task 5. The plan's 21 tests are unchanged. Item 1 added 2 tests
+(8 expectations), which fail 4 on the plan literal (`dev/.validation/P07/task5-plan-literal2.log`).
+Items 2 and 3 added 2 tests (12 expectations), which fail 9 on the pre-review source
+(`task5-fix1-red.log`). Final `^prompt-context$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 88 ]`.
