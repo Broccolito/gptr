@@ -431,3 +431,394 @@ test_that("a magrittr-piped call is found as magrittr calls it (6.1.1, research 
   }, 1L)
   expect_identical(found, seq_along(seen))
 })
+
+# A session with recorded turns, built the way P06 records them: the turn counter moves first,
+# then the turn's entries are appended (user messages carry their turn number)
+doc_test_session = function(turns, mode = "auto", kind = "chat", home = new.env()) {
+  s = session_new("fake/fake-1", mode, home = home, kind = kind)
+  d = session_data(s)
+  for (entries in turns) {
+    d$turns = d$turns + 1L
+    for (e in entries) session_append(s, e)
+  }
+  s
+}
+
+# The entries of one turn: the prompt, one r call with its result, the final answer
+doc_test_turn = function(code, note = NULL, outputs = character(), status = "ok", record = TRUE,
+                         prompt = "count rows", answer = "There are 32 rows.", value = NULL,
+                         id = "call_1") {
+  usage = function(i, o) {
+    list(input = i, output = o, cache_read = 0, cache_write_5m = 0, cache_write_1h = 0,
+         cost = list(total = 0))
+  }
+  args = list(code = code)
+  if (!is.null(note)) args$note = note
+  list(
+    list(type = "message", message = msg_user(prompt, source = "prompt")),
+    list(type = "message", message = msg_assistant(
+      list(block_tool_call(id, "r", args)), api = "fake", provider = "fake",
+      model = "fake-1", usage = usage(100, 20), stop_reason = "tool_use")),
+    list(type = "message", message = msg_tool_result(
+      id, "r", "[1] 32", is_error = !identical(status, "ok"),
+      details = list(code = code, record = record, note = note, status = status,
+                     outputs = outputs, value = value))),
+    list(type = "message", message = msg_assistant(
+      answer, api = "fake", provider = "fake", model = "fake-1", usage = usage(150, 10)))
+  )
+}
+
+test_that("recorded code drops gptr_return() and record = FALSE members and rewrites arrows", {
+  arrow = paste0("<", "-")
+  code = c(paste("fit", arrow, "lm(mpg ~ wt, data = mtcars)"), "gptr_return(fit)",
+           "gptr$out(\"o1a2b3\")", "hits = gptr$grep(\"mtcars\")",
+           paste0("x ", arrow, " \"a ", arrow, " b\"; gptr::gptr_return(x)"),
+           paste0("f(y ", arrow, " 1)"), "{", paste0("  z ", arrow, " 2"), "}",
+           paste0("g = function() { w ", arrow, " 3 }"), paste0("a <", arrow, " 1"), "dt[, b := 2]",
+           paste("p", arrow, "q", arrow, "4"), paste0("if (TRUE) v ", arrow, " 5"))
+  out = doc_code_clean(code)
+  expect_identical(as.character(out), c(
+    "fit = lm(mpg ~ wt, data = mtcars)", "hits = gptr$grep(\"mtcars\")",
+    paste0("x = \"a ", arrow, " b\""), paste0("f(y ", arrow, " 1)"), "{", "  z = 2", "}",
+    paste0("g = function() { w ", arrow, " 3 }"), paste0("a <", arrow, " 1"), "dt[, b := 2]",
+    paste("p = q", arrow, "4"), paste0("if (TRUE) v ", arrow, " 5")))
+  expect_identical(attr(out, "kept"), c(TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE,
+                                        TRUE, TRUE, TRUE, TRUE))
+  expect_identical(as.character(doc_code_clean("gptr_return(fit)")), character())
+  expect_identical(as.character(doc_code_clean("x = 1 +")), "x = 1 +")
+  expect_null(attr(doc_code_clean("x = 1 +"), "kept"))
+  expect_identical(as.character(doc_code_clean(c("", "x = 1", ""))), "x = 1")
+})
+
+test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 characters", {
+  out = doc_output_lines(as.character(1:20), max_lines = 12L)
+  expect_length(out, 13L)
+  expect_identical(out[13], "#> ... (8 more lines)")
+  expect_identical(doc_output_lines(strrep("x", 100), max_lines = 12L)[1],
+                   paste0("#> ", strrep("x", 76)))
+  expect_identical(doc_output_lines(character()), character())
+  expect_identical(doc_output_lines("a\nb"), c("#> a", "#> b"))
+  expect_identical(doc_output_lines(list(character(), "[1] 4", c("x", "y"))),
+                   c("#> [1] 4", "#> x", "#> y"))
+  local_gptr_options(doc_output_lines = 1L)
+  expect_identical(doc_output_lines(c("a", "b")), c("#> a", "#> ... (1 more lines)"))
+})
+
+test_that("turn entries follow P06's turn stamps", {
+  s = doc_test_session(list(doc_test_turn("a = 1", prompt = "one"),
+                            doc_test_turn("b = 2", prompt = "two")))
+  expect_length(doc_path_entries(s), 8L)
+  t2 = doc_turn_entries(s, 2L)
+  expect_length(t2, 4L)
+  expect_identical(msg_text(t2[[1]]$message), "two")
+  expect_identical(doc_turn_entries(s, 3L), list())
+})
+
+test_that("a turn's block holds recorded code, outputs, decision, value and header facts", {
+  arrow = paste0("<", "-")
+  s = doc_test_session(list(doc_test_turn(paste("n_rows", arrow, "nrow(mtcars)\nn_rows"),
+                                          note = "count rows", outputs = "[1] 32",
+                                          value = "n_rows")))
+  site = list(format = "r", prompt_hash = prompt_hash("count rows"), args_hash = NULL,
+              template = "count rows")
+  lines = doc_block_lines(s, 1L, site, 1L)
+  expect_identical(as.character(lines), c("n_rows = nrow(mtcars)", "n_rows", "#> [1] 32",
+                                          "## Decision: count rows"))
+  h = attr(lines, "header")
+  expect_identical(h$model, "fake/fake-1")
+  expect_identical(h$prompt, prompt_hash("count rows"))
+  expect_identical(h$value, "n_rows")
+  expect_identical(h$turn, 1L)
+  expect_identical(h$tokens, "250/30")
+  expect_identical(h$session, session_data(s)$id)
+  expect_null(h$call)
+  expect_identical(attr(lines, "answer"), "There are 32 rows.")
+  rmd = doc_block_lines(s, 1L, utils::modifyList(site, list(format = "rmd")), 1L)
+  expect_false(any(grepl("^#>", rmd)))
+  expect_identical(attr(doc_block_lines(s, 1L, site, 2L), "header")$call, 2L)
+})
+
+test_that("the output of a dropped expression is dropped with it when outputs are per expression", {
+  code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\ngptr$out(\"o1a2b3c\", lines = 1)"
+  s = doc_test_session(list(doc_test_turn(code, outputs = list(character(), character(),
+                                                                "[1] \"line\""))))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), "fit = lm(mpg ~ wt, data = mtcars)")
+  # P10 flattens outputs into one character vector: the code is still dropped, the printed
+  # line stays as a #> comment (it cannot be told apart)
+  flat = doc_test_session(list(doc_test_turn(code, outputs = "[1] \"line\"")))
+  flat_lines = doc_block_lines(flat, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(flat_lines),
+                   c("fit = lm(mpg ~ wt, data = mtcars)", "#> [1] \"line\""))
+})
+
+test_that("child answers map to the block's direct gptr() calls by prompt, not creation order", {
+  code = paste0("subs = lapply(1:2, function(i) gptr(paste(\"part\", i)))\n",
+                "total = gptr(\"Summarise the parts\")")
+  s = doc_test_session(list(doc_test_turn(code)))
+  kid = function(prompt, text) {
+    k = doc_test_session(list(doc_test_turn("x = 1", prompt = prompt, answer = text)))
+    kd = session_data(k)
+    kd$last_text = text
+    k
+  }
+  sd = session_data(s)
+  sd$children = list(a = kid("part 1", "one"), b = kid("part 2", "two"),
+                     c = kid("Summarise the parts", "both"))
+  parts = attr(doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L),
+               "children")
+  expect_named(parts, "n1")
+  expect_identical(parts$n1$text, "both")
+  expect_identical(parts$n1$sent, prompt_hash("Summarise the parts"))
+  expect_identical(doc_nested_parts(character(), sd$children), list())
+})
+
+test_that("failed and unrecorded calls are left out and plan-mode turns give one Plan line", {
+  s = doc_test_session(list(doc_test_turn("stop('x')", status = "error", id = "c1"),
+                            doc_test_turn("head(mtcars)", record = FALSE, id = "c2",
+                                          prompt = "b")))
+  site = list(format = "r", template = "count rows")
+  expect_identical(as.character(doc_block_lines(s, 1L, site, 1L)), character())
+  expect_identical(as.character(doc_block_lines(s, 2L, site, 1L)), character())
+  plan = doc_test_turn("x = 1")
+  plan = c(plan, list(list(type = "custom", custom_type = "gptr.plan",
+                           data = list(path = ".gptr/plans/2026-09-29-tidy.md"))))
+  p = doc_test_session(list(plan), mode = "plan")
+  expect_identical(as.character(doc_block_lines(p, 1L, site, 1L)),
+                   "## Plan: .gptr/plans/2026-09-29-tidy.md")
+})
+
+test_that("steers and follow-ups delivered during the turn are recorded as comment lines", {
+  turn = doc_test_turn("x = 1")
+  relay = list(type = "custom_message", message = msg_operator(
+    "steer_relay", "The user sent this message while you were working: use TPM",
+    origin_text = "use TPM"))
+  follow = list(type = "message", message = msg_user("and plot it", source = "follow_up"))
+  early = list(type = "message", message = msg_user("use log scale", source = "steer"))
+  s = doc_test_session(list(c(turn[1], list(early), turn[2:3], list(relay), turn[4],
+                              list(follow))))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), c("## Steer: use log scale", "x = 1", "## Steer: use TPM",
+                                          "## Follow-up: and plot it"))
+  expect_identical(attr(lines, "header")$turn, 1L)
+})
+
+test_that("secret markers become Sys.getenv() and an unreplayable one flags the block", {
+  # entries are redacted at ingress (P06), so recorded code holds markers, never values
+  s = doc_test_session(list(doc_test_turn("k = \"[secret:DOC_TEST_KEY]\"\nn = nchar(k)")))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines), c("k = Sys.getenv(\"DOC_TEST_KEY\")", "n = nchar(k)"))
+  s2 = doc_test_session(list(doc_test_turn("h = \"Bearer [secret:DOC_TEST_KEY]\"")))
+  flagged = doc_block_lines(s2, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(flagged), c("# gptr: block needs secrets that are not recorded",
+                                            "h = \"Bearer [secret:DOC_TEST_KEY]\""))
+  expect_identical(doc_history_code(character()), list(lines = character(), secrets = FALSE))
+})
+
+test_that("an overlay fork's block is wrapped in local() on its gptr_resume(block =) home", {
+  home = new.env()
+  overlay = new.env(parent = home)
+  attr(overlay, "gptr_overlay") = "overlay of s0123456789"
+  f = doc_test_session(list(), home = overlay)
+  d = session_data(f)
+  d$fork_of = list(id = "s0123456789", entry = "9f3a1c2b", turn = 1L)
+  d$home_label = "overlay of s0123456789"
+  d$turns = 1L
+  d$turns = d$turns + 1L
+  for (e in doc_test_turn("qc_flags = 2", prompt = "Try 10%")) session_append(f, e)
+  lines = doc_block_lines(f, 2L, list(format = "r", template = "Try 10%"), 1L)
+  expect_identical(as.character(lines),
+                   c("local({", "  qc_flags = 2",
+                     paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\")$envir)")))
+  expect_identical(attr(lines, "header")$fork, "s0123456789:1")
+})
+
+test_that("a team block has one line per child, child overlays and export assignments", {
+  team = doc_test_session(list(), kind = "team")
+  td = session_data(team)
+  kid = function(name, model, text, exports = character(), code = NULL) {
+    k = doc_test_session(if (is.null(code)) list() else list(doc_test_turn(code)))
+    kd = session_data(k)
+    kd$model = model
+    kd$last_text = text
+    kd$exports = exports
+    k
+  }
+  td$children = list(stats = kid("stats", "anthropic/claude-opus-5-5", "Looks fine.\nMore."),
+                     code = kid("code", "openai/gpt-5.5", "Two bugs.", "fixed",
+                                "fixed = TRUE"))
+  lines = doc_block_lines(team, 1L, list(format = "r", template = "Review"), 1L)
+  code_id = session_data(td$children$code)$id
+  stats_id = session_data(td$children$stats)$id
+  expect_identical(as.character(lines), c(
+    "## Agent code (openai/gpt-5.5): Two bugs.", "local({", "  fixed = TRUE",
+    paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\", child = \"code\")$envir)"),
+    paste0("fixed = gptr_resume(block = \"", doc_block_token, "\", child = \"code\")$envir$fixed"),
+    "## Agent stats (anthropic/claude-opus-5-5): Looks fine."))
+  h = attr(lines, "header")
+  expect_identical(h$kind, "team")
+  expect_identical(h$children, paste0("code:", code_id, ",stats:", stats_id))
+  expect_named(attr(lines, "children"), c("code", "stats"))
+})
+
+# ---- Task 3 adaptations (IC-48, IC-62, IC-74, G6 5.6; dev/DEVIATIONS.md D-068) ----------------
+
+test_that("dropped code is cut by characters in UTF-8 and C locales, never by srcref bytes", {
+  arrow = paste0("<", "-")
+  e = "\u00e9"
+  emoji = "\U0001F600"
+  check = function(loc) {
+    withr::local_locale(c(LC_CTYPE = loc))
+    out = doc_code_clean(paste0("x ", arrow, " \"", e, e, "\"; gptr_return(x)"))
+    expect_identical(as.character(out), paste0("x = \"", e, e, "\""), info = loc)
+    out = doc_code_clean(paste0("y = \"", e, "\"; gptr$out(\"o1\"); z ", arrow, " 2"))
+    expect_identical(as.character(out), paste0("y = \"", e, "\"; z = 2"), info = loc)
+    expect_identical(attr(out, "kept"), c(TRUE, FALSE, TRUE), info = loc)
+    out = doc_code_clean(paste0("m ", arrow, " \"", emoji, "\t", e, "\"; gptr_return(m); n ",
+                                arrow, " 1"))
+    expect_identical(as.character(out), paste0("m = \"", emoji, "\t", e, "\"; n = 1"),
+                     info = loc)
+    expect_identical(as.character(doc_code_clean(paste0("w ", arrow, " \"", e, "\""))),
+                     paste0("w = \"", e, "\""), info = loc)
+  }
+  check("C")
+  settable = function(loc) {
+    old = Sys.getlocale("LC_CTYPE")
+    on.exit(Sys.setlocale("LC_CTYPE", old), add = TRUE)
+    nzchar(suppressWarnings(Sys.setlocale("LC_CTYPE", loc))) && isTRUE(l10n_info()[["UTF-8"]])
+  }
+  utf8 = Filter(settable, c("C.UTF-8", "en_US.UTF-8", "English_United States.utf8"))
+  if (!length(utf8)) skip("no UTF-8 locale")
+  check(utf8[[1L]])
+})
+
+test_that("a cut takes its own separator, keeps literals and runs without parse data", {
+  arrow = paste0("<", "-")
+  expect_identical(as.character(doc_code_clean("x = \"a;;b\"; gptr_return(x)")), "x = \"a;;b\"")
+  expect_identical(as.character(doc_code_clean("gptr_return(x); y = \"p; ;q\"")), "y = \"p; ;q\"")
+  expect_identical(as.character(doc_code_clean(c("x = 1; gptr_return(",
+                                                 paste0("  x); y ", arrow, " 2")))),
+                   "x = 1; y = 2")
+  expect_identical(as.character(doc_code_clean(c("x = 1; gptr_return(x) # done",
+                                                 "gptr$out('o1') # gone"))),
+                   "x = 1 # done")
+  # sys.source() turns parse data off while the sourced code runs
+  withr::local_options(keep.parse.data = FALSE)
+  expect_identical(as.character(doc_code_clean(paste("a", arrow, "1"))), "a = 1")
+})
+
+test_that("only a literal that is exactly a secret marker becomes Sys.getenv() (G6 5.6)", {
+  out = doc_history_code(c("k = \"[secret:K_ONE]\"", "q = '[secret:K_TWO]'",
+                           "system(\"TOKEN='[secret:GH_TOKEN]' git push\")"))
+  expect_identical(out$lines, c("k = Sys.getenv(\"K_ONE\")", "q = Sys.getenv(\"K_TWO\")",
+                                "system(\"TOKEN='[secret:GH_TOKEN]' git push\")"))
+  expect_true(out$secrets)
+})
+
+test_that("an emptied chunk drops all its output, even flat; digests and paths stay", {
+  s = doc_test_session(list(doc_test_turn("gptr$out(\"o1a2b3c\", lines = 1)", note = "show it",
+                                          outputs = "[1] \"line\"")))
+  site = list(format = "r", template = "count rows")
+  expect_identical(as.character(doc_block_lines(s, 1L, site, 1L)), "## Decision: show it")
+  turn = doc_test_turn("st = gptr$sh(\"git status --porcelain\")", note = "check the tree")
+  turn[[3L]]$message$details$bridge = c("#> sh git status --porcelain: exit 0, 6 lines",
+                                        "py import pandas: ok")
+  turn[[3L]]$message$details$artifacts = c(".gptr/artifacts/qc-app/app.R", "plots/p1.png")
+  b = doc_test_session(list(turn))
+  expect_identical(as.character(doc_block_lines(b, 1L, site, 1L)),
+                   c("st = gptr$sh(\"git status --porcelain\")",
+                     "#> sh git status --porcelain: exit 0, 6 lines", "#> py import pandas: ok",
+                     "#> [app] .gptr/artifacts/qc-app/app.R", "#> [plot] plots/p1.png",
+                     "## Decision: check the tree"))
+})
+
+test_that("a local model keeps its tag and unknown usage is never summed (IC-74)", {
+  site = list(format = "r", template = "count rows")
+  turn = doc_test_turn("x = 1")
+  turn[[4L]]$message$provider = "ollama"
+  turn[[4L]]$message$model = "qwen3:8b"
+  turn[[4L]]$message$usage$input = NA_real_
+  h = attr(doc_block_lines(doc_test_session(list(turn)), 1L, site, 1L), "header")
+  expect_identical(h$model, "ollama/qwen3:8b")
+  expect_null(h$tokens)
+  expect_null(h$cost)
+  priced = doc_test_turn("x = 1")
+  priced[[2L]]$message$usage$cost$total = 0.01
+  priced[[4L]]$message$usage$cost$total = 0.0023
+  h = attr(doc_block_lines(doc_test_session(list(priced)), 1L, site, 1L), "header")
+  expect_identical(h$tokens, "250/30")
+  expect_identical(h$cost, "0.0123")
+  priced[[4L]]$message$usage$cost$total = NA_real_
+  h = attr(doc_block_lines(doc_test_session(list(priced)), 1L, site, 1L), "header")
+  expect_null(h$cost)
+})
+
+test_that("wrapped code keeps multi-line strings; team children without text or with secrets", {
+  expect_identical(doc_wrap_local(c("x = \"a", "b\"", "y = 1")),
+                   c("local({", "  x = \"a", "b\"", "  y = 1",
+                     paste0("}, envir = gptr_resume(block = \"", doc_block_token, "\")$envir)")))
+  team = doc_test_session(list(), kind = "fanout")
+  td = session_data(team)
+  quiet = doc_test_session(list())
+  qd = session_data(quiet)
+  qd$model = "fake/fake-1"
+  keyed = doc_test_session(list(doc_test_turn("h = \"Bearer [secret:DOC_TEST_KEY]\"")))
+  kd = session_data(keyed)
+  kd$model = "fake/fake-1"
+  kd$last_text = "Done."
+  kd$exports = "h"
+  td$children = list(a = quiet, b = keyed)
+  lines = doc_block_lines(team, 1L, list(format = "r", template = "Fan"), 1L)
+  expect_identical(as.character(lines)[1:3],
+                   c(doc_secret_flag, "## Agent a (fake/fake-1):",
+                     "## Agent b (fake/fake-1): Done."))
+  expect_identical(attr(lines, "children")$a$text, NA_character_)
+  expect_identical(attr(lines, "header")$kind, "fanout")
+})
+
+# ---- Task 3 review round 1 (IC-48, contract 11.5, G6 5.6; dev/DEVIATIONS.md D-068) -------------
+
+test_that("dropped expressions that share a line with each other are cut, not kept", {
+  e = "\u00e9"
+  check = function(loc) {
+    withr::local_locale(c(LC_CTYPE = loc))
+    out = doc_code_clean(c("a = 1; gptr$out(", "  'o1'); gptr$plot()"))
+    expect_identical(as.character(out), "a = 1", info = loc)
+    expect_identical(attr(out, "kept"), c(TRUE, FALSE, FALSE), info = loc)
+    out = doc_code_clean(c("gptr_return(x); gptr$plot(", "  'a'); b = 2"))
+    expect_identical(as.character(out), "b = 2", info = loc)
+    expect_identical(attr(out, "kept"), c(FALSE, FALSE, TRUE), info = loc)
+    out = doc_code_clean(c(paste0("x = \"", e, "\"; gptr$out("), "  'o1'); gptr$plot(\"p\") # p",
+                           paste0("gptr_return(x); y = \"", e, "\"")))
+    expect_identical(as.character(out), c(paste0("x = \"", e, "\""), paste0("y = \"", e, "\"")),
+                     info = loc)
+    out = doc_code_clean(c("a = 1", "gptr$out(1); gptr$plot(", "  2) # gone", "b = 2"))
+    expect_identical(as.character(out), c("a = 1", "b = 2"), info = loc)
+  }
+  check("C")
+  check(Sys.getlocale("LC_CTYPE"))
+})
+
+test_that("a marker that a redaction rule writes stays a marker and flags the block", {
+  out = doc_history_code(c("tok = \"[secret:jwt]\"", "k = \"[secret:K_ONE]\""))
+  expect_identical(out$lines, c("tok = \"[secret:jwt]\"", "k = Sys.getenv(\"K_ONE\")"))
+  expect_true(out$secrets)
+  s = doc_test_session(list(doc_test_turn("tok = \"[secret:jwt]\"\nhttr_get(tok)")))
+  lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
+  expect_identical(as.character(lines),
+                   c(doc_secret_flag, "tok = \"[secret:jwt]\"", "httr_get(tok)"))
+  off = gptr_register(gptr_spec("redaction_rule", "doc-mrn", pattern = "MRN[0-9]{8}",
+                                anchor = "MRN", marker = "doc_mrn"))
+  withr::defer(off())
+  out = doc_history_code("id = '[secret:doc_mrn]'")
+  expect_identical(out$lines, "id = '[secret:doc_mrn]'")
+  expect_true(out$secrets)
+})
+
+test_that("token counts in the header are never written in scientific notation", {
+  turn = doc_test_turn("x = 1")
+  turn[[2L]]$message$usage$input = 99850
+  h = attr(doc_block_lines(doc_test_session(list(turn)), 1L,
+                           list(format = "r", template = "count rows"), 1L), "header")
+  expect_identical(h$tokens, "100000/30")
+})

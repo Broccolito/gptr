@@ -3394,3 +3394,123 @@ Validation: `progress/P07.md`, Task 6. Three tests added (8 expectations), inclu
 pins the contract 7.7 signature; on the plan literal they fail 1
 (`dev/.validation/P07/task6-fix1-plan-literal.log`: the null setting gave 200,000 instead of
 900,000). Final `^prompt-compact$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 18 ]`.
+
+## D-068 - P15 recorded block content: dropped code is cut by parse columns, never srcref bytes (IC-62), with only its own separator; parse data is kept under sys.source(); only an exact marker literal becomes Sys.getenv(); an emptied chunk keeps no output; unknown usage is never summed (IC-74); wrapped code keeps multi-line strings; team children without a report or with secrets (2026-10-04)
+
+P15 Task 3's plan-literal block content (`R/doc-blocks.R`) was changed in eight ways. The
+interfaces of contract 7.15 (`doc_block_lines(session, turn, site, call_ordinal)` and its
+attributes) and the helpers the plan lists are unchanged; `doc_drop_ranges()` keeps its name and
+arguments and may now return `NULL`; new internal helpers: `doc_byte_cols()`, `doc_join_cut()`,
+`doc_same_exprs()`, `doc_secret_literals()`, `doc_rule_markers()`, `doc_string_tails()`,
+`doc_turn_usage()`.
+1. **Dropped code is cut by characters (IC-48 "verbatim except", IC-62).** The plan cut each
+   line's bytes at the srcref byte fields (elements 2 and 4). In a UTF-8 locale R 4.5.0 reports
+   those fields shifted after a multi-byte character (scratch probe: for `x <- "éé";
+   gptr_return(x)` the second expression is bytes 14..27 but its srcref says 16..29), so the
+   plan cut the wrong bytes and wrote code that does not parse: `x = "éé"; gp`, `y = "é"; g z =
+   2`. In a C locale it parsed marked UTF-8, which the parser translates (`<U+00E9>`), so cuts
+   misfired (`x <- "éé"; gptr_return(`) and the arrow rewrite never matched a line holding a
+   non-ASCII literal. Now the code is parsed by Task 2's `doc_parse_text()`, and srcref and
+   parse-data columns are mapped to bytes by `doc_byte_cols()`, which counts as R's parser does
+   (a column per character when the text is read as UTF-8, a column per byte otherwise, a tab to
+   the next multiple of 8): 1,994 tokens of 400 generated lines with tabs, accented, CJK and
+   4-byte characters map to their exact text in both locales
+   (`dev/.validation/P15/task3-probe-colmap.log`). A cut whose result does not parse back to
+   exactly the kept expressions leaves the chunk as written (`kept` all `TRUE`). A dropped
+   expression spanning lines that it shares with kept code is now cut too (the plan left it in).
+   The cut is the exact text of each dropped expression plus every whole line that dropped
+   expressions touch and kept ones do not (its comments included); overlapping cuts are merged,
+   so dropped expressions that share lines with each other go together (review round 1: a
+   first version deleted such a line for one expression while cutting the other partially, the
+   result did not parse back, and the chunk was kept as written with its `gptr$out()` and
+   `gptr$plot()` calls; a 1,500-chunk fuzz in both locales now has no refused cut where the
+   first version refused 65, `dev/.validation/P15/task3-fix1-fuzz.log`).
+   In a C locale code with a non-ASCII identifier does not parse (nor does Rscript run it there)
+   and is kept as written.
+2. **Only the dropped expression's own `;` goes.** The plan cleaned a cut line with whole-line
+   regexes, which edited string literals: `x = "a;;b"; gptr_return(x)` became `x = "a;b"` and
+   `gptr_return(x); y = "p; ;q"` became `y = "p;q"`. `doc_join_cut()` touches only the two edges
+   of the cut: the separator after the expression, else the one before it.
+3. **Parse data under `sys.source()`.** The plan's arrow rewrite parsed with `parse()`, so with
+   `keep.parse.data = FALSE` (as `sys.source()` sets while the sourced script runs, D-064 item 2)
+   `getParseData()` was `NULL` and nothing was rewritten. `doc_parse_text()` keeps parse data.
+4. **Only a literal that is exactly a marker becomes `Sys.getenv()` (G6 5.6, self-review
+   ambiguity 16).** The plan's regex also rewrote a quoted marker inside a longer literal:
+   `system("TOKEN='[secret:GH_TOKEN]' git push")` became `system("TOKEN=Sys.getenv("GH_TOKEN")
+   git push")`, code that does not parse, and since no marker was left the block was not
+   flagged. `doc_secret_literals()` rewrites only `STR_CONST` tokens whose whole text is
+   `"[secret:NAME]"` or `'[secret:NAME]'`; any other marker stays and `code_for_history()` flags
+   the block. A marker that a redaction rule writes (the built-in and registered rules' fixed
+   markers, P03's `redact_known_markers()` without registered secrets; new helper
+   `doc_rule_markers()`) also stays, since it names the rule and not an environment variable:
+   the plan's regex and the first version turned a redacted JWT literal `"[secret:jwt]"` into
+   `Sys.getenv("jwt")` with no flag (review round 1). A marker that the `named-secret` rule
+   writes carries the variable's name and cannot be told apart from a registered secret's, so
+   it is still rewritten as ambiguity 16 says.
+5. **An emptied chunk keeps no output (IC-48).** When every expression of a call is dropped, all
+   its printed output belongs to dropped expressions, so it is dropped even from P10's flat
+   output vector (the plan kept, for example, the printed line of a lone `gptr$out(id, lines =
+   1)`). The call's `## Decision:` line, bridge digests and artifact references stay. Partly
+   dropped calls with flat output keep their output as self-review ambiguity 18 says.
+6. **Unknown usage is never summed (IC-74 section 5: "Missing usage remains unknown").** The
+   plan summed with `na.rm = TRUE` and counted a message without usage as zero, so an unknown
+   input count gave a too-small `tokens=` (`150/30` instead of unknown) and an unknown cost an
+   understated `cost=`. `tokens=` and `cost=` are now written only when every assistant message
+   of the turn reports them (`doc_turn_usage()`). `model=` is the provider and model of the
+   recorded answer, so a local model keeps its tag (`ollama/qwen3:8b`, tested; the plan already
+   did this).
+7. **Wrapped code keeps multi-line strings.** `doc_wrap_local()` indented every body line,
+   including the continuation lines of a multi-line string literal, which changes the string
+   when the document is sourced; those lines are no longer indented (`doc_string_tails()`). The
+   child name is written with `doc_str_literal()`.
+8. **Team and fan-out children.** A child without a report (`last_text` NA) gave
+   `## Agent a (<model>): NA` and the S2 text `"NA"`; now the line ends at the colon and the text
+   stays `NA`. A child's exported code whose secret marker stays now flags the team block
+   (contract 11.5); the plan's `doc_session_code()` dropped the flag. That code is now taken from
+   the recorded code itself instead of by removing body lines that start with `#`, which also
+   removed lines of a multi-line string that start with `#`.
+
+Not changed: an upper bound on the creation time of a turn's children was tried and reverted;
+the plan's fixture creates the children after the turn's entries, and blocks are written for the
+run's own turn at `agent_end`. Also: `spec[["record"]]` is read exactly, and
+`doc_path_entries()` follows P06's id index (falling back to `match()`), which only saves time.
+The `tokens=` header is written with `sprintf("%.0f/%.0f")`; the plan's `paste0(round())`
+wrote `1e+05/30` for 100,000 input tokens (review round 1).
+
+Validation: `progress/P15.md`, Task 3. The plan's 11 tests are unchanged; 6 tests (29
+expectations) were added, and on the plan literal 20 of them fail
+(`dev/.validation/P15/task3-adapt-red.log`). Review round 1 added 3 tests (18 expectations), of
+which 16 failed before its fixes (`dev/.validation/P15/task3-fix1-red.log`). Final
+`^doc-blocks$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 249 ]`, the same under `LC_ALL=C LANG=C`.
+
+## D-069 - P07 frozen prompt: the floor check counts the project instructions for the audience being frozen, cut re-injection budgets are recorded in gptr.frozen and survive a restore (2026-10-04)
+
+P07 Task 7 (`R/prompt-sections.R`, one line of `R/prompt-context.R`). The contract 7.7 signature
+`prompt_freeze(s, opts = list())`, the `prompt.freeze` service, `prompt_floor_check(frozen,
+project_tokens, skills_budget = 0)`, the IC-71 formula and refusal, and the plan's 25
+expectations are unchanged.
+
+1. The plan rendered the project instructions for the floor with
+   `context_block_by_name(s, "project_instructions", list(turn, placement, preview))` before
+   `.d$frozen` exists, so Task 5's `context_input()` took the audience from `gptr_can_prompt()`
+   instead of the `interactive` value the freeze composes with (P06's `run_freeze()` passes the
+   run's audience). In an untrusted project in `auto` or `edits`, where IC-52 withholds the
+   project files from a run nobody attends, the floor then counted files the first message
+   would not send, or missed files it would send, and IC-71 could accept a model it must refuse
+   or refuse one it must accept. `prompt_freeze()` now passes `human = frozen$human`, and
+   `context_input()` takes `input$human` before `.d$frozen$human` (nothing else passes it).
+2. `gptr.frozen` carries `reinject` when the floor check cut the budgets (finite, non-negative
+   `project` and `skills`), and `prompt_frozen_restore()` reads it back, else the full budgets
+   (`project = Inf`, `skills = 10000`) as in the plan. With the plan literal a restored session
+   re-injected the full budgets, losing the cut IC-71 makes at freeze. Uncut budgets are not
+   written (`Inf` has no JSON number). An extra key, like the plan's own `human` (contract 11:
+   readers ignore unknown keys).
+
+Open for P06 (not changed here): `rebuild_frozen()` (`R/session-store.R`), the resume path of
+`store_rebuild()`, copies neither `human` nor `reinject` from `gptr.frozen`, so a session resumed
+from its file renders for `gptr_can_prompt()` and re-injects the full budgets until it reads both
+as P07's restore does.
+
+Validation: `progress/P07.md`, Task 7. Two tests (12 expectations) were added; on the plan
+literal 4 of them fail (`dev/.validation/P07/task7-plan-literal.log`). Final
+`^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 222 ]`.
