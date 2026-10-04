@@ -19,6 +19,15 @@ Resume log (newest last):
   test-first (red 23, green 340; reactor/request 276; proc 269; lint clean; D-012).
   Hosted CI on `8e8d8e0` (first push of `main`) is red on Ubuntu/macOS and the
   connection job: diagnosis under way before the M0 gate.
+- 2026-10-03/04: **P05 complete locally**: Tasks 8-12 committed (`7633ff1`, `add014a`,
+  `ec8b786`, `e66da6f`, `6d4dd39`), each with independent review; plan acceptance
+  `df47cbe` passed every row (1,472 P05 assertions, offline `gptr_models("sonnet")`
+  0.012 s installed, whole-package lint clean). IC-74 decisions D-014, D-015, D-017,
+  D-018, D-020. Hosted CI corrections `118f78b` (D-016) and Windows process portability
+  `90a43f5` (D-019); superseded CI runs now auto-cancel (`d051686`). Evidence:
+  `progress/P05.md`, `progress/P05-usage.md`, `progress/ci-hosted.md`.
+- Lanes now running: **P06** (session kernel, Tasks 2-16) and, in parallel, **P12**
+  (native adapters; early lane on its P05-only dependencies, blocks if it needs P06/P07).
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
@@ -87,7 +96,7 @@ Resume log (newest last):
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
 | M0 Foundation | P01–P04 | paused; acceptance pending | All P01 tasks passed focused checks; integrated acceptance underway |
-| M1 Offline session kernel | P05–P08 | pending | — |
+| M1 Offline session kernel | P05–P08 | in progress | P05 plan acceptance passed locally (`df47cbe`); P06 underway |
 | M2 Live R agent and decisions | P09–P13 | pending | — |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
