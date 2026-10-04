@@ -2182,3 +2182,75 @@ expectations): the capture-mode device at a reused user number failed 2 before i
 fails 1 (`task6-fix1-mutant-nounlink.log`). Final `^eval-plots$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 66 ]` (`task6-fix1-green.log`), the same under `LC_ALL=C` with
 `_R_CHECK_SCREEN_DEVICE_=stop` (`task6-fix1-green-clocale.log`).
+
+## D-051 - P10 write engine: a file without a line ending is written as given, the 1 MiB sample ends on a whole character, a new file gets the umask's mode, ".." links climb as the kernel does, 40 links are followed, non-ASCII paths in a C locale, an unreadable file is written verbatim, a read-only file is refused (2026-10-04)
+
+P10 Task 5's plan-literal `R/tool-write.R` passes the plan's five blocks (20 expectations) but had
+these defects, each reproduced against that source (`dev/.validation/P10/task5-probe-plan-literal.log`,
+`task5-probe-plan-literal-clocale.log`; the plan-literal file is kept as
+`task5-plan-literal-tool-write.R`, the probe script as `task5-probe.R`):
+1. **A file without a line ending had its content's line endings rewritten.** An existing empty
+   or one-line file counted no CRLF, so its "dominant" line ending was LF and `a\r\nb\r\n`
+   became `a\nb\n`. Such a file has no convention to keep: `write_conventions()` now returns
+   `eol = "asis"` and the content is written as given (Pi, report 01 section 2.4); its encoding
+   and BOM are still kept. `details$eol` is `"asis"` there, the value new files already had.
+2. **A UTF-8 file whose 1 MiB sample ended inside a character read as CP1252.** With few
+   non-ASCII characters before the cut, `decode_raw()` counted the cut sequence as invalid bytes
+   and chose CP1252, so `é` was written as the single byte `0xE9` into a UTF-8 file and a CJK
+   character was refused with `cannot be represented in the file's encoding (CP1252)`. A sample
+   shorter than the file (without a BOM or with a UTF-8 BOM) is now cut back to a whole character
+   with Task 4's `utf8_trim_partial()` (report 11 section 2.2's rule for the read head).
+3. **Every new file was private (0600).** P01's `write_atomic()` creates its files with mode 0600
+   on purpose, for gptr's own state (`progress/P01.md`, "Independent review corrections after
+   Task 8"). Pi's `writeFile()` and editors create 0666 minus the umask (0644 under umask 022).
+   `write_bytes_keep_mode()` now applies `Sys.chmod(p, "0666", use_umask = TRUE)` to a file it
+   created (not on Windows); an existing file keeps its mode as before. Task 6's patch `Add File`
+   uses the same function and inherits this.
+4. **A relative link that climbs with ".." named the wrong file.** `resolve_link_target()` joined
+   the link text to the link's directory lexically, so `proj/linkdir/f.txt -> ../shared/f.txt`
+   with `proj/linkdir -> other/real` resolved to `proj/shared/f.txt` instead of the kernel's
+   `other/shared/f.txt`: the write created `proj/shared/` and a new file and left the real target
+   unchanged. The same held for an absolute link text and for a ".." after a symlinked component
+   inside the link text (`abs.txt -> <td>/proj/linkdir/../shared/f.txt`). A link text with a ".."
+   segment, relative or absolute, is now joined to the link's directory and handed to the new
+   `tool_path_physical()`, which resolves the longest existing leading part of the joined path
+   with `normalizePath()` (the kernel's order: each link before the ".." after it) and leaves the
+   rest, which does not exist yet, to the lexical `tool_path_norm()`. A dangling link into a
+   directory that does not exist yet (`<td>/proj/linkdir/../new/g.txt`) therefore creates
+   `other/new/g.txt`, as `mkdir -p` on the link text would. Link texts without ".." keep the
+   lexical join, so `details$path` keeps the caller's spelling (independent review round 1).
+5. **The hop limit was off by one.** The loop followed 40 links but never examined the 40th
+   target, so a chain of exactly 40 links (Linux's MAXSYMLINKS) was refused with `ELOOP`. Now 40
+   links are followed and the 41st is refused; a loop still gives `ELOOP`.
+6. **Non-ASCII paths failed in a C locale.** `dirname()` of a marked UTF-8 non-ASCII path raises
+   `unable to translate ... to native encoding` and `file.path()` turns it into `<U+00E9>`
+   escapes, so `write_file("déjà/fü.txt", ...)` failed under `LC_ALL=C` and a relative
+   link there would have been resolved to an escaped path. The new `tool_path_dir()` takes
+   `dirname()` of the unmarked bytes (`fs_path()`) and re-marks the result UTF-8; link texts are
+   joined with `paste0()`.
+7. **A file that may be written but not read (mode 0200) raised a base error** (`cannot open the
+   connection`, with a warning) while reading the sample. Its conventions are unknown, so it is
+   now written as given, like a binary file, and keeps its mode (Pi's `writeFile()` succeeds
+   there too).
+8. **A read-only file was replaced silently.** `write_atomic()` renames a temporary file over the
+   target, which needs only a writable directory, and `write_bytes_keep_mode()` then put the 0444
+   mode back, so `write` rewrote a file that Pi's `writeFile()` refuses with `EACCES` and that
+   Task 6's `edit_compute()` refuses with `Could not edit file: <path>. Error code: EACCES.`
+   `write_file()` now checks `file.access(target, 2L)` for an existing (link-resolved) target and
+   raises `EACCES: permission denied, open '<path>'` (`gptr_error_invalid_argument`, Node's text,
+   the absolute path as given) before encoding anything; the file is left unchanged. A file in a
+   read-only directory still fails in `write_atomic()` with `gptr_error_doc_write`
+   (independent review round 1).
+
+The `EISDIR` check also runs on the resolved target, so a resolution that lands on a directory is
+refused instead of failing in the rename. Interfaces are unchanged: `write_file(path, content)`
+and its result, `resolve_link_target(p, max_hops = 40L)`, `write_bytes_keep_mode(target, bytes)`
+-> `invisible(existed)`. Internal additions: `write_sniff_bytes`, `tool_path_dir()`,
+`tool_path_physical()`.
+
+Validation: `progress/P10.md`, Task 5. Seven blocks (32 expectations) were added to the plan's
+five blocks, which are unchanged. Against the plan-literal source the test file of that time gave
+`[ FAIL 14 | WARN 0 | SKIP 0 | PASS 24 ]` (`task5-red-plan-literal.log`; every failure is in an
+added block). Review round 1 added two blocks (12 expectations) for items 4 and 8, red before the
+fix (`[ FAIL 8 | WARN 1 | SKIP 0 | PASS 55 ]`, `task5-fix1-red.log`). Final `^tool-write$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 64 ]`, the same under `LC_ALL=C`.
