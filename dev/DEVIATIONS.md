@@ -925,3 +925,41 @@ Review round 1: the image-bridge regression assertions failed against the round'
 `reasoning` flag from the message memo key each fail one new memo assertion; final
 `^provider-openai-completions$` [ FAIL 0 | WARN 0 | SKIP 1 | PASS 274 ].
 
+## D-031 - P12 Responses normaliser: IC-74 usage, typed status and error codes, items found by id (2026-10-04)
+
+P12 Task 6's plan-literal `responses_normaliser()` (`R/provider-openai-responses.R`, the `parse`
+of the `openai-responses` adapter) was changed in the four ways below. Task 7 (the request
+builder and `builtin:openai`), P06's usage rows and P24 consume it.
+
+1. **IC-74 usage** (07-local-ollama.md section 5: "Missing usage remains unknown"; D-022, D-027).
+   The plan read every usage field with `%||% 0`, so a reported null became a known zero.
+   `responses_usage()` now follows D-027's rule with Task 4's helpers (`completions_count()`,
+   `completions_first()`): a field left out keeps P05's legacy zero, a reported null (or a value
+   that is not a nonnegative number) is `NA`, and `"usage": null` is no report. Usage that
+   `response.failed` reports is recorded on the error's partial message; the plan dropped it. The
+   hand-written goldens of `failed` and `truncated` (no usage on the wire) record unknown usage
+   (`g_usage_unknown()`, as D-027 point 2 requires); the plan wrote zeros, which the D-022 core
+   no longer produces.
+2. **Contract-typed status and codes** (04 sections 2.2, 4.2; D-022 point 3). A `status`,
+   `incomplete_details.reason` or error `code` that is not one string is never used as text
+   (`responses_str()`): the plan built `raw_stop_reason` `"7.max_output_tokens"` from a numeric
+   status, classified `list("server_error")` as a retryable overload and threw on a vector code.
+   A terminal response without a `status` takes it from its event (`response.completed` is
+   `completed`, so `stop`; the plan gave `error`), as Pi's `mapStopReason()` does.
+3. **Every error shape is read** (08 section 3.3). An SSE `event: error` whose data has no `type`,
+   and a `data` object with only an `error` member, are error events (the plan ignored them and
+   later reported a truncated stream); an error given as a bare string is the provider's message
+   (the plan's `err$code` threw, giving an `internal` error).
+4. **Items found by `item_id`, then `output_index`; malformed items stay harmless.** Stream fields
+   are read with `[[`. A delta that carries only `item_id` reaches its item (the plan's
+   `as.character(NULL)` key threw), an item that is not an object is ignored, a message item
+   without an id gets no signature (the plan wrote `{"v":1,"id":null}`), a done item without
+   `phase` keeps the phase of the added item, a function call without an `fc_` id keeps its call
+   id alone (the plan gave `call_z|`), and an empty summary or content list no longer blanks
+   streamed text.
+
+Validation: `progress/P12.md`, Task 6. The plan's six tests pass against the plan-literal source;
+the eight added tests fail 18 assertions there (2 null usages read as zero, the failed usage lost,
+the list code classified, the vector code throwing, the typeless SSE error, 2 for the bare-string
+error, 3 statuses, 2 for the `item_id` delta, 3 for the non-object item, 1 for `call_z|`, and the
+blanked thinking and text of empty done lists).

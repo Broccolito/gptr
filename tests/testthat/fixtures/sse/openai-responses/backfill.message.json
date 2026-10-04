@@ -1,0 +1,29 @@
+{
+  "stop_reason": "stop",
+  "raw_stop_reason": "completed",
+  "response_id": "resp_b1",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "Thinking."
+    },
+    {
+      "type": "opaque",
+      "json": "{\"type\":\"reasoning\",\"id\":\"rs_b1\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"Thinking.\"}],\"encrypted_content\":\"gAAAAB-backfilled==\"}"
+    },
+    {
+      "type": "text",
+      "text": "Done.",
+      "signature": "{\"v\":1,\"id\":\"msg_b1\",\"phase\":\"final_answer\"}"
+    }
+  ],
+  "usage": {
+    "input": 100,
+    "output": 10,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 4,
+    "total": 110
+  }
+}

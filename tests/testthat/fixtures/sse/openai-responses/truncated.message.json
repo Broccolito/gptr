@@ -1,0 +1,23 @@
+{
+  "stop_reason": "error",
+  "error_message": "The Responses stream ended before a terminal response event.",
+  "response_id": "resp_t1",
+  "content": [
+    {
+      "type": "tool_call",
+      "id": "call_t1|fc_t1",
+      "name": "read",
+      "arguments": {},
+      "raw_arguments": "{\"path\":"
+    }
+  ],
+  "usage": {
+    "input": null,
+    "output": null,
+    "cache_read": null,
+    "cache_write_5m": null,
+    "cache_write_1h": null,
+    "reasoning": null,
+    "total": null
+  }
+}

@@ -498,3 +498,303 @@ write_case(
   g_msg("error", err = "The stream ended without a finish_reason.", rid = "chatcmpl-1",
         content = list(g_text("Half")), usage = g_usage_unknown())
 )
+
+# ============================================================================================
+# openai-responses
+# ============================================================================================
+o = "openai-responses"
+txt = "data frame \u00e9 \u2713."
+
+rs_done = js(
+  '{"id":"rs_fixture1","type":"reasoning",',
+  '"summary":[{"type":"summary_text",',
+  '"text":"**Planning** Need nrow of the data."}],',
+  '"encrypted_content":"gAAAAB-fixture-opaque-blob==",',
+  '"status":"completed"}'
+)
+
+msg_done = js(
+  '{"id":"msg_fixture1","type":"message","role":"assistant",',
+  '"status":"completed","phase":"commentary",',
+  '"content":[{"type":"output_text","text":"Checking the ',
+  txt,
+  '","annotations":[]}]}'
+)
+
+fc_done = js(
+  '{"id":"fc_fixture1","type":"function_call","status":"completed",',
+  '"call_id":"call_fixture1","name":"r",',
+  '"arguments":"{\\"code\\":\\"nrow(big_df)\\"}"}'
+)
+
+o_tools = c(
+  ev("response.created", js(
+    '{"type":"response.created","response":{"id":"resp_fixture1",',
+    '"object":"response","status":"in_progress","model":"gpt-6-luna",',
+    '"output":[]},"sequence_number":1}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":0,',
+    '"item":{"id":"rs_fixture1","type":"reasoning","summary":[],',
+    '"status":"in_progress"},"sequence_number":2}'
+  )),
+  ev("response.reasoning_summary_part.added", js(
+    '{"type":"response.reasoning_summary_part.added",',
+    '"item_id":"rs_fixture1","output_index":0,"summary_index":0,',
+    '"part":{"type":"summary_text","text":""},"sequence_number":3}'
+  )),
+  ev("response.reasoning_summary_text.delta", js(
+    '{"type":"response.reasoning_summary_text.delta",',
+    '"item_id":"rs_fixture1","output_index":0,"summary_index":0,',
+    '"delta":"**Planning** Need nrow ","sequence_number":4}'
+  )),
+  ev("response.reasoning_summary_text.delta", js(
+    '{"type":"response.reasoning_summary_text.delta",',
+    '"item_id":"rs_fixture1","output_index":0,"summary_index":0,',
+    '"delta":"of the data.","sequence_number":5}'
+  )),
+  ev("response.output_item.done", js(
+    '{"type":"response.output_item.done","output_index":0,"item":',
+    rs_done,
+    ',"sequence_number":6}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":1,',
+    '"item":{"id":"msg_fixture1","type":"message","role":"assistant",',
+    '"status":"in_progress","phase":"commentary","content":[]},',
+    '"sequence_number":7}'
+  )),
+  ev("response.output_text.delta", js(
+    '{"type":"response.output_text.delta","item_id":"msg_fixture1",',
+    '"output_index":1,"content_index":0,"delta":"Checking the ",',
+    '"sequence_number":8}'
+  )),
+  ev("response.output_text.delta", js(
+    '{"type":"response.output_text.delta","item_id":"msg_fixture1",',
+    '"output_index":1,"content_index":0,"delta":"',
+    txt,
+    '","sequence_number":9}'
+  )),
+  ev("response.output_item.done", js(
+    '{"type":"response.output_item.done","output_index":1,"item":',
+    msg_done,
+    ',"sequence_number":10}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":2,',
+    '"item":{"id":"fc_fixture1","type":"function_call",',
+    '"status":"in_progress","call_id":"call_fixture1","name":"r",',
+    '"arguments":""},"sequence_number":11}'
+  )),
+  ev("response.function_call_arguments.delta", js(
+    '{"type":"response.function_call_arguments.delta",',
+    '"item_id":"fc_fixture1","output_index":2,"delta":"{\\"code\\":",',
+    '"sequence_number":12}'
+  )),
+  ev("response.function_call_arguments.delta", js(
+    '{"type":"response.function_call_arguments.delta",',
+    '"item_id":"fc_fixture1","output_index":2,',
+    '"delta":"\\"nrow(big_df)\\"}","sequence_number":13}'
+  )),
+  ev("response.function_call_arguments.done", js(
+    '{"type":"response.function_call_arguments.done",',
+    '"item_id":"fc_fixture1","output_index":2,',
+    '"arguments":"{\\"code\\":\\"nrow(big_df)\\"}","sequence_number":14}'
+  )),
+  ev("response.output_item.done", js(
+    '{"type":"response.output_item.done","output_index":2,"item":',
+    fc_done,
+    ',"sequence_number":15}'
+  )),
+  ev("response.completed", js(
+    '{"type":"response.completed","response":{"id":"resp_fixture1",',
+    '"object":"response","status":"completed","model":"gpt-6-luna",',
+    '"output":[',
+    rs_done,
+    ",",
+    msg_done,
+    ",",
+    fc_done,
+    '],"usage":{"input_tokens":812,',
+    '"input_tokens_details":{"cached_tokens":512,"cache_write_tokens":0},',
+    '"output_tokens":64,"output_tokens_details":{"reasoning_tokens":32},',
+    '"total_tokens":876}},"sequence_number":16}'
+  ))
+)
+rs_replay = js(
+  '{"type":"reasoning","id":"rs_fixture1",',
+  '"summary":[{"type":"summary_text",',
+  '"text":"**Planning** Need nrow of the data."}],',
+  '"encrypted_content":"gAAAAB-fixture-opaque-blob=="}'
+)
+
+msg_sig = '{"v":1,"id":"msg_fixture1","phase":"commentary"}'
+plan = "**Planning** Need nrow of the data."
+call_id = "call_fixture1|fc_fixture1"
+write_case(
+  o, "reasoning_tools", o_tools,
+  list(e_start("resp_fixture1"), e_open("thinking", 1L),
+       e_delta("thinking", 1L, "**Planning** Need nrow "),
+       e_delta("thinking", 1L, "of the data."), e_end("thinking", 1L, g_think(plan)),
+       e_open("text", 3L), e_delta("text", 3L, "Checking the "), e_delta("text", 3L, txt),
+       e_end("text", 3L, g_text(paste0("Checking the ", txt), msg_sig)),
+       e_tstart(4L, call_id, "r"), e_delta("toolcall", 4L, "{\"code\":"),
+       e_delta("toolcall", 4L, "\"nrow(big_df)\"}"),
+       e_end("toolcall", 4L, g_tool(call_id, "r", list(code = "nrow(big_df)"))),
+       e_done("tool_use")),
+  g_msg("tool_use", "completed", rid = "resp_fixture1", rmodel = "gpt-6-luna",
+        content = list(g_think(plan), g_opaque(rs_replay),
+                       g_text(paste0("Checking the ", txt), msg_sig),
+                       g_tool(call_id, "r", list(code = "nrow(big_df)"))),
+        usage = g_usage(300, 64, 512, reasoning = 32))
+)
+
+o_backfill = c(
+  ev("response.created", js(
+    '{"type":"response.created","response":{"id":"resp_b1",',
+    '"status":"in_progress","model":"fixture-1","output":[]}}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":0,',
+    '"item":{"id":"rs_b1","type":"reasoning","summary":[]}}'
+  )),
+  ev("response.reasoning_summary_text.delta", js(
+    '{"type":"response.reasoning_summary_text.delta","output_index":0,',
+    '"summary_index":0,"delta":"Thinking."}'
+  )),
+  ev("response.output_item.done", js(
+    '{"type":"response.output_item.done","output_index":0,',
+    '"item":{"id":"rs_b1","type":"reasoning",',
+    '"summary":[{"type":"summary_text","text":"Thinking."}]}}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":1,',
+    '"item":{"id":"msg_b1","type":"message","role":"assistant",',
+    '"phase":"final_answer","content":[]}}'
+  )),
+  ev("response.output_text.delta", js(
+    '{"type":"response.output_text.delta","output_index":1,',
+    '"content_index":0,"delta":"Done."}'
+  )),
+  ev("response.completed", js(
+    '{"type":"response.completed","response":{"id":"resp_b1",',
+    '"status":"completed","model":"fixture-1","output":[{"id":"rs_b1",',
+    '"type":"reasoning","summary":[{"type":"summary_text",',
+    '"text":"Thinking."}],"encrypted_content":"gAAAAB-backfilled=="},',
+    '{"id":"msg_b1","type":"message","role":"assistant",',
+    '"status":"completed","phase":"final_answer",',
+    '"content":[{"type":"output_text","text":"Done.",',
+    '"annotations":[]}]}],"usage":{"input_tokens":100,',
+    '"input_tokens_details":{"cached_tokens":0},"output_tokens":10,',
+    '"output_tokens_details":{"reasoning_tokens":4}}}}'
+  ))
+)
+rs_b1 = js(
+  '{"type":"reasoning","id":"rs_b1","summary":[{"type":"summary_text",',
+  '"text":"Thinking."}],"encrypted_content":"gAAAAB-backfilled=="}'
+)
+
+b1_sig = '{"v":1,"id":"msg_b1","phase":"final_answer"}'
+write_case(
+  o, "backfill", o_backfill,
+  list(e_start("resp_b1"), e_open("thinking", 1L), e_delta("thinking", 1L, "Thinking."),
+       e_end("thinking", 1L, g_think("Thinking.")), e_open("text", 3L),
+       e_delta("text", 3L, "Done."), e_end("text", 3L, g_text("Done.", b1_sig)),
+       e_done("stop")),
+  g_msg("stop", "completed", rid = "resp_b1",
+        content = list(g_think("Thinking."), g_opaque(rs_b1), g_text("Done.", b1_sig)),
+        usage = g_usage(100, 10, reasoning = 4))
+)
+
+# failed and truncated report no usage: it stays unknown (IC-74), never a zero
+o_failed = c(
+  ev("response.created", js(
+    '{"type":"response.created","response":{"id":"resp_f1",',
+    '"status":"in_progress","model":"fixture-1","output":[]}}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":0,',
+    '"item":{"id":"msg_f1","type":"message","role":"assistant",',
+    '"content":[]}}'
+  )),
+  ev("response.output_text.delta", js(
+    '{"type":"response.output_text.delta","output_index":0,',
+    '"content_index":0,"delta":"Partial"}'
+  )),
+  ev("response.failed", js(
+    '{"type":"response.failed","response":{"id":"resp_f1",',
+    '"status":"failed","error":{"code":"server_error",',
+    '"message":"The model failed to generate a response."}}}'
+  ))
+)
+write_case(
+  o, "failed", o_failed,
+  list(e_start("resp_f1"), e_open("text", 1L), e_delta("text", 1L, "Partial"),
+       e_error("overloaded", 503L)),
+  g_msg("error", err = "server_error: The model failed to generate a response.",
+        rid = "resp_f1", content = list(g_text("Partial")), usage = g_usage_unknown())
+)
+
+o_incomplete = c(
+  ev("response.created", js(
+    '{"type":"response.created","response":{"id":"resp_i1",',
+    '"status":"in_progress","model":"fixture-1","output":[]}}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":0,',
+    '"item":{"id":"msg_i1","type":"message","role":"assistant",',
+    '"content":[]}}'
+  )),
+  ev("response.output_text.delta", js(
+    '{"type":"response.output_text.delta","output_index":0,',
+    '"content_index":0,"delta":"Long answer"}'
+  )),
+  ev("response.output_item.done", js(
+    '{"type":"response.output_item.done","output_index":0,',
+    '"item":{"id":"msg_i1","type":"message","role":"assistant",',
+    '"status":"incomplete","content":[{"type":"output_text",',
+    '"text":"Long answer","annotations":[]}]}}'
+  )),
+  ev("response.incomplete", js(
+    '{"type":"response.incomplete","response":{"id":"resp_i1",',
+    '"status":"incomplete","incomplete_details":{"reason":"max_output_tok',
+    'ens"},"model":"fixture-1","output":[{"id":"msg_i1","type":"message",',
+    '"role":"assistant","status":"incomplete",',
+    '"content":[{"type":"output_text","text":"Long answer",',
+    '"annotations":[]}]}],"usage":{"input_tokens":50,',
+    '"input_tokens_details":{"cached_tokens":0},"output_tokens":16}}}'
+  ))
+)
+i1_sig = '{"v":1,"id":"msg_i1"}'
+write_case(
+  o, "incomplete", o_incomplete,
+  list(e_start("resp_i1"), e_open("text", 1L), e_delta("text", 1L, "Long answer"),
+       e_end("text", 1L, g_text("Long answer", i1_sig)), e_done("length")),
+  g_msg("length", "incomplete.max_output_tokens", rid = "resp_i1",
+        content = list(g_text("Long answer", i1_sig)), usage = g_usage(50, 16))
+)
+
+o_cut = c(
+  ev("response.created", js(
+    '{"type":"response.created","response":{"id":"resp_t1",',
+    '"status":"in_progress","model":"fixture-1","output":[]}}'
+  )),
+  ev("response.output_item.added", js(
+    '{"type":"response.output_item.added","output_index":0,',
+    '"item":{"id":"fc_t1","type":"function_call","call_id":"call_t1",',
+    '"name":"read","arguments":""}}'
+  )),
+  ev("response.function_call_arguments.delta", js(
+    '{"type":"response.function_call_arguments.delta","output_index":0,',
+    '"delta":"{\\"path\\":"}'
+  ))
+)
+write_case(
+  o, "truncated", o_cut,
+  list(e_start("resp_t1"), e_tstart(1L, "call_t1|fc_t1", "read"),
+       e_delta("toolcall", 1L, "{\"path\":"), e_error("network")),
+  g_msg("error", err = "The Responses stream ended before a terminal response event.",
+        rid = "resp_t1",
+        content = list(g_tool("call_t1|fc_t1", "read", obj(), raw = "{\"path\":")),
+        usage = g_usage_unknown())
+)

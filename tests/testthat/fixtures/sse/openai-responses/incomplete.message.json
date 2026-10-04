@@ -1,0 +1,21 @@
+{
+  "stop_reason": "length",
+  "raw_stop_reason": "incomplete.max_output_tokens",
+  "response_id": "resp_i1",
+  "content": [
+    {
+      "type": "text",
+      "text": "Long answer",
+      "signature": "{\"v\":1,\"id\":\"msg_i1\"}"
+    }
+  ],
+  "usage": {
+    "input": 50,
+    "output": 16,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 66
+  }
+}

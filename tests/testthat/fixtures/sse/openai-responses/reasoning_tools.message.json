@@ -1,0 +1,38 @@
+{
+  "stop_reason": "tool_use",
+  "raw_stop_reason": "completed",
+  "response_id": "resp_fixture1",
+  "response_model": "gpt-6-luna",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "**Planning** Need nrow of the data."
+    },
+    {
+      "type": "opaque",
+      "json": "{\"type\":\"reasoning\",\"id\":\"rs_fixture1\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"**Planning** Need nrow of the data.\"}],\"encrypted_content\":\"gAAAAB-fixture-opaque-blob==\"}"
+    },
+    {
+      "type": "text",
+      "text": "Checking the data frame é ✓.",
+      "signature": "{\"v\":1,\"id\":\"msg_fixture1\",\"phase\":\"commentary\"}"
+    },
+    {
+      "type": "tool_call",
+      "id": "call_fixture1|fc_fixture1",
+      "name": "r",
+      "arguments": {
+        "code": "nrow(big_df)"
+      }
+    }
+  ],
+  "usage": {
+    "input": 300,
+    "output": 64,
+    "cache_read": 512,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 32,
+    "total": 876
+  }
+}

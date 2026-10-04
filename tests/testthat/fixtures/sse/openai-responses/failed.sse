@@ -1,0 +1,12 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_f1","status":"in_progress","model":"fixture-1","output":[]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_f1","type":"message","role":"assistant","content":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"Partial"}
+
+event: response.failed
+data: {"type":"response.failed","response":{"id":"resp_f1","status":"failed","error":{"code":"server_error","message":"The model failed to generate a response."}}}
+

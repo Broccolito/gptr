@@ -1,0 +1,83 @@
+[
+  {
+    "type": "start",
+    "response_id": "resp_fixture1"
+  },
+  {
+    "type": "thinking_start",
+    "index": 1
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "**Planning** Need nrow "
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "of the data."
+  },
+  {
+    "type": "thinking_end",
+    "index": 1,
+    "block": {
+      "type": "thinking",
+      "thinking": "**Planning** Need nrow of the data."
+    }
+  },
+  {
+    "type": "text_start",
+    "index": 3
+  },
+  {
+    "type": "text_delta",
+    "index": 3,
+    "delta": "Checking the "
+  },
+  {
+    "type": "text_delta",
+    "index": 3,
+    "delta": "data frame é ✓."
+  },
+  {
+    "type": "text_end",
+    "index": 3,
+    "block": {
+      "type": "text",
+      "text": "Checking the data frame é ✓.",
+      "signature": "{\"v\":1,\"id\":\"msg_fixture1\",\"phase\":\"commentary\"}"
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "index": 4,
+    "id": "call_fixture1|fc_fixture1",
+    "name": "r"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 4,
+    "delta": "{\"code\":"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 4,
+    "delta": "\"nrow(big_df)\"}"
+  },
+  {
+    "type": "toolcall_end",
+    "index": 4,
+    "block": {
+      "type": "tool_call",
+      "id": "call_fixture1|fc_fixture1",
+      "name": "r",
+      "arguments": {
+        "code": "nrow(big_df)"
+      }
+    }
+  },
+  {
+    "type": "done",
+    "reason": "tool_use"
+  }
+]

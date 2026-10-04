@@ -1,0 +1,28 @@
+[
+  {
+    "type": "start",
+    "response_id": "resp_i1"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "Long answer"
+  },
+  {
+    "type": "text_end",
+    "index": 1,
+    "block": {
+      "type": "text",
+      "text": "Long answer",
+      "signature": "{\"v\":1,\"id\":\"msg_i1\"}"
+    }
+  },
+  {
+    "type": "done",
+    "reason": "length"
+  }
+]

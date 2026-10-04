@@ -1,0 +1,25 @@
+[
+  {
+    "type": "start",
+    "response_id": "resp_t1"
+  },
+  {
+    "type": "toolcall_start",
+    "index": 1,
+    "id": "call_t1|fc_t1",
+    "name": "read"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 1,
+    "delta": "{\"path\":"
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "network",
+      "status": null
+    }
+  }
+]
