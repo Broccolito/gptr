@@ -2452,6 +2452,8 @@ reactor_pump(until = function() done, slice_ms = 100L)
 | `usage_log_append(row)`, `usage_log()` | `provider-usage.R` | the process System 1 accounting log (append-only) | P13, P06 |
 | `catalog_get()` | `catalog-models.R` | the merged catalog (§11.10) | P05, P07 |
 | `model_resolve(ref, strict = TRUE)` | `catalog-models.R` | a model record (§4.9) for `provider/id[:thinking]`, an alias (dynamic by family and release date), or a provider-less id; `strict = TRUE` signals `gptr_error_unknown_model` with `adist()` suggestions; local providers accept unknown ids | P06, P08, P13, P17, P19 |
+| `model_prepare(ref, safety = NULL)` | `catalog-models.R` | explicit selected-model preparation: discovers missing/stale Ollama evidence, then resolves and preflights; no discovery during replay (IC-74; `07-local-ollama.md` section 2.1) | P08, P13 |
+| `provider_preflight(model, provider, safety = NULL)` | `catalog-models.R` | pure no-I/O check before payload/state/image serialization and credential lookup; private discovery evidence binds endpoint/path/model/server/lifecycle; missing protected safety means local-only TRUE (IC-74; `07-local-ollama.md` section 2.1) | P05, P08, P13 |
 | `catalog_aliases()` | `catalog-models.R` | chr of alias names (for `identifier_known()`) | P08 |
 | `model_default(role = c("chat", "small", "system1"))` | `catalog-models.R` | `chr(1)` ref from settings, else the first available route (§8.4 of `03`), else `NULL` | P08, P07, P13 |
 

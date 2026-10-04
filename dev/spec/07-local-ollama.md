@@ -57,6 +57,53 @@ produce an inflated advertised capacity. Cache identity includes model digest;
 if an immutable identity is unavailable, do not reuse a durable cached decision
 across discoveries of a mutable tag without revalidation.
 
+### 2.1 Preparation and request preflight (P05 internal contract)
+
+`model_resolve(ref, strict = TRUE)`, `model_default(role)` and ordinary
+`gptr_models()` listing are deterministic and do not discover or contact a
+provider. They may return catalog descriptions of an unverified Ollama model;
+those descriptions do not establish availability or authorize inference.
+`model_prepare(ref, safety = NULL)` explicitly prepares the selected model,
+performing discovery only when its current evidence is missing or stale, then
+resolving and running `provider_preflight(model, provider, safety = NULL)`.
+Explicit `gptr_models(provider = "ollama", refresh = TRUE)` discovers the server's
+installed models. Discovery never runs at package load or during offline replay.
+
+`provider_preflight()` is a pure, no-I/O check returning the checked model. Chat
+transport and P13 call it before payload construction, state/image serialization,
+credential lookup or dispatch. Its `safety` argument is the frozen protected
+P08/P06 safety record; `safety$ollama_local_only` is scalar nonmissing logical.
+Missing safety defaults to TRUE. FALSE may originate only from explicit human
+user/session configuration through P08/P06; callers must never populate it from
+merged provider settings, model metadata, project settings or per-call options.
+FALSE relaxes only local-only rejection; normal egress acknowledgement remains
+required. P08/P06 own safety-record construction, inheritance and freezing.
+
+Public model fields such as `locality`, `digest`, `server_version`, or an
+`ollama` list containing `verified`/`source` are descriptive, not attestation.
+P05 keeps validated discovery evidence privately, binds it to canonical origin,
+base path, model id, digest (when supplied), server version and the registry
+lifecycle, and checks the selected model against that evidence. Registry reload,
+provider replacement, endpoint/path changes and changed model identities
+invalidate evidence. A frozen prepared model records the identity selected for
+the run; a later catalog change cannot silently replace it. Until a protected
+P08 human-provenance path is implemented, only validated P05 discovery can create
+trusted live evidence. Catalog data and arbitrary project/plugin model specs
+cannot self-attest. Offline fixtures may exercise the same parsers with synthetic
+responses; they do not contact a provider.
+
+Default local-only preflight requires a loopback endpoint and positive local
+execution evidence for the selected installed model. It rejects cloud selectors,
+remote_host/remote_model markers, non-loopback endpoints and unknown locality.
+The provider's `local` hint is insufficient, and loopback alone is insufficient.
+Classifier preflight also requires native decision capability, model-level
+`type = "classifier"` / `api = "ollama-system-one"`, and server >= 0.35.1.
+Chat preflight requires a conversational capability and its compatible adapter.
+Failures are typed and actionable, naming manual server/model preparation when
+needed; no hidden cloud fallback is permitted. Unknown mutable identity cannot
+support durable cache reuse without revalidation. Public listing columns remain
+those in interface-contract section 5.12; typed metadata lives on model records.
+
 ## 3. Native decision request and normalized response
 
 `ollama-system-one` is a non-streaming `http_json` classifier adapter owned by
