@@ -48,3 +48,14 @@ the harness correction). This is a fresh `git archive`, with its own receipt in
   [37167848633](https://github.com/Broccolito/gptr/actions/runs/37167848633)
   targets this exact SHA. Hosted jobs are in progress; later commits are not
   covered by these local results or by this hosted run.
+
+## Hosted Linux findings at the corrected checkpoint
+
+Completed Ubuntu release and LC_ALL=C jobs both report **FAIL11/WARN0/SKIP4/
+PASS4443**. Credential-store tests cannot reclaim a dead-PID lock; process
+cleanup reports false and retains markers, and the orphan-sweep fixture retains
+children. These shared liveness symptoms are assigned to the dedicated Astra
+portability lane, with Luna regression execution and a separate Astra review.
+Windows oldrel-4 passed; other job states are recorded by their actual receipts.
+Raw completed-job logs are under ignored `hosted/`. No cross-platform pass is
+claimed from the successful local Mac gate or from a different hosted commit.

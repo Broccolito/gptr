@@ -23,15 +23,17 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
   1,406 assertions with clean lint, docs and examples. The corrected coherent
   checkpoint `55ec31d` passed 4,474 offline assertions, the complete connection
   comparison, and R CMD check with 0 errors/warnings/notes. It is published to
-  draft PR #4; hosted platform acceptance is in progress. See
+  draft PR #4. Hosted Linux jobs exposed 11 shared process/lock failures;
+  a targeted portability correction is in progress. Windows oldrel-4 passed.
+  Hosted platform acceptance remains open. See
   [P02 integrated acceptance](progress/P02-acceptance.md).
-- P03 Tasks 1–4 and 6–11 are committed: vault, whole/streaming redaction,
+- All P03 tasks are committed through `dd58e45`: vault, whole/streaming redaction,
   dotenv loading, credential storage, child environments and advisory secret
-  scanning, history handling and built-in integration. Retroactive scrubbing
-  remains. D-010 records the streaming overflow rule that prevents raw leakage.
-- P04 Tasks 1–9 are committed: splitters, requests/retries, supervision/jobs,
-  reactor core, process execution, child pipes and rate limiting. Wire logs and
-  HTTP/retry integration remain in progress.
+  scanning, history handling, built-in integration and the preview-first
+  persisted-file scrubber. Full P03 integration acceptance remains pending. D-010 records the streaming overflow rule that prevents raw leakage.
+- P04 Tasks 1–10 are committed through `54cb63d`: splitters, requests/retries,
+  supervision/jobs, reactor core, process execution, child pipes, rate limiting
+  and the opt-in wire log. HTTP/retry integration remains in progress.
 - P05's independent usage/pricing component is committed with IC-74 unknown-
   usage semantics. No later plan or milestone is declared complete from these
   dependency-ready components.
@@ -84,7 +86,10 @@ changes remain intact. New agents use explicit model selections.
 - `astra_auth` (`gpt-6-astra`): P03 retroactive scrubber and auth integration.
 - `astra_transport` (`gpt-6-astra`): P04 wire log, HTTP transfers and retries.
 - `astra_models` (`gpt-6-astra`): P05 credentials, transcript projection and catalog.
-- `astra_review` (`gpt-6-astra`): independent source review across those lanes.
+- `astra_kernel` (`gpt-6-astra`): independent P06 agent-loop state machine.
+- `astra_portability` (`gpt-6-astra`): hosted Linux liveness/lock corrections.
+- `astra_review` (`gpt-6-astra`): independent auth/transport/model source review.
+- `astra_review_core` (`gpt-6-astra`): independent portability/kernel review.
 - `luna_core` (`gpt-6-luna`): P04 and immutable package/hosted validation.
 - `luna_auth_models` (`gpt-6-luna`): focused P03/P05 tests and lint.
 - Root: coordination, serialized Git/docs queue, acceptance decisions, GitHub

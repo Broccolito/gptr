@@ -49,6 +49,14 @@ remaining transport tasks wait for their actual authentication prerequisites. P0
 a separate lane while root validates the immutable foundation snapshot.
 Tasks that materialize secrets or persist transport data still wait for P03.
 
+P06 Task 1's pure agent-loop state machine may likewise use the actual completed
+P01/P02 interfaces while transport acceptance finishes. Four unused test helpers
+that call future P06 functions (`local_events`, `test_session`, `test_run`,
+`run_text`) are deferred until Tasks 3–5 supply those functions. Restore them
+from Task 1's harness definition at their first dependent task; no production
+stub or lint suppression stands in for those dependencies. Full P06/M1 gates
+still require the complete dependency chain.
+
 ## D-006 — Effective connection cleanup gate (2026-10-03)
 
 Independent review found that setting `_R_CHECK_CONNECTIONS_LEFT_OPEN_` around
