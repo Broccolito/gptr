@@ -3691,3 +3691,34 @@ separators=(",", ": ")) + "\n"`, and every source list equals `splitlines(True)`
 (`task6-python-fixture.log`, `task6-python-notebooks.log`). Final `^doc-formats$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 228 ]`, the same under `LC_ALL=C LANG=C`
 (`task6-fix1-green.log`, `task6-fix1-green-clocale.log`).
+
+## D-072 - P17 shared resource layer: a gptr plugin manifest may give its resource paths as an array, an unparseable rDepends version counts as missing, existing L0 helpers are reused (2026-10-04)
+
+P17 Task 1's plan-literal `R/ext-plugins.R` was changed in three ways. Signatures, return shapes
+and the plan's 15 tests are unchanged.
+
+1. **Array paths in a gptr manifest.** `plugin_type_paths()` took a gptr plugin's `skills`,
+   `prompts` or `agents` key only when `is.character()`; otherwise it used the default directory.
+   Manifests are read with P01's `json_decode()` (`simplifyVector = FALSE`, contract section 6),
+   which turns a JSON array into a list, so `"skills": ["a", "b"]` was silently replaced by
+   `skills/`. A list is now read like the Claude bundle keys (each entry through `plugin_rel()`,
+   escaping entries dropped with the `a path outside the plugin was ignored` diagnostic). The
+   contract's documented string form (11.12) behaves as before.
+2. **An unparseable `rDepends` version is missing.** `rdepends_missing()` called
+   `package_version()` on the matched version text, which the pattern lets through in forms such
+   as `1.` or `1..2`; that threw out of plugin resolution. Such an entry is now reported as
+   missing (contract 11.13: manifest and frontmatter problems are diagnostics, never errors).
+3. **Reuse and robustness.** `res_session_id()` delegates to P02's `ext_session_id()` and
+   `res_inside()` to P01's `path_inside()` (identical rules, both L0). `res_match()` ignores `NA`
+   candidates and de-duplicates an exact hit; `res_register()` skips the `NULL` that `res_spec()`
+   returns for an invalid spec instead of logging a diagnostic with an `NA` kind.
+
+Four regression tests appended to `tests/testthat/test-ext-plugins.R` after the plan's 15 lock
+items 1-3. They fail against the plan-literal code (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 71 ]`), so
+every later P17 count for this file is 13 higher (IC-74).
+
+Validation: `progress/P17.md`, Task 1. `^ext-plugins$`: red
+`[ FAIL 15 | WARN 0 | SKIP 0 | PASS 0 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 67 ]` (plan
+tests), then `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 80 ]` with the regression tests (review round 1);
+lint clean.
+
