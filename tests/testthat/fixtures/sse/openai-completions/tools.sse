@@ -1,0 +1,22 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning_content":"Need two lookups. "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"content":"Checking both files"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"content":"."},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_A1","type":"function","function":{"name":"read","arguments":""}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"pa"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"R/a.R\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_B2","type":"function","function":{"name":"grep","arguments":"{\"pattern\":\"nrow\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[],"usage":{"prompt_tokens":1500,"completion_tokens":96,"total_tokens":1596,"prompt_tokens_details":{"cached_tokens":1024},"completion_tokens_details":{"reasoning_tokens":32}}}
+
+data: [DONE]
+

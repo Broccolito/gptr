@@ -1,0 +1,44 @@
+[
+  {
+    "type": "start",
+    "response_id": "chatcmpl-1"
+  },
+  {
+    "type": "thinking_start",
+    "index": 1
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "Plan: count rows."
+  },
+  {
+    "type": "text_start",
+    "index": 2
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "\n\nThere are 32 rows."
+  },
+  {
+    "type": "thinking_end",
+    "index": 1,
+    "block": {
+      "type": "thinking",
+      "thinking": "Plan: count rows."
+    }
+  },
+  {
+    "type": "text_end",
+    "index": 2,
+    "block": {
+      "type": "text",
+      "text": "\n\nThere are 32 rows."
+    }
+  },
+  {
+    "type": "done",
+    "reason": "stop"
+  }
+]

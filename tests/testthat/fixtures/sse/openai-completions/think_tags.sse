@@ -1,0 +1,12 @@
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"role":"assistant","content":"<thi"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"content":"nk>Plan: count rows.</th"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{"content":"ink>\n\nThere are 32 rows."},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1","choices":[],"usage":{"prompt_tokens":40,"completion_tokens":12,"total_tokens":52}}
+
+data: [DONE]
+

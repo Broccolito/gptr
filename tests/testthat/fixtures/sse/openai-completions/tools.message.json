@@ -1,0 +1,41 @@
+{
+  "stop_reason": "tool_use",
+  "raw_stop_reason": "tool_calls",
+  "response_id": "chatcmpl-1",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "Need two lookups. ",
+      "signature": "reasoning_content"
+    },
+    {
+      "type": "text",
+      "text": "Checking both files."
+    },
+    {
+      "type": "tool_call",
+      "id": "call_A1",
+      "name": "read",
+      "arguments": {
+        "path": "R/a.R"
+      }
+    },
+    {
+      "type": "tool_call",
+      "id": "call_B2",
+      "name": "grep",
+      "arguments": {
+        "pattern": "nrow"
+      }
+    }
+  ],
+  "usage": {
+    "input": 476,
+    "output": 96,
+    "cache_read": 1024,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 32,
+    "total": 1596
+  }
+}

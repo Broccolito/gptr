@@ -1,0 +1,23 @@
+[
+  {
+    "type": "start",
+    "response_id": "chatcmpl-1"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "Partial"
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "overloaded",
+      "status": 502
+    }
+  }
+]

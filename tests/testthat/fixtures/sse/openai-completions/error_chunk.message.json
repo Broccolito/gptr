@@ -1,0 +1,20 @@
+{
+  "stop_reason": "error",
+  "error_message": "Upstream provider failed",
+  "response_id": "chatcmpl-1",
+  "content": [
+    {
+      "type": "text",
+      "text": "Partial"
+    }
+  ],
+  "usage": {
+    "input": null,
+    "output": null,
+    "cache_read": null,
+    "cache_write_5m": null,
+    "cache_write_1h": null,
+    "reasoning": null,
+    "total": null
+  }
+}

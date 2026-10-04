@@ -1,0 +1,101 @@
+[
+  {
+    "type": "start",
+    "response_id": "chatcmpl-1"
+  },
+  {
+    "type": "thinking_start",
+    "index": 1
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "Need two lookups. "
+  },
+  {
+    "type": "text_start",
+    "index": 2
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "Checking both files"
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "."
+  },
+  {
+    "type": "toolcall_start",
+    "index": 3,
+    "id": "call_A1",
+    "name": "read"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 3,
+    "delta": "{\"pa"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 3,
+    "delta": "th\":\"R/a.R\"}"
+  },
+  {
+    "type": "toolcall_start",
+    "index": 4,
+    "id": "call_B2",
+    "name": "grep"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 4,
+    "delta": "{\"pattern\":\"nrow\"}"
+  },
+  {
+    "type": "thinking_end",
+    "index": 1,
+    "block": {
+      "type": "thinking",
+      "thinking": "Need two lookups. ",
+      "signature": "reasoning_content"
+    }
+  },
+  {
+    "type": "text_end",
+    "index": 2,
+    "block": {
+      "type": "text",
+      "text": "Checking both files."
+    }
+  },
+  {
+    "type": "toolcall_end",
+    "index": 3,
+    "block": {
+      "type": "tool_call",
+      "id": "call_A1",
+      "name": "read",
+      "arguments": {
+        "path": "R/a.R"
+      }
+    }
+  },
+  {
+    "type": "toolcall_end",
+    "index": 4,
+    "block": {
+      "type": "tool_call",
+      "id": "call_B2",
+      "name": "grep",
+      "arguments": {
+        "pattern": "nrow"
+      }
+    }
+  },
+  {
+    "type": "done",
+    "reason": "tool_use"
+  }
+]

@@ -50,6 +50,12 @@ g_usage = function(input = 0, output = 0, cache_read = 0, w5 = 0, w1 = 0, reason
        cache_write_1h = w1, reasoning = reasoning,
        total = input + output + cache_read + w5 + w1)
 }
+# The usage of a stream that reported none: every count unknown, JSON null (IC-74: "Missing usage
+# remains unknown"; 07-local-ollama.md section 5)
+g_usage_unknown = function() {
+  list(input = NULL, output = NULL, cache_read = NULL, cache_write_5m = NULL,
+       cache_write_1h = NULL, reasoning = NULL, total = NULL)
+}
 g_msg = function(stop, raw = NULL, err = NULL, rid = NULL, rmodel = NULL, content = list(),
                  usage = g_usage()) {
   drop_null(list(stop_reason = stop, raw_stop_reason = raw, error_message = err,
@@ -378,4 +384,117 @@ write_case(
   g_msg("stop", "end_turn", rid = "msg_01SRV", rmodel = "claude-sonnet-5-5",
         content = list(g_opaque(stu), g_opaque(wsr), g_text("R 4.4 is out.")),
         usage = g_usage(40, 20))
+)
+
+# ============================================================================================
+# openai-completions (model.json: provider together, so the <think> splitter is on)
+# ============================================================================================
+k = "openai-completions"
+dir.create(file.path(root, k), showWarnings = FALSE, recursive = TRUE)
+write_text(file.path(root, k, "model.json"),
+           '{"provider": "together", "id": "deepseek-r1", "input": ["text"]}\n')
+chat_chunk = function(delta, finish = "null") {
+  js(
+    '{"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1",',
+    '"choices":[{"index":0,"delta":', delta, ',"finish_reason":', finish, "}]}"
+  )
+}
+
+k_tools = c(
+  ": OPENROUTER PROCESSING\n\n",
+  dat(chat_chunk(js(
+    '{"role":"assistant","content":"",',
+    '"reasoning_content":"Need two lookups. "}'
+  ))),
+  dat(chat_chunk('{"content":"Checking both files"}')),
+  dat(chat_chunk('{"content":"."}')),
+  dat(chat_chunk(js(
+    '{"tool_calls":[{"index":0,"id":"call_A1","type":"function",',
+    '"function":{"name":"read","arguments":""}}]}'
+  ))),
+  dat(chat_chunk('{"tool_calls":[{"index":0,"function":{"arguments":"{\\"pa"}}]}')),
+  dat(chat_chunk(js(
+    '{"tool_calls":[{"index":0,"function":',
+    '{"arguments":"th\\":\\"R/a.R\\"}"}}]}'
+  ))),
+  dat(chat_chunk(js(
+    '{"tool_calls":[{"index":1,"id":"call_B2","type":"function",',
+    '"function":{"name":"grep","arguments":"{\\"pattern\\":\\"nrow\\"}"}}]}'
+  ))),
+  dat(chat_chunk("{}", '"tool_calls"')),
+  dat(js(
+    '{"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1",',
+    '"choices":[],"usage":{"prompt_tokens":1500,"completion_tokens":96,',
+    '"total_tokens":1596,"prompt_tokens_details":{"cached_tokens":1024},',
+    '"completion_tokens_details":{"reasoning_tokens":32}}}'
+  )),
+  dat("[DONE]")
+)
+write_case(
+  k, "tools", k_tools,
+  list(e_start("chatcmpl-1"), e_open("thinking", 1L),
+       e_delta("thinking", 1L, "Need two lookups. "), e_open("text", 2L),
+       e_delta("text", 2L, "Checking both files"), e_delta("text", 2L, "."),
+       e_tstart(3L, "call_A1", "read"), e_delta("toolcall", 3L, "{\"pa"),
+       e_delta("toolcall", 3L, "th\":\"R/a.R\"}"),
+       e_tstart(4L, "call_B2", "grep"), e_delta("toolcall", 4L, "{\"pattern\":\"nrow\"}"),
+       e_end("thinking", 1L, g_think("Need two lookups. ", signature = "reasoning_content")),
+       e_end("text", 2L, g_text("Checking both files.")),
+       e_end("toolcall", 3L, g_tool("call_A1", "read", list(path = "R/a.R"))),
+       e_end("toolcall", 4L, g_tool("call_B2", "grep", list(pattern = "nrow"))),
+       e_done("tool_use")),
+  g_msg("tool_use", "tool_calls", rid = "chatcmpl-1",
+        content = list(g_think("Need two lookups. ", signature = "reasoning_content"),
+                       g_text("Checking both files."),
+                       g_tool("call_A1", "read", list(path = "R/a.R")),
+                       g_tool("call_B2", "grep", list(pattern = "nrow"))),
+        usage = g_usage(476, 96, 1024, reasoning = 32))
+)
+
+k_tags = c(
+  dat(chat_chunk('{"role":"assistant","content":"<thi"}')),
+  dat(chat_chunk('{"content":"nk>Plan: count rows.</th"}')),
+  dat(chat_chunk('{"content":"ink>\\n\\nThere are 32 rows."}')),
+  dat(chat_chunk("{}", '"stop"')),
+  dat(js(
+    '{"id":"chatcmpl-1","object":"chat.completion.chunk","model":"deepseek-r1",',
+    '"choices":[],"usage":{"prompt_tokens":40,"completion_tokens":12,"total_tokens":52}}'
+  )),
+  dat("[DONE]")
+)
+write_case(
+  k, "think_tags", k_tags,
+  list(e_start("chatcmpl-1"), e_open("thinking", 1L),
+       e_delta("thinking", 1L, "Plan: count rows."), e_open("text", 2L),
+       e_delta("text", 2L, "\n\nThere are 32 rows."),
+       e_end("thinking", 1L, g_think("Plan: count rows.")),
+       e_end("text", 2L, g_text("\n\nThere are 32 rows.")), e_done("stop")),
+  g_msg("stop", "stop", rid = "chatcmpl-1",
+        content = list(g_think("Plan: count rows."), g_text("\n\nThere are 32 rows.")),
+        usage = g_usage(40, 12))
+)
+
+# error_chunk and truncated report no usage: it stays unknown (IC-74), never a zero
+k_error = c(
+  dat(chat_chunk('{"role":"assistant","content":"Partial"}')),
+  dat(js(
+    '{"id":"chatcmpl-1","object":"chat.completion.chunk",',
+    '"choices":[{"index":0,"delta":{},"finish_reason":"error"}],',
+    '"error":{"code":502,"message":"Upstream provider failed"}}'
+  ))
+)
+write_case(
+  k, "error_chunk", k_error,
+  list(e_start("chatcmpl-1"), e_open("text", 1L), e_delta("text", 1L, "Partial"),
+       e_error("overloaded", 502L)),
+  g_msg("error", err = "Upstream provider failed", rid = "chatcmpl-1",
+        content = list(g_text("Partial")), usage = g_usage_unknown())
+)
+
+write_case(
+  k, "truncated", dat(chat_chunk('{"role":"assistant","content":"Half"}')),
+  list(e_start("chatcmpl-1"), e_open("text", 1L), e_delta("text", 1L, "Half"),
+       e_error("network")),
+  g_msg("error", err = "The stream ended without a finish_reason.", rid = "chatcmpl-1",
+        content = list(g_text("Half")), usage = g_usage_unknown())
 )

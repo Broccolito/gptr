@@ -433,16 +433,19 @@ adp_golden_event = function(ev) {
   out
 }
 
-#' Golden projection of a final assistant message (cost left out: it depends on prices)
+#' Golden projection of a final assistant message (cost left out: it depends on prices); an
+#' unknown count (NA, IC-74) is JSON null, as in the session file's usage (`usage_to_json()`)
 #' @noRd
 adp_golden_message = function(m) {
   u = m$usage
+  n = function(x) if (length(x) == 1L && is.na(x)) NULL else x
   out = list(stop_reason = m$stop_reason, raw_stop_reason = m$raw_stop_reason,
              error_message = m$error_message, response_id = m$response_id,
              response_model = m$response_model, content = lapply(m$content, adp_golden_block),
-             usage = list(input = u$input, output = u$output, cache_read = u$cache_read,
-                          cache_write_5m = u$cache_write_5m, cache_write_1h = u$cache_write_1h,
-                          reasoning = u$reasoning, total = u$total))
+             usage = list(input = n(u$input), output = n(u$output), cache_read = n(u$cache_read),
+                          cache_write_5m = n(u$cache_write_5m),
+                          cache_write_1h = n(u$cache_write_1h), reasoning = n(u$reasoning),
+                          total = n(u$total)))
   out[!vapply(out, is.null, logical(1))]
 }
 
@@ -812,23 +815,28 @@ adp_header_secret = function(handle, prefix = "") {
 #' @noRd
 adp_url = function(base, path) paste0(sub("/+$", "", base), "/", sub("^/+", "", path))
 
-#' The non-secret headers of the model's provider record (for example OpenRouter attribution)
-#'
-#' The record is the one provider_stream() resolved (`opts$provider`: the session's rank-0
-#' record first, settings applied; 04 section 10.1 scopes `model = <spec>` to its session), else
-#' the session's own record (`opts$session`), else the global one. Callers pass build()'s `opts`.
+#' The provider record of the model (D-023): the one provider_stream() resolved (`opts$provider`:
+#' the session's rank-0 record first, settings applied; 04 section 10.1 scopes `model = <spec>`
+#' to its session) when it is the model's provider (its id, name or an alias), else the session's
+#' own record (`opts$session`), else the global one; NULL when there is none. Adapters pass the
+#' `opts` of build() or parse().
 #' @noRd
-adp_provider_headers = function(model, opts = NULL) {
+adp_provider_record = function(model, opts = NULL) {
   id = model$provider %||% ""
-  if (!is.character(id) || length(id) != 1L || is.na(id) || !nzchar(id)) return(list())
+  if (!is.character(id) || length(id) != 1L || is.na(id) || !nzchar(id)) return(NULL)
   rec = opts[["provider"]]
   names_of = function(p) c(p[["id"]], p[["name"]], p[["aliases"]])
-  if (!is.list(rec) || !(id %in% names_of(rec))) {
-    sid = opts[["session"]]
-    scoped = if (is.null(sid)) NULL else registry_get("provider", id, session = sid)
-    rec = provider_effective(scoped) %||% provider_get(id)
-  }
-  h = rec$headers
+  if (is.list(rec) && id %in% names_of(rec)) return(rec)
+  sid = opts[["session"]]
+  scoped = if (is.null(sid)) NULL else registry_get("provider", id, session = sid)
+  provider_effective(scoped) %||% provider_get(id)
+}
+
+#' The non-secret headers of the model's provider record (for example OpenRouter attribution),
+#' from adp_provider_record(). Callers pass build()'s `opts`.
+#' @noRd
+adp_provider_headers = function(model, opts = NULL) {
+  h = adp_provider_record(model, opts)[["headers"]]
   if (is.null(h) || !length(h)) list() else as.list(h)
 }
 

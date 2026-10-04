@@ -728,3 +728,134 @@ Validation: `progress/P12.md`, Task 3. The three added tests failed 7 + 1 + 1 as
 the plan-literal source (269 escaped test warnings in the first run). The `signalCondition()`
 assertions of review round 1 failed 3 times against the muffling handlers, and 4 times with 216
 escaped test warnings against a `tryInvokeRestart()` variant.
+
+## D-027 - P12 Chat Completions normaliser: IC-74 usage, compat from the resolved provider record, typed finish reasons, merged reasoning_details (2026-10-04)
+
+P12 Task 4's plan-literal `completions_normaliser()` (`R/provider-openai-completions.R`, the
+`parse` of the `openai-completions` adapter that also serves Ollama chat models, IC-74) was
+changed in the six ways below, and two shared helpers in `R/provider-anthropic.R` changed with
+it. Task 5 (`completions_build()`), P06's usage rows and P24 consume them.
+
+1. **IC-74 usage** (07-local-ollama.md section 5: "Missing usage remains unknown"; D-022). The
+   plan read every usage field with `%||% 0`, so a reported null became a known zero.
+   `completions_usage()` now follows D-022's rule. A field the provider left out of a reported
+   usage keeps P05's legacy zero. A reported null, or a value that is not a nonnegative number,
+   is `NA`. The first known of `prompt_tokens_details.cached_tokens`, `prompt_cache_hit_tokens`
+   (DeepSeek) and `cached_tokens` (Kimi) is the cache read, as Pi's `??` chain does, so a null
+   `cached_tokens` falls back to the next field; when only nulls were reported the cache read,
+   and with it the input, is `NA`. `"usage": null` (OpenAI sends it on every chunk but the last)
+   is no report. A stream that reported no usage at all keeps the core's unknown usage (D-022
+   point 1): the plan's goldens for `error_chunk` and `truncated` wrote zeros.
+2. **Unknown usage in the goldens is JSON null.** The hand-written goldens of those two cases
+   record every count as `null` (new `g_usage_unknown()` in `make_fixtures.R`), and
+   `adp_golden_message()` projects an `NA` count to `NULL`, the representation the session file
+   already uses (`usage_to_json()`). Before this, an `NA` reached `json_encode()` as the string
+   `"NA"`. The Anthropic goldens hold no unknown count and are unchanged. Tasks 6 and 8 must write
+   `usage = g_usage_unknown()` for a failed or truncated fixture that reports no usage.
+3. **The compat record comes from the resolved provider record** (D-023 item 1, extended). The
+   plan's `compat_flags(model$provider, model)` looked the provider up globally, so a
+   session-scoped provider (`model = <spec>`, 04 section 10.1) lost its `compat`
+   (`supports_finish_reason`, `think_tags`, ...), and a session record that shadows a global one
+   got the global record's flags. D-023's lookup moved into the shared helper
+   `adp_provider_record(model, opts)` (`adp_provider_headers()` now calls it, with unchanged
+   behaviour), and the normaliser calls `compat_flags(adp_provider_record(model, opts) %||%
+   list(id = <provider id>), model)`. Tasks 5 and 7 must do the same in `build()` instead of the
+   plan's `compat_flags(model$provider, model)`.
+4. **Contract-typed finish reasons** (04 section 4.2; D-022 point 3). `completions_stop()` maps a
+   `finish_reason` that is not one string to `error`; R's `switch()` mapped a number by position
+   (`2` became `stop`). `raw_stop_reason` is stored as text.
+5. **Robustness without a contract change.** Chunk fields are read with `[[` (no `$` partial
+   matching). An `error` given as a bare string is its message. Tool arguments sent as a parsed
+   object are serialised back to JSON text instead of being joined as R values. A Mistral
+   `thinking` item given as a bare string is thinking text. Each of these previously ended the
+   stream with an `internal` error through `adp_guard()` or corrupted the arguments.
+6. **OpenRouter `reasoning_details` are merged and accumulated linearly** (04 section 8.1;
+   report 09 section 2.3, Pi `openai-completions.ts:665-676`; review round 1). The plan grew the
+   list with `c(cur$details, d$reasoning_details)` on every chunk and kept every per-delta
+   fragment, so the opaque block, which the session file keeps and Task 5 replays verbatim as
+   `reasoning_details`, held one item per delta (20,000 deltas: 20,000 items, 2.0 MB, 3.7 s
+   against 0.9 s without details). The new `completions_details()` collects items in the core's
+   linear buffer and merges consecutive `reasoning.text` or `reasoning.summary` fragments of the
+   same type and `index` (and no conflicting `id`) as Pi does: the text is joined once, and a
+   later non-null field such as the closing `signature` is kept. `reasoning.encrypted` and other
+   items stay discrete and verbatim; a null item is dropped. Same 20,000 deltas: one item, 129 KB,
+   1.4 s. Task 5's `completions_assistant()` replays the merged array unchanged.
+
+Validation: `progress/P12.md`, Task 4. Against the plan-literal source the added tests and the
+adapted goldens failed 10 assertions (2 golden messages with `"NA"`, 2 null usages read as zero,
+3 for the numeric finish reason, 3 for the session-scoped compat); the point 5 test failed 5 more
+(an `internal` error with "$ operator is invalid for atomic vectors" for the string error, empty
+object arguments, and an `internal` error for the bare thinking string). Point 6 failed 2
+assertions against the per-fragment list (the merged opaque JSON in two streams).
+
+## D-028 - P06 session verbs: no chat on decision models, enqueue checks attachments and model code, mode changes keep the run's invariants (2026-10-04)
+
+P06 Task 6's plan-literal `session_set_model()`, `session_set_mode()`, `mode_block_text()` and
+`session_enqueue()` (`R/session-object.R`) were changed in six ways. P08 (`gptr_steer()`, the mode
+and model verbs), P11 (the plan execute menu), P14 (the pause menu and the pipe), P15 and P19
+(sub-agent reports) and Task 15's `ctx.kernel` consume them.
+
+1. **Decision-only models are refused for chat** (IC-74, 07-local-ollama.md sections 1 and 6:
+   "expected failures for chat on decision-only models"). `session_set_model()` resolves `ref`
+   purely (no discovery, no I/O) and refuses a model of `type = "classifier"` (the fake
+   classifier, `ollama/clef-flash`, `typesafe/jev-latest` and the alias `jev`) before anything is
+   appended or emitted, with `provider_stream()`'s refusal (`stream_chat_model()`, D-017 item 3):
+   `gptr_error_not_available`, `member` = the resolved ref, `provided_by = "a conversational
+   model"`. `model_canonical()` now also returns the resolved `type` (`NULL` for a router or an
+   unresolved reference). The plan accepted the switch, so the refusal came only at the next
+   request. `session_new()` stays lenient (Task 3); there, `provider_stream()` still refuses at
+   the first request.
+2. **Attachments are checked before the item enters the queue** (04 section 4.2, IC-55; the steering
+   rule of `progress/P06-loop.md`). The loop takes items off the queue destructively and only then
+   calls `queue_item_message()`, which refuses a non-text block on a steering relay; the plan
+   accepted any list as `blocks`, so such a steer was lost at delivery. `queue_blocks_check()`
+   requires an unnamed list of complete user content blocks (`text`, `image` or `context` with
+   their string fields) and, for a steer from a user source (`pipe`, `pause_menu`, `repl`,
+   `api_user`), text blocks only; otherwise `gptr_error_invalid_argument` with `arg = "blocks"` and
+   nothing is queued or emitted. A user steer is refused even on an idle session, because whether
+   it is delivered as a relay depends on when a run takes it. Follow-ups, extension notes and agent
+   reports keep their user-role shapes; operator relays stay text-only.
+3. **The attachments are redacted with the `context` profile at ingress**, as the text is (03
+   section 6.5: `context` is egress to providers; image data and replay signatures are left alone
+   by `redact_tree()`). The plan redacted only the text.
+4. **Only a `mode` context block of rank 3 or more supplies the operator note** (IC-52: operator
+   authority only from records of rank 3 or more; 04 section 4.2: operator messages carry harness
+   facts only). The note is an operator message, but the plan used the winning `mode` block
+   whatever its rank, and the lowest rank wins (session 0, project 1). A session or project record
+   named `mode` now gives the one-line notice instead; user, plugin and built-in records (P07's
+   `builtin:context`, rank 6) are used as planned. `provide()` sees only the session's ctx (no
+   rendering input), so P07's `context_provide_mode()` describes the session's mode; a body whose
+   `attrs$name` names a mode other than the one the note is for (a nested run whose effective
+   mode item 5 tightens) also gives the notice, so a block is never named for one mode while its
+   text describes another. A body without `attrs$name` is used as planned.
+5. **A mode change keeps the run's invariants** (`mode_apply_run()`). As in `run_new()`, a nested
+   run takes the stricter of its outer run's mode and the new one (IC-53 item 4: "only
+   tightened"); the plan set `run$mode` to the new mode, loosening a nested run beyond its outer
+   run. The run evaluates `r` in a scratch overlay of its home exactly while its mode is `plan`
+   (IC-15: the scratch exists "when the effective mode is `plan`"); the plan left the scratch as it
+   was at the start, so a mid-run switch into plan mode evaluated in the home and a mid-run switch
+   out of it (any `session_set_mode()` while a run is active, for example from a hook or P14's
+   console) kept evaluating in the discarded scratch. The operator note is queued only when the run's mode changes, and it
+   names the run's effective mode. This supersedes P11 ambiguity 14's parenthetical
+   "`session_set_mode()` changes `run$mode` but not the overlay": the overlay now follows the
+   effective mode (P11's execute menu runs at `agent_end`, after the plan run, so its design is
+   unchanged).
+6. **Model code enqueues only the first input of a never-run session, as a follow-up** (IC-55:
+   `gptr_steer()` and `ctx$send()` "called from model-evaluated code of the same session tree are
+   refused"; "a child agent's text never appears in an operator message"). The plan exempted any
+   item while the session had no entries and no live run, so an `r` call could queue a steer with a
+   user source on a never-run session of its tree, which its first run then delivered as the
+   operator relay "The user sent this message while you were working: ...". The exception now
+   covers only what P08 ambiguity 5 needs, the queued prompt of a `.run = FALSE` call: `as =
+   "follow_up"`, no entries, no live run and an empty queue. Steers (any source) and later items
+   from model code are refused with `gptr_error_permission`.
+
+Validation: `progress/P06.md`, Task 6. Against the plan-literal source the added tests failed 15
+times: the switch to the fake classifier was accepted (2); the nested run was loosened, with notes
+for an unchanged effective mode, and a non-session `s` gave an unclassed error (5); no scratch
+after a switch into plan mode and a stale one after leaving it (3); project- and session-rank
+blocks became operator text (2); an image on a user steer was queued (2); a text attachment kept
+its key (1). Review round 1 added item 6 and the `attrs$name` rule of item 4: against the round's
+source the extended tests gave [ FAIL 4 | PASS 228 ] (a nested run's note read "BODY FOR auto"
+under `<mode name="edits">`; a body named `edits` was used for `plan`; a model-code steer to a
+never-run session was accepted, which ended that block).

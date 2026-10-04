@@ -1,0 +1,24 @@
+{
+  "stop_reason": "stop",
+  "raw_stop_reason": "stop",
+  "response_id": "chatcmpl-1",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "Plan: count rows."
+    },
+    {
+      "type": "text",
+      "text": "\n\nThere are 32 rows."
+    }
+  ],
+  "usage": {
+    "input": 40,
+    "output": 12,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 52
+  }
+}
