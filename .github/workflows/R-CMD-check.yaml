@@ -12,6 +12,12 @@ on:
 
 name: R-CMD-check.yaml
 
+# A newer push to the same ref supersedes a running check: its results would validate an
+# outdated commit, so it is cancelled to free the runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions: read-all
 
 jobs:
