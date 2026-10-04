@@ -405,3 +405,503 @@ catalog_read = function(path) {
   if (!is.list(x) || !identical(as.integer(x[["schema_version"]] %||% 0L), 1L)) return(NULL)
   x
 }
+
+#' The newer of the shipped snapshot and the refreshed cache
+#' @noRd
+catalog_read_base = function() {
+  snap = catalog_read(catalog_snapshot_path())
+  cache = catalog_read(catalog_cache_path())
+  if (is.null(cache)) {
+    return(snap %||% list(schema_version = 1L, generated = NA_character_, source = "none",
+                          providers = list(), models = list(), aliases = list()))
+  }
+  if (is.null(snap)) return(cache)
+  newer = as.character(cache[["generated"]] %||% "") >= as.character(snap[["generated"]] %||% "")
+  if (newer) cache else snap
+}
+
+#' Model entries declared by a provider spec, with the provider id filled in
+#' @noRd
+catalog_spec_models = function(p) {
+  if (is.null(p)) return(list())
+  lapply(p[["models"]] %||% list(), function(m) {
+    m[["id"]] = m[["id"]] %||% sub("^[^/]*/", "", m[["ref"]] %||% "")
+    m[["provider"]] = p[["id"]] %||% p[["name"]]
+    m[["ref"]] = NULL
+    m
+  })
+}
+
+#' Model entries registered as `model` specs (04 section 10.2 row 3; name `provider/id`)
+#'
+#' A spec's `name` is its registry key, so the display name comes from `label` (else the id);
+#' the spec bookkeeping fields are dropped.
+#' @noRd
+catalog_model_specs = function() {
+  specs = tryCatch(registry_all("model"), error = function(e) list())
+  lapply(unname(specs), function(s) {
+    e = unclass(s)
+    e[["name"]] = e[["label"]] %||% e[["id"]]
+    e[c("kind", "label", "api_version", "ref")] = NULL
+    e
+  })
+}
+
+#' Normalised model id for matching ("claude-sonnet-5.5" equals "claude-sonnet-5-5")
+#' @noRd
+catalog_norm_id = function(x) gsub("[._]", "-", tolower(x))
+
+#' The lookup index of a named list of entries
+#' @noRd
+catalog_index = function(models) {
+  f = function(k, d = NA_character_) {
+    vapply(models, function(m) {
+      v = m[[k]]
+      if (is.null(v) || !length(v) || is.na(v[[1]])) d else as.character(v[[1]])
+    }, "", USE.NAMES = FALSE)
+  }
+  idx = data.frame(ref = names(models) %||% character(), provider = f("provider"),
+                   id = f("id"), name = f("name"), family = f("family"),
+                   release_date = f("release_date"), status = f("status", "active"),
+                   type = f("type", "chat"), owner = f("owner"), stringsAsFactors = FALSE)
+  idx$name = ifelse(is.na(idx$name), idx$id, idx$name)
+  idx$norm = catalog_norm_id(idx$id)
+  idx
+}
+
+#' The ref an alias resolves to now (newest active model; the owner's listing preferred when
+#' no provider is given; on a release-date tie the undated id wins over its `-YYYYMMDD` twin)
+#' @noRd
+catalog_alias_target = function(a, idx) {
+  if (!is.null(a[["ref"]])) return(as.character(a[["ref"]]))
+  ok = idx$status != "deprecated"
+  if (!is.null(a[["provider"]])) ok = ok & idx$provider == a[["provider"]]
+  if (!is.null(a[["id"]])) ok = ok & idx$id == a[["id"]]
+  if (!is.null(a[["family"]])) ok = ok & !is.na(idx$family) & idx$family == a[["family"]]
+  if (!is.null(a[["pattern"]])) ok = ok & grepl(a[["pattern"]], idx$id)
+  cand = idx[ok, , drop = FALSE]
+  if (!nrow(cand)) return(NA_character_)
+  act = cand[cand$status == "active", , drop = FALSE]
+  if (nrow(act)) cand = act
+  if (is.null(a[["provider"]])) {
+    own = cand[!is.na(cand$owner) & cand$provider == cand$owner, , drop = FALSE]
+    if (nrow(own)) cand = own
+  }
+  dated = grepl("-[0-9]{8}$", cand$id)
+  cand = cand[order(cand$release_date, dated, cand$id, decreasing = c(TRUE, FALSE, TRUE),
+                    method = "radix"), , drop = FALSE]
+  cand$ref[[1]]
+}
+
+#' Alias name -> target ref (NA when an alias resolves to nothing)
+#' @noRd
+catalog_alias_targets = function(aliases, idx) {
+  if (!length(aliases)) return(character())
+  vapply(aliases, catalog_alias_target, "", idx = idx)
+}
+
+#' Build the merged catalog: base < overrides < provider specs < model specs < user config <
+#' discovery
+#' @noRd
+catalog_build = function() {
+  base = catalog_read_base()
+  ov = catalog_overrides()
+  models = catalog_merge_models(list(), base[["models"]])
+  models = catalog_merge_models(models, ov[["models"]], patch_only = TRUE)
+  for (nm in sort(registry_names("provider"))) {
+    models = catalog_merge_models(models, catalog_spec_models(registry_get("provider", nm)))
+  }
+  models = catalog_merge_models(models, catalog_model_specs())
+  cfg = setting_get("providers", default = list()) %||% list()
+  for (pid in names(cfg)) {
+    layer = lapply(cfg[[pid]][["models"]] %||% list(), function(m) {
+      m[["provider"]] = pid
+      m
+    })
+    models = catalog_merge_models(models, layer)
+  }
+  disc = the$catalog[["discovered"]] %||% list()
+  for (pid in names(disc)) models = catalog_merge_models(models, disc[[pid]])
+  aliases = base[["aliases"]] %||% list()
+  for (nm in names(ov[["aliases"]])) aliases[[nm]] = ov[["aliases"]][[nm]]
+  ctg = list(schema_version = 1L, generated = base[["generated"]] %||% NA_character_,
+             source = base[["source"]] %||% "none",
+             providers = utils::modifyList(base[["providers"]] %||% list(),
+                                           ov[["providers"]] %||% list()),
+             models = models, aliases = aliases, small = ov[["small"]])
+  ctg$index = catalog_index(models)
+  ctg$alias_targets = catalog_alias_targets(ctg$aliases, ctg$index)
+  targets = ctg$alias_targets
+  ctg$index$aliases = vapply(ctg$index$ref, function(r) {
+    paste(names(targets)[!is.na(targets) & targets == r], collapse = ",")
+  }, "", USE.NAMES = FALSE)
+  ctg
+}
+
+#' What the cached catalog depends on (registered providers and model specs, user config, cache
+#' file, discovery)
+#' @noRd
+catalog_key = function() {
+  specs = lapply(sort(registry_names("provider")), function(nm) {
+    p = registry_get("provider", nm)
+    list(nm, p[["models"]], p[["api"]], p[["local"]])
+  })
+  reg = registry_env()
+  list(registry = reg, generation = reg$generation, version = reg$version,
+       specs = specs, models = tryCatch(registry_all("model"), error = function(e) list()),
+       config = setting_get("providers", default = NULL),
+       cache = file.info(catalog_cache_path())[["mtime"]],
+       discovered = the$catalog[["discovered"]])
+}
+
+#' The merged catalog (04 section 11.10), rebuilt only when a layer changed
+#' @noRd
+catalog_get = function() {
+  key = catalog_key()
+  st = the$catalog
+  if (is.list(st) && identical(st[["key"]], key) && !is.null(st[["value"]])) {
+    return(st[["value"]])
+  }
+  value = catalog_build()
+  the$catalog = list(key = key, value = value, discovered = st[["discovered"]])
+  value
+}
+
+#' Forget the merged catalog (and, with `discovered = TRUE`, live-discovered local models)
+#' @noRd
+catalog_reset = function(discovered = FALSE) {
+  st = the$catalog
+  the$catalog = if (discovered) NULL else list(discovered = st[["discovered"]])
+  invisible(NULL)
+}
+
+#' Canonical provider id for a reference prefix (provider ids and provider aliases)
+#' @noRd
+model_provider_id = function(prefix, ctg) {
+  lp = tolower(prefix)
+  known = unique(c(ctg$index$provider, names(ctg$providers), registry_names("provider")))
+  if (lp %in% known) return(lp)
+  for (nm in registry_names("provider")) {
+    if (lp %in% tolower(registry_get("provider", nm)[["aliases"]] %||% character())) return(nm)
+  }
+  NA_character_
+}
+
+#' An entry for an alias target ref (a registered provider may serve an uncatalogued id)
+#' @noRd
+model_alias_entry = function(target, ctg) {
+  if (is.na(target)) return(NULL)
+  e = ctg$models[[target]]
+  if (!is.null(e)) return(e)
+  pv = sub("/.*$", "", target)
+  if (is.null(provider_get(pv))) return(NULL)
+  list(provider = pv, id = sub("^[^/]*/", "", target))
+}
+
+#' Is a credential for these variables (or this provider's store entry) present?
+#'
+#' Checks only: the environment, the vault and the credential store; never registers a value.
+#' @noRd
+model_key_present = function(id, vars) {
+  if (length(vars) && any(nzchar(Sys.getenv(vars, unset = "")))) return(TRUE)
+  if (any(vapply(vars, function(v) !is.null(secret_lookup(v)), NA))) return(TRUE)
+  rec = tryCatch(auth_store_read()[[id]], error = function(e) NULL)
+  if (!is.list(rec)) return(FALSE)
+  present = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  present(rec[["key"]]) || present(rec[["refresh"]]) || is.list(rec[["keyring"]])
+}
+
+#' Does a provider with key variables have a credential now?
+#' @noRd
+model_provider_keyed = function(pid) {
+  p = provider_get(pid)
+  vars = p[["auth"]]
+  if (!is.character(vars) || !length(vars)) return(FALSE)
+  isTRUE(tryCatch(model_key_present(pid, vars), error = function(e) FALSE))
+}
+
+#' Pick one row among several candidates: the single provider with a credential, else the
+#' owner's own listing among the credentialed ones (among all when none has a credential), else
+#' ambiguous (report 09 break_tie(), verification log row 34)
+#' @noRd
+model_pick = function(w, ctg, how) {
+  idx = ctg$index
+  if (length(w) == 1L) return(list(entry = ctg$models[[w]], how = how))
+  keyed = w[vapply(idx$provider[w], model_provider_keyed, NA, USE.NAMES = FALSE)]
+  if (length(keyed) == 1L) {
+    return(list(entry = ctg$models[[keyed]], how = paste0(how, " (credential)")))
+  }
+  if (length(keyed) > 1L) w = keyed
+  own = w[!is.na(idx$owner[w]) & idx$provider[w] == idx$owner[w]]
+  if (length(own) == 1L) return(list(entry = ctg$models[[own]], how = paste0(how, " (owner)")))
+  list(entry = NULL, how = "ambiguous", candidates = idx$ref[w])
+}
+
+#' Match by exact then normalised id within the selected rows
+#' @noRd
+model_match_id = function(pat, ctg, sel) {
+  idx = ctg$index
+  w = which(sel & tolower(idx$id) == tolower(pat))
+  if (length(w)) return(model_pick(w, ctg, "exact id"))
+  w = which(sel & idx$norm == catalog_norm_id(pat))
+  if (length(w)) return(model_pick(w, ctg, "normalised id"))
+  NULL
+}
+
+#' Match by family (newest active, owner preferred) then substring within the selected rows
+#' @noRd
+model_match_fuzzy = function(pat, ctg, sel) {
+  idx = ctg$index
+  lp = tolower(pat)
+  fam = sel & !is.na(idx$family) & tolower(idx$family) == lp & idx$status != "deprecated"
+  if (any(fam)) {
+    target = catalog_alias_target(list(family = idx$family[which(fam)[1]]),
+                                  idx[sel, , drop = FALSE])
+    if (!is.na(target)) return(list(entry = ctg$models[[target]], how = "family"))
+  }
+  if (nchar(lp) >= 3L) {
+    part = which(sel & (grepl(lp, tolower(idx$id), fixed = TRUE) |
+                          grepl(lp, tolower(idx$name), fixed = TRUE)))
+    if (length(part)) {
+      own = part[!is.na(idx$owner[part]) & idx$provider[part] == idx$owner[part]]
+      if (length(own)) part = own
+      pref = part[!grepl("-[0-9]{8}$", idx$id[part])]
+      pool = if (length(pref)) pref else part
+      ord = order(idx$release_date[pool], idx$id[pool], decreasing = TRUE, method = "radix")
+      return(list(entry = ctg$models[[pool[ord][1]]], how = "substring"))
+    }
+  }
+  NULL
+}
+
+#' The model entry of a live fake provider (P01) that no registry record shows
+#'
+#' gptr(model = gptr_fake_provider(...)) registers the spec at rank 0 for its session only
+#' (04 section 10.1), and model_resolve() has no session argument, so P06 resolving the
+#' session's "fake/fake-1" would miss it. P01 keeps a weak index of live fake engines by name
+#' (`fake_engine()`); the record is P01's `fake_model_record()` without its `fake` engine field,
+#' so provider_stream() picks the session's own spec through `opts$provider`.
+#' @noRd
+model_fake_entry = function(pid, id) {
+  engine = tryCatch(fake_engine(list(provider = pid)), error = function(e) NULL)
+  if (!is.environment(engine)) return(NULL)
+  type = if (identical(id, paste0(pid, "-1"))) {
+    "chat"
+  } else if (identical(id, paste0(pid, "-s1"))) {
+    "classifier"
+  } else {
+    return(NULL)
+  }
+  api = if (identical(type, "chat")) "fake" else "fake-classifier"
+  e = fake_model_record(pid, type, api, engine)
+  e[["fake"]] = NULL
+  e
+}
+
+#' Resolve a reference without its thinking suffix (report 09 match_pattern())
+#' @noRd
+model_match = function(pat, ctg) {
+  idx = ctg$index
+  lp = tolower(pat)
+  w = which(tolower(idx$ref) == lp)
+  if (length(w) == 1L) return(list(entry = ctg$models[[w]], how = "exact provider/id"))
+  targets = ctg$alias_targets
+  alias = if (length(targets)) targets[match(lp, tolower(names(targets)))] else NA_character_
+  sl = regexpr("/", pat, fixed = TRUE)
+  if (sl > 0L) {
+    pv = model_provider_id(substr(pat, 1L, sl - 1L), ctg)
+    if (is.na(pv)) {
+      fe = model_fake_entry(substr(pat, 1L, sl - 1L), substring(pat, sl + 1L))
+      if (!is.null(fe)) return(list(entry = fe, how = "live fake provider"))
+    }
+    if (!is.na(pv)) {
+      rest = substring(pat, sl + 1L)
+      sel = idx$provider == pv
+      r = model_match_id(rest, ctg, sel)
+      if (!is.null(r)) return(r)
+      sub_alias = if (length(targets)) {
+        targets[match(tolower(rest), tolower(names(targets)))]
+      } else {
+        NA_character_
+      }
+      if (!is.na(sub_alias) && startsWith(sub_alias, paste0(pv, "/"))) {
+        e = model_alias_entry(sub_alias, ctg)
+        if (!is.null(e)) return(list(entry = e, how = "alias"))
+      }
+      r = model_match_fuzzy(rest, ctg, sel)
+      if (!is.null(r)) return(r)
+      return(list(entry = NULL, how = "unknown id for known provider", provider = pv, id = rest))
+    }
+  }
+  every = rep(TRUE, nrow(idx))
+  r = model_match_id(pat, ctg, every)
+  if (!is.null(r)) return(r)
+  e = model_alias_entry(alias, ctg)
+  if (!is.null(e)) return(list(entry = e, how = "alias"))
+  r = model_match_fuzzy(pat, ctg, every)
+  if (!is.null(r)) return(r)
+  list(entry = NULL, how = "no match")
+}
+
+#' Is a provider local (loopback server: unknown model ids allowed)?
+#' @noRd
+model_provider_local = function(pid, ctg) {
+  p = provider_get(pid)
+  isTRUE(p[["local"]] %||% ctg$providers[[pid]][["local"]])
+}
+
+#' Resolve a reference with Pi's last-colon thinking rule and local-provider fallback
+#' @noRd
+model_lookup = function(text, ctg) {
+  hit = model_match(text, ctg)
+  if (!is.null(hit$entry)) return(hit)
+  thinking = NULL
+  pos = regexpr(":[^:]*$", text)
+  if (pos > 0L) {
+    suffix = substring(text, pos + 1L)
+    if (suffix %in% catalog_thinking_levels) {
+      hit2 = model_match(substr(text, 1L, pos - 1L), ctg)
+      if (!is.null(hit2$entry)) {
+        hit2$thinking = suffix
+        return(hit2)
+      }
+      if (!is.null(hit2$provider)) {
+        hit = hit2
+        thinking = suffix
+      }
+    }
+  }
+  if (!is.null(hit$provider) && model_provider_local(hit$provider, ctg)) {
+    entry = list(provider = hit$provider, id = hit$id, status = "active",
+                 reasoning = FALSE, tool_call = FALSE, locality = "unknown")
+    return(list(entry = entry, how = "local id", thinking = thinking))
+  }
+  hit
+}
+
+#' Up to three suggestions for an unresolved reference (utils::adist(), report 09)
+#' @noRd
+model_suggestions = function(text, ctg, candidates = NULL) {
+  if (length(candidates)) return(utils::head(candidates, 3L))
+  known = unique(c(ctg$index$ref, ctg$index$id, names(ctg$aliases)))
+  if (!length(known)) return(character())
+  d = utils::adist(tolower(sub(":.*$", "", text)), tolower(known))[1, ]
+  known[order(d, known, method = "radix")][seq_len(min(3L, length(known)))]
+}
+
+#' Clamp a requested thinking level to the supported ones: upwards first, then downwards
+#' @noRd
+model_clamp_thinking = function(levels, level) {
+  first = if (length(levels)) levels[[1]] else "off"
+  if (level %in% levels) return(level)
+  i = match(level, catalog_thinking_levels)
+  if (is.na(i)) return(first)
+  up = catalog_thinking_levels[i:length(catalog_thinking_levels)]
+  hit = up[up %in% levels]
+  if (length(hit)) return(hit[[1]])
+  down = rev(catalog_thinking_levels[seq_len(i - 1L)])
+  hit = down[down %in% levels]
+  if (length(hit)) return(hit[[1]])
+  first
+}
+
+#' A length-1 number or NA
+#' @noRd
+catalog_num = function(x) {
+  if (is.null(x) || !length(x)) return(NA_real_)
+  suppressWarnings(as.numeric(x[[1]]))
+}
+
+#' Model capabilities (contract section 4.9 plus forced_tool_choice, IC-71)
+#' @noRd
+model_capabilities = function(e, pinfo) {
+  caps = list(mid_system = FALSE, tool_addition = FALSE, images_in_results = FALSE,
+              operator_role = FALSE, adaptive_thinking = FALSE, effort = FALSE,
+              forced_tool_choice = TRUE)
+  caps = utils::modifyList(caps, pinfo[["capabilities"]] %||% list())
+  caps = utils::modifyList(caps, e[["capabilities"]] %||% list())
+  lapply(caps, isTRUE)
+}
+
+#' The model record (contract section 4.9) of a catalog entry
+#' @noRd
+model_record = function(e, ctg, provider = NULL) {
+  pid = as.character(e[["provider"]])
+  p = provider %||% provider_get(pid)
+  info = ctg$providers[[pid]] %||% list()
+  reasoning = isTRUE(e[["reasoning"]])
+  levels = as.character(unlist(e[["thinking_levels"]]))
+  if (!length(levels)) {
+    levels = if (reasoning) c("off", "minimal", "low", "medium", "high") else "off"
+  }
+  type = as.character(e[["type"]] %||% p[["type"]] %||% "chat")
+  id = as.character(e[["id"]])
+  ref = paste0(pid, "/", id)
+  targets = ctg$alias_targets %||% character()
+  metadata = catalog_entry_metadata(e, ref)
+  metadata[["capabilities"]] = NULL
+  context = catalog_entry_context(list(limit = list(context = e[["context"]]),
+                                        configured_context = e[["configured_context"]]))
+  record = list(ref = ref, provider = pid, id = id, name = as.character(e[["name"]] %||% id),
+       family = as.character(e[["family"]] %||% NA_character_),
+       api = as.character(e[["api"]] %||% p[["api"]] %||% info[["api"]] %||% NA_character_),
+       type = type, release_date = as.character(e[["release_date"]] %||% NA_character_),
+       context = catalog_num(context), max_output = catalog_num(e[["max_output"]]),
+       reasoning = reasoning, thinking_levels = levels, thinking = NULL,
+       input = as.character(unlist(e[["input"]] %||% "text")),
+       tool_call = isTRUE(e[["tool_call"]]),
+       structured_output = isTRUE(e[["structured_output"]]), prices = prices_df(e[["prices"]]),
+       cache_min = catalog_num(e[["cache_min"]]), max_images = catalog_num(e[["max_images"]]),
+       capabilities = model_capabilities(e, info),
+       aliases = names(targets)[!is.na(targets) & targets == ref],
+       status = as.character(e[["status"]] %||% "active"),
+       local = isTRUE(p[["local"]] %||% info[["local"]] %||% e[["local"]]))
+  c(record, metadata)
+}
+
+#' Resolve a model reference to a model record (contract sections 4.9 and 7.5)
+#'
+#' `ref` is `provider/id[:thinking]`, an alias (dynamic by family and release date), a
+#' provider-less id, or a `gptr_provider` spec (its first model; used for `model = <spec>`).
+#' @noRd
+model_resolve = function(ref, strict = TRUE) {
+  check_flag(strict, "strict")
+  ctg = catalog_get()
+  if (inherits(ref, "gptr_provider")) {
+    models = catalog_spec_models(ref)
+    if (!length(models)) {
+      gptr_abort(paste0("Provider ", ref[["id"]] %||% "", " declares no models."),
+                 "unknown_model", ref = ref[["id"]] %||% "", suggestions = character())
+    }
+    return(model_record(models[[1]], ctg, provider = ref))
+  }
+  check_string(ref, "ref")
+  hit = model_lookup(ref, ctg)
+  if (is.null(hit$entry)) {
+    if (!strict) return(NULL)
+    targets = ctg$alias_targets
+    target = if (length(targets)) targets[match(tolower(ref), tolower(names(targets)))] else NA
+    if (!is.na(target)) {
+      gptr_abort(paste0("The model alias '", ref, "' points to ", target, ", but its provider ",
+                        sub("/.*$", "", target), " is not registered."),
+                 "unknown_model", ref = ref, suggestions = character())
+    }
+    sugg = model_suggestions(ref, ctg, hit$candidates)
+    lead = if (identical(hit$how, "ambiguous")) {
+      paste0("The model reference '", ref, "' is listed by several providers; name one as ",
+             "provider/id.")
+    } else {
+      paste0("Unknown model reference '", ref, "'.")
+    }
+    gptr_abort(paste0(lead, if (length(sugg)) paste0(" Did you mean: ",
+                                                     paste(sugg, collapse = ", "), "?") else ""),
+               "unknown_model", ref = ref, suggestions = sugg)
+  }
+  rec = model_record(hit$entry, ctg)
+  if (!is.null(hit$thinking)) rec$thinking = model_clamp_thinking(rec$thinking_levels, hit$thinking)
+  rec
+}
+
+#' Alias names of the merged catalog (for identifier_known(), P08)
+#' @noRd
+catalog_aliases = function() names(catalog_get()$aliases) %||% character()
