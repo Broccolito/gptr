@@ -254,3 +254,49 @@ test_that("the Windows release job streams the offline suite file by file, bound
   expect_identical(step$env[["NOT_CRAN"]], "true")
   expect_true(file.exists(file.path(root, "dev", "ci", "test-by-file.R")))
 })
+
+# The `gptr::name` calls in the bodies and formals of the package's functions, where R CMD check's
+# "checking dependencies in R code" looks for them. A name that NAMESPACE does not export is a
+# WARNING ("Missing or unexported objects"), which fails every hosted check job (CI Task CI-4).
+gptr_ns_calls = function(e, acc) {
+  if (is.function(e)) {
+    if (!is.primitive(e)) {
+      gptr_ns_calls(formals(e), acc)
+      gptr_ns_calls(body(e), acc)
+    }
+    return(invisible())
+  }
+  if (!is.call(e) && !is.pairlist(e) && !is.expression(e)) return(invisible())
+  if (is.call(e) && length(e) == 3L && identical(e[[1L]], as.name("::")) &&
+      identical(e[[2L]], as.name("gptr"))) {
+    acc$names = c(acc$names, as.character(e[[3L]]))
+  }
+  for (i in seq_along(e)) {
+    el = e[[i]]
+    if (!missing(el)) gptr_ns_calls(el, acc)
+  }
+  invisible()
+}
+
+namespace_exports = function() {
+  path = source_file("NAMESPACE")
+  if (is.null(path)) path = system.file("NAMESPACE", package = "gptr")
+  directives = as.list(parse(path, keep.source = FALSE))
+  unlist(lapply(directives, function(d) {
+    if (identical(d[[1L]], as.name("export"))) vapply(as.list(d)[-1L], as.character, "")
+  }))
+}
+
+test_that("every gptr:: call in the package code names an export of NAMESPACE (R CMD check)", {
+  acc = new.env(parent = emptyenv())
+  acc$names = character()
+  # negative control: a quoted call counts, in a body and in a default argument
+  gptr_ns_calls(function(a = gptr::in_formals) quote(gptr::in_body(x)), acc)
+  expect_setequal(acc$names, c("in_formals", "in_body"))
+  exports = namespace_exports()
+  expect_true(all(c("gptr_env", "gptr_sessions") %in% exports))
+  acc$names = character()
+  ns = asNamespace("gptr")
+  for (name in ls(ns, all.names = TRUE)) gptr_ns_calls(get(name, envir = ns), acc)
+  expect_identical(setdiff(unique(acc$names), exports), character())
+})

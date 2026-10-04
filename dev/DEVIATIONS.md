@@ -2919,6 +2919,171 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
+## D-061 - P11 command, SQL and Python classifiers: a command line is read as sh reads it (comments, heredocs, ANSI-C quotes, substitutions, cd), null devices and shell-word paths are followed, wrappers, eval and shell keywords never hide a command, program-running options and environment prefixes are dynamic, every write takes the path class of the file it writes, SQL is lexed in one pass per dialect, text enters through as_utf8() (2026-10-04)
+
+P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
+flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
+interfaces and call texts; all 55 plan expectations pass unchanged, and so do the later P11 tasks'
+command, SQL and Python cases. The classifier is advisory (G5, 03 section 6.8), but a level-0 result
+runs without asking in every mode (plan mode included), so the plan-literal code had to be hardened
+where it returned level 0 or 1 for code that runs programs, deletes or writes guarded files:
+1. **Shell syntax.** Substitutions are found by a scan that follows quotes, backslashes and
+   nesting, and each is classified as a command line, recursively (the plan read one level with a
+   regular expression: `echo $(rm -rf ~ $(true))` was 0), process substitutions `<(...)`/`>(...)`
+   too. Text in single quotes is no command (`awk '{print $(NF-1)}'` stays 0, `echo '$(rm -rf ~)'`
+   is 0), double-quoted substitutions are (`echo "$(rm -rf ~)"` is 4). An arithmetic `$((...))` is
+   no command, but substitutions inside it are. One that is not closed is level 3 `dynamic` and its
+   text is classified too. A line that starts with `|` no longer throws. A wrapper, `sudo` or `xargs`
+   without a command keeps its flag. Redirects are handled per simple command, and
+   `cd`/`pushd`/`popd` set the directory that later relative paths and redirects resolve from
+   (`cd .gptr && echo x > settings.json` was 2, now 4); a computed `cd` makes relative paths
+   `unknown`; a `cd` in a subshell `( )` ends with it, and one in a pipeline or the background
+   (`cd /tmp & rm -rf *`) changes nothing. A bare digit after `>` is a file; only after `>&` is it a
+   descriptor; `>|` is `>`. The tokeniser reads backslash escapes (outside quotes before a shell
+   metacharacter, quote, `$` or backtick, and `\"`, `\\`, `\$`, `` \` `` in double quotes; other
+   backslashes stay, so Windows paths keep theirs): `echo \' ; rm -rf ~ ; echo \'` was 0, now 4.
+   Before any scan the line is read as sh reads it (`risk_sh_prepare()`), at any nesting of
+   `$(...)`: an unquoted `#` that starts a word comments out the rest of its line (`a#b`,
+   `${x#a}` and `$#` are no comments); `$'...'` is ANSI-C quoting and is decoded (`\'`, `\xHH`,
+   octal, `\u`); a backslash-newline is removed outside single quotes; a heredoc body (`<<WORD`,
+   `<<-WORD` with its tabs, `<<'WORD'`, several on one line) is data up to its delimiter line, and
+   the lines after it are commands again. An unquoted delimiter's body still runs its
+   substitutions, and a shell that reads a heredoc or a here-string (`sh <<'EOF'`,
+   `bash <<< '...'`) runs it as a command line. A `<<` inside `((...))` or `$((...))` is a shift.
+   A line that ends inside an open quote is level 3 `dynamic`. Before review round 2 an
+   apostrophe in a comment or a heredoc body opened a quote that hid every later line:
+   `ls # don't` followed by `rm -rf ~` was 0, `echo $'\'' ; rm -rf ~` was 0,
+   `"$\<newline>(rm -rf ~)"` was 0, and `cat > notes.md <<'EOF'` with the body `It's done`
+   followed by `rm -rf ~` was 3.
+2. **Null devices are not writes** (`/dev/null`, `/dev/stdout`, `/dev/stderr`, `/dev/tty`,
+   `/dev/fd/1`, `/dev/fd/2`, `NUL`, `-`). G5 had a `null` path class; P01's `path_class()` puts
+   `/dev/null` in `outside`, so `git status 2>/dev/null` was level 3 in the plan.
+3. **Shell-word paths** (`risk_cmd_path_class()`): `$HOME`/`${HOME}` (and `${HOME:?}`,
+   `${HOME:-x}`, `${HOME%/}`) is `~`, `$PWD` (and `$(pwd)`) the working directory; any other `$`,
+   backtick or `%VAR%` word is `unknown` (P01 joined it to the root as `workspace`, so `cp x $DEST`
+   was an edits-mode auto-approval). A glob takes its directory's class when that is `control`,
+   `protected` or `instructions` (any glob in `.gptr/` is `control`), and a bare `*` in a critical
+   directory is `critical` (`rm -rf *` at the root, `~/*`, `/*`, `"$PWD"/*`: 4, like `rm -rf ~`).
+   Deleting or moving away the root, home, a directory above either (any expansion of `$HOME` or
+   `$PWD`, such as `${PWD%/*}`), or a `.gptr/` directory is level 4. `~+` is the working
+   directory; `~-`, `~+N`, `~-N` and `~login/...` are `unknown`, and deleting a bare `~login` (that
+   user's home) is 4 (`rm -rf ~+` and `rm -rf ~root` were 3). Every write takes the path
+   class of the file it writes (`risk_cmd_target_class()`, control category for `control`; a `.gptr`
+   directory itself is `control`): all operands of `mkdir`/`touch`; for `cp`/`mv`/`ln`, the
+   destination, or, when it is a directory (a `-t`/`--target-directory` value, a trailing `/`, `.`,
+   `..`, `~`, more than one source, or an existing directory, unless `-T`), each source's name inside
+   it (`cp settings.json .gptr/` is 4 `control`, `cp ../a.csv .` is 2 `workspace`; `src/.` copies
+   any name; a glob name takes the class of the guarded names it can match there: dot names for a
+   dot pattern, the control files inside `.gptr/`); guarded sources of `mv`; `chmod`/`chown` targets
+   of class `control` or `critical`; and the targets of redirects, `tee`, `time -o`,
+   `find -fprint*`/`-fls`, sed `w` and `-i`, `gawk -i inplace`, the second operand of `uniq` and
+   `xxd`, `sort -o`/`--output`, `tree -o`, gawk's `-o`/`-p`/`-d` (an attached file, else
+   `awkprof.out` or `awkvars.out`) and the literal files an awk program prints to
+   (`print "x" > "f"`), curl's `-o`, `-O` (the URL's name, both in `--output-dir`), `-D`, `-c`,
+   `--trace*`, `--libcurl`, `--stderr`, `--etag-save`, `--hsts`, `--alt-svc`, wget's `-O`, else
+   each URL's name (in `-P`), and its `-o`/`-a`/`--save-cookies` files, PowerShell's `-OutFile`,
+   and git's outputs (item 5); options are read in every spelling (item 6).
+4. **Environment prefixes** that choose the program or what it loads (`PATH`, `LD_*`, `DYLD_*`,
+   `HOME`, `GIT_SSH*`/`GIT_EXTERNAL_DIFF`/`GIT_CONFIG*`/..., `BASH_ENV`, `PAGER`, `EDITOR`,
+   `PYTHONPATH`, `NODE_OPTIONS`, `R_PROFILE*`, ...) are level 3 `dynamic`: the open question of G5
+   (line 189) that the research digest's security notes answer with level 3. `LC_ALL=C` stays 0.
+5. **git.** The global options that take a value are skipped with it, as the next word or after
+   `=` (`-C`, `-c`, `--config-env`, `--git-dir`, `--work-tree`, `--namespace`, `--super-prefix`,
+   `--attr-source`): `git --namespace status push --force origin main` read `status` as the
+   subcommand and was 0, now 3. A writing subcommand on a `--work-tree` or `--git-dir` of class
+   `control`, `protected` or `instructions` writes there (`git --work-tree .gptr checkout -- .` is
+   4 `control`; a `.git` directory is not counted). `-c`/`--config-env` with a key outside an
+   allowlist of keys that cannot run a program
+   (pager keys are checked by value, so the plan's `-c core.pager=cat` stays 0; `core.fsmonitor`,
+   `alias.*`, `core.sshCommand` are 3), `--exec-path=`, `--upload-pack`/`--receive-pack`/`--exec`,
+   `rebase -x`, `grep -O`, `bisect run` and `submodule foreach` are `dynamic`. A bare `git stash`
+   (push and reset) is 2, `git branch <name>`/`git tag <name>` (listing forms stay 0) are 2, `reflog
+   expire|delete` is 3. Levels are only raised, so `-D` never lowers a row a `risk_rule` raised; the
+   plan's `branch -d`/`tag -a` kept category `read` at level 2, now `file_write`. Files git writes
+   take their path class, resolved from `-C`: `--output`, `archive -o`, `format-patch -o DIR`
+   (`DIR/*.patch`) and `bundle create FILE`. `git config` storing a key whose value git later runs
+   or loads (`core.fsmonitor`, `core.hooksPath`, `core.editor`, `alias.*`, `credential.*helper`,
+   `diff.*.textconv`, `filter.*`, `include.path`, ...; pager keys checked by value) is level 4
+   `control` on `.git/config` (or `<git-dir>/config`, or the `--file`, `--global`, `--system`
+   file): later level-0 git commands would run it. Other settings written to a `--file`/`-f`,
+   `--global` or `--system` file take that file's path class (`git config --file
+   .gptr/settings.json user.name me` was 2 with no path, now 4 `control`); `git config user.name
+   me`, which git writes to the repository's own `.git/config`, stays 2.
+6. **Read-table programs with options that run code or write files**: sed (combined `-ni`,
+   `-i.bak`; GNU `e`, `w`/`W` and the `e`/`w` flags of `s`; `--sandbox` turns them off; BSD
+   `-i ''`/`-i .bak`), find (leading `-H`/`-L`/`-P` skipped; `-delete` and `-exec rm` take the start
+   paths' delete level), fd `-x`/`-X`, rg/ag `--pre`/`--pager`, sort `--compress-program`, awk pipes
+   to or from commands and `getline`, yq `-i`, printf of a secret-looking variable, curl data flags in
+   attached and combined forms (`-d@file`, `-sd`), wget `--post-data=`/`--method`/`--body-*`, httpie
+   `POST`/`PUT`/`PATCH`/`DELETE`. These options are read with `risk_cmd_args()`: a short-option
+   cluster gives one option per letter up to the first that takes a value, which takes the rest
+   of the word or the next word (`sort -uo FILE`, `yq -Pi`, `curl -so FILE`, `wget -qO FILE`;
+   `sort -to x` is `-t o`, `yq -oi` is `-o i`); tree's value letters each take the next word, in
+   order; a long option that is a prefix of a listed one is that option, as getopt_long() reads
+   it (`sort --out=F`, `gawk --dump=F`, `cp --targ=DIR`; not for curl and yq, which read long
+   options in full); gawk's optional values are only attached, and `xargs -i`/`--replace` take no
+   separate value. Before review round 2, `sort -uo .Rprofile`, `tree -ao .gptr/settings.json`,
+   `yq -Pi ... .gptr/settings.json` and `gawk -o.gptr/settings.json` were 0.
+7. **SQL** is lexed once, left to right (strings, quoted identifiers, dollar quotes, `--` and block
+   comments; MySQL's executable `/*! */` stays code), with and without backslash escapes, and the
+   higher result wins. The plan stripped comments before strings, so `SELECT '--'; DROP TABLE t` was
+   0, and a block comment over two lines made `SELECT 1` level 3. `EXPLAIN ANALYZE` of a write is 2.
+   Statements are classified in one pass (20,000 statements, 800 KB: 8.3 s with one bind per
+   statement for both lexings, 0.4 s after). Two MySQL lexings (with and without backslash
+   escapes) read `#` as a comment, `--` as one only before white space or a control character,
+   and no dollar quotes: `SELECT 1--1; DROP TABLE t` and `SELECT $$; DROP TABLE t; $$` were 0, now
+   3. With backslash escapes `\"` is escaped inside double quotes too. A lexing whose blanked text
+   equals an earlier one is not classified again (the same 20,000 statements: 0.2 s).
+8. **Python**: `from os|shutil|pty import` of process and delete functions, and `os.rename`/
+   `replace`/`makedirs`/... and `shutil.copy*`/`move` (file writes) are flagged.
+9. **Input**: command, SQL and Python text enters through P01's `as_utf8()`. The file
+   `utils-encoding.R` is the only place allowed to convert from the native encoding, because in a C
+   locale that conversion rewrites UTF-8 bytes as `<c3><a9>`, which the tokeniser reads as
+   redirects. Bytes that are neither UTF-8 nor marked latin1 are level 3. A vector of SQL or Python
+   is joined with newlines (the plan's `if (grepl(...))` threw on length > 1). NA is `""`.
+   `risk_path_class()` also maps P01's translation warning (a non-ASCII path in a C locale) to
+   `unknown`, as its documented contract says. The tokeniser collects characters by index (linear
+   time on long quoted words).
+10. **Wrappers and shell keywords never hide the command they run.** The options of `sudo`,
+    `doas`, `env`, `nice`, `timeout` (and its duration), `time`, `stdbuf`, `xargs`, `exec` and
+    `command` are skipped with their values (`-u root`, `-uroot`, `-Eu root`, `--user=root`, `--`);
+    `env -C`/`sudo -D` set the directory, `env -S` splits its string into the command, `env -P` is
+    `dynamic`, `env` with only options or assignments prints the environment (2 `secret`), `command
+    -v` only looks up, `sudo -e` writes its files, `su -c` and a shell's `-c` (`bash -lc`, `sh -o
+    pipefail -c`) classify their command line. An unknown program, or a wrapper option gptr does not
+    know, also has its first later word that names a known program classified (`chrt 10 rm -rf ~`
+    is 4). Shell keywords (`!`, `{`, `}`, `if`, `then`, `else`, `elif`, `while`, `until`, `do`,
+    `done`, `fi`, `esac`) run nothing; `for`/`select`/`case` words are data; a `function` body is
+    classified; `( )` is a subshell; `[[` is `[`. The plan made `sudo -u root rm -rf /`,
+    `nice -n 10 rm -rf ~`, `(rm -rf ~)`, `if true; then rm -rf ~; fi` and `bash -c 'rm -rf ~'` level
+    3, which auto mode allows, so the critical guard and the control `ask_human` were bypassed.
+    `eval` joins its words and classifies them as a command line (`eval 'rm -rf ~'` was 3, now 4).
+    A program word with a backslash is also classified as sh reads it, without the backslashes,
+    when that names a known program (`r\m -rf ~` and `c\p settings.json .gptr/` were 3, now 4;
+    `C:\Git\bin\git.exe status` stays 0). Substitutions, `-c`, `eval` and heredoc lines nested
+    deeper than 25 levels are level 3 `dynamic`, not read.
+Known limits (advisory classifier, not a security boundary): scripts read by `sed -f`/`awk -f`,
+configuration read by `curl -K`, `wget -e`/`--config` or `git` from the repository, commands
+hidden by `eval` of computed strings beyond the rules above, Python reached through `getattr()`,
+and heredocs or here-strings read by a program other than a shell (an interpreter is 3 `process`
+anyway). A substitution in an unquoted heredoc that holds a comment is not read and is level 3
+`dynamic`. Shell syntax is read as sh (and PowerShell, for `#` comments) reads it; cmd.exe, gptr's
+last fallback on Windows without Git Bash or PowerShell, has no `'` quotes, no `#` comments and
+`^` escapes, which the classifier does not model.
+
+Validation: `progress/P11.md`, Task 2. Six blocks were added to `test-perm-classify.R`
+(145 expectations); against the plan-literal Task 2 source the file gives
+`[ FAIL 87 | WARN 0 | SKIP 0 | PASS 202 ]` (`task2-probe-plan-literal.log`). Review round 1 added
+item 10 and the destination, operand, `$PWD`, quote and `cd` parts of items 1, 3 and 5, with five
+blocks (131 expectations) and one changed row (`echo $(rm -rf ~ "(")` is now read: 4, not 3);
+against the round-0 source they fail 100 (`task2-fix1-red.log`, before five category assertions
+were added). Review round 2 added the comment, heredoc, `$'...'` and continuation parts of item
+1, the git options, tilde prefixes and new write targets of items 3 and 5, the option parsing of
+item 6, the MySQL lexings of item 7 and `eval` and escaped program names in item 10, with six
+blocks (109 expectations); the first 103 fail 70 against the round-1 source
+(`task2-fix2-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 556 ]` in the
+UTF-8 and the C locale.
+
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
 P15 Task 1's plan-literal `doc_format_kv()`, `doc_parse_kv()` and `doc_block_status()`
@@ -2954,3 +3119,148 @@ unchanged. Fifteen were added: 2 for item 1 (the plan literal writes a newline i
 decoded without the R parser, also in a C locale" and 2 for item 3. Against the round-0 source
 the added review-round-1 expectations fail 5 (3 C-locale, 2 partial-match; `task1-fix1-red.log`).
 Final `^doc-blocks$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 59 ]` in the UTF-8 and the C locale.
+
+## D-063 - Hosted CI after the P06/P09/P10 waves: as_utf8() keeps bytes that are not UTF-8 in a UTF-8 locale on every R version; the six-stream INFRA-01 wall nets out the mock's own lateness (2026-10-04)
+
+Hosted run 37213342336 (`b40b4d1`) and run 37210924368 (`51ba767`) failed every R CMD check
+job. CI Task CI-4 fixes them. Two of its changes go beyond a test's portability or packaging:
+
+1. **`as_utf8()` keeps bytes that are not valid UTF-8 when the native encoding is UTF-8**
+   (`R/utils-encoding.R`, P01; IC-62). Such an unknown-encoded string has no native encoding to
+   be converted from. On R 4.5 and later (hosted 4.5.3, 4.6.1 and devel, local 4.5.0),
+   `enc2utf8()` keeps its bytes and marks it UTF-8. R 4.2.3, on the oldrel-4 jobs for Ubuntu
+   and Windows (ucrt, UTF-8), turned each invalid byte into `<xx>` text (R 4.3 and 4.4 were not
+   checked). So on R 4.2.3 the code `x = '`, byte 0xff, `'` ran as `x = '<ff>'` with status
+   `ok`, and D-055 item 4's `parse_error` never happened (hosted `test-eval-core.R:512-514`).
+   `as_utf8()` now marks such strings UTF-8 itself. It calls `enc2utf8()` only for latin1
+   strings and, in other locales, for native strings that are not valid UTF-8. Where
+   `enc2utf8()` already kept the bytes, the result is the same as before. Where it rewrote
+   them, every ingress in a UTF-8 locale now keeps the bytes as they came, so `validUTF8()`
+   checks see them. Nothing changes in a non-UTF-8 locale. The one `enc2utf8()` call moved into
+   `native_to_utf8()`, which the test mocks with R 4.2.3's conversion to reproduce the hosted
+   failure on any R version.
+2. **The six-stream INFRA-01 wall is measured on the mock's clock** (`test-http-reactor.R`,
+   P04; extends D-016 item 1). Hosted macOS measured 2.486 s from the first head written. The
+   heads were written within 0.017 s, and the long streams ended at 2.402, 2.436 and
+   2.486 s, against the 2.25 s schedule. The message did not show whether the mock wrote the
+   last pieces late or gptr delivered them late. D-016 netted the mock's own lateness out of
+   the gaps but not out of the wall. Each stream's end is now its head's write, plus its
+   scheduled length (`n * 0.25` s), plus gptr's delivery latency of the end of the body. That
+   latency is the callback's wall clock minus the mock's write of the stream's last piece. A
+   body of its own names each stream's request in its mock's log. The bound stays the plan's
+   1.10 * 9 * 0.25 = 2.475 s. A latency below -0.05 s fails, because it means mismatched
+   writes. D-016 said that contention which stretches every stream still fails. That now holds
+   for gptr's delivery, but not for a mock that writes late. The failure message prints each
+   stream's own lateness and gptr's delivery latency. Real-mock probe, on a clean `HEAD`
+   export: normal runs measure 2.259-2.263 s here and 2.261-2.269 s by the old measure. With
+   gptr's pump held for 0.4 s near the ends, the new measure gives 2.531-2.535 s and the old
+   2.523-2.526 s, so both fail. With the long mock suspended for 0.7 s near its last writes
+   (own lateness 0.319 s), the new measure gives 2.261-2.262 s and the old 2.574 s, the hosted
+   failure's shape.
+
+Validation: `progress/ci-hosted.md`, Task CI-4.
+
+## D-064 - P15 call scanner: UTF-8 bytes are parsed (IC-62), parse data is kept under sys.source(), ownership matches header keys exactly and never a missing prompt hash, a computed prompt = gives no literal (2026-10-04)
+
+P15 Task 2's plan-literal scanner and ownership functions (`R/doc-blocks.R`) were changed in five
+ways. Their interfaces and the contract 11.5 ownership rule are unchanged.
+1. **The scanner parses UTF-8 bytes.** The plan parsed `as_utf8()` (UTF-8-marked) text and
+   decoded string literals with `str2lang()`. In a C locale (the architecture section 9 CI
+   matrix has an `LC_ALL=C` job) the parser translates marked UTF-8 to the native encoding, so a
+   prompt literal `"café"` was read as `"caf<U+00E9>"`. Its `prompt_hash()` differs from the
+   runtime prompt's, so the call never finds its block by prompt: the block is matched by `call=`
+   ordinal as stale or not at all, against IC-62 (exact UTF-8 prompt bytes under
+   `LC_ALL=C Rscript`, document included). Outside a UTF-8 locale `doc_parse_text()` now parses
+   `os_bytes(lines)` (UTF-8 bytes without a mark); in a UTF-8 locale it parses marked UTF-8 as
+   the plan did, since nothing is translated there. `str2lang(os_bytes(.))` decodes prompt
+   literals and call texts, and prompts and call texts pass `as_utf8()`. Parse-data columns and
+   `utils::getParseText()` (which cuts the source lines with `substr()`) then count the same
+   unit: bytes outside a UTF-8 locale, characters in a UTF-8 locale. The plan's parse cut a
+   non-ASCII call text short in a C locale. The first version of this change parsed the bytes in
+   every locale: unmarked non-ASCII text makes the parser count bytes, while `substr()` counts
+   characters in a UTF-8 locale, so in the default locale a call after a non-ASCII character on
+   its line got a shifted text and was never found by identity, and a literal prompt over 1000
+   bytes was lost (review round 2; fixed and covered in both locales).
+2. **Parse data is kept under `sys.source()`.** `sys.source()` sets `keep.parse.data = FALSE`
+   while the sourced code runs (its `keep.parse.data` argument defaults to
+   `keep.parse.data.pkgs`), and a user may set the option. `getParseData()` is then `NULL` and the
+   plan's scanner found no `gptr()` call at all. `doc_parse_text()` sets
+   `options(keep.parse.data = TRUE)` for the parse and restores it with `on.exit(add = TRUE)`.
+3. **Ownership matches exactly.** `doc_owned_block()` read `call=` with `h$call`, which partially
+   matches an unknown header key such as `callback=` (as D-062 item 3 for `sha=`/`status=`); it
+   now reads `h[["call"]]`, as do the label column and the site and anchor fields.
+   `doc_run_owner()` matched a header without `prompt=` to a missing prompt hash (`NA %in% NA`),
+   returning that block as owned and fresh; a missing hash now never matches by prompt.
+4. **Terminal-only parse text.** `getParseData()` runs without `includeText = TRUE`;
+   `getParseText()` reads a call's text back from the source, so results are identical and a
+   2,320-line script parses about 18 times faster (0.013 s instead of 0.24 s).
+5. **A computed `prompt =` is the prompt (review round 1).** Contract 6.1.1 step 2 takes
+   `prompt =` when given, else the first unnamed string literal, and a non-literal prompt's
+   template is its value (7.8 call record). The plan's `doc_call_prompt()` fell back to the first
+   unnamed literal when `prompt =` was not a literal, so `gptr(prompt = p, "context text")` was
+   hashed as `"context text"`, never matched the runtime hash of `p`'s value, and was skipped by
+   the call-identity fallback (which only checks rows without a hash): the call could never be
+   located. A given `prompt =` whose value is not a string literal now gives NA, so the call is
+   found by its text. `prompt = NULL` and an empty `prompt =` are not given (the default is
+   `NULL`), and `` `prompt` = `` and `"prompt" =` bind `prompt` as in R (`doc_arg_name()`).
+
+Validation: `progress/P15.md`, Task 2 (`test-doc-blocks.R`). The plan's 46 expectations are
+unchanged. Thirty-one were added (5 C-locale, 6 for the parse memo and `line_offset`, 3 ownership,
+4 parse data, 3 for `prompt =`, and 10 for call texts and long literals, run in both the C and a
+UTF-8 locale). Against the plan literal they fail 15 (`dev/.validation/P15/task2-adapt-red.log`,
+`task2-fix1-adapt-red.log`, `task2-fix2-adapt-red.log`). Final `^doc-blocks$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 136 ]` in the UTF-8 and the C locale.
+
+## D-065 - P07 composition: a session preset equal to the configured one is not an explicit choice, `tools.disable` also drops plugin direct tools, a failing tool schema leaves that tool out, section overrides follow Pi's rule without widening the preset (2026-10-04)
+
+P07 Task 4's plan-literal `prompt_compose()` / `prompt_compose_preset()` / `prompt_tool_array()`
+(`R/prompt-sections.R`) were changed in three ways, and the review of Task 4 added three more to
+`prompt_sections_render()` / `prompt_system_overrides()`. Signatures and the frozen list are
+unchanged.
+
+1. **The configured preset is not an explicit preset.** The plan took
+   `explicit = opts$preset %||% d$preset`, but P06's real `session_new()` stores
+   `preset %||% setting_get("preset", default = "standard")`, so `d$preset` is never `NULL` for a
+   session. The user's `tools.presets` mapping and IC-73's shipped `extended` defaults (Gemini 3,
+   Haiku 4.5 past break-even) then never applied to a real session, only to
+   `gptr_prompt(NULL)`. P08 passes `preset = NULL` to `session_new()` and leaves `preset` out of
+   the run options when the user names none (`gateway_preset()`), so the session's own preset is
+   now explicit only when it differs from setting `preset`; `opts$preset` always wins. A caller
+   that names exactly the configured preset (session_new() without `opts$preset`) is treated as
+   not having chosen one; P06 records no separate flag, and P06's file is not changed.
+   `prompt_compose_preset()` also passes `session = sid` to `preset_tools()` (Task 3 review), so a
+   session's rank-0 preset (IC-69 session scope) composes instead of aborting "Unknown preset".
+2. **`tools.disable` drops plugin direct tools.** The plan removed the always-declared
+   un-namespaced direct tools (IC-37) only for `-name` run modifiers; the `tools.disable` setting
+   (04 section 11.2 `tools {enable, disable, presets}`) removed only preset tools, so a disabled
+   plugin tool stayed in the array. Both now remove it.
+3. **A failing tool declaration leaves that tool out.** The plan let an error of a tool's
+   `parameters(ctx)` stop the whole freeze (every run of the session) and dropped an erroring
+   `available(ctx)` silently. As P06's fallback freeze (`freeze_tool_decl()`) does, the tool is now
+   left out with a diagnostic when `available()` or `parameters()` fails or the schema is not a
+   JSON Schema with `type = "object"` (contract section 9.1); a plain `FALSE` from `available()`
+   stays silent.
+4. **The Pi-rule core replacement has no section budget.** A trusted `.gptr/SYSTEM.md`, the
+   user's `SYSTEM.md` or a string `.opts$system` replaces `preamble`, `tools` and `rules`
+   (04 section 9.3, 03 section 7.3). The plan stored it as the `preamble` override and cut it to
+   the preamble's 120 tokens. Contract and architecture give the replacement no budget, and Pi
+   applies none. The replacement now carries the attribute `core`, and only that text skips the
+   budget check. Named overrides (`.opts$system` list, `session_start` sections) keep their
+   section's budget. A blank replacement (an empty SYSTEM.md, `.opts$system = ""`) replaces
+   nothing, and a blank named override omits its section, as a provider's empty text does.
+5. **Overrides never change inclusion.** The plan matched overrides against the rendered rows
+   only, so an override of a registered section that the preset excludes became a new T0 section
+   at order 760. A T1 `r_env` then landed in T0 after `<context>` (03 section 7.3: T0 ends after
+   `<context>`). Such an override is now dropped: the preset record decides inclusion (IC-69),
+   and a `session_start` override cannot widen a minimal sub-agent prompt. Only unregistered
+   names still become T0 sections at 760.
+6. **Fragments honour overrides.** A named override of an `r_session` fragment (a
+   `prompt_section` with `parent`) now replaces its text, or removes it for `NULL` or blank text,
+   inside the parent ("a named `.opts$system` list overrides named sections (`NULL` removes)").
+   The plan ignored it, and a string added a stray `<shell>` section beside the original line.
+
+Validation: `progress/P07.md`, Task 4. The plan's 12 tests are unchanged and pass on both the
+plan literal and the adapted code. Items 1-3 added 4 tests (19 expectations); against the plan
+literal they fail 6 (`dev/.validation/P07/task4-plan-literal2.log`). Items 4-6 added 4 tests
+(30 expectations); against the pre-review source they fail 20 (`task4-fix1-red2.log`). Final
+`^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 185 ]`.

@@ -29,6 +29,35 @@ test_that("as_utf8() converts latin1, leaves ASCII and NA, keeps names", {
   expect_identical(as_utf8(1:3), 1:3)
 })
 
+test_that("as_utf8() keeps bytes that are not UTF-8 in a UTF-8 locale, on every R version", {
+  # A UTF-8 native encoding has nothing to convert them from. enc2utf8() keeps them, marked
+  # UTF-8, on R 4.5 and later; R 4.2.3 turned them into "<ff>" text, so code holding a stray
+  # byte ran as other code instead of being refused (hosted oldrel-4, CI Task CI-4).
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "the session's native encoding is not UTF-8")
+  bad = rawToChar(as.raw(c(0x61, 0xff)))
+  latin = "caf\xe9"
+  Encoding(latin) = "latin1"
+  x = c(k = bad, l = latin, m = "caf\xc3\xa9", n = "plain", o = NA)
+  # R 4.2.3's enc2utf8(): latin1 converted, other bytes read as UTF-8 with each invalid one as <xx>
+  # (explicit encodings: iconv(from = "") ignores the latin1 mark before R 4.3.0)
+  r423 = function(x) {
+    latin = Encoding(x) == "latin1"
+    x[latin] = iconv(x[latin], "latin1", "UTF-8")
+    x[!latin] = iconv(x[!latin], "UTF-8", "UTF-8", sub = "byte")
+    x
+  }
+  for (old_r in c(FALSE, TRUE)) {
+    if (old_r) local_mocked_bindings(native_to_utf8 = r423)
+    y = as_utf8(x)
+    expect_identical(charToRaw(y[["k"]]), as.raw(c(0x61, 0xff)))
+    expect_identical(unname(Encoding(y)), c("UTF-8", "UTF-8", "UTF-8", "unknown", "unknown"))
+    expect_identical(unname(y[2:5]), c("caf\u00e9", "caf\u00e9", "plain", NA))
+    expect_named(y, names(x))
+  }
+  # the R 4.2.3 conversion the second pass emulates
+  expect_identical(r423(c(bad, latin)), c("a<ff>", "caf\u00e9"))
+})
+
 test_that("utf8_mark() marks valid UTF-8 only", {
   x = c("caf\xc3\xa9", "\xff\xfe")
   y = utf8_mark(x)

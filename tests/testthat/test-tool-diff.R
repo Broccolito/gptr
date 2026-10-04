@@ -2,6 +2,36 @@
 # test of dev/research/11-r-file-tools.md verification log row 32), the D = 256 cap, budgets and git
 # apply.
 
+# A hosted Windows runner's git config has core.autocrlf=true, which made git write every patched
+# line with CRLF there (CI Task CI-4). That setting is emulated through GIT_CONFIG_* on every OS
+# for the calling frame. git reads these variables only from 2.31.0 on.
+local_runner_git_config = function(env = parent.frame()) {
+  withr::local_envvar(GIT_CONFIG_COUNT = "1", GIT_CONFIG_KEY_0 = "core.autocrlf",
+                      GIT_CONFIG_VALUE_0 = "true", .local_envir = env)
+}
+
+# `git apply` in `dir` under the emulated runner setting, which the call overrides unless
+# `override` is FALSE
+git_apply = function(dir, ..., override = TRUE) {
+  local_runner_git_config()
+  args = c(if (override) c("-c", "core.autocrlf=false"), "-C", shQuote(dir), "apply", ...)
+  system2("git", args, stdout = FALSE, stderr = FALSE)
+}
+
+# TRUE when git in `dir` sees the emulated core.autocrlf=true (FALSE before git 2.31.0, unless
+# the user's own config sets it)
+git_emulates_runner = function(dir) {
+  local_runner_git_config()
+  out = suppressWarnings(system2("git", c("-C", shQuote(dir), "config", "--get", "core.autocrlf"),
+                                 stdout = TRUE, stderr = FALSE))
+  identical(as.vector(out), "true")
+}
+
+# A patch file with LF line ends (writeLines() writes CRLF on Windows, which git apply refuses)
+write_patch = function(lines, path) {
+  writeBin(charToRaw(paste0(paste(lines, collapse = "\n"), "\n")), path)
+}
+
 apply_ops = function(a, b, ops) {
   keep = ops$op != "-"
   out = character(sum(keep))
@@ -83,11 +113,17 @@ test_that("unified diffs apply cleanly with git apply", {
   new_lines = sprintf("line %d", 1:30)
   new_lines[c(3, 17)] = c("THREE", "SEVENTEEN")
   new = paste(c("first", new_lines[-25]), collapse = "\n")
+  write_patch(diff_unified("f.txt", old, new), file.path(td, "p.diff"))
   writeBin(charToRaw(old), file.path(td, "f.txt"))
-  writeLines(diff_unified("f.txt", old, new), file.path(td, "p.diff"))
-  status = system2("git", c("-C", shQuote(td), "apply", "p.diff"), stdout = FALSE, stderr = FALSE)
-  expect_identical(status, 0L)
+  expect_identical(git_apply(td, "p.diff"), 0L)
   expect_identical(rawToChar(readBin(file.path(td, "f.txt"), "raw", 1e5)), new)
+  # control: the emulated runner setting rewrites the line ends when it is not overridden. A git
+  # before 2.31.0 ignores the emulation, so it cannot show that.
+  skip_if_not(git_emulates_runner(td), "git ignores GIT_CONFIG_* (it needs git 2.31.0 or later)")
+  writeBin(charToRaw(old), file.path(td, "f.txt"))
+  expect_identical(git_apply(td, "p.diff", override = FALSE), 0L)
+  expect_identical(rawToChar(readBin(file.path(td, "f.txt"), "raw", 1e5)),
+                   gsub("\n", "\r\n", new, fixed = TRUE))
 })
 
 test_that("a final line without its newline never matches a line that has one, whatever its text", {
@@ -173,9 +209,8 @@ test_that("generated unified diffs apply cleanly with git apply (any context, an
       expect_identical(d, character())
       next
     }
-    writeBin(charToRaw(paste0(paste(d, collapse = "\n"), "\n")), file.path(td, "p.diff"))
-    args = c("-C", shQuote(td), "apply", if (context == 0L) "--unidiff-zero", "p.diff")
-    expect_identical(system2("git", args, stdout = FALSE, stderr = FALSE), 0L)
+    write_patch(d, file.path(td, "p.diff"))
+    expect_identical(git_apply(td, if (context == 0L) "--unidiff-zero", "p.diff"), 0L)
     expect_identical(rawToChar(readBin(f, "raw", 1e5)), new)
   }
 })

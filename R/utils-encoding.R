@@ -21,16 +21,31 @@ utf8_mark = function(x) {
 #' Normalise text entering gptr to marked UTF-8
 #'
 #' Valid UTF-8 of unknown encoding is marked UTF-8; other unknown or latin1 strings are converted
-#' from the native encoding with enc2utf8(). Attributes (names, class) are kept.
+#' from the native encoding with enc2utf8(). When the native encoding is UTF-8, an unknown string
+#' that is not valid UTF-8 has nothing to be converted from: its bytes are kept and marked UTF-8,
+#' as enc2utf8() does on R 4.5 and later (R 4.2.3 turned each such byte into "<xx>" text, which
+#' made such code run as other code instead of being refused; DEVIATIONS D-063). Attributes
+#' (names, class) are kept.
 #' @noRd
 as_utf8 = function(x) {
   if (!is.character(x) || !length(x)) return(x)
   x = utf8_mark(x)
   enc = Encoding(x)
-  convert = which(!is.na(x) & (enc == "latin1" | (enc == "unknown" & !validUTF8(x))))
-  if (length(convert)) x[convert] = enc2utf8(x[convert])
+  invalid = !is.na(x) & enc == "unknown" & !validUTF8(x)
+  if (any(invalid) && isTRUE(l10n_info()[["UTF-8"]])) {
+    y = x[invalid]
+    Encoding(y) = "UTF-8"
+    x[invalid] = y
+    invalid[] = FALSE
+  }
+  convert = which(!is.na(x) & (enc == "latin1" | invalid))
+  if (length(convert)) x[convert] = native_to_utf8(x[convert])
   x
 }
+
+#' Convert strings from their declared or the native encoding to UTF-8 (gptr's one enc2utf8() call)
+#' @noRd
+native_to_utf8 = function(x) enc2utf8(x)
 
 #' Bytes for the operating system (argv, environment, working directory): UTF-8 without a mark
 #'

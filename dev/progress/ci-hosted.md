@@ -573,3 +573,235 @@ Open items:
   verified on Windows: start every child the test kills with TMPDIR, TMP and TEMP in a
   `withr::local_tempdir()`, as `local_mock_server()` already does, or from a script file instead
   of `-e`. CRAN skips these tests (`skip_on_cran()`), and the gate fails only on warnings.
+
+## Task CI-4 - Hosted regressions after the P06/P09/P10 waves
+
+Hosted evidence (job logs fetched with `gh api .../actions/jobs/<id>/logs`): run 37213342336 on
+`b40b4d1` (every R CMD check job failed; token benchmark, copy-safety release and devel and
+connections passed) and run 37210924368 on `51ba767` (the same jobs failed).
+
+| Failure | Where | Cause |
+|---|---|---|
+| WARNING "checking dependencies in R code": "Missing or unexported objects: 'gptr::gptr' 'gptr::gptr_return'" | all 9 R CMD check jobs of both runs; on Ubuntu release, devel, oldrel-1 (R 4.5.3), LC_ALL=C and no-Suggests the only problem (tests `[ FAIL 0 \| WARN 0 \| SKIP 19 \| PASS 11036 ]`, LC_ALL=C `SKIP 22 \| PASS 11017`, no-Suggests `SKIP 20 \| PASS 11032`) | packaging. `gptr_shim()` (`R/eval-guard.R`, P09 Task 1) quoted `gptr::gptr` and `gptr::gptr_return`. R CMD check reads every `pkg::name` call in function bodies, quoted or not, and these exports belong to P08, which is not built yet. The gate fails on warnings (`error-on: "warning"`) |
+| `test-eval-core.R:512-514` "code that is not valid UTF-8 is a parse error": status `"ok"`, `n_total` 1, no error event | Ubuntu oldrel-4 and Windows oldrel-4, both R 4.2.3 (`b40b4d1`; the test came with `61ae515`, after `51ba767`) | product (P01 `as_utf8()`). On R 4.2.3, `enc2utf8()` of an unknown-encoded string that is not valid UTF-8, in a UTF-8 locale, turned each invalid byte into `<xx>` text. So the code `x = '<byte ff>'` became valid code and ran. R 4.5 and later keep the bytes |
+| `test-tool-diff.R:179` (58 cases), `:89`, `:90` "generated unified diffs apply cleanly with git apply" | Windows release and oldrel-4, both runs (`[ FAIL 60 ...` on `51ba767`) | non-portable test. The runner's git has `core.autocrlf=true`, so `git apply` wrote every patched line with CRLF (`:90`, `:179`). The first test also wrote its patch with `writeLines()`, which writes CRLF on Windows, and git refused that patch (`:89`, status 1) |
+| `test-eval-core.R:467`, `:471`, `:472` "gptr's own PNG rendering is not reported": `"images 1 \n"` not found | Windows release and oldrel-4 (`b40b4d1`) | non-portable test. The child's stdout is a text-mode stream on Windows, so the lines end in CRLF (as in CI-2) |
+| `test-http-reactor.R:637` INFRA-01 six streams: wall 2.486 s > 2.475 s | macOS release (`b40b4d1`; it passed on `51ba767` and in CI-3's runs) | not determined. Heads were written within 0.017 s, and the long streams ended at 2.402, 2.436 and 2.486 s, against a 2.25 s schedule. The message could not say whether the mock wrote the last pieces late or gptr delivered them late. D-016 netted the mock's own lateness out of the gaps but not out of the wall |
+
+Totals on `b40b4d1`: Ubuntu oldrel-4 `Status: 1 ERROR, 1 WARNING`, `[ FAIL 3 | WARN 0 | SKIP 19 |
+PASS 11032 ]`. macOS `Status: 1 ERROR, 1 WARNING, 1 NOTE`, `[ FAIL 1 | WARN 0 | SKIP 17 | PASS
+11049 ]`. Windows release `Status: 1 ERROR, 1 WARNING, 1 NOTE`, `[ FAIL 63 | WARN 0 | SKIP 43 |
+PASS 10868 ]`; Windows oldrel-4 the same with `[ FAIL 66 | WARN 0 | SKIP 43 | PASS 10864 ]`. The
+NOTEs do not gate and are not fixed here. On macOS, "checking for new files in some other
+directories" lists macOS service folders under `/var/folders/.../T` (`com.apple.*`,
+`proactived`, ...), which gptr does not create. On Windows it is the `Rscript*` temp detritus
+(CI-3 open item). The Windows diagnostic stream ("files with failures: test-eval-core.R,
+test-tool-diff.R") matches R CMD check, and `test-http-sse.R` passed there this time.
+
+What was built:
+
+1. `R/eval-guard.R`: new `eval_guard_ns_call(name)` builds `gptr::<name>` with `call()`. The
+   shim's three rewrites use it, so the result is identical, and R CMD check no longer sees a
+   reference to a missing export. `test-eval-guard.R` checks that the rewritten heads are
+   `identical()` to the quoted calls (3 expectations). New P01-level test in `test-zzz.R`,
+   "every gptr:: call in the package code names an export of NAMESPACE (R CMD check)". It walks
+   the bodies and formals of every function in the namespace. The exports come from the source
+   tree's `NAMESPACE` or the installed one, so it works in check mode and under `load_all()`'s
+   `export_all`. It includes a negative control (a quoted call in a body and in a default).
+2. `R/utils-encoding.R` (D-063 item 1): `as_utf8()` keeps the bytes of an unknown-encoded
+   string that is not valid UTF-8 when the native encoding is UTF-8, and marks it UTF-8, as
+   `enc2utf8()` does on R 4.5 and later. The one `enc2utf8()` call is now `native_to_utf8()`.
+   New block in `test-utils-encoding.R`: a mixed vector (invalid bytes, latin1, marked UTF-8,
+   ASCII, `NA`, names) goes through `as_utf8()` twice. The first pass uses the real
+   `enc2utf8()`. The second mocks `native_to_utf8()` with R 4.2.3's conversion (latin1
+   converted, each invalid byte as `<xx>`, explicit encodings because `iconv(from = "")`
+   ignores the latin1 mark before R 4.3.0). The block skips in a non-UTF-8 locale.
+3. `test-tool-diff.R`: `write_patch()` writes the patch as LF bytes, and `git_apply()` runs
+   `git -c core.autocrlf=false -C <dir> apply ...`. It emulates the runner's
+   `core.autocrlf=true` with `GIT_CONFIG_COUNT`/`KEY_0`/`VALUE_0` on every OS, so the override
+   is tested everywhere. A control without the override shows that the emulated setting
+   rewrites the line ends (2 expectations). No product change. Review round 1 guarded only
+   that control (see below).
+4. `test-eval-core.R`: the PNG test reads the child's stdout with CRLF as LF.
+5. `test-http-reactor.R` (D-063 item 2): the six-stream wall is measured on the mock's clock.
+   `infra01_six(heads, lasts, ended, scheduled)` returns the wall (each stream's head write +
+   its scheduled length + gptr's end latency, the callback minus the mock's last write; from
+   the first head), the latencies and the mock's own lateness. `infra01_six_on_time()` requires
+   a wall of at most 2.475 s and every latency above -0.05 s. Each stream sends a body of its
+   own, so its request id is found in its mock's log. The failure message prints the head
+   spread, the ends, the mock's lateness and gptr's latency per stream. The controls test
+   passes on-time delivery and the hosted shape when the lateness is the mock's (last writes
+   0-0.236 s late). It fails a delivery stretched to one delta every 0.375 s, each end
+   delivered 0.25 s after its write, serialised streams and ends matched to the wrong streams.
+
+Adaptations: no plan literal covers these corrections. The P09 shim's call construction, the
+P01/P09/P10 test portability changes and the P04 measurement change follow P01 Task 21's rule
+that the hosted jobs must pass on every platform. Owning plan logs got cross-reference notes:
+`progress/P01.md`, `P04.md`, `P09.md` and `P10.md`. Deviations: D-063 (the `as_utf8()`
+behaviour on R before 4.5; the six-stream measurement, extending D-016 item 1). D-062 and D-064
+in `dev/DEVIATIONS.md` belong to the P15 lane and D-061 to the P11 lane: stage only the D-063
+section.
+
+Red (actual):
+
+- Local R CMD check (`isolated-check.R check`) of a clean `git archive` export of `3cda7b2`:
+  `Status: 1 WARNING`, with the same "Missing or unexported objects: 'gptr::gptr'
+  'gptr::gptr_return'". Its tests passed on macOS, `[ FAIL 0 | WARN 0 | SKIP 17 | PASS 11410 ]`
+  (`task4-check-head.log`, `task4-check-head-00check.log`).
+- `^(utils-encoding|zzz)$` with the new tests, after only moving `enc2utf8()` into
+  `native_to_utf8()`: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 125 ]` (`task4-red-encoding-zzz.log`).
+  The failures were `test-utils-encoding.R:45-46` (R 4.2.3 pass: bytes `61 3c 66 66 3e`, that is
+  `a<ff>`, encoding `unknown`; the real-`enc2utf8()` pass passed on R 4.5.0) and
+  `test-zzz.R:301` (`"gptr" "gptr_return"`, the hosted WARNING). The emulation was then made
+  independent of the R version. Against the same pre-fix source on a clean `HEAD` copy it gives
+  `^utils-encoding$` `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 37 ]` at `:52-53`
+  (`task4-red-encoding-seam-only.log`).
+- `^tool-diff$` on the clean `3cda7b2` export with the runner's setting given to git
+  (`GIT_CONFIG_COUNT=1`, `core.autocrlf=true`): `[ FAIL 59 | WARN 0 | SKIP 0 | PASS 509 ]`, which
+  is the hosted 58 failures at `:179` plus `:90` (`task4-red-tool-diff-head-autocrlf.log`). The
+  CRLF patch failure (`:89`) needs Windows' `writeLines()`, and the PNG test's CRLF needs a
+  Windows child. Their red evidence is the hosted logs.
+- INFRA-01 six streams, real mock, on a clean `HEAD` copy (probe `test-ci4probe.R`, kept in the
+  session scratchpad, `task4-infra01-six-probe.log`). The table gives the old measure (first
+  head to last callback), then the new one:
+
+  | case | old (s) | new (s) |
+  |---|---|---|
+  | normal, 3 runs | 2.261-2.269 | 2.259-2.263 |
+  | gptr's pump held 0.4 s near the ends | 2.523-2.526 | 2.531-2.535 |
+  | long mock suspended 0.7 s near its last writes (own lateness 0.319 s) | 2.574 | 2.261-2.262 |
+
+  So the old measure failed when the mock alone was late, as on hosted macOS (if that was the
+  cause), and the new measure still fails gptr's own lateness.
+
+Green (actual, `isolated-check.R`, working tree):
+
+- Per file: `^utils-encoding$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 39 ]` (30 + 9), `^zzz$` `PASS
+  89` (86 + 3), `^eval-guard$` `PASS 129` (126 + 3), `^eval-core$` `[ FAIL 0 | WARN 0 | SKIP 1 |
+  PASS 231 ]` (unchanged; the skip is the D-054 guard), `^tool-diff$` `PASS 570` (568 + 2),
+  `^http-reactor$` `PASS 208` (205 + 3), each with `FAIL 0 | WARN 0` (`task4-green-final-*.log`).
+  `^http-reactor$` also ran three times in a row, each `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 208 ]`
+  (`task4-green-http-reactor-{1,2,3}.log`).
+- `^tool-diff$` with the runner's `core.autocrlf=true` given through the environment:
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 570 ]` (`task4-green-tool-diff-autocrlf.log`).
+- `LC_ALL=C LANG=C`, `^(utils-encoding|eval-core|eval-guard|tool-diff|zzz)$`: `[ FAIL 0 | WARN 0
+  | SKIP 4 | PASS 1035 ]`. The new encoding block and three UTF-8-only or D-054 eval-core blocks
+  skip (`task4-green-clocale.log`).
+- Neighbours, working tree with the other lanes' edits:
+  `^(utils-encoding|eval-core|eval-guard|eval-format|env-snapshot|env-describe|env-history|perm-classify|json-encode|tool-read|tool-write|zzz)$`
+  gives `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 1476 ]` (`task4-neighbours-wt.log`).
+  `^(lint-rules|arch-layers)$` gives `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 18 ]`
+  (`task4-lint-arch.log`).
+- R CMD check of a clean export of `01124c4` plus this task's 8 files: `Status: OK`, `0 errors |
+  0 warnings | 0 notes`, tests `[ FAIL 0 | WARN 0 | SKIP 21 | PASS 11496 ]`
+  (`task4-check-fixed.log`, `task4-check-fixed-00check.log`, `task4-check-fixed-testthat.Rout`).
+  Full offline suite of the same export: `[ FAIL 0 | WARN 0 | SKIP 11 | PASS 11566 ]`
+  (`task4-full-fixed.log`).
+- Final, on a clean export of `152c624` (other lanes committed during this task) plus this
+  task's 8 files:
+  - Full offline suite: `[ FAIL 0 | WARN 0 | SKIP 11 | PASS 11669 ]` (`task4-full-final.log`).
+  - The same export without this task's files: `[ FAIL 0 | WARN 0 | SKIP 11 | PASS 11649 ]`
+    (`task4-full-base.log`). The difference, +20, is the 9 + 3 + 3 + 2 + 3 new expectations.
+  - The 11 skips: the keyring skip, the 3 gated live tests, the D-054 shim guard, the 4
+    "default cache_policy of builtin:prompt is not loaded" skips and the 2 "P06's session_run()
+    and P07's request.build are not loaded" skips.
+  - R CMD check of the final export, second run: `Status: OK`, tests `[ FAIL 0 | WARN 0 |
+    SKIP 21 | PASS 11599 ]` (`task4-check-final2.log`, `task4-check-final2-00check.log`). In
+    check mode there are 21 skips: the 11 above, plus 4 "not running from the source tree"
+    (`test-zzz.R`), 2 "package sources not found" (`test-session-store.R`) and 4 "dev/ is not
+    available (built package)" (P07's `test-prompt-text.R`). The new `test-zzz.R` export test
+    runs in check mode, against the installed `NAMESPACE`.
+  - The first R CMD check of that export failed once, `[ FAIL 1 | WARN 0 | SKIP 21 | PASS 11598 ]`,
+    at `test-http-retry.R:613` "a malformed committed result fails closed without retrying":
+    `nrow(srv$log())` was 0, not 1, while `st$fail` was the expected `gptr_error_overloaded`
+    (`task4-check-final.log`, `task4-check-final-00check.log`,
+    `task4-check-final-testthat.Rout.fail`). See the open items.
+
+After the exports were built, the PNG test's local variable was renamed from `stdout` to
+`printed`, so it no longer shadows `stdout()`. `^eval-core$` was re-run on the working tree:
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 231 ]` (`task4-green-final-eval-core.log`).
+
+Lint: `isolated-check.R lint` on `R/utils-encoding.R`, `R/eval-guard.R`, `test-utils-encoding.R`,
+`test-zzz.R`, `test-eval-guard.R`, `test-eval-core.R`, `test-tool-diff.R` and
+`test-http-reactor.R` found no lints (`task4-lint.log`). All are ASCII-only. Roxygen changed only
+in `@noRd` blocks, so there was no `document` run. A working-tree `document` would also have
+regenerated the other lanes' uncommitted exports.
+
+Logs: `dev/.validation/CI/task4-*.log`. The hosted job logs are not in the repository; refetch
+them by job id: 111468772736 (macOS), 111468772744 (Ubuntu release), 111468772819 (Windows
+release), 111468772636 (no-Suggests), 111468772735 (Ubuntu oldrel-4), 111468772724 (Windows
+oldrel-4), 111468772750, 111468772786 and 111468772799 (run 37213342336), and 111461785998,
+111461786024, 111461785987, 111461785949 and 111461786004 (run 37210924368).
+
+To be confirmed by the hosted run of the pushed commit:
+
+- every R CMD check job passes "checking dependencies in R code";
+- Ubuntu and Windows oldrel-4 pass `test-eval-core.R`'s invalid UTF-8 block and the new
+  `test-utils-encoding.R` block;
+- both Windows jobs pass `test-tool-diff.R` and the PNG test;
+- macOS passes the six-stream test. If it fails again, the message now says whether the mock's
+  own lateness or gptr's delivery latency is late.
+
+Review round 1 (independent reviewer, verdict clear). The reviewer re-ran the focused filters,
+`LC_ALL=C`, the neighbours, `^tool-diff$` with the runner setting in the environment, five
+`^http-retry$` runs, and a full suite and R CMD check of a clean `8262f19` export plus the 8
+files: `[ FAIL 0 | WARN 0 | SKIP 11 | PASS 11713 ]`, `Status: OK` with tests `[ FAIL 0 | WARN 0
+| SKIP 21 | PASS 11643 ]`. It also confirmed the red independently (HEAD's `R/eval-guard.R` gives
+`^zzz$` `FAIL 1`; HEAD's `as_utf8()` under the R 4.2.3 emulation gives `61 3c 66 66 3e`). One
+finding:
+
+- Minor, accepted. In "unified diffs apply cleanly with git apply", the control without the
+  override relies on `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, which git reads
+  only from 2.31.0 (March 2021). With an older git (Ubuntu 20.04 has 2.25.1, Debian 11 has
+  2.30.2), the file keeps LF and the CRLF expectation fails in any `NOT_CRAN` run, although
+  nothing is wrong with the product. Hosted runners (git 2.4x) and the local git 2.50.1 are not
+  affected. Fix (test-only, `tests/testthat/test-tool-diff.R`): the emulated setting is now one
+  helper, `local_runner_git_config()`, shared by `git_apply()` and a new probe,
+  `git_emulates_runner(dir)`, which asks `git -C <dir> config --get core.autocrlf` under the
+  same environment and is TRUE only for `"true"`. The test applies with the override first,
+  unconditionally, then `skip_if_not(git_emulates_runner(td), ...)` guards only the control.
+  The probe asks git for the setting it would actually use, so an older git whose own config
+  sets `core.autocrlf=true` still runs the control. The expectation count is unchanged.
+
+Regression red/green. An old git was emulated with a `git` wrapper first on `PATH` that unsets
+`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0` and `GIT_CONFIG_VALUE_0` and runs `/usr/bin/git` (the
+wrapper is kept in the session scratchpad). Through it, `git config --get core.autocrlf` under
+the emulation exits 1, and `/usr/bin/git` says `true`.
+
+- Red, round-0 test with the wrapper: `^tool-diff$` `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 569 ]`
+  at `test-tool-diff.R:105`, the CRLF expectation (`task4-fix1-red-tool-diff-oldgit.log`).
+- Green with the wrapper: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 568 ]`, with the skip reason "git
+  ignores GIT_CONFIG_* (it needs git 2.31.0 or later)" (`task4-fix1-green-tool-diff-oldgit.log`).
+- Green with git 2.50.1: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 570 ]`
+  (`task4-fix1-green-tool-diff.log`). With `GIT_CONFIG_COUNT=1`, `core.autocrlf=true` in the
+  environment: the same (`task4-fix1-green-tool-diff-autocrlf.log`).
+
+Final green after round 1 (working tree, `isolated-check.R`):
+`^(utils-encoding|zzz|eval-guard|eval-core|tool-diff|http-reactor)$` gives `[ FAIL 0 | WARN 0 |
+SKIP 1 | PASS 1266 ]` twice (`task4-fix1-focused-2.log`, `task4-fix1-focused-3.log`). The skip is
+the D-054 guard. `^http-reactor$` alone ran three times, each `[ FAIL 0 | WARN 0 | SKIP 0 | PASS
+208 ]` (`task4-fix1-http-reactor-{1,2,3}.log`). The first combined run failed once, `[ FAIL 1 |
+WARN 0 | SKIP 1 | PASS 1265 ]`, at `test-http-reactor.R:726` (`task4-fix1-focused.log`). That
+test was not changed by this task. See the open items. Lint of `test-tool-diff.R`: no lints
+(`task4-fix1-lint.log`), ASCII-only. No roxygen changed, so there was no `document` run.
+`progress/P10.md` got a sentence on the guard.
+
+Open items:
+
+- `test-http-retry.R:613` (P04) failed once in a local R CMD check. Five `^http-retry$` runs
+  (`task4-http-retry-repeat-*.log`, `PASS 340` each), a second R CMD check of the same export
+  and three full suites did not reproduce it, and no hosted log shows it. This task changed
+  neither that test nor the mock. A 503 reached the client, so the mock logged the request
+  before replying (`respond()` logs, then schedules). `mock_log()` drops lines it cannot decode,
+  and a 0-row log suggests that the read missed the line or could not decode it. A P04
+  investigation is needed if it recurs; nothing here explains it.
+- `test-http-reactor.R:726` (P04) "reactor_cancel() called inside on_bytes really stops the
+  stream" failed once in a local combined run during CI-4 review round 1:
+  `isTRUE(srv$log()$disconnected[1])` was FALSE (`task4-fix1-focused.log`). The machine was
+  loaded (load averages 7-9) by the other lanes' runs. Three `^http-reactor$` runs and two more combined runs
+  did not reproduce it, and no hosted log shows it. This task changed neither that test nor the
+  mock. FALSE means either that the mock logged the end with `disconnected = FALSE`, so it wrote
+  all 20 pieces (2 s) before it saw the client hang up, or that no end line was read within the
+  test's 10 s poll (`disconnected` stays NA). Like the `http-retry:613` item, it reads the mock's
+  log, and the two may share a cause. A P04 investigation is needed if either recurs.
+- Windows `Rscript*` temp detritus NOTE and INFRA-23 on hosted Windows: unchanged from CI-3.

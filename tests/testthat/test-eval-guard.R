@@ -158,6 +158,10 @@ test_that("gptr_shim rewrites gptr calls only when gptr is not visible", {
   expect_equal(deparse(out[[1]]), "r = gptr::gptr(\"task\", d)")
   expect_equal(deparse(out[[2]]), "gptr::gptr$grep(\"x\")")
   expect_equal(deparse(out[[3]]), "gptr::gptr_return(r)")
+  # the heads are built with call() (R CMD check, CI Task CI-4) and equal the quoted calls
+  expect_identical(out[[1]][[3]][[1]], quote(gptr::gptr))
+  expect_identical(out[[2]][[1]][[2]], quote(gptr::gptr))
+  expect_identical(out[[3]][[1]], quote(gptr::gptr_return))
   expect_equal(ls(hidden), character())
   visible = new.env(parent = baseenv())
   visible$gptr = function(...) NULL

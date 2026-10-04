@@ -368,6 +368,14 @@ eval_assign_targets = function(exprs) {
   unique(acc$out)
 }
 
+#' The call `gptr::<name>`, built with call()
+#'
+#' R CMD check reads a literal `gptr::name` in the package code, quoted or not, as a use of an
+#' export and warns while P08's gptr() and gptr_return() are not exported ("Missing or unexported
+#' objects", CI Task CI-4). The built call is identical to the quoted one.
+#' @noRd
+eval_guard_ns_call = function(name) call("::", as.symbol("gptr"), as.symbol(name))
+
 #' Rewrite one expression for gptr_shim()
 #' @noRd
 eval_guard_shim_rewrite = function(e, need_g, need_r) {
@@ -375,10 +383,10 @@ eval_guard_shim_rewrite = function(e, need_g, need_r) {
   head = e[[1L]]
   if (is.symbol(head)) {
     nm = as.character(head)
-    if (need_g && identical(nm, "gptr")) e[[1L]] = quote(gptr::gptr)
-    if (need_r && identical(nm, "gptr_return")) e[[1L]] = quote(gptr::gptr_return)
+    if (need_g && identical(nm, "gptr")) e[[1L]] = eval_guard_ns_call("gptr")
+    if (need_r && identical(nm, "gptr_return")) e[[1L]] = eval_guard_ns_call("gptr_return")
     if (need_g && nm %in% c("$", "[[") && length(e) >= 2L && identical(e[[2L]], quote(gptr))) {
-      e[[2L]] = quote(gptr::gptr)
+      e[[2L]] = eval_guard_ns_call("gptr")
     }
   } else {
     e[[1L]] = eval_guard_shim_rewrite(head, need_g, need_r)

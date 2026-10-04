@@ -464,12 +464,14 @@ test_that("gptr's own PNG rendering is not reported as a change the code made", 
   out = processx::run(rscript_path(), c("--vanilla", script), wd = dir, error_on_status = FALSE,
                       env = c("current", R_LIBS = libs))
   expect_equal(out$status, 0L)
-  expect_match(out$stdout, "images 1 \n", fixed = TRUE)
+  # the child's stdout is a text-mode stream on Windows, where each "\n" arrives as CRLF
+  printed = gsub("\r\n", "\n", out$stdout, fixed = TRUE)
+  expect_match(printed, "images 1 \n", fixed = TRUE)
   if (requireNamespace("ragg", quietly = TRUE)) {
-    expect_match(out$stdout, "rendering loaded:[^\n]* ragg")
+    expect_match(printed, "rendering loaded:[^\n]* ragg")
   }
-  expect_match(out$stdout, "reported loaded: character(0) \n", fixed = TRUE)
-  expect_match(out$stdout, "reported envvars: character(0) \n", fixed = TRUE)
+  expect_match(printed, "reported loaded: character(0) \n", fixed = TRUE)
+  expect_match(printed, "reported envvars: character(0) \n", fixed = TRUE)
 })
 
 test_that("added promises and active bindings are reported by kind and never forced", {
