@@ -775,3 +775,553 @@ anthropic_normaliser = function(model, opts) {
 
   adp_normaliser(st, push, finish, push_parsed)
 }
+
+# ---- shared request helpers -------------------------------------------------------------------
+
+#' A model capability: the record's `capabilities` entry, then a top-level field, then `default`
+#' @noRd
+adp_model_cap = function(model, name, default = FALSE) {
+  v = model$capabilities[[name]] %||% model[[name]]
+  if (is.null(v) || length(v) != 1L || is.na(v)) default else v
+}
+
+#' Was msg produced by exactly this model through this api? (opaque data replays only then)
+#' @noRd
+adp_same_model = function(msg, model) {
+  identical(msg$api, model$api) && identical(msg$provider, model$provider) &&
+    identical(msg$model, model$id)
+}
+
+#' Does the model take image input? (images are otherwise replaced by a one-line note)
+#' @noRd
+adp_images_ok = function(model) "image" %in% unlist(model$input %||% "text")
+
+#' The note sent in place of an image to a model without image input
+#' @noRd
+adp_image_note = function() "(image omitted: this model does not accept images)"
+
+#' A header value that holds a secret handle; only http-request.R (P04) materialises it
+#' @noRd
+adp_header_secret = function(handle, prefix = "") {
+  if (is.null(handle)) return(NULL)
+  if (!nzchar(prefix)) return(handle)
+  list(prefix, handle)
+}
+
+#' Join a base URL and a path with exactly one slash
+#' @noRd
+adp_url = function(base, path) paste0(sub("/+$", "", base), "/", sub("^/+", "", path))
+
+#' The non-secret headers of the model's provider record (for example OpenRouter attribution)
+#'
+#' The record is the one provider_stream() resolved (`opts$provider`: the session's rank-0
+#' record first, settings applied; 04 section 10.1 scopes `model = <spec>` to its session), else
+#' the session's own record (`opts$session`), else the global one. Callers pass build()'s `opts`.
+#' @noRd
+adp_provider_headers = function(model, opts = NULL) {
+  id = model$provider %||% ""
+  if (!is.character(id) || length(id) != 1L || is.na(id) || !nzchar(id)) return(list())
+  rec = opts[["provider"]]
+  names_of = function(p) c(p[["id"]], p[["name"]], p[["aliases"]])
+  if (!is.list(rec) || !(id %in% names_of(rec))) {
+    sid = opts[["session"]]
+    scoped = if (is.null(sid)) NULL else registry_get("provider", id, session = sid)
+    rec = provider_effective(scoped) %||% provider_get(id)
+  }
+  h = rec$headers
+  if (is.null(h) || !length(h)) list() else as.list(h)
+}
+
+#' An adapter's own headers with a provider record's non-secret headers merged in (D-023)
+#'
+#' Names compare case-insensitively, so the spec never repeats a header (P04's http_headers()
+#' refuses one that does). The adapter's headers win: a provider header with the name of one the
+#' adapter set is dropped, so a record never changes the wire format (content-type, accept, the
+#' API version) or replaces the credential. Two exceptions: a header named in `lists` (a
+#' comma-separated token list such as anthropic-beta) gets the tokens of both sides, the
+#' adapter's first, each once; and while the adapter sends a credential, a provider header named
+#' in `auth` (the API's credential headers) is dropped, so two credentials are never sent. Any
+#' other provider header is added; of two with the same name in the record, the last is kept.
+#' @noRd
+adp_merge_headers = function(base, extra, lists = character(), auth = character()) {
+  base = as.list(base)
+  if (!length(extra)) return(base)
+  extra = as.list(extra)
+  low = tolower(names(extra))
+  extra = extra[!duplicated(low, fromLast = TRUE)]
+  lists = tolower(lists)
+  auth = tolower(auth)
+  has_cred = any(tolower(names(base)) %in% auth)
+  tokens = function(x) {
+    t = trimws(strsplit(x, ",", fixed = TRUE)[[1L]])
+    t[nzchar(t)]
+  }
+  for (k in names(extra)) {
+    lk = tolower(k)
+    v = extra[[k]]
+    at = match(lk, tolower(names(base)))
+    if (!is.na(at)) {
+      own = base[[at]]
+      if (lk %in% lists && is.character(own) && length(own) == 1L &&
+            is.character(v) && length(v) == 1L && !is.na(v)) {
+        base[[at]] = paste(unique(c(tokens(own), tokens(v))), collapse = ",")
+      }
+    } else if (!(has_cred && lk %in% auth)) {
+      base[[k]] = v
+    }
+  }
+  base
+}
+
+#' The instruction sent with `returns =` where no native structured output is used (IC-71)
+#' @noRd
+adp_returns_instruction = function(schema) {
+  paste0("When your work is complete, reply with only a JSON value that matches this JSON ",
+         "Schema, with no other text and no code fence: ", json_encode(schema))
+}
+
+#' Serialise once per session: the value stored in opts$memo under `key`, computed on a miss
+#' @noRd
+adp_memo = function(opts, key, fun) {
+  memo = opts$memo
+  if (!is.environment(memo)) return(fun())
+  hit = get0(key, envir = memo, inherits = FALSE)
+  if (!is.null(hit)) return(hit)
+  val = fun()
+  assign(key, val, envir = memo)
+  val
+}
+
+#' The memo key of a message: projected messages carry no entry id, so a hash of the fields
+#' that reach the wire (timestamps, usage and details are left out so a rebuilt copy hits)
+#' @noRd
+adp_msg_key = function(msg) {
+  keep = c("role", "content", "api", "provider", "model", "tool_call_id", "tool_name",
+           "is_error", "kind", "tool_add")
+  hash_xxh128(msg[intersect(keep, names(msg))])
+}
+
+#' Tool-call ids restricted to [A-Za-z0-9_-] and a maximum length
+#' @noRd
+adp_sanitize_id = function(id, max = 64L) substr(gsub("[^A-Za-z0-9_-]", "_", id), 1L, max)
+
+#' The frozen tool array converted once per session for an api; NULL when there are no tools
+#' @noRd
+adp_tools_json = function(opts, api, tools_json, convert) {
+  if (is.null(tools_json)) return(NULL)
+  text = as.character(tools_json)
+  key = paste(api, "tools", hash_xxh128(text), sep = "|")
+  out = adp_memo(opts, key, function() {
+    tools = json_decode(text)
+    if (!length(tools)) "" else json_encode(convert(tools))
+  })
+  if (nzchar(out)) out else NULL
+}
+
+#' Does any projected message hold a tool call or a tool result?
+#' @noRd
+adp_has_tool_calls = function(msgs) {
+  for (m in msgs) {
+    if (identical(m$role, "tool_result")) return(TRUE)
+    if (identical(m$role, "assistant")) {
+      for (b in m$content) if (identical(b$type, "tool_call")) return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' Index of the first user message that holds an anchored context block (the BP2 anchor)
+#' @noRd
+adp_anchor_index = function(msgs) {
+  for (k in seq_along(msgs)) {
+    m = msgs[[k]]
+    if (!identical(m$role, "user")) next
+    for (b in m$content) if (identical(b$type, "context") && isTRUE(b$anchor)) return(k)
+  }
+  0L
+}
+
+#' The text of an operator message
+#' @noRd
+adp_operator_text = function(m) {
+  paste(vapply(m$content, function(b) b$text %||% "", ""), collapse = "\n")
+}
+
+#' The effort for a thinking level: `minimal` maps to `low`, `off` and NULL to none
+#' @noRd
+adp_level_effort = function(level) {
+  if (is.null(level) || identical(level, "off")) return(NULL)
+  if (identical(level, "minimal")) "low" else level
+}
+
+#' Thinking budget in tokens for budget-based models (report 03 section 5.5 defaults)
+#' @noRd
+adp_budget = function(level) {
+  switch(level, minimal = 1024L, low = 2048L, medium = 8192L, 16384L)
+}
+
+#' Assemble a JSON body: the head fields, the extra members, then the growing array last
+#' @noRd
+adp_body = function(head, extra, key, elements) {
+  h = json_encode(head)
+  inner = substr(h, 2L, nchar(h) - 1L)
+  parts = c(if (nzchar(inner)) inner, extra,
+            paste0("\"", key, "\":[", paste(elements, collapse = ","), "]"))
+  paste0("{", paste(parts, collapse = ","), "}")
+}
+
+#' The cache plan of the request context (04 section 8.1), or the Anthropic default
+#' @noRd
+adp_cache_plan = function(context) {
+  context$cache_plan %||% list(anchors = c("t0", "project"), tail_ttl = "5m", key = NULL)
+}
+
+#' Is a tool_choice a forced choice (a list naming a tool, or `any`)?
+#' @noRd
+adp_forced = function(tc) {
+  is.list(tc) && !((tc$type %||% "") %in% c("auto", "none"))
+}
+
+#' May a forced tool_choice be sent? Model capability first, then the adapter's (IC-71)
+#' @noRd
+adp_forced_ok = function(model, caps) {
+  isTRUE(adp_model_cap(model, "forced_tool_choice", isTRUE(caps$forced_tool_choice)))
+}
+
+# ---- anthropic-messages: request body ---------------------------------------------------------
+
+#' Adapter capabilities of anthropic-messages (04 section 8.1; IC-69, IC-71)
+#' @noRd
+anthropic_caps = function() {
+  list(images_in_results = TRUE, tool_addition = TRUE, structured_output = TRUE,
+       reasoning_replay = TRUE, parallel_tools = TRUE, forced_tool_choice = FALSE,
+       request_params = c("service_tier", "metadata"), operator_role = "system",
+       cache = "anthropic", max_tool_name = 128L, tool_shape = "anthropic")
+}
+
+#' An Anthropic image content block (base64 source), or a text note for a text-only model
+#' @noRd
+anthropic_image = function(b, images) {
+  if (!images) return(list(type = "text", text = adp_image_note()))
+  list(type = "image", source = list(type = "base64", media_type = b$mime, data = b$data))
+}
+
+#' A user message; the anchored context block carries the 1 h BP2 marker
+#' @noRd
+anthropic_user = function(m, mark_anchor, images) {
+  parts = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    if (type == "text" && nzchar(trimws(b$text))) {
+      parts[[length(parts) + 1L]] = list(type = "text", text = b$text)
+    } else if (type == "context") {
+      p = list(type = "text", text = b$text)
+      if (mark_anchor && isTRUE(b$anchor)) p$cache_control = list(type = "ephemeral", ttl = "1h")
+      parts[[length(parts) + 1L]] = p
+    } else if (type == "image") {
+      parts[[length(parts) + 1L]] = anthropic_image(b, images)
+    }
+  }
+  if (!length(parts)) return(NULL)
+  list(role = "user", content = parts)
+}
+
+#' An assistant message; signed thinking, redacted thinking and opaque blocks are replayed
+#' byte for byte only to the model that produced them (INFRA-07)
+#' @noRd
+anthropic_assistant = function(m, model) {
+  same = adp_same_model(m, model)
+  parts = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    p = NULL
+    if (type == "text") {
+      if (nzchar(trimws(b$text))) p = list(type = "text", text = b$text)
+    } else if (type == "thinking") {
+      if (isTRUE(b$redacted)) {
+        if (same && !is.null(b$data)) p = list(type = "redacted_thinking", data = b$data)
+      } else if (same && nzchar(b$signature %||% "")) {
+        p = list(type = "thinking", thinking = b$thinking, signature = b$signature)
+      } else if (nzchar(trimws(b$thinking))) {
+        p = list(type = "text", text = b$thinking)
+      }
+    } else if (type == "tool_call") {
+      args = if (length(b$arguments)) b$arguments else json_obj()
+      p = list(type = "tool_use", id = adp_sanitize_id(b$id), name = b$name, input = args)
+    } else if (type == "opaque") {
+      if (same) p = json_verbatim(b$json)
+    }
+    if (!is.null(p)) parts[[length(parts) + 1L]] = p
+  }
+  if (!length(parts)) return(NULL)
+  list(role = "assistant", content = parts)
+}
+
+#' One tool_result block: text first, images as native image blocks (acceptance 3);
+#' whitespace-only text blocks are left out, the rule anthropic_user() and anthropic_assistant()
+#' apply (the Messages API refuses text blocks without non-whitespace text). A result without
+#' text leads with "(see attached image)" only when an image block is attached; for a model
+#' without image input the omission note stands alone
+#' @noRd
+anthropic_tool_result = function(r, images) {
+  content = list()
+  has_text = FALSE
+  for (b in r$content) {
+    if (identical(b$type, "text") && nzchar(trimws(b$text))) {
+      content[[length(content) + 1L]] = list(type = "text", text = b$text)
+      has_text = TRUE
+    } else if (identical(b$type, "image")) {
+      content[[length(content) + 1L]] = anthropic_image(b, images)
+    }
+  }
+  if (!has_text && images && length(content)) {
+    content = c(list(list(type = "text", text = "(see attached image)")), content)
+  }
+  out = list(type = "tool_result", tool_use_id = adp_sanitize_id(r$tool_call_id))
+  if (length(content)) out$content = content
+  if (isTRUE(r$is_error)) out$is_error = TRUE
+  out
+}
+
+#' A run of operator messages as ONE message: a mid-conversation system message (with
+#' tool_addition blocks when the model takes them) where the placement rule allows it, else user
+#' text (G4 section 2.3). Report 07 section 2.3: a system message must follow a user message and
+#' be last or followed by an assistant turn, so a run is never split into consecutive system
+#' messages
+#' @noRd
+anthropic_operator = function(group, as_system, with_tools) {
+  parts = list()
+  for (m in group) {
+    text = adp_operator_text(m)
+    if (nzchar(text)) parts[[length(parts) + 1L]] = list(type = "text", text = text)
+    if (!with_tools) next
+    for (t in m$tool_add %||% list()) {
+      def = list(name = t$name, description = t$description, input_schema = t$input_schema)
+      parts[[length(parts) + 1L]] = list(type = "tool_addition",
+                                         tool = list(type = "tool_definition", definition = def))
+    }
+  }
+  if (!length(parts)) return(NULL)
+  list(role = if (as_system) "system" else "user", content = parts)
+}
+
+#' The messages array elements (JSON text), each serialised once per session through opts$memo.
+#' Consecutive tool results become one user message; a run of operator messages becomes one
+#' message, a system message only when it follows a user turn and precedes an assistant turn or
+#' the end (`tail = TRUE`: a `returns` instruction follows the last element, so a trailing run is
+#' user text and the instruction can be the closing system message); the anchored project block
+#' carries BP2 only when the cache plan names `project`
+#' @noRd
+anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FALSE) {
+  out = character()
+  betas = character()
+  mid = isTRUE(adp_model_cap(model, "mid_system", FALSE))
+  add_tools = isTRUE(adp_model_cap(model, "tool_addition", TRUE))
+  images = adp_images_ok(model)
+  anchor_at = if ("project" %in% anchors) adp_anchor_index(msgs) else 0L
+  prev = "none"
+  n = length(msgs)
+  i = 1L
+  while (i <= n) {
+    m = msgs[[i]]
+    role = m$role %||% ""
+    if (role %in% c("tool_result", "operator")) {
+      j = i
+      while (j <= n && identical(msgs[[j]]$role, role)) j = j + 1L
+      group = msgs[i:(j - 1L)]
+      if (role == "tool_result") {
+        key = paste(c("anthropic", "results", images, vapply(group, adp_msg_key, "")),
+                    collapse = "|")
+        el = adp_memo(opts, key, function() {
+          json_encode(list(role = "user",
+                           content = lapply(group, anthropic_tool_result, images = images)))
+        })
+        out = c(out, el)
+        prev = "user"
+      } else {
+        nxt = if (j <= n) msgs[[j]]$role %||% "" else if (tail) "user" else "end"
+        as_system = mid && identical(prev, "user") && nxt %in% c("assistant", "end")
+        with_tools = as_system && add_tools &&
+          any(vapply(group, function(op) length(op$tool_add) > 0L, logical(1)))
+        if (with_tools) betas = c(betas, "inline-tools-2026-09-15")
+        key = paste(c("anthropic", "operator", vapply(group, adp_msg_key, ""), as_system,
+                      with_tools), collapse = "|")
+        el = adp_memo(opts, key, function() {
+          x = anthropic_operator(group, as_system, with_tools)
+          if (is.null(x)) "" else json_encode(x)
+        })
+        if (nzchar(el)) {
+          out = c(out, el)
+          prev = if (as_system) "system" else "user"
+        }
+      }
+      i = j
+      next
+    }
+    same = adp_same_model(m, model)
+    mark = identical(i, anchor_at)
+    key = paste("anthropic", role, adp_msg_key(m), same, mark, images, sep = "|")
+    el = adp_memo(opts, key, function() {
+      x = NULL
+      if (role == "user") x = anthropic_user(m, mark, images)
+      if (role == "assistant") x = anthropic_assistant(m, model)
+      if (is.null(x)) "" else json_encode(x)
+    })
+    if (nzchar(el)) {
+      out = c(out, el)
+      prev = role
+    }
+    i = i + 1L
+  }
+  list(elements = out, betas = unique(betas), prev = prev, mid = mid)
+}
+
+#' Thinking, effort and budget of a request: adaptive models get adaptive thinking and an
+#' effort, budget models `enabled` with a budget and the interleaved beta (07 section 2.6)
+#' @noRd
+anthropic_thinking = function(model, params) {
+  out = list(thinking = NULL, effort = NULL, budget = NULL, betas = character())
+  if (!isTRUE(model$reasoning)) return(out)
+  level = params$thinking
+  if (isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))) {
+    if (!identical(level, "off")) {
+      out$thinking = list(type = "adaptive",
+                          display = if (gptr_has_human()) "summarized" else "omitted")
+    }
+    if (isTRUE(adp_model_cap(model, "effort", TRUE))) {
+      out$effort = params$effort %||% adp_level_effort(level)
+    }
+  } else if (!is.null(level) && !identical(level, "off")) {
+    out$budget = adp_budget(level)
+    out$thinking = list(type = "enabled", budget_tokens = out$budget)
+    out$betas = "interleaved-thinking-2025-05-14"
+  }
+  out
+}
+
+#' The tool_choice field of a request, or NULL for the default `auto` (IC-71)
+#' @noRd
+anthropic_tool_choice = function(tc, model, thinking, returns) {
+  if (identical(tc, "none")) return(list(type = "none"))
+  if (!adp_forced(tc) || !adp_forced_ok(model, anthropic_caps())) return(NULL)
+  if (!is.null(thinking) || !is.null(returns)) return(NULL)
+  if (identical(tc$type, "any")) return(list(type = "any"))
+  list(type = "tool", name = tc$name)
+}
+
+#' build() of the anthropic-messages adapter (04 section 8.1): the request spec
+#'
+#' Body key order per G4 section 3.7: model, max_tokens, stream, cache_control (the automatic
+#' tail breakpoint), thinking, output_config, tool_choice, declared request params, tools,
+#' system (T0 with the 1 h BP1, T1), messages (the project block with the 1 h BP2).
+#' @noRd
+anthropic_build = function(model, context, opts) {
+  params = context$params %||% list()
+  plan = adp_cache_plan(context)
+  anchors = plan$anchors %||% character()
+  msgs = context$messages %||% list()
+  cc1h = list(type = "ephemeral", ttl = "1h")
+  native_returns = !is.null(params$returns) && isTRUE(model$structured_output)
+  tail = !is.null(params$returns) && !native_returns
+  rendered = anthropic_elements(model, msgs, opts, anchors, tail)
+  th = anthropic_thinking(model, params)
+
+  max_tokens = params$max_tokens %||% model$max_output %||% 64000L
+  if (is.null(max_tokens) || is.na(max_tokens)) max_tokens = 64000L
+  cap = model$max_output
+  if (is.null(cap) || is.na(cap)) cap = Inf
+  asked = min(max_tokens, cap)
+  max_tokens = asked
+  if (!is.null(th$budget)) {
+    max_tokens = min(max(asked, th$budget + 1024L), cap)
+    budget = min(th$budget, max(1024L, max_tokens - 1024L))
+    if (budget < max_tokens) {
+      th$thinking = list(type = "enabled", budget_tokens = as.integer(budget))
+    } else {
+      # the API needs 1024 <= budget_tokens < max_tokens: no room to think, so no thinking
+      th = list(thinking = NULL, effort = th$effort, budget = NULL, betas = character())
+      max_tokens = asked
+    }
+  }
+  betas = c(rendered$betas, th$betas)
+
+  head = list(model = model$id, max_tokens = as.integer(max_tokens), stream = TRUE)
+  head$cache_control = if (identical(plan$tail_ttl, "1h")) cc1h else list(type = "ephemeral")
+  if (!is.null(th$thinking)) head$thinking = th$thinking
+  oc = list()
+  if (!is.null(th$effort)) oc$effort = th$effort
+  if (native_returns) oc$format = list(type = "json_schema", schema = params$returns)
+  if (length(oc)) head$output_config = oc
+  tc = anthropic_tool_choice(params$tool_choice, model, th$thinking, params$returns)
+  if (!is.null(tc)) head$tool_choice = tc
+  # report 07 section 2.3: a non-default temperature is a 400 on every 5.x (adaptive) model
+  adaptive = isTRUE(adp_model_cap(model, "adaptive_thinking", FALSE))
+  if (!is.null(params$temperature) && is.null(th$thinking) && !adaptive) {
+    head$temperature = params$temperature
+  }
+  for (f in anthropic_caps()$request_params) if (!is.null(params[[f]])) head[[f]] = params[[f]]
+
+  extra = character()
+  tools = context$tools_json
+  if (!is.null(tools) && !identical(trimws(as.character(tools)), "[]")) {
+    extra = c(extra, paste0("\"tools\":", as.character(tools)))
+  }
+  sys = list()
+  t0 = context$system$t0 %||% ""
+  t1 = context$system$t1 %||% ""
+  if (nzchar(t0)) {
+    s = list(type = "text", text = t0)
+    if ("t0" %in% anchors) s$cache_control = cc1h
+    sys[[length(sys) + 1L]] = s
+  }
+  if (nzchar(t1)) {
+    s = list(type = "text", text = t1)
+    no_anchor = "project" %in% anchors && adp_anchor_index(msgs) == 0L
+    if ("t1" %in% anchors || no_anchor) s$cache_control = cc1h
+    sys[[length(sys) + 1L]] = s
+  }
+  if (length(sys)) {
+    sys_json = adp_memo(opts, paste("anthropic", "system", hash_xxh128(sys), sep = "|"),
+                        function() json_encode(sys))
+    extra = c(extra, paste0("\"system\":", sys_json))
+  }
+
+  elements = rendered$elements
+  if (tail) {
+    as_system = rendered$mid && identical(rendered$prev, "user")
+    instr = list(role = if (as_system) "system" else "user",
+                 content = list(list(type = "text",
+                                     text = adp_returns_instruction(params$returns))))
+    elements = c(elements, json_encode(instr))
+  }
+
+  headers = list(`content-type` = "application/json", accept = "text/event-stream",
+                 `anthropic-version` = "2023-06-01")
+  cred = opts$credential
+  if (!is.null(cred)) {
+    if (identical(cred$name, "ANTHROPIC_AUTH_TOKEN")) {
+      headers$authorization = adp_header_secret(cred, "Bearer ")
+      betas = c(betas, "oauth-2025-04-20")
+    } else {
+      headers$`x-api-key` = adp_header_secret(cred)
+    }
+  }
+  if (length(betas)) headers$`anthropic-beta` = paste(unique(betas), collapse = ",")
+  headers = adp_merge_headers(headers, adp_provider_headers(model, opts),
+                              lists = "anthropic-beta", auth = c("x-api-key", "authorization"))
+
+  list(url = adp_url(opts$base_url %||% "https://api.anthropic.com", "v1/messages"),
+       method = "POST", headers = headers,
+       body = adp_body(head, extra, "messages", elements), stream = "sse")
+}
+
+#' builtin:anthropic: registers the anthropic-messages adapter (04 sections 7.12, 10.3)
+#' @noRd
+builtin_anthropic = function(gptr) {
+  gptr$register(gptr_adapter("anthropic-messages", transport = "http_sse",
+                             build = anthropic_build, parse = anthropic_normaliser,
+                             capabilities = anthropic_caps()))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("anthropic", builtin_anthropic))

@@ -563,3 +563,57 @@ which every P12 adapter, P20's reuse of `anthropic_normaliser()` and P06's usage
 Validation: `progress/P12.md`, Task 1 (`test-provider-anthropic.R`; the four regression tests
 failed 9 assertions against the plan-literal source; the two review-round regression tests for
 points 1 and 5 failed 7 assertions before the fix).
+
+## D-023 - P12 request headers from the resolved provider record, merged by name; no thinking without budget room (2026-10-03)
+
+Four changes to P12 Task 2's plan-literal request builder (`R/provider-anthropic.R`):
+
+1. **`adp_provider_headers(model, opts = NULL)`.** The plan's helper took only `model` and looked
+   the provider up again with the global `provider_get()`. That lookup never sees a session-scoped
+   (rank 0) record, such as a provider passed as `model = <spec>` (04 section 10.1). Such a
+   provider's non-secret `headers` (04 section 10.2 row 1) were dropped. When a session record
+   shadowed a global one with the same id, the request mixed the session record's base URL and
+   credential with the global record's headers. The helper now uses the record that
+   `provider_stream()` resolved and passed as `opts$provider` (session first, settings applied;
+   P05 ambiguity 13). It accepts that record when the model's provider is its id, name or one of
+   its aliases. Otherwise it uses the session's own record (`opts$session`, with the settings
+   applied), and only then the global `provider_get()`. The argument is optional, so the plan's
+   one-argument calls still work. Tasks 5, 7 and 9 must call `adp_provider_headers(model, opts)`
+   so the defect does not spread to their adapters.
+2. **A budget model with no room for the minimum budget sends no thinking.** The plan's clamp
+   `min(budget, max(1024, max_tokens - 1024))` gave `budget_tokens = max_tokens` when the model's
+   `max_output` (or the requested `max_tokens`) left `max_tokens <= 1024`. The API needs
+   `1024 <= budget_tokens < max_tokens` (report 07 section 2.6, and the plan's own body rule "a
+   budget below `max_tokens`"). In that case the body now carries no `thinking` and no
+   interleaved-thinking beta, and `max_tokens` stays at the requested value (capped by
+   `max_output`) instead of the raised one. Any `max_tokens` above 1024 keeps budget thinking,
+   with the plan's clamp. No current catalog model is affected (Haiku 4.5 has `max_output`
+   64000).
+3. **Provider headers are merged, not appended: `adp_merge_headers(base, extra, lists, auth)`.**
+   The plan's `headers = c(headers, adp_provider_headers(model))` repeats a name when the record
+   (or `providers.<id>.headers` in settings) sets one the adapter also sets, and P04's
+   `http_headers()` refuses a spec with a repeated name (in any case), so the request never left
+   the process. An `anthropic-beta` header in the record broke only requests where gptr adds its
+   own beta (an OAuth token, budget thinking, inline tool additions), so it could fail mid-session.
+   The helper compares names case-insensitively. The adapter's headers win: a record header with
+   the name of one the adapter set is dropped, so a record never changes the wire format
+   (`content-type`, `accept`, the API version) or replaces the credential. This differs from Pi,
+   where caller headers replace defaults, because gptr's parser and credential handling depend on
+   them. Two exceptions. A header named in `lists` (for Anthropic `anthropic-beta`) gets the
+   tokens of both sides, the adapter's first, each once. While the adapter sends a credential, a
+   record header named in `auth` (for Anthropic `x-api-key` and `authorization`) is dropped, so
+   two credentials are never sent (plan Global Constraints: "never sends both"). Without a
+   credential, such a record header is sent as it is. Of two record headers with the same name,
+   the last is kept. Tasks 5, 7 and 9 must call
+   `adp_merge_headers(headers, adp_provider_headers(model, opts), auth = <their credential
+   header names>)` instead of the plan's `c()`: Chat Completions `c("authorization", "api-key")`,
+   Responses `"authorization"`, Gemini `"x-goog-api-key"`.
+4. **An image-only tool result for a model without image input carries only the omission note.**
+   The plan's `anthropic_tool_result()` led every result without text with "(see attached
+   image)", also when each image had been replaced by the note "(image omitted: this model does
+   not accept images)", so the model got two contradicting notes. The lead is now added only when
+   an image block is attached. P05's `handoff_transform()` usually strips images for text-only
+   targets first, so this mainly concerns direct `build()` callers.
+
+Validation: `progress/P12.md`, Task 2 review rounds 1 and 2. The round-1 regression tests failed 7
+assertions against the plan-literal source; the round-2 tests failed 6 (4 header, 2 image note).

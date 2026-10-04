@@ -346,3 +346,459 @@ test_that("push_parsed() accepts stream-event objects (the cli-claude reuse, 04 
   expect_identical(msg$route, "plan-cli")
   expect_identical(replay_case(api, anthropic_normaliser, "text")$message$route, "api")
 })
+
+# ---- the request body and the built-in (Task 2) ------------------------------------------------
+
+anthropic_turn2 = function(model) {
+  asst = msg_assistant(list(block_text("Checking."),
+                            block_tool_call("toolu_01A", "r", list(code = "nrow(d)"))),
+                       api = api, provider = model$provider, model = model$id,
+                       stop_reason = "tool_use", timestamp = 2)
+  # first_message() comes from replay_helpers.R, sourced at run time where lintr cannot see it
+  first = first_message() # nolint: object_usage_linter.
+  list(first, asst, msg_tool_result("toolu_01A", "r", "[1] 32", timestamp = 3))
+}
+
+test_that("anthropic breakpoints follow G4 section 3.7: T0 and the project block 1 h, auto tail", {
+  model = test_model(api)
+  req = anthropic_build(model, ctx_fixture(list(first_message())), list())
+  body = json_decode(req$body)
+  expect_identical(names(body), c("model", "max_tokens", "stream", "cache_control", "thinking",
+                                  "tools", "system", "messages"))
+  expect_equal(body$cache_control, list(type = "ephemeral"))
+  expect_equal(body$system[[1L]]$cache_control, list(type = "ephemeral", ttl = "1h"))
+  expect_null(body$system[[2L]]$cache_control)
+  project = body$messages[[1L]]$content[[1L]]
+  expect_match(project$text, "<project_instructions", fixed = TRUE)
+  expect_equal(project$cache_control, list(type = "ephemeral", ttl = "1h"))
+  expect_null(body$messages[[1L]]$content[[2L]]$cache_control)
+  expect_identical(lengths(regmatches(req$body, gregexpr("cache_control", req$body))), 3L)
+  plan = list(anchors = c("t0", "project"), tail_ttl = "1h", key = "gptr:0123456789ab")
+  body_1h = json_decode(anthropic_build(model, ctx_fixture(list(first_message()),
+                                                           cache_plan = plan), list())$body)
+  expect_equal(body_1h$cache_control, list(type = "ephemeral", ttl = "1h"))
+})
+
+test_that("the default cache policy of prompt-cache.R drives the breakpoints (acceptance 4)", {
+  plan = default_plan(api)
+  expect_identical(plan$anchors, c("t0", "project"))
+  body = json_decode(anthropic_build(test_model(api), ctx_fixture(list(first_message()),
+                                                                  cache_plan = plan),
+                                     list())$body)
+  expect_equal(body$system[[1L]]$cache_control, list(type = "ephemeral", ttl = "1h"))
+  expect_equal(body$messages[[1L]]$content[[1L]]$cache_control,
+               list(type = "ephemeral", ttl = "1h"))
+  plan = default_plan(api, project = FALSE)
+  expect_identical(plan$anchors, c("t0", "t1"))
+  body = json_decode(anthropic_build(test_model(api), ctx_fixture(list(msg_user("hi")),
+                                                                  cache_plan = plan),
+                                     list())$body)
+  expect_equal(body$system[[2L]]$cache_control, list(type = "ephemeral", ttl = "1h"))
+})
+
+test_that("without a project block the second breakpoint moves to the T1 system block", {
+  plan = list(anchors = c("t0", "t1"), tail_ttl = "5m", key = "gptr:0123456789ab")
+  body = json_decode(anthropic_build(test_model(api), ctx_fixture(list(msg_user("hi")),
+                                                                  cache_plan = plan),
+                                     list())$body)
+  expect_equal(body$system[[2L]]$cache_control, list(type = "ephemeral", ttl = "1h"))
+  # a cache plan that names neither T1 nor the project block marks only T0 and the tail
+  plan = list(anchors = "t0", tail_ttl = "5m", key = "gptr:0123456789ab")
+  req = anthropic_build(test_model(api), ctx_fixture(list(first_message()), cache_plan = plan),
+                        list())
+  expect_identical(lengths(regmatches(req$body, gregexpr("cache_control", req$body))), 2L)
+  expect_null(json_decode(req$body)$messages[[1L]]$content[[1L]]$cache_control)
+})
+
+test_that("the frozen prefix stays byte-identical across turns and pieces are memoised", {
+  model = test_model(api)
+  memo = new.env(parent = emptyenv())
+  b1 = anthropic_build(model, ctx_fixture(list(first_message())), list(memo = memo))$body
+  b2 = anthropic_build(model, ctx_fixture(anthropic_turn2(model)), list(memo = memo))$body
+  expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
+  fresh = anthropic_build(model, ctx_fixture(anthropic_turn2(model)), list())$body
+  expect_identical(b2, fresh)
+  n = length(ls(memo))
+  expect_gt(n, 0L)
+  again = anthropic_build(model, ctx_fixture(anthropic_turn2(model)), list(memo = memo))$body
+  expect_identical(again, b2)
+  expect_identical(length(ls(memo)), n)
+})
+
+test_that("a PNG tool result is sent as a native image block (acceptance 3)", {
+  model = test_model(api)
+  msgs = anthropic_turn2(model)
+  msgs[[3L]] = msg_tool_result("toolu_01A", "r", list(block_text("plot drawn"),
+                                                      block_image(png_b64())))
+  body = json_decode(anthropic_build(model, ctx_fixture(msgs), list())$body)
+  result = body$messages[[3L]]$content[[1L]]
+  expect_identical(result$type, "tool_result")
+  expect_identical(result$tool_use_id, "toolu_01A")
+  expect_identical(result$content[[2L]]$type, "image")
+  expect_equal(result$content[[2L]]$source,
+               list(type = "base64", media_type = "image/png", data = png_b64()))
+  text_only = test_model(api, input = "text")
+  body = json_decode(anthropic_build(text_only, ctx_fixture(msgs), list())$body)
+  expect_identical(body$messages[[3L]]$content[[1L]]$content[[2L]]$type, "text")
+})
+
+test_that("an image-only tool result for a text-only model carries only the omission note", {
+  msgs = anthropic_turn2(test_model(api))
+  msgs[[3L]] = msg_tool_result("toolu_01A", "r", list(block_image(png_b64())))
+  result = function(model) {
+    body = json_decode(anthropic_build(model, ctx_fixture(msgs), list())$body)
+    body$messages[[3L]]$content[[1L]]$content
+  }
+  # no "(see attached image)" lead: no image is attached
+  blind = result(test_model(api, input = "text"))
+  expect_identical(vapply(blind, function(p) p$type, ""), "text")
+  expect_identical(blind[[1L]]$text, adp_image_note())
+  seen = result(test_model(api))
+  expect_identical(vapply(seen, function(p) p$type, ""), c("text", "image"))
+  expect_identical(seen[[1L]]$text, "(see attached image)")
+})
+
+test_that("signed and redacted thinking replay byte for byte only to the same model", {
+  dir = sse_dir(api)
+  model = adp_fixture_model(api, dir)
+  msg = replay_case(api, anthropic_normaliser, "thinking_tools")$message
+  ctx = ctx_fixture(list(first_message(), msg, msg_tool_result("toolu_01A", "r", "ok"),
+                         msg_tool_result("toolu_01B", "read", "ok")))
+  req = anthropic_build(model, ctx, list())
+  parts = json_decode(req$body)$messages[[2L]]$content
+  expect_identical(parts[[1L]]$type, "thinking")
+  expect_identical(parts[[1L]]$signature, msg$content[[1L]]$signature)
+  expect_identical(parts[[2L]], list(type = "redacted_thinking", data = msg$content[[2L]]$data))
+  expect_true(grepl(msg$content[[2L]]$data, req$body, fixed = TRUE))
+  expect_length(json_decode(req$body)$messages[[3L]]$content, 2L)
+  other = json_decode(anthropic_build(test_model(api, id = "other-model"), ctx, list())$body)
+  kinds = vapply(other$messages[[2L]]$content, function(p) p$type, "")
+  expect_false(any(kinds %in% c("thinking", "redacted_thinking")))
+  expect_identical(kinds[[1L]], "text")
+})
+
+test_that("adaptive models get adaptive thinking and effort; budget models an enabled budget", {
+  body = json_decode(anthropic_build(test_model(api),
+                                     ctx_fixture(list(msg_user("hi")),
+                                                 params = list(thinking = "high")),
+                                     list())$body)
+  expect_equal(body$thinking, list(type = "adaptive", display = "omitted"))
+  expect_identical(body$output_config$effort, "high")
+  haiku = test_model(api, id = "claude-haiku-4-5", max_output = 64000,
+                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+  req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
+                                           params = list(thinking = "medium", max_tokens = 4096L)),
+                        list())
+  body = json_decode(req$body)
+  expect_equal(body$thinking, list(type = "enabled", budget_tokens = 8192L))
+  expect_gt(body$max_tokens, 8192L)
+  expect_null(body$output_config)
+  expect_match(req$headers$`anthropic-beta`, "interleaved-thinking-2025-05-14", fixed = TRUE)
+  haiku$max_output = 8192
+  body = json_decode(anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
+                                                        params = list(thinking = "high")),
+                                     list())$body)
+  expect_identical(body$max_tokens, 8192L)
+  expect_lt(body$thinking$budget_tokens, body$max_tokens)
+  # report 07 section 2.3: a temperature is never sent to a 5.x (adaptive) model
+  cold = json_decode(anthropic_build(test_model(api),
+                                     ctx_fixture(list(msg_user("hi")),
+                                                 params = list(thinking = "off",
+                                                               temperature = 0.2)),
+                                     list())$body)
+  expect_null(cold$thinking)
+  expect_null(cold$temperature)
+  warm = json_decode(anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
+                                                        params = list(temperature = 0.2)),
+                                     list())$body)
+  expect_null(warm$thinking)
+  expect_identical(warm$temperature, 0.2)
+})
+
+test_that("returns = uses output_config.format and keeps the tools (IC-71, INFRA-25)", {
+  schema = list(type = "object", required = I("rows"),
+                properties = list(rows = list(type = "integer")))
+  req = anthropic_build(test_model(api), ctx_fixture(list(msg_user("rows?")),
+                                                     params = list(returns = schema)), list())
+  body = json_decode(req$body)
+  expect_identical(body$output_config$format$type, "json_schema")
+  expect_identical(body$output_config$format$schema$required, list("rows"))
+  expect_identical(vapply(body$tools, function(t) t$name, ""), c("read", "r"))
+  expect_null(body$tool_choice)
+  plain = test_model(api, structured_output = FALSE)
+  body = json_decode(anthropic_build(plain, ctx_fixture(list(msg_user("rows?")),
+                                                        params = list(returns = schema)),
+                                     list())$body)
+  expect_null(body$output_config$format)
+  last = body$messages[[length(body$messages)]]
+  expect_identical(last$role, "system")
+  expect_match(last$content[[1L]]$text, "JSON Schema", fixed = TRUE)
+})
+
+test_that("a forced tool_choice is never sent while forced_tool_choice is FALSE (IC-71)", {
+  forced = list(tool_choice = list(type = "tool", name = "read"))
+  no = test_model(api, reasoning = FALSE, capabilities = list(forced_tool_choice = FALSE))
+  body = json_decode(anthropic_build(no, ctx_fixture(list(msg_user("x")), params = forced),
+                                     list())$body)
+  expect_null(body$tool_choice)
+  silent = test_model(api, reasoning = FALSE, capabilities = list())
+  body = json_decode(anthropic_build(silent, ctx_fixture(list(msg_user("x")), params = forced),
+                                     list())$body)
+  expect_null(body$tool_choice)
+  yes = test_model(api, reasoning = FALSE, capabilities = list(forced_tool_choice = TRUE))
+  body = json_decode(anthropic_build(yes, ctx_fixture(list(msg_user("x")), params = forced),
+                                     list())$body)
+  expect_equal(body$tool_choice, list(type = "tool", name = "read"))
+  body = json_decode(anthropic_build(yes, ctx_fixture(list(msg_user("x")),
+                                                      params = list(tool_choice = "none")),
+                                     list())$body)
+  expect_equal(body$tool_choice, list(type = "none"))
+})
+
+test_that("operator messages are system messages only where the placement rule allows", {
+  model = test_model(api)
+  relay = msg_operator("steer_relay",
+                       "The user sent this message while you were working: use TPM")
+  body = json_decode(anthropic_build(model, ctx_fixture(c(anthropic_turn2(model), list(relay))),
+                                     list())$body)
+  expect_identical(body$messages[[length(body$messages)]]$role, "system")
+  old = test_model(api, capabilities = list(mid_system = FALSE))
+  body = json_decode(anthropic_build(old, ctx_fixture(c(anthropic_turn2(model), list(relay))),
+                                     list())$body)
+  expect_identical(body$messages[[length(body$messages)]]$role, "user")
+  before_user = c(anthropic_turn2(model), list(relay, msg_user("and then?")))
+  body = json_decode(anthropic_build(model, ctx_fixture(before_user), list())$body)
+  roles = vapply(body$messages, function(m) m$role, "")
+  expect_false("system" %in% roles)
+  add = msg_operator("tool_change", "New tool: lint.",
+                     tool_add = list(list(name = "lint", description = "Lint a file.",
+                                          input_schema = list(type = "object"))))
+  req = anthropic_build(model, ctx_fixture(c(anthropic_turn2(model), list(add))), list())
+  parts = json_decode(req$body)$messages[[4L]]$content
+  expect_identical(parts[[2L]]$type, "tool_addition")
+  expect_identical(parts[[2L]]$tool$definition$name, "lint")
+  expect_match(req$headers$`anthropic-beta`, "inline-tools-2026-09-15", fixed = TRUE)
+})
+
+test_that("a run of operator messages is one system message, never two in a row (07 2.3)", {
+  model = test_model(api)
+  mode = msg_operator("mode", "Mode changed to auto.")
+  relay = msg_operator("steer_relay",
+                       "The user sent this message while you were working: use TPM")
+  body = json_decode(anthropic_build(model, ctx_fixture(c(anthropic_turn2(model),
+                                                          list(mode, relay))),
+                                     list())$body)
+  expect_identical(vapply(body$messages, function(m) m$role, ""),
+                   c("user", "assistant", "user", "system"))
+  expect_identical(vapply(body$messages[[4L]]$content, function(p) p$text, ""),
+                   c("Mode changed to auto.",
+                     "The user sent this message while you were working: use TPM"))
+  # a returns instruction closes the request: the trailing run is user text, the instruction
+  # the one system message after it
+  plain = test_model(api, structured_output = FALSE)
+  ctx = ctx_fixture(c(anthropic_turn2(model), list(relay)),
+                    params = list(returns = count_schema()))
+  roles = vapply(json_decode(anthropic_build(plain, ctx, list())$body)$messages,
+                 function(m) m$role, "")
+  expect_identical(roles, c("user", "assistant", "user", "user", "system"))
+})
+
+test_that("credentials stay handles: x-api-key, or Bearer with the oauth beta", {
+  key = fake_handle("ANTHROPIC_API_KEY")
+  req = anthropic_build(test_model(api), ctx_fixture(list(msg_user("x"))),
+                        list(credential = key, base_url = "https://api.anthropic.com"))
+  expect_identical(req$url, "https://api.anthropic.com/v1/messages")
+  expect_identical(req$method, "POST")
+  expect_identical(req$headers$`x-api-key`, key)
+  expect_identical(req$headers$`anthropic-version`, "2023-06-01")
+  expect_identical(req$stream, "sse")
+  tok = fake_handle("ANTHROPIC_AUTH_TOKEN")
+  req = anthropic_build(test_model(api), ctx_fixture(list(msg_user("x"))), list(credential = tok))
+  expect_identical(req$headers$authorization, list("Bearer ", tok))
+  expect_null(req$headers$`x-api-key`)
+  expect_match(req$headers$`anthropic-beta`, "oauth-2025-04-20", fixed = TRUE)
+  expect_false(grepl("abc123", req$body, fixed = TRUE))
+})
+
+test_that("provider headers come from the record provider_stream() resolved (04 10.1, 10.2)", {
+  # a provider passed as `model = <spec>` is a session-scoped (rank 0) record that the global
+  # lookup never sees; its non-secret headers must still reach the wire
+  probe = function(org, id = "p12-probe") {
+    gptr_provider(id, api = api, base_url = "http://127.0.0.1:9", auth = NULL,
+                  headers = list(`x-org` = org),
+                  models = list(list(id = "probe-1", name = "Probe", context = 200000,
+                                     max_output = 4096, reasoning = FALSE,
+                                     input = "text", tool_call = TRUE)),
+                  local = TRUE, offline = TRUE)
+  }
+  model = test_model(api, provider = "p12-probe")
+  ctx = ctx_fixture(list(msg_user("x")))
+  # the record handed over as opts$provider is used; one of another provider is not
+  req = anthropic_build(model, ctx, list(provider = probe("direct")))
+  expect_identical(req$headers$`x-org`, "direct")
+  other = probe("other", id = "p12-other")
+  expect_null(anthropic_build(model, ctx, list(provider = other))$headers$`x-org`)
+  # through provider_stream(): a session record alone, then a session record over a global one
+  sid = "s_p12probe01"
+  withr::defer(registry_session_drop(sid))
+  registry_add(probe("session"), source = "session", rank = 0L, session = sid)
+  sent = function(opts) {
+    wire = local_scripted_wire(list(anthropic_sse_text("ok")))
+    out = new.env(parent = emptyenv())
+    out$msg = NULL
+    provider_stream(model_resolve(probe("unused")), ctx, opts, emit = function(ev) NULL,
+                    done = function(msg) out$msg = msg)
+    reactor_pump(until = function() !is.null(out$msg), timeout = 10)
+    wire$requests[[1L]]$headers
+  }
+  expect_identical(sent(list(session = sid))$`x-org`, "session")
+  # the session's own record is also found when build() gets only the session id
+  expect_identical(anthropic_build(model, ctx, list(session = sid))$headers$`x-org`, "session")
+  off = gptr_register(probe("global"))
+  withr::defer(off())
+  expect_identical(sent(list(session = sid))$`x-org`, "session")
+  expect_identical(sent(list())$`x-org`, "global")
+})
+
+test_that("provider headers never repeat an adapter header: betas join, the adapter's win", {
+  # 04 10.2 row 1 allows any non-secret header in a provider record, and P04's http_headers()
+  # refuses a spec that repeats a name in any case, so the request would never leave the process
+  rec = function(...) {
+    gptr_provider("p12-beta", api = api, base_url = "http://127.0.0.1:9", auth = NULL,
+                  headers = list(...),
+                  models = list(list(id = "h-1", name = "H", context = 200000,
+                                     max_output = 64000, reasoning = TRUE,
+                                     input = "text", tool_call = TRUE)),
+                  local = TRUE, offline = TRUE)
+  }
+  haiku = test_model(api, id = "claude-haiku-4-5", provider = "p12-beta", max_output = 64000,
+                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+  ctx = ctx_fixture(list(msg_user("hi")), params = list(thinking = "medium"))
+  tok = fake_handle("ANTHROPIC_AUTH_TOKEN")
+  p = rec(`anthropic-beta` = "context-1m-2025-08-07, interleaved-thinking-2025-05-14",
+          Accept = "application/json", `Anthropic-Version` = "2099-01-01",
+          `X-Api-Key` = "static", `x-org` = "p12")
+  h = anthropic_build(haiku, ctx, list(credential = tok, provider = p))$headers
+  expect_identical(anyDuplicated(tolower(names(h))), 0L)
+  local_mocked_bindings(secret_value = function(handle, origin) "tok-value")
+  expect_no_error(http_headers(h, "https://api.anthropic.com"))
+  # the beta tokens of both sides, gptr's first, each once
+  expect_identical(h$`anthropic-beta`, paste("interleaved-thinking-2025-05-14",
+                                             "oauth-2025-04-20", "context-1m-2025-08-07",
+                                             sep = ","))
+  # the adapter's wire format and credential stay; a second credential is never added
+  expect_identical(h$accept, "text/event-stream")
+  expect_identical(h$`anthropic-version`, "2023-06-01")
+  expect_identical(h$authorization, list("Bearer ", tok))
+  expect_false("x-api-key" %in% tolower(names(h)))
+  expect_identical(h$`x-org`, "p12")
+  # without gptr betas or a credential the provider's headers go out as they are
+  plain = anthropic_build(test_model(api, provider = "p12-beta"),
+                          ctx_fixture(list(msg_user("hi"))),
+                          list(provider = rec(`anthropic-beta` = "context-1m-2025-08-07",
+                                              `X-Api-Key` = "static")))$headers
+  expect_identical(plain$`anthropic-beta`, "context-1m-2025-08-07")
+  expect_identical(plain$`X-Api-Key`, "static")
+  expect_identical(anyDuplicated(tolower(names(plain))), 0L)
+})
+
+test_that("a budget model without room for the minimum budget sends no thinking (07 2.6)", {
+  # the API needs 1024 <= budget_tokens < max_tokens
+  haiku = test_model(api, id = "claude-haiku-4-5", max_output = 1024,
+                     capabilities = list(adaptive_thinking = FALSE, effort = FALSE))
+  req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
+                                           params = list(thinking = "high", max_tokens = 800L)),
+                        list())
+  body = json_decode(req$body)
+  expect_null(body$thinking)
+  expect_identical(body$max_tokens, 800L)
+  expect_null(req$headers$`anthropic-beta`)
+  # one token more leaves room for the minimum budget below max_tokens
+  haiku$max_output = 1025
+  req = anthropic_build(haiku, ctx_fixture(list(msg_user("hi")),
+                                           params = list(thinking = "high")),
+                        list())
+  body = json_decode(req$body)
+  expect_identical(body$max_tokens, 1025L)
+  expect_equal(body$thinking, list(type = "enabled", budget_tokens = 1024L))
+  expect_match(req$headers$`anthropic-beta`, "interleaved-thinking-2025-05-14", fixed = TRUE)
+})
+
+test_that("declared request params reach the body; others do not (IC-69)", {
+  ctx = ctx_fixture(list(msg_user("x")), params = list(service_tier = "auto", user = "u1"))
+  body = json_decode(anthropic_build(test_model(api), ctx, list())$body)
+  expect_identical(body$service_tier, "auto")
+  expect_null(body$user)
+})
+
+test_that("builtin:anthropic registers the adapter with its capabilities", {
+  a = adapter_get(api)
+  expect_s3_class(a, "gptr_adapter")
+  expect_identical(a$transport, "http_sse")
+  expect_false(a$capabilities$forced_tool_choice)
+  expect_identical(a$capabilities$request_params, c("service_tier", "metadata"))
+  expect_identical(a$capabilities$max_tool_name, 128L)
+})
+
+test_that("provider_stream() puts the returns schema on the wire (INFRA-25)", {
+  local_scripted_provider(api)
+  wire = local_scripted_wire(list(anthropic_sse_text("{\"n\":32}")))
+  out = new.env(parent = emptyenv())
+  out$msg = NULL
+  ctx = ctx_fixture(list(msg_user("How many rows?")), params = list(returns = count_schema()))
+  provider_stream(model_resolve("scripted/scripted-1"), ctx, list(), emit = function(ev) NULL,
+                  done = function(msg) out$msg = msg)
+  reactor_pump(until = function() !is.null(out$msg), timeout = 10)
+  body = json_decode(wire$requests[[1L]]$body)
+  expect_identical(body$output_config$format$type, "json_schema")
+  expect_identical(body$output_config$format$schema$required, list("n"))
+  expect_identical(msg_text(out$msg), "{\"n\":32}")
+})
+
+test_that("returns = through the run loop: a typed value and the tool calls kept (INFRA-25)", {
+  skip_without_run_engine()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  local_scripted_provider(api)
+  local_count_tool()
+  wire = local_scripted_wire(list(anthropic_sse_tool("toolu_01", "count", "{}"),
+                                  anthropic_sse_text("{\"n\":32}")))
+  s = session_new("scripted/scripted-1", "auto", home = new.env())
+  session_run(s, msg_user("How many rows?"), list(returns = count_schema()))
+  expect_identical(s$value$n, 32L)
+  expect_identical(vapply(s$messages, function(m) m$role, ""),
+                   c("user", "assistant", "tool_result", "assistant"))
+  expect_length(wire$requests, 2L)
+  expect_match(wire$requests[[1L]]$url, "/v1/messages$")
+  # the run's returns schema reaches the wire through P07's request context (IC-71)
+  first = json_decode(wire$requests[[1L]]$body)
+  expect_identical(first$output_config$format$type, "json_schema")
+  expect_identical(first$output_config$format$schema$required, list("n"))
+  expect_true("count" %in% vapply(first$tools, function(t) t$name, ""))
+  second = json_decode(wire$requests[[2L]]$body)
+  kinds = unlist(lapply(second$messages, function(m) vapply(m$content, function(b) b$type, "")))
+  expect_true(all(c("tool_use", "tool_result") %in% kinds))
+})
+
+test_that("end to end on the mock server: streaming, retry and abort (skip on CRAN)", {
+  skip_on_cran()
+  srv = local_mock_server("stream", n = 3L, interval = 0.02)
+  r = mock_stream(srv)
+  expect_identical(r$types, c("start", "text_start", rep("text_delta", 3L), "text_end", "done"))
+  expect_identical(msg_text(r$message), "tok01 tok02 tok03 ")
+  expect_identical(r$message$usage$input, 100)
+  over = local_mock_server("overload", attempts = 1L)
+  r = mock_stream(over)
+  expect_identical(r$message$stop_reason, "stop")
+  expect_identical(nrow(over$log()), 2L)
+  expect_identical(sum(r$types == "start"), 1L)
+  slow = local_mock_server("stream", n = 12L, interval = 0.2)
+  r = mock_stream(slow, abort_after = 2L)
+  expect_identical(r$message$stop_reason, "aborted")
+  expect_identical(msg_text(r$message), "tok01 tok02 ")
+  expect_identical(r$types[[length(r$types)]], "error")
+  tools = local_mock_server("parallel_tools")
+  r = mock_stream(tools)
+  expect_identical(r$message$stop_reason, "tool_use")
+  expect_identical(vapply(r$message$content, function(b) b$name, ""), c("read", "r"))
+  expect_identical(r$message$content[[2L]]$arguments, list(code = "1 + 1"))
+})
