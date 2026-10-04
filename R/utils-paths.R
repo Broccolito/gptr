@@ -46,10 +46,19 @@ write_atomic = function(path, content) {
   before = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_
   tmp = tempfile(".gptr-write-", tmpdir = dir)
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
+  # Create an empty private file before writing any content; changing permissions after
+  # write_bytes() would expose a private target's new content under an ordinary umask.
+  mode = if (!is.na(before)) file.info(path)$mode else "0600"
+  if (!file.create(tmp, showWarnings = FALSE) ||
+        !isTRUE(Sys.chmod(tmp, "0600", use_umask = FALSE))) {
+    gptr_abort("Cannot create a private temporary file.", "doc_write", path = path,
+               reason = "temporary permissions")
+  }
   write_bytes(tmp, bytes)
-  # The renamed temp file replaces the target, so give it the target's permission bits (an
-  # executable script stays executable)
-  if (!is.na(before)) Sys.chmod(tmp, file.info(path)$mode, use_umask = FALSE)
+  if (!isTRUE(Sys.chmod(tmp, mode, use_umask = FALSE))) {
+    gptr_abort("Cannot preserve destination permissions.", "doc_write", path = path,
+               reason = "destination permissions")
+  }
   for (attempt in 1:4) {
     if (file_rename(tmp, path)) return(invisible(path))
     if (attempt < 4L) Sys.sleep(0.1)
@@ -253,7 +262,8 @@ path_rel = function(path, root = project_root()) {
   base = path_norm(root)
   inside = path_inside(abs, base)
   out = abs
-  out[inside] = substring(abs[inside], nchar(base) + 2L)
+  prefix = if (endsWith(base, "/")) base else paste0(base, "/")
+  out[inside] = substring(abs[inside], nchar(prefix) + 1L)
   out[inside & !nzchar(out)] = "."
   out
 }
@@ -310,6 +320,20 @@ path_class_one = function(path, context) {
     expanded = file.path(context$root, expanded)
   }
   key = path_key(expanded)
+  resolved = path_class_key(key, context)
+  # Both the requested pathname and its symlink target carry policy authority.
+  lexical = path_lexical(expanded)
+  if (is_windows() || is_macos()) lexical = tolower(lexical)
+  requested = path_class_key(lexical, context)
+  guarded = c("control", "critical", "protected", "instructions")
+  ranks = match(c(requested, resolved), guarded)
+  if (all(is.na(ranks))) return(resolved)
+  guarded[min(ranks, na.rm = TRUE)]
+}
+
+#' Classify one absolute lexical or resolved path without resolving it again
+#' @noRd
+path_class_key = function(key, context) {
   has = function(pattern) grepl(pattern, key, ignore.case = TRUE, perl = TRUE)
   inside = function(base) key == base || startsWith(key, paste0(sub("/$", "", base), "/"))
   control = has("(^|/)\\.gptr/settings[^/]*\\.json$") ||
@@ -343,4 +367,23 @@ path_class_one = function(path, context) {
   if (inside(context$root_key)) return("workspace")
   if (inside(context$temp_key)) return("temp")
   "outside"
+}
+
+#' Normalize an absolute path lexically without following symlinks
+#' @noRd
+path_lexical = function(path) {
+  unc = startsWith(path, "//")
+  prefix = if (unc) "//" else if (startsWith(path, "/")) "/" else ""
+  floor = if (unc) 2L else if (grepl("^[A-Za-z]:/", path)) 1L else 0L
+  pieces = strsplit(path, "/", fixed = TRUE)[[1L]]
+  out = character()
+  for (piece in pieces) {
+    if (piece %in% c("", ".")) next
+    if (identical(piece, "..")) {
+      if (length(out) > floor) out = out[-length(out)]
+    } else {
+      out = c(out, piece)
+    }
+  }
+  paste0(prefix, paste(out, collapse = "/"))
 }
