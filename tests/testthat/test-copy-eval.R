@@ -54,3 +54,13 @@ test_that("a describe method that throws costs at most one copy (R's limit, D-04
   expect_no_copy(setup, 'invisible(describe_binding("big", globalenv()))', allow = 1L,
                  label = "describe_binding of an object whose method throws")
 })
+
+test_that("the history task callback is handed the user's object and leaves it in place", {
+  # Every top-level line of the child runs through R's task callbacks; these hand `big` itself
+  # to user_log_callback() as `value` (P09 Task 4, report 12 section 2.C5).
+  setup = paste("big = runif(5e6)", ns_get("user_log_start"), "user_log_start('s0000000001')",
+                sep = "; ")
+  action = paste("invisible(big)", "invisible(identity(big))", "(function(d) invisible(d))(big)",
+                 sep = "; ")
+  expect_no_copy(setup, action, label = "top-level values handed to the history callback")
+})

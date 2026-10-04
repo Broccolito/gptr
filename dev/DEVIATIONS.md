@@ -1797,6 +1797,107 @@ tests, which are unchanged. Against the plan-literal source:
 `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 403 ]`, all 13 in the added blocks. Final
 `^session-(object|store)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 416 ]`.
 
+## D-045 - P09 user-expression log: the task callback walks every call linearly, default arguments included, and deparses nothing nested past 5,000 calls, a deparse() error becomes a note, multi-line expressions are one line, a removed callback is registered again, session ids are checked (2026-10-04)
+
+P09 Task 4's plan-literal `R/env-history.R` (`user_log_push()`, `user_log_is_gptr()`,
+`user_log_start()`, `user_log_stop()`) was changed in the ways below. Each was found by a probe of
+the plan-literal source (`dev/.validation/P09/task4-probe-plan-literal.log`,
+`task4-probe-callback-plan-literal.log`, `task4-probe-deep-plan-literal.log`). The internal
+signatures, the callback name `gptr_history`, the 20-entry and 120-character limits and
+`user_expr_log()` are unchanged. The plan's `user_log_is_gptr()` is replaced by
+`user_log_scan()`, and the `active` field of `user_log_state` is gone (nothing outside the file
+read it).
+
+R calls a task callback through `R_tryEval()`. When the callback signals an error, R prints that
+error at the user's prompt and removes the callback, so logging stops for every live session.
+The callback therefore must not throw on any expression the parser can produce.
+
+1. **A linear, non-recursive walk.** The plan's recursive walk read `expr[[i]]` for each
+   argument. On a call that is a pairlist this is quadratic. Pasting one `x = c(<100,000
+   numbers>)` line (a `dput()` of a long vector) made the callback run for 515 s before the
+   next prompt. A 20,000-term expression, such as a generated function body, overflowed R's
+   node stack. R then printed "node stack overflow ... user_log_is_gptr" and dropped the
+   callback. `user_log_scan()` now walks the call tree breadth-first with `as.list()`. The same
+   line takes 0.024 s. The children of a level are joined with
+   `unlist(recursive = FALSE, use.names = FALSE)` (review round 2). The first version joined
+   them with `do.call(c, ...)`, which passed their argument names to `c()`: a child under an
+   argument named `recursive` or `use.names` bound to that formal, and the walk stopped there.
+   `f(recursive = g(gptr("p")))` was logged, and a 6,000-level body under `recursive =` reached
+   `deparse()` past the cap of item 2 (at 100,000 levels R segfaulted, per the reviewer).
+2. **Expressions nested more than 5,000 calls deep are not deparsed.** The new walk alone moved
+   the failure into `deparse()`, which recurses in C. At about 100,000 levels it ends in
+   "segfault from C stack overflow", which no handler catches. The walk counts levels and stops
+   at R's default `expressions` limit. Such an entry is logged as
+   `<expression nested more than 5000 calls deep>`. The levels include the default arguments
+   of `function()` (review round 3). Its formals are a pairlist, not a call, and the first walk
+   kept only calls, so it never looked inside a default: `f = function(x = a + ... + a) 1` with
+   100,000 terms scanned as two levels deep, reached `deparse()` and segfaulted in a child
+   Rscript, and R dropped the callback (with 6,000 terms a 120-character text was logged
+   instead of the note). `g = function(x = gptr("p")) x` was logged. The walk now adds the
+   elements of each pairlist child to the same level; a missing default (an empty symbol) is
+   not a call and ends there, as the empty argument of `x[, 1]` does.
+3. **Multi-line expressions are one line** (04 section 7.9: "deparsed and cut to 120
+   characters"). With `nlines = 1L`, the plan logged only the first deparsed line: `{`,
+   `for (i in 1:3) {`, `f = function(x) {`, `if (TRUE) {`. The lines (at most 120) are now
+   trimmed and joined, with `"; "` between statements: `for (i in 1:3) { y = i; z = y + 1 }`.
+   A break inside one statement takes a space. Inside braces `deparse()` breaks an `if` after
+   `if (cond) ` and before `else`, and past 500 bytes it breaks after `, ` or a binary operator.
+   The glue is a space when the untrimmed line ends with `{` or with a space (`deparse()` leaves
+   one at each break inside a statement) or the next line starts with `}` or the word `else`.
+   The first version (review round 2) used only the braces, so `{ if (x) y else z }` was logged
+   as `{ if (x); y; else z }`, which is not the code typed. Applied without the cut to every
+   function body of base, stats, utils, methods, tools and graphics that deparses to 2 to 120
+   lines (2,891), the one-line text parses to the same expression as the multi-line deparse
+   for all of them; the first rule failed for 2,260 (`task4-fix2-probe-corpus.log`,
+   `task4-fix2-probe-corpus-oldglue.log`).
+4. **The entry is valid UTF-8 before it is cut** (IC-62; conventions section 4: console input
+   passes `as_utf8()`). The deparsed text goes through Task 2's `env_text()`, so `nchar()` and
+   `substr()` count characters in every locale.
+5. **Registration follows R's callback list, not a flag.** The plan registered only while its
+   own `active` flag was FALSE. After R dropped the callback (item 1), or the user removed it by
+   position (`removeTaskCallback(1)`), the flag stayed TRUE, and a new session never registered
+   the callback again. `user_log_start()` now checks `getTaskCallbackNames()`, and
+   `user_log_stop()` removes every callback named `gptr_history`.
+6. **`gptr:::gptr(...)` and `"gptr"::"gptr"(...)` are filtered** like `gptr::gptr(...)`. They
+   too are calls of `gptr()`. Other functions of the package, such as `gptr::gptr_last()`, are
+   still logged.
+7. **Session ids are checked** (04 section 2.2). `user_log_start(NULL)` registered a callback
+   with no session to release it, and `user_log_start(NA)` stored an `NA` session. Both now
+   signal `gptr_error_invalid_argument` before anything changes.
+8. **An error from `deparse()` becomes a note** (review round 1). `deparse()` signals an error
+   on two kinds of input that the parser accepts and that evaluate without error. Both made R
+   print the error at the prompt and drop the callback (`task4-fix1-probe-before.log`).
+   - In a UTF-8 locale (the default on macOS, Linux and Windows R >= 4.2), a backtick name
+     whose `\x` escapes are not UTF-8: `` `\xff` = 1 ``, `` x = list(`\xfe` = 1) ``,
+     `` f = function(`\xff`) 1 ``. The error is "invalid multibyte string at '<fe>'".
+   - A chain of calls `f(1)(1)...(1)` typed as a whole top-level expression, where `f` returns
+     itself. With an 8 MB C stack, `deparse()` fails its C stack check from about 800 calls,
+     far below the 5,000-call cap of item 2 (`task4-fix1-probe-shapes.log`). A bigger stack
+     only moves the threshold.
+   `user_log_text()` now runs the text step (`user_log_line()`, the former body) in
+   `tryCatch()`, and any error there is logged as `<expression that cannot be deparsed>`. Its
+   frame holds only `expr`, never the callback's `value`, so R3 holds: the copy row still
+   counts 0 copies. A probe of other parser shapes found no other failure: `- - a`, `!!a`,
+   `a$a`, `a[1][1]`, `~ ~ a`, pipes and `+` deparse at 4,999 levels; `^`, `=`, `function()` and
+   `if` do not parse at 4,999 levels and deparse at 2,000 (`function()` at 1,000; it does not
+   parse at 2,000).
+
+Copy safety (R1-R3). A new fresh-process row in `test-copy-eval.R` runs three top-level lines
+that hand `big` itself to the live callback as `value`. The next edit is in place, with 0 copies.
+A negative control with the same script (`task4-copy-negative-control.log`) shows a callback
+that keeps the values it is handed costs 1 copy, which the row would catch.
+
+Validation: `progress/P09.md`, Task 4. Ten blocks (62 expectations) and one copy row were added
+to the plan's tests, which are unchanged. Against the plan-literal source the first seven added
+blocks gave `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 24 ]`. The two blocks of item 8 and its line in
+the fresh-process block failed against the source before item 8 (`[ FAIL 5 | WARN 0 | SKIP 0 |
+PASS 41 ]`, `task4-fix1-red.log`). The review round 2 expectations (the glue of item 3, the
+argument names of item 1) failed against the source before that round (`[ FAIL 6 | WARN 0 |
+SKIP 0 | PASS 54 ]`, `task4-fix2-red.log`). The review round 3 block (the defaults of item 2)
+failed 3 of its 8 expectations against the source before that round (`[ FAIL 3 | WARN 0 |
+SKIP 0 | PASS 71 ]`, `task4-fix3-red.log`). Final `^env-history$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 74 ]`, the same under `LC_ALL=C`. `^copy-eval$`: 8 passes.
+
 ## D-046 - P10 diff engine: collision-free no-newline keys, validated diff_unified() arguments, a clamped context, O(D^2) Myers memory, linear hunk rendering and an O(n log n) LIS (2026-10-04)
 
 P10 Task 3's plan-literal `R/tool-diff.R` had six defects, all reproduced against that source:
