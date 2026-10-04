@@ -73,3 +73,16 @@ regressions use mocked OS operations, never live unrelated PIDs.
 - Generated gptr_jobs.Rd and its NAMESPACE export with pinned roxygen2 7.3.3 using
   the isolated document action. Other active lanes' generated exports/manuals are
   left unstaged; this commit includes only the gptr_jobs namespace addition.
+
+## Task 4 follow-up - require the orphan recovery record
+
+While integrating Task 7, source inspection found that `proc_mark()` suppressed
+`write_atomic()` errors and could report registration without the persistent marker
+required by IC-60. The write failure now propagates; the exact original child remains
+in the in-memory table so `proc_spawn()` can roll it back immediately.
+
+The new pure-mock regression failed before the change, then the complete isolated
+mock boundary selection passed **54 assertions**. Scoped source/test lint remains
+**0**. No process was launched or signalled by this regression. The Task 7 suite also
+checks that registration failure invokes cleanup with the exact newly created object.
+Independent source review is clear; this fix is committed separately from Task 7.

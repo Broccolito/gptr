@@ -169,7 +169,8 @@ proc_mark = function(p, marker, command) {
   assign(marker, rec, envir = je$procs)
   assign(marker, p, envir = je$handles)
   path = file.path(proc_dir(create = TRUE), paste0(marker, ".json"))
-  tryCatch(write_atomic(path, json_encode(rec)), error = function(e) NULL)
+  # Keep the original child in memory if persistence fails: proc_spawn() rolls it back.
+  write_atomic(path, json_encode(rec))
   if (length(ls(je$procs)) > 32L) proc_prune()
   invisible(rec)
 }

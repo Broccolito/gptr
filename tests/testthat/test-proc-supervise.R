@@ -424,3 +424,17 @@ test_that("boundary: unload retains records when owned child cleanup is unconfir
   expect_true(file.exists(path))
   expect_identical(proc_record(42L)$marker, marker)
 })
+
+test_that("boundary: marker persistence failures propagate while retaining the exact child", {
+  local_proc_state()
+  local_mocked_bindings(
+    proc_self = function() list(pid = 42L, create_time = 10),
+    proc_create_time = function(pid) 11,
+    write_atomic = function(...) gptr_abort("Synthetic marker write failure.", "io")
+  )
+  p = list(get_pid = function() 43L)
+  marker = proc_marker_new()
+  expect_error(proc_mark(p, marker, "synthetic"), class = "gptr_error_io")
+  expect_identical(proc_record(43L, process = p)$marker, marker)
+  expect_identical(jobs_env()$handles[[marker]], p)
+})
