@@ -68,7 +68,7 @@ test_that("an IRkernel session can prompt but does not count as a watching human
     gptr.interactive = NULL, jupyter.in_kernel = TRUE, knitr.in.progress = NULL
   )
   withr::local_envvar(TESTTHAT = "false", `_R_CHECK_PACKAGE_NAME_` = "")
-  local_mocked_bindings(gptr_is_interactive = function() FALSE)
+  local_mocked_bindings(gptr_is_interactive = function() FALSE, .package = "gptr")
   expect_true(gptr_can_prompt())
   expect_false(gptr_has_human())
   withr::local_options(knitr.in.progress = TRUE)

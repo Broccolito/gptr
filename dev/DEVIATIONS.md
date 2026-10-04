@@ -44,7 +44,10 @@ and fake-provider contracts. This uses the tested interface dependency order;
 full P01 acceptance still precedes P02 completion and milestone promotion.
 P04 Task 1 (SSE/NDJSON splitters) likewise uses only the verified P01 JSON
 decoder. It can run independently before registry/secrets integration; the
-remaining transport tasks wait for their actual authentication prerequisites.
+remaining transport tasks wait for their actual authentication prerequisites. P04 Tasks 4–5
+(process supervision and the job table) also use only P01 interfaces and run in
+a separate lane while root validates the immutable foundation snapshot.
+Tasks that materialize secrets or persist transport data still wait for P03.
 
 ## D-006 — Effective connection cleanup gate (2026-10-03)
 

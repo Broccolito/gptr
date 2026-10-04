@@ -33,8 +33,11 @@ Updated: 2026-10-03. State: active implementation, P01 not yet complete.
 Continue P01 from the latest completed task in `progress/P01.md` and the
 parallel utilities/providers/infrastructure logs. All 21 tasks have
 focused passing checks. Task 18 completed at `7d816e9`; full acceptance is pending.
-P02's first two tasks are uncommitted parallel work, excluded from root's
-forthcoming immutable P01 package-check snapshot. The README/About are
+P02 Tasks 1–3 are committed and Task 4 is underway. Root captured P01 at
+`eea1e36` before these commits; its 1,599 assertions, connection gate and lint
+passed. Installed-package checking found one mock-package inference issue;
+the one-line test correction is being rechecked in that snapshot. See
+`progress/P01-acceptance.md` for exact evidence and pending hosted results. The README/About are
 updated and draft PR #4 tracks the work. roxygen2 7.3.3 is in `dev/.library`;
 use `R_LIBS_USER="$PWD/dev/.library" Rscript --vanilla` for development checks.
 Optional tooling installation is complete (`progress/tooling.md`). Read ownership

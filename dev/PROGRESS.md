@@ -10,7 +10,10 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
   IC-74 adds acceptance work that must be reconciled, not assumed complete.
 - All 21 P01 tasks passed focused red/green checks and independent review.
-  Full package acceptance and hosted CI are now pending on an immutable snapshot.
+  The immutable snapshot passed 1,599 offline assertions, the connection gate,
+  documentation generation and lint. Installed-package checks found one test
+  inference issue; its explicit-package correction is being rechecked. Hosted CI
+  remains pending. See [integrated acceptance](progress/P01-acceptance.md).
   See [core task evidence](progress/P01.md) and
   [utilities](progress/P01-utilities.md), [provider/helpers](progress/P01-providers.md)
   and [infrastructure evidence](progress/P01-infrastructure.md) for results.
@@ -59,10 +62,10 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 ## Active ownership
 
 - `design_summary`: P01 core complete; preparing P03 after P02 prerequisites.
-- `requirements_audit`: P01 utilities complete; preparing IC-74/P05 changes.
-- `scientific_value`: P01 provider/helpers complete; available for reactor tasks.
+- `requirements_audit`: P04 reactor core (Task 6); IC-74/P05 preparation ready.
+- `scientific_value`: P04 process supervision and job table (Tasks 4–5).
 - `plans_security_review`: independent P01 review, then registry/secrets review.
-- `ollama_api_research`: P02 implementation (Tasks 1–2 pending integration).
+- `ollama_api_research`: P02 implementation (Tasks 1–3 committed; Task 4 underway).
 - Root: integrated acceptance, P04, GitHub, global ledger and scheduling.
 
 Git commits and generated documentation are serialized. A lane may prepare an
