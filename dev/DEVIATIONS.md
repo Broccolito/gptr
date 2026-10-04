@@ -1492,3 +1492,43 @@ active binding called gptr_r_call is neither forced nor called" (3 expectations)
 plan-literal walker, a scratch reproduction forced the promise and called the active binding
 (`dev/.validation/P10/task1-red-lazy-binding.log`). Green is `[ FAIL 0 | WARN 0 | SKIP 0 |
 PASS 31 ]`: the plan's 28 expectations, unchanged, plus these 3.
+
+## D-040 - P09 workspace snapshot: missing arguments are listed, not fatal; display text is valid UTF-8; linear on large workspaces (2026-10-04)
+
+P09 Task 2's plan-literal `env_snapshot()`, `workspace_lines()`, `changes_lines()` and
+`env_fmt_n()` (`R/env-snapshot.R`) were changed in the four ways below. Each was found by a probe
+of the plan-literal source (`dev/.validation/P09/task2-probe-plan-literal.log`). The contract's
+columns, kinds and line grammar are unchanged.
+
+1. **A binding holding R's missing argument is a row, not an error** (04 section 2.2: evaluation
+   failures never throw; 04 section 7.9: the snapshot never forces anything). A function-frame
+   home has one when a formal without a default was not supplied, or when `...` is empty. The
+   plan's `get()` and its fallback `get()` both threw 'argument "x" is missing, with no
+   default', so any `r` call in such a home would fail. A failing `get()` also leaves the home on
+   its unwound frame. A fresh-process control gives one copy of the user's object on the next
+   edit, bare or inside `tryCatch()` through the box (`task2-copy-negative-control.log`).
+   `env_snap_missing()` now checks first, with `identical(.subset2(envir, name), quote(expr = ))`.
+   It evaluates nothing, it is called only for non-lazy, non-active bindings, and it treats a
+   forced default (whose `missing()` is TRUE) as a value. The row has kind `value`, class
+   `<missing>`, shape `""`, and no address, fingerprint or size. `<workspace>` shows
+   `x  <missing>`, like `<promise>`/`<active>`. An assignment to it later is `modified`.
+2. **Display text is valid UTF-8** (IC-62). An object name need not be valid UTF-8
+   (`assign("\xe9t\xe9", 1)`). `workspace_lines()` threw "invalid multibyte string" in
+   `nchar()`, and `changes_lines()` warned "unable to translate". Names, classes, shapes and
+   `user ran:` text now pass `env_text()`: `as_utf8()`, then `<xx>` byte escapes for whatever is
+   still invalid. Snapshot `name`s keep the exact binding names, because later `get()` calls and
+   diffs use them.
+3. **Counts ignore `OutDec`.** `env_fmt_n()` passes `decimal.mark = "."`. Under
+   `options(OutDec = ",")`, `format()` warned that both marks are `,`.
+4. **No quadratic loops, same output.**
+   - The snapshot loop fills plain vectors and builds the data frame once, and it matches
+     `previous` once. Writing data-frame cells copied a column per binding: 20,000 bindings took
+     3.27 s, now 1.05 s.
+   - `changes_lines()` cuts more than `budget + 1` lines before its line-by-line trim. Every
+     line costs more than one estimated token, so those lines never fit, and the result is the
+     same. A 20,000-name diff took 32 s, now 0.03 s, with the same 47 lines.
+
+Validation: `progress/P09.md`, Task 2. Four blocks (21 expectations) and one copy row were added
+to the plan's tests, which are unchanged. Against the plan-literal source the four blocks gave
+`[ FAIL 4 | WARN 1 | SKIP 0 | PASS 51 ]`. The final result for `env-snapshot|copy-eval` is
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 69 ]`, and `^env-snapshot$` under `LC_ALL=C` passes 66.
