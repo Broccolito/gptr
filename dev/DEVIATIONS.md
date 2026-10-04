@@ -3365,3 +3365,32 @@ Validation: `progress/P07.md`, Task 5. The plan's 21 tests are unchanged. Item 1
 (8 expectations), which fail 4 on the plan literal (`dev/.validation/P07/task5-plan-literal2.log`).
 Items 2 and 3 added 2 tests (12 expectations), which fail 9 on the pre-review source
 (`task5-fix1-red.log`). Final `^prompt-context$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 88 ]`.
+
+## D-067 - P07 compaction threshold: a null compact_at setting disables the cap (2026-10-04)
+
+P07 Task 6's plan-literal `compact_threshold()` (`R/prompt-compact.R`) no longer passes a
+`default` when it reads the setting. The contract 7.7 signature
+`compact_threshold(window, max_output, r_cap = 4000)`, the formula and the plan's 10 expectations
+are unchanged.
+
+The plan read `setting_get("compact_at", default = gptr_opt("compact_at"))`. `setting_get()`
+returns `value %||% default`, so that `default` turned a `null` from P08's settings service back
+into the option value or 200,000. Contract 3.1 says "`NULL` disables the cap" and 11.2 types the
+key `num|null`, and the plan's own `is.null(cap)` branch could never run. The read is now
+`setting_get("compact_at")`. Without P08, `setting_get()` already falls back to
+`gptr_opt("compact_at")` (the option or 200,000), so behaviour before P08 is unchanged; `Inf` or
+`NA` in the option still disables the cap (plan decision 9). For P08: `settings.get` must return
+the package default (200,000, the lowest layer of 11.2) for an unset key; a `NULL` there would
+disable the cap.
+
+No session is passed, as in the plan. A first draft added a trailing `session = NULL` on the
+premise that a `gptr_config(.scope = "session")` value would otherwise be missed; review 1 showed
+the premise was false (contract 5: the `"session"` scope is this R process, and P08's
+`settings_get(key, session = NULL)` ignores `session` because settings are process-wide in 1.0),
+so the argument was removed and Tasks 7 and 13 call `compact_threshold()` as their plan
+literals do.
+
+Validation: `progress/P07.md`, Task 6. Three tests added (8 expectations), including one that
+pins the contract 7.7 signature; on the plan literal they fail 1
+(`dev/.validation/P07/task6-fix1-plan-literal.log`: the null setting gave 200,000 instead of
+900,000). Final `^prompt-compact$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 18 ]`.
