@@ -33,8 +33,53 @@ the parser/alias changes and the final empty-comment regression before commit.
 The R process additionally reports the installed testthat build-version warning
 (built under R 4.5.2, running R 4.5.0); it is outside test-result warnings.
 
-## Pending
+## Task 7: explicit loading and trusted-project discovery
 
-Task 7 waits for the real redactor. Its `secret_discover_env()` amendment is
-coordinated with the owner of `auth-secrets.R`. Task 8 follows the same real
-vault/redactor dependencies. No placeholder production functions are used.
+Task 6 committed as `a978d1d`. The Task 7 tests first reproduced FAIL 7 / WARN 0 /
+SKIP 0 / PASS 30 for the missing loader and discovery functions. Using the real
+Task 1 vault and Task 2 redactor, the baseline then passed 89 assertions.
+
+Additional regressions reproduced FAIL 5 / PASS 91. The loader now gives the
+literal canonical spelling precedence over lowercase/canonicalized names, and
+vault discovery preserves `.gptr/.env` precedence over `.env`. Secret-source
+resolution no longer reactivates invalid API-key values that the loader refused;
+they stay registered only for redaction. An explicitly empty selected value
+also cannot fall through to an alias, and plain URL/path fields are not secret
+source results. Green after these fixes: FAIL 0 / WARN 0 / SKIP 0 / PASS 96.
+
+Independent review added the case where a higher-priority `.gptr/.env` defines
+an empty or invalid key while `.env` defines a valid one. The regression failed
+2 assertions (100 passed). Superseded values from that dotenv source now become
+inactive while staying available for redaction; lookup no longer falls back to
+the lower file. Current green: FAIL 0 / WARN 0 / SKIP 0 / PASS 102.
+
+The owner of `auth-secrets.R` integrated the `secret_discover_env()` amendment
+while preserving Task 1 review fixes; its focused 101 assertions remained green.
+Independent review cleared Task 7. Pinned roxygen2 regenerated `gptr_env.Rd` and
+its export/method declarations in an isolated process. The final combined
+dotenv/store/vault run passed 263 assertions with zero failures/test warnings and
+one skip (missing-keyring branch on a machine where keyring is installed).
+
+## Task 8: credential store
+
+Actual missing-function red: FAIL 6 / WARN 0 / SKIP 1 / PASS 0. Baseline green:
+FAIL 0 / WARN 0 / SKIP 1 / PASS 33. The skip is the missing-keyring path because
+keyring is installed. The positive keyring check uses its temporary environment
+backend, without accessing the system keychain.
+
+New validation regressions reproduced FAIL 20 / PASS 33: JSON arrays/ambiguous
+object fields were accepted, malformed secret fields could be persisted, nested
+handles were not refused before serialization, and malformed keyring references
+were accepted. The store now validates those boundaries with typed errors that
+do not include values. Existing Unix credential files are restricted to 0600
+before atomic replacement preserves their mode. Current green: FAIL 0 / WARN 0 /
+SKIP 1 / PASS 54.
+
+Independent review found partial matching of external JSON/keyring field names
+and treating unknown process liveness as proof of a stale lock. Regressions
+reproduced FAIL 4 / PASS 56. Those record fields now use exact lookup, and an
+access failure keeps a fresh lock held until its stale timeout unless the process
+is positively known to be gone. The metadata test mocks keyring lookup and
+asserts it is never called. Current green: FAIL 0 / WARN 0 / SKIP 1 / PASS 60.
+Independent review cleared Task 8. Source and mirrored tests have zero scoped
+lints for Tasks 7 and 8. No placeholder production dependencies are used.

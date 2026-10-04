@@ -315,28 +315,33 @@ secret_registered_names = function() {
   unique(unname(vapply(reg, function(e) e$name, "")))
 }
 
-#' Register secret-looking environment variables (ambient discovery at session start)
+#' Register secret-looking environment variables and a trusted project's .env files (ambient
+#' discovery at session start; the .env part is vault-only and needs project trust)
 #' @noRd
 secret_discover_env = function(env = Sys.getenv()) {
   nm = names(env)
-  if (!length(nm)) return(invisible(0L))
-  vals = as_utf8(unname(as.character(env)))
-  min_len = secrets_opt("redact_min_chars")
-  hit = is_secret_name(nm) & (nchar(vals, allowNA = TRUE) >= min_len) %in% TRUE &
-    vapply(nm, secret_name_ok, NA, USE.NAMES = FALSE)
-  proxies = which(nm %in% c("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy",
-                            "https_proxy", "all_proxy"))
-  secret_register_batch("environment", function() {
-    for (i in which(hit)) secret_register(vals[i], nm[i], source = "environment")
-    for (i in proxies) {
-      m = regmatches(vals[i], regexec("^[A-Za-z][A-Za-z0-9+.-]*://[^/:@]+:([^/@]+)@",
-                                      vals[i]))[[1]]
-      if (length(m) == 2L && nchar(m[2]) >= 4L) {
-        secret_register(m[2], paste0(toupper(nm[i]), "_PASSWORD"), source = "environment")
+  found = 0L
+  if (length(nm)) {
+    vals = as_utf8(unname(as.character(env)))
+    min_len = secrets_opt("redact_min_chars")
+    hit = is_secret_name(nm) & (nchar(vals, allowNA = TRUE) >= min_len) %in% TRUE &
+      vapply(nm, secret_name_ok, NA, USE.NAMES = FALSE)
+    proxies = which(nm %in% c("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy",
+                              "https_proxy", "all_proxy"))
+    secret_register_batch("environment", function() {
+      for (i in which(hit)) secret_register(vals[i], nm[i], source = "environment")
+      for (i in proxies) {
+        m = regmatches(vals[i], regexec("^[A-Za-z][A-Za-z0-9+.-]*://[^/:@]+:([^/@]+)@",
+                                        vals[i]))[[1]]
+        if (length(m) == 2L && nchar(m[2]) >= 4L) {
+          secret_register(m[2], paste0(toupper(nm[i]), "_PASSWORD"), source = "environment")
+        }
       }
-    }
-  })
-  invisible(sum(hit))
+    })
+    found = sum(hit)
+  }
+  from_files = tryCatch(dotenv_discover(), error = function(e) 0L)
+  invisible(as.integer(found + from_files))
 }
 
 #' Install the provider of live sessions' in-memory entries for the late-registration check
