@@ -418,3 +418,290 @@ test_that("local_project() rejects paths escaping its temporary root before writ
   expect_error(local_project(files = list("unnamed")), "named")
   expect_error(local_project(files = list("same" = "a", "same" = "b")), "unique")
 })
+mock_handle = function(body, headers, timeout) {
+  h = curl::new_handle()
+  curl::handle_setopt(h, post = TRUE, postfields = body, followlocation = 0L, timeout = timeout,
+                      pipewait = 0L, proxy = "")
+  curl::handle_setheaders(h, .list = as.list(c(`content-type` = "application/json", headers)))
+  h
+}
+
+mock_fetch = function(url, body = "{\"model\":\"mock-1\",\"messages\":[]}",
+                      headers = c(`x-api-key` = "sk-test-NOT-A-REAL-KEY"), timeout = 30) {
+  res = curl::curl_fetch_memory(url, handle = mock_handle(body, headers, timeout))
+  res$text = rawToChar(res$content)
+  res$header_list = curl::parse_headers_list(res$headers)
+  res
+}
+
+count_events = function(text, event) {
+  lengths(regmatches(text, gregexpr(paste0("event: ", event, "\n"), text, fixed = TRUE)))
+}
+
+test_that("the mock streams Anthropic SSE on token paths only and logs redacted requests", {
+  srv = local_mock_server("stream", n = 3L, interval = 0.05)
+  expect_true(srv$provider$offline)
+  expect_identical(srv$provider$api, "anthropic-messages")
+  expect_identical(srv$provider$base_url, srv$url)
+  res = mock_fetch(paste0(srv$url, "/v1/messages"))
+  expect_identical(res$status_code, 200L)
+  expect_identical(res$header_list[["content-type"]], "text/event-stream")
+  expect_identical(count_events(res$text, "content_block_delta"), 3L)
+  expect_identical(count_events(res$text, "message_stop"), 1L)
+  foreign = mock_fetch(sprintf("http://127.0.0.1:%d/v1/messages", srv$port))
+  expect_identical(foreign$status_code, 404L)
+  # The server logs the end of a request just after writing its last byte, so the client can
+  # finish first: wait until both requests are logged as ended
+  deadline = Sys.time() + 10
+  while (anyNA(srv$log()$disconnected) && Sys.time() < deadline) Sys.sleep(0.05)
+  log = srv$log()
+  expect_identical(log$method, c("POST", "POST"))
+  expect_identical(log$path, c("/v1/messages", "/v1/messages"))
+  expect_match(log$headers[[1]], "x-api-key: [redacted]", fixed = TRUE)
+  expect_false(any(grepl("NOT-A-REAL-KEY", unlist(log), fixed = TRUE)))
+  expect_identical(log$body, c("{\"model\":\"mock-1\",\"messages\":[]}", ""))
+  expect_identical(log$disconnected, c(FALSE, FALSE))
+})
+
+test_that("status, spend_cap and overload scenarios fail, then succeed when asked to", {
+  srv = local_mock_server("status", status = 429L, retry_after = 2, succeed_after = 1)
+  first = mock_fetch(paste0(srv$url, "/v1/messages"))
+  expect_identical(first$status_code, 429L)
+  expect_identical(first$header_list[["retry-after"]], "2")
+  expect_match(first$text, "rate_limit_error", fixed = TRUE)
+  expect_identical(mock_fetch(paste0(srv$url, "/v1/messages"))$status_code, 200L)
+  srv$stop()
+  cap = local_mock_server("spend_cap")
+  res = mock_fetch(paste0(cap$url, "/v1/messages"))
+  expect_identical(res$status_code, 429L)
+  expect_match(res$text, "enforced_spend_limit_reached", fixed = TRUE)
+  expect_null(res$header_list[["retry-after"]])
+  cap$stop()
+  over = local_mock_server("overload", attempts = 1L)
+  res = mock_fetch(paste0(over$url, "/v1/messages"))
+  expect_identical(count_events(res$text, "error"), 1L)
+  expect_identical(count_events(res$text, "content_block_delta"), 0L)
+  res = mock_fetch(paste0(over$url, "/v1/messages"))
+  expect_identical(count_events(res$text, "message_stop"), 1L)
+})
+
+test_that("a redirect points at a second origin that logs any key bytes it receives (IC-64)", {
+  srv = local_mock_server("redirect")
+  res = mock_fetch(paste0(srv$url, "/v1/messages"))
+  expect_identical(res$status_code, 307L)
+  location = res$header_list[["location"]]
+  expect_match(location, "/redirected-to-second-origin$")
+  expect_false(grepl(sprintf(":%d/", srv$port), location, fixed = TRUE))
+  expect_identical(srv$log()$path, "/v1/messages")
+  followed = mock_fetch(location, headers = character())
+  expect_identical(followed$status_code, 200L)
+  expect_identical(srv$log()$path, c("/v1/messages", "/redirected-to-second-origin"))
+  # A client that carried the key across origins is caught: the second origin logs it raw
+  leaked = mock_fetch(location)
+  expect_identical(leaked$status_code, 200L)
+  expect_match(srv$log()$headers[[3L]], "x-api-key: sk-test-NOT-A-REAL-KEY", fixed = TRUE)
+  expect_match(srv$log()$headers[[1L]], "x-api-key: [redacted]", fixed = TRUE)
+})
+
+test_that("truncated, stalled and held streams end as the client sees them", {
+  cut = local_mock_server("truncated", n = 2L)
+  expect_error(mock_fetch(paste0(cut$url, "/v1/messages")))
+  cut$stop()
+  stall = local_mock_server("stall", n = 2L)
+  expect_error(mock_fetch(paste0(stall$url, "/v1/messages"), timeout = 2))
+  stall$stop()
+  held = local_mock_server("hold_headers")
+  expect_error(mock_fetch(paste0(held$url, "/v1/messages"), timeout = 1))
+  deadline = Sys.time() + 10
+  while (!isTRUE(held$log()$disconnected[1]) && Sys.time() < deadline) Sys.sleep(0.1)
+  expect_true(held$log()$disconnected[1])
+})
+
+test_that("time-shaped scenarios delay the first byte or trickle bytes", {
+  ttft = local_mock_server("ttft", delay = 1)
+  started = Sys.time()
+  res = mock_fetch(paste0(ttft$url, "/v1/messages"))
+  expect_gte(as.numeric(Sys.time() - started, units = "secs"), 1)
+  expect_identical(count_events(res$text, "message_stop"), 1L)
+  ttft$stop()
+  slow = local_mock_server("bytes_per_10s", duration = 2, every = 0.5)
+  res = mock_fetch(paste0(slow$url, "/v1/messages"))
+  expect_match(res$text, "^:\n:\n")
+  expect_identical(count_events(res$text, "message_stop"), 1L)
+})
+
+test_that("parallel_tools answers tool calls first and text after tool results", {
+  srv = local_mock_server("parallel_tools")
+  res = mock_fetch(paste0(srv$url, "/v1/messages"))
+  expect_match(res$text, "\"name\":\"read\"", fixed = TRUE)
+  expect_match(res$text, "\"name\":\"r\"", fixed = TRUE)
+  expect_match(res$text, "\"stop_reason\":\"tool_use\"", fixed = TRUE)
+  body = json_encode(list(model = "mock-1", messages = list(list(
+    role = "user", content = list(list(type = "tool_result", tool_use_id = "toolu_A",
+                                       content = "ok"))
+  ))))
+  res = mock_fetch(paste0(srv$url, "/v1/messages"), body = body)
+  expect_match(res$text, "both done", fixed = TRUE)
+})
+
+test_that("OpenAI, Gemini, System 1 and JSON scenarios speak their wire shapes", {
+  responses = local_mock_server("openai_responses", n = 2L)
+  expect_identical(responses$provider$api, "openai-responses")
+  text = mock_fetch(paste0(responses$url, "/responses"))$text
+  expect_identical(count_events(text, "response.output_text.delta"), 2L)
+  expect_identical(count_events(text, "response.completed"), 1L)
+  responses$stop()
+  chat = local_mock_server("chat_completions", n = 2L)
+  text = mock_fetch(paste0(chat$url, "/chat/completions"))$text
+  expect_match(text, "chat.completion.chunk", fixed = TRUE)
+  expect_match(text, "data: [DONE]\n\n", fixed = TRUE)
+  chat$stop()
+  gemini = local_mock_server("gemini", n = 2L)
+  text = mock_fetch(paste0(gemini$url, "/v1beta/models/m:streamGenerateContent?alt=sse"))$text
+  expect_match(text, "\"finishReason\":\"STOP\"", fixed = TRUE)
+  expect_match(gemini$log()$path, "streamGenerateContent", fixed = TRUE)
+  gemini$stop()
+  s1 = local_mock_server("systemone")
+  expect_identical(s1$provider$type, "classifier")
+  body = json_encode(list(model = "jev-latest", state = list(text = "a puppy"), questions = list(
+    is_dog = list(type = "noul", instructions = "Dog?", criteria = list(true = "y", false = "n"))
+  )))
+  answer = json_decode(mock_fetch(paste0(s1$url, "/systemone"), body = body)$text)
+  expect_identical(answer$answers$is_dog, list(type = "noul", noul = 0.9))
+  s1$stop()
+  custom = local_mock_server("systemone", answers = function(body) {
+    list(is_dog = list(type = "noul", noul = 0.25))
+  })
+  answer = json_decode(mock_fetch(paste0(custom$url, "/systemone"), body = body)$text)
+  expect_identical(answer$answers$is_dog$noul, 0.25)
+  custom$stop()
+  fixed = local_mock_server("json", body = "{\"ok\":true}", status = 201L)
+  res = mock_fetch(paste0(fixed$url, "/anything"))
+  expect_identical(res$status_code, 201L)
+  expect_identical(res$text, "{\"ok\":true}")
+})
+
+test_that("concurrent streams are served in parallel, not one after another", {
+  srv = local_mock_server("stream", n = 4L, interval = 1)
+  pool = curl::new_pool()
+  done = 0L
+  for (i in 1:3) {
+    curl::curl_fetch_multi(
+      paste0(srv$url, "/v1/messages"), pool = pool,
+      handle = mock_handle("{\"model\":\"mock-1\",\"messages\":[]}", character(), 30),
+      done = function(res) done <<- done + 1L
+    )
+  }
+  started = Sys.time()
+  curl::multi_run(pool = pool)
+  elapsed = as.numeric(Sys.time() - started, units = "secs")
+  expect_identical(done, 3L)
+  expect_lt(elapsed, 9)
+})
+
+test_that("mock requests bypass configured proxies for loopback only", {
+  withr::local_envvar(
+    http_proxy = "http://127.0.0.1:1", ALL_PROXY = "http://127.0.0.1:1",
+    no_proxy = "", NO_PROXY = ""
+  )
+  srv = local_mock_server("json", body = "{}")
+  expect_identical(mock_fetch(srv$url)$status_code, 200L)
+  expect_identical(curl::curl_fetch_memory(srv$url)$status_code, 200L)
+})
+
+test_that("custom mock answers preserve captured values and helper closures", {
+  probability = 0.25
+  answer_for = function(body) list(is_dog = list(type = "noul", noul = probability))
+  answers = function(body) answer_for(body)
+  original = environment(answers)
+  srv = local_mock_server("systemone", answers = answers)
+  result = mock_fetch(paste0(srv$url, "/systemone"), body = "{\"questions\":{}}")
+  expect_identical(result$status_code, 200L)
+  expect_identical(json_decode(result$text)$answers$is_dog$noul, 0.25)
+  expect_identical(environment(answers), original)
+})
+
+test_that("the mock child exits if its parent vanished before startup", {
+  skip_on_cran()
+  dir = withr::local_tempdir()
+  config = list(
+    ports = port_candidates(20L), token = id_new("", 24L), scenario = "json", args = list(),
+    log = file.path(dir, "log.jsonl"), ready = file.path(dir, "ready.json"),
+    parent_pid = .Machine$integer.max
+  )
+  config_file = file.path(dir, "config.rds")
+  saveRDS(config, config_file)
+  proc = processx::process$new(
+    rscript_path(), c("--vanilla", test_path("fixtures", "mock_server.R"), config_file),
+    env = c("current", R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
+    stdout = file.path(dir, "stdout.txt"), stderr = file.path(dir, "stderr.txt"), cleanup = TRUE
+  )
+  withr::defer(if (proc$is_alive()) proc$kill())
+  proc$wait(5000)
+  expect_false(proc$is_alive())
+})
+
+test_that("captured mock callbacks share ancestor bindings and omit unrelated state", {
+  probe = local({
+    count = 0L
+    inc = function() count <<- count + 1L
+    read = local(function() count)
+    function(body) {
+      inc()
+      read()
+    }
+  })
+  captured = mock_capture_function(probe)
+  expect_identical(captured(NULL), 1L)
+  expect_identical(captured(NULL), 2L)
+  expect_identical(probe(NULL), 1L)
+
+  nested = local({
+    unrelated = "UNRELATED-TEST-FRAME-CANARY"
+    probability = 0.25
+    handlers = list(answer = function(body) probability)
+    function(body) handlers$answer(body)
+  })
+  captured = mock_capture_function(nested)
+  expect_identical(captured(NULL), 0.25)
+  expect_length(grepRaw("UNRELATED-TEST-FRAME-CANARY", serialize(captured, NULL), fixed = TRUE), 0L)
+})
+
+test_that("malformed HTTP requests are rejected without terminating the fixture", {
+  srv = local_mock_server("json", body = "{}")
+  request = function(bytes) {
+    con = socketConnection("127.0.0.1", port = srv$port, blocking = TRUE, open = "r+b", timeout = 5)
+    on.exit(close(con))
+    writeBin(charToRaw(bytes), con)
+    rawToChar(readBin(con, "raw", 4096L))
+  }
+  bad = c(
+    "\r\n\r\n",
+    "NOT HTTP\r\n\r\n",
+    "POST /wrong HTTP/1.1\r\ninvalid-header\r\n\r\n",
+    "POST /wrong HTTP/1.1\r\nContent-Length: invalid\r\n\r\n",
+    "POST /wrong HTTP/1.1\r\nContent-Length: -1\r\n\r\n",
+    "POST /wrong HTTP/1.1\r\nContent-Length: 2147483648\r\n\r\n",
+    "POST /wrong HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n",
+    "POST /wrong HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\ntest\r\n0\r\n\r\n",
+    paste0("POST /wrong HTTP/1.1\r\nX-Long: ", strrep("a", 65536L), "\r\n\r\n")
+  )
+  for (bytes in bad) expect_match(request(bytes), "^HTTP/1.1 (400|413|431|501) ")
+  expect_identical(mock_fetch(srv$url)$status_code, 200L)
+  expect_identical(nrow(srv$log()), 1L)
+})
+
+test_that("mock callback capture rejects unsupported mutable environment values", {
+  state = new.env(parent = emptyenv())
+  callback = function(body) state$value
+  expect_error(mock_capture_function(callback), "unsupported value", fixed = TRUE)
+})
+
+test_that("mock callback attributes cannot smuggle an enclosing environment", {
+  callback = local({
+    helper = function(body) 0.25
+    attr(helper, "fixture") = environment()
+    function(body) helper(body)
+  })
+  expect_error(mock_capture_function(callback), "unsupported function attributes", fixed = TRUE)
+})

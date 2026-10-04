@@ -65,3 +65,37 @@ Owner: scientific_value. Scope: tasks 14-18 only. No Task 13 edits.
   SKIP 0, exit 0 (2.6 seconds). This includes the str() negative control, fingerprint()
   and save_rds() non-retention checks, and edits during/after a simulated run.
 - Scoped lint on helper-tracemem.R and test-utils-hash.R passed. No public docs changed.
+
+## Task 18 - synthetic HTTP fixture server
+
+- Red: provider-fake tests failed 8 times (missing local_mock_server), with 128
+  assertions passing. The planned scenarios then passed 187 assertions.
+- Added regressions reproducing four failures across proxy inheritance, erased
+  lexical callback bindings and a missing-parent orphan server. Fixed loopback-only
+  proxy bypass, selected callback binding capture and missing-parent shutdown.
+- A subsequent narrow review found malformed requests could terminate the child,
+  and callback captures could retain unrelated frames through nested functions.
+  New tests reproduced FAIL 4 / WARN 1 / PASS 195. The server now rejects invalid
+  request lines/headers, duplicate/invalid Content-Length and transfer-encoding
+  uploads, with 64 KiB header / 16 MiB body limits and a per-client error boundary.
+  Nine malformed inputs are followed by a successful authorized request, which is
+  the only request counted as scenario traffic.
+- Callback capture preserves lexical parent/binding identity and recursively copies
+  referenced functions and supported list/vector values. It strips source references
+  (which otherwise retained unrelated source text), rejects explicit captured
+  environments, connections, S4 objects and custom function attributes before spawn,
+  and guards the optional codetools dependency. Tests cover a nested synthetic canary,
+  shared mutable lexical bindings, original-function preservation and explicit rejection.
+  This helper supports lexical captures, not arbitrary dynamic lookup or object cloning.
+- Intermediate callback regressions caught an attribute-recursion overflow and a
+  source-reference canary retention; both were corrected. A final function-attribute
+  regression failed once, then passed after the explicit rejection was added.
+- All fixture scenarios run serially with at most one server child; concurrent
+  stream coverage uses three clients in that one child. The Jev System One fixture
+  deliberately preserves wire shape for future adapter tests; fake_classify remains
+  provider-neutral. No live endpoint or real credential is used.
+- Final green: `Rscript --vanilla -e 'devtools::test(filter = "provider-fake", stop_on_failure = TRUE)'`
+  (escalated only for loopback sockets) passed 211 assertions, FAIL 0 / WARN 0 /
+  SKIP 0, exit 0, in 16.7 seconds. Includes the final function-attribute rejection.
+- Scoped lint on helper-mock-server.R, fixtures/mock_server.R and test-provider-fake.R
+  passed, as did `git diff --check`. No public documentation changed in this task.
