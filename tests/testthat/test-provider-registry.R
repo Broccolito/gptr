@@ -136,3 +136,204 @@ test_that("settings header overrides use HTTP name identity and reject ambiguous
     expect_error(provider_get("openrouter"), class = "gptr_error_invalid_argument")
   }
 })
+
+# A private vault for tests that set key variables: P03's process vault has no unregister
+# function, and later test files must not find a test key in it.
+local_test_vault = function(.env = parent.frame()) {
+  vault = new.env(parent = emptyenv())
+  previous = list(vault = the$vault, secrets = the$secrets)
+  original_register = secret_register
+  vault_reset()
+  withr::defer({
+    the$vault = previous$vault
+    the$secrets = previous$secrets
+  }, envir = .env)
+  testthat::local_mocked_bindings(
+    secret_register = function(value, name, source = "user", active = TRUE, origin = NULL) {
+      h = original_register(value, name, source, active, origin)
+      assign(name, h, envir = vault)
+      h
+    },
+    secret_lookup = function(name) get0(name, envir = vault, inherits = FALSE),
+    .env = .env
+  )
+  vault
+}
+
+test_that("credentials: vault, then the environment, bound to the provider origin", {
+  vault = local_test_vault()
+  withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p05test-000000000000000000")
+  h = provider_credential(provider_get("anthropic"))
+  expect_s3_class(h, "gptr_secret")
+  expect_equal(h$name, "ANTHROPIC_API_KEY")
+  expect_equal(provider_origin(h$origin), "https://api.anthropic.com")
+  printed = paste(c(capture.output(print(h)), format(h)), collapse = "\n")
+  expect_false(grepl("p05test", printed, fixed = TRUE))
+  expect_identical(get("ANTHROPIC_API_KEY", envir = vault), h)
+  expect_identical(provider_credential(provider_get("anthropic"))$id, h$id)
+  expect_null(provider_credential(provider_get("ollama")))
+  expect_null(provider_credential(gptr_fake_provider(list("hi"))))
+  withr::local_envvar(VLLM_API_KEY = "")
+  expect_null(provider_credential(provider_get("vllm")))
+})
+
+test_that("a keyed provider without any credential signals gptr_error_no_key", {
+  local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL)
+  withr::local_envvar(GROQ_API_KEY = "")
+  err = expect_error(provider_credential(provider_get("groq")), class = "gptr_error_no_key")
+  expect_equal(err$provider, "groq")
+  expect_equal(err$variables, "GROQ_API_KEY")
+  expect_match(conditionMessage(err), "GROQ_API_KEY", fixed = TRUE)
+})
+
+test_that("credential-store and auth-function handles are bound to the provider origin", {
+  local_test_vault()
+  stored = secret_register("synthetic-stored-key-123456", "auth:openrouter")
+  local_mocked_bindings(secret_lookup = function(name) NULL,
+                        auth_store_get = function(key) list(type = "api_key", key = stored))
+  withr::local_envvar(OPENROUTER_API_KEY = "")
+  h = provider_credential(provider_get("openrouter"))
+  expect_equal(h$id, stored$id)
+  expect_equal(h$origin, "https://openrouter.ai")
+  lab = gptr_provider("authfn", api = "openai-completions", base_url = "https://llm.lab.example/v1",
+                      auth = function() stored)
+  expect_equal(provider_credential(lab)$origin, "https://llm.lab.example")
+})
+
+test_that("a vault handle bound to another origin is never used for this provider", {
+  elsewhere = structure(list(id = "OPENROUTER_API_KEY#aaaaaa", name = "OPENROUTER_API_KEY",
+                             fp = "aaaaaa", origin = "https://evil.example"),
+                        class = "gptr_secret")
+  local_mocked_bindings(secret_lookup = function(name) elsewhere,
+                        auth_store_get = function(key) NULL)
+  withr::local_envvar(OPENROUTER_API_KEY = "")
+  expect_error(provider_credential(provider_get("openrouter")), class = "gptr_error_no_key")
+})
+
+test_that("vault handles: canonical origins match, unbound ones are bound to the provider", {
+  vault = local_test_vault()
+  key = "sk-proj-p05bind-00000000000000000000000000"
+  withr::local_envvar(OPENAI_API_KEY = key)
+  ambient = secret_register(key, "OPENAI_API_KEY", source = "environment")
+  expect_null(ambient$origin)
+  h = provider_credential(provider_get("openai"))
+  expect_equal(h$origin, "https://api.openai.com")
+  expect_equal(h$fp, ambient$fp)
+  canonical = secret_register("synthetic-xai-key-123456", "XAI_API_KEY",
+                                origin = "https://api.x.ai:443")
+  vault[["XAI_API_KEY"]] = canonical
+  withr::local_envvar(XAI_API_KEY = "")
+  expect_identical(provider_credential(provider_get("xai")), canonical)
+})
+
+test_that("the anthropic provider refuses a Claude subscription OAuth token (sk-ant-oat)", {
+  vault = local_test_vault()
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  oat = "sk-ant-oat01-p05test-0000000000000000000000"
+  withr::local_envvar(ANTHROPIC_API_KEY = oat)
+  err = expect_error(provider_credential(provider_get("anthropic")), class = "gptr_error_no_key")
+  expect_equal(err$provider, "anthropic")
+  expect_equal(err$variables, "ANTHROPIC_API_KEY")
+  expect_match(conditionMessage(err), "subscription OAuth token (sk-ant-oat...)", fixed = TRUE)
+  expect_match(conditionMessage(err), "model = \"claude_code\"", fixed = TRUE)
+  expect_false(grepl("p05test", conditionMessage(err), fixed = TRUE))
+  expect_false(exists("ANTHROPIC_API_KEY", envir = vault, inherits = FALSE))
+  # ambient discovery registered the same token: its vault handle is refused too
+  secret_register(oat, "ANTHROPIC_API_KEY", source = "environment")
+  expect_error(provider_credential(provider_get("anthropic")), class = "gptr_error_no_key")
+  # an API key held only in the vault (a .env value that was not exported) is still used
+  api = secret_register("sk-ant-api03-p05vault-0000000000000000000", "ANTHROPIC_API_KEY",
+                        source = "dotenv")
+  h = provider_credential(provider_get("anthropic"))
+  expect_equal(h$fp, api$fp)
+  expect_equal(h$origin, "https://api.anthropic.com")
+})
+
+test_that("auth callbacks cannot return credentials bound to a different origin", {
+  foreign = structure(list(id = "foreign", name = "KEY", fp = "synthetic",
+                            origin = "https://elsewhere.example"), class = "gptr_secret")
+  provider = gptr_provider("bound", "openai-completions", base_url = "https://lab.example/v1",
+                            auth = function() foreign)
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+  for (origin in list(NA_character_, "not-a-url")) {
+    foreign$origin = origin
+    expect_error(provider_credential(provider), class = "gptr_error_no_key")
+  }
+})
+
+test_that("missing or malformed configured origins fail before credential lookup", {
+  calls = 0L
+  auth = function() {
+    calls <<- calls + 1L
+    structure(list(id = "unbound", name = "KEY", fp = "synthetic", origin = NULL),
+                class = "gptr_secret")
+  }
+  for (url in list(NULL, "", "not-a-url", "https://")) {
+    provider = gptr_provider("unbound", "openai-completions", base_url = url, auth = auth)
+    expect_error(provider_credential(provider), class = "gptr_error_no_key")
+  }
+  expect_identical(calls, 0L)
+})
+
+test_that("provider credentials honor both the actual vault and handle origin restrictions", {
+  vault_reset()
+  withr::defer(vault_reset())
+  handle = secret_register("synthetic-provider-bound-key-123456", "BOUND_TEST_KEY",
+                             origin = "https://elsewhere.example")
+  handle$origin = "https://lab.example"
+  provider = gptr_provider("bound", "openai-completions", base_url = "https://lab.example/v1",
+                            auth = function() handle)
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+})
+
+test_that("real stored handles bind without exposing values and default Ollama avoids cloud auth", {
+  vault_reset()
+  withr::defer(vault_reset())
+  root = withr::local_tempdir()
+  local_mocked_bindings(auth_store_path = function(create = FALSE) file.path(root, "auth.json"))
+  value = "synthetic-store-provider-key-123456"
+  auth_store_set("openrouter", list(type = "api_key", key = value))
+  withr::local_envvar(OPENROUTER_API_KEY = "")
+  handle = provider_credential(provider_get("openrouter"))
+  expect_s3_class(handle, "gptr_secret")
+  expect_identical(provider_origin(handle$origin), "https://openrouter.ai")
+  expect_false(any(grepl(value, capture.output(print(handle)), fixed = TRUE)))
+  headers = http_headers(list(Authorization = list("Bearer ", handle)), "https://openrouter.ai")
+  expect_identical(headers$Authorization, paste0("Bearer ", value))
+  expect_error(http_headers(list(Authorization = handle), "https://elsewhere.example"),
+                 class = "gptr_error_untrusted")
+  local_mocked_bindings(secret_lookup = function(...) stop("unexpected cloud lookup"),
+                        auth_store_get = function(...) stop("unexpected cloud lookup"))
+  expect_null(provider_credential(provider_get("ollama")))
+})
+
+test_that("environment fallback preserves old origin restrictions and distinguishes new keys", {
+  vault_reset()
+  withr::defer(vault_reset())
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  old_value = "synthetic-existing-bound-env-key-123456"
+  old = secret_register(old_value, "BOUND_TEST_KEY", origin = "https://old.example")
+  withr::local_envvar(BOUND_TEST_KEY = old_value)
+  provider = gptr_provider("replacement", "openai-completions",
+                            base_url = "https://new.example", auth = "BOUND_TEST_KEY")
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+  expect_identical(secrets_state()$reg[[old$id]]$origin, "https://old.example:443")
+  withr::local_envvar(BOUND_TEST_KEY = "synthetic-replacement-env-key-654321")
+  replacement = provider_credential(provider)
+  expect_false(identical(replacement$id, old$id))
+  expect_identical(provider_origin(replacement$origin), "https://new.example")
+  expect_identical(secrets_state()$reg[[old$id]]$origin, "https://old.example:443")
+  provider$base_url = "https://third.example"
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+})
+
+test_that("a stale credential ID is unavailable before dispatch", {
+  vault_reset()
+  withr::defer(vault_reset())
+  stale = secret_register("synthetic-stale-key-123456", "STALE_TEST_KEY")
+  vault_reset()
+  provider = gptr_provider("stale", "openai-completions", base_url = "https://lab.example",
+                            auth = function() stale)
+  expect_false(credential_usable(stale, "https://lab.example"))
+  expect_error(provider_credential(provider), class = "gptr_error_no_key")
+})

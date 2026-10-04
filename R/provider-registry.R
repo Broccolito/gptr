@@ -244,3 +244,140 @@ provider_origin = function(url) {
   origin = url_origin(url)
   if (is.na(origin)) NULL else origin
 }
+
+#' Is a handle usable for a provider origin (unbound, or bound to the same origin)?
+#'
+#' P03 stores bound origins in canonical form with the port (`https://api.anthropic.com:443`),
+#' so the bound origin passes provider_origin() before the comparison.
+#' @noRd
+credential_usable = function(h, origin) {
+  origin = provider_origin(origin)
+  if (is.null(origin) || !inherits(h, "gptr_secret") || !is.list(h)) return(FALSE)
+  id = h[["id"]]
+  if (!is.character(id) || length(id) != 1L || is.na(id) || !nzchar(id)) return(FALSE)
+  st = the$secrets
+  entry = if (is.environment(st)) st$reg[[id]] else NULL
+  if (!is.list(entry) || !identical(entry[["id"]], id)) return(FALSE)
+  stored = entry[["origin"]]
+  # A mutable handle may narrow an unbound credential; it cannot replace the vault's
+  # independent origin restriction. Inspect metadata only, never the secret value.
+  bounds = list(h[["origin"]], stored)
+  all(vapply(bounds, function(bound) {
+    is.null(bound) || identical(provider_origin(bound), origin)
+  }, NA))
+}
+
+#' Bind a handle to the provider origin (contract section 7.5: "a handle bound to the provider's
+#' configured origin")
+#'
+#' An unbound handle (ambient discovery, a vault-only `.env` value, a credential-store record, an
+#' `auth` function's result) gets the provider origin in its own `origin` field, which P03's
+#' secret_value() checks before the origin of the vault entry (P03 plan, Task 1: "how P05 binds
+#' a looked-up handle"); the vault entry itself stays as it is for other consumers. A handle that
+#' is already bound is returned unchanged; provider_credential() never uses one that is bound to
+#' another origin. P05 never sees the value.
+#' @noRd
+credential_bind = function(h, origin) {
+  if (is.null(origin) || !inherits(h, "gptr_secret") || !is.null(h[["origin"]])) return(h)
+  h[["origin"]] = origin
+  h
+}
+
+#' A handle from a credential-store record (P03 returns handles for stored values)
+#' @noRd
+credential_from_store = function(rec, name, origin) {
+  if (is.null(rec)) return(NULL)
+  if (inherits(rec, "gptr_secret")) return(rec)
+  for (k in c("handle", "key")) {
+    v = rec[[k]]
+    if (inherits(v, "gptr_secret")) return(v)
+  }
+  key = rec[["key"]]
+  if (is.character(key) && length(key) == 1L && nzchar(key)) {
+    return(credential_register(key, name, "store", origin))
+  }
+  NULL
+}
+
+#' Register an ambient value without overwriting an existing origin restriction
+#' @noRd
+credential_register = function(value, name, source, origin) {
+  h = secret_register(value, name, source = source)
+  if (!credential_usable(h, origin)) return(NULL)
+  # Only compatible registrations may acquire a persistent origin restriction.
+  # This also prevents an unchanged environment value following endpoint edits.
+  secret_register(value, name, source = source, origin = origin)
+}
+
+#' The credential handle of a provider (contract section 7.5)
+#'
+#' Order (architecture section 8): an explicit `auth` function > the vault (gptr_env(), ambient
+#' discovery) > the credential store (gptr_login(); keyring references are resolved by P03) >
+#' the provider's environment variables, registered at once and bound to the provider's origin.
+#' NULL for providers without auth; gptr_error_no_key otherwise. Never returns a value. The
+#' anthropic provider refuses a subscription OAuth token (`sk-ant-oat`, architecture section
+#' 8.1) found in its variable, and the vault handle holding the same token: gptr_error_no_key
+#' naming the token type when nothing else is found.
+#' @noRd
+provider_credential = function(provider) {
+  if (is.null(provider)) return(NULL)
+  id = provider[["id"]] %||% provider[["name"]]
+  auth = provider[["auth"]]
+  if (is.null(auth) || isTRUE(provider[["offline"]])) return(NULL)
+  origin = provider_origin(provider_base_url(provider))
+  if (is.null(origin)) {
+    gptr_abort(paste0("Provider ", id, " needs a valid configured origin before credentials ",
+                      "can be bound."), "no_key", provider = id, variables = character())
+  }
+  if (is.function(auth)) {
+    h = auth()
+    if (is.null(h)) return(NULL)
+    if (inherits(h, "gptr_secret")) {
+      if (credential_usable(h, origin)) return(credential_bind(h, origin))
+      gptr_abort(paste0("The auth function of provider ", id,
+                        " returned a credential unavailable for its configured origin."),
+                 "no_key", provider = id, variables = character())
+    }
+    gptr_abort(paste0("The auth function of provider ", id, " returned no secret handle."),
+               "invalid_spec", kind = "provider", name = id, field = "auth",
+               problem = "auth() must return a gptr_secret handle or NULL")
+  }
+  vars = as.character(auth)
+  # Architecture section 8.1: the anthropic provider refuses Claude subscription OAuth tokens
+  # (sk-ant-oat...). Their fingerprints (P03: the first 6 hex of hash_sha256(value)) mark the
+  # vault handles that hold the same token (ambient discovery registers the environment's
+  # values); a token that exists only in the vault cannot be recognised here (ambiguity 8).
+  refused = character()
+  if (identical(id, "anthropic")) {
+    for (v in vars) {
+      value = Sys.getenv(v, unset = "")
+      if (startsWith(value, "sk-ant-oat")) refused[[v]] = substr(hash_sha256(value), 1L, 6L)
+    }
+  }
+  for (v in vars) {
+    h = secret_lookup(v)
+    if (v %in% names(refused) && identical(h[["fp"]], refused[[v]])) next
+    if (credential_usable(h, origin)) return(credential_bind(h, origin))
+  }
+  rec = tryCatch(auth_store_get(id), gptr_error = function(e) NULL)
+  h = credential_from_store(rec, vars[[1]], origin)
+  if (credential_usable(h, origin)) return(credential_bind(h, origin))
+  for (v in vars) {
+    if (v %in% names(refused)) next
+    value = Sys.getenv(v, unset = "")
+    if (nzchar(value)) {
+      h = credential_register(value, v, "env", origin)
+      if (!is.null(h)) return(h)
+    }
+  }
+  if (length(refused)) {
+    gptr_abort(paste0(names(refused)[[1]], " holds a Claude subscription OAuth token ",
+                      "(sk-ant-oat...), which the API provider refuses; use an API key, or ",
+                      "model = \"claude_code\" for the subscription CLI."),
+               "no_key", provider = id, variables = vars)
+  }
+  gptr_abort(paste0("No credential found for provider ", id, ". Set ",
+                    paste(vars, collapse = " or "),
+                    " (for example with gptr_env()) or store one with gptr_login()."),
+             "no_key", provider = id, variables = vars)
+}
