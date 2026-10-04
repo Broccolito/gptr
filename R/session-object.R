@@ -1130,3 +1130,285 @@ replay_lookup = function(block, child = NULL) {
 #' The key of a block in the replay table
 #' @noRd
 replay_key = function(block, child = NULL) if (is.null(child)) block else paste0(block, "/", child)
+
+# ---------------------------------------------------------------------------- replay (IC-46)
+
+#' Advance a piped session in place for a fresh recorded block (IC-46)
+#'
+#' Appends a `gptr.replay` entry, adds the block to `seen` (a block already seen changes
+#' nothing), counts one turn, designates the header's `value=` name under the value policy and
+#' takes `last_text` from the cached answer. The same object is returned, so
+#' `identical(chain_result, first_result)` holds along a replayed pipe chain.
+#' @param s The piped `gptr_session`.
+#' @param block chr(1): the block id.
+#' @param header Named list: the parsed block header (04 section 11.5: `model`, `session`,
+#'   `turn`, `value`, `fork`, ...), plus `doc` (the document path) and `mode` (the replay mode of
+#'   P15) when the caller knows them. `session` must be a session id, `value` one name and
+#'   `model` a `provider/id` (replay_header_check()).
+#' @param text chr(1) or `NULL`: the cached answer text (the S2 cache of P15).
+#' @return `s`.
+#' @noRd
+session_replay_apply = function(s, block, header, text = NULL) {
+  check_class(s, "gptr_session", "s")
+  check_string(block, "block")
+  replay_header_check(header)
+  check_string(text, "text", null = TRUE)
+  replay_mark(s, block, header, text, advance = TRUE)
+  s
+}
+
+#' The session a fresh block replays into when no session is piped (IC-46)
+#'
+#' The live session holding the header's `session=` id when one exists in this process (advanced
+#' with `session_replay_apply()`); otherwise a `replayed` session that adopts the recorded id:
+#' rebuilt from its JSONL with the leaf moved back to the end of the recorded turn, or, without a
+#' file, reconstructed from the document (`history_source = "reconstructed"`).
+#' @param block chr(1): the block id.
+#' @param header Named list: the parsed block header (see `session_replay_apply()`).
+#' @param envir The environment the document is sourced into (the rebuilt session's home; a
+#'   rebuilt fork gets a fresh overlay of it).
+#' @param doc Named list from the document or `NULL` (IC-46 calls the function without it):
+#'   `path`, `format`, `template` (the prompt template), `code` (chr: the recorded code lines),
+#'   `output` (chr: the `#>` lines without their prefix), `text` (the cached answer or `NULL`).
+#' @return A live `gptr_session`.
+#' @noRd
+session_replay_new = function(block, header, envir, doc = NULL) {
+  check_string(block, "block")
+  replay_header_check(header)
+  check_env(envir, "envir")
+  replay_doc_check(doc)
+  id = header$session
+  live_s = if (is.null(id)) NULL else session_by_id(id)
+  if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text))
+  path = if (is.null(id)) NULL else store_find(id)
+  if (!is.null(path)) return(replay_adopt(replay_rebuild(path, header, envir), block, header, doc))
+  # all or nothing, as store_rebuild(): an error or an interrupt (Esc, Ctrl-C) after the session
+  # is created is undone by on.exit(), so the recorded id never holds a half-built session, in
+  # this process or, through its file, in a later one; the condition propagates unchanged
+  prev_last = the$last
+  s = replay_session_new(header, envir)
+  done = FALSE
+  on.exit(if (!done) replay_undo(s, prev_last), add = TRUE)
+  replay_reconstruct(s, header, doc)
+  replay_adopt(s, block, header, doc)
+  done = TRUE
+  s
+}
+
+#' Make a rebuilt or reconstructed session the replayed session of a block and record the block
+#' @return `s`.
+#' @noRd
+replay_adopt = function(s, block, header, doc) {
+  d = session_data(s)
+  d$kind = "replayed"
+  d$replayed = TRUE
+  d$block = block
+  if (!is.null(doc$path)) {
+    d$doc = list(path = doc$path, format = doc$format %||% NA_character_, site = NULL,
+                 blocks = block)
+  }
+  replay_mark(s, block, header, doc$text, advance = FALSE)
+  s
+}
+
+#' Check the header fields that name things before anything is looked up or recorded: `session`
+#' names a registry entry and a session file (the check_session_id() rule), `value` a binding,
+#' `model` the provider and model id a reconstruction records (04 section 11.5: `provider/id`;
+#' a name without `/` is kept as given, like model_canonical())
+#' @noRd
+replay_header_check = function(header) {
+  check_list(header, "header")
+  if (!is.null(header$session)) check_session_id(header$session, "header$session")
+  check_string(header$value, "header$value", null = TRUE)
+  model = header$model
+  check_string(model, "header$model", null = TRUE)
+  if (!is.null(model) && !all(nzchar(replay_model_parts(model)))) {
+    arg_abort(model, "header$model", "a model reference `provider/id`")
+  }
+  invisible(header)
+}
+
+#' The provider and model id a reconstruction records for a header model: the parts before and
+#' after the first `/` (a name without `/` gives itself twice)
+#' @noRd
+replay_model_parts = function(model) c(sub("/.*$", "", model), sub("^[^/]*/", "", model))
+
+#' Check the document fields of a replay before a session is built from them: `path`, `format`,
+#' `template` and `text` are one string or NULL, `code` and `output` character vectors or NULL
+#' @noRd
+replay_doc_check = function(doc) {
+  check_list(doc, "doc", null = TRUE)
+  for (f in c("path", "format", "template", "text")) {
+    check_string(doc[[f]], paste0("doc$", f), null = TRUE, empty = TRUE)
+  }
+  for (f in c("code", "output")) check_strings(doc[[f]], paste0("doc$", f), null = TRUE)
+  invisible(doc)
+}
+
+#' The recorded turn of a block header: one whole number >= 0, else NA (no cut, the default turn)
+#' @noRd
+replay_turn = function(x) {
+  if (!is.atomic(x) || length(x) != 1L || is.na(x)) return(NA_integer_)
+  n = suppressWarnings(as.numeric(x))
+  if (is.na(n) || n < 0 || n != trunc(n) || n > .Machine$integer.max) return(NA_integer_)
+  as.integer(n)
+}
+
+#' Record a replayed block on a session: `gptr.replay`, `seen`, the turn, the value, `last_text`
+#' @param advance `TRUE` counts one more turn (a piped session); `FALSE` keeps the turn of a
+#'   rebuilt or reconstructed transcript.
+#' @noRd
+replay_mark = function(s, block, header, text, advance) {
+  d = session_data(s)
+  if (block %in% d$seen) return(invisible(s))
+  turn = if (advance) d$turns + 1L else d$turns
+  session_append(s, entry_custom("gptr.replay", drop_null(list(
+    doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
+    turn = turn, value = header$value))))
+  d$seen = c(d$seen, block)
+  d$turns = turn
+  if (!is.null(header$value)) replay_value(s, header$value)
+  if (!is.null(text)) d$last_text = text
+  invisible(s)
+}
+
+#' Designate the replayed block's `value=` name: through the value policy when the name is bound
+#' in the kept home, else held by name only (resolved when first read)
+#' @noRd
+replay_value = function(s, name) {
+  home = session_home(s)
+  if (!is.null(home) && exists(name, envir = home, inherits = FALSE)) {
+    session_value_set(s, name, get(name, envir = home, inherits = FALSE), name = name)
+    return(invisible(NULL))
+  }
+  d = session_data(s)
+  vals = d$values
+  vals[[length(vals) + 1L]] = list(turn = d$turns, mode = "name", name = name,
+                                   address = NA_character_, class = NA_character_,
+                                   bytes = NA_real_, value = NULL)
+  d$values = vals
+  session_append(s, entry_custom("gptr.value", list(turn = d$turns, mode = "name", name = name)))
+  invisible(NULL)
+}
+
+#' Rebuild a replayed session from its JSONL, the leaf moved back to the end of the recorded turn
+#'
+#' Every field that store_rebuild() derives from the active path is derived again from the cut
+#' path: the turn, the last answer, the values, the history source, and the model, mode and
+#' frozen prompt (as store_rebuild() reads them, so a model, mode or refreeze of a later turn
+#' never decides them).
+#' @noRd
+replay_rebuild = function(path, header, envir) {
+  s = store_rebuild(path, envir)
+  d = session_data(s)
+  turn = replay_turn(header$turn)
+  if (!is.na(turn) && turn < d$turns) {
+    cut = tryCatch(fork_cut(d, turn), error = function(e) NULL)
+    if (!is.null(cut) && !is.null(cut$entry)) {
+      d$leaf = cut$entry
+      d$turns = cut$turn
+      path_e = entries_path(d)
+      d$last_text = final_text(path_e) %||% NA_character_
+      d$values = Filter(function(v) as.integer(v$turn) <= cut$turn, d$values)
+      d$model = rebuild_model(path_e) %||% d$model
+      d$mode = rebuild_mode(path_e)
+      if (!isTRUE(d$refreeze)) d$frozen = rebuild_frozen(path_e)
+      d$history_source = history_source_of(path_e)
+      d$status = "idle"
+    }
+  }
+  s
+}
+
+#' The `replayed` session a reconstruction fills: the recorded id (a fresh one without it), the
+#' header model (`unknown/unknown` without it), and a fresh overlay of `envir` for a fork block
+#' (`fork=` header), like a fork rebuilt from its JSONL (IC-46), so its objects never land in the
+#' document's environment
+#' @noRd
+replay_session_new = function(header, envir) {
+  fork = header$fork
+  home = if (!is.null(fork) && home_keep(envir)) overlay_new(envir, fork) else envir
+  session_new(header$model %||% "unknown/unknown", setting_get("mode", default = "manual"),
+              home = home, kind = "replayed",
+              opts = list(id = header$session %||% id_new("s", 10L)))
+}
+
+#' Undo a reconstruction that did not complete (not interruptible itself): forget the live
+#' session, restore the last session, and release the lock and remove the file this call created,
+#' so that no later process rebuilds a half-built transcript from it (a file that already existed
+#' when the store opened is kept)
+#' @noRd
+replay_undo = function(s, prev_last) {
+  suspendInterrupts({
+    file = session_data(s)$file
+    st = session_live(s)$store
+    if (!is.null(file)) {
+      lock_release(lock_path(file))
+      if ((is.environment(st) || is.list(st)) && isTRUE(st$fresh)) unlink(file)
+    }
+    live_forget(s)
+    the$last = prev_last
+  })
+  invisible(NULL)
+}
+
+#' Reconstruct a replayed session's transcript from its document block: the template as the user
+#' message, the recorded code as the assistant's `r` call, the `#>` lines as its result, then the
+#' cached answer
+#' @param s The fresh session of replay_session_new().
+#' @noRd
+replay_reconstruct = function(s, header, doc) {
+  d = session_data(s)
+  d$history_source = "reconstructed"
+  turn = replay_turn(header$turn)
+  d$turns = if (is.na(turn) || turn < 1L) 1L else turn
+  parts = replay_model_parts(header$model %||% "unknown/unknown")
+  provider = parts[[1L]]
+  model_id = parts[[2L]]
+  session_append(s, entry_message(msg_user(doc$template %||% "(the prompt was not recorded)",
+                                           source = "replay")))
+  has_code = length(doc$code) > 0L
+  if (has_code) {
+    call_id = paste0("replay_", d$turns)
+    call = block_tool_call(call_id, "r", list(code = paste(doc$code, collapse = "\n")))
+    session_append(s, entry_message(msg_assistant(list(call), api = "replay", provider = provider,
+                                                  model = model_id, stop_reason = "tool_use")))
+    out = if (length(doc$output)) paste(doc$output, collapse = "\n") else "(no output recorded)"
+    session_append(s, entry_message(msg_tool_result(call_id, "r", out)))
+  }
+  # a missing answer is said to be missing, and the code is pointed to only when it is there
+  answer = doc$text %||% paste0("(the answer of this turn was not recorded",
+                                if (has_code) "; its code is above", ")")
+  session_append(s, entry_message(msg_assistant(answer, api = "replay", provider = provider,
+                                                model = model_id)))
+  s
+}
+
+#' The one-time notice when a reconstructed session continues live (IC-46)
+#' @noRd
+replay_notice = function(s) {
+  d = session_data(s)
+  if (!identical(d$history_source, "reconstructed")) return(invisible(NULL))
+  gptr_inform(paste0("session ", d$id, " continues from a history reconstructed from its ",
+                     "document; earlier tool calls and answers are approximate"),
+              "notice", .once = paste0("reconstructed:", d$id))
+  invisible(NULL)
+}
+
+#' The history source of a session rebuilt from its file (04 section 5.1): `reconstructed` when
+#' the path holds a reconstruction from a document (IC-46), so that the notice of a later live
+#' run is given in a later process too; otherwise `store`
+#' @noRd
+history_source_of = function(path) if (path_reconstructed(path)) "reconstructed" else "store"
+
+#' Does a path hold a transcript reconstructed from a document? Only replay_reconstruct() writes
+#' a user message with source `replay` (a foreign rebuild marks it `imported`) or an assistant
+#' message with api `replay`
+#' @noRd
+path_reconstructed = function(path) {
+  for (e in path) {
+    m = if (identical(e$type, "message")) e$message else NULL
+    if (identical(m$source, "replay") || identical(m$api, "replay")) return(TRUE)
+  }
+  FALSE
+}

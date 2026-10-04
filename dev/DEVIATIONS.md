@@ -2500,13 +2500,14 @@ block, then show the test passing (2 expectations) in its evidence. Until then `
 reports `SKIP 1`. Tracked in `HANDOFF.md` (cross-plan obligations) and `progress/P09.md`
 ("Pending removal").
 
-## D-055 - P09 evaluator: session changes are taken before gptr renders the plots; added promises and active bindings show their kind; non-ASCII and invalid names never make eval_r() throw; code that is not valid UTF-8 is a parse error (2026-10-04)
+## D-055 - P09 evaluator: session changes are taken before gptr renders the plots; added promises and active bindings show their kind; non-ASCII and invalid names never make eval_r() throw; code that is not valid UTF-8 is a parse error; a message sink the code leaves open is undone; values print with the home's print methods (2026-10-04)
 
 P09 Task 8's plan-literal `eval_r()` helpers (`R/eval-core.R`) and Task 2's `env_diff()`
-(`R/env-snapshot.R`) were changed in the four ways below. Each was found by a probe of the
-plan-literal source (`dev/.validation/P09/task8-eval-core-plan-literal.R`). The signatures, the
-`gptr_eval_result` fields, the statuses, the event types and the plan's 24 test blocks (19 in
-`test-eval-core.R`, 5 in `test-copy-eval.R`) are unchanged.
+(`R/env-snapshot.R`) were changed in the six ways below. Items 1-4 were found by a probe of the
+plan-literal source (`dev/.validation/P09/task8-eval-core-plan-literal.R`), items 5 and 6 by
+review round 1. The signatures of `eval_r()` and `env_diff()`, the `gptr_eval_result` fields,
+the statuses, the event types and the plan's 24 test blocks (19 in `test-eval-core.R`, 5 in
+`test-copy-eval.R`) are unchanged.
 
 1. **Session changes are compared before the plots are rendered.** Rendering to PNG is gptr's
    own work. The first plot of a process loads ragg, systemfonts and textshaping, and the plan
@@ -2526,42 +2527,85 @@ plan-literal source (`dev/.validation/P09/task8-eval-core-plan-literal.R`). The 
    throw). `env_diff()` now orders the exact names by their display text, `env_text()`, still
    with `method = "radix"`. The `+`/`~`/`-` lines pass names, classes and shapes through
    `env_text()`, so a name that is not valid UTF-8 shows as `a<ff>` and the lines are valid
-   UTF-8 (IC-62; D-040 item 2). `workspace_lines()` still orders `snapshot$name` with
-   `method = "radix"`, the same failure. It is not on the evaluator's path and is left to
-   Task 10, whose `<workspace>` block calls it.
+   UTF-8 (IC-62; D-040 item 2). R makes the check on the first key only, when it is a
+   character vector, and looks at its first element (probe on R 4.5.0 with the unknown-encoded
+   `x = c("<e4>ndern", "b")`: `order(x)` and `order(x, c(1, 2))` throw, `order(rev(x))` and
+   `order(c(1, 1), x)` do not). `workspace_lines()` orders by
+   `order(-size, snapshot$name, method = "radix")`, whose first key is numeric; with the names
+   `<e4>ndern` alone and with `b` it returned the lines without an error, so it is unchanged.
 4. **Code that is not valid UTF-8 after `as_utf8()` is a `parse_error`.** The plan's `gsub()`
    threw "input string 1 is invalid" (with a translation warning) before parsing. Model code
    arrives as JSON and is always valid, but `!expr` and `ctx$eval()` callers can pass bytes.
    `eval_parse()` now returns the error `<gptr>: the code is not valid UTF-8 text; nothing was
    evaluated.` and nothing runs. In a non-UTF-8 locale `as_utf8()` reads such bytes as native
    text, so this cannot happen there.
+5. **A message sink the code leaves open is undone.** The plan restores only output sinks
+   (those at or above its own). `eval_r()` stops at the first error, so code such as
+   `sink(zz, type = "message"); library(x); sink(type = "message")` never reaches its reset
+   line when `library(x)` fails, and the user's later errors, warnings and messages went into
+   the code's file for the rest of the session. `eval_open()` now notes
+   `sink.number(type = "message")` in `st$msg_sink`. When it differs at the restore,
+   `eval_msg_sink_reset()` resets messages to stderr and, when the user had a message sink of
+   their own, points them back to that connection while it is still open. The code's
+   connection is its own object in the home and stays open.
+6. **A visible value prints with the print methods visible from the home.** The plan's
+   `eval_print()` called `print(value)` from the gptr namespace, so S3 methods were looked up
+   from there (globalenv() and the search path). A method that the code defined in another home
+   (a function frame, the plan-mode scratch overlay, an inline sub-agent overlay) printed `x`,
+   which 04 prints as `print(<sym>)` in the home, but not `(x)` or `f(x)`. `eval_print()` now
+   does what R's console does (`PrintValueEnv()`): it evaluates `print(x)` in a short-lived
+   child of the home, with `x` bound to the value. S4 objects still go through `show()`. Before
+   it returns, the binding is removed and the child is detached (`parent.env(pe) =
+   emptyenv()`). A child left pointing at a function-frame home counts as a reference to the
+   frame, so R keeps the frame's arguments referenced after the function returns, and the
+   user's next edit copies them: without the detach, the plan's two function-frame copy rows
+   and the added one each counted 1 copy (`task8-fix1-mutant-nodetach.log`).
 
-Validation: `progress/P09.md`, Task 8. Four blocks were added to `test-eval-core.R` (23
-expectations) and one to `test-env-snapshot.R` (5). Against the plan-literal sources they give
-`[ FAIL 5 | WARN 0 | SKIP 1 | PASS 220 ]` for `^(eval-core|env-snapshot)$`
-(`task8-red-adaptations.log`). Final `^(eval-core|copy-eval|env-snapshot)$`:
-`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 262 ]` (`task8-green.log`). Under `LC_ALL=C`, the three
-UTF-8-only blocks skip: `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 222 ]`
-(`task8-green-clocale.log`).
+Validation: `progress/P09.md`, Task 8. For items 1-4, four blocks were added to
+`test-eval-core.R` (23 expectations) and one to `test-env-snapshot.R` (5). Against the
+plan-literal sources they give `[ FAIL 5 | WARN 0 | SKIP 1 | PASS 220 ]` for
+`^(eval-core|env-snapshot)$` (`task8-red-adaptations.log`). For items 5 and 6 (review round 1),
+two blocks were added to `test-eval-core.R` (20 expectations) and one block of two rows to
+`test-copy-eval.R`. Against the round-0 source, `^(eval-core|copy-eval)$` gives
+`[ FAIL 8 | WARN 0 | SKIP 1 | PASS 204 ]` (`task8-fix1-red.log`). Final
+`^(eval-core|copy-eval|env-snapshot)$`: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 284 ]`
+(`task8-fix1-green.log`). Under `LC_ALL=C`, the three UTF-8-only blocks skip, and
+`^(eval-core|env-snapshot)$` gives `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 242 ]`
+(`task8-fix1-green-clocale.log`).
 
-## D-056 - P06 replay functions: header ids, value= names and document fields are checked first, doc is optional, a header turn is one whole number, a session rebuilt for a replay takes model, mode and frozen prompt from the cut path (2026-10-04)
+## D-056 - P06 replay functions: header ids, value= names, models and document fields are checked first, doc is optional, a reconstruction is all or nothing, a header turn is one whole number, a session rebuilt for a replay takes model, mode and frozen prompt from the cut path, a reconstructed history stays reconstructed when rebuilt from its file (2026-10-04)
 
-P06 Task 14's literal `session_replay_apply()` and `session_replay_new()` are changed in five
+P06 Task 14's literal `session_replay_apply()` and `session_replay_new()` are changed in six
 ways. P15's replay (the `document` route of IC-45/IC-46) and P19's team replay consume them:
 
 1. **The header fields that name things are checked before anything is looked up or recorded.**
-   `header$session` must pass `check_session_id()` (Task 3, D-050 item 2) and `header$value` must
-   be one non-empty string; otherwise `gptr_error_invalid_argument` with `arg = "header$session"`
-   or `"header$value"`. In the plan a non-string or two-element id raised base R's unclassed
-   `get0()` error in `session_by_id()`, a path-like id was refused only by `session_new()`
-   (`arg = "opts$id"`), and a bad `value=` reached `exists()` after the `gptr.replay` entry had
-   been appended.
-2. **`doc` defaults to `NULL`, and its fields are checked.** IC-46 (section 15) calls
-   `session_replay_new(block, header, envir)`; 04 section 7.6 lists `doc` as a fourth argument. The
-   default satisfies both. `path`, `format`, `template` and `text` must be one string or `NULL`,
-   `code` and `output` character vectors without NA. In the plan a two-element template became the
-   joined prompt `"a\nb"`, and `text = 1` failed in P01's `as_content()` after the session had been
-   registered under the recorded id, so the next replay of that id returned the half-built session.
+   `header$session` must pass `check_session_id()` (Task 3, D-050 item 2), `header$value` must
+   be one non-empty string, and `header$model` one non-empty string whose parts before and after
+   its first `/` are both non-empty (04 section 11.5 records `provider/id`; a name without `/`
+   is kept as given, as `model_canonical()` keeps it); otherwise `gptr_error_invalid_argument`
+   with `arg = "header$session"`, `"header$value"` or `"header$model"`. In the plan a non-string
+   or two-element id raised base R's unclassed `get0()` error in `session_by_id()`, a path-like id
+   was refused only by `session_new()` (`arg = "opts$id"`), a bad `value=` reached `exists()`
+   after the `gptr.replay` entry had been appended, and a model such as `"fake/"` or `"/x"` was
+   refused by P01's `msg_assistant()` (`arg = "model"`) after the session had been registered
+   and its user message written to its file (review round 1).
+2. **`doc` defaults to `NULL`, its fields are checked, and a reconstruction is all or nothing.**
+   IC-46 (section 15) calls `session_replay_new(block, header, envir)`; 04 section 7.6 lists `doc`
+   as a fourth argument. The default satisfies both. `path`, `format`, `template` and `text` must
+   be one string or `NULL`, `code` and `output` character vectors without NA. In the plan a
+   two-element template became the joined prompt `"a\nb"`, and `text = 1` failed in P01's
+   `as_content()` after the session had been registered under the recorded id, so the next replay
+   of that id returned the half-built session. Any other failure after the session is created (a
+   store error, an interrupt) is now undone as `store_rebuild()` undoes a rebuild: an `on.exit()`
+   in `session_replay_new()` (`replay_undo()`) forgets the live session, restores the last
+   session, releases the lock and removes the file this call created (a file that already existed
+   when the store opened is kept), so neither this process nor a later one finds a half-built
+   transcript under the recorded id; the condition propagates unchanged (review round 1). The
+   plan's `replay_reconstruct(header, envir, doc)` is split into `replay_session_new(header,
+   envir)` and `replay_reconstruct(s, header, doc)` for this, and the adoption of the block
+   (`kind`, `block`, `doc`, `replay_mark()`) moved into `replay_adopt()`. A session rebuilt for a
+   replay relies on `store_rebuild()`'s own all-or-nothing up to the rebuilt session (contract
+   note in `progress/P06.md`).
 3. **A header turn is one whole number >= 0, else unknown** (`replay_turn()`). The plan's
    `as.integer()` truncated `"1.5"` and failed with "the condition has length > 1" for a
    two-element turn, after the session was registered. An unknown turn means no cut for a rebuilt
@@ -2577,9 +2621,45 @@ ways. P15's replay (the `document` route of IC-45/IC-46) and P19's team replay c
 5. **A reconstructed answer that was not recorded does not point to absent code.** The plan's
    placeholder said "its code is above" even when no code was recorded; that clause is now added
    only when the `r` call is reconstructed. `last_text` stays `NA` (plan).
+6. **A history reconstructed from a document stays reconstructed when its file is rebuilt.**
+   A reconstruction writes its JSONL under the recorded id, so a later process (or this one after
+   the session was collected) rebuilds it from that file, and the plan's `history_source` was then
+   `"store"`: the IC-46 notice of a later live continuation was never given, although the
+   transcript is the same approximate one. `store_rebuild()` (Task 13's `rebuild_fill()`, so
+   `gptr_resume()` too) and `replay_rebuild()` (from the cut path) now set `history_source` with
+   `history_source_of()`: `"reconstructed"` when the path holds a message only a reconstruction
+   writes (a user message with source `replay`, or an assistant message with api `replay`, which
+   a foreign rebuild's `imported` marking leaves intact), else `"store"` (review round 1).
 
 Validation: `progress/P06.md`, Task 14 (`test-session-object.R`). Four blocks (45 expectations)
-were added to the plan's eight. Against the plan-literal source they gave 13 failures and 399
-passes, all failures in the added blocks (`task14-literal.log`). Final `^session-object$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 429 ]` in the UTF-8 and the C locale (`task14-green.log`,
-`task14-green-C.log`).
+were added to the plan's eight, and three more (34 expectations) in review round 1. Against the
+plan-literal source the first four gave 13 failures and 399 passes, all failures in the added
+blocks (`task14-literal.log`); the round-1 blocks gave 11 failures against the first
+implementation (`task14-fix1-red.log`). Final `^session-object$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 463 ]` in the UTF-8 and the C locale (`task14-fix1-green.log`,
+`task14-fix1-green-C.log`).
+
+## D-057 - P10 grep, find and ls: a searched file and the relevance sort work with non-ASCII names in a C locale (2026-10-04)
+
+P10 Task 7's plan-literal `R/tool-search.R` passes the plan's 13 blocks (56 expectations, the
+ripgrep oracle included) in the UTF-8 and the C locale, and its (file, line) sets equal
+ripgrep's on 8 patterns over `R/`, `tests/` and `dev/spec/` (`dev/.validation/P10/task7-probe-rg-repo.log`).
+One defect, reproduced against that source (`task7-probe-plan-literal-clocale.log`,
+`task7-probe2-plan-literal-clocale.log`):
+1. **`basename()` of a marked UTF-8 non-ASCII path stops in a non-UTF-8 locale** ("unable to
+   translate ... to native encoding"; the base-R limit behind D-041 item 4 and D-051 item 6). Two
+   plan calls hit it. `grep_candidates()` labelled a single searched file with `basename(root)`,
+   so `search_grep("x", "<dir>/café.R")` failed; `find_relevance()` took `basename(paths)`, so
+   `search_find(sort = "relevance")` failed as soon as the walk met one non-ASCII name anywhere
+   under the root. Both now use the new `search_basename()` (`sub("(?s)^.*/", "", p, perl =
+   TRUE)`, marked with `as_utf8()`); the paths are already "/"-separated (`resolve_tool_path()`,
+   `walk_files()`). No signature, class, column, attribute or Pi text changes.
+
+Validation: `progress/P10.md`, Task 7. Added block "non-ASCII file and directory names are
+searched, found and listed in any locale" (7 expectations, under
+`withr::local_locale(c(LC_CTYPE = "C"))`). Against the plan-literal source:
+`[ FAIL 1 | WARN 0 | SKIP 0 | PASS 57 ]`, the block erroring at `basename(root)`; with only the
+first fix `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 58 ]`, erroring at `basename(paths)`
+(`task7-red-final-plan-literal.log`, `task7-red-final-relevance.log`). Final `^tool-search$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 63 ]` in the UTF-8 and the C locale (`task7-green.log`,
+`task7-green-clocale.log`).

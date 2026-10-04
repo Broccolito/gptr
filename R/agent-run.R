@@ -1089,6 +1089,7 @@ run_start = function(s, input, opts = list()) {
   }
   if (!is.null(outer)) run_count_nested(outer, opts)
   run = run_new(s, opts, outer)
+  replay_notice(s)
   input = run_initial_input(run, input)
   live$run = run
   d$status = "running"

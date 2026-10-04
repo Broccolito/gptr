@@ -517,6 +517,7 @@ rebuild_fill = function(s, h, g, file, tree, path_e, foreign) {
   d$frozen = if (foreign) NULL else rebuild_frozen(path_e)
   d$refreeze = foreign
   d$values = rebuild_values(path_e)
+  d$history_source = history_source_of(path_e)
   d$usage = rebuild_usage(rebuild_own(tree$entries, fork), d)
   live = session_live(s)
   live$store = store_open(s)

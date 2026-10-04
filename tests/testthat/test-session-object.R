@@ -926,3 +926,301 @@ test_that("an empty or oversized entry id is refused before session_before_fork 
   }
   expect_length(ev(), 0L)
 })
+
+# ---------------------------------------------------------------- replay (IC-46)
+
+replay_types = function(s) {
+  vapply(session_data(s)$entries, function(e) e$custom_type %||% e$type, "")
+}
+
+test_that("session_replay_apply() advances the piped session in place; identical() holds", {
+  s = test_session()
+  r = s |>
+    session_replay_apply("a1b2c3", list(session = s$id, turn = "1")) |>
+    session_replay_apply("d4e5f6", list(session = s$id, turn = "2"), text = "cached answer")
+  expect_identical(r, s)
+  expect_identical(s$turns, 2L)
+  expect_identical(session_data(s)$seen, c("a1b2c3", "d4e5f6"))
+  expect_identical(s$text, "cached answer")
+  rep = Filter(function(e) identical(e$custom_type, "gptr.replay"), session_data(s)$entries)
+  expect_length(rep, 2L)
+  expect_identical(rep[[2L]]$data$block, "d4e5f6")
+  expect_identical(rep[[2L]]$data$turn, 2L)
+  expect_identical(rep[[2L]]$data$mode, "replay")
+})
+
+test_that("a block already seen adds no turn and no entry", {
+  s = test_session()
+  session_replay_apply(s, "a1b2c3", list(turn = "1"))
+  n = length(session_data(s)$entries)
+  session_replay_apply(s, "a1b2c3", list(turn = "1"))
+  expect_identical(s$turns, 1L)
+  expect_length(session_data(s)$entries, n)
+})
+
+test_that("value= designates the named object of the kept home under the value policy", {
+  home = new.env()
+  home$qc = c(a = 1, b = 2)
+  s = test_session(home = home)
+  session_replay_apply(s, "a1b2c3", list(turn = "1", value = "qc"))
+  expect_identical(s$value, c(a = 1, b = 2))
+  expect_identical(s$values$mode, "copy")
+  expect_identical(s$values$name, "qc")
+  session_replay_apply(s, "d4e5f6", list(turn = "2", value = "later"))
+  expect_identical(s$values$mode, c("copy", "name"))
+  home$later = "bound after the replay"
+  expect_identical(s$value, "bound after the replay")
+})
+
+test_that("session_replay_apply() validates its arguments", {
+  s = test_session()
+  expect_error(session_replay_apply(s, 1, list()), class = "gptr_error_invalid_argument")
+  expect_error(session_replay_apply(s, "a1b2c3", "x"), class = "gptr_error_invalid_argument")
+  expect_error(session_replay_apply(list(), "a1b2c3", list()),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("session_replay_new() returns the live session holding the header's id", {
+  s = test_session()
+  r = session_replay_new("a1b2c3", list(session = s$id, turn = "1"), envir = globalenv(),
+                         doc = list(path = "analysis.R", text = "cached"))
+  expect_identical(r, s)
+  expect_identical(s$turns, 1L)
+  expect_identical(s$text, "cached")
+})
+
+test_that("session_replay_new() rebuilds from the JSONL, cut at the recorded turn", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "second answer"))
+  s = test_session(home = globalenv())
+  run_text(s, "one")
+  run_text(s, "two")
+  id = s$id
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  expect_null(session_by_id(id))
+  home = new.env()
+  r = session_replay_new("a1b2c3", list(session = id, turn = "1", model = "fake/fake-1"),
+                         envir = home, doc = list(path = "analysis.R", format = "r"))
+  expect_identical(r$id, id)
+  expect_identical(r$kind, "replayed")
+  expect_identical(r$turns, 1L)
+  expect_identical(r$text, "first answer")
+  expect_identical(session_data(r)$history_source, "store")
+  expect_identical(session_data(r)$doc$path, "analysis.R")
+  expect_identical(roles(r), c("user", "assistant"))
+  expect_true("gptr.replay" %in% replay_types(r))
+})
+
+test_that("without a file the session is reconstructed from the document", {
+  local_store()
+  home = new.env()
+  doc = list(path = "analysis.R", format = "r", template = "Count the rows of d",
+             code = "n = nrow(d)", output = "[1] 32", text = "There are 32 rows.")
+  r = session_replay_new("a1b2c3", list(session = "s0123456789", turn = "2",
+                                        model = "fake/fake-1", value = "n"),
+                         envir = home, doc = doc)
+  expect_identical(r$id, "s0123456789")
+  expect_identical(r$kind, "replayed")
+  expect_identical(session_data(r)$history_source, "reconstructed")
+  expect_identical(r$turns, 2L)
+  expect_identical(r$text, "There are 32 rows.")
+  expect_identical(roles(r), c("user", "assistant", "tool_result", "assistant"))
+  call = r$messages[[2L]]$content[[1L]]
+  expect_identical(call$name, "r")
+  expect_identical(call$arguments$code, "n = nrow(d)")
+  expect_identical(msg_text(r$messages[[3L]]), "[1] 32")
+  expect_identical(r$messages[[1L]]$source, "replay")
+  expect_identical(r$values$name, "n")
+  expect_identical(r$envir, home)
+  # a fork block (`fork=` header) reconstructed without a file gets a fresh overlay (IC-46)
+  f = session_replay_new("b7c8d9", list(session = "s0123456787", turn = "1",
+                                        model = "fake/fake-1", fork = "s0123456789"),
+                         envir = home, doc = doc)
+  expect_identical(parent.env(f$envir), home)
+})
+
+test_that("a later live run of a reconstructed session gives a one-time notice", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list("continued"))
+  local_gptr_options(quiet = FALSE)
+  r = session_replay_new("a1b2c3", list(session = "s0123456788", turn = "1", model = "fake/fake-1"),
+                         envir = new.env(), doc = list(template = "Summarise d", text = "Done."))
+  expect_message(run_text(r, "and then?"), "reconstructed", class = "gptr_message_notice")
+  expect_identical(r$text, "continued")
+  expect_no_message(run_text(r, "more"), message = "reconstructed")
+})
+
+# Added to the plan's replay tests: the header fields that name things are checked, `doc` is
+# optional (IC-46 calls session_replay_new(block, header, envir)), a header turn that is not one
+# whole number never fails, and a session rebuilt for a replay takes every path-derived field
+# from the cut path.
+
+test_that("a header id, a value= name or a document field of the wrong type is refused first", {
+  local_store()
+  for (id in list("../escaped", "s_1", 1, c("s0123456789", "s0123456780"))) {
+    err = tryCatch(session_replay_new("a1b2c3", list(session = id, turn = "1"),
+                                      envir = new.env(), doc = NULL),
+                   error = function(e) e)
+    expect_s3_class(err, "gptr_error_invalid_argument")
+    expect_identical(err$arg, "header$session")
+  }
+  expect_null(session_by_id("s_1"))
+  docs = list(list(text = 1), list(template = c("a", "b")), list(code = 1),
+              list(output = NA_character_))
+  for (doc in docs) {
+    err = tryCatch(session_replay_new("a1b2c3", list(session = "s0123456784", turn = "1"),
+                                      envir = new.env(), doc = doc),
+                   error = function(e) e)
+    expect_s3_class(err, "gptr_error_invalid_argument")
+    expect_match(err$arg, "^doc[$](text|template|code|output)$")
+  }
+  expect_null(session_by_id("s0123456784"))
+  s = test_session()
+  for (value in list(1, c("a", "b"), "")) {
+    err = tryCatch(session_replay_apply(s, "a1b2c3", list(turn = "1", value = value)),
+                   error = function(e) e)
+    expect_s3_class(err, "gptr_error_invalid_argument")
+    expect_identical(err$arg, "header$value")
+  }
+  expect_identical(list(s$turns, length(session_data(s)$entries)), list(0L, 0L))
+})
+
+test_that("session_replay_new() takes doc as optional; a missing answer is not invented", {
+  local_store()
+  r = session_replay_new("a1b2c3", list(session = "s0123456786", turn = "1"), envir = new.env())
+  expect_identical(session_data(r)$history_source, "reconstructed")
+  expect_identical(roles(r), c("user", "assistant"))
+  expect_identical(msg_text(r$messages[[1L]]), "(the prompt was not recorded)")
+  expect_identical(msg_text(r$messages[[2L]]), "(the answer of this turn was not recorded)")
+  expect_true(is.na(r$text))
+  expect_null(session_data(r)$doc)
+})
+
+test_that("a header turn that is not one whole number keeps the recorded transcript", {
+  expect_identical(replay_turn("2"), 2L)
+  expect_identical(replay_turn(3L), 3L)
+  for (x in list(NULL, "x", c("1", "2"), "-1", "1.5", NA_character_, list("1"))) {
+    expect_identical(replay_turn(x), NA_integer_)
+  }
+  local_store()
+  r = session_replay_new("a1b2c3", list(session = "s0123456785", turn = c("1", "2")),
+                         envir = new.env(), doc = list(template = "t", text = "a"))
+  expect_identical(r$turns, 1L)
+})
+
+test_that("a session rebuilt for a replay takes model, mode and frozen prompt from the cut path", {
+  local_store()
+  s = test_session(home = globalenv())
+  d = session_data(s)
+  frozen = function(t0) {
+    entry_custom("gptr.frozen", list(preset = "standard", t0 = t0, t1 = "", toolsJson = "[]",
+                                     toolNames = list(), sections = list(),
+                                     model = "fake/fake-1"))
+  }
+  answer = function(text, model) {
+    entry_message(msg_assistant(text, api = "fake", provider = "fake", model = model))
+  }
+  session_append(s, frozen("T0-first"))
+  d$turns = 1L
+  session_append(s, entry_message(msg_user("one")))
+  session_append(s, answer("first answer", "fake-1"))
+  d$turns = 2L
+  session_append(s, entry_message(msg_user("two")))
+  session_append(s, frozen("T0-second"))
+  session_set_mode(s, "plan")
+  session_append(s, answer("second answer", "fake-2"))
+  id = s$id
+  other = test_session()
+  rm(s, d)
+  invisible(gc())
+  expect_null(session_by_id(id))
+  r = session_replay_new("a1b2c3", list(session = id, turn = "1"), envir = new.env(), doc = NULL)
+  expect_identical(list(r$turns, r$text, r$model, r$mode),
+                   list(1L, "first answer", "fake/fake-1", "manual"))
+  expect_identical(session_data(r)$frozen$t0, "T0-first")
+  expect_identical(roles(r), c("user", "assistant"))
+})
+
+# Review round 1: a header model is checked first, a reconstruction is all or nothing, and a
+# session reconstructed from its document stays reconstructed when rebuilt from its file.
+
+test_that("a header model without a provider or a model id is refused before anything exists", {
+  local_store()
+  doc = list(template = "t", text = "a")
+  for (model in list("fake/", "/x", "/", "", NA_character_, 1, c("fake/a", "fake/b"))) {
+    err = tryCatch(session_replay_new("a1b2c3", list(session = "s0123456781", turn = "1",
+                                                     model = model),
+                                      envir = new.env(), doc = doc),
+                   error = function(e) e)
+    expect_s3_class(err, "gptr_error_invalid_argument")
+    expect_identical(err$arg, "header$model")
+  }
+  expect_null(session_by_id("s0123456781"))
+  expect_null(store_find("s0123456781"))
+  s = test_session()
+  err = tryCatch(session_replay_apply(s, "a1b2c3", list(turn = "1", model = "fake/")),
+                 error = function(e) e)
+  expect_identical(err$arg, "header$model")
+  expect_length(session_data(s)$entries, 0L)
+  # a model id may itself hold a slash: the provider is the part before the first one
+  r = session_replay_new("b1b2c3", list(session = "s0123456781", turn = "1",
+                                        model = "openrouter/vendor/m-1"),
+                         envir = new.env(), doc = doc)
+  expect_identical(r$messages[[2L]][c("provider", "model")],
+                   list(provider = "openrouter", model = "vendor/m-1"))
+})
+
+test_that("a reconstruction that fails part-way leaves no session and no file behind", {
+  local_store()
+  keep = test_session()
+  doc = list(template = "t", code = "x = 1", output = "1", text = "a")
+  header = list(session = "s0123456783", turn = "1", model = "fake/fake-1")
+  local({
+    local_mocked_bindings(replay_mark = function(...) stop("failed part-way"))
+    expect_error(session_replay_new("a1b2c3", header, envir = new.env(), doc = doc),
+                 "failed part-way", class = "simpleError")
+  })
+  expect_null(session_by_id("s0123456783"))
+  expect_null(store_find("s0123456783"))
+  expect_length(list.files(sessions_dir(), pattern = "s0123456783", all.files = TRUE), 0L)
+  expect_identical(gptr_last(), keep)
+  r = session_replay_new("a1b2c3", header, envir = new.env(), doc = doc)
+  expect_identical(roles(r), c("user", "assistant", "tool_result", "assistant"))
+  expect_identical(session_data(r)$seen, "a1b2c3")
+})
+
+test_that("a reconstructed session stays reconstructed when it is rebuilt from its file", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list("continued"))
+  local_gptr_options(quiet = FALSE)
+  doc = list(template = "Count the rows of d", code = "n = nrow(d)", output = "[1] 32",
+             text = "There are 32 rows.")
+  r = session_replay_new("a1b2c3", list(session = "s0123456782", turn = "1",
+                                        model = "fake/fake-1"),
+                         envir = new.env(), doc = doc)
+  other = test_session()
+  rm(r)
+  invisible(gc())
+  expect_null(session_by_id("s0123456782"))
+  r = session_replay_new("d4e5f6", list(session = "s0123456782", turn = "1"), envir = new.env())
+  expect_identical(session_data(r)$history_source, "reconstructed")
+  expect_identical(roles(r), c("user", "assistant", "tool_result", "assistant"))
+  expect_message(run_text(r, "and then?"), "reconstructed", class = "gptr_message_notice")
+  expect_identical(r$text, "continued")
+  # gptr_resume() rebuilds the same file the same way (store_rebuild())
+  other = test_session()
+  rm(r)
+  invisible(gc())
+  expect_identical(session_data(gptr_resume("s0123456782"))$history_source, "reconstructed")
+  # a foreign file marks its user turns imported; the replay api still tells
+  user = list(type = "message", message = msg_user("t", source = "imported"))
+  answer = list(type = "message", message = msg_assistant("a", api = "replay", provider = "fake",
+                                                          model = "fake-1"))
+  expect_true(path_reconstructed(list(user, answer)))
+  expect_false(path_reconstructed(list(user)))
+})
