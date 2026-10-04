@@ -48,3 +48,156 @@ test_that("write_atomic() keeps the permission bits of the file it replaces", {
   write_atomic(path, "echo new")
   expect_identical(format(file.info(path)$mode), "755")
 })
+
+test_that("project_root() honours the option, then GPTR_PROJECT_ROOT (IC-63)", {
+  dir = withr::local_tempdir()
+  withr::local_options(gptr.project_root = dir)
+  expect_identical(project_root(), path_norm(dir))
+  withr::local_options(gptr.project_root = NULL)
+  withr::local_envvar(GPTR_PROJECT_ROOT = dir)
+  expect_identical(project_root("/"), path_norm(dir))
+})
+
+test_that("project_root() finds the nearest marked ancestor, else the start directory", {
+  withr::local_options(gptr.project_root = NULL)
+  withr::local_envvar(GPTR_PROJECT_ROOT = NA)
+  dir = withr::local_tempdir()
+  deep = file.path(dir, "proj", "R", "sub")
+  dir.create(deep, recursive = TRUE)
+  file.create(file.path(dir, "proj", "_quarto.yml"))
+  expect_identical(project_root(deep), path_norm(file.path(dir, "proj")))
+  dir.create(file.path(dir, "proj", "R", ".gptr"))
+  expect_identical(project_root(deep), path_norm(file.path(dir, "proj", "R")))
+})
+
+test_that("user_home() uses USERPROFILE on Windows and HOME elsewhere (IC-63)", {
+  withr::local_envvar(USERPROFILE = "C:\\Users\\me", HOME = "/home/me")
+  local_mocked_bindings(is_windows = function() TRUE)
+  expect_identical(user_home(), "C:/Users/me")
+  local_mocked_bindings(is_windows = function() FALSE)
+  expect_identical(user_home(), "/home/me")
+})
+
+test_that("app_config_dir() follows each platform's convention", {
+  withr::local_envvar(
+    APPDATA = "C:\\Users\\me\\AppData\\Roaming", HOME = "/home/me", XDG_CONFIG_HOME = NA
+  )
+  local_mocked_bindings(is_windows = function() TRUE, is_macos = function() FALSE)
+  expect_identical(app_config_dir("Claude"), "C:/Users/me/AppData/Roaming/Claude")
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
+  expect_identical(app_config_dir("Claude"), "/home/me/Library/Application Support/Claude")
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() FALSE)
+  expect_identical(app_config_dir("codex"), "/home/me/.config/codex")
+  withr::local_envvar(XDG_CONFIG_HOME = "/xdg")
+  expect_identical(app_config_dir("codex"), "/xdg/codex")
+})
+
+test_that("rscript_path() points into R.home('bin'), never at a PATH lookup (IC-60)", {
+  path = rscript_path()
+  expect_identical(dirname(path), R.home("bin"))
+  expect_true(file.exists(path))
+})
+
+test_that("gptr_user_dir() is tools::R_user_dir() and is created only on request", {
+  dir = gptr_user_dir("cache")
+  expect_identical(dir, tools::R_user_dir("gptr", "cache"))
+  expect_match(dir, "gptr-tests-", fixed = TRUE)
+  unlink(dir, recursive = TRUE)
+  gptr_user_dir("cache")
+  expect_false(dir.exists(dir))
+  gptr_user_dir("cache", create = TRUE)
+  expect_true(dir.exists(dir))
+  expect_error(gptr_user_dir("home"), class = "gptr_error_invalid_argument")
+})
+
+test_that("path_norm() resolves symlinked ancestors, '..' and '~' for missing paths", {
+  dir = path_norm(withr::local_tempdir())
+  expect_identical(path_norm(file.path(dir, "a", "..", "b", "c.txt")), file.path(dir, "b", "c.txt"))
+  expect_identical(path_norm("~/x"), paste0(path_norm(user_home()), "/x"))
+  withr::local_dir(dir)
+  expect_identical(path_norm("rel.R"), file.path(dir, "rel.R"))
+})
+
+test_that("path_key() lower-cases on Windows and macOS only (IC-51)", {
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
+  expect_identical(path_key("/TMP/Foo"), tolower(path_norm("/TMP/Foo")))
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() FALSE)
+  # path_norm() adds the drive letter on Windows, so compare with it, then check the case
+  expect_identical(path_key("/no/such/Foo"), path_norm("/no/such/Foo"))
+  expect_true(endsWith(path_key("/no/such/Foo"), "/no/such/Foo"))
+})
+
+test_that("workspace_root() is .gptr/ when it exists, else tempdir()/gptr", {
+  dir = withr::local_tempdir()
+  withr::local_options(gptr.project_root = dir)
+  expect_null(workspace_dir())
+  expect_identical(workspace_root(), file.path(tempdir(), "gptr"))
+  dir.create(file.path(dir, ".gptr"))
+  expect_identical(path_norm(workspace_root()), path_norm(file.path(dir, ".gptr")))
+  path = ws_path("cache", "tmp", "x.txt")
+  expect_true(dir.exists(dirname(path)))
+  expect_false(file.exists(path))
+})
+
+test_that("save_rds() and serialize_leaf() round-trip without ascii serialisation (R7)", {
+  file = withr::local_tempfile(fileext = ".rds")
+  save_rds(mtcars, file)
+  expect_identical(readRDS(file), mtcars)
+  bytes = serialize_leaf(letters)
+  expect_true(is.raw(bytes))
+  expect_identical(unserialize(bytes), letters)
+})
+
+test_that("path_rel() is root-relative inside the root and absolute outside", {
+  root = path_norm(withr::local_tempdir())
+  expect_identical(path_rel(file.path(root, "R", "a.R"), root), "R/a.R")
+  expect_identical(path_rel(root, root), ".")
+  expect_identical(path_rel("/elsewhere/x", root), path_norm("/elsewhere/x"))
+})
+
+test_that("reserved_name() recognises Windows device names", {
+  expect_identical(reserved_name(c("con", "NUL.txt", "com1", "lpt9.R", "console", "data")),
+                   c(TRUE, TRUE, TRUE, TRUE, FALSE, FALSE))
+})
+
+test_that("path_class() assigns the classes of report 18 and IC-54", {
+  root = path_norm(withr::local_tempdir())
+  home = path_norm(user_home())
+  cls = function(p) path_class(p, root)
+  expect_identical(cls("https://example.org/data.csv"), "url")
+  expect_identical(cls("R/*.R"), "wildcard")
+  expect_identical(cls(NA_character_), "unknown")
+  expect_identical(cls(".gptr/settings.json"), "control")
+  expect_identical(cls(".gptr/settings.local.json"), "control")
+  expect_identical(cls(".gptr/mcp.json"), "control")
+  expect_identical(cls(".gptr/extensions/tool.R"), "control")
+  expect_identical(cls(".gptr/SYSTEM.md"), "control")
+  expect_identical(cls(".git/hooks/pre-commit"), "control")
+  expect_identical(cls("sub/.Rprofile"), "control")
+  expect_identical(cls(file.path(tools::R_user_dir("gptr", "config"), "settings.json")), "control")
+  expect_identical(cls(file.path(home, ".R", "Makevars")), "control")
+  expect_identical(cls(root), "critical")
+  expect_identical(cls("/"), "critical")
+  expect_identical(cls(home), "critical")
+  expect_identical(cls(tempdir()), "critical")
+  expect_identical(cls(".git/HEAD"), "protected")
+  expect_identical(cls(".env"), "protected")
+  expect_identical(cls("renv.lock"), "protected")
+  expect_identical(cls(file.path(home, ".ssh", "id_rsa")), "protected")
+  expect_identical(cls("AGENTS.md"), "instructions")
+  expect_identical(cls("CLAUDE.md"), "instructions")
+  expect_identical(cls(".gptr/vignette.Rmd"), "instructions")
+  expect_identical(cls(".gptr/skills/x/SKILL.md"), "instructions")
+  expect_identical(cls("R/analysis.R"), "workspace")
+  expect_identical(cls(file.path(tempdir(), "scratch.csv")), "temp")
+  expect_identical(cls("/opt/elsewhere/file.txt"), "outside")
+  # Linux keeps the case of path keys: ~/.R/Makevars is still a control file there
+  local_mocked_bindings(is_windows = function() FALSE, is_macos = function() FALSE)
+  expect_identical(path_class(file.path(home, ".R", "Makevars"), root), "control")
+})
+
+test_that("path_class protects local credential directories and env files", {
+  root = path_norm(withr::local_tempdir())
+  paths = c(".secrets", ".secrets/jev-key.env", "keys/llm-passwords.env")
+  expect_identical(path_class(paths, root), rep("protected", length(paths)))
+})
