@@ -59,6 +59,9 @@ Independent review cleared Task 7. Pinned roxygen2 regenerated `gptr_env.Rd` and
 its export/method declarations in an isolated process. The final combined
 dotenv/store/vault run passed 263 assertions with zero failures/test warnings and
 one skip (missing-keyring branch on a machine where keyring is installed).
+Task 7 committed as `bccad62`; the `auth-secrets.R` owner can resume its other
+tasks. The commit contains only the agreed discovery function change from that
+file and only `gptr_env` namespace/manual entries.
 
 ## Task 8: credential store
 
@@ -83,3 +86,6 @@ is positively known to be gone. The metadata test mocks keyring lookup and
 asserts it is never called. Current green: FAIL 0 / WARN 0 / SKIP 1 / PASS 60.
 Independent review cleared Task 8. Source and mirrored tests have zero scoped
 lints for Tasks 7 and 8. No placeholder production dependencies are used.
+The final combined 263-assertion run above includes the real vault, loader and
+store together after documentation generation. Task 8 is ready for its scoped
+source/test/evidence commit; no additional exports or dependencies are added.
