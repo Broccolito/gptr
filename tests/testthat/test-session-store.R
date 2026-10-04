@@ -198,3 +198,17 @@ test_that(oracle_title(store_recs, "S31"), {
   expect_lt(nchar(msg_text(msg)), nchar(long))
   expect_lt(est_tokens(msg_text(msg), "r_output"), 200)
 })
+
+test_that(oracle_title(store_recs, "S34"), {
+  s = test_session()
+  session_append(s, entry_message(msg_user(strrep("long question ", 200))))
+  session_append(s, entry_message(msg_assistant("a", api = "fake", provider = "fake",
+                                                model = "fake-1",
+                                                usage = usage_new(input = 5000, output = 20))))
+  before = context_tokens(s)
+  session_append(s, list(type = "compaction", summary = "short", first_kept_entry_id = NULL,
+                         tokens_before = before,
+                         gptr = list(blocks = list(block_context("checkpoint", "short summary")),
+                                     state = list(), n = 1L)))
+  expect_lt(context_tokens(s), before)
+})

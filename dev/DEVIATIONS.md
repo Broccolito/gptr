@@ -1219,3 +1219,110 @@ sent to a model without tool calling, 8 for the image notes); mutations of the f
 append the record headers with `c()` or drop the `tool_call` gate fail 3 and 2 assertions.
 `gptr_check()` on the adapter: 30 checks, 0 failed.
 
+## D-036 - P06 request shaping: unusable router answers fall back, switches are counted per branch, no chat on decision models, colon model ids, IC-74 context estimates (2026-10-04)
+
+P06 Task 9's plan-literal request shaping in `R/agent-run.R` (`run_target()`, `run_route()`,
+`run_model_resolve()`, `freeze_fallback()`, `images_elide()`, `context_tokens()`,
+`run_estimator_update()`, `plugin_state_persist()`, `run_returns()`, `run_build()`,
+`request_fallback()`) was changed in the eight ways below. Task 10's run engine
+(`run_request()`, `run_compact_check()`, `run_response()`, `run_settle()`) and Task 15's
+`ctx$set_model()` consume these functions.
+
+1. **An unusable router answer falls back** (IC-69: P06 calls the router "falling back to the
+   default model with a diagnostic"; 04 section 10.2, kind table row 4 `router`: "a timeout, an
+   error or a non-registered result falls back to the default model with a diagnostic and a
+   `route` event"; IC-74). Item 2 says when the `route` event is emitted. The plan fell back only
+   when the `router.call` service threw. An answer that named a model that does not resolve ended
+   the run with `gptr_error_unknown_model`. An answer without a model string (`list(model = 42)`)
+   ended it with `gptr_error_invalid_argument` from `model_resolve()`. A decision-only
+   (classifier) model was accepted and reached `provider_stream()`, which refuses it (D-017), and
+   that ended the run. Now `route_answer()` treats all three as unusable. Each one gets a
+   `router_fallback` diagnostic and the default chat model (`model_default("chat")`). A default
+   that is itself decision-only is refused with `gptr_error_not_available` before anything is
+   appended. The fallback keeps the router's last state, from the branch's last `gptr.router`
+   entry, as P08's `router_fallback()` does. A router state that is not JSON is dropped with a
+   `router_state` diagnostic. Under the plan, `session_append()` failed with "the session store
+   failed" and the run ended.
+2. **A switch is counted against the branch, not the run** (IC-69 "each switch appends
+   `model_change` ... and emits `route`"). The plan compared against `run$routed`, which is `NULL`
+   at the start of every run. So every new run on a routed session appended `model_change` and
+   `gptr.router` and emitted `route` again, even when the router chose the same model. That is a
+   spurious switch and a stated cache miss. The baseline is now the model of the branch's last
+   `model_change` entry (`path_model_ref()`), so a switch is recorded only when the model changes.
+   P08's `router_call()` reads the branch's last `gptr.router` entry the same way.
+   - Fallbacks follow the same rule. A fallback that changes the branch's model is a switch: it
+     appends `model_change` and `gptr.router` and emits `route`. A repeated fallback to the same
+     default gets its `router_fallback` diagnostic but no `route`. This differs from the literal
+     words of 04 section 10.2 row 4 ("with a diagnostic and a `route` event"). IC-69 (section 15,
+     which wins over section 10.2) ties `route` to a switch: "Each switch appends `model_change`
+     ... and emits `route`". P08's `router_fallback()` follows IC-69 as well: it hands the fallback
+     to P06 as an ordinary answer and leaves "the `route` event and the
+     `model_change`/`gptr.router` entries of the switch" to `run_route()`. Once P08 is loaded, P06
+     cannot tell P08's fallbacks from router choices, so a `route` per fallback could be emitted
+     only for the fallbacks P06 detects itself. The plan also emitted no `route` for a repeated
+     fallback within a run (`run$routed`); this change extends that to later runs.
+3. **No chat request on a decision-only model** (IC-74; the coordinator's note; D-017, D-028).
+   `run_target()` calls P05's `stream_chat_model()` on the resolved session model before any
+   request is built. The plan returned the classifier record, and the refusal came only inside
+   `provider_stream()`, after the budget check, the ledger row and `before_request`. The condition
+   is the same (`gptr_error_not_available`). Router answers follow item 1.
+4. **Model ids may hold a colon** (IC-74: local Ollama tags such as `qwen3:8b`). For a
+   session-registered provider (`model = <spec:provider>`, ambiguity 21), the plan stripped any
+   `:<suffix>` as a thinking level. So `loc/qwen3:8b` looked for model `qwen3` and failed, and
+   `loc/m1:8b` silently resolved to `m1`. `run_model_resolve()` now tries the whole id first. It
+   reads a suffix as thinking only when the suffix is one of P05's `catalog_thinking_levels`, which
+   is P05's own `model_lookup()` rule. Otherwise the strict `gptr_error_unknown_model` applies.
+5. **Thinking levels are clamped** to the model's levels with P05's `model_clamp_thinking()`. This
+   applies to a router's `thinking`, a pending `ctx$set_model()` switch and the session's level.
+   The plan passed any string through, for example `max` to a model whose highest level is `high`.
+6. **The fallback freeze is a freeze** (04 section 9.1: `parameters` "a function is evaluated once
+   at freeze"; `available` "evaluated at session freeze; `FALSE` excludes a direct tool"). The plan
+   wrote `{}` as the schema of a tool whose `parameters` is a function. Task 7's `tool_frozen()`
+   then validated against `{}`. The plan also ignored `available()`. `freeze_tool_decl()` now
+   evaluates both with the session's ctx. A tool whose `available()` is not `TRUE` is left out. A
+   tool whose `available()` or `parameters()` throws, or whose schema is not an object schema, is
+   left out with a `tool_left_out` diagnostic.
+7. **Images are elided by id** (IC-67: newly elided images are "recorded by an appended
+   `gptr.image_elision` entry (one stated cache break)"). The plan elided one image block at a time.
+   When one copy of a repeated image was enough to get under the limit, the next request elided
+   every copy, because elision is keyed on the id. That changed the projection with no new entry,
+   which is an unstated cache break. Now every copy of an elided id goes at once.
+8. **IC-74 context estimates** (07-local-ollama.md section 5 "Missing usage remains unknown"; 03
+   section 12.5 "the last provider-reported input total + output + `m * est(new entries)`"). The
+   plan took any non-`NULL` `usage$total` as the anchor. An unknown total (`NA`, from
+   `usage_as(NULL)` or a reported null) made `context_tokens()` `NA`, which Task 10's
+   `compact.should` call and its S25 check (`is.finite()`) cannot take. gptr's own estimate
+   (`estimated = TRUE`, Task 10's stand-in for an unreported usage) was taken as if the provider had
+   reported it. Now only a finite provider-reported total is an anchor; without one, the estimate
+   covers everything.
+   - After a compaction the plan counted only the compaction's blocks and what followed. It
+     dropped the kept tail, which P05's `entry_compaction_cut()` projects (S33), and the frozen
+     prompt. Both are counted now.
+   - Estimates count text, context and thinking blocks as prose, tool-call arguments as JSON and
+     images with `est_image_tokens()` at the block's size, else at `gptr$plot()`'s 1000 x 700
+     default (`msg_tokens_est()`). The plan's `msg_text()` dropped context blocks, tool calls and
+     images. `request_fallback()` uses the same estimate.
+   - An image elided on the path (IC-67) counts as its `[image omitted: ...]` text, which is what
+     the request sends. `request_fallback()` therefore elides before it estimates (the plan
+     estimated first and elided afterwards in `run_build()`), and `context_tokens()` passes the
+     path's elided ids to the estimate. Otherwise every elided image would have been counted at
+     full size in `tokens_est`, the ledger row, `before_request`, the estimator multiplier and the
+     context projection.
+   - `run_estimator_update()` also changed. The plan summed the prompt counts with `unlist()`,
+     and an unknown count stopped it with base R's unclassed "missing value where TRUE/FALSE
+     needed". An unknown count now leaves the multiplier unchanged; a count the usage leaves out is
+     P05's legacy zero.
+
+Two smaller changes:
+
+- `plugin_state_persist()` persists a state emptied after it was persisted as `{}`. Under the plan
+  nothing was written, so a resume restored the old state.
+- `run_returns()` reports a `returns` schema that `schema_validate()` cannot apply as the same
+  notice. The plan threw from settlement.
+
+Validation: `progress/P06.md`, Task 9 (`test-agent-run.R`). The plan's 15 tests pass against the
+plan-literal source. All 11 added blocks fail there, with 23 failed expectations
+(`dev/.validation/P06/task9-literal-final.log`). The router fallback block stops at its third
+answer, so a probe of the plan-literal `run_route()` (`task9-literal-probe.log`) shows the rest:
+a classifier answer is accepted, `list(model = 42)` raises `gptr_error_invalid_argument`, and a
+non-JSON state raises `gptr_error_internal` ("the session store failed").

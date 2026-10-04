@@ -423,3 +423,457 @@ test_that("agent_retry_delay() keeps the second delay and refuses a bad attempt"
     expect_error(agent_retry_delay(a), class = "gptr_error_invalid_argument")
   }
 })
+
+# ---------------------------------------------------------------- request shaping
+
+test_that("the fallback freeze appends gptr.frozen and emits session_start (reason new)", {
+  local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
+                           "context.turn"))
+  local_tool("read", function(input, ctx) "x",
+             parameters = list(type = "object", properties = list(path = list(type = "string"))))
+  ev = local_events("session_start")
+  s = test_session()
+  run = test_run(s)
+  input = run_freeze(run, list(msg_user("hi")))
+  d = session_data(s)
+  expect_identical(d$entries[[1L]]$custom_type, "gptr.frozen")
+  expect_named(d$frozen, c("t0", "t1", "tools_json", "tool_names", "sections"))
+  expect_identical(d$frozen$tool_names, "read")
+  expect_match(d$frozen$tools_json, "\"input_schema\"", fixed = TRUE)
+  expect_identical(ev(s)[[1L]]$reason, "new")
+  expect_identical(input[[1L]]$content[[1L]]$text, "hi")
+  n = length(d$entries)
+  run_freeze(run, list(msg_user("again")))
+  expect_length(d$entries, n)
+})
+
+test_that("session_start blocks join the first user message; the prompt.freeze service is used", {
+  local_hook("session_start", function(event, ctx) {
+    list(blocks = list(block_context("lab_notebook", "Experiment 12")))
+  })
+  got = new.env()
+  local_service("prompt.freeze", function(s, opts) {
+    got$opts = opts
+    d = session_data(s)
+    d$frozen = list(t0 = "T0", t1 = "T1", tools_json = "[]", tool_names = character(),
+                    sections = frozen_sections_df(list()))
+    invisible(d$frozen)
+  })
+  s = test_session()
+  run = test_run(s)
+  lead = block_context("environment", "Date: today")
+  input = run_freeze(run, list(msg_user(list(lead, block_text("hi")))))
+  kinds = vapply(input[[1L]]$content, function(b) b$kind %||% b$type, "")
+  expect_identical(kinds, c("environment", "lab_notebook", "text"))
+  expect_identical(session_data(s)$frozen$t0, "T0")
+  expect_identical(got$opts$start$blocks[[1L]]$kind, "lab_notebook")
+})
+
+test_that("session_start reasons follow the session's origin", {
+  expect_identical(session_start_reason(list(kind = "chat", entries = list())), "new")
+  expect_identical(session_start_reason(list(kind = "child", entries = list())), "child")
+  expect_identical(session_start_reason(list(kind = "replayed", entries = list())), "replay")
+  expect_identical(session_start_reason(list(kind = "chat", entries = list(1), fork_of = NULL)),
+                   "resume")
+  expect_identical(session_start_reason(list(kind = "chat", fork_of = list(id = "s1"))), "fork")
+})
+
+test_that("run_target() resolves the model once and applies a pending ctx$set_model() switch", {
+  local_fake_provider(list("x"))
+  local_fake_provider(list("y"), name = "other")
+  s = test_session()
+  run = test_run(s)
+  expect_identical(run_target(run)$ref, "fake/fake-1")
+  run$pending_model = list(ref = "other/other-1", thinking = "high", reason = "plugin")
+  rec = run_target(run)
+  expect_identical(rec$ref, "other/other-1")
+  expect_identical(rec$thinking, "high")
+  expect_identical(s$model, "other/other-1")
+  d = session_data(s)
+  expect_identical(d$entries[[length(d$entries)]]$gptr$reason, "plugin")
+})
+
+test_that("run_target() resolves a provider registered for the session only (model = <spec>)", {
+  s = test_session()
+  d = session_data(s)
+  spec = gptr_provider("loc", api = "fake", models = list(list(id = "m0"), list(id = "m1")),
+                       offline = TRUE)
+  id = registry_add(spec, source = "session", rank = 0L, session = d$id)
+  withr::defer(registry_remove(id))
+  expect_null(model_resolve("loc/m1", strict = FALSE))
+  d$model = "loc/m1"
+  run = test_run(s)
+  rec = run_target(run)
+  expect_identical(c(rec$provider, rec$id, rec$ref), c("loc", "m1", "loc/m1"))
+  d$model = "loc/absent"
+  expect_error(run_target(run), class = "gptr_error_unknown_model")
+})
+
+test_that("a router session asks router.call before each request and records each switch (IC-69)", {
+  local_fake_provider(list("x"))
+  calls = new.env()
+  calls$reasons = character()
+  local_service("router.call", function(s, reason) {
+    calls$reasons = c(calls$reasons, reason)
+    list(model = "fake/fake-1", thinking = NULL, state = list(k = 1))
+  })
+  ev = local_events("route")
+  s = session_new("router:cheapest", "auto", home = new.env())
+  run = test_run(s)
+  expect_identical(run_target(run)$ref, "fake/fake-1")
+  expect_identical(run_target(run)$ref, "fake/fake-1")
+  expect_identical(calls$reasons, c("turn", "turn"))
+  types = vapply(session_data(s)$entries, function(e) e$custom_type %||% e$type, "")
+  expect_identical(types, c("model_change", "gptr.router"))
+  router = session_data(s)$entries[[2L]]$data
+  expect_identical(router$router, "cheapest")
+  expect_identical(router$state, list(k = 1))
+  expect_length(ev(s), 1L)
+})
+
+test_that("a failing router falls back to the default model with a diagnostic", {
+  local_fake_provider(list("x"))
+  local_service("router.call", function(s, reason) stop("router crashed"))
+  testthat::local_mocked_bindings(model_default = function(role = "chat") "fake/fake-1")
+  s = session_new("router:cheapest", "auto", home = new.env())
+  expect_identical(run_route(test_run(s), "turn")$ref, "fake/fake-1")
+})
+
+test_that("the fallback request projects the transcript and carries the frozen tools", {
+  local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
+                           "context.turn"))
+  local_fake_provider(list("x"))
+  local_tool("read", function(input, ctx) "x")
+  s = test_session()
+  run = test_run(s, list(returns = list(type = "object")))
+  freeze_fallback(s)
+  session_append(s, entry_message(msg_user("What is in a.R?")))
+  req = run_build(run, run_target(run))
+  ctx = req$context
+  expect_named(ctx$system, c("t0", "t1"))
+  expect_s3_class(ctx$tools_json, "json")
+  expect_identical(vapply(ctx$tools, function(t) t$name, ""), "read")
+  expect_identical(vapply(ctx$messages, function(m) m$role, ""), "user")
+  expect_match(ctx$request_id, "^q[0-9a-f]{12}$")
+  expect_identical(ctx$params$returns, list(type = "object"))
+  expect_gt(req$tokens_est, 0)
+  expect_true(all(c("tools", "transcript") %in% names(req$components)))
+})
+
+test_that("request_params handlers patch only the adapter's declared fields (IC-69)", {
+  testthat::local_mocked_bindings(adapter_get = function(api) {
+    list(api = api, capabilities = list(request_params = "service_tier"))
+  })
+  local_hook("request_params", function(event, ctx) {
+    list(params = list(service_tier = "priority", max_tokens = 5L))
+  })
+  run = test_run(test_session())
+  out = run_request_params(run, list(api = "fake", provider = "fake", ref = "fake/fake-1"),
+                           list(max_tokens = 100L, service_tier = "auto"))
+  expect_identical(out$service_tier, "priority")
+  expect_identical(out$max_tokens, 100L)
+})
+
+test_that("older images are elided above the model's image limit, once (IC-67)", {
+  s = test_session()
+  img = function(k) block_image(strrep(as.character(k), 40))
+  msgs = list(msg_user(list(img(1), img(2), img(3), block_text("look"))))
+  out = images_elide(s, msgs, list(max_images = 2))
+  expect_match(out[[1L]]$content[[1L]]$text, "^\\[image omitted: gptr\\$plot\\(")
+  expect_identical(out[[1L]]$content[[2L]]$type, "image")
+  d = session_data(s)
+  expect_identical(d$entries[[length(d$entries)]]$custom_type, "gptr.image_elision")
+  n = length(d$entries)
+  again = images_elide(s, msgs, list(max_images = 2))
+  expect_length(d$entries, n)
+  expect_match(again[[1L]]$content[[1L]]$text, "image omitted", fixed = TRUE)
+})
+
+test_that("returns = <schema> designates the parsed final answer; a mismatch is a notice", {
+  s = test_session()
+  run = test_run(s, list(returns = list(type = "object", required = I("n"),
+                                        properties = list(n = list(type = "integer")))))
+  d = session_data(s)
+  d$last_text = "{\"n\": 32}"
+  run_returns(run)
+  expect_identical(s$value$n, 32L)
+  d$last_text = "no JSON here"
+  withr::local_options(gptr.quiet = FALSE)
+  expect_message(run_returns(run), class = "gptr_message_notice")
+})
+
+test_that("JSON-able plugin state is persisted as a gptr.ext entry when it changed", {
+  s = test_session()
+  st = new.env()
+  st$count = 1L
+  assign("panel", st, envir = session_live(s)$ext)
+  plugin_state_persist(s)
+  plugin_state_persist(s)
+  ext = Filter(function(e) identical(e$custom_type, "gptr.ext"), session_data(s)$entries)
+  expect_length(ext, 1L)
+  expect_identical(ext[[1L]]$data, list(plugin = "panel", state = list(count = 1L)))
+  expect_identical(s$ext$panel$count, 1L)
+})
+
+test_that("the estimator multiplier follows reported usage (03 section 12.5)", {
+  s = test_session()
+  run = test_run(s)
+  run$model = list(provider = "anthropic")
+  run$tokens_est = 1000
+  run_estimator_update(run, list(usage = usage_new(input = 1500, output = 10)))
+  st = session_data(s)$estimator
+  expect_gt(st$m, 1)
+  expect_identical(st$n, 1L)
+})
+
+test_that("context_tokens() is the last reported total plus the multiplier times new content", {
+  s = test_session()
+  session_append(s, entry_message(msg_user("q")))
+  session_append(s, entry_message(msg_assistant("a", api = "fake", provider = "fake",
+                                                model = "fake-1",
+                                                usage = usage_new(input = 500, output = 20))))
+  expect_equal(context_tokens(s), 520)
+  session_append(s, entry_message(msg_user(strrep("x", 400))))
+  expect_equal(context_tokens(s), 520 + est_tokens(strrep("x", 400), "prose"))
+  expect_gte(context_idle(s), 0)
+})
+
+# ---------------------------------------------------- request shaping: IC-67, IC-69, IC-74
+
+test_that("a colon tag is part of a session model id; a suffix is thinking only when known", {
+  s = test_session()
+  d = session_data(s)
+  spec = gptr_provider("loc", api = "fake",
+                       models = list(list(id = "qwen3:8b"), list(id = "m1", reasoning = TRUE)),
+                       offline = TRUE)
+  id = registry_add(spec, source = "session", rank = 0L, session = d$id)
+  withr::defer(registry_remove(id))
+  run = test_run(s)
+  d$model = "loc/qwen3:8b"
+  rec = run_target(run)
+  expect_identical(c(rec$id, rec$ref), c("qwen3:8b", "loc/qwen3:8b"))
+  d$model = "loc/m1:high"
+  rec = run_target(run)
+  expect_identical(c(rec$id, rec$thinking), c("m1", "high"))
+  d$model = "loc/m1:8b"
+  expect_error(run_target(run), class = "gptr_error_unknown_model")
+})
+
+test_that("run_target() refuses a decision-only model before any request (IC-74)", {
+  local_fake_provider(list("x"), name = "judge", type = "classifier")
+  s = test_session(model = "judge/judge-s1")
+  run = test_run(s)
+  expect_error(run_target(run), class = "gptr_error_not_available")
+  expect_null(run$model)
+})
+
+test_that("an unusable router answer falls back to the default chat model (IC-69, IC-74)", {
+  local_fake_provider(list("x"))
+  local_fake_provider(list("y"), name = "other")
+  local_fake_provider(list("z"), name = "judge", type = "classifier")
+  answers = list(list(model = "other/other-1", state = list(k = 1)), "judge/judge-s1",
+                 "nowhere/absent", list(model = 42),
+                 list(model = "other/other-1", state = new.env()))
+  k = new.env()
+  k$i = 0L
+  local_service("router.call", function(s, reason) {
+    k$i = k$i + 1L
+    answers[[k$i]]
+  })
+  testthat::local_mocked_bindings(model_default = function(role = "chat") "fake/fake-1")
+  ev = local_events("route")
+  s = session_new("router:cheapest", "auto", home = new.env())
+  run = test_run(s)
+  refs = vapply(1:5, function(i) run_target(run)$ref, "")
+  expect_identical(refs, c("other/other-1", rep("fake/fake-1", 3L), "other/other-1"))
+  diag = utils::tail(gptr_registry(diagnostics = TRUE), 4L)
+  expect_identical(diag$class, c(rep("router_fallback", 3L), "router_state"))
+  expect_match(diag$message[[1L]], "decision-only", fixed = TRUE)
+  expect_match(diag$message[[2L]], "nowhere/absent", fixed = TRUE)
+  ents = session_data(s)$entries
+  types = vapply(ents, function(e) e$custom_type %||% e$type, "")
+  expect_identical(types, rep(c("model_change", "gptr.router"), 3L))
+  # the fallback switch keeps the router's last state; a state that is not JSON is dropped
+  expect_identical(ents[[4L]]$data$state, list(k = 1))
+  expect_null(ents[[6L]]$data$state)
+  expect_identical(vapply(ev(s), function(e) e$model, ""),
+                   c("other/other-1", "fake/fake-1", "other/other-1"))
+})
+
+test_that("a router fallback refuses a decision-only default model (IC-74)", {
+  local_fake_provider(list("z"), name = "judge", type = "classifier")
+  local_service("router.call", function(s, reason) stop("router crashed"))
+  testthat::local_mocked_bindings(model_default = function(role = "chat") "judge/judge-s1")
+  s = session_new("router:cheapest", "auto", home = new.env())
+  run = test_run(s)
+  expect_error(run_target(run), class = "gptr_error_not_available")
+  expect_length(session_data(s)$entries, 0L)
+  expect_null(run$model)
+})
+
+test_that("a router switch is recorded against the branch's last model, also across runs", {
+  local_fake_provider(list("x"))
+  local_fake_provider(list("y"), name = "other")
+  pick = new.env()
+  pick$model = "fake/fake-1"
+  local_service("router.call", function(s, reason) {
+    list(model = pick$model, state = list(m = pick$model))
+  })
+  s = session_new("router:cheapest", "auto", home = new.env())
+  types = function() vapply(session_data(s)$entries, function(e) e$custom_type %||% e$type, "")
+  run_target(test_run(s))
+  run_target(test_run(s))
+  expect_identical(types(), c("model_change", "gptr.router"))
+  pick$model = "other/other-1"
+  expect_identical(run_target(test_run(s))$ref, "other/other-1")
+  expect_identical(types(), rep(c("model_change", "gptr.router"), 2L))
+  expect_identical(session_data(s)$entries[[4L]]$data$state, list(m = "other/other-1"))
+  expect_identical(s$model, "router:cheapest")
+})
+
+test_that("router and ctx$set_model() thinking levels are clamped to the model's levels", {
+  local_fake_provider(list("x"))
+  local_service("router.call", function(s, reason) list(model = "fake/fake-1", thinking = "max"))
+  s = session_new("router:cheapest", "auto", home = new.env())
+  expect_identical(run_target(test_run(s))$thinking, "high")
+  s2 = test_session()
+  run = test_run(s2)
+  run$pending_model = list(ref = "fake/fake-1", thinking = "xhigh", reason = "plugin")
+  expect_identical(run_target(run)$thinking, "high")
+})
+
+test_that("the fallback freeze evaluates function parameters and available() (04 section 9.1)", {
+  local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
+                           "context.turn"))
+  seen = new.env()
+  local_tool("read", function(input, ctx) "x", parameters = function(ctx) {
+    seen$ctx = ctx
+    list(type = "object", properties = list(path = list(type = "string")))
+  })
+  off = gptr_register(gptr_tool("edit", "Test tool edit", execute = function(input, ctx) "x",
+                                available = function(ctx) FALSE))
+  withr::defer(off())
+  off2 = gptr_register(gptr_tool("write", "Test tool write", execute = function(input, ctx) "x",
+                                 parameters = function(ctx) stop("no schema")))
+  withr::defer(off2())
+  s = test_session()
+  fr = freeze_fallback(s)
+  expect_identical(fr$tool_names, "read")
+  arr = json_decode(fr$tools_json)
+  expect_identical(arr[[1L]]$input_schema$properties$path$type, "string")
+  expect_s3_class(seen$ctx, "gptr_ctx")
+  diag = utils::tail(gptr_registry(diagnostics = TRUE), 1L)
+  expect_match(diag$message, "write", fixed = TRUE)
+})
+
+test_that("an elided image is elided in every copy at once (IC-67)", {
+  s = test_session()
+  img = function(k) block_image(strrep(as.character(k), 40))
+  msgs = list(msg_user(list(img(1), block_text("a"))),
+              msg_user(list(img(2), img(1), block_text("b"))))
+  out = images_elide(s, msgs, list(max_images = 2))
+  types = vapply(c(out[[1L]]$content, out[[2L]]$content), function(b) b$type, "")
+  expect_identical(types, c("text", "text", "image", "text", "text"))
+  d = session_data(s)
+  el = d$entries[[length(d$entries)]]
+  expect_identical(as.character(unlist(el$data$images)),
+                   substr(hash_sha256(strrep("1", 40)), 1L, 8L))
+  expect_identical(images_elide(s, msgs, list(max_images = 2)), out)
+})
+
+test_that("the fallback request and the context projection count elided images as omitted", {
+  local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
+                           "context.turn"))
+  local_fake_provider(list("x"))
+  s = test_session()
+  run = test_run(s)
+  freeze_fallback(s)
+  img = function(k) block_image(strrep(as.character(k), 40))
+  session_append(s, entry_message(msg_user(list(img(1), img(2), img(3), img(4),
+                                                block_text("look")))))
+  target = run_target(run)
+  target$max_images = 1
+  req = run_build(run, target)
+  sent = req$context$messages
+  expect_identical(vapply(sent[[1L]]$content, function(b) b$type, ""),
+                   c("text", "text", "text", "image", "text"))
+  transcript = sum(vapply(sent, msg_tokens_est, 1))
+  expect_equal(req$components$transcript, transcript)
+  expect_equal(req$tokens_est, frozen_tokens(session_data(s)$frozen) + transcript)
+  # no reported total yet: the projection estimates the same elided messages
+  expect_equal(context_tokens(s), req$tokens_est)
+})
+
+test_that("context_tokens() anchors on provider-reported totals only and counts every block", {
+  s = test_session()
+  d = session_data(s)
+  t0 = strrep("system ", 50)
+  d$frozen = list(t0 = t0, t1 = "", tools_json = "[]", tool_names = character(),
+                  sections = frozen_sections_df(list()))
+  static = est_tokens(t0, "prose") + est_tokens("[]", "json")
+  env = block_context("environment", strrep("env ", 100))
+  session_append(s, entry_message(msg_user(list(env, block_text("q")))))
+  session_append(s, entry_message(msg_assistant("a", api = "fake", provider = "fake",
+                                                model = "fake-1", usage = usage_as(NULL))))
+  est = static + est_tokens(env$text, "prose") + est_tokens("q", "prose") +
+    est_tokens("a", "prose")
+  expect_equal(context_tokens(s), est)
+  session_append(s, entry_message(msg_assistant("b", api = "fake", provider = "fake",
+                                                model = "fake-1",
+                                                usage = usage_new(input = 9999, output = 1,
+                                                                  estimated = TRUE))))
+  expect_equal(context_tokens(s), est + est_tokens("b", "prose"))
+  session_append(s, entry_message(msg_assistant("c", api = "fake", provider = "fake",
+                                                model = "fake-1",
+                                                usage = usage_new(input = 500, output = 20))))
+  kept = session_append(s, entry_message(msg_user(list(block_image(strrep("A", 40)),
+                                                       block_text("plot")))))
+  call = block_tool_call("c1", "r", list(code = "x = 1"))
+  session_append(s, entry_message(msg_assistant(list(call), api = "fake", provider = "fake",
+                                                model = "fake-1", stop_reason = "tool_use")))
+  tail = est_image_tokens(1000, 700) + est_tokens("plot", "prose") +
+    est_tokens(json_encode(list(code = "x = 1")), "json")
+  expect_equal(context_tokens(s), 520 + tail)
+  summary = block_context("checkpoint", "short")
+  session_append(s, list(type = "compaction", summary = "short", first_kept_entry_id = kept,
+                         tokens_before = 600,
+                         gptr = list(blocks = list(summary), state = list(), n = 1L)))
+  expect_equal(context_tokens(s), static + est_tokens(summary$text, "prose") + tail)
+})
+
+test_that("an unknown prompt count leaves the estimator unchanged (IC-74)", {
+  s = test_session()
+  run = test_run(s)
+  run$model = list(provider = "anthropic")
+  run$tokens_est = 1000
+  run_estimator_update(run, list(usage = usage_new(input = NA_real_, output = 10)))
+  run_estimator_update(run, list(usage = usage_as(NULL)))
+  run_estimator_update(run, list(usage = usage_new(input = 1500, cache_read = NA_real_,
+                                                   output = 10)))
+  expect_null(session_data(s)$estimator)
+})
+
+test_that("plugin state emptied after it was persisted is persisted as an empty object", {
+  s = test_session()
+  st = new.env()
+  st$count = 1L
+  assign("panel", st, envir = session_live(s)$ext)
+  plugin_state_persist(s)
+  rm("count", envir = st)
+  plugin_state_persist(s)
+  plugin_state_persist(s)
+  ext = Filter(function(e) identical(e$custom_type, "gptr.ext"), session_data(s)$entries)
+  expect_length(ext, 2L)
+  expect_match(entry_json_line(ext[[2L]]), "\"state\":{}", fixed = TRUE)
+  expect_identical(s$ext$panel, json_obj())
+})
+
+test_that("a returns schema that cannot be applied is a notice, not an error", {
+  s = test_session()
+  run = test_run(s, list(returns = "not a schema"))
+  d = session_data(s)
+  d$last_text = "{\"n\": 1}"
+  withr::local_options(gptr.quiet = FALSE)
+  expect_message(run_returns(run), class = "gptr_message_notice")
+  expect_null(s$value)
+})

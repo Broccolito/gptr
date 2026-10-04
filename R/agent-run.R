@@ -368,3 +368,649 @@ agent_retry_delay = function(attempt) {
   attempt = check_number(attempt, "attempt", min = 1, int = TRUE)
   c(2, 4)[min(attempt, 2L)]
 }
+
+# ---------------------------------------------------------------------------- freeze and input
+
+#' Freeze the prompt at the first run
+#'
+#' Emits `session_start` (collect), then calls the `prompt.freeze` service (P07) or the documented
+#' fallback (empty T0/T1 and the core tools' JSON, 04 section 7.0); blocks returned by
+#' `session_start` handlers join the first user message.
+#' @return The input messages, with the collected blocks inserted.
+#' @noRd
+run_freeze = function(run, input) {
+  s = run$shell
+  d = session_data(s)
+  if (length(d$frozen)) return(input)
+  collected = run_emit(run, "session_start", reason = session_start_reason(d))
+  if (ext_service_has("prompt.freeze")) {
+    # the run options P07's prompt_compose() reads (`preset`, `tools`, `doc`, `system`, `call`),
+    # plus `start` (the merged session_start result), `interactive` and `refreeze` (IC-52)
+    fopts = run$opts
+    fopts$start = collected
+    fopts$interactive = fopts$interactive %||% isTRUE(fopts$safety$can_prompt)
+    fopts$refreeze = isTRUE(d$refreeze)
+    fr = ext_service_get("prompt.freeze")(s, fopts)
+    if (!length(d$frozen)) d$frozen = fr
+  } else {
+    freeze_fallback(s)
+  }
+  d$refreeze = FALSE
+  blocks = if (is.list(collected)) collected$blocks else NULL
+  if (length(blocks) && !is.null(input)) input = input_insert_blocks(input, blocks)
+  input
+}
+
+#' The `session_start` reason of a session's first freeze
+#' @noRd
+session_start_reason = function(d) {
+  if (!is.null(d$fork_of)) return("fork")
+  if (identical(d$kind, "child")) return("child")
+  if (identical(d$kind, "replayed")) return("replay")
+  if (length(d$entries)) return("resume")
+  "new"
+}
+
+#' The fallback freeze used before P07 is loaded: empty T0/T1 and the four core tools' JSON
+#'
+#' As at any freeze (04 section 9.1), a tool's `available(ctx)` decides whether it is offered and
+#' a `parameters` function is evaluated once, with the session's ctx (freeze_tool_decl()).
+#' @noRd
+freeze_fallback = function(s) {
+  d = session_data(s)
+  live = session_live(s)
+  ctx = if (is.null(live)) NULL else live$ctx
+  core = c("read", "r", "edit", "write")
+  decls = lapply(core, function(n) freeze_tool_decl(tool_lookup(n, d$id), ctx))
+  keep = !vapply(decls, is.null, NA)
+  fr = list(t0 = "", t1 = "", tools_json = json_encode(decls[keep]), tool_names = core[keep],
+            sections = frozen_sections_df(list()))
+  d$frozen = fr
+  session_append(s, entry_custom("gptr.frozen",
+                                 list(preset = d$preset, t0 = "", t1 = "",
+                                      toolsJson = fr$tools_json,
+                                      toolNames = I(fr$tool_names), sections = list(),
+                                      model = d$model)))
+  invisible(fr)
+}
+
+#' The frozen declaration `{name, description, input_schema}` of a tool (Anthropic shape, 04
+#' section 9.1), or NULL when the tool is absent, its `available(ctx)` is not TRUE, or it has no
+#' object schema; a failing `available()` or `parameters()` leaves the tool out with a diagnostic
+#' @noRd
+freeze_tool_decl = function(tool, ctx) {
+  if (is.null(tool)) return(NULL)
+  left_out = function(why) {
+    registry_diagnostic("session", "freeze", "tool_left_out",
+                        paste0("tool ", tool[["name"]], " is not frozen: ", why))
+    NULL
+  }
+  avail = tool[["available"]]
+  if (is.function(avail)) {
+    ok = tryCatch(isTRUE(avail(ctx)), error = function(e) {
+      left_out(paste0("available() failed: ", conditionMessage(e)))
+      FALSE
+    })
+    if (!ok) return(NULL)
+  }
+  params = tool[["parameters"]]
+  schema = if (is.function(params)) {
+    tryCatch(params(ctx), error = function(e) e)
+  } else {
+    tool_schema(tool) %||% list(type = "object", properties = json_obj())
+  }
+  if (inherits(schema, "error")) {
+    return(left_out(paste0("parameters() failed: ", conditionMessage(schema))))
+  }
+  if (!is.list(schema) || !identical(schema[["type"]], "object")) {
+    return(left_out("its parameters are not a JSON Schema with type \"object\""))
+  }
+  list(name = tool[["name"]], description = tool[["description"]], input_schema = schema)
+}
+
+#' Insert context blocks contributed by session_start handlers into the first user message,
+#' after its leading context blocks and before its text
+#' @noRd
+input_insert_blocks = function(input, blocks) {
+  for (i in seq_along(input)) {
+    m = input[[i]]
+    if (!is.list(m) || !identical(m[["role"]], "user")) next
+    content = m$content
+    pos = which(!vapply(content, function(b) identical(b$type, "context"), NA))
+    at = if (length(pos)) pos[[1L]] - 1L else length(content)
+    m$content = append(content, blocks, after = at)
+    input[[i]] = m
+    break
+  }
+  input
+}
+
+# ---------------------------------------------------------------------------- the next request
+
+#' The model record of the next request: a pending `ctx$set_model()` switch first, then the router
+#' (`router.call`, IC-69) for `router:` models, else the session's model
+#'
+#' A decision-only (classifier) model is refused here, before any request is built, with the
+#' condition of provider_stream()'s refusal (IC-74, D-017). The session's thinking level is
+#' clamped to the model's levels, as P05's model_resolve() clamps a `:<level>` suffix.
+#' @noRd
+run_target = function(run) {
+  s = run$shell
+  d = session_data(s)
+  pm = run$pending_model
+  if (!is.null(pm)) {
+    run$pending_model = NULL
+    session_set_model(s, pm$ref, pm$reason %||% "plugin")
+    if (is.character(pm$thinking) && length(pm$thinking) == 1L && !is.na(pm$thinking)) {
+      d$thinking = pm$thinking
+    }
+  }
+  if (startsWith(d$model, "router:")) return(run_route(run, "turn"))
+  if (is.null(run$model) || !identical(run$model_key, d$model)) {
+    rec = run_model_resolve(d$model, d$id)
+    stream_chat_model(rec)
+    run$model = rec
+    run$model_key = d$model
+  }
+  if (!is.null(d$thinking)) {
+    run$model$thinking = model_clamp_thinking(run$model$thinking_levels, d$thinking)
+  }
+  run$model
+}
+
+#' Resolve a model reference for a session: P05's catalog first, else a provider registered at
+#' rank 0 for this session only (`model = <spec:provider>`, 04 section 6.1), which the catalog
+#' does not list; P05's model_resolve() accepts that spec (its first model), so the spec is
+#' narrowed to the declared model the reference names. A model id may hold a colon (an Ollama tag
+#' such as `qwen3:8b`, IC-74), so the whole id is tried first, and a `:<suffix>` counts as a
+#' thinking level only when it is one (P05's rule). Anything else is the strict, classed
+#' `gptr_error_unknown_model` of model_resolve().
+#' @noRd
+run_model_resolve = function(ref, sid) {
+  rec = model_resolve(ref, strict = FALSE)
+  if (!is.null(rec)) return(rec)
+  if (grepl("/", ref, fixed = TRUE)) {
+    pr = tryCatch(registry_get("provider", sub("/.*$", "", ref), session = sid),
+                  error = function(e) NULL)
+    if (inherits(pr, "gptr_provider")) {
+      mid = sub("^[^/]*/", "", ref)
+      rec = session_model_resolve(pr, mid)
+      if (!is.null(rec)) return(rec)
+      pos = regexpr(":[^:]*$", mid)
+      level = if (pos > 0L) substring(mid, pos + 1L) else ""
+      if (level %in% catalog_thinking_levels) {
+        rec = session_model_resolve(pr, substr(mid, 1L, pos - 1L))
+        if (!is.null(rec)) {
+          rec$thinking = model_clamp_thinking(rec$thinking_levels, level)
+          return(rec)
+        }
+      }
+    }
+  }
+  model_resolve(ref)
+}
+
+#' The model record of a session-registered provider spec's model `id` (by `id`, or the `ref` P08's
+#' specs may carry), or NULL when the spec declares no such model
+#' @noRd
+session_model_resolve = function(pr, id) {
+  model_id = function(m) as.character(m[["id"]] %||% sub("^[^/]*/", "", m[["ref"]] %||% ""))
+  keep = Filter(function(m) is.list(m) && identical(model_id(m), id), pr$models %||% list())
+  if (!length(keep)) return(NULL)
+  pr$models = keep[1L]
+  model_resolve(pr)
+}
+
+#' Ask the session's router for the model (IC-69)
+#'
+#' A failing router or an unusable answer (no model, a model that does not resolve, or a
+#' decision-only model, which cannot hold a conversation, IC-74) falls back to the default chat
+#' model with a diagnostic, keeping the router's last state. A switch is a model other than the
+#' one of the branch's last `model_change` entry, so a new run on the same branch records none.
+#' Each switch appends `model_change` (reason `router`) and `gptr.router`, and emits `route`; a
+#' fallback is a switch only when it changes the model (IC-69, as P08's `router_fallback()`).
+#' @param reason `"turn"` or `"compaction"`.
+#' @noRd
+run_route = function(run, reason = "turn") {
+  s = run$shell
+  d = session_data(s)
+  router = sub("^router:", "", d$model)
+  res = tryCatch(ext_service_get("router.call")(s, reason), error = function(e) e)
+  ans = if (inherits(res, "error")) {
+    list(why = paste0("failed: ", conditionMessage(res)))
+  } else {
+    route_answer(res, d$id)
+  }
+  path = entries_path(d)
+  state = NULL
+  rec = ans$rec
+  if (is.null(rec)) {
+    registry_diagnostic("session", "router", "router_fallback",
+                        paste0("router ", router, " ", ans$why, "; using the default model"))
+    rec = route_default(router, d)
+    state = path_router_state(path)
+  } else if (is.list(res)) {
+    state = res[["state"]]
+  }
+  run$model = rec
+  run$model_key = NULL
+  if (identical(path_model_ref(path), rec$ref)) return(rec)
+  if (!is.null(state) && inherits(tryCatch(json_encode(state), error = function(e) e), "error")) {
+    registry_diagnostic("session", "router", "router_state",
+                        paste0("router ", router, " returned a state that is not JSON; not kept"))
+    state = NULL
+  }
+  session_append(s, entry_model_change(rec$ref, rec$thinking, "router"))
+  session_append(s, entry_custom("gptr.router",
+                                 drop_null(list(router = router, state = state, model = rec$ref,
+                                                reason = reason))))
+  run_emit(run, "route", route = "router", router = router, model = rec$ref, reason = reason)
+  rec
+}
+
+#' The model record of a router's answer (`list(model, thinking, state)` or a model reference),
+#' as `list(rec)`, or `list(why)` when the answer is unusable
+#' @noRd
+route_answer = function(res, sid) {
+  ref = if (is.list(res)) res[["model"]] else res
+  if (!is.character(ref) || length(ref) != 1L || is.na(ref) || !nzchar(ref)) {
+    return(list(why = "gave no model"))
+  }
+  rec = tryCatch(run_model_resolve(ref, sid), error = function(e) e)
+  if (inherits(rec, "error")) {
+    return(list(why = paste0("chose a model that does not resolve (", ref, "): ",
+                             conditionMessage(rec))))
+  }
+  if (identical(rec$type, "classifier")) {
+    return(list(why = paste0("chose the decision-only model ", rec$ref, ", which cannot hold a ",
+                             "conversation")))
+  }
+  th = if (is.list(res)) res[["thinking"]] else NULL
+  if (is.character(th) && length(th) == 1L && !is.na(th)) {
+    rec$thinking = model_clamp_thinking(rec$thinking_levels, th)
+  }
+  list(rec = rec)
+}
+
+#' The default chat model a router falls back to (a decision-only default is refused)
+#' @noRd
+route_default = function(router, d) {
+  ref = model_default("chat")
+  if (is.null(ref)) {
+    gptr_abort(paste0("router ", router, " gave no model and no default model is configured"),
+               "unknown_model", ref = d$model, suggestions = character())
+  }
+  rec = run_model_resolve(ref, d$id)
+  stream_chat_model(rec)
+  rec
+}
+
+#' The model of the last `model_change` entry of a path, or NULL
+#' @noRd
+path_model_ref = function(path) {
+  for (e in rev(path)) {
+    if (identical(e$type, "model_change")) {
+      return(e$gptr$ref %||% paste0(e$provider, "/", e$model_id))
+    }
+  }
+  NULL
+}
+
+#' The router state of the last `gptr.router` entry of a path, or NULL
+#' @noRd
+path_router_state = function(path) {
+  for (e in rev(path)) {
+    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.router")) {
+      return(e$data$state)
+    }
+  }
+  NULL
+}
+
+#' The request for a target: the `request.build` service (P07) then image elision, or the fallback
+#' (which elides before it estimates)
+#' @return `list(context, view, tokens_est, components)`.
+#' @noRd
+run_build = function(run, target) {
+  s = run$shell
+  if (ext_service_has("request.build")) {
+    req = ext_service_get("request.build")(s, target, NULL)
+    req$context$messages = images_elide(s, req$context$messages, target)
+  } else {
+    req = request_fallback(run, target)
+  }
+  req$context$request_id = req$context$request_id %||% id_new("q", 12L)
+  req$context$session_id = req$context$session_id %||% session_data(s)$id
+  req$tokens_est = req$tokens_est %||% 0
+  req
+}
+
+#' The fallback request before P07 is loaded: the projected messages after image elision (so the
+#' estimate counts what is sent) and the frozen tools
+#' @noRd
+request_fallback = function(run, target) {
+  s = run$shell
+  d = session_data(s)
+  fr = d$frozen
+  msgs = images_elide(s, project_messages(d$entries, d$leaf, target), target)
+  tools = lapply(fr$tool_names %||% character(), function(n) tool_lookup(n, d$id))
+  tools = Filter(Negate(is.null), tools)
+  transcript = sum(vapply(msgs, msg_tokens_est, 1))
+  static = frozen_tokens(fr)
+  max_out = suppressWarnings(as.numeric(target$max_output %||% NA))
+  context = list(system = list(t0 = fr$t0 %||% "", t1 = fr$t1 %||% ""),
+                 tools_json = json_verbatim(fr$tools_json %||% "[]"), tools = tools,
+                 messages = msgs,
+                 cache_plan = list(anchors = character(), tail_ttl = "5m", key = ""),
+                 params = list(max_tokens = if (is.finite(max_out)) as.integer(max_out) else 8192L,
+                               thinking = target$thinking, effort = NULL, tool_choice = "auto",
+                               returns = run$opts$returns, temperature = NULL),
+                 session_id = d$id, request_id = id_new("q", 12L))
+  list(context = context, view = NULL, tokens_est = static + transcript,
+       components = list(tools = static, transcript = transcript))
+}
+
+#' Estimated tokens of a frozen prompt: T0 and T1 as prose, the tool array as JSON
+#' @noRd
+frozen_tokens = function(fr) {
+  if (!length(fr)) return(0)
+  est_tokens(fr$t0 %||% "", "prose") + est_tokens(fr$t1 %||% "", "prose") +
+    est_tokens(fr$tools_json %||% "", "json")
+}
+
+#' Estimated tokens of a message's content (03 section 12.5): text, context and thinking blocks
+#' as prose, tool-call arguments as JSON and images by their size (the 1000 x 700 default of
+#' `gptr$plot()` when the block does not say); an image whose id is in `elided` counts as the text
+#' that replaces it (images_elide())
+#' @noRd
+msg_tokens_est = function(m, elided = character()) {
+  total = 0
+  for (b in m[["content"]] %||% list()) {
+    type = if (is.list(b)) b[["type"]] else NULL
+    if (!is.character(type) || length(type) != 1L || is.na(type)) next
+    total = total + switch(type,
+      text = ,
+      context = est_tokens(b[["text"]], "prose"),
+      thinking = est_tokens(b[["thinking"]], "prose"),
+      tool_call = tryCatch(est_tokens(json_encode(b[["arguments"]] %||% json_obj()), "json"),
+                           error = function(e) 0),
+      image = image_tokens_est(b, elided),
+      0)
+  }
+  total
+}
+
+#' Estimated tokens of an image block (Anthropic's formula, est_image_tokens()), or of its
+#' omission text when its id is in `elided`
+#' @noRd
+image_tokens_est = function(b, elided = character()) {
+  if (length(elided)) {
+    id = image_id(b)
+    if (!is.na(id) && id %in% elided) return(est_tokens(image_omitted_text(id), "prose"))
+  }
+  size = function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 1
+  w = b[["width"]]
+  h = b[["height"]]
+  if (!size(w) || !size(h)) {
+    w = 1000
+    h = 700
+  }
+  est_image_tokens(w, h)
+}
+
+#' The `request_params` patch chain over the adapter's declared non-prefix fields (IC-69)
+#' @noRd
+run_request_params = function(run, target, params) {
+  adapter = tryCatch(adapter_get(target$api), error = function(e) NULL)
+  fields = adapter$capabilities$request_params %||% character()
+  if (!length(fields)) return(params)
+  res = run_emit(run, "request_params", provider = target$provider, model = target$ref,
+                 params = params[intersect(names(params), fields)])
+  patched = if (is.list(res)) res$params else NULL
+  if (!is.list(patched)) return(params)
+  bad = setdiff(names(patched), fields)
+  if (length(bad)) {
+    registry_diagnostic("session", "request_params", "ignored_patch",
+                        paste0("request_params handlers may not patch: ",
+                               paste(bad, collapse = ", ")))
+  }
+  for (f in intersect(names(patched), fields)) params[f] = list(patched[[f]])
+  params
+}
+
+#' Older images projected as omitted when a request exceeds the model's image count or 32 MB (IC-67)
+#'
+#' Newly elided images are recorded by one appended `gptr.image_elision` entry (one stated cache
+#' break); images elided earlier on the path stay elided. An image is elided by its id, so every
+#' copy of it goes at once and the next request projects the same messages.
+#' @noRd
+images_elide = function(s, messages, target) {
+  info = images_scan(messages)
+  if (!nrow(info)) return(messages)
+  d = session_data(s)
+  max_n = suppressWarnings(as.numeric(target[["max_images"]] %||% NA))
+  keep = !(info$id %in% elided_image_ids(d))
+  over = function() (is.finite(max_n) && sum(keep) > max_n) || sum(info$bytes[keep]) > 32 * 1024^2
+  new = character()
+  while (any(keep) && over()) {
+    id = info$id[which(keep)[[1L]]]
+    keep[info$id == id] = FALSE
+    new = c(new, id)
+  }
+  if (length(new)) session_append(s, entry_custom("gptr.image_elision", list(images = I(new))))
+  for (r in which(!keep)) {
+    messages[[info$msg[r]]]$content[[info$block[r]]] = block_text(image_omitted_text(info$id[r]))
+  }
+  messages
+}
+
+#' The id of an image block: 8 hex of its data's sha256 (NA when the block has no data string)
+#' @noRd
+image_id = function(b) {
+  data = b[["data"]]
+  if (!is.character(data) || length(data) != 1L || is.na(data)) return(NA_character_)
+  substr(hash_sha256(data), 1L, 8L)
+}
+
+#' The text an elided image is projected as (IC-67)
+#' @noRd
+image_omitted_text = function(id) {
+  paste0("[image omitted: gptr$plot(\"", id, "\")]")
+}
+
+#' The image blocks of a message list: position, id (8 hex of the data's sha256) and bytes
+#' @noRd
+images_scan = function(messages) {
+  rows = list()
+  for (i in seq_along(messages)) {
+    content = messages[[i]]$content %||% list()
+    for (j in seq_along(content)) {
+      b = content[[j]]
+      if (!identical(b$type, "image")) next
+      rows[[length(rows) + 1L]] = data.frame(msg = i, block = j,
+                                             id = image_id(b),
+                                             bytes = nchar(b$data, type = "bytes") * 3 / 4,
+                                             stringsAsFactors = FALSE)
+    }
+  }
+  if (!length(rows)) {
+    return(data.frame(msg = integer(), block = integer(), id = character(), bytes = numeric(),
+                      stringsAsFactors = FALSE))
+  }
+  do.call(rbind, rows)
+}
+
+#' Image ids already elided on the session's path
+#' @noRd
+elided_image_ids = function(d) {
+  ids = character()
+  for (e in entries_path(d)) {
+    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.image_elision")) {
+      ids = c(ids, as.character(unlist(e$data$images)))
+    }
+  }
+  ids
+}
+
+# ---------------------------------------------------------------------------- answers and state
+
+#' Structured final answers (`opts$returns`, INFRA-25): the final text parsed, validated and
+#' designated as the run's value; a mismatch, or a schema that cannot be applied, is a notice
+#' @noRd
+run_returns = function(run) {
+  schema = run$opts$returns
+  if (is.null(schema)) return(invisible(NULL))
+  s = run$shell
+  txt = session_data(s)$last_text
+  ok_txt = is.character(txt) && length(txt) == 1L && !is.na(txt)
+  val = if (ok_txt) tryCatch(json_decode(txt), error = function(e) NULL) else NULL
+  chk = if (is.null(val)) NULL else tryCatch(schema_validate(schema, val), error = function(e) e)
+  if (is.null(chk) || inherits(chk, "error") || !isTRUE(chk$ok)) {
+    why = if (is.null(chk)) {
+      " (not JSON)"
+    } else if (inherits(chk, "error")) {
+      paste0(" (the schema cannot be applied: ", conditionMessage(chk), ")")
+    } else {
+      paste0(": ", paste(chk$errors, collapse = "; "))
+    }
+    gptr_inform(paste0("the final answer does not match `returns`", why), "notice")
+    return(invisible(NULL))
+  }
+  session_value_set(s, "returns", chk$input)
+  invisible(NULL)
+}
+
+#' Persist JSON-able per-plugin state (`ctx$state()`) as gptr.ext entries when it changed
+#'
+#' A state emptied after it was persisted is persisted as `{}`, so that a resume does not bring
+#' the old state back.
+#' @noRd
+plugin_state_persist = function(s) {
+  live = session_live(s)
+  if (is.null(live)) return(invisible(NULL))
+  d = session_data(s)
+  for (plugin in ls(live$ext)) {
+    st = get(plugin, envir = live$ext)
+    if (!is.environment(st)) next
+    vals = as.list(st, sorted = TRUE)
+    if (!length(vals)) {
+      if (!length(d$ext[[plugin]])) next
+      vals = json_obj()
+    }
+    if (identical(d$ext[[plugin]], vals)) next
+    ok = tryCatch({
+      json_encode(vals)
+      TRUE
+    }, error = function(e) FALSE)
+    if (!ok) next
+    ext = d$ext
+    ext[[plugin]] = vals
+    d$ext = ext
+    session_append(s, entry_custom("gptr.ext", list(plugin = plugin, state = vals)))
+  }
+  invisible(NULL)
+}
+
+#' Update the session's estimator multiplier from provider-reported usage (03 section 12.5)
+#'
+#' Only a reported prompt total updates it: gptr's own estimate (`estimated = TRUE`) and a usage
+#' with an unknown prompt count (IC-74) leave it unchanged; a count the usage leaves out is P05's
+#' legacy zero (overflow_count()).
+#' @noRd
+run_estimator_update = function(run, msg) {
+  d = session_data(run$shell)
+  u = msg[["usage"]]
+  if (!is.list(u) || isTRUE(u[["estimated"]])) return(invisible(NULL))
+  counts = vapply(c("input", "cache_read", "cache_write_5m", "cache_write_1h"),
+                  function(f) overflow_count(u, f), 1)
+  est = run$tokens_est %||% 0
+  if (anyNA(counts) || !(sum(counts) > 0) || !isTRUE(est > 0)) return(invisible(NULL))
+  prior = switch(run$model$provider %||% "", anthropic = 1.35, google = 1.10, 1.00)
+  state = d$estimator %||% list(m = prior, n = 0L)
+  d$estimator = est_multiplier(state, estimated = est, reported = sum(counts), prior = prior)
+  invisible(NULL)
+}
+
+#' Context size projection (03 section 12.5): the last provider-reported total plus the
+#' multiplier times the estimate of what follows it
+#'
+#' The anchor is the newest of the latest compaction and the latest assistant message whose total
+#' the provider reported. After a compaction, the frozen prompt, its blocks, its kept tail and what
+#' follows are estimated (the projection of P05's `entry_compaction_cut()`). An unknown total
+#' (IC-74) or gptr's own estimate (`estimated = TRUE`) is no anchor; without one, the frozen
+#' prompt and the whole path are estimated. Errored and aborted replies are not counted, as the
+#' projection drops them, and images elided on the path count as their omission text (IC-67).
+#' @noRd
+context_tokens = function(s) {
+  d = session_data(s)
+  path = entries_path(d)
+  m = d$estimator$m %||% 1
+  elided = elided_image_ids(d)
+  est = function(idx) sum(vapply(path[idx], entry_tokens_est, 1, elided = elided))
+  after = function(i) seq_along(path)[-seq_len(i)]
+  for (i in rev(seq_along(path))) {
+    e = path[[i]]
+    if (identical(e$type, "compaction")) {
+      blocks = sum(vapply(e$gptr$blocks %||% list(), function(b) {
+        est_tokens(b$text %||% "", "prose")
+      }, 1))
+      tail = c(compaction_kept(path, i), after(i))
+      return(m * (frozen_tokens(d$frozen) + blocks + est(tail)))
+    }
+    total = reported_total(e)
+    if (!is.na(total)) return(total + m * est(after(i)))
+  }
+  m * (frozen_tokens(d$frozen) + est(seq_along(path)))
+}
+
+#' Path positions of a compaction's kept tail (from its first kept entry up to the compaction)
+#' @noRd
+compaction_kept = function(path, i) {
+  first = path[[i]]$first_kept_entry_id
+  if (!is.character(first) || length(first) != 1L || i < 2L) return(integer())
+  ids = vapply(path[seq_len(i - 1L)], function(e) as.character(e$id %||% NA_character_), "")
+  from = match(first, ids)
+  if (is.na(from)) integer() else from:(i - 1L)
+}
+
+#' The provider-reported total of an entry (an assistant reply that did not fail), else NA
+#' @noRd
+reported_total = function(e) {
+  m = e$message
+  if (!identical(e$type, "message") || !is.list(m) || !identical(m$role, "assistant") ||
+      isTRUE((m$stop_reason %||% "stop") %in% c("error", "aborted"))) {
+    return(NA_real_)
+  }
+  u = m$usage
+  if (!is.list(u) || isTRUE(u[["estimated"]])) return(NA_real_)
+  total = u[["total"]]
+  if (!is.numeric(total) || length(total) != 1L || !is.finite(total) || total < 0) {
+    return(NA_real_)
+  }
+  as.numeric(total)
+}
+
+#' Estimated tokens of an entry's message as the projection sends it (0 for other entries and for
+#' errored or aborted replies; images in `elided` as their omission text)
+#' @noRd
+entry_tokens_est = function(e, elided = character()) {
+  m = e$message
+  if (!isTRUE(e$type %in% c("message", "custom_message")) || !is.list(m)) return(0)
+  if (identical(m$role, "assistant") &&
+      isTRUE((m$stop_reason %||% "stop") %in% c("error", "aborted"))) {
+    return(0)
+  }
+  msg_tokens_est(m, elided)
+}
+
+#' Seconds since the last assistant message on the path (the cold rule of compact.should)
+#' @noRd
+context_idle = function(s) {
+  d = session_data(s)
+  for (e in rev(entries_path(d))) {
+    if (identical(e$type, "message") && identical(e$message$role, "assistant")) {
+      return(max(0, as.numeric(Sys.time()) - (e$message$timestamp %||% 0) / 1000))
+    }
+  }
+  0
+}
