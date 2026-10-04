@@ -772,3 +772,34 @@ test_that("a result the transcript cannot record is an error result with paired 
   lines = readLines(session_data(s)$file, encoding = "UTF-8")
   expect_true(all(vapply(lines, function(l) is.list(json_decode(l)), NA)))
 })
+
+# ---------------------------------------------------------------- through runs
+
+test_that("a length stop mid-call gives an error result and done(length) (INFRA-09)", {
+  local_permissive()
+  ran = new.env()
+  ran$yes = FALSE
+  local_tool("w", function(input, ctx) {
+    ran$yes = TRUE
+    "x"
+  })
+  local_fake_provider(list(c(fake_tool("w"), list(stop = "length")), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  expect_false(ran$yes)
+  expect_identical(s$messages[[2L]]$stop_reason, "length")
+  expect_true(tool_results(s)[[1L]]$is_error)
+  expect_identical(s$status, "idle")
+})
+
+test_that("with no policy a mutating tool asks and the run ends blocked without a human", {
+  local_tool("w", function(input, ctx) "written")
+  fake = local_fake_provider(list(fake_tool("w"), "never"))
+  s = test_session(mode = "manual")
+  run_text(s, "go")
+  expect_identical(s$status, "blocked")
+  expect_length(fake_requests(fake), 1L)
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_permission")
+  expect_identical(s$reason, conditionMessage(cnd))
+})

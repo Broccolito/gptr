@@ -379,3 +379,61 @@ test_that("budget_check() refuses an estimate that is not a nonnegative number",
   }
   expect_null(budget_check(s, estimate = 0L))
 })
+
+test_that("a token budget stops the run before the next request with status budget", {
+  local_permissive()
+  ev = local_events(c("budget_exceeded", "budget_near"))
+  local_tool("noop", function(input, ctx) "ok")
+  fake = local_fake_provider(list(c(fake_tool("noop"), list(usage = usage_new(input = 990,
+                                                                              output = 50))),
+                                  "never"), name = "fb")
+  s = test_session(model = "fb/fb-1")
+  run_text(s, "go", list(budget = list(tokens = 1000)))
+  expect_identical(s$status, "budget")
+  expect_length(fake_requests(fake), 1L)
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_budget_tokens")
+  expect_s3_class(cnd, "gptr_error_budget")
+  expect_identical(cnd$kind, "tokens")
+  types = vapply(ev(s), function(e) e$type, "")
+  expect_identical(types, c("budget_near", "budget_exceeded"))
+  d = session_data(s)
+  last = d$entries[[length(d$entries)]]
+  expect_identical(last$custom_type, "gptr.budget")
+})
+
+test_that("a budget of 5 USD on a root stops its children (root charging, IC-66)", {
+  local_permissive()
+  box = new.env()
+  local_tool("spawn", function(input, ctx) {
+    root = ctx$session
+    usage_add(root, usage_fixture(session_data(root)$id, "q-costly", cost = 6))
+    child = session_new("fake/fake-1", "auto", home = new.env(), kind = "child", parent = root)
+    box$child = child
+    run_wait(list(run_start(child, msg_user("child work"))))
+    "spawned"
+  })
+  fake = local_fake_provider(list(fake_tool("spawn"), "never"))
+  s = test_session()
+  run_text(s, "go", list(budget = list(cost = 5)))
+  expect_identical(box$child$status, "budget")
+  expect_s3_class(session_data(box$child)$condition, "gptr_error_budget_cost")
+  expect_identical(s$status, "budget")
+  expect_length(fake_requests(fake), 1L)
+})
+
+test_that("interactively a reached budget can be extended by the same amount (ask_human)", {
+  local_permissive()
+  local_gptr_options(interactive = TRUE)
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, select = function(title, choices, default = NULL, ...) 1L)
+  })
+  local_tool("noop", function(input, ctx) "ok")
+  fake = local_fake_provider(list(c(fake_tool("noop"), list(usage = usage_new(input = 990,
+                                                                              output = 50))),
+                                  "finished"), name = "fb")
+  s = test_session(model = "fb/fb-1")
+  run_text(s, "go", list(budget = list(tokens = 1000)))
+  expect_identical(s$status, "idle")
+  expect_length(fake_requests(fake), 2L)
+})

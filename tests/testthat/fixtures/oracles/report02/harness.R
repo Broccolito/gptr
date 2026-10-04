@@ -202,8 +202,96 @@ projection_session = function() {
   s
 }
 
-# run_text() (needs session_run(), P06 Task 10) is restored from the Task 1 plan by Task 10, once
-# session_run() exists.
+# The helpers of the engine tests of test-agent-loop.R and test-session-store.R (P06 Task 10),
+# kept here for the same reason: they call the harness helpers above.
+
+#' Register the `add` tool (two numbers)
+add_tool = function(.env = parent.frame()) {
+  local_tool("add", function(input, ctx) as.character(input$a + input$b),
+             parameters = num_schema(a = "number", b = "number"), .env = .env)
+}
+
+#' A slow tool whose start enqueues two steers and a follow-up from the pipe
+steer_during_slow = function(box, .env = parent.frame()) {
+  local_tool("slow", function(input, ctx) "slow done", .env = .env)
+  local_hook("tool_execution_start", function(event, ctx) {
+    if (identical(event$tool_name, "slow")) {
+      session_enqueue(box$s, "STEER-1: actually use metric units", "steer", source = "pipe")
+      session_enqueue(box$s, "STEER-2: and be brief", "steer", source = "pipe")
+      session_enqueue(box$s, "FOLLOWUP: now summarise", "follow_up", source = "pipe")
+    }
+    NULL
+  }, .env = .env)
+}
+
+#' A run whose first tool signals an interrupt (the second call never runs)
+interrupting_run = function(.env = parent.frame()) {
+  add_tool(.env = .env)
+  local_tool("spin", function(input, ctx) {
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+    "not reached"
+  }, .env = .env)
+  fake = local_fake_provider(list(fake_tools(list(name = "spin", input = json_obj()),
+                                             list(name = "add", input = list(a = 1, b = 1))),
+                                  "after the interrupt"), .env = .env)
+  s = test_session()
+  res = tryCatch({
+    run_text(s, "go")
+    "returned"
+  }, interrupt = function(cnd) "interrupted")
+  list(s = s, res = res, fake = fake)
+}
+
+#' A fake compactor (the compact.should/compact.run services of P07) that logs its calls
+local_compactor = function(should = function(s, tokens, idle_s) FALSE, .env = parent.frame()) {
+  log = new.env(parent = emptyenv())
+  log$calls = list()
+  log$tokens = numeric()
+  local_service("compact.should", function(s, tokens, idle_s) {
+    log$tokens = c(log$tokens, tokens)
+    should(s, tokens, idle_s)
+  }, .env = .env)
+  local_service("compact.run", function(s, reason, focus = NULL) {
+    d = session_data(s)
+    last = d$entries[[length(d$entries)]]
+    log$calls[[length(log$calls) + 1L]] = list(reason = reason, last = last)
+    users = Filter(function(e) identical(e$type, "message") && identical(e$message$role, "user"),
+                   entries_path(d))
+    session_append(s, list(type = "compaction", summary = "## Goal\nsummary",
+                           first_kept_entry_id = users[[length(users)]]$id, tokens_before = 1234,
+                           details = list(readFiles = list("R/a.R")),
+                           gptr = list(blocks = list(block_context("checkpoint", "summary",
+                                                                   attrs = list(n = "1"))),
+                                       state = list(), n = 1L)))
+    invisible(s)
+  }, .env = .env)
+  log
+}
+
+#' Two runs on a stored session; the second compacts once at its first request (threshold)
+compacting_run = function(.env = parent.frame()) {
+  local_store(.env = .env)
+  local_permissive(.env = .env)
+  local_tool("read", function(input, ctx) paste(rep("lorem ipsum", 50), collapse = " "),
+             .env = .env)
+  once = new.env()
+  once$done = FALSE
+  log = local_compactor(should = function(s, tokens, idle_s) {
+    if (once$done || session_data(s)$turns < 2L) return(FALSE)
+    once$done = TRUE
+    TRUE
+  }, .env = .env)
+  fake = local_fake_provider(list("first answer", fake_tool("read", path = "R/a.R"),
+                                  "second answer"),
+                             .env = .env)
+  s = test_session()
+  run_text(s, "Task 1")
+  n_before = length(session_data(s)$entries)
+  run_text(s, "Task 2")
+  list(s = s, log = log, fake = fake, n_before = n_before)
+}
+
+run_text = function(s, text, opts = list()) session_run(s, msg_user(text), opts)
 roles = function(s) vapply(s$messages, function(m) m$role, "")
 tool_results = function(s) Filter(function(m) identical(m$role, "tool_result"), s$messages)
 req_roles = function(req) vapply(req$messages, function(m) m$role, "")

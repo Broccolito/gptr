@@ -877,3 +877,792 @@ test_that("a returns schema that cannot be applied is a notice, not an error", {
   expect_message(run_returns(run), class = "gptr_message_notice")
   expect_null(s$value)
 })
+
+# ---------------------------------------------------------------- the run engine
+
+test_that("session_run() returns the identical session; each run is one prompt turn", {
+  local_permissive()
+  local_fake_provider(list("one", "two"))
+  s = test_session()
+  expect_identical(session_run(s, msg_user("a")), s)
+  expect_identical(s |> session_run(msg_user("b")), s)
+  expect_identical(s$turns, 2L)
+  expect_identical(s$text, "two")
+  expect_identical(s$status, "idle")
+})
+
+test_that("run_start() is non-blocking; run_wait() settles; the run carries its contract fields", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  expect_identical(s$status, "running")
+  expect_identical(session_live(s)$run, run)
+  expect_true(run_wait(list(run), timeout = 30))
+  expect_identical(run$status, "idle")
+  expect_identical(run$turn, 1L)
+  expect_identical(s$status, "idle")
+  expect_null(session_live(s)$run)
+  expect_identical(gptr_last(), s)
+})
+
+test_that("agent events are paired and ordered", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  ev = local_events(c("agent_start", "turn_start", "message_start", "message_end", "turn_end",
+                      "agent_end"))
+  s = test_session()
+  run_text(s, "go")
+  types = vapply(ev(s), function(e) e$type, "")
+  expect_identical(types, c("agent_start", "turn_start", "message_start", "message_end",
+                            "message_start", "message_end", "turn_end", "agent_end"))
+  end = ev(s)[[length(ev(s))]]
+  expect_identical(end$status, "idle")
+  expect_identical(end$turns, 1L)
+  expect_identical(nrow(end$usage), 1L)
+})
+
+test_that("turn_end carries the tool-result messages, never the tools' R values (R1)", {
+  local_permissive()
+  local_tool("val", function(input, ctx) gptr_tool_result("made", value = as.numeric(1:10)))
+  ev = local_events("turn_end")
+  local_fake_provider(list(fake_tool("val"), "done"))
+  s = test_session()
+  run_text(s, "go")
+  res = ev(s)[[1L]]$results[[1L]]
+  expect_identical(res$role, "tool_result")
+  expect_identical(msg_text(res), "made")
+  expect_null(res[["value"]])
+})
+
+test_that("the first run freezes the prompt: gptr.frozen is the first entry (fallback before P07)",
+          {
+  local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
+                           "context.turn"))
+  local_permissive()
+  local_fake_provider(list("done"))
+  s = test_session()
+  run_text(s, "go")
+  first = session_data(s)$entries[[1L]]
+  expect_identical(first$custom_type, "gptr.frozen")
+})
+
+test_that("a busy session refuses a second run", {
+  local_permissive()
+  local_fake_provider(list(list(hang = TRUE)))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  expect_error(run_start(s, msg_user("again")), class = "gptr_error_busy")
+  run_abort(run)
+  expect_identical(s$status, "aborted")
+})
+
+test_that("an empty input, an empty queue and a finished answer is refused", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  s = test_session()
+  run_text(s, "go")
+  expect_error(run_start(s, NULL), class = "gptr_error_invalid_argument")
+})
+
+test_that("queued items start an idle session's run (input = NULL)", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  s = test_session()
+  session_enqueue(s, "please start", as = "follow_up", source = "api_user")
+  session_run(s, NULL)
+  expect_identical(roles(s), c("user", "assistant"))
+  expect_identical(s$messages[[1L]]$source, "follow_up")
+  expect_identical(s$turns, 1L)
+})
+
+test_that("run_start(s, NULL) continues from the leaf after an abort", {
+  local_permissive()
+  fake = local_fake_provider(list(list(hang = TRUE), "resumed answer"))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  run_wait(list(run), timeout = 0.2)
+  run_abort(run, "waiting")
+  session_run(s, NULL)
+  expect_identical(s$text, "resumed answer")
+  expect_identical(s$turns, 1L)
+  expect_identical(req_roles(fake_requests(fake)[[2L]]), "user")
+})
+
+test_that("run_current() and run_eval_env() inside a tool; the home is reset at settlement", {
+  local_permissive()
+  box = new.env()
+  local_tool("peek", function(input, ctx) {
+    box$run = run_current()
+    box$env = run_eval_env(box$run)
+    "seen"
+  })
+  local_fake_provider(list(fake_tool("peek"), "done"))
+  home = new.env()
+  s = test_session(home = home)
+  run_text(s, "go")
+  expect_s3_class(box$run, "gptr_run")
+  expect_identical(box$env, home)
+  expect_null(box$run$home)
+  expect_null(run_current())
+})
+
+test_that("plan mode evaluates in a scratch overlay that is discarded (IC-15)", {
+  local_permissive()
+  box = new.env()
+  local_tool("peek", function(input, ctx) {
+    box$env = run_eval_env(run_current())
+    assign("scratch_obj", 1, envir = box$env)
+    "ok"
+  })
+  local_fake_provider(list(fake_tool("peek"), "plan ready"))
+  home = new.env()
+  s = test_session(mode = "plan", home = home)
+  run_text(s, "plan it")
+  expect_identical(parent.env(box$env), home)
+  expect_false(exists("scratch_obj", envir = home, inherits = FALSE))
+})
+
+test_that("a function-frame home is used for the run but never kept (R2)", {
+  local_permissive()
+  box = new.env()
+  local_tool("peek", function(input, ctx) {
+    box$env = run_eval_env(run_current())
+    "ok"
+  })
+  local_fake_provider(list(fake_tool("peek"), "done"))
+  f = function() {
+    s = session_new("fake/fake-1", "auto", home = environment())
+    call = new.env()
+    call$envir = environment()
+    session_run(s, msg_user("go"), list(call = call))
+    list(s = s, frame = environment())
+  }
+  x = f()
+  expect_identical(box$env, x$frame)
+  expect_null(x$s$envir)
+  expect_match(session_data(x$s)$home_label, "^frame of f")
+})
+
+test_that("run_abort() records the partial answer, moves the queue to dropped and settles aborted",
+          {
+  local_permissive()
+  local_fake_provider(list(list(hang = TRUE)))
+  ev = local_events("agent_end")
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  run_wait(list(run), timeout = 0.3)
+  session_enqueue(s, "later", as = "steer", source = "pipe")
+  run_abort(run, "user")
+  expect_identical(s$status, "aborted")
+  last = s$messages[[length(s$messages)]]
+  expect_identical(last$role, "assistant")
+  expect_identical(last$stop_reason, "aborted")
+  expect_length(session_data(s)$dropped, 1L)
+  expect_length(session_data(s)$queue$steer, 0L)
+  expect_identical(ev(s)[[1L]]$status, "aborted")
+})
+
+test_that("an abort while a tool waits in the FIFO cancels the job; the session can be collected", {
+  local_permissive()
+  local_tool("queued", function(input, ctx) "never runs")
+  local_fake_provider(list(fake_tool("queued"), "never"))
+  s = test_session()
+  id = session_data(s)$id
+  run = run_start(s, msg_user("go"))
+  # pump without running any FIFO tool (allow_runs = character()) until the batch is queued
+  reactor_pump(until = function() identical(run$status, "tools"), allow_runs = character(),
+               timeout = 30)
+  run_abort(run)
+  other = test_session()
+  rm(s, run)
+  invisible(gc())
+  expect_null(session_by_id(id))
+})
+
+test_that("an interrupt aborts the run and is re-signalled; no connection is left open", {
+  local_permissive()
+  local_store()
+  n0 = nrow(showConnections())
+  local_tool("spin", function(input, ctx) {
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+    "no"
+  })
+  local_fake_provider(list(fake_tool("spin"), "never"))
+  s = test_session()
+  res = tryCatch({
+    run_text(s, "go")
+    "returned"
+  }, interrupt = function(cnd) "interrupted")
+  expect_identical(res, "interrupted")
+  expect_identical(s$status, "aborted")
+  expect_identical(nrow(showConnections()), n0)
+})
+
+test_that("no connection is left open after a run returns or errors (IC-59)", {
+  local_permissive()
+  local_store()
+  n0 = nrow(showConnections())
+  local_fake_provider(list("ok", fake_error("400 bad request", status = 400L)))
+  s = test_session()
+  run_text(s, "a")
+  run_text(s, "b")
+  expect_identical(s$status, "error")
+  expect_identical(nrow(showConnections()), n0)
+})
+
+test_that("a nested run tightens the mode, inherits the snapshot and links to the outer run", {
+  local_permissive()
+  box = new.env()
+  local_tool("sub", function(input, ctx) {
+    child = session_new("fake/fake-1", "auto", home = new.env(), kind = "child",
+                        parent = ctx$session)
+    box$outer = run_current()
+    box$child_run = run_start(child, msg_user("child task"))
+    box$child = child
+    run_wait(list(box$child_run))
+    "child done"
+  })
+  local_fake_provider(list(fake_tool("sub"), "child answer", "outer done"))
+  s = test_session(mode = "manual")
+  run_text(s, "go")
+  expect_identical(box$child_run$mode, "manual")
+  expect_identical(box$child_run$opts$safety, box$outer$opts$safety)
+  expect_identical(box$child_run$parent_run, box$outer$id)
+  expect_true(session_data(box$child)$id %in% box$outer$children)
+  expect_identical(session_data(box$child)$depth, 1L)
+  expect_identical(box$child$text, "child answer")
+  expect_identical(nrow(s$usage), 3L)
+})
+
+test_that("gptr.max_nested_calls caps gptr() calls of one evaluation; a group counts once", {
+  local_permissive()
+  local_gptr_options(max_nested_calls = 2L)
+  box = new.env()
+  local_tool("many", function(input, ctx) {
+    # three children of one team share `nested_group` and count once (1 of 2) ...
+    box$team = tryCatch({
+      for (i in 1:3) {
+        child = session_new("fake/fake-1", "auto", home = new.env(), kind = "child",
+                            parent = ctx$session)
+        run_wait(list(run_start(child, msg_user("x"), list(nested_group = "team1"))))
+      }
+      "ok"
+    }, error = function(e) e)
+    # ... so one more call fits (2 of 2) and the next is refused (3 > 2)
+    box$err = tryCatch({
+      for (i in 1:2) {
+        child = session_new("fake/fake-1", "auto", home = new.env(), kind = "child",
+                            parent = ctx$session)
+        run_wait(list(run_start(child, msg_user("x"))))
+      }
+      NULL
+    }, error = function(e) e)
+    "ok"
+  })
+  local_fake_provider(list(fake_tool("many"), "c"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(box$team, "ok")
+  expect_s3_class(box$err, "gptr_error_budget")
+  expect_identical(box$err$kind, "nested_calls")
+})
+
+test_that("tools plus returns = <schema> give a typed $value and keep the tool calls (INFRA-25)", {
+  local_permissive()
+  local_tool("count", function(input, ctx) "32")
+  local_fake_provider(list(fake_tool("count"), list(json = list(n = 32L))))
+  s = test_session()
+  run_text(s, "count", list(returns = list(type = "object", required = I("n"),
+                                           properties = list(n = list(type = "integer")))))
+  expect_identical(s$value$n, 32L)
+  expect_identical(roles(s), c("user", "assistant", "tool_result", "assistant"))
+})
+
+test_that("a router session calls router.call before each request (IC-69)", {
+  # P07's compactor would ask the router for its compaction model first (reason "compaction")
+  local_without_services(c("compact.should", "compact.run"))
+  local_permissive()
+  local_fake_provider(list("routed"))
+  calls = new.env()
+  calls$reasons = character()
+  local_service("router.call", function(s, reason) {
+    calls$reasons = c(calls$reasons, reason)
+    list(model = "fake/fake-1", thinking = NULL, state = list(k = 1))
+  })
+  s = session_new("router:cheapest", "auto", home = new.env())
+  run_text(s, "go")
+  expect_identical(calls$reasons, "turn")
+  types = vapply(session_data(s)$entries, function(e) e$custom_type %||% e$type, "")
+  expect_true(all(c("model_change", "gptr.router") %in% types))
+  expect_identical(s$text, "routed")
+  expect_identical(s$model, "router:cheapest")
+})
+
+test_that("a prefix break stops the run only under gptr.check_prefix = \"error\"", {
+  local_permissive()
+  local_service("prefix.guard", function(s, target, view) {
+    gptr_abort("Prompt-cache prefix broken at t1", "internal", detail = "test break")
+  })
+  fake = local_fake_provider(list("ok"))
+  local_gptr_options(check_prefix = "error")
+  s = test_session()
+  run_text(s, "hello")
+  expect_identical(s$status, "error")
+  expect_s3_class(session_data(s)$condition, "gptr_error_internal")
+  expect_length(fake_requests(fake), 0L)
+  local_gptr_options(check_prefix = "event")
+  s2 = test_session()
+  run_text(s2, "hello")
+  expect_identical(s2$status, "idle")
+  expect_identical(s2$text, "ok")
+})
+
+test_that("two concurrent sessions keep separate usage and tool context (INFRA-15)", {
+  local_permissive()
+  seen = new.env()
+  local_tool("who", function(input, ctx) {
+    seen[[session_data(ctx$session)$id]] = run_current()$session
+    "me"
+  })
+  local_fake_provider(list(fake_tool("who"), "a2"), name = "fa")
+  local_fake_provider(list(fake_tool("who"), "b2"), name = "fb")
+  s1 = test_session(model = "fa/fa-1")
+  s2 = test_session(model = "fb/fb-1")
+  r1 = run_start(s1, msg_user("x"))
+  r2 = run_start(s2, msg_user("y"))
+  run_wait(list(r1, r2))
+  id1 = session_data(s1)$id
+  id2 = session_data(s2)$id
+  expect_identical(nrow(s1$usage), 2L)
+  expect_identical(unique(s1$usage$session), id1)
+  expect_identical(unique(s2$usage$session), id2)
+  expect_identical(seen[[id1]], id1)
+  expect_identical(seen[[id2]], id2)
+})
+
+test_that("a tool piping into its own running session enqueues a steer delivered after its result",
+          {
+  local_permissive()
+  local_tool("self", function(input, ctx) {
+    session_enqueue(ctx$session, "use TPM", as = "steer", source = "pipe")
+    "sent"
+  })
+  fake = local_fake_provider(list(fake_tool("self"), "ack", "done"))
+  s = test_session()
+  run_text(s, "go")
+  req = fake_requests(fake)[[2L]]
+  expect_identical(req_roles(req), c("user", "assistant", "tool_result", "operator"))
+  expect_identical(msg_text(req$messages[[4L]]),
+                   "The user sent this message while you were working: use TPM")
+})
+
+test_that("a mode change during a run reaches the model as an operator message after the results", {
+  local_permissive()
+  box = new.env()
+  local_tool("switch", function(input, ctx) {
+    session_set_mode(ctx$session, "plan", source = "pause_menu")
+    "switched"
+  })
+  fake = local_fake_provider(list(fake_tool("switch"), "ok"))
+  s = test_session(mode = "auto")
+  run_text(s, "go")
+  req = fake_requests(fake)[[2L]]
+  expect_identical(req_roles(req), c("user", "assistant", "tool_result", "operator"))
+  expect_match(msg_text(req$messages[[4L]]), "<mode name=\"plan\">", fixed = TRUE)
+})
+
+test_that("a run sent to the background ends the foreground wait (P21)", {
+  local_permissive()
+  local_fake_provider(list(list(hang = TRUE)))
+  s = test_session()
+  local_hook("message_start", function(event, ctx) {
+    run = session_live(ctx$session)$run
+    if (!is.null(run)) run$opts$background = TRUE
+    NULL
+  })
+  session_run(s, msg_user("go"))
+  expect_identical(s$status, "running")
+  run_abort(session_live(s)$run)
+})
+
+test_that("a UI answering abort to a permission request aborts the run", {
+  local_gptr_options(interactive = TRUE)
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) list(decision = "abort"))
+  })
+  local_tool("w", function(input, ctx) "written")
+  fake = local_fake_provider(list(fake_tools(list(name = "w", input = json_obj()),
+                                             list(name = "w", input = json_obj())), "never"))
+  s = test_session(mode = "manual")
+  run_text(s, "go")
+  expect_identical(s$status, "aborted")
+  expect_length(tool_results(s), 1L)
+  expect_length(fake_requests(fake), 1L)
+})
+
+# ---------------------------------------------------------------- report 02 section 5.3: the driver
+
+local_fast_retry = function(.env = parent.frame()) {
+  testthat::local_mocked_bindings(agent_retry_delay = function(attempt) c(0.04, 0.08)[attempt],
+                                  .env = .env)
+}
+flaky = function() {
+  list(fake_error("529 overloaded", 529L), fake_error("503 service unavailable", 503L), "finally")
+}
+
+test_that(oracle_title(recovery_recs, "R19"), {
+  local_permissive()
+  local_fast_retry()
+  fake = local_fake_provider(flaky())
+  s = test_session()
+  run_text(s, "hello")
+  expect_length(fake_requests(fake), 3L)
+  expect_identical(s$text, "finally")
+  expect_identical(s$status, "idle")
+})
+
+test_that(oracle_title(recovery_recs, "R20"), {
+  local_permissive()
+  local_fast_retry()
+  fake = local_fake_provider(flaky())
+  run_text(test_session(), "hello")
+  expect_identical(req_roles(fake_requests(fake)[[3L]]), "user")
+})
+
+test_that(oracle_title(recovery_recs, "R21"), {
+  local_permissive()
+  local_fast_retry()
+  local_fake_provider(flaky())
+  s = test_session()
+  run_text(s, "hello")
+  expect_identical(sum(vapply(s$messages, function(m) identical(m$stop_reason, "error"), NA)), 2L)
+})
+
+test_that(oracle_title(recovery_recs, "R22"), {
+  local_permissive()
+  local_fast_retry()
+  ev = local_events(c("retry_start", "retry_end"))
+  local_fake_provider(flaky())
+  s = test_session()
+  t0 = Sys.time()
+  run_text(s, "hello")
+  el = as.numeric(difftime(Sys.time(), t0, units = "secs"))
+  starts = Filter(function(e) identical(e$type, "retry_start"), ev(s))
+  expect_identical(vapply(starts, function(e) e$delay, 1), c(0.04, 0.08))
+  expect_gte(el, 0.1)
+  expect_true(ev(s)[[length(ev(s))]]$ok)
+})
+
+test_that(oracle_title(recovery_recs, "R23"), {
+  local_permissive()
+  ev = local_events("retry_start")
+  fake = local_fake_provider(list(fake_error("insufficient_quota", status = 400L)))
+  s = test_session()
+  run_text(s, "hello")
+  expect_length(fake_requests(fake), 1L)
+  expect_length(ev(s), 0L)
+  expect_identical(s$status, "error")
+})
+
+test_that(oracle_title(recovery_recs, "R24"), {
+  local_permissive()
+  local_fast_retry()
+  ev = local_events("retry_end")
+  fake = local_fake_provider(list(fake_error("overloaded", 529L)))
+  s = test_session()
+  run_text(s, "hello")
+  expect_length(fake_requests(fake), 3L)
+  expect_false(ev(s)[[1L]]$ok)
+  expect_identical(s$status, "error")
+  expect_s3_class(session_data(s)$condition, "gptr_error_provider")
+})
+
+test_that(oracle_title(recovery_recs, "R25"), {
+  local_permissive()
+  n = new.env()
+  n$calls = 0L
+  local_service("compact.run", function(s, reason, focus = NULL) {
+    n$calls = n$calls + 1L
+    n$reason = reason
+    invisible(s)
+  })
+  fake = local_fake_provider(list(list(overflow = TRUE), "fits now"))
+  s = test_session()
+  run_text(s, "hello")
+  expect_identical(n$calls, 1L)
+  expect_identical(n$reason, "overflow")
+  expect_length(fake_requests(fake), 2L)
+  expect_identical(s$status, "idle")
+})
+
+test_that(oracle_title(recovery_recs, "R26"), {
+  local_permissive()
+  n = new.env()
+  n$calls = 0L
+  local_service("compact.run", function(s, reason, focus = NULL) {
+    n$calls = n$calls + 1L
+    invisible(s)
+  })
+  fake = local_fake_provider(list(list(overflow = TRUE)))
+  s = test_session()
+  run_text(s, "hello")
+  expect_identical(n$calls, 1L)
+  expect_length(fake_requests(fake), 2L)
+  expect_identical(s$status, "error")
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_context_overflow")
+  expect_s3_class(cnd, "gptr_error_provider")
+  expect_match(conditionMessage(cnd), "still too large after one compaction", fixed = TRUE)
+})
+
+test_that("without a compactor the first overflow is terminal", {
+  local_without_services(c("compact.should", "compact.run"))
+  local_permissive()
+  fake = local_fake_provider(list(list(overflow = TRUE)))
+  s = test_session()
+  run_text(s, "hello")
+  expect_length(fake_requests(fake), 1L)
+  expect_s3_class(session_data(s)$condition, "gptr_error_context_overflow")
+})
+
+test_that("every report 02 recovery check has a test", {
+  expect_oracles_covered(recovery_recs, "test-agent-run.R")
+})
+
+# ---------------------------------------------------------------- the engine under IC-74 and IC-57
+
+test_that("a reported usage keeps its unknown counts; only an unreported one is estimated", {
+  expect_false(run_usage_reported(NULL))
+  expect_false(run_usage_reported(usage_as(NULL)))
+  expect_false(run_usage_reported(usage_new()))
+  expect_false(run_usage_reported(list(input = -1, output = 2)))
+  expect_false(run_usage_reported("12 tokens"))
+  expect_true(run_usage_reported(usage_new(input = 3, output = NA)))
+  expect_true(run_usage_reported(list(cache_read = 40)))
+  local_permissive()
+  partly = usage_new(input = 120, output = NA)
+  local_fake_provider(list(list(text = "partly reported", usage = partly),
+                           list(text = "nothing reported", usage = usage_as(NULL)),
+                           fake_error("400 invalid request", status = 400L)))
+  s = test_session()
+  run_text(s, "one")
+  run_text(s, "two")
+  run_text(s, "three")
+  u = session_data(s)$usage
+  expect_identical(nrow(u), 3L)
+  expect_identical(u$input[[1L]], 120)
+  expect_true(is.na(u$output[[1L]]))
+  expect_false(u$estimated[[1L]])
+  msgs = s$messages
+  expect_identical(msgs[[2L]]$usage$input, 120)
+  expect_true(is.na(msgs[[2L]]$usage$output))
+  expect_identical(u$estimated[2:3], c(TRUE, TRUE))
+  expect_true(all(u$input[2:3] > 0))
+  expect_true(isTRUE(msgs[[4L]]$usage$estimated))
+  expect_true(isTRUE(msgs[[6L]]$usage$estimated))
+  expect_identical(s$status, "error")
+})
+
+test_that("an overflow condition carries the provider's prompt count, never gptr's estimate", {
+  expect_identical(run_overflow_tokens(list(usage = usage_new(input = 5000, output = 0))), 5000)
+  expect_identical(run_overflow_tokens(list(usage = usage_new(input = 5000, estimated = TRUE))),
+                   NA_real_)
+  expect_identical(run_overflow_tokens(list(usage = usage_as(NULL))), NA_real_)
+  expect_identical(run_overflow_tokens(list()), NA_real_)
+  local_without_services(c("compact.should", "compact.run"))
+  local_permissive()
+  local_fake_provider(list(list(overflow = TRUE)))
+  s = test_session()
+  run_text(s, "hello")
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_context_overflow")
+  expect_identical(cnd$tokens, NA_real_)
+  expect_true(isTRUE(s$messages[[2L]]$usage$estimated))
+})
+
+test_that("a decision-only model or a refused request preflight ends the run before any request", {
+  local_permissive()
+  judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
+  s = test_session(model = "judge/judge-s1")
+  run_text(s, "go")
+  expect_identical(s$status, "error")
+  expect_s3_class(session_data(s)$condition, "gptr_error_not_available")
+  expect_null(session_live(s)$run)
+  expect_length(fake_requests(judge), 0L)
+  fake = local_fake_provider(list("never sent"))
+  seen = new.env()
+  testthat::local_mocked_bindings(provider_preflight = function(model, provider, safety = NULL) {
+    seen$safety = safety
+    gptr_abort("test refusal: local execution cannot be established", "untrusted",
+               what = "model", path = model$ref, origin = "http://192.0.2.1:11434")
+  })
+  s2 = test_session()
+  run_text(s2, "go")
+  expect_identical(s2$status, "error")
+  cnd = session_data(s2)$condition
+  expect_s3_class(cnd, "gptr_error_untrusted")
+  expect_identical(s2$reason, conditionMessage(cnd))
+  expect_length(fake_requests(fake), 0L)
+  # the preflight reads the run's frozen safety snapshot: without a human relaxation, local-only
+  expect_true(isTRUE(seen$safety$ollama_local_only))
+  expect_null(session_live(s2)$run)
+  expect_identical(nrow(s2$usage), 0L)
+})
+
+test_that("a pump nested in a hook runs only its own run's tools, never another run's (IC-57)", {
+  local_permissive()
+  box = new.env()
+  local_tool("probe", function(input, ctx) {
+    box$depth = reactor_depth()
+    "probed"
+  })
+  local_fake_provider(list(fake_tool("probe"), "a done"), name = "fa")
+  local_fake_provider(list("b done"), name = "fb")
+  local_fake_provider(list("c done"), name = "fc")
+  a = test_session(model = "fa/fa-1")
+  b = test_session(model = "fb/fb-1")
+  c_s = test_session(model = "fc/fc-1")
+  bid = session_data(b)$id
+  local_hook("turn_end", function(event, ctx) {
+    if (identical(event$session, bid) && is.null(box$nested)) {
+      box$nested = TRUE
+      session_run(c_s, msg_user("nested"))
+    }
+    NULL
+  })
+  ra = run_start(a, msg_user("x"))
+  rb = run_start(b, msg_user("y"))
+  run_wait(list(ra, rb))
+  expect_true(isTRUE(box$nested))
+  expect_identical(c_s$text, "c done")
+  expect_identical(box$depth, 1L)
+  expect_identical(a$text, "a done")
+  expect_identical(b$text, "b done")
+})
+
+test_that("a streaming redactor that failed closed drops its held text; the reply is recorded", {
+  local_permissive()
+  limit = function(...) {
+    gptr_abort("Streaming redaction exceeded its holding limit.", "redaction_limit", limit = 1L)
+  }
+  testthat::local_mocked_bindings(redact_stream = function(profile = "stream") {
+    list(push = limit, flush = limit)
+  })
+  updates = local_events("message_update")
+  local_fake_provider(list("a reply the redactor cannot hold"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "idle")
+  expect_identical(s$text, "a reply the redactor cannot hold")
+  expect_length(updates(s), 0L)
+})
+
+# ---------------------------------------------------------------- settlement when the store fails
+
+test_that("a store failure while a run settles ends it with status error; the session is free", {
+  local_permissive()
+  box = new.env()
+  box$fail = TRUE
+  persist = plugin_state_persist
+  testthat::local_mocked_bindings(plugin_state_persist = function(s) {
+    if (isTRUE(box$fail)) {
+      box$fail = FALSE
+      gptr_abort("the session store failed: disk full", "internal", detail = "disk full")
+    }
+    persist(s)
+  })
+  ev = local_events("agent_end")
+  local_fake_provider(list("first", "second"))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  expect_true(run_wait(list(run), timeout = 30))
+  expect_identical(s$status, "error")
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_internal")
+  expect_identical(s$reason, conditionMessage(cnd))
+  expect_match(s$reason, "the session store failed", fixed = TRUE)
+  expect_identical(run$signal$condition, cnd)
+  expect_null(session_live(s)$run)
+  expect_null(run$home)
+  expect_false(exists(reactor_run_id(run), envir = reactor_get()$runs, inherits = FALSE))
+  expect_identical(vapply(ev(s), function(e) e$status, ""), "error")
+  run_text(s, "again")
+  expect_identical(s$status, "idle")
+  expect_identical(s$text, "second")
+})
+
+test_that("a store failure while storing the `returns` value settles the run with status error", {
+  local_permissive()
+  testthat::local_mocked_bindings(session_value_set = function(...) {
+    gptr_abort("the session store failed: read-only file", "internal", detail = "read-only file")
+  })
+  local_fake_provider(list('{"n": 1}'))
+  s = test_session()
+  run_text(s, "go", list(returns = num_schema(n = "integer")))
+  expect_identical(s$status, "error")
+  expect_s3_class(session_data(s)$condition, "gptr_error_internal")
+  expect_null(session_live(s)$run)
+})
+
+test_that("a store failure while a run settles keeps its own terminal condition, with a diagnostic",
+          {
+  local_permissive()
+  testthat::local_mocked_bindings(plugin_state_persist = function(s) {
+    gptr_abort("the session store failed: disk full", "internal", detail = "disk full")
+  })
+  local_tool("again", function(input, ctx) "ok")
+  local_fake_provider(list(fake_tool("again"), "never"))
+  s = test_session()
+  run_text(s, "go", list(max_turns = 1L))
+  expect_identical(s$status, "max_turns")
+  expect_s3_class(session_data(s)$condition, "gptr_error_max_turns")
+  expect_null(session_live(s)$run)
+  diag = utils::tail(gptr_registry(diagnostics = TRUE), 1L)
+  expect_identical(diag$event, "settle")
+  expect_match(diag$message, "the session store failed", fixed = TRUE)
+})
+
+test_that("an abort whose partial answer cannot be stored still settles and re-signals", {
+  local_permissive()
+  append = session_append
+  testthat::local_mocked_bindings(session_append = function(s, entry) {
+    if (identical(entry$message$stop_reason, "aborted")) {
+      gptr_abort("the session store failed: disk full", "internal", detail = "disk full")
+    }
+    append(s, entry)
+  })
+  local_fake_provider(list(list(hang = TRUE)))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  reactor_pump(until = function() identical(run$status, "streaming"), timeout = 30)
+  interrupt = function() {
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+  }
+  res = tryCatch(run_abort_only(interrupt, run), interrupt = function(cnd) "interrupted",
+                 error = function(e) conditionMessage(e))
+  expect_identical(res, "interrupted")
+  expect_identical(s$status, "aborted")
+  expect_true(isTRUE(run$settled))
+  expect_null(session_live(s)$run)
+  expect_false(exists(reactor_run_id(run), envir = reactor_get()$runs, inherits = FALSE))
+  diag = utils::tail(gptr_registry(diagnostics = TRUE), 1L)
+  expect_identical(diag$event, "abort")
+  expect_match(diag$message, "the session store failed", fixed = TRUE)
+})
+
+test_that("an abort before the stream's start event records the run's model, not 'unknown'", {
+  local_permissive()
+  local_fake_provider(list(list(hang = TRUE, delay = 5)))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  reactor_pump(until = function() identical(run$status, "requesting"), timeout = 30)
+  run_abort(run, "user")
+  expect_identical(s$status, "aborted")
+  last = s$messages[[length(s$messages)]]
+  expect_identical(last$role, "assistant")
+  expect_identical(last$stop_reason, "aborted")
+  expect_identical(c(last$api, last$provider, last$model), c(run$model$api, "fake", "fake-1"))
+  expect_false(identical(last$api, "unknown"))
+  expect_identical(last$request_id, run$request_id)
+})

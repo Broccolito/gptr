@@ -212,3 +212,170 @@ test_that(oracle_title(store_recs, "S34"), {
                                      state = list(), n = 1L)))
   expect_lt(context_tokens(s), before)
 })
+
+# ---------------------------------------------------------------- the kernel side of compaction
+# The algorithm is P07's; a fake compactor stands in through the compact.should/compact.run
+# services.
+
+file_entries = function(s) {
+  lapply(readLines(session_data(s)$file, encoding = "UTF-8")[-1L], json_decode)
+}
+
+test_that(oracle_title(store_recs, "S25"), {
+  x = compacting_run()
+  expect_length(x$log$calls, 1L)
+  expect_identical(x$log$calls[[1L]]$reason, "threshold")
+  expect_true(all(is.finite(x$log$tokens)))
+})
+
+test_that(oracle_title(store_recs, "S26"), {
+  x = compacting_run()
+  last = x$log$calls[[1L]]$last
+  expect_identical(last$message$role, "user")
+  d = session_data(x$s)
+  for (e in d$entries) {
+    if (identical(e$type, "compaction")) break
+    prev = e
+  }
+  expect_false(identical(prev$message$role, "assistant") &&
+                 any(vapply(prev$message$content, function(b) identical(b$type, "tool_call"), NA)))
+})
+
+test_that(oracle_title(store_recs, "S27"), {
+  x = compacting_run()
+  req = fake_requests(x$fake)[[2L]]
+  texts = vapply(req$messages, msg_text, "")
+  expect_false(any(grepl("Task 1", texts, fixed = TRUE)))
+  expect_false(any(texts == "first answer"))
+  expect_true(any(grepl("Task 2", texts, fixed = TRUE)))
+})
+
+test_that(oracle_title(store_recs, "S28"), {
+  x = compacting_run()
+  e = Filter(function(e) identical(e$type, "compaction"), file_entries(x$s))[[1L]]
+  expect_identical(e$summary, "## Goal\nsummary")
+  expect_identical(e$tokensBefore, 1234L)
+  expect_false(is.null(e$firstKeptEntryId))
+  expect_identical(e$gptr$blocks[[1L]]$gptr$context, "checkpoint")
+})
+
+test_that(oracle_title(store_recs, "S29"), {
+  x = compacting_run()
+  expect_identical(vapply(x$log$calls, function(k) k$reason, ""), "threshold")
+})
+
+test_that(oracle_title(store_recs, "S33"), {
+  x = compacting_run()
+  req = fake_requests(x$fake)[[3L]]
+  first = req$messages[[1L]]
+  expect_true(any(vapply(first$content, function(b) {
+    identical(b$type, "context") && identical(b$kind, "checkpoint")
+  }, NA)))
+  expect_identical(req_roles(req), c("user", "user", "assistant", "tool_result"))
+})
+
+test_that(oracle_title(store_recs, "S35"), {
+  x = compacting_run()
+  d = session_data(x$s)
+  expect_identical(sum(vapply(d$entries, function(e) identical(e$type, "compaction"), NA)), 1L)
+  expect_gt(length(d$entries), x$n_before)
+  expect_length(readLines(d$file, encoding = "UTF-8"), 1L + length(d$entries))
+})
+
+test_that(oracle_title(store_recs, "S36"), {
+  local_permissive()
+  log = local_compactor(should = function(s, tokens, idle_s) TRUE)
+  local_fake_provider(list("a"))
+  run_text(test_session(), "one")
+  expect_length(log$calls, 1L)
+})
+
+test_that(oracle_title(store_recs, "S38"), {
+  x = compacting_run()
+  lines = readLines(session_data(x$s)$file, encoding = "UTF-8")
+  expect_true(any(grepl("Task 1", lines, fixed = TRUE)))
+  expect_true(any(vapply(session_data(x$s)$entries, function(e) {
+    identical(e$type, "message") && identical(msg_text(e$message), "Task 1")
+  }, NA)))
+})
+
+test_that(oracle_title(store_recs, "S39"), {
+  local_permissive()
+  local_tool("read", function(input, ctx) "data")
+  n = new.env()
+  n$calls = 0L
+  local_service("compact.run", function(s, reason, focus = NULL) {
+    n$calls = n$calls + 1L
+    invisible(s)
+  })
+  local_fake_provider(list(fake_tool("read", path = "a"), list(overflow = TRUE), "done"))
+  s = test_session()
+  run_text(s, "long task")
+  expect_identical(n$calls, 1L)
+  expect_length(Filter(function(m) identical(m$role, "user"), s$messages), 1L)
+  expect_identical(s$status, "idle")
+  expect_identical(s$turns, 1L)
+})
+
+test_that(oracle_title(store_recs, "S40"), {
+  local_permissive()
+  local_tool("read", function(input, ctx) "data")
+  local_service("compact.run", function(s, reason, focus = NULL) invisible(s))
+  fake = local_fake_provider(list(fake_tool("read", path = "a"), list(overflow = TRUE), "done"))
+  run_text(test_session(), "long task")
+  req = fake_requests(fake)[[3L]]
+  calls = unlist(lapply(req$messages, function(m) {
+    vapply(Filter(function(b) identical(b$type, "tool_call"), m$content %||% list()),
+           function(b) b$id, "")
+  }))
+  results = vapply(Filter(function(m) identical(m$role, "tool_result"), req$messages),
+                   function(m) m$tool_call_id, "")
+  expect_setequal(calls, results)
+})
+
+test_that(oracle_title(store_recs, "S41"), {
+  local_permissive()
+  local_tool("slow", function(input, ctx) "done")
+  box = new.env()
+  local_hook("tool_execution_start", function(event, ctx) {
+    session_enqueue(box$s, "use data.table instead", "steer", source = "pipe")
+    session_enqueue(box$s, "then plot it", "follow_up", source = "pipe")
+    NULL
+  })
+  local_fake_provider(list(fake_tool("slow"), "ok 1", "ok 2"))
+  box$s = test_session()
+  run_text(box$s, "go")
+  txt = vapply(box$s$messages, msg_text, "")
+  i = grep("use data.table instead", txt, fixed = TRUE)
+  j = grep("then plot it", txt, fixed = TRUE)
+  expect_true(length(i) == 1L && length(j) == 1L && i < j)
+})
+
+test_that(oracle_title(store_recs, "S42"), {
+  local_permissive()
+  local_tool("slow", function(input, ctx) "done")
+  box = new.env()
+  local_hook("tool_execution_start", function(event, ctx) {
+    session_enqueue(box$s, "steer me", "steer", source = "pipe")
+    NULL
+  })
+  ev = local_events("queue_update")
+  local_fake_provider(list(fake_tool("slow"), "ok"))
+  box$s = test_session()
+  run_text(box$s, "go")
+  expect_length(session_data(box$s)$queue$steer, 0L)
+  last = ev(box$s)[[length(ev(box$s))]]
+  expect_identical(c(last$steer, last$follow_up), c(0L, 0L))
+})
+
+test_that("each run touches its session's lock when it starts (heartbeat, IC-59)", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list("one", "two"))
+  s = test_session()
+  run_text(s, "first")
+  pid_file = file.path(lock_path(session_data(s)$file), "pid")
+  Sys.setFileTime(pid_file, Sys.time() - 86400)
+  run_text(s, "second")
+  expect_lt(as.numeric(Sys.time()) - as.numeric(file.mtime(pid_file)), 3600)
+})

@@ -293,3 +293,301 @@ test_that("steering relays retain text blocks and refuse unsupported attachments
   expect_error(queue_item_message(item, "steer", TRUE), class = "gptr_error_invalid_argument")
   expect_identical(queue_item_message(item, "follow_up", TRUE)$content[[1L]], item$blocks[[1L]])
 })
+
+# ---------------------------------------------------------------- report 02 section 5.1 (24 checks)
+
+loop_recs = oracle("loop")
+
+test_that(oracle_title(loop_recs, "L01"), {
+  local_permissive()
+  local_fake_provider(list("Hello from gptr!"))
+  s = test_session()
+  run_text(s, "Hi")
+  expect_identical(roles(s), c("user", "assistant"))
+})
+
+test_that(oracle_title(loop_recs, "L02"), {
+  local_permissive()
+  local_fake_provider(list(fake_text("Hello from gptr! A longer answer.", chunk = 8L)))
+  updates = local_events("message_update")
+  s = test_session()
+  run_text(s, "Hi")
+  expect_identical(s$text, "Hello from gptr! A longer answer.")
+  expect_gt(length(updates(s)), 1L)
+  expect_identical(paste(vapply(updates(s), function(e) e$delta, ""), collapse = ""), s$text)
+})
+
+test_that(oracle_title(loop_recs, "L03"), {
+  local_permissive()
+  local_fake_provider(list("Hello"))
+  s = test_session()
+  run_text(s, "Hi")
+  expect_identical(s$status, "idle")
+})
+
+test_that(oracle_title(loop_recs, "L04"), {
+  local_permissive()
+  add_tool()
+  local_tool("boom", function(input, ctx) stop("kaboom: file not found"))
+  local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 2, b = 3)),
+                                      list(name = "boom", input = json_obj()),
+                                      list(name = "nope", input = json_obj()),
+                                      list(name = "add", input = list(a = 1))),
+                           "Done: 5"))
+  s = test_session()
+  run_text(s, "compute")
+  expect_length(tool_results(s), 4L)
+})
+
+test_that(oracle_title(loop_recs, "L05"), {
+  local_permissive()
+  add_tool()
+  local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 2, b = 3)),
+                                      list(name = "add", input = list(a = 2, b = "3"))),
+                           "ok"))
+  s = test_session()
+  run_text(s, "compute")
+  tr = tool_results(s)
+  expect_identical(msg_text(tr[[1L]]), "5")
+  expect_false(tr[[1L]]$is_error)
+  expect_true(tr[[2L]]$is_error)
+  expect_match(msg_text(tr[[2L]]), "^Invalid arguments for add")
+})
+
+test_that(oracle_title(loop_recs, "L06"), {
+  local_permissive()
+  local_tool("boom", function(input, ctx) stop("kaboom: file not found"))
+  local_fake_provider(list(fake_tool("boom"), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  tr = tool_results(s)[[1L]]
+  expect_true(tr$is_error)
+  expect_match(msg_text(tr), "kaboom: file not found", fixed = TRUE)
+})
+
+test_that(oracle_title(loop_recs, "L07"), {
+  local_permissive()
+  local_fake_provider(list(fake_tool("nope"), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(msg_text(tool_results(s)[[1L]]), "Tool nope not found")
+})
+
+test_that(oracle_title(loop_recs, "L08"), {
+  local_permissive()
+  ran = new.env()
+  ran$yes = FALSE
+  local_tool("add", function(input, ctx) {
+    ran$yes = TRUE
+    "x"
+  }, parameters = num_schema(a = "number", b = "number"))
+  local_fake_provider(list(fake_tool("add", a = 1), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  tr = tool_results(s)[[1L]]
+  expect_true(tr$is_error)
+  expect_match(msg_text(tr), "^Invalid arguments for add: .*b")
+  expect_false(ran$yes)
+})
+
+test_that(oracle_title(loop_recs, "L09"), {
+  local_permissive()
+  add_tool()
+  fake = local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 1, b = 2)),
+                                             list(name = "add", input = list(a = 3, b = 4))),
+                                  "done"))
+  run_text(test_session(), "go")
+  expect_length(fake_requests(fake), 2L)
+})
+
+test_that(oracle_title(loop_recs, "L10"), {
+  local_permissive()
+  add_tool()
+  fake = local_fake_provider(list(fake_tools(list(name = "add", input = list(a = 1, b = 1)),
+                                             list(name = "add", input = list(a = 1, b = 2)),
+                                             list(name = "add", input = list(a = 1, b = 3)),
+                                             list(name = "add", input = list(a = 1, b = 4))),
+                                  "done"))
+  run_text(test_session(), "go")
+  req = fake_requests(fake)[[2L]]
+  expect_identical(req_roles(req), c("user", "assistant", rep("tool_result", 4L)))
+  expect_identical(vapply(req$messages[3:6], msg_text, ""), c("2", "3", "4", "5"))
+})
+
+test_that(oracle_title(loop_recs, "L11"), {
+  local_permissive()
+  box = new.env()
+  steer_during_slow(box)
+  local_fake_provider(list(fake_tool("slow"), "ack steer 1", "ack steer 2", "summary"))
+  box$s = test_session()
+  run_text(box$s, "go")
+  expect_identical(roles(box$s), c("user", "assistant", "tool_result", "operator", "assistant",
+                                   "operator", "assistant", "user", "assistant"))
+})
+
+test_that(oracle_title(loop_recs, "L12"), {
+  local_permissive()
+  box = new.env()
+  steer_during_slow(box)
+  local_fake_provider(list(fake_tool("slow"), "ack steer 1", "ack steer 2", "summary"))
+  box$s = test_session()
+  run_text(box$s, "go")
+  txt = vapply(box$s$messages, msg_text, "")
+  expect_match(txt[[4L]], "STEER-1", fixed = TRUE)
+  expect_match(txt[[6L]], "STEER-2", fixed = TRUE)
+  expect_match(txt[[8L]], "FOLLOWUP", fixed = TRUE)
+})
+
+test_that(oracle_title(loop_recs, "L13"), {
+  local_permissive()
+  box = new.env()
+  steer_during_slow(box)
+  fake = local_fake_provider(list(fake_tool("slow"), "ack steer 1", "ack steer 2", "summary"))
+  box$s = test_session()
+  run_text(box$s, "go")
+  reqs = fake_requests(fake)
+  expect_length(reqs, 4L)
+  last_role = vapply(reqs[2:3], function(r) r$messages[[length(r$messages)]]$role, "")
+  expect_identical(last_role, c("operator", "operator"))
+})
+
+test_that(oracle_title(loop_recs, "L14"), {
+  local_permissive()
+  ran = new.env()
+  ran$yes = FALSE
+  local_tool("w", function(input, ctx) {
+    ran$yes = TRUE
+    "x"
+  })
+  local_fake_provider(list(c(fake_tool("w"), list(stop = "length")), "retry ok"))
+  s = test_session()
+  run_text(s, "go")
+  tr = tool_results(s)[[1L]]
+  expect_false(ran$yes)
+  expect_true(tr$is_error)
+  expect_identical(msg_text(tr), paste0("Tool call not executed: the response stopped (length) ",
+                                        "before the call was complete."))
+})
+
+test_that(oracle_title(loop_recs, "L15"), {
+  local_permissive()
+  add_tool()
+  local_hook("tool_call", function(event, ctx) {
+    list(decision = "block", reason = "denied by permission mode")
+  })
+  local_fake_provider(list(fake_tool("add", a = 1, b = 1), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(msg_text(tool_results(s)[[1L]]),
+                   "Tool execution was blocked: denied by permission mode")
+})
+
+test_that(oracle_title(loop_recs, "L16"), {
+  local_permissive()
+  local_tool("stopper", function(input, ctx) {
+    res = gptr_tool_result("final")
+    res$terminate = TRUE
+    res
+  })
+  fake = local_fake_provider(list(fake_tool("stopper"), "unused"))
+  s = test_session()
+  run_text(s, "go")
+  expect_length(fake_requests(fake), 1L)
+  expect_identical(s$status, "idle")
+})
+
+test_that(oracle_title(loop_recs, "L17"), {
+  local_permissive()
+  add_tool()
+  local_hook("tool_result", function(event, ctx) {
+    list(content = list(block_text(paste0("[audited] ", event$content[[1L]]$text))))
+  })
+  local_fake_provider(list(fake_tool("add", a = 1, b = 1), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(msg_text(tool_results(s)[[1L]]), "[audited] 2")
+})
+
+test_that(oracle_title(loop_recs, "L18"), {
+  local_permissive()
+  x = interrupting_run()
+  expect_identical(x$res, "interrupted")
+  expect_identical(x$s$status, "aborted")
+  expect_length(fake_requests(x$fake), 1L)
+})
+
+test_that(oracle_title(loop_recs, "L19"), {
+  local_permissive()
+  x = interrupting_run()
+  tr = tool_results(x$s)
+  expect_length(tr, 1L)
+  expect_match(msg_text(tr[[1L]]),
+               "^Interrupted after [0-9.]+ s; side effects may have occurred[.]$")
+})
+
+test_that(oracle_title(loop_recs, "L20"), {
+  local_permissive()
+  x = interrupting_run()
+  expect_null(session_live(x$s)$run)
+  run_text(x$s, "continue")
+  expect_identical(x$s$status, "idle")
+  expect_identical(x$s$text, "after the interrupt")
+  req = fake_requests(x$fake)[[2L]]
+  ids = vapply(Filter(function(m) identical(m$role, "tool_result"), req$messages),
+               function(m) m$tool_call_id, "")
+  expect_length(ids, 2L)
+})
+
+test_that(oracle_title(loop_recs, "L21"), {
+  local_permissive()
+  local_fake_provider(list(fake_error("400 invalid request: bad parameter", status = 400L)))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "error")
+  cnd = session_data(s)$condition
+  expect_s3_class(cnd, "gptr_error_provider")
+  expect_match(conditionMessage(cnd), "bad parameter", fixed = TRUE)
+  expect_identical(cnd$session, session_data(s)$id)
+})
+
+test_that(oracle_title(loop_recs, "L22"), {
+  local_permissive()
+  add_tool()
+  fake = local_fake_provider(list(fake_tool("add", a = 1, b = 1)))
+  s = test_session()
+  run_text(s, "loop forever", list(max_turns = 3L))
+  expect_identical(s$status, "max_turns")
+  expect_length(fake_requests(fake), 3L)
+  expect_s3_class(session_data(s)$condition, "gptr_error_max_turns")
+  expect_identical(session_data(s)$condition$max_turns, 3L)
+})
+
+test_that(oracle_title(loop_recs, "L23"), {
+  local_permissive()
+  local_hook("message_end", function(event, ctx) stop("listener bug"))
+  local_fake_provider(list("fine"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "idle")
+  expect_identical(s$text, "fine")
+})
+
+test_that(oracle_title(loop_recs, "L24"), {
+  local_permissive()
+  box = new.env()
+  local_tool("re", function(input, ctx) {
+    box$err = tryCatch({
+      run_start(box$s, msg_user("nested"))
+      "no error"
+    }, error = function(e) e)
+    "ok"
+  })
+  local_fake_provider(list(fake_tool("re"), "x"))
+  box$s = test_session()
+  run_text(box$s, "go")
+  expect_s3_class(box$err, "gptr_error_busy")
+})
+
+test_that("every report 02 loop check has a test", {
+  expect_oracles_covered(loop_recs, "test-agent-loop.R")
+})

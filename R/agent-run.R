@@ -1014,3 +1014,779 @@ context_idle = function(s) {
   }
   0
 }
+
+# ---------------------------------------------------------------------------- starting and waiting
+
+#' Run a session to settlement
+#'
+#' Appends the input and runs `s` on the reactor under the interrupt policy (the
+#' `console.interrupt_policy` service of P14 when registered, else abort-only). Raises nothing
+#' itself: the gateway maps terminal statuses to conditions (04 section 6.1.2); an interrupt aborts
+#' the run, keeps the partial turn and is re-signalled. A run marked `opts$background` by P21 stops
+#' the foreground wait.
+#' @param input A message (`msg_user()`), a list of messages, or `NULL` (the queued items, else a
+#'   continuation from the leaf).
+#' @param opts Run options (04 section 7.6).
+#' @return `s`, invisibly.
+#' @noRd
+session_run = function(s, input, opts = list()) {
+  run = run_start(s, input, opts)
+  wait = function() run_wait_foreground(run)
+  if (ext_service_has("console.interrupt_policy")) {
+    ext_service_get("console.interrupt_policy")(wait, list(run), mode = "call")
+  } else {
+    run_abort_only(wait, run)
+  }
+  invisible(s)
+}
+
+#' Pump until the run settles or is sent to the background
+#'
+#' A pump nested in another reactor callback (a tool, a hook) runs only this run's FIFO tools, so
+#' it never runs another run's tool (IC-57); the outermost pump runs every run's tools.
+#' @noRd
+run_wait_foreground = function(run) {
+  allow = if (reactor_depth() == 0L) NULL else run$id
+  reactor_pump(until = function() isTRUE(run$settled) || isTRUE(run$opts$background),
+               slice_ms = 100L, allow_runs = allow)
+}
+
+#' The abort-only interrupt policy: abort the run, then re-signal the interrupt
+#' @noRd
+run_abort_only = function(expr_fun, run) {
+  tryCatch(expr_fun(), interrupt = function(cnd) {
+    run_abort(run, "interrupt")
+    run_resignal_interrupt()
+  })
+}
+
+#' Re-signal an interrupt after cleanup (report 02 section 5.8): enclosing handlers see it, and
+#' without one the evaluation returns to the top level
+#' @noRd
+run_resignal_interrupt = function() {
+  cnd = structure(class = c("interrupt", "condition"), list(message = "", call = NULL))
+  signalCondition(cnd)
+  invokeRestart("abort")
+}
+
+#' Start a run without blocking
+#'
+#' Attaches a detached copy first (split-brain rules), refuses a running session
+#' (`gptr_error_busy`), counts nested `gptr()` calls against `gptr.max_nested_calls` (IC-66),
+#' freezes the prompt at the first run, appends the input and registers the run with the reactor.
+#' @return A `gptr_run` held by the reactor until it settles.
+#' @noRd
+run_start = function(s, input, opts = list()) {
+  check_class(s, "gptr_session", "s")
+  check_list(opts, "opts")
+  input = run_input(input)
+  outer = run_current()
+  live = session_attach(s)
+  d = session_data(s)
+  if (!is.null(live$run) || identical(d$status, "running")) {
+    gptr_abort(paste0("session ", d$id, " is running; steer it with gptr_steer() or wait for it"),
+               "busy", session = d$id)
+  }
+  if (!is.null(outer)) run_count_nested(outer, opts)
+  run = run_new(s, opts, outer)
+  input = run_initial_input(run, input)
+  live$run = run
+  d$status = "running"
+  d$reason = NULL
+  d$condition = NULL
+  d$budget = run$budget
+  if (is.null(d$parent_id)) last_set(s)
+  reactor_run_add(run)
+  # a failure before the run is wired (a freeze that refuses the model, a store error) settles
+  # the run with status error and re-signals, so the session never stays `running`
+  started = tryCatch({
+    input = run_freeze(run, input)
+    run_emit(run, "agent_start")
+    run_emit(run, "turn_start")
+    if (!is.null(input)) run_append_messages(run, input)
+    run_wire(run)
+    TRUE
+  }, error = function(e) e)
+  if (!isTRUE(started)) {
+    run_fail(run, started)
+    stop(started)
+  }
+  run
+}
+
+#' Normalise the input of a run: NULL, one message, or a list of messages
+#' @noRd
+run_input = function(input) {
+  if (is.null(input)) return(NULL)
+  if (is.list(input) && !is.null(input[["role"]])) return(list(input))
+  if (is.list(input) && length(input) &&
+      all(vapply(input, function(m) is.list(m) && !is.null(m[["role"]]), NA))) {
+    return(input)
+  }
+  gptr_abort("`input` must be a message or a list of messages", "invalid_argument", arg = "input",
+             expected = "a message from msg_user() or a list of messages")
+}
+
+#' Without input: the first queued item (steers first) opens the turn; with an empty queue the run
+#' continues from the leaf when the path awaits a response, else there is nothing to run
+#' @noRd
+run_initial_input = function(run, input) {
+  if (!is.null(input)) return(input)
+  d = session_data(run$shell)
+  for (which in c("steer", "follow_up")) {
+    if (length(d$queue[[which]])) return(run_take(run, which))
+  }
+  msgs = Filter(function(m) {
+    !(identical(m$role, "assistant") && (m$stop_reason %||% "stop") %in% c("error", "aborted"))
+  }, path_messages(entries_path(d)))
+  if (length(msgs)) {
+    last = msgs[[length(msgs)]]
+    open_calls = any(vapply(last$content %||% list(),
+                            function(b) identical(b$type, "tool_call"), NA))
+    if (!identical(last$role, "assistant") || open_calls) return(NULL)
+  }
+  gptr_abort("nothing to run: no input, an empty queue and a finished answer", "invalid_argument",
+             arg = "input", expected = "a message or queued items")
+}
+
+#' Wire a run: the loop, its reactor task, the heartbeat and the callbacks that provider_stream()
+#' injects into adapters (IC-33); the closures capture a frame that holds only `run` (rule R2)
+#' @noRd
+run_wire = function(run) {
+  run$gate = function(call) perm_check(call, run)
+  run$tool_result = function(result, call) tool_result_message(result, call)
+  run$mcp_dispatch = function(message) ext_service_get("mcp.dispatch_local")(message, run$shell)
+  run$loop = loop_new(max_turns = run$max_turns,
+                      steering = function() run_take(run, "steer"),
+                      follow_up = function() run_take(run, "follow_up"),
+                      finish_turn = function(turn) run_finish_turn(run, turn),
+                      emit = function(type, ...) run_emit(run, type, ...))
+  run$task = reactor_task(function() run_drive(run), run = run)
+  # touch the lock now, then every 10 minutes (IC-59): a session whose runs are all shorter than
+  # 10 minutes still refreshes its lock at each run, so another process never takes an actively
+  # used session's lock for stale after 24 h
+  run_heartbeat(run)
+  invisible(run)
+}
+
+#' Count gptr() calls made from one `r` evaluation (gptr.max_nested_calls, IC-66); the children of
+#' one team or fan-out share `opts$nested_group` and count once
+#' @noRd
+run_count_nested = function(outer, opts) {
+  tc = outer$tool_call
+  if (is.null(tc)) return(invisible(NULL))
+  counts = outer$nested_count
+  keys = unique(c(counts[[tc$id]], opts$nested_group %||% id_new("g", 8L)))
+  counts[[tc$id]] = keys
+  outer$nested_count = counts
+  cap = gptr_opt("max_nested_calls")
+  if (length(keys) > cap) {
+    gptr_abort(paste0("too many gptr() calls in one evaluation (limit ", cap,
+                      ", option gptr.max_nested_calls)"),
+               "budget", kind = "nested_calls", budget = cap, used = length(keys),
+               session = outer$session)
+  }
+  invisible(length(keys))
+}
+
+#' Pump the reactor until every run settled or `timeout` seconds passed
+#'
+#' As run_wait_foreground(), a nested pump runs only the FIFO tools of the awaited runs (IC-57).
+#' @return `invisible(TRUE)` when all settled.
+#' @noRd
+run_wait = function(runs, timeout = Inf) {
+  if (inherits(runs, "gptr_run")) runs = list(runs)
+  settled = function() all(vapply(runs, function(r) isTRUE(r$settled), NA))
+  if (settled()) return(invisible(TRUE))
+  allow = if (reactor_depth() == 0L) NULL else vapply(runs, function(r) r$id, "")
+  ok = reactor_pump(until = settled, slice_ms = 100L, allow_runs = allow, timeout = timeout)
+  invisible(isTRUE(ok) || settled())
+}
+
+#' Append messages and emit their events; the first user message of a run opens a prompt turn
+#' @noRd
+run_append_messages = function(run, msgs) {
+  s = run$shell
+  d = session_data(s)
+  for (m in msgs) {
+    if (identical(m$role, "user") && !isTRUE(run$counted_turn) && !isTRUE(run$requested)) {
+      d$turns = d$turns + 1L
+      run$counted_turn = TRUE
+    }
+    session_append(s, entry_message(m))
+    run_emit(run, "message_start", role = m$role)
+    run_emit(run, "message_end", role = m$role, message = m)
+  }
+  invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------- driving the loop
+
+#' The reactor task of a run: one loop action per call while not waiting
+#' @return `TRUE` while the run is active.
+#' @noRd
+run_drive = function(run) {
+  if (isTRUE(run$settled)) return(FALSE)
+  if (isTRUE(run$busy)) return(TRUE)
+  tryCatch(run_step(run), error = function(e) run_fail(run, e))
+  !isTRUE(run$settled)
+}
+
+#' One step: abort when signalled, else the loop's next action
+#' @noRd
+run_step = function(run) {
+  if (isTRUE(run$signal$aborted)) return(run_abort(run, run$signal$reason %||% "user"))
+  act = loop_next(run$loop)
+  switch(act$action,
+    request = run_begin_request(run, act$messages),
+    tools = run_tools(run, act),
+    end = run_settle(run, act$reason),
+    invisible(NULL))
+}
+
+#' Take one queued item and turn it into a message (IC-55); steers become relays once the run has
+#' made a request
+#' @noRd
+run_take = function(run, which) {
+  d = session_data(run$shell)
+  q = d$queue
+  if (!length(q[[which]])) return(list())
+  item = q[[which]][[1L]]
+  q[[which]] = q[[which]][-1L]
+  d$queue = q
+  run_emit(run, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  list(queue_item_message(item, which, relay = isTRUE(run$requested)))
+}
+
+#' The loop's finish_turn hook: a blocked gate or an abort ends the run
+#' @noRd
+run_finish_turn = function(run, turn) {
+  if (!is.null(run$blocked)) return(list(action = "end", reason = "blocked"))
+  if (isTRUE(run$signal$aborted)) return(list(action = "end", reason = "aborted"))
+  NULL
+}
+
+#' Start a turn's request: pending operator messages and queued messages first
+#' @noRd
+run_begin_request = function(run, messages) {
+  ops = run$pending_operator
+  run$pending_operator = list()
+  run_append_messages(run, c(ops, messages))
+  run$requested = TRUE
+  run$boundary_compacted = FALSE
+  run_request(run)
+}
+
+#' Make one model request (also used for retries)
+#'
+#' provider_stream() (P05) refuses a decision-only model, a disabled provider, a request
+#' preflight that fails (IC-74: a local-only Ollama selection that cannot establish local
+#' execution, missing or stale discovery evidence) and a missing key before anything starts; that
+#' condition ends the run with status `error` (run_drive() and the retry timer hand it to
+#' run_fail()). The preflight reads the run's frozen safety snapshot (`run$opts$safety`), because
+#' the run is passed as `run`.
+#' @noRd
+run_request = function(run) {
+  s = run$shell
+  d = session_data(s)
+  live = session_live(s)
+  if (isTRUE(run$signal$aborted)) return(run_abort(run, run$signal$reason %||% "user"))
+  if (identical(run$attempt, 0L) && !isTRUE(run$boundary_compacted)) run_compact_check(run)
+  target = run_target(run)
+  req = run_build(run, target)
+  hit = budget_check(s, req$tokens_est)
+  if (!is.null(hit) && !run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
+  if (ext_service_has("prefix.guard")) {
+    # gptr.check_prefix = "error" (04 section 3.1) stops the run: P07's guard signals
+    # gptr_error_internal and the run settles with status error; other failures are diagnostics
+    tryCatch(ext_service_get("prefix.guard")(s, target, req$view), error = function(e) {
+      if (inherits(e, "gptr_error_internal") && identical(gptr_opt("check_prefix"), "error")) {
+        stop(e)
+      }
+      registry_diagnostic("session", "prefix.guard", "service_error", conditionMessage(e))
+    })
+  }
+  run$request_id = req$context$request_id
+  run$request_ids = c(run$request_ids, run$request_id)
+  run$tokens_est = req$tokens_est
+  ledger_add(s, run$request_id, req$components)
+  run_emit(run, "before_request", provider = target$provider, model = target$ref,
+           request_id = run$request_id, view = req$view, tokens_est = req$tokens_est)
+  req$context$params = run_request_params(run, target, req$context$params)
+  run$acc = acc_new()
+  run$rs = new.env(parent = emptyenv())
+  run$last_error = NULL
+  run$request_started = Sys.time()
+  run$request_closed = FALSE
+  run$busy = TRUE
+  run$status = "requesting"
+  run$turn = run$loop$turn
+  # IC-33: the run's gate, tool-result builder and MCP dispatcher are injected through `opts`
+  # (P05's provider_stream() reads opts$gate, opts$tool_result and opts$mcp_dispatch and falls
+  # back to a closed gate without them)
+  opts = list(signal = run$signal, state = live$adapter, memo = live$memo, run = run$id,
+              session = d$id, gate = run$gate, tool_result = run$tool_result)
+  if (ext_service_has("mcp.dispatch_local")) opts$mcp_dispatch = run$mcp_dispatch
+  cb = run_stream_callbacks(run)
+  tid = provider_stream(target, req$context, opts, emit = cb$emit, done = cb$done, run = run)
+  tid = as.character(tid)
+  if (length(tid) == 1L && !is.na(tid)) run$transfers = c(run$transfers, tid)
+  invisible(NULL)
+}
+
+#' The emit/done callbacks of a request; their frame holds only the run (rule R2)
+#' @noRd
+run_stream_callbacks = function(run) {
+  list(emit = function(ev) run_on_event(run, ev), done = function(msg) run_on_done(run, msg))
+}
+
+# ---------------------------------------------------------------------------- stream callbacks
+
+#' INFRA-02 events: delta-only agent events, redacted per content block with a streaming hold-back
+#' @noRd
+run_on_event = function(run, ev) {
+  if (isTRUE(run$settled) || isTRUE(run$request_closed)) return(invisible(NULL))
+  run$acc$push(ev)
+  type = ev$type
+  if (identical(type, "start")) {
+    run$status = "streaming"
+    run_emit(run, "message_start", role = "assistant")
+  } else if (type %in% c("text_delta", "thinking_delta", "toolcall_delta")) {
+    kind = sub("_delta$", "", type)
+    key = as.character(ev$index)
+    x = get0(key, envir = run$rs, inherits = FALSE)
+    if (is.null(x)) {
+      x = list(rs = redact_stream("stream"), kind = kind)
+      assign(key, x, envir = run$rs)
+    }
+    safe = x$rs$push(ev$delta)
+    if (nzchar(safe)) run_emit(run, "message_update", index = ev$index, kind = kind, delta = safe)
+  } else if (identical(type, "error")) {
+    run$last_error = ev$error
+  } else if (type %in% c("retry_start", "retry_end")) {
+    args = ev[setdiff(names(ev), c("type", "ts", "session", "run", "agent", "turn"))]
+    do.call(run_emit, c(list(run, type), args))
+  }
+  invisible(NULL)
+}
+
+#' Emit what the streaming redactors still hold
+#'
+#' A redactor that failed closed at its holding limit (D-010) keeps failing: its held text is
+#' dropped with a diagnostic, never emitted, and the response is still recorded.
+#' @noRd
+run_flush_deltas = function(run) {
+  for (key in ls(run$rs)) {
+    x = get(key, envir = run$rs)
+    rest = tryCatch(x$rs$flush(), error = function(e) {
+      registry_diagnostic("session", "message_update", class(e)[[1L]], conditionMessage(e))
+      ""
+    })
+    if (nzchar(rest)) {
+      run_emit(run, "message_update", index = as.integer(key), kind = x$kind, delta = rest)
+    }
+  }
+  invisible(NULL)
+}
+
+#' The final assistant message of a request (called once by provider_stream())
+#' @noRd
+run_on_done = function(run, msg) {
+  if (isTRUE(run$settled) || isTRUE(run$request_closed)) return(invisible(NULL))
+  run$request_closed = TRUE
+  tryCatch(run_response(run, msg), error = function(e) run_fail(run, e))
+  invisible(NULL)
+}
+
+#' Account, append and hand the response to the loop (or to recovery when it failed)
+#'
+#' Usage (IC-74, 07-local-ollama.md section 5 "Missing usage remains unknown"): a usage the
+#' provider reported is recorded as reported, its unknown counts staying unknown (`NA`); only when
+#' the provider reported no token count at all is the row filled by the estimator and marked
+#' `estimated = TRUE` (04 section 4.3).
+#' @noRd
+run_response = function(run, msg) {
+  s = run$shell
+  d = session_data(s)
+  run_flush_deltas(run)
+  if (!run_usage_reported(msg[["usage"]])) {
+    msg$usage = usage_new(input = run$tokens_est %||% 0,
+                          output = est_tokens(msg_text(msg), "prose"), estimated = TRUE)
+  }
+  row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
+                  parent_id = d$parent_id %||% NA_character_, started = run$request_started,
+                  seconds = as.numeric(difftime(Sys.time(), run$request_started, units = "secs")),
+                  multiplier = d$estimator$m %||% 1)
+  row = usage_conform(row)
+  row$request_id = run$request_id
+  usage_add(s, row)
+  ledger_mark_cached(s, run$request_id, usage_as(msg[["usage"]])[["cache_read"]])
+  run_emit(run, "usage", row = row)
+  run_estimator_update(run, msg)
+  session_append(s, entry_message(msg))
+  run_emit(run, "message_end", role = "assistant", message = msg)
+  run$message = msg
+  if (identical(msg$stop_reason, "error")) return(run_response_error(run, msg))
+  if (run$attempt > 0L) {
+    run_emit(run, "retry_end", attempt = run$attempt, ok = TRUE)
+    run$attempt = 0L
+  }
+  if (identical(msg$stop_reason, "stop") && is_context_overflow(msg, run$model$context)) {
+    run$pending_compact = "overflow"
+  }
+  budget_near(run)
+  run$busy = FALSE
+  loop_response(run$loop, msg)
+  invisible(NULL)
+}
+
+#' Did the provider report usage? TRUE when P05 accepts the record (usage_as()) and it holds at
+#' least one known positive token count (IC-74)
+#'
+#' A missing record, an all-unknown one (P05's `usage_as(NULL)`, which P12's normalisers give for
+#' a stream that reported nothing), only legacy zeros, or a record P05 refuses report nothing;
+#' a partial report is a report, and its unknown counts stay unknown.
+#' @noRd
+run_usage_reported = function(usage) {
+  if (!is.list(usage)) return(FALSE)
+  u = tryCatch(usage_as(usage), error = function(e) NULL)
+  if (is.null(u)) return(FALSE)
+  counts = vapply(c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h"),
+                  function(f) as.numeric(u[[f]]), 1)
+  any(!is.na(counts) & counts > 0)
+}
+
+#' Recovery of a failed request: one compact-and-retry on overflow, at most two agent-level
+#' retries of transient errors, else the error ends the run (report 02 sections 2.8-2.9, C-33)
+#' @noRd
+run_response_error = function(run, msg) {
+  err = run$last_error %||% list()
+  if (is_context_overflow(msg, run$model$context, err)) {
+    if (!isTRUE(run$overflow_used) && ext_service_has("compact.run")) {
+      run$overflow_used = TRUE
+      ok = tryCatch({
+        ext_service_get("compact.run")(run$shell, "overflow")
+        TRUE
+      }, error = function(e) {
+        registry_diagnostic("session", "compaction", "compaction_failed", conditionMessage(e))
+        FALSE
+      })
+      if (ok) {
+        run$boundary_compacted = TRUE
+        return(run_schedule_request(run, 0))
+      }
+    }
+    run$condition = run_condition(
+      run, msg, c("context_overflow", "provider"),
+      message = paste0("the context is still too large",
+                       if (isTRUE(run$overflow_used)) " after one compaction and retry" else "",
+                       ": ", msg$error_message %||% "context overflow"),
+      tokens = run_overflow_tokens(msg))
+    return(run_response_final(run, msg))
+  }
+  if (run_retryable(msg, err) && run$attempt < 2L) {
+    run$attempt = run$attempt + 1L
+    delay = agent_retry_delay(run$attempt)
+    run_emit(run, "retry_start", attempt = run$attempt, delay = delay, class = err_class(err))
+    return(run_schedule_request(run, delay))
+  }
+  if (run$attempt > 0L) run_emit(run, "retry_end", attempt = run$attempt, ok = FALSE)
+  run$condition = run_condition(run, msg, provider_classes(err))
+  run_response_final(run, msg)
+}
+
+#' The prompt tokens the provider reported for an overflowing request, else NA: gptr's own
+#' estimate (`estimated = TRUE`) is not the provider's count (IC-74)
+#' @noRd
+run_overflow_tokens = function(msg) {
+  u = msg[["usage"]]
+  if (!is.list(u) || isTRUE(u[["estimated"]])) return(NA_real_)
+  overflow_count(u, "input")
+}
+
+#' Hand a failed response to the loop, which ends the run
+#' @noRd
+run_response_final = function(run, msg) {
+  run$busy = FALSE
+  loop_response(run$loop, msg)
+  invisible(NULL)
+}
+
+#' Re-send the current request after `delay` seconds (an interruptible reactor timer)
+#' @noRd
+run_schedule_request = function(run, delay) {
+  run$busy = TRUE
+  id = reactor_timer(at = reactor_now() + delay, fn = function() {
+    tryCatch(run_request(run), error = function(e) run_fail(run, e))
+  }, run = run)
+  run$timers = c(run$timers, id)
+  invisible(NULL)
+}
+
+#' The unsignalled condition object stored for a terminal status (04 section 2.2)
+#' @noRd
+run_condition = function(run, msg, cls, message = NULL, ...) {
+  err = run$last_error %||% list()
+  d = session_data(run$shell)
+  rid = err[["request_id"]]
+  if (!is.character(rid) || length(rid) != 1L || is.na(rid)) rid = run$request_id %||% NA_character_
+  gptr_condition(message %||% msg$error_message %||% "the model request failed", cls, "error",
+                 list(provider = run$model$provider %||% NA_character_,
+                      model = run$model$ref %||% d$model, status = err_status(err),
+                      request_id = rid, error_type = err_class(err), session = d$id, ...))
+}
+
+# ---------------------------------------------------------------------------- compaction, budgets
+
+#' Threshold compaction at a request boundary (compact.should), or the pending compaction after a
+#' silent overflow; none before P07 registers the services. A router session is asked for the
+#' compaction model first (IC-69)
+#' @noRd
+run_compact_check = function(run) {
+  s = run$shell
+  reason = run$pending_compact
+  run$pending_compact = NULL
+  if (is.null(reason) && ext_service_has("compact.should")) {
+    should_fun = ext_service_get("compact.should")
+    should = tryCatch(isTRUE(should_fun(s, context_tokens(s), context_idle(s))),
+                      error = function(e) FALSE)
+    if (should) reason = "threshold"
+  }
+  if (is.null(reason) || !ext_service_has("compact.run")) return(invisible(FALSE))
+  if (startsWith(session_data(s)$model, "router:")) run_route(run, "compaction")
+  ok = tryCatch({
+    ext_service_get("compact.run")(s, reason)
+    TRUE
+  }, error = function(e) {
+    registry_diagnostic("session", "compaction", "compaction_failed", conditionMessage(e))
+    FALSE
+  })
+  if (ok) run$boundary_compacted = TRUE
+  invisible(ok)
+}
+
+#' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
+#' @noRd
+run_budget_extend = function(run, hit) {
+  if (!isTRUE(run$opts$safety$can_prompt)) return(FALSE)
+  ui = run_ui(run)
+  if (is.null(ui) || !isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) return(FALSE)
+  title = paste0("The ", hit$kind, " budget of this call (", format(hit$budget), ") is reached.")
+  ans = tryCatch(ui$select(title, c("Extend it by the same amount", "Stop the run"), default = 2L),
+                 error = function(e) NA_integer_)
+  if (!identical(suppressWarnings(as.integer(ans)), 1L)) return(FALSE)
+  for (r in run_chain(run)) {
+    if (identical(r$budget[[hit$kind]], hit$budget)) {
+      b = r$budget
+      b[[hit$kind]] = 2 * hit$budget
+      r$budget = b
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' Stop a run at a request boundary because a budget is reached (status budget)
+#' @noRd
+run_stop_budget = function(run, hit) {
+  s = run$shell
+  d = session_data(s)
+  session_append(s, entry_custom("gptr.budget", list(kind = hit$kind, budget = hit$budget,
+                                                     used = hit$used)))
+  run_emit(run, "budget_exceeded", kind = hit$kind, budget = hit$budget, used = hit$used)
+  run$condition = gptr_condition(
+    paste0("the ", hit$kind, " budget of this call (", format(hit$budget), ") is reached (used ",
+           format(hit$used), ")"),
+    c(paste0("budget_", hit$kind), "budget"), "error",
+    list(kind = hit$kind, budget = hit$budget, used = hit$used, session = d$id))
+  run_settle(run, "budget")
+}
+
+# ---------------------------------------------------------------------------- tools
+
+#' Hand a turn's tool calls to the dispatcher: through the reactor's tool FIFO when any call is
+#' sequential (R-evaluating or file-writing tools), directly when every call is concurrent or the
+#' batch is truncated (nothing executes). The loop (and so `turn_end`) receives the tool-result
+#' messages, never the results' R values (rule R1). The FIFO item id is kept in `run$fifo` so that
+#' settlement cancels a job that has not started (it would otherwise hold the run, and the
+#' session, until the next pump).
+#' @noRd
+run_tools = function(run, act) {
+  calls = lapply(act$calls, function(b) call_record(run, b))
+  run$status = "tools"
+  run$busy = TRUE
+  job = function() {
+    tryCatch({
+      out = dispatch_tools(run, calls)
+      if (!isTRUE(run$settled)) {
+        run$busy = FALSE
+        run$status = "boundary"
+        loop_results(run$loop, out$messages, out$terminate)
+      }
+    }, error = function(e) run_fail(run, e))
+    invisible(NULL)
+  }
+  sequential = any(vapply(calls, function(cl) {
+    is.null(cl$tool) || !identical(cl$tool$execution, "concurrent")
+  }, NA))
+  if (sequential && !isTRUE(act$truncated)) {
+    run$fifo = c(run$fifo, reactor_enqueue_tool(run, job))
+  } else {
+    job()
+  }
+  invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------- settle and abort
+
+#' Settle a run with a loop end reason: status, stored condition, released frame bindings (rule R2),
+#' `agent_end`
+#' @noRd
+run_settle = function(run, reason) {
+  if (isTRUE(run$settled)) return(invisible(NULL))
+  run$settled = TRUE
+  s = run$shell
+  d = session_data(s)
+  live = session_live(s)
+  status = switch(reason, aborted = "aborted", error = "error", max_turns = "max_turns",
+                  blocked = "blocked", budget = "budget", "idle")
+  if (identical(status, "max_turns") && is.null(run$condition)) {
+    run$condition = gptr_condition(
+      paste0("the run stopped after ", run$max_turns, " turns (max_turns)"), "max_turns", "error",
+      list(max_turns = run$max_turns, session = d$id))
+  }
+  if (identical(status, "error") && is.null(run$condition)) {
+    run$condition = run_condition(run, run$message %||% list(), "provider")
+  }
+  status = run_settle_persist(run, status)
+  d$status = status
+  d$reason = if (is.null(run$condition)) NULL else conditionMessage(run$condition)
+  d$condition = run$condition
+  # 04 section 2.2: the condition object travels in the run; P08's gateway_signal() reads it here
+  run$signal$condition = run$condition
+  run$status = status
+  run$home = NULL
+  run$scratch = NULL
+  run$outer = NULL
+  run$opts["call"] = list(NULL)
+  ids = as.character(c(run$task, run$timers, run$transfers, run$fifo))
+  ids = ids[!is.na(ids) & nzchar(ids)]
+  if (length(ids)) tryCatch(reactor_cancel(ids), error = function(e) NULL)
+  if (!is.null(live) && identical(live$run, run)) live$run = NULL
+  reactor_run_remove(run)
+  u = d$usage
+  run_emit(run, "agent_end", status = status, reason = d$reason,
+           usage = u[u$request_id %in% run$request_ids, , drop = FALSE], doc = run$opts$doc,
+           turns = d$turns)
+  if (is.null(d$parent_id)) last_set(s)
+  invisible(NULL)
+}
+
+#' Persist a settling run's outcome: the last text, the `returns` value and the plugin state
+#'
+#' These steps write to the store, which can fail (a full disk, a read-only file). The failure
+#' never interrupts the settlement, which would leave the session `running` and the run held by
+#' the reactor. A run without a terminal condition of its own (an `idle` run) settles with status
+#' `error` and the store's condition; a run that already ends `aborted` or with a condition keeps
+#' it, and the store failure is a registry diagnostic.
+#' @return The status to settle with.
+#' @noRd
+run_settle_persist = function(run, status) {
+  s = run$shell
+  d = session_data(s)
+  err = tryCatch({
+    txt = final_text(entries_path(d))
+    if (!is.null(txt) && !status %in% c("error", "aborted")) d$last_text = txt
+    if (identical(status, "idle")) run_returns(run)
+    plugin_state_persist(s)
+    NULL
+  }, error = function(e) e)
+  if (is.null(err)) return(status)
+  if (identical(status, "aborted") || !is.null(run$condition)) {
+    registry_diagnostic("session", "settle", class(err)[[1L]], conditionMessage(err))
+    return(status)
+  }
+  run$condition = run_error_condition(err)
+  "error"
+}
+
+#' The stored condition of an unexpected R error: a gptr_error as it is, else
+#' `gptr_error_internal`
+#' @noRd
+run_error_condition = function(e) {
+  if (inherits(e, "gptr_error")) return(e)
+  gptr_condition(paste0("internal error in the run: ", conditionMessage(e)), "internal", "error",
+                 list(detail = conditionMessage(e)))
+}
+
+#' Settle a run after an unexpected R error (kept as the stored condition)
+#' @noRd
+run_fail = function(run, e) {
+  if (isTRUE(run$settled)) return(invisible(NULL))
+  run$condition = run_error_condition(e)
+  run_settle(run, "error")
+}
+
+#' Abort a run: cancel its transfers and child runs, record the partial answer with
+#' `stop_reason = "aborted"`, move the queue to `dropped`, settle with status `aborted`
+#' @noRd
+run_abort = function(run, reason = "user") {
+  if (isTRUE(run$settled)) return(invisible(run))
+  s = run$shell
+  d = session_data(s)
+  run$signal$aborted = TRUE
+  run$signal$reason = reason
+  if (length(run$transfers)) tryCatch(reactor_cancel(run$transfers), error = function(e) NULL)
+  for (cid in run$children) {
+    cs = session_by_id(cid)
+    cl = if (is.null(cs)) NULL else session_live(cs)
+    if (!is.null(cl$run)) run_abort(cl$run, reason)
+  }
+  streaming = run$status %in% c("requesting", "streaming")
+  if (isTRUE(run$busy) && streaming && !isTRUE(run$request_closed)) {
+    run$request_closed = TRUE
+    msg = run_partial_message(run)
+    msg$stop_reason = "aborted"
+    msg$error_message = paste0("aborted (", reason, ")")
+    # a store failure here must not stop the abort (the session would stay `running`, and under
+    # the abort-only policy the store error would replace the re-signalled interrupt)
+    tryCatch(session_append(s, entry_message(msg)), error = function(e) {
+      registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e))
+    })
+    run_emit(run, "message_end", role = "assistant", message = msg)
+  }
+  d$dropped = c(d$dropped, d$queue$steer, d$queue$follow_up)
+  d$queue = list(steer = list(), follow_up = list())
+  run_settle(run, "aborted")
+  invisible(run)
+}
+
+#' The partial answer of an aborted request
+#'
+#' The accumulator's message once the stream's `start` event named the model; before it, P01's
+#' accumulator answers "unknown" for the api, provider and model, so an empty message of the run's
+#' model is built instead (as P05's stream_partial() does).
+#' @noRd
+run_partial_message = function(run) {
+  msg = if (identical(run$status, "streaming")) {
+    tryCatch(run$acc$message(), error = function(e) NULL)
+  } else {
+    NULL
+  }
+  if (is.list(msg)) return(msg)
+  m = run$model
+  msg_assistant(list(), api = m[["api"]] %||% "unknown", provider = m[["provider"]] %||% "unknown",
+                model = m[["id"]] %||% "unknown", stop_reason = "aborted", route = stream_route(m),
+                request_id = run$request_id)
+}
+
+#' Touch the session's lock every 10 minutes while the run is live (IC-59)
+#' @noRd
+run_heartbeat = function(run) {
+  if (isTRUE(run$settled)) return(invisible(NULL))
+  live = session_live(run$shell)
+  if (!is.null(live$store)) tryCatch(store_heartbeat(live$store), error = function(e) NULL)
+  run$timers = c(run$timers, reactor_timer(at = reactor_now() + 600,
+                                           fn = function() run_heartbeat(run), run = run))
+  invisible(NULL)
+}

@@ -1402,6 +1402,74 @@ expectations failed before the fixes, `[ FAIL 19 | WARN 0 | SKIP 0 | PASS 78 ]`,
 (two seeds) gives 0 errors and 0 warnings from the guard, the targets and the shim
 (`task1-fix1-fuzz.log`, script `task1-fix1-fuzz.R`).
 
+## D-038 - P06 run engine: a reported usage keeps its unknowns, nested pumps run only the awaited runs' tools, a failed stream redactor never ends the run, settlement survives a store failure (2026-10-04)
+
+P06 Task 10's literal engine (`R/agent-run.R`) predates IC-74, departs from IC-57 and D-010, and
+could leave a session `running` (04 section 7.6: `session_run()` runs to settlement). Six places
+changed. The behaviours now, which P07 (compaction), P08 (`gateway_signal()`), P13, P14, P19
+and P21 consume:
+
+1. **The estimator fills a usage only when the provider reported nothing** (07-local-ollama.md
+   section 5, "Missing usage remains unknown"; contract 4.3 `estimated`). The plan replaced the
+   message's usage with `usage_new(input = <request estimate>, output = <text estimate>,
+   estimated = TRUE)` whenever `input + output` was not a known positive number. A usage with a
+   reported input and an unknown output, or a reported cache read beside zero input and output,
+   therefore lost its observation. `run_usage_reported()` now decides. The estimator fills the row
+   only when the record is missing, is refused by P05's `usage_as()`, or holds no known positive
+   count among `input`, `output`, `cache_read`, `cache_write_5m` and `cache_write_1h`. That covers
+   an all-unknown record (P05's `usage_as(NULL)`, which P12's normalisers give for a stream that
+   reported nothing) and one with only legacy zeros. A partial report is kept as reported: its
+   unknown counts stay `NA` in the stored message, the usage row and the session totals (D-021),
+   and budgets compare its known part (D-025). The ledger's cache flags read the cache read of
+   the normalised record (`usage_as()`): an omitted field is P05's legacy zero, an unknown one
+   `NA` (D-024 item 2).
+2. **An overflow condition's `tokens` is the provider's count.** `gptr_error_context_overflow`
+   carried `msg$usage$input`. For an overflow without reported usage (the usual case: the error
+   arrives before any usage) that was gptr's own estimate presented as a measurement. It is now
+   the provider-reported input count, else `NA` (`run_overflow_tokens()`).
+3. **A nested pump runs only the FIFO tools of the runs it awaits** (IC-57; P04's
+   `reactor_pump()` default). The plan's `run_wait()` and foreground wait passed
+   `allow_runs = NULL` (every run) whenever `run_current()` was `NULL`. That includes a pump nested
+   in a hook or another reactor callback while another run is between steps: such a pump ran that
+   other run's queued tool inside the hook, one pump level deeper. The choice is now by pump
+   depth: every run only in the outermost pump (`reactor_depth() == 0`), else the awaited runs.
+   Inside a tool this equals the plan's behaviour.
+4. **A stream redactor that failed closed does not end the run** (D-010). A redactor that
+   exceeded its hold-back limit keeps failing. The plan's `run_flush_deltas()` let its `flush()`
+   error escape `run_response()`, which settled a complete response with status `error`
+   (`gptr_error_internal`). Its held text is now dropped with a registry diagnostic, never
+   emitted, and the response is recorded as usual.
+5. **Settlement finishes when the store fails** (04 section 7.6, `session_run()` "runs `s` to
+   settlement"; rule R2; the plan's own "the session never stays `running`"). The plan's
+   `run_settle()` set `run$settled` first and then wrote to the store (`run_returns()`'s value
+   entry, `plugin_state_persist()`) before it set the session's status, cleared the live run,
+   released the reactor's hold and the frame bindings and emitted `agent_end`. A store failure
+   (`gptr_error_internal`, "the session store failed") escaped, and `run_fail()` returned at once
+   because the run was already settled: the session stayed `running` for good, every later
+   `run_start()` raised `gptr_error_busy`, and no condition reached the caller.
+   `run_settle_persist()` now runs those steps (and the last-text update) under one handler. A run
+   with no terminal condition of its own (`idle`) settles with status `error` and the store's
+   condition (a non-gptr error becomes `gptr_error_internal`, as in `run_fail()`); a run that
+   ends `aborted` or already holds a condition (`error`, `max_turns`, `budget`, `blocked`) keeps
+   it, and the store failure is a registry diagnostic (event `settle`). `run_abort()` guards its
+   partial-answer append the same way (diagnostic, event `abort`), so under the abort-only policy
+   the interrupt, not a store error, is re-signalled.
+6. **An abort before the stream's `start` event records the run's model.** P01's accumulator
+   answers `"unknown"` for api, provider and model until `start`, and never throws, so the plan's
+   fallback to the run's model never ran. `run_partial_message()` uses the accumulator only once
+   `start` was seen (`run$status == "streaming"`), else an empty message of `run$model` with the
+   request id and route, as P05's `stream_partial()` does.
+
+Unchanged: the estimator fill itself (contract 4.3; D-024 item 2, D-025 item 2, D-033 item 1 and
+D-036 item 8 rely on it), and `provider_stream()`'s IC-74 refusals (a decision-only model, a
+refused request preflight, which reads the run's frozen safety snapshot, a missing key), which end
+the run with status `error` before any request, through `run_fail()`.
+
+Validation: `progress/P06.md`, Task 10 (`test-agent-run.R`; the added blocks failed 9 assertions
+against the plan-literal engine: 5 for item 1, 1 for item 2, 1 for item 3 (a tool run at pump
+depth 2), 2 for item 4), and its review round 1 (items 5 and 6: 5 blocks that failed 21
+assertions before the fix).
+
 ## D-039 - P10 r-call marker: ns_r_call() never forces or calls a gptr_r_call binding (2026-10-04)
 
 P10 Task 1's plan-literal `ns_r_call()` (`R/tool-namespace.R`) walks `sys.frame(k)` outwards
