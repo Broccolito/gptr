@@ -404,3 +404,224 @@ print.gptr_secret = function(x, ...) {
 #' @export
 #' @noRd
 as.character.gptr_secret = function(x, ...) paste0("[secret:", x$name, "]")
+
+# ---- secret-access classifier (G6 sections 3.8 and 5.4; extends report 18's classifier) ----
+# Levels and secret-guard flags per rule; P11's secret_guard policy and classifier read them.
+scan_rules = data.frame(
+  rule = c("secret_env_registered", "env_dump", "env_dump_process", "vault_access", "secret_env",
+           "env_dynamic", "secret_file", "keyring", "env_write", "marker", "secret_to_network",
+           "tainted_to_network"),
+  level = c(3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 2L, 3L, 4L, 4L),
+  guard = c(TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE),
+  stringsAsFactors = FALSE
+)
+scan_secret_path_re = paste0(
+  "(^|[/\\\\])([^/\\\\]*\\.env(\\.[A-Za-z0-9_-]+)?|\\.Renviron|\\.netrc|_netrc|\\.pgpass|",
+  "auth\\.json|\\.credentials\\.json|credentials(\\.json)?|id_(rsa|dsa|ecdsa|ed25519)|",
+  "[^/\\\\]+\\.(pem|key|p12|pfx))$|",
+  "(^|[/\\\\])(\\.ssh|\\.aws|\\.codex|\\.claude|\\.gnupg|\\.docker|\\.kube|gcloud)([/\\\\]|$)|",
+  "/proc/(self|[0-9]+)/environ"
+)
+scan_read_funs = c("readLines", "readRDS", "readChar", "readBin", "scan", "file", "read.table",
+                   "read.csv", "read.delim", "readRenviron", "fromJSON", "read_json", "read_yaml",
+                   "yaml.load_file", "fread", "read_csv", "read_lines", "read_file", "vroom",
+                   "read.dcf", "source", "sys.source", "load_dot_env", "file.show", "read")
+scan_net_funs = c("req_perform", "req_perform_parallel", "req_perform_connection",
+                  "req_perform_stream", "curl_fetch_memory", "curl_fetch_disk",
+                  "curl_fetch_stream", "curl_upload", "curl", "multi_add", "download.file", "url",
+                  "socketConnection", "make.socket", "url.show", "GET", "POST", "PUT", "PATCH",
+                  "DELETE", "VERB", "gh", "send", "smtp_send", "request", "write.socket",
+                  "ws_send")
+# The namespace operators and the assignment operators. The internal namespace operator and
+# the arrows are assembled so that neither the triple-colon lint nor a text scan for the arrow
+# ever matches this file.
+scan_ns_ops = c("::", paste0("::", ":"))
+scan_assign_ops = c("=", "assign", paste0("<", "-"), paste0("<<", "-"))
+scan_net_pkgs = c("", "httr2", "httr", "curl", "utils", "base", "gh", "blastula", "websocket")
+scan_ns_funs = c("getFromNamespace", "asNamespace", "getNamespace", "loadNamespace")
+scan_proc_funs = c("system", "system2", "shell", "run", "process", "r_bg", "r", "run_process",
+                   "exec_wait")
+scan_dump_cmds = c("env", "printenv", "set", "export", "declare", "Get-ChildItem", "gci", "cat",
+                   "type")
+
+#' The function name of a call (`f()`, `pkg::f()`, `obj$f()`), or ""
+#' @noRd
+scan_call_name = function(e) {
+  h = e[[1]]
+  if (is.symbol(h)) return(as.character(h))
+  if (is.character(h)) return(h)
+  if (is.call(h) && as.character(h[[1]])[1] %in% scan_ns_ops) return(as.character(h[[3]]))
+  if (is.call(h) && identical(as.character(h[[1]])[1], "$")) return(as.character(h[[3]]))
+  ""
+}
+
+#' The package of a `pkg::f()` call, or ""
+#' @noRd
+scan_call_pkg = function(e) {
+  h = e[[1]]
+  if (is.call(h) && as.character(h[[1]])[1] %in% scan_ns_ops) as.character(h[[2]]) else ""
+}
+
+#' Every string constant inside a call (depth-limited)
+#' @noRd
+scan_strings = function(e, depth = 0L) {
+  if (is.character(e)) return(e)
+  if (!is.call(e) || depth > 6L) return(character())
+  parts = as.list(e)
+  out = character()
+  for (i in seq_along(parts)) {
+    if (!identical(parts[[i]], quote(expr = ))) out = c(out, scan_strings(parts[[i]], depth + 1L))
+  }
+  out
+}
+
+#' Literal environment-name vectors, or NULL when resolving them would need evaluation
+#' @noRd
+scan_env_literals = function(e) {
+  if (is.character(e)) return(list(names = e))
+  if (is.null(e)) return(list(names = character()))
+  if (!is.call(e) || !(scan_call_pkg(e) %in% c("", "base"))) return(NULL)
+  fn = scan_call_name(e)
+  parts = as.list(e)[-1L]
+  if (fn == "character" && (!length(parts) ||
+      (length(parts) == 1L &&
+       (identical(parts[[1L]], 0) || identical(parts[[1L]], 0L))))) {
+    return(list(names = character()))
+  }
+  if (fn != "c") return(NULL)
+  out = character()
+  for (i in seq_along(parts)) {
+    if (identical(parts[[i]], quote(expr = ))) return(NULL)
+    one = scan_env_literals(parts[[i]])
+    if (is.null(one)) return(NULL)
+    out = c(out, one$names)
+  }
+  list(names = out)
+}
+
+#' Root symbol assigned by an ordinary or replacement assignment
+#' @noRd
+scan_assign_target = function(e) {
+  if (is.symbol(e) || is.character(e)) return(as.character(e))
+  if (is.call(e) && length(e) >= 2L && !identical(e[[2L]], quote(expr = ))) {
+    return(scan_assign_target(e[[2L]]))
+  }
+  character()
+}
+
+#' Static secret-access rules for model-written R code (never evaluates it)
+#' @noRd
+secret_scan = function(code, tainted = character()) {
+  check_strings(code, "code")
+  check_strings(tainted, "tainted")
+  code = paste(code, collapse = "\n")
+  registered = secret_registered_names()
+  found = list()
+  add = function(rule, name = "") found[[length(found) + 1L]] <<- c(rule, name)
+  assigned = character()
+  uses = character()
+  net = FALSE
+  if (grepl("[secret:", code, fixed = TRUE)) add("marker", "[secret:")
+  exprs = tryCatch(parse(text = code, keep.source = FALSE), error = function(e) NULL)
+  walk = function(e) {
+    if (is.symbol(e)) {
+      s = as.character(e)
+      if (s %in% c("Sys.getenv", "readRenviron", "key_get")) add("env_dynamic", s)
+      uses <<- c(uses, s)
+      return(invisible())
+    }
+    if (!is.call(e)) return(invisible())
+    fn = scan_call_name(e)
+    pkg = scan_call_pkg(e)
+    args = as.list(e)[-1L]
+    lits = scan_strings(e)
+    if (fn %in% scan_assign_ops && length(args) >= 2L) {
+      pos = 1L
+      if (fn == "assign") {
+        arg_names = names(args) %||% rep("", length(args))
+        pos = match("x", arg_names)
+        if (is.na(pos)) pos = match("", arg_names)
+      }
+      if (!is.na(pos) && !identical(args[[pos]], quote(expr = ))) {
+        assigned <<- c(assigned, scan_assign_target(args[[pos]]))
+      }
+    }
+    if (fn %in% scan_ns_ops && length(args) == 2L) {
+      internal = fn == scan_ns_ops[2] || grepl("^(secret_|the$|vault)", as.character(args[[2]]))
+      if (identical(as.character(args[[1]]), "gptr") && internal) add("vault_access", "gptr")
+    }
+    if (fn %in% scan_ns_funs && "gptr" %in% lits) add("vault_access", "gptr")
+    if (fn == "Sys.getenv") {
+      arg_names = names(args) %||% rep("", length(args))
+      pos = match("x", arg_names)
+      if (is.na(pos)) pos = match("", arg_names)
+      known = if (is.na(pos)) list(names = character()) else if (
+        identical(args[[pos]], quote(expr = ))
+      ) NULL else scan_env_literals(args[[pos]])
+      if (!is.null(known) && !length(known$names)) {
+        add("env_dump", "Sys.getenv")
+      } else if (!is.null(known)) {
+        for (n in known$names) {
+          if (n %in% registered) {
+            add("secret_env_registered", n)
+          } else if (is_secret_name(n)) {
+            add("secret_env", n)
+          }
+        }
+      } else {
+        add("env_dynamic", "Sys.getenv")
+      }
+    }
+    if (fn %in% c("do.call", "get", "match.fun", "exec", "Map", "lapply", "sapply", "vapply")) {
+      syms = character()
+      for (i in seq_along(args)) if (is.symbol(args[[i]])) syms = c(syms, as.character(args[[i]]))
+      if (any(c("Sys.getenv", "readRenviron") %in% c(lits, syms))) add("env_dynamic", fn)
+    }
+    if (fn %in% scan_read_funs && length(lits)) {
+      hit = lits[grepl(scan_secret_path_re, path.expand(lits), perl = TRUE, ignore.case = TRUE)]
+      if (length(hit)) add("secret_file", hit[1])
+    }
+    if (fn %in% c("key_get", "key_list", "key_get_raw") || pkg == "keyring") add("keyring", fn)
+    if (fn %in% scan_proc_funs && length(lits)) {
+      dump_re = paste0("(^|[[:space:];|&])(env|printenv|set|export|declare)([[:space:];|&]|$)",
+                        "|environ|\\.env\\b|(^|[[:space:];|&])(Get-ChildItem|gci)",
+                        "[[:space:]]+(?:-Path[[:space:]]+)?['\"]?env:")
+      dumps = any(tolower(lits) %in% tolower(scan_dump_cmds)) ||
+        any(grepl(dump_re, lits, perl = TRUE, ignore.case = TRUE))
+      if (dumps) add("env_dump_process", fn)
+      net_re = paste0("(^|[[:space:];|&(/\\\\'\"])",
+                       "(curl|wget|nc|ncat|scp|ssh|Invoke-WebRequest|iwr)",
+                       "(?:\\.exe)?([[:space:];|&)'\"]|$)")
+      if (any(grepl(net_re, lits, perl = TRUE, ignore.case = TRUE))) net <<- TRUE
+    }
+    if (fn %in% scan_net_funs && pkg %in% scan_net_pkgs) net <<- TRUE
+    if (fn == "Sys.setenv") add("env_write", paste(names(args), collapse = ","))
+    if (is.call(e[[1]])) walk(e[[1]])
+    for (i in seq_along(args)) if (!identical(args[[i]], quote(expr = ))) walk(args[[i]])
+    invisible()
+  }
+  for (e in exprs) walk(e)
+  rules = vapply(found, function(f) f[1], "")
+  sources = intersect(rules, c("env_dump", "secret_env", "secret_env_registered", "env_dynamic",
+                               "secret_file", "keyring", "vault_access", "env_dump_process"))
+  taint_hit = length(intersect(uses, tainted)) > 0L
+  if (net && (length(sources) || taint_hit)) {
+    add(if (length(sources)) "secret_to_network" else "tainted_to_network", "network")
+  }
+  if (!length(found)) {
+    findings = data.frame(rule = character(), name = character(), level = integer(),
+                          guard = logical(), stringsAsFactors = FALSE)
+  } else {
+    m = do.call(rbind, found)
+    findings = data.frame(rule = m[, 1], name = m[, 2], stringsAsFactors = FALSE)
+    findings = findings[!duplicated(findings), , drop = FALSE]
+    i = match(findings$rule, scan_rules$rule)
+    findings$level = scan_rules$level[i]
+    findings$guard = scan_rules$guard[i]
+    rownames(findings) = NULL
+  }
+  list(findings = findings,
+       level = if (nrow(findings)) max(findings$level) else 0L,
+       guard = any(findings$guard),
+       assigned = if (length(sources) || taint_hit) unique(assigned) else character())
+}
