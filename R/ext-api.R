@@ -266,3 +266,250 @@ print.gptr_extension_api = function(x, ...) {
   cat("members: ", paste(api_members(x), collapse = ", "), "\n", sep = "")
   invisible(x)
 }
+
+# ---- ctx (contract 5.6, 10.6) --------------------------------------------------------------------
+# ctx members fetch their services lazily, at call time, through the registry `service` kind and
+# P01's service table (IC-09, IC-34); a member whose service has not arrived signals
+# gptr_error_not_available. Members marked P06 in contract 10.6 are implemented by the
+# `ctx.kernel` service: a named list of functions called as impl(ctx, ...).
+
+# ---- services and ctx --------------------------------------------------------------------------
+
+#' A service function or NULL: a `service` registry record first (it may be session-scoped),
+#' then P01's bootstrap table (IC-34), looked up once
+#' @noRd
+ext_service_try = function(name, session = NULL) {
+  spec = registry_get("service", name, session)
+  if (!is.null(spec)) return(spec[["fun"]])
+  tryCatch(ext_service_get(name), gptr_error_not_available = function(e) NULL)
+}
+
+#' gptr_error_not_available for a ctx member whose provider plan is not loaded
+#' @noRd
+ctx_unavailable = function(member, plan) {
+  gptr_abort(paste0(member, " is not available: its provider (plan ", plan, ") is not loaded or ",
+                    "is disabled."),
+             "not_available", member = member, provided_by = plan)
+}
+
+#' A required service for a ctx member
+#' @noRd
+ctx_service = function(ctx, name, member, plan) {
+  f = ext_service_try(name, get(".sid", envir = ctx, inherits = FALSE))
+  if (is.null(f)) ctx_unavailable(member, plan)
+  f
+}
+
+#' The P06 implementation of a ctx member from the `ctx.kernel` service, or NULL
+#' @noRd
+ctx_kernel_impl = function(ctx, member) {
+  k = ext_service_try("ctx.kernel", get(".sid", envir = ctx, inherits = FALSE))
+  if (is.null(k)) return(NULL)
+  impl = k()[[member]]
+  if (is.function(impl)) impl else NULL
+}
+
+#' Call a kernel member: impl(ctx, ...) (P06 implementations take the ctx first)
+#' @noRd
+ctx_call = function(ctx, member, ...) {
+  impl = ctx_kernel_impl(ctx, member)
+  if (is.null(impl)) ctx_unavailable(paste0("ctx$", member, "()"), "P06")
+  impl(ctx, ...)
+}
+
+#' The `none` UI used before a UI backend is registered (contract 10.6): nobody answers
+#' @noRd
+ctx_ui_none = function() {
+  select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
+                    allow_other = FALSE) {
+    NA_integer_
+  }
+  permission = function(request) list(decision = "deny", remember = NULL, feedback = NULL)
+  gptr_spec("ui", "none", has_ui = function() FALSE, select = select, permission = permission)
+}
+
+#' The extension source a handler runs for (set by ev_dispatch() around each handler)
+#' @noRd
+ctx_source = function(ctx) get0(".source", envir = ctx, inherits = FALSE)
+
+#' Call a plugin-scoped kernel member: the handler's source (`"plugin:panel"`) is passed last,
+#' positionally, and only when the member runs for a handler, so the kernel's default applies
+#' otherwise (P06 names that argument `extension` and derives the label "panel" itself)
+#' @noRd
+ctx_call_plugin = function(ctx, member, ...) {
+  src = ctx_source(ctx)
+  if (is.null(src)) ctx_call(ctx, member, ...) else ctx_call(ctx, member, ..., src)
+}
+
+#' Run `fun()` with the ctx attributed to `source`, restoring the previous source
+#' @noRd
+ctx_with_source = function(ctx, source, fun) {
+  if (is.null(ctx)) return(fun())
+  old = ctx_source(ctx)
+  assign(".source", source, envir = ctx)
+  on.exit(assign(".source", old, envir = ctx), add = TRUE)
+  fun()
+}
+
+#' Member names of a ctx (contract 10.6)
+#' @noRd
+ctx_members = c("session", "envir", "run", "input", "mode", "model", "has_ui", "ui", "risk",
+                "redact", "secret", "execute_tool", "send", "set_model", "add_tools", "tokens",
+                "eval", "describe", "append_entry", "abort", "aborted", "update", "decide",
+                "usage", "state", "emit", "get")
+
+#' The ctx of a session (one per session; contract 7.2, 10.6)
+#'
+#' `session` is a session object, a session id, or NULL for process-level dispatch; `run` is the
+#' run (or run id) whose tool is executing. Members marked P06 in contract 10.6 call the
+#' `ctx.kernel` implementations as impl(ctx, ...); send(), append_entry() and state() add the
+#' source of the handler that called them as their last argument (ctx_call_plugin()).
+#' @noRd
+ctx_new = function(session, run = NULL) {
+  session_id = ext_session_id(session)
+  run_id = ext_session_id(run)
+  check_string(session_id, "session", null = is.null(session))
+  check_string(run_id, "run", null = is.null(run))
+  ctx = new.env(parent = emptyenv())
+  ctx$session = if (is.character(session)) NULL else session
+  ctx$.sid = session_id
+  ctx$.run = run_id
+  ctx$.source = NULL
+  sid = function() get(".sid", envir = ctx, inherits = FALSE)
+  makeActiveBinding("envir", function() {
+    impl = ctx_kernel_impl(ctx, "envir")
+    if (is.null(impl)) NULL else impl(ctx)
+  }, ctx)
+  makeActiveBinding("run", function() {
+    impl = ctx_kernel_impl(ctx, "run")
+    if (is.null(impl)) get(".run", envir = ctx, inherits = FALSE) else impl(ctx)
+  }, ctx)
+  makeActiveBinding("input", function() {
+    f = ext_service_try("ctx.input", sid())
+    if (is.null(f)) NULL else f(ctx)
+  }, ctx)
+  ctx$mode = function() ctx_call(ctx, "mode")
+  ctx$model = function() ctx_call(ctx, "model")
+  ctx$ui = function() {
+    f = ext_service_try("ui.get", sid())
+    if (is.null(f)) ctx_ui_none() else f(get("session", envir = ctx, inherits = FALSE))
+  }
+  ctx$has_ui = function() {
+    ui = ctx$ui()
+    isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))
+  }
+  ctx$risk = function(code, kind = "r") {
+    ctx_service(ctx, "risk.classify", "ctx$risk()", "P11")(code, envir = ctx$envir, kind = kind)
+  }
+  ctx$redact = function(x, profile = "persist") redact_hook(x, profile)
+  ctx$secret = function(name) {
+    check_string(name, "name")
+    f = ext_service_try("secret.lookup", sid())
+    if (is.null(f)) NULL else f(name)
+  }
+  ctx$execute_tool = function(name, input) ctx_call(ctx, "execute_tool", name, input)
+  ctx$send = function(text, as = c("steer", "follow_up")) {
+    check_strings(text, "text")
+    as = check_choice(as, c("steer", "follow_up"), "as")
+    ctx_call_plugin(ctx, "send", text, as)
+    invisible(NULL)
+  }
+  ctx$set_model = function(ref, thinking = NULL, reason = "plugin") {
+    ctx_call(ctx, "set_model", ref, thinking, reason)
+    invisible(NULL)
+  }
+  ctx$add_tools = function(specs) {
+    f = ctx_service(ctx, "session.add_tools", "ctx$add_tools()", "P07")
+    f(get("session", envir = ctx, inherits = FALSE), specs)
+    invisible(NULL)
+  }
+  ctx$tokens = function(x, class = "prose") {
+    est = registry_get("estimator", "default", sid())
+    if (is.null(est)) est_tokens(x, class) else est$estimate(x, class)
+  }
+  ctx$eval = function(code, envir = NULL) {
+    f = ctx_service(ctx, "eval.r", "ctx$eval()", "P09")
+    where = envir %||% ctx$envir
+    if (is.null(where)) {
+      gptr_abort("ctx$eval() needs `envir` when the session has no evaluation environment.",
+                 "invalid_argument", arg = "envir", expected = "an environment")
+    }
+    f(code, envir = where)
+  }
+  ctx$describe = function(x, budget = 150L) {
+    ctx_service(ctx, "describe", "ctx$describe()", "P09")(x, budget)
+  }
+  ctx$append_entry = function(type, data) {
+    check_string(type, "type")
+    ctx_call_plugin(ctx, "append_entry", type, data)
+  }
+  ctx$abort = function(reason) ctx_call(ctx, "abort", reason)
+  ctx$aborted = function() isTRUE(ctx_call(ctx, "aborted"))
+  ctx$update = function(text) ctx_call(ctx, "update", text)
+  ctx$decide = function(question, x, ...) {
+    ctx_service(ctx, "s1.decide", "ctx$decide()", "P13")(question, x, ...)
+  }
+  ctx$usage = function() ctx_call(ctx, "usage")
+  ctx$state = function() ctx_call_plugin(ctx, "state")
+  ctx$emit = function(channel, data) {
+    if (!ev_is_channel(channel)) {
+      gptr_abort("ctx$emit() needs a channel named '<plugin>:<topic>'.", "invalid_argument",
+                 arg = "channel", expected = "a <plugin>:<topic> channel name")
+    }
+    ev_dispatch(channel, list(data = data), session = get("session", envir = ctx) %||% sid(),
+                ctx = ctx)
+    invisible(NULL)
+  }
+  ctx$get = function(kind, name) registry_get(kind, name, sid())
+  class(ctx) = "gptr_ctx"
+  ctx
+}
+
+#' The ctx used for a dispatch whose caller passed none: the process ctx for session-less
+#' dispatch, else a ctx for that session (sessions pass their own ctx; contract 10.6)
+#' @noRd
+ctx_default = function(session) {
+  if (!is.null(session)) return(ctx_new(session))
+  reg = registry_env()
+  if (is.null(reg$ctx0)) reg$ctx0 = ctx_new(NULL)
+  reg$ctx0
+}
+
+#' Get a ctx member; unknown names signal gptr_error_unknown_member
+#' @export
+#' @noRd
+`$.gptr_ctx` = function(x, name) {
+  ext_warn_deprecated("ctx", name)
+  if (exists(name, envir = x, inherits = FALSE)) return(get(name, envir = x, inherits = FALSE))
+  gptr_abort(paste0("ctx has no member '", name, "'."), "unknown_member", name = name,
+             available = ctx_members)
+}
+
+#' Get a ctx member by name
+#' @export
+#' @noRd
+`[[.gptr_ctx` = function(x, i, ...) `$.gptr_ctx`(x, i)
+
+#' ctx is read-only (IC-26)
+#' @export
+#' @noRd
+`$<-.gptr_ctx` = function(x, name, value) {
+  gptr_abort(paste0("ctx is read-only; '", name, "' cannot be assigned. Keep per-session state in ",
+                    "ctx$state()."),
+             "readonly", object = "gptr_ctx", field = name)
+}
+
+#' ctx is read-only (IC-26)
+#' @export
+#' @noRd
+`[[<-.gptr_ctx` = function(x, i, value) `$<-.gptr_ctx`(x, i, value)
+
+#' Print a ctx: its session id and members
+#' @export
+#' @noRd
+print.gptr_ctx = function(x, ...) {
+  sid = get(".sid", envir = x, inherits = FALSE)
+  cat("<gptr_ctx> session ", sid %||% "none", "\n", sep = "")
+  cat("members: ", paste(ctx_members, collapse = ", "), "\n", sep = "")
+  invisible(x)
+}
