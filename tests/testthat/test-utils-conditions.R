@@ -116,3 +116,14 @@ test_that("checkers signal invalid_argument with arg and expected, never the val
   expect_error(check_list(list(1, 2), "l", named = TRUE), class = invalid)
   expect_error(check_class(1, "foo", "x"), class = invalid)
 })
+
+test_that("integer arguments reject overflow and the reserved NA representation", {
+  expect_identical(check_number(.Machine$integer.max, "count", int = TRUE),
+                   .Machine$integer.max)
+  expect_identical(check_number(-.Machine$integer.max, "count", int = TRUE),
+                   -.Machine$integer.max)
+  expect_error(check_number(2147483648, "count", int = TRUE),
+               class = "gptr_error_invalid_argument")
+  expect_error(check_number(-2147483648, "count", int = TRUE),
+               class = "gptr_error_invalid_argument")
+})

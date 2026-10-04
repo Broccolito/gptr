@@ -136,7 +136,9 @@ check_flag = function(x, arg, null = FALSE) {
 check_number = function(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE) {
   if (null && is.null(x)) return(invisible(x))
   ok = is.numeric(x) && length(x) == 1L && !is.na(x) && x >= min && x <= max
-  if (ok && int) ok = is.finite(x) && x == round(x)
+  if (ok && int) {
+    ok = is.finite(x) && x == round(x) && abs(x) <= .Machine$integer.max
+  }
   if (!ok) {
     expected = paste0(
       if (int) "a whole number" else "a number",
