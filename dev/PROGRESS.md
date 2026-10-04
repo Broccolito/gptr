@@ -6,15 +6,18 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 ## Current state
 
 - Branch: `codex/gptr-1.0-implementation`, based on `17a95dd`.
-- Active milestone: **M0**, starting **P01 Foundation**.
+- Active milestone: **M0**, implementing **P01 Foundation**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
   IC-74 adds acceptance work that must be reconciled, not assumed complete.
+- P01 Task 1 passed its actual red/green check and is committed as `bbc000c`.
+  See [P01 task evidence](progress/P01.md) for subsequent task results.
 - The old `get_response()` / `dataframe_to_text()` source and exports were
-  already removed by `0a39627`. The README and GitHub metadata still need the
-  corresponding public-facing transition.
-- Most recent verified state: design checks passed (25 plans, no error-level
-  findings, 764 R blocks parsed, 740 top-level blocks linted); this is not
-  implementation evidence. Synthetic Ollama API checks are in research 04b.
+  already removed by `0a39627`. The README now describes the rebuild and labels
+  planned capabilities clearly. GitHub metadata/publication is being updated.
+- Pinned roxygen2 7.3.3 is available in the ignored development library; missing
+  optional tooling is being installed separately from the user's library.
+- Historical design checks and synthetic Ollama API checks (research 04b) do
+  not substitute for implementation tests or milestone gates.
 
 ## Execution and recording rules
 
@@ -38,12 +41,23 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
-| M0 Foundation | P01–P04 | in progress | P01 starting |
+| M0 Foundation | P01–P04 | in progress | P01 Task 1: FAIL 0, WARN 0, SKIP 0, PASS 42 |
 | M1 Offline session kernel | P05–P08 | pending | — |
 | M2 Live R agent and decisions | P09–P13 | pending | — |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
 | M5 Applications, benchmarks, release | P22–P25 | pending | — |
+
+## Active ownership
+
+- `design_summary`: P01 source, package scaffold, tests, CI and P01 task log.
+- `requirements_audit`: isolated tooling and its evidence; no package source.
+- `plans_security_review`: independent P01 review, then registry/secrets review.
+- Root: integration, GitHub, global progress/handoff and dependency scheduling.
+
+Git commits and generated documentation are serialized. A lane may prepare an
+independent component in parallel, but its plan remains incomplete until all
+prerequisites and acceptance checks pass.
 
 ## Delivery boundary
 

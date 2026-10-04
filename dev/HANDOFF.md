@@ -30,6 +30,10 @@ Updated: 2026-10-03. State: active implementation, P01 not yet complete.
 
 ## Next concrete work
 
-Establish P01 through test-first tasks and actual checks. In parallel, replace
-the legacy README honestly, update GitHub About, and prepare isolated tooling.
-No API should be described as available until its implementation is verified.
+Continue P01 from the latest completed task in `progress/P01.md`. Task 1 was
+committed as `bbc000c` (42 passing assertions). The README rewrite is ready;
+root owns GitHub publication. roxygen2 7.3.3 is installed in `dev/.library`;
+use `R_LIBS_USER="$PWD/dev/.library" Rscript --vanilla` for development checks.
+Optional dependency installation has a separate owner. Read active ownership
+in `PROGRESS.md` before editing or committing. No API should be described as
+available until its implementation is verified.

@@ -1,128 +1,107 @@
-# gptr: An R Interface with the ChatGPT API <a href='https://github.com/Broccolito/gptr'><img src='man/img/logo.png' align="right" height="140"/></a>
+# gptr
 
-Author: [Wanjun Gu](mailto:wanjun.gu@ucsf.edu)
+**An R-native AI agent harness for scientific computing.**
 
-**gptr** is an R package that provides a convenient interface with the OpenAI ChatGPT API. It allows you to interact with ChatGPT, a powerful language model, for various natural language processing tasks.
+gptr 1.0 is being built to bring AI agents into the R session where your data,
+models and analyses already live. Its central idea is simple: let R do the
+computation, let models help with reasoning and decisions, and keep the work in
+documents that scientists can inspect, edit and rerun.
 
-The `gptr` R package makes talking to ChatGPT in R super easy. It helps researchers and data folks by simplifying the complicated stuff, like asking questions and getting answers. With `gptr`, you can use ChatGPT in R without any hassle, making it simpler for everyone to do cool things with language!
+**Status: 1.0 is in development.** The capabilities below describe the accepted
+design, not a completed release. See the [implementation progress](dev/PROGRESS.md)
+for completed work and verification evidence.
 
-## Installation
+The former 0.x ChatGPT interface, including `get_response()` and
+`dataframe_to_text()`, is superseded in this source branch. This is a breaking
+redesign; the source branch and a published CRAN release may expose different
+APIs. Installation and usage instructions for the new harness will accompany a
+validated implementation.
 
-You can install gptr directly from CRAN:
+## The workflow we are building
 
-```R
-install.packages("gptr")
-```
+Load a dataset or a large scientific object into R, ask the agent to investigate
+it, inspect the results, and steer the next step. The agent works in the selected
+R environment, so useful intermediate objects remain available for your own
+code. Prompts, concrete R code and typed model decisions can be combined using
+ordinary R functions, pipes, loops and conditionals.
 
-Alternatively, you can install the most recent `gptr` package from GitHub using the `devtools` package. Make sure you have `devtools` installed:
+The planned `gptr()` gateway serves both interactive conversation and
+programmatic workflows. The same design targets terminal R, RStudio, Positron,
+R Markdown, Quarto and Jupyter with IRkernel, with plots and Shiny applications
+as analysis outputs.
 
-```R
-install.packages("devtools")
-```
+## Design principles
 
-Then, install `gptr`:
+- **Work with live objects.** Inspect large objects through compact, class-aware
+  descriptions and compute on them in R. Copy-safety rules aim to prevent the
+  harness from retaining references that cause unnecessary large copies; they
+  do not eliminate copies required by an analysis itself.
+- **Use the right kind of model.** Combine conversational and reasoning models
+  ("System 2") with native typed decision models ("System 1") for logical
+  decisions, choices and scores. Typed results fit R control flow; a model's
+  reported confidence is not proof of scientific correctness or calibration.
+- **Keep provider choice open.** gptr owns its transport and provider adapters.
+  The design includes cloud APIs, compatible endpoints and local Ollama models,
+  with capability checks for each model and a public extension API for others.
+- **Make the workflow inspectable.** Record code, prompts, decisions and relevant
+  provenance in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents. Recorded responses
+  support replay without a model call; replay must report missing records.
+  Scientific reproducibility also requires suitable data, dependencies, seeds
+  and validation of results in a fresh session.
+- **Measure efficiency.** Keep bulk data out of model context, compose operations
+  in R, bound tool output and reuse provider caches where supported. Track
+  tokens, cost and time alongside task correctness. Early research fixtures
+  motivate these choices; real-world savings remain to be established.
+- **Make capabilities extensible.** Built-in providers, tools, skills, document
+  formats and front ends use the same versioned plugin API planned for external
+  R packages. MCP and subagents extend the workflows available to scientists.
 
-```R
-devtools::install_github("Broccolito/gptr")
-```
+## Local models with Ollama
 
-## Usage
+Ollama is a first-class optional provider in the 1.0 design, covering two
+different roles:
 
-### Setting up API Key
+| Role | Planned support |
+|---|---|
+| Conversation and agent execution | Installed conversational models, with tools, images and other features enabled only when supported |
+| Native typed decisions | Clef and Clef Flash through Ollama's native decision API, alongside hosted Jev decisions |
 
-Before using the package, set your OpenAI API key using the `Sys.setenv` function:
+Clef and Clef Flash require Ollama 0.35.1 or later. They produce decisions rather
+than running a conversational agent loop. Ollama and model weights are external,
+optional requirements; the package will not install them or download models
+automatically.
 
-```R
-Sys.setenv(OPENAI_API_KEY = "your_openai_api_key_here")
-```
+The default Ollama policy is local-only, with explicit checks for inference
+locality and no automatic cloud fallback. A local model does not make a workflow
+local if another step sends data to a cloud model or network tool. The full
+[Ollama design amendment](dev/spec/07-local-ollama.md) specifies routing,
+capabilities, privacy controls, decision semantics and validation.
 
-For more instructions on how to get an OpenAI API key, check out this website for instructions: https://www.maisieai.com/help/how-to-get-an-openai-api-key-for-chatgpt
+## Development and contributions
 
-### Example Usage
+The target is an ordinary cross-platform R package, with R >= 4.2.0, no compiled
+code in v1, and no Node.js or Python runtime requirement for core functionality.
+Optional integrations have their own dependencies. CRAN readiness is a release
+gate, not a claim about the current development branch.
 
-#### Get Response
+Start with these documents:
 
-```R
-library(gptr)
+- [Vision and requirements](dev/spec/00-vision-brief.md)
+- [Architecture](dev/spec/03-architecture.md) and
+  [interface contract](dev/spec/04-interface-contract.md)
+- [Implementation plans and milestone gates](dev/plan/00-index.md)
+- [Progress and verification](dev/PROGRESS.md)
+- [Development rules](CLAUDE.md) and [implementation conventions](dev/plan/00-conventions.md)
 
-# Example 1
-response1 <- get_response(user_input = "How to calculate the bonforoni corrected p values?")
+Contributions should follow the plan dependencies and include focused
+verification. Tests use offline providers by default; live tests are explicit
+opt-ins. Keep credentials and private data out of source, examples and reports.
+In-process R execution is not a security sandbox: the design includes permission
+controls and recovery mechanisms, while scientific decisions remain reviewable
+by the user.
 
-# Example 2
-response2 <- get_response(user_input = paste0("Based on this data.frame in R: \n\n",
-                                               dataframe_to_text(mtcars),
-                                               "\n\n which variables are correlated?"))
+Questions and proposals are welcome in
+[GitHub issues](https://github.com/Broccolito/gptr/issues).
 
-# Example 3
-response3 <- get_response(user_input = "What are redox reactions?",
-                          system_specification = "You are a knowledgeable and helpful chemist who will answer any questions in German")
-```
-
-##### Function output
-
-```R
-> response1 <- get_response(user_input = "How to calculate the bonforoni corrected p values?")
-
-To calculate the Bonferroni corrected p-values, follow these steps:
-...
-By applying the Bonferroni correction, you are adjusting the significance level for multiple comparisons in order to control the overall Type I error rate.
-```
-
-```R
-> response2 <- get_response(user_input = paste0("Based on this data.frame in R: \n\n",
-+                                               dataframe_to_text(mtcars),
-+                                               "\n\n which variables are correlated?"))
-
-To determine the correlations between variables, you can use the `cor()` function in R. Here's an example code to calculate the correlation matrix:
-...
-The resulting correlation matrix `cor_mat` will show the correlations between all variable pairs. A value close to 1 indicates a strong positive correlation, a value close to -1 indicates a strong negative correlation, and a value close to 0 indicates no correlation.
-```
-
-```R
-> response3 <- get_response(user_input = "What are redox reactions?",
-+                           system_specification = "You are a knowledgeable and helpful chemist who will answer any questions in German")
-
-Redox-Reaktionen (Reduktions-Oxidations-Reaktionen) sind chemische Reaktionen, bei denen ein ElektronenÃ¼bergang zwischen den beteiligten chemischen Spezies stattfindet. Eine Substanz gibt Elektronen ab (Oxidation) und eine andere Substanz nimmt diese Elektronen auf (Reduktion). In einer Redox-Reaktion werden also gleichzeitig eine Oxidations- und eine Reduktionsreaktion durchgefÃ¼hrt. Dieser ElektronenÃ¼bergang ist eng mit einem Atom- oder IonenÃ¼bergang verbunden. Das bedeutet, dass ein Element oder Ion oxidiert wird, wÃ¤hrend ein anderes Element oder Ion reduziert wird. Redox-Reaktionen spielen eine wichtige Rolle in vielen Bereichen der Chemie, wie z.B. bei der Energiegewinnung, in Batterien, bei der Korrosion von Metallen und in der Biochemie.
-```
-
-Here is the general structure of the output list:
-
-```R
-> str(response1)
-List of 7
- $ id                : chr "chatcmpl-8RTwikRlCHDf92mmYz7Ilmmku68sR"
- $ object            : chr "chat.completion"
- $ created           : int 1701560660
- $ model             : chr "gpt-3.5-turbo-0613"
- $ choices           :'data.frame':	1 obs. of  3 variables:
-  ..$ index        : int 0
-  ..$ message      :'data.frame':	1 obs. of  2 variables:
-  .. ..$ role   : chr "assistant"
-  .. ..$ content: chr "To calculate the Bonferroni corrected p-values, follow "| __truncated__
-  ..$ finish_reason: chr "stop"
- $ usage             :List of 3
-  ..$ prompt_tokens    : int 28
-  ..$ completion_tokens: int 238
-  ..$ total_tokens     : int 266
- $ system_fingerprint: NULL
-```
-
-#### DataFrame to Text
-
-```R
-# Example: Convert mtcars DataFrame to text
-dataframe_text <- dataframe_to_text(mtcars)
-print(dataframe_text)
-```
-
-## Obtaining Your OpenAI API Key
-
-To utilize the `gptr` package, you must first obtain an API key from OpenAI. Begin by creating an account on the OpenAI website. Post registration, navigate to the API section from the dropdown menu under your account name. Request API access by following the prompts and agreeing to the terms. After approval, retrieve your API key from the "Your API Keys" section. Securely store this key by setting it as an environment variable in your R session using the code `Sys.setenv(OPENAI_API_KEY = "your_openai_api_key_here")`. Ensure responsible handling of your API key, keeping it private and seeking assistance from OpenAI support if needed. Now, you are set to explore natural language processing with `gptr`.
-
-## Contribution
-
-If you encounter any issues or have suggestions for improvement, feel free to contribute by opening an issue or a pull request on [GitHub](https://github.com/Broccolito/gptr). Alternatively, you can contact the [author](mailto:wanjun.gu@ucsf.edu) of this package. 
-
-## Useful GPT Prompts
-
-For useful GPT prompts, check out: https://github.com/Broccolito/useful_gpt_prompts
+Maintained by [Wanjun Gu](mailto:wanjun.gu@ucsf.edu). Licensed under the
+[MIT license](LICENSE.md).
