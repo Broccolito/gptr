@@ -1404,3 +1404,41 @@ print.gptr_tool_result = function(x, ...) {
   msg_verbatim(format(x))
   invisible(x)
 }
+
+# ---- kinds defined by `kind` records (contract 10.2 row 30) -------------------------------------
+
+#' A kind record for a `kind` spec
+#' @noRd
+kind_record_from_spec = function(spec, source) {
+  kind_record(spec[["name"]], kind_user_validate(spec[["validate"]]), spec[["resolve"]],
+              spec[["fields"]], spec[["order_field"]], spec[["experimental"]], source)
+}
+
+#' Define the kind described by a `kind` spec; `id` is its registry record
+#' @noRd
+kind_from_spec = function(spec, source, id) {
+  k = kinds_env()
+  old = get0(spec[["name"]], envir = k, inherits = FALSE)
+  staged_here = !is.null(old) && !is.null(old$staged) &&
+    identical(old$staged, registry_env()$current_ext)
+  if (!is.null(old) && !staged_here) {
+    spec_abort(spec, "name", paste0("names a kind already defined by ", old$source))
+  }
+  rec = kind_record_from_spec(spec, source)
+  rec$record = id
+  assign(spec[["name"]], rec, envir = k)
+  registry_touch()
+  invisible(spec[["name"]])
+}
+
+#' Undefine the kind created by registry record `id`
+#' @noRd
+kind_undefine = function(name, id) {
+  k = kinds_env()
+  d = get0(name, envir = k, inherits = FALSE)
+  if (!is.null(d) && identical(d$record, id)) {
+    rm(list = name, envir = k)
+    registry_touch()
+  }
+  invisible(NULL)
+}
