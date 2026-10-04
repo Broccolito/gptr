@@ -379,3 +379,114 @@ test_that("each run touches its session's lock when it starts (heartbeat, IC-59)
   run_text(s, "second")
   expect_lt(as.numeric(Sys.time()) - as.numeric(file.mtime(pid_file)), 3600)
 })
+
+# ---------------------------------------------------------------- fork files
+
+# stored_run() (one stored run with a read tool round trip) and its top-level read tool
+# stored_read() are in the harness.
+
+test_that(oracle_title(store_recs, "S21"), {
+  s = stored_run()
+  f = gptr_fork(s)
+  expect_null(f$file)
+  run_text(f, "branch")
+  expect_true(file.exists(f$file))
+  expect_false(identical(f$file, s$file))
+})
+
+test_that(oracle_title(store_recs, "S22"), {
+  s = stored_run()
+  f = gptr_fork(s)
+  run_text(f, "branch")
+  hdr = json_decode(readLines(f$file, n = 1L, encoding = "UTF-8"))
+  expect_identical(hdr$parentSession, s$file)
+  expect_identical(hdr$gptr$forkOf$id, s$id)
+  expect_identical(hdr$gptr$forkOf$entry, session_data(s)$leaf)
+  expect_identical(hdr$gptr$forkOf$turn, 1L)
+})
+
+test_that(oracle_title(store_recs, "S23"), {
+  s = stored_run()
+  session_append(s, list(type = "label", raw = list(targetId = session_data(s)$leaf,
+                                                    label = "start")))
+  f = gptr_fork(s, at = session_data(s)$leaf)
+  kept = vapply(session_data(f)$entries, function(e) e$id, "")
+  src = Filter(function(e) !identical(e$type, "label"), entries_path(session_data(s)))
+  expect_identical(kept, vapply(src, function(e) e$id, ""))
+  expect_false("label" %in% vapply(session_data(f)$entries, function(e) e$type, ""))
+})
+
+test_that("a fork file records the entries that close the copied turn before its own messages", {
+  s = stored_run()
+  session_value_set(s, "answer", "done")
+  f = gptr_fork(s)
+  run_text(f, "branch")
+  lines = readLines(f$file, encoding = "UTF-8")
+  hdr = json_decode(lines[[1L]])
+  expect_identical(hdr$gptr$forkOf$entry, session_data(s)$leaf)
+  entries = lapply(lines[-1L], json_decode)
+  types = vapply(entries, function(e) e$customType %||% e$type, "")
+  at = match("gptr.value", types)
+  expect_false(is.na(at))
+  expect_identical(entries[[at]]$id, session_data(s)$leaf)
+  expect_identical(entries[[at]]$data$turn, 1L)
+  expect_identical(entries[[at + 1L]]$parentId, entries[[at]]$id)
+  expect_identical(entries[[at + 1L]]$message$role, "user")
+})
+
+test_that("a fork that copies no gptr.frozen entry freezes its own, the first of its file", {
+  s = stored_run()
+  d = session_data(s)
+  expect_identical(d$entries[[1L]]$custom_type, "gptr.frozen")
+  # a cut after the source's freeze copies its gptr.frozen entry and shares its frozen prompt
+  f = gptr_fork(s)
+  expect_identical(session_data(f)$frozen, d$frozen)
+  expect_identical(session_data(f)$entries[[1L]]$id, d$entries[[1L]]$id)
+  # at = 0 copies nothing, so the fork freezes at its first run (04 section 11.4)
+  f0 = gptr_fork(s, at = 0)
+  expect_length(session_data(f0)$frozen, 0L)
+  run_text(f0, "branch")
+  expect_true(length(session_data(f0)$frozen) > 0L)
+  entries = lapply(readLines(f0$file, encoding = "UTF-8")[-1L], json_decode)
+  types = vapply(entries, function(e) e$customType %||% e$type, "")
+  expect_identical(types, c("gptr.frozen", "message", "message"))
+  expect_false(identical(entries[[1L]]$id, d$entries[[1L]]$id))
+})
+
+test_that("a fork of a source still in its first turn freezes its own prompt", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list(list(hang = TRUE), "branch answer"))
+  s = test_session()
+  run = run_start(s, msg_user("first"))
+  run_wait(list(run), timeout = 0.2)
+  expect_identical(session_data(s)$entries[[1L]]$custom_type, "gptr.frozen")
+  f = gptr_fork(s)
+  run_abort(run)
+  expect_length(session_data(f)$entries, 0L)
+  expect_length(session_data(f)$frozen, 0L)
+  run_text(f, "branch")
+  expect_identical(f$text, "branch answer")
+  entries = lapply(readLines(f$file, encoding = "UTF-8")[-1L], json_decode)
+  types = vapply(entries, function(e) e$customType %||% e$type, "")
+  expect_identical(types, c("gptr.frozen", "message", "message"))
+})
+
+test_that("forkOf.entry is the last entry the fork copied when a label trails the cut", {
+  s = stored_run()
+  before = session_data(s)$leaf
+  session_append(s, list(type = "label", raw = list(targetId = before, label = "start")))
+  label = session_data(s)$leaf
+  expect_false(identical(label, before))
+  for (at in list(NULL, 1L, label)) {
+    fd = session_data(gptr_fork(s, at = at))
+    expect_identical(fd$fork_of$entry, before)
+    expect_identical(fd$fork_of$entry, fd$leaf)
+    expect_true(exists(fd$fork_of$entry, envir = fd$index, inherits = FALSE))
+  }
+  f = gptr_fork(s)
+  run_text(f, "branch")
+  hdr = json_decode(readLines(f$file, n = 1L, encoding = "UTF-8"))
+  expect_identical(hdr$gptr$forkOf$entry, before)
+  expect_identical(hdr$gptr$forkOf$turn, 1L)
+})

@@ -257,3 +257,25 @@ frozen_sections_df = function(x) {
              tokens = vapply(x, function(r) as.numeric(r$tokens %||% NA_real_), 1),
              stringsAsFactors = FALSE)
 }
+
+# ---------------------------------------------------------------------------- fork files
+
+#' Copy the source path up to `cut` (an entry id or NULL) into `new`: ids kept, labels dropped,
+#' parents re-chained (Pi `createBranchedSession`, G3 finding 11); the file is written lazily
+#' @noRd
+store_fork = function(s, cut, new) {
+  d = session_data(s)
+  nd = session_data(new)
+  path = if (is.null(cut)) list() else entries_path(d, cut)
+  path = Filter(function(e) !identical(e$type, "label"), path)
+  prev = NULL
+  for (i in seq_along(path)) {
+    path[[i]]["parent_id"] = list(prev)
+    prev = path[[i]]$id
+  }
+  nd$entries = path
+  nd$index = new.env(parent = emptyenv())
+  for (i in seq_along(path)) assign(path[[i]]$id, i, envir = nd$index)
+  nd$leaf = prev
+  invisible(new)
+}

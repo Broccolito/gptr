@@ -618,3 +618,311 @@ test_that("model code of the same session tree cannot enqueue (IC-55)", {
   expect_length(session_data(other)$queue$steer, 1L)
   expect_length(ev(), 4L)
 })
+
+# ---------------------------------------------------------------- forks (gptr_fork, INFRA-14)
+
+# fork_source() (a two-turn source session with a kept home binding `x`) is in the harness.
+
+test_that("an overlay fork reads the source home and writes to its own overlay", {
+  x = fork_source()
+  f = gptr_fork(x$s)
+  expect_false(identical(f$id, x$s$id))
+  expect_identical(f$turns, 2L)
+  expect_identical(f$text, "B")
+  expect_identical(f$status, "idle")
+  expect_identical(parent.env(f$envir), x$home)
+  expect_identical(get("x", envir = f$envir), 1)
+  assign("y", 2, envir = f$envir)
+  expect_false(exists("y", envir = x$home, inherits = FALSE))
+  expect_match(session_data(f)$home_label, "^overlay of ")
+  expect_identical(gptr_fork(x$s, envir = "shared")$envir, x$home)
+})
+
+test_that("gptr_fork(at =) cuts at a turn, at 0 or at an entry id", {
+  x = fork_source()
+  f1 = gptr_fork(x$s, at = 1)
+  expect_identical(f1$turns, 1L)
+  expect_identical(f1$text, "A")
+  expect_identical(gptr_fork(x$s, at = 0)$turns, 0L)
+  expect_length(session_data(gptr_fork(x$s, at = 0))$entries, 0L)
+  first_user = Filter(function(e) identical(e$type, "message"), session_data(x$s)$entries)[[1L]]
+  f3 = gptr_fork(x$s, at = first_user$id)
+  expect_identical(session_data(f3)$leaf, first_user$id)
+  expect_error(gptr_fork(x$s, at = 9), class = "gptr_error_invalid_argument")
+  expect_error(gptr_fork(x$s, at = "ffffffff"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_fork(x$s, envir = "copy"), class = "gptr_error_invalid_argument")
+})
+
+test_that("a listener on the fork never fires for the source; nothing live is shared", {
+  x = fork_source()
+  f = gptr_fork(x$s)
+  fired = new.env()
+  fired$ids = character()
+  local_hook("message_end", function(event, ctx) {
+    fired$ids = c(fired$ids, event$session)
+    NULL
+  }, session = f$id)
+  run_text(x$s, "on the source")
+  expect_false(x$s$id %in% fired$ids)
+  run_text(f, "on the fork")
+  expect_true(f$id %in% fired$ids)
+  expect_false(identical(session_live(f)$ctx, session_live(x$s)$ctx))
+  expect_identical(nrow(f$usage), 1L)
+  expect_false(identical(session_data(f)$leaf, session_data(x$s)$leaf))
+})
+
+test_that("a running source is cut at its last closed boundary", {
+  local_permissive()
+  local_fake_provider(list("A", list(hang = TRUE)))
+  s = test_session()
+  run_text(s, "first")
+  run = run_start(s, msg_user("second"))
+  run_wait(list(run), timeout = 0.2)
+  f = gptr_fork(s)
+  expect_identical(f$turns, 1L)
+  expect_identical(f$text, "A")
+  run_abort(run)
+})
+
+test_that("a session_before_fork handler may cancel the fork", {
+  x = fork_source()
+  local_hook("session_before_fork", function(event, ctx) list(cancel = TRUE, reason = "not now"))
+  expect_error(gptr_fork(x$s), "not now", class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_fork() emits session_start with reason fork to process-wide hooks", {
+  x = fork_source()
+  ev = local_events("session_start")
+  f = gptr_fork(x$s)
+  starts = ev(f)
+  expect_length(starts, 1L)
+  expect_identical(starts[[1L]]$reason, "fork")
+})
+
+test_that("rank-0 specs of the source are registered again for the fork", {
+  x = fork_source()
+  spec = gptr_tool("only_here", "A session tool", execute = function(input, ctx) "x")
+  id = registry_add(spec, source = "session", rank = 0L, session = x$s$id)
+  withr::defer(registry_remove(id))
+  f = gptr_fork(x$s)
+  expect_false(is.null(registry_get("tool", "only_here", session = f$id)))
+})
+
+test_that("a source without a kept home gives a fork without one, with a notice", {
+  local_permissive()
+  local_fake_provider(list("A"))
+  g = function() {
+    s = session_new("fake/fake-1", "auto", home = environment())
+    session_run(s, msg_user("x"))
+    s
+  }
+  s = g()
+  withr::local_options(gptr.quiet = FALSE)
+  expect_message({
+    f = gptr_fork(s)
+  }, class = "gptr_message_notice")
+  expect_null(f$envir)
+})
+
+test_that("the fork keeps the values of the turns it copies", {
+  x = fork_source()
+  d = session_data(x$s)
+  vals = d$values
+  vals[[1L]] = list(turn = 1L, mode = "box", name = "a", address = NA_character_,
+                    class = "character",
+                    bytes = 56, value = "turn one")
+  vals[[2L]] = list(turn = 2L, mode = "box", name = "b", address = NA_character_,
+                    class = "character",
+                    bytes = 56, value = "turn two")
+  d$values = vals
+  expect_identical(gptr_fork(x$s, at = 1)$value, "turn one")
+  expect_identical(gptr_fork(x$s)$value, "turn two")
+})
+
+test_that("model code cannot fork another session without a human approval (IC-53)", {
+  local_permissive()
+  other = test_session()
+  box = new.env()
+  local_tool("forker", function(input, ctx) {
+    box$err = tryCatch(gptr_fork(other), error = function(e) e)
+    box$own = gptr_fork(ctx$session)
+    "done"
+  })
+  local_fake_provider(list(fake_tool("forker"), "ok"))
+  s = test_session()
+  run_text(s, "go")
+  expect_s3_class(box$err, "gptr_error_permission")
+  expect_s3_class(box$own, "gptr_session")
+  expect_s3_class(gptr_fork(other), "gptr_session")
+})
+
+test_that("an approved ask_human is a one-shot token for one control call", {
+  local_gptr_options(interactive = TRUE)
+  local_service("ui.get", function(session = NULL) {
+    list(has_ui = function() TRUE, permission = function(request) list(decision = "allow"))
+  })
+  local_policy("mode", function(call, ctx) list(decision = "ask_human", reason = "control"))
+  other = test_session()
+  box = new.env()
+  # the tool's risk record flags gptr_fork() in the `control` category, as P11's classifier
+  # does for model code; the approval grants exactly one `gptr_fork` token
+  control_risk = function(input, ctx) {
+    list(level = 4L, categories = "control", paths = character(),
+         flagged = data.frame(call = "gptr_fork(other)", fn = "gptr_fork", level = 4L,
+                              category = "control", path = NA_character_,
+                              path_class = NA_character_, stringsAsFactors = FALSE))
+  }
+  local_tool("forker", function(input, ctx) {
+    box$first = tryCatch(gptr_fork(other), error = function(e) e)
+    box$second = tryCatch(gptr_fork(other), error = function(e) e)
+    "done"
+  }, risk = control_risk)
+  local_fake_provider(list(fake_tool("forker"), "ok"))
+  run_text(test_session(mode = "manual"), "go")
+  expect_s3_class(box$first, "gptr_session")
+  expect_s3_class(box$second, "gptr_error_permission")
+})
+
+# The blocks below go beyond the plan's tests of gptr_fork() (P06 Task 12 adaptations, D-044).
+
+test_that("a cut at the end of a turn keeps the entries that close the turn, such as its value", {
+  x = fork_source()
+  session_value_set(x$s, "answer", "two")
+  d = session_data(x$s)
+  expect_identical(d$entries[[length(d$entries)]]$custom_type, "gptr.value")
+  f = gptr_fork(x$s)
+  fd = session_data(f)
+  expect_identical(fd$leaf, d$leaf)
+  expect_identical(fd$fork_of$entry, d$leaf)
+  expect_identical(fd$entries[[length(fd$entries)]]$custom_type, "gptr.value")
+  expect_identical(list(f$turns, f$text, f$value), list(2L, "B", "two"))
+  # the value of turn 2 closes turn 2, not turn 1
+  f1 = session_data(gptr_fork(x$s, at = 1))
+  types = vapply(f1$entries, function(e) e$custom_type %||% "", "")
+  expect_false("gptr.value" %in% types)
+  expect_length(f1$values, 0L)
+  # an operator relay after closed tool results never extends a boundary
+  path = list(list(type = "message", id = "e1", message = msg_user("q"), gptr = list(turn = 1L)),
+              list(type = "message", id = "e2",
+                   message = msg_assistant(list(block_tool_call("c1", "read", list(path = "a"))),
+                                           api = "fake", provider = "fake", model = "fake-1",
+                                           stop_reason = "tool_use")),
+              list(type = "message", id = "e3", message = msg_tool_result("c1", "read", "ok")),
+              list(type = "custom", id = "e4", custom_type = "gptr.checkpoint", data = list()),
+              list(type = "custom_message", id = "e5", custom_type = "gptr.operator",
+                   message = msg_operator("steer_relay", "use metric units")),
+              list(type = "custom", id = "e6", custom_type = "test.note", data = list()))
+  expect_identical(fork_boundaries(path), data.frame(index = 4L, turn = 1L))
+})
+
+test_that("a cut inside a turn keeps only the values recorded before the cut", {
+  x = fork_source()
+  session_value_set(x$s, "answer", "two")
+  session_value_set(x$s, "answer", "three")
+  d = session_data(x$s)
+  msgs = Filter(function(e) identical(e$type, "message"), d$entries)
+  users = Filter(function(e) identical(e$message$role, "user"), msgs)
+  answer = msgs[[length(msgs)]]
+  value_ids = vapply(Filter(function(e) identical(e$custom_type, "gptr.value"), d$entries),
+                     function(e) e$id, "")
+  expect_length(value_ids, 2L)
+  # at the second prompt: turn 2's values were recorded after the cut, and the fork has no entry
+  f = gptr_fork(x$s, at = users[[2L]]$id)
+  types = vapply(session_data(f)$entries, function(e) e$custom_type %||% "", "")
+  expect_false("gptr.value" %in% types)
+  expect_length(session_data(f)$values, 0L)
+  expect_null(f$value)
+  # at the answer itself, before the value entries that close the turn
+  expect_length(session_data(gptr_fork(x$s, at = answer$id))$values, 0L)
+  # between the two value entries of the turn: only the first is kept
+  f1 = gptr_fork(x$s, at = value_ids[[1L]])
+  expect_length(session_data(f1)$values, 1L)
+  expect_identical(f1$value, "two")
+  expect_identical(gptr_fork(x$s, at = value_ids[[2L]])$value, "three")
+  expect_identical(gptr_fork(x$s)$value, "three")
+})
+
+test_that("gptr_fork() refuses a malformed cut with a classed error", {
+  x = fork_source()
+  bad = list("", NA_character_, NA, -1, 1.5, Inf, TRUE, c(1, 2), c("a", "b"), list(1))
+  for (at in bad) {
+    err = tryCatch(gptr_fork(x$s, at = at), error = function(e) e)
+    expect_s3_class(err, "gptr_error_invalid_argument")
+    expect_identical(err$arg, "at")
+  }
+  for (envir in list(NA_character_, c("overlay", "copy"), 1)) {
+    expect_error(gptr_fork(x$s, envir = envir), class = "gptr_error_invalid_argument")
+  }
+  expect_error(gptr_fork(session_data(x$s)), class = "gptr_error_invalid_argument")
+})
+
+test_that("session_before_fork sees the source and the cut; a cancel without a reason says so", {
+  x = fork_source()
+  ev = local_events("session_before_fork")
+  gptr_fork(x$s, at = 1)
+  expect_length(ev(x$s), 1L)
+  expect_identical(list(ev(x$s)[[1L]]$source, ev(x$s)[[1L]]$at), list(x$s$id, 1))
+  local_hook("session_before_fork", function(event, ctx) list(cancel = TRUE, reason = c("a", "b")))
+  expect_error(gptr_fork(x$s), "no reason given", class = "gptr_error_invalid_argument")
+})
+
+test_that("the source's listeners are never copied to the fork (INFRA-14)", {
+  x = fork_source()
+  fired = new.env()
+  fired$ids = character()
+  local_hook("message_end", function(event, ctx) {
+    fired$ids = c(fired$ids, event$session)
+    NULL
+  }, session = x$s$id)
+  f = gptr_fork(x$s)
+  run_text(f, "on the fork")
+  expect_false(f$id %in% fired$ids)
+  run_text(x$s, "on the source")
+  expect_true(x$s$id %in% fired$ids)
+})
+
+test_that("a detached copy is forked from its own state unless another process holds its file", {
+  local_store()
+  x = fork_source()
+  copy = unserialize(serialize(x$s, NULL))
+  expect_null(session_live(copy))
+  withr::local_options(gptr.quiet = FALSE)
+  local_mocked_bindings(lock_held_elsewhere = function(file) TRUE)
+  ev = local_events("session_before_fork")
+  err = tryCatch(gptr_fork(copy), error = function(e) e)
+  expect_s3_class(err, "gptr_error_busy")
+  expect_identical(err$session, x$s$id)
+  expect_length(ev(), 0L)
+  local_mocked_bindings(lock_held_elsewhere = function(file) FALSE)
+  expect_message({
+    f = gptr_fork(copy)
+  }, class = "gptr_message_notice")
+  expect_identical(list(f$turns, f$text, f$envir), list(2L, "B", NULL))
+})
+
+test_that("the IC-53 refusal names the export, the tool, the control level and the session", {
+  local_permissive()
+  other = test_session()
+  box = new.env()
+  local_tool("forker", function(input, ctx) {
+    box$err = tryCatch(gptr_fork(other), error = function(e) e)
+    box$sid = session_data(ctx$session)$id
+    "done"
+  })
+  local_fake_provider(list(fake_tool("forker"), "ok"))
+  run_text(test_session(), "go")
+  expect_s3_class(box$err, "gptr_error_permission")
+  expect_identical(list(box$err$action, box$err$tool, box$err$risk, box$err$session),
+                   list("gptr_fork", "forker", 4L, box$sid))
+})
+
+test_that("an empty or oversized entry id is refused before session_before_fork is emitted", {
+  x = fork_source()
+  ev = local_events("session_before_fork")
+  for (at in list("", strrep("a", 20000L))) {
+    err = tryCatch(gptr_fork(x$s, at = at), error = function(e) e)
+    expect_s3_class(err, "gptr_error_invalid_argument")
+    expect_identical(err$arg, "at")
+  }
+  expect_length(ev(), 0L)
+})

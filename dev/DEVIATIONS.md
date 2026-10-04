@@ -1756,10 +1756,11 @@ added to the plan's tests, which are unchanged. Against the plan-literal source:
 Final `env-describe|copy-eval`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 160 ]`; `^env-describe$` under
 `LC_ALL=C` passes 153.
 
-## D-044 - P06 gptr_fork(): a cut keeps the entries that close its turn, an empty entry id is a classed refusal, a cancel reason must be one string, the IC-53 refusal names level 4 (2026-10-04)
+## D-044 - P06 gptr_fork(): a cut keeps the entries that close its turn, an empty or oversized entry id is a classed refusal, a cancel reason must be one string, the IC-53 refusal names level 4, a cut inside a turn keeps only the values recorded before it, a fork that copies no gptr.frozen entry freezes its own, forkOf.entry is an entry the fork copied (2026-10-04)
 
 P06 Task 12's plan-literal `gptr_fork()` passes all of the plan's tests against the real P01-P05
-and P06 Tasks 1-11 code. Four details changed, each shown by an added test against that source:
+and P06 Tasks 1-11 code. Seven details changed, each shown by an added test against that source
+(item 5 was found in review round 1, items 6 and 7 and the oversized id of item 2 in round 2):
 
 1. **A cut at the end of a turn keeps the entries that close the turn.** The plan's
    `fork_boundaries()` placed a boundary on a message only, so `at = NULL` and `at = k` cut
@@ -1776,9 +1777,11 @@ and P06 Tasks 1-11 code. Four details changed, each shown by an added test again
    messages (`custom_message`) are relays for the model's next step and never extend a boundary.
    Which messages are boundaries (no tool call awaiting its result, error and aborted replies
    skipped) is unchanged, and so are a running source's cut and the turn numbers.
-2. **An empty entry id is refused with `gptr_error_invalid_argument`** (`arg = "at"`, 04 section
-   1.1). The plan's `exists("", envir = d$index)` raised base R's unclassed "invalid first
-   argument".
+2. **An empty or oversized entry id is refused with `gptr_error_invalid_argument`** (`arg = "at"`,
+   04 section 1.1), before `session_before_fork` is emitted, as a malformed number already is.
+   The plan's `exists("", envir = d$index)` raised base R's unclassed "invalid first argument",
+   and `exists()` of a string over 10000 bytes raises the unclassed "variable names are limited
+   to 10000 bytes" (no such string can name an entry of `.d$index`).
 3. **A cancel's reason is used only when it is one non-empty string**; otherwise the message says
    "no reason given". The plan pasted a vector reason into a message of several lines and read
    `dec$cancel`/`dec$reason` with `$`, which matches prefixes (D-030 item 8 precedent: exact
@@ -1786,16 +1789,55 @@ and P06 Tasks 1-11 code. Four details changed, each shown by an added test again
 4. **The IC-53 refusal of `session_control_check()` carries `risk = 4L`**, the level of the
    `control` category (IC-53 item 3), as P02's `ext_control_guard()` and P08's planned
    `control_check()` do. The plan gave `risk = NULL`. The tool name is read with `[[`.
+5. **A cut inside a turn keeps only the values recorded before the cut.** The plan kept every
+   value of the turns up to the cut's turn (`turn <= cut turn`). An entry-id cut can fall inside
+   turn `k`, at its prompt or at its answer, before the `gptr.value` entries that close the turn.
+   The fork then reported turn `k`'s value (`f$value`) although neither its transcript nor its
+   file held the entry, so a resume (Task 13's planned `rebuild_values()`) would lose it: the
+   mismatch item 1 removes for `at = NULL` and `at = k`. `fork_values()` starts from the plan's
+   set and, for each `gptr.value` entry on the source path that the cut leaves out, drops the
+   latest record of that turn and name (`session_value_set()` appends record and entry
+   together). Records without an entry (the plan's value test sets `d$values` directly) still
+   follow the turn rule. An integer or `NULL` cut of an idle source keeps the plan's set, since
+   its boundary ends after the turn's closing entries (item 1), unless something that is not a
+   closing entry separates a value entry from the answer; a running source's cut, which can fall
+   between two tool rounds of the running turn, gets the same check.
+6. **A fork that copies no `gptr.frozen` entry freezes its own prompt.** The plan set
+   `fd$frozen = d$frozen` for every cut. A cut that copies nothing (`at = 0`, or `at = NULL` on a
+   source with no closed boundary yet: still running, or failed in, its first turn) then shared
+   the source's frozen prompt in memory, so the fork's first run skipped the freeze and its file
+   never got a `gptr.frozen` entry, against 04 section 11.4 ("The first entry of every session is
+   `gptr.frozen`"); P07's planned resume and Task 13's planned `rebuild_frozen()` read the prompt
+   back only from that entry. Now `fork_frozen()` shares the source's prompt only when the copied
+   path holds the `gptr.frozen` entry it came from (the last one on the source path); otherwise
+   the fork freezes at its first run (its `session_start` there has reason `fork`, Task 9) and
+   its file starts with its own `gptr.frozen`. Every cut that copies the source's freeze still
+   shares the prompt, so a fork's first request re-reads the source's cached prefix (03 section
+   10.2 item 5). The plan's `at = 0` test (no entries) is unchanged. Copying the source's
+   `gptr.frozen` entry into an empty cut was not chosen: it changes that plan test, and `at = 0`
+   is an empty conversation (04 section 5.1).
+7. **`gptr.forkOf.entry` (`.d$fork_of$entry`) is the last entry the fork copied.** The plan used
+   the cut entry, which can be a label: an entry id `at` naming a label (S23's scenario), and,
+   since item 1, a boundary extended over a trailing label at `at = NULL` or `at = k`.
+   `store_fork()` drops labels, so the id was in neither the fork's transcript nor its file.
+   P16's planned `ckpt_rewind_ops(tree, target, d$fork_of$entry)` finds the copied range in the
+   fork's own tree from that id, so a missing id gave an empty range, and a rewind of the fork
+   would have undone the source's copied `gptr.checkpoint` records. The id is now `fd$leaf` after
+   `store_fork()`, which equals the cut whenever the cut is not a label (S22 unchanged).
 
 Not behavioural: the source's rank-0 specs are registered for the fork after `session_new()`
 returns, so the fork's finalizer (`session_shutdown`, P02's `registry_session_drop()`) removes
 them if a later step fails. The plan registered them first, under a fresh id that no live
 session might ever hold.
 
-Validation: `progress/P06.md`, Task 12. Seven blocks (51 expectations) were added to the plan's
-tests, which are unchanged. Against the plan-literal source:
-`[ FAIL 13 | WARN 0 | SKIP 0 | PASS 403 ]`, all 13 in the added blocks. Final
-`^session-(object|store)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 416 ]`.
+Validation: `progress/P06.md`, Task 12. Twelve blocks (89 expectations) were added to the plan's
+tests, which are unchanged. Against the plan-literal source, before review round 1:
+`[ FAIL 13 | WARN 0 | SKIP 0 | PASS 403 ]`, all 13 in the seven blocks added then. The eighth
+block (item 5), against the plan's value filter: 5 of its 9 expectations failed
+(`^session-object$`: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 328 ]`). The four blocks of review round
+2 (items 2, 6 and 7), against the round-1 source: 17 of their 29 expectations failed
+(`^session-(object|store)$`: `[ FAIL 17 | WARN 0 | SKIP 0 | PASS 437 ]`). Final
+`^session-(object|store)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 454 ]`.
 
 ## D-045 - P09 user-expression log: the task callback walks every call linearly, default arguments included, and deparses nothing nested past 5,000 calls, a deparse() error becomes a note, multi-line expressions are one line, a removed callback is registered again, session ids are checked (2026-10-04)
 
@@ -1957,3 +1999,50 @@ PASS 566 ]` at 9.6 s and 9.5 s before the fix).
   `[ FAIL 7 | WARN 1 | SKIP 0 | PASS 543 ]`.
 - Final `^tool-diff$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 568 ]` (the plan's 419 plus 149), the
   same under `LC_ALL=C`.
+
+## D-047 - P09 r_env probe: LinkingTo never makes a package unloadable, a loaded namespace is installed at its loaded version, lookups by name, no warning for a directory that is not an installed package (2026-10-04)
+
+P09 Task 5's plan-literal `env_probe_packages()` (`R/env-probe.R`) was changed in the three ways
+below. Each was found by a probe of the plan-literal source
+(`dev/.validation/P09/task5-probe-plan-literal.log`). The registry, `env_probe_deps()`,
+`env_probe_session()`, `env_probe_render()`, the `<r_env>` grammar and the cache are unchanged.
+
+1. **Only Depends and Imports decide "Installed but NOT loadable"; LinkingTo does not.** The plan
+   text counts LinkingTo as a hard dependency, but 04 section 7.9 and 03 sections 7.3 and 7.5
+   define the line as packages that are installed but not loadable, and R reads LinkingTo only
+   when it compiles a package. A check (`task5-linkingto-check.R`, `.log`) installed two R-only packages
+   into a temporary library and recorded a dependency on a package that is not installed: with
+   LinkingTo the package loads and attaches in a child Rscript; with Imports (and its NAMESPACE
+   import) loading fails ("there is no package called"). A library holding binaries installed
+   without their header-only LinkingTo packages would otherwise tell the model not to
+   `library()` working packages. No installed package on the development machine has such a
+   missing LinkingTo package (probe B: 0).
+2. **A loaded namespace is installed at its loaded version, and every lookup is by name.** The
+   plan named the paths of one vectorised `find.package()` by their `basename()` and read
+   `Meta/package.rds` from each. A namespace loaded from a source tree (`pkgload::load_all()`)
+   breaks both: its directory need not carry the package name (a clone named `seurat` or
+   `p09devpkg-main`), and it has no `Meta/package.rds`. The plan-literal probe reported such a
+   loaded package as "Not installed" (probe C). With `lib = NULL`, a package whose namespace is
+   loaded now takes `getNamespaceVersion()` (guarded by `isNamespaceLoaded()`, so nothing is
+   loaded) and has nothing missing; any other package is looked up with one `find.package()` per
+   name, and the dependencies through `env_probe_found()`, one `find.package()` per name,
+   memoised for the dependencies the probed packages share.
+3. **No warning for a directory that is not an installed package.** `find.package()` accepts a
+   library directory with only a `DESCRIPTION`, but `library()` refuses it ("is not a valid
+   installed package"). The plan's `tryCatch(readRDS(...), error = )` let the `gzfile()` warning
+   for the missing `Meta/package.rds` escape. The file's existence is now checked first, and such
+   a directory still counts as not installed.
+
+Known limits, unchanged from the plan's design: the out-of-process load probe is not run, so a
+package whose compiled library cannot be loaded is listed as installed (BPCells on the
+development machine: "unable to load shared object" in a child process); only direct
+Depends/Imports are checked, without their version requirements; and a pathologically broken
+library can exceed the section's 450-token budget (probe D3: 3,580 tokens with all 36 packages
+each missing 40 dependencies; 351 with each missing one), which `prompt_freeze()` truncates at a
+line boundary with a diagnostic (04 section 7.7).
+
+Validation: `progress/P09.md`, Task 5. Three blocks (9 expectations) were added to the plan's 5
+blocks (16 expectations), which are unchanged; the plan's `fake_lib()` helper gained `...` for
+extra DESCRIPTION fields. Against the plan-literal source the added blocks gave
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 20 ]` (`task5-red-adaptations.log`). Final `^env-probe$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 25 ]`, the same under `LC_ALL=C`.

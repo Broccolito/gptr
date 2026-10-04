@@ -291,6 +291,43 @@ compacting_run = function(.env = parent.frame()) {
   list(s = s, log = log, fake = fake, n_before = n_before)
 }
 
+# The fixtures of the fork tests of test-session-object.R and test-session-store.R (P06 Task 12),
+# kept here for the same reason: they call the harness helpers.
+
+#' A two-turn source session ("first" -> A, "second" -> B) whose kept home binds `x = 1`; the fake
+#' provider has two more answers (C, D) for runs on the source and its forks
+fork_source = function(.env = parent.frame()) {
+  local_permissive(.env = .env)
+  local_fake_provider(list("A", "B", "C", "D"), .env = .env)
+  home = new.env()
+  home$x = 1
+  s = test_session(home = home)
+  run_text(s, "first")
+  run_text(s, "second")
+  list(s = s, home = home)
+}
+
+# The read tool of stored_run(). It is defined at the top level of the file on purpose: a closure
+# created inside stored_run() would keep that frame, and with it the session, alive in the
+# registry, so the garbage-collection tests of the session files could never collect it.
+stored_read = function(input, ctx) {
+  gptr_tool_result(paste("contents of", input$path), details = list(lines = 1L))
+}
+
+#' One stored run: a read tool round trip, then "All done"; one more answer for a fork's run
+stored_run = function(.env = parent.frame()) {
+  local_store(.env = .env)
+  local_permissive(.env = .env)
+  local_tool("read", stored_read,
+             parameters = list(type = "object", required = I("path"),
+                               properties = list(path = list(type = "string"))), .env = .env)
+  local_fake_provider(list(fake_tool("read", path = "R/a.R"), "All done \u2713", "branch answer"),
+                      .env = .env)
+  s = test_session(home = globalenv())
+  run_text(s, "Refactor a.R")
+  s
+}
+
 run_text = function(s, text, opts = list()) session_run(s, msg_user(text), opts)
 roles = function(s) vapply(s$messages, function(m) m$role, "")
 tool_results = function(s) Filter(function(m) identical(m$role, "tool_result"), s$messages)

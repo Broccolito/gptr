@@ -844,3 +844,255 @@ session_root_id = function(s) {
   }
   d$id
 }
+
+# ---------------------------------------------------------------------------- fork
+
+#' Fork a session
+#'
+#' Creates a new idle session whose transcript is the source path up to a cut, with the same entry
+#' ids. Nothing live is shared (listeners, queue, run, lock, usage); the fork's file is written
+#' lazily at its first own message, with `parentSession` and `gptr.forkOf` in its header. The
+#' fork's workspace is an overlay of the source's kept home: it reads every object of the source
+#' at zero cost, and its writes stay in the overlay.
+#'
+#' @param s A `gptr_session`: the source.
+#' @param at `NULL` (the last closed boundary; a running source is cut there), an integer `k >= 0`
+#'   (the end of turn `k`; `0` is an empty conversation) or an entry id.
+#' @param envir `"overlay"`: the fork evaluates in `new.env(parent = <source home>)`;
+#'   `"shared"`: the same home.
+#' @return A new idle `gptr_session`.
+#' @examples
+#' s = gptr_last()
+#' if (!is.null(s)) {
+#'   f = gptr_fork(s)
+#'   f$turns
+#' }
+#' @examplesIf exists("gptr", mode = "function")
+#' fake = gptr_fake_provider(list("A", "B"))
+#' s = gptr("first", model = fake, envir = new.env())
+#' f = gptr_fork(s)
+#' f |> gptr("branch")
+#' c(s$turns, f$turns)
+#' @export
+gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
+  check_class(s, "gptr_session", "s")
+  envir = check_choice(envir, c("overlay", "shared"), "envir")
+  session_control_check("gptr_fork", s)
+  if (!is.null(at) && !(is.character(at) && length(at) == 1L && !is.na(at))) {
+    check_number(at, "at", min = 0, int = TRUE)
+  }
+  d = session_data(s)
+  if (is.character(at) && !fork_id_ok(at)) fork_id_refuse(d, at)
+  live = session_live(s)
+  if (is.null(live) && !is.null(d$file) && lock_held_elsewhere(d$file)) {
+    gptr_abort(paste0("session ", d$id, " is attached in another R process"), "busy",
+               session = d$id)
+  }
+  dec = session_emit(s, "session_before_fork", source = d$id, at = at)
+  if (is.list(dec) && isTRUE(dec[["cancel"]])) {
+    why = dec[["reason"]]
+    if (!is.character(why) || length(why) != 1L || is.na(why) || !nzchar(why)) {
+      why = "no reason given"
+    }
+    gptr_abort(paste0("gptr_fork() was cancelled by a session_before_fork handler: ", why),
+               "invalid_argument", arg = "s", expected = "a session whose fork no handler cancels")
+  }
+  cut = fork_cut(d, at)
+  home = if (is.null(live)) NULL else live$home
+  if (is.null(home)) {
+    gptr_inform(paste0("session ", d$id, " has no kept workspace, so each turn of the fork ",
+                       "evaluates in the caller of that gptr() call"), "notice")
+  }
+  new_home = home
+  if (!is.null(home) && identical(envir, "overlay")) new_home = overlay_new(home, d$id)
+  f = session_new(d$model, d$mode, home = new_home, kind = "chat", preset = d$preset,
+                  opts = list(id = id_new("s", 10L), thinking = d$thinking))
+  fd = session_data(f)
+  # registered once the fork exists, so that its finalizer (session_shutdown) drops the copies
+  # even when a later step fails
+  fork_copy_specs(d$id, fd$id)
+  store_fork(s, cut$entry, f)
+  # the last entry the fork copied: the cut itself unless it is a label, which store_fork() drops
+  fd$fork_of = list(id = d$id, entry = fd$leaf, turn = cut$turn, file = d$file)
+  fd$turns = cut$turn
+  fd$frozen = fork_frozen(d, fd)
+  fd$rules = d$rules
+  fd$last_text = final_text(entries_path(fd)) %||% NA_character_
+  fd$values = fork_values(d, fd$entries, cut$turn)
+  session_emit(f, "session_start", reason = "fork")
+  f
+}
+
+#' A fork overlay: reads fall through to the home, writes stay in the overlay (rule R2)
+#' @noRd
+overlay_new = function(home, id) {
+  ov = new.env(parent = home)
+  attr(ov, "gptr_overlay") = paste0("overlay of ", id)
+  ov
+}
+
+#' Register the source's rank-0 specs again for the fork (never listeners)
+#' @noRd
+fork_copy_specs = function(src_id, new_id) {
+  for (kind in c("provider", "model", "tool", "agent", "router")) {
+    nms = tryCatch(registry_names(kind, session = src_id), error = function(e) character())
+    for (nm in nms) {
+      a = registry_get(kind, nm, session = src_id)
+      b = registry_get(kind, nm, session = NULL)
+      if (!is.null(a) && !identical(a, b)) {
+        registry_add(a, source = "session", rank = 0L, session = new_id)
+      }
+    }
+  }
+  invisible(NULL)
+}
+
+#' Where a fork cuts the source path
+#' @return `list(entry = <last kept entry id or NULL>, turn = int)`.
+#' @noRd
+fork_cut = function(d, at) {
+  if (is.character(at)) {
+    if (!fork_id_ok(at) || !exists(at, envir = d$index, inherits = FALSE)) fork_id_refuse(d, at)
+    return(list(entry = at, turn = path_turn(entries_path(d, at))))
+  }
+  if (!is.null(at) && as.integer(at) == 0L) return(list(entry = NULL, turn = 0L))
+  path = entries_path(d)
+  b = fork_boundaries(path)
+  if (is.null(at)) {
+    if (!nrow(b)) return(list(entry = NULL, turn = 0L))
+    i = max(b$index)
+  } else {
+    ok = b$index[b$turn == as.integer(at)]
+    if (!length(ok)) {
+      gptr_abort(paste0("turn ", at, " of session ", d$id, " has no closed boundary to fork at"),
+                 "invalid_argument", arg = "at",
+                 expected = paste0("a completed turn between 0 and ", d$turns))
+    }
+    i = max(ok)
+  }
+  list(entry = path[[i]]$id, turn = b$turn[b$index == i][1L])
+}
+
+#' Whether one string can be an entry id at all: non-empty, and within R's 10000-byte limit on
+#' variable names, since an id is a name of `.d$index` (exists() errors on a longer string)
+#' @noRd
+fork_id_ok = function(at) nzchar(at) && nchar(at, "bytes") <= 10000L
+
+#' Refuse an entry-id cut that is not on the source: `gptr_error_invalid_argument`, arg `at`
+#' @noRd
+fork_id_refuse = function(d, at) {
+  n = nchar(at, "bytes")
+  what = if (!n) "an empty entry id" else if (n > 64L) paste0("an entry id of ", n, " bytes") else
+    paste0("entry ", at)
+  gptr_abort(paste0(what, " is not in session ", d$id), "invalid_argument", arg = "at",
+             expected = "an entry id of this session")
+}
+
+#' The frozen prompt a fork shares: the source's, when the copied path holds the `gptr.frozen`
+#' entry it came from (the last one on the source path); otherwise NULL, and the fork freezes at
+#' its first run, so its file starts with its own `gptr.frozen` (04 section 11.4) and a resume
+#' reads back the prompt its turns ran under. A cut that copies no such entry is `at = 0`, or
+#' `NULL` on a source with no closed boundary yet (still in, or failed in, its first turn).
+#' @param d The source's `.d`.
+#' @param fd The fork's `.d`, after store_fork().
+#' @noRd
+fork_frozen = function(d, fd) {
+  if (!length(d$frozen)) return(NULL)
+  for (e in rev(entries_path(d))) {
+    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.frozen")) {
+      if (exists(e$id, envir = fd$index, inherits = FALSE)) return(d$frozen)
+      return(NULL)
+    }
+  }
+  NULL
+}
+
+#' The value records a fork keeps: those of the turns it copies (`turn <= cut turn`), less those
+#' whose `gptr.value` entries are on the source path but not on the copied one (recorded after a
+#' cut inside a turn), so the fork's values are the ones its own entries record
+#' @param d The source's `.d`.
+#' @param path The fork's copied path.
+#' @param turn The cut's turn.
+#' @noRd
+fork_values = function(d, path, turn) {
+  vals = Filter(function(v) as.integer(v$turn) <= turn, d$values)
+  copied = vapply(path, function(e) e$id, "")
+  for (e in rev(entries_path(d))) {
+    if (!identical(e$type, "custom") || !identical(e$custom_type, "gptr.value") ||
+        e$id %in% copied) {
+      next
+    }
+    # the latest record of that turn and name is the one this entry recorded
+    hit = which(vapply(vals, function(v) {
+      identical(as.integer(v$turn), as.integer(e$data[["turn"]])) &&
+        identical(v$name, e$data[["name"]])
+    }, NA))
+    if (length(hit)) vals[[max(hit)]] = NULL
+  }
+  vals
+}
+
+#' Closed boundaries of a path: message positions where no tool call awaits its result
+#'
+#' A boundary extends over the entries that directly follow it and carry no message (a turn's
+#' `gptr.value`, a model or mode change made after the answer, a compaction), so a cut at the end
+#' of a turn keeps the entries that close the turn and the file of a fork records them. A label
+#' extends it too; store_fork() drops it, and the fork's `fork_of$entry` names the last entry it
+#' copied. Operator messages (`custom_message`) are relays for the next step and never extend a
+#' boundary.
+#' @return A data frame `index`, `turn`.
+#' @noRd
+fork_boundaries = function(path) {
+  open = 0L
+  turn = 0L
+  idx = integer()
+  trn = integer()
+  for (i in seq_along(path)) {
+    e = path[[i]]
+    if (!identical(e$type, "message")) {
+      n = length(idx)
+      if (!identical(e$type, "custom_message") && n && idx[[n]] == i - 1L) idx[[n]] = i
+      next
+    }
+    m = e$message
+    if (identical(m$role, "user")) {
+      turn = as.integer(e$gptr$turn %||% (turn + 1L))
+      next
+    }
+    if (identical(m$role, "assistant")) {
+      if ((m$stop_reason %||% "stop") %in% c("error", "aborted")) next
+      open = sum(vapply(m$content %||% list(), function(b) identical(b$type, "tool_call"), NA))
+    }
+    if (identical(m$role, "tool_result")) open = max(0L, open - 1L)
+    if (open == 0L) {
+      idx = c(idx, i)
+      trn = c(trn, turn)
+    }
+  }
+  data.frame(index = idx, turn = trn)
+}
+
+#' Model code may not reach a session other than the running one through gptr's control exports
+#' (IC-53 item 3) unless the dispatcher approved exactly this call through an `ask_human`: a
+#' one-shot token named after the export in `run$signal$control` (granted by
+#' `perm_grant_control()`, the slot P08's `control_check()` also consumes; cleared when the call
+#' ends). Not named control_check(), which is P08's.
+#' @param what The export's name (the token it consumes).
+#' @param s The target session, or NULL when unknown (always another session).
+#' @noRd
+session_control_check = function(what, s = NULL) {
+  run = run_current()
+  if (is.null(run)) return(invisible(TRUE))
+  if (!is.null(s) && identical(session_data(s)$id, run$session)) return(invisible(TRUE))
+  tokens = run$signal$control %||% character()
+  i = match(what, tokens)
+  if (!is.na(i)) {
+    run$signal$control = tokens[-i]
+    return(invisible(TRUE))
+  }
+  gptr_abort(paste0(what, "() on another session is refused while a run executes model code; ",
+                    "a person must approve it"),
+             "permission", action = what, tool = run$tool_call[["name"]] %||% "r", risk = 4L,
+             how_to_allow = "call it outside the run, or approve it when asked",
+             session = run$session)
+}
