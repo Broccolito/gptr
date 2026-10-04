@@ -491,3 +491,33 @@ P13 and P20 (`status()` functions) consume:
 Validation: `progress/P05.md`, Task 12 (`test-provider-registry.R`). This entry first landed in
 commit 90a43f5 (an unrelated CI commit); point 5 and the transport and settings parts of
 point 4 were added by Task 12's review round 1.
+
+## D-021 - IC-74 usage frames: missing usage stays NA, unknown counts print "unknown" (2026-10-03)
+
+P06 Task 2's literal `usage_conform()` and `format_count()` predate IC-74 (07-local-ollama.md
+section 5: "Missing usage remains unknown"). Behaviours changed, which P06 Tasks 4, 10, 11 and 13
+and P18's tests consume through `usage_add()`/`gptr_usage()`:
+
+1. **Missing columns are unknown.** `usage_conform(row)` fills every column the row lacks with the
+   typed NA of P05's `usage_empty()`, the token and cost columns included (the plan filled those
+   with 0). A known zero in the row stays zero. Rows from P05's `usage_row()` (complete, with
+   D-015's NA for unknown tokens and unpriced cost) pass through unchanged. A fixture that means
+   "known zero cache use" must state the zero columns.
+2. **Unknown sums and counts.** `usage_totals()` sums without `na.rm`, so one unknown value makes
+   its total unknown (as P05's `usage_rollup()`); `format_count()` returns `"unknown"` for an
+   unknown count (the plan's version errored on NA) and picks the unit from the printed value
+   (999.7 -> `"1.0k"`, 999999 -> `"1.0M"`).
+3. **No silent coercion.** `usage_conform()` refuses wrong-typed columns (character tokens,
+   numeric ids, non-logical `estimated`, unparsed `started`), known numbers that are negative,
+   infinite or NaN, and a known `started` that is infinite or NaN, with
+   `gptr_error_invalid_argument` (`arg = "row$<col>"`), P05's rule for usage rows (an NA start
+   stays unknown); a bare logical `NA` column becomes its typed NA. It also refuses (`arg =
+   "row"`) a non-list input and a list that is not named, equal-length, non-nested columns
+   (a `NULL` element is an absent column), which `as.data.frame()` would otherwise flatten,
+   recycle or rename. The plan's `as.numeric()` would have turned bad input into an invented
+   unknown with a warning.
+
+Later tasks that print usage must treat an unknown cost the same way (the plan's
+`sprintf("$%.4f", ...)` footers print `$NA`).
+
+Validation: `progress/P06.md`, Task 2 (`test-session-budget.R`).
