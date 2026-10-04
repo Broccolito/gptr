@@ -256,3 +256,248 @@ google_normaliser = function(model, opts) {
 
   adp_normaliser(st, push, finish)
 }
+
+# ---- google-generative-ai: request body --------------------------------------------------------
+
+#' Adapter capabilities of google-generative-ai (04 section 8.1; IC-69, IC-71)
+#' @noRd
+google_caps = function() {
+  list(images_in_results = TRUE, tool_addition = FALSE, structured_output = FALSE,
+       reasoning_replay = TRUE, parallel_tools = TRUE, forced_tool_choice = TRUE,
+       request_params = c("labels", "service_tier"), operator_role = "user", cache = "gemini",
+       max_tool_name = 128L, tool_shape = "gemini")
+}
+
+#' Remove the JSON Schema keywords Gemini rejects in parametersJsonSchema
+#' @noRd
+google_schema = function(x) {
+  if (!is.list(x)) return(x)
+  if (!is.null(names(x))) x = x[!(names(x) %in% c("$schema", "$id", "$comment"))]
+  if (length(x)) x[] = lapply(x, google_schema)
+  x
+}
+
+#' A Gemini inlineData part, or a text note for a text-only model
+#' @noRd
+google_image = function(b, images) {
+  if (!images) return(list(text = adp_image_note()))
+  list(inlineData = list(mimeType = b$mime, data = b$data))
+}
+
+#' The Gemini content of a user message
+#' @noRd
+google_user = function(m, images) {
+  parts = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    if (type %in% c("text", "context") && nzchar(b$text)) {
+      parts[[length(parts) + 1L]] = list(text = b$text)
+    } else if (type == "image") {
+      parts[[length(parts) + 1L]] = google_image(b, images)
+    }
+  }
+  if (!length(parts)) return(NULL)
+  list(role = "user", parts = parts)
+}
+
+#' The Gemini model content of an assistant message; thought signatures stay on the part they
+#' arrived on and are replayed only to the same model (09 section 2.1)
+#' @noRd
+google_assistant = function(m, model) {
+  same = adp_same_model(m, model)
+  needs_id = google_needs_id(model$id)
+  parts = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    p = NULL
+    if (type == "text") {
+      sig = if (same && google_valid_sig(b$signature)) b$signature else NULL
+      if (nzchar(trimws(b$text)) || !is.null(sig)) p = list(text = b$text)
+      if (!is.null(p) && !is.null(sig)) p$thoughtSignature = sig
+    } else if (type == "thinking") {
+      sig = if (same && google_valid_sig(b$signature)) b$signature else NULL
+      if (nzchar(trimws(b$thinking)) || !is.null(sig)) {
+        p = if (same) list(thought = TRUE, text = b$thinking) else list(text = b$thinking)
+        if (!is.null(sig)) p$thoughtSignature = sig
+      }
+    } else if (type == "tool_call") {
+      sig = if (same && google_valid_sig(b$thought_signature)) b$thought_signature else NULL
+      fc = list(name = b$name, args = if (length(b$arguments)) b$arguments else json_obj())
+      if (needs_id) fc$id = adp_sanitize_id(b$id)
+      p = c(list(functionCall = fc), if (!is.null(sig)) list(thoughtSignature = sig))
+    }
+    if (!is.null(p)) parts[[length(parts) + 1L]] = p
+  }
+  if (!length(parts)) return(NULL)
+  list(role = "model", parts = parts)
+}
+
+#' The Gemini contents of a group of tool results: one user content of functionResponse parts;
+#' images inside functionResponse.parts on Gemini 3+, else a following user content. A model
+#' without image input gets the omission note in the result's output, once per image, and no
+#' image content (D-023 item 4, D-029.3)
+#' @noRd
+google_tool_results = function(group, model) {
+  needs_id = google_needs_id(model$id)
+  v3 = isTRUE(google_major(model$id) >= 3L)
+  images = adp_images_ok(model)
+  parts = list()
+  extra = list()
+  for (r in group) {
+    txt = paste(vapply(Filter(function(b) identical(b$type, "text"), r$content),
+                       function(b) b$text, ""), collapse = "\n")
+    imgs = Filter(function(b) identical(b$type, "image"), r$content)
+    if (length(imgs) && !images) {
+      txt = paste(c(txt[nzchar(txt)], rep(adp_image_note(), length(imgs))), collapse = "\n")
+      imgs = list()
+    }
+    fr = list(name = r$tool_name,
+              response = if (isTRUE(r$is_error)) list(error = txt) else list(output = txt))
+    if (needs_id) fr$id = adp_sanitize_id(r$tool_call_id)
+    imgs = lapply(imgs, google_image, images = images)
+    if (length(imgs) && v3) fr$parts = imgs
+    if (length(imgs) && !v3) extra = c(extra, imgs)
+    parts[[length(parts) + 1L]] = list(functionResponse = fr)
+  }
+  out = list(list(role = "user", parts = parts))
+  if (length(extra)) {
+    out[[2L]] = list(role = "user", parts = c(list(list(text = "Tool result image:")), extra))
+  }
+  out
+}
+
+#' The generationConfig of a request: maxOutputTokens, temperature and thinkingConfig
+#' (thinkingLevel for Gemini 3.x, thinkingBudget for 2.5; 09 sections 2.1 and 4.5)
+#' @noRd
+google_generation = function(model, params) {
+  gen = json_obj()
+  if (!is.null(params$max_tokens)) gen$maxOutputTokens = as.integer(params$max_tokens)
+  if (!is.null(params$temperature)) gen$temperature = params$temperature
+  if (!isTRUE(model$reasoning)) return(gen)
+  level = params$thinking
+  if (google_uses_level(model$id)) {
+    if (is.null(level)) {
+      gen$thinkingConfig = list(includeThoughts = TRUE)
+    } else if (identical(level, "off")) {
+      low = if ("minimal" %in% unlist(model$thinking_levels)) "MINIMAL" else "LOW"
+      gen$thinkingConfig = list(thinkingLevel = low)
+    } else {
+      lv = if (level %in% c("xhigh", "max")) "high" else level
+      gen$thinkingConfig = list(includeThoughts = TRUE, thinkingLevel = toupper(lv))
+    }
+  } else if (identical(level, "off")) {
+    gen$thinkingConfig = list(thinkingBudget = 0L)
+  } else {
+    budget = if (is.null(level)) -1L else google_budget(model$id, level)
+    gen$thinkingConfig = list(includeThoughts = TRUE, thinkingBudget = budget)
+  }
+  gen
+}
+
+#' build() of the google-generative-ai adapter (04 section 8.1; G4 section 3.7:
+#' systemInstruction, tools, toolConfig, generationConfig, contents; implicit caching only)
+#'
+#' The provider headers come from the provider record provider_stream() resolved (`opts$provider`,
+#' the session's own record first) and are merged by name, so a record never repeats or
+#' replaces an adapter header or the key (D-023). Tools and toolConfig go only to a model that
+#' calls tools (`tool_call`; IC-74, 07-local-ollama.md section 1; D-029, D-032), and toolConfig
+#' only with a tools array.
+#' @noRd
+google_build = function(model, context, opts) {
+  params = context$params %||% list()
+  msgs = context$messages %||% list()
+  images = adp_images_ok(model)
+  tools_on = !isFALSE(model[["tool_call"]])
+  head = json_obj()
+  sys = list()
+  for (k in c("t0", "t1")) {
+    txt = context$system[[k]] %||% ""
+    if (nzchar(txt)) sys[[length(sys) + 1L]] = list(text = txt)
+  }
+  if (length(sys)) head$systemInstruction = list(parts = sys)
+  extra = character()
+  tj = if (tools_on) adp_tools_json(opts, "google", context$tools_json, function(tools) {
+    decl = lapply(tools, function(t) {
+      list(name = t$name, description = t$description %||% "",
+           parametersJsonSchema = google_schema(t$input_schema))
+    })
+    list(list(functionDeclarations = decl))
+  })
+  if (!is.null(tj)) {
+    extra = c(extra, paste0("\"tools\":", tj))
+    tc = params$tool_choice
+    fcc = if (identical(tc, "none")) {
+      list(mode = "NONE")
+    } else if (adp_forced(tc) && adp_forced_ok(model, google_caps()) && is.null(params$returns)) {
+      if (identical(tc$type, "any")) list(mode = "ANY") else
+        list(mode = "ANY", allowedFunctionNames = list(tc$name))
+    } else {
+      list(mode = "AUTO")
+    }
+    extra = c(extra, paste0("\"toolConfig\":", json_encode(list(functionCallingConfig = fcc))))
+  }
+  gen = google_generation(model, params)
+  if (length(gen)) extra = c(extra, paste0("\"generationConfig\":", json_encode(gen)))
+  if (!is.null(params$labels)) extra = c(extra, paste0("\"labels\":", json_encode(params$labels)))
+  if (!is.null(params$service_tier)) {
+    extra = c(extra, paste0("\"serviceTier\":", json_encode(params$service_tier)))
+  }
+
+  elements = character()
+  n = length(msgs)
+  i = 1L
+  while (i <= n) {
+    m = msgs[[i]]
+    r = m$role %||% ""
+    if (r == "tool_result") {
+      j = i
+      while (j <= n && identical(msgs[[j]]$role, "tool_result")) j = j + 1L
+      group = msgs[i:(j - 1L)]
+      key = paste(c("google", "results", model$id, images, vapply(group, adp_msg_key, "")),
+                  collapse = "|")
+      el = adp_memo(opts, key, function() {
+        paste(vapply(google_tool_results(group, model), json_encode, ""), collapse = ",")
+      })
+      elements = c(elements, el)
+      i = j
+      next
+    }
+    same = adp_same_model(m, model)
+    key = paste("google", r, adp_msg_key(m), same, model$id, images, sep = "|")
+    el = adp_memo(opts, key, function() {
+      x = NULL
+      if (r == "user") x = google_user(m, images)
+      if (r == "assistant") x = google_assistant(m, model)
+      if (r == "operator") {
+        txt = adp_operator_text(m)
+        if (nzchar(txt)) x = list(role = "user", parts = list(list(text = txt)))
+      }
+      if (is.null(x)) "" else json_encode(x)
+    })
+    if (nzchar(el)) elements = c(elements, el)
+    i = i + 1L
+  }
+  if (!is.null(params$returns)) {
+    text = adp_returns_instruction(params$returns)
+    elements = c(elements, json_encode(list(role = "user", parts = list(list(text = text)))))
+  }
+
+  headers = list(`content-type` = "application/json", accept = "text/event-stream")
+  if (!is.null(opts$credential)) headers$`x-goog-api-key` = adp_header_secret(opts$credential)
+  headers = adp_merge_headers(headers, adp_provider_headers(model, opts), auth = "x-goog-api-key")
+  path = paste0("models/", model$id, ":streamGenerateContent?alt=sse")
+  list(url = adp_url(opts$base_url %||% "https://generativelanguage.googleapis.com/v1beta", path),
+       method = "POST", headers = headers,
+       body = adp_body(head, extra, "contents", elements), stream = "sse")
+}
+
+#' builtin:google: registers the google-generative-ai adapter (04 sections 7.12, 10.3)
+#' @noRd
+builtin_google = function(gptr) {
+  gptr$register(gptr_adapter("google-generative-ai", transport = "http_sse",
+                             build = google_build, parse = google_normaliser,
+                             capabilities = google_caps()))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("google", builtin_google))

@@ -1181,3 +1181,41 @@ reasons, 2 for the non-string signature, 1 error for the bare-string `google_err
 (`dev/.validation/P12/task8-adapt-red2.log`) shows the remaining throws of point 3. Review round 1
 added the HTTP-range code rule of point 3 and the free-id rule of point 4, each with a regression
 test that failed before the fix (`task8-fix1-red.log`: 8 failures and 1 warning).
+
+## D-035 - P12 Gemini request bodies: headers from the resolved record, tools only where the model calls tools, image notes in the tool output (2026-10-04)
+
+P12 Task 9's plan-literal `google_build()` and `google_tool_results()` (`R/provider-google.R`, the
+`build()` of the `google-generative-ai` adapter registered by `builtin:google`) were changed in
+three ways. P07's `request_build()`, P06's runs and P24 consume the bodies.
+
+1. **Provider headers from the record `provider_stream()` resolved, merged by name** (D-023 items 1
+   and 3, which required this of Task 9 with the credential header `x-goog-api-key`). The plan's
+   `c(headers, adp_provider_headers(model))` looked the provider up globally, so a session-scoped
+   provider (`model = <spec>`, 04 section 10.1) lost its non-secret headers (04 section 10.2 row 1),
+   and a record header with the name of an adapter header (`Content-Type`, `X-Goog-Api-Key`) was
+   sent twice, which P04's `http_headers()` refuses, so the request never left the process. Now
+   `adp_merge_headers(headers, adp_provider_headers(model, opts), auth = "x-goog-api-key")`: the
+   adapter's headers and key win, and a record's own key header is sent only when the adapter
+   sends none.
+2. **Tools only for a model that calls tools** (07-local-ollama.md section 1, IC-74: tool calling
+   is "enabled only when the selected model supports" it; D-029.1 and D-032.2 for this adapter). A
+   model record with `tool_call = FALSE` gets no `tools` and no `toolConfig`; the history's
+   `functionCall` and `functionResponse` parts are still sent. The plan sent both whatever the
+   model's tool calling (it already sent `toolConfig` only with a tools array). Reach as in
+   D-029.1: the catalog's `google` model (`gemini-3.8-flash`) declares `tool_call = TRUE`; a user
+   or plugin `gptr_provider()` model on this api must declare it.
+3. **Tool-result images for a model without image input** (D-023 item 4 and D-029.3 for this
+   adapter). Each image becomes the omission note "(image omitted: this model does not accept
+   images)" in the result's own `functionResponse.response` text, after the text, once per image;
+   no image content follows. The plan sent, on Gemini 3 and 2.5 alike, an extra user content
+   "Tool result image:" followed only by the note (announcing an image that is not attached), and
+   an empty `output` for an image-only result. With image input the plan's behaviour is unchanged
+   (`functionResponse.parts` on Gemini 3, the following "Tool result image:" content on 2.5).
+
+Validation: `progress/P12.md`, Task 9. The plan's ten tests pass against the plan-literal source
+(the default cache-policy test skips until P07 registers the `default` policy); against the
+plan-literal source the added tests fail 13 assertions (3 for the resolved record, 2 for tools
+sent to a model without tool calling, 8 for the image notes); mutations of the final source that
+append the record headers with `c()` or drop the `tool_call` gate fail 3 and 2 assertions.
+`gptr_check()` on the adapter: 30 checks, 0 failed.
+

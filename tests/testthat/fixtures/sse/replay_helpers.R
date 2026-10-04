@@ -364,3 +364,34 @@ responses_body_schema = function() {
              input = list(type = "array", items = item))
   wire_object(top, c("model", "store", "stream", "input"))
 }
+
+# The schema fixture of a Gemini request body (report 09 section 2.1; G4 section 3.7): the fields,
+# contents and parts gptr sends, closed, so a foreign key such as a signature fails
+gemini_body_schema = function() {
+  str = list(type = "string")
+  obj = list(type = "object")
+  int = list(type = "integer")
+  inline = wire_object(list(mimeType = str, data = str), c("mimeType", "data"))
+  call = wire_object(list(name = str, args = obj, id = str), c("name", "args"))
+  response = wire_object(list(name = str, response = obj, id = str, parts = list(type = "array")),
+                         c("name", "response"))
+  part = wire_object(list(text = str, thought = list(type = "boolean"), thoughtSignature = str,
+                          inlineData = inline, functionCall = call, functionResponse = response))
+  parts = list(type = "array", items = part)
+  decl = wire_object(list(name = str, description = str, parametersJsonSchema = obj), "name")
+  tool = wire_object(list(functionDeclarations = list(type = "array", items = decl)))
+  calling = wire_object(list(mode = list(type = "string", enum = c("AUTO", "ANY", "NONE")),
+                             allowedFunctionNames = list(type = "array", items = str)), "mode")
+  thinking = wire_object(list(includeThoughts = list(type = "boolean"), thinkingLevel = str,
+                              thinkingBudget = int))
+  generation = wire_object(list(maxOutputTokens = int, temperature = list(type = "number"),
+                                thinkingConfig = thinking))
+  content = wire_object(list(role = list(type = "string", enum = c("user", "model")),
+                             parts = parts), c("role", "parts"))
+  top = list(systemInstruction = wire_object(list(parts = parts), "parts"),
+             tools = list(type = "array", items = tool),
+             toolConfig = wire_object(list(functionCallingConfig = calling)),
+             generationConfig = generation, labels = obj, serviceTier = str,
+             contents = list(type = "array", items = content))
+  wire_object(top, "contents")
+}

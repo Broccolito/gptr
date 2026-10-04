@@ -293,3 +293,295 @@ test_that("model helpers: Gemini versions, thinking levels, call ids, signatures
   expect_identical(google_budget("gemini-3.8-flash", "high"), -1L)
   expect_identical(google_budget("gemini-2.5-pro", "unknown"), -1L)
 })
+
+# ---- the request body and the built-in (Task 9) ------------------------------------------------
+
+test_that("Gemini bodies: systemInstruction, tools, toolConfig, generationConfig, contents", {
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  req = google_build(model, ctx_fixture(list(first_message())),
+                     list(base_url = "https://generativelanguage.googleapis.com/v1beta",
+                          credential = fake_handle("GEMINI_API_KEY")))
+  body = json_decode(req$body)
+  expect_identical(names(body), c("systemInstruction", "tools", "toolConfig", "generationConfig",
+                                  "contents"))
+  expect_identical(body$systemInstruction$parts[[1L]]$text, "T0 static sections.")
+  decl = body$tools[[1L]]$functionDeclarations[[2L]]
+  expect_identical(decl$name, "r")
+  expect_identical(decl$parametersJsonSchema$required, list("code"))
+  expect_equal(body$toolConfig, list(functionCallingConfig = list(mode = "AUTO")))
+  expect_equal(body$generationConfig, list(maxOutputTokens = 1024L,
+                                           thinkingConfig = list(includeThoughts = TRUE)))
+  expect_identical(req$url, paste0("https://generativelanguage.googleapis.com/v1beta/models/",
+                                   "gemini-3.8-flash:streamGenerateContent?alt=sse"))
+  expect_identical(req$headers$`x-goog-api-key`, fake_handle("GEMINI_API_KEY"))
+  expect_false(grepl("key=", req$url, fixed = TRUE))
+})
+
+test_that("the default cache policy gives Gemini no markers: implicit caching (acceptance 4)", {
+  plan = default_plan(api)
+  expect_identical(plan$anchors, character())
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  body = google_build(model, ctx_fixture(list(first_message()), cache_plan = plan), list())$body
+  expect_false(grepl("cache", body, ignore.case = TRUE))
+  expect_identical(names(json_decode(body))[[1L]], "systemInstruction")
+})
+
+test_that("thought signatures replay byte for byte to the same model only (acceptance 2)", {
+  dir = sse_dir(api)
+  model = adp_fixture_model(api, dir)
+  msg = replay_case(api, google_normaliser, "thought_tools")$message
+  ctx = ctx_fixture(list(first_message(), msg, msg_tool_result("fc_7h2k", "find", "a.R"),
+                         msg_tool_result("fc_8j3m", "read", "x = 1")))
+  body = json_decode(google_build(model, ctx, list())$body)
+  parts = body$contents[[2L]]$parts
+  expect_identical(parts[[1L]], list(thought = TRUE, text = msg$content[[1L]]$thinking,
+                                     thoughtSignature = "CiQBjz1rX3NpZ1RoaW5r"))
+  expect_identical(parts[[3L]]$thoughtSignature, "CiQBjz1rX3NpZ0NhbGw=")
+  expect_identical(parts[[3L]]$functionCall$id, "fc_7h2k")
+  expect_null(parts[[4L]]$thoughtSignature)
+  results = body$contents[[3L]]
+  expect_identical(results$role, "user")
+  expect_identical(results$parts[[1L]]$functionResponse,
+                   list(name = "find", response = list(output = "a.R"), id = "fc_7h2k"))
+  other = json_decode(google_build(test_model(api, provider = "google", id = "gemini-3.5-flash"),
+                                   ctx, list())$body)
+  expect_false(grepl("thoughtSignature", json_encode(other$contents), fixed = TRUE))
+  expect_null(other$contents[[2L]]$parts[[1L]]$thought)
+})
+
+test_that("Anthropic -> Responses -> Gemini: no foreign opaque data, valid body (INFRA-08)", {
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  resp = replay_case("openai-responses", responses_normaliser, "reasoning_tools")$message
+  h = handoff_entries(list(msg_user("And the row count?", timestamp = 5), resp,
+                           msg_tool_result("call_fixture1|fc_fixture1", "r", "[1] 32",
+                                           timestamp = 7)))
+  expect_length(h$opaque, 5L)
+  # P05's projection (project_messages() ends with handoff_transform()), as request_build() runs it
+  msgs = project_messages(h$entries, h$leaf, model)
+  wire = google_build(model, ctx_fixture(msgs), list())$body
+  for (s in h$opaque) expect_false(grepl(s, wire, fixed = TRUE), label = s)
+  expect_false(grepl("thoughtSignature|rs_fixture1|msg_fixture1", wire))
+  body = json_decode(wire)
+  expect_identical(schema_validate(gemini_body_schema(), body)$errors, character())
+  expect_identical(names(body), c("systemInstruction", "tools", "toolConfig", "generationConfig",
+                                  "contents"))
+  roles = vapply(body$contents, function(x) x$role, "")
+  expect_identical(roles, c("user", "model", "user", "user", "model", "user"))
+  part_ids = function(contents, field) {
+    unlist(lapply(contents, function(x) lapply(x$parts, function(p) p[[field]]$id)))
+  }
+  calls = part_ids(body$contents[roles == "model"], "functionCall")
+  expect_identical(calls, c("toolu_01A", "toolu_01B", "call_fixture1_fc_fixture1"))
+  expect_identical(part_ids(body$contents[roles == "user"], "functionResponse"), calls)
+  expect_identical(body$contents[[5L]]$parts[[1L]],
+                   list(text = "**Planning** Need nrow of the data."))
+  # the schema is closed: an Anthropic signature on a part does not validate
+  bad = body
+  bad$contents[[2L]]$parts[[1L]]$signature = h$opaque[[1L]]
+  expect_false(schema_validate(gemini_body_schema(), bad)$ok)
+})
+
+test_that("tool-result images ride in functionResponse.parts on Gemini 3 (09 section 2.1)", {
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  asst = msg_assistant(list(block_tool_call("fc_1", "r", list(code = "plot(1)"))), api = api,
+                       provider = "google", model = "gemini-3.8-flash", stop_reason = "tool_use")
+  res = msg_tool_result("fc_1", "r", list(block_text("drawn"), block_image(png_b64())))
+  body = json_decode(google_build(model, ctx_fixture(list(msg_user("plot"), asst, res)),
+                                  list())$body)
+  fr = body$contents[[3L]]$parts[[1L]]$functionResponse
+  expect_identical(fr$parts[[1L]]$inlineData$data, png_b64())
+  old = test_model(api, provider = "google", id = "gemini-2.5-flash")
+  body = json_decode(google_build(old, ctx_fixture(list(msg_user("plot"), asst, res)),
+                                  list())$body)
+  expect_identical(body$contents[[4L]]$parts[[1L]]$text, "Tool result image:")
+  expect_null(body$contents[[3L]]$parts[[1L]]$functionResponse$id)
+})
+
+test_that("thinking levels for Gemini 3, budgets for 2.5, forced calls as mode ANY", {
+  g3 = test_model(api, provider = "google", id = "gemini-3.8-flash",
+                  thinking_levels = c("low", "medium", "high"))
+  body = json_decode(google_build(g3, ctx_fixture(list(msg_user("x")),
+                                                  params = list(thinking = "xhigh")),
+                                  list())$body)
+  expect_equal(body$generationConfig$thinkingConfig,
+               list(includeThoughts = TRUE, thinkingLevel = "HIGH"))
+  body = json_decode(google_build(g3, ctx_fixture(list(msg_user("x")),
+                                                  params = list(thinking = "off")),
+                                  list())$body)
+  expect_equal(body$generationConfig$thinkingConfig, list(thinkingLevel = "LOW"))
+  g25 = test_model(api, provider = "google", id = "gemini-2.5-pro")
+  body = json_decode(google_build(g25, ctx_fixture(list(msg_user("x")),
+                                                   params = list(thinking = "medium")),
+                                  list())$body)
+  expect_equal(body$generationConfig$thinkingConfig,
+               list(includeThoughts = TRUE, thinkingBudget = 8192L))
+  forced = list(tool_choice = list(type = "tool", name = "read"))
+  body = json_decode(google_build(g3, ctx_fixture(list(msg_user("x")), params = forced),
+                                  list())$body)
+  expect_equal(body$toolConfig$functionCallingConfig,
+               list(mode = "ANY", allowedFunctionNames = list("read")))
+})
+
+test_that("returns = becomes a user instruction; operators are user contents (IC-71)", {
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  relay = msg_operator("steer_relay", "The user sent this message while you were working: stop")
+  body = json_decode(google_build(model, ctx_fixture(list(msg_user("x"), relay),
+                                                     params = list(returns = count_schema())),
+                                  list())$body)
+  n = length(body$contents)
+  expect_identical(body$contents[[n - 1L]]$parts[[1L]]$text,
+                   "The user sent this message while you were working: stop")
+  expect_match(body$contents[[n]]$parts[[1L]]$text, "JSON Schema", fixed = TRUE)
+  expect_null(body$generationConfig$responseJsonSchema)
+})
+
+test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", {
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  asst = msg_assistant(list(block_tool_call("fc_1", "r", list(code = "nrow(d)"),
+                                            thought_signature = "Q2lnRmNTaWc=")),
+                       api = api, provider = "google", model = "gemini-3.8-flash",
+                       stop_reason = "tool_use", timestamp = 2)
+  turn2 = list(first_message(), asst, msg_tool_result("fc_1", "r", "[1] 32"))
+  memo = new.env(parent = emptyenv())
+  b1 = google_build(model, ctx_fixture(list(first_message())), list(memo = memo))$body
+  b2 = google_build(model, ctx_fixture(turn2), list(memo = memo))$body
+  expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
+  expect_identical(b2, google_build(model, ctx_fixture(turn2), list())$body)
+  expect_true(grepl("\"thoughtSignature\":\"Q2lnRmNTaWc=\"", b2, fixed = TRUE))
+})
+
+test_that("builtin:google registers the adapter; check_adapter() and gptr_check() pass", {
+  a = adapter_get(api)
+  expect_identical(a$capabilities$tool_shape, "gemini")
+  expect_identical(a$capabilities$cache, "gemini")
+  res = check_adapter(a, fixtures = sse_dir(api))
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
+  expect_true("adapter.thought_tools.roundtrip" %in% res$check)
+  expect_true(all(gptr_check(a)$ok))
+})
+
+test_that("end to end on the mock server: a Gemini stream (skip on CRAN)", {
+  skip_on_cran()
+  srv = local_mock_server("gemini", n = 3L, interval = 0.02)
+  r = mock_stream(srv)
+  expect_identical(r$types, c("start", "text_start", rep("text_delta", 3L), "text_end", "done"))
+  expect_identical(msg_text(r$message), "tok01 tok02 tok03 ")
+  expect_identical(r$message$stop_reason, "stop")
+})
+
+test_that("build() takes headers from the record provider_stream() resolved (04 10.1, D-023)", {
+  # D-023 items 1 and 3: a session-scoped provider (`model = <spec>`) is invisible to the global
+  # lookup, so its headers come from opts$provider or the session's own record, merged by name:
+  # the adapter's headers and credential win, and a record never adds a second key
+  model = test_model(api, provider = "p12-gem", id = "gemini-3.8-flash")
+  rec = gptr_provider("p12-gem", api = api, base_url = "https://gemini.corp.example/v1beta",
+                      headers = list(`X-Org` = "lab", `Content-Type` = "text/plain",
+                                     `X-Goog-Api-Key` = "record-key"))
+  ctx = ctx_fixture(list(first_message()))
+  h = google_build(model, ctx, list(provider = rec, credential = fake_handle("CORP_KEY")))$headers
+  expect_identical(anyDuplicated(tolower(names(h))), 0L)
+  expect_identical(h$`x-goog-api-key`, fake_handle("CORP_KEY"))
+  expect_null(h$`X-Goog-Api-Key`)
+  expect_identical(h$`content-type`, "application/json")
+  expect_null(h$`Content-Type`)
+  expect_identical(h$`X-Org`, "lab")
+  # without a credential the record's own key header goes out as it is (D-023 item 3)
+  expect_identical(google_build(model, ctx, list(provider = rec))$headers$`X-Goog-Api-Key`,
+                   "record-key")
+  # a record of another provider is ignored; nothing else is registered
+  other = gptr_provider("p12-other", api = api, headers = list(`X-Org` = "other"))
+  expect_null(google_build(model, ctx, list(provider = other))$headers$`X-Org`)
+  # the session's own record when build() gets only the session id
+  sid = "s_p12gem01"
+  withr::defer(registry_session_drop(sid))
+  registry_add(rec, source = "session", rank = 0L, session = sid)
+  expect_identical(google_build(model, ctx, list(session = sid))$headers$`X-Org`, "lab")
+})
+
+test_that("a model without tool calling gets no tools or toolConfig (IC-74, 07 section 1)", {
+  # 07-local-ollama.md section 1: tool calling is enabled only when the model supports it
+  # (D-029.1, D-032.2 for this adapter); the history's calls and results are still sent
+  forced = list(type = "tool", name = "read")
+  blind = test_model(api, provider = "google", id = "gemini-3.8-flash", tool_call = FALSE)
+  asst = msg_assistant(list(block_tool_call("fc_1", "r", list(code = "nrow(d)"))), api = api,
+                       provider = "google", model = "gemini-3.8-flash", stop_reason = "tool_use",
+                       timestamp = 2)
+  msgs = list(msg_user("x", timestamp = 1), asst, msg_tool_result("fc_1", "r", "[1] 32",
+                                                                  timestamp = 3))
+  for (tc in list("none", forced)) {
+    body = json_decode(google_build(blind, ctx_fixture(msgs, params = list(tool_choice = tc)),
+                                    list())$body)
+    expect_false(any(c("tools", "toolConfig") %in% names(body)))
+    expect_identical(body$contents[[2L]]$parts[[1L]]$functionCall$id, "fc_1")
+    expect_identical(body$contents[[3L]]$parts[[1L]]$functionResponse$response,
+                     list(output = "[1] 32"))
+  }
+  # a request without a tools array sends no toolConfig; a model that calls tools keeps both
+  able = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  ctx = ctx_fixture(list(msg_user("x")), params = list(tool_choice = forced))
+  ctx$tools_json = NULL
+  expect_false(grepl("tool", google_build(able, ctx, list())$body, ignore.case = TRUE))
+  body = json_decode(google_build(able, ctx_fixture(msgs, params = list(tool_choice = "none")),
+                                  list())$body)
+  expect_equal(body$toolConfig, list(functionCallingConfig = list(mode = "NONE")))
+  expect_length(body$tools[[1L]]$functionDeclarations, 2L)
+})
+
+test_that("a text-only model gets the omission note in the tool output, no image content", {
+  # D-023 item 4 and D-029.3 for this adapter: the note stands in the result's own output and no
+  # "Tool result image:" content follows with nothing attached
+  note = "(image omitted: this model does not accept images)"
+  asst = msg_assistant(list(block_tool_call("fc_1", "r", list(code = "plot(1)"))), api = api,
+                       provider = "google", model = "gemini-3.8-flash", stop_reason = "tool_use")
+  drawn = msg_tool_result("fc_1", "r", list(block_text("drawn"), block_image(png_b64())))
+  only = msg_tool_result("fc_1", "r", list(block_image(png_b64())))
+  for (id in c("gemini-3.8-flash", "gemini-2.5-flash")) {
+    model = test_model(api, provider = "google", id = id, input = "text")
+    for (case in list(list(res = drawn, out = paste0("drawn\n", note)),
+                      list(res = only, out = note))) {
+      wire = google_build(model, ctx_fixture(list(msg_user("plot"), asst, case$res)),
+                          list())$body
+      expect_false(grepl(png_b64(), wire, fixed = TRUE))
+      body = json_decode(wire)
+      expect_length(body$contents, 3L)
+      fr = body$contents[[3L]]$parts[[1L]]$functionResponse
+      expect_identical(fr$response, list(output = case$out), label = id)
+      expect_null(fr$parts)
+    }
+  }
+})
+
+test_that("a forced any is mode ANY; returns = never forces a call; params and errors (IC-69)", {
+  # IC-71: a forced choice only when the model allows it and `returns` is not set (auto, the
+  # closing instruction and validation); IC-69: only the declared request params reach the body
+  model = test_model(api, provider = "google", id = "gemini-3.8-flash")
+  build = function(params, msgs = list(msg_user("x")), m = model) {
+    json_decode(google_build(m, ctx_fixture(msgs, params = params), list())$body)
+  }
+  calling = function(body) body$toolConfig$functionCallingConfig
+  expect_equal(calling(build(list(tool_choice = list(type = "any")))), list(mode = "ANY"))
+  expect_equal(calling(build(list(tool_choice = list(type = "auto")))), list(mode = "AUTO"))
+  for (tc in list(list(type = "tool", name = "read"), list(type = "any"))) {
+    body = build(list(tool_choice = tc, returns = count_schema()))
+    expect_equal(calling(body), list(mode = "AUTO"))
+    last = body$contents[[length(body$contents)]]
+    expect_identical(last$role, "user")
+    expect_match(last$parts[[1L]]$text, "JSON Schema", fixed = TRUE)
+  }
+  free = test_model(api, provider = "google", id = "gemini-3.8-flash", forced_tool_choice = FALSE)
+  expect_equal(calling(build(list(tool_choice = list(type = "tool", name = "read")), m = free)),
+               list(mode = "AUTO"))
+  # a failed tool reports response.error
+  asst = msg_assistant(list(block_tool_call("fc_1", "r", list(code = "nrow(d)"))), api = api,
+                       provider = "google", model = "gemini-3.8-flash", stop_reason = "tool_use")
+  err = msg_tool_result("fc_1", "r", "object 'd' not found", is_error = TRUE)
+  body = build(list(), list(msg_user("x"), asst, err))
+  expect_identical(body$contents[[3L]]$parts[[1L]]$functionResponse,
+                   list(name = "r", response = list(error = "object 'd' not found"), id = "fc_1"))
+  # labels and serviceTier are the declared params, placed before contents; metadata is not
+  body = build(list(labels = list(team = "lab"), service_tier = "flex", metadata = list(a = 1)))
+  expect_identical(names(body), c("systemInstruction", "tools", "toolConfig", "generationConfig",
+                                  "labels", "serviceTier", "contents"))
+  expect_identical(body$labels, list(team = "lab"))
+  expect_identical(body$serviceTier, "flex")
+})
