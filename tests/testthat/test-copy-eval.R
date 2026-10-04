@@ -27,3 +27,30 @@ test_that("a function-frame home with an unsupplied argument and empty dots stay
     label = "snapshot of a function frame with missing arguments"
   )
 })
+
+test_that("describe_binding() leaves the object in place (R4)", {
+  expect_no_copy(paste("big = runif(5e6)", ns_get("describe_binding"), sep = "; "),
+                 'invisible(describe_binding("big", globalenv()))', label = "describe_binding")
+  in_frame = paste0('f = function(d) { force(d); s = describe_binding("d", environment()); ',
+                    "invisible(NULL) }; f(big)")
+  expect_no_copy(paste("big = runif(5e6)", ns_get("describe_binding"), sep = "; "), in_frame,
+                 label = "describe_binding in a function frame")
+})
+
+test_that("describe_binding() of a missing argument in a function-frame home stays in place", {
+  in_frame = paste0('f = function(d, n) { force(d); s = describe_binding("n", environment()); ',
+                    "invisible(NULL) }; f(big)")
+  expect_no_copy(paste("big = runif(5e6)", ns_get("describe_binding"), sep = "; "), in_frame,
+                 label = "describe_binding of a missing argument")
+})
+
+test_that("a describe method that throws costs at most one copy (R's limit, D-043)", {
+  # The error unwinds the method's frame without R_CleanupEnvir(), so the reference it holds is
+  # never released and the next edit copies once. Pinned: more than one copy is a regression.
+  boom = paste0("registerS3method('gptr_describe', 'p09_boom', function(x, budget = 150L, ...) ",
+                "stop('boom'), envir = asNamespace('gptr'))")
+  setup = paste("big = structure(runif(5e6), class = 'p09_boom')", ns_get("describe_binding"),
+                boom, sep = "; ")
+  expect_no_copy(setup, 'invisible(describe_binding("big", globalenv()))', allow = 1L,
+                 label = "describe_binding of an object whose method throws")
+})

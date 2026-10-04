@@ -1559,3 +1559,82 @@ ledger and the last row is the session's own last request, which P14's `/context
 
 Validation: `progress/P06.md`, Task 11 (`test-session-budget.R`; the added tests failed 7
 assertions against the plan-literal code, and every plan test passed against both).
+
+## D-043 - P09 describers: list, matrix and data frame columns, invalid UTF-8, missing arguments, reference class objects and S4 slots; silent and within budget; method results that are not lines (2026-10-04)
+
+P09 Task 3's plan-literal `R/env-describe.R` was changed in the eight ways below. Items 1-7 were
+found by a probe of the plan-literal source (`dev/.validation/P09/task3-probe-plan-literal.log`,
+script `task3-probe.R`), item 8 by the task review. The descriptions of the plan's 20 fixture objects are unchanged byte for byte
+(`task3-facts-plan-literal.log` and `task3-facts-adapted.log`: 92 of G2's 98 facts, the longest
+130 tokens). No signature, condition class or exported behaviour of 04 section 6.6 changes.
+
+1. **Data frame columns that are not plain vectors.** A list column (tibble list columns), a
+   matrix column (`df$m = matrix(...)`, `scale()` results) or a data frame column (packed
+   columns, nested `jsonlite::fromJSON()` results) made the data frame method throw while it
+   built the rows level: "arguments imply differing number of rows", or "argument must be
+   coercible to non-negative integer" after a 'length.out' warning, or tibble's recycling error.
+   `describe_value()`, which Task 10's `attached` block calls, threw; `describe_binding()` fell
+   back to the default method (`<data.frame> 3 x 2`, `typeof list`). The new leaf
+   `dsc_leaf_col()` samples values of plain vectors only. Other columns give class and shape:
+   `$ l <list> length 3`, `$ m <matrix> 3 x 2`, `$ inner <data.frame> 3 x 2`, and cells such as
+   `<list>` in the rows.
+2. **Text that is not valid UTF-8** (IC-62). Invalid bytes in list or data frame names, factor
+   levels or list strings made P01's `est_tokens()` (a PCRE `gsub()`) or `substr()` throw
+   ("input string 1 is invalid UTF-8", "invalid multibyte string"). Every level passes Task 2's
+   `env_text()` before it is measured, so the lines are valid UTF-8 with `<xx>` escapes.
+   `describe_binding()` shows the name the same way.
+3. **Missing arguments.** An environment that holds R's missing argument (the frame of a call
+   that left a formal unsupplied) made `dsc_env_is_fun()`'s `get()` throw. It now reads the
+   binding with `.subset2()`, which returns the missing argument as a value. `describe_binding()`
+   of a missing argument or of empty `...` gave `<?> (describe failed: argument "n" is missing,
+   ...)`. The failing `get()` also left the function-frame home on its unwound frame: a
+   fresh-process row against the plan-literal source counts `1 copies of big` on the next edit
+   (D-040 item 1 found the same for the snapshot). It now returns `name: <missing>`, Task 2's
+   `<missing>`, checked with `env_snap_missing()` before any `get()`.
+4. **Reference class objects.** S3 dispatch sends an RC object (S4, extending `environment`) to
+   `gptr_describe.environment()`, where rlang's binding predicates refused it (`` `env` must be an
+   environment ``). `dsc_leaf_env()` reads its `as.environment()`.
+5. **S4 slots.** A slot holding `NULL` is stored as R's pseudo-NULL symbol and was shown as
+   `<name> length 1`; it is now `<NULL> length 0`. When methods has no definition of the class
+   (its package is not installed), `methods::slotNames()` is empty and the header ended in
+   `slots: `. The slot names now come from the attribute names (slots are attributes; IC-71).
+6. **Silent and within budget.**
+   - The lm method calls `summary()` under `suppressWarnings()`: its "essentially perfect fit"
+     warning reached the caller.
+   - Strings are cut to 40 characters in the character examples and the data frame rows. One
+     300-character cell pushed a data frame's rows level to 603 tokens.
+   - `dsc_fit()` also cuts a first line that alone overruns the budget. A third-party method with
+     a 2,100-character header gave 888 tokens at budget 20. The `<?>` note passes `dsc_fit()`.
+7. **A forced `level` is a whole number of at least 1** (04 section 2.2). `level = 0` was clamped
+   to 1 and `level = NA` returned `NULL`. Both now signal `gptr_error_invalid_argument`; a level
+   above the method's last still gives its richest.
+8. **A method result must be lines** (04 section 6.6: "the first a header"). The harness passed
+   a third-party method's `character(0)`, `NULL` or `NA_character_` through:
+   `describe_value()` returned `character(0)` or `NA`, and `describe_binding()` built `q: NA`. A
+   method returning an environment made `as.character()` throw. The new helper `dsc_lines()`
+   accepts a non-empty atomic vector without `NA`. For anything else, `describe_value()` returns
+   the default method's description, and a forced-level retry that is not lines is skipped. This
+   is checked rather than signalled, because an error would unwind `describe_value()`, which holds
+   the object (see the known limit below). A fresh-process probe counts 0 copies on the next edit
+   for the `NULL`, `character(0)` and `NA` fallbacks (`task3-fix1-copy-probe.log`).
+
+Known limits (R semantics, not changed):
+- S3 dispatch on an S4 object whose class's package is installed but not loaded loads that
+  namespace (`UseMethod()`, `inherits()` and `length()` all do), so neither the generic nor a
+  method can prevent it (`task3-s4-namespace-load.log`).
+- **A method that throws costs one copy** of the described object, an exception to [R4] on the
+  "errors caught" path (04 section 7.9). This is the plan's design, not a change. The error
+  unwinds `describe_value()`, the generic and the method with a longjmp. Their bindings (the
+  argument promises) hold the object, and R releases a closure frame's references
+  (`R_CleanupEnvir()`) only when it returns normally. The user's next in-place edit copies once.
+  After that the new object is referenced once again, so the cost is one copy per failure.
+  `describe_binding()` still returns the default method's lines. No R-level code can avoid this,
+  because the method's own frame binds the object. The added row in `test-copy-eval.R`
+  (`allow = 1L`) catches any regression beyond one copy. Methods that return normally, built-in
+  or third-party, cost none.
+
+Validation: `progress/P09.md`, Task 3. Eleven blocks (54 expectations) and two copy rows were
+added to the plan's tests, which are unchanged. Against the plan-literal source:
+`[ FAIL 15 | WARN 0 | SKIP 0 | PASS 103 ]` (items 1-7; item 8's red is in the review round 1 entry).
+Final `env-describe|copy-eval`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 160 ]`; `^env-describe$` under
+`LC_ALL=C` passes 153.
