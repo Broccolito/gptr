@@ -2031,7 +2031,13 @@ below. Each was found by a probe of the plan-literal source
    library directory with only a `DESCRIPTION`, but `library()` refuses it ("is not a valid
    installed package"). The plan's `tryCatch(readRDS(...), error = )` let the `gzfile()` warning
    for the missing `Meta/package.rds` escape. The file's existence is now checked first, and such
-   a directory still counts as not installed.
+   a directory still counts as not installed. The same rule covers dependencies
+   (`env_probe_path()`, shared by `env_probe_packages()` and `env_probe_found()`):
+   `loadNamespace()` refuses such a directory ("does not have a namespace"), so a package that
+   imports it is "Installed but NOT loadable" with it as the missing dependency, and the section
+   no longer lists the package under Installed and its dependency under Not installed (review
+   round 1). With `lib = NULL` a loaded dependency counts as found, as a loaded probed package
+   does, so a dependency loaded from a source tree is not reported missing.
 
 Known limits, unchanged from the plan's design: the out-of-process load probe is not run, so a
 package whose compiled library cannot be loaded is listed as installed (BPCells on the
@@ -2041,8 +2047,10 @@ library can exceed the section's 450-token budget (probe D3: 3,580 tokens with a
 each missing 40 dependencies; 351 with each missing one), which `prompt_freeze()` truncates at a
 line boundary with a diagnostic (04 section 7.7).
 
-Validation: `progress/P09.md`, Task 5. Three blocks (9 expectations) were added to the plan's 5
+Validation: `progress/P09.md`, Task 5. Four blocks (15 expectations) were added to the plan's 5
 blocks (16 expectations), which are unchanged; the plan's `fake_lib()` helper gained `...` for
-extra DESCRIPTION fields. Against the plan-literal source the added blocks gave
-`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 20 ]` (`task5-red-adaptations.log`). Final `^env-probe$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 25 ]`, the same under `LC_ALL=C`.
+extra DESCRIPTION fields. Against the plan-literal source the first three added blocks gave
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 20 ]` (`task5-red-adaptations.log`); the fourth (dependencies,
+review round 1) gave `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 29 ]` against the round-0 source
+(`task5-fix1-red.log`). Final `^env-probe$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 31 ]`
+(`task5-fix1-green.log`), the same under `LC_ALL=C` (`task5-fix1-green-clocale.log`).
