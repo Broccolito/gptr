@@ -285,3 +285,345 @@ test_that("ctx$input reaches the ctx.input service once builtin:prompt is loaded
   expect_identical(with_prompt_input(ctx, list(a = 1), function() ctx$input$a), 1)
   expect_null(ctx$input)
 })
+
+# ---- Task 4: the tool array and section composition ---------------------------------------------
+
+# The stand-in helpers (shared with the bench tests and dev/bench/tokens/run.R), bound here by
+# name: the lint's object_usage_linter cannot see names that source() defines.
+standins_env = local({
+  source(test_path("fixtures", "bench", "standins.R"), local = TRUE)
+  environment()
+})
+prefix_fixture = standins_env$prefix_fixture
+prompt_standins_register = standins_env$prompt_standins_register
+
+# Compose one case of prefix-baseline.json with the stand-ins for other owners' texts.
+compose_case = function(name, .env = parent.frame()) {
+  pb = prefix_fixture()
+  cs = pb$cases[[name]]
+  s = p07_session(cs$mode, cs$preset, .env = .env)
+  prompt_standins_register(pb$standins, session_data(s)$id, sections = unlist(cs$sections),
+                           exclusive = TRUE)
+  doc = if (isTRUE(cs$document)) list(path = file.path(project_root(), "analysis.R"), format = "R")
+  prompt_compose(s, list(interactive = cs$human, doc = doc))
+}
+
+section_of = function(t0, name) {
+  i = regexpr(paste0("<", name, ">\n"), t0, fixed = TRUE)
+  j = regexpr(paste0("\n</", name, ">"), t0, fixed = TRUE)
+  if (i < 0 || j < 0) return(NA_character_)
+  substr(t0, i, j + nchar(name) + 3L)
+}
+
+wrap = function(name, x) paste0("<", name, ">\n", x, "\n</", name, ">")
+
+test_that("rendered P07 sections are byte-identical to architecture 7.3 (with stand-ins)", {
+  rd = prefix_fixture()$expected$rendered
+  inter = compose_case("standard_interactive")
+  expect_identical(section_of(inter$t0, "tools"), rd$tools_standard_ask)
+  expect_identical(section_of(inter$t0, "rules"), rd$rules_standard)
+  expect_identical(section_of(inter$t0, "r_session"), rd$r_session)
+  expect_identical(section_of(inter$t0, "r_performance"),
+                   wrap("r_performance", prompt_text("r_performance")))
+  expect_identical(section_of(inter$t0, "modes"), wrap("modes", prompt_text("modes")))
+  expect_identical(section_of(inter$t0, "context"), wrap("context", prompt_text("context")))
+  expect_true(startsWith(inter$t0, paste0(prompt_text("preamble"), "\n\n<tools>\n")))
+  expect_true(endsWith(inter$t0, "</context>"))
+  expect_true(startsWith(inter$t1, "<skills>\n"))
+  mini = compose_case("minimal")
+  expect_true(startsWith(mini$t0, paste0(prompt_text("preamble_short"), "\n\n<tools>\n")))
+  expect_identical(section_of(mini$t0, "tools"), rd$tools_minimal)
+  expect_identical(section_of(mini$t0, "rules"), rd$rules_minimal)
+  expect_true(is.na(section_of(mini$t0, "r_session")))
+  expect_identical(mini$t1, "")
+  expect_identical(names(mini$sections), c("name", "tier", "hash", "tokens"))
+})
+
+test_that("the readonly preset has no edit or write rules (IC-68)", {
+  rd = prefix_fixture()$expected$rendered
+  s = p07_session("plan", "readonly")
+  prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, exclusive = TRUE)
+  fr = prompt_compose(s, list(interactive = TRUE))
+  expect_identical(fr$tool_names, c("read", "r", "ask"))
+  expect_identical(section_of(fr$t0, "rules"), rd$rules_readonly)
+  expect_false(grepl("Use edit for precise changes", fr$t0, fixed = TRUE))
+})
+
+test_that("the extended preset uses the full r_performance text and the extra tools", {
+  s = p07_session("auto", "extended")
+  prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, exclusive = TRUE)
+  fr = prompt_compose(s, list(interactive = FALSE))
+  expect_identical(fr$tool_names, c("read", "r", "edit", "write", "grep", "find", "ls"))
+  expect_match(fr$t0, prompt_text("r_performance_full"), fixed = TRUE)
+  expect_match(fr$t0, "- ls: List directory contents\n\nIn addition", fixed = TRUE)
+})
+
+test_that("the r schema is frozen in the variant for the document and the human (IC-68)", {
+  arr = function(fr) {
+    a = json_decode(fr$tools_json)
+    names(a[[which(vapply(a, function(x) x$name, "") == "r")]]$input_schema$properties)
+  }
+  expect_identical(arr(compose_case("standard_interactive")), c("code", "record", "note"))
+  expect_identical(arr(compose_case("standard_all")), c("code", "record", "note", "timeout"))
+  expect_identical(arr(compose_case("standard_core")), c("code", "timeout"))
+})
+
+test_that("{s1} is replaced by the configured System 1 alias", {
+  fr = compose_case("standard_all")
+  expect_match(fr$t0, "System 1 decisions are gptr(..., model = jev)", fixed = TRUE)
+  expect_false(grepl("{s1}", fr$t0, fixed = TRUE))
+})
+
+test_that("fragments are inserted at the marker, or the marker line is dropped", {
+  core = prompt_text("r_session")
+  none = prompt_insert_fragments(core, character())
+  expect_false(grepl("{{fragments}}", none, fixed = TRUE))
+  expect_false(grepl("\n\n", none, fixed = TRUE))
+  two = prompt_insert_fragments(core, c("- one", "- two"))
+  expect_match(two, "tool calls.\n- one\n- two\n- To hand a result", fixed = TRUE)
+})
+
+test_that("a section over its budget is truncated with a diagnostic", {
+  s = p07_session()
+  sid = session_data(s)$id
+  registry_add(gptr_prompt_section("house", paste(rep("Use SI units in every table.", 40),
+                                                  collapse = "\n"),
+                                   tier = "T1", order = 780L, budget = 20L),
+               source = "session", rank = 0L, session = sid)
+  fr = prompt_compose(s, list(interactive = FALSE))
+  expect_match(section_of(fr$t1, "house"), "[... section truncated to 20 tokens]", fixed = TRUE)
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(grepl("Section 'house' was truncated", d$message, fixed = TRUE)))
+})
+
+test_that("SYSTEM text, .opts$system and session_start sections replace or remove sections", {
+  s = p07_session()
+  fr = prompt_compose(s, list(interactive = FALSE, system = "You are a terse assistant."))
+  expect_true(startsWith(fr$t0, "You are a terse assistant.\n\n"))
+  expect_false(grepl("<tools>", fr$t0, fixed = TRUE))
+  expect_false(grepl("<rules>", fr$t0, fixed = TRUE))
+  call = list(args = list(opts = list(system = list(modes = NULL))))
+  fr2 = prompt_compose(s, list(interactive = FALSE, call = call))
+  expect_false(grepl("<modes>", fr2$t0, fixed = TRUE))
+  fr3 = prompt_compose(s, list(interactive = FALSE,
+                               start = list(sections = list(context = "Custom context."))))
+  expect_match(fr3$t0, "<context>\nCustom context.\n</context>", fixed = TRUE)
+})
+
+test_that("the user's SYSTEM.md replaces the core; the project's needs trust", {
+  local_project(files = list(".gptr/SYSTEM.md" = "Project system prompt."))
+  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  s = p07_session()
+  expect_false(grepl("Project system prompt.", prompt_compose(s)$t0, fixed = TRUE))
+  local_mocked_bindings(prompt_trusted = function(root) TRUE)
+  expect_true(startsWith(prompt_compose(s)$t0, "Project system prompt.\n\n"))
+})
+
+test_that("the tool array skips unavailable and missing tools and adds plugin direct tools", {
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
+  registry_add(gptr_tool("needs_ui", "Needs a UI.", parameters = list(type = "object"),
+                         execute = function(input, ctx) "ok",
+                         available = function(ctx) FALSE),
+               source = "session", rank = 0L, session = sid)
+  registry_add(gptr_tool("zz_lookup", "Look up a term.",
+                         parameters = list(type = "object", properties = json_obj()),
+                         execute = function(input, ctx) "ok", exposure = "direct"),
+               source = "session", rank = 0L, session = sid)
+  fr = prompt_compose(s, list(interactive = FALSE, tools = c("+needs_ui", "+nope")))
+  expect_identical(fr$tool_names, c("read", "r", "edit", "write", "zz_lookup"))
+  arr = json_decode(fr$tools_json)
+  expect_identical(vapply(arr, function(x) x$name, ""),
+                   c("read", "r", "edit", "write", "zz_lookup"))
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(grepl("Tool 'nope' is not registered", d$message, fixed = TRUE)))
+  fr2 = prompt_compose(s, list(interactive = FALSE, tools = "-zz_lookup"))
+  expect_false("zz_lookup" %in% fr2$tool_names)
+})
+
+test_that("prompt_schema_formals marks arguments without defaults as required", {
+  sch = prompt_schema_formals(function(name, n = 5L) NULL)
+  expect_identical(unclass(sch$required), "name")
+  expect_setequal(names(sch$properties), c("name", "n"))
+  expect_identical(json_encode(prompt_schema_formals(NULL)),
+                   "{\"type\":\"object\",\"properties\":{}}")
+})
+
+test_that("the default estimator is registered and keeps its prior when calibrating", {
+  sp = registry_get("estimator", "default")
+  expect_equal(sp$estimate("hello world", "prose"), est_tokens("hello world", "prose"))
+  st = sp$calibrate(list(m = 1, n = 0L, prior = 1.35), 1000, 1300)
+  expect_identical(st$prior, 1.35)
+  expect_true(is.numeric(st$m))
+})
+
+# P06's session_new() stores the `preset` setting when the caller names no preset, so a session
+# preset equal to the configured one is not an explicit choice: the user's tools.presets mapping
+# and the shipped defaults (IC-73) apply to it; `opts$preset` and any other session preset win.
+test_that("a session created without a preset gets tools.presets and the shipped default (IC-73)", {
+  local_gptr_options(tools = list(presets = list("fake/*" = "minimal")))
+  s = p07_session()
+  expect_identical(session_data(s)$preset, "standard")
+  expect_identical(prompt_compose(s, list(interactive = FALSE))$preset, "minimal")
+  expect_identical(prompt_compose(s, list(interactive = FALSE, preset = "readonly"))$preset,
+                   "readonly")
+  r = p07_session(preset = "readonly")
+  expect_identical(prompt_compose(r, list(interactive = FALSE))$preset, "readonly")
+  # Haiku 4.5 (catalog cache_min 4096): extended past break-even only (a human can answer)
+  h = session_new("anthropic/claude-haiku-4-5", "manual", home = new.env())
+  prompt_standins_register(prefix_fixture()$standins, session_data(h)$id, exclusive = TRUE)
+  fr = prompt_compose(h, list(interactive = TRUE))
+  expect_identical(fr$preset, "extended")
+  expect_identical(fr$tool_names, c("read", "r", "edit", "write", "ask", "grep", "find", "ls"))
+  expect_identical(prompt_compose(h, list(interactive = FALSE))$preset, "standard")
+  h2 = session_new("anthropic/claude-haiku-4-5", "manual", home = new.env(), preset = "minimal")
+  expect_identical(prompt_compose(h2, list(interactive = TRUE))$preset, "minimal")
+  # a configured preset other than standard is never replaced by the shipped default
+  local_gptr_options(preset = "readonly")
+  h3 = session_new("anthropic/claude-haiku-4-5", "manual", home = new.env())
+  expect_identical(prompt_compose(h3, list(interactive = TRUE))$preset, "readonly")
+})
+
+test_that("the tools.disable setting also leaves out plugin direct tools", {
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
+  registry_add(gptr_tool("zz_lookup", "Look up a term.",
+                         parameters = list(type = "object", properties = json_obj()),
+                         execute = function(input, ctx) "ok", exposure = "direct"),
+               source = "session", rank = 0L, session = sid)
+  expect_true("zz_lookup" %in% prompt_compose(s, list(interactive = FALSE))$tool_names)
+  local_gptr_options(tools = list(disable = "zz_lookup"))
+  expect_identical(prompt_compose(s, list(interactive = FALSE))$tool_names,
+                   c("read", "r", "edit", "write"))
+})
+
+test_that("a tool whose available() or parameters() fails is left out with a diagnostic", {
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
+  ok = function(input, ctx) "ok"
+  add = function(spec) registry_add(spec, source = "session", rank = 0L, session = sid)
+  add(gptr_tool("zz_params", "Broken schema.", parameters = function(ctx) stop("no schema"),
+                execute = ok))
+  add(gptr_tool("zz_avail", "Broken check.", parameters = list(type = "object"), execute = ok,
+                available = function(ctx) stop("no ui")))
+  add(gptr_tool("zz_array", "Not an object.", parameters = function(ctx) list(type = "array"),
+                execute = ok))
+  fr = prompt_compose(s, list(interactive = FALSE))
+  expect_identical(fr$tool_names, c("read", "r", "edit", "write"))
+  expect_identical(vapply(json_decode(fr$tools_json), function(x) x$name, ""),
+                   c("read", "r", "edit", "write"))
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_true(any(grepl("Tool 'zz_params' is not declared: parameters() failed: no schema",
+                        msg, fixed = TRUE)))
+  expect_true(any(grepl("Tool 'zz_avail' is not declared: available() failed: no ui", msg,
+                        fixed = TRUE)))
+  expect_true(any(grepl("Tool 'zz_array' is not declared: its parameters are not a JSON Schema",
+                        msg, fixed = TRUE)))
+})
+
+test_that("a session's own rank-0 preset composes with its tools (IC-69)", {
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_standins_register(prefix_fixture()$standins, sid, exclusive = TRUE)
+  id = registry_add(gptr_spec("preset", "p07_domain", tools = c("read", "r")), "session", 0L,
+                    session = sid)
+  withr::defer(registry_remove(id))
+  fr = prompt_compose(s, list(interactive = FALSE, preset = "p07_domain"))
+  expect_identical(fr$preset, "p07_domain")
+  expect_identical(fr$tool_names, c("read", "r"))
+  expect_match(fr$t0, "<tools>\n- read: Read file contents\n- r: Run R code", fixed = TRUE)
+})
+
+# Pi's rule: a custom system prompt (SYSTEM.md or a string .opts$system) replaces the whole core
+# (preamble, tools and rules) and is the user's text, so the preamble's 120-token budget does not
+# cut it; a named `preamble` override is a section override and keeps the section's budget.
+test_that("a custom system prompt replaces the core without the preamble's budget (Pi's rule)", {
+  fx = prefix_fixture()$standins
+  local_project()
+  withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
+  s = p07_session()
+  prompt_standins_register(fx, session_data(s)$id, exclusive = TRUE)
+  lines = paste0("Rule ", 1:30, ": answer in short sentences and name every object, file and ",
+                 "package you used.")
+  txt = paste(lines, collapse = "\n")
+  expect_gt(est_tokens(txt, "prose"), 500)
+  whole = function(fr) {
+    expect_true(startsWith(fr$t0, paste0(txt, "\n\n<r_session>\n")))
+    expect_false(grepl("section truncated", fr$t0, fixed = TRUE))
+    expect_identical(fr$sections$name[1], "preamble")
+  }
+  whole(prompt_compose(s, list(interactive = FALSE, system = txt)))
+  user = file.path(gptr_user_dir("config", create = TRUE), "SYSTEM.md")
+  writeLines(lines, user)
+  whole(prompt_compose(s, list(interactive = FALSE)))
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_false(any(grepl("Section 'preamble' was truncated", msg, fixed = TRUE)))
+  unlink(user)
+  named = prompt_compose(s, list(interactive = FALSE, system = list(preamble = txt)))
+  expect_match(named$t0, "[... section truncated to 120 tokens]", fixed = TRUE)
+  expect_match(named$t0, "<tools>", fixed = TRUE)
+})
+
+test_that("an empty SYSTEM.md or .opts$system replaces nothing; an empty override omits", {
+  fx = prefix_fixture()$standins
+  local_project()
+  withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
+  s = p07_session()
+  prompt_standins_register(fx, session_data(s)$id, exclusive = TRUE)
+  base = prompt_compose(s, list(interactive = FALSE))
+  expect_true(startsWith(base$t0, paste0(prompt_text("preamble"), "\n\n<tools>\n")))
+  expect_identical(prompt_compose(s, list(interactive = FALSE, system = ""))$t0, base$t0)
+  expect_identical(prompt_compose(s, list(interactive = FALSE, system = " \n "))$t0, base$t0)
+  writeLines(character(), file.path(gptr_user_dir("config", create = TRUE), "SYSTEM.md"))
+  fr = prompt_compose(s, list(interactive = FALSE))
+  expect_identical(fr$t0, base$t0)
+  expect_identical(fr$sections$name, base$sections$name)
+  fr2 = prompt_compose(s, list(interactive = FALSE, system = list(modes = " ")))
+  expect_false(grepl("<modes>", fr2$t0, fixed = TRUE))
+  expect_false("modes" %in% fr2$sections$name)
+})
+
+# An override changes a registered section's text; whether the section is included stays the
+# preset record's decision, so an excluded section keeps out of the prompt (never a stray T0
+# section that breaks the tiers).
+test_that("an override of a section the preset excludes keeps it out of the prompt", {
+  s = p07_session(preset = "minimal")
+  prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, sections = "r_env",
+                           exclusive = TRUE)
+  fr = prompt_compose(s, list(interactive = FALSE, system = list(r_env = "R 4.4 custom")))
+  expect_false(grepl("<r_env>", fr$t0, fixed = TRUE))
+  expect_identical(fr$t1, "")
+  expect_false("r_env" %in% fr$sections$name)
+  expect_true(endsWith(fr$t0, "</context>"))
+  st = p07_session(preset = "standard")
+  prompt_standins_register(prefix_fixture()$standins, session_data(st)$id, sections = "r_env",
+                           exclusive = TRUE)
+  fr2 = prompt_compose(st, list(interactive = FALSE, system = list(r_env = "R 4.4 custom")))
+  expect_identical(fr2$t1, "<r_env>\nR 4.4 custom\n</r_env>")
+  expect_identical(fr2$sections$tier[fr2$sections$name == "r_env"], "T1")
+})
+
+test_that("a named override replaces or removes an r_session fragment", {
+  frags = prefix_fixture()$standins$fragments
+  shell = frags[[which(vapply(frags, function(f) f$name, "") == "shell")]]$text
+  s = p07_session()
+  prompt_standins_register(prefix_fixture()$standins, session_data(s)$id, exclusive = TRUE)
+  base = section_of(prompt_compose(s, list(interactive = FALSE))$t0, "r_session")
+  expect_match(base, shell, fixed = TRUE)
+  gone = prompt_compose(s, list(interactive = FALSE, system = list(shell = NULL)))
+  expect_identical(section_of(gone$t0, "r_session"),
+                   sub(paste0(shell, "\n"), "", base, fixed = TRUE))
+  mine = "- Use the shell carefully."
+  swap = prompt_compose(s, list(interactive = FALSE, system = list(shell = mine)))
+  expect_identical(section_of(swap$t0, "r_session"), sub(shell, mine, base, fixed = TRUE))
+  expect_false("shell" %in% swap$sections$name)
+  expect_false(grepl("<shell>", swap$t0, fixed = TRUE))
+  m = p07_session(preset = "minimal")
+  prompt_standins_register(prefix_fixture()$standins, session_data(m)$id, exclusive = TRUE)
+  fm = prompt_compose(m, list(interactive = FALSE, system = list(shell = mine)))
+  expect_false(grepl(mine, fm$t0, fixed = TRUE))
+  expect_false("shell" %in% fm$sections$name)
+})

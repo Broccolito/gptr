@@ -436,6 +436,434 @@ prompt_register_presets = function(gptr) {
                           variants = c(r_performance = "full")))
   invisible(NULL)
 }
+
+# ---- the tool array -----------------------------------------------------------------------------
+
+#' A JSON Schema derived from a function's formals (all strings; required without a default)
+#' @noRd
+prompt_schema_formals = function(fun) {
+  f = if (is.function(fun)) formals(fun) else list()
+  f = f[names(f) != "..."]
+  req = names(f)[vapply(f, function(x) identical(x, quote(expr = )), NA)]
+  out = list(type = "object")
+  if (length(req)) out$required = I(req)
+  out$properties = if (length(f)) lapply(f, function(x) list(type = "string")) else json_obj()
+  out
+}
+
+#' The Anthropic-shape declaration of a tool spec (a parameters function is evaluated once)
+#' @noRd
+prompt_tool_decl = function(sp, ctx, input) {
+  params = sp$parameters
+  if (is.function(params)) params = with_prompt_input(ctx, input, function() params(ctx))
+  if (is.null(params)) params = prompt_schema_formals(sp$fun)
+  list(name = sp$name, description = sp$description, input_schema = params)
+}
+
+#' Direct tools declared whatever the preset: other specs with exposure "direct" (IC-37)
+#' @noRd
+prompt_tools_always = function(session_id) {
+  core = c("read", "r", "edit", "write", "ask", "grep", "find", "ls")
+  out = character()
+  for (nm in setdiff(registry_names("tool", session = session_id), core)) {
+    sp = registry_get("tool", nm, session = session_id)
+    direct = !is.null(sp) && identical(sp$exposure, "direct") && is.function(sp$execute)
+    if (direct && is.null(sp$namespace)) out = c(out, nm)
+  }
+  out
+}
+
+#' Build the frozen tool array (serialised once, Anthropic shape)
+#'
+#' A tool that is not registered, whose `available(ctx)` is not `TRUE`, or whose `parameters`
+#' function fails or gives no object schema is left out (with a diagnostic, except for a plain
+#' `FALSE` from `available()`), as P06's fallback freeze leaves it out: one plugin's failing
+#' schema never stops the freeze (contract section 9.1).
+#'
+#' @return `list(json = chr(1), names = chr)`: the declared tools only.
+#' @noRd
+prompt_tool_array = function(names, ctx, input, session_id) {
+  decls = list()
+  kept = character()
+  left_out = function(nm, why) {
+    registry_diagnostic("builtin:prompt", "freeze", "tool_left_out",
+                        paste0("Tool '", nm, "' is not declared: ", why))
+  }
+  for (nm in names) {
+    sp = registry_get("tool", nm, session = session_id)
+    if (is.null(sp) || !is.function(sp$execute)) {
+      registry_diagnostic("builtin:prompt", "freeze", "missing_tool",
+                          paste0("Tool '", nm, "' is not registered; it is not declared."))
+      next
+    }
+    if (is.function(sp$available)) {
+      ok = tryCatch(isTRUE(with_prompt_input(ctx, input, function() sp$available(ctx))),
+                    error = function(e) {
+                      left_out(nm, paste0("available() failed: ", conditionMessage(e)))
+                      FALSE
+                    })
+      if (!ok) next
+    }
+    decl = tryCatch(prompt_tool_decl(sp, ctx, input), error = function(e) e)
+    if (inherits(decl, "error")) {
+      left_out(nm, paste0("parameters() failed: ", conditionMessage(decl)))
+      next
+    }
+    schema = decl$input_schema
+    if (!is.list(schema) || !identical(schema[["type"]], "object")) {
+      left_out(nm, "its parameters are not a JSON Schema with type \"object\"")
+      next
+    }
+    decls[[length(decls) + 1L]] = decl
+    kept = c(kept, nm)
+  }
+  list(json = json_encode(decls), names = kept)
+}
+
+# ---- sections -----------------------------------------------------------------------------------
+
+#' Render one section's text (chr or function(ctx)); NULL omits it; an error is a diagnostic
+#' @noRd
+prompt_section_text = function(sp, ctx, input) {
+  txt = sp$text
+  if (is.function(txt)) {
+    txt = tryCatch(with_prompt_input(ctx, input, function() txt(ctx)), error = function(e) {
+      registry_diagnostic(paste0("prompt_section:", sp$name), "render", class(e)[1],
+                          conditionMessage(e))
+      NULL
+    })
+  }
+  if (is.null(txt) || !length(txt)) return(NULL)
+  txt = paste(as_utf8(as.character(txt)), collapse = "\n")
+  if (nzchar(txt)) txt else NULL
+}
+
+#' Insert rendered fragments at the {{fragments}} marker, or drop the marker line (IC-68)
+#' @noRd
+prompt_insert_fragments = function(txt, frags) {
+  marker = "{{fragments}}"
+  i = regexpr(marker, txt, fixed = TRUE)
+  if (i < 0) return(txt)
+  if (!length(frags)) {
+    txt = gsub(paste0("\n", marker), "", txt, fixed = TRUE)
+    txt = gsub(paste0(marker, "\n"), "", txt, fixed = TRUE)
+    return(gsub(marker, "", txt, fixed = TRUE))
+  }
+  paste0(substr(txt, 1L, i - 1L), paste(frags, collapse = "\n"),
+         substring(txt, i + nchar(marker)))
+}
+
+#' Wrap a section: the preamble is untagged, every other one becomes <name>\ntext\n</name>
+#' @noRd
+prompt_section_wrap = function(name, txt) {
+  if (identical(name, "preamble")) txt else paste0("<", name, ">\n", txt, "\n</", name, ">")
+}
+
+#' The System 1 alias written for {s1} (contract section 9.3; default `jev`)
+#' @noRd
+prompt_s1_alias = function(session = NULL) {
+  v = setting_get("system1", session = session)
+  unset = is.null(v) || !length(v) || !nzchar(v[1])
+  if (unset || startsWith(v[1], "typesafe/") || startsWith(v[1], "emulate:")) return("jev")
+  if (grepl("[/:]", v[1])) paste0("\"", v[1], "\"") else v[1]
+}
+
+#' Render every included section in `order`
+#'
+#' An override replaces the text of a section or of an `r_session` fragment; `NULL` or blank
+#' text removes it, as a provider's empty text does. Overrides never change inclusion: one for a
+#' registered section or fragment that the preset record (or the parent's own override) leaves
+#' out is dropped, and only an unregistered name becomes a new T0 section (order 760). The Pi-rule
+#' core replacement (attribute `core`, from `prompt_system_overrides()`) is the user's whole
+#' prompt, so the `preamble` budget does not cut it; every other text keeps its section's budget.
+#'
+#' @param overrides Named list: a chr replaces the text, `NULL` removes it.
+#' @return data.frame `name`, `tier`, `order`, `text` (wrapped).
+#' @noRd
+prompt_sections_render = function(ctx, input, session_id, overrides = list()) {
+  specs = prompt_specs("prompt_section", session_id)
+  is_frag = vapply(specs, function(x) !is.null(x$parent), NA)
+  frags = specs[is_frag]
+  rows = list()
+  add_row = function(rows, name, tier, order, text) {
+    rows[[length(rows) + 1L]] = data.frame(name = name, tier = tier, order = order,
+                                           text = prompt_section_wrap(name, text),
+                                           stringsAsFactors = FALSE)
+    rows
+  }
+  override_text = function(nm) {
+    txt = overrides[[nm]]
+    if (is.null(txt) || !nzchar(trimws(paste(txt, collapse = "\n")))) NULL else txt
+  }
+  for (sp in specs[!is_frag]) {
+    nm = sp$name
+    if (!preset_includes(input$preset, nm)) next
+    core = FALSE
+    if (nm %in% names(overrides)) {
+      txt = override_text(nm)
+      if (is.null(txt)) next
+      core = isTRUE(attr(txt, "core", exact = TRUE))
+      txt = paste(as.character(txt), collapse = "\n")
+    } else {
+      txt = prompt_section_text(sp, ctx, input)
+      if (is.null(txt)) next
+      fr = character()
+      for (f in frags) {
+        if (!identical(f$parent, nm) || !preset_includes(input$preset, f$name)) next
+        ft = if (f$name %in% names(overrides)) {
+          override_text(f$name)
+        } else {
+          prompt_section_text(f, ctx, input)
+        }
+        if (!is.null(ft)) fr = c(fr, paste(as.character(ft), collapse = "\n"))
+      }
+      txt = prompt_insert_fragments(txt, fr)
+    }
+    txt = gsub("{s1}", input$s1_alias %||% "jev", txt, fixed = TRUE)
+    budget = as.numeric(sp$budget %||% 300L)
+    if (!core && prompt_est(txt, "prose", session_id) > budget) {
+      registry_diagnostic("builtin:prompt", "freeze", "section_budget",
+                          paste0("Section '", nm, "' was truncated to ", budget, " tokens."))
+      txt = prompt_truncate(txt, budget, sprintf(prompt_text("section_truncated"), budget),
+                            session_id = session_id)
+    }
+    rows = add_row(rows, nm, sp$tier %||% "T0", as.numeric(sp$order %||% 500L), txt)
+  }
+  known = vapply(specs, function(x) as.character(x$name), "")
+  for (nm in setdiff(names(overrides), known)) {
+    txt = override_text(nm)
+    if (!is.null(txt)) {
+      rows = add_row(rows, nm, "T0", 760, paste(as.character(txt), collapse = "\n"))
+    }
+  }
+  if (!length(rows)) {
+    return(data.frame(name = character(), tier = character(), order = numeric(),
+                      text = character(), stringsAsFactors = FALSE))
+  }
+  out = do.call(rbind, rows)
+  out[order(out$order, seq_len(nrow(out)), method = "radix"), , drop = FALSE]
+}
+
+#' Section overrides from session_start, SYSTEM.md and .opts$system (Pi's replacement rule)
+#'
+#' A SYSTEM.md (the trusted project's, else the user's) or a string `.opts$system` replaces
+#' `preamble` and removes `tools` and `rules`; a named `.opts$system` list or the
+#' `session_start` collect result (`start$sections`) overrides named sections (`NULL` removes).
+#' A blank replacement (an empty SYSTEM.md, `.opts$system = ""`) replaces nothing. The
+#' replacement carries the attribute `core`, so the `preamble` budget does not cut it (Pi applies
+#' none; contract section 9.3 gives it none).
+#' @noRd
+prompt_system_overrides = function(system, start, root, trusted) {
+  ov = list()
+  put = function(ov, nm, val) {
+    if (is.null(val)) ov[nm] = list(NULL) else ov[[nm]] = paste(as.character(val), collapse = "\n")
+    ov
+  }
+  replace_core = function(ov, txt) {
+    txt = paste(as.character(txt), collapse = "\n")
+    if (!nzchar(trimws(txt))) return(ov)
+    ov = put(ov, "preamble", txt)
+    ov[["preamble"]] = structure(ov[["preamble"]], core = TRUE)
+    ov = put(ov, "tools", NULL)
+    put(ov, "rules", NULL)
+  }
+  secs = start$sections
+  for (nm in names(secs)) ov = put(ov, nm, secs[[nm]])
+  proj = file.path(root, ".gptr", "SYSTEM.md")
+  user = file.path(gptr_user_dir("config"), "SYSTEM.md")
+  if (isTRUE(trusted) && file.exists(proj)) {
+    ov = replace_core(ov, prompt_read_file(proj))
+  } else if (file.exists(user)) {
+    ov = replace_core(ov, prompt_read_file(user))
+  }
+  if (is.character(system) && length(system) == 1L) {
+    ov = replace_core(ov, system)
+  } else if (is.list(system)) {
+    for (nm in names(system)) ov = put(ov, nm, system[[nm]])
+  }
+  ov
+}
+
+#' The rendering input of prompt sections (contract section 10.2 row 14, plus `mode`)
+#' @noRd
+prompt_section_input = function(rec, tool_names, human, document, model, root, trusted, mode,
+                                session = NULL) {
+  list(preset = rec, tool_names = tool_names, human = isTRUE(human), document = document,
+       s1_alias = prompt_s1_alias(session), model = model, root = root,
+       trusted = isTRUE(trusted), mode = mode)
+}
+
+#' Estimated tokens of a frozen prompt's static prefix (tool array plus T0 and T1)
+#' @noRd
+prompt_static_tokens = function(frozen, session_id = NULL) {
+  sum(frozen$sections$tokens %||% 0) + prompt_est(frozen$tools_json %||% "", "json", session_id)
+}
+
+#' Compose the frozen prompt for one preset (no side effects)
+#'
+#' The preset's tools come from `preset_tools()` with the session (its rank-0 presets and
+#' settings, IC-69); the plugin direct tools declared whatever the preset are dropped by a
+#' `-name` modifier and by the `tools.disable` setting, as preset tools are.
+#' @noRd
+prompt_compose_preset = function(s, ctx, name, opts, model, mode, human, doc, root, trusted) {
+  sid = prompt_sid(s)
+  rec = preset_record(name, sid)
+  mods = as.character(opts$tools %||% character())
+  mods = mods[!is.na(mods)]
+  tool_names = preset_tools(name, human, model, mods, mode, session = sid)
+  removed = c(substring(mods[startsWith(mods, "-")], 2L),
+              as.character(unlist(setting_get("tools", session = sid)$disable)))
+  tool_names = prompt_tool_order(c(tool_names, setdiff(prompt_tools_always(sid), removed)))
+  input = prompt_section_input(rec, tool_names, human, doc, model, root, trusted, mode, s)
+  arr = prompt_tool_array(tool_names, ctx, input, sid)
+  input$tool_names = arr$names
+  system = opts$system %||% opts$call$args$opts$system
+  secs = prompt_sections_render(ctx, input, sid,
+                                prompt_system_overrides(system, opts$start, root, trusted))
+  tok = vapply(secs$text, function(x) prompt_est(x, "prose", sid), 0)
+  list(preset = name, model = model,
+       t0 = paste(secs$text[secs$tier == "T0"], collapse = "\n\n"),
+       t1 = paste(secs$text[secs$tier == "T1"], collapse = "\n\n"),
+       tools_json = arr$json, tool_names = arr$names,
+       sections = data.frame(name = secs$name, tier = secs$tier,
+                             hash = as.character(hash_sha256(secs$text)),
+                             tokens = unname(tok), stringsAsFactors = FALSE),
+       human = isTRUE(human), document = doc,
+       reinject = list(project = Inf, skills = 10000))
+}
+
+#' Compose what a session would freeze now (no side effects)
+#'
+#' The preset is the one named in `opts$preset`, else the session's own preset, else the user's
+#' `tools.presets` match for the model, else setting `preset`; the shipped `extended` default
+#' (IC-73) may replace a `standard` preset that none of the first three chose. P06's
+#' `session_new()` stores setting `preset` as the session's preset when its caller names none,
+#' so a session preset equal to the configured one counts as not chosen.
+#'
+#' @param s A `<session>` or `NULL` (a preview with the current settings).
+#' @param opts Run options: `preset`, `tools` (modifiers), `doc`, `interactive`, `system` (or
+#'   `call$args$opts$system`), `start` (the merged `session_start` collect result).
+#' @return The frozen list: `preset`, `model`, `t0`, `t1`, `tools_json`, `tool_names`,
+#'   `sections` (df `name`, `tier`, `hash`, `tokens`), `human`, `document`, `reinject`.
+#' @noRd
+prompt_compose = function(s, opts = list()) {
+  d = if (is.null(s)) NULL else session_data(s)
+  ctx = prompt_ctx(s)
+  model = d$model %||% setting_get("model", session = s) %||% model_default("chat")
+  mode = d$mode %||% setting_get("mode", session = s, default = "manual")
+  human = opts$interactive %||% gptr_can_prompt()
+  doc = opts$doc %||% prompt_doc(s)
+  root = project_root()
+  trusted = prompt_trusted(root)
+  configured = setting_get("preset", session = s, default = "standard")
+  own = d$preset
+  if (identical(own, configured)) own = NULL
+  explicit = opts$preset %||% own
+  mapped = if (is.null(explicit)) preset_user_mapping(model, s) else NULL
+  name = explicit %||% mapped %||% configured
+  frozen = prompt_compose_preset(s, ctx, name, opts, model, mode, human, doc, root, trusted)
+  shipped = is.null(explicit) && is.null(mapped) && identical(name, "standard") &&
+    preset_shipped_applies(model, prompt_model(model), prompt_static_tokens(frozen), human,
+                           d$kind)
+  if (shipped) {
+    frozen = prompt_compose_preset(s, ctx, "extended", opts, model, mode, human, doc, root,
+                                   trusted)
+  }
+  frozen
+}
+
+# ---- P07's section texts ------------------------------------------------------------------------
+
+#' @noRd
+prompt_section_preamble = function(ctx) {
+  if (identical(ctx$input$preset$preamble, "short")) {
+    prompt_text("preamble_short")
+  } else {
+    prompt_text("preamble")
+  }
+}
+
+#' @noRd
+prompt_section_tools = function(ctx) {
+  lines = character()
+  for (nm in ctx$input$tool_names) {
+    sp = ctx$get("tool", nm)
+    if (!is.null(sp$snippet)) lines = c(lines, paste0("- ", nm, ": ", sp$snippet))
+  }
+  if (!length(lines)) return(prompt_text("tools_footer"))
+  paste(c(lines, "", prompt_text("tools_footer")), collapse = "\n")
+}
+
+#' @noRd
+prompt_section_rules = function(ctx) {
+  inp = ctx$input
+  g = character()
+  for (nm in inp$tool_names) g = c(g, as.character(ctx$get("tool", nm)$guidelines))
+  extra = if ("r" %in% inp$tool_names && !preset_includes(inp$preset, "r_session")) {
+    prompt_text("rules_minimal")
+  }
+  rules = unique(c(g, prompt_text("rules_closing"), extra))
+  rules = rules[nzchar(trimws(rules))]
+  paste0("- ", rules, collapse = "\n")
+}
+
+#' @noRd
+prompt_section_r_session = function(ctx) {
+  if ("r" %in% ctx$input$tool_names) prompt_text("r_session") else NULL
+}
+
+#' @noRd
+prompt_section_r_performance = function(ctx) {
+  inp = ctx$input
+  if (!"r" %in% inp$tool_names) return(NULL)
+  v = inp$preset$variants
+  full = !is.null(v) && identical(unname(as.character(v[["r_performance"]])), "full")
+  prompt_text(if (full) "r_performance_full" else "r_performance")
+}
+
+#' @noRd
+prompt_section_addendum = function(ctx) {
+  inp = ctx$input
+  p = if (isTRUE(inp$trusted)) file.path(inp$root, ".gptr", "APPEND_SYSTEM.md") else ""
+  if (!file.exists(p)) p = file.path(gptr_user_dir("config"), "APPEND_SYSTEM.md")
+  if (!file.exists(p)) return(NULL)
+  txt = prompt_read_file(p)
+  if (nzchar(txt)) txt else NULL
+}
+
+#' The default estimator's calibration step (EWMA of the log ratio, G2 section 3.3)
+#' @noRd
+prompt_estimator_calibrate = function(state, estimated, reported) {
+  out = est_multiplier(state, estimated, reported, prior = state$prior %||% 1)
+  out$prior = state$prior
+  out
+}
+
+#' Register P07's sections (IC-68) and the default estimator
+#' @noRd
+prompt_register_sections = function(gptr) {
+  gptr$register(gptr_prompt_section("preamble", prompt_section_preamble, tier = "T0",
+                                    order = 100L, budget = 120L))
+  gptr$register(gptr_prompt_section("tools", prompt_section_tools, tier = "T0", order = 200L,
+                                    budget = 250L))
+  gptr$register(gptr_prompt_section("rules", prompt_section_rules, tier = "T0", order = 300L,
+                                    budget = 450L))
+  gptr$register(gptr_prompt_section("r_session", prompt_section_r_session, tier = "T0",
+                                    order = 400L, budget = 500L))
+  gptr$register(gptr_prompt_section("r_performance", prompt_section_r_performance, tier = "T0",
+                                    order = 450L, budget = 450L))
+  gptr$register(gptr_prompt_section("modes", prompt_text("modes"), tier = "T0", order = 700L,
+                                    budget = 120L))
+  gptr$register(gptr_prompt_section("context", prompt_text("context"), tier = "T0",
+                                    order = 750L, budget = 160L))
+  gptr$register(gptr_prompt_section("addendum", prompt_section_addendum, tier = "T1",
+                                    order = 800L, budget = 1000L))
+  gptr$register(gptr_spec("estimator", "default",
+                          estimate = function(x, class = "prose") est_tokens(x, class),
+                          calibrate = prompt_estimator_calibrate))
+  invisible(NULL)
+}
+
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
 #'
 #' @param gptr The extension API object.
@@ -443,6 +871,7 @@ prompt_register_presets = function(gptr) {
 #' @noRd
 builtin_prompt = function(gptr) {
   prompt_register_presets(gptr)
+  prompt_register_sections(gptr)
   invisible(NULL)
 }
 
