@@ -945,3 +945,462 @@ print.gptr_spec = function(x, ...) {
   cat(paste0(format(x), "\n"), sep = "")
   invisible(x)
 }
+
+# ---- the exported spec constructors (contract 6.8; IC-35) ---------------------------------------
+
+#' The first element of a choice vector when the argument was left at its default; a wrong value
+#' is passed on so that the kind validator reports it as gptr_error_invalid_spec
+#' @noRd
+spec_arg_first = function(x, choices) if (identical(x, choices)) choices[[1]] else x
+
+#' gptr_error_invalid_spec for a required constructor argument that is missing
+#' @noRd
+spec_missing = function(kind, name, field) {
+  label = if (is.character(name) && length(name) == 1L && !is.na(name)) name else "?"
+  spec_abort(list(kind = kind, name = label), field, "is required")
+}
+
+#' Define a tool
+#'
+#' A tool is one capability the model can use: declared directly in the request's tool array
+#' (`exposure = "direct"`), callable from R code as `gptr$<namespace>$<name>()` (`"r"`, one
+#' signature line in the prompt), found through `gptr$search()` (`"deferred"`) or callable only by
+#' gptr code (`"hidden"`). Give `execute` (`function(input, ctx)`, the direct-tool form), `fun` (an
+#' R function whose formals match the schema properties, the member form), or both. A direct tool
+#' with only `fun` gets a generated `execute` that prints the value within `output_tokens`; an `r`
+#' member with only `execute` gets a generated `fun`.
+#'
+#' @param name Tool name, `^[a-zA-Z0-9_-]{1,64}$`.
+#' @param description Model-facing description; direct tools stay under 400 estimated tokens.
+#' @param parameters A JSON Schema list with `type = "object"`, a `function(ctx)` evaluated once
+#'   when a session freezes its prompt, or `NULL` to derive the schema from `fun`'s formals.
+#' @param execute `function(input, ctx)` returning a [gptr_tool_result()], text, a list or `NULL`.
+#' @param fun The R-callable form of the tool.
+#' @param exposure One of `"direct"`, `"r"`, `"deferred"`, `"hidden"`.
+#' @param namespace Namespace of an `r` member (plugins must set it to their package name).
+#' @param execution `"sequential"` (tools that evaluate R or write files) or `"concurrent"`.
+#' @param risk `function(input, ctx)` returning a risk level, or `NULL`.
+#' @param snippet One line shown in the prompt's tool list (direct tools).
+#' @param guidelines Bullet lines added to the prompt's rules (direct tools).
+#' @param signature Catalog line for `r` members; `NULL` derives it from the schema.
+#' @param output_tokens Budget for printed results; `NULL` uses the gptr defaults.
+#' @param record Keep calls of this member in recorded code.
+#' @param available `function(ctx)` deciding at freeze whether a direct tool is offered.
+#' @param annotations Named list: `read_only`, `destructive`, `idempotent`, `open_world`,
+#'   `requires_user` (MCP `readOnlyHint`-style names are mapped).
+#' @return A spec of class `c("gptr_tool", "gptr_spec")`.
+#' @examples
+#' gptr_tool("nrow_of", "Number of rows of a data frame in the session",
+#'           parameters = list(type = "object", required = I("name"),
+#'                             properties = list(name = list(type = "string"))),
+#'           fun = function(name) nrow(get(name, envir = globalenv())), exposure = "r",
+#'           namespace = "demo")
+#' @export
+gptr_tool = function(name, description, parameters = NULL, execute = NULL, fun = NULL,
+                     exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL,
+                     execution = c("sequential", "concurrent"), risk = NULL, snippet = NULL,
+                     guidelines = NULL, signature = NULL, output_tokens = NULL, record = TRUE,
+                     available = NULL, annotations = list()) {
+  if (missing(description)) spec_missing("tool", name, "description")
+  spec_new("tool", name, description = description, parameters = parameters, execute = execute,
+           fun = fun, exposure = spec_arg_first(exposure, c("direct", "r", "deferred", "hidden")),
+           namespace = namespace,
+           execution = spec_arg_first(execution, c("sequential", "concurrent")), risk = risk,
+           snippet = snippet, guidelines = guidelines, signature = signature,
+           output_tokens = output_tokens, record = record, available = available,
+           annotations = annotations)
+}
+
+#' Define a model provider
+#'
+#' A provider is data: an id, the wire `api` its adapter implements, a base URL, how to find a
+#' credential and its models. `auth` names environment variables (or is a function returning a
+#' secret handle) and is resolved per request.
+#'
+#' @param id Provider id, `^[a-z0-9][a-z0-9-]*$`.
+#' @param api Wire api (the name of an adapter), for example `"openai-completions"`.
+#' @param base_url Endpoint base URL.
+#' @param auth Character vector of environment-variable names, a function, or `NULL`.
+#' @param models List of model records (each with at least `id`).
+#' @param compat Named list of compatibility switches for the adapter.
+#' @param type `"chat"`, `"classifier"` (System 1) or `"cli"`.
+#' @param headers Named list of non-secret header strings.
+#' @param discover `function()` listing models on request, or `NULL`.
+#' @param status `function()` reporting cached provider status, or `NULL`.
+#' @param aliases Alternative names of the provider.
+#' @param local Endpoint locality hint permitting unknown model ids. Resolved model locality is
+#'   checked separately: a loopback server may route inference to a remote model.
+#' @param offline `TRUE` when no remote model is called (test providers).
+#' @param rate `list(requests_per_s, tokens_per_s)` static limits, or `NULL`.
+#' @return A spec of class `c("gptr_provider", "gptr_spec")`.
+#' @examples
+#' gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.example/v1",
+#'               auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000)))
+#' @export
+gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(),
+                         type = c("chat", "classifier", "cli"), headers = list(), discover = NULL,
+                         status = NULL, aliases = character(), local = FALSE, offline = FALSE,
+                         rate = NULL) {
+  if (missing(api)) spec_missing("provider", id, "api")
+  spec_new("provider", id, id = id, api = api, base_url = base_url, auth = auth, models = models,
+           compat = compat, type = spec_arg_first(type, c("chat", "classifier", "cli")),
+           headers = headers, discover = discover, status = status, aliases = aliases,
+           local = local, offline = offline, rate = rate)
+}
+
+#' Define a wire adapter
+#'
+#' An adapter turns gptr's request context into one provider's wire format and its stream back
+#' into gptr events. HTTP and process adapters give `build()` and `parse()`; `inprocess` adapters
+#' give `stream()`, a generator factory; classifier adapters give `classify`.
+#'
+#' @param api The wire api this adapter implements (the name providers bind to).
+#' @param transport `"http_sse"`, `"http_ndjson"`, `"http_json"`, `"process_jsonl"` or
+#'   `"inprocess"`.
+#' @param build `function(model, context, opts)` returning a request spec.
+#' @param parse `function(model, opts)` returning a stream normaliser.
+#' @param stream `function(model, context, opts)` returning a generator (`inprocess`).
+#' @param classify Named list for classifier adapters: `build(model, state, questions, opts)`
+#'   and `parse(model, status, headers, body, questions)`, or
+#'   `run(model, state, questions, opts)` for `inprocess`. Classifier response parsing has a
+#'   separate signature from the ordinary chat stream `parse(model, opts)`.
+#' @param capabilities Named list of adapter capabilities.
+#' @return A spec of class `c("gptr_adapter", "gptr_spec")`.
+#' @examples
+#' gptr_adapter("echo", transport = "inprocess",
+#'              stream = function(model, context, opts) {
+#'                state = new.env()
+#'                state$done = FALSE
+#'                function() {
+#'                  if (state$done) return(NULL)
+#'                  state$done = TRUE
+#'                  list(events = list())
+#'                }
+#'              })
+#' @export
+gptr_adapter = function(api, transport = c("http_sse", "http_ndjson", "http_json",
+                                           "process_jsonl", "inprocess"),
+                        build = NULL, parse = NULL, stream = NULL, classify = NULL,
+                        capabilities = list()) {
+  choices = c("http_sse", "http_ndjson", "http_json", "process_jsonl", "inprocess")
+  spec_new("adapter", api, api = api, transport = spec_arg_first(transport, choices),
+           build = build, parse = parse, stream = stream, classify = classify,
+           capabilities = capabilities)
+}
+
+#' Define a model router
+#'
+#' A router is a virtual model: `route(request, ctx)` runs before every request of a session whose
+#' model is the router's name and returns a model reference, or
+#' `list(model, thinking = NULL, state = NULL)`. A router that errors or exceeds `timeout` falls
+#' back to the default model.
+#'
+#' @param name Router name, usable as `model = <name>`.
+#' @param route `function(request, ctx)`.
+#' @param description One line for listings.
+#' @param timeout Seconds allowed per call.
+#' @return A spec of class `c("gptr_router", "gptr_spec")`.
+#' @examples
+#' gptr_router("cheapest", route = function(request, ctx) "anthropic/claude-haiku-4-5")
+#' @export
+gptr_router = function(name, route, description = NULL, timeout = 2) {
+  if (missing(route)) spec_missing("router", name, "route")
+  spec_new("router", name, route = route, description = description, timeout = timeout)
+}
+
+#' Define an event hook
+#'
+#' A hook runs `handler(event, ctx)` for one event of the catalogue (see `gptr_api()$features`) or
+#' for a plugin channel named `"<plugin>:<topic>"`. What the handler may return depends on the
+#' event: patches for `tool_result`, a decision for `tool_call`, nothing for notifications.
+#' Handlers of `tool_call`, `permission_request` and `document_write` fail closed: an error blocks
+#' or denies, and a `tool_call` answer with an unknown `decision` (anything but `"block"`,
+#' `"modify"` with an `input` list, or `"allow"`; for example `"deny"`) blocks.
+#'
+#' @param event Event name.
+#' @param handler `function(event, ctx)`.
+#' @param matcher `NULL`, a tool-name glob such as `"mcp__*"`, or `function(event)` returning
+#'   `TRUE` for events the handler wants.
+#' @return A spec of class `c("gptr_hook", "gptr_spec")`, named after its event.
+#' @examples
+#' gptr_hook("tool_result", function(event, ctx) NULL, matcher = "r")
+#' @export
+gptr_hook = function(event, handler, matcher = NULL) {
+  ok = is.character(event) && length(event) == 1L && !is.na(event) && nzchar(event)
+  label = if (ok) event else "hook"
+  if (missing(handler)) spec_missing("hook", label, "handler")
+  spec_new("hook", label, event = event, handler = handler, matcher = matcher)
+}
+
+#' Define a permission policy
+#'
+#' `check(call, ctx)` sees every tool call before it runs and returns `NULL` (no opinion) or
+#' `list(decision = "allow" | "deny" | "ask" | "ask_human" | "modify", reason, input)`.
+#' Decisions combine as deny > ask_human > ask > modify > allow; only a person answers an
+#' `ask_human`, never a hook; a policy that errors denies. Keep checks under 10 ms.
+#'
+#' @param name Policy name.
+#' @param check `function(call, ctx)`.
+#' @param description One line for listings.
+#' @return A spec of class `c("gptr_policy", "gptr_spec")`.
+#' @examples
+#' gptr_policy("no_installs", check = function(call, ctx) {
+#'   if (identical(call$name, "r") && grepl("install.packages", call$input$code, fixed = TRUE)) {
+#'     list(decision = "deny", reason = "installs are not allowed here")
+#'   } else {
+#'     NULL
+#'   }
+#' })
+#' @export
+gptr_policy = function(name, check, description = NULL) {
+  if (missing(check)) spec_missing("policy", name, "check")
+  spec_new("policy", name, check = check, description = description)
+}
+
+#' Define a sub-agent
+#'
+#' An agent definition names a specialist for `gptr(agents = ...)`: its model, tools, skills,
+#' system text, backend, preset and limits. `model` and `skills` may be bare identifiers; they are
+#' stored unevaluated (as written) and resolved by the gateway. `gptr_agent("name")` alone (or
+#' with only `file`) loads a saved definition. Package code should pass strings.
+#'
+#' @param name Agent name.
+#' @param description One line describing the specialist.
+#' @param model Model reference: a string, a bare identifier or a provider spec.
+#' @param tools Tool names (or specs) the agent may use.
+#' @param skills Skills to preload.
+#' @param system System text of the agent.
+#' @param backend `"auto"`, `"inline"`, `"worker"`, `"cli"` or a registered backend name.
+#' @param preset Tool preset of the agent's session.
+#' @param max_turns Turn limit, or `NULL`.
+#' @param mode Permission mode (`"plan"`, `"manual"`, `"edits"`, `"auto"`), or `NULL` to inherit.
+#' @param objects Names of objects the agent may see.
+#' @param export Names of objects the agent returns.
+#' @param returns JSON Schema of a structured answer, or `NULL`.
+#' @param file Path of an agent definition file.
+#' @return A spec of class `c("gptr_agent", "gptr_spec")`.
+#' @examples
+#' gptr_agent("stats", description = "Statistical reviewer", model = "anthropic/claude-opus-5-5",
+#'            skills = "statistics")
+#' @export
+gptr_agent = function(name = NULL, description = NULL, model = NULL, tools = NULL, skills = NULL,
+                      system = NULL, backend = c("auto", "inline", "worker", "cli"),
+                      preset = "minimal", max_turns = NULL, mode = NULL, objects = NULL,
+                      export = NULL, returns = NULL, file = NULL) {
+  model_expr = substitute(model)
+  skills_expr = substitute(skills)
+  only_ref = missing(description) && missing(model) && missing(tools) && missing(skills) &&
+    missing(system) && missing(backend) && missing(preset) && missing(max_turns) &&
+    missing(mode) && missing(objects) && missing(export) && missing(returns)
+  if (only_ref) {
+    if (is.null(name) && is.null(file)) {
+      gptr_abort("gptr_agent() needs a name, a file, or the fields of a definition.",
+                 "invalid_argument", arg = "name", expected = "an agent name or file")
+    }
+    load = ext_service_try("agent_def.get")
+    if (is.null(load)) {
+      gptr_abort(paste0("gptr_agent() with only a name loads a saved agent definition, which ",
+                        "needs the agent loader (plan P17); give the definition's fields instead."),
+                 "not_available", member = "agent_def.get", provided_by = "P17")
+    }
+    return(load(name, file = file))
+  }
+  spec_new("agent", name, description = description, model = model_expr, tools = tools,
+           skills = skills_expr, system = system,
+           backend = spec_arg_first(backend, c("auto", "inline", "worker", "cli")),
+           preset = preset, max_turns = max_turns, mode = mode, objects = objects,
+           export = export, returns = returns, file = file)
+}
+
+#' Define a slash command
+#'
+#' A console command `/name args`: `handler(args, ctx)` gets the raw text after the name and
+#' returns `NULL`, a character vector (printed) or `list(prompt = "...")` (sent as a prompt).
+#'
+#' @param name Command name without the leading `/`.
+#' @param handler `function(args, ctx)`.
+#' @param description One line for `/help`.
+#' @param complete `function(prefix, ctx)` returning completions, or `NULL`.
+#' @return A spec of class `c("gptr_command", "gptr_spec")`.
+#' @examples
+#' gptr_command("rows", function(args, ctx) paste("rows:", nrow(mtcars)), description = "Show rows")
+#' @export
+gptr_command = function(name, handler, description = NULL, complete = NULL) {
+  if (missing(handler)) spec_missing("command", name, "handler")
+  spec_new("command", name, handler = handler, description = description, complete = complete)
+}
+
+#' Define a system-prompt section
+#'
+#' A section of the frozen system prompt, rendered once per session in ascending `order`: `T0`
+#' sections form the stable prefix, `T1` sections follow. `text` may be a function of `ctx`;
+#' `parent` makes the section a fragment of another section.
+#'
+#' @param name Section name (the tag it is wrapped in).
+#' @param text A string or `function(ctx)` returning a string or `NULL`.
+#' @param tier `"T0"` or `"T1"`.
+#' @param order Position among sections.
+#' @param budget Token budget of the section.
+#' @param parent Name of the section this fragment belongs to, or `NULL`.
+#' @return A spec of class `c("gptr_prompt_section", "gptr_spec")`.
+#' @examples
+#' gptr_prompt_section("house_rules", "Use SI units in every table.", tier = "T1", order = 780L)
+#' @export
+gptr_prompt_section = function(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L,
+                               parent = NULL) {
+  if (missing(text)) spec_missing("prompt_section", name, "text")
+  spec_new("prompt_section", name, text = text, tier = spec_arg_first(tier, c("T0", "T1")),
+           order = order, budget = budget, parent = parent)
+}
+
+#' Define a context block
+#'
+#' A block of context the model receives in user messages: `provide(ctx, budget)` returns text (or
+#' `NULL` to skip). `placement` puts it in the first message, in later turns, or both; turn blocks
+#' equal to their previous text are skipped. `authority = "operator"` is accepted only from user,
+#' plugin and built-in records.
+#'
+#' @param name Block name (the tag it is wrapped in).
+#' @param provide `function(ctx, budget)`.
+#' @param placement `"turn"`, `"first"` or `"both"`.
+#' @param authority `"data"` or `"operator"`.
+#' @param budget Token budget; longer text is truncated.
+#' @param order Position among blocks.
+#' @return A spec of class `c("gptr_context_block", "gptr_spec")`.
+#' @examples
+#' gptr_context_block("lab_notebook", function(ctx, budget) "Experiment 12: cohort B only.",
+#'                    placement = "first", order = 650L)
+#' @export
+gptr_context_block = function(name, provide, placement = c("turn", "first", "both"),
+                              authority = c("data", "operator"), budget = 300L, order = 650L) {
+  if (missing(provide)) spec_missing("context_block", name, "provide")
+  spec_new("context_block", name, provide = provide,
+           placement = spec_arg_first(placement, c("turn", "first", "both")),
+           authority = spec_arg_first(authority, c("data", "operator")), budget = budget,
+           order = order)
+}
+
+#' Define a sub-agent backend
+#'
+#' A backend runs child sessions: `start(spec, ctx)` returns a handle the reactor can poll,
+#' `cancel(handle)` stops it and every process it started. Backends never block the reactor for
+#' more than 50 ms.
+#'
+#' @param name Backend name, usable as `backend = <name>`.
+#' @param start `function(spec, ctx)`.
+#' @param poll `function(handle)` or `NULL`.
+#' @param cancel `function(handle)`.
+#' @param capabilities Named list: `parallel`, `live_objects`, `ask`.
+#' @return A spec of class `c("gptr_backend", "gptr_spec")`.
+#' @examples
+#' gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) NULL)
+#' @export
+gptr_backend = function(name, start, poll = NULL, cancel, capabilities = list()) {
+  if (missing(start)) spec_missing("backend", name, "start")
+  if (missing(cancel)) spec_missing("backend", name, "cancel")
+  spec_new("backend", name, start = start, poll = poll, cancel = cancel,
+           capabilities = capabilities)
+}
+
+# ---- tool results (contract 5.7) -----------------------------------------------------------------
+
+#' Image blocks from image blocks, image file paths or raw PNG vectors
+#' @noRd
+spec_result_images = function(images) {
+  if (is.character(images)) images = as.list(images)
+  if (is.raw(images)) images = list(images)
+  expected = "image blocks, PNG file paths or raw PNG vectors"
+  if (!is.list(images)) {
+    gptr_abort(paste0("`images` must be a list of ", expected, "."), "invalid_argument",
+               arg = "images", expected = expected)
+  }
+  mimes = c(png = "image/png", jpg = "image/jpeg", jpeg = "image/jpeg", gif = "image/gif",
+            webp = "image/webp")
+  b64 = function(raw) gsub("[\r\n]", "", jsonlite::base64_enc(raw), perl = TRUE)
+  lapply(images, function(im) {
+    if (is.list(im) && identical(im[["type"]], "image")) {
+      check_list(im, "images", named = TRUE)
+      return(block_image(im[["data"]], mime = im[["mime"]], source = im[["source"]],
+                          width = im[["width"]], height = im[["height"]]))
+    }
+    if (is.raw(im)) return(block_image(b64(im), mime = "image/png", source = "plot"))
+    ext = if (is.character(im) && length(im) == 1L) tolower(tools::file_ext(im)) else ""
+    if (nzchar(ext) && ext %in% names(mimes) && file.exists(im)) {
+      raw = readBin(im, "raw", n = file.info(im)$size)
+      return(block_image(b64(raw), mime = unname(mimes[ext]), source = "file"))
+    }
+    gptr_abort("An element of `images` is neither an image block, an image file nor raw PNG.",
+               "invalid_argument", arg = "images", expected = expected)
+  })
+}
+
+#' Build a tool result
+#'
+#' What a tool's `execute()` returns: text and images for the model, `details` kept in the
+#' transcript but never sent to a model, and `value`, the R object handed to R callers of the
+#' member (kept in memory only, never persisted).
+#'
+#' @param text Character vector, joined with newlines into one text block, or `NULL`.
+#' @param images List of image blocks, PNG file paths or raw PNG vectors, or `NULL`.
+#' @param details Named list of details, or `NULL`.
+#' @param is_error `TRUE` when the result reports a failure.
+#' @param value Any R value returned to R callers.
+#' @return A `gptr_tool_result` list with `content`, `details`, `is_error`, `value`, `spill`,
+#'   `out_id`, `truncated` and `terminate`.
+#' @examples
+#' gptr_tool_result("3 rows", details = list(n = 3L), value = 3L)
+#' @export
+gptr_tool_result = function(text = NULL, images = NULL, details = NULL, is_error = FALSE,
+                            value = NULL) {
+  check_strings(text, "text", null = TRUE)
+  check_list(details, "details", named = TRUE, null = TRUE)
+  check_flag(is_error, "is_error")
+  content = list()
+  if (!is.null(text)) content = list(block_text(paste(text, collapse = "\n")))
+  if (!is.null(images)) content = c(content, spec_result_images(images))
+  structure(list(content = content, details = details, is_error = is_error, value = value,
+                 spill = NULL, out_id = NULL, truncated = FALSE, terminate = FALSE),
+            class = "gptr_tool_result")
+}
+
+#' Normalise what a tool's execute() returned (contract 5.7)
+#' @noRd
+as_tool_result = function(x) {
+  if (inherits(x, "gptr_tool_result")) return(x)
+  if (is.null(x)) return(gptr_tool_result("(no output)"))
+  if (is.character(x)) return(gptr_tool_result(x))
+  known = c("text", "images", "value", "is_error", "details")
+  nms = names(x)
+  fields_ok = !length(x) || (!is.null(nms) && !anyNA(nms) && !anyDuplicated(nms) &&
+    all(nms %in% known))
+  if (is.list(x) && !is.object(x) && fields_ok) {
+    text = x[["text"]]
+    if (is.null(text) && is.null(x[["images"]])) text = "(no output)"
+    return(gptr_tool_result(text = text, images = x[["images"]], details = x[["details"]],
+                            is_error = x[["is_error"]] %||% FALSE, value = x[["value"]]))
+  }
+  gptr_abort(paste0("A tool returned an object of class '", class(x)[[1]], "'; return a ",
+                    "gptr_tool_result, text, list(text, images, value, is_error, details) ",
+                    "or NULL."),
+             "invalid_argument", arg = "x",
+             expected = "a gptr_tool_result, a character vector, a list or NULL")
+}
+
+#' Format a tool result: its text blocks, with `[image]` for images
+#' @export
+#' @noRd
+format.gptr_tool_result = function(x, ...) {
+  parts = vapply(x$content, function(b) {
+    if (identical(b[["type"]], "image")) return("[image]")
+    paste(as.character(b[["text"]] %||% ""), collapse = "")
+  }, "")
+  paste(parts, collapse = "\n")
+}
+
+#' Print a tool result through msg_verbatim() (untrusted text is never a format string)
+#' @export
+#' @noRd
+print.gptr_tool_result = function(x, ...) {
+  msg_verbatim(format(x))
+  invisible(x)
+}

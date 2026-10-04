@@ -402,3 +402,192 @@ test_that("format() shows fields and never function bodies", {
   expect_false(any(grepl("secret-body-text", out, fixed = TRUE)))
   expect_output(print(s), "<gptr_command hello>", fixed = TRUE)
 })
+
+test_that("every example of contract 6.8 runs and returns its class (IC-35)", {
+  local_registry()
+  specs = list(
+    gptr_tool("nrow_of", "Number of rows of a data frame in the session",
+              parameters = list(type = "object", required = I("name"),
+                                properties = list(name = list(type = "string"))),
+              fun = function(name) nrow(get(name, envir = globalenv())), exposure = "r",
+              namespace = "demo"),
+    gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.example/v1",
+                  auth = "CORP_LLM_KEY", models = list(list(id = "corp-large", context = 128000))),
+    gptr_adapter("echo", transport = "inprocess",
+                 stream = function(model, context, opts) {
+                   state = new.env()
+                   state$done = FALSE
+                   function() {
+                     if (state$done) return(NULL)
+                     state$done = TRUE
+                     list(events = list())
+                   }
+                 }),
+    gptr_router("cheapest", route = function(request, ctx) "anthropic/claude-haiku-4-5"),
+    gptr_hook("tool_result", function(event, ctx) NULL, matcher = "r"),
+    gptr_policy("no_installs", check = function(call, ctx) {
+      if (identical(call$name, "r") && grepl("install.packages", call$input$code, fixed = TRUE)) {
+        list(decision = "deny", reason = "installs are not allowed here")
+      } else {
+        NULL
+      }
+    }),
+    gptr_agent("stats", description = "Statistical reviewer", model = "anthropic/claude-opus-5-5",
+               skills = "statistics"),
+    gptr_command("rows", function(args, ctx) paste("rows:", nrow(mtcars)),
+                 description = "Show rows"),
+    gptr_prompt_section("house_rules", "Use SI units in every table.", tier = "T1", order = 780L),
+    gptr_context_block("lab_notebook", function(ctx, budget) "Experiment 12: cohort B only.",
+                       placement = "first", order = 650L),
+    gptr_backend("echo", start = function(spec, ctx) NULL, cancel = function(handle) NULL)
+  )
+  kinds = vapply(specs, function(s) s$kind, "")
+  expect_equal(kinds, c("tool", "provider", "adapter", "router", "hook", "policy", "agent",
+                        "command", "prompt_section", "context_block", "backend"))
+  for (s in specs) expect_s3_class(s, c(paste0("gptr_", s$kind), "gptr_spec"), exact = TRUE)
+  expect_equal(specs[[1]]$namespace, "demo")
+  expect_true(is.function(specs[[1]]$fun))
+  expect_equal(specs[[2]]$auth, "CORP_LLM_KEY")
+  expect_equal(specs[[3]]$transport, "inprocess")
+  expect_equal(specs[[3]]$stream(NULL, NULL, NULL)(), list(events = list()))
+  expect_equal(specs[[4]]$timeout, 2)
+  expect_equal(specs[[5]]$name, "tool_result")
+  expect_equal(specs[[5]]$matcher, "r")
+  expect_equal(specs[[6]]$check(list(name = "r", input = list(code = "install.packages('x')")),
+                                NULL)$decision, "deny")
+  expect_equal(specs[[8]]$handler("", NULL), "rows: 32")
+  expect_equal(specs[[9]]$tier, "T1")
+  expect_identical(specs[[9]]$order, 780L)
+  expect_equal(specs[[10]]$placement, "first")
+})
+
+test_that("constructors pick the first choice and report missing or wrong arguments", {
+  local_registry()
+  t = gptr_tool("t", "A tool", execute = function(input, ctx) "x")
+  expect_equal(t$exposure, "direct")
+  expect_equal(t$execution, "sequential")
+  expect_equal(gptr_adapter("a", build = function(model, context, opts) NULL,
+                            parse = function(model, opts) NULL)$transport, "http_sse")
+  expect_equal(gptr_provider("p", api = "x")$type, "chat")
+  expect_equal(gptr_prompt_section("s", "text")$tier, "T0")
+  expect_equal(gptr_context_block("b", function(ctx, budget) NULL)$placement, "turn")
+  expect_equal(gptr_context_block("b", function(ctx, budget) NULL)$authority, "data")
+  expect_equal(gptr_agent("a", description = "d")$backend, "auto")
+  expect_equal(gptr_agent("a", description = "d")$preset, "minimal")
+  err = expect_error(gptr_tool("t"), class = "gptr_error_invalid_spec")
+  expect_equal(err$field, "description")
+  expect_error(gptr_router("r"), class = "gptr_error_invalid_spec")
+  expect_error(gptr_provider("p"), class = "gptr_error_invalid_spec")
+  expect_error(gptr_backend("b", start = function(spec, ctx) NULL),
+               class = "gptr_error_invalid_spec")
+  err = expect_error(gptr_tool("t", "d", execute = function(input, ctx) NULL, exposure = "public"),
+                     class = "gptr_error_invalid_spec")
+  expect_equal(err$field, "exposure")
+  expect_error(gptr_context_block("b", function(ctx, budget) NULL, placement = "system"),
+               class = "gptr_error_invalid_spec")
+})
+
+test_that("gptr_agent() stores the raw captured expressions (IC-34)", {
+  local_registry()
+  a = gptr_agent("rev", description = "Reviewer", model = opus, skills = c(stats, plots))
+  expect_identical(a$model, quote(opus))
+  expect_identical(a$skills, quote(c(stats, plots)))
+  b = gptr_agent("rev", description = "Reviewer", model = "anthropic/claude-opus-5-5",
+                 mode = "plan", max_turns = 5)
+  expect_equal(b$model, "anthropic/claude-opus-5-5")
+  expect_identical(b$max_turns, 5L)
+  expect_error(gptr_agent(description = "no name"), class = "gptr_error_invalid_spec")
+  expect_error(gptr_agent("rev", description = "d", mode = "yolo"),
+               class = "gptr_error_invalid_spec")
+  err = expect_error(gptr_agent("text", description = "d"), class = "gptr_error_invalid_spec")
+  expect_equal(err$field, "name")
+})
+
+test_that("gptr_tool_result() builds text, image, details and value", {
+  r = gptr_tool_result(c("3 rows", "2 cols"), details = list(n = 3L), value = 3L)
+  expect_s3_class(r, "gptr_tool_result")
+  expect_named(r, c("content", "details", "is_error", "value", "spill", "out_id", "truncated",
+                    "terminate"))
+  expect_equal(r$content[[1]]$type, "text")
+  expect_equal(r$content[[1]]$text, "3 rows\n2 cols")
+  expect_equal(r$value, 3L)
+  expect_false(r$is_error)
+  expect_false(r$terminate)
+  png = withr::local_tempfile(fileext = ".png")
+  writeBin(as.raw(c(0x89, 0x50, 0x4e, 0x47, rep(0, 80))), png)
+  r = gptr_tool_result("plot", images = list(png, as.raw(c(1, 2, 3))))
+  expect_length(r$content, 3L)
+  expect_equal(r$content[[2]]$type, "image")
+  expect_equal(r$content[[2]]$mime, "image/png")
+  expect_equal(r$content[[2]]$source, "file")
+  expect_false(grepl("\n", r$content[[2]]$data, fixed = TRUE))
+  expect_equal(format(r), "plot\n[image]\n[image]")
+  expect_error(gptr_tool_result(images = list(42)), class = "gptr_error_invalid_argument")
+  expect_error(gptr_tool_result(details = list(1)), class = "gptr_error_invalid_argument")
+  expect_error(gptr_tool_result(is_error = NA), class = "gptr_error_invalid_argument")
+  expect_error(gptr_tool_result(text = 1), class = "gptr_error_invalid_argument")
+  expect_invisible(print(gptr_tool_result("")))
+})
+
+test_that("as_tool_result() normalises the shapes execute() may return (contract 5.7)", {
+  expect_equal(format(as_tool_result(NULL)), "(no output)")
+  expect_equal(format(as_tool_result(list())), "(no output)")
+  expect_equal(format(as_tool_result(c("a", "b"))), "a\nb")
+  r = as_tool_result(list(text = "done", value = 1:3, is_error = TRUE))
+  expect_true(r$is_error)
+  expect_equal(r$value, 1:3)
+  expect_equal(format(as_tool_result(list(value = 2))), "(no output)")
+  x = gptr_tool_result("same")
+  expect_identical(as_tool_result(x), x)
+  expect_error(as_tool_result(data.frame(a = 1)), class = "gptr_error_invalid_argument")
+  expect_error(as_tool_result(list(text = "x", colour = "red")),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("a direct tool with only fun gets an execute() printing the value in budget", {
+  local_registry()
+  t = gptr_tool("paste2", "Paste two strings", fun = function(a, b = "x") paste(a, b))
+  res = t$execute(list(a = "hello", b = "world"), NULL)
+  expect_s3_class(res, "gptr_tool_result")
+  expect_equal(res$value, "hello world")
+  expect_match(format(res), "hello world", fixed = TRUE)
+  expect_false(res$truncated)
+  big = gptr_tool("seq_of", "A long sequence", fun = function(n) seq_len(as.integer(n)),
+                  output_tokens = 50L)
+  res = big$execute(list(n = "5000"), NULL)
+  expect_true(res$truncated)
+  expect_lt(nchar(format(res)), 2000L)
+  expect_length(res$value, 5000L)
+})
+
+test_that("tool result boundaries preserve canonical named records and logical errors", {
+  for (details in list(stats::setNames(list(1), NA_character_), list(a = 1, a = 2))) {
+    expect_error(gptr_tool_result(details = details), class = "gptr_error_invalid_argument")
+  }
+  for (flag in list(NA, 1, "true", c(TRUE, FALSE))) {
+    expect_error(as_tool_result(list(text = "x", is_error = flag)),
+                 class = "gptr_error_invalid_argument")
+  }
+  for (value in list(list(text = "ok", text = "lost"),
+                     list(text = "x", is_error = FALSE, is_error = TRUE),
+                     stats::setNames(list("x"), NA_character_),
+                     stats::setNames(list("x"), ""))) {
+    expect_error(as_tool_result(value), class = "gptr_error_invalid_argument")
+  }
+  expect_false(as_tool_result(list(text = "x", is_error = NULL))$is_error)
+  expect_identical(gptr_tool_result(details = list())$details, list())
+})
+
+test_that("preformed result images obey the canonical block_image boundary", {
+  image = block_image("YWJj", mime = "image/png", source = "plot", width = 3L, height = 2L)
+  expect_identical(gptr_tool_result(images = list(image))$content[[1]], image)
+  bad = list(list(type = "image"),
+             utils::modifyList(image, list(data = NA_character_)),
+             utils::modifyList(image, list(mime = 1)),
+             utils::modifyList(image, list(source = NA_character_)),
+             utils::modifyList(image, list(width = -1L)),
+             utils::modifyList(image, list(height = Inf)))
+  for (value in bad) {
+    expect_error(gptr_tool_result(images = list(value)), class = "gptr_error_invalid_argument")
+  }
+})
