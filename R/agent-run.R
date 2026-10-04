@@ -184,3 +184,187 @@ run_append_message = function(run, msg) session_append(run$shell, entry_message(
 run_append_custom = function(run, type, data) {
   session_append(run$shell, entry_custom(type, data))
 }
+
+# ---------------------------------------------------------------------------- recovery
+
+# Error-text patterns: provider error-message facts collected by Pi (MIT licence;
+# packages/ai/src/utils/overflow.ts and retry.ts at commit 1b347794), transcribed in report 02
+# section 5.3 (`recovery.R`, with the verifier's fixes) and gptr's libcurl additions. Matched with
+# perl = TRUE and ignore.case = TRUE.
+overflow_patterns = c(
+  "prompt (?:is )?too long", "request_too_large", "input is too long for requested model",
+  "exceeds the context window",
+  "exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\\d,]+ tokens?|\\s*\\([\\d,]+\\))",
+  "input token count.*exceeds the maximum", "maximum prompt length is \\d+",
+  "reduce the length of the messages", "maximum context length is \\d+ tokens",
+  "exceeds (?:the )?maximum allowed input length of [\\d,]+ tokens?",
+  "input \\(\\d+ tokens\\) is longer than the model'?s context length \\(\\d+ tokens\\)",
+  "exceeds the limit of \\d+", "exceeds the available context size",
+  "greater than the context length", "context window exceeds limit", "exceeded model token limit",
+  "too large for model with \\d+ maximum context length",
+  "prompt has [\\d,]+ tokens?, but the configured context size is [\\d,]+ tokens?",
+  "model_context_window_exceeded", "prompt too long; exceeded (?:max )?context length",
+  "range of input length should be", "context[_ ]length[_ ]exceeded", "too many tokens",
+  "token limit exceeded")
+non_overflow_patterns = c("^(Throttling error|Service unavailable):", "rate limit",
+                          "too many requests")
+bodyless_overflow_pattern = "^4(?:00|13)\\s*(?:status code)?\\s*\\(no body\\)"
+non_retryable_pattern = paste(c(
+  "GoUsageLimitError", "FreeUsageLimitError", "Monthly usage limit reached", "available balance",
+  "insufficient_quota", "out of budget", "quota exceeded", "billing",
+  "subscription_sharing_usage_limit_exceeded"), collapse = "|")
+retryable_pattern = paste(c(
+  "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests", "429",
+  "500", "502", "503", "504", "520", "524", "service.?unavailable", "server.?error",
+  "internal.?error", "provider.?returned.?error",
+  "exceeded request buffer limit while retrying upstream", "network.?error",
+  "connection.?error", "connection.?refused", "connection.?lost", "other side closed",
+  "fetch failed", "getaddrinfo", "ENOTFOUND", "EAI_AGAIN", "upstream.?connect",
+  "reset before headers", "socket hang up", "socket connection was closed", "timed? out",
+  "timeout", "terminated", "websocket.?closed", "websocket.?error", "ended without",
+  "stream ended before message_stop", "stream ended before a terminal response event",
+  "http2 request did not get a response", "retry delay", "you can retry your request",
+  "try your request again", "please retry your request", "ResourceExhausted",
+  "subscription_sharing_usage_unavailable", "subscription_sharing_user_unavailable",
+  "could not resolve host", "failed to connect", "recv failure", "send failure",
+  "ssl connect error", "transfer closed with", "empty reply from server"), collapse = "|")
+
+#' Does any of the patterns match the text? (PCRE, case-insensitive)
+#' @noRd
+any_match = function(patterns, x) {
+  any(vapply(patterns, function(p) grepl(p, x, perl = TRUE, ignore.case = TRUE), NA))
+}
+
+#' The error text of a message: its `error_message` when that is one string, else ""
+#' @noRd
+run_error_text = function(msg) {
+  x = if (is.list(msg)) msg[["error_message"]] else NULL
+  if (is.character(x) && length(x) == 1L && !is.na(x)) x else ""
+}
+
+#' A context window in tokens (one positive finite number), else NA
+#' @noRd
+overflow_window = function(x) {
+  if (!(is.numeric(x) || is.character(x)) || length(x) != 1L) return(NA_real_)
+  x = suppressWarnings(as.numeric(x))
+  if (is.finite(x) && x > 0) x else NA_real_
+}
+
+#' One token count of a usage record: 0 when the record leaves it out (P05's legacy zero of a
+#' reported usage), NA when it is unknown (an explicit null, as in P05's `usage_from_json()`) or
+#' not one nonnegative number (IC-74)
+#' @noRd
+overflow_count = function(usage, field) {
+  if (!field %in% names(usage)) return(0)
+  x = usage[[field]]
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x < 0) return(NA_real_)
+  as.numeric(x)
+}
+
+#' Is a response a context overflow? (report 02 section 5.3 `is_context_overflow()`)
+#'
+#' Three signals: the error record's class, the provider's error text (the 21 texts of report 02,
+#' the 413/no-body forms), and a silent overflow shown by the reported usage. Under IC-74 an
+#' unknown count is not zero: the known prompt counts are a lower bound, which proves an overflow
+#' only when it alone exceeds the window, and an estimated usage (`estimated = TRUE`, gptr's own
+#' guess) proves nothing. Malformed records give FALSE, never an error.
+#' @param message An assistant message (R shape).
+#' @param context_window The model's window in tokens, or NULL/NA.
+#' @param error The error record of the terminal `error` event, if any.
+#' @noRd
+is_context_overflow = function(message, context_window = NULL, error = NULL) {
+  if (identical(err_class(error), "context_overflow")) return(TRUE)
+  if (!is.list(message)) return(FALSE)
+  err = run_error_text(message)
+  if (identical(message[["stop_reason"]], "error") && nzchar(err) &&
+      !any_match(non_overflow_patterns, err)) {
+    if (any_match(overflow_patterns, err)) return(TRUE)
+    if (identical(message[["provider"]], "cerebras") && any_match(bodyless_overflow_pattern, err)) {
+      return(TRUE)
+    }
+  }
+  window = overflow_window(context_window)
+  usage = message[["usage"]]
+  if (is.na(window) || !is.list(usage) || isTRUE(usage[["estimated"]])) return(FALSE)
+  input = sum(overflow_count(usage, "input"), overflow_count(usage, "cache_read"), na.rm = TRUE)
+  if (identical(message[["stop_reason"]], "stop") && input > window) return(TRUE)
+  identical(message[["stop_reason"]], "length") &&
+    identical(overflow_count(usage, "output"), 0) && input >= window * 0.99
+}
+
+#' Does an error text describe a transient failure? (non-retryable patterns win)
+#' @noRd
+retryable_error_text = function(text) {
+  if (!is.character(text) || length(text) != 1L || is.na(text) || !nzchar(text)) return(FALSE)
+  if (grepl(non_retryable_pattern, text, perl = TRUE, ignore.case = TRUE)) return(FALSE)
+  grepl(retryable_pattern, text, perl = TRUE, ignore.case = TRUE)
+}
+
+#' The HTTP status of an error record as one integer, else NA
+#' @noRd
+err_status = function(err) {
+  st = if (is.list(err)) err[["status"]] else NULL
+  if (!(is.numeric(st) || is.character(st)) || length(st) != 1L) return(NA_integer_)
+  suppressWarnings(as.integer(st))
+}
+
+#' The gptr class name of an error record (`list(class, status, ...)` of an `error` event)
+#' @noRd
+err_class = function(err) {
+  cls = if (is.list(err)) err[["class"]] else NULL
+  cls = if (is.character(cls)) cls[!is.na(cls) & nzchar(cls)] else character()
+  cls = setdiff(sub("^gptr_error_", "", cls),
+                c("gptr_error", "error", "condition", "provider", "timeout"))
+  if (length(cls)) return(cls[[1L]])
+  st = err_status(err)
+  if (is.na(st)) return(NA_character_)
+  if (st %in% c(401L, 403L)) return("auth")
+  if (st == 429L) return("rate_limit")
+  if (st >= 500L) return("overloaded")
+  NA_character_
+}
+
+#' The condition classes of a failed request (most specific first)
+#' @noRd
+provider_classes = function(err) {
+  k = err_class(err)
+  if (is.na(k)) return("provider")
+  if (startsWith(k, "timeout")) return(c(k, "timeout"))
+  if (k %in% c("auth", "rate_limit", "spend_cap", "retry_after", "overloaded", "context_overflow",
+               "network", "redirect", "billing")) return(c(k, "provider"))
+  "provider"
+}
+
+#' Is a failed request transient, to be retried at agent level?
+#'
+#' Never an overflow (compaction recovers it, Pi's `_isRetryableError()`), never a provider's
+#' definitive answer (auth, spend cap, a long retry-after, a redirect, billing, quota texts), and
+#' never one of gptr's own local failures (no credential, an unavailable or untrusted model, an
+#' invalid argument or spec, a missing package), whose message is gptr's text, not a provider's.
+#' @noRd
+run_retryable = function(msg, err) {
+  if (is_context_overflow(msg, NULL, err)) return(FALSE)
+  text = run_error_text(msg)
+  k = err_class(err)
+  if (!is.na(k) && k %in% c("spend_cap", "auth", "retry_after", "redirect", "billing",
+                            "context_overflow", "no_key", "not_available", "untrusted",
+                            "invalid_argument", "invalid_spec", "missing_package")) {
+    return(FALSE)
+  }
+  quota = grepl(non_retryable_pattern, text, perl = TRUE, ignore.case = TRUE)
+  if (!is.na(k) && k %in% c("overloaded", "rate_limit", "network", "timeout_idle",
+                            "timeout_first_byte", "timeout_connect")) {
+    return(!quota)
+  }
+  st = err_status(err)
+  if (!is.na(st) && (st %in% c(408L, 409L, 429L, 529L) || st >= 500L)) return(!quota)
+  retryable_error_text(text)
+}
+
+#' Agent-level retry delays in seconds: 2 s, then 4 s (C-33)
+#' @param attempt The number of the retry (1 for the first).
+#' @noRd
+agent_retry_delay = function(attempt) {
+  attempt = check_number(attempt, "attempt", min = 1, int = TRUE)
+  c(2, 4)[min(attempt, 2L)]
+}

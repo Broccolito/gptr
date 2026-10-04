@@ -183,6 +183,25 @@ failing_tools = function(.env = parent.frame()) {
   }, .env = .env)
 }
 
+# The projection fixture of test-agent-run.R's recovery checks R16-R17 (P06 Task 8), kept here
+# for the same reason: it calls the harness's test_session().
+
+#' A session whose transcript holds two tool calls, one result, an aborted reply and a new prompt
+projection_session = function() {
+  local_fake_provider(list("x"), .env = parent.frame())
+  s = test_session()
+  call = function(id) block_tool_call(id, "read", list(path = "a"))
+  session_append(s, entry_message(msg_user("q")))
+  session_append(s, entry_message(msg_assistant(list(call("c1"), call("c2")), api = "fake",
+                                                provider = "fake", model = "fake-1",
+                                                stop_reason = "tool_use")))
+  session_append(s, entry_message(msg_tool_result("c1", "read", "ok")))
+  session_append(s, entry_message(msg_assistant("partial", api = "fake", provider = "fake",
+                                                model = "fake-1", stop_reason = "aborted")))
+  session_append(s, entry_message(msg_user("next")))
+  s
+}
+
 # run_text() (needs session_run(), P06 Task 10) is restored from the Task 1 plan by Task 10, once
 # session_run() exists.
 roles = function(s) vapply(s$messages, function(m) m$role, "")

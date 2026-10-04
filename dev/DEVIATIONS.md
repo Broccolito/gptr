@@ -1080,3 +1080,54 @@ source the three added tests fail 15 assertions (8 for the resolved record, 5 fo
 `tool_choice` without tools fail 1 and 3 assertions. `gptr_check()` on the adapter: 31 checks, 0
 failed.
 
+## D-033 - P06 recovery classification: unknown or estimated usage proves no overflow, overflows and gptr's own failures are never retried, malformed records never throw (2026-10-04)
+
+P06 Task 8's plan-literal `is_context_overflow()`, `run_retryable()`, `err_class()`,
+`retryable_error_text()` and `agent_retry_delay()` (`R/agent-run.R`) were changed in four ways.
+Task 10's run engine (`run_response()`, `run_response_error()`, `run_condition()`) consumes them.
+
+1. **IC-74 usage** (07-local-ollama.md section 5: "Missing usage remains unknown"; D-021, D-022,
+   D-024, D-025). The plan's silent-overflow rule added `usage$input %||% 0` and
+   `usage$cache_read %||% 0`. An unknown count (P05's `usage_as(NULL)` for an unreported usage,
+   D-022's `NA` for a reported null) made the sum `NA`, and the `if` then stopped with base R's
+   unclassed "missing value where TRUE/FALSE needed" on every `stop` response of such a model; in
+   Task 10's `run_response()` that error would end the run. The known prompt counts (`input`,
+   `cache_read`) are now a lower bound: a field the usage leaves out keeps P05's legacy zero, and
+   an unknown value (`NA`, or an explicit null such as a `json_decode()`d `"output": null`, the
+   distinction P05's `usage_from_json()` makes; the plan's `%||% 0` read that null as zero) or one
+   that is not a nonnegative number adds nothing. The rule therefore
+   proves an overflow only when the known counts alone exceed the window (a `stop`) or reach 99%
+   of it with a known zero output (a `length` stop); an unknown output never counts as zero. A
+   usage marked `estimated = TRUE` (Task 10 replaces an unreported usage with gptr's own estimate
+   before the check) proves nothing: Pi detects a silent overflow only from reported usage, and an
+   estimate above the window would otherwise start a compaction on a guess.
+2. **An overflow is never retried.** `run_retryable()` returns `FALSE` whenever
+   `is_context_overflow(msg, NULL, err)` holds (Pi's `_isRetryableError()`; the plan's own
+   interface line says "never an overflow"). The plan checked only the record's class, so a 429 or
+   5xx whose text is an overflow ("429 too many tokens in the prompt") was retryable. Task 10's
+   engine tests the overflow first, so its behaviour is unchanged; a direct caller now gets the
+   same answer.
+3. **gptr's own definitive failures are never retried.** P05's `provider_stream()` turns a gptr
+   condition raised in its driver into an `error` event whose record carries the condition's
+   class. For `no_key`, `not_available`, `untrusted`, `invalid_argument`, `invalid_spec` and
+   `missing_package` the message is gptr's text, not a provider's, so the plan's fallback to the
+   provider text patterns could retry a missing credential or an invalid argument twice (for
+   example "`timeout` must be a number" matches `timeout`). These classes now give `FALSE`, like
+   `auth` and `spend_cap`. `internal` keeps the text rule (P05's "The stream ended without a
+   terminal event." is retried, as in report 02). `provider_classes()` is unchanged: such a
+   failure is stored as `gptr_error_provider` with `error_type` naming the class (plan).
+4. **The classifier never throws.** Fields are read with `[[` and checked for shape. A message that
+   is not a list, an `error_message` that is not one string, a usage that is not a list, a count
+   that is not one nonnegative number, a window that is not one positive finite number, an error
+   record that is not a list, an `NA` or empty class and a status that is not one number give
+   `FALSE`, `NA` or `"provider"`. The plan threw on several of them (`$` on an atomic vector,
+   `'length = 2' in coercion to 'logical(1)'`, a character count) and returned the class `""`.
+   `agent_retry_delay(attempt)` refuses an attempt that is not a whole number >= 1 with
+   `gptr_error_invalid_argument` (as P04's `retry_backoff()`); the plan returned `numeric(0)`,
+   `NA`, 2 or 4 for `0L`, `"1"`, `1.5` and `NULL`. Attempts of 3 and more still give 4 s.
+
+Validation: `progress/P06.md`, Task 8 (`test-agent-run.R`). The plan's 18 tests pass against the
+plan-literal source; the 7 added blocks fail 18 assertions there (the `if (NA)` error, 2
+estimated usages, the non-list message, 2 retried overflows, 6 retried definitive classes and 6
+accepted `agent_retry_delay()` arguments), and a probe of the plan-literal functions
+(`dev/.validation/P06/task8-literal-probe.log`) shows the remaining throws of item 4.
