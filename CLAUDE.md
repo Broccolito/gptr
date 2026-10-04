@@ -3,6 +3,8 @@
 gptr 1.0 is a ground-up rebuild: an AI agent harness that lives inside the R session (CRAN package, pure R).
 All design material is under `dev/` and excluded from the package build.
 Machine-specific inventories belong in the ignored `dev/LOCAL_SETUP.md`, if needed.
+Implementation status and resume instructions: `dev/PROGRESS.md`, `dev/HANDOFF.md`,
+`dev/DEVIATIONS.md`, and task evidence in `dev/progress/`.
 
 ## Read before working
 

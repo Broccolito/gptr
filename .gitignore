@@ -12,6 +12,8 @@
 # Private source discussion
 /gptr-discussion.txt
 /dev/LOCAL_SETUP.md
+/dev/.library/
+/dev/.validation/
 
 # macOS metadata
 .DS_Store
