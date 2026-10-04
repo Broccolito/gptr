@@ -55,3 +55,24 @@ UTF-8 byte boundaries, completed values and preview throttling.
   multibyte characters, and the 20,000-delta performance case under its five
   second bound.
 - Commit: `feat(json): add the streaming partial-JSON scanner`.
+
+## Task 12 — schema validation and signatures
+
+Created `R/json-schema.R` and focused tests for required properties, scalar
+types, explicit integer/array coercions, enums, nested objects/arrays, unknown
+properties, schema structure and concise tool signatures.
+
+- Red filter `^json-schema$`: FAIL 7, WARN 0, SKIP 0, PASS 0; missing validator
+  and schema helpers.
+- Green after documentation: FAIL 0, WARN 0, SKIP 0, PASS 28, with zero-failure
+  assertions on the returned test results.
+- Scoped lint of all eight source/test files from Tasks 9–12, after
+  `pkgload::load_all(quiet = TRUE)`, returns zero lints. Raw log:
+  `dev/.validation/P01-utilities-lint.log`.
+- No direct IC-74 changes are needed in these four utility tasks; amended fake
+  classifier metadata/records remain with the foundation owner in Task 15.
+- Commit: `feat(json): add JSON Schema validation and one-line signatures`.
+
+Tasks 9–12 have actual red/green evidence, with 714 passing expectations across
+their four focused green runs. The complete P01 package/milestone gates remain
+the foundation owner's responsibility.
