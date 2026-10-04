@@ -1666,3 +1666,392 @@ test_that("an abort before the stream's start event records the run's model, not
   expect_false(identical(last$api, "unknown"))
   expect_identical(last$request_id, run$request_id)
 })
+
+# ---------------------------------------------------------------- the ctx.kernel service (IC-34)
+
+kernel_members = c("envir", "run", "mode", "model", "execute_tool", "send", "set_model",
+                   "append_entry", "abort", "aborted", "update", "usage", "state")
+
+test_that("ctx.kernel is a registered service listing the P06 members of section 10.6", {
+  expect_true(ext_service_has("ctx.kernel"))
+  k = ext_service_get("ctx.kernel")()
+  expect_identical(names(k), kernel_members)
+  expect_true(all(vapply(k, is.function, NA)))
+})
+
+test_that("outside a run the members read the session", {
+  home = new.env()
+  s = test_session(mode = "manual", home = home)
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  expect_identical(k$envir(ctx), home)
+  expect_null(k$run(ctx))
+  expect_identical(k$mode(ctx), "manual")
+  expect_identical(k$model(ctx), "fake/fake-1")
+  expect_false(k$aborted(ctx))
+  expect_s3_class(k$usage(ctx), "gptr_usage")
+  expect_null(k$update(ctx, "ignored outside a tool"))
+  expect_null(k$abort(ctx))
+})
+
+test_that("inside a tool the members see the run; update emits tool_execution_update", {
+  local_permissive()
+  box = new.env()
+  local_tool("probe", function(input, ctx) {
+    k = ctx_kernel()
+    box$run = k$run(ctx)
+    box$envir = k$envir(ctx)
+    box$mode = k$mode(ctx)
+    k$update(ctx, "half way")
+    "probed"
+  })
+  local_fake_provider(list(fake_tool("probe"), "done"))
+  ev = local_events("tool_execution_update")
+  home = new.env()
+  s = test_session(home = home)
+  run_text(s, "go")
+  expect_match(box$run, "^u[0-9a-f]{8}$")
+  expect_identical(box$envir, home)
+  expect_identical(box$mode, "auto")
+  up = ev(s)
+  expect_length(up, 1L)
+  expect_identical(up[[1L]]$text, "half way")
+  expect_identical(up[[1L]]$tool_name, "probe")
+})
+
+test_that("send() enqueues extension notes, never operator relays (IC-55)", {
+  s = test_session()
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  k$send(ctx, "check the units", extension = "plugin:units")
+  k$send(ctx, "then plot", as = "follow_up")
+  q = session_data(s)$queue
+  expect_identical(q$steer[[1L]]$source, "extension")
+  expect_identical(q$steer[[1L]]$name, "units")
+  expect_identical(q$follow_up[[1L]]$text, "then plot")
+  m = queue_item_message(q$steer[[1L]], "steer", relay = TRUE)
+  expect_identical(m$role, "user")
+  expect_identical(msg_text(m),
+                   "Extension units sent this note (not from the user): check the units")
+})
+
+test_that("send() from model code of the same session tree is refused (IC-55)", {
+  local_permissive()
+  box = new.env()
+  local_tool("r", function(input, ctx) {
+    box$err = tryCatch(ctx_kernel()$send(ctx, "sneaky"), error = function(e) e)
+    "ran"
+  }, parameters = list(type = "object", required = I("code"),
+                       properties = list(code = list(type = "string"))))
+  local_fake_provider(list(fake_tool("r", code = "gptr_steer(s, 'x')"), "done"))
+  s = test_session()
+  run_text(s, "go")
+  expect_s3_class(box$err, "gptr_error_permission")
+  expect_length(session_data(s)$queue$steer, 0L)
+})
+
+test_that("set_model() switches at once when idle and at the next request inside a run", {
+  local_permissive()
+  local_fake_provider(list("a"))
+  local_fake_provider(list("from other"), name = "other")
+  s = test_session()
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  k$set_model(ctx, "other/other-1", thinking = "high", reason = "plugin")
+  expect_identical(s$model, "other/other-1")
+  change = Filter(function(e) identical(e$type, "model_change"), session_data(s)$entries)
+  expect_identical(change[[1L]]$gptr$reason, "plugin")
+  run = test_run(s)
+  k$set_model(ctx, "fake/fake-1", thinking = "low")
+  expect_identical(s$model, "other/other-1")
+  expect_identical(run$pending_model, list(ref = "fake/fake-1", thinking = "low",
+                                           reason = "plugin"))
+})
+
+test_that("append_entry() writes a custom entry named <plugin>.<type>", {
+  s = test_session()
+  ctx = session_live(s)$ctx
+  id = ctx_kernel()$append_entry(ctx, "note", list(n = 1L), extension = "plugin:units")
+  e = session_data(s)$entries[[length(session_data(s)$entries)]]
+  expect_identical(e$id, id)
+  expect_identical(e$custom_type, "units.note")
+  expect_identical(e$data, list(n = 1L))
+})
+
+test_that("abort() inside a tool stops the run after the call with the given reason", {
+  local_permissive()
+  local_tool("stopper", function(input, ctx) {
+    ctx_kernel()$abort(ctx, "plugin stop")
+    "stopping"
+  })
+  local_fake_provider(list(fake_tools(list(name = "stopper", input = json_obj()),
+                                      list(name = "stopper", input = json_obj())),
+                           "never reached"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "aborted")
+  expect_length(tool_results(s), 1L)
+  expect_false(identical(s$text, "never reached"))
+})
+
+test_that("state() is one environment per session and plugin, persisted when JSON-able", {
+  local_permissive()
+  local_fake_provider(list("ok"))
+  s = test_session()
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  st = k$state(ctx, extension = "plugin:panel")
+  st$count = 2L
+  expect_identical(k$state(ctx, extension = "plugin:panel"), st)
+  expect_false(identical(k$state(ctx, extension = "plugin:other"), st))
+  run_text(s, "go")
+  expect_identical(s$ext$panel$count, 2L)
+})
+
+# Added beyond the plan (P06 Task 15 adaptations, dev/progress/P06.md): labels, the process-level
+# ctx, recorded thinking levels, refused entries, aborts inside the dispatcher, the stack's run.
+
+test_that("ctx_ext_label() takes a bare plugin name or a full source", {
+  expect_identical(ctx_ext_label("plugin:units"), "units")
+  expect_identical(ctx_ext_label("builtin:documents"), "documents")
+  expect_identical(ctx_ext_label("panel"), "panel")
+  expect_identical(ctx_ext_label(NULL), "plugin")
+  expect_identical(ctx_ext_label(NA_character_), "plugin")
+  expect_identical(ctx_ext_label(""), "plugin")
+  expect_identical(ctx_ext_label("plugin:"), "plugin")
+})
+
+test_that("a process-level ctx reads the process defaults and refuses the session verbs", {
+  local_gptr_options(mode = "plan", model = "fake/fake-1")
+  ctx = ctx_new(NULL)
+  k = ctx_kernel()
+  expect_null(k$envir(ctx))
+  expect_null(k$run(ctx))
+  expect_identical(k$run(ctx_new(NULL, run = list(id = "u1"))), "u1")
+  expect_identical(k$mode(ctx), "plan")
+  expect_identical(k$model(ctx), "fake/fake-1")
+  expect_false(k$aborted(ctx))
+  expect_null(k$abort(ctx, "stop"))
+  expect_null(k$update(ctx, "progress"))
+  expect_null(k$state(ctx))
+  expect_s3_class(k$usage(ctx), "gptr_usage")
+  verbs = list(function() k$send(ctx, "note"), function() k$set_model(ctx, "fake/fake-1"),
+               function() k$append_entry(ctx, "note", list()))
+  for (verb in verbs) {
+    err = expect_error(verb(), class = "gptr_error_invalid_argument")
+    expect_identical(err$arg, "ctx")
+  }
+})
+
+test_that("set_model() records the thinking level with the model and refuses bad input at once", {
+  local_fake_provider(list("a"))
+  s = test_session()
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  k$set_model(ctx, "fake/fake-1", thinking = "high")
+  d = session_data(s)
+  e = d$entries[[length(d$entries)]]
+  expect_identical(e$type, "model_change")
+  expect_identical(e$gptr[c("thinking", "reason")], list(thinking = "high", reason = "plugin"))
+  expect_identical(d$thinking, "high")
+  expect_identical(s$model, "fake/fake-1")
+  n = length(d$entries)
+  err = expect_error(k$set_model(ctx, "fake/fake-1", thinking = "extreme"),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "thinking")
+  expect_error(k$set_model(ctx, "nowhere/none-1"), class = "gptr_error_unknown_model")
+  run = test_run(s)
+  expect_error(k$set_model(ctx, "nowhere/none-1"), class = "gptr_error_unknown_model")
+  expect_null(run$pending_model)
+  expect_length(d$entries, n)
+  k$set_model(ctx, "fake/fake-1", thinking = "low")
+  expect_length(d$entries, n)
+  expect_identical(run_target(run)$thinking, "low")
+  e = d$entries[[length(d$entries)]]
+  expect_identical(e$type, "model_change")
+  expect_identical(e$gptr[c("thinking", "reason")], list(thinking = "low", reason = "plugin"))
+  expect_identical(d$thinking, "low")
+})
+
+test_that("append_entry() refuses data the store cannot hold and gptr's own entry types", {
+  s = test_session()
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  n = length(session_data(s)$entries)
+  err = expect_error(k$append_entry(ctx, "note", list(where = new.env())),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "data")
+  err = expect_error(k$append_entry(ctx, "mode_change", list(from = "manual", to = "auto"),
+                                    extension = "plugin:gptr"),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "type")
+  expect_error(k$append_entry(ctx, "", list()), class = "gptr_error_invalid_argument")
+  expect_length(session_data(s)$entries, n)
+  k$append_entry(ctx, "mode_change", list(to = "auto"), extension = "plugin:gptrx")
+  expect_identical(session_data(s)$entries[[n + 1L]]$custom_type, "gptrx.mode_change")
+})
+
+test_that("send() labels its own queue item when a queue_update hook enqueues another", {
+  s = test_session()
+  ctx = session_live(s)$ctx
+  once = new.env()
+  once$done = FALSE
+  local_hook("queue_update", function(event, ctx) {
+    if (!once$done) {
+      once$done = TRUE
+      session_enqueue(ctx$session, "from the pipe", "steer", source = "pipe")
+    }
+    NULL
+  })
+  ctx_kernel()$send(ctx, "check the units", extension = "plugin:units")
+  q = session_data(s)$queue$steer
+  expect_identical(vapply(q, function(i) i$source, ""), c("extension", "pipe"))
+  expect_identical(q[[1L]]$name, "units")
+  expect_null(q[[2L]]$name)
+})
+
+test_that("abort() from a tool_call hook ends the call unrun, then settles the run", {
+  local_permissive()
+  box = new.env()
+  box$status = character()
+  local_tool("work", function(input, ctx) {
+    box$status = c(box$status, session_data(ctx$session)$status)
+    "worked"
+  })
+  local_hook("tool_call", function(event, ctx) {
+    ctx_kernel()$abort(ctx, "hook stop")
+    NULL
+  })
+  ev = local_events(c("tool_execution_end", "agent_end"))
+  local_fake_provider(list(fake_tools(list(name = "work", input = json_obj()),
+                                      list(name = "work", input = json_obj())),
+                           "never reached"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "aborted")
+  expect_length(box$status, 0L)
+  res = tool_results(s)
+  expect_length(res, 1L)
+  expect_true(res[[1L]]$is_error)
+  expect_identical(msg_text(res[[1L]]), "Tool call not executed: the run was aborted (hook stop).")
+  expect_identical(vapply(ev(s), function(e) e$type, ""), c("tool_execution_end", "agent_end"))
+})
+
+test_that("aborted() and run() still see a run that was aborted while its tool executes", {
+  local_permissive()
+  box = new.env()
+  local_tool("long", function(input, ctx) {
+    k = ctx_kernel()
+    box$before = k$aborted(ctx)
+    run_abort(session_live(ctx$session)$run, "user")
+    box$after = k$aborted(ctx)
+    box$run = k$run(ctx)
+    "stopped early"
+  })
+  local_fake_provider(list(fake_tool("long"), "never reached"))
+  s = test_session()
+  run_text(s, "go")
+  expect_false(box$before)
+  expect_true(box$after)
+  expect_match(box$run, "^u[0-9a-f]{8}$")
+  expect_identical(s$status, "aborted")
+})
+
+test_that("state() starts empty when the stored state of a plugin is not a named list", {
+  s = test_session()
+  d = session_data(s)
+  d$ext = list(panel = list(count = 3L), broken = list(1, 2))
+  ctx = session_live(s)$ctx
+  k = ctx_kernel()
+  expect_identical(k$state(ctx, extension = "plugin:panel")$count, 3L)
+  expect_length(ls(k$state(ctx, extension = "plugin:broken")), 0L)
+})
+
+# Added in the Task 15 review (round 1): a switch requested during the run's last reply, an abort
+# before the request starts, the refusals inside a run.
+
+test_that("set_model() during the run's last reply switches the model when the run settles", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  local_fake_provider(list(), name = "other")
+  local_hook("message_end", function(event, ctx) {
+    if (identical(event$role, "assistant")) ctx_kernel()$set_model(ctx, "other/other-1")
+    NULL
+  })
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "idle")
+  expect_identical(s$model, "other/other-1")
+  change = Filter(function(e) identical(e$type, "model_change"), session_data(s)$entries)
+  expect_length(change, 1L)
+  expect_identical(change[[1L]]$gptr$reason, "plugin")
+})
+
+test_that("a pending switch that fails when the run settles is a diagnostic, not a failed run", {
+  local_permissive()
+  local_fake_provider(list("done"))
+  local_fake_provider(list(), name = "other")
+  testthat::local_mocked_bindings(session_set_model = function(s, ref, reason = "user") {
+    gptr_abort("the session store failed: disk full", "internal", detail = "disk full")
+  })
+  local_hook("message_end", function(event, ctx) {
+    if (identical(event$role, "assistant")) ctx_kernel()$set_model(ctx, "other/other-1")
+    NULL
+  })
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "idle")
+  expect_identical(s$model, "fake/fake-1")
+  expect_null(session_live(s)$run)
+  diag = utils::tail(gptr_registry(diagnostics = TRUE), 1L)
+  expect_identical(diag$event, "set_model")
+  expect_match(diag$message, "other/other-1 was not applied: the session store failed",
+               fixed = TRUE)
+})
+
+test_that("abort() from a before_request hook settles the run before any transfer starts", {
+  local_permissive()
+  box = new.env()
+  local_hook("before_request", function(event, ctx) {
+    box$run = session_live(ctx$session)$run
+    ctx_kernel()$abort(ctx, "too expensive")
+    NULL
+  })
+  ev = local_events("agent_end")
+  fake = local_fake_provider(list("never sent"))
+  s = test_session()
+  run_text(s, "go")
+  expect_identical(s$status, "aborted")
+  expect_identical(box$run$status, "aborted")
+  expect_true(box$run$settled)
+  expect_false(isTRUE(box$run$busy))
+  expect_length(box$run$transfers, 0L)
+  expect_length(fake_requests(fake), 0L)
+  expect_length(ev(s), 1L)
+})
+
+test_that("inside a run set_model() refuses a decision-only model; a second abort keeps the reason",
+          {
+  local_permissive()
+  local_fake_provider(list("a"))
+  local_fake_provider(list(0.9), name = "cls", type = "classifier")
+  s = test_session()
+  ctx = session_live(s)$ctx
+  run = test_run(s)
+  expect_error(ctx_kernel()$set_model(ctx, "cls/cls-s1"), class = "gptr_error_not_available")
+  expect_null(run$pending_model)
+  box = new.env()
+  local_tool("twice", function(input, ctx) {
+    k = ctx_kernel()
+    k$abort(ctx, "first")
+    k$abort(ctx, "second")
+    box$run = ctx_run(ctx)
+    "stopping"
+  })
+  local_fake_provider(list(fake_tool("twice"), "never reached"), name = "fake2")
+  s2 = test_session(model = "fake2/fake2-1")
+  run_text(s2, "go")
+  expect_identical(s2$status, "aborted")
+  expect_identical(box$run$signal$reason, "first")
+  expect_length(tool_results(s2), 1L)
+})

@@ -101,6 +101,11 @@ dispatch_one = function(run, call, st = NULL) {
 
 #' The pipeline of one call: lookup, validation, tool_call hooks, perm_check(), checkpointers,
 #' execution, tool_result hooks
+#'
+#' A run aborted while the call is prepared (a `tool_call` or `permission_request` hook calling
+#' `ctx$abort()`, or an abort from elsewhere during the permission prompt) ends the call unrun:
+#' the permission check and the tool are skipped, so a guard that aborts on a call stops its side
+#' effects, and the call still gets its error result.
 #' @noRd
 dispatch_steps = function(run, call, st = NULL) {
   ctx = run_ctx(run)
@@ -118,17 +123,26 @@ dispatch_steps = function(run, call, st = NULL) {
                              hk$reason %||% "a tool_call hook blocked it")))
   }
   if (is.list(hk) && identical(hk$decision, "modify") && is.list(hk$input)) call$input = hk$input
+  if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
   dec = perm_check(call, run)
   call$risk = dec$risk
   if (!identical(dec$decision, "allow")) return(tool_error(perm_denial_text(dec)))
   call$input = dec$input %||% call$input
   call$approved_level = risk_level(dec$risk)
+  if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
   tokens = checkpoint_before(run, call, ctx)
   res = tool_execute_frame(run, call, ctx, st)
   res = checkpoint_after(run, call, ctx, tokens, res)
   nested = run$nested[[call$id]]
   if (length(nested)) res$details$nested = nested
   tool_result_hooks(run, call, res)
+}
+
+#' The error result of a call that the run's abort ended before it executed
+#' @noRd
+dispatch_aborted_result = function(run) {
+  tool_error(paste0("Tool call not executed: the run was aborted (",
+                    run$signal$reason %||% "user", ")."))
 }
 
 #' Execute a tool; the frame marks the running tool for run_current() (`.gptr_tool_run`)

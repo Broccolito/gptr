@@ -2658,13 +2658,17 @@ implementation (`task14-fix1-red.log`). Final `^session-object$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 463 ]` in the UTF-8 and the C locale (`task14-fix1-green.log`,
 `task14-fix1-green-C.log`).
 
-## D-057 - P10 grep, find and ls: a searched file and the relevance sort work with non-ASCII names in a C locale (2026-10-04)
+## D-057 - P10 grep, find and ls: a searched file and the relevance sort work with non-ASCII names in a C locale, the whole-file prefilter never drops a matching file, ls skips names that are not valid UTF-8, a failed long-line locate leaks no warning, a match-limit failure is always reported and costs only its own lines (2026-10-04)
 
 P10 Task 7's plan-literal `R/tool-search.R` passes the plan's 13 blocks (56 expectations, the
 ripgrep oracle included) in the UTF-8 and the C locale, and its (file, line) sets equal
 ripgrep's on 8 patterns over `R/`, `tests/` and `dev/spec/` (`dev/.validation/P10/task7-probe-rg-repo.log`).
 One defect, reproduced against that source (`task7-probe-plan-literal-clocale.log`,
-`task7-probe2-plan-literal-clocale.log`):
+`task7-probe2-plan-literal-clocale.log`); review round 1 found three more (items 2-4,
+`task7-fix1-probe*-before.log`) and review round 2 two more (item 2's backreferences and item 5,
+`task7-fix2-probe1-before.log`). Item 3 adds the `invalid_names` attribute of `search_ls()`, and
+item 5 adds the "results may be incomplete" notice to the texts and prints that had none. No
+signature, class, column or other Pi text changes.
 1. **`basename()` of a marked UTF-8 non-ASCII path stops in a non-UTF-8 locale** ("unable to
    translate ... to native encoding"; the base-R limit behind D-041 item 4 and D-051 item 6). Two
    plan calls hit it. `grep_candidates()` labelled a single searched file with `basename(root)`,
@@ -2672,16 +2676,83 @@ One defect, reproduced against that source (`task7-probe-plan-literal-clocale.lo
    `search_find(sort = "relevance")` failed as soon as the walk met one non-ASCII name anywhere
    under the root. Both now use the new `search_basename()` (`sub("(?s)^.*/", "", p, perl =
    TRUE)`, marked with `as_utf8()`); the paths are already "/"-separated (`resolve_tool_path()`,
-   `walk_files()`). No signature, class, column, attribute or Pi text changes.
+   `walk_files()`).
+2. **The whole-file `(?m)` prefilter dropped matching files** (report 21 section 2.1; report 11
+   section 2.5, the same (file, line) sets as ripgrep). It must keep every file the per-line
+   matcher matches, but the plan switched it off only for `\A`, `\z`, `\Z`, `\G`, a leading verb
+   and an `(?s)` flag. At a line edge the per-line subject has no neighbour while the whole file
+   has "\n", so these constructs failed in the whole file where the line matched: negative
+   lookaround (`,(?!\s)` on a line ending with a comma, `(?<!\s)#` at a line start, `(*nla:`),
+   possessive quantifiers and atomic groups (`a\s*+$` and `a(?>\s*)$` consume the newline and
+   cannot give it back), conditionals (`q(?(?=\s)x|)$`), a verb after the start (`x(*COMMIT)y`
+   ends the scan at the file's first `x`), and an inline `(?-m)` or `(?^)` (they unset the
+   prefilter's multiline flag). The file was dropped before the per-line matcher ran, so its
+   matches were lost without a notice, and whether a line was reported depended on unrelated
+   lines. `rg -P` and the per-line matcher report every one of them. The prefilter is now also
+   off for `(*` anywhere, `(?!`, `(?<!`, `(?>`, `(?(`, an option group containing `-` or `^`,
+   and a possessive quantifier (`*+`, `++`, `?+`, `}+`). Over-matching, inside `\Q...\E` or on an
+   escaped `\*+`, only costs the prefilter's speed. 22 common patterns keep the prefilter
+   (`task7-fix1-probe4-prefilter-active.log`), and the ripgrep comparison over `R/`, `tests/`
+   and `dev/spec/` is unchanged (`task7-fix1-probe-rg-repo.log`). Review round 2: a capture made
+   inside a positive lookaround is atomic too, so a backreference to it (`a(?=(\s*))\1$`, the
+   atomic-group idiom) lost `ws.R:1` the same way (`rg -P` reports it). Backreferences (`\1`-`\9`,
+   `\g`, `\k`, `(?P=`) now switch the prefilter off. The possessive test now reads `}+` only after
+   a quantifier brace (`{n}`, `{n,m}`, `{,m}`), so `\p{L}+`, `\x{E9}+` and `\N{U+00E9}+` keep the
+   prefilter (`task7-fix2-probe4.log`).
+3. **`search_ls()` listed with `list.files()` directly**, bypassing D-041 item 7. A name that
+   is not valid UTF-8 (Latin-1 bytes on Linux in a UTF-8 locale) reached `tolower()` in the name
+   sort, which threw "invalid input ... in 'utf8towcs'", so `ls` failed for the whole
+   directory. It now lists through the walker's `walk_list_dir()`, skips such names before
+   `as_utf8()` and counts them in a new `invalid_names` attribute, as `walk_files()` does.
+   `search_find()` already carried the walker's count. The Pi texts are unchanged.
+4. **The long-line locator leaked PCRE warnings** (report 11 section 7.1 risk 3).
+   `grep_cap_lines()` runs the pattern again on a line longer than 500 characters to centre the
+   window. That `regexpr()` was outside the warning handler, so a match-limit error on such a
+   line leaked "PCRE error 'match limit exceeded'" from `grep_tool_text()` and `print()`.
+   This happened even for a context line, and although `search_grep()` had already recorded
+   `incomplete`. The locator now runs under `suppressWarnings()`; a failed locate gives -1 and
+   the window starts at the beginning of the line.
+5. **A PCRE match-limit failure was not always reported, and in the prefilter it lost whole
+   files** (report 11 section 7.1 risk 3; the plan's "captured and reported as 'results may be
+   incomplete'"). `grep_tool_text()` and `print.gptr_matches()` returned "No matches found"
+   before building any notice, and `print.gptr_files()` had no incomplete note, so a search
+   whose only candidate lines hit the limit read as a clean empty result. Worse, the whole-file
+   `(?m)` prefilter returns `FALSE` for a file on which it hits the limit, so every line of that
+   file was dropped, including lines the per-line matcher matches cheaply. `(a+)+$` over
+   `cat.txt` = 600 `a`, `b`, then `aaa` gave "No matches found" with no notice (`rg -P` reports
+   "match limit exceeded" for the file); `((a|\s)+)+b` over twelve `aaaa` lines, `x` and `aab`
+   lost `f.txt:14` (`rg -P` finds it) and claimed `incomplete`, although no line hits the limit.
+   The empty texts and both prints now carry the notice when `incomplete` is set. When the
+   prefilter warns for a batch, each file of the batch is tried alone, and only the files that
+   hit the limit go to the per-line matcher; the prefilter's own failure no longer sets
+   `incomplete`, which now records only lines that hit the limit themselves. The reviewer's
+   sketch sent the whole batch on. It was not used because it also scans every non-matching file
+   of the batch line by line; the added prefilter check fails against it
+   (`task7-fix2-red-batch.log`). Over three `R/` files, `(\w+\s?)+$` now finds the per-line
+   matcher's 258 rows instead of 240, in 9.3 s instead of 7.9 s; the per-line matcher alone
+   takes 9.8 s (`task7-fix2-probe3.log`).
 
 Validation: `progress/P10.md`, Task 7. Added block "non-ASCII file and directory names are
 searched, found and listed in any locale" (7 expectations, under
 `withr::local_locale(c(LC_CTYPE = "C"))`). Against the plan-literal source:
 `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 57 ]`, the block erroring at `basename(root)`; with only the
 first fix `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 58 ]`, erroring at `basename(paths)`
-(`task7-red-final-plan-literal.log`, `task7-red-final-relevance.log`). Final `^tool-search$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 63 ]` in the UTF-8 and the C locale (`task7-green.log`,
-`task7-green-clocale.log`).
+(`task7-red-final-plan-literal.log`, `task7-red-final-relevance.log`). Items 2-4 add the
+blocks "the whole-file prefilter never drops a file the per-line matcher matches" (14
+expectations), "ls skips and counts an entry whose name is not valid UTF-8, as the walker does"
+(4) and "a match-limit error while placing a long line's window leaks no warning" (6). The
+final test file against the reviewed source (scratch copy, working tree untouched):
+`[ FAIL 15 | WARN 3 | SKIP 0 | PASS 72 ]` (`task7-fix1-red-final.log`). The 15 failures are the
+12 prefilter rows, the missing `invalid_names` and 2 leaked warnings; the 3 WARN are leaked
+warnings. Round-1 `^tool-search$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 87 ]` in the UTF-8 and
+the C locale (`task7-fix1-green.log`, `task7-fix1-green-clocale.log`). Review round 2 adds 4
+backreference rows and a brace check to the prefilter block, and the block "a match-limit failure
+is reported without rows and loses only the lines it hits" (13 expectations). The final test file
+against the round-1 source (scratch copy) gives `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 91 ]`
+(`task7-fix2-red-final.log`), before the brace check was added. The brace check alone failed on
+the in-tree source before its fix: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 104 ]`
+(`task7-fix2-red-brace.log`). Final `^tool-search$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]` in
+the UTF-8 and the C locale (`task7-fix2-green.log`, `task7-fix2-green-clocale.log`).
 
 ## D-058 - P09 model text: the context-pressure check reads the session's own last request, takes all-unknown token counts as no evidence, and survives a failing compact.should (2026-10-04)
 
@@ -2715,6 +2786,77 @@ pressure asks compact.should with twice the session's last request" (7 expectati
 (`task9-red-adaptations.log`). The child row is counted (18200 tokens instead of 3200, then
 `TRUE` instead of `FALSE`), the all-`NA` row is asked (3 calls instead of 2), and the failing
 service throws "compactor failed".
+
+## D-059 - P06 ctx.kernel: session verbs need a session ctx, ctx$run honours the ctx's own run id, set_model records the thinking level and refuses bad input at once, append_entry refuses unencodable data and gptr.* types, an abort inside the dispatcher waits for the call and a call whose own hook aborted is not executed, members see the run executing on the stack, a pending switch applies when the run settles, an abort while a request is prepared starts no transfer (2026-10-04)
+
+P06 Task 15's literal `ctx_kernel()` (`R/agent-run.R`, the `ctx.kernel` service of IC-34 behind
+the P06 members of 04 section 10.6) is changed in these ways. The member names, their argument
+lists and P02's calling convention are the plan's; the plan's 9 test blocks pass unchanged.
+
+1. **A process-level ctx** (`ctx$session` `NULL`): `send`, `set_model` and `append_entry`
+   signal `gptr_error_invalid_argument` with `arg = "ctx"` instead of base R errors from
+   `session_enqueue(NULL)` and `session_data(NULL)`; `state` returns `NULL`.
+2. **`ctx$run` falls back to the run id the ctx was created for** (P02's `ctx_new(session,
+   run)`) when the kernel finds no run. Without it, registering the kernel broke P02's
+   `test-ext-api.R:399` (`ctx_new(NULL, run = list(id = "u1"))$run` gave `NULL`).
+3. **`set_model(ref, thinking)` records the level and refuses bad input at once.** `thinking`
+   must be one of P05's levels (`arg = "thinking"`); the reference is resolved purely
+   (IC-74) and a decision-only model refused (D-017) before anything changes, also inside a run
+   (the plan set `pending_model` unchecked, and the user's run failed at its next request). The
+   level is passed as the reference's `:<level>` suffix, so P05 clamps it and the
+   `model_change` entry carries it (`gptr$thinking`); the plan wrote no entry at all for a
+   thinking-only change and an entry without the level otherwise. `run_target()` applies a
+   pending switch the same way. Router references keep the plan's behaviour.
+4. **`append_entry(type, data)` refuses before appending**: data `json_encode()` cannot encode
+   (`arg = "data"`; the plan's `session_append()` had already added the entry in memory when the
+   store failed), and a resulting `gptr.<type>` (`arg = "type"`): those entry types belong to
+   gptr (04 section 4.6) and its readers trust them (`rebuild_mode()` would let a plugin whose
+   source is `plugin:gptr` switch a resumed session to `auto` with a `gptr.mode_change`).
+5. **`send()` labels its own queue item** (by its position before the enqueue), not the last item,
+   which a `queue_update` hook may have added.
+6. **`abort()` inside the dispatcher only raises the run's abort signal**: while a tool executes
+   (the plan's rule) and also while the run's status is `tools` (a `tool_call`,
+   `permission_request` or `tool_result` hook of a call). In the plan such a hook settled the run
+   at once, and the dispatcher then ran the permission check and the tool in the settled run and
+   recorded the result after `agent_end`. The first abort's reason is kept. The dispatcher (P06
+   Task 7, `R/agent-dispatch.R` `dispatch_steps()`) now checks the signal after the `tool_call`
+   hooks and again after `perm_check()`: a call whose own `tool_call` or `permission_request`
+   hook aborted (or that an abort from elsewhere reached during its permission prompt) gets the
+   error result "Tool call not executed: the run was aborted (<reason>)." and neither its
+   checkpointers nor the tool run, so a guard plugin that aborts on a dangerous call stops its
+   side effects (in the plan, and in this task's first version, the tool still executed).
+7. **Members act on the run executing on the call stack first** (`run_current()` when it belongs
+   to the ctx's session), else `session_live(s)$run` (the plan). A run settled while its tool
+   still executes (an abort from elsewhere) now still answers `ctx$aborted()` `TRUE` and
+   `ctx$run` with its id; `envir` falls back to the kept home when the run released its
+   evaluation environment; `set_model` applies at once to a settled run's session.
+8. **`state()` seeds its environment only from a named list** (a malformed stored `gptr.ext`
+   starts empty instead of failing in `list2env()`), and `ctx_ext_label("plugin:")` is
+   `"plugin"`.
+9. **A pending `set_model()` switch applies when the run settles first** (`run_settle_model()`,
+   called by `run_settle()`). The plan's switch inside a run lived only in `run$pending_model`,
+   read by `run_target()` at the run's next request, so a call during the run's last reply (a
+   `message_end` or `turn_end` hook, a callback while the reply streams, a run ending on
+   `max_turns`) returned `invisible(NULL)` and was silently dropped: no `model_change` entry, the
+   old model kept. 04 section 10.6 and IC-69 promise "a `model_change` at the next request
+   boundary"; the run's end is that boundary. It applies whatever the run's status, and a failure
+   there (the provider went away, a store failure) is a registry diagnostic (`event =
+   "set_model"`) that never interrupts the settlement.
+10. **An abort while a request is prepared stops the request** (`run_request()`, P06 Task 10):
+    after `run_target()` (a `model_select` hook), after the `before_request` emit and after the
+    `request_params` chain the request returns through `run_abort()` when the run is signalled or
+    settled (`run_halted()`). In the plan a `before_request` hook calling `ctx$abort()` settled
+    the run (`agent_end`, transfers cancelled) and `run_request()` then marked the run busy and
+    `requesting` and called `provider_stream()`, a transfer that nothing cancelled.
+
+Validation: `progress/P06.md`, Task 15. Twelve blocks were added to `test-agent-run.R` (81
+expectations; the last four and the changed dispatcher block come from the review, round 1).
+Against the plan-literal source, `^agent-run$` gives `[ FAIL 11 | WARN 1 | SKIP 0 | PASS 540 ]`
+(`task15-literal.log`, before the review), every failure in the added blocks; the review's
+regression tests against the first version: `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 592 ]`
+(`task15-fix1-red.log`); final `^agent-run$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 603 ]`;
+neighbours `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 6241 ]`; broad suite
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 8312 ]`.
 
 ## D-060 - P11 risk tables: a winning risk_rule row replaces only the cells it supplies, rows with an NA key are dropped (an NA subcommand is `*`), the table cache sees re-registered records (2026-10-04)
 

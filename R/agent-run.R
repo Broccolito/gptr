@@ -490,6 +490,8 @@ input_insert_blocks = function(input, blocks) {
 #' The model record of the next request: a pending `ctx$set_model()` switch first, then the router
 #' (`router.call`, IC-69) for `router:` models, else the session's model
 #'
+#' The pending switch is applied as the idle `ctx$set_model()` applies it (kernel_model_switch()),
+#' so its `model_change` entry records the thinking level too.
 #' A decision-only (classifier) model is refused here, before any request is built, with the
 #' condition of provider_stream()'s refusal (IC-74, D-017). The session's thinking level is
 #' clamped to the model's levels, as P05's model_resolve() clamps a `:<level>` suffix.
@@ -500,10 +502,7 @@ run_target = function(run) {
   pm = run$pending_model
   if (!is.null(pm)) {
     run$pending_model = NULL
-    session_set_model(s, pm$ref, pm$reason %||% "plugin")
-    if (is.character(pm$thinking) && length(pm$thinking) == 1L && !is.na(pm$thinking)) {
-      d$thinking = pm$thinking
-    }
+    kernel_model_switch(s, pm$ref, pm$thinking, pm$reason %||% "plugin")
   }
   if (startsWith(d$model, "router:")) return(run_route(run, "turn"))
   if (is.null(run$model) || !identical(run$model_key, d$model)) {
@@ -1245,6 +1244,11 @@ run_step = function(run) {
     invisible(NULL))
 }
 
+#' Is the run aborted (signalled) or already settled, for example by a hook that called
+#' `ctx$abort()` during the current step?
+#' @noRd
+run_halted = function(run) isTRUE(run$settled) || isTRUE(run$signal$aborted)
+
 #' Take one queued item and turn it into a message (IC-55); steers become relays once the run has
 #' made a request
 #' @noRd
@@ -1285,15 +1289,18 @@ run_begin_request = function(run, messages) {
 #' execution, missing or stale discovery evidence) and a missing key before anything starts; that
 #' condition ends the run with status `error` (run_drive() and the retry timer hand it to
 #' run_fail()). The preflight reads the run's frozen safety snapshot (`run$opts$safety`), because
-#' the run is passed as `run`.
+#' the run is passed as `run`. A hook of the request's preparation (`model_select`,
+#' `before_request`, `request_params`) can abort the run (`ctx$abort()`); the request then stops
+#' at once, before it marks the run busy or starts a transfer that settlement no longer cancels.
 #' @noRd
 run_request = function(run) {
   s = run$shell
   d = session_data(s)
   live = session_live(s)
-  if (isTRUE(run$signal$aborted)) return(run_abort(run, run$signal$reason %||% "user"))
+  if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   if (identical(run$attempt, 0L) && !isTRUE(run$boundary_compacted)) run_compact_check(run)
   target = run_target(run)
+  if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req = run_build(run, target)
   hit = budget_check(s, req$tokens_est)
   if (!is.null(hit) && !run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
@@ -1313,7 +1320,9 @@ run_request = function(run) {
   ledger_add(s, run$request_id, req$components)
   run_emit(run, "before_request", provider = target$provider, model = target$ref,
            request_id = run$request_id, view = req$view, tokens_est = req$tokens_est)
+  if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   req$context$params = run_request_params(run, target, req$context$params)
+  if (run_halted(run)) return(run_abort(run, run$signal$reason %||% "user"))
   run$acc = acc_new()
   run$rs = new.env(parent = emptyenv())
   run$last_error = NULL
@@ -1659,6 +1668,7 @@ run_settle = function(run, reason) {
   if (identical(status, "error") && is.null(run$condition)) {
     run$condition = run_condition(run, run$message %||% list(), "provider")
   }
+  run_settle_model(run)
   status = run_settle_persist(run, status)
   d$status = status
   d$reason = if (is.null(run$condition)) NULL else conditionMessage(run$condition)
@@ -1680,6 +1690,27 @@ run_settle = function(run, reason) {
            usage = u[u$request_id %in% run$request_ids, , drop = FALSE], doc = run$opts$doc,
            turns = d$turns)
   if (is.null(d$parent_id)) last_set(s)
+  invisible(NULL)
+}
+
+#' Apply a `ctx$set_model()` switch that no later request of the run took
+#'
+#' A switch requested inside a run waits for the next request boundary (IC-69, 04 section 10.6);
+#' when the run ends first (a call during its last reply, a `turn_end` hook, `max_turns`), the
+#' run's end is that boundary, so the switch is not lost. Whatever stopped the run, the switch is
+#' the plugin's choice for the session and applies. A failure (the provider went away since the
+#' call) is a registry diagnostic and never interrupts the settlement.
+#' @noRd
+run_settle_model = function(run) {
+  pm = run$pending_model
+  if (is.null(pm)) return(invisible(NULL))
+  run$pending_model = NULL
+  tryCatch(kernel_model_switch(run$shell, pm$ref, pm$thinking, pm$reason %||% "plugin"),
+           error = function(e) {
+             registry_diagnostic("session", "set_model", class(e)[[1L]],
+                                 paste0("the model switch to ", pm$ref, " was not applied: ",
+                                        conditionMessage(e)))
+           })
   invisible(NULL)
 }
 
@@ -1790,4 +1821,232 @@ run_heartbeat = function(run) {
   run$timers = c(run$timers, reactor_timer(at = reactor_now() + 600,
                                            fn = function() run_heartbeat(run), run = run))
   invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------- ctx.kernel (IC-34)
+
+on_load(ext_service_set("ctx.kernel", ctx_kernel, provided_by = "P06"))
+
+#' The `ctx.kernel` service: the implementations of the `ctx` members marked P06 in contract
+#' section 10.6
+#'
+#' P02's `ctx_new()` is a thin shell whose members fetch this list at call time and call the
+#' member with the `ctx` first, then the member's own arguments, positionally (P02's
+#' `ctx_call()`); inside a handler P02 appends the handler's source (`"plugin:units"`) as the last
+#' argument of `send`, `append_entry` and `state`, which P06 receives as `extension` (`NULL`
+#' outside handlers; `ctx_ext_label()` accepts the bare name or a full source and gives
+#' `"units"`). The run a member acts on is `ctx_run()`: the run of the ctx's session whose tool is
+#' executing on the call stack, else the session's current run (`session_live(s)$run`).
+#'
+#' `send`, `set_model` and `append_entry` need the ctx of a session; a process-level ctx (P02's
+#' `ctx_new(NULL)`) gets `gptr_error_invalid_argument` (`arg = "ctx"`), and its other members read
+#' the process: no environment or state, the run id the ctx was created for (if any), the `mode`
+#' setting, the default chat model and the process usage. `set_model` refuses an unknown or
+#' decision-only model at once, also inside a run, and records the thinking level in the
+#' `model_change` entry; inside a run the switch applies at the run's next request, or when the
+#' run settles first (run_settle_model()). `append_entry` refuses data the store cannot encode and
+#' the reserved `gptr.` entry types (04 section 4.6), before anything is appended. `abort` inside
+#' the dispatcher (a tool, or a hook of a call) only raises the run's abort signal, so the call
+#' ends (a call whose `tool_call` or `permission_request` hook aborted is not executed), the
+#' remaining calls are skipped and the next step settles the run with the reason; elsewhere it
+#' aborts at once, and a request being prepared stops before its transfer starts.
+#' @return A named list of functions: `envir`, `run`, `mode`, `model`, `execute_tool`, `send`,
+#'   `set_model`, `append_entry`, `abort`, `aborted`, `update`, `usage`, `state`.
+#' @noRd
+ctx_kernel = function() {
+  list(
+    envir = function(ctx) {
+      run = ctx_run(ctx)
+      env = if (is.null(run)) NULL else run_eval_env(run)
+      if (!is.null(env)) return(env)
+      s = ctx_session(ctx)
+      if (is.null(s)) NULL else session_home(s)
+    },
+    run = function(ctx) {
+      run = ctx_run(ctx)
+      if (is.null(run)) ctx_own_run_id(ctx) else run$id
+    },
+    mode = function(ctx) {
+      run = ctx_run(ctx)
+      if (!is.null(run)) return(run$mode)
+      s = ctx_session(ctx)
+      if (is.null(s)) setting_get("mode", default = "manual") else session_data(s)$mode
+    },
+    model = function(ctx) {
+      s = ctx_session(ctx)
+      if (is.null(s)) model_default("chat") %||% NA_character_ else session_data(s)$model
+    },
+    execute_tool = function(ctx, name, input) dispatch_nested(name, input, ctx),
+    send = function(ctx, text, as = c("steer", "follow_up"), extension = NULL) {
+      s = ctx_session(ctx, "send")
+      check_strings(text, "text")
+      as = check_choice(as, c("steer", "follow_up"), "as")
+      d = session_data(s)
+      # the item's position, taken before a queue_update hook can enqueue after it
+      at = length(d$queue[[as]]) + 1L
+      session_enqueue(s, paste(text, collapse = "\n"), as = as, source = "extension")
+      q = d$queue
+      if (length(q[[as]]) >= at) {
+        q[[as]][[at]]$name = ctx_ext_label(extension)
+        d$queue = q
+      }
+      invisible(NULL)
+    },
+    set_model = function(ctx, ref, thinking = NULL, reason = "plugin") {
+      s = ctx_session(ctx, "set_model")
+      check_string(ref, "ref")
+      if (!is.null(thinking)) thinking = check_choice(thinking, catalog_thinking_levels, "thinking")
+      check_string(reason, "reason")
+      run = ctx_run(ctx)
+      if (is.null(run) || isTRUE(run$settled)) {
+        kernel_model_switch(s, ref, thinking, reason)
+      } else {
+        kernel_model_ref(ref, thinking)
+        run$pending_model = list(ref = ref, thinking = thinking, reason = reason)
+      }
+      invisible(NULL)
+    },
+    append_entry = function(ctx, type, data, extension = NULL) {
+      s = ctx_session(ctx, "append_entry")
+      check_string(type, "type")
+      custom_type = paste0(ctx_ext_label(extension), ".", type)
+      if (startsWith(custom_type, "gptr.")) {
+        gptr_abort(paste0("custom entries named gptr.* are written only by gptr itself; ",
+                          custom_type, " cannot be appended by an extension"),
+                   "invalid_argument", arg = "type",
+                   expected = "an entry type outside the reserved gptr.* entries")
+      }
+      encodable = tryCatch({
+        json_encode(data)
+        TRUE
+      }, error = function(e) FALSE)
+      if (!encodable) arg_abort(data, "data", "JSON-able data (lists, atomic vectors and NULL)")
+      session_append(s, entry_custom(custom_type, data))
+    },
+    abort = function(ctx, reason = "plugin") {
+      check_string(reason, "reason")
+      run = ctx_run(ctx)
+      if (is.null(run) || isTRUE(run$settled)) return(invisible(NULL))
+      if (!is.null(run$tool_call) || identical(run$status, "tools")) {
+        if (!isTRUE(run$signal$aborted)) {
+          run$signal$aborted = TRUE
+          run$signal$reason = reason
+        }
+      } else {
+        run_abort(run, reason)
+      }
+      invisible(NULL)
+    },
+    aborted = function(ctx) {
+      run = ctx_run(ctx)
+      !is.null(run) && isTRUE(run$signal$aborted)
+    },
+    update = function(ctx, text) {
+      check_string(text, "text")
+      run = ctx_run(ctx)
+      if (!is.null(run) && !is.null(run$tool_call)) {
+        run_emit(run, "tool_execution_update", tool_call_id = run$tool_call$id,
+                 tool_name = run$tool_call$name, text = text)
+      }
+      invisible(NULL)
+    },
+    usage = function(ctx) gptr_usage(ctx_session(ctx)),
+    state = function(ctx, extension = NULL) {
+      s = ctx_session(ctx)
+      live = if (is.null(s)) NULL else session_live(s)
+      if (is.null(live)) return(NULL)
+      plugin = ctx_ext_label(extension)
+      e = get0(plugin, envir = live$ext, inherits = FALSE)
+      if (is.null(e)) {
+        e = new.env(parent = emptyenv())
+        prior = session_data(s)$ext[[plugin]]
+        if (ctx_state_restorable(prior)) list2env(prior, envir = e)
+        assign(plugin, e, envir = live$ext)
+      }
+      e
+    })
+}
+
+#' The session of a ctx, or NULL for a process-level ctx
+#'
+#' With `member` (the name of a session verb), a process-level ctx is refused with
+#' `gptr_error_invalid_argument` (`arg = "ctx"`).
+#' @noRd
+ctx_session = function(ctx, member = NULL) {
+  s = ctx$session
+  if (inherits(s, "gptr_session")) return(s)
+  if (is.null(member)) return(NULL)
+  gptr_abort(paste0("ctx$", member, "() needs the ctx of a session; this ctx belongs to a ",
+                    "dispatch without a session"),
+             "invalid_argument", arg = "ctx", expected = "the ctx of a session")
+}
+
+#' The run a ctx member acts on, or NULL
+#'
+#' The run of the ctx's session whose tool is executing on this call stack (`run_current()`), even
+#' when it settled while the tool runs (an abort from elsewhere), so that a long tool polling
+#' `ctx$aborted()` sees the abort; otherwise the session's current run.
+#' @noRd
+ctx_run = function(ctx) {
+  s = ctx_session(ctx)
+  if (is.null(s)) return(NULL)
+  cur = run_current()
+  if (!is.null(cur) && identical(cur$shell, s)) return(cur)
+  live = session_live(s)
+  if (is.null(live)) NULL else live$run
+}
+
+#' The run id a ctx was created for (P02's `ctx_new(session, run)`: "the run (or run id) whose
+#' tool is executing"), or NULL; `ctx$run` falls back to it when the kernel finds no run
+#' @noRd
+ctx_own_run_id = function(ctx) {
+  id = if (is.environment(ctx)) get0(".run", envir = ctx, inherits = FALSE) else NULL
+  if (is.character(id) && length(id) == 1L && !is.na(id) && nzchar(id)) id else NULL
+}
+
+#' The plugin label of a handler's extension source: `"plugin:units"` -> `"units"`,
+#' `"builtin:tools"` -> `"tools"`; `"plugin"` when no source (or an empty name) is known (P02
+#' passes nothing outside handlers)
+#' @noRd
+ctx_ext_label = function(extension) {
+  if (!is.character(extension) || !length(extension) || is.na(extension[[1L]])) return("plugin")
+  label = sub("^[A-Za-z_]+:", "", extension[[1L]])
+  if (nzchar(label)) label else "plugin"
+}
+
+#' Can a stored plugin state (`gptr.ext`) seed a state environment? A list whose elements all
+#' have names (an empty list included)
+#' @noRd
+ctx_state_restorable = function(prior) {
+  if (!is.list(prior)) return(FALSE)
+  if (!length(prior)) return(TRUE)
+  nms = names(prior)
+  !is.null(nms) && !anyNA(nms) && all(nzchar(nms))
+}
+
+#' The reference that switches a session to `ref` at thinking level `thinking`
+#'
+#' Resolution is pure (no discovery, no I/O; IC-74) and refuses at once what session_set_model()
+#' refuses: an unknown reference (`gptr_error_unknown_model`) and a decision-only model
+#' (`gptr_error_not_available`, D-017). A thinking level travels as the reference's `:<level>`
+#' suffix, which P05's resolver clamps to the model's levels, so the `model_change` entry records
+#' it; a router chooses each request's level itself, so its reference is kept as given.
+#' @noRd
+kernel_model_ref = function(ref, thinking = NULL) {
+  m = model_canonical(ref, strict = TRUE)
+  stream_chat_model(m)
+  if (is.null(thinking) || startsWith(m$ref, "router:")) return(ref)
+  paste0(m$ref, ":", thinking)
+}
+
+#' Switch a session's model (and thinking level) now: one `model_change` entry and `model_select`
+#' @noRd
+kernel_model_switch = function(s, ref, thinking = NULL, reason = "plugin") {
+  target = kernel_model_ref(ref, thinking)
+  session_set_model(s, target, reason)
+  if (!is.null(thinking) && startsWith(target, "router:")) {
+    d = session_data(s)
+    d$thinking = thinking
+  }
+  invisible(s)
 }
