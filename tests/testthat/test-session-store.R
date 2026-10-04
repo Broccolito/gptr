@@ -189,3 +189,12 @@ test_that("a detached copy persists nothing until it is attached", {
   session_append(copy, entry_custom("test.note", list(i = 1L)))
   expect_length(readLines(session_data(s)$file, encoding = "UTF-8"), n)
 })
+
+test_that(oracle_title(store_recs, "S31"), {
+  local_gptr_options(r_output_tokens = 50L)
+  spec = gptr_tool("big", "big", execute = function(input, ctx) NULL)
+  long = paste(rep("a long line of printed output", 400), collapse = "\n")
+  msg = tool_result_message(gptr_tool_result(long), list(id = "c1", name = "big", tool = spec))
+  expect_lt(nchar(msg_text(msg)), nchar(long))
+  expect_lt(est_tokens(msg_text(msg), "r_output"), 200)
+})

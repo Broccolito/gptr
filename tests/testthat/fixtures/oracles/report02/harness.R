@@ -150,6 +150,39 @@ answered_session = function(text = "The data has 32 rows.") {
   s
 }
 
+# The two helpers of test-agent-dispatch.R (P06 Task 7), kept here so that lintr's
+# object_usage_linter sees the harness helpers they call (as written_session() above).
+
+#' Dispatch one assistant message's tool calls on a run that is attached but not started
+dispatch = function(s, blocks, stop_reason = "tool_use", opts = list(), .env = parent.frame()) {
+  run = test_run(s, opts, .env = .env)
+  run$message = msg_assistant(blocks, api = "fake", provider = "fake", model = "fake-1",
+                              stop_reason = stop_reason)
+  calls = lapply(blocks, function(b) call_record(run, b))
+  out = dispatch_tools(run, calls)
+  list(run = run, out = out, msgs = tool_results(s))
+}
+
+#' Tools that throw, warn under warn = 2, hit a time limit and signal an interrupt (INFRA-10)
+failing_tools = function(.env = parent.frame()) {
+  local_tool("throw", function(input, ctx) stop("boom"), .env = .env)
+  local_tool("warn2", function(input, ctx) {
+    old = options(warn = 2)
+    on.exit(options(old), add = TRUE)
+    warning("warned")
+    "not reached"
+  }, .env = .env)
+  local_tool("slowloop", function(input, ctx) {
+    setTimeLimit(elapsed = 0.3, transient = TRUE)
+    on.exit(setTimeLimit(elapsed = Inf), add = TRUE)
+    repeat NULL
+  }, .env = .env)
+  local_tool("spin", function(input, ctx) {
+    signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
+    "not reached"
+  }, .env = .env)
+}
+
 # run_text() (needs session_run(), P06 Task 10) is restored from the Task 1 plan by Task 10, once
 # session_run() exists.
 roles = function(s) vapply(s$messages, function(m) m$role, "")

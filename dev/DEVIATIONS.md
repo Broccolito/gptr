@@ -925,6 +925,85 @@ Review round 1: the image-bridge regression assertions failed against the round'
 `reasoning` flag from the message memo key each fail one new memo assertion; final
 `^provider-openai-completions$` [ FAIL 0 | WARN 0 | SKIP 1 | PASS 274 ].
 
+## D-030 - P06 tool dispatcher: never throws on malformed tool, policy, classifier or UI output; interrupted and nested calls stay paired (2026-10-04)
+
+P06 Task 7's plan-literal `R/agent-dispatch.R` (the dispatcher and `perm_check()`, IC-04, IC-53)
+was changed in ten ways. Every change makes the code keep a promise of 04 section 7.6
+(`dispatch_tools()` "never throws", `perm_check()` fails closed) or of INFRA-10 (paired execution
+events) for input the plan did not guard. The plan's tests all pass unchanged. Task 10's engine,
+P10/P18/P22/P23 (`dispatch_nested()`), P18/P20 (`perm_check()`, `tool_result_message()`) and
+P11 (policies, UI) consume the code.
+
+1. **A risk record without one `level` from 0 to 4 counts as level 3** (`call_risk()`; IC-54 levels;
+   the plan's level for a failing classifier). A tool `risk()` or `risk.classify` answer that is
+   not a list, has no level, or has a level such as 7 or `NA` made `risk_level()` throw out of the
+   dispatcher (`$ operator is invalid for atomic vectors`), or reached policies as is. A numeric
+   level is stored as an integer.
+2. **The pipeline of one call cannot throw** (`dispatch_one()` wraps the plan's body, now
+   `dispatch_steps()`). An unexpected error (a broken invariant, a failing service) becomes the
+   error result `Tool <name> failed in the dispatcher: <message>`, so the call still gets its
+   tool-result message and `tool_execution_end`. An interrupt is not an error and still unwinds.
+3. **A malformed tool result is an error result** (`tool_run()`, `tool_result_check()`, used
+   directly and for nested calls). P02's `as_tool_result()` returns a `gptr_tool_result` unchanged,
+   so a hand-built result with, for example, `details = "x"` made `msg_tool_result()` throw out of
+   `dispatch_tools()`. Content must be text/image blocks with their string fields (P01's
+   `msg_block_types`, `msg_block_fields`), `details` `NULL` or a named list, `is_error` and
+   `terminate` `NULL` or one logical.
+4. **A policy answer that fails P02's rule for policy answers denies** (`perm_policies()`;
+   `ext_policy_ok()`, 04 section 10.2 row 12). The plan checked only the decision. A `modify`
+   whose `input` is not a named list was re-checked with that input and, when the policies then
+   allowed it, the tool ran with a non-list input that had bypassed validation. A `reason` that is
+   not one string is also malformed now. `NULL` and a list without `decision` stay "no opinion"
+   (plan review row 8).
+5. **A UI answer that is not a list is not an approval** (`perm_ask()`; 04 section 10.2 row 22, "a
+   failing dialog is not an approval"). `"allow"` or `TRUE` made `ans$decision` throw out of
+   `perm_check()`; they now deny with "the user declined". Feedback that is not one non-empty
+   string is dropped. The request record's `reason`, `suggested_rule` and `undo_note` are one
+   string or `NULL` (04 section 7.11), and every `perm_check()` reason is one string.
+6. **A nested call's execution events stay paired, and its id is unique** (`nested_execute()`,
+   `nested_next_id()`; INFRA-10, IC-53 item 3). An interrupt inside a nested member left its
+   `tool_execution_start` without an end. P02's record of executing tools then kept the call, so
+   `gptr_register()`'s unregister closure and the other control exports refused with
+   `gptr_error_permission` after the run (observed as teardown errors in the red run). The end is
+   now emitted from `on.exit()` before the outer call's end. The plan's id `<outer>/<k>` used the
+   number of the 20 kept records, so calls after the 20th all got `<outer>/21`; the count is now
+   kept per outer call in `run$nested_seq`.
+7. **The frozen schema memo is keyed on the frozen tool array** (`tool_frozen()`, IC-68). The plan
+   cached the parsed schemas at the first call, even before the first freeze (an empty table) and
+   across a refreeze, so a tool whose `parameters` is a function was then never validated, or was
+   validated against a stale schema.
+8. **Input fields are matched exactly** (`[[` for `INVALID_JSON`, `code`, `path`, `questions`,
+   `question`). `$` matched by prefix, so a tool input `code_path` was shown and classified as `r`
+   code, and `INVALID_JSON_note` failed validation. A nested member listed with a non-numeric level
+   by the outer analysis passes the gate (`nested_listed_level()`); the plan's `max(NA)` threw an
+   unclassed error inside the model's code.
+9. **An interrupt anywhere in a call is recorded** (`dispatch_call()`, `tool_interrupted()`;
+   INFRA-10, 03 sections 6.2, 6.3 and 6.8.3, loop check L19). The plan recorded an interrupt only
+   while the tool's `execute()` ran (`tool_execute_frame()`'s `on.exit()`). Ctrl-C at the permission
+   prompt (which aborts the run), or an interrupt in a policy, a classifier, a hook or a
+   checkpointer, unwound with no tool-result message and no `tool_execution_end`, so P02's record
+   of executing tools kept the call until `agent_end`. Each call now has its own frame whose
+   `on.exit()` records the error result and the end event: "Interrupted after <s> s; side effects
+   may have occurred." once `execute()` has started, else the new text "Interrupted before the
+   tool ran; the call was not executed.". The interrupt is still never handled (no
+   `tryCatch(interrupt =)`; G3). A calling `error` handler only notes an error that escapes the
+   call (a failing store), which still ends the run and is not recorded a second time; the append
+   and its mark run inside `suspendInterrupts()`. The one-shot control tokens end with the call
+   even when it ends before `execute()`.
+10. **Tool results are normalised, and must be recordable** (`tool_result_check()`,
+    `tool_result_message()`, `dispatch_record()`). The names of the content list are dropped: P02's
+    `gptr_tool_result()` keeps those of a named `images` list, which item 3's check refused and the
+    transcript would write as a JSON object. `usage` must be `NULL` or a list (`msg_tool_result()`
+    threw). The tool-result message is encoded as the store encodes it before it is appended, so
+    `details` holding an environment or a function (from the tool, or from a `tool_result` hook's
+    patch, which P02 accepts as a named list) become the error result "The result of <name> cannot
+    be recorded in the transcript: <message>" instead of a store failure that ends the run.
+
+Validation: `progress/P06.md`, Task 7. With the plan-literal source, every added test block fails
+(`dev/.validation/P06/task7-added-red-isolated3.log`; the nested-id repetition is shown on its
+own in `task7-nested-ids-literal.log`). Items 9 and 10 (review round 1): the four new blocks fail
+against the round-0 source (`task7-fix1-red.log`, `task7-fix1-red-isolated.log`).
+
 ## D-031 - P12 Responses normaliser: IC-74 usage, typed status and error codes, items found by id (2026-10-04)
 
 P12 Task 6's plan-literal `responses_normaliser()` (`R/provider-openai-responses.R`, the `parse`
