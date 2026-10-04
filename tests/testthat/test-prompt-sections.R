@@ -2,6 +2,10 @@
 # and gptr_prompt().
 
 p07_session = function(mode = "auto", preset = NULL, .env = parent.frame()) {
+  # Collect the sessions of earlier tests now, so that their finalizers (P06 session_finalizer(),
+  # which drops their registry records) do not run in the middle of a registry lookup: that
+  # known GC race in P02's registry_recs() is routed to the coordinator (progress/P07.md).
+  invisible(gc(verbose = FALSE))
   local_fake_provider(list("ok"), .env = .env)
   session_new("fake/fake-1", mode, home = new.env(), preset = preset)
 }
@@ -764,4 +768,396 @@ test_that("cut re-injection budgets are recorded in gptr.frozen and survive a re
   expect_false("reinject" %in% names(prompt_path(s2)[[1]]$data))
   d2$frozen = NULL
   expect_identical(prompt_freeze(s2)$reinject, list(project = Inf, skills = 10000))
+})
+
+# ---- Task 8: tool additions and section patches -------------------------------------------------
+
+trials_tool = function() {
+  gptr_tool("trials", "Search ClinicalTrials.gov by condition.",
+            parameters = list(type = "object", required = I("condition"),
+                              properties = list(condition = list(type = "string"))),
+            execute = function(input, ctx) "12 trials")
+}
+
+test_that("session_add_tools declares tools by value when the adapter supports it (IC-69)", {
+  s = p07_session()
+  before = prompt_freeze(s, list(interactive = FALSE))$tools_json
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  expect_identical(session_add_tools(s, trials_tool()), s)
+  expect_false(is.null(registry_get("tool", "trials", session = session_data(s)$id)))
+  q = pending_of(s)
+  expect_identical(q[[1]]$kind, "tool_change")
+  expect_identical(q[[1]]$tool_add[[1]]$name, "trials")
+  expect_identical(q[[1]]$tool_add[[1]]$input_schema$required, I("condition"))
+  expect_identical(msg_text(q[[1]]), "New tools are available from now on: trials.")
+  expect_identical(session_data(s)$frozen$tools_json, before)
+})
+
+test_that("without tool_addition the tools become namespaced r members with a note", {
+  s = p07_session()
+  prompt_freeze(s, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  session_add_tools(s, list(trials_tool()))
+  sid = session_data(s)$id
+  # namespaced tools are registry records keyed "<namespace>/<name>" (P02 spec_key())
+  reg = registry_get("tool", "tools/trials", session = sid)
+  expect_identical(reg$exposure, "r")
+  expect_identical(reg$namespace, "tools")
+  expect_true(is.function(reg$fun))
+  q = pending_of(s)
+  expect_null(q[[1]]$tool_add)
+  expect_match(msg_text(q[[1]]), "gptr$tools$trials(condition: string)", fixed = TRUE)
+})
+
+test_that("a spec that already is a gptr$ member keeps its name when added", {
+  s = p07_session()
+  prompt_freeze(s, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  session_add_tools(s, gptr_tool("rows_of", "Rows of a data frame.", fun = function(name) 1L))
+  q = pending_of(s)
+  expect_match(msg_text(q[[1]]), "gptr$rows_of(name: string)", fixed = TRUE)
+  expect_null(registry_get("tool", "tools/rows_of", session = session_data(s)$id))
+})
+
+test_that("session.add_tools is P07's service", {
+  expect_identical(ext_service_get("session.add_tools"), session_add_tools)
+})
+
+test_that("section patches are queued as operator messages (Pi's wording)", {
+  s = p07_session()
+  prompt_section_patch(s, "r_env", "R 4.5.0")
+  prompt_section_patch(s, "mcp")
+  q = pending_of(s)
+  expect_identical(q[[1]]$kind, "section_patch")
+  expect_identical(msg_text(q[[1]]),
+                   "Updated system prompt section \"r_env\":\n\n<r_env>\nR 4.5.0\n</r_env>")
+  expect_identical(msg_text(q[[2]]), "Removed system prompt section \"mcp\".")
+})
+
+# The adapters send an operator message's declarations only when the adapter declares
+# tool_addition and the model's own capability does not refuse it (P12 adp_model_cap(model,
+# "tool_addition", TRUE); the Responses adapter also needs tool_call), so P07 announces tools by
+# value under the same rule; otherwise the declarations would be dropped and the tool lost.
+test_that("tools are declared by value only when the adapter and the model take them (IC-74)", {
+  s = p07_session()
+  expect_true(prompt_tool_addition(s))
+  rec = model_resolve("fake/fake-1", strict = FALSE)
+  with_model = function(m) {
+    local_mocked_bindings(prompt_model = function(ref) m)
+    prompt_tool_addition(s)
+  }
+  no_cap = rec
+  no_cap$capabilities$tool_addition = FALSE
+  expect_false(with_model(no_cap))
+  unset = rec
+  unset$capabilities$tool_addition = NULL
+  expect_true(with_model(unset))
+  no_tools = rec
+  no_tools$tool_call = FALSE
+  expect_false(with_model(no_tools))
+  # a model that claims tool_addition behind an adapter that does not declare it
+  completions = rec
+  completions$api = "openai-completions"
+  expect_false(isTRUE(adapter_get("openai-completions")$capabilities$tool_addition))
+  expect_false(with_model(completions))
+  unknown_api = rec
+  unknown_api$api = "p07-no-such-api"
+  expect_false(with_model(unknown_api))
+  expect_false(with_model(NULL))
+})
+
+test_that("hidden specs are never announced; namespaced and fun-only members stay members", {
+  s = p07_session()
+  prompt_freeze(s, list(interactive = FALSE))
+  sid = session_data(s)$id
+  ok = function(input, ctx) "ok"
+  hidden = gptr_tool("p07_hidden", "Internal.", execute = ok, exposure = "hidden")
+  cohort = gptr_tool("p07_cohort", "Cohort size.", fun = function(id) 1L, exposure = "r",
+                     namespace = "p07lab")
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, list(hidden, cohort, trials_tool()))
+  expect_identical(registry_get("tool", "p07_hidden", session = sid)$exposure, "hidden")
+  expect_false(is.null(registry_get("tool", "p07lab/p07_cohort", session = sid)))
+  q = pending_of(s)
+  expect_length(q, 2L)
+  expect_identical(vapply(q[[1]]$tool_add, function(x) x$name, ""), "trials")
+  expect_identical(msg_text(q[[1]]), "New tools are available from now on: trials.")
+  expect_null(q[[2]]$tool_add)
+  expect_match(msg_text(q[[2]]), "gptr$p07lab$p07_cohort(id: string)", fixed = TRUE)
+  s2 = p07_session()
+  prompt_freeze(s2, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  session_add_tools(s2, list(hidden))
+  expect_null(registry_get("tool", "tools/p07_hidden", session = session_data(s2)$id))
+  expect_length(pending_of(s2) %||% list(), 0L)
+})
+
+test_that("a spec that cannot be added is skipped with a diagnostic; the others are announced", {
+  s = p07_session()
+  prompt_freeze(s, list(interactive = FALSE))
+  sid = session_data(s)$id
+  bad = gptr_tool("p07_bad", "Broken schema.", parameters = function(ctx) stop("no schema"),
+                  execute = function(input, ctx) "x")
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, list(bad, trials_tool()))
+  expect_null(registry_get("tool", "p07_bad", session = sid))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_identical(msg_text(q[[1]]), "New tools are available from now on: trials.")
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_true(any(grepl("Tool 'p07_bad' was not added: no schema", msg, fixed = TRUE)))
+  expect_error(session_add_tools(s, list("trials")), class = "gptr_error_invalid_argument")
+})
+
+test_that("a tool made a member keeps the spec's other fields", {
+  rend = function(call, result, width) "rendered"
+  sp = gptr_spec("tool", "p07_rend", description = "Rendered.", render = rend,
+                 execute = function(input, ctx) "ok", snippet = "Render it")
+  m = prompt_member_spec(sp)
+  expect_identical(m$render, rend)
+  expect_identical(m$snippet, "Render it")
+  expect_identical(c(m$exposure, m$namespace), c("r", "tools"))
+  expect_true(is.function(m$fun))
+})
+
+# P06's run_freeze() runs the session_start hooks (which may call ctx$add_tools()) before the
+# freeze, and the freeze declares a session's direct tools, so a message would declare them twice.
+test_that("tools added before the first freeze join the frozen prompt, not a message", {
+  s = p07_session()
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, trials_tool())
+  expect_length(pending_of(s) %||% list(), 0L)
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_true("trials" %in% fr$tool_names)
+  expect_true("trials" %in% vapply(json_decode(fr$tools_json), function(x) x$name, ""))
+  session_add_tools(s, gptr_tool("p07_later", "Later.", execute = function(input, ctx) "x"))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_identical(msg_text(q[[1]]), "New tools are available from now on: p07_later.")
+  # a session that will be frozen anew (an IC-52 refreeze) does not announce either
+  d = session_data(s)
+  d$frozen = NULL
+  d$refreeze = TRUE
+  session_add_tools(s, gptr_tool("p07_again", "Again.", execute = function(input, ctx) "x"))
+  expect_length(pending_of(s), 1L)
+})
+
+# Review round 1 (finding 1): before the freeze, only the tools the frozen array declares itself
+# (prompt_tools_always()) stay unannounced; any other tool becomes a member as after the freeze, so
+# the model learns of every added tool whenever it was added. Review round 2 (finding 2): that
+# includes namespaced r members, since whether the frozen prompt lists them (P10's plugins
+# section) depends on the preset, the run options and the session_start overrides of the freeze.
+test_that("tools added before the freeze that it does not declare are announced", {
+  s = p07_session()
+  sid = session_data(s)$id
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  f = function(input, ctx) "x"
+  session_add_tools(s, list(
+    gptr_tool("p07_nsd", "Namespaced direct.", execute = f, namespace = "p07lab"),
+    gptr_tool("p07_mem", "Plain member.", fun = function(a) 1L, exposure = "r"),
+    gptr_tool("p07_cat", "Catalogued.", fun = function(id) 1L, exposure = "r",
+              namespace = "p07lab")
+  ))
+  nsd = registry_get("tool", "p07lab/p07_nsd", session = sid)
+  expect_identical(c(nsd$exposure, nsd$namespace), c("r", "p07lab"))
+  expect_true(is.function(nsd$fun))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_null(q[[1]]$tool_add)
+  lines = c("gptr$p07lab$p07_nsd()  # Namespaced direct.",
+            "gptr$p07_mem(a: string)  # Plain member.",
+            "gptr$p07lab$p07_cat(id: string)  # Catalogued.")
+  expect_identical(msg_text(q[[1]]),
+                   sprintf(prompt_text("members_added"), paste(lines, collapse = "\n")))
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_false(any(c("p07_nsd", "p07_mem", "p07_cat") %in% fr$tool_names))
+})
+
+# Review round 1 (finding 2): the model already has the declarations of the frozen array and of
+# earlier additions, so the same tool is not declared again (P08 passes the registry's own spec
+# on a continuation), and a changed declaration under a declared name is refused: the frozen
+# array never changes, and a rank-0 tie would keep running the first spec (P02).
+test_that("a tool the model already has is not declared again; a changed one is refused", {
+  s = p07_session()
+  sid = session_data(s)$id
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, gptr_tool("p07_arr", "In array.", execute = function(input, ctx) "x"))
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_true("p07_arr" %in% fr$tool_names)
+  session_add_tools(s, registry_get("tool", "p07_arr", session = sid))
+  session_add_tools(s, gptr_tool("p07_arr", "In array.", execute = function(input, ctx) "y"))
+  expect_length(pending_of(s) %||% list(), 0L)
+  # the declaration is unchanged, so the latest implementation runs
+  expect_identical(tool_lookup("p07_arr", sid)$execute(list(), NULL), "y")
+  changed = gptr_tool("p07_arr", "Changed schema.",
+                      parameters = list(type = "object",
+                                        properties = list(q = list(type = "string"))),
+                      execute = function(input, ctx) "z")
+  session_add_tools(s, changed)
+  session_add_tools(s, gptr_tool("p07_arr", "In array.", execute = function(input, ctx) "h",
+                                 exposure = "hidden"))
+  expect_length(pending_of(s) %||% list(), 0L)
+  expect_identical(tool_lookup("p07_arr", sid)$description, "In array.")
+  expect_identical(tool_lookup("p07_arr", sid)$execute(list(), NULL), "y")
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_identical(sum(grepl("Tool 'p07_arr' was not added: ", msg, fixed = TRUE)), 2L)
+  session_add_tools(s, trials_tool())
+  session_add_tools(s, list(trials_tool(), trials_tool()))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_identical(msg_text(q[[1]]), "New tools are available from now on: trials.")
+  # members: the same signature is not announced again; a changed one is re-registered and
+  # announced with its new signature
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  m1 = gptr_tool("p07_m", "Member one.", fun = function(a) 1L, exposure = "r")
+  session_add_tools(s, m1)
+  session_add_tools(s, m1)
+  session_add_tools(s, gptr_tool("p07_tr", "Trials again.", execute = function(input, ctx) "t"))
+  session_add_tools(s, gptr_tool("p07_tr", "Trials again.", execute = function(input, ctx) "t"))
+  expect_length(pending_of(s), 3L)
+  session_add_tools(s, gptr_tool("p07_m", "Member two.", fun = function(a, b) 2L,
+                                 exposure = "r"))
+  q = pending_of(s)
+  expect_length(q, 4L)
+  expect_match(msg_text(q[[4]]), "gptr$p07_m(a: string, b: string)  # Member two.", fixed = TRUE)
+  expect_identical(registry_get("tool", "p07_m", session = sid)$description, "Member two.")
+  # after the queue is flushed into the transcript, what it announced still counts: trials is not
+  # declared again (while the model takes tool additions, review round 2 finding 3), and the
+  # member one signature is announced again only because the newest line of p07_m is the member
+  # two signature
+  prompt_pending_flush(s)
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, trials_tool())
+  expect_length(pending_of(s) %||% list(), 0L)
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  session_add_tools(s, gptr_tool("p07_tr", "Trials again.", execute = function(input, ctx) "t"))
+  expect_length(pending_of(s) %||% list(), 0L)
+  session_add_tools(s, m1)
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_match(msg_text(q[[1]]), "gptr$p07_m(a: string)  # Member one.", fixed = TRUE)
+  expect_identical(registry_get("tool", "p07_m", session = sid)$description, "Member one.")
+})
+
+test_that("a tool another rank-0 record of the session wins over is refused, not announced", {
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_freeze(s, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  registry_add(gptr_tool("p07_px", "From an extension.", execute = function(input, ctx) "ext"),
+               source = "plugin:p07ext", rank = 0L, session = sid)
+  session_add_tools(s, gptr_tool("p07_px", "Mine.", execute = function(input, ctx) "mine"))
+  expect_length(pending_of(s) %||% list(), 0L)
+  expect_identical(tool_lookup("p07_px", sid)$execute(list(), NULL), "ext")
+  expect_length(registry_candidates("tool", "p07_px", sid), 1L)
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_true(any(grepl("Tool 'p07_px' was not added: Another record of the session provides",
+                        msg, fixed = TRUE)))
+})
+
+# Review round 2 (finding 1): P08's continuation enables `plugins =` at rank 0 for the session
+# (P17's plugin.enable, source "plugin:<name>") and then passes registry_get() of each new tool to
+# session.add_tools. The tool that runs is the one passed, so it is announced, not refused, and it
+# is not registered a second time.
+test_that("a tool another rank-0 record of the session already provides is announced", {
+  f = function(input, ctx) "plug"
+  plug = function(s, suffix) {
+    sid = session_data(s)$id
+    registry_add(gptr_tool(paste0("p07_plug", suffix), "From a plugin.", execute = f),
+                 source = "plugin:p07x", rank = 0L, session = sid)
+    registry_add(gptr_tool(paste0("p07_plugm", suffix), "Plugin member.", fun = function(id) 1L,
+                           exposure = "r", namespace = "p07x"),
+                 source = "plugin:p07x", rank = 0L, session = sid)
+    list(registry_get("tool", paste0("p07_plug", suffix), session = sid),
+         registry_get("tool", paste0("p07x/p07_plugm", suffix), session = sid))
+  }
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_freeze(s, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, plug(s, "1"))
+  q = pending_of(s)
+  expect_length(q, 2L)
+  expect_identical(vapply(q[[1]]$tool_add, function(x) x$name, ""), "p07_plug1")
+  expect_identical(msg_text(q[[2]]),
+                   sprintf(prompt_text("members_added"),
+                           "gptr$p07x$p07_plugm1(id: string)  # Plugin member."))
+  expect_length(registry_candidates("tool", "p07_plug1", sid), 1L)
+  expect_length(registry_candidates("tool", "p07x/p07_plugm1", sid), 1L)
+  expect_identical(tool_lookup("p07_plug1", sid)$execute(list(), NULL), "plug")
+  # without tool additions the plugin's direct tool becomes the member gptr$tools$<name>()
+  s2 = p07_session()
+  prompt_freeze(s2, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  session_add_tools(s2, plug(s2, "2"))
+  q2 = pending_of(s2)
+  expect_length(q2, 1L)
+  lines = c("gptr$tools$p07_plug2()  # From a plugin.",
+            "gptr$p07x$p07_plugm2(id: string)  # Plugin member.")
+  expect_identical(msg_text(q2[[1]]),
+                   sprintf(prompt_text("members_added"), paste(lines, collapse = "\n")))
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_false(any(grepl("'p07_plugm?[12]'", msg)))
+})
+
+# Review round 2 (finding 2): the minimal preset has no plugins section, so a namespaced member
+# added before the freeze is announced by the member note.
+test_that("namespaced members added before the freeze are announced under any preset", {
+  s = p07_session(preset = "minimal")
+  sid = session_data(s)$id
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, gptr_tool("p07_min", "Catalogued.", fun = function(id) 1L, exposure = "r",
+                                 namespace = "p07min"))
+  expect_false(is.null(registry_get("tool", "p07min/p07_min", session = sid)))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_identical(msg_text(q[[1]]),
+                   sprintf(prompt_text("members_added"),
+                           "gptr$p07min$p07_min(id: string)  # Catalogued."))
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_identical(fr$preset, "minimal")
+  expect_false("plugins" %in% fr$sections$name)
+})
+
+# Review round 2 (finding 3): an adapter that does not take tool additions drops the declarations
+# of earlier tool_change messages, so after a switch to such a model only the frozen array counts
+# as declared, and a tool that an earlier message declared is offered again as a member.
+test_that("after a switch to a model without tool additions, re-added tools become members", {
+  s = p07_session()
+  sid = session_data(s)$id
+  local_mocked_bindings(prompt_tool_addition = function(s) TRUE)
+  session_add_tools(s, gptr_tool("p07_arr2", "In array.", execute = function(input, ctx) "x"))
+  prompt_freeze(s, list(interactive = FALSE))
+  session_add_tools(s, trials_tool())
+  expect_length(pending_of(s), 1L)
+  prompt_pending_flush(s)
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  session_add_tools(s, registry_get("tool", "p07_arr2", session = sid))
+  expect_length(pending_of(s) %||% list(), 0L)
+  session_add_tools(s, registry_get("tool", "trials", session = sid))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  expect_null(q[[1]]$tool_add)
+  expect_match(msg_text(q[[1]]), "gptr$tools$trials(condition: string)", fixed = TRUE)
+  expect_false(is.null(registry_get("tool", "tools/trials", session = sid)))
+})
+
+# Review round 2 (finding 4): the member signature is built before the spec is registered, so a
+# schema it cannot read leaves the tool out entirely (D-075 item 5).
+test_that("a member whose signature cannot be built is not registered", {
+  s = p07_session()
+  sid = session_data(s)$id
+  prompt_freeze(s, list(interactive = FALSE))
+  local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
+  bad = gptr_tool("p07_badsig", "Bad signature.",
+                  parameters = function(ctx) list(type = "object", properties = list(a = "x")),
+                  execute = function(input, ctx) "x")
+  session_add_tools(s, list(bad, trials_tool()))
+  expect_null(registry_get("tool", "tools/p07_badsig", session = sid))
+  q = pending_of(s)
+  expect_length(q, 1L)
+  line = "gptr$tools$trials(condition: string)  # Search ClinicalTrials.gov by condition."
+  expect_identical(msg_text(q[[1]]), sprintf(prompt_text("members_added"), line))
+  msg = gptr_registry(diagnostics = TRUE)$message
+  expect_true(any(grepl("Tool 'p07_badsig' was not added: ", msg, fixed = TRUE)))
 })

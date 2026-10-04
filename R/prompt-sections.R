@@ -460,15 +460,24 @@ prompt_tool_decl = function(sp, ctx, input) {
   list(name = sp$name, description = sp$description, input_schema = params)
 }
 
+#' The core tools: a preset decides whether they are declared (contract section 9.1)
+#' @noRd
+prompt_core_tools = c("read", "r", "edit", "write", "ask", "grep", "find", "ls")
+
+#' Is a tool spec declared whatever the preset? A non-core spec with no namespace, exposure
+#' "direct" and an `execute` (IC-37)
+#' @noRd
+prompt_tool_always = function(sp) {
+  !is.null(sp) && is.null(sp$namespace) && identical(sp$exposure, "direct") &&
+    is.function(sp$execute) && !(sp$name %in% prompt_core_tools)
+}
+
 #' Direct tools declared whatever the preset: other specs with exposure "direct" (IC-37)
 #' @noRd
 prompt_tools_always = function(session_id) {
-  core = c("read", "r", "edit", "write", "ask", "grep", "find", "ls")
   out = character()
-  for (nm in setdiff(registry_names("tool", session = session_id), core)) {
-    sp = registry_get("tool", nm, session = session_id)
-    direct = !is.null(sp) && identical(sp$exposure, "direct") && is.function(sp$execute)
-    if (direct && is.null(sp$namespace)) out = c(out, nm)
+  for (nm in setdiff(registry_names("tool", session = session_id), prompt_core_tools)) {
+    if (prompt_tool_always(registry_get("tool", nm, session = session_id))) out = c(out, nm)
   }
   out
 }
@@ -999,6 +1008,311 @@ prompt_freeze = function(s, opts = list()) {
 }
 
 on_load(ext_service_set("prompt.freeze", prompt_freeze, provided_by = "P07", builtin = "prompt"))
+
+# ---- mid-session additions ----------------------------------------------------------------------
+
+#' Does the session's current model take tool declarations mid-conversation?
+#'
+#' The adapter of the model's own `api` (resolved per model, IC-74) must declare `tool_addition`,
+#' and the model must not refuse it: its `capabilities$tool_addition` is not `FALSE` and it calls
+#' tools (`tool_call` is not `FALSE`). The adapters send an operator message's declarations under
+#' the same rule (P12: `adp_model_cap(model, "tool_addition", TRUE)`, and `tool_call` for the
+#' Responses api), so a tool announced by value is always declared. Routers and unresolved models
+#' get members.
+#' @noRd
+prompt_tool_addition = function(s) {
+  m = prompt_model(session_data(s)$model)
+  if (is.null(m) || isFALSE(m[["tool_call"]])) return(FALSE)
+  ad = tryCatch(adapter_get(m$api), error = function(e) NULL)
+  cap = m$capabilities[["tool_addition"]] %||% m[["tool_addition"]]
+  isTRUE(ad$capabilities$tool_addition) && !isFALSE(cap)
+}
+
+#' A tool spec as a namespaced `r` member (`gptr$<namespace>$<name>()`, namespace `tools` when
+#' it has none)
+#'
+#' P02's tool validator generates the member's `fun` from `execute` (contract section 6.8,
+#' IC-37); every other field of the spec (for example `render`) is kept.
+#' @noRd
+prompt_member_spec = function(sp) {
+  if (identical(sp$exposure, "r") && !is.null(sp$namespace)) return(sp)
+  x = unclass(sp)
+  x$exposure = "r"
+  x$namespace = sp$namespace %||% "tools"
+  do.call(gptr_spec, c(list(kind = "tool"), x[setdiff(names(x), "kind")]))
+}
+
+#' The prompt-section input of a session now (for tool schemas evaluated after the freeze)
+#'
+#' @param frozen The session's frozen list (`prompt_frozen_now()`), or `NULL` for `.d$frozen`.
+#' @noRd
+prompt_session_input = function(s, frozen = NULL) {
+  d = session_data(s)
+  f = frozen %||% d$frozen
+  rec = tryCatch(preset_record(f$preset %||% d$preset %||% "standard", d$id),
+                 error = function(e) NULL)
+  root = project_root()
+  prompt_section_input(rec, f$tool_names, f$human %||% gptr_can_prompt(), f$document, d$model,
+                       root, prompt_trusted(root), d$mode, s)
+}
+
+#' The frozen prompt of the session's next request, or NULL when its next run composes one
+#'
+#' P06's `run_freeze()` composes only while `.d$frozen` is empty, after the `session_start`
+#' hooks ran, and `prompt_freeze()` restores the newest `gptr.frozen` entry unless an IC-52
+#' refreeze is pending.
+#' @noRd
+prompt_frozen_now = function(s) {
+  d = session_data(s)
+  if (length(d$frozen)) return(d$frozen)
+  if (isTRUE(d$refreeze)) return(NULL)
+  prompt_frozen_restore(s)
+}
+
+#' A tool declaration as canonical JSON text, so that one read back from JSON compares equal
+#' @noRd
+prompt_decl_json = function(decl) json_encode(json_decode(json_encode(decl)))
+
+#' The registry key of a member signature line (`gptr$<name>(` or `gptr$<namespace>$<name>(`),
+#' or NA
+#' @noRd
+prompt_member_key = function(line) {
+  m = regmatches(line, regexec("^gptr\\$([^$( ]+)(?:\\$([^$( ]+))?\\(", line, perl = TRUE))[[1L]]
+  if (length(m) < 3L) return(NA_character_)
+  if (nzchar(m[3L])) paste0(m[2L], "/", m[3L]) else m[2L]
+}
+
+#' What the model already has of the session's tools
+#'
+#' The declarations of the frozen tool array and of the `tool_change` messages on the active path
+#' and in the queue, and the newest member signature line announced for each key. The transcript
+#' is read, not the live state, so a resumed session counts its earlier additions. The
+#' declarations of the messages count only while the model takes tool additions (`added`): an
+#' adapter that does not drops them (P12), so after a switch to such a model the tools they
+#' declared are offered again as members.
+#'
+#' @param frozen The frozen list or `NULL` (before the freeze).
+#' @param added Count the declarations of `tool_change` messages (`prompt_tool_addition()`).
+#' @return `list(decls, lines)`: named chr (canonical declaration JSON by tool name) and named chr
+#'   (signature line by registry key).
+#' @noRd
+prompt_tools_known = function(s, frozen, added = TRUE) {
+  items = list()
+  if (!is.null(frozen)) {
+    items = tryCatch(json_decode(frozen$tools_json %||% "[]"), error = function(e) list())
+  }
+  memo = prompt_memo(s)
+  queued = if (is.null(memo)) list() else get0("prompt_pending", envir = memo, inherits = FALSE)
+  lines = character()
+  for (op in c(lapply(prompt_path(s), prompt_entry_operator), queued %||% list())) {
+    if (!identical(op$kind, "tool_change")) next
+    if (length(op$tool_add)) {
+      if (isTRUE(added)) items = c(items, op$tool_add)
+      next
+    }
+    for (ln in strsplit(prompt_operator_text(op), "\n", fixed = TRUE)[[1L]]) {
+      key = prompt_member_key(ln)
+      if (!is.na(key)) lines[[key]] = ln
+    }
+  }
+  decls = character()
+  for (x in items) {
+    ok = is.list(x) && is.character(x$name) && length(x$name) == 1L && !is.na(x$name) &&
+      nzchar(x$name)
+    if (ok) decls[[x$name]] = prompt_decl_json(x)
+  }
+  list(decls = decls, lines = lines)
+}
+
+#' Register a tool spec at rank 0 so that it is the record the session resolves
+#'
+#' P02 resolves a tie at the same rank to the first registered record, so the session's earlier
+#' rank-0 `session` records of the key are removed once the new record is in. A spec that the
+#' winning record already holds at rank 0 for the session, whatever its source, is not registered
+#' again: for example P08's continuation enables `plugins =` at rank 0 for the session (P17,
+#' source `plugin:<name>`) and passes `registry_get()` of each new tool, which is the tool that
+#' runs. A different spec that still does not win (a rank-0 record of the session from another
+#' source, or a filter) is removed again and refused, and the earlier records stay.
+#' @noRd
+prompt_session_register = function(sp, sid) {
+  key = spec_key(sp)
+  own = function(r) {
+    identical(r$rank, 0L) && identical(r$session, sid) && identical(r$source, "session")
+  }
+  recs = registry_candidates("tool", key, sid)
+  if (length(recs)) {
+    w = recs[[1L]]
+    if (identical(w$rank, 0L) && identical(w$session, sid) && identical(w$spec, sp)) {
+      return(invisible(NULL))
+    }
+  }
+  id = registry_add(sp, source = "session", rank = 0L, session = sid)
+  cand = registry_candidates("tool", key, sid)
+  old = vapply(Filter(function(r) own(r) && !identical(r$id, id), cand), function(r) r$id, "")
+  win = Filter(function(r) !(r$id %in% old), cand)
+  if (!length(win) || !identical(win[[1L]]$id, id)) {
+    registry_remove(id)
+    gptr_abort(paste0("Another record of the session provides '", key, "' (or a filter disables ",
+                      "it), so it would not be the tool that runs."), "invalid_argument",
+               arg = "specs", expected = "a tool the session resolves to")
+  }
+  for (i in old) registry_remove(i)
+  invisible(id)
+}
+
+#' Register one added spec at rank 0 for the session and say how the model learns of it
+#'
+#' Before the session's prompt is frozen (for example from a `session_start` hook through
+#' `ctx$add_tools()`), a spec the frozen tool array will declare whatever the preset
+#' (`prompt_tool_always()`) is registered and not announced, since a message would declare it
+#' twice; any other tool is announced as a member, as after the freeze without tool additions,
+#' because no message may declare a tool before the array is known. That includes namespaced `r`
+#' members: P10's `plugins` section lists them only under a preset that keeps the section (not
+#' `minimal`) and without a `session_start` or `.opts$system` override removing it, which the
+#' freeze decides later, and a line listed twice costs a few tokens once. After the freeze a tool is
+#' declared by value when the model takes tool additions and the kernel can find it by its name
+#' (no namespace, an `execute`, not hidden: P06's `tool_lookup()` resolves a call by the registry
+#' key). Otherwise it is a member: a spec with a `fun` and no namespace already is `gptr$<name>()`
+#' (IC-37; for example the built-in `edit` and `write` that plan mode adds when it switches to
+#' `auto`), any other becomes a namespaced member (`prompt_member_spec()`). A hidden tool
+#' (callable by gptr code only) and a spec of another kind are registered, not announced.
+#'
+#' What the model already has is not announced again (`known`, `prompt_tools_known()`): a tool
+#' whose name the model has by value (the frozen array or an earlier addition) is only registered
+#' when its declaration is unchanged (the implementation may change) and refused otherwise, as the
+#' declaration cannot change mid-conversation (IC-69); a member line already announced for its
+#' key is not repeated. The declaration and the signature line are built before the spec is
+#' registered, so a spec whose schema cannot be read is left out entirely.
+#'
+#' @return `list(decl)` (a declaration sent by value), `list(member)` (a signature line) or an
+#'   empty list.
+#' @noRd
+prompt_add_one = function(sp, sid, frozen, direct, ctx, input, known) {
+  if (!inherits(sp, "gptr_tool")) {
+    registry_add(sp, source = "session", rank = 0L, session = sid)
+    return(list())
+  }
+  hidden = identical(sp$exposure, "hidden")
+  declared = frozen && spec_key(sp) %in% names(known$decls)
+  listed = !frozen && prompt_tool_always(sp)
+  by_value = !declared && direct && !hidden && is.null(sp$namespace) && is.function(sp$execute)
+  member = is.function(sp$fun) && is.null(sp$namespace)
+  reg = if (declared || by_value || hidden || member || listed) sp else prompt_member_spec(sp)
+  quiet = hidden || listed
+  changed = function() {
+    gptr_abort(paste0("The model already has a different declaration of '", sp$name, "' (the ",
+                      "frozen tool array or an earlier addition), which cannot change in a ",
+                      "conversation; add the changed tool under a new name."),
+               "invalid_argument", arg = "specs", expected = "a tool the model does not have")
+  }
+  if (declared) {
+    if (identical(registry_get("tool", sp$name, session = sid), sp)) return(list())
+    if (hidden) changed()
+  }
+  decl = if (!quiet) prompt_tool_decl(reg, ctx, input)
+  if (!quiet && (!is.list(decl$input_schema) ||
+                   !identical(decl$input_schema[["type"]], "object"))) {
+    gptr_abort("Its parameters are not a JSON Schema with type \"object\".", "invalid_argument",
+               arg = "parameters", expected = "a JSON Schema with type \"object\"")
+  }
+  if (declared && !identical(prompt_decl_json(decl), known$decls[[sp$name]])) changed()
+  line = NULL
+  if (!quiet && !declared && !by_value) {
+    prefix = if (is.null(reg$namespace)) "gptr$" else paste0("gptr$", reg$namespace, "$")
+    line = reg$signature %||%
+      schema_signature(reg$name, decl$input_schema, reg$description, prefix = prefix)
+  }
+  prompt_session_register(reg, sid)
+  if (by_value) return(list(decl = decl))
+  if (is.null(line) || identical(unname(known$lines[spec_key(reg)]), line)) return(list())
+  list(member = line)
+}
+
+#' Add tools to a running or idle session without touching the frozen array (IC-69)
+#'
+#' Registers `specs` at rank 0 for the session (the service `session.add_tools`). When the
+#' adapter declares `tool_addition` (`prompt_tool_addition()`), the tools are announced by an
+#' operator `tool_change` message that carries their declarations; otherwise they become `r`
+#' members announced by an operator note with one `schema_signature()` line each. The messages
+#' wait in the session's queue and are appended before the next request (`request_build()`).
+#' Before the first freeze only the tools the frozen array does not declare are announced, as
+#' members; what the model already has is not announced again, and a changed declaration of a
+#' name it has is refused (`prompt_add_one()`). A spec whose conversion, schema, signature line or
+#' registration fails is left out with a diagnostic, as at freeze (contract section 9.1), and the
+#' others are still announced.
+#'
+#' @param s A `<session>`.
+#' @param specs A spec or a list of specs.
+#' @return `s`, invisibly.
+#' @noRd
+session_add_tools = function(s, specs) {
+  if (inherits(specs, "gptr_spec")) specs = list(specs)
+  if (!length(specs)) return(invisible(s))
+  if (!is.list(specs) || !all(vapply(specs, function(x) inherits(x, "gptr_spec"), NA))) {
+    gptr_abort("`specs` must be a spec or a list of specs.", "invalid_argument", arg = "specs",
+               expected = "a gptr_spec or a list of them")
+  }
+  sid = session_data(s)$id
+  fr = prompt_frozen_now(s)
+  frozen = !is.null(fr)
+  direct = frozen && prompt_tool_addition(s)
+  ctx = prompt_ctx(s)
+  input = prompt_session_input(s, fr)
+  known = prompt_tools_known(s, fr, added = direct)
+  decls = list()
+  members = character()
+  for (sp in specs) {
+    one = tryCatch(prompt_add_one(sp, sid, frozen, direct, ctx, input, known),
+                   error = function(e) e)
+    if (inherits(one, "error")) {
+      registry_diagnostic("builtin:prompt", "add_tools", class(one)[1],
+                          paste0("Tool '", sp$name, "' was not added: ", conditionMessage(one)))
+      next
+    }
+    if (!is.null(one$decl)) {
+      decls[[length(decls) + 1L]] = one$decl
+      known$decls[[one$decl$name]] = prompt_decl_json(one$decl)
+    }
+    if (!is.null(one$member)) {
+      members = c(members, one$member)
+      key = prompt_member_key(one$member)
+      if (!is.na(key)) known$lines[[key]] = one$member
+    }
+  }
+  if (length(decls)) {
+    txt = sprintf(prompt_text("tools_added"),
+                  paste(vapply(decls, function(x) x$name, ""), collapse = ", "))
+    prompt_pending_add(s, msg_operator("tool_change", txt, tool_add = decls))
+  }
+  if (length(members)) {
+    prompt_pending_add(s, msg_operator("tool_change",
+                                       sprintf(prompt_text("members_added"),
+                                               paste(members, collapse = "\n"))))
+  }
+  invisible(s)
+}
+
+on_load(ext_service_set("session.add_tools", session_add_tools, provided_by = "P07",
+                        builtin = "prompt"))
+
+#' Queue a section patch for the model (Pi's wording; the frozen text never changes)
+#'
+#' Like tool changes, the patch waits for the next request (`request_build()` flushes the queue).
+#'
+#' @param s A `<session>`.
+#' @param name Section name.
+#' @param text New section body, or `NULL` when the section was removed.
+#' @return `s`, invisibly.
+#' @noRd
+prompt_section_patch = function(s, name, text = NULL) {
+  txt = if (is.null(text)) {
+    sprintf(prompt_text("section_removed"), name)
+  } else {
+    sprintf(prompt_text("section_updated"), name, prompt_section_wrap(name, text))
+  }
+  prompt_pending_add(s, msg_operator("section_patch", txt))
+  invisible(s)
+}
 
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
 #'

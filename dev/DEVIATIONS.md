@@ -3893,7 +3893,7 @@ the unreadable file warned, `~bob/skills` read `user` and visible), and `^ext-pl
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 96 ]`. With only the `fm_size_ok()` checks removed, the
 alias tests still fail (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 162 ]`). Lint clean.
 
-## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen prompt will not show is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
+## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen array will not declare is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
 
 P07 Task 8 (`R/prompt-sections.R`). The contract 7.7 signature `session_add_tools(s, specs)`, the
 `session.add_tools` service, `prompt_section_patch(s, name, text = NULL)`, the message texts and
@@ -3915,24 +3915,28 @@ the plan's 18 expectations are unchanged.
    including uncallable namespaced and hidden ones, or made a hidden one the visible member
    `gptr$tools$<name>()`.
 3. Before the first freeze (`.d$frozen` empty and no `gptr.frozen` to restore, or an IC-52
-   refreeze; `prompt_frozen_now()`) nothing is declared by value, and a spec the frozen prompt
-   will declare or list itself (`prompt_freeze_lists()`: the `prompt_tools_always()` shape, that
-   is no namespace, exposure `"direct"`, an `execute`, not a core tool; or a namespaced `r`
-   member, which P10's `plugins` section lists) is registered and not announced: P06's
-   `run_freeze()` runs the `session_start` hooks, which may call `ctx$add_tools()`, before
-   `prompt.freeze`, and the freeze declares session direct tools in the array, so the plan's
-   message declared them a second time. Every other non-hidden tool is handled as after the
-   freeze without tool additions: a namespaced non-`r` spec becomes its member (then listed by
-   the freeze), and an un-namespaced member (a `fun`, for example a core tool or an `r` spec) is
-   announced by the queued note, flushed at the first request (review round 1: the first fix
+   refreeze; `prompt_frozen_now()`) nothing is declared by value, and a spec the frozen array
+   will declare itself (`prompt_tool_always()`: no namespace, exposure `"direct"`, an `execute`,
+   not a core tool) is registered and not announced: P06's `run_freeze()` runs the
+   `session_start` hooks, which may call `ctx$add_tools()`, before `prompt.freeze`, and the
+   freeze declares session direct tools in the array, so the plan's message declared them a
+   second time. Every other non-hidden tool is handled as after the freeze without tool
+   additions and announced by the queued member note, flushed at the first request: a namespaced
+   non-`r` spec becomes its member, and namespaced `r` members and un-namespaced members (a `fun`,
+   for example a core tool or an `r` spec) keep their names (review round 1: the first fix
    registered these silently, so the model never learned of them; contract 7.7 and IC-69 announce
-   every added tool).
+   every added tool). Review round 2: namespaced `r` members are announced too, although P10's
+   `plugins` section may list them: whether the frozen prompt has that section depends on the
+   preset (`minimal` switches it off), the run's `opts$preset` and the `session_start` or
+   `.opts$system` overrides, which the freeze decides later, and a line listed twice costs a few
+   tokens once.
 4. `prompt_member_spec()` re-validates the modified spec with `gptr_spec("tool", ...)` and keeps
    every field; the plan's `do.call(gptr_tool, ...)` dropped `render` and extension fields.
-5. A spec whose conversion, schema or registration fails is left out with a diagnostic before it
-   is registered, and the other specs are announced (contract 9.1, as at freeze). The plan
-   registered all specs, then evaluated the schemas, so one failing `parameters()` left registered
-   but unannounced tools and an error. A non-spec `specs` is `gptr_error_invalid_argument`.
+5. A spec whose conversion, schema, signature line or registration fails is left out with a
+   diagnostic before it is registered (review round 2: the member signature line is now built
+   before registration too), and the other specs are announced (contract 9.1, as at freeze). The
+   plan registered all specs, then evaluated the schemas, so one failing `parameters()` left
+   registered but unannounced tools and an error. A non-spec `specs` is `gptr_error_invalid_argument`.
 6. What the model already has is not announced again and cannot change (review round 1;
    `prompt_tools_known()` reads the frozen array and the `tool_change` messages of the active
    path and the queue, so a resumed session counts its earlier additions). A tool whose name the
@@ -3944,26 +3948,36 @@ the plan's 18 expectations are unchanged.
    repeated; a changed one is announced again. Registration replaces the session's earlier rank-0
    `session` record of the key (`prompt_session_register()`), because P02 resolves a same-rank
    tie to the first record and `tool_lookup()` would run the old spec under the new declaration;
-   a spec that still would not be the record that runs (a rank-0 record of the session from
-   another source, or a filter) is left out with a diagnostic. The reviewer's "skip a spec
-   identical to the session's current record" was not applied: P08's `gateway_continue_session()`
-   passes exactly the registry's current specs (newly registered plugins and extensions) so that
-   they are announced.
+   a different spec that still would not be the record that runs (a rank-0 record of the session
+   from another source, or a filter) is left out with a diagnostic. A spec that the winning
+   record already holds at rank 0 for the session, whatever its source, is announced and not
+   registered again (review round 2): P08's `gateway_continue_session()` enables `plugins =` at
+   rank 0 for the session (P17, source `plugin:<name>`) and passes `registry_get()` of each new
+   tool so that it is announced; the round-1 check refused those. The round-1 reviewer's "skip the
+   announcement for a spec identical to the session's current record" stays declined: the skip is
+   of the registration only, and the announcement is keyed on what the model was told.
+7. The declarations of earlier `tool_change` messages count as known only while the model takes
+   tool additions (review round 2): an adapter without them drops those declarations (P12), so
+   after a switch to such a model (`session_set_model()`, a P08 continuation with `model =`) a
+   re-added tool is offered as a member instead of being a silent no-op. The frozen array's
+   declarations always count.
 
 Open for other owners (not changed here): Haiku 4.5 has `tool_addition = TRUE` with `mid_system =
 FALSE`, and P12's Anthropic adapter sends `tool_addition` blocks only in a mid-conversation system
 message, so its declarations are dropped (P05 catalog or P12 adapter). P08's
 `gateway_register()` registers a changed `tools =` spec at rank 0 behind the session's earlier
 record of that name, so `registry_get()` hands P07 the old spec; P08 should replace the earlier
-record. P10's `ns_catalog()` must list the session's rank-0 namespaced `r` members (it reads
-`registry_all("tool", session = ...)`), which item 3 relies on. P07's compaction tasks: the
+record. P10's `ns_catalog()` lists the session's rank-0 namespaced `r` members (it reads
+`registry_all("tool", session = ...)`); item 3 no longer relies on it. P07's compaction tasks: the
 `tool_change` declarations before a cut must stay declared after it.
 
 Validation: `progress/P07.md`, Task 8. Five tests (32 expectations) were added; on the plan
 literal 14 of them fail (`dev/.validation/P07/task8-plan-literal2.log`). Review round 1 added three
 tests (27 expectations); on the pre-fix source 21 of them fail
-(`dev/.validation/P07/task8-fix1-red-final.log`). Final `^prompt-sections$`: `[ FAIL 0 | WARN 0 |
-SKIP 0 | PASS 301 ]`.
+(`dev/.validation/P07/task8-fix1-red-final.log`). Review round 2 added four tests (24
+expectations) and changed two round-1 tests (+1 expectation); on the pre-fix source 11 of them
+fail (`dev/.validation/P07/task8-fix2-red-final.log`). Final `^prompt-sections$`: `[ FAIL 0 | WARN
+0 | SKIP 0 | PASS 326 ]`.
 
 ## D-076 - P13 model-layer wrappers: unknown System 1 usage stays NA, a missing request id gets a fresh one and a malformed one is refused, and the s1 area reaches the preflight and preparation through wrappers (2026-10-04)
 
