@@ -3722,3 +3722,65 @@ Validation: `progress/P17.md`, Task 1. `^ext-plugins$`: red
 tests), then `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 80 ]` with the regression tests (review round 1);
 lint clean.
 
+## D-073 - P13 System 1 vectors: unknown calibration prints as unknown, combined answers never overstate calibration, as.data.frame and Summary take row.names and na.rm through ..., gptr_prob()'s example waits for gptr(), NA subscripts assign like base R and cached stays per element (2026-10-04)
+
+P13 Task 1 (`R/s1-types.R`). The classes, attributes, constructors, `gptr_prob()` and the 18
+`gptr_s1` methods are those of contract 5.2 and 6.6; five points differ from the plan literal.
+
+1. **Calibration in the print footer (IC-74).** The plan's `s1_footer()` printed `calibrated` for
+   every value except `FALSE`, so `meta$calibrated = NA` (P01's fake classifier, native Clef
+   answers) would have claimed calibration. 07 section 3 requires output to "say unknown when
+   calibration is unknown". The footer is now `<model> . calibrated . <date>` only for `TRUE`,
+   `uncalibrated` for `FALSE` (emulation) and `calibration unknown` for `NA` or a missing field.
+   Contract 5.2's example footer (`jev-1.13.0 . calibrated . 2026-09-29`) is unchanged.
+2. **Method signatures without lint suppressions.** The plan put `# nolint: object_name_linter.`
+   on the `row.names` and `na.rm` formals and used the bare `.Generic` symbol (an
+   `object_usage_linter` warning). `as.data.frame.gptr_s1(x, ...)` now takes `row.names` from
+   `...` (by name, else the first unnamed argument), `Summary.gptr_s1(...)` receives `na.rm` in
+   `...` (group dispatch always passes it), and `Ops`/`Math`/`Summary` read the generic as
+   `get(".Generic", envir = <method frame>, inherits = FALSE)`. Behaviour is unchanged; R CMD
+   check's S3 consistency rules accept the `...` forms (`tools::checkS3methods()`).
+3. **Example guard.** The 04 section 6.6 example needs P08's `gptr()`. Its `gptr()` call and
+   `gptr_prob(d)` run under `@examplesIf exists("gptr", mode = "function")` (P06's convention), so
+   the example runs offline now with that part skipped. For P08 and P13 Task 9: once `gptr()`
+   exists the guarded part runs, and it needs Task 9's `classifier` route; an R CMD check
+   between those two points fails on this example. Task 9 (plan acceptance 4b-1) must show the
+   full example running.
+4. **Calibration of combined answers (IC-74).** The plan's `c.gptr_s1()` kept the first part's
+   call-level `meta` unchanged, so `c(<jev answer, calibrated = TRUE>, <Clef answer, NA>)` or
+   `c(<jev>, <emulated, FALSE>)` printed `calibrated` for every element; `[<-` with another
+   call's answer and `vctrs::vec_c()`/`vec_rbind()`/dplyr's `bind_rows()`, `if_else()`,
+   `case_when()` and `coalesce()` (whose common prototype comes from `vec_ptype2()`) did the
+   same. The new private `s1_meta_combine()` keeps the first part's `meta` but sets
+   `calibrated` to `TRUE` only when every part is `TRUE`, to `FALSE` when any part is `FALSE`
+   (emulation stays explicitly uncalibrated) and to `NA` otherwise; it stays absent when no part
+   states it. `c.gptr_s1()`, `[<-` with a same-kind System 1 value (not a bare value, which is not
+   a model answer, and not an empty subscript) and `vec_ptype2()` between two System 1 vectors use
+   it. The other call-level fields (`model`, `engine`, `date`, ...) remain the first part's, as
+   in the plan (contract 5.2 types them as single values and has no mixed-provenance form).
+   Not covered: a direct `vctrs::vec_assign()` / `vec_slice<-` keeps `x`'s meta, since vctrs
+   casts the value to `x`'s type and restores to `x` (the tidyverse verbs above do not take that
+   path).
+5. **NA subscripts and per-element `cached` (contract 5.2).** The plan's `[<-` mapped the
+   subscript to positions with `pos[i]`, which keeps NA positions, so assigning a length-1 value
+   through a subscript holding NA (`replace(d, mask, d[1])` with an NA in the mask,
+   `d[c(NA, 2L)] = d[3]`) failed with "NAs are not allowed in subscripted assignments", where base
+   R assigns nothing at the NA positions. `[<-` now finds the value row of every position by
+   applying the same subscript to an index vector (`from[i] = seq_along(value)`), so NA, recycling,
+   names and extension follow base R's own rules; an all-NA subscript merges no calibration.
+   `[[<-` rejects an NA or multi-element subscript, as base R does (`gptr_error_invalid_argument`).
+   The plan's `s1_meta_take()` did not extend a zero-length `cached` (`e = d[0]; e[2] = TRUE` left
+   `cached = logical(0)` on a length-2 answer), and its vctrs proxy had a `cached` column only when
+   `cached` was aligned, so `vctrs::vec_c()`, `vec_rbind()` or dplyr's `bind_rows()` of an answer
+   with per-element `cached` and one without stopped with a vctrs internal error. A present
+   `cached` of length 0 now extends with NA; every proxy carries `cached` (NA when unknown), and
+   `vec_restore()` leaves it absent only when the target has none and no element knows it;
+   `c.gptr_s1()` likewise fills NA for the parts without `cached` instead of dropping it (absent
+   only when no part has it).
+
+Validation: `progress/P13.md`, Task 1. `^s1-types$`: red `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 0 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 102 ]`; lint clean; a sabotage of item 2 fails the three
+guarded expectations. Item 4 (review round 1): red `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 112 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 127 ]`. Item 5 (review round 2): red
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 129 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 161 ]`.
+
