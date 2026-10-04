@@ -138,8 +138,10 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::devtools
-      - name: Tests with _R_CHECK_CONNECTIONS_LEFT_OPEN_=true
-        run: Rscript --vanilla -e 'devtools::test(stop_on_failure = TRUE)'
+      - name: Prove the connection gate detects a leak
+        run: Rscript --vanilla -e 'testthat::test_file("dev/ci/test-check-connections.R", stop_on_failure = TRUE)'
+      - name: Test suite with explicit connection cleanup check
+        run: Rscript --vanilla dev/ci/check-connections.R
 
   bench:
     runs-on: ubuntu-latest

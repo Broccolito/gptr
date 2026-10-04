@@ -2,8 +2,8 @@
 # proposal P-B section 2.4). The layer table is architecture section 3.2; the function map is
 # built by parsing the files under R/, never from srcrefs (installed packages carry none).
 
-# The layer of every file of architecture section 3.2 (119 files after IC-74); "L4 svc" files are the
-# declared services other built-ins may call (eval-*, env-*, tool-walk)
+# The layer of every file of architecture section 3.2 (119 files after IC-74).
+# "L4 svc" files are declared services other built-ins may call (eval-*, env-*, tool-walk).
 arch_layer_table = function() {
   rows = c(
     "aaa-state.R", "L0", "P01",
