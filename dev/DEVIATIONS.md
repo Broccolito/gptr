@@ -1402,3 +1402,25 @@ expectations failed before the fixes, `[ FAIL 19 | WARN 0 | SKIP 0 | PASS 78 ]`,
 (two seeds) gives 0 errors and 0 warnings from the guard, the targets and the shim
 (`task1-fix1-fuzz.log`, script `task1-fix1-fuzz.R`).
 
+## D-039 - P10 r-call marker: ns_r_call() never forces or calls a gptr_r_call binding (2026-10-04)
+
+P10 Task 1's plan-literal `ns_r_call()` (`R/tool-namespace.R`) walks `sys.frame(k)` outwards
+with `exists()` + `get()`. `get()` forces a promise and calls an active binding. So a user
+frame on the stack with a lazy argument or an active binding named `gptr_r_call` had it forced or
+called from inside a `gptr$` member. For example, model code
+`f = function(gptr_r_call) gptr$read("x"); f(stop("boom"))` raised `boom` from the member. That
+contradicts the plan's own docstring ("no promise is forced", plan line 268) and architecture
+section 6.4 R3, which never forces a user promise from a frame walk.
+
+The walker now checks a binding only when it exists and `rlang::env_binding_are_lazy()` and
+`rlang::env_binding_are_active()` are both `FALSE`. Both are sanctioned rlang uses
+(architecture section 9.1), and rlang is already in Imports. A promise that was already forced
+is no longer lazy, so it is still read. The `r` tool binds the marker as an ordinary local value
+(P10 Task 11, plan line 7180), so no real marker is ever skipped. No contract or interface
+changes; `ns_r_call()` still returns the innermost marker or `NULL`.
+
+Validation: `progress/P10.md`, Task 1 (`test-tool-namespace.R`). One block was added, "a lazy or
+active binding called gptr_r_call is neither forced nor called" (3 expectations). Against the
+plan-literal walker, a scratch reproduction forced the promise and called the active binding
+(`dev/.validation/P10/task1-red-lazy-binding.log`). Green is `[ FAIL 0 | WARN 0 | SKIP 0 |
+PASS 31 ]`: the plan's 28 expectations, unchanged, plus these 3.
