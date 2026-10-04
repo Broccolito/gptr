@@ -179,3 +179,22 @@ test_that("s3_register() waits for a package that is not loaded yet", {
   expect_length(getHook(hook), length(old) + 1L)
   expect_error(s3_register("toy_generic", "gptr_toy"), class = "gptr_error_invalid_argument")
 })
+
+test_that("s3_register() removes only its own delayed hook when the package unloads", {
+  event = packageEvent("gptrdelayedtoy", "onLoad")
+  old_hooks = getHook(event)
+  old_cleanups = the$on_unload
+  withr::defer({
+    setHook(event, old_hooks, "replace")
+    the$on_unload = old_cleanups
+  })
+  other = function(...) invisible(NULL)
+  setHook(event, other, "replace")
+  the$on_unload = list()
+  for (i in seq_len(2L)) {
+    s3_register("gptrdelayedtoy::format", "gptr_toy", function(x, ...) "toy")
+    expect_length(getHook(event), 2L)
+    on_unload_run()
+    expect_identical(getHook(event), list(other))
+  }
+})

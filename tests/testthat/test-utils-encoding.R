@@ -34,3 +34,47 @@ test_that("utf8_mark() marks valid UTF-8 only", {
   y = utf8_mark(x)
   expect_identical(Encoding(y), c("UTF-8", "unknown"))
 })
+
+test_that("os_bytes() hands UTF-8 bytes to the OS without an encoding mark", {
+  y = os_bytes("caf\u00e9")
+  expect_identical(Encoding(y), "unknown")
+  expect_identical(charToRaw(y), cafe_bytes)
+})
+
+test_that("raw_to_utf8() strips a BOM and falls back to CP1252", {
+  expect_identical(raw_to_utf8(as.raw(c(0xef, 0xbb, 0xbf, 0x61))), "a")
+  expect_identical(raw_to_utf8(as.raw(c(0x63, 0x61, 0x66, 0xe9))), "caf\u00e9")
+  expect_identical(raw_to_utf8(raw(0)), "")
+})
+
+test_that("read_utf8() and write_utf8() round-trip CRLF, BOM and missing final newlines", {
+  dir = withr::local_tempdir()
+  cases = list(
+    lf = charToRaw("a\nb\n"),
+    crlf_bom = c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\ny = 2\r\n")),
+    no_final = charToRaw("last line"),
+    utf8 = c(cafe_bytes, as.raw(0x0a))
+  )
+  for (name in names(cases)) {
+    src = file.path(dir, paste0(name, ".txt"))
+    out = file.path(dir, paste0(name, "-copy.txt"))
+    writeBin(cases[[name]], src)
+    info = read_utf8(src)
+    expect_false(grepl("\r", info$text, fixed = TRUE), label = name)
+    write_utf8(out, info$text, eol = info$eol, bom = info$bom, final_newline = info$final_newline)
+    expect_identical(readBin(out, "raw", 1000), cases[[name]], label = name)
+  }
+  info = read_utf8(file.path(dir, "crlf_bom.txt"))
+  expect_identical(info$eol, "\r\n")
+  expect_true(info$bom)
+  expect_identical(info$text, "x = 1\ny = 2\n")
+  expect_false(read_utf8(file.path(dir, "no_final.txt"))$final_newline)
+  expect_error(read_utf8(file.path(dir, "missing.txt")), class = "gptr_error_invalid_argument")
+})
+
+test_that("locale_utf8() warns once in a non-UTF-8 session", {
+  rm(list = intersect("warning:locale", ls(the$once)), envir = the$once)
+  local_c_ctype()
+  expect_warning(expect_false(locale_utf8()), class = "gptr_warning_locale")
+  expect_no_warning(locale_utf8())
+})

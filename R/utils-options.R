@@ -190,7 +190,13 @@ s3_register = function(generic, class, method = NULL) {
     }
     invisible(NULL)
   }
-  setHook(packageEvent(package, "onLoad"), register)
+  event = packageEvent(package, "onLoad")
+  setHook(event, register)
+  on_unload(function() {
+    hooks = getHook(event)
+    keep = vapply(hooks, function(hook) !identical(hook, register), logical(1))
+    setHook(event, hooks[keep], "replace")
+  })
   if (isNamespaceLoaded(package)) register()
   invisible(NULL)
 }
