@@ -652,3 +652,84 @@ reactor_drain_child = function(r, key, b) {
   }
   invisible(NULL)
 }
+
+# ---- the opt-in wire log (INFRA-28; IC-59, IC-65) ------------------------------------------
+
+#' Where the wire log of a session goes, or NULL when the log is off
+#'
+#' `options(gptr.wire_log = TRUE)`: `<workspace root>/cache/tmp/wire-<session id>.jsonl`. A
+#' string names a directory (one file per session inside it) or, ending in `.jsonl`, one file;
+#' it must lie inside the workspace root or `tempdir()`, otherwise the default location is used
+#' (with a one-time notice).
+#' @noRd
+wire_log_path = function(session) {
+  opt = gptr_opt("wire_log")
+  if (is.null(opt) || isFALSE(opt)) return(NULL)
+  file = paste0("wire-", gsub("[^A-Za-z0-9_-]", "_", session %||% "nosession"), ".jsonl")
+  roots = c(workspace_root(create = FALSE), tempdir())
+  safe = function(path) {
+    part = path
+    repeat {
+      link = Sys.readlink(part)
+      if (!is.na(link) && nzchar(link) && !file.exists(part)) return(FALSE)
+      parent = dirname(part)
+      if (identical(parent, part)) break
+      part = parent
+    }
+    any(vapply(roots, function(root) path_inside(path, root), NA))
+  }
+  prepare = function(path) {
+    if (!safe(path) || !safe(dirname(path))) return(NULL)
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    path
+  }
+  default = function() prepare(file.path(roots[1L], "cache", "tmp", file))
+  if (isTRUE(opt)) return(default())
+  if (!is.character(opt) || length(opt) != 1L || is.na(opt) || !nzchar(opt)) return(NULL)
+  path = if (grepl("[.]jsonl$", opt)) opt else file.path(opt, file)
+  if (!safe(path) || !safe(dirname(path))) {
+    gptr_inform("gptr.wire_log must be inside the workspace root or tempdir(); using the default.",
+                "notice", .once = "wire_log_path")
+    return(default())
+  }
+  prepare(path)
+}
+
+#' Append one line: open, append, close (no connection outlives the call; IC-59)
+#' @noRd
+wire_log_append = function(path, line) {
+  append_line = function() {
+    con = file(path, open = "ab")
+    on.exit(close(con), add = TRUE)
+    writeLines(as_utf8(line), con, useBytes = TRUE)
+    flush(con)
+  }
+  suspendInterrupts(append_line())
+  invisible(path)
+}
+
+#' One redacted wire-log line for a transfer (request start or terminal event)
+#'
+#' Fields `ts` (epoch seconds), `request_id`, `provider`, `model`, `url` (origin and path only),
+#' `status`, `bytes`, `seconds`, `event`; never headers or bodies (contract 8.2).
+#' @param tr the transfer environment (`session`, `request_id`, `provider`, `model`, `spec$url`,
+#'   `bytes`, `t_start`).
+#' @noRd
+wire_log = function(tr, event, status = NULL) {
+  path = tryCatch(wire_log_path(tr$session), error = function(e) NULL)
+  if (is.null(path)) return(invisible(NULL))
+  present = function(x) {
+    if (is.null(x) || (length(x) == 1L && is.na(x))) NULL else x
+  }
+  st = present(status)
+  # `ts` is seconds since the epoch, as for every `ts` of contract 1.2
+  rec = list(ts = round(as.numeric(Sys.time()), 3),
+             request_id = tr$request_id,
+             provider = present(tr$provider),
+             model = present(tr$model),
+             url = url_for_log(tr$spec$url), status = if (is.null(st)) NULL else as.integer(st),
+             bytes = tr$bytes, seconds = round(reactor_now() - tr$t_start, 3), event = event)
+  rec = rec[!vapply(rec, is.null, NA)]
+  tryCatch(wire_log_append(path, json_encode(redact(rec, "persist"))), error = function(e) NULL)
+  invisible(NULL)
+}

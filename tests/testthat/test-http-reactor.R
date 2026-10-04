@@ -373,3 +373,134 @@ test_that("a pump nested in on_line never re-enters the watcher and on_exit come
   expect_false(st$reentered)
   expect_identical(st$log, c(paste("line", 1:4, ""), "exit 0"))
 })
+
+wire_tr = function(session = "s0123456789", request_id = "q000000000001", model = "mock-1") {
+  tr = new.env()
+  tr$session = session
+  tr$request_id = request_id
+  tr$provider = "anthropic"
+  tr$model = model
+  tr$spec = list(url = "https://api.example.test/v1/messages?key=abc#frag")
+  tr$bytes = 0
+  tr$t_start = reactor_now()
+  tr
+}
+
+test_that("INFRA-28: the wire log writes redacted lines open-append-close", {
+  local_gptr_options(wire_log = TRUE)
+  secret_register("sk-wire-test-0123456789abcdef", "GPTR_TEST_WIRE_KEY")
+  tr = wire_tr(model = "sk-wire-test-0123456789abcdef")
+  path = wire_log_path(tr$session)
+  expect_identical(path, ws_path("cache", "tmp", "wire-s0123456789.jsonl"))
+  unlink(path)
+  n0 = nrow(showConnections())
+  for (i in 1:100) wire_log(tr, "start")
+  expect_identical(nrow(showConnections()), n0)
+  lines = readLines(path, encoding = "UTF-8")
+  expect_length(lines, 100L)
+  rec = json_decode(lines[1])
+  expect_identical(rec$url, "https://api.example.test/v1/messages")
+  expect_identical(rec$event, "start")
+  expect_identical(rec$request_id, "q000000000001")
+  expect_null(rec$status)
+  expect_setequal(names(rec), c("ts", "request_id", "provider", "model", "url", "bytes",
+                                "seconds", "event"))
+  expect_type(rec$ts, "double")
+  expect_lt(abs(rec$ts - as.numeric(Sys.time())), 60)
+  expect_false(any(grepl("sk-wire-test-0123456789abcdef", lines, fixed = TRUE)))
+  wire_log(tr, "done", 200L)
+  last = json_decode(utils::tail(readLines(path, encoding = "UTF-8"), 1L))
+  expect_identical(last$status, 200L)
+})
+
+test_that("the wire log is off by default and stays inside the workspace or tempdir()", {
+  local_gptr_options(wire_log = NULL)
+  expect_null(wire_log_path("s1111111111"))
+  local_gptr_options(wire_log = FALSE)
+  expect_null(wire_log_path("s1111111111"))
+  local_gptr_options(wire_log = file.path(dirname(tempdir()), "gptr-outside.jsonl"))
+  expect_identical(wire_log_path("s1111111111"),
+                   ws_path("cache", "tmp", "wire-s1111111111.jsonl"))
+  inside = file.path(tempdir(), "wire-dir")
+  local_gptr_options(wire_log = inside)
+  expect_identical(wire_log_path("s1111111111"), file.path(inside, "wire-s1111111111.jsonl"))
+  one = file.path(tempdir(), "wire-one.jsonl")
+  local_gptr_options(wire_log = one)
+  expect_identical(wire_log_path("s2222222222"), one)
+})
+
+test_that("wire metadata is redacted before JSON escaping and absent fields are omitted", {
+  local_gptr_options(wire_log = TRUE)
+  for (value in c('wire-quoted-"-0123456789', "wire-backslash-\\-0123456789",
+                   "wire-newline-\n-0123456789")) {
+    secret_register(value, "GPTR_TEST_WIRE_ESCAPED")
+    tr = wire_tr(model = value)
+    path = wire_log_path(tr$session)
+    unlink(path)
+    wire_log(tr, "start")
+    rec = json_decode(readLines(path, encoding = "UTF-8"))
+    expect_false(grepl(value, rec$model, fixed = TRUE))
+    expect_match(rec$model, "[secret:", fixed = TRUE)
+  }
+  tr = wire_tr()
+  tr$model = NULL
+  tr$provider = NULL
+  path = wire_log_path(tr$session)
+  unlink(path)
+  expect_no_error(wire_log(tr, "start"))
+  expect_true(file.exists(path))
+  rec = json_decode(readLines(path, encoding = "UTF-8"))
+  expect_null(rec$model)
+  expect_null(rec$provider)
+})
+
+test_that("wire writes close their connection when encoding fails", {
+  path = tempfile(fileext = ".jsonl")
+  before = showConnections(all = TRUE)
+  expect_error(wire_log_append(path, new.env()))
+  expect_identical(showConnections(all = TRUE), before)
+})
+
+test_that("wire log resolves symlinks before enforcing its path boundary", {
+  skip_on_os("windows")
+  outside = tempfile(tmpdir = dirname(tempdir()))
+  dir.create(outside)
+  withr::defer(unlink(outside, recursive = TRUE))
+  link = tempfile()
+  expect_true(file.symlink(outside, link))
+  withr::defer(unlink(link))
+  local_gptr_options(wire_log = file.path(link, "escape.jsonl"))
+  expect_identical(wire_log_path("s1111111111"),
+                   ws_path("cache", "tmp", "wire-s1111111111.jsonl"))
+  expect_false(file.exists(file.path(outside, "escape.jsonl")))
+})
+
+test_that("wire default and fallback paths reject escaping symlinks", {
+  skip_on_os("windows")
+  project = withr::local_tempdir()
+  workspace = file.path(project, ".gptr")
+  dir.create(file.path(workspace, "cache"), recursive = TRUE)
+  outside = tempfile(tmpdir = dirname(tempdir()))
+  dir.create(outside)
+  withr::defer(unlink(outside, recursive = TRUE))
+  local_gptr_options(project_root = project, wire_log = TRUE)
+  link = file.path(workspace, "cache", "tmp")
+  expect_true(file.symlink(outside, link))
+  expect_null(wire_log_path("s1111111111"))
+  local_gptr_options(wire_log = file.path(outside, "custom.jsonl"))
+  expect_null(wire_log_path("s1111111111"))
+  unlink(link)
+  dir.create(link)
+  target = file.path(outside, "target.jsonl")
+  writeLines("existing", target)
+  expect_true(file.symlink(target, file.path(link, "wire-s1111111111.jsonl")))
+  local_gptr_options(wire_log = TRUE)
+  expect_null(wire_log_path("s1111111111"))
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_identical(readLines(target, encoding = "UTF-8"), "existing")
+  expect_false(file.exists(file.path(outside, "wire-s1111111111.jsonl")))
+  unlink(target)
+  expect_null(wire_log_path("s1111111111"))
+  wire_log(wire_tr(session = "s1111111111"), "start")
+  expect_false(file.exists(target))
+})
