@@ -2183,6 +2183,77 @@ fails 1 (`task6-fix1-mutant-nounlink.log`). Final `^eval-plots$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 66 ]` (`task6-fix1-green.log`), the same under `LC_ALL=C` with
 `_R_CHECK_SCREEN_DEVICE_=stop` (`task6-fix1-green-clocale.log`).
 
+## D-050 - P06 store reader and resume: entries that parse but cannot be read are skipped, ids are checked before they name anything, mode, model and frozen prompt come from the active path, a failed or interrupted rebuild leaves nothing registered, a rebuilt fork's usage is its own, a time that is not ISO 8601 falls back (2026-10-04)
+
+P06 Task 13's literal reader and `store_rebuild()` are changed in six ways. Task 14's
+`session_replay_new()`, P15's replay, P16's rewind and every `gptr_resume()` caller consume them:
+
+1. **`store_read()` also skips a line that parses but is not a readable entry.** These are
+   objects without a string `type` or entry id (one non-empty string of at most 10000 bytes),
+   and messages that P01's `msg_from_json()` refuses. A `parentId` that cannot be an entry id
+   counts as missing, so the entry is re-parented to the previous one. In the plan, any of these
+   made the whole file unreadable: `assign(NULL, ...)` failed, `msg_from_json()` failed, a
+   numeric `type` selected a `switch()` branch by position, or `exists()` failed. Contract 04
+   section 7.6 and IC-59: the reader "skips any unparsable line with a diagnostic". They count in
+   the same single `torn_line` diagnostic.
+2. **Ids are checked before they name a registry entry, a file or a pattern.**
+   - `store_rebuild()` refuses a header id that fails `check_session_id()`'s rule, before
+     `session_by_id()`, with `gptr_error_invalid_argument` (`arg = "x"`). The plan raised base R's
+     unclassed `get0()` error for a non-string id, and `session_new()`'s refusal (`arg =
+     "opts$id"`) for a path-like one.
+   - `store_find()` returns `NULL` for a string that cannot be a session id, and matches file
+     names with `endsWith()`. With the plan's regex built from the id, `gptr_resume(".*")`
+     resumed an arbitrary stored session.
+   - `gptr_resume(<directory>)` is `gptr_error_invalid_argument`, not base R's `readLines()`
+     error.
+   - The new helper `session_id_ok()` holds `check_session_id()`'s rule, which is unchanged.
+3. **The mode, the model and the frozen prompt of a rebuilt session come from its active path**
+   (root -> the last entry, 04 section 6.5).
+   - The plan read the mode from every entry of the file, so a sibling branch's later mode change
+     decided it.
+   - The frozen prompt is now the last `gptr.frozen` entry on the path, as Task 12's
+     `fork_frozen()` and P07's planned restore read it. The plan took the first one in the file,
+     which differs after an IC-52 refreeze or on a sibling branch.
+   - `rebuild_model()` also reads the `model` of the path's `gptr.frozen` entry (the model of the
+     first run), which later `model_change` entries and answers override. A session stopped
+     before its first answer keeps its model instead of resuming as `"unknown/unknown"`.
+4. **A rebuild that fails after `session_new()` leaves nothing registered.** The plan undid the
+   registration only for a `store_open()` failure. Any other error (a usage record that P05's
+   `usage_row()` refuses, for example) left a live session with the recorded id and no store,
+   which the next `gptr_resume()` returned unlocked and `gptr_last()` pointed at. Now every step
+   after `session_new()` runs in `rebuild_fill()`. Until it completes, an `on.exit()` handler
+   (`rebuild_undo()`, under `suspendInterrupts()`) releases a lock this process took, calls
+   `live_forget()` and restores `the$last`. This covers an interrupt (Esc, Ctrl-C) as well as an
+   error, and the condition propagates unchanged. Architecture 03 section 6.4 records
+   interruption with `on.exit()`, never with an exiting `tryCatch()`; a `tryCatch(error =)` (the
+   first version of this fix) let an interrupt through and left the half-built session behind.
+5. **A rebuilt fork's usage rows are its own requests.** The plan's `rebuild_usage()` read every
+   assistant message of the file. A fork's file starts with the source path that `store_fork()`
+   copied (written first by `store_open()`, ids kept, up to the header's `gptr.forkOf.entry`), so
+   a resumed fork reported the source's requests, under the source's recorded request ids, as its
+   own: `$usage`, `$cost` and `gptr_usage()` were overstated, and `gptr_usage()` over all live
+   sessions (deduplicated by request id, the first session in id order kept) could credit the
+   source's requests to the fork. Contract 04 section 6.5: nothing live is shared with a fork,
+   usage included; a live fork's usage holds only its own requests (Task 12). The new
+   `rebuild_own()` leaves out the copied prefix. A fork at turn 0 copies nothing and has no
+   `forkOf.entry`; a `forkOf.entry` missing from the file (a skipped line) leaves the entries as
+   they are.
+6. **A time that is not ISO 8601 falls back instead of failing.** `iso_ms()` returned `NA` for a
+   string in another format, or for a non-string, so the callers' `%||%` fallbacks never applied.
+   One hand-edited assistant entry time then made P05's `usage_row()` refuse the start time and
+   the whole session could not be resumed, against item 1's aim; a header time gave
+   `d$created = NA` and an `NA` `created` in `gptr_sessions()`. `iso_ms()` now returns `NULL` for
+   anything but one parsable ISO 8601 string. A usage row's start time falls back to the
+   message's own epoch-ms time, then to the epoch; `created` falls back as for a missing time.
+
+Validation: `progress/P06.md`, Task 13 (`test-session-store.R`). Four blocks (31 expectations)
+were added to the plan's tests, then, in review round 1, two blocks and an interrupt variant of
+the undo block (15 expectations). Against the plan-literal source, the first four blocks gave 10
+failures and 230 passes, all failures in the added blocks (`task13-literal.log`). The review
+round's additions failed 9 times against the first version of this fix
+(`task13-fix1-red.log`). Final `^session-(live|store)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 270 ]`
+(`task13-fix1-focused.log`).
+
 ## D-051 - P10 write engine: a file without a line ending is written as given, the 1 MiB sample ends on a whole character, a new file gets the umask's mode, ".." links climb as the kernel does, 40 links are followed, non-ASCII paths in a C locale, an unreadable file is written verbatim, a read-only file is refused (2026-10-04)
 
 P10 Task 5's plan-literal `R/tool-write.R` passes the plan's five blocks (20 expectations) but had
@@ -2288,3 +2359,81 @@ blocks (17). Review round 1 added two blocks (11 expectations): the kind with a 
 against the round-0 source (`task7-fix1-red.log`), and a mutant that re-syncs without `try()`
 and `suppressWarnings()` fails the rejected-vector block (`task7-fix1-mutant-notry.log`). Final
 `^eval-core$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 50 ]` (`task7-fix1-green.log`).
+
+## D-053 - P10 edit engine: whole-line patch hunks, one operation per file, Codex's hunk-line rule, a checked Delete File, fuzzy envelopes carry the diff, a lone CR stays out of the diff, a NUL means binary, string fields, the shim finds envelopes and never reads a named file, linear match search (2026-10-04)
+
+P10 Task 6's plan-literal `R/tool-edit.R` passes the plan's 15 blocks (79 expectations) but had
+these defects, each reproduced against that source (`dev/.validation/P10/task6-probe-plan-literal.log`
+and `-clocale.log`; the plan-literal file is kept as `task6-plan-literal-tool-edit.R`, the probe as
+`task6-probe.R`). Signatures and result shapes are the plan's (04 section 7.10):
+1. **A patch hunk that only removed lines left an empty line.** Each hunk became an
+   `oldText`/`newText` pair of its joined lines without a line ending, so `@@ / -y = 2` turned
+   `x = 1\ny = 2\nz = 3\n` into `x = 1\n\nz = 3\n` (CRLF and fuzzy variants alike). Codex hunks
+   are blocks of whole lines. Such a hunk (no context, nothing added) now also removes the line
+   ending after the block when the block starts a line and ends one (the LF view first, then its
+   fuzzy normalisation, as `apply_edits()` searches), or the ending before it when the block ends
+   a file without a final newline. A block found only inside a line keeps the plan's substring
+   semantics, and the uniqueness check still runs on the widened text.
+2. **A file named by two operations lost a change, or was deleted.** Every operation is computed
+   against the original files, so two `*** Update File` sections of one file wrote only the
+   second update (reported as 2 files changed), an update plus a delete of one file deleted it,
+   a move onto another operation's file raced it, and on a case-insensitive file system
+   `Update case.R / Move to CASE.R` wrote the file and then removed it under its old name,
+   leaving nothing. `patch_apply()` now refuses, before computing anything, a patch in which two
+   operations name one file (`Invalid patch: more than one operation names <path>; put all
+   hunks of a file under one *** Update File.`); paths are compared after following links and,
+   when `fs_case_insensitive()`, with ASCII case folded. A move removes the source only when it
+   is a different file, and it removes the name it moved (a link itself), not the link's target:
+   the plan deleted the target and left a dangling link.
+3. **Hunk lines follow Codex's rule.** A line of an update hunk must start with " ", "-" or "+"
+   (an empty line is empty context); the plan dropped the first character of any other line and
+   used the rest as context. Such a line, and an `*** Update File` without hunks (also with only
+   a `*** Move to`), are now `Invalid patch: ...` errors; the plan reported the latter as `Edit
+   tool input is invalid. edits must contain at least one replacement.`
+4. **`*** Delete File` is checked.** The plan's `file.remove()` deleted an empty directory and
+   ignored a failed removal. A directory is refused before anything is written (`Could not delete
+   file: <path>. Error code: EISDIR.`); a removal goes through `unlink()` (which never removes a
+   directory) and a failure is `gptr_error_doc_write`. An `*** Add File` without content lines
+   writes an empty file (the plan wrote one newline).
+5. **An envelope whose hunk matched only through the fuzzy fallback reported no deviation.**
+   `edit_from_patch()` set `fuzzy = FALSE`, `deviated = FALSE` and an empty `diff`, so the result
+   text never carried the diff that contract section 9.2 and acceptance 6 require when the fuzzy
+   fallback, an EOL change or a re-encoding changed what was asked. `patch_apply()`'s details now
+   add `fuzzy` and `reasons` (from the same `edit_reasons()` that `edit_file()` uses), and
+   `edit_from_patch()` returns them with `diff` = the patch's unified diff cut to 400 tokens.
+6. **A lone CR produced a spurious diff.** The bytes were kept, but the after-view of the diff
+   turned a lone CR into a line break while the before-view kept it, so `a\rb\nc\n` edited at
+   `c` showed three changed lines. Both views now read only CRLF as LF.
+7. **A UTF-8 BOM file with a NUL byte past the first 8,000 bytes** failed with `decode_raw()`'s
+   `The file contains NUL bytes: it is binary.` instead of the edit text `Could not edit file:
+   <path>. It is a binary file.`; a UTF-8 BOM no longer exempts a file from the NUL check (only
+   UTF-16/32 BOMs do).
+8. **An `oldText`/`newText` that is not one string** (a number, `NA`, a vector) stopped with a
+   base R `vapply()` or `gregexpr()` error. Pi's shim now refuses it with
+   `gptr_error_invalid_argument`: `Edit tool input is invalid. edits[<i>].<field> must be a
+   string.` (fields absent or `NULL` keep the plan's defaults).
+9. **The shim never saw an envelope inside other edit shapes.** An envelope pasted as the only
+   edit's `newText` inside a JSON-string `edits` (the shape Pi's shim exists for), a single
+   object or a data frame failed with `oldText must not be empty`. `edit_envelope_of()` (and so
+   `edit_nested_input()`) now puts `edits` through the shim first, and returns the envelope
+   string when the field is a one-element list.
+10. **A string naming a file or a URL was read as the edits.** `jsonlite::fromJSON()` treats a
+    string that is not valid JSON as a file name or an http(s) URL (jsonlite 2.0.0 opens
+    `file()` or `url()` on it), so a model-supplied `edits` naming a local JSON file applied that
+    file's edits, and a URL would have been fetched. The shim uses P01's `json_decode()`
+    (`jsonlite::parse_json()`, the same `simplifyVector = FALSE` semantics as conventions
+    section 6, written for exactly this reason in P01).
+11. **Match search was quadratic in the number of matches.** `gregexpr(fixed = TRUE)` took 9 s
+    for 200,000 matches in a 5 MB text (a `replace_all`, or the uniqueness count of a short
+    `oldText` in a large file). `fixed_positions()` now uses `strsplit()` and byte counts (0.03
+    s, same positions: leftmost, non-overlapping).
+
+Internal additions: `edit_source()` (the loading half of the plan's `edit_compute()`, which now
+takes an optional `src`), `edit_view()`, `edit_reasons()`, `patch_line_end()`,
+`patch_hunk_edits()`, `patch_remove()`.
+
+Validation: `progress/P10.md`, Task 6. Eleven blocks (53 expectations) were added to the plan's
+15 blocks, which are unchanged. Against the plan-literal source the final test file gives
+`[ FAIL 32 | WARN 1 | SKIP 0 | PASS 88 ]` (`task6-red-plan-literal.log`; every failure is in an
+added block). Final `^tool-edit$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 132 ]` in the UTF-8 and the
+C locale (`task6-green-final.log`, `task6-green-clocale.log`).

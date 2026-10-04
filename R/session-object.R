@@ -124,10 +124,18 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
 #' @noRd
 check_session_id = function(x, arg) {
   check_string(x, arg)
-  if (!grepl("^[A-Za-z0-9-]{1,64}$", x)) {
+  if (!session_id_ok(x)) {
     arg_abort(x, arg, "a session id (1 to 64 ASCII letters, digits or `-`)")
   }
   invisible(x)
+}
+
+#' Can a value be a session id? One string of 1-64 ASCII letters, digits and `-` (the rule of
+#' check_session_id(), without signalling: store_rebuild() and store_find() test recorded and
+#' user-given ids with it)
+#' @noRd
+session_id_ok = function(x) {
+  is.character(x) && length(x) == 1L && !is.na(x) && grepl("^[A-Za-z0-9-]{1,64}$", x)
 }
 
 #' Canonical model reference; lenient (an unknown model fails at the first request, not here)
@@ -1096,3 +1104,29 @@ session_control_check = function(what, s = NULL) {
              how_to_allow = "call it outside the run, or approve it when asked",
              session = run$session)
 }
+
+# ---------------------------------------------------------------------------- the replay table
+# (IC-46)
+
+#' Bind a replayed session to its document block id (gptr-created sessions only)
+#' @return `s`, invisibly.
+#' @noRd
+session_replay_bind = function(block, s, child = NULL) {
+  check_string(block, "block")
+  check_class(s, "gptr_session", "s")
+  check_string(child, "child", null = TRUE)
+  assign(replay_key(block, child), s, envir = the$replay_blocks)
+  invisible(s)
+}
+
+#' The session bound to a block (and a team member), or NULL
+#' @noRd
+replay_lookup = function(block, child = NULL) {
+  check_string(block, "block")
+  check_string(child, "child", null = TRUE)
+  get0(replay_key(block, child), envir = the$replay_blocks, inherits = FALSE)
+}
+
+#' The key of a block in the replay table
+#' @noRd
+replay_key = function(block, child = NULL) if (is.null(child)) block else paste0(block, "/", child)

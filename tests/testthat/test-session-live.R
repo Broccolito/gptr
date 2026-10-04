@@ -132,3 +132,52 @@ test_that("secret_register() warns secret_late for a value a live session alread
                      class = "gptr_warning_secret_late")
   expect_identical(names(w$counts), session_data(s)$id)
 })
+
+test_that("continuing a same-process duplicate with a run is split brain", {
+  local_permissive()
+  local_fake_provider(list("a"))
+  s = test_session()
+  run_text(s, "one")
+  copy = unserialize(serialize(s, NULL))
+  expect_error(run_start(copy, msg_user("again")), class = "gptr_error_split_brain")
+  expect_error(gptr_resume(copy), class = "gptr_error_split_brain")
+})
+
+test_that("a copy snapshotted while running is attached as aborted (reason detached)", {
+  local_permissive()
+  local_fake_provider(list(list(hang = TRUE), "resumed"))
+  s = test_session()
+  run = run_start(s, msg_user("go"))
+  snap = serialize(s, NULL)
+  run_abort(run)
+  other = test_session()
+  rm(s, run)
+  invisible(gc())
+  copy = unserialize(snap)
+  gptr_resume(copy)
+  expect_identical(copy$status, "aborted")
+  expect_identical(copy$reason, "detached")
+})
+
+test_that("a file locked by another live process is not resumed and leaves no live session", {
+  skip_on_cran()
+  local_store()
+  p = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"),
+                           supervise = supervise_default())
+  withr::defer(p$kill())
+  s = test_session()
+  session_append(s, entry_custom("test.note", list(i = 1L)))
+  file = session_data(s)$file
+  id = session_data(s)$id
+  last = test_session()
+  rm(s)
+  invisible(gc())
+  created = as.numeric(ps::ps_create_time(ps::ps_handle(p$get_pid())))
+  dir.create(lock_path(file), showWarnings = FALSE)
+  write_atomic(file.path(lock_path(file), "pid"),
+               c(as.character(p$get_pid()), format(created, digits = 17)))
+  expect_error(gptr_resume(file, envir = new.env()), class = "gptr_error_split_brain")
+  expect_null(session_by_id(id))
+  expect_identical(gptr_last(), last)
+  expect_error(gptr_resume(id, envir = new.env()), class = "gptr_error_split_brain")
+})

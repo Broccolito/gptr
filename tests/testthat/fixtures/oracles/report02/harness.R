@@ -328,6 +328,29 @@ stored_run = function(.env = parent.frame()) {
   s
 }
 
+# The branch fixture of the reader tests S15-S17 of test-session-store.R (P06 Task 13), kept here
+# for the same reason: it calls the harness helpers.
+
+#' A stored session continued by a detached copy after its original is gone: the copy's turn 2
+#' is a sibling of the original's turn 2 in the same file
+branch_in_file = function(.env = parent.frame()) {
+  local_store(.env = .env)
+  local_permissive(.env = .env)
+  local_fake_provider(list("first", "second", "third"), .env = .env)
+  s = test_session(home = globalenv())
+  run_text(s, "one")
+  snap = serialize(s, NULL)
+  run_text(s, "two")
+  main_leaf = session_data(s)$leaf
+  file = s$file
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  copy = unserialize(snap)
+  run_text(copy, "two, rephrased")
+  list(copy = copy, file = file, main_leaf = main_leaf, other = other)
+}
+
 run_text = function(s, text, opts = list()) session_run(s, msg_user(text), opts)
 roles = function(s) vapply(s$messages, function(m) m$role, "")
 tool_results = function(s) Filter(function(m) identical(m$role, "tool_result"), s$messages)
