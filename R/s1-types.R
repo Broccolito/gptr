@@ -624,3 +624,96 @@ s1_vctrs_register = function() {
 }
 
 on_load(s1_vctrs_register())
+
+# ---- model-layer access for the System 1 area (layer L1) --------------------------------------
+# s1-types.R is the one L1 file of the s1 area (architecture 3.2). The L4 files s1-client.R,
+# s1-route.R, s1-cache.R, s1-emulate.R and s1-ollama.R may call L0, their own area, the declared
+# services and the kernel SDK (architecture 2.2 rule 3, IC-33; P01's test-arch-layers.R), so every
+# call they make into the provider registry, the catalog, the request preflight, usage accounting
+# and provider_stream() (the P05 functions of contract 7.5 whose consumer lists name P13) goes
+# through these wrappers. IC-74 (07-local-ollama.md sections 2, 2.1 and 5): a classifier is
+# dispatched by its resolved model-level type and api, never its provider's default; the pure
+# preflight runs before any state is serialised or a credential is looked up; a keyless loopback
+# server gets no credential; and unknown usage or an unknown price stays NA, never zero.
+
+#' The provider record of a System 1 target: a provider spec passes through; else by id or alias
+#' @noRd
+s1_provider = function(x) {
+  if (inherits(x, "gptr_provider")) return(x)
+  if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) return(NULL)
+  provider_get(x)
+}
+
+#' The adapter registered for a wire api (gptr_error_not_available when there is none)
+#' @noRd
+s1_adapter = function(api) adapter_get(api)
+
+#' The origin-bound credential handle of a provider (NULL for offline and keyless providers such
+#' as a loopback Ollama server; gptr_error_no_key when a key is needed and none is found)
+#' @noRd
+s1_credential = function(provider) provider_credential(provider)
+
+#' The configured base URL of a provider (settings `providers.<id>.base_url` > the record),
+#' without a trailing `/`
+#' @noRd
+s1_base_url = function(provider) provider_base_url(provider)
+
+#' A model record (contract 4.9) for a reference or a provider spec (its first model), with the
+#' model's own type and api (IC-74)
+#' @noRd
+s1_model = function(ref, strict = TRUE) model_resolve(ref, strict = strict)
+
+#' The pure, no-I/O request preflight of a model on its provider (IC-74, contract 7.5): the
+#' checked model, or gptr_error_not_available / gptr_error_untrusted before anything is sent
+#' @noRd
+s1_preflight = function(model, provider, safety = NULL) {
+  provider_preflight(model, provider, safety = safety)
+}
+
+#' Explicit preparation of a selected model (IC-74, contract 7.5): discovery only for missing or
+#' stale Ollama evidence, then resolution and preflight; never used under replay
+#' @noRd
+s1_prepare = function(ref, safety = NULL) model_prepare(ref, safety = safety)
+
+#' The configured System 1 reference, or NULL when none is usable (contract 7.5): the setting,
+#' else the TypeSafe key, else a verified local native classifier, which needs no key (IC-74)
+#' @noRd
+s1_default_ref = function() model_default("system1")
+
+#' USD cost of System 1 usage `list(input, output)` under a model's dated prices (contract 7.5)
+#'
+#' A missing or NA token count and a missing price are unknown, so the cost is NA (IC-74,
+#' D-015); a declared zero rate is a known zero charge, with or without token counts.
+#' @noRd
+s1_cost = function(usage, model) {
+  u = usage_new(input = usage[["input"]], output = usage[["output"]])
+  usage_cost(u, model)$cost$total
+}
+
+#' Append one row to the process System 1 accounting log (contract 4.3 and 7.5; agent "s1")
+#'
+#' `input` and `output` are token counts, NULL or NA when unknown (kept NA, IC-74). The row's
+#' cost comes from P05's usage_row() (the dated price of the resolved, preflighted model).
+#' `request_id` is the provider's request id; NULL, a scalar NA or "" (no id reported) gets a
+#' fresh one, and any other value that is not one non-empty string (several ids, a number) is
+#' refused by usage_row() with gptr_error_invalid_argument rather than silently replaced (D-015).
+#' @noRd
+s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds) {
+  u = usage_cost(usage_new(input = input, output = output), model)
+  api = model[["api"]]
+  if (!is.character(api) || length(api) != 1L || is.na(api)) api = "unknown"
+  rid = request_id
+  if (is.atomic(rid) && length(rid) == 1L && (is.na(rid) || identical(unname(rid), ""))) {
+    rid = NULL
+  }
+  msg = msg_assistant(list(), api = api, provider = model[["provider"]], model = model[["id"]],
+                      usage = u, route = route, request_id = rid)
+  usage_log_append(usage_row(msg, session = session_id, agent = "s1", parent_id = NA_character_,
+                             started = started, seconds = seconds, multiplier = 1))
+}
+
+#' One System 2 request on the reactor (emulation; contract 8.4); returns the transfer or task id
+#' @noRd
+s1_stream = function(model, context, opts, emit, done) {
+  provider_stream(model, context, opts, emit, done)
+}

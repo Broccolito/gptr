@@ -3784,3 +3784,165 @@ guarded expectations. Item 4 (review round 1): red `[ FAIL 15 | WARN 0 | SKIP 0 
 green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 127 ]`. Item 5 (review round 2): red
 `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 129 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 161 ]`.
 
+## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, and a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it) (2026-10-04)
+
+P17 Task 2 (`R/skill-discover.R`), review rounds 1 and 2. The plan-literal code changed in three
+places (items 1, 2 and 4), and the plan's test file gained a temporary helper (item 3).
+Exported signatures, return shapes and the plan's 8 tests are unchanged.
+
+1. **`skill_parse()` never throws.** R yaml reads `.na.character`, `.na`, `.na.integer` and
+   `.na.real` as `NA`. An `NA` name or description passed the plan's `is.character()`,
+   `length() == 1L` and `nzchar()` checks (`nzchar(NA)` is `TRUE`), and the next
+   `if (nchar(...) > n)` stopped with "missing value where TRUE/FALSE needed". `skill_collect()`
+   does not guard the parse, so one such file in any root (a cloned repository's
+   `.claude/skills`, untrusted) made the whole `gptr_skills()` call fail. Contract 11.13 and the
+   `skill` row of section 10 require "diagnostics, never errors" and "skipped with a
+   diagnostic". An `NA` description is now "description is required", and an `NA` name falls
+   back to the directory name. The plan's body moved unchanged into the private
+   `skill_parse_md(path, diag)`, and `skill_parse(path)` wraps it: any other error is a
+   `builtin:skills` diagnostic (`<path>: cannot parse the skill: <message>`) and `NULL`.
+   Interrupts are not caught.
+2. **R yaml's `.na` spellings are kept as text (IC-71, Task 1 code).** IC-71 says the string
+   keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) "keep their source
+   text". Task 1's `fm_raw_tags` (`R/ext-plugins.R`, plan lines 362-365) listed the YAML 1.1
+   tags but not R yaml's `str#na`, `bool#na`, `int#na` and `float#na`, so these keys could
+   still come back as `NA`. The four tags were added. `name: .na.character` is now the text
+   `.na.character`; the `skill` kind refuses it, so the skill is skipped with a diagnostic.
+   `description: .na.character` is kept as written. Other keys keep their typed values
+   (`license: .na.character` is still `NA`). This also covers the agent files and templates of
+   Tasks 6-7, which use the same frontmatter reader.
+3. **TEMPORARY test-side `trust.get`.** The plan test "gptr_skills lists project and user skills;
+   the project wins a name" calls `local_project(trust = TRUE)`. Without P08 that only writes
+   `trust.json`, and `trust_ok()` reads trust only through P08's `trust.get` service (IC-33).
+   `tests/testthat/test-skill-discover.R` therefore defines `local_trust_record()` and calls it
+   once in that test. While `ext_service_has("trust.get")` is `FALSE`, it binds a `trust.get`
+   for that test only (restored by `withr::defer()`), answering from the `trust.json` record
+   keyed by `path_key()`. Once a real service is registered it does nothing. Nothing in `R/`
+   stubs P08. **P08 Task 2 (project trust and the `trust.get` service) MUST delete
+   `local_trust_record()` (its comment, definition and the one call) and show that test passing
+   against the real service.** IC-52's trust fingerprint does not cover `skills/`, so the
+   plan-literal test should then pass unchanged. The coordinator should add this to
+   `HANDOFF.md` (cross-plan obligations).
+4. **A relative `skills.paths` entry is a project root (IC-52, contract 6.3; review round 2).**
+   The plan's `skill_setting_paths()` resolves a relative entry against `project_root()`, and
+   `skill_roots()` put every `skills.paths` directory in the user group (rank 3, `user`,
+   trusted). A relative entry names a directory of whichever project is open, so in an
+   untrusted project its skills were listed as `user` with `visible = TRUE`, and Task 4's
+   registration (`df$trusted & origin != "plugin"`) would put them in the T1 catalog. That
+   breaks IC-52 ("Only skills from user directories, installed packages and trusted projects
+   enter the T1 catalog") and contract 6.3 (project resources show `project (untrusted)`).
+   `skill_setting_paths()` now returns `list(project, user)`: relative entries (resolved
+   against the project root, including ones that climb out with `..`) join the project group
+   after `.gptr/skills`, `.agents/skills` and `.claude/skills` (rank 1, origin `project`,
+   registry source `project`, label and trust from `trust_ok()`); absolute and `~` entries stay
+   user directories (rank 3). An `NA` entry is dropped instead of reaching `path_norm()`. In a
+   trusted project a relative entry now outranks a user skill of the same name, as the other
+   project roots do.
+
+Regression tests lock items 1, 2 and 4: three appended to `tests/testthat/test-skill-discover.R`
+and one to `tests/testthat/test-ext-plugins.R`. Every later P17 count for
+`test-skill-discover.R` is 20 higher (10 from round 1, 10 from round 2): Task 3's red
+36 -> 56, 64 -> 84, 99 -> 119, and Task 12's combined count 260 -> 280. Every later count for
+`test-ext-plugins.R` is 19 higher (D-072's 13 plus 6): 82 -> 101, 133 -> 152, 166 -> 185,
+184 -> 203. Acceptance 1 becomes 483, acceptance 2b 119 and acceptance 4c 322 (IC-74).
+
+Validation: `progress/P17.md`, Task 2, review rounds 1 and 2. Round 1 red: `^skill-discover$`
+`[ FAIL 2 | WARN 0 | SKIP 0 | PASS 33 ]` (both new tests stop with the `NA` error), and
+`^ext-plugins$` `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 82 ]`. Green: `[ FAIL 0 | WARN 0 | SKIP 0 |
+PASS 43 ]` and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 86 ]`. With item 2 reverted, the
+`gptr_skills()` regression test still fails (`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 39 ]`). Round 2
+(item 4) red: `^skill-discover$` `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 46 ]` (the relative entry
+read `user`, rank 3, trusted, visible); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 53 ]`. Lint
+clean.
+
+## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, nothing is announced before the first freeze, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
+
+P07 Task 8 (`R/prompt-sections.R`). The contract 7.7 signature `session_add_tools(s, specs)`, the
+`session.add_tools` service, `prompt_section_patch(s, name, text = NULL)`, the message texts and
+the plan's 18 expectations are unchanged.
+
+1. `prompt_tool_addition()`: the adapter of the model's `api` must declare `tool_addition` and
+   the model must not refuse it (`capabilities$tool_addition` not `FALSE`, `tool_call` not
+   `FALSE`), the rule P12's adapters apply when they send the declarations
+   (`adp_model_cap(model, "tool_addition", TRUE)`). The plan's `adapter OR model` announced tools
+   by value that the adapter then dropped, so they were never declared: for example every OpenAI
+   catalog model on the Responses api (adapter TRUE, model FALSE) or a model claiming the
+   capability behind `openai-completions`. Contract 7.7: "when the adapter declares
+   `tool_addition`"; IC-74: per-model resolution, a model record does not grant what its adapter
+   cannot send.
+2. Only an un-namespaced, non-hidden spec with an `execute` is declared by value (P06's
+   `tool_lookup()` resolves a call by the registry key and needs `execute`); a namespaced spec is
+   announced as its member `gptr$<ns>$<name>()`; a `hidden` spec (callable by gptr code only,
+   contract 9.1) is registered and never announced. The plan declared every spec by value,
+   including uncallable namespaced and hidden ones, or made a hidden one the visible member
+   `gptr$tools$<name>()`.
+3. Before the first freeze (`.d$frozen` empty and no `gptr.frozen` to restore, or an IC-52
+   refreeze) specs are registered as they are and nothing is queued: P06's `run_freeze()` runs the
+   `session_start` hooks, which may call `ctx$add_tools()`, before `prompt.freeze`, and the freeze
+   declares session direct tools in the array, so the plan's message declared them a second time.
+4. `prompt_member_spec()` re-validates the modified spec with `gptr_spec("tool", ...)` and keeps
+   every field; the plan's `do.call(gptr_tool, ...)` dropped `render` and extension fields.
+5. A spec whose conversion, schema or registration fails is left out with a diagnostic before it
+   is registered, and the other specs are announced (contract 9.1, as at freeze). The plan
+   registered all specs, then evaluated the schemas, so one failing `parameters()` left registered
+   but unannounced tools and an error. A non-spec `specs` is `gptr_error_invalid_argument`.
+
+Open for other owners (not changed here): Haiku 4.5 has `tool_addition = TRUE` with `mid_system =
+FALSE`, and P12's Anthropic adapter sends `tool_addition` blocks only in a mid-conversation system
+message, so its declarations are dropped (P05 catalog or P12 adapter); P08's continuation should
+not pass tools the frozen array already declares.
+
+Validation: `progress/P07.md`, Task 8. Five tests (32 expectations) were added; on the plan
+literal 14 of them fail (`dev/.validation/P07/task8-plan-literal2.log`). Final
+`^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 274 ]`.
+
+## D-076 - P13 model-layer wrappers: unknown System 1 usage stays NA, a missing request id gets a fresh one and a malformed one is refused, and the s1 area reaches the preflight and preparation through wrappers (2026-10-04)
+
+P13 Task 2 (`R/s1-types.R`). The plan's nine wrappers are kept with their signatures; three points
+differ from the plan literal.
+
+1. **Unknown usage is not a zero charge (IC-74, 07 section 5; D-015).** The plan's `s1_cost()`
+   replaced a missing token count and a missing cost with 0, so a System 1 answer without usage
+   would be booked as a known free request. `s1_cost(usage, model)` now gives `NA` when a count on
+   a priced component is unknown (NULL or NA) or no price is in force, and 0 for a declared zero
+   rate (local inference) even with unknown counts, as P05's `usage_cost()` defines. It reads
+   `usage[["input"]]`/`usage[["output"]]`; the plan's `usage$input` partially matched a record's
+   `input_tokens`. The plan's assertion `s1_cost(list(), rec) == 0` is now `NA_real_`.
+2. **`s1_usage_log()` accepts unknown counts and a missing request id.** NULL or NA `input` and
+   `output` are written as `NA` (with an `NA` cost) instead of failing in `usage_new()`, and a NULL,
+   scalar NA or empty `request_id` (Ollama's decision API sends no `x-typesafe-request-id`) gets a
+   fresh id from `usage_row()`, which refuses an NA id. Any other value that is not one non-empty
+   string (several ids, a number, a list) is passed on, so `usage_row()` refuses it with
+   `gptr_error_invalid_argument` and nothing is appended (D-015 item 4; review round 1).
+3. **Two wrappers beyond the plan: `s1_preflight(model, provider, safety = NULL)` and
+   `s1_prepare(ref, safety = NULL)`.** Contract 7.5 (IC-74) names P13 as a consumer of
+   `provider_preflight()` and `model_prepare()` in `catalog-models.R` (L1), and 07 section 2.1
+   requires the pure preflight before state/image serialisation, credential lookup and dispatch.
+   The L4 files of the s1 area may not call L1 (`test-arch-layers.R`), so they get the same
+   delegating wrappers; `safety` passes through unchanged.
+
+For later P13 tasks (plan literals that IC-74 changes; review round 1 added the Task 4 and Task 8
+dispatch points):
+
+- Task 4's `s1_request()` should call `s1_preflight()` on the resolved model before
+  `s1_credential()`, state/image serialisation and `build()`. It should pick the adapter from the
+  resolved model's api, `s1_adapter(model$api)`, not `s1_adapter(provider$api)` (plan line 2330),
+  so Clef on the mixed `ollama` provider (provider api `openai-completions`) reaches
+  `ollama-system-one` (07 section 2). The `engine` passed to `s1_dispatch()` likewise comes from the
+  model's api or provider id, not `s1_engine(provider$api)` (line 2365; Task 8's target at line
+  3762 too).
+- Task 4's `s1_dispatch()` should keep unknown per-state usage NA when summing, not
+  `input + (r$value$usage$input %||% 0)` / `output + (... %||% 0)` (lines 2277-2278), so the
+  `s1_cost(usage, model)` at the end gives NA, not a known cost, when any state reported no usage.
+- Calibration (07 section 3): the default `calibrated = TRUE` passed to `s1_dispatch()` (line 2365;
+  Task 8's `calibrated = TRUE` at line 3762) and `calibrated = isTRUE(r$value$calibrated)` (line
+  2281, which turns NA into FALSE) should keep unknown calibration NA; TRUE needs recorded
+  calibration evidence.
+- Tasks 5, 6 and 8 (lines 2650, 2982, 3982, 4085-4086) should pass unknown counts and cost through
+  rather than the plan's `%||% 0`.
+
+Validation: `progress/P13.md`, Task 2. `^s1-types$`: red `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 161 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 212 ]`; lint clean; the plan-literal `s1_cost()` gives 0
+for empty usage and 0.042 for `list(input_tokens = 1e6)` (`dev/.validation/P13/task2-probe.log`).
+Review round 1: regression red `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 216 ]`, green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 220 ]`.

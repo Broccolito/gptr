@@ -352,3 +352,202 @@ test_that("vctrs combining never claims calibration that a combined part lacks (
   expect_s3_class(rows$d, "gptr_decision")
   expect_identical(calib(rows$d), FALSE)
 })
+
+# ---- Task 2: model-layer access for the System 1 area ------------------------------------------
+
+priced_provider = function() {
+  gptr_provider("pricey", api = "fake-classifier", type = "classifier", local = TRUE,
+                offline = TRUE,
+                models = list(list(id = "pricey-s1", type = "classifier",
+                                   prices = data.frame(from = "2026-01-01", tier = "default",
+                                                       input = 0.042, output = 0))))
+}
+
+test_that("s1_provider() passes specs through and looks ids up", {
+  spec = priced_provider()
+  expect_identical(s1_provider(spec), spec)
+  off = gptr_register(spec)
+  withr::defer(off())
+  expect_identical(s1_provider("pricey")$id, "pricey")
+  expect_null(s1_provider("no-such-provider"))
+  expect_null(s1_provider(NA_character_))
+  expect_null(s1_provider(42))
+})
+
+test_that("s1_model() resolves a provider spec to its first model record", {
+  rec = s1_model(priced_provider())
+  expect_identical(rec$provider, "pricey")
+  expect_identical(rec$id, "pricey-s1")
+  expect_identical(rec$type, "classifier")
+  expect_identical(s1_adapter("fake-classifier")$api, "fake-classifier")
+  expect_error(s1_adapter("no-such-api"), class = "gptr_error_not_available")
+})
+
+test_that("s1_cost() prices input tokens at the model's dated rate", {
+  rec = s1_model(priced_provider())
+  expect_equal(s1_cost(list(input = 1e6, output = 500), rec), 0.042)
+  # IC-74 (07 section 5, D-015): missing usage remains unknown, never a zero-token request
+  expect_identical(s1_cost(list(), rec), NA_real_)
+})
+
+test_that("s1_usage_log() appends one System 1 row to the process log", {
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  off = gptr_register(priced_provider())
+  withr::defer(off())
+  rec = s1_model("pricey/pricey-s1")
+  n = nrow(usage_log())
+  s1_usage_log(rec, "system-one", 300, 2, "q000000000001", NA_character_, Sys.time(), 0.2)
+  log = usage_log()
+  expect_identical(nrow(log), n + 1L)
+  row = log[nrow(log), ]
+  expect_identical(row$agent, "s1")
+  expect_identical(row$route, "system-one")
+  expect_identical(row$provider, "pricey")
+  expect_equal(row$input, 300)
+  expect_equal(row$cost, 300 * 0.042 / 1e6)
+})
+
+test_that("s1_default_ref() is the configured System 1 model, NULL without one", {
+  local_mocked_bindings(model_key_present = function(id, vars) FALSE)
+  local_gptr_options(system1 = NULL)
+  expect_null(s1_default_ref())
+  local_gptr_options(system1 = "judge/judge-s1")
+  expect_identical(s1_default_ref(), "judge/judge-s1")
+})
+
+test_that("s1_base_url(), s1_credential() and s1_stream() delegate to the model layer", {
+  p = gptr_provider("based", api = "typesafe-system-one", type = "classifier",
+                    base_url = "https://example.invalid/v1/")
+  expect_identical(s1_base_url(p), "https://example.invalid/v1")
+  expect_null(s1_credential(priced_provider()))
+  local_mocked_bindings(provider_stream = function(model, context, opts, emit, done, run = NULL) {
+    "t42"
+  })
+  expect_identical(s1_stream(list(), list(), list(), function(ev) NULL, function(msg) NULL), "t42")
+})
+
+# ---- Task 2, IC-74 (07-local-ollama.md sections 2, 2.1 and 5) -----------------------------------
+
+clef_provider = function(id, base_url) {
+  gptr_provider(id, api = "ollama-system-one", type = "classifier", base_url = base_url,
+                models = list(list(id = "clef-flash", type = "classifier",
+                                   api = "ollama-system-one")))
+}
+
+test_that("s1_model() keeps a model's own type and api on a mixed provider (IC-74)", {
+  mixed = gptr_provider("mixedlocal", api = "openai-completions",
+                        base_url = "http://127.0.0.1:11434/v1", local = TRUE,
+                        models = list(list(id = "chatty"),
+                                      list(id = "clef-flash", type = "classifier",
+                                           api = "ollama-system-one")))
+  off = gptr_register(mixed)
+  withr::defer(off())
+  clef = s1_model("mixedlocal/clef-flash")
+  expect_identical(clef$type, "classifier")
+  expect_identical(clef$api, "ollama-system-one")
+  chat = s1_model("mixedlocal/chatty")
+  expect_identical(chat$type, "chat")
+  expect_identical(chat$api, "openai-completions")
+})
+
+test_that("s1_cost() keeps unknown tokens and prices unknown and a zero rate known (IC-74)", {
+  rec = s1_model(priced_provider())
+  expect_identical(s1_cost(list(input = NA, output = 2), rec), NA_real_)
+  expect_identical(s1_cost(NULL, rec), NA_real_)
+  free = s1_model(gptr_provider("free", api = "fake-classifier", type = "classifier",
+                                local = TRUE, offline = TRUE,
+                                models = list(list(id = "free-s1", type = "classifier",
+                                                   prices = data.frame(from = "2026-01-01",
+                                                                       tier = "default",
+                                                                       input = 0, output = 0)))))
+  expect_identical(s1_cost(list(input = 300, output = 2), free), 0)
+  expect_identical(s1_cost(list(), free), 0)
+  unpriced = s1_model(gptr_provider("unpriced", api = "fake-classifier", type = "classifier",
+                                    offline = TRUE,
+                                    models = list(list(id = "unpriced-s1", type = "classifier"))))
+  expect_identical(s1_cost(list(input = 300, output = 2), unpriced), NA_real_)
+})
+
+test_that("s1_usage_log() keeps unknown tokens unknown and fills a missing request id (IC-74)", {
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  off = gptr_register(priced_provider())
+  withr::defer(off())
+  rec = s1_model("pricey/pricey-s1")
+  n = nrow(usage_log())
+  s1_usage_log(rec, "system-one", NA, NA, NA_character_, "s_local", Sys.time(), 0.1)
+  s1_usage_log(rec, "emulated", NULL, NULL, NULL, NA_character_, Sys.time(), 0.3)
+  log = usage_log()
+  expect_identical(nrow(log), n + 2L)
+  rows = log[n + 1:2, ]
+  expect_identical(rows$route, c("system-one", "emulated"))
+  expect_identical(rows$agent, c("s1", "s1"))
+  expect_identical(rows$session, c("s_local", NA))
+  expect_identical(rows$input, c(NA_real_, NA_real_))
+  expect_identical(rows$output, c(NA_real_, NA_real_))
+  expect_identical(rows$cost, c(NA_real_, NA_real_))
+  expect_true(all(nzchar(rows$request_id)) && !anyNA(rows$request_id))
+  expect_false(identical(rows$request_id[1], rows$request_id[2]))
+  expect_equal(rows$seconds, c(0.1, 0.3))
+})
+
+test_that("s1_usage_log() refuses a malformed request id rather than replacing it (D-015)", {
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  off = gptr_register(priced_provider())
+  withr::defer(off())
+  rec = s1_model("pricey/pricey-s1")
+  n = nrow(usage_log())
+  bad = list(c("q000000000001", "q000000000002"), 42, list("q000000000001"))
+  for (rid in bad) {
+    expect_error(s1_usage_log(rec, "system-one", 300, 2, rid, NA_character_, Sys.time(), 0.1),
+                 class = "gptr_error_invalid_argument")
+  }
+  expect_identical(nrow(usage_log()), n)
+  # no reported id (empty string, logical NA) still gets a fresh one
+  s1_usage_log(rec, "system-one", 300, 2, "", NA_character_, Sys.time(), 0.1)
+  s1_usage_log(rec, "system-one", 300, 2, NA, NA_character_, Sys.time(), 0.1)
+  rows = usage_log()[n + 1:2, ]
+  expect_identical(nrow(rows), 2L)
+  expect_match(rows$request_id, "^q[0-9a-f]{12}$")
+})
+
+test_that("s1_default_ref() offers a verified local classifier without a TypeSafe key (IC-74)", {
+  local_mocked_bindings(model_key_present = function(id, vars) FALSE,
+                        catalog_local_classifier = function() "ollama/clef-flash")
+  local_gptr_options(system1 = NULL)
+  expect_identical(s1_default_ref(), "ollama/clef-flash")
+})
+
+test_that("a keyless loopback classifier gets no credential, even beside a TypeSafe key (IC-74)", {
+  withr::local_envvar(TYPESAFE_API_KEY = "test-placeholder-not-a-key")
+  lp = clef_provider("lollama", "http://127.0.0.1:11434/")
+  expect_null(s1_credential(lp))
+  expect_identical(s1_base_url(lp), "http://127.0.0.1:11434")
+  # the built-in loopback `ollama` record that hosts Clef needs no key either
+  ollama = s1_provider("ollama")
+  expect_null(s1_credential(ollama))
+  expect_identical(s1_base_url(ollama), "http://127.0.0.1:11434/v1")
+})
+
+test_that("s1_preflight() and s1_prepare() check a model before any request (IC-74)", {
+  local_mocked_bindings(catalog_ollama_discover = function(...) {
+    stop("discovery must not run in this test")
+  })
+  spec = priced_provider()
+  rec = s1_model(spec)
+  expect_identical(s1_preflight(rec, spec), rec)
+  lp = clef_provider("lollama", "http://127.0.0.1:11434")
+  expect_error(s1_preflight(s1_model(lp), lp), class = "gptr_error_not_available")
+  remote = clef_provider("rollama", "https://ollama.example.invalid")
+  rclef = s1_model(remote)
+  expect_error(s1_preflight(rclef, remote), class = "gptr_error_untrusted")
+  expect_error(s1_preflight(rclef, remote, safety = list(ollama_local_only = FALSE)),
+               class = "gptr_error_not_available")
+  off = gptr_register(spec)
+  withr::defer(off())
+  expect_identical(s1_prepare("pricey/pricey-s1")$id, "pricey-s1")
+  expect_error(s1_prepare("pricey/pricey-s1", safety = list(ollama_local_only = NA)),
+               class = "gptr_error_invalid_argument")
+})
