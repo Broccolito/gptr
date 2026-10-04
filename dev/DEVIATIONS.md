@@ -28,3 +28,12 @@ The named `superpowers:*` skills are not installed. Use the available subagent
 tools for task-sized implementation and independent review, preserving actual
 test-first evidence and plan gates. Do not install unrelated skills or claim
 that a named external workflow was run.
+
+## D-005 — Parallel foundation tasks (2026-10-03)
+
+The maintainer authorized parallel implementation. P01 Tasks 19–21 run once
+Task 3's service table is stable: their structural checks do not require the
+remaining token/message utilities. Tasks 9–12 and 13–18 may proceed in separate
+lanes after Task 8. Scope edits and Git commits to each owner, preserve actual
+red/green checks, and rerun complete P01 acceptance after integration. No plan
+or milestone is declared complete from a partial tree.

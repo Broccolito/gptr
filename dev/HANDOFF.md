@@ -30,10 +30,11 @@ Updated: 2026-10-03. State: active implementation, P01 not yet complete.
 
 ## Next concrete work
 
-Continue P01 from the latest completed task in `progress/P01.md`. Task 1 was
-committed as `bbc000c` (42 passing assertions). The README rewrite is ready;
-root owns GitHub publication. roxygen2 7.3.3 is installed in `dev/.library`;
+Continue P01 from the latest completed task in `progress/P01.md` and the
+parallel `progress/P01-infrastructure.md`. Tasks 1–4 and 19–21 have focused
+passing checks; full foundation acceptance is pending. The README/About are
+updated and draft PR #4 tracks the work. roxygen2 7.3.3 is in `dev/.library`;
 use `R_LIBS_USER="$PWD/dev/.library" Rscript --vanilla` for development checks.
-Optional dependency installation has a separate owner. Read active ownership
+Optional tooling installation is complete (`progress/tooling.md`). Read ownership
 in `PROGRESS.md` before editing or committing. No API should be described as
 available until its implementation is verified.
