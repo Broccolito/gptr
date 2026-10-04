@@ -3784,10 +3784,10 @@ guarded expectations. Item 4 (review round 1): red `[ FAIL 15 | WARN 0 | SKIP 0 
 green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 127 ]`. Item 5 (review round 2): red
 `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 129 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 161 ]`.
 
-## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, and a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it) (2026-10-04)
+## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it), YAML aliases never expand without bound, an unreadable file never warns, and a ~name skills.paths entry is project content (2026-10-04)
 
-P17 Task 2 (`R/skill-discover.R`), review rounds 1 and 2. The plan-literal code changed in three
-places (items 1, 2 and 4), and the plan's test file gained a temporary helper (item 3).
+P17 Task 2 (`R/skill-discover.R`), review rounds 1, 2 and 3. The plan-literal code changed in
+items 1, 2 and 4-7, and the plan's test file gained a temporary helper (item 3).
 Exported signatures, return shapes and the plan's 8 tests are unchanged.
 
 1. **`skill_parse()` never throws.** R yaml reads `.na.character`, `.na`, `.na.integer` and
@@ -3838,24 +3838,62 @@ Exported signatures, return shapes and the plan's 8 tests are unchanged.
    user directories (rank 3). An `NA` entry is dropped instead of reaching `path_norm()`. In a
    trusted project a relative entry now outranks a user skill of the same name, as the other
    project roots do.
+5. **YAML aliases never expand without bound (contract 6.3 and 11.13, IC-52; review round 3;
+   Task 1 code too).** R yaml keeps an aliased node as one shared R object, so a SKILL.md of a
+   few hundred bytes (`x0: &a0 [a, ..., i]`, `x1: &a1 [*a0 x 9]`, ... `x7`, then
+   `disable-model-invocation: *a7`) loads at once but expands about ninefold per level. The
+   plan's `as.character()` of `disable-model-invocation` and `fm_chr_list()`'s `unlist()` of
+   `allowed-tools` expanded it: one such file took 186 s at seven levels (and would take about
+   30 minutes at eight) and blocked `gptr_skills()`, which walks untrusted project skills too.
+   No error is raised, so item 1's `tryCatch()` cannot help. Three guards:
+   - `fm_yaml()` (`R/ext-plugins.R`) checks the parsed value with the new `fm_size_ok()`, a
+     level-by-level count with vectorised steps that stops at its limit. YAML that expands to
+     more than 10,000 values or 1,000,000 string bytes beyond the size of its own text is a
+     failed parse: `meta = NULL` and the error string
+     `invalid YAML frontmatter: too large once its aliases are expanded` (so `skill_parse()`
+     skips the skill with that diagnostic). Text without aliases always fits, and the check
+     covers every frontmatter reader (skills, templates, agent files).
+   - `fm_chr_list()` returns `NULL` for a value that is not flat (new `fm_flat()`: `NULL`, an
+     atomic vector, or a list of atomic scalars and `NULL`s) instead of flattening it.
+     `skill_parse()` then adds the diagnostic
+     `allowed-tools must be a list of tool names; it was ignored`.
+   - `skill_parse()` reads `disable-model-invocation` only as a logical scalar or a text scalar
+     equal to `true` in any case; any other value is `FALSE` and is never converted to text.
+6. **An unreadable file is a diagnostic only (contract 6.3, 11.13; review round 3; Task 1
+   code).** `read_utf8()`'s `file()` warns ("Permission denied") before it fails, and the
+   warning escaped `frontmatter_read()`'s `tryCatch(error = )`, so `gptr_skills()` printed a
+   base R warning on top of the `cannot read the file` diagnostic. The read is now wrapped in
+   `suppressWarnings()`.
+7. **Only `~` and `~/` (or `~\`) `skills.paths` entries are home directories (IC-52, IC-63;
+   review round 3).** Item 4 classed every entry starting with `~` as a user root, but
+   `path_norm()` expands only `~` and `~/` (IC-63), so `~bob/skills` was resolved against the
+   working directory, inside the project, and listed project content as `user` and visible in
+   an untrusted project. Other `~name` entries are now relative entries: project roots,
+   resolved against the project root and trust-gated like the rest of item 4.
 
-Regression tests lock items 1, 2 and 4: three appended to `tests/testthat/test-skill-discover.R`
-and one to `tests/testthat/test-ext-plugins.R`. Every later P17 count for
-`test-skill-discover.R` is 20 higher (10 from round 1, 10 from round 2): Task 3's red
-36 -> 56, 64 -> 84, 99 -> 119, and Task 12's combined count 260 -> 280. Every later count for
-`test-ext-plugins.R` is 19 higher (D-072's 13 plus 6): 82 -> 101, 133 -> 152, 166 -> 185,
-184 -> 203. Acceptance 1 becomes 483, acceptance 2b 119 and acceptance 4c 322 (IC-74).
+Regression tests lock items 1, 2 and 4-7: seven appended to
+`tests/testthat/test-skill-discover.R` and three to `tests/testthat/test-ext-plugins.R`. Every
+later P17 count for `test-skill-discover.R` is 39 higher (10 from round 1, 10 from round 2, 19
+from round 3): Task 3's red 36 -> 75, 64 -> 103, 99 -> 138, and Task 12's combined count
+260 -> 299. Every later count for `test-ext-plugins.R` is 29 higher (D-072's 13, plus 6 from
+round 1 and 10 from round 3): 82 -> 111, 133 -> 162, 166 -> 195, 184 -> 213. Acceptance 1
+becomes 512, acceptance 2b 138 and acceptance 4c 351 (IC-74).
 
-Validation: `progress/P17.md`, Task 2, review rounds 1 and 2. Round 1 red: `^skill-discover$`
+Validation: `progress/P17.md`, Task 2, review rounds 1, 2 and 3. Round 1 red: `^skill-discover$`
 `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 33 ]` (both new tests stop with the `NA` error), and
 `^ext-plugins$` `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 82 ]`. Green: `[ FAIL 0 | WARN 0 | SKIP 0 |
 PASS 43 ]` and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 86 ]`. With item 2 reverted, the
 `gptr_skills()` regression test still fails (`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 39 ]`). Round 2
 (item 4) red: `^skill-discover$` `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 46 ]` (the relative entry
-read `user`, rank 3, trusted, visible); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 53 ]`. Lint
-clean.
+read `user`, rank 3, trusted, visible); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 53 ]`. Round 3
+(items 5-7) red: `^skill-discover$` `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 61 ]` after 3 min 31 s
+(the seven-level file was listed, nested values were expanded, `list("true")` read as `TRUE`,
+the unreadable file warned, `~bob/skills` read `user` and visible), and `^ext-plugins$`
+`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 90 ]`; green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 72 ]` and
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 96 ]`. With only the `fm_size_ok()` checks removed, the
+alias tests still fail (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 162 ]`). Lint clean.
 
-## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, nothing is announced before the first freeze, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
+## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen prompt will not show is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
 
 P07 Task 8 (`R/prompt-sections.R`). The contract 7.7 signature `session_add_tools(s, specs)`, the
 `session.add_tools` service, `prompt_section_patch(s, name, text = NULL)`, the message texts and
@@ -3877,24 +3915,55 @@ the plan's 18 expectations are unchanged.
    including uncallable namespaced and hidden ones, or made a hidden one the visible member
    `gptr$tools$<name>()`.
 3. Before the first freeze (`.d$frozen` empty and no `gptr.frozen` to restore, or an IC-52
-   refreeze) specs are registered as they are and nothing is queued: P06's `run_freeze()` runs the
-   `session_start` hooks, which may call `ctx$add_tools()`, before `prompt.freeze`, and the freeze
-   declares session direct tools in the array, so the plan's message declared them a second time.
+   refreeze; `prompt_frozen_now()`) nothing is declared by value, and a spec the frozen prompt
+   will declare or list itself (`prompt_freeze_lists()`: the `prompt_tools_always()` shape, that
+   is no namespace, exposure `"direct"`, an `execute`, not a core tool; or a namespaced `r`
+   member, which P10's `plugins` section lists) is registered and not announced: P06's
+   `run_freeze()` runs the `session_start` hooks, which may call `ctx$add_tools()`, before
+   `prompt.freeze`, and the freeze declares session direct tools in the array, so the plan's
+   message declared them a second time. Every other non-hidden tool is handled as after the
+   freeze without tool additions: a namespaced non-`r` spec becomes its member (then listed by
+   the freeze), and an un-namespaced member (a `fun`, for example a core tool or an `r` spec) is
+   announced by the queued note, flushed at the first request (review round 1: the first fix
+   registered these silently, so the model never learned of them; contract 7.7 and IC-69 announce
+   every added tool).
 4. `prompt_member_spec()` re-validates the modified spec with `gptr_spec("tool", ...)` and keeps
    every field; the plan's `do.call(gptr_tool, ...)` dropped `render` and extension fields.
 5. A spec whose conversion, schema or registration fails is left out with a diagnostic before it
    is registered, and the other specs are announced (contract 9.1, as at freeze). The plan
    registered all specs, then evaluated the schemas, so one failing `parameters()` left registered
    but unannounced tools and an error. A non-spec `specs` is `gptr_error_invalid_argument`.
+6. What the model already has is not announced again and cannot change (review round 1;
+   `prompt_tools_known()` reads the frozen array and the `tool_change` messages of the active
+   path and the queue, so a resumed session counts its earlier additions). A tool whose name the
+   model has by value (the frozen array or an earlier addition) is not declared again: the same
+   spec is a no-op, an equal declaration only replaces the implementation, and a changed
+   declaration (or a hidden spec under that name) is left out with a `builtin:prompt` /
+   `add_tools` diagnostic, since the frozen array never changes (IC-69) and a second declaration
+   of a name is a duplicate tool. A member signature line already announced for its key is not
+   repeated; a changed one is announced again. Registration replaces the session's earlier rank-0
+   `session` record of the key (`prompt_session_register()`), because P02 resolves a same-rank
+   tie to the first record and `tool_lookup()` would run the old spec under the new declaration;
+   a spec that still would not be the record that runs (a rank-0 record of the session from
+   another source, or a filter) is left out with a diagnostic. The reviewer's "skip a spec
+   identical to the session's current record" was not applied: P08's `gateway_continue_session()`
+   passes exactly the registry's current specs (newly registered plugins and extensions) so that
+   they are announced.
 
 Open for other owners (not changed here): Haiku 4.5 has `tool_addition = TRUE` with `mid_system =
 FALSE`, and P12's Anthropic adapter sends `tool_addition` blocks only in a mid-conversation system
-message, so its declarations are dropped (P05 catalog or P12 adapter); P08's continuation should
-not pass tools the frozen array already declares.
+message, so its declarations are dropped (P05 catalog or P12 adapter). P08's
+`gateway_register()` registers a changed `tools =` spec at rank 0 behind the session's earlier
+record of that name, so `registry_get()` hands P07 the old spec; P08 should replace the earlier
+record. P10's `ns_catalog()` must list the session's rank-0 namespaced `r` members (it reads
+`registry_all("tool", session = ...)`), which item 3 relies on. P07's compaction tasks: the
+`tool_change` declarations before a cut must stay declared after it.
 
 Validation: `progress/P07.md`, Task 8. Five tests (32 expectations) were added; on the plan
-literal 14 of them fail (`dev/.validation/P07/task8-plan-literal2.log`). Final
-`^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 274 ]`.
+literal 14 of them fail (`dev/.validation/P07/task8-plan-literal2.log`). Review round 1 added three
+tests (27 expectations); on the pre-fix source 21 of them fail
+(`dev/.validation/P07/task8-fix1-red-final.log`). Final `^prompt-sections$`: `[ FAIL 0 | WARN 0 |
+SKIP 0 | PASS 301 ]`.
 
 ## D-076 - P13 model-layer wrappers: unknown System 1 usage stays NA, a missing request id gets a fresh one and a malformed one is refused, and the s1 area reaches the preflight and preparation through wrappers (2026-10-04)
 
@@ -3946,3 +4015,69 @@ green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 212 ]`; lint clean; the plan-literal `s
 for empty usage and 0.042 for `list(input_tokens = 1e6)` (`dev/.validation/P13/task2-probe.log`).
 Review round 1: regression red `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 216 ]`, green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 220 ]`.
+
+## D-077 - P13 System 1 wire adapter: classify$parse takes the questions and returns validated canonical answers, unreported usage stays NA, a model's decision record sets the question limits, two harness helpers wait for their functions (2026-10-04)
+
+P13 Task 3 (`R/s1-client.R`, `tests/testthat/test-s1-client.R`, `tests/testthat/fixtures/jev/`).
+The question builder, the conditions, the error-body reader, the request builder and the TypeSafe
+confidence formulas follow the plan. Five points differ from the plan literal.
+
+1. **`s1_typesafe_parse(model, status, headers, body, questions)` returns canonical answers
+   (IC-74, 07 section 3; contract 8.1 as amended).** The plan's four-argument parse returned the
+   wire answers, and its tests parsed them a second time with `s1_parse_answers()`. P02's
+   `kind_check_adapter()` already requires the five-argument `parse`, so the plan's adapter could
+   not even be registered. Parse now normalises once, through `s1_parse_answers()`, into
+   `list(type = "noul", prob)`, `list(type = "choice", choice, probabilities, confidence)` and
+   `list(type = "score", score, probabilities, confidence, legend)`. Probabilities are named in
+   request order, and the score's `legend` holds the requested level descriptions named
+   `"0".."n-1"`, the same shape as P01's fake. A malformed answer inside a 200 body is an
+   unsignalled `gptr_error_s1_response` that carries the response's status and request id.
+2. **Answers are validated against the request (07 section 3).** The plan accepted extra
+   probability keys, out-of-range probabilities and confidences, probabilities that do not sum
+   to 1, a choice its own probabilities contradict, a score outside `[0, levels - 1]` or unequal
+   to the expected level of its probabilities, and answers to questions that were not asked.
+   Each of these is now `gptr_error_s1_response`. The tolerances follow TypeSafe's two-decimal
+   rounding (report 04a): 0.005 per probability for the sum, 0.01 between the chosen option and
+   the most probable one, and 0.005 per level index plus 0.005 for the score. An absent
+   confidence or score is recomputed (TypeSafe's formulas; the score stays the fractional
+   expected level). A present but invalid value is an error, not a recomputation. An empty or
+   absent probability map is still "unavailable" (NA), not zero (report 04 section 2.9). A
+   missing choice is the most probable option, the first in request order on a tie.
+3. **Unreported usage is unknown (IC-74, 07 section 5; D-076).** The plan turned a missing token
+   count into 0. `usage` now gives `NA` for a count that is absent, null or not a nonnegative
+   number, so P13's `s1_cost()` reports an unknown cost rather than a known zero.
+4. **`s1_question(..., decision = NULL)` (IC-74, 07 sections 2-3; report 04b: "do not assume
+   Jev's documented candidate limits apply").** The plan hard-coded TypeSafe's limits (2-255
+   options, 2-10 levels), so a Clef score with 11-26 levels could not be asked. The optional
+   `decision` argument takes the resolved model's decision record: its `max_options` caps both
+   options and levels, and its `types` restrict the question type (`gptr_error_invalid_argument`
+   otherwise). Without a record, or a record without `max_options`, TypeSafe's limits apply as
+   before. `labels` must be a character vector without NA.
+5. **The harness omits `s1_fresh()` and `s1_test_call()` for now.** The two helpers call Task 5's
+   `s1_cache_swap()` and P08's `call_new()`, which do not exist yet, so the package lint
+   (`object_usage_linter`, which also covers `tests/testthat/fixtures/`) reports them. Lint
+   suppressions are not allowed. Task 5 adds `s1_fresh()`, and the first task that needs
+   `s1_test_call()` adds it once P08's `call_new()` exists, both verbatim from the plan. Every
+   other helper is the plan's.
+
+For later P13 tasks:
+
+- Task 4's `s1_request()` must call `adapter$classify$parse(model, status, headers, body,
+  questions)`. `s1_dispatch()` must consume the canonical answers of every adapter
+  (`typesafe-system-one`, the fake, `s1-emulate`, `ollama-system-one`) rather than call
+  `s1_parse_answers()` on them again (plan line 2291; 07 section 3: "must not call the Jev wire
+  parser a second time").
+- P01's `fake_questions_check()` refuses choice criteria without descriptions (`{"dog": null}`,
+  which is 04a's wire shape and what `s1_question(choices = c("dog", "cat"))` sends) with
+  `gptr_error_s1_validation` ("choice and score questions need at least two text criteria";
+  `dev/.validation/P13/task3-fake-probe.log`). Fake-classifier tests of Tasks 4-9 with undescribed
+  choices fail until P01's fake accepts null descriptions or the tests use described choices. That
+  is a decision for P01's owner or the coordinator, outside this lane.
+- Task 8's `s1_run()` should pass `decision = target$model$decision` to `s1_question()`.
+- The `ollama-system-one` task must not reuse `s1_confidence_choice()`/`s1_confidence_score()`
+  (Ollama's confidence is `1 - H(p)/log(N)`). Its own wire normaliser must produce the same
+  canonical shape and validation.
+
+Validation: `progress/P13.md`, Task 3. `^s1-client$`: red `[ FAIL 18 | WARN 0 | SKIP 0 | PASS 0 ]`
+(every failure a missing function), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 190 ]` (the plan's
+literal assertions are 126 of them); lint clean.

@@ -1,0 +1,15 @@
+{
+  "request": {
+    "model": "jev-latest",
+    "state": {"text": "A golden retriever puppy fetched the ball and wagged its tail."},
+    "questions": {
+      "answer": {"type": "noul", "instructions": "Does this text describe a dog? The input is in `text`."}
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {"answer": {"type": "noul", "noul": 0.99}},
+    "usage": {"input_tokens": 296, "output_tokens": 3}
+  }
+}

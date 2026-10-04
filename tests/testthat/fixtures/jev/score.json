@@ -1,0 +1,23 @@
+{
+  "request": {
+    "model": "jev-latest",
+    "state": {"text": "A golden retriever puppy fetched the ball and wagged its tail."},
+    "questions": {
+      "answer": {
+        "type": "score",
+        "instructions": "How positive is the sentiment of the text? The input is in `text`.",
+        "criteria": ["Very negative", "Neutral", "Very positive"]
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "answer": {"type": "score", "score": 1.98, "confidence": 0.97,
+                 "legend": {"0": "Very negative", "1": "Neutral", "2": "Very positive"},
+                 "probabilities": {"0": 0.0, "1": 0.02, "2": 0.98}}
+    },
+    "usage": {"input_tokens": 318, "output_tokens": 14}
+  }
+}

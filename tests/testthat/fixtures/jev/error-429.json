@@ -1,0 +1,5 @@
+{
+  "request": null,
+  "status": 429,
+  "response": {"detail": {"error_type": "rate_limit_error", "message": "Rate limit exceeded."}}
+}

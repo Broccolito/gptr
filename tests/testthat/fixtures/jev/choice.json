@@ -1,0 +1,22 @@
+{
+  "request": {
+    "model": "jev-latest",
+    "state": {"text": "A golden retriever puppy fetched the ball and wagged its tail."},
+    "questions": {
+      "answer": {
+        "type": "choice",
+        "instructions": "Which animal does the text describe? The input is in `text`.",
+        "criteria": {"dog": null, "cat": null, "bird": null, "other": null}
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "answer": {"type": "choice", "choice": "dog", "confidence": 1.0,
+                 "probabilities": {"other": 0.0, "bird": 0.0, "dog": 1.0, "cat": 0.0}}
+    },
+    "usage": {"input_tokens": 312, "output_tokens": 12}
+  }
+}

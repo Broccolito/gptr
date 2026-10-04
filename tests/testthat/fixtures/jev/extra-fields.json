@@ -1,0 +1,22 @@
+{
+  "request": {
+    "model": "jev-latest",
+    "state": {"text": "Loved every page of this novel."},
+    "questions": {
+      "positive": {"type": "noul", "instructions": "Is the review in `text` positive?"},
+      "genre": {"type": "choice", "instructions": "Which genre does `text` review?",
+                "criteria": {"fiction": null, "nonfiction": null}}
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "positive": {"type": "noul", "noul": 0.98, "stats": {}},
+      "genre": {"type": "choice", "choice": "fiction", "confidence": 1.0,
+                "probabilities": {"fiction": 1.0, "nonfiction": 0.0}, "stats": {}}
+    },
+    "usage": {"input_tokens": 448, "output_tokens": 55},
+    "assets_used": null
+  }
+}
