@@ -1,0 +1,74 @@
+[
+  {
+    "name": "print_df",
+    "class": "r_output",
+    "o200k": 855,
+    "text": "   day time  temp activ\n1  346  840 36.33     0\n2  346  850 36.34     0\n3  346  900 36.35     0\n4  346  910 36.42     0\n5  346  920 36.55     0\n6  346  930 36.69     0\n7  346  940 36.71     0\n8  346  950 36.75     0\n9  346 1000 36.81     0\n10 346 1010 36.88     0\n11 346 1020 36.89     0\n12 346 1030 36.91     0\n13 346 1040 36.85     0\n14 346 1050 36.89     0\n15 346 1100 36.89     0\n16 346 1110 36.67     0\n17 346 1120 36.50     0\n18 346 1130 36.74     0\n19 346 1140 36.77     0\n20 346 1150 36.76     0\n21 346 1200 36.78     0\n22 346 1210 36.82     0\n23 346 1220 36.89     0\n24 346 1230 36.99     0\n25 346 1240 36.92     0\n26 346 1250 36.99     0\n27 346 1300 36.89     0\n28 346 1310 36.94     0\n29 346 1320 36.92     0\n30 346 1330 36.97     0\n31 346 1340 36.91     0\n32 346 1350 36.79     0\n33 346 1400 36.77     0\n34 346 1410 36.69     0\n35 346 1420 36.62     0\n36 346 1430 36.54     0\n37 346 1440 36.55     0\n38 346 1450 36.67     0\n39 346 1500 36.69     0\n40 346 1510 36.62     0\n41 346 1520 36.64     0\n42 346 1530 36.59     0\n43 346 1540 36.65     0\n44 346 1550 36.75     0\n45 346 1600 36.80     0\n46 346 1610 36.81     0\n47 346 1620 36.87     0\n48 346 1630 36.87     0\n49 346 1640 36.89     0\n50 346 1650 36.94     0\n51 346 1700 36.98     0\n52 346 1710 36.95     0\n53 346 1720 37.00     0\n54 346 1730 37.07     1\n55 346 1740 37.05     0\n56 346 1750 37.00     0\n57 346 1800 36.95     0\n58 346 1810 37.00     0\n59 346 1820 36.94     0\n60 346 1830 36.88     0"
+  },
+  {
+    "name": "print_tibble",
+    "class": "r_output",
+    "o200k": 270,
+    "text": "# A tibble: 30 x 2\n   weight group\n    <dbl> <fct>\n 1   4.17 ctrl \n 2   5.58 ctrl \n 3   5.18 ctrl \n 4   6.11 ctrl \n 5   4.5  ctrl \n 6   4.61 ctrl \n 7   5.17 ctrl \n 8   4.53 ctrl \n 9   5.33 ctrl \n10   5.14 ctrl \n11   4.81 trt1 \n12   4.17 trt1 \n13   4.41 trt1 \n14   3.59 trt1 \n15   5.87 trt1 \n16   3.83 trt1 \n17   6.03 trt1 \n18   4.89 trt1 \n19   4.32 trt1 \n20   4.69 trt1 \n21   6.31 trt2 \n22   5.12 trt2 \n23   5.54 trt2 \n24   5.5  trt2 \n25   5.37 trt2 \n# i 5 more rows"
+  },
+  {
+    "name": "summary_lm",
+    "class": "r_output",
+    "o200k": 372,
+    "text": "\nCall:\nstats::lm(formula = f, data = d)\n\nResiduals:\n       Min         1Q     Median         3Q        Max \n-6.178e-16 -3.737e-17  2.010e-18  1.139e-16  3.313e-16 \n\nCoefficients: (1 not defined because of singularities)\n             Estimate Std. Error   t value Pr(>|t|)    \n(Intercept) 0.000e+00  9.042e-16 0.000e+00    1.000    \nx2          1.000e+00  6.151e-17 1.626e+16   <2e-16 ***\nx3                 NA         NA        NA       NA    \nx4          4.572e-17  4.318e-17 1.059e+00    0.330    \ny1          5.507e-17  8.567e-17 6.430e-01    0.544    \ny2          2.533e-18  1.059e-16 2.400e-02    0.982    \n---\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1\n\nResidual standard error: 3.057e-16 on 6 degrees of freedom\nMultiple R-squared:      1,\tAdjusted R-squared:      1 \nF-statistic: 2.943e+32 on 4 and 6 DF,  p-value: < 2.2e-16\n"
+  },
+  {
+    "name": "print_misc",
+    "class": "r_output",
+    "o200k": 190,
+    "text": "\nCall:\nglm(formula = am ~ wt, family = binomial, data = mtcars)\n\nCoefficients:\n            Estimate Std. Error z value Pr(>|z|)   \n(Intercept)   12.040      4.510   2.670  0.00759 **\nwt            -4.024      1.436  -2.801  0.00509 **\n---\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1\n\n(Dispersion parameter for binomial family taken to be 1)\n\n    Null deviance: 43.230  on 31  degrees of freedom\nResidual deviance: 19.176  on 30  degrees of freedom\nAIC: 23.176\n\nNumber of Fisher Scoring iterations: 6\n"
+  },
+  {
+    "name": "str",
+    "class": "str",
+    "o200k": 137,
+    "text": "'data.frame':\t64 obs. of  4 variables:\n $ decrease : num  57 95 8 69 92 90 15 2 84 6 ...\n $ rowpos   : num  1 2 3 4 5 6 7 8 1 2 ...\n $ colpos   : num  1 1 1 1 1 1 1 1 2 2 ...\n $ treatment: Factor w/ 8 levels \"A\",\"B\",\"C\",\"D\",..: 4 5 2 8 7 6 3 1 3 2 ..."
+  },
+  {
+    "name": "errors",
+    "class": "error",
+    "o200k": 142,
+    "text": "> nls(y ~ a * x, data = data.frame(x = 1:5, y = 1:5))\nWarning in nls(y ~ a * x, data = data.frame(x = 1:5, y = 1:5)): No starting values specified for some parameters.\nInitializing 'a' to '1.'.\nConsider specifying 'start' or using a selfStart model\nError in nls(y ~ a * x, data = data.frame(x = 1:5, y = 1:5)): number of iterations exceeded maximum of 50\n[status: error; 0 of 1 top-level expressions completed; 0.01s]"
+  },
+  {
+    "name": "json",
+    "class": "json",
+    "o200k": 146,
+    "text": "[\n  {\n    \"carb\": 0.1,\n    \"optden\": 0.086\n  },\n  {\n    \"carb\": 0.3,\n    \"optden\": 0.269\n  },\n  {\n    \"carb\": 0.5,\n    \"optden\": 0.446\n  },\n  {\n    \"carb\": 0.6,\n    \"optden\": 0.538\n  },\n  {\n    \"carb\": 0.7,\n    \"optden\": 0.626\n  },\n  {\n    \"carb\": 0.9,\n    \"optden\": 0.782\n  }\n]"
+  },
+  {
+    "name": "csv",
+    "class": "csv",
+    "o200k": 1025,
+    "text": "\"sr\",\"pop15\",\"pop75\",\"dpi\",\"ddpi\"\n11.43,29.35,2.87,2329.68,2.87\n12.07,23.32,4.41,1507.99,3.93\n13.17,23.8,4.43,2108.47,3.82\n5.75,41.89,1.67,189.13,0.22\n12.88,42.19,0.83,728.47,4.56\n8.79,31.72,2.85,2982.88,2.43\n0.6,39.74,1.34,662.86,2.67\n11.9,44.75,0.67,289.52,6.51\n4.98,46.64,1.06,276.65,3.08\n10.78,47.64,1.14,471.24,2.8\n16.85,24.42,3.93,2496.53,3.99\n3.59,46.31,1.19,287.77,2.19\n11.24,27.84,2.37,1681.25,4.32\n12.64,25.06,4.7,2213.82,4.52\n12.55,23.31,3.35,2457.12,3.44\n10.67,25.62,3.1,870.85,6.28\n3.01,46.05,0.87,289.71,1.48\n7.7,47.32,0.58,232.44,3.19\n1.27,34.03,3.08,1900.1,1.12\n9,41.31,0.96,88.94,1.54\n11.34,31.16,4.19,1139.95,2.99\n14.28,24.52,3.48,1390,3.54\n21.1,27.01,1.91,1257.28,8.21\n3.98,41.74,0.91,207.68,5.81\n10.35,21.8,3.73,2449.39,1.57\n15.48,32.54,2.47,601.05,8.12\n10.25,25.95,3.67,2231.03,3.62\n14.65,24.71,3.25,1740.7,7.66\n10.67,32.61,3.17,1487.52,1.76\n7.3,45.04,1.21,325.54,2.48\n4.44,43.56,1.2,568.56,3.61\n2.02,41.18,1.05,220.56,1.03\n12.7,44.19,1.28,400.06,0.67\n12.78,46.26,1.12,152.01,2\n12.49,28.96,2.85,579.51,7.48\n11.14,31.94,2.28,651.11,2.19\n13.3,31.92,1.52,250.96,2\n11.77,27.74,2.87,768.79,4.35\n6.86,21.44,4.54,3299.49,3.01\n14.13,23.49,3.73,2630.96,2.7\n5.13,43.42,1.08,389.66,2.96\n2.81,46.12,1.21,249.87,1.13\n7.81,23.27,4.46,1813.93,2.01\n7.56,29.81,3.43,4001.89,2.45\n9.22,46.4,0.9,813.39,0.53\n18.56,45.25,0.56,138.33,5.14\n7.72,41.12,1.73,380.47,10.23\n9.24,28.13,2.72,766.54,1.88\n8.89,43.69,2.07,123.58,16.71\n4.71,47.2,0.66,242.69,5.08"
+  },
+  {
+    "name": "r_code",
+    "class": "code",
+    "o200k": 194,
+    "text": "library(shiny)\nlibrary(bslib)\n\nui = page_fillable(\n  h2(\"Car explorer\"),\n  layout_columns(\n    plotOutput(\"plot\", brush = \"brush\"),\n    card(textOutput(\"n\"), tableOutput(\"selected\"), downloadButton(\"download\", \"Download CSV\"))\n  )\n)\n\nserver = function(input, output) {\n  picked = reactive(brushedPoints(cars_df, input$brush, xvar = \"wt\", yvar = \"mpg\")[c(\"name\", \"wt\", \"mpg\", \"hp\")])\n  output$plot = renderPlot(plot(mpg ~ wt, cars_df, pch = 19))\n  output$n = renderText(paste(nrow(picked()), \"selected\"))\n  output$selected = renderTable(picked())\n  output$download = downloadHandler(\"selected.csv\", function(file) write.csv(picked(), file, row.names = FALSE))\n}\n\nshinyApp(ui, server)"
+  },
+  {
+    "name": "markdown",
+    "class": "prose",
+    "o200k": 68,
+    "text": "See [`jev-router.ts`](../examples/extensions/jev-router.ts) for a complete router. It plans on a strong OpenAI Codex model chosen by the Jev classifier, lets that model make the first edit, and then switches once to a cheaper model, accepting a single prompt-cache miss. It keeps the phase as router state."
+  },
+  {
+    "name": "cjk",
+    "class": "prose",
+    "o200k": 152,
+    "text": "\u6570\u636e\u6846 mtcars \u6709 32 \u884c\u548c 11 \u5217\u3002\u5e73\u5747\u6cb9\u8017\u4e3a 20.09 \u82f1\u91cc\u6bcf\u52a0\u4ed1\uff0c\u6c14\u7f38\u6570\u8d8a\u591a\uff0c\u6cb9\u8017\u8d8a\u9ad8\u3002\n\u56de\u5f52\u6a21\u578b\u663e\u793a\uff0c\u91cd\u91cf\u6bcf\u589e\u52a0\u4e00\u5343\u78c5\uff0c\u6cb9\u8017\u5e73\u5747\u4e0b\u964d 5.34\u3002\u6a21\u578b\u7684\u51b3\u5b9a\u7cfb\u6570\u4e3a 0.75\u3002\n\u30c7\u30fc\u30bf\u30d5\u30ec\u30fc\u30e0\u306b\u306f\u6b20\u640d\u5024\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u6b21\u306e\u30b9\u30c6\u30c3\u30d7\u3067\u306f\u3001\u5909\u6570\u3054\u3068\u306e\u5206\u5e03\u3092\u78ba\u8a8d\u3057\u3001\u5916\u308c\u5024\u3092\u8abf\u3079\u307e\u3059\u3002\n\ud55c\uad6d\uc5b4 \uc694\uc57d: \uacb0\uce21\uac12\uc774 \uc5c6\uace0 \ubaa8\ub378\uc740 \uc548\uc815\uc801\uc785\ub2c8\ub2e4.\n\u7ed3\u8bba\uff1a\u5728\u53d1\u9001\u62a5\u544a\u4e4b\u524d\uff0c\u8bf7\u5148\u68c0\u67e5\u6b8b\u5dee\u56fe\u548c\u5f71\u54cd\u70b9\uff0c\u5e76\u5c06\u7ed3\u679c\u4fdd\u5b58\u4e3a CSV \u6587\u4ef6\u3002"
+  },
+  {
+    "name": "cjk_mixed_output",
+    "class": "r_output",
+    "o200k": 203,
+    "text": "'data.frame':\t40 obs. of  4 variables:\n $ sample: chr  \"S01\" \"S02\" \"S03\" \"S04\" ...\n $ tissue: chr  \"\\350\\204\\221\" \"\\350\\202\\272\" \"\\350\\241\\200\\346\\266\\262\" \"\\350\\204\\221\" ...\n $ note  : chr  \"\\345\\274\\202\\345\\270\\270\\345\\200\\274\" \"\\351\\234\\200\\350\\246\\201\\345\\244\\215\\346\\237\\245\" \"\\343\\202\\265\\343\\203\\263\\343\\203\\227\\343\\203\\253\\344\\270\\215\\350\\266\\263\" \"\\346\\255\\243\\345\\270\\270\" ...\n $ value : num  -0.307 1.923 -0.56 2.519 0.651 ..."
+  }
+]
