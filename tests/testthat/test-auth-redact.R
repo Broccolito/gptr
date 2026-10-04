@@ -554,3 +554,78 @@ test_that("the streaming hold limit must be a positive finite integer", {
     expect_error(redact_stream(), class = "gptr_error_invalid_argument")
   }
 })
+
+
+test_that("recorded code replays: exact literals become Sys.getenv(), the rest are flagged", {
+  vault_reset()
+  withr::defer(vault_reset())
+  secret_register(fake_ghp, "GITHUB_PAT", "environment")
+  code = c("req = httr2::request('https://api.github.com/user')",
+           paste0("req = httr2::req_auth_bearer_token(req, '", fake_ghp, "')"),
+           paste0("msg = paste('token:', '", fake_ghp, "')"),
+           paste0("hdr = 'Bearer ", fake_ghp, "'"))
+  h = code_for_history(code)
+  expect_false(grepl(fake_ghp, h, fixed = TRUE))
+  expect_true(grepl("req_auth_bearer_token(req, Sys.getenv(\"GITHUB_PAT\"))", h, fixed = TRUE))
+  expect_true(grepl("paste('token:', Sys.getenv(\"GITHUB_PAT\"))", h, fixed = TRUE))
+  expect_true(grepl("hdr = 'Bearer [secret:GITHUB_PAT]'", h, fixed = TRUE))
+  expect_true(startsWith(h, "# gptr: block needs secrets that are not recorded\n"))
+  expect_identical(attr(h, "needs"), "GITHUB_PAT")
+  expect_silent(parse(text = h))
+  expect_identical(as.character(code_for_history(h)), as.character(h))
+})
+
+test_that("code without secrets passes through unchanged and unflagged", {
+  vault_reset()
+  withr::defer(vault_reset())
+  code = "fit = lm(mpg ~ wt, data = mtcars)\nsummary(fit)"
+  h = code_for_history(code)
+  expect_identical(as.character(h), code)
+  expect_identical(attr(h, "needs"), character())
+  expect_error(code_for_history(1), class = "gptr_error_invalid_argument")
+})
+
+test_that("a secret whose name is not a variable name becomes a flagged marker", {
+  vault_reset()
+  withr::defer(vault_reset())
+  stored = paste0("sk-", "or-v1-FAKEstoredKey0123456789")
+  secret_register(stored, "auth:openrouter", "auth.json")
+  h = code_for_history(paste0("k = '", stored, "'"))
+  flag = "# gptr: block needs secrets that are not recorded"
+  expect_identical(as.character(h), paste0(flag, "\nk = '[secret:auth:openrouter]'"))
+  expect_identical(attr(h, "needs"), character())
+})
+
+test_that("recorded code preserves needs metadata on repeated passes", {
+  vault_reset()
+  withr::defer(vault_reset())
+  secret_register(fake_ghp, "GITHUB_PAT", "environment")
+  first = code_for_history(paste0("token = '", fake_ghp, "'"))
+  expect_identical(code_for_history(first), first)
+  second = code_for_history(structure(c(as.character(first), "value = 1"), needs = "GITHUB_PAT"))
+  expect_identical(attr(second, "needs"), "GITHUB_PAT")
+  expect_silent(parse(text = second))
+})
+
+test_that("recorded code rejects missing code and invalid needs metadata", {
+  for (code in list(NA_character_, c("value = 1", NA_character_))) {
+    expect_error(code_for_history(code), class = "gptr_error_invalid_argument")
+  }
+  for (needs in list(1, NA_character_, "", "auth:openrouter", "TOKEN\n")) {
+    code = structure("value = 1", needs = needs)
+    expect_error(code_for_history(code), class = "gptr_error_invalid_argument")
+  }
+})
+
+test_that("unsafe replay-variable metadata remains a flagged marker", {
+  vault_reset()
+  withr::defer(vault_reset())
+  name = paste0("FAKE_", "TOKEN_NAME")
+  secret_register(name, name, "environment")
+  h = code_for_history(paste0("token = '", name, "'"))
+  want = paste0("# gptr: block needs secrets that are not recorded\ntoken = '[secret:", name, "]'")
+  expect_identical(as.character(h), want)
+  expect_identical(attr(h, "needs"), character())
+  expect_identical(code_for_history(h), h)
+  expect_silent(parse(text = h))
+})

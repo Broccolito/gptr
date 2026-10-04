@@ -279,6 +279,9 @@ code_rewrite_literals = function(code) {
     # only an environment-variable name replays through Sys.getenv(); any other name (for
     # example "auth:openrouter") is left to the marker, which flags the block
     if (is.null(nm) || !grepl("^[A-Za-z_][A-Za-z0-9_]*$", nm)) next
+    # A replay name containing a registered value would itself be redacted on
+    # the next pass. Keep the flagged marker instead of emitting a broken call.
+    if (lits_present(nm, st)) next
     ln = lines[s$line1[i]]
     call = paste0("Sys.getenv(\"", nm, "\")")
     if (identical(substr(ln, s$col1[i], s$col2[i]), s$text[i])) {
@@ -533,4 +536,25 @@ redact_stream = function(profile = "stream") {
   }
   rs$held = function() nchar(rs$pending, type = "bytes")
   rs
+}
+
+
+#' Recorded code for a history document: literal secrets become Sys.getenv("NAME")
+#' @noRd
+code_for_history = function(code) {
+  check_strings(code, "code")
+  needs = attr(code, "needs", exact = TRUE) %||% character()
+  check_strings(needs, "attr(code, \"needs\")")
+  if (any(!grepl("\\A[A-Za-z_][A-Za-z0-9_]*\\z", needs, perl = TRUE))) {
+    gptr_abort("The `needs` attribute must contain environment-variable names.",
+               "invalid_argument", arg = "attr(code, \"needs\")",
+               expected = "environment-variable names")
+  }
+  flag = "# gptr: block needs secrets that are not recorded"
+  rw = code_rewrite_literals(paste(code, collapse = "\n"))
+  out = redact(rw$code, "code")
+  if (grepl("[secret:", out, fixed = TRUE) && !startsWith(out, flag)) {
+    out = paste0(flag, "\n", out)
+  }
+  structure(out, needs = unique(c(needs, rw$needs)))
 }
