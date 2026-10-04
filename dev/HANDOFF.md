@@ -41,9 +41,8 @@ mock correction (`d4aabfb`) and Windows/old-R harness corrections (`285deec`).
 The previous hosted run at `eea1e36` cannot validate them. The corrected checkpoint is published to draft PR #4, hosted run
 `37167848633`; record exact-SHA hosted results when available.
 
-P03 committed tasks are 1–3 and 6–10. P04 committed tasks are 1–7. Read current
-ownership in `PROGRESS.md` before edits. P03 history/scrub/built-in integration
-and P04 child-pipe/limiter/wire/HTTP/retry integration remain. P05 usage is
+P03 committed tasks are 1–4 and 6–11. P04 committed tasks are 1–9. Read current
+ownership in `PROGRESS.md` before edits. P03 scrubber integration and P04 wire/HTTP/retry integration remain. P05 usage is
 committed, and its provider/catalog lane may proceed on actual stable
 prerequisites; no full P05 acceptance is implied.
 
@@ -60,3 +59,12 @@ Latest component details belong in `dev/progress/`; inspect those and Git rather
 than assuming an agent's intended commit happened. The README/About and draft
 PR #4 remain development status. Completed plans remain 0/25 until the recorded
 plan gates, including hosted checks where required, are actually closed.
+
+## Model allocation requested by the maintainer
+
+Use `gpt-6-astra` for implementation and code fixes, and `gpt-6-luna` for test
+execution, lint and validation reporting. Current explicit-model agent ownership
+is in `PROGRESS.md`. Prior agents stopped at safe boundaries and transferred all
+uncommitted changes. Do not restart their superseded lanes or overwrite those
+changes. Keep test evidence tied to the tested source; a model handoff does not
+invalidate prior completed checks or authorize skipping pending regressions.

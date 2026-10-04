@@ -109,3 +109,14 @@ generic message. Held input is discarded; later push/flush calls remain failed.
 Normal bounded streams retain chunk/whole parity. Overflow is an explicit
 termination case, not a parity claim. Contract section 7.3 and the condition
 table record this clarification; the P03 task log owns its regression evidence.
+
+## D-011 — Explicit transport performance acceptance (2026-10-03)
+
+Architecture section 6.18 explicitly requires INFRA-01's first-delta latency
+and six-stream concurrency targets. Preserve those measured performance gates;
+the conventions' general five-second wall-clock guidance does not erase a
+specific higher-authority acceptance requirement. Run the named performance
+checks on a resource-healthy host with competing heavy validation paused, and
+record actual measurements. Ordinary functional tests should prefer event and
+ordering assertions. A timing failure needs investigation, not a silently
+loosened target or a substitute claim based only on receiving callbacks.

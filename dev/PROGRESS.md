@@ -25,12 +25,12 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
   comparison, and R CMD check with 0 errors/warnings/notes. It is published to
   draft PR #4; hosted platform acceptance is in progress. See
   [P02 integrated acceptance](progress/P02-acceptance.md).
-- P03 Tasks 1–3 and 6–10 are committed: vault, whole/streaming redaction,
+- P03 Tasks 1–4 and 6–11 are committed: vault, whole/streaming redaction,
   dotenv loading, credential storage, child environments and advisory secret
-  scanning. History handling, retroactive scrubbing and built-in integration
-  remain. D-010 records the streaming overflow rule that prevents raw leakage.
-- P04 Tasks 1–7 are committed: splitters, requests/retries, supervision/jobs,
-  reactor core and process execution. Child pipes, rate limiting, wire logs and
+  scanning, history handling and built-in integration. Retroactive scrubbing
+  remains. D-010 records the streaming overflow rule that prevents raw leakage.
+- P04 Tasks 1–9 are committed: splitters, requests/retries, supervision/jobs,
+  reactor core, process execution, child pipes and rate limiting. Wire logs and
   HTTP/retry integration remain in progress.
 - P05's independent usage/pricing component is committed with IC-74 unknown-
   usage semantics. No later plan or milestone is declared complete from these
@@ -77,14 +77,19 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Active ownership
 
-- `design_summary`: P03 history handling and final built-in integration.
-- `auth_dotenv`: P03 retroactive scrubbing after the history task hands off.
-- `requirements_audit`: P04 rate limiter (Task 9).
-- `scientific_value`: P04 child pipes and nonblocking stdin (Task 8).
-- `plans_security_review`: independent reviews across the disjoint lanes.
-- `ollama_api_research`: dependency-ready P05 provider/catalog components.
-- Root: P04 wire log/HTTP/retry integration after Task 8, package acceptance,
-  serialized Git/docs queue, GitHub and global records.
+The maintainer requested **Astra for implementation** and **Luna for testing**
+on 2026-10-03. Existing agents handed off at safe boundaries; their unfinished
+changes remain intact. New agents use explicit model selections.
+
+- `astra_auth` (`gpt-6-astra`): P03 retroactive scrubber and auth integration.
+- `astra_transport` (`gpt-6-astra`): P04 wire log, HTTP transfers and retries.
+- `astra_models` (`gpt-6-astra`): P05 credentials, transcript projection and catalog.
+- `astra_review` (`gpt-6-astra`): independent source review across those lanes.
+- `luna_core` (`gpt-6-luna`): P04 and immutable package/hosted validation.
+- `luna_auth_models` (`gpt-6-luna`): focused P03/P05 tests and lint.
+- Root: coordination, serialized Git/docs queue, acceptance decisions, GitHub
+  and global records. Runtime implementation and test execution are delegated
+  to the requested models.
 
 Git commits and generated documentation are serialized. A lane may prepare an
 independent component in parallel, but its plan remains incomplete until all
