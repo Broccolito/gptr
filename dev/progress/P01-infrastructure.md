@@ -19,3 +19,12 @@ Raw output is under ignored `dev/.validation/P01-Tnn-{red,green}.log`.
 - Commit: `test(arch): enforce package layering and kernel SDK boundaries`.
 - Runtime diagnostic outside the test results: installed testthat was built
   under R 4.5.2, while the current runtime is R 4.5.0.
+
+## Task 20 — source rule scanner
+
+- Added parser-based checks for forbidden assignments, dependencies, shared
+  state writes, serialization and source conventions. Negative controls prove
+  that each rule detects its violation; S3/closure fixtures check exemptions.
+- Red filter `lint-rules`: FAIL 4, WARN 0, SKIP 0, PASS 0 (missing scanner).
+- Green with `stop_on_failure = TRUE`: FAIL 0, WARN 0, SKIP 0, PASS 5.
+- Commit: `test(lint): enforce R source rules with negative controls`.
