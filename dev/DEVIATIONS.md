@@ -4095,3 +4095,85 @@ For later P13 tasks:
 Validation: `progress/P13.md`, Task 3. `^s1-client$`: red `[ FAIL 18 | WARN 0 | SKIP 0 | PASS 0 ]`
 (every failure a missing function), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 190 ]` (the plan's
 literal assertions are 126 of them); lint clean.
+
+## D-078 - P13 System 1 requests: the resolved model is preflighted and picks its own adapter, dispatch validates canonical answers without a wire parser, unknown usage and calibration stay NA, the engine is the provider id, a model's decision record lowers the requests in flight (2026-10-04)
+
+P13 Task 4 (`R/s1-client.R`, `tests/testthat/test-s1-client.R`). The transfer, the outcomes, the
+pump, the wait, the rounds and the deduplication follow the plan. Nine points differ from the
+plan literal, each required by IC-74 (07-local-ollama.md) or by the reviewed forward notes of
+D-076 and D-077.
+
+1. **Preflight first, adapter from the model (07 sections 2 and 2.1).** `s1_request()` calls
+   `s1_preflight(model, provider, safety = opts$safety)` before it looks up an adapter or a
+   credential or builds a request, and takes the adapter from the checked model's own api (the
+   provider's api only when the model has none). The plan used `s1_adapter(provider$api)`, so
+   Clef on the mixed `ollama` provider would have reached the chat adapter. `opts$safety` is the
+   run's frozen safety record that P08/P06 hand down; NULL keeps the local-only default. A model
+   whose adapter has no classify functions is refused with `gptr_error_invalid_argument` before
+   any request (the plan failed with "attempt to apply non-function").
+2. **Canonical answers are validated, never parsed again (07 section 3; D-077).** `classify$parse`
+   receives `questions`. `s1_dispatch()` no longer calls `s1_parse_answers()`; the new
+   `s1_check_answers()`, `s1_check_answer()` and `s1_check_probs()` validate the canonical records
+   of every adapter: exactly the question ids, their types, a `prob` in [0, 1], probabilities
+   named by exactly the options (re-keyed into request order, summing to 1 within report 04a's
+   rounding, or all NA when unavailable), a confidence in [0, 1] or NA (never recomputed, since
+   the formulas differ by provider), a choice its probabilities support, a fractional score its
+   probabilities give and a legend named by the levels. They reuse Task 3's generic helpers
+   (`s1_answer_probs()`, `s1_parse_choice()`, `s1_parse_score()`). A failure is a
+   `gptr_error_s1_response` that carries the request id.
+3. **Unknown usage stays unknown (07 section 5; D-076).** The per-request counts are summed with
+   `s1_count()`, so one request without usage makes the total `NA` and `s1_cost()` `NA`. The plan
+   added `%||% 0`.
+4. **Calibration is unknown unless stated (07 section 3; D-073, D-076).** `s1_request()` passes
+   `calibrated = NA` (the plan: `TRUE`), and the results' statements are combined with
+   `s1_meta_combine()`'s rule: TRUE only when every result says TRUE, FALSE when any says FALSE,
+   NA otherwise (the plan kept the last result's `isTRUE()`, turning NA into FALSE). P01's fake
+   reports NA, so the plan's `expect_true(res$calibrated)` became `expect_identical(..., NA)`.
+   Jev answers through `typesafe-system-one` are therefore NA ("calibration unknown") until a
+   later task records calibration evidence for them; contract 5.2's footer example
+   (`jev-1.13.0 . calibrated`) needs that record.
+5. **The engine is the provider id (contract 5.2 as amended by IC-74).** `s1_engine(model)`
+   returns the model's provider id, or `"emulated:structured"` for the `s1-emulate` api; an
+   adapter result's own `engine` still wins (P01's fake reports `"fake"`). The plan's
+   `s1_engine(api)` mapped api names onto a fixed set.
+6. **A model's decision record lowers the requests in flight (07 section 2).**
+   `s1_active_cap(model)` is `min(gptr.s1_max_active, decision$max_active)` (Clef: 1); the global
+   option stays the upper bound. `gptr.s1_max_active` and `gptr.s1_rounds` must be positive whole
+   numbers (`gptr_error_invalid_argument`): with 0 the plan would never start a job and would
+   pump forever. Process-wide admission per server across concurrent System 1 calls is left to
+   the `s1-ollama.R` task.
+7. **Provenance (07 section 3).** The result gains `provenance = list(provider, api, execution,
+   locality, digest, server_version, calibration_provenance)`. The checked model's fields (from
+   P05's discovery evidence) come before what an adapter reports, and locality is `"unknown"`
+   unless one of them establishes it. P01's fake already reports these fields, and without this
+   element the dispatch would drop them.
+8. **Robustness.** Adapter-result and transport-condition fields, and `opts[["provider"]]` and
+   `opts[["safety"]]`, are read with `[[`, because `$` partially matches a longer name (an option
+   `safety_snapshot` must not relax local-only). A request id that is not one non-empty string is
+   ignored, and a result that is not a list is a `gptr_error_s1_response`.
+9. **One score expectation (review round 1; changes Task 3's `s1_parse_score()`, D-077 item 2).**
+   A missing score was filled with the normalised expected level `sum(lv * p) / sum(p)`, but a
+   given score was compared with the raw `sum(lv * p)`. When two-decimal probabilities summed
+   below 1, the dispatch re-check then refused the score the parser had just filled in (5 levels,
+   `{0, 0, 0, 0, 0.98}`: filled 4, raw 3.92, tolerance 0.055). Both now use the normalised
+   expectation, and a given score must lie within
+   `s1_round_tol * (sum(levels) + 1) / min(1, sum(p))` of it, which bounds a score computed from
+   the unrounded probabilities and rounded to two decimals.
+
+For later P13 tasks:
+
+- Task 6's emulation must return canonical records (a score with its `legend`), because
+  `s1_dispatch()` validates them; it passes `calibrated = FALSE`.
+- Task 8's `s1_target_of()` should use `s1_engine(rec)` and keep `calibrated` NA unless calibration
+  evidence is recorded, and `s1_run()` should take `res$calibrated` without `isTRUE()`. It should
+  pass the run's frozen safety record as `opts$safety` and may copy `res$provenance` into `meta`.
+- The `s1-ollama.R` task owns per-server admission across calls.
+
+Validation: `progress/P13.md`, Task 4. `^s1-client$`: red `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 190 ]`
+(every failure a missing `s1_request`, `s1_http`, `s1_wait` or `s1_transport_outcome`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 279 ]`; after review round 1 (items 8 and 9) red
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 282 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 286 ]`.
+A scratch copy with the plan-literal choices (provider api, `calibrated = TRUE`, no decision
+cap, `%||% 0`) and a nested pump that allows every run fails five tests
+(`dev/.validation/P13/task4-negative.log`). Lint is clean.
+

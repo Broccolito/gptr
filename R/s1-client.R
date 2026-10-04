@@ -455,15 +455,23 @@ s1_parse_choice = function(ch, p, keys, conf, bad) {
 
 #' The score of a score answer: within [0, levels - 1] and, when probabilities are known, their
 #' expected level within the rounding of the probabilities; never rounded to a level
+#'
+#' One expectation serves both cases: the expected level of the probabilities normalised to sum
+#' 1. A missing score becomes it, and a given score must lie within the probabilities' rounding
+#' of it, `s1_round_tol * (sum(levels) + 1) / min(1, sum(p))`. That bound holds for a score
+#' computed from the unrounded probabilities and rounded to two decimals, and a score filled in
+#' here passes its own check when the dispatch validates the canonical record again.
 #' @noRd
 s1_parse_score = function(given, p, keys, conf, legend, bad) {
-  known = !anyNA(p)
+  known = !anyNA(p) && sum(p) > 0
   lv = seq_along(keys) - 1
+  expected = if (known) sum(lv * p) / sum(p) else NA_real_
   if (is.null(given)) {
-    sc = if (known && sum(p) > 0) sum(lv * p / sum(p)) else NA_real_
+    sc = expected
   } else {
     sc = s1_num(given)
-    if (!is.na(sc) && known && abs(sc - sum(lv * p)) > s1_round_tol * (sum(lv) + 1) + 1e-9) {
+    tol = s1_round_tol * (sum(lv) + 1) / min(1, sum(p)) + 1e-9
+    if (!is.na(sc) && known && abs(sc - expected) > tol) {
       return(bad("System 1 returned a score that its probabilities do not give."))
     }
   }
@@ -500,4 +508,464 @@ s1_parse_answers = function(answers, questions, model_id = NA_character_) {
     out[[id]] = a
   }
   out
+}
+
+# ---- concurrent requests on the reactor ---------------------------------------------------------
+# Report 04's verification log (item 14) is why this is not httr2: req_perform_parallel() retries
+# 429/503 without bound and ignores max_tries. The client keeps at most `gptr.s1_max_active` jobs
+# in flight (a model's decision record may lower it, IC-74), runs at most `gptr.s1_rounds` rounds
+# and resubmits only retryable failures; the wait between rounds is a reactor timer, never a sleep
+# inside a callback. IC-74 (07-local-ollama.md sections 2-5): the resolved model is preflighted
+# before an adapter, a credential or a state is touched; its own api picks the adapter; every
+# adapter returns canonical answers, which s1_dispatch() validates without a wire parser; unknown
+# usage and calibration stay NA.
+
+#' One HTTP transfer on the reactor; `on_done(status, headers, body)` receives the whole body
+#'
+#' The reactor's own retries are off (`max_attempts = 1`): System 1 retries in bounded rounds that
+#' resubmit only the failed elements (s1_drive()). Admission follows the global `gptr.max_active`
+#' and the provider's token bucket, which holds the provider record's static `rate` (IC-64), so
+#' System 1 admission is process-wide.
+#' @noRd
+s1_http = function(spec, provider, on_done, on_fail) {
+  buf = new.env(parent = emptyenv())
+  buf$chunks = list()
+  reactor_http(spec,
+               on_bytes = function(raw) {
+                 buf$chunks[[length(buf$chunks) + 1L]] = raw
+               },
+               on_done = function(status, headers) {
+                 bytes = do.call(c, buf$chunks)
+                 on_done(status, headers, raw_to_utf8(if (is.null(bytes)) raw() else bytes))
+               },
+               on_fail = on_fail, provider = provider, retry = list(max_attempts = 1L))
+}
+
+#' The outcome of one classify result: ok with the result, or a (retryable?) failure
+#'
+#' A result that is neither a condition nor a list is a response error (never retried).
+#' @noRd
+s1_outcome = function(res, model_id = NA_character_) {
+  if (inherits(res, "condition")) {
+    return(list(ok = FALSE, error = res, retry = s1_retry_of(res),
+                delay = s1_delay(res[["retry_after"]])))
+  }
+  if (!is.list(res)) {
+    err = s1_condition("s1_response", "System 1 returned a result that is not a list.",
+                       model = model_id)
+    return(list(ok = FALSE, error = err, retry = FALSE, delay = NULL))
+  }
+  list(ok = TRUE, value = res)
+}
+
+#' The outcome of a transport failure (a classed, unsignalled condition from the reactor)
+#'
+#' The reactor hands a non-2xx response to `on_fail()` as a condition classified from its status
+#' and body (contract 8.2), so the System 1 class follows the status; timeouts and network
+#' failures without a status are connection errors; a refused redirect is never retried (IC-64).
+#' @noRd
+s1_transport_outcome = function(cnd, model) {
+  st = cnd[["status"]]
+  status = if (is.numeric(st) && length(st) == 1L) as.integer(st) else NA_integer_
+  sub = if (inherits(cnd, "gptr_error_timeout") || inherits(cnd, "gptr_error_network")) {
+    "s1_connection"
+  } else {
+    s1_status_class(status)
+  }
+  err = s1_condition(sub, paste0("System 1 request failed: ", conditionMessage(cnd)), status,
+                     as.character(cnd[["error_type"]] %||% NA_character_)[1L],
+                     as.character(cnd[["request_id"]] %||% NA_character_)[1L], model[["id"]],
+                     retry_after = cnd[["retry_after"]])
+  list(ok = FALSE, error = err,
+       retry = s1_retry_of(err) && !inherits(cnd, "gptr_error_redirect"),
+       delay = s1_delay(cnd[["retry_after"]]))
+}
+
+#' Pump the reactor until `until()` holds
+#'
+#' A nested pump (System 1 called from a router, a hook or model code while another pump runs)
+#' passes no run ids, so it waits for its own transfers and timers and never starts a FIFO tool
+#' of another run (contract 8.2, IC-57).
+#' @noRd
+s1_pump = function(until) {
+  if (reactor_depth() > 0L) {
+    reactor_pump(until = until, allow_runs = character())
+  } else {
+    reactor_pump(until = until)
+  }
+}
+
+#' Wait on the reactor (interruptible; never a sleep inside a callback)
+#' @noRd
+s1_wait = function(seconds) {
+  if (seconds <= 0) return(invisible(NULL))
+  flag = new.env(parent = emptyenv())
+  flag$done = FALSE
+  id = reactor_timer(reactor_now() + seconds, function() {
+    flag$done = TRUE
+  })
+  on.exit(if (!flag$done) reactor_cancel(id), add = TRUE)
+  s1_pump(function() flag$done)
+  invisible(NULL)
+}
+
+#' One round: start the jobs with at most `max_active` in flight and pump until all reported
+#'
+#' `start(k, done)` starts job `k` and returns a reactor id (or NULL for a synchronous job);
+#' `done(outcome)` is called exactly once per job. An interrupt cancels what is still in flight.
+#' @noRd
+s1_round = function(idx, start, max_active) {
+  st = new.env(parent = emptyenv())
+  st$out = vector("list", length(idx))
+  st$next_k = 1L
+  st$active = 0L
+  st$done = 0L
+  st$ids = character()
+  n = length(idx)
+  finish = function(k) {
+    force(k)
+    function(res) {
+      st$out[[k]] = res
+      st$active = st$active - 1L
+      st$done = st$done + 1L
+      invisible(NULL)
+    }
+  }
+  launch = function() {
+    while (st$active < max_active && st$next_k <= n) {
+      k = st$next_k
+      st$next_k = k + 1L
+      st$active = st$active + 1L
+      # do.call() passes values: a lazy `idx[k]` or `finish(k)` would be forced after `k` moved on
+      id = do.call(start, list(idx[k], finish(k)))
+      if (is.character(id) && length(id) == 1L && !is.na(id)) st$ids = c(st$ids, id)
+    }
+    st$done >= n
+  }
+  on.exit(if (st$done < n && length(st$ids)) reactor_cancel(st$ids), add = TRUE)
+  if (!launch()) s1_pump(launch)
+  st$out
+}
+
+#' Bounded rounds: resubmit only retryable failures, waiting the largest requested delay
+#'
+#' Before round r + 1 the client waits for the largest `retry-after` of round r (capped at 60 s)
+#' or else `min(0.5 * 2^(r - 1), 5)` seconds: the TypeSafe SDK schedule (report 04 section 2.6)
+#' without its random jitter, since gptr never touches the RNG (IC-61).
+#' @noRd
+s1_drive = function(n, start, max_active, rounds) {
+  results = vector("list", n)
+  pending = seq_len(n)
+  round = 1L
+  while (length(pending)) {
+    got = s1_round(pending, start, max_active)
+    again = integer()
+    wait = 0
+    for (k in seq_along(pending)) {
+      r = got[[k]]
+      if (isTRUE(r$ok) || !isTRUE(r$retry) || round >= rounds) {
+        results[[pending[k]]] = r
+      } else {
+        again = c(again, pending[k])
+        wait = max(wait, r$delay %||% min(0.5 * 2^(round - 1L), 5))
+      }
+    }
+    if (!length(again)) break
+    s1_wait(min(wait, 60))
+    pending = again
+    round = round + 1L
+  }
+  results
+}
+
+#' The failures of a list of conditions as the `errors` table of meta (NULL when none)
+#' @noRd
+s1_errors_df = function(conditions) {
+  bad = which(!vapply(conditions, is.null, TRUE))
+  if (!length(bad)) return(NULL)
+  data.frame(index = bad, class = vapply(conditions[bad], function(e) class(e)[1L], ""),
+             message = vapply(conditions[bad], conditionMessage, ""), stringsAsFactors = FALSE)
+}
+
+# ---- canonical answers, admission and provenance (IC-74) ----------------------------------------
+
+#' The canonical answers of one state checked against the questions asked (07 section 3)
+#'
+#' Every adapter returns canonical records (typesafe-system-one's parse, P01's fake, s1-emulate,
+#' ollama-system-one), so this common check never runs a wire parser again. It requires an answer
+#' for exactly the questions asked, in their types, and returns them in question order, or the
+#' unsignalled gptr_error_s1_response of the first problem.
+#' @noRd
+s1_check_answers = function(answers, questions, model_id = NA_character_) {
+  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
+  ids = names(questions)
+  got = names(answers)
+  if (!is.list(answers) || is.null(got) || anyNA(got) || anyDuplicated(got) ||
+        length(got) != length(ids) || !setequal(got, ids)) {
+    return(bad("System 1 returned answers that do not match the questions asked."))
+  }
+  out = vector("list", length(ids))
+  names(out) = ids
+  for (id in ids) {
+    a = s1_check_answer(answers[[id]], questions[[id]], bad)
+    if (inherits(a, "condition")) return(a)
+    out[[id]] = a
+  }
+  out
+}
+
+#' One canonical record checked against its question
+#'
+#' `prob` in [0, 1]; probabilities named by exactly the options (re-keyed into request order),
+#' each in [0, 1] and summing to 1 within the two-decimal rounding of report 04a, or all NA
+#' (unavailable); a confidence in [0, 1], or NA when unknown (never recomputed here: the formulas
+#' differ by provider); a choice among the options that its probabilities support; a fractional
+#' score in [0, levels - 1] that its probabilities give; a legend named by the levels.
+#' @noRd
+s1_check_answer = function(a, question, bad) {
+  type = if (is.list(question)) question[["type"]] else NULL
+  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
+    return(bad("System 1 was sent a question without a known type."))
+  }
+  if (!is.list(a) || !identical(a[["type"]], type)) {
+    return(bad(paste0("System 1 returned an answer that is not a canonical ", type, " record.")))
+  }
+  if (identical(type, "noul")) {
+    p = s1_unit(a[["prob"]])
+    if (is.na(p)) return(bad("System 1 returned an invalid probability."))
+    return(list(type = "noul", prob = p))
+  }
+  keys = s1_option_keys(question)
+  if (is.null(keys)) return(bad("System 1 was sent a question without valid options."))
+  p = s1_check_probs(a[["probabilities"]], keys)
+  if (is.character(p)) return(bad(p))
+  conf = a[["confidence"]]
+  if (is.null(conf) || (is.atomic(conf) && length(conf) == 1L && is.na(conf))) {
+    conf = NA_real_
+  } else {
+    conf = s1_unit(conf)
+    if (is.na(conf)) return(bad("System 1 returned an invalid confidence."))
+  }
+  if (identical(type, "choice")) {
+    if (is.null(a[["choice"]])) return(bad("System 1 returned a choice answer without a choice."))
+    return(s1_parse_choice(a[["choice"]], p, keys, conf, bad))
+  }
+  if (is.null(a[["score"]])) return(bad("System 1 returned a score answer without a score."))
+  legend = a[["legend"]]
+  ln = names(legend)
+  if (!is.character(legend) || anyNA(legend) || is.null(ln) || anyNA(ln) || anyDuplicated(ln) ||
+        length(ln) != length(keys) || !setequal(ln, keys)) {
+    return(bad("System 1 returned a score answer without a legend of its levels."))
+  }
+  s1_parse_score(a[["score"]], p, keys, conf, legend[keys], bad)
+}
+
+#' Canonical probabilities: a named double vector over exactly the options, in request order, or
+#' a chr(1) problem; all NA means unavailable (report 04 section 2.9)
+#' @noRd
+s1_check_probs = function(probs, keys) {
+  nm = names(probs)
+  if (!is.numeric(probs) || is.null(nm) || anyNA(nm) || anyDuplicated(nm) ||
+        length(nm) != length(keys) || !setequal(nm, keys)) {
+    return("System 1 returned probabilities that are not named by the options asked.")
+  }
+  if (all(is.na(probs))) return(stats::setNames(rep(NA_real_, length(keys)), keys))
+  s1_answer_probs(as.list(probs), keys)
+}
+
+#' The requests one System 1 call may keep in flight: `gptr.s1_max_active`, lowered by the
+#' model's decision record (`max_active`; Clef: 1, 07 section 2); the global cap stays an upper
+#' bound
+#' @noRd
+s1_active_cap = function(model) {
+  cap = check_number(gptr_opt("s1_max_active"), "gptr.s1_max_active", min = 1, int = TRUE)
+  d = model[["decision"]]
+  own = if (is.list(d)) d[["max_active"]] else NULL
+  if (is.numeric(own) && length(own) == 1L && !is.na(own) && own >= 1) {
+    cap = min(cap, as.integer(own))
+  }
+  cap
+}
+
+#' The calibration of a call: the results' statements (absent ones take `default`) combined
+#' conservatively, TRUE only when every result is calibrated, FALSE when any is explicitly
+#' uncalibrated (emulation), NA otherwise (07 section 3; s1_meta_combine())
+#' @noRd
+s1_calibration = function(default, stated) {
+  if (!length(stated)) return(default)
+  metas = lapply(stated, function(v) list(calibrated = v %||% default))
+  s1_meta_combine(metas)[["calibrated"]] %||% default
+}
+
+#' The provenance of a call (07 section 3): provider id, adapter api, execution kind, locality,
+#' model digest, server version and calibration provenance
+#'
+#' The checked model's fields (P05's discovery evidence, applied by the preflight) come before
+#' what an adapter result reports; locality is "unknown" unless one of them establishes it.
+#' @noRd
+s1_provenance = function(model, values, engine) {
+  chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  place = function(x) chr1(x) && x %in% c("local", "remote", "unknown")
+  pick = function(own, field, valid) {
+    if (valid(own)) return(own)
+    for (v in values) {
+      if (valid(v[[field]])) return(v[[field]])
+    }
+    NULL
+  }
+  given = function(x) !is.null(x)
+  list(provider = model[["provider"]] %||% NA_character_,
+       api = model[["api"]] %||% NA_character_,
+       execution = if (identical(engine, "emulated:structured")) "emulated" else "native",
+       locality = pick(model[["locality"]], "locality", place) %||% "unknown",
+       digest = pick(model[["digest"]], "model_digest", chr1) %||% NA_character_,
+       server_version = pick(model[["server_version"]], "server_version", chr1) %||%
+         NA_character_,
+       calibration_provenance = pick(NULL, "calibration_provenance", given))
+}
+
+#' Deduplicate states, run one job per unique state and shape the result
+#'
+#' Returns `list(answers, conditions, errors, usages, usage = list(input, output, cost),
+#' model_version, request_ids, engine, calibrated, provenance)`; `answers[[i]]` holds the
+#' canonical answers of state i by question id, or NULL when `conditions[[i]]` holds its failure.
+#' Unknown usage stays NA in the sums (IC-74, D-076); `calibrated` is the default unless the
+#' results state it (s1_calibration()).
+#' @noRd
+s1_dispatch = function(model, states, questions, start_for, engine, calibrated) {
+  max_active = s1_active_cap(model)
+  rounds = check_number(gptr_opt("s1_rounds"), "gptr.s1_rounds", min = 1, int = TRUE)
+  n = length(states)
+  keys = vapply(states, canonical_json, "")
+  uniq = which(!duplicated(keys))
+  map = match(keys, keys[uniq])
+  results = s1_drive(length(uniq), start_for(states[uniq]), max_active, rounds)
+  answers = vector("list", n)
+  conditions = vector("list", n)
+  usages = vector("list", n)
+  input = 0
+  output = 0
+  version = NULL
+  rids = character()
+  values = list()
+  for (j in seq_along(results)) {
+    r = results[[j]]
+    if (!isTRUE(r$ok)) next
+    # result fields are read with [[ ]]: `$` would partially match a longer field name
+    v = r$value
+    values[[length(values) + 1L]] = v
+    u = if (is.list(v[["usage"]])) v[["usage"]] else list()
+    input = input + s1_count(u[["input"]])
+    output = output + s1_count(u[["output"]])
+    version = version %||% v[["model_version"]]
+    engine = v[["engine"]] %||% engine
+    rid = s1_request_id(v)
+    if (!is.na(rid)) rids = c(rids, rid)
+  }
+  checked = lapply(results, function(r) {
+    if (!isTRUE(r$ok)) return(r$error)
+    out = s1_check_answers(r$value[["answers"]], questions, model$id)
+    if (inherits(out, "condition")) out$request_id = s1_request_id(r$value)
+    out
+  })
+  for (i in seq_len(n)) {
+    got = checked[[map[i]]]
+    if (inherits(got, "condition")) {
+      conditions[i] = list(got)
+    } else {
+      answers[i] = list(got)
+      usages[i] = list(results[[map[i]]]$value[["usage"]])
+    }
+  }
+  usage = list(input = input, output = output)
+  usage$cost = s1_cost(usage, model)
+  list(answers = answers, conditions = conditions, errors = s1_errors_df(conditions),
+       usages = usages, usage = usage, model_version = version %||% model$id,
+       request_ids = rids, engine = engine,
+       calibrated = s1_calibration(calibrated, lapply(values, function(v) v[["calibrated"]])),
+       provenance = s1_provenance(model, values, engine))
+}
+
+#' The provider's request id of a classify result: one non-empty string, else NA
+#' @noRd
+s1_request_id = function(value) {
+  rid = value[["request_id"]]
+  if (is.character(rid) && length(rid) == 1L && !is.na(rid) && nzchar(rid)) rid else NA_character_
+}
+
+#' The meta$engine of a classifier model: its provider id (contract 5.2 as amended by IC-74; the
+#' built-in providers give "typesafe" and "ollama"), or "emulated:structured" for the s1-emulate
+#' adapter. An adapter result may name its own engine (P01's fake reports "fake").
+#' @noRd
+s1_engine = function(model) {
+  if (identical(model[["api"]], "s1-emulate")) return("emulated:structured")
+  model[["provider"]] %||% NA_character_
+}
+
+#' Send states to a classifier model (contract 7.13; IC-74)
+#'
+#' Preflights the resolved model before anything else (07 section 2.1; `opts$safety` is the run's
+#' frozen safety record from P08/P06, never built from settings or call options; NULL keeps the
+#' local-only default), picks the adapter from the model's own api, deduplicates states, keeps at
+#' most `gptr.s1_max_active` requests in flight (or fewer, by the model's decision record) and
+#' runs at most `gptr.s1_rounds` rounds that resubmit only failures (408, 429, 5xx, network;
+#' `retry-after` capped at 60 s). `opts$provider` is the provider spec, for `model = <spec>`.
+#' Both are read by exact name: a longer option such as `safety_snapshot` is not the safety record.
+#' @return `list(answers = list per state, usage, model_version, request_ids, errors = df)` plus
+#'   `conditions`, `usages`, `engine`, `calibrated` (NA unless the adapter states it) and
+#'   `provenance`.
+#' @noRd
+s1_request = function(model, states, questions, opts = list()) {
+  provider = opts[["provider"]] %||% s1_provider(model$provider)
+  if (is.null(provider)) {
+    gptr_abort(paste0("No provider is registered for the System 1 model ", model$provider, "/",
+                      model$id, "."), "unknown_model", ref = paste0(model$provider, "/", model$id),
+               suggestions = character())
+  }
+  model = s1_preflight(model, provider, safety = opts[["safety"]])
+  api = model[["api"]]
+  if (!is.character(api) || length(api) != 1L || is.na(api)) api = provider[["api"]]
+  adapter = s1_adapter(api)
+  cl = adapter[["classify"]]
+  run = if (is.list(cl)) cl[["run"]] else NULL
+  if (!is.function(run) && !(is.list(cl) && is.function(cl[["build"]]) &&
+                               is.function(cl[["parse"]]))) {
+    gptr_abort(paste0("Model ", model$provider, "/", model$id, " cannot answer System 1 ",
+                      "questions: its adapter ", api, " has no classify functions."),
+               "invalid_argument", arg = "model", expected = "a classifier model")
+  }
+  signal = new.env(parent = emptyenv())
+  signal$aborted = FALSE
+  signal$reason = NULL
+  aopts = list(credential = s1_credential(provider), base_url = s1_base_url(provider),
+               signal = signal, provider = provider)
+  start_for = function(ustates) {
+    if (is.function(run)) {
+      return(function(j, done) {
+        res = tryCatch(run(model, ustates[[j]], questions, aopts), error = function(e) {
+          s1_condition("s1_response", conditionMessage(e), model = model$id)
+        })
+        done(s1_outcome(res, model$id))
+        NULL
+      })
+    }
+    function(j, done) {
+      spec = cl[["build"]](model, ustates[[j]], questions, aopts)
+      spec$request_id = id_new("q", 12L)
+      spec$model = model$id
+      spec$first_byte_timeout = spec[["first_byte_timeout"]] %||% 30
+      spec$idle_timeout = spec[["idle_timeout"]] %||% 30
+      s1_http(spec, provider[["id"]],
+              on_done = function(status, headers, body) {
+                res = tryCatch(cl[["parse"]](model, status, headers, body, questions),
+                               error = function(e) {
+                                 s1_condition("s1_response", conditionMessage(e), status,
+                                              model = model$id)
+                               })
+                done(s1_outcome(res, model$id))
+              },
+              on_fail = function(cnd) done(s1_transport_outcome(cnd, model)))
+    }
+  }
+  s1_dispatch(model, states, questions, start_for, s1_engine(model), NA)
 }
