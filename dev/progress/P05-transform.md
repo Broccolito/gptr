@@ -82,6 +82,10 @@ Raw local evidence: ignored
    warnings or skips, and both source and tests lint clean. Saved evidence:
    `dev/.validation/P05/provider-transform-luna-green.log` and
    `dev/.validation/P05/provider-transform-luna-lint.log`.
+7. Pinned roxygen documentation generation found an unresolved cross-reference
+   to the private `handoff_transform()` helper. Replaced the link with inline
+   code in its roxygen comment; no runtime change. Documentation revalidation
+   is coordinated at the next root documentation window.
 
 Independent source review: plans_security_review/p02_metadata_review confirmed
 both fixes against the contract and found no further issue in that narrow pass;

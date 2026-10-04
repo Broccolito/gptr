@@ -266,7 +266,7 @@ id_alnum9_normaliser = function() {
 #' entry replaces everything before its first kept entry; entries become messages; errored and
 #' aborted assistant messages are dropped; orphaned tool calls get one synthetic error result;
 #' operator messages that arrive while tool results are pending are held until the results are
-#' complete; results that match no pending call are dropped; then [handoff_transform()].
+#' complete; results that match no pending call are dropped; then `handoff_transform()`.
 #' @noRd
 project_messages = function(entries, leaf, target) {
   path = entry_compaction_cut(entry_path(entries, leaf))
