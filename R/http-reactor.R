@@ -259,20 +259,28 @@ reactor_step = function(r, allow_runs, slice_ms, t_end) {
   invisible(NULL)
 }
 
-#' Wait for the next event (this version has only timers, tasks and the FIFO to wait for)
+#' Wait for the next event: timers, tasks, the FIFO and child pipes
 #' @noRd
 reactor_io = function(r, allow_runs, slice_ms, t_end) {
   wait = reactor_wait_ms(r, allow_runs, slice_ms, t_end)
-  if (wait > 0) Sys.sleep(wait / 1000)
+  pollables = reactor_pollables(r)
+  if (length(pollables)) {
+    processx::poll(pollables, as.integer(min(wait, .Machine$integer.max)))
+  } else if (wait > 0) {
+    Sys.sleep(wait / 1000)
+  }
+  reactor_read_procs(r)
+  reactor_drain_stdin(r)
   invisible(NULL)
 }
 
-#' How long this iteration may wait, in milliseconds
+#' How long this iteration may wait, in milliseconds (pending stdin: at most 5 ms)
 #' @noRd
 reactor_wait_ms = function(r, allow_runs, slice_ms, t_end) {
   if (reactor_fifo_ready(r, allow_runs)) return(0)
   now = reactor_now()
   at = min(t_end, reactor_next_due(r))
+  if (length(ls(r$stdin, sorted = FALSE))) at = min(at, now + 0.005)
   max(0, min(as.numeric(slice_ms), (at - now) * 1000))
 }
 
@@ -390,7 +398,10 @@ reactor_cancel = function(ids) {
   invisible(n)
 }
 
-#' Cancel one id (this version knows timers, tasks and FIFO items)
+#' Cancel one id: timers, tasks, FIFO items and process watchers
+#'
+#' A process watcher is removed and its child is interrupted, given the grace period and killed
+#' with its tree (kill_all()); `on_exit` is not called.
 #' @return int(1) 1 when something was cancelled
 #' @noRd
 reactor_cancel_id = function(r, id) {
@@ -407,14 +418,237 @@ reactor_cancel_id = function(r, id) {
     r$fifo = r$fifo[-k]
     return(1L)
   }
+  w = r$procs[[id]]
+  if (!is.null(w)) {
+    rm(list = id, envir = r$procs)
+    reactor_stdin_drop(r, w$p, "The child was cancelled before stdin was delivered.")
+    kill_all(w$p)
+    return(1L)
+  }
   0L
 }
 
-#' Unload cleanup: forget all reactor state
+#' Unload cleanup: kill watched children and forget all reactor state
 #' @noRd
 reactor_shutdown = function() {
-  if (exists("reactor", envir = the, inherits = FALSE)) rm(list = "reactor", envir = the)
+  r = get0("reactor", envir = the, inherits = FALSE)
+  if (is.null(r)) return(invisible(NULL))
+  children = lapply(ls(r$procs, sorted = FALSE), function(id) r$procs[[id]]$p)
+  pending = lapply(ls(r$stdin, sorted = FALSE), function(key) r$stdin[[key]]$p)
+  # In-flight callbacks still hold r. Clear its tables before stopping children so
+  # they cannot deliver more lines or schedule old work after shutdown.
+  for (table in list(r$procs, r$timers, r$tasks)) rm(list = ls(table), envir = table)
+  r$fifo = list()
+  rm(list = "reactor", envir = the)
+  stopped = list()
+  for (p in c(children, pending)) {
+    reactor_stdin_drop(r, p, "The reactor stopped before stdin was delivered.")
+    if (any(vapply(stopped, identical, NA, p))) next
+    try(kill_all(p, grace = 0), silent = TRUE)
+    stopped[[length(stopped) + 1L]] = p
+  }
   invisible(NULL)
 }
 
 on_load(on_unload(reactor_shutdown))
+
+# ---- child-process watchers and non-blocking stdin (IC-60) ---------------------------------
+
+#' Watch a child's pipes
+#'
+#' `on_line(line)` per complete line of `stream` (UTF-8, a trailing carriage return stripped,
+#' at most 512 chunks per iteration, lines up to 16 MiB); `on_stderr(line)` per line of the
+#' other stream when `stream = "stdout"` (drained and dropped when NULL); `on_exit(status)`
+#' once, after the process exited and both pipes reached end of stream. A callback may pump the
+#' reactor, but the watcher's own later lines are delivered only after the callback returned:
+#' work that needs the child's next answer (a request made from inside `on_line`) is scheduled
+#' with `reactor_timer(reactor_now(), fn)` instead of waited for inside the callback.
+#' @return the watcher id
+#' @noRd
+reactor_proc = function(proc, on_line, on_exit, run = NULL, stream = "stdout",
+                        on_stderr = NULL) {
+  check_function(on_line, "on_line")
+  check_function(on_exit, "on_exit")
+  check_function(on_stderr, "on_stderr", null = TRUE)
+  stream = check_choice(stream, c("stdout", "stderr"), "stream")
+  r = reactor_get()
+  id = reactor_id(r)
+  w = new.env(parent = emptyenv())
+  w$id = id
+  w$p = proc
+  w$run = reactor_run_id(run)
+  has_out = isTRUE(tryCatch(proc$has_output_connection(), error = function(e) FALSE))
+  has_err = isTRUE(tryCatch(proc$has_error_connection(), error = function(e) FALSE))
+  other = if (stream == "stdout") "stderr" else "stdout"
+  has_main = if (stream == "stdout") has_out else has_err
+  has_other = if (stream == "stdout") has_err else has_out
+  w$main = if (has_main) line_reader(proc, stream) else NULL
+  w$other = if (has_other) line_reader(proc, other) else NULL
+  w$on_main = on_line
+  w$on_other = if (stream == "stdout") on_stderr else NULL
+  w$on_exit = on_exit
+  assign(id, w, envir = r$procs)
+  id
+}
+
+#' The pipe connections still worth polling
+#'
+#' A watcher whose callback is running (a pump nested inside it) is left out: its unread output
+#' would make every poll of the nested pump return at once.
+#' @noRd
+reactor_pollables = function(r) {
+  out = list()
+  for (id in ls(r$procs, sorted = FALSE)) {
+    w = r$procs[[id]]
+    if (is.null(w) || isTRUE(w$busy)) next
+    p = w$p
+    if (isTRUE(tryCatch(p$is_incomplete_output(), error = function(e) FALSE))) {
+      out[[length(out) + 1L]] = p$get_output_connection()
+    }
+    if (isTRUE(tryCatch(p$is_incomplete_error(), error = function(e) FALSE))) {
+      out[[length(out) + 1L]] = p$get_error_connection()
+    }
+  }
+  out
+}
+
+#' Deliver the ready lines of every watched child; report each exit once
+#'
+#' A watcher whose callback is running is skipped, so a pump nested inside `on_line` (a
+#' `process_jsonl` normaliser whose events reach a hook that calls System 1, IC-57) neither
+#' delivers its later lines re-entrantly or out of order nor reports its exit early or twice.
+#' @noRd
+reactor_read_procs = function(r) {
+  for (id in reactor_ids(r$procs)) {
+    w = r$procs[[id]]
+    if (!is.null(w) && !isTRUE(w$busy)) reactor_read_proc(r, id, w)
+  }
+  invisible(NULL)
+}
+
+#' Deliver one watcher's lines, then its exit; stop as soon as a callback cancelled the watcher
+#' @noRd
+reactor_read_proc = function(r, id, w) {
+  w$busy = TRUE
+  on.exit({
+    w$busy = FALSE
+  }, add = TRUE)
+  live = function() exists(id, envir = r$procs, inherits = FALSE)
+  if (!is.null(w$main)) {
+    for (ln in w$main$read()) {
+      if (!live()) return(invisible(NULL))
+      reactor_call("on_line", w$on_main, ln)
+    }
+  }
+  if (!is.null(w$other)) {
+    lines = w$other$read()
+    if (!is.null(w$on_other)) {
+      for (ln in lines) {
+        if (!live()) return(invisible(NULL))
+        reactor_call("on_stderr", w$on_other, ln)
+      }
+    }
+  }
+  done = (is.null(w$main) || w$main$eof()) && (is.null(w$other) || w$other$eof())
+  alive = tryCatch(w$p$is_alive(), error = function(e) NA)
+  if (done && live() && isFALSE(alive)) {
+    rm(list = id, envir = r$procs)
+    status = tryCatch(w$p$get_exit_status(), error = function(e) NA_integer_)
+    reactor_stdin_drop(r, w$p, "The child exited before stdin was delivered.")
+    proc_release(w$p)
+    reactor_call("on_exit", w$on_exit, if (is.null(status)) NA_integer_ else status)
+  }
+  invisible(NULL)
+}
+
+#' Write pending stdin bytes without blocking; fail buffers that cannot be delivered
+#'
+#' processx's write_input() writes at most about 8 KB per call and returns the rest (report 08
+#' verification: one call truncated a 50 KB prompt), so each child gets up to 64 slices of
+#' 64 KB per iteration and the pump reads the child's output between attempts. A buffer that
+#' made no progress for `gptr.stdin_timeout` seconds is dropped, the child's stdin is closed
+#' and a typed failure is kept for write_all(). Write errors and premature exit likewise
+#' fail instead of claiming delivery; inside a pump failures become registry diagnostics.
+#' @noRd
+reactor_drain_stdin = function(r) {
+  for (key in ls(r$stdin, sorted = FALSE)) {
+    b = r$stdin[[key]]
+    if (!is.null(b) && !isTRUE(b$busy)) reactor_drain_child(r, key, b)
+  }
+  invisible(NULL)
+}
+
+
+#' Fail one owned stdin buffer without exposing its bytes or an arbitrary process error
+#' @noRd
+reactor_stdin_fail = function(r, key, b, message, class = "io") {
+  fields = if (class == "timeout") list(what = "stdin", seconds = b$limit) else
+    list(operation = "write", path = NULL)
+  b$failed = TRUE
+  b$error = gptr_condition(message, class, fields = fields)
+  if (identical(r$stdin[[key]], b)) rm(list = key, envir = r$stdin)
+  try(close(b$p$get_input_connection()), silent = TRUE)
+  if (!isTRUE(b$waited)) registry_diagnostic("reactor", "stdin", class, message)
+  invisible(NULL)
+}
+
+#' Remove a pending buffer only when it belongs to the same original process object
+#' @noRd
+reactor_stdin_drop = function(r, p, message) {
+  key = as.character(p$get_pid())
+  b = r$stdin[[key]]
+  if (!is.null(b) && identical(b$p, p)) {
+    # Reading output after a successful write can observe immediate child exit.
+    # Bytes already accepted by the pipe are complete, even before the drain settles.
+    if (b$pos >= length(b$bytes)) {
+      if (isTRUE(b$close)) try(close(p$get_input_connection()), silent = TRUE)
+      rm(list = key, envir = r$stdin)
+    } else {
+      reactor_stdin_fail(r, key, b, message)
+    }
+  }
+  invisible(NULL)
+}
+
+#' Give one child a bounded write slice, reading ready output between successful writes
+#' @noRd
+reactor_drain_child = function(r, key, b) {
+  b$busy = TRUE
+  on.exit({
+    b$busy = FALSE
+  }, add = TRUE)
+  p = b$p
+  alive = tryCatch(p$is_alive(), error = function(e) NA)
+  if (isFALSE(alive)) {
+    reactor_stdin_fail(r, key, b, "The child exited before stdin was delivered.")
+    return(invisible(NULL))
+  }
+  if (isTRUE(alive)) {
+    k = 0L
+    while (b$pos < length(b$bytes) && k < 64L && identical(r$stdin[[key]], b)) {
+      end = min(length(b$bytes), b$pos + 65536L)
+      slice = b$bytes[(b$pos + 1L):end]
+      rest = tryCatch(p$write_input(slice), error = function(e) NULL)
+      if (!is.raw(rest) || length(rest) > length(slice)) {
+        reactor_stdin_fail(r, key, b, "Could not write the queued bytes to child stdin.")
+        return(invisible(NULL))
+      }
+      written = length(slice) - length(rest)
+      if (written <= 0L) break
+      b$pos = b$pos + written
+      b$last = reactor_now()
+      k = k + 1L
+      reactor_read_procs(r)
+    }
+  }
+  if (!identical(r$stdin[[key]], b)) return(invisible(NULL))
+  if (b$pos >= length(b$bytes)) {
+    if (isTRUE(b$close)) try(close(p$get_input_connection()), silent = TRUE)
+    rm(list = key, envir = r$stdin)
+  } else if (reactor_now() - b$last >= b$limit) {
+    reactor_stdin_fail(r, key, b,
+      paste0("Timed out writing to child stdin: nothing was consumed for ", b$limit, " s."),
+      class = "timeout")
+  }
+  invisible(NULL)
+}

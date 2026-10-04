@@ -308,3 +308,282 @@ test_that("proc_run echo fails closed when streaming redaction exceeds its bound
                         echo = TRUE), class = "gptr_error_redaction_limit")
   expect_identical(paste(emitted, collapse = ""), "")
 })
+
+count_stdin_code = paste0("con = file('stdin', 'rb'); n = 0; repeat { b = readBin(con, 'raw', ",
+                          "65536L); if (!length(b)) break; n = n + length(b) }; ",
+                          "cat(sprintf('%.0f\\n', n))")
+
+test_that("write_all() delivers 2 MB through a pipe and write_close() sends EOF", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", count_stdin_code), stdin = "|")
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  st = new.env()
+  st$out = character()
+  st$status = NULL
+  reactor_proc(p, on_line = function(l) st$out = c(st$out, l),
+               on_exit = function(s) st$status = s)
+  write_all(p, as.raw(rep_len(c(0x61:0x7a, 0x0a), 2e6)))
+  write_close(p)
+  expect_true(reactor_pump(until = function() !is.null(st$status), timeout = 60))
+  expect_identical(st$out, "2000000")
+})
+
+test_that("a 4 MB payload to a child that echoes each line completes without deadlock", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  echo = paste0("con = file('stdin', 'rb'); repeat { x = readLines(con, n = 500L, ",
+                "warn = FALSE); if (!length(x)) break; writeLines(x); flush(stdout()) }")
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", echo), stdin = "|")
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  lines = sprintf("%05d %s", 1:40000, strrep("x", 93))
+  st = new.env()
+  st$n = 0L
+  st$last = ""
+  st$status = NULL
+  reactor_proc(p, on_line = function(l) {
+    st$n = st$n + 1L
+    st$last = l
+  }, on_exit = function(s) st$status = s)
+  write_all(p, paste0(paste(lines, collapse = "\n"), "\n"))
+  write_close(p)
+  expect_true(reactor_pump(until = function() !is.null(st$status), timeout = 120))
+  expect_identical(st$n, 40000L)
+  expect_identical(st$last, lines[40000])
+})
+
+test_that("inside a pump write_all() only queues and the pump drains the buffer", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", count_stdin_code), stdin = "|")
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  st = new.env()
+  st$out = character()
+  st$status = NULL
+  reactor_proc(p, on_line = function(l) st$out = c(st$out, l),
+               on_exit = function(s) st$status = s)
+  reactor_timer(reactor_now(), function() {
+    write_all(p, as.raw(rep_len(0x61, 1e6)))
+    st$queued = exists(as.character(p$get_pid()), envir = reactor_get()$stdin,
+                       inherits = FALSE)
+    write_close(p)
+  })
+  expect_true(reactor_pump(until = function() !is.null(st$status), timeout = 60))
+  expect_true(st$queued)
+  expect_identical(st$out, "1000000")
+})
+
+test_that("write_all() times out on a child that reads nothing and refuses one without a pipe", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  local_gptr_options(stdin_timeout = 1)
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"), stdin = "|",
+                 stdout = NULL, stderr = NULL)
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  err = tryCatch(write_all(p, as.raw(rep_len(0x61, 4e6))), gptr_error_timeout = function(e) e)
+  expect_s3_class(err, "gptr_error_timeout")
+  expect_identical(err$what, "stdin")
+  expect_identical(err$seconds, 1)
+  expect_false(exists(as.character(p$get_pid()), envir = reactor_get()$stdin, inherits = FALSE))
+  q = proc_spawn(rscript_path(), c("--vanilla", "-e", "1"), stdout = NULL, stderr = NULL)
+  withr::defer(kill_all(q, grace = 0))
+  expect_error(write_all(q, "x"), class = "gptr_error_invalid_argument")
+})
+
+local_pipe_state = function(.env = parent.frame()) {
+  old = the$reactor
+  the$reactor = NULL
+  withr::defer({
+    the$reactor = old
+  }, envir = .env)
+  reactor_get()
+}
+
+fake_stdin_child = function(pid = 42L) {
+  p = new.env(parent = emptyenv())
+  p$alive = TRUE
+  p$get_pid = function() pid
+  p$is_alive = function() p$alive
+  p$has_input_connection = function() TRUE
+  p$get_input_connection = function() NULL
+  p$has_output_connection = function() FALSE
+  p$has_error_connection = function() FALSE
+  p$write_input = function(data) data
+  p
+}
+
+test_that("stdin boundary: appending does not reset the no-progress deadline", {
+  r = local_pipe_state()
+  r$depth = 1L
+  now = 0
+  local_mocked_bindings(reactor_now = function() now)
+  local_gptr_options(stdin_timeout = 10)
+  p = fake_stdin_child()
+  write_all(p, "first")
+  b = r$stdin[["42"]]
+  now = 5
+  write_all(p, "second")
+  expect_identical(b$last, 0)
+  now = 11
+  reactor_drain_stdin(r)
+  expect_true(b$failed)
+  expect_false(exists("42", r$stdin, inherits = FALSE))
+})
+
+test_that("stdin boundary: write failure and early exit never report delivery", {
+  r = local_pipe_state()
+  p = fake_stdin_child()
+  p$write_input = function(data) stop("FAKEprivateChildPayload")
+  local_mocked_bindings(reactor_pump = function(...) reactor_drain_stdin(r))
+  err = tryCatch(write_all(p, "payload"), error = identity)
+  expect_s3_class(err, "gptr_error_io")
+  expect_false(grepl("FAKEprivateChildPayload", conditionMessage(err), fixed = TRUE))
+  expect_false(exists("42", r$stdin, inherits = FALSE))
+  p$alive = FALSE
+  expect_error(write_all(p, "payload"), class = "gptr_error_io")
+})
+
+test_that("stdin boundary: buffers remain bound to the exact process object", {
+  r = local_pipe_state()
+  r$depth = 1L
+  p = fake_stdin_child()
+  q = fake_stdin_child()
+  write_all(p, "original")
+  b = r$stdin[["42"]]
+  expect_error(write_all(q, "other"), class = "gptr_error_invalid_argument")
+  expect_identical(b$bytes, charToRaw("original"))
+  write_close(q)
+  expect_false(b$close)
+  write_close(p)
+  expect_true(b$close)
+  expect_error(write_all(p, "after EOF"), class = "gptr_error_invalid_argument")
+})
+
+test_that("stdin boundary: malformed data never enters the queue", {
+  r = local_pipe_state()
+  r$depth = 1L
+  p = fake_stdin_child()
+  for (bad in list(NA_character_, 1, list("payload"), TRUE)) {
+    expect_error(write_all(p, bad), class = "gptr_error_invalid_argument")
+  }
+  expect_length(ls(r$stdin), 0L)
+})
+
+test_that("stdin boundary: cancellation clears only the owned child buffer", {
+  r = local_pipe_state()
+  r$depth = 1L
+  p = fake_stdin_child()
+  q = fake_stdin_child(43L)
+  stopped = list()
+  local_mocked_bindings(kill_all = function(p, ...) {
+    stopped[[length(stopped) + 1L]] <<- p
+    TRUE
+  })
+  id = reactor_proc(p, function(line) NULL, function(status) stop("must not exit"))
+  write_all(p, "one")
+  write_all(q, "two")
+  expect_identical(reactor_cancel(id), 1L)
+  expect_identical(stopped, list(p))
+  expect_false(exists("42", r$stdin, inherits = FALSE))
+  expect_true(exists("43", r$stdin, inherits = FALSE))
+  reactor_shutdown()
+  expect_true(any(vapply(stopped, identical, NA, q)))
+})
+
+test_that("stdin boundary: invalid timeout options do not create pending work", {
+  r = local_pipe_state()
+  r$depth = 1L
+  p = fake_stdin_child()
+  for (bad in list(NA_real_, Inf, -1, "invalid", c(1, 2), 1 + 1i)) {
+    withr::with_options(list(gptr.stdin_timeout = bad), {
+      expect_error(write_all(p, "payload"), class = "gptr_error_invalid_argument")
+    })
+  }
+  expect_length(ls(r$stdin), 0L)
+})
+
+test_that("stdin boundary: uncertain liveness never reports a confirmed exit", {
+  r = local_pipe_state()
+  p = fake_stdin_child()
+  p$is_alive = function() stop("synthetic inaccessible state")
+  p$get_exit_status = function() 0L
+  exited = FALSE
+  released = FALSE
+  local_mocked_bindings(proc_release = function(...) {
+    released <<- TRUE
+  })
+  id = reactor_proc(p, function(line) NULL, function(status) {
+    exited <<- TRUE
+  })
+  reactor_read_procs(r)
+  expect_false(exited)
+  expect_false(released)
+  expect_true(exists(id, r$procs, inherits = FALSE))
+})
+
+test_that("stdin boundary: shutdown during a line callback prevents later delivery", {
+  r = local_pipe_state()
+  p = fake_stdin_child()
+  p$alive = FALSE
+  p$get_exit_status = function() 0L
+  p$has_output_connection = function() TRUE
+  p$read_output = local({
+    read = FALSE
+    function(n) {
+      if (read) return("")
+      read <<- TRUE
+      "first\nsecond\n"
+    }
+  })
+  p$is_incomplete_output = function() FALSE
+  out = character()
+  exited = FALSE
+  local_mocked_bindings(kill_all = function(...) TRUE)
+  reactor_proc(p, function(line) {
+    out <<- c(out, line)
+    reactor_shutdown()
+  }, function(status) {
+    exited <<- TRUE
+  })
+  reactor_read_procs(r)
+  expect_identical(out, "first")
+  expect_false(exited)
+  expect_length(ls(r$procs), 0L)
+})
+
+test_that("stdin boundary: polling clamps oversized wait values to integer milliseconds", {
+  r = local_pipe_state()
+  observed = NULL
+  local_mocked_bindings(
+    reactor_wait_ms = function(...) Inf,
+    reactor_pollables = function(...) list("synthetic connection"),
+    reactor_read_procs = function(...) NULL,
+    reactor_drain_stdin = function(...) NULL
+  )
+  local_mocked_bindings(poll = function(connections, timeout) {
+    observed <<- timeout
+  }, .package = "processx")
+  expect_no_warning(reactor_io(r, NULL, Inf, Inf))
+  expect_identical(observed, .Machine$integer.max)
+})
+
+test_that("stdin boundary: exit immediately after the last accepted byte is successful", {
+  r = local_pipe_state()
+  p = fake_stdin_child()
+  p$write_input = function(data) {
+    p$alive = FALSE
+    raw(0)
+  }
+  p$get_exit_status = function() 0L
+  status = NULL
+  local_mocked_bindings(
+    reactor_pump = function(...) reactor_drain_stdin(r),
+    proc_release = function(...) NULL
+  )
+  reactor_proc(p, function(line) NULL, function(s) {
+    status <<- s
+  })
+  expect_no_error(write_all(p, "all accepted"))
+  expect_identical(status, 0L)
+  expect_length(ls(r$stdin), 0L)
+})

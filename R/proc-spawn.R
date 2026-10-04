@@ -306,3 +306,87 @@ line_reader = function(p, stream = "stdout", max_line = 16 * 1024^2) {
   st$eof = function() st$done
   st
 }
+
+#' Queue bytes for a child's stdin (non-blocking; IC-60)
+#'
+#' chr is written as `charToRaw(as_utf8(x))` (pieces concatenated without separators), raw as
+#' is. Inside a running pump the bytes are only queued: the pump drains them between reads of
+#' the child's output, so a child that echoes what it reads cannot deadlock the reactor.
+#' Outside any pump write_all() pumps the reactor itself (running no FIFO tool) until the
+#' buffer is drained, and signals `gptr_error_timeout` (`what = "stdin"`) when the child
+#' consumed nothing for `gptr.stdin_timeout` seconds.
+#' @param p a processx process started with `stdin = "|"` (otherwise
+#'   `gptr_error_invalid_argument`: processx would refuse every write and the bytes would be
+#'   lost silently).
+#' @param data chr or raw.
+#' @return invisible(p)
+#' @noRd
+write_all = function(p, data) {
+  if (!isTRUE(tryCatch(p$has_input_connection(), error = function(e) FALSE))) {
+    gptr_abort("The child process has no stdin pipe; start it with stdin = \"|\".",
+               "invalid_argument", arg = "p", expected = "a process started with stdin = \"|\"")
+  }
+  if (!is.raw(data)) check_strings(data, "data")
+  limit = stdin_timeout()
+  bytes = if (is.raw(data)) data else charToRaw(as_utf8(paste(data, collapse = "")))
+  if (!length(bytes)) return(invisible(p))
+  r = reactor_get()
+  key = as.character(p$get_pid())
+  b = r$stdin[[key]]
+  if (!is.null(b) && (!identical(b$p, p) || isTRUE(b$close))) {
+    gptr_abort("The stdin buffer is closing or belongs to a different process object.",
+               "invalid_argument", arg = "p", expected = "the same open child stdin")
+  }
+  if (is.null(b)) {
+    b = new.env(parent = emptyenv())
+    b$p = p
+    b$bytes = raw(0)
+    b$pos = 0L
+    b$close = FALSE
+    b$failed = FALSE
+    b$error = NULL
+    b$limit = limit
+    b$waited = FALSE
+    b$last = reactor_now()
+    assign(key, b, envir = r$stdin)
+  }
+  if (b$pos > 0L) {
+    b$bytes = b$bytes[-seq_len(b$pos)]
+    b$pos = 0L
+  }
+  b$bytes = c(b$bytes, bytes)
+  if (r$depth > 0L) return(invisible(p))
+  b$waited = TRUE
+  on.exit({
+    b$waited = FALSE
+  }, add = TRUE)
+  reactor_pump(until = function() !identical(r$stdin[[key]], b),
+               slice_ms = 20L, allow_runs = character())
+  if (!is.null(b$error)) stop(b$error)
+  invisible(p)
+}
+
+#' Close a child's stdin once every queued byte is written (at once when nothing is queued)
+#' @noRd
+write_close = function(p) {
+  b = reactor_get()$stdin[[as.character(p$get_pid())]]
+  if (is.null(b)) {
+    try(close(p$get_input_connection()), silent = TRUE)
+  } else if (identical(b$p, p)) {
+    b$close = TRUE
+  }
+  invisible(p)
+}
+
+
+#' Validate the no-progress deadline before adding work to the reactor
+#' @noRd
+stdin_timeout = function() {
+  limit = gptr_opt("stdin_timeout") %||% 60
+  if (!is.numeric(limit) || is.complex(limit) || length(limit) != 1L ||
+      !is.finite(limit) || limit < 0) {
+    gptr_abort("`gptr.stdin_timeout` must be a finite nonnegative number.", "invalid_argument",
+               arg = "gptr.stdin_timeout", expected = "finite nonnegative seconds")
+  }
+  as.numeric(limit)
+}

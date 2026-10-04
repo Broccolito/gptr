@@ -286,3 +286,90 @@ test_that("callback failures reach the real registry diagnostics", {
   expect_identical(row$message, "reactor integration sentinel")
   expect_length(ls(reactor_get()$tasks), 0L)
 })
+
+test_that("reactor_proc() decodes the pipe path byte-exact under LC_ALL=C", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  withr::local_locale(c(LC_CTYPE = "C"))
+  withr::local_envvar(LC_ALL = "C")
+  bytes = as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9, 0x20, 0xe6, 0x97, 0xa5, 0xe6, 0x9c, 0xac))
+  code = paste0("cat(rawToChar(as.raw(c(", paste0("0x", as.character(bytes), collapse = ", "),
+                ", 0x0d, 0x0a))))")
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))
+  withr::defer(kill_all(p, grace = 0))
+  st = new.env()
+  st$lines = character()
+  st$status = NULL
+  reactor_proc(p, on_line = function(l) st$lines = c(st$lines, l),
+               on_exit = function(s) st$status = s)
+  expect_true(reactor_pump(until = function() !is.null(st$status), timeout = 60))
+  expect_identical(st$status, 0L)
+  expect_length(st$lines, 1L)
+  expect_identical(Encoding(st$lines), "UTF-8")
+  expect_identical(charToRaw(st$lines), bytes)
+})
+
+test_that("reactor_proc() delivers stdout and stderr lines, then the exit status once", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  code = paste0("for (i in 1:3) { cat('out', i, '\\n'); message('err ', i) }; ",
+                "flush(stdout()); quit(status = 3)")
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))
+  withr::defer(kill_all(p, grace = 0))
+  st = new.env()
+  st$out = character()
+  st$err = character()
+  st$exits = integer()
+  reactor_proc(p, on_line = function(l) st$out = c(st$out, l),
+               on_exit = function(s) st$exits = c(st$exits, s),
+               on_stderr = function(l) st$err = c(st$err, l))
+  expect_true(reactor_pump(until = function() length(st$exits) > 0L, timeout = 60))
+  reactor_pump(timeout = 0.3)
+  expect_identical(st$out, c("out 1 ", "out 2 ", "out 3 "))
+  expect_identical(st$err, c("err 1", "err 2", "err 3"))
+  expect_identical(st$exits, 3L)
+})
+
+test_that("reactor_cancel() on a watcher kills the child without calling on_exit", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"))
+  withr::defer(kill_all(p, grace = 0))
+  st = new.env()
+  st$exited = FALSE
+  id = reactor_proc(p, on_line = function(l) NULL, on_exit = function(s) st$exited = TRUE)
+  reactor_pump(timeout = 0.2)
+  expect_identical(reactor_cancel(id), 1L)
+  expect_false(p$is_alive())
+  reactor_pump(timeout = 0.2)
+  expect_false(st$exited)
+})
+
+test_that("a pump nested in on_line never re-enters the watcher and on_exit comes once, last", {
+  skip_on_cran()
+  withr::defer(reactor_shutdown())
+  code = "for (i in 1:4) { cat('line', i, '\\n'); flush(stdout()); Sys.sleep(0.1) }"
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))
+  withr::defer(kill_all(p, grace = 0))
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  st = new.env()
+  st$log = character()
+  st$inside = FALSE
+  st$reentered = FALSE
+  reactor_proc(p, on_line = function(l) {
+    if (st$inside) st$reentered = TRUE
+    st$log = c(st$log, l)
+    if (length(st$log) == 1L) {
+      # what a hook calling System 1 does from inside a process_jsonl stream (IC-57)
+      st$inside = TRUE
+      on.exit({
+        st$inside = FALSE
+      }, add = TRUE)
+      reactor_pump(timeout = 1)
+    }
+  }, on_exit = function(s) st$log = c(st$log, paste("exit", s)))
+  expect_true(reactor_pump(until = function() any(startsWith(st$log, "exit")), timeout = 60))
+  reactor_pump(timeout = 0.3)
+  expect_false(st$reentered)
+  expect_identical(st$log, c(paste("line", 1:4, ""), "exit 0"))
+})
