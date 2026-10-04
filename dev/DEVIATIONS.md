@@ -2918,3 +2918,39 @@ Review round 1 extended item 1 to NA cells and item 2 to NA subcommands: 6 expec
 first added block and a third added block (4); against the round-0 source they fail 4
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
+
+## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
+
+P15 Task 1's plan-literal `doc_format_kv()`, `doc_parse_kv()` and `doc_block_status()`
+(`R/doc-blocks.R`) were changed in three ways. The marker grammar of contract section 11.5 is
+unchanged, and so are the function interfaces.
+1. **Line breaks are quoted.** The plan quoted a value only when it held a blank, tab, quote, `=`
+   or backslash, so a value with a CR or LF (a non-syntactic `gptr_return()` name in `value=`, or
+   a child name in `children=`) was written unquoted and split the one-line `BLOCK_OPEN` marker.
+   The quote class is now `[ \t\r\n"=\\]`; `doc_str_literal()` already writes `\n` and `\r`.
+   Contract 11.5 only says that values containing spaces are quoted, so quoting more values is
+   compatible with it.
+2. **Quoted values are decoded without the R parser.** The plan decoded them with `str2lang()`.
+   In a C locale (the architecture section 9 CI matrix has an `LC_ALL=C` job) the parser rewrites
+   each non-ASCII character of the literal as `<U+00E1>`. `children=` is always quoted, so a
+   non-ASCII team or fan-out child name came back as `an<U+00E1>lisis:s1`, and so did a quoted
+   `value=` name. P06's replay and IC-47 child binding would read the wrong name, and Task 5
+   re-renders parsed headers, so the corruption would be written back into the user's document.
+   The new `doc_str_unquote()` decodes exactly the escapes `doc_str_literal()` writes (backslash,
+   quote, `\n`, `\r`, `\t`); any other escaped character stands for itself, so `\u`/`\x` escapes
+   that a person typed by hand are not interpreted (gptr never writes them). Text that is not one
+   whole quoted literal is kept as written, as before.
+3. **Header keys are matched exactly.** `doc_block_status()` read `header$status`, `$sha`,
+   `$prompt` and `$args`, which partial-match. Unknown keys are kept in a header, so a header
+   with `shaz=` and no `sha=` was reported `user-edited` (and `statusx=undone` as `undone`). It
+   now uses `header[["..."]]`.
+The IC-74 local-model guard needed no code: a local model tag such as `ollama/qwen3:8b` has no
+character of the quote class and is written unquoted and unchanged in `model=` (07 section 6, P15
+row). One expectation pins it.
+
+Validation: `progress/P15.md`, Task 1 (`test-doc-blocks.R`). The plan's 44 expectations are
+unchanged. Fifteen were added: 2 for item 1 (the plan literal writes a newline into the header,
+`task1-red-newline.log`), 1 for the IC-74 model tag, 10 in the block "quoted header values are
+decoded without the R parser, also in a C locale" and 2 for item 3. Against the round-0 source
+the added review-round-1 expectations fail 5 (3 C-locale, 2 partial-match; `task1-fix1-red.log`).
+Final `^doc-blocks$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 59 ]` in the UTF-8 and the C locale.
