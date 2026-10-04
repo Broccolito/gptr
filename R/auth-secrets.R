@@ -625,3 +625,73 @@ secret_scan = function(code, tainted = character()) {
        guard = any(findings$guard),
        assigned = if (length(sources) || taint_hit) unique(assigned) else character())
 }
+
+
+# ---- builtin:secrets (S-11: the built-ins register through the same API as plugins) ----
+
+#' builtin:secrets: secret sources, redaction rules, env aliases and child-environment profiles
+#' @noRd
+builtin_secrets = function(gptr) {
+  gptr$register(gptr_spec(
+    "secret_source", "environment",
+    resolve = function(name, ctx) {
+      v = Sys.getenv(name, unset = "")
+      if (!nzchar(v)) return(NULL)
+      v = as_utf8(v)
+      secret_register(v, name, source = "environment")
+      v
+    },
+    list = function(ctx) {
+      nm = names(Sys.getenv())
+      nm[is_secret_name(nm)]
+    }
+  ))
+  gptr$register(gptr_spec(
+    "secret_source", "dotenv",
+    resolve = function(name, ctx) dotenv_source_resolve(name),
+    list = function(ctx) dotenv_source_list()
+  ))
+  gptr$register(gptr_spec(
+    "secret_source", "auth",
+    resolve = function(name, ctx) {
+      rec = auth_store_read()[[name]]
+      if (!is.list(rec)) return(NULL)
+      v = auth_record_values(rec)[["key"]]
+      if (!is.character(v) || length(v) != 1L || !nzchar(v)) return(NULL)
+      secret_register(v, auth_secret_name(name, "key"), source = "auth.json")
+      v
+    },
+    list = function(ctx) names(auth_store_read()),
+    store = function(name, value, ctx) auth_store_set(name, list(type = "api_key", key = value)),
+    forget = function(name, ctx) auth_store_remove(name)
+  ))
+  gptr$register(gptr_spec(
+    "secret_source", "keyring",
+    resolve = function(name, ctx) {
+      if (!requireNamespace("keyring", quietly = TRUE)) return(NULL)
+      v = tryCatch(keyring::key_get("gptr", name), error = function(e) NULL)
+      if (!is.character(v) || length(v) != 1L || !nzchar(v)) return(NULL)
+      secret_register(v, name, source = "keyring")
+      v
+    },
+    list = function(ctx) {
+      if (!requireNamespace("keyring", quietly = TRUE)) return(character())
+      tryCatch(keyring::key_list("gptr")$username, error = function(e) character())
+    }
+  ))
+  for (r in redact_rules_builtin()) {
+    gptr$register(do.call(gptr_spec, c(list("redaction_rule"), r)))
+  }
+  aliases = alias_builtin()
+  for (canon in names(aliases)) {
+    gptr$register(gptr_spec("env_alias", canon, aliases = aliases[[canon]]))
+  }
+  profiles = child_env_profiles_builtin()
+  for (p in names(profiles)) {
+    gptr$register(do.call(gptr_spec, c(list("child_env", p), profiles[[p]])))
+  }
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE))
+on_load(ext_service_set("secret.lookup", secret_lookup, provided_by = "P03", builtin = "secrets"))

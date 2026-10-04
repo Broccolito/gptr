@@ -369,3 +369,138 @@ test_that("known shell environment dumps include PowerShell and command case var
     expect_identical(secret_scan(paste0("system('", command, "')"))$level, 0L)
   }
 })
+
+
+# registry_all() returns a list named by record name; compare plain names
+spec_names = function(specs) unname(vapply(specs, function(s) s$name, ""))
+
+test_that("builtin:secrets registers sources, 12 rules, the Jev aliases and six profiles", {
+  expect_setequal(spec_names(registry_all("secret_source")),
+                  c("environment", "dotenv", "auth", "keyring"))
+  expect_identical(spec_names(registry_all("redaction_rule")),
+                   c("private-key", "anthropic-key", "openai-key", "google-api-key",
+                     "github-token", "slack-token", "huggingface-token", "aws-access-key", "jwt",
+                     "auth-header", "url-password", "named-secret"))
+  alias = registry_all("env_alias")
+  jev = alias[[match("TYPESAFE_API_KEY", spec_names(alias))]]
+  expect_identical(jev$aliases, c("jev-key", "JEV_KEY", "JEV_API_KEY", "TYPESAFE_KEY"))
+  for (p in c("mcp", "worker", "cli-claude", "cli-codex", "helper", "artifact")) {
+    expect_false(is.null(registry_get("child_env", p)), label = p)
+  }
+  expect_true("CLAUDE_CONFIG_DIR" %in% registry_get("child_env", "cli-claude")$keep)
+  kinds = c("secret_source", "redaction_rule", "env_alias", "child_env")
+  for (s in unlist(lapply(kinds, registry_all), recursive = FALSE)) {
+    expect_true(all(gptr_check(s)$ok), label = paste(s$kind, s$name))
+  }
+})
+
+test_that("the secret.lookup service backs ctx$secret()", {
+  vault_reset()
+  withr::defer(vault_reset())
+  lookup = ext_service_get("secret.lookup")
+  expect_null(lookup("NOPE_P03_TOKEN"))
+  secret_register(paste0("FAKE", "lookupvalue0123"), "P03_LOOKUP_TOKEN", "test")
+  expect_identical(format(lookup("P03_LOOKUP_TOKEN")),
+                   format(secret_lookup("P03_LOOKUP_TOKEN")))
+})
+
+test_that("the environment and auth sources resolve and register values", {
+  vault_reset()
+  withr::defer(vault_reset())
+  withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir(),
+                      P03_SOURCE_TOKEN = "FAKEsourceToken0123")
+  sources = registry_all("secret_source")
+  env_src = sources[[match("environment", spec_names(sources))]]
+  expect_identical(env_src$resolve("P03_SOURCE_TOKEN", NULL), "FAKEsourceToken0123")
+  expect_null(env_src$resolve("P03_UNSET_TOKEN", NULL))
+  expect_true("P03_SOURCE_TOKEN" %in% env_src$list(NULL))
+  expect_identical(redact("FAKEsourceToken0123"), "[secret:P03_SOURCE_TOKEN]")
+  dot_src = sources[[match("dotenv", spec_names(sources))]]
+  expect_null(dot_src$resolve("P03_SOURCE_TOKEN", NULL))      # the test project is not trusted
+  expect_identical(dot_src$list(NULL), character())
+  auth_src = sources[[match("auth", spec_names(sources))]]
+  auth_src$store("openrouter", paste0("sk-", "or-v1-FAKEauthsource0123"), NULL)
+  expect_identical(auth_src$list(NULL), "openrouter")
+  expect_identical(auth_src$resolve("openrouter", NULL), paste0("sk-", "or-v1-FAKEauthsource0123"))
+  expect_true(auth_src$forget("openrouter", NULL))
+})
+
+test_that("plugin records extend the redactor, the alias table and the child profiles", {
+  vault_reset()
+  withr::defer(vault_reset())
+  off1 = gptr_register(gptr_spec("redaction_rule", "demo-token", pattern = "demo_[0-9]{8}",
+                                 anchor = "demo_", marker = "demo-token",
+                                 profiles = c("stream", "code", "context", "persist")))
+  withr::defer(off1())
+  expect_identical(redact("x demo_12345678 y"), "x [secret:demo-token] y")
+  expect_identical(redact("x demo_12345678 y", "user_data"), "x demo_12345678 y")
+  off2 = gptr_register(gptr_spec("env_alias", "SLACK_BOT_TOKEN", aliases = "slack-token"))
+  withr::defer(off2())
+  expect_identical(alias_resolve("slack-token"), "SLACK_BOT_TOKEN")
+  off3 = gptr_register(gptr_spec("child_env", "strict", base = "allowlist", keep = "PATH",
+                                 drop = character(), set = c(STRICT = "1"),
+                                 billing = structure(list(), names = character())))
+  withr::defer(off3())
+  env = child_env("strict")
+  expect_setequal(toupper(names(env)), c("PATH", "STRICT", "R_ENVIRON_USER", "R_PROFILE_USER"))
+})
+
+test_that("a rule that matches its own marker never applies", {
+  vault_reset()
+  withr::defer(vault_reset())
+  # P02's validator may refuse it at registration; otherwise rules_compile() skips it.
+  off = tryCatch(
+    gptr_register(gptr_spec("redaction_rule", "greedy", pattern = "\\[secret:[a-z]+\\]",
+                            anchor = "[secret:", marker = "greedy",
+                            profiles = c("stream", "code", "context", "persist"))),
+    gptr_error_invalid_spec = function(e) function() invisible(NULL)
+  )
+  withr::defer(off())
+  expect_identical(redact("keep [secret:x] as is"), "keep [secret:x] as is")
+})
+
+test_that("loading builtin:secrets registers records without resolving credentials", {
+  vault_reset()
+  withr::defer(vault_reset())
+  old = registry_swap(registry_scratch())
+  withr::defer(registry_swap(old))
+  withr::local_envvar(P03_LOAD_CANARY_TOKEN = "FAKEloadCanary0123456789")
+  fail = function(...) stop("credential resolution must stay lazy")
+  local_mocked_bindings(secret_register = fail, dotenv_source_resolve = fail,
+                        auth_store_read = fail, child_env = fail)
+  expect_true(ext_load(builtin_secrets, source = "builtin:secrets", rank = 6L))
+  expect_null(secret_lookup("P03_LOAD_CANARY_TOKEN"))
+  expect_length(secrets_state()$reg, 0L)
+  records = gptr_registry()
+  expect_identical(nrow(records), 23L)
+  expect_true(all(records$source == "builtin:secrets"))
+})
+
+test_that("builtin:secrets remains available through filters and ctx returns only handles", {
+  vault_reset()
+  withr::defer(vault_reset())
+  old = registry_swap(registry_scratch())
+  withr::defer(registry_swap(old))
+  expect_true(ext_load(builtin_secrets, source = "builtin:secrets", rank = 6L))
+  expect_false(the$builtins$secrets$replaceable)
+  out = registry_filters_set("-builtin:secrets", "user")
+  expect_identical(attr(out, "refused"), "-builtin:secrets")
+  expect_false(is.null(registry_get("secret_source", "environment")))
+  value = paste0("FAKEctxLookup", "0123456789")
+  registered = secret_register(value, "P03_CTX_TOKEN", "test")
+  handle = ctx_new(NULL)$secret("P03_CTX_TOKEN")
+  expect_identical(handle, registered)
+  expect_null(ctx_new(NULL)$secret("P03_UNKNOWN_TOKEN"))
+  expect_false(grepl(value, paste(capture.output(str(handle)), collapse = ""), fixed = TRUE))
+})
+
+test_that("the auth source never treats metadata fields as the API key", {
+  vault_reset()
+  withr::defer(vault_reset())
+  withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
+  auth_store_set("metadata-only", list(type = "api_key", key_hint = "FAKEmetadataOnly0123456789"))
+  src = registry_get("secret_source", "auth")
+  expect_null(src$resolve("metadata-only", NULL))
+  expect_null(secret_lookup("auth:metadata-only"))
+  expect_length(secrets_state()$reg, 0L)
+})
