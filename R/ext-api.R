@@ -59,8 +59,13 @@ ext_state = function(info) {
 
 #' Signal gptr_error_stale_api unless the API object is still current
 #' @noRd
-api_alive = function(info, reg, gen) {
-  current = identical(the$registry, reg) && identical(reg$generation, gen) && !isTRUE(info$unloaded)
+api_alive = function(info, reg, gen, read_only = FALSE) {
+  same = identical(the$registry, reg)
+  # Conformance may inspect a current live API's immutable feature/version contract. It
+  # never authorizes registration or cancellation across the scratch-registry boundary.
+  origin = if (is.environment(the$registry)) the$registry$check_origin else NULL
+  current = (same || (read_only && identical(origin, reg))) &&
+    identical(reg$generation, gen) && !isTRUE(info$unloaded)
   if (!current) {
     gptr_abort(paste0("This extension API object of ", info$source, " is stale: the registry was ",
                       "reloaded or the extension was unloaded. Use the API object passed to the ",
@@ -199,11 +204,11 @@ api_build = function(info, reg) {
     ext_register(info, gptr_hook(event, handler, matcher))
   }
   api$require = function(requires) {
-    api_alive(info, reg, gen)
+    api_alive(info, reg, gen, read_only = TRUE)
     api_require(requires, info$source)
   }
   api$has = function(feature) {
-    api_alive(info, reg, gen)
+    api_alive(info, reg, gen, read_only = TRUE)
     check_string(feature, "feature")
     feature %in% gptr_api()$features
   }

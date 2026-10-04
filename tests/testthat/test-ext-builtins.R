@@ -31,7 +31,9 @@ test_that("failed built-ins are omitted and attempted once per registry", {
     if (calls$n == 1L) stop("planned failure")
     gptr$register(gptr_command("ready", function(args, ctx) "ready"))
   })
-  expect_warning({ failed = ext_load_builtins() }, class = "gptr_warning_plugin")
+  expect_warning({
+    failed = ext_load_builtins()
+  }, class = "gptr_warning_plugin")
   expect_identical(failed, character())
   expect_identical(ext_load_builtins(), character())
   expect_identical(calls$n, 1L)
