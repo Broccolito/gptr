@@ -91,3 +91,14 @@ copy on the hosted oldrel-4 R interpreter, although it does on this Mac. Use
 must force the next edit to copy. The zero-copy requirement for the package's
 fingerprint/save operations and the real edit tests is unchanged. Full Windows
 and old-R acceptance still needs a new hosted run containing these corrections.
+
+## D-010 — Streaming redaction fails closed at its bound (2026-10-03)
+
+The literal P03 Task 3 implementation advances the emit point when a sensitive
+candidate exceeds the hold-back cap, potentially releasing a secret prefix.
+That conflicts with the design's confidentiality guarantee. The stream now
+fails closed with `gptr_error_redaction_limit`, a numeric `limit` field and a
+generic message. Held input is discarded; later push/flush calls remain failed.
+Normal bounded streams retain chunk/whole parity. Overflow is an explicit
+termination case, not a parity claim. Contract section 7.3 and the condition
+table record this clarification; the P03 task log owns its regression evidence.

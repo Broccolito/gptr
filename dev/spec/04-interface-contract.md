@@ -246,6 +246,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 | `stale_block` | `not_recorded` | `document`, `block` | P15 | `replay` mode and the block's prompt or interpolated values changed |
 | `replay_unbound` | `not_recorded` | `block`, `child` | P06 (`gptr_resume(block =)`) | no session is bound to that block in this process (IC-46) |
 | `secret_found` | - | `findings` (df, no values) | P03 (`gptr_scrub(error = TRUE)`) | persisted files contain a registered secret (IC-70) |
+| `redaction_limit` | - | `limit` (characters, no input) | P03 (`redact_stream()`) | an unresolved sensitive candidate exceeds the hold-back cap; the stream fails closed |
 | `doc_write` | - | `path`, `reason` | P15 | a document write failed or was blocked and the caller asked for strictness |
 | `s1` | - | `status`, `error_type`, `request_id`, `model` | P13 | System 1 failure, parent of the next rows |
 | `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` | `s1` | as `s1` | P13 | classified as in 04 §4.12 (scalar calls; vectorised calls give `NA` + one warning) |
@@ -2375,7 +2376,7 @@ ok = ext_load(function(gptr) gptr$register(gptr_command("hi", function(args, ctx
 | `secret_registered_names()` | `auth-secrets.R` | chr of registered variable names (for the classifier's secret guard) | P11 |
 | `redact(x, profile = "persist")` | `auth-redact.R` | chr -> chr (§6.6 `gptr_redact()` semantics) | all sinks |
 | `redact_tree(x, profile = "persist", structural = FALSE)` | `auth-redact.R` | recursive over lists; never touches opaque replay fields (G6 §3.9) | P02, P06, P15 |
-| `redact_stream(profile = "stream")` | `auth-redact.R` | environment with `push(chunk)` -> chr(1) (safe to emit now) and `flush()` -> chr(1); bounded hold-back (G6 §3.6) | P04 (child pipes), P06 (event text), P14 |
+| `redact_stream(profile = "stream")` | `auth-redact.R` | environment with `push(chunk)` -> chr(1) (safe to emit now) and `flush()` -> chr(1); bounded hold-back; fails closed with `redaction_limit` on an unresolved sensitive candidate above the cap (D-010 clarification below) | P04 (child pipes), P06 (event text), P14 |
 | `code_for_history(code)` | `auth-redact.R` | literal secret -> `Sys.getenv("NAME")` | P15 |
 | `dotenv_parse(path)` | `auth-dotenv.R` | df(`name`, `value`, `line`) with attribute `bad_lines` | P03 internal, P08 (trusted project `.env`) |
 | `alias_resolve(names, aliases = NULL)` | `auth-dotenv.R` | chr of canonical names | P03 |
@@ -2397,6 +2398,16 @@ emit_now = rs$push("Authorization: Bearer ab")
 emit_rest = rs$flush()
 env = child_env("worker", provider = "anthropic")
 ```
+
+**D-010 implementation clarification (2026-10-03).** An unresolved sensitive
+candidate must never be made emit-safe merely because it exceeds
+`gptr.stream_hold_max`. In that case the redactor raises
+`gptr_error_redaction_limit` with the numeric `limit` and a generic message that
+contains no input. It discards held text and remains failed: later `push()` or
+`flush()` calls cannot release that candidate. Stream/whole-output parity
+applies within the supported bound; overflow terminates the stream instead of
+returning a partial unredacted candidate. This supersedes the raw-prefix
+overflow fallback in the historical P03 Task 3 example and G6 prototype.
 
 ### 7.4 P04 Reactor and process engine
 
