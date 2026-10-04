@@ -30,6 +30,28 @@ deleted. **All work now happens directly on `main`, with periodic pushes.**
 5. Do not describe a whole plan, milestone, cross-platform gate or release as
    complete from component-level results.
 
+## Cross-plan obligations (later tasks MUST honour these)
+
+Maintained by the coordinator; remove an item only when its owning task lands it.
+
+- **Early lanes.** P12 (all 10 tasks), P09 (Tasks 1-9) and P10 (Tasks 1-7) were run
+  ahead of their declared dependencies, implementing only tasks whose real
+  dependencies existed. Deferred: P09 Tasks 10-11 and P10 Tasks 8-13 (after P07/P08),
+  P12 plan acceptance (after P07).
+- **P12:** two tests skip until P06's run engine (`session_run`) and P07's default
+  `cache_policy`/`request.build` exist; P12 plan acceptance must show them running.
+- **P09 Task 8 temporary guard:** the test "the gptr shim reaches gptr:: when gptr is
+  not visible from envir" skips while P08's `gptr_return()` is absent. **P08 Task 10
+  (session SDK verbs) must delete that guard** and see the test pass (see its D-entry).
+- **D-019 item 5:** `write_all()` blocks on Windows (processx). P04-level decision needed
+  before P18/P19/P20/P22 send large stdin payloads to Windows children.
+- **Hosted CI open items** (`progress/ci-hosted.md`): INFRA-23 CPU 1.060 s once on hosted
+  Windows (non-gating stream); Windows `Rscript*` temp-file NOTE; macOS INFRA-01 gap
+  explanation if it recurs.
+- An untracked `AGENTS.md` (copy of `CLAUDE.md`) appeared in the repository root; it
+  belongs to the maintainer. Do not stage or delete it; it is not in `.Rbuildignore`
+  (a top-level file would add an R CMD check NOTE if it were committed).
+
 ## Pause record (historical, 2026-10-03 18:44 PDT)
 
 The maintainer paused the earlier Codex-driven implementation to transfer work.
