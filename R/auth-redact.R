@@ -409,3 +409,128 @@ gptr_redact = function(x, profile = c("persist", "stream", "context", "code", "u
 }
 
 on_load(redactor_set(redact))
+
+
+#' Where a pending stream buffer may be cut without splitting a secret (G6 section 3.6)
+#' @noRd
+stream_cut = function(s, hold_max) {
+  n = nchar(s)
+  if (!n) return(1L)
+  st = secrets_state()
+  rules = rules_current()
+  cut = n + 1L
+  m = regexpr(paste0("[", token_class, "]+$"), s, perl = TRUE)          # (a) trailing token run
+  if (m > 0L) cut = as.integer(m)
+  lo = max(1L, cut - 64L)                                               # (b) keyword before it
+  pre = substr(s, lo, cut - 1L)
+  k = regexpr("(?:[Bb]earer|BEARER|Basic|BASIC|[A-Z][A-Z0-9_]{2,})[ \\t]*[:=]?[ \\t\"']*$", pre,
+              perl = TRUE)
+  if (k > 0L) cut = lo + as.integer(k) - 1L
+  u = regexpr("[A-Za-z][A-Za-z0-9+.-]*:(?:/(?:/[^/\\s@]*)?)?$", s, perl = TRUE)  # (c) scheme://u:p
+  if (u > 0L) cut = min(cut, as.integer(u))
+  h = regexpr("(?<![A-Za-z0-9-])-{1,5}(?:B(?:E(?:G(?:I(?:N[ A-Z0-9_-]{0,120})?)?)?)?)?$", s,
+              perl = TRUE)                                              # (d) partial PEM header
+  if (h > 0L) cut = min(cut, as.integer(h))
+  b = gregexpr(pem_begin_re, s, perl = TRUE)[[1]]                       # (e) unterminated PEM
+  if (b[1] > 0L) {
+    last = b[length(b)]
+    if (!grepl(pem_end_re, substr(s, last, n), perl = TRUE)) cut = min(cut, as.integer(last))
+  }
+  protected_literals = unique(c(st$lits_odd, redact_known_markers(st)))
+  if (length(protected_literals)) {                                    # (f) odd literals/markers
+    len = min(n, max(nchar(protected_literals)) - 1L)
+    while (len >= 1L) {
+      if (any(startsWith(protected_literals, substr(s, n - len + 1L, n)))) {
+        cut = min(cut, n - len + 1L)
+        break
+      }
+      len = len - 1L
+    }
+  }
+  check_rules = cut <= n && length(rules) > 0L                          # (g) never cut a match
+  if (check_rules && !isTRUE(st$anchor_all)) {
+    check_rules = grepl(st$anchor_re, s, perl = TRUE, useBytes = TRUE)
+  }
+  if (check_rules) {
+    for (r in rules) {
+      anchored = vapply(r$anchor, grepl, NA, x = s, fixed = TRUE, useBytes = TRUE)
+      if (length(r$anchor) && !any(anchored)) next
+      g = gregexpr(r$re, s, perl = TRUE)[[1]]
+      if (g[1] < 0L) next
+      en = g + attr(g, "match.length") - 1L
+      inside = g < cut & en >= cut
+      if (any(inside)) cut = min(g[inside])
+    }
+  }
+  if (n - cut + 1L > hold_max) stream_limit_abort(hold_max)
+  cut
+}
+
+#' Fail closed without including pending text in the condition (D-010)
+#' @noRd
+stream_limit_abort = function(limit) {
+  gptr_abort("Streaming redaction exceeded its holding limit.", "redaction_limit", limit = limit)
+}
+
+#' A streaming redactor: push(chunk) returns redacted text that is safe to emit now
+#' @noRd
+redact_stream = function(profile = "stream") {
+  if (!(is.character(profile) && length(profile) == 1L && profile %in% redact_profiles)) {
+    gptr_abort("`profile` must be one of persist, stream, context, code, user_data.",
+               "invalid_argument", arg = "profile", expected = "a redaction profile")
+  }
+  hold_max = check_number(secrets_opt("stream_hold_max"), "gptr.stream_hold_max",
+                          min = 1, int = TRUE)
+  rs = new.env(parent = emptyenv())
+  rs$pending = ""
+  rs$last = ""   # the last raw character emitted: left context for look-behinds
+  rs$failed = FALSE
+  fail_limit = function() {
+    rs$failed = TRUE
+    rs$pending = ""
+    rs$last = ""
+    stream_limit_abort(hold_max)
+  }
+  guarded_cut = function(text) {
+    tryCatch(stream_cut(text, hold_max), gptr_error_redaction_limit = function(e) fail_limit())
+  }
+  emit = function(raw) {
+    if (!nzchar(raw)) return("")
+    if (!validUTF8(raw)) {
+      rs$last = ""
+      return(redact(raw, profile))
+    }
+    r = redact(paste0(rs$last, raw), profile)
+    keep_all = !nzchar(rs$last) || !startsWith(r, rs$last)
+    out = if (keep_all) r else substr(r, nchar(rs$last) + 1L, nchar(r))
+    rs$last = substr(raw, nchar(raw), nchar(raw))
+    out
+  }
+  rs$push = function(chunk) {
+    if (isTRUE(rs$failed)) fail_limit()
+    if (!length(chunk)) return("")
+    rs$pending = paste0(rs$pending, paste(chunk, collapse = ""))
+    if (!validUTF8(rs$pending)) {
+      # a multi-byte character split across chunks: wait for the rest, within the cap
+      if (nchar(rs$pending, type = "bytes") <= hold_max) return("")
+      fail_limit()
+    }
+    cut = guarded_cut(rs$pending)
+    raw = substr(rs$pending, 1L, cut - 1L)
+    rs$pending = substr(rs$pending, cut, nchar(rs$pending))
+    emit(raw)
+  }
+  rs$flush = function() {
+    if (isTRUE(rs$failed)) fail_limit()
+    if (validUTF8(rs$pending)) {
+      guarded_cut(rs$pending)
+    } else if (nchar(rs$pending, type = "bytes") > hold_max) {
+      fail_limit()
+    }
+    raw = rs$pending
+    rs$pending = ""
+    emit(raw)
+  }
+  rs$held = function() nchar(rs$pending, type = "bytes")
+  rs
+}

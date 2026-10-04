@@ -327,3 +327,230 @@ test_that("an unknown marker name cannot hide a registered credential", {
   expect_false(grepl(fake_jev, out, fixed = TRUE))
   expect_identical(redact(out, "user_data"), out)
 })
+
+
+# Streaming chunk invariance (G6 section 5.2 part 6). A fixed LCG, not R's RNG, drives the chunk
+# sizes, so the user's .Random.seed is never touched.
+lcg_new = function(seed = 42) {
+  state = seed
+  function(n) {
+    out = numeric(n)
+    for (i in seq_len(n)) {
+      state <<- (1103515245 * state + 12345) %% 2^31
+      out[i] = state / 2^31
+    }
+    out
+  }
+}
+
+stream_through = function(rs, text, lcg, max_chunk) {
+  pieces = character()
+  holds = integer()
+  pos = 1L
+  while (pos <= nchar(text)) {
+    k = 1L + floor(lcg(1) * max_chunk)
+    pieces = c(pieces, rs$push(substr(text, pos, pos + k - 1L)))
+    holds = c(holds, rs$held())
+    pos = pos + k
+  }
+  list(text = paste(c(pieces, rs$flush()), collapse = ""), holds = holds)
+}
+
+stream_doc = function() {
+  paste0(
+    "Here is the configuration I found.\n",
+    "TYPESAFE_API_KEY=", fake_jev, "\nThe Anthropic key ", fake_ant, " should never be shown.",
+    " Password: ", fake_odd, " (with spaces).\nAuthorization: Bearer FAKEtoken1234567890abcdef\n",
+    "A url postgres://analyst:FAKEpassw0rd@db.example.test/prod and a PEM:\n",
+    "-----BEGIN PRIVATE ", "KEY-----\nMIIFAKEFAKE\nFAKEFAKE==\n-----END PRIVATE ", "KEY-----\n",
+    "task-force-2026 and sk-learn stay. ", fake_ghp, " goes."
+  )
+}
+
+test_that("a short stream equals whole-text redaction (CRAN-sized)", {
+  vault_reset()
+  withr::defer(vault_reset())
+  register_fakes()
+  text = stream_doc()
+  want = redact(text, "stream")
+  lcg = lcg_new(7)
+  for (trial in 1:10) {
+    expect_identical(stream_through(redact_stream("stream"), text, lcg, 30)$text, want)
+  }
+  expect_false(grepl(fake_ant, want, fixed = TRUE))
+})
+
+test_that("streaming equals whole-text redaction over 400 chunkings; no secret prefix leaks", {
+  skip_on_cran()
+  vault_reset()
+  withr::defer(vault_reset())
+  register_fakes()
+  text = stream_doc()
+  want = redact(text, "stream")
+  lcg = lcg_new(42)
+  fails = 0L
+  leak = FALSE
+  holds = integer()
+  for (trial in 1:400) {
+    got = stream_through(redact_stream("stream"), text, lcg, if (trial <= 200) 9 else 60)
+    if (!identical(got$text, want)) fails = fails + 1L
+    for (sec in c(fake_jev, fake_ant, fake_odd)) {
+      if (grepl(substr(sec, 1, 12), got$text, fixed = TRUE)) leak = TRUE
+    }
+    holds = c(holds, got$holds)
+  }
+  expect_identical(fails, 0L)
+  expect_false(leak)
+  expect_lte(max(holds), 4096L)
+})
+
+test_that("1,000 shuffled documents streamed in chunks of 1-200 characters stay invariant", {
+  skip_on_cran()
+  vault_reset()
+  withr::defer(vault_reset())
+  register_fakes()
+  frags = c(fake_jev, fake_ant, fake_odd, "Bearer FAKEtok3n4567890abcdefgh",
+            "postgres://u:FAKEpw99@h/db",
+            paste0("-----BEGIN EC PRIVATE ", "KEY-----\nMHcFAKE\n-----END EC PRIVATE ", "KEY-----"),
+            fake_ghp, paste0("AI", "zaFAKEfakeFAKEfakeFAKEfakeFAKEfake123"),
+            "task-force-2026", "sk-learn", "The model fit well.",
+            paste0(strrep("`", 3), "r\nfit = lm(y ~ x)\n", strrep("`", 3)),
+            "{\"k\": \"v\"}", "## Heading", "- bullet", "x |> head()",
+            "https://cran.r-project.org/",
+            "TOKEN=", "Password:", "-----", "BEGIN", "sk-", "eyJ", "\n")
+  lcg = lcg_new(42)
+  fails = 0L
+  for (trial in 1:1000) {
+    ord = order(lcg(length(frags)))
+    seps = ifelse(lcg(length(frags)) < 0.5, " ", "\n")
+    doc = paste0(frags[ord], seps, collapse = "")
+    got = stream_through(redact_stream("stream"), doc, lcg, 200)
+    if (!identical(got$text, redact(doc, "stream"))) fails = fails + 1L
+  }
+  expect_identical(fails, 0L)
+})
+
+test_that("the persist profile (NAME=value rule included) is chunk invariant too", {
+  skip_on_cran()
+  vault_reset()
+  withr::defer(vault_reset())
+  register_fakes()
+  text = paste0(stream_doc(), "\nMY_SERVICE_TOKEN     FAKEvalue9876543210\n",
+                "OPENAI_API_KEY=sk-", "proj-FAKEfakeFAKEfakeFAKEfake1234567890abcd\n")
+  want = redact(text, "persist")
+  lcg = lcg_new(3)
+  fails = 0L
+  for (trial in 1:200) {
+    got = stream_through(redact_stream("persist"), text, lcg, if (trial <= 100) 9 else 60)
+    if (!identical(got$text, want)) fails = fails + 1L
+  }
+  expect_identical(fails, 0L)
+})
+
+test_that("a multi-byte character split across chunks is held, not mangled", {
+  vault_reset()
+  withr::defer(vault_reset())
+  rs = redact_stream("stream")
+  e_acute = charToRaw("\u00e9")
+  first = rs$push(rawToChar(e_acute[1]))
+  second = rs$push(paste0(rawToChar(e_acute[2]), " ok"))
+  out = paste0(first, second, rs$flush())
+  expect_identical(first, "")
+  expect_identical(charToRaw(out), charToRaw("\u00e9 ok"))
+  expect_identical(rs$push(NULL), "")
+  expect_error(redact_stream("nope"), class = "gptr_error_invalid_argument")
+})
+
+expect_failed_redaction_stream = function(rs, cnd, limit, sensitive_prefix) {
+  expect_s3_class(cnd, "gptr_error_redaction_limit")
+  if (!inherits(cnd, "gptr_error_redaction_limit")) return(invisible(NULL))
+  expect_identical(cnd$limit, as.integer(limit))
+  expect_null(cnd$call)
+  expect_length(grepRaw(charToRaw(sensitive_prefix), serialize(cnd, NULL)), 0L)
+  expect_identical(rs$held(), 0L)
+  expect_error(rs$push("ordinary follow-up"), class = "gptr_error_redaction_limit")
+  expect_error(rs$flush(), class = "gptr_error_redaction_limit")
+  expect_identical(rs$held(), 0L)
+}
+
+test_that("stream overflow fails closed at every split around the default cap (D-010)", {
+  vault_reset()
+  withr::defer(vault_reset())
+  limit = 4096L
+  value = paste0("FAKE_LONG_PRIVATE_", strrep("x", limit + 32L))
+  secret_register(value, "LONG_TOKEN")
+  for (split in (limit - 2L):(limit + 2L)) {
+    rs = redact_stream()
+    emitted = character()
+    cnd = tryCatch({
+      emitted = c(emitted, rs$push(substr(value, 1L, split)))
+      emitted = c(emitted, rs$push(substring(value, split + 1L)))
+      NULL
+    }, error = identity)
+    expect_failed_redaction_stream(rs, cnd, limit, substr(value, 1L, 16L))
+    expect_identical(paste(emitted, collapse = ""), "")
+  }
+})
+
+test_that("oversized derived credentials and unterminated PEM never emit raw prefixes", {
+  vault_reset()
+  withr::defer(vault_reset())
+  limit = 4096L
+  value = paste0("FAKE LONG PRIVATE ", strrep("x", limit + 32L))
+  secret_register(value, "LONG_TOKEN")
+  pem = paste0("-----BEGIN PRIVATE ", "KEY-----\n", strrep("FAKE_PRIVATE_BODY", 300L))
+  for (text in c(utils::URLencode(value, reserved = TRUE), pem)) {
+    for (split in c(1L, limit - 1L, limit, limit + 1L)) {
+      rs = redact_stream()
+      emitted = character()
+      cnd = tryCatch({
+        emitted = c(emitted, rs$push(substr(text, 1L, split)))
+        emitted = c(emitted, rs$push(substring(text, split + 1L)))
+        NULL
+      }, error = identity)
+      expect_failed_redaction_stream(rs, cnd, limit, substr(text, 1L, 16L))
+      expect_identical(paste(emitted, collapse = ""), "")
+    }
+  }
+})
+
+test_that("flush also rejects oversized pending candidates and leaves failure latched", {
+  vault_reset()
+  withr::defer(vault_reset())
+  rs = redact_stream()
+  pending = paste0("FAKE_PRIVATE_PENDING_", strrep("x", 4100L))
+  rs$pending = pending
+  cnd = tryCatch(rs$flush(), error = identity)
+  expect_failed_redaction_stream(rs, cnd, 4096L, substr(pending, 1L, 16L))
+})
+
+test_that("known markers remain unchanged when streamed across arbitrary character boundaries", {
+  vault_reset()
+  withr::defer(vault_reset())
+  value = paste0("FAKE_", "TOKEN_NAME")
+  secret_register(value, value)
+  text = paste0("before [secret:", value, "] after")
+  want = redact(text, "user_data")
+  for (split in seq_len(nchar(text) - 1L)) {
+    rs = redact_stream("user_data")
+    got = paste0(rs$push(substr(text, 1L, split)), rs$push(substring(text, split + 1L)), rs$flush())
+    expect_identical(got, want)
+  }
+})
+
+
+test_that("invalid byte overflow also clears and permanently stops the stream", {
+  vault_reset()
+  withr::defer(vault_reset())
+  rs = redact_stream()
+  chunk = rawToChar(c(as.raw(255), charToRaw(paste0("FAKE_INVALID_", strrep("x", 4096L)))))
+  cnd = tryCatch(rs$push(chunk), error = identity)
+  expect_failed_redaction_stream(rs, cnd, 4096L, "FAKE_INVALID_")
+})
+
+test_that("the streaming hold limit must be a positive finite integer", {
+  for (limit in list(NA_real_, Inf, 0, 1.5, 1 + 1i)) {
+    withr::local_options(gptr.stream_hold_max = limit)
+    expect_error(redact_stream(), class = "gptr_error_invalid_argument")
+  }
+})
