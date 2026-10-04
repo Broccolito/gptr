@@ -31,10 +31,19 @@ Updated: 2026-10-03. State: active implementation, P01 not yet complete.
 ## Next concrete work
 
 Continue P01 from the latest completed task in `progress/P01.md` and the
-parallel `progress/P01-infrastructure.md`. Tasks 1–4 and 19–21 have focused
-passing checks; full foundation acceptance is pending. The README/About are
+parallel utilities/providers/infrastructure logs. All 21 tasks have
+focused passing checks. Task 18 completed at `7d816e9`; full acceptance is pending.
+P02's first two tasks are uncommitted parallel work, excluded from root's
+forthcoming immutable P01 package-check snapshot. The README/About are
 updated and draft PR #4 tracks the work. roxygen2 7.3.3 is in `dev/.library`;
 use `R_LIBS_USER="$PWD/dev/.library" Rscript --vanilla` for development checks.
 Optional tooling installation is complete (`progress/tooling.md`). Read ownership
 in `PROGRESS.md` before editing or committing. No API should be described as
 available until its implementation is verified.
+
+Capture the completed P01 Git archive before
+integrating P02. Run full tests, lint, explicit connection gate, and R CMD check
+there with the isolated library and local-socket permission. No actual cloud
+providers or credentials are needed. Then enable the hosted matrix at that
+commit; track cross-platform outcomes separately from local results. P02 can
+continue once the snapshot is captured, with serialized docs/Git ownership.

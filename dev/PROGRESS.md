@@ -9,9 +9,13 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 - Active milestone: **M0**, implementing **P01 Foundation**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
   IC-74 adds acceptance work that must be reconciled, not assumed complete.
-- P01 Tasks 1–4 and independent Tasks 19–21 passed focused red/green checks.
+- All 21 P01 tasks passed focused red/green checks and independent review.
+  Full package acceptance and hosted CI are now pending on an immutable snapshot.
   See [core task evidence](progress/P01.md) and
-  [infrastructure evidence](progress/P01-infrastructure.md) for results.
+  [utilities](progress/P01-utilities.md), [provider/helpers](progress/P01-providers.md)
+  and [infrastructure evidence](progress/P01-infrastructure.md) for results.
+- P02 Tasks 1–2 passed 219 assertions and independent review in parallel; P04's independent splitter task
+  passed 70 focused assertions and review. These are not completed plans.
 - The old `get_response()` / `dataframe_to_text()` source and exports were
   already removed by `0a39627`. The README now describes the rebuild and labels
   planned capabilities clearly. GitHub About is updated; work is published in
@@ -45,7 +49,7 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
-| M0 Foundation | P01–P04 | in progress | P01 core/utilities underway; local infrastructure checks passed |
+| M0 Foundation | P01–P04 | in progress | All P01 tasks passed focused checks; integrated acceptance underway |
 | M1 Offline session kernel | P05–P08 | pending | — |
 | M2 Live R agent and decisions | P09–P13 | pending | — |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
@@ -54,15 +58,21 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Active ownership
 
-- `design_summary`: P01 Tasks 1–8 and 13–18, with core task log.
-- `requirements_audit`: P01 Tasks 9–12 after Task 8 handoff; isolated tooling.
+- `design_summary`: P01 core complete; preparing P03 after P02 prerequisites.
+- `requirements_audit`: P01 utilities complete; preparing IC-74/P05 changes.
+- `scientific_value`: P01 provider/helpers complete; available for reactor tasks.
 - `plans_security_review`: independent P01 review, then registry/secrets review.
-- `ollama_api_research`: P02 preparation; awaits foundation activation.
-- Root: P01 Tasks 19–21, integration, GitHub, global ledger and scheduling.
+- `ollama_api_research`: P02 implementation (Tasks 1–2 pending integration).
+- Root: integrated acceptance, P04, GitHub, global ledger and scheduling.
 
 Git commits and generated documentation are serialized. A lane may prepare an
 independent component in parallel, but its plan remains incomplete until all
 prerequisites and acceptance checks pass.
+
+For a full package gate, root creates an immutable archive of the completed
+commit. Uncommitted future-module work is excluded so its forward references
+cannot contaminate an earlier plan's check. Record the exact commit, commands,
+logs and results. A successful snapshot check does not validate later edits.
 
 ## Delivery boundary
 
