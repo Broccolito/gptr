@@ -108,3 +108,40 @@ test_that("fingerprint() is stable, sensitive to sampled values and cheap on ALT
   expect_false(identical(fingerprint(df), fingerprint(transform(df, a = a + 1L))))
   expect_match(fingerprint(new.env()), "^[0-9a-f]{64}$")
 })
+test_that("the copy-safety harness sees str(big) as a copy and a plain edit as in place", {
+  expect_no_copy(setup = "big = runif(5e6)", action = "invisible(NULL)", label = "baseline")
+  expect_failure(expect_no_copy(setup = "big = runif(5e6)", action = "str(big)"))
+})
+
+test_that("the leaf functions fingerprint() and save_rds() leave `big` editable in place", {
+  expect_no_copy(
+    setup = "big = runif(5e6)",
+    action = "fp = get('fingerprint', envir = asNamespace('gptr'))(big)",
+    label = "fingerprint(big)"
+  )
+  expect_no_copy(
+    setup = "big = runif(5e6)",
+    action = "get('save_rds', envir = asNamespace('gptr'))(big, tempfile())",
+    label = "save_rds(big)"
+  )
+})
+
+test_that("in_run_edit counts copies made by the edit inside the action (IC-41)", {
+  script = tracemem_script("big = 1", "act()", "big[1] = 0", "big", in_run_edit = TRUE)
+  expect_true(any(grepl("gptr_fake_provider(", script, fixed = TRUE)))
+  run_edit = "eval(parse(text = fake$script[[1]]$input$code))"
+  expect_no_copy(setup = "big = runif(5e6)", action = run_edit, in_run_edit = TRUE)
+  expect_failure(expect_no_copy(
+    setup = "big = runif(5e6)", action = paste0("y = big; ", run_edit), in_run_edit = TRUE
+  ))
+})
+
+test_that("the copy-safety harness requires a successful child exit", {
+  expect_failure(
+    expect_no_copy(
+      setup = "big = runif(10)", action = "invisible(NULL)",
+      edit = "cat('GPTR-END\\n'); quit(status = 2)"
+    ),
+    "status 2"
+  )
+})

@@ -51,3 +51,17 @@ Owner: scientific_value. Scope: tasks 14-18 only. No Task 13 edits.
   The regression's attempted outside file was itself in a managed temporary directory.
 - Green: provider-fake tests passed 128 assertions, FAIL 0 / WARN 0 / SKIP 0, exit 0.
   Explicit UTF-8 fixture reads follow the conventions. No public documentation changed.
+
+## Task 17 - fresh-process copy-safety harness
+
+- Red: utils-hash reported 3 missing-harness failures plus the existing random-port
+  sandbox restriction (30 assertions passed). Local-socket escalation is required for
+  that pre-existing test; the suite uses no external network.
+- Implemented the fresh-Rscript harness; the initial scoped suite passed 39 assertions.
+  A new regression exposed a false success when a child printed its final marker but
+  exited nonzero (FAIL 1 / PASS 39). The harness now checks exit status as well as the
+  marker. Generated loader paths use R quoting, including apostrophes in checkout paths.
+- Green: escalated offline utils-hash tests passed 40 assertions, FAIL 0 / WARN 0 /
+  SKIP 0, exit 0 (2.6 seconds). This includes the str() negative control, fingerprint()
+  and save_rds() non-retention checks, and edits during/after a simulated run.
+- Scoped lint on helper-tracemem.R and test-utils-hash.R passed. No public docs changed.
