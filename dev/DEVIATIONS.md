@@ -2254,3 +2254,37 @@ five blocks, which are unchanged. Against the plan-literal source the test file 
 added block). Review round 1 added two blocks (12 expectations) for items 4 and 8, red before the
 fix (`[ FAIL 8 | WARN 1 | SKIP 0 | PASS 55 ]`, `task5-fix1-red.log`). Final `^tool-write$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 64 ]`, the same under `LC_ALL=C`.
+
+## D-052 - P09 agent RNG streams: rng_swap() also restores R's generator kind when the user had a seed; the word 2^31 is stored as NA without a warning (2026-10-04)
+
+P09 Task 7's plan-literal `R/eval-core.R` was changed in the two ways below. The signatures of
+`rng_seeds()` and `rng_swap()`, the derivation of IC-61 (24 bytes of sha256, modulo m1 and m2,
+two's complement), the state fields `seed` and `id`, the no-seed branch and the plan's 4 test
+blocks are unchanged.
+
+1. **The user's generator kind is restored when the user had a seed (review round 1).** R keeps
+   the kind internally. The plan put back the user's vector, which is identical, but left the
+   agent's L'Ecuyer-CMRG as R's internal kind until R next read the variable. A user who then
+   removed `.Random.seed` (`rm(list = ls(all.names = TRUE))`) got L'Ecuyer-CMRG from
+   `set.seed(42)`: `runif(1)` gave 0.1738 instead of 0.9148. A later swap made without a seed
+   then read L'Ecuyer-CMRG as the user's kind and kept it in force. This is the defect the plan
+   fixes for the no-seed branch (Self-review ambiguity 16), on the other branch. Now, after the
+   vector is put back, `stats::rbinom(1L, 0L, 0.5)` makes R read the kind from the user's full
+   vector and draws nothing, and the vector is assigned again so it stays identical. The kind is
+   not re-synced from the length-1 kind code, because that path (RNG_Init) drops a cached
+   Box-Muller normal; the full vector keeps it. The call is wrapped in
+   `try(suppressWarnings(...), silent = TRUE)`, so a vector R rejects (wrong length, not
+   integer, an NA or invalid kind) never turns into an error or warning at the end of an agent's
+   evaluation. R checks such a vector again at the user's next draw, as without the swap.
+   `RNGkind()`, `set.seed()`, `sample()` and `runif()` stay unused (IC-61).
+2. **The word 2^31 is stored as `NA_integer_` without a warning.** The plan turned a reduced
+   word of exactly 2147483648 into `-2147483648`, and `as.integer()` made it NA with the warning
+   "NAs introduced by coercion to integer range" (about 6 chances in 2^32 per key). NA is that
+   word's two's-complement bit pattern, R reads it back as 2^31, and a seed with NA words gives
+   reproducible draws. `rng_seeds()` now sets that value to NA before `as.integer()`.
+
+Validation: `progress/P09.md`, Task 7. Six blocks (22 expectations) were added to the plan's 4
+blocks (17). Review round 1 added two blocks (11 expectations): the kind with a seed failed 2
+against the round-0 source (`task7-fix1-red.log`), and a mutant that re-syncs without `try()`
+and `suppressWarnings()` fails the rejected-vector block (`task7-fix1-mutant-notry.log`). Final
+`^eval-core$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 50 ]` (`task7-fix1-green.log`).
