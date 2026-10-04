@@ -86,3 +86,46 @@ mock boundary selection passed **54 assertions**. Scoped source/test lint remain
 **0**. No process was launched or signalled by this regression. The Task 7 suite also
 checks that registration failure invokes cleanup with the exact newly created object.
 Independent source review is clear; this fix is committed separately from Task 7.
+
+## Task 7 - process resolution, spawn, run, and line reader
+
+- Added executable/batch resolution, Unix and Windows shell selection, UTF-16LE
+  PowerShell payloads, UTF-8 spawn arguments/environments, complete stdin files,
+  redirected output with legacy code-page fallback, timeouts, and incremental lines.
+- Complete environments use Task 9's validated names; malformed arguments and input
+  are rejected before launching. Batch metacharacter rejection includes the shim
+  path because that path becomes a cmd.exe argument. Registration failure invokes
+  cleanup on the exact newly created process; marker-write errors now propagate
+  through the separately committed Task 4 correction (`15615bf`).
+- Independent review found the literal plan's echo path bypassed redaction. Each run
+  now holds one actual P03 streaming redactor across output polls and final flush.
+  D-010 overflow propagates; pending text is never emitted as a fallback. Raw returned
+  stdout/stderr remain the process-result data, separate from the redacted echo sink.
+- The orphan fixture uses one parent and one child to respect this lane's two-worker
+  limit. Deferred cleanup retains the child's original ps identity handle; no fresh
+  arbitrary PID lookup is used for signalling.
+
+Validation (2026-10-03):
+
+- Actual test-first baseline: **11 missing-implementation errors / 0 passes**. Expanded
+  validation/cleanup/line-boundary tests before implementation: **15 errors / 0 passes**.
+- Initial full suite: **81 passed / 0 failed / 0 warnings / 0 skipped**. Added echo privacy
+  regressions failed **4 / 82 passed** before the streaming-redactor correction.
+- Final scoped process suite: **86 passed / 0 failed / 0 warnings / 0 skipped**, about
+  5 seconds. Covers UTF-8 under C locale, CP1252 fallback, 2 MB stdin, timeout, synthetic
+  Windows shell rules, line boundaries, exact-object rollback, and SIGTERM orphan sweep.
+- Actual Task 9 integration rerun after proc_spawn became available: **139 passed /
+  0 failed / 0 warnings / 0 skipped**; its Rscript helper now uses the real spawn layer.
+- Scoped lint: **0** across `R/proc-spawn.R` and its test file.
+- Command: `R_LIBS_USER="$PWD/dev/.library" Rscript --vanilla /tmp/gptr-p04-spawn/run-isolated.R test`
+  (`lint` for scoped lint). The isolated runner creates startup HOME/config/cache/data/
+  project directories before loading gptr, strips ambient variables except runtime
+  paths, sets `NOT_CRAN=true` and disables the persistent test supervisor. Child tests
+  run serially, never exceeding the fixture's parent-plus-child pair. macOS ps access
+  requires the approved sandbox escalation; only exact test processes are signalled.
+- The installed testthat startup build-version warning remains outside the reporter;
+  the reporter itself has zero warnings. No keys, models, external network, or unrelated
+  processes were used. Native Windows behavior and complete P04 acceptance remain pending.
+- Independent source review is clear, including the echo correction. Actual P03 Task 3
+  stream dependency is committed as `2739ff2`; no stub is used. Task 8 remains owned
+  by the root agent.
