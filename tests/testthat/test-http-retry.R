@@ -171,3 +171,176 @@ test_that("only recognized error code fields can indicate the spend cap", {
   expect_identical(result$class, c("rate_limit", "provider"))
   expect_null(retry_after_seconds(list(`retry-after` = list(character()))))
 })
+
+test_that("the limiter gates admission from headers and never waits", {
+  ratelimit_update("rl-unit-a", list(`x-ratelimit-remaining-requests` = "2",
+                                     `x-ratelimit-reset-requests` = "400ms"))
+  expect_true(ratelimit_admit("rl-unit-a"))
+  expect_true(ratelimit_admit("rl-unit-a"))
+  expect_false(ratelimit_admit("rl-unit-a"))
+  expect_gt(ratelimit_next("rl-unit-a"), reactor_now())
+  Sys.sleep(0.45)
+  expect_true(ratelimit_admit("rl-unit-a"))
+  expect_true(ratelimit_admit(NULL))
+  ratelimit_update("rl-unit-a2", list(`x-ratelimit-remaining-requests` = "0",
+                                      `x-ratelimit-reset-requests` = "30s"))
+  t0 = reactor_now()
+  expect_false(ratelimit_admit("rl-unit-a2"))
+  # the window lasts 30 s: an admission that waited for it would take that long
+  expect_lt(reactor_now() - t0, 5)
+})
+
+test_that("a 429 retry-after blocks the provider and static rates feed the same bucket", {
+  ratelimit_update("rl-unit-b", list(`retry-after` = "1"))
+  expect_false(ratelimit_admit("rl-unit-b"))
+  ratelimit_set("rl-unit-c", list(requests_per_s = 2))
+  expect_true(ratelimit_admit("rl-unit-c"))
+  expect_true(ratelimit_admit("rl-unit-c"))
+  expect_false(ratelimit_admit("rl-unit-c"))
+  expect_lt(ratelimit_next("rl-unit-c") - reactor_now(), 0.6)
+})
+
+test_that("Anthropic token headers block until their reset", {
+  reset = format(as.POSIXct(Sys.time() + 30), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  ratelimit_update("rl-unit-d", list(`anthropic-ratelimit-tokens-remaining` = "0",
+                                     `anthropic-ratelimit-tokens-reset` = reset))
+  expect_false(ratelimit_admit("rl-unit-d"))
+  expect_gt(ratelimit_next("rl-unit-d") - reactor_now(), 20)
+})
+
+test_that("a retry-after longer than gptr.max_retry_delay parks the provider for the cap only", {
+  local_gptr_options(max_retry_delay = 2)
+  ratelimit_update("rl-unit-e", list(`retry-after` = "3600"))
+  expect_false(ratelimit_admit("rl-unit-e"))
+  expect_lt(ratelimit_next("rl-unit-e") - reactor_now(), 2.1)
+  expect_true(ratelimit_admit("rl-unit-unknown"))
+})
+
+test_that("static rates come from the provider record through the registry", {
+  local_mocked_bindings(registry_get = function(kind, name, session = NULL) {
+    if (identical(kind, "provider") && identical(name, "rl-unit-typesafe")) {
+      list(rate = list(requests_per_s = 40, tokens_per_s = 1e5))
+    }
+  })
+  st = ratelimit_get("rl-unit-typesafe")
+  expect_identical(st$rate$requests_per_s, 40)
+  admitted = sum(vapply(1:60, function(i) ratelimit_admit("rl-unit-typesafe"), NA))
+  expect_gte(admitted, 40L)
+  expect_lt(admitted, 60L)
+})
+
+test_that("fractional static rates permit one request and refill without moving deadlines", {
+  clock = new.env()
+  clock$now = 100
+  local_mocked_bindings(reactor_now = function() clock$now)
+  ratelimit_set("rl-fractional", list(requests_per_s = 0.5))
+  expect_true(ratelimit_admit("rl-fractional"))
+  expect_false(ratelimit_admit("rl-fractional"))
+  expect_equal(ratelimit_next("rl-fractional"), 102)
+  clock$now = 101
+  expect_equal(ratelimit_next("rl-fractional"), 102)
+  clock$now = 102
+  expect_identical(ratelimit_next("rl-fractional"), Inf)
+  expect_true(ratelimit_admit("rl-fractional"))
+  expect_false(ratelimit_admit("rl-fractional"))
+})
+
+test_that("static rates and provider identities reject invalid values without mutation", {
+  st = ratelimit_set("rl-validation", list(requests_per_s = 2))
+  for (value in list(0, -1, Inf, NA_real_, NaN, 1 + 1i, "2", TRUE, c(1, 2))) {
+    expect_error(ratelimit_set("rl-validation", list(requests_per_s = value)),
+                 class = "gptr_error_invalid_argument")
+    expect_identical(st$rate$requests_per_s, 2)
+    expect_error(ratelimit_set("rl-validation", list(tokens_per_s = value)),
+                 class = "gptr_error_invalid_argument")
+  }
+  expect_error(ratelimit_set("rl-validation", list(2)), class = "gptr_error_invalid_argument")
+  expect_error(ratelimit_set("rl-validation", list(other = 2)),
+               class = "gptr_error_invalid_argument")
+  for (provider in list("", NA_character_, character(), c("a", "b"), 1)) {
+    expect_error(ratelimit_get(provider), class = "gptr_error_invalid_argument")
+  }
+  local_mocked_bindings(registry_get = function(...) list(rate = list(requests_per_s = Inf)))
+  expect_error(ratelimit_get("rl-invalid-registry"), class = "gptr_error_invalid_argument")
+})
+
+test_that("retry cooldown does not exhaust a positive long-lived request window", {
+  clock = new.env()
+  clock$now = 100
+  local_mocked_bindings(reactor_now = function() clock$now)
+  local_gptr_options(max_retry_delay = 2)
+  ratelimit_update("rl-cooldown", list(`x-ratelimit-remaining-requests` = "5",
+    `x-ratelimit-reset-requests` = "3600s", `retry-after` = "10"))
+  expect_false(ratelimit_admit("rl-cooldown"))
+  expect_equal(ratelimit_next("rl-cooldown"), 102)
+  clock$now = 103
+  expect_true(ratelimit_admit("rl-cooldown"))
+  expect_equal(ratelimit_get("rl-cooldown")$req_remaining, 4)
+  for (cap in list(NA_real_, Inf, -1, "2", c(1, 2), 1 + 1i)) {
+    withr::with_options(list(gptr.max_retry_delay = cap), {
+      expect_error(ratelimit_update("rl-cooldown", list(`retry-after` = "1")),
+                   class = "gptr_error_invalid_argument")
+    })
+  }
+})
+
+test_that("independent token windows retain their own exhaustion and reset times", {
+  clock = new.env()
+  clock$now = 100
+  local_mocked_bindings(reactor_now = function() clock$now)
+  ratelimit_update("rl-token-windows", list(
+    `anthropic-ratelimit-input-tokens-remaining` = "0",
+    `anthropic-ratelimit-input-tokens-reset` = "2s",
+    `anthropic-ratelimit-output-tokens-remaining` = "100",
+    `anthropic-ratelimit-output-tokens-reset` = "30s"))
+  expect_false(ratelimit_admit("rl-token-windows"))
+  expect_equal(ratelimit_next("rl-token-windows"), 102)
+  clock$now = 103
+  expect_true(ratelimit_admit("rl-token-windows"))
+  ratelimit_update("rl-partial-tokens", list(
+    `anthropic-ratelimit-input-tokens-remaining` = "0",
+    `anthropic-ratelimit-input-tokens-reset` = "10s"))
+  ratelimit_update("rl-partial-tokens", list(
+    `anthropic-ratelimit-output-tokens-remaining` = "5",
+    `anthropic-ratelimit-output-tokens-reset` = "20s"))
+  expect_false(ratelimit_admit("rl-partial-tokens"))
+  expect_equal(ratelimit_next("rl-partial-tokens"), 113)
+})
+
+test_that("malformed headers cannot poison known budgets or create infinite deadlines", {
+  clock = new.env()
+  clock$now = 100
+  local_mocked_bindings(reactor_now = function() clock$now)
+  ratelimit_update("rl-header-values", list(`X-RateLimit-Remaining-Requests` = "2",
+    `X-RateLimit-Reset-Requests` = "10s"))
+  for (value in list("Inf", "-Inf", "NaN", "junk", c("1", "2"), list("3"))) {
+    ratelimit_update("rl-header-values", list(`x-ratelimit-remaining-requests` = value))
+    expect_equal(ratelimit_get("rl-header-values")$req_remaining, 2)
+    expect_equal(ratelimit_get("rl-header-values")$req_reset, 110)
+  }
+  ratelimit_update("rl-negative-header", list(`x-ratelimit-remaining-requests` = "-2"))
+  expect_false(ratelimit_admit("rl-negative-header"))
+  expect_equal(ratelimit_get("rl-negative-header")$req_remaining, 0)
+  clock$now = 1e308
+  ratelimit_update("rl-overflow", list(`x-ratelimit-remaining-requests` = "0",
+    `x-ratelimit-reset-requests` = "1e308"))
+  expect_true(is.finite(ratelimit_next("rl-overflow")))
+  st = ratelimit_set("rl-refill-overflow", list(requests_per_s = 1e308))
+  st$bucket = 0
+  st$bucket_at = 0
+  ratelimit_refill(st, clock$now)
+  expect_equal(st$bucket, 1e308)
+})
+
+test_that("a provider named like the anonymous marker has its own static bucket", {
+  local_mocked_bindings(registry_get = function(kind, name, session = NULL) {
+    if (identical(name, "(none)")) list(rate = list(requests_per_s = 0.5))
+  })
+  named = ratelimit_get("(none)")
+  anonymous = ratelimit_get(NULL)
+  expect_false(identical(named, anonymous))
+  expect_equal(named$rate$requests_per_s, 0.5)
+  expect_true(ratelimit_admit("(none)"))
+  expect_false(ratelimit_admit("(none)"))
+  expect_true(ratelimit_admit(NULL))
+})
