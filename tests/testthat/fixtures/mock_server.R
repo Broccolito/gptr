@@ -26,6 +26,10 @@ log_line = function(x) {
   cat(json(x), "\n", file = cfg$log, append = TRUE, sep = "")
 }
 
+# With `log_writes = TRUE` every response piece is also logged as kind "write" (INFRA-01 measures
+# delivery from the moment the mock writes a delta; DEVIATIONS D-016)
+log_writes = isTRUE(opt("log_writes", FALSE))
+
 # ---- Anthropic Messages stream pieces (report 10a A.1; report 15 section 3.2) ----------------
 
 msg_start = function(model) {
@@ -403,15 +407,22 @@ response_head = function(res) {
          paste0(names(headers), ": ", headers, "\r\n", collapse = ""), "\r\n")
 }
 
+# The SSE event a response piece starts with, named in the write log ("" for other bytes)
+first_event = function(text) {
+  hit = regmatches(text, regexpr("^event: [^\r\n]*", text))
+  if (length(hit)) substring(hit, 8L) else ""
+}
+
 schedule = function(cl, res) {
   t = now() + res$head_delay
-  queue = list(list(due = t, bytes = charToRaw(response_head(res))))
+  queue = list(list(due = t, bytes = charToRaw(response_head(res)), event = "head"))
   for (item in res$items) {
     t = t + item$delay
-    queue[[length(queue) + 1L]] = list(due = t, bytes = frame(item$text, isTRUE(res$chunked)))
+    queue[[length(queue) + 1L]] = list(due = t, bytes = frame(item$text, isTRUE(res$chunked)),
+                                       event = first_event(item$text))
   }
   if (res$end == "close" && isTRUE(res$chunked)) {
-    queue[[length(queue) + 1L]] = list(due = t, bytes = charToRaw("0\r\n\r\n"))
+    queue[[length(queue) + 1L]] = list(due = t, bytes = charToRaw("0\r\n\r\n"), event = "")
   }
   if (is.infinite(res$head_delay)) queue = list()
   cl$queue = queue
@@ -497,12 +508,16 @@ write_due = function(key) {
   cl = srv$clients[[key]]
   t = now()
   while (length(cl$queue) && cl$queue[[1L]]$due <= t) {
+    at = now()
     ok = tryCatch({
       writeBin(cl$queue[[1L]]$bytes, cl$con)
       flush(cl$con)
       TRUE
     }, error = function(e) FALSE, warning = function(w) FALSE)
     if (!ok) return(finish_client(key, disconnected = TRUE))
+    if (log_writes && !is.null(cl$req_id)) {
+      log_line(list(kind = "write", id = cl$req_id, time = at, event = cl$queue[[1L]]$event))
+    }
     cl$queue = cl$queue[-1L]
   }
   srv$clients[[key]] = cl

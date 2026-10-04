@@ -84,6 +84,26 @@ mock_log = function(file) {
   out
 }
 
+# The writes the mock logged when started with `log_writes = TRUE` (DEVIATIONS D-016): one row
+# per response piece, `id` = its request, `time` = wall-clock seconds (Sys.time()) just before the
+# write, `event` = the SSE event the piece starts with ("head" for the response head, "" for other
+# bytes). A line the server is still writing is skipped.
+mock_writes = function(file) {
+  empty = data.frame(id = integer(), time = numeric(), event = character())
+  if (!file.exists(file)) return(empty)
+  lines = readLines(file, encoding = "UTF-8", warn = FALSE)
+  records = lapply(lines[nzchar(lines)], function(line) {
+    tryCatch(json_decode(line), error = function(e) NULL)
+  })
+  records = Filter(function(r) identical(r$kind, "write"), records)
+  if (!length(records)) return(empty)
+  data.frame(
+    id = vapply(records, function(r) as.integer(r$id), integer(1)),
+    time = vapply(records, function(r) as.numeric(r$time), numeric(1)),
+    event = vapply(records, function(r) r$event, "")
+  )
+}
+
 # Copy only referenced bindings while preserving lexical parents and shared binding owners.
 # Capture supports functions, atomic vectors and lists (including their attributes). Explicit
 # environment/connection/S4 captures and custom function attributes are rejected before spawn.
@@ -141,7 +161,8 @@ mock_capture_function = function(fun, cache = new.env(parent = emptyenv())) {
 
 # Start the mock server for the calling test; see contract section 12.2 for the scenarios.
 # `...` are scenario arguments (n, interval, delay, status, body, retry_after, answers, headers,
-# chunked, ...); function arguments carry only their lexically referenced fixture bindings.
+# chunked, log_writes, ...); function arguments carry only their lexically referenced fixture
+# bindings. Beyond contract 12.2, the result also has `writes()` (mock_writes(), D-016).
 local_mock_server = function(scenario, ..., .env = parent.frame()) {
   testthat::skip_on_cran()
   if (!(scenario %in% mock_scenarios)) stop("unknown mock scenario: ", scenario)
@@ -196,6 +217,7 @@ local_mock_server = function(scenario, ..., .env = parent.frame()) {
     url = url,
     port = as.integer(ready$port),
     log = function() mock_log(config$log),
+    writes = function() mock_writes(config$log),
     stop = stop_server,
     provider = mock_provider(scenario, url)
   )

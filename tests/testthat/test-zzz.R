@@ -200,3 +200,33 @@ test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-
   bench_steps = vapply(jobs$bench$steps, function(s) s$run %||% "", "")
   expect_true(any(grepl("dev/bench/tokens/run.R --check", bench_steps, fixed = TRUE)))
 })
+
+test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
+  description = source_file("DESCRIPTION")
+  skip_if(is.null(description), "not running from the source tree")
+  path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
+  jobs = yaml::read_yaml(path)$jobs
+  # A hung run fails at its job's limit instead of holding the runner until it is cancelled
+  for (name in names(jobs)) {
+    expect_false(is.null(jobs[[name]][["timeout-minutes"]]), label = name)
+  }
+  # rcmdcheck reported success when R CMD check aborted before writing a status line
+  for (name in c("R-CMD-check", "no-suggests", "c-locale")) {
+    steps = jobs[[name]]$steps
+    uses = vapply(steps, function(s) s$uses %||% "", "")
+    runs = vapply(steps, function(s) s$run %||% "", "")
+    check = which(startsWith(uses, "r-lib/actions/check-r-package@"))
+    guard = which(grepl("check/gptr.Rcheck/00check.log", runs, fixed = TRUE) &
+                    grepl("^Status:", runs, fixed = TRUE))
+    expect_length(check, 1L)
+    expect_true(length(guard) == 1L && all(guard > check), label = name)
+  }
+  # Windows R before 4.5.0 has no file.info() owner columns, which this check variable needs
+  config = jobs[["R-CMD-check"]]$strategy$matrix$config
+  expect_identical(jobs[["R-CMD-check"]]$env[["_R_CHECK_THINGS_IN_OTHER_DIRS_"]],
+                   "${{ matrix.config.things-in-other-dirs || 'true' }}")
+  combos = vapply(config, function(x) paste(x$os, x$r), "")
+  other = vapply(config, function(x) x[["things-in-other-dirs"]] %||% "true", "")
+  expect_identical(unname(other[combos == "windows-latest oldrel-4"]), "false")
+  expect_true(all(other[combos != "windows-latest oldrel-4"] == "true"))
+})

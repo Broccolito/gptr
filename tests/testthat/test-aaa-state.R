@@ -122,6 +122,10 @@ test_that("an unbound service signals not_available naming the providing plan (I
 
 test_that("ext_service_set() registers and replaces services", {
   local_services()
+  # The owning built-in `workspace` (P09) is not declared in this build, so once other built-ins
+  # have loaded records the plan's rule counts it as filtered out; this test is about the
+  # bootstrap table, and filtering is tested below (DEVIATIONS D-016)
+  local_mocked_bindings(service_builtin_active = function(builtin) TRUE)
   ext_service_set("describe", function(x, budget) "first", provided_by = "P09",
                   builtin = "workspace")
   expect_true(ext_service_has("describe"))

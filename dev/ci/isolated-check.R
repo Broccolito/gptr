@@ -53,7 +53,7 @@
   } else if (args[[1L]] == "connections") {
     source("dev/ci/check-connections.R", local = TRUE)
     testthat::set_max_fails(Inf)
-    check_connections(devtools::test(stop_on_failure = TRUE))
+    run_gate()
   } else if (args[[1L]] == "check") {
     if (length(args) != 2L) stop("Supply an output directory for the package check")
     devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning",

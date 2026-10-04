@@ -612,7 +612,7 @@ scrub_guarded = function(path) {
 #' Expand a directory without escaping its resolved root or revisiting a symlink cycle
 #' @noRd
 scrub_walk = function(root) {
-  if (!dir.exists(root)) return(root[file_test("-f", root)])
+  if (!dir.exists(root)) return(root[utils::file_test("-f", root)])
   pending = root
   visited = character()
   out = character()
@@ -627,7 +627,7 @@ scrub_walk = function(root) {
     is_dir = dir.exists(entries)
     descend = is_dir & !endsWith(tolower(basename(entries)), ".lock")
     pending = c(pending, entries[descend])
-    out = c(out, entries[!is_dir & file_test("-f", entries)])
+    out = c(out, entries[!is_dir & utils::file_test("-f", entries)])
   }
   out
 }

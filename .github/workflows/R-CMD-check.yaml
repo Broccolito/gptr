@@ -2,6 +2,8 @@
 # macOS, Windows and Ubuntu release, devel and oldrel-1, oldrel-4 (proves R >= 4.2.0), a job
 # without Suggests, an LC_ALL=C job, the copy-safety suites, a connections-left-open run and the
 # token benchmark once dev/bench/tokens/run.R exists (P07).
+# Every job has a time limit, and each R CMD check job fails unless the check wrote its final
+# status line: rcmdcheck reports success when R CMD check aborts before checking anything.
 on:
   push:
     branches: [main]
@@ -15,13 +17,17 @@ jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+    # R-devel installs every dependency from source (about 65 minutes on a cold cache)
+    timeout-minutes: ${{ matrix.config.r == 'devel' && 120 || 45 }}
     strategy:
       fail-fast: false
       matrix:
         config:
           - {os: macos-latest, r: 'release'}
           - {os: windows-latest, r: 'release'}
-          - {os: windows-latest, r: 'oldrel-4'}
+          # Windows R before 4.5.0: file.info() has no owner columns, which
+          # _R_CHECK_THINGS_IN_OTHER_DIRS_ needs (R CMD check aborts at its start otherwise)
+          - {os: windows-latest, r: 'oldrel-4', things-in-other-dirs: 'false'}
           - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest, r: 'release'}
           - {os: ubuntu-latest, r: 'oldrel-1'}
@@ -29,7 +35,7 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
-      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: ${{ matrix.config.things-in-other-dirs || 'true' }}
       _R_CHECK_CRAN_INCOMING_: false
     steps:
       - uses: actions/checkout@v6
@@ -49,10 +55,24 @@ jobs:
           build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
+      - name: Fail unless R CMD check wrote its status
+        shell: bash
+        run: |
+          log=check/gptr.Rcheck/00check.log
+          if [ ! -f "$log" ]; then
+            echo "::error::R CMD check did not write $log"
+            exit 1
+          fi
+          if ! grep -q '^Status:' "$log"; then
+            echo "::error::$log has no Status line: R CMD check did not finish"
+            exit 1
+          fi
+          grep '^Status:' "$log"
 
   no-suggests:
     runs-on: ubuntu-latest
     name: ubuntu-latest (release, no Suggests)
+    timeout-minutes: 45
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       _R_CHECK_FORCE_SUGGESTS_: false
@@ -72,10 +92,24 @@ jobs:
         with:
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
+      - name: Fail unless R CMD check wrote its status
+        shell: bash
+        run: |
+          log=check/gptr.Rcheck/00check.log
+          if [ ! -f "$log" ]; then
+            echo "::error::R CMD check did not write $log"
+            exit 1
+          fi
+          if ! grep -q '^Status:' "$log"; then
+            echo "::error::$log has no Status line: R CMD check did not finish"
+            exit 1
+          fi
+          grep '^Status:' "$log"
 
   c-locale:
     runs-on: ubuntu-latest
     name: ubuntu-latest (release, LC_ALL=C)
+    timeout-minutes: 45
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       LC_ALL: C
@@ -95,10 +129,24 @@ jobs:
         with:
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
+      - name: Fail unless R CMD check wrote its status
+        shell: bash
+        run: |
+          log=check/gptr.Rcheck/00check.log
+          if [ ! -f "$log" ]; then
+            echo "::error::R CMD check did not write $log"
+            exit 1
+          fi
+          if ! grep -q '^Status:' "$log"; then
+            echo "::error::$log has no Status line: R CMD check did not finish"
+            exit 1
+          fi
+          grep '^Status:' "$log"
 
   copy-safety:
     runs-on: ubuntu-latest
     name: copy-safety (${{ matrix.r }})
+    timeout-minutes: ${{ matrix.r == 'devel' && 120 || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -127,6 +175,7 @@ jobs:
   connections:
     runs-on: ubuntu-latest
     name: connections left open
+    timeout-minutes: 30
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
@@ -140,12 +189,13 @@ jobs:
           extra-packages: any::devtools
       - name: Prove the connection gate detects a leak
         run: Rscript --vanilla -e 'testthat::test_file("dev/ci/test-check-connections.R", stop_on_failure = TRUE)'
-      - name: Test suite with explicit connection cleanup check
+      - name: Test suite with explicit connection cleanup check (all tests run, then both gates)
         run: Rscript --vanilla dev/ci/check-connections.R
 
   bench:
     runs-on: ubuntu-latest
     name: token benchmark
+    timeout-minutes: 30
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:

@@ -36,3 +36,61 @@ test_that("connection gate uses check-mode supervision and restores the caller's
   }), "test suite failed")
   expect_true(getOption("gptr.supervise"))
 })
+
+test_that("connection gate compares the tables before reporting failed tests", {
+  con = NULL
+  withr::defer(if (!is.null(con)) close(con))
+  cnd = tryCatch(checker$check_connections({
+    con = file(tempfile(), open = "w")
+    "results"
+  }, failures = function(value) 3L), error = identity)
+  expect_s3_class(cnd, "error")
+  expect_match(conditionMessage(cnd), "3 failed test(s)", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "R connection table changed", fixed = TRUE)
+})
+
+test_that("connection gate fails on failed tests even when no connection leaked", {
+  expect_error(checker$check_connections("results", failures = function(value) 2L),
+               "2 failed test(s)", fixed = TRUE)
+  expect_identical(checker$check_connections("results", failures = function(value) 0L),
+                   "results")
+})
+
+test_that("connection gate still compares the tables when the suite errors", {
+  con = NULL
+  withr::defer(if (!is.null(con)) close(con))
+  cnd = tryCatch(checker$check_connections({
+    con = file(tempfile(), open = "w")
+    stop("test suite failed")
+  }), error = identity)
+  expect_match(conditionMessage(cnd), "test suite failed", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "R connection table changed", fixed = TRUE)
+})
+
+test_that("suite_failures() counts failed expectations and errored tests", {
+  dir = withr::local_tempdir()
+  file = file.path(dir, "test-sample.R")
+  writeLines(c(
+    "test_that(\"passes\", expect_true(TRUE))",
+    "test_that(\"fails twice\", {",
+    "  expect_true(FALSE)",
+    "  expect_identical(1, 2)",
+    "})",
+    "test_that(\"errors\", stop(\"boom\"))",
+    "test_that(\"skips\", skip(\"not here\"))"
+  ), file)
+  results = testthat::test_file(file, reporter = "silent", stop_on_failure = FALSE)
+  expect_identical(checker$suite_failures(results), 3L)
+})
+
+test_that("the gate runs the whole suite, then fails on its failures and leaks", {
+  seen = new.env()
+  fake_test = function(...) {
+    seen$args = list(...)
+    "results"
+  }
+  expect_error(checker$run_gate(fake_test, failures = function(value) 1L),
+               "1 failed test(s)", fixed = TRUE)
+  expect_identical(seen$args, list(stop_on_failure = FALSE))
+  expect_identical(checker$run_gate(fake_test, failures = function(value) 0L), "results")
+})

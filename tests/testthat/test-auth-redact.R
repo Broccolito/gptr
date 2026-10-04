@@ -994,3 +994,10 @@ test_that("scrub discovery does not turn lock metadata into rewrite targets", {
   expect_identical(nrow(gptr_scrub()), 0L)
   expect_identical(nrow(gptr_scrub(pid)), 1L)
 })
+
+test_that("scrub discovery calls utils::file_test() explicitly (R CMD check code usage)", {
+  skip_if_not_installed("codetools")
+  # utils is not imported: an unqualified file_test() is an undefined global under R CMD check
+  globals = codetools::findGlobals(scrub_walk, merge = FALSE)$functions
+  expect_false("file_test" %in% globals)
+})

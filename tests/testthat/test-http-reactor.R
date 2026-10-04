@@ -515,6 +515,7 @@ mock_spec = function(srv, ...) {
 }
 
 # Start a transfer whose bytes go through sse_splitter(); returns its state environment
+# (`arrivals`/`t_end` on the reactor clock, `walls`/`wall_end` on the wall clock the mock logs)
 start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {
   st = new.env()
   st$types = character()
@@ -522,22 +523,26 @@ start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {
   st$done = FALSE
   st$status = NA_integer_
   st$fail = NULL
+  st$walls = numeric()
   sp = sse_splitter()
   st$t0 = reactor_now()
   on_bytes = function(x) {
     for (e in sp$push(x)) {
       st$types = c(st$types, e$event %||% "message")
       st$arrivals = c(st$arrivals, reactor_now())
+      st$walls = c(st$walls, as.numeric(Sys.time()))
     }
   }
   on_done = function(status, headers) {
     st$status = status
     st$t_end = reactor_now()
+    st$wall_end = as.numeric(Sys.time())
     st$done = TRUE
   }
   on_fail = function(cnd) {
     st$fail = cnd
     st$t_end = reactor_now()
+    st$wall_end = as.numeric(Sys.time())
     st$done = TRUE
   }
   st$id = reactor_http(spec, on_bytes = on_bytes, on_done = on_done, on_fail = on_fail,
@@ -545,29 +550,91 @@ start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {
   st
 }
 
+# INFRA-01 on the mock's own clock (architecture 6.18; decomposition P04 acceptance 2; DEVIATIONS
+# D-016). `arrived` are the wall-clock times (Sys.time()) at which the deltas reached the
+# callback and `written` the wall-clock times at which the mock wrote the same deltas (its
+# `log_writes` log; both processes read the same clock). A delta's latency is its arrival minus
+# its write: architecture 6.18 bounds it ("within 0.35 s of the mock writing it"), here for every
+# delta. A gap is the time between two consecutive deltas on the mock's 0.25 s cadence, i.e. with
+# any lateness of the mock's own writes netted out; the decomposition bounds it ("every
+# inter-delta gap is under 0.35 s"). A latency below -0.05 s means arrivals and writes are
+# mismatched. Connection setup precedes the first write, so neither target counts it.
+infra01_delivery = function(arrived, written, interval = 0.25) {
+  latency = arrived - written
+  list(latency = latency, gaps = interval + diff(latency))
+}
+
+infra01_on_time = function(d) {
+  all(d$latency < 0.35) && all(d$latency > -0.05) && all(d$gaps < 0.35)
+}
+
+# Six streams: from the first response head the mocks wrote (their write log, wall clock), which
+# starts every stream's schedule, to the end of the last stream at the callback; the plan's bound
+# is 1.10 times the slowest stream's 9 * 0.25 s. Serialised streams start their heads late.
+infra01_wall = function(started, ended) max(ended) - min(started)
+
+test_that("INFRA-01 measurements catch late, stalled, batched and serialised delivery", {
+  written = 100 + 0.25 * 1:12
+  expect_true(infra01_on_time(infra01_delivery(written + 0.003, written)))
+  # the mock writing delta 5 0.11 s late is its own lateness, not gptr's
+  slow_mock = written + c(0, 0, 0, 0, 0.11, rep(0, 7))
+  expect_true(infra01_on_time(infra01_delivery(slow_mock + 0.003, slow_mock)))
+  # every delta 1.5 s after its write (review round 1), and one delta stalled 0.4 s
+  expect_false(infra01_on_time(infra01_delivery(written + 1.5, written)))
+  expect_false(infra01_on_time(infra01_delivery(written + c(0, 0, 0, 0, 0.4, rep(0, 7)), written)))
+  # delta 5 held back 0.11 s (a 0.36 s gap) or 0.34 s (a 0.59 s gap, review round 1)
+  expect_false(infra01_on_time(infra01_delivery(written + c(0, 0, 0, 0, 0.11, rep(0, 7)), written)))
+  expect_false(infra01_on_time(infra01_delivery(written + c(0, 0, 0, 0, 0.34, rep(0, 7)), written)))
+  # every delta batched at the end, and arrivals matched to the following writes
+  expect_false(infra01_on_time(infra01_delivery(rep(max(written) + 0.01, 12), written)))
+  expect_false(infra01_on_time(infra01_delivery(written[-12] + 0.003, written[-1])))
+  n = c(4, 4, 4, 9, 9, 9)
+  started = 100 + c(0, 0.004, 0.008, 0.002, 0.006, 0.01)
+  expect_lte(infra01_wall(started, started + 0.25 * n + 0.005), 1.10 * 9 * 0.25)
+  # stretched by contention to a delta every 0.375 s (review round 1), and serialised streams
+  expect_gt(infra01_wall(started, started + 0.375 * n), 1.10 * 9 * 0.25)
+  serial = 100 + cumsum(c(0, 1, 1, 1, 2.25, 2.25))
+  expect_gt(infra01_wall(serial, serial + 0.25 * n), 1.10 * 9 * 0.25)
+})
+
 test_that("INFRA-01: deltas reach the callback as the mock writes them", {
-  srv = local_mock_server("stream", n = 12L, interval = 0.25)
+  srv = local_mock_server("stream", n = 12L, interval = 0.25, log_writes = TRUE)
   st = start_transfer(mock_spec(srv))
   expect_true(reactor_pump(until = function() st$done, timeout = 30))
   expect_null(st$fail)
   expect_identical(st$status, 200L)
-  delta = st$arrivals[st$types == "content_block_delta"]
-  expect_length(delta, 12L)
-  expect_lt(delta[1] - st$t0, 0.25 + 0.35)
-  expect_true(all(diff(delta) < 0.35))
+  arrived = st$walls[st$types == "content_block_delta"]
+  writes = srv$writes()
+  written = writes$time[writes$event == "content_block_delta"]
+  expect_length(arrived, 12L)
+  expect_length(written, 12L)
+  d = infra01_delivery(arrived, written)
+  mock_late = written - writes$time[writes$event == "head"][1L] - 0.25 * seq_along(written)
+  expect_true(infra01_on_time(d), label = paste0(
+    "latencies ", toString(round(d$latency, 3)), "; gaps ", toString(round(d$gaps, 3)),
+    "; the mock's own lateness ", toString(round(mock_late, 3))
+  ))
 })
 
 test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest", {
-  short = local_mock_server("stream", n = 4L, interval = 0.25)
-  long = local_mock_server("stream", n = 9L, interval = 0.25)
+  short = local_mock_server("stream", n = 4L, interval = 0.25, log_writes = TRUE)
+  long = local_mock_server("stream", n = 9L, interval = 0.25, log_writes = TRUE)
   sts = c(lapply(1:3, function(i) start_transfer(mock_spec(short))),
           lapply(1:3, function(i) start_transfer(mock_spec(long))))
-  t0 = reactor_now()
   all_done = function() all(vapply(sts, function(s) s$done, NA))
   expect_true(reactor_pump(until = all_done, timeout = 30))
   expect_true(all(vapply(sts, function(s) is.null(s$fail), NA)))
-  wall = max(vapply(sts, function(s) s$t_end, 0)) - t0
-  expect_lte(wall, 1.10 * 9 * 0.25)
+  started = unlist(lapply(list(short, long), function(srv) {
+    w = srv$writes()
+    w$time[w$event == "head"]
+  }))
+  ended = vapply(sts, function(s) s$wall_end, 0)
+  expect_length(started, 6L)
+  wall = infra01_wall(started, ended)
+  expect_lte(wall, 1.10 * 9 * 0.25, label = sprintf(
+    "wall %.3f s from the first head written (heads within %.3f s; ends at %s s)", wall,
+    max(started) - min(started), toString(round(sort(ended) - min(started), 3))
+  ))
 })
 
 test_that("one pump drives an HTTP stream and a child process together", {
