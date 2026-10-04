@@ -25,6 +25,34 @@ wait_until = function(cond, seconds = 5) {
   isTRUE(cond())
 }
 
+# The bytes an R child's "\n" reaches the pipe as: R's stdout is a text-mode stream on Windows,
+# which writes "\n" as CRLF (hosted Windows: `cat("...\n")` arrived as "...\r\n")
+child_eol = function() {
+  if (proc_is_windows()) as.raw(c(0x0d, 0x0a)) else as.raw(0x0a)
+}
+
+# R code for a child that writes `bytes` with no line end of its own. Bytes, not escapes: an -e
+# expression does not reach R unchanged on every OS (on macOS the plan's child
+# `cat('a\\r\\nb\\nc')` wrote "a\nb\nc", so that fixture never tested CRLF there)
+cat_raw_code = function(bytes) {
+  paste0("cat(rawToChar(as.raw(c(", paste0("0x", as.character(bytes), collapse = ", "), "))))")
+}
+
+# The bytes for a child to write so that one CRLF reaches the pipe on every OS (on Windows an
+# explicit CRLF would arrive as "\r\r\n")
+crlf_bytes = function() if (proc_is_windows()) as.raw(0x0a) else as.raw(c(0x0d, 0x0a))
+
+# The pids that carry a tree marker, and whether they are `pid` and its descendants only. On
+# Windows Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one
+# Rscript child holds two processes there
+marker_pids = function(marker) vapply(proc_tree(marker), ps::ps_pid, 1L)
+marker_tree_is = function(marker, pid) {
+  pids = marker_pids(marker)
+  kids = tryCatch(ps::ps_children(ps::ps_handle(pid), recursive = TRUE),
+                  error = function(e) list())
+  pid %in% pids && all(pids %in% c(pid, vapply(kids, ps::ps_pid, 1L)))
+}
+
 test_that("R children must come from rscript_path(), never a PATH lookup", {
   expect_error(proc_resolve("Rscript", "--version"), class = "gptr_error_invalid_argument")
   expect_error(proc_resolve("R"), class = "gptr_error_invalid_argument")
@@ -80,7 +108,7 @@ test_that("proc_spawn() records a tree marker that kill_all() releases", {
   rec = proc_record(p$get_pid())
   expect_match(rec$marker, "^GPTR_PROC_[0-9a-f]{16}$")
   expect_true(file.exists(file.path(proc_dir(), paste0(rec$marker, ".json"))))
-  expect_true(wait_until(function() length(proc_tree(rec$marker)) == 1L, 10))
+  expect_true(wait_until(function() marker_tree_is(rec$marker, p$get_pid()), 10))
   expect_true(kill_all(p, grace = 0))
   expect_false(file.exists(file.path(proc_dir(), paste0(rec$marker, ".json"))))
   expect_error(proc_spawn(rscript_path(), env = c("no names")),
@@ -96,14 +124,15 @@ test_that("proc_run() decodes redirected output byte-exact under LC_ALL=C", {
   expect_identical(res$status, 0L)
   expect_false(res$timed_out)
   expect_identical(Encoding(res$stdout), "UTF-8")
-  expect_identical(charToRaw(res$stdout), c(bytes_cafe_cjk, as.raw(0x0a)))
+  # byte-exact: the child's own line end too (CRLF on Windows), which proc_run() keeps
+  expect_identical(charToRaw(res$stdout), c(bytes_cafe_cjk, child_eol()))
 })
 
 test_that("proc_run() falls back to the code page for output that is not UTF-8", {
   skip_on_cran()
   res = proc_run(rscript_path(), c("--vanilla", "-e",
                                    cat_bytes_code(as.raw(c(0x63, 0x61, 0x66, 0xe9)))))
-  expect_identical(res$stdout, "caf\u00e9\n")
+  expect_identical(res$stdout, paste0("caf\u00e9", rawToChar(child_eol())))
 })
 
 test_that("proc_spawn() passes argv and environment bytes unchanged", {
@@ -129,7 +158,9 @@ test_that("proc_run() passes a 2 MB stdin payload complete and enforces its time
 
 test_that("line_reader() returns complete lines and the final unterminated line at EOF", {
   skip_on_cran()
-  p = processx::process$new(rscript_path(), c("--vanilla", "-e", "cat('a\\r\\nb\\nc')"),
+  # "a" CRLF "b" LF "c" on the pipe (on Windows "b" also ends with CRLF: text-mode stdout)
+  code = cat_raw_code(c(charToRaw("a"), crlf_bytes(), charToRaw("b\nc")))
+  p = processx::process$new(rscript_path(), c("--vanilla", "-e", code),
                             stdout = "|", encoding = "UTF-8")
   withr::defer(if (p$is_alive()) p$kill())
   p$wait(30000L)
@@ -274,6 +305,26 @@ test_that("line readers bound chunks and preserve partial stderr and empty lines
   expect_false(reader$eof())
 })
 
+test_that("line readers end lines at CRLF as a Windows child writes them, across reads", {
+  # a Windows child's text-mode stdout: every line end CRLF, one pair split between two reads,
+  # an empty line and a final unterminated line ("" ends each read)
+  chunks = c("one\r\ntwo\r", "", "\n\r\nthree\r\nfo", "", "ur", "")
+  i = 0L
+  done = FALSE
+  process = list(read_output = function(n) {
+    i <<- i + 1L
+    if (i <= length(chunks)) chunks[[i]] else ""
+  },
+                 is_incomplete_output = function() !done)
+  reader = line_reader(process)
+  expect_identical(reader$read(), "one")
+  expect_identical(reader$partial(), "two\r")
+  expect_identical(reader$read(), c("two", "", "three"))
+  done = TRUE
+  expect_identical(reader$read(), "four")
+  expect_true(reader$eof())
+})
+
 test_that("proc_run echo redacts registered values spanning output polls", {
   skip_on_cran()
   vault_reset()
@@ -294,6 +345,79 @@ test_that("proc_run echo redacts registered values spanning output polls", {
   expect_match(text, "[secret:SPLIT_TEST_TOKEN]", fixed = TRUE)
 })
 
+test_that("proc_run echo ends lines at CRLF, so a Windows child's output is redacted as LF", {
+  vault_reset()
+  withr::defer(vault_reset())
+  secret_register("FAKEfirstLine\nFAKEsecondLine", "SPLIT_TEST_TOKEN")
+  emitted = character()
+  local_mocked_bindings(msg_verbatim = function(x, stream) {
+    emitted <<- c(emitted, x)
+    invisible(NULL)
+  })
+  # what proc_run() polls from a Windows child's redirect file: CRLF line ends and the secret's
+  # line break between two polls (hosted Windows echoed "FAKEfirstLine\r\nFAKEsecondLine")
+  path = withr::local_tempfile()
+  writeBin(charToRaw("prefix FAKEfirstLine\r\n"), path)
+  redactor = redact_stream("stream")
+  shown = proc_echo(path, 0, redactor)
+  expect_identical(shown, 22)
+  con = file(path, open = "ab")
+  writeBin(charToRaw("FAKEsecondLine suffix\r\n"), con)
+  close(con)
+  shown = proc_echo(path, shown, redactor, final = TRUE)
+  expect_identical(shown, 45)
+  text = paste(c(emitted, redactor$flush()), collapse = "")
+  expect_false(grepl("FAKE", text, fixed = TRUE))
+  expect_identical(text, "prefix [secret:SPLIT_TEST_TOKEN] suffix\n")
+})
+
+test_that("proc_run echo redacts a registered CRLF value however the child wrote its line end", {
+  vault_reset()
+  withr::defer(vault_reset())
+  secret_register("FAKEfirstLine\r\nFAKEsecondLine", "CRLF_TEST_TOKEN")
+  # the value written verbatim (a Unix child, or a binary-mode Windows child) and through
+  # Windows text-mode stdout ("\r\n" arrives as "\r\r\n"), its line break between two polls
+  for (eol in c("\r\n", "\r\r\n")) {
+    emitted = character()
+    local_mocked_bindings(msg_verbatim = function(x, stream) {
+      emitted <<- c(emitted, x)
+      invisible(NULL)
+    })
+    path = withr::local_tempfile()
+    writeBin(charToRaw(paste0("prefix FAKEfirstLine", eol)), path)
+    redactor = redact_stream("stream")
+    shown = proc_echo(path, 0, redactor)
+    con = file(path, open = "ab")
+    writeBin(charToRaw("FAKEsecondLine suffix\n"), con)
+    close(con)
+    proc_echo(path, shown, redactor, final = TRUE)
+    text = paste(c(emitted, redactor$flush()), collapse = "")
+    expect_false(grepl("FAKE", text, fixed = TRUE))
+    expect_identical(text, "prefix [secret:CRLF_TEST_TOKEN] suffix\n")
+  }
+})
+
+test_that("proc_run echo redacts a CRLF value whose LF form is under the redaction minimum", {
+  vault_reset()
+  withr::defer(vault_reset())
+  withr::local_options(gptr.redact_min_chars = 8L)
+  # 8 characters, so the value is redacted; its LF form, which the echo shows, has 7
+  secret_register("Ab3\r\nXy9", "EDGE_TEST_TOKEN")
+  emitted = character()
+  local_mocked_bindings(msg_verbatim = function(x, stream) {
+    emitted <<- c(emitted, x)
+    invisible(NULL)
+  })
+  path = withr::local_tempfile()
+  writeBin(charToRaw("pre Ab3\r\nXy9 post\n"), path)    # written verbatim, as a Unix child does
+  redactor = redact_stream("stream")
+  proc_echo(path, 0, redactor, final = TRUE)
+  text = paste(c(emitted, redactor$flush()), collapse = "")
+  expect_false(grepl("Ab3", text, fixed = TRUE))
+  expect_false(grepl("Xy9", text, fixed = TRUE))
+  expect_identical(text, "pre [secret:EDGE_TEST_TOKEN] post\n")
+})
+
 test_that("proc_run echo fails closed when streaming redaction exceeds its bound", {
   skip_on_cran()
   vault_reset()
@@ -308,6 +432,15 @@ test_that("proc_run echo fails closed when streaming redaction exceeds its bound
                         echo = TRUE), class = "gptr_error_redaction_limit")
   expect_identical(paste(emitted, collapse = ""), "")
 })
+
+# D-019: processx writes a child's stdin with a blocking WriteFile() on Windows (its pipe has no
+# FILE_FLAG_OVERLAPPED and is in PIPE_WAIT mode), so write_all() cannot be non-blocking there. A
+# child that stops reading stdin while its stdout pipe is full deadlocks the R process, which no
+# timeout can bound (hosted Windows: "checking tests" hung for over an hour after this file's
+# last pre-stdin test). The stdin tests that need a non-blocking write skip on Windows.
+skip_if_blocking_stdin = function() {
+  skip_if(proc_is_windows(), "D-019: processx writes child stdin with a blocking call on Windows")
+}
 
 count_stdin_code = paste0("con = file('stdin', 'rb'); n = 0; repeat { b = readBin(con, 'raw', ",
                           "65536L); if (!length(b)) break; n = n + length(b) }; ",
@@ -331,6 +464,7 @@ test_that("write_all() delivers 2 MB through a pipe and write_close() sends EOF"
 
 test_that("a 4 MB payload to a child that echoes each line completes without deadlock", {
   skip_on_cran()
+  skip_if_blocking_stdin()
   withr::defer(reactor_shutdown())
   echo = paste0("con = file('stdin', 'rb'); repeat { x = readLines(con, n = 500L, ",
                 "warn = FALSE); if (!length(x)) break; writeLines(x); flush(stdout()) }")
@@ -377,6 +511,10 @@ test_that("write_all() times out on a child that reads nothing and refuses one w
   skip_on_cran()
   withr::defer(reactor_shutdown())
   local_gptr_options(stdin_timeout = 1)
+  q = proc_spawn(rscript_path(), c("--vanilla", "-e", "1"), stdout = NULL, stderr = NULL)
+  withr::defer(kill_all(q, grace = 0))
+  expect_error(write_all(q, "x"), class = "gptr_error_invalid_argument")
+  skip_if_blocking_stdin()
   p = proc_spawn(rscript_path(), c("--vanilla", "-e", "Sys.sleep(30)"), stdin = "|",
                  stdout = NULL, stderr = NULL)
   withr::defer(try(p$kill_tree(), silent = TRUE))
@@ -385,9 +523,6 @@ test_that("write_all() times out on a child that reads nothing and refuses one w
   expect_identical(err$what, "stdin")
   expect_identical(err$seconds, 1)
   expect_false(exists(as.character(p$get_pid()), envir = reactor_get()$stdin, inherits = FALSE))
-  q = proc_spawn(rscript_path(), c("--vanilla", "-e", "1"), stdout = NULL, stderr = NULL)
-  withr::defer(kill_all(q, grace = 0))
-  expect_error(write_all(q, "x"), class = "gptr_error_invalid_argument")
 })
 
 local_pipe_state = function(.env = parent.frame()) {

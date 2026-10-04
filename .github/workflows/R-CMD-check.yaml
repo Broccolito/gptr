@@ -4,6 +4,7 @@
 # token benchmark once dev/bench/tokens/run.R exists (P07).
 # Every job has a time limit, and each R CMD check job fails unless the check wrote its final
 # status line: rcmdcheck reports success when R CMD check aborts before checking anything.
+# The Windows release job first streams the offline tests file by file (diagnosis only).
 on:
   push:
     branches: [main]
@@ -49,6 +50,17 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
+      # R CMD check prints the test output only after the tests end, so a hung Windows run named
+      # no file (CI Task CI-2). This streams the offline suite file by file and test by test
+      # first, within its own limit; it only diagnoses, and the R CMD check below is the gate.
+      - name: Offline tests file by file (Windows release diagnosis)
+        if: runner.os == 'Windows' && matrix.config.r == 'release'
+        timeout-minutes: 20
+        continue-on-error: true
+        shell: bash
+        env:
+          NOT_CRAN: 'true'
+        run: Rscript --vanilla dev/ci/test-by-file.R
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true

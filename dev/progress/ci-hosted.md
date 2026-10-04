@@ -196,3 +196,261 @@ Open items (not fixed here):
   (D-011).
 - The hosted gate is not closed until a pushed commit containing these corrections passes on
   every job.
+
+## Task CI-2 - Windows process portability and the hung Windows test run
+
+Hosted evidence: the Windows release job of run 37167848633 on `55ec31d` (job 111334466669,
+complete: `[ FAIL 8 | WARN 0 | SKIP 8 | PASS 4430 ]` in 216 s) and of run 37169255693 on
+`8e8d8e0` (cancelled after 68 minutes in "checking tests"; its `_problems` list ends at
+`test-proc-spawn-294`). The job of run 37170545611 on `a2ba302` (no time limit) was still in
+"checking tests" after more than two hours when looked at once during this task.
+
+| Failure | Cause |
+|---|---|
+| `test-proc-spawn.R:99`, `:106` byte-exact and code-page `proc_run()` output ended `0d 0a` | R's stdout is a text-mode stream on Windows: an R child's `"\n"` reaches the pipe as CRLF. `proc_run()` correctly keeps the bytes; the expectations assumed LF |
+| `test-proc-spawn.R:143` `line_reader()` gave `"a\r"`; `test-http-reactor.R:309` (`8e8d8e0` only) the same | the fixtures wrote an explicit CRLF, which arrives as `"\r\r\n"` on Windows; `line_reader()` strips one CR, as specified. Found locally: on macOS the `:143` child `cat('a\\r\\nb\\nc')`, passed with `-e`, wrote `61 0a 62 0a 63` (no CR), so the plan's fixture never tested CRLF on Unix (`task2-fixture-bytes.log`) |
+| `test-proc-spawn.R:294` echo of `FAKEfirstLine\r\nFAKEsecondLine` not redacted | the registered value holds LF; the echo passed the child's CRLF to the redactor (a real product gap, reproduced on macOS by the new unit test) |
+| `test-proc-spawn.R:83`, `test-proc-supervise.R:102` `length(proc_tree(marker)) == 1L` FALSE | `Rscript.exe` runs `Rterm.exe` as its child on Windows, which inherits the marker (callr's `setup_r_binary_and_args()` also starts `Rterm` directly on Windows) |
+| `test-proc-supervise.R:109` orphan marker file kept although the orphan died within 5 s (`:108` passed) | ps 1.9.3's `ps_kill()` on Windows calls `TerminateProcess()` and returns at once (on Unix it sends SIGTERM and waits up to its grace period before SIGKILL), so `proc_cleanup_record()` saw the processes still running and kept the record |
+| `test-proc-supervise.R:253` mocked `ps::ps_kill_tree()` called 3 times | processx's finalizer of a process started with `cleanup_tree = TRUE` calls `get("ps_kill_tree", asNamespace("ps"))(tree_id)`, which reaches the mock when a garbage collection runs during the test; reproduced on macOS (`task2-red-finalizer.log`: one call with processx's `PS..._...` tree id) |
+| the hang | first run in which the P04 Task 8 stdin tests existed (`f33c191`, after `55ec31d`); they follow `:294`. processx writes stdin with a blocking `WriteFile()` on Windows (pipe without `FILE_FLAG_OVERLAPPED`, `PIPE_WAIT`, 64 KB; `lpOverlapped = NULL`), read from processx's `src/win/stdio.c` and `src/processx-connection.c`. The 4 MB echo test deadlocks: the parent blocks writing a 64 KB slice while the child blocks writing its echo into a full stdout pipe. No R-level timeout can end that call |
+
+What was built:
+
+1. `R/proc-spawn.R`: `proc_echo()` shows CRLF as LF before redaction (echo only; the redirect
+   file and `proc_run()`'s returned text keep the child's bytes, as P22's `bridge_decode()`
+   expects). Roxygen of `proc_echo()` and `proc_run()` says so.
+2. `R/proc-supervise.R`: new `proc_wait_exit(handles, seconds = 2)`; `proc_cleanup_record()`
+   waits for the processes it signalled (the marked tree and the recorded child) before it counts
+   kills and checks survivors. No wait when the kill completed (Unix), none on an unknown state.
+3. Tests, `test-proc-spawn.R`: helpers `child_eol()`, `cat_raw_code()`, `crlf_bytes()`,
+   `marker_tree_is()`; `:99` and `:106` expect the platform line end; the `line_reader()`
+   fixture writes bytes (`61 0d 0a 62 0a 63` on Unix, measured; a bare LF on Windows), so one
+   CRLF reaches the pipe on every OS; the tree test requires the child and its descendants; new
+   "line readers end lines at CRLF as a Windows child writes them, across reads" (unit, fake
+   process) and "proc_run echo
+   ends lines at CRLF, so a Windows child's output is redacted as LF" (unit of `proc_echo()`
+   over a CRLF redirect file, two polls); `skip_if_blocking_stdin()` (D-019) on the 4 MB echo
+   test and on the timeout part of the stdin timeout test, whose no-pipe refusal now runs first
+   and still runs on Windows. `test-proc-supervise.R`: `marker_tree_is()` in the sweep test; the
+   reused-PID boundary test runs a synthetic processx-style finalizer under the mock and fails
+   only on a signalled `GPTR_PROC_` marker; new "boundary: orphan cleanup waits for a kill that
+   completes asynchronously" (mocked: the killed process reads as running for 0.3 s).
+   `test-http-reactor.R:296`: the byte-exact pipe fixture writes one CRLF on every OS.
+4. Workflow: step "Offline tests file by file (Windows release diagnosis)" in the R-CMD-check job
+   before R CMD check, only for `runner.os == 'Windows' && matrix.config.r == 'release'`,
+   `timeout-minutes: 20`, `continue-on-error: true`, `NOT_CRAN: 'true'`, running the new
+   `dev/ci/test-by-file.R`: it redirects the home and `R_user_dir()` folders, loads the package
+   once, then for each file prints its name and time into the run, every test start/end and
+   expectation (`LocationReporter`) to unbuffered stderr, and per file the counts and failure
+   messages; exit 1 on any failure. New `test-zzz.R` test "the Windows release job streams the
+   offline suite file by file, bounded".
+
+Adaptations and deviations (D-019): plan literal tests changed for Windows text-mode CRLF, the
+`Rterm.exe` grandchild and processx finalizers (no target weakened: each now states the exact
+platform behaviour, and the finalizer control proves the assertion still sees calls); two new
+product behaviours (CRLF echo, bounded wait after a kill); two stdin tests skip on Windows with
+the D-019 number because processx cannot write stdin without blocking there (open item below).
+The P05 lane's uncommitted D-018 sits above D-019 in `dev/DEVIATIONS.md`: stage only the D-019
+section (how: review round 1, finding 4). No P05-owned file was touched.
+
+Red (actual, `isolated-check.R`):
+
+- `^proc`: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 277 ]` (`task2-red-proc.log`): the CRLF echo test
+  (`FAKE` in the echo, the text `"prefix FAKEfirstLine\r"`, `"FAKEsecondLine suffix\r"`) and the
+  asynchronous-kill test (`proc_sweep()` 0 instead of 1, the process still running when it
+  returned, the marker file kept). The Windows-only fixture changes pass on macOS by design.
+  Baseline before any change: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 269 ]`
+  (`task2-baseline-proc.log`).
+- `^zzz$`: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 79 ]` (`task2-red-zzz.log`): no diagnostic step
+  (count, order, `if`, limit, `continue-on-error`, `NOT_CRAN`) and no `dev/ci/test-by-file.R`.
+- Finalizer reproduction with the plan's assertion (`task2-red-finalizer.log`, scratch test
+  file run with `testthat::test_file()`): "Expected `signalled` to have length 0. Actual length:
+  1." after collecting a processx process started with `cleanup_tree = TRUE`.
+- The hang and the Windows-only failures cannot be reproduced on macOS; their red evidence is
+  the hosted logs above.
+
+Green (actual):
+
+- `^proc`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 282 ]` (269 + 13: 5 + 4 + 3 in the three new tests,
+  +1 in the reused-PID test) (`task2-green-proc.log`).
+- `^zzz$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 86 ]` (`task2-green-zzz.log`).
+- `^http` (all HTTP files, including the changed reactor test): `[ FAIL 0 | WARN 0 | SKIP 0 |
+  PASS 698 ]`, 1 min 53 s (`task2-green-http.log`).
+- Full unfiltered offline suite (`isolated-check.R test '.'`, HEAD `118f78b` plus this task's
+  changes and the concurrent P05 working-tree edits): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 6172 ]`,
+  exit 0, 3 min 26 s; the skip is the keyring skip at `test-auth-store.R:75`
+  (`task2-full.log`). It ran before the `line_reader()` fixture moved to bytes; `^proc` was
+  re-run after that change (below).
+- `dev/ci/test-by-file.R` locally on `test-proc-supervise.R` and `test-utils-hash.R`: per-file
+  headers, every test start/end and expectation, `0 failed, 0 skipped, 134 passed` and
+  `0 failed, 0 skipped, 43 passed`, exit 0 (`task2-by-file-local.log`). Its failure summary was
+  checked on scratch controls (1 failure + 1 error + 1 skip + 1 pass gave "2 failed, 1 skipped,
+  1 passed" and both messages).
+- YAML parsed with Python `yaml.safe_load` (`task2-yaml.log`) and by `test-zzz.R`.
+- Fixture bytes (`task2-fixture-bytes.log`): the plan's escaped child wrote `61 0a 62 0a 63` on
+  macOS, the new byte fixture `61 0d 0a 62 0a 63`; `^proc` re-run with it: `[ FAIL 0 | WARN 0 |
+  SKIP 0 | PASS 282 ]`.
+- Final, after comment-only edits to `R/proc-supervise.R`: `^proc|^zzz$` `[ FAIL 0 | WARN 0 |
+  SKIP 0 | PASS 368 ]` (282 + 86) (`task2-green-final.log`).
+
+Lint: `isolated-check.R lint` on `R/proc-spawn.R`, `R/proc-supervise.R`, `test-proc-spawn.R`,
+`test-proc-supervise.R`, `test-http-reactor.R`, `test-zzz.R` and `dev/ci/test-by-file.R`: no
+lints (`task2-lint.log`); every touched file is ASCII-only. No roxygen export change, so no
+document run.
+
+Logs: `dev/.validation/CI/task2-*.log`.
+
+To be confirmed by the hosted Windows run of the pushed commit (local results do not close it):
+
+- the diagnostic step's stream completes within 20 minutes and names no hanging file; if a file
+  still hangs, its last "Start test:" line names the test;
+- `test-proc-spawn.R` (tree, `proc_run()` line ends, `line_reader()`, echo redaction) and
+  `test-http-reactor.R` byte-exact pipe test pass on Windows release and oldrel-4 (which now
+  runs its tests, since CI-1);
+- `test-proc-supervise.R` sweep test: the bounded wait is the fix for the kept marker file
+  only if the cause is the asynchronous `TerminateProcess()`; if `:109` still fails, read
+  whether the survivor reads as running or unknown;
+- R CMD check on both Windows jobs finishes and writes its `Status:` line.
+
+Open items:
+
+- D-019 item 5: `write_all()` blocks on Windows (processx). A P04 product decision is needed
+  before P18, P19, P20 and P22 send large stdin payloads to Windows children.
+- Not this task: the connections job of run 37176542781 (`118f78b`) failed at
+  `test-provider-registry.R:970` (P05 lane), seen once while fetching logs.
+
+### Review round 1 (Task CI-2)
+
+Findings, checked against the contract and the architecture:
+
+1. Major, accepted. The echo's CRLF-to-LF step ran before redaction, and `secret_variants()`
+   had no line-end form, so a registered value that itself holds CRLF, written verbatim by a
+   child (any Unix child, a binary-mode Windows child), reached the redactor as LF and was
+   echoed in clear; HEAD redacted it. Architecture 6.5 lists the derived forms (URL-encoded,
+   JSON-escaped, base64 cores) without excluding others, so adding one only widens redaction.
+   Fixed with the reviewer's option 1, which keeps the hosted LF fix and covers every case:
+   `secret_variants()` (`R/auth-secrets.R`) adds the value with CRLF turned into LF when it holds
+   CRLF. With the echo's step this also redacts a CRLF value written through Windows text mode
+   (`"\r\r\n"` becomes `"\r\n"`, the value itself). A value without CRLF has the same forms as
+   before; `secret_late_check()` gains the same form (no double count: the LF form is not a
+   substring of the CRLF value). D-019 item 1 says so.
+2. Minor, accepted. `proc_wait_exit()` waited for every tree handle that read as running,
+   including those whose `ps_kill()` failed, so each kept record cost 2 s on every
+   `library(gptr)` sweep and `kill_all()`. Fixed: new `proc_kill_signalled(handles)` kills the
+   tree with one `ps_kill()` call (no serial grace periods on Unix) and returns only the handles
+   it signalled, from the per-handle `results` ps attaches when some of several handles fail
+   (none on a failure without them); the recorded child is added only when its own `ps_kill()`
+   did not fail. Only those are waited for. D-019 item 3 says so.
+3. Nit, fixed: `kill_all()`'s roxygen names the bounded wait of the marker cleanup (D-019).
+4. Nit, accepted: `git add -p` cannot split the contiguous D-018 and D-019 additions. The
+   committer stages the HEAD file plus the D-019 section as a blob, without touching the
+   working tree (checked in the scratchpad: the result equals the working file minus the D-018
+   lines 331-367, and adds 56 lines to HEAD):
+
+   ```sh
+   T=$(mktemp -d)
+   git show HEAD:dev/DEVIATIONS.md > "$T/d.md" && printf '\n' >> "$T/d.md"
+   sed -n '/^## D-019/,$p' dev/DEVIATIONS.md >> "$T/d.md"
+   git update-index --cacheinfo "100644,$(git hash-object -w "$T/d.md"),dev/DEVIATIONS.md"
+   git diff --cached dev/DEVIATIONS.md   # only the D-019 section
+   ```
+
+What changed: `R/auth-secrets.R` (`secret_variants()` LF form), `R/proc-supervise.R`
+(`proc_kill_signalled()`, `proc_cleanup_record()` waits only for signalled handles, `kill_all()`
+roxygen), `tests/testthat/test-proc-spawn.R` (new "proc_run echo redacts a registered CRLF value
+however the child wrote its line end": CRLF written verbatim and as text-mode `"\r\r\n"`, the
+line break between two polls), `tests/testthat/test-proc-supervise.R` (the failed-cleanup
+boundary test mocks `proc_wait_exit()` and expects no handle waited for, no wall clock; new
+"boundary: a kill counts as signalled only for the handles ps_kill() reached": partial failure
+with ps's `results`, a plain failure, success, an empty tree), `dev/DEVIATIONS.md` (D-019 items
+1 and 3).
+
+Red (actual): `^proc` `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 284 ]`
+(`task2-fix1-red-proc.log`): `test-proc-spawn.R:395`, `:396` (the verbatim CRLF case echoed
+`FAKE...`; the text-mode case already passed) and `test-proc-supervise.R:250` (`waited` had
+length 2, the tree handle and the child, whose kills had failed). The reviewer's scratch
+reproductions after the fix (`task2-fix1-reviewer-repro.log`): two failed-kill sweeps 0.01 s and
+0.02 s (were 2.02 s and 2.04 s), records kept; the CRLF value echoed as
+`prefix [secret:CRLF_TOKEN] suffix\n`, and the LF value in Windows text mode too.
+
+Green (actual):
+
+- `^proc` after the two fixes: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 287 ]`
+  (`task2-fix1-green-proc.log`; 282 + 4 + 1).
+- `^proc|^zzz$|^auth` with the `proc_kill_signalled()` test (written after the fix, so it has
+  no red run): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 1383 ]`, the skip the keyring skip at
+  `test-auth-store.R:75` (`task2-fix1-green-final.log`).
+- `^proc|^zzz$` final: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 378 ]` (292 + 86: the new
+  `proc_kill_signalled()` test adds 5) (`task2-fix1-green-proc-zzz.log`).
+- Full unfiltered offline suite (`isolated-check.R test '.'`, with the concurrent P05
+  working-tree edits): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 6219 ]`, exit 0; the skip is the
+  keyring skip at `test-auth-store.R:75` (`task2-fix1-full.log`). It covers every other user of
+  `secret_variants()` (redaction, late check, scrub).
+
+Lint: `isolated-check.R lint` on `R/auth-secrets.R`, `R/proc-spawn.R`, `R/proc-supervise.R`,
+`test-proc-spawn.R`, `test-proc-supervise.R`, `test-http-reactor.R`, `test-zzz.R` and
+`dev/ci/test-by-file.R`: no lints (`task2-fix1-lint.log`). Touched files and the D-019 section
+are ASCII-only. Roxygen changed only in `@noRd` blocks; `isolated-check.R document` ran (exit 0) and
+changed no file under `man/` and not `NAMESPACE` (`task2-fix1-document.log`).
+
+Still to be confirmed by the hosted Windows run of the pushed commit: the items listed above
+under "To be confirmed"; review round 1 changes nothing there.
+
+### Review round 2 (Task CI-2)
+
+The reviewer re-ran `^proc` (292), `^zzz$` (86), `^http` (698), `^proc|^zzz$` (378), lint on
+the 8 files, and the full suite: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 6286 ]` once the P05 lane
+had stopped editing. A first full run had 17 failures, all in `test-provider-registry.R`, which
+P05 rewrote during that run; a copy of HEAD plus only the CI-2 files passed. The reviewer also
+checked the processx and ps sources and the D-019 staging recipe. One finding:
+
+1. Major, accepted. Round 1's LF form went through `secret_variants()`'s
+   `nchar(out) >= min_len` filter like the other derived forms. Each CRLF becomes one character
+   shorter, so a value just long enough to be redacted lost its LF form whenever the LF form
+   fell under `gptr.redact_min_chars`. Such a value has n characters with n >= min, but n minus
+   its k CRLFs is under min. Written verbatim, it was then echoed in clear, where HEAD had
+   redacted it. Example: the 8-character `"Ab3\r\nXy9"` echoed as `"pre Ab3\nXy9 post\n"`.
+   Contract 3.1 defines `gptr.redact_min_chars` as the "shortest value-redacted secret", so it
+   is a property of the registered value (`secret_register()` sets `redact` from the value's
+   own length), not of each displayed form. Fixed as the reviewer proposed:
+   `secret_variants()` filters the other forms by length, then adds the LF form whenever
+   `nchar(v) >= min_len`. The LF form has at least half the value's characters (a CRLF is
+   two). It is the value as the echo shows it, so it adds no redaction beyond the value
+   itself. D-019 item 1 records the rule. The D-019 section now has 59 lines, not 56, and the
+   round 1 staging recipe still picks it up whole. That was checked in the scratchpad: the
+   staged file adds 59 lines to HEAD and changes nothing else.
+
+What changed: `R/auth-secrets.R` (`secret_variants()`: the LF form is kept by the value's own
+length, roxygen says so), `tests/testthat/test-proc-spawn.R` (new "proc_run echo redacts a CRLF
+value whose LF form is under the redaction minimum": `gptr.redact_min_chars = 8`,
+`"Ab3\r\nXy9"` written verbatim, echoed with `final = TRUE`, no part of the value shown),
+`dev/DEVIATIONS.md` (D-019 item 1).
+
+Red (actual): `^proc-spawn$` `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 152 ]`
+(`task2-r2fix-red-proc-spawn.log`). It failed at `test-proc-spawn.R:416`, `:417` and `:418`:
+"Ab3" and "Xy9" were in the echo, and the text was not `"pre [secret:EDGE_TEST_TOKEN] post\n"`.
+
+Green (actual):
+
+- `^proc-spawn$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 155 ]` (`task2-r2fix-green-proc-spawn.log`).
+- `^auth`: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 1005 ]`. The skip is the keyring skip at
+  `test-auth-store.R:75` (`task2-r2fix-green-auth.log`). This filter covers redaction, the late
+  check and scrub.
+- `^http`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 698 ]` (`task2-r2fix-green-http.log`).
+- `^proc|^zzz$` final: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 381 ]`, which is 378 + 3
+  (`task2-r2fix-green-final.log`).
+- Full unfiltered offline suite (`isolated-check.R test '.'`, with the concurrent P05
+  working-tree edits): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 6289 ]`, exit 0. That is the
+  reviewer's 6286 + 3, and the skip is the keyring skip at `test-auth-store.R:75`
+  (`task2-r2fix-full.log`).
+
+Lint: `isolated-check.R lint` on `R/auth-secrets.R`, `R/proc-spawn.R`, `R/proc-supervise.R`,
+`test-proc-spawn.R`, `test-proc-supervise.R`, `test-http-reactor.R`, `test-zzz.R` and
+`dev/ci/test-by-file.R` found no lints, exit 0 (`task2-r2fix-lint.log`). A first lint run
+flagged the new test's 101-character title; the title was shortened. The touched files and the
+D-019 section are ASCII-only. Roxygen changed only in a `@noRd` block, so there was no
+`document` run.
+
+Still to be confirmed by the hosted Windows run of the pushed commit: the items under "To be
+confirmed" above. Review round 2 changes none of them.

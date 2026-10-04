@@ -284,21 +284,62 @@ proc_sweep = function() {
   invisible(killed)
 }
 
+#' Wait, at most `seconds`, until none of the signalled processes reads as running
+#'
+#' On Windows ps_kill() calls TerminateProcess(), which returns before the process has exited
+#' (on Unix ps_kill() sends SIGTERM and waits up to its grace period before SIGKILL), so a
+#' process killed a moment ago can still read as running and still carry its marker. Only a
+#' handle that reads as running is waited for: an unknown state (NA) is never waited on and stays
+#' unknown.
+#' @return invisible(lgl(1)) TRUE when none reads as running
+#' @noRd
+proc_wait_exit = function(handles, seconds = 2) {
+  t_end = proc.time()[["elapsed"]] + seconds
+  repeat {
+    running = vapply(handles, function(h) isTRUE(proc_handle_alive(h)), logical(1))
+    if (!any(running) || proc.time()[["elapsed"]] >= t_end) return(invisible(!any(running)))
+    handles = handles[running]
+    Sys.sleep(0.02)
+  }
+}
+
+#' Kill handles with one ps_kill() call; returns the handles it signalled
+#'
+#' ps_kill() fails as a whole when one handle fails (access denied, say) and lists the per-handle
+#' results in the condition's `results`: a character result means that handle was signalled (or
+#' was already dead). A failure without per-handle results counts as no handle signalled.
+#' @noRd
+proc_kill_signalled = function(handles) {
+  if (!length(handles)) return(list())
+  ok = tryCatch({
+    suppressWarnings(ps::ps_kill(handles))
+    rep(TRUE, length(handles))
+  }, error = function(e) {
+    res = e$results
+    if (!is.list(res) || length(res) != length(handles)) return(rep(FALSE, length(handles)))
+    vapply(res, function(x) is.character(x) || is.null(x), logical(1))
+  })
+  handles[ok]
+}
+
 #' Clean one validated owned tree, retaining its recovery record until cleanup is confirmed
 #' @noRd
 proc_cleanup_record = function(rec) {
   path = file.path(proc_dir(), paste0(rec$marker, ".json"))
   if (!proc_record_valid(rec, path)) return(list(killed = 0L, complete = FALSE))
   tree = proc_tree(rec$marker)
-  if (length(tree)) {
-    suppressWarnings(try(ps::ps_kill(tree), silent = TRUE))
-  }
+  signalled = proc_kill_signalled(tree)
   killed = 0L
   ct = suppressWarnings(as.numeric(rec$create_time))
   known = length(ct) == 1L && is.finite(ct)
   child = if (known) proc_identity(rec$pid, ct) else list(handle = NULL, alive = NA)
-  if (known && isTRUE(child$alive)) {
-    try(ps::ps_kill(child$handle), silent = TRUE)
+  signal_child = known && isTRUE(child$alive)
+  if (signal_child && !inherits(try(ps::ps_kill(child$handle), silent = TRUE), "try-error")) {
+    signalled = c(signalled, list(child$handle))
+  }
+  # wait only for what was signalled: a failed kill (kept record) must not delay every load
+  proc_wait_exit(signalled)
+  if (signal_child) {
     child$alive = proc_handle_alive(child$handle)
     if (isFALSE(child$alive)) killed = killed + 1L
   }
@@ -318,7 +359,8 @@ proc_cleanup_record = function(rec) {
 #'
 #' Interrupt, wait `grace` seconds, `kill_tree()` (processx's marker) and gptr's marker, on
 #' Windows `taskkill /F /T /PID` while the process still lives, then `$kill()` (the process
-#' group on Unix).
+#' group on Unix); the marker cleanup then waits at most 2 s for the processes it signalled to
+#' exit (Windows `TerminateProcess()` is asynchronous; D-019).
 #' @param p a processx (or callr) process.
 #' @param grace num(1) seconds to wait after the interrupt.
 #' @return invisible(lgl(1)): TRUE when the process is gone

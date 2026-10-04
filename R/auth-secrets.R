@@ -120,9 +120,15 @@ origin_of = function(url) {
 }
 
 #' Derived forms of a value that commonly appear in output (G6 section 3.4)
+#'
+#' A value with CRLF line ends also has its LF form: proc_echo() shows a child's CRLF as LF
+#' (D-019), so a multi-line value written verbatim reaches the redactor with LF line ends.
+#' The LF form is the value itself as the echo shows it, so it is kept whenever the value is
+#' long enough to be redacted, even when dropping the CRs leaves it under `min_len`.
 #' @noRd
 secret_variants = function(v, min_len = 8L) {
   j = json_encode(v)
+  lf = if (grepl("\r\n", v, fixed = TRUE)) gsub("\r\n", "\n", v, fixed = TRUE)
   out = c(v, utils::URLencode(v, reserved = TRUE), substr(j, 2L, nchar(j) - 1L))
   if (nchar(v) >= 12L) {
     for (o in 0:2) {
@@ -132,7 +138,9 @@ secret_variants = function(v, min_len = 8L) {
       out = c(out, frag, chartr("+/", "-_", frag))
     }
   }
-  unique(out[nchar(out) >= min_len])
+  out = out[nchar(out) >= min_len]
+  if (!is.null(lf) && nchar(v) >= min_len) out = c(out, lf)
+  unique(out)
 }
 
 #' Escape a literal for use inside a PCRE pattern

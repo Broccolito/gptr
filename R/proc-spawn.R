@@ -175,6 +175,11 @@ proc_read_text = function(path) {
 }
 
 #' Echo the complete new lines of a redirect file to stderr; returns the new byte offset
+#'
+#' The echo is line-oriented, so a CRLF line end (every line of a Windows child's text-mode
+#' output) is shown as LF, before redaction: a registered multi-line value then matches the
+#' child's CRLF output too. A pair is never split between polls, because a poll that is not the
+#' final one echoes only through the last LF. The redirect file itself is left as written.
 #' @noRd
 proc_echo = function(path, shown, redactor, final = FALSE) {
   size = if (file.exists(path)) file.size(path) else 0
@@ -190,7 +195,8 @@ proc_echo = function(path, shown, redactor, final = FALSE) {
     if (length(nl)) nl[length(nl)] else 0L
   }
   if (upto > 0) {
-    safe = redactor$push(raw_to_utf8(b[seq_len(upto)]))
+    text = gsub("\r\n", "\n", raw_to_utf8(b[seq_len(upto)]), fixed = TRUE)
+    safe = redactor$push(text)
     if (nzchar(safe)) msg_verbatim(safe, stream = "stderr")
   }
   shown + upto
@@ -203,7 +209,8 @@ proc_echo = function(path, shown, redactor, final = FALSE) {
 #' line, whose Windows limit is 32,767 characters), a `p$wait(200)` loop enforces `timeout`,
 #' and `on.exit()` kills the whole tree on error or interrupt. Never processx's run().
 #' @return `list(status = int(1), stdout = chr(1), stderr = chr(1), timed_out = lgl(1),
-#'   elapsed = num(1))`, decoded as UTF-8 with the code-page fallback
+#'   elapsed = num(1))`, decoded as UTF-8 with the code-page fallback; line ends stay as the
+#'   child wrote them (CRLF from a Windows child's text-mode output), for the caller to normalise
 #' @noRd
 proc_run = function(command, args = character(), input = NULL, timeout = 120, env = NULL,
                     wd = NULL, echo = FALSE) {

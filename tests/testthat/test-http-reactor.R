@@ -293,8 +293,11 @@ test_that("reactor_proc() decodes the pipe path byte-exact under LC_ALL=C", {
   withr::local_locale(c(LC_CTYPE = "C"))
   withr::local_envvar(LC_ALL = "C")
   bytes = as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9, 0x20, 0xe6, 0x97, 0xa5, 0xe6, 0x9c, 0xac))
+  # the line ends with one CRLF on the pipe on every OS: R's text-mode stdout on Windows writes
+  # "\n" as CRLF, so an explicit 0x0d 0x0a would arrive there as "\r\r\n" (hosted Windows)
+  eol = if (proc_is_windows()) ", 0x0a" else ", 0x0d, 0x0a"
   code = paste0("cat(rawToChar(as.raw(c(", paste0("0x", as.character(bytes), collapse = ", "),
-                ", 0x0d, 0x0a))))")
+                eol, "))))")
   p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))
   withr::defer(kill_all(p, grace = 0))
   st = new.env()

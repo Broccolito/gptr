@@ -230,3 +230,27 @@ test_that("hosted CI jobs are bounded and a crashed R CMD check cannot pass", {
   expect_identical(unname(other[combos == "windows-latest oldrel-4"]), "false")
   expect_true(all(other[combos != "windows-latest oldrel-4"] == "true"))
 })
+
+test_that("the Windows release job streams the offline suite file by file, bounded", {
+  description = source_file("DESCRIPTION")
+  skip_if(is.null(description), "not running from the source tree")
+  root = dirname(description)
+  jobs = yaml::read_yaml(file.path(root, ".github", "workflows", "R-CMD-check.yaml"))$jobs
+  # R CMD check prints the test output only after the tests end, so the hosted Windows run that
+  # hung in "checking tests" named no file; this step names the file and test it is running
+  steps = jobs[["R-CMD-check"]]$steps
+  runs = vapply(steps, function(s) s$run %||% "", "")
+  uses = vapply(steps, function(s) s$uses %||% "", "")
+  diag = which(grepl("Rscript --vanilla dev/ci/test-by-file.R", runs, fixed = TRUE))
+  check = which(startsWith(uses, "r-lib/actions/check-r-package@"))
+  expect_length(diag, 1L)
+  step = if (length(diag) == 1L) steps[[diag]] else list()
+  # before R CMD check, so a hang there cannot use up the job's limit first
+  expect_true(length(diag) == 1L && length(check) == 1L && diag < check)
+  expect_identical(step[["if"]], "runner.os == 'Windows' && matrix.config.r == 'release'")
+  expect_true(is.numeric(step[["timeout-minutes"]]) && step[["timeout-minutes"]] <= 20)
+  # diagnosis only: R CMD check stays the gate
+  expect_true(isTRUE(step[["continue-on-error"]]))
+  expect_identical(step$env[["NOT_CRAN"]], "true")
+  expect_true(file.exists(file.path(root, "dev", "ci", "test-by-file.R")))
+})

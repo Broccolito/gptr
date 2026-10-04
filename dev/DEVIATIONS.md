@@ -442,3 +442,35 @@ the following; contract 7.4 and IC-60 are otherwise unchanged.
 The hosted Windows release job also streams the offline suite file by file before R CMD check
 (`dev/ci/test-by-file.R`, 20-minute step limit, diagnosis only). Validation:
 `progress/ci-hosted.md`, Task CI-2.
+
+## D-020 - gptr_providers(): IC-74 egress and default model, one-attempt probe, row-local failures (2026-10-03)
+
+P05 Task 12's literal `gptr_providers()` predates IC-74. Behaviours changed, which P08 (egress),
+P13 and P20 (`status()` functions) consume:
+
+1. **Egress follows the effective endpoint.** Contract 10.2 row 1 lets a `local` provider skip
+   the egress acknowledgement; IC-74 (07-local-ollama.md sections 2.1 and 5) says the `local`
+   hint is insufficient and a remote Ollama endpoint needs the normal acknowledgement. The
+   `egress` column is therefore `ack` for an offline provider, for a `local` provider whose
+   effective base URL is a loopback address (`catalog_endpoint()`), and otherwise only when the
+   user settings' `egress.<id>` is `"ack"`. P08's `egress_check()` should apply the same
+   effective-origin rule (P07/P08 row of 07 section 6).
+2. **Default model by type.** A decision-only (classifier) model is never shown as the default
+   of a chat or CLI provider, and a classifier provider shows only its classifier models (the
+   plan took the newest active catalog row, which made `ollama/clef` Ollama's default chat
+   model). Ollama's default is `NA` with the shipped snapshot, whose Ollama rows are
+   classifiers.
+3. **One probe, bounded.** `check = TRUE` calls `catalog_http_request(<base>/models, "GET",
+   list(), NULL, timeout = 2, attempts = 1L, max_bytes = 65536)` instead of the plan's
+   `catalog_http_get()`, whose P04 default policy retries (the plan says "one unauthenticated
+   GET"). Any HTTP status proves reachability, also when it arrives with a body above the bound
+   (the condition's `status`). The probe runs only for rows whose status is `ready` or `no key`.
+4. **Failures stay in their row.** A credential lookup that fails other than with
+   `gptr_error_no_key` (a plugin `auth` function that throws a plain R error or returns no
+   handle) shows `error` instead of aborting the listing. A keyed provider without a base URL
+   shows `no base url`, with a malformed one `invalid base url` (the plan showed `no key`), and
+   neither is probed. A provider's `status()` result lacking `status` maps `available`
+   (`TRUE` -> `ready`, `FALSE` -> `unavailable`, else `unknown`), as plan ambiguity 18 requires;
+   a `package_version` `version` is shown as text.
+
+Validation: `progress/P05.md`, Task 12 (`test-provider-registry.R`).

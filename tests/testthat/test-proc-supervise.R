@@ -14,6 +14,16 @@ wait_until = function(cond, seconds = 5) {
   isTRUE(cond())
 }
 
+# Whether the processes that carry a marker are `pid` and its descendants only. On Windows
+# Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one Rscript
+# child holds two processes there (hosted Windows: `length(proc_tree(marker)) == 1L` was FALSE)
+marker_tree_is = function(marker, pid) {
+  pids = vapply(proc_tree(marker), ps::ps_pid, 1L)
+  kids = tryCatch(ps::ps_children(ps::ps_handle(pid), recursive = TRUE),
+                  error = function(e) list())
+  pid %in% pids && all(pids %in% c(pid, vapply(kids, ps::ps_pid, 1L)))
+}
+
 test_that("pid_alive() checks liveness and the creation time against pid reuse", {
   local_proc_state()
   me = Sys.getpid()
@@ -99,7 +109,7 @@ test_that("proc_sweep() kills the trees of markers whose parent process is gone"
   kept = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"),
                                env = c("current", stats::setNames("YES", kept_marker)))
   withr::defer(try(kept$kill(), silent = TRUE))
-  expect_true(wait_until(function() length(proc_tree(orphan_marker)) == 1L, 10))
+  expect_true(wait_until(function() marker_tree_is(orphan_marker, orphan$get_pid()), 10))
   # a parent creation time that does not match this process reads as "parent gone"
   orphan_file = write_marker(orphan_marker, orphan$get_pid(), me$create_time + 1000)
   kept_file = write_marker(kept_marker, kept$get_pid(), me$create_time)
@@ -225,12 +235,75 @@ test_that("boundary: failed orphan cleanup retains the recovery marker", {
     pid_alive = function(pid, create_time = NULL) pid == 42L,
     proc_tree = function(marker) list(list(pid = 42L, time = 10)), .package = "gptr"
   )
+  # a kill that failed signalled nothing, so nothing is waited for (every library(gptr) sweeps)
+  waited = list()
+  local_mocked_bindings(proc_wait_exit = function(handles, seconds = 2) {
+    waited <<- c(waited, handles)
+    invisible(TRUE)
+  }, .package = "gptr")
   marker = proc_marker_new()
   path = write_proc_fixture(list(marker = marker, pid = 42L, create_time = 10,
                                  parent_pid = 43L, parent_create = 11))
   withr::defer(unlink(path))
   expect_identical(proc_sweep(), 0L)
   expect_true(file.exists(path))
+  expect_length(waited, 0L)
+})
+
+test_that("boundary: orphan cleanup waits for a kill that completes asynchronously", {
+  local_proc_state()
+  # On Windows ps_kill() calls TerminateProcess(), which returns before the process has exited:
+  # just after the kill the child still reads as running and still carries its marker (hosted
+  # Windows kept the marker file of a swept orphan whose process was gone soon after)
+  now = function() proc.time()[["elapsed"]]
+  died = Inf
+  running = function() now() < died
+  local_mocked_bindings(
+    ps_handle = function(pid, time = NULL) list(pid = pid, time = time),
+    ps_is_running = function(p) p$pid != 42L || running(),
+    ps_status = function(p) "running",
+    ps_create_time = function(p) 10,
+    ps_pid = function(p) p$pid,
+    ps_kill = function(p, ...) {
+      if (is.infinite(died)) died <<- now() + 0.3
+      invisible("killed")
+    },
+    .package = "ps"
+  )
+  local_mocked_bindings(
+    proc_tree = function(marker) if (running()) list(list(pid = 42L, time = 10)) else list(),
+    .package = "gptr"
+  )
+  marker = proc_marker_new()
+  path = write_proc_fixture(list(marker = marker, pid = 42L, create_time = 10,
+                                 parent_pid = 43L, parent_create = 11))
+  expect_identical(proc_sweep(), 1L)
+  expect_false(running())
+  expect_false(file.exists(path))
+})
+
+test_that("boundary: a kill counts as signalled only for the handles ps_kill() reached", {
+  handles = list(list(pid = 41L), list(pid = 42L))
+  outcome = "partial"
+  calls = 0L
+  local_mocked_bindings(ps_kill = function(p, ...) {
+    calls <<- calls + 1L
+    switch(outcome,
+      # ps's own shape when one handle of several fails: per-handle results on the condition
+      partial = stop(structure(
+        list(message = "Failed to kill some processes: 42 (R)", call = NULL,
+             results = list("killed", simpleError("access denied")), pid = 42L),
+        class = c("ps_error", "error", "condition"))),
+      plain = stop("synthetic access failure"),
+      invisible(c("killed", "dead")))
+  }, .package = "ps")
+  expect_identical(proc_kill_signalled(handles), handles[1])
+  outcome = "plain"
+  expect_identical(proc_kill_signalled(handles), list())
+  outcome = "ok"
+  expect_identical(proc_kill_signalled(handles), handles)
+  expect_identical(proc_kill_signalled(list()), list())
+  expect_identical(calls, 3L)
 })
 
 test_that("boundary: stale process cleanup cannot release or kill a reused PID record", {
@@ -238,7 +311,7 @@ test_that("boundary: stale process cleanup cannot release or kill a reused PID r
   signalled = character()
   local_mocked_bindings(proc_create_time = function(pid) 10, .package = "gptr")
   local_mocked_bindings(
-    ps_kill_tree = function(marker) {
+    ps_kill_tree = function(marker, ...) {
       signalled <<- c(signalled, marker)
     }, .package = "ps"
   )
@@ -250,7 +323,17 @@ test_that("boundary: stale process cleanup cannot release or kill a reused PID r
   expect_true(kill_all(stale, grace = 0))
   expect_false(proc_release(stale))
   expect_identical(proc_record(42L)$marker, marker)
-  expect_length(signalled, 0L)
+  # processx's finalizer (cleanup_tree = TRUE) calls ps_kill_tree() by name with processx's own
+  # tree id, so a garbage collection here reaches the mock (hosted Windows: 3 calls). Only a
+  # gptr marker signalled by kill_all() would be a fault.
+  local({
+    e = new.env()
+    reg.finalizer(e, function(e) get("ps_kill_tree", asNamespace("ps"))("PS_finalizer"))
+    invisible(NULL)
+  })
+  gc()
+  expect_true("PS_finalizer" %in% signalled)
+  expect_false(any(startsWith(signalled, "GPTR_PROC_")))
 })
 
 test_that("boundary: unavailable tree inspection preserves recovery records", {
