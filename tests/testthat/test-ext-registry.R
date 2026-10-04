@@ -240,3 +240,192 @@ test_that("malformed session and source values cannot widen registration scope",
   registry_session_drop(NULL)
   expect_equal(registry_names("command"), "global")
 })
+
+local_builtins = function(env = parent.frame()) {
+  old = the$builtins
+  withr::defer(assign("builtins", old, envir = the), envir = env)
+  the$builtins = list()
+  invisible(NULL)
+}
+
+test_that("-kind:name hides a record and +kind:name restores it", {
+  local_registry()
+  local_builtins()
+  registry_add(cmd("grep"), "builtin:tools", 6L)
+  expect_equal(gptr_registry()$state, "active")
+  registry_filters_set("-command:grep", "session")
+  expect_null(registry_get("command", "grep"))
+  expect_equal(gptr_registry("command")$state, "disabled")
+  expect_equal(gptr_registry()$state, "disabled")
+  registry_filters_set("+command:grep", "session")
+  expect_false(is.null(registry_get("command", "grep")))
+  expect_equal(gptr_registry()$state, "active")
+})
+
+test_that("a later scope's + undoes an earlier scope's -", {
+  local_registry()
+  local_builtins()
+  registry_add(cmd("grep"), "builtin:tools", 6L)
+  registry_filters_set("-command:grep", "user")
+  expect_null(registry_get("command", "grep"))
+  out = registry_filters_set("+command:grep", "session")
+  expect_false("command:grep" %in% out)
+  expect_false(is.null(registry_get("command", "grep")))
+})
+
+test_that("-builtin:<name> and -plugin:<name> disable every record of that source", {
+  local_registry()
+  local_builtins()
+  registry_add(cmd("a"), "builtin:mcp", 6L)
+  registry_add(cmd("b"), "plugin:panel", 5L)
+  registry_filters_set(c("-builtin:mcp", "-plugin:panel"), "user")
+  expect_null(registry_get("command", "a"))
+  expect_null(registry_get("command", "b"))
+  expect_true(registry_source_filtered("builtin:mcp"))
+  expect_true(registry_source_filtered("plugin:panel"))
+  registry_filters_set(character(), "user")
+  expect_false(is.null(registry_get("command", "a")))
+})
+
+test_that("no filter from user settings, a call or gptr_config() disables the kernel (IC-53)", {
+  local_registry()
+  local_builtins()
+  registry_add(gptr_policy("mode", function(call, ctx) NULL), "builtin:permissions", 6L)
+  registry_add(gptr_policy("critical_guard", function(call, ctx) NULL), "builtin:permissions", 6L)
+  registry_add(gptr_policy("plan", function(call, ctx) NULL), "builtin:plan", 6L)
+  bad = c("-builtin:permissions", "-builtin:plan", "-policy:critical_guard",
+          "-policy:secret_guard", "-builtin:secrets")
+  for (scope in c("user", "session", "project")) {
+    out = registry_filters_set(bad, scope)
+    expect_setequal(attr(out, "refused"), bad)
+    expect_length(out, 0L)
+  }
+  registry_filters_set("-policy:mode", "user")
+  expect_length(registry_all("policy"), 3L)
+  expect_false(registry_source_filtered("builtin:permissions"))
+  d = gptr_registry(diagnostics = TRUE)
+  expect_equal(sum(d$class == "filter_refused"), 15L)
+})
+
+test_that("project filters never disable user or built-in policies and hooks", {
+  local_registry()
+  local_builtins()
+  registry_add(gptr_policy("mine", function(call, ctx) NULL), "user", 3L)
+  registry_add(gptr_policy("theirs", function(call, ctx) NULL), "plugin:p", 5L)
+  registry_add(gptr_hook("tool_call", function(event, ctx) NULL), "builtin:audit", 6L)
+  registry_filters_set(c("-policy:mine", "-policy:theirs", "-builtin:audit"), "project")
+  expect_equal(names(registry_all("policy")), "mine")
+  expect_length(registry_all("hook"), 1L)
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(d$class == "filter_limited"))
+  registry_filters_set("-policy:mine", "user")
+  expect_length(registry_all("policy"), 0L)
+})
+
+test_that("inside a run, filters that remove policies or hooks are refused (IC-53)", {
+  reg = local_registry()
+  local_builtins()
+  registry_add(gptr_policy("no_installs", function(call, ctx) NULL), "user", 3L)
+  registry_add(cmd("x"), "user", 3L)
+  reg$runs = "u1"
+  out = registry_filters_set(c("-policy:no_installs", "-command:x"), "session")
+  expect_equal(attr(out, "refused"), "-policy:no_installs")
+  expect_length(registry_all("policy"), 1L)
+  expect_null(registry_get("command", "x"))
+  reg$runs = character()
+  registry_filters_set("-policy:no_installs", "session")
+  expect_length(registry_all("policy"), 0L)
+})
+
+test_that("inside a run, dropping a + that keeps a policy enabled is refused (IC-53)", {
+  reg = local_registry()
+  local_builtins()
+  registry_add(gptr_policy("audit", function(call, ctx) NULL), "user", 3L)
+  registry_add(cmd("x"), "user", 3L)
+  registry_filters_set("-policy:audit", "user")
+  registry_filters_set(c("+policy:audit", "+command:x"), "session")
+  expect_length(registry_all("policy"), 1L)
+  reg$runs = "u1"
+  out = registry_filters_set(character(), "session")
+  expect_equal(attr(out, "refused"), "+policy:audit")
+  expect_length(registry_all("policy"), 1L)
+  expect_equal(reg$filters$session, "+policy:audit")
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(d$class == "filter_refused" & grepl("+policy:audit", d$message, fixed = TRUE)))
+  reg$runs = character()
+  registry_filters_set(character(), "session")
+  expect_length(registry_all("policy"), 0L)
+})
+
+test_that("malformed filters are an invalid argument", {
+  local_registry()
+  expect_error(registry_filters_set("builtin:mcp", "user"), class = "gptr_error_invalid_argument")
+  expect_error(registry_filters_set("-Tool:x", "user"), class = "gptr_error_invalid_argument")
+  expect_error(registry_filters_set("-tool:grep", "global"), class = "gptr_error_invalid_argument")
+  expect_error(registry_filters_set(NA_character_, "user"), class = "gptr_error_invalid_argument")
+})
+
+test_that("a filter on a kind not defined yet is kept with a diagnostic (plugin kinds)", {
+  local_registry()
+  local_builtins()
+  out = registry_filters_set("-reviewer:stats", "user")
+  expect_equal(as.character(out), "reviewer:stats")
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true(any(d$class == "filter_unknown_kind" & grepl("reviewer", d$message, fixed = TRUE)))
+  kind_define("reviewer", validate = function(spec) spec, source = "plugin:panel")
+  registry_add(gptr_spec("reviewer", "stats"), "plugin:panel", 5L)
+  registry_add(gptr_spec("reviewer", "style"), "plugin:panel", 5L)
+  expect_equal(registry_names("reviewer"), "style")
+})
+
+test_that("a non-replaceable built-in source cannot be disabled in any scope", {
+  local_registry()
+  local_builtins()
+  the$builtins = list(locked = list(replaceable = FALSE))
+  registry_add(cmd("locked_command"), "builtin:locked", 6L)
+  for (scope in c("user", "project", "session")) {
+    out = registry_filters_set("-builtin:locked", scope)
+    expect_identical(attr(out, "refused"), "-builtin:locked")
+    expect_false(registry_source_filtered("builtin:locked"))
+    expect_false(is.null(registry_get("command", "locked_command")))
+  }
+})
+
+test_that("active-run filters preserve hook records through kind and source filters", {
+  reg = local_registry()
+  local_builtins()
+  hook = gptr_hook("tool_call", function(event, ctx) NULL)
+  registry_add(hook, "plugin:audit", 5L)
+  registry_add(cmd("ordinary"), "plugin:audit", 5L)
+  reg$runs = "active"
+  blocked = c(paste0("-hook:", hook$name), "-plugin:audit")
+  out = registry_filters_set(c(blocked, "-command:ordinary"), "session")
+  expect_setequal(attr(out, "refused"), blocked)
+  expect_length(registry_all("hook"), 1L)
+  expect_null(registry_get("command", "ordinary"))
+})
+
+test_that("dropping several restoration filters cannot remove live safety records", {
+  reg = local_registry()
+  local_builtins()
+  policy = gptr_policy("audit", function(call, ctx) NULL)
+  hook = gptr_hook("tool_call", function(event, ctx) NULL)
+  registry_add(policy, "plugin:audit", 5L)
+  registry_add(hook, "plugin:audit", 5L)
+  keys = c("policy:audit", paste0("hook:", hook$name), "plugin:audit")
+  registry_filters_set(paste0("-", keys), "user")
+  registry_filters_set(paste0("+", keys), "session")
+  reg$runs = "active"
+  out = registry_filters_set(character(), "session")
+  expect_setequal(attr(out, "refused"), paste0("+", keys))
+  expect_length(registry_all("policy"), 1L)
+  expect_length(registry_all("hook"), 1L)
+})
+
+test_that("filter validation rejects trailing line terminators", {
+  local_registry()
+  for (suffix in c("\n", "\r", "\r\n")) {
+    expect_error(registry_filters_set(paste0("-tool:x", suffix), "user"),
+                 class = "gptr_error_invalid_argument")
+  }
+})

@@ -636,3 +636,144 @@ registry_rec_filtered = function(rec, reg = registry_env(), eff = reg$eff) {
   if (rec$kind %in% c("policy", "hook") && kept_from_project) hit = hit[hit != "project"]
   length(hit) > 0L
 }
+
+# ---- setting filters (contract 7.2 registry_filters_set, 10.1; IC-53) ---------------------------
+
+#' The form of a filter string: a sign, a prefix (builtin, plugin or a kind) and a name
+#' @noRd
+registry_filter_rx = "\\A[+-][a-z][a-z0-9_]*:[^[:space:]]+\\z"
+
+#' The effective filters: names are filter keys, values the scope that set them. Scopes apply in
+#' the order user, project, session; "+key" removes a key set by an earlier scope
+#' @noRd
+registry_filters_effective = function(filters) {
+  eff = character()
+  for (scope in c("user", "project", "session")) {
+    for (f in filters[[scope]]) {
+      key = substring(f, 2L)
+      if (!startsWith(f, "-")) {
+        eff = eff[names(eff) != key]
+      } else if (!(key %in% names(eff)) || identical(eff[[key]], "project")) {
+        eff[key] = scope
+      }
+    }
+  }
+  eff
+}
+
+#' Is a whole source (builtin:<name>, plugin:<name>) disabled by a filter?
+#' @noRd
+registry_source_filtered = function(source, reg = registry_env()) {
+  if (registry_source_protected(source)) return(FALSE)
+  if (startsWith(source, "builtin:") && substring(source, 9L) %in% registry_protected_builtins()) {
+    return(FALSE)
+  }
+  source %in% names(reg$eff)
+}
+
+#' Does a filter key match an enabled policy or hook record?
+#' @noRd
+registry_filter_hits_policy = function(key, reg) {
+  for (k in c("policy", "hook")) {
+    for (r in registry_recs(reg, get0(k, envir = reg$by_kind, inherits = FALSE))) {
+      if (registry_source_protected(r$source) || registry_rec_filtered(r, reg)) next
+      if (identical(key, paste0(r$kind, ":", r$name)) || identical(key, r$source)) return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' Would the effective filters `eff` disable a policy or hook record that is enabled now?
+#' @noRd
+registry_drops_guard = function(reg, eff) {
+  for (k in c("policy", "hook")) {
+    for (r in registry_recs(reg, get0(k, envir = reg$by_kind, inherits = FALSE))) {
+      if (!registry_rec_filtered(r, reg) && registry_rec_filtered(r, reg, eff)) return(TRUE)
+    }
+  }
+  FALSE
+}
+
+#' Why a filter is refused, or NULL (IC-53)
+#' @noRd
+registry_filter_refusal = function(f, reg) {
+  if (!startsWith(f, "-")) return(NULL)
+  key = substring(f, 2L)
+  protected = c(paste0("builtin:", registry_protected_builtins()), "policy:critical_guard",
+                "policy:secret_guard")
+  if (key %in% protected) {
+    return("the permission kernel and non-replaceable built-ins cannot be disabled by filters")
+  }
+  if (length(reg$runs) && registry_filter_hits_policy(key, reg)) {
+    return("filters that remove policy or hook records are refused while a run is active")
+  }
+  NULL
+}
+
+#' Set the filters of one scope (contract 7.2; IC-53). Returns the effective filter keys
+#' invisibly, with attribute "refused" naming the refused filters
+#' @noRd
+registry_filters_set = function(filters, scope = c("session", "user", "project")) {
+  check_strings(filters, "filters")
+  scope = check_choice(scope, c("session", "user", "project"), "scope")
+  reg = registry_env()
+  ok_form = grepl(registry_filter_rx, filters, perl = TRUE)
+  if (!all(ok_form)) {
+    gptr_abort(paste0("Invalid filter; use -builtin:<name>, -plugin:<name> or -<kind>:<name>, ",
+                      "and a leading + to undo one."),
+               "invalid_argument", arg = "filters",
+               expected = "filters of the form -builtin:<name>, -plugin:<name>, -<kind>:<name>")
+  }
+  # A kind that a lazy plugin defines on activation does not exist yet when the settings layer
+  # applies the user's filters: keep the filter (it applies once the kind exists) and note it
+  prefix = sub("^[+-]([a-z][a-z0-9_]*):.*$", "\\1", filters, perl = TRUE)
+  for (f in filters[!(prefix %in% c("builtin", "plugin", kind_names()))]) {
+    registry_diagnostic(paste0("filters:", scope), "filter", "filter_unknown_kind",
+                        paste0(f, " names a kind that is not registered (yet)"))
+  }
+  keep = character()
+  refused = character()
+  for (f in filters) {
+    why = registry_filter_refusal(f, reg)
+    if (is.null(why)) {
+      keep = c(keep, f)
+    } else {
+      refused = c(refused, f)
+      registry_diagnostic(paste0("filters:", scope), "filter", "filter_refused",
+                          paste0(f, " refused: ", why))
+    }
+  }
+  if (identical(scope, "project")) {
+    for (f in keep[startsWith(keep, "-")]) {
+      if (registry_filter_hits_policy(substring(f, 2L), reg)) {
+        registry_diagnostic("filters:project", "filter", "filter_limited",
+                            paste0(f, " does not apply to user or built-in policy and hook ",
+                                   "records"))
+      }
+    }
+  }
+  if (length(reg$runs)) {
+    old = reg$filters[[scope]]
+    dropped = setdiff(old[startsWith(old, "+")], keep)
+    retained = character()
+    for (f in dropped) {
+      trial = reg$filters
+      trial[[scope]] = c(keep, setdiff(dropped, f))
+      if (registry_drops_guard(reg, registry_filters_effective(trial))) {
+        retained = c(retained, f)
+        registry_diagnostic(paste0("filters:", scope), "filter", "filter_refused",
+                            paste0("dropping ", f, " refused: it keeps a policy or hook record ",
+                                   "enabled while a run is active"))
+      }
+    }
+    keep = c(keep, retained)
+    refused = c(refused, retained)
+  }
+  reg$filters[[scope]] = keep
+  reg$eff = registry_filters_effective(reg$filters)
+  registry_touch(reg)
+  if (any(startsWith(keep, "+builtin:")) && length(the$builtins)) ext_load_builtins()
+  out = names(reg$eff) %||% character()
+  attr(out, "refused") = refused
+  invisible(out)
+}
