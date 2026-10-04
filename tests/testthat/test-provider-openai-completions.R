@@ -400,3 +400,391 @@ test_that("OpenRouter reasoning_details become one opaque block, merged as Pi do
   r = chat_run(c(chat_chunk('{"content":"ok"}', '"stop"'), "[DONE]"), provider = "openrouter")
   expect_identical(vapply(r$message$content, function(b) b$type, ""), "text")
 })
+
+# ---- the request body and the built-in (Task 5) ------------------------------------------------
+
+completions_turn2 = function(model) {
+  asst = msg_assistant(list(block_thinking("Need the row count.", signature = "reasoning_content"),
+                            block_text("Checking."),
+                            block_tool_call("call_A1", "r", list(code = "nrow(d)"))),
+                       api = api, provider = model$provider, model = model$id,
+                       stop_reason = "tool_use", timestamp = 2)
+  # first_message() comes from replay_helpers.R, sourced at run time where lintr cannot see it
+  first = first_message() # nolint: object_usage_linter.
+  list(first, asst, msg_tool_result("call_A1", "r", "[1] 32", timestamp = 3))
+}
+
+test_that("completions bodies: one system message, converted tools, the messages last", {
+  model = test_model(api, provider = "groq", id = "openai/gpt-oss-120b")
+  req = completions_build(model, ctx_fixture(list(first_message())),
+                          list(base_url = "https://api.groq.com/openai/v1"))
+  body = json_decode(req$body)
+  expect_identical(names(body), c("model", "stream", "stream_options", "store",
+                                  "max_completion_tokens", "tools", "messages"))
+  expect_equal(body$stream_options, list(include_usage = TRUE))
+  expect_identical(body$messages[[1L]]$role, "developer")
+  expect_identical(body$messages[[1L]]$content, "T0 static sections.\n\nT1 catalogs.")
+  expect_identical(body$tools[[2L]]$`function`$name, "r")
+  expect_identical(body$tools[[2L]]$`function`$parameters$required, list("code"))
+  expect_identical(req$url, "https://api.groq.com/openai/v1/chat/completions")
+})
+
+test_that("OpenRouter Anthropic models get cache_control on the system and project blocks", {
+  model = test_model(api, provider = "openrouter", id = "anthropic/claude-sonnet-5-5")
+  req = completions_build(model, ctx_fixture(list(first_message())), list())
+  body = json_decode(req$body)
+  sys = body$messages[[1L]]$content
+  expect_equal(sys[[length(sys)]]$cache_control, list(type = "ephemeral"))
+  user = body$messages[[2L]]$content
+  expect_equal(user[[1L]]$cache_control, list(type = "ephemeral"))
+  expect_null(user[[2L]]$cache_control)
+  expect_identical(req$headers$`x-session-id`, "s0123456789")
+  expect_identical(req$headers$`X-OpenRouter-Title`, "gptr")
+  none = list(anchors = character(), tail_ttl = "5m", key = "gptr:0123456789ab")
+  expect_false(grepl("cache_control",
+                     completions_build(model, ctx_fixture(list(first_message()), cache_plan = none),
+                                       list())$body, fixed = TRUE))
+  model$id = "meta/llama-5"
+  expect_false(grepl("cache_control", completions_build(model, ctx_fixture(list(first_message())),
+                                                        list())$body, fixed = TRUE))
+})
+
+test_that("the default cache policy anchors the OpenRouter system and project blocks", {
+  plan = default_plan(api)
+  expect_identical(plan$anchors, c("t0", "project"))
+  model = test_model(api, provider = "openrouter", id = "google/gemini-3.8-flash")
+  body = json_decode(completions_build(model, ctx_fixture(list(first_message()), cache_plan = plan),
+                                       list())$body)
+  sys = body$messages[[1L]]$content
+  expect_equal(sys[[length(sys)]]$cache_control, list(type = "ephemeral"))
+  expect_equal(body$messages[[2L]]$content[[1L]]$cache_control, list(type = "ephemeral"))
+  groq = test_model(api, provider = "groq", id = "openai/gpt-oss-120b")
+  expect_false(grepl("cache_control",
+                     completions_build(groq, ctx_fixture(list(first_message()), cache_plan = plan),
+                                       list())$body, fixed = TRUE))
+})
+
+test_that("reasoning is replayed in its own field to the same model; DeepSeek forces the field", {
+  model = test_model(api, provider = "together", id = "deepseek-r1")
+  body = json_decode(completions_build(model, ctx_fixture(completions_turn2(model)), list())$body)
+  asst = body$messages[[3L]]
+  expect_identical(asst$reasoning_content, "Need the row count.")
+  expect_identical(asst$content, "Checking.")
+  expect_identical(asst$tool_calls[[1L]]$`function`$arguments, "{\"code\":\"nrow(d)\"}")
+  expect_identical(body$messages[[4L]], list(role = "tool", tool_call_id = "call_A1",
+                                             content = "[1] 32"))
+  ds = test_model(api, provider = "deepseek", id = "deepseek-v4-pro")
+  msgs = completions_turn2(test_model(api, provider = "other", id = "x"))
+  asst = json_decode(completions_build(ds, ctx_fixture(msgs), list())$body)$messages[[3L]]
+  expect_identical(asst$reasoning_content, "")
+})
+
+test_that("tool-result images follow as one user message; Mistral ids are 9 characters", {
+  model = test_model(api, provider = "mistral", id = "pixtral-large")
+  msgs = completions_turn2(model)
+  msgs[[3L]] = msg_tool_result("call_A1", "r", list(block_text("plot drawn"),
+                                                    block_image(png_b64())))
+  body = json_decode(completions_build(model, ctx_fixture(msgs), list())$body)
+  tool = body$messages[[4L]]
+  expect_identical(tool$role, "tool")
+  expect_match(tool$tool_call_id, "^[A-Za-z0-9]{9}$")
+  expect_identical(body$messages[[3L]]$tool_calls[[1L]]$id, tool$tool_call_id)
+  img = body$messages[[5L]]
+  expect_identical(img$role, "user")
+  expect_identical(img$content[[2L]]$image_url$url, paste0("data:image/png;base64,", png_b64()))
+})
+
+test_that("no tools but tool calls in history sends tools: []; max_tokens per compat", {
+  model = test_model(api, provider = "deepseek", id = "deepseek-v4-pro")
+  ctx = ctx_fixture(completions_turn2(model), params = list(max_tokens = 2000L))
+  ctx$tools_json = NULL
+  body = json_decode(completions_build(model, ctx, list())$body)
+  expect_identical(body$tools, list())
+  expect_identical(body$max_tokens, 2000L)
+  expect_null(body$max_completion_tokens)
+})
+
+test_that("thinking formats, tool_choice and auth headers follow the compat record", {
+  model = test_model(api, provider = "openrouter", id = "openai/gpt-6-sol")
+  forced = list(type = "tool", name = "read")
+  req = completions_build(model, ctx_fixture(list(msg_user("x")),
+                                             params = list(thinking = "low",
+                                                           tool_choice = forced)),
+                          list(credential = fake_handle("OPENROUTER_API_KEY")))
+  body = json_decode(req$body)
+  expect_equal(body$reasoning, list(effort = "low"))
+  expect_equal(body$tool_choice, list(type = "function", `function` = list(name = "read")))
+  expect_identical(req$headers$authorization, list("Bearer ", fake_handle("OPENROUTER_API_KEY")))
+  no = test_model(api, provider = "groq", capabilities = list(forced_tool_choice = FALSE))
+  body = json_decode(completions_build(no, ctx_fixture(list(msg_user("x")),
+                                                       params = list(tool_choice = forced)),
+                                       list())$body)
+  expect_null(body$tool_choice)
+  ol = test_model(api, provider = "ollama", id = "qwen3:8b")
+  body = json_decode(completions_build(ol, ctx_fixture(list(msg_user("x")),
+                                                       params = list(tool_choice = "none")),
+                                       list())$body)
+  expect_null(body$tool_choice)
+  az = test_model(api, provider = "azure", id = "gpt-6-sol")
+  req = completions_build(az, ctx_fixture(list(msg_user("x"))),
+                          list(credential = fake_handle("AZURE_OPENAI_API_KEY")))
+  expect_identical(req$headers$`api-key`, fake_handle("AZURE_OPENAI_API_KEY"))
+  expect_null(req$headers$authorization)
+})
+
+test_that("returns = becomes an instruction with auto tool choice (IC-71)", {
+  model = test_model(api, provider = "groq", id = "openai/gpt-oss-120b")
+  body = json_decode(completions_build(model, ctx_fixture(list(msg_user("x")),
+                                                          params = list(returns = count_schema())),
+                                       list())$body)
+  last = body$messages[[length(body$messages)]]
+  expect_identical(last$role, "user")
+  expect_match(last$content, "JSON Schema", fixed = TRUE)
+  expect_null(body$tool_choice)
+  expect_null(body$response_format)
+})
+
+test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", {
+  model = test_model(api, provider = "groq", id = "openai/gpt-oss-120b")
+  memo = new.env(parent = emptyenv())
+  b1 = completions_build(model, ctx_fixture(list(first_message())), list(memo = memo))$body
+  b2 = completions_build(model, ctx_fixture(completions_turn2(model)), list(memo = memo))$body
+  expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
+  expect_identical(b2, completions_build(model, ctx_fixture(completions_turn2(model)),
+                                         list())$body)
+})
+
+test_that("builtin:openai-compat registers the adapter; check_adapter() and gptr_check() pass", {
+  a = adapter_get(api)
+  expect_identical(a$capabilities$tool_shape, "chat")
+  expect_identical(a$capabilities$cache, "openrouter")
+  expect_identical(a$capabilities$request_params, c("service_tier", "metadata", "user"))
+  res = check_adapter(a, fixtures = sse_dir(api))
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
+  expect_true(all(gptr_check(a)$ok))
+})
+
+test_that("end to end on the mock server: a Chat Completions stream (skip on CRAN)", {
+  skip_on_cran()
+  srv = local_mock_server("chat_completions", n = 3L, interval = 0.02)
+  r = mock_stream(srv)
+  expect_identical(r$types, c("start", "text_start", rep("text_delta", 3L), "text_end", "done"))
+  expect_identical(r$message$stop_reason, "stop")
+  expect_identical(msg_text(r$message), "tok01 tok02 tok03 ")
+  expect_identical(r$message$usage$input, 100)
+})
+
+test_that("build() takes compat and headers from the record provider_stream() resolved (04 10.1)", {
+  # D-023, D-027 item 3: a session-scoped provider (`model = <spec>`) is invisible to the global
+  # lookup, so its compat and headers come from opts$provider or the session's own record
+  model = test_model(api, provider = "p12-corp", id = "corp-large")
+  rec = gptr_provider("p12-corp", api = api, base_url = "https://llm.corp.example/v1",
+                      compat = list(maxTokensField = "max_tokens", auth_header = "api-key",
+                                    supports_developer_role = FALSE),
+                      headers = list(`X-Org` = "lab", `Content-Type` = "text/plain",
+                                     Authorization = "Bearer record"))
+  ctx = ctx_fixture(list(msg_user("x")))
+  req = completions_build(model, ctx, list(provider = rec, credential = fake_handle("CORP_KEY")))
+  body = json_decode(req$body)
+  expect_identical(body$max_tokens, 1024L)
+  expect_null(body$max_completion_tokens)
+  expect_identical(body$messages[[1L]]$role, "system")
+  h = req$headers
+  expect_identical(anyDuplicated(tolower(names(h))), 0L)
+  expect_identical(h$`api-key`, fake_handle("CORP_KEY"))
+  expect_false("authorization" %in% tolower(names(h)))
+  expect_identical(h$`content-type`, "application/json")
+  expect_identical(h$`X-Org`, "lab")
+  # without a credential the record's own credential header goes out as it is (D-023 item 3)
+  expect_identical(completions_build(model, ctx, list(provider = rec))$headers$Authorization,
+                   "Bearer record")
+  # a record of another provider is ignored; nothing else is registered, so the defaults apply
+  other = gptr_provider("p12-other", api = api, compat = list(max_tokens_field = "max_tokens"),
+                        headers = list(`X-Org` = "other"))
+  req = completions_build(model, ctx, list(provider = other))
+  expect_identical(json_decode(req$body)$max_completion_tokens, 1024L)
+  expect_null(req$headers$`X-Org`)
+  # the session's own record when build() gets only the session id
+  sid = "s_p12build01"
+  withr::defer(registry_session_drop(sid))
+  registry_add(rec, source = "session", rank = 0L, session = sid)
+  req = completions_build(model, ctx, list(session = sid))
+  expect_identical(json_decode(req$body)$max_tokens, 1024L)
+  expect_identical(req$headers$`X-Org`, "lab")
+})
+
+test_that("a model without tool calling gets no tools and no tool_choice (IC-74, 07 section 1)", {
+  # P05 prepares an Ollama model with tool_call = FALSE when the server lacks the tools capability
+  forced = list(type = "tool", name = "read")
+  blind = test_model(api, provider = "groq", id = "small-1", tool_call = FALSE)
+  for (tc in list("none", forced)) {
+    body = json_decode(completions_build(blind, ctx_fixture(completions_turn2(blind),
+                                                            params = list(tool_choice = tc)),
+                                         list())$body)
+    expect_false(any(c("tools", "tool_choice") %in% names(body)))
+    expect_identical(body$messages[[3L]]$tool_calls[[1L]]$id, "call_A1")
+  }
+  # a request without any tools sends no tool_choice either; a model that calls tools keeps both
+  able = test_model(api, provider = "groq", id = "large-1")
+  ctx = ctx_fixture(list(msg_user("x")), params = list(tool_choice = "none"))
+  ctx$tools_json = NULL
+  expect_false(grepl("tool", completions_build(able, ctx, list())$body, fixed = TRUE))
+  body = json_decode(completions_build(able, ctx_fixture(list(msg_user("x")),
+                                                         params = list(tool_choice = "none")),
+                                       list())$body)
+  expect_identical(body$tool_choice, "none")
+  expect_length(body$tools, 2L)
+})
+
+test_that("Ollama chat bodies follow the prepared model's capabilities (IC-74, 07 section 6)", {
+  # the P05 ollama record: system role, no store, `max_tokens`, reasoning_effort, no tool_choice;
+  # reasoning replays in the field Ollama streamed it in (`reasoning`, Task 4)
+  ol = test_model(api, provider = "ollama", id = "qwen3:8b", input = "text")
+  asst = msg_assistant(list(block_thinking("Count first.", signature = "reasoning"),
+                            block_tool_call("call_1", "r", list(code = "nrow(d)"))),
+                       api = api, provider = "ollama", model = "qwen3:8b",
+                       stop_reason = "tool_use", timestamp = 2)
+  msgs = list(msg_user("How many rows?", timestamp = 1), asst,
+              msg_tool_result("call_1", "r", list(block_text("[1] 32"), block_image(png_b64())),
+                              timestamp = 3))
+  ctx = ctx_fixture(msgs, params = list(thinking = "medium", max_tokens = 4096L,
+                                        tool_choice = "none"))
+  req = completions_build(ol, ctx, list(base_url = "http://127.0.0.1:11434/v1"))
+  body = json_decode(req$body)
+  expect_identical(names(body), c("model", "stream", "stream_options", "max_tokens",
+                                  "reasoning_effort", "tools", "messages"))
+  expect_identical(c(body$model, body$reasoning_effort), c("qwen3:8b", "medium"))
+  expect_identical(body$max_tokens, 4096L)
+  expect_identical(vapply(body$tools, function(t) t$`function`$name, ""), c("read", "r"))
+  expect_identical(vapply(body$messages, function(m) m$role, ""),
+                   c("system", "user", "assistant", "tool"))
+  expect_identical(body$messages[[3L]]$reasoning, "Count first.")
+  expect_true("content" %in% names(body$messages[[3L]]))
+  expect_null(body$messages[[3L]]$content)
+  # a text-only model gets the omission note in place of the image, and no image message
+  expect_identical(body$messages[[4L]]$content, paste0("[1] 32\n", adp_image_note()))
+  expect_identical(req$url, "http://127.0.0.1:11434/v1/chat/completions")
+  expect_false(any(c("authorization", "api-key") %in% tolower(names(req$headers))))
+  # a vision model gets the image after the tool message
+  vl = test_model(api, provider = "ollama", id = "qwen3-vl:8b")
+  img = json_decode(completions_build(vl, ctx, list())$body)$messages[[5L]]
+  expect_identical(img$content[[2L]]$image_url$url, paste0("data:image/png;base64,", png_b64()))
+  # thinking off where the model can switch it off; no reasoning field without thinking
+  off = completions_build(ol, ctx_fixture(list(msg_user("x")), params = list(thinking = "off")),
+                          list())
+  expect_identical(json_decode(off$body)$reasoning_effort, "none")
+  plain = test_model(api, provider = "ollama", id = "gemma3:4b", reasoning = FALSE,
+                     thinking_levels = "off")
+  expect_null(json_decode(completions_build(plain, ctx, list())$body)$reasoning_effort)
+})
+
+test_that("an image-only tool result for a text-only model carries only the omission note", {
+  # D-023 item 4: no "(see attached image)" lead when no image is attached
+  blind = test_model(api, provider = "groq", id = "openai/gpt-oss-120b", input = "text")
+  msgs = completions_turn2(blind)
+  msgs[[3L]] = msg_tool_result("call_A1", "r", list(block_image(png_b64())), timestamp = 3)
+  body = json_decode(completions_build(blind, ctx_fixture(msgs), list())$body)
+  expect_length(body$messages, 4L)
+  expect_identical(body$messages[[4L]]$content, adp_image_note())
+  vision = test_model(api, provider = "groq", id = "openai/gpt-oss-120b")
+  body = json_decode(completions_build(vision, ctx_fixture(msgs), list())$body)
+  expect_identical(body$messages[[4L]]$content, "(see attached image)")
+  expect_identical(body$messages[[5L]]$role, "user")
+})
+
+test_that("the bridging assistant message precedes every user message after tool results", {
+  # requires_assistant_after_tool_result: a user message never directly follows tool results,
+  # neither the returns instruction nor the message carrying the results' images, which the
+  # bridge precedes (report 09 section 3.2; Pi 1426-1461, 1443-1448)
+  model = test_model(api, provider = "p12-bridge", id = "m1")
+  rec = list(id = "p12-bridge", compat = list(requiresAssistantAfterToolResult = TRUE))
+  build = function(params, msgs = completions_turn2(model), m = model) {
+    json_decode(completions_build(m, ctx_fixture(msgs, params = params),
+                                  list(provider = rec))$body)$messages
+  }
+  roles = function(...) vapply(build(...), function(x) x$role, "")
+  expect_identical(roles(list(returns = count_schema())),
+                   c("developer", "user", "assistant", "tool", "assistant", "user"))
+  expect_identical(roles(list()), c("developer", "user", "assistant", "tool"))
+  plot = completions_turn2(model)
+  plot[[3L]] = msg_tool_result("call_A1", "r", list(block_text("plot drawn"),
+                                                    block_image(png_b64())), timestamp = 3)
+  nxt = c(plot, list(msg_user("next", timestamp = 4)))
+  bridged = c("developer", "user", "assistant", "tool", "assistant", "user")
+  msgs = build(list(), plot)
+  expect_identical(vapply(msgs, function(x) x$role, ""), bridged)
+  expect_identical(msgs[[5L]]$content, "I have processed the tool results.")
+  expect_identical(msgs[[6L]]$content[[2L]]$type, "image_url")
+  # the image message is the user message the bridge was for: no second bridge after it
+  expect_identical(roles(list(), nxt), c(bridged, "user"))
+  expect_identical(roles(list(returns = count_schema()), plot), c(bridged, "user"))
+  # a text-only model attaches no image, so the bridge goes before the next user message only
+  blind = test_model(api, provider = "p12-bridge", id = "m1", input = "text")
+  expect_identical(roles(list(), plot, blind), c("developer", "user", "assistant", "tool"))
+  expect_identical(roles(list(), nxt, blind), bridged)
+})
+
+test_that("memoised pieces follow the model's image input and the compat record", {
+  memo = new.env(parent = emptyenv())
+  msgs = list(msg_user(list(block_text("Look."), block_image(png_b64())), timestamp = 1))
+  vision = test_model(api, provider = "p12-memo", id = "m1")
+  blind = test_model(api, provider = "p12-memo", id = "m1", input = "text")
+  expect_match(completions_build(vision, ctx_fixture(msgs), list(memo = memo))$body, "image_url",
+               fixed = TRUE)
+  expect_identical(completions_build(blind, ctx_fixture(msgs), list(memo = memo))$body,
+                   completions_build(blind, ctx_fixture(msgs), list())$body)
+  turn = completions_turn2(vision)
+  plain = list(id = "p12-memo")
+  named = list(id = "p12-memo", compat = list(requires_tool_result_name = TRUE))
+  completions_build(vision, ctx_fixture(turn), list(memo = memo, provider = plain))
+  body = completions_build(vision, ctx_fixture(turn), list(memo = memo, provider = named))$body
+  expect_identical(json_decode(body)$messages[[4L]]$name, "r")
+  # an assistant piece follows the compat record and the model's reasoning flag
+  past = completions_turn2(test_model(api, provider = "other", id = "x"))
+  forced = list(id = "p12-memo", compat = list(requires_reasoning_content = TRUE))
+  asst = function(m, rec) {
+    json_decode(completions_build(m, ctx_fixture(past),
+                                  list(memo = memo, provider = rec))$body)$messages[[3L]]
+  }
+  expect_null(asst(vision, plain)$reasoning_content)
+  expect_identical(asst(vision, forced)$reasoning_content, "")
+  flat = test_model(api, provider = "p12-memo", id = "m1", reasoning = FALSE)
+  expect_false("reasoning_content" %in% names(asst(flat, forced)))
+})
+
+test_that("a resolved model whose record omits tool_call gets no tools (P05, IC-74)", {
+  # P05's model_resolve() turns an omitted tool_call into FALSE (user and plugin models, generic
+  # local ids): such a model gets no tools until its record says tool_call = TRUE (D-029.1)
+  off = gptr_register(gptr_provider("p12-resolve", api = api,
+                                    base_url = "https://llm.corp.example/v1",
+                                    models = list(list(id = "corp-large"),
+                                                  list(id = "corp-tools", tool_call = TRUE))))
+  withr::defer(off())
+  for (ref in c("p12-resolve/corp-large", "lmstudio/qwen3-coder")) {
+    m = model_resolve(ref)
+    expect_false(m$tool_call)
+    body = json_decode(completions_build(m, ctx_fixture(completions_turn2(m)), list())$body)
+    expect_false(any(c("tools", "tool_choice") %in% names(body)))
+  }
+  m = model_resolve("p12-resolve/corp-tools")
+  expect_true(m$tool_call)
+  body = json_decode(completions_build(m, ctx_fixture(completions_turn2(m)), list())$body)
+  expect_null(body$tool_choice)
+  expect_identical(vapply(body$tools, function(t) t$`function`$name, ""), c("read", "r"))
+})
+
+test_that("OpenRouter reasoning_details replay verbatim to the same model only (INFRA-07)", {
+  model = test_model(api, provider = "openrouter", id = "openai/gpt-6-sol")
+  details = '[{"type":"reasoning.encrypted","data":"enc+/1=","id":"rs_1","index":0}]'
+  asst = msg_assistant(list(block_thinking("Plan.", signature = "reasoning"), block_text("Done."),
+                            block_opaque("openrouter", api, model$id, details)),
+                       api = api, provider = "openrouter", model = model$id, timestamp = 2)
+  msgs = list(msg_user("x", timestamp = 1), asst, msg_user("again", timestamp = 3))
+  body = completions_build(model, ctx_fixture(msgs), list())$body
+  expect_true(grepl(paste0('"reasoning_details":', details), body, fixed = TRUE))
+  expect_identical(json_decode(body)$messages[[3L]]$reasoning, "Plan.")
+  other = test_model(api, provider = "openrouter", id = "anthropic/claude-sonnet-5-5")
+  body = completions_build(other, ctx_fixture(msgs), list())$body
+  expect_false(grepl("enc+/1=", body, fixed = TRUE))
+  expect_false(grepl("Plan.", body, fixed = TRUE))
+})

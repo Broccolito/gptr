@@ -859,3 +859,69 @@ its key (1). Review round 1 added item 6 and the `attrs$name` rule of item 4: ag
 source the extended tests gave [ FAIL 4 | PASS 228 ] (a nested run's note read "BODY FOR auto"
 under `<mode name="edits">`; a body named `edits` was used for `plan`; a model-code steer to a
 never-run session was accepted, which ended that block).
+
+## D-029 - P12 Chat Completions request bodies: tools only where the model calls tools, no tool_choice without tools, image notes, the bridge after tool results, complete memo keys (2026-10-04)
+
+P12 Task 5's plan-literal `completions_build()` and `completions_tool_results()`
+(`R/provider-openai-completions.R`, the `build()` of the `openai-completions` adapter that also
+serves Ollama chat models, IC-74) were changed in five ways. They also apply D-023 items 1 and 3
+and D-027 item 3 as those entries require: the compat record comes from
+`adp_provider_record(model, opts)` and the provider headers are merged with
+`adp_merge_headers(..., auth = c("authorization", "api-key"))`. P07's `request_build()`, P06's
+runs and P24 consume the bodies.
+
+1. **Tools go only to a model that calls tools** (07-local-ollama.md section 1: "General LLM tool
+   calling, images, structured output, streaming and reasoning are enabled only when the selected
+   model supports them"; IC-74). P05's Ollama preparation sets `tool_call = FALSE` when the server
+   reports no `tools` capability, and Ollama answers a request carrying tools for such a model
+   with an error. A model whose record says `tool_call = FALSE` now gets no `tools` (not even the
+   plan's `tools: []` for a history with tool calls) and no `tool_choice`; the history's tool calls
+   and results are still sent.
+   **Reach (corrected in review round 1).** The gate reads the model record P05 resolves, and
+   `model_resolve()` always sets the field: an omitted `tool_call` becomes `FALSE`
+   (`R/catalog-models.R`, `tool_call = isTRUE(e[["tool_call"]])`), and a generic local id
+   (`lmstudio/...`, `llamacpp/...`, `vllm/...` without a catalog entry) gets `tool_call = FALSE`.
+   Catalog chat entries carry `TRUE`, because P05's catalog drops models without tool calling. So
+   every resolved model on `openai-completions` without `tool_call = TRUE` gets no tools: a user or
+   plugin `gptr_provider()` model must declare `tool_call = TRUE` in its model list, and a generic
+   LM Studio, llama.cpp or vLLM id gets none. Only a raw model record without the field (adapter
+   tests, `gptr_check()` fixtures) keeps the plan's behaviour. Downstream owners: P07's
+   `request_build()` and the T1 tool catalog should not advertise tools to a model whose
+   `tool_call` is `FALSE`, because this adapter drops them without a notice; and P05's FALSE for
+   generic local ids now removes tools for those servers (a P05 decision, recorded here, not
+   changed). The test "a resolved model whose record omits tool_call gets no tools" pins this with
+   `model_resolve()` records.
+2. **No `tool_choice` without a tools array.** OpenAI-compatible hosts refuse `tool_choice` when
+   no `tools` are given, and a forced choice would name a tool that is not declared. The plan sent
+   `tool_choice: "none"` (or a forced choice) whatever the tools were.
+3. **Images in tool results for a text-only model** (D-023 item 4 for this adapter). Each image
+   becomes the omission note "(image omitted: this model does not accept images)" in the `tool`
+   message, after the text; no image message follows. The plan gave an image-only result
+   "(see attached image)" with nothing attached and silently dropped images after text.
+4. **The bridging assistant message precedes every user message after tool results** for
+   `requires_assistant_after_tool_result` (report 09 sections 3.2 and 3.3; Pi 1233-1238,
+   1426-1461, 1443-1448). The `returns` instruction counts as a user message: when tool results
+   are the last messages and `returns =` is set, the bridge precedes the instruction. When the
+   results' images are attached (a model with image input), the bridge precedes the "Attached
+   image(s) from tool result:" user message, and no second bridge follows it, as in Pi, where
+   `lastRole` becomes `"user"` (review round 1). The plan put the image message directly after the
+   tool messages and the bridge after it, so on such a host every request after a tool returned an
+   image (an R plot) had a user message right after tool results. Now a user message never
+   directly follows tool results on such a host.
+5. **Complete memo keys** (04 section 8.1 memo, plan ambiguity 7: keys cover what reaches the
+   wire). Message and tool-result pieces are also keyed by the model's image input, its
+   `reasoning` flag (DeepSeek's forced `reasoning_content`) and a hash of the compat record. With
+   the plan's keys (provider and model id), a changed compat record (for example a provider's
+   `compat` changed in settings) or image input within one session served a stale piece. The
+   frozen prefix is unchanged while these stay the same.
+
+Validation: `progress/P12.md`, Task 5. Against the plan-literal source the added tests failed 17
+assertions (9 for the resolved provider record, 3 for tools and `tool_choice`, 2 image notes, 1
+bridging assistant, 2 in the memo test); a mutation that removes only the new memo-key fields
+fails the 2 memo assertions. The plan's 12 tests pass unchanged (the default cache-policy test
+skips until P07 registers the `default` policy). `gptr_check()` on the adapter: 25 checks, 0 failed.
+Review round 1: the image-bridge regression assertions failed against the round's source
+([ FAIL 3 | PASS 267 ], one error ended that test); mutations that drop the compat hash or the
+`reasoning` flag from the message memo key each fail one new memo assertion; final
+`^provider-openai-completions$` [ FAIL 0 | WARN 0 | SKIP 1 | PASS 274 ].
+

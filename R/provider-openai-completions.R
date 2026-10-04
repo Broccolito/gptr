@@ -495,3 +495,349 @@ completions_normaliser = function(model, opts) {
 
   adp_normaliser(st, push, finish)
 }
+
+# ---- openai-completions: request body ---------------------------------------------------------
+
+#' Adapter capabilities of openai-completions (04 section 8.1; IC-69, IC-71)
+#'
+#' `cache = "openrouter"`: the default cache policy (P07) then anchors T0 and the project block;
+#' the markers are written only for providers whose compat record has
+#' `cache_control_format = "anthropic"` (OpenRouter's Anthropic and Google models) and ignored by
+#' every other OpenAI-compatible host (G4 section 3.7).
+#' @noRd
+completions_caps = function() {
+  list(images_in_results = FALSE, tool_addition = FALSE, structured_output = FALSE,
+       reasoning_replay = TRUE, parallel_tools = TRUE, forced_tool_choice = TRUE,
+       request_params = c("service_tier", "metadata", "user"), operator_role = "user",
+       cache = "openrouter", max_tool_name = 64L, tool_shape = "chat")
+}
+
+#' Chat Completions content of a user message: a string, or text and image_url parts
+#' @noRd
+completions_user = function(m, model, mark_anchor, cc) {
+  images = adp_images_ok(model)
+  parts = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    if (type %in% c("text", "context") && nzchar(b$text)) {
+      p = list(type = "text", text = b$text)
+      if (cc && mark_anchor && type == "context" && isTRUE(b$anchor)) {
+        p$cache_control = list(type = "ephemeral")
+      }
+      parts[[length(parts) + 1L]] = p
+    } else if (type == "image") {
+      url = paste0("data:", b$mime, ";base64,", b$data)
+      parts[[length(parts) + 1L]] = if (images) {
+        list(type = "image_url", image_url = list(url = url))
+      } else {
+        list(type = "text", text = adp_image_note())
+      }
+    }
+  }
+  if (!length(parts)) return(NULL)
+  single = length(parts) == 1L && identical(parts[[1L]]$type, "text") &&
+    is.null(parts[[1L]]$cache_control)
+  if (single) return(list(role = "user", content = parts[[1L]]$text))
+  list(role = "user", content = parts)
+}
+
+#' A Chat Completions assistant message: content a plain string (a text-part array only when
+#' requires_thinking_as_text), reasoning replayed in the field it arrived in (Pi 1296-1396)
+#' @noRd
+completions_assistant = function(m, model, compat) {
+  same = adp_same_model(m, model)
+  texts = character()
+  thinks = character()
+  field = NULL
+  calls = list()
+  details = NULL
+  for (b in m$content) {
+    type = b$type %||% ""
+    if (type == "text" && nzchar(trimws(b$text))) texts = c(texts, b$text)
+    if (type == "thinking" && nzchar(trimws(b$thinking))) {
+      thinks = c(thinks, b$thinking)
+      field = field %||% b$signature
+    }
+    if (type == "tool_call") {
+      args = if (length(b$arguments)) b$arguments else json_obj()
+      calls[[length(calls) + 1L]] = list(id = completions_tool_id(b$id, compat, model$provider),
+                                         type = "function",
+                                         `function` = list(name = b$name,
+                                                           arguments = json_encode(args)))
+    }
+    if (type == "opaque" && same) details = b$json
+  }
+  txt = paste(texts, collapse = "")
+  as_text = length(thinks) && isTRUE(compat$requires_thinking_as_text)
+  a = list(role = "assistant")
+  if (as_text) {
+    a$content = lapply(c(paste(thinks, collapse = "\n\n"), if (nzchar(txt)) txt),
+                       function(x) list(type = "text", text = x))
+  } else if (nzchar(txt)) {
+    a$content = txt
+  } else if (length(calls)) {
+    a["content"] = if (isTRUE(compat$requires_assistant_after_tool_result)) list("") else list(NULL)
+  } else {
+    return(NULL)
+  }
+  if (length(calls)) a$tool_calls = calls
+  fields = c("reasoning_content", "reasoning", "reasoning_text")
+  if (length(thinks) && !as_text && same && isTRUE(field %in% fields)) {
+    a[[field]] = paste(thinks, collapse = "\n")
+  } else if (isTRUE(compat$requires_reasoning_content) && isTRUE(model$reasoning)) {
+    a$reasoning_content = ""
+  }
+  if (!is.null(details)) a$reasoning_details = json_verbatim(details)
+  a
+}
+
+#' The assistant message a host with requires_assistant_after_tool_result needs between tool
+#' results and a user message (report 09 section 3.3; Pi 1233-1238, 1443-1448)
+#' @noRd
+completions_bridge = function() {
+  list(role = "assistant", content = "I have processed the tool results.")
+}
+
+#' TRUE when the messages of a group of tool results end with the user message that attaches
+#' their images (a model with image input and at least one image)
+#' @noRd
+completions_attaches = function(group, model) {
+  adp_images_ok(model) && any(vapply(group, function(r) {
+    any(vapply(r$content, function(b) identical(b$type, "image"), logical(1)))
+  }, logical(1)))
+}
+
+#' Chat Completions messages of a group of tool results; images follow as one user message
+#'
+#' A model without image input gets the omission note in the tool message, once per image, and
+#' no image message; "(see attached image)" leads a result without text only when its images
+#' are attached (D-023 item 4). With requires_assistant_after_tool_result the bridging assistant
+#' message precedes the image message (Pi 1443-1448).
+#' @noRd
+completions_tool_results = function(group, model, compat) {
+  out = list()
+  imgs = list()
+  images = adp_images_ok(model)
+  for (r in group) {
+    txt = paste(vapply(Filter(function(b) identical(b$type, "text"), r$content),
+                       function(b) b$text, ""), collapse = "\n")
+    n_img = sum(vapply(r$content, function(b) identical(b$type, "image"), logical(1)))
+    if (n_img && !images) {
+      txt = paste(c(txt[nzchar(txt)], rep(adp_image_note(), n_img)), collapse = "\n")
+    }
+    content = if (nzchar(txt)) txt else if (n_img) "(see attached image)" else "(no tool output)"
+    tm = list(role = "tool",
+              tool_call_id = completions_tool_id(r$tool_call_id, compat, model$provider),
+              content = content)
+    if (isTRUE(compat$requires_tool_result_name)) tm$name = r$tool_name
+    out[[length(out) + 1L]] = tm
+    if (images) {
+      for (b in Filter(function(b) identical(b$type, "image"), r$content)) {
+        url = paste0("data:", b$mime, ";base64,", b$data)
+        imgs[[length(imgs) + 1L]] = list(type = "image_url", image_url = list(url = url))
+      }
+    }
+  }
+  if (length(imgs)) {
+    if (isTRUE(compat$requires_assistant_after_tool_result)) {
+      out[[length(out) + 1L]] = completions_bridge()
+    }
+    note = list(type = "text", text = "Attached image(s) from tool result:")
+    out[[length(out) + 1L]] = list(role = "user", content = c(list(note), imgs))
+  }
+  out
+}
+
+#' Chat Completions tool definitions from the frozen Anthropic-shape array (04 section 9.2)
+#' @noRd
+completions_tools = function(tools, compat) {
+  lapply(tools, function(t) {
+    fn = list(name = t$name, description = t$description %||% "", parameters = t$input_schema)
+    if (isTRUE(compat$supports_strict_mode)) fn$strict = FALSE
+    list(type = "function", `function` = fn)
+  })
+}
+
+#' The thinking request fields of a compat thinking_format (report 09 section 3.4)
+#' @noRd
+completions_thinking = function(head, model, params, compat) {
+  if (!isTRUE(model$reasoning) || is.null(params$thinking)) return(head)
+  level = params$thinking
+  on = !identical(level, "off")
+  eff = params$effort %||% (if (on) level else NULL)
+  fmt = compat$thinking_format %||% "openai"
+  if (fmt == "openrouter") {
+    head$reasoning = list(effort = if (on) eff else "none")
+  } else if (fmt == "deepseek") {
+    head$thinking = list(type = if (on) "enabled" else "disabled")
+    if (on && isTRUE(compat$supports_reasoning_effort)) head$reasoning_effort = eff
+  } else if (fmt == "zai") {
+    head$thinking = if (on) list(type = "enabled", clear_thinking = FALSE) else
+      list(type = "disabled")
+  } else if (fmt == "qwen") {
+    head$enable_thinking = on
+  } else if (fmt == "qwen-chat-template") {
+    head$chat_template_kwargs = list(enable_thinking = on, preserve_thinking = TRUE)
+  } else if (fmt == "together") {
+    head$reasoning = list(enabled = on)
+  } else if (isTRUE(compat$supports_reasoning_effort)) {
+    if (on) {
+      head$reasoning_effort = eff
+    } else if ("off" %in% unlist(model$thinking_levels)) {
+      head$reasoning_effort = "none"
+    }
+  }
+  head
+}
+
+#' build() of the openai-completions adapter (04 section 8.1; G4 section 3.7: model, stream,
+#' stream_options, tools, messages; OpenRouter session affinity and cache_control)
+#'
+#' The compat record and the provider headers come from the provider record provider_stream()
+#' resolved (`opts$provider`, the session's own record first; D-023, D-027), and the provider
+#' headers are merged by name. Tools go only to a model that calls tools (`tool_call`; IC-74,
+#' 07-local-ollama.md section 1), and `tool_choice` only with a tools array. Each element is
+#' serialised once per session through `opts$memo`, keyed by everything that reaches the wire
+#' (the compat record and the model's image input included). A `returns` instruction counts as
+#' a user message for the assistant a host requires after tool results, and that assistant
+#' precedes the image message of tool results instead of following it (Pi 1443-1448).
+#' @noRd
+completions_build = function(model, context, opts) {
+  params = context$params %||% list()
+  compat = compat_flags(adp_provider_record(model, opts) %||% list(id = adp_chr(model$provider)),
+                        model)
+  ckey = hash_xxh128(compat)
+  images = adp_images_ok(model)
+  anchors = adp_cache_plan(context)$anchors %||% character()
+  cc_ok = identical(compat$cache_control_format, "anthropic")
+  cc_sys = cc_ok && any(c("t0", "t1") %in% anchors)
+  cc = cc_ok && "project" %in% anchors
+  msgs = context$messages %||% list()
+  anchor_at = adp_anchor_index(msgs)
+  tools_on = !isFALSE(model[["tool_call"]])
+  tj = if (tools_on) {
+    adp_tools_json(opts, paste("openai-completions", compat$supports_strict_mode),
+                   context$tools_json, function(tools) completions_tools(tools, compat))
+  }
+
+  head = list(model = completions_model_name(model, compat), stream = TRUE)
+  if (isTRUE(compat$supports_usage_in_streaming)) head$stream_options = list(include_usage = TRUE)
+  if (isTRUE(compat$supports_store)) head$store = FALSE
+  if (!is.null(params$max_tokens)) head[[compat$max_tokens_field]] = as.integer(params$max_tokens)
+  if (!is.null(params$temperature)) head$temperature = params$temperature
+  head = completions_thinking(head, model, params, compat)
+  tc = params$tool_choice
+  if (!is.null(tj) && isTRUE(compat$supports_tool_choice)) {
+    if (identical(tc, "none")) {
+      head$tool_choice = "none"
+    } else if (adp_forced(tc) && adp_forced_ok(model, completions_caps()) &&
+                 is.null(params$returns)) {
+      head$tool_choice = if (identical(tc$type, "any")) "required" else
+        list(type = "function", `function` = list(name = tc$name))
+    }
+  }
+  for (f in completions_caps()$request_params) if (!is.null(params[[f]])) head[[f]] = params[[f]]
+
+  extra = character()
+  if (!is.null(tj)) {
+    extra = c(extra, paste0("\"tools\":", tj))
+  } else if (tools_on && adp_has_tool_calls(msgs)) {
+    extra = c(extra, "\"tools\":[]")
+  }
+
+  elements = character()
+  t0 = context$system$t0 %||% ""
+  t1 = context$system$t1 %||% ""
+  role = if (isTRUE(model$reasoning) && isTRUE(compat$supports_developer_role)) "developer" else
+    "system"
+  if (nzchar(t0) || nzchar(t1)) {
+    sys = if (cc_sys) {
+      parts = list()
+      if (nzchar(t0)) parts[[length(parts) + 1L]] = list(type = "text", text = t0)
+      if (nzchar(t1)) parts[[length(parts) + 1L]] = list(type = "text", text = t1)
+      parts[[length(parts)]]$cache_control = list(type = "ephemeral")
+      list(role = role, content = parts)
+    } else {
+      list(role = role, content = paste(c(t0, t1)[nzchar(c(t0, t1))], collapse = "\n\n"))
+    }
+    elements = c(elements, json_encode(sys))
+  }
+  n = length(msgs)
+  i = 1L
+  while (i <= n) {
+    m = msgs[[i]]
+    r = m$role %||% ""
+    if (r == "tool_result") {
+      j = i
+      while (j <= n && identical(msgs[[j]]$role, "tool_result")) j = j + 1L
+      group = msgs[i:(j - 1L)]
+      key = paste(c("openai-completions", "results", model$provider, model$id, images, ckey,
+                    vapply(group, adp_msg_key, "")), collapse = "|")
+      el = adp_memo(opts, key, function() {
+        paste(vapply(completions_tool_results(group, model, compat), json_encode, ""),
+              collapse = ",")
+      })
+      elements = c(elements, el)
+      # the returns instruction below is a user message too; a group that ends with its image
+      # message already carries the bridge (completions_tool_results())
+      nxt = if (j <= n) msgs[[j]]$role %||% "" else if (!is.null(params$returns)) "user" else
+        "end"
+      if (isTRUE(compat$requires_assistant_after_tool_result) && nxt %in% c("user", "operator") &&
+            !completions_attaches(group, model)) {
+        elements = c(elements, json_encode(completions_bridge()))
+      }
+      i = j
+      next
+    }
+    same = adp_same_model(m, model)
+    mark = identical(i, anchor_at)
+    key = paste("openai-completions", r, adp_msg_key(m), model$provider, model$id, same, mark,
+                cc, images, isTRUE(model$reasoning), ckey, sep = "|")
+    el = adp_memo(opts, key, function() {
+      x = NULL
+      if (r == "user") x = completions_user(m, model, mark, cc)
+      if (r == "assistant") x = completions_assistant(m, model, compat)
+      if (r == "operator") {
+        txt = adp_operator_text(m)
+        if (nzchar(txt)) x = list(role = "user", content = txt)
+      }
+      if (is.null(x)) "" else json_encode(x)
+    })
+    if (nzchar(el)) elements = c(elements, el)
+    i = i + 1L
+  }
+  if (!is.null(params$returns)) {
+    elements = c(elements, json_encode(list(role = "user",
+                                            content = adp_returns_instruction(params$returns))))
+  }
+
+  headers = list(`content-type` = "application/json", accept = "text/event-stream")
+  cred = opts$credential
+  if (!is.null(cred)) {
+    if (identical(compat$auth_header, "api-key")) {
+      headers$`api-key` = adp_header_secret(cred)
+    } else {
+      headers$authorization = adp_header_secret(cred, "Bearer ")
+    }
+  }
+  if (identical(compat$session_affinity, "openrouter") && !is.null(context$session_id)) {
+    headers$`x-session-id` = context$session_id
+  }
+  headers = adp_merge_headers(headers, adp_provider_headers(model, opts),
+                              auth = c("authorization", "api-key"))
+
+  list(url = adp_url(opts$base_url %||% "https://api.openai.com/v1", "chat/completions"),
+       method = "POST", headers = headers,
+       body = adp_body(head, extra, "messages", elements), stream = "sse")
+}
+
+#' builtin:openai-compat: registers the openai-completions adapter (04 sections 7.12, 10.3)
+#' @noRd
+builtin_openai_compat = function(gptr) {
+  gptr$register(gptr_adapter("openai-completions", transport = "http_sse",
+                             build = completions_build, parse = completions_normaliser,
+                             capabilities = completions_caps()))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("openai-compat", builtin_openai_compat))
