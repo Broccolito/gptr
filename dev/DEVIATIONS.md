@@ -1796,3 +1796,63 @@ Validation: `progress/P06.md`, Task 12. Seven blocks (51 expectations) were adde
 tests, which are unchanged. Against the plan-literal source:
 `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 403 ]`, all 13 in the added blocks. Final
 `^session-(object|store)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 416 ]`.
+
+## D-046 - P10 diff engine: collision-free no-newline keys, validated diff_unified() arguments, a clamped context, O(D^2) Myers memory, linear hunk rendering and an O(n log n) LIS (2026-10-04)
+
+P10 Task 3's plan-literal `R/tool-diff.R` had six defects, all reproduced against that source:
+1. **The no-newline sentinel could collide.** `diff_unified()` keyed a last line lacking its
+   newline as `paste0(line, "\001<no-eol>")`. A line that has its newline and ends in that text
+   matched it, so `diff_unified("f", "x\001<no-eol>\n", "x")` returned `character()`, which
+   claims two different texts are equal.
+2. **`diff_unified()` did not validate its arguments.** An `NA` text rendered as `-NA`, and a
+   vector text stopped with a base error.
+3. **A large `context` overflowed.** `context` near `.Machine$integer.max` overflowed
+   `2L * context + 1L`.
+4. **Myers memory was O(D * (n + m)).** The Myers trace kept a full copy of `v` for each of up to
+   257 rounds: a 100,000-line total rewrite grew the heap by 401.8 MB, and 1,000,000 lines would
+   have needed about 4 GB. The plan's backtrack loop `seq.int(d, 1L, by = -1L)` also errors at
+   d = 0.
+5. **Rendering was quadratic in the number of hunks.** 20,000 hunks over 200,000 lines took
+   16.5 s.
+6. **The LIS step was quadratic on reordered input** (review round 1). The plan finds each
+   anchor's pile with `findInterval()`, which checks on every call that its `vec` is sorted, an
+   O(L) scan of the tails. When anchors are out of order but have a long increasing run (any
+   moved line or block in a large file) the tails grow with the input and the step costs
+   O(n * L): moving a 1,000-line block in a 200,000-line file took 9.6 s in `diff_lines()`, and
+   `diff_lis(c(2:200000, 1L))` 9.5 s (red run). The `checkSorted` argument that skips the check exists
+   only from R 4.5.0; the package depends on R >= 4.2.0.
+
+These affect `edit` (Task 6), P15's document writer and P16's checkpoints, which diff whole
+files.
+
+The fixes:
+- Lines are compared as integer codes, and a last line without its newline gets the negated code.
+- `diff_unified()` raises `gptr_error_invalid_argument` for a bad `path`, `old`, `new` or
+  `context`.
+- `context` is clamped to the edit script's length.
+- `v` spans diagonals -(D + 1) .. D + 1, and each round keeps only its window -d .. d, so memory
+  is O(D^2). The backtrack loops over `rev(seq_len(d))`.
+- `diff_hunks()` is vectorised over the rows of all hunks at once.
+- `diff_match()` keeps its stack in four integer vectors with a top index and vectorised pushes.
+- `diff_lis()` keeps the tails in vectors of length n with a length counter: a value above the
+  last tail is appended in O(1), any other finds its pile by binary search, so the step is
+  O(n log n). The plan text's "through `findInterval()`" is replaced; the result is the same.
+
+A diff whose budget is smaller than its truncation notice is now documented as the notice alone.
+No signature, class or output format changed. Wherever the plan-literal source worked, the
+outputs are identical: a differential check of 3,000 generated pairs, 60,000 `diff_lines()`
+calls, 24,000 `diff_unified()` calls and 7,988 `diff_myers()` calls found 0 differences. The new
+`diff_lis()` returned the same indices as the `findInterval()` version on 5,000 generated inputs
+(permutations, repeats, reversals, rotations), and `diff_lines()`/`diff_ops()` were identical on
+2,000 generated pairs with moved lines.
+
+Validation: `progress/P10.md`, Task 3. Nine blocks (149 expectations, 118 of them from a `git
+apply` property test over 60 generated pairs with context 0, 1 and 3 and every final-newline
+combination) were added to the plan's 6 blocks, which are unchanged. Two of them came with
+review round 1: the LIS against an O(n^2) reference on 300 generated inputs, and a timing block
+(a 1,000-line block moved in 200,000 lines, under 5 s; red `[ FAIL 2 | WARN 0 | SKIP 0 |
+PASS 566 ]` at 9.6 s and 9.5 s before the fix).
+- Against the plan-literal source the test file before review round 1 gave
+  `[ FAIL 7 | WARN 1 | SKIP 0 | PASS 543 ]`.
+- Final `^tool-diff$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 568 ]` (the plan's 419 plus 149), the
+  same under `LC_ALL=C`.
