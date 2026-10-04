@@ -2054,3 +2054,73 @@ extra DESCRIPTION fields. Against the plan-literal source the first three added 
 review round 1) gave `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 29 ]` against the round-0 source
 (`task5-fix1-red.log`). Final `^env-probe$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 31 ]`
 (`task5-fix1-green.log`), the same under `LC_ALL=C` (`task5-fix1-green-clocale.log`).
+
+## D-048 - P10 read engine: BMP needs a DIB header, magick failures are notes, whole characters, integer-range offsets, the token-limit notice, BOM-aware and late-byte decoding, NUL means binary, bounded streaming windows, an LRU index cache keyed by the tool path (2026-10-04)
+
+P10 Task 4's plan-literal `R/tool-read.R` passes the plan's 12 blocks (80 expectations) but had
+these defects, each reproduced against that source (`dev/.validation/P10/task4-probe-plan-literal.log`,
+`task4-probe-giant-line-plan-literal.log`, `task4-probe-clocale-index.log`):
+1. **Any text file starting with `BM` was a BMP.** The sniff checked only `BM` and 26 bytes, so
+   `BMI notes: ...` went to magick, which stopped `read` with `ImproperImageHeader`. Pi's
+   `mime.ts` needs a plausible DIB header (report 01 section 2.3 and its verified port in
+   section 5): `bmp_header_ok()` checks the file size, pixel offset, a core (12) or info
+   (40-124) header, one plane and a standard bit depth.
+2. **A magick decode error stopped `read`.** An image whose magic bytes pass but that magick
+   cannot decode is now omitted with Pi's note `[Image omitted: could not be converted to a
+   supported inline image format.]` (`process_image_magick()` runs under `tryCatch()`).
+3. **`image_dims()`**: JPEG fill bytes (`FF FF`) before a marker were read as a segment length
+   (dimensions lost); a BMP core header has 16-bit dimensions.
+4. **Offsets.** `format(100000)` is `1e+05`, so the error read `Offset 1e+05 is beyond end of
+   file`; it is now `Offset 100000 ...` (Pi prints the number). `offset = 1e10` was coerced to
+   `NA` with a warning and then a base error; `offset` and `limit` are now checked within the
+   integer range (`gptr_error_invalid_argument`), and the window end is computed in double, so
+   `limit = .Machine$integer.max` no longer overflows `offset + n - 1L`.
+5. **A long line cut on a character boundary lost a whole character.** `read_line_prefix()`
+   stripped the last complete multi-byte character whenever the cut fell after it (51,198
+   instead of 51,200 bytes of `é`). The new `utf8_trim_partial()` drops only an incomplete
+   final sequence.
+6. **A first line cut by the token budget claimed the 50 KB cap** (`[Line 1 is 2.0KB, exceeds
+   the 50.0KB limit; ...]` for `budget_tokens = 10`). It now names the cause: `exceeds the 10
+   token limit`.
+7. **The in-memory reader ignored a UTF-8 BOM when deciding the encoding**, so a BOM file with
+   invalid bytes read as CP1252 while `decode_raw()` (used by write and edit) says lossy UTF-8.
+   It now calls `decode_raw()` on the bytes with their BOM.
+8. **Streaming-reader decoding (files above 16 MiB).** The encoding came from the first 64 KB
+   minus 4 bytes, which can still end inside a character: a valid file then decoded as CP1252
+   (mojibake in every window) or got a false lossy notice. The head is now cut back to a
+   character boundary. A CP1252 gap byte (`0x81`) in a later window gave the line `"NA"`; such a
+   window now falls back to latin1. Invalid UTF-8 in a later window now sets the lossy notice.
+9. **NUL bytes past the 8,000-byte sniff.** In a large file, a NUL in the head past byte 8,000
+   raised `The file contains NUL bytes` (`invalid_argument`) and a NUL in a later window a base
+   `embedded nul` error or a cut line. In a file up to 16 MiB, an embedded NUL made
+   `rawToChar()` fail (binary), but trailing NULs are silently dropped by `rawToChar()`: the
+   file then showed as text without them, or, when it was not valid UTF-8, `decode_raw()`
+   raised `The file contains NUL bytes` (review round 1). All now give the binary notice: the
+   in-memory reader looks for a NUL anywhere with `grepRaw()` (ripgrep's rule, report 11
+   section 2.2), the streaming reader in its 64 KB head and in the window.
+10. **The streaming reader was not bounded in memory.** It kept every byte up to the end of the
+    window, so a giant line was read whole: a 40 MB single-line file peaked at 45.9 million
+    Vcells (about 367 MB) against 8.4 million after the fix (the package's baseline). It now
+    keeps at most `read_window_cap` (102,400) bytes of a window through `read_span()`; the line
+    cut there is kept in part, past the 50 KB cap, so `truncate_lines_head()` reports the
+    truncation, and the length of a first line longer than the cap is measured by scanning
+    (`first_bytes`). `read_text_window()` gained `cap = Inf` (passed by `read_core()`).
+11. **The sparse-index cache** keyed entries through P01's `path_key()`, which fails with
+    "unable to translate" for a non-ASCII path in a C locale, so a large file in such a
+    directory could not be read there. It also evicted the alphabetically first keys and kept
+    entries of older versions of a file. It now keys on the normalised tool path, keeps a list of
+    at most 8 entries compared by value, evicts the least recently used and drops an older
+    version's entry when a file is indexed again. `path_key()` is no longer consumed.
+
+No signature, class or text of `read_file()`, `read_lines_value()` or `gptr_lines` changed,
+except the token-limit wording of item 6. The internal additions are `utf8_trim_partial()`,
+`bmp_header_ok()`, `process_image_magick()`, `read_span()`, `read_window_cap`, the `cap`
+argument of `read_text_window()` and `read_window_big()`, the `first_bytes` field of a window and
+`read_core()`'s `first_line_limit`.
+
+Validation: `progress/P10.md`, Task 4. Fifteen blocks (49 expectations) were added to the plan's
+12 blocks, which are unchanged. Against the plan-literal source the final test file gave
+`[ FAIL 23 | WARN 0 | SKIP 0 | PASS 90 ]` (`task4-fix1-red-plan-literal.log`) and, under
+`LC_ALL=C`, `[ FAIL 23 | WARN 1 | SKIP 0 | PASS 89 ]` (`task4-fix1-red-plan-literal-clocale.log`;
+the non-ASCII index block is red in both locales, through `unable to translate` under `LC_ALL=C`).
+Final `^tool-read$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 129 ]`, the same under `LC_ALL=C`.
