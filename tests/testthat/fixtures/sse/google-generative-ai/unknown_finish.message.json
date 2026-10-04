@@ -1,0 +1,21 @@
+{
+  "stop_reason": "error",
+  "raw_stop_reason": "MISSING_THOUGHT_SIGNATURE",
+  "error_message": "Provider stopped with: MISSING_THOUGHT_SIGNATURE",
+  "response_id": "r4",
+  "content": [
+    {
+      "type": "text",
+      "text": "x"
+    }
+  ],
+  "usage": {
+    "input": null,
+    "output": null,
+    "cache_read": null,
+    "cache_write_5m": null,
+    "cache_write_1h": null,
+    "reasoning": null,
+    "total": null
+  }
+}

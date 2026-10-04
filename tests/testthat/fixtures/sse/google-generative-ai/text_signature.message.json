@@ -1,0 +1,21 @@
+{
+  "stop_reason": "stop",
+  "raw_stop_reason": "STOP",
+  "response_id": "r2",
+  "content": [
+    {
+      "type": "text",
+      "text": "The mean is 20.1.",
+      "signature": "Q2lnVGV4dFNpZw=="
+    }
+  ],
+  "usage": {
+    "input": 120,
+    "output": 8,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 128
+  }
+}

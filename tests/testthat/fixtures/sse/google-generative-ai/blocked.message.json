@@ -1,0 +1,15 @@
+{
+  "stop_reason": "error",
+  "error_message": "The prompt was blocked: SAFETY",
+  "response_id": "r3",
+  "content": [],
+  "usage": {
+    "input": 10,
+    "output": 0,
+    "cache_read": 0,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 0,
+    "total": 10
+  }
+}

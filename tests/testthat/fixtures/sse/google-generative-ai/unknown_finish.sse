@@ -1,0 +1,2 @@
+data: {"candidates":[{"content":{"parts":[{"text":"x"}],"role":"model"},"finishReason":"MISSING_THOUGHT_SIGNATURE","index":0}],"responseId":"r4"}
+

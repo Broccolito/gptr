@@ -1,0 +1,14 @@
+[
+  {
+    "type": "start",
+    "response_id": "r3"
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "provider",
+      "status": null
+    }
+  }
+]

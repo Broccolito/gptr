@@ -798,3 +798,115 @@ write_case(
         content = list(g_tool("call_t1|fc_t1", "read", obj(), raw = "{\"path\":")),
         usage = g_usage_unknown())
 )
+
+# ============================================================================================
+# google-generative-ai (model.json: a Gemini 3 model, so calls and responses carry ids)
+# ============================================================================================
+g = "google-generative-ai"
+dir.create(file.path(root, g), showWarnings = FALSE, recursive = TRUE)
+write_text(file.path(root, g, "model.json"), '{"provider": "google", "id": "gemini-3.8-flash"}\n')
+tsig = "CiQBjz1rX3NpZ1RoaW5r"
+csig = "CiQBjz1rX3NpZ0NhbGw="
+xsig = "Q2lnVGV4dFNpZw=="
+stopifnot(nchar(c(tsig, csig, xsig)) %% 4L == 0L)
+gem_chunk = function(parts, extra = "") {
+  js(
+    '{"candidates":[{"content":{"parts":', parts, ',"role":"model"},"index":0', extra,
+    '}],"modelVersion":"gemini-3.8-flash","responseId":"k9_XaJ3vGsmWz7IP"}'
+  )
+}
+g_tools = c(
+  dat(gem_chunk('[{"text":"**Working out the query**\\n","thought":true}]')),
+  dat(gem_chunk(js(
+    '[{"text":"I should list files first.","thought":true,"thoughtSignature":"', tsig, '"}]'
+  ))),
+  dat(gem_chunk('[{"text":"Let me look at "}]')),
+  dat(gem_chunk('[{"text":"the directory."}]')),
+  dat(js(
+    '{"candidates":[{"content":{"parts":[{"functionCall":{"id":"fc_7h2k","name":"find",',
+    '"args":{"pattern":"*.R"}},"thoughtSignature":"', csig, '"},',
+    '{"functionCall":{"id":"fc_8j3m","name":"read","args":{"path":"R/a.R"}}}],',
+    '"role":"model"},"finishReason":"STOP","index":0}],',
+    '"usageMetadata":{"promptTokenCount":812,"cachedContentTokenCount":512,',
+    '"candidatesTokenCount":31,"thoughtsTokenCount":43,"totalTokenCount":886},',
+    '"modelVersion":"gemini-3.8-flash","responseId":"k9_XaJ3vGsmWz7IP"}'
+  ))
+)
+thought = "**Working out the query**\nI should list files first."
+write_case(
+  g, "thought_tools", g_tools,
+  list(e_start("k9_XaJ3vGsmWz7IP"), e_open("thinking", 1L),
+       e_delta("thinking", 1L, "**Working out the query**\n"),
+       e_delta("thinking", 1L, "I should list files first."),
+       e_end("thinking", 1L, g_think(thought, signature = tsig)),
+       e_open("text", 2L), e_delta("text", 2L, "Let me look at "),
+       e_delta("text", 2L, "the directory."),
+       e_end("text", 2L, g_text("Let me look at the directory.")),
+       e_tstart(3L, "fc_7h2k", "find"), e_delta("toolcall", 3L, "{\"pattern\":\"*.R\"}"),
+       e_end("toolcall", 3L, g_tool("fc_7h2k", "find", list(pattern = "*.R"), sig = csig)),
+       e_tstart(4L, "fc_8j3m", "read"), e_delta("toolcall", 4L, "{\"path\":\"R/a.R\"}"),
+       e_end("toolcall", 4L, g_tool("fc_8j3m", "read", list(path = "R/a.R"))),
+       e_done("tool_use")),
+  g_msg("tool_use", "STOP", rid = "k9_XaJ3vGsmWz7IP",
+        content = list(g_think(thought, signature = tsig),
+                       g_text("Let me look at the directory."),
+                       g_tool("fc_7h2k", "find", list(pattern = "*.R"), sig = csig),
+                       g_tool("fc_8j3m", "read", list(path = "R/a.R"))),
+        usage = g_usage(300, 74, 512, reasoning = 43))
+)
+
+g_sig = c(
+  dat(js(
+    '{"candidates":[{"content":{"parts":[{"text":"The mean is 20.1."}],"role":"model"},',
+    '"index":0}],"modelVersion":"gemini-3.8-flash","responseId":"r2"}'
+  )),
+  dat(js(
+    '{"candidates":[{"content":{"parts":[{"text":"","thoughtSignature":"', xsig, '"}],',
+    '"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":',
+    '{"promptTokenCount":120,"candidatesTokenCount":8,"totalTokenCount":128},',
+    '"modelVersion":"gemini-3.8-flash","responseId":"r2"}'
+  ))
+)
+write_case(
+  g, "text_signature", g_sig,
+  list(e_start("r2"), e_open("text", 1L), e_delta("text", 1L, "The mean is 20.1."),
+       e_end("text", 1L, g_text("The mean is 20.1.", xsig)), e_done("stop")),
+  g_msg("stop", "STOP", rid = "r2", content = list(g_text("The mean is 20.1.", xsig)),
+        usage = g_usage(120, 8))
+)
+
+write_case(
+  g, "blocked",
+  dat(js(
+    '{"promptFeedback":{"blockReason":"SAFETY"},',
+    '"usageMetadata":{"promptTokenCount":10,"totalTokenCount":10},"responseId":"r3"}'
+  )),
+  list(e_start("r3"), e_error("provider")),
+  g_msg("error", err = "The prompt was blocked: SAFETY", rid = "r3", usage = g_usage(10))
+)
+
+# unknown_finish and truncated report no usage: it stays unknown (IC-74), never a zero
+write_case(
+  g, "unknown_finish",
+  dat(js(
+    '{"candidates":[{"content":{"parts":[{"text":"x"}],"role":"model"},',
+    '"finishReason":"MISSING_THOUGHT_SIGNATURE","index":0}],"responseId":"r4"}'
+  )),
+  list(e_start("r4"), e_open("text", 1L), e_delta("text", 1L, "x"),
+       e_end("text", 1L, g_text("x")), e_error("provider")),
+  g_msg("error", "MISSING_THOUGHT_SIGNATURE",
+        err = "Provider stopped with: MISSING_THOUGHT_SIGNATURE", rid = "r4",
+        content = list(g_text("x")), usage = g_usage_unknown())
+)
+
+write_case(
+  g, "truncated",
+  dat(js(
+    '{"candidates":[{"content":{"parts":[{"text":"Partial"}],"role":"model"},',
+    '"index":0}],"responseId":"r5"}'
+  )),
+  list(e_start("r5"), e_open("text", 1L), e_delta("text", 1L, "Partial"),
+       e_end("text", 1L, g_text("Partial")), e_error("network")),
+  g_msg("error", err = "The Google stream ended without a finish reason.", rid = "r5",
+        content = list(g_text("Partial")), usage = g_usage_unknown())
+)

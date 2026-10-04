@@ -1,0 +1,102 @@
+[
+  {
+    "type": "start",
+    "response_id": "k9_XaJ3vGsmWz7IP"
+  },
+  {
+    "type": "thinking_start",
+    "index": 1
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "**Working out the query**\n"
+  },
+  {
+    "type": "thinking_delta",
+    "index": 1,
+    "delta": "I should list files first."
+  },
+  {
+    "type": "thinking_end",
+    "index": 1,
+    "block": {
+      "type": "thinking",
+      "thinking": "**Working out the query**\nI should list files first.",
+      "signature": "CiQBjz1rX3NpZ1RoaW5r"
+    }
+  },
+  {
+    "type": "text_start",
+    "index": 2
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "Let me look at "
+  },
+  {
+    "type": "text_delta",
+    "index": 2,
+    "delta": "the directory."
+  },
+  {
+    "type": "text_end",
+    "index": 2,
+    "block": {
+      "type": "text",
+      "text": "Let me look at the directory."
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "index": 3,
+    "id": "fc_7h2k",
+    "name": "find"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 3,
+    "delta": "{\"pattern\":\"*.R\"}"
+  },
+  {
+    "type": "toolcall_end",
+    "index": 3,
+    "block": {
+      "type": "tool_call",
+      "id": "fc_7h2k",
+      "name": "find",
+      "arguments": {
+        "pattern": "*.R"
+      },
+      "thought_signature": "CiQBjz1rX3NpZ0NhbGw="
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "index": 4,
+    "id": "fc_8j3m",
+    "name": "read"
+  },
+  {
+    "type": "toolcall_delta",
+    "index": 4,
+    "delta": "{\"path\":\"R/a.R\"}"
+  },
+  {
+    "type": "toolcall_end",
+    "index": 4,
+    "block": {
+      "type": "tool_call",
+      "id": "fc_8j3m",
+      "name": "read",
+      "arguments": {
+        "path": "R/a.R"
+      }
+    }
+  },
+  {
+    "type": "done",
+    "reason": "tool_use"
+  }
+]

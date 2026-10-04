@@ -1131,3 +1131,53 @@ plan-literal source; the 7 added blocks fail 18 assertions there (the `if (NA)` 
 estimated usages, the non-list message, 2 retried overflows, 6 retried definitive classes and 6
 accepted `agent_retry_delay()` arguments), and a probe of the plan-literal functions
 (`dev/.validation/P06/task8-literal-probe.log`) shows the remaining throws of item 4.
+
+## D-034 - P12 Gemini normaliser: IC-74 usage, typed finish reasons and error fields, malformed parts never end the stream (2026-10-04)
+
+P12 Task 8's plan-literal `google_normaliser()` and `google_error_info()`
+(`R/provider-google.R`, the `parse` of the `google-generative-ai` adapter) were changed in the four
+ways below. Task 9 (the request builder and `builtin:google`), P06's usage rows and P24 consume
+them.
+
+1. **IC-74 usage** (07-local-ollama.md section 5: "Missing usage remains unknown"; D-022, D-027,
+   D-031). The plan read `cachedContentTokenCount` and `thoughtsTokenCount` with `%||% 0`, so a
+   reported null became a known zero. `google_usage()` now follows D-027's rule with Task 4's
+   helpers (`completions_count()`, `completions_first()`): a field left out keeps P05's legacy
+   zero, a reported null (or a value that is not a nonnegative number) is `NA`, and
+   `"usageMetadata": null` is no report; each report still replaces the last (Pi). The
+   hand-written goldens of `unknown_finish` and `truncated` (no usage on the wire) record unknown
+   usage (`g_usage_unknown()`, as D-027 point 2 requires); the plan wrote zeros, which the D-022
+   core no longer produces even with the plan-literal source.
+2. **Contract-typed finish reasons** (04 section 4.2; D-022 point 3). A `finishReason` that is
+   not one string is an `error` stop, never matched as text: the plan's `fr == "STOP"` mapped
+   `["STOP"]` to `stop` and stored a numeric reason as an integer `raw_stop_reason`.
+   `raw_stop_reason` is text (`adp_chr()`), the error message names it (`unknown` when it has no
+   text) and appends `finishMessage` only when that is one string.
+3. **Typed error fields; every error shape read** (09 section 2.1; D-031 point 3). An error chunk
+   whose `error` is a bare string is a provider error with that text (the plan's `err$status`
+   threw, giving an `internal` error), a `code` is used only when it is one whole number from 100
+   to 599, an HTTP status (a vector code threw "'length = 2' in coercion to 'logical(1)'", and,
+   found in review round 1, a code beyond R's integer range such as `1e10` escaped `push()` as
+   the warning "NAs introduced by coercion to integer range", against 04 section 8.1's "Normalisers
+   never signal R conditions"), and a `status` only when it is one string (the plan matched
+   `list("UNAVAILABLE")` as a retryable overload).
+4. **Malformed parts never end the stream.** Chunk fields are read with `[[` (no `$` partial
+   matching). A part, `functionCall`, candidate or `content` that is not an object is ignored, and
+   a text part counts only when `text` is one string (the plan threw "subscript out of bounds" or
+   "$ operator is invalid for atomic vectors", ending the stream with an `internal` error, or
+   joined a number into the text). A thought signature is kept only when it is one string (a
+   non-string signature made the block constructors throw when the block closed). A call without
+   a name gets a generated id with the prefix `call` (its block name is the core's
+   `unknown_tool`), and a response id with no alphanumeric character gives the id fragment `x`.
+   A generated id `<name>_<fragment>_<n>` moves on to the next free `n` when a call of the same
+   message already holds it (review round 1: the plan could repeat a provider-supplied id such as
+   `read_abc_2`, and duplicate ids in one assistant message break tool-result pairing).
+
+Validation: `progress/P12.md`, Task 8. The plan's six tests pass against the plan-literal source
+(56 assertions, the plan's count, with the adapted goldens); the four added tests for these
+points fail 13 assertions there (2 null usages read as zero, 4 for the numeric and list finish
+reasons, 2 for the non-string signature, 1 error for the bare-string `google_error_info()` call,
+4 for the non-object parts), and an ad hoc probe of the plan-literal source
+(`dev/.validation/P12/task8-adapt-red2.log`) shows the remaining throws of point 3. Review round 1
+added the HTTP-range code rule of point 3 and the free-id rule of point 4, each with a regression
+test that failed before the fix (`task8-fix1-red.log`: 8 failures and 1 warning).

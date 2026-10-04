@@ -1,0 +1,42 @@
+{
+  "stop_reason": "tool_use",
+  "raw_stop_reason": "STOP",
+  "response_id": "k9_XaJ3vGsmWz7IP",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "**Working out the query**\nI should list files first.",
+      "signature": "CiQBjz1rX3NpZ1RoaW5r"
+    },
+    {
+      "type": "text",
+      "text": "Let me look at the directory."
+    },
+    {
+      "type": "tool_call",
+      "id": "fc_7h2k",
+      "name": "find",
+      "arguments": {
+        "pattern": "*.R"
+      },
+      "thought_signature": "CiQBjz1rX3NpZ0NhbGw="
+    },
+    {
+      "type": "tool_call",
+      "id": "fc_8j3m",
+      "name": "read",
+      "arguments": {
+        "path": "R/a.R"
+      }
+    }
+  ],
+  "usage": {
+    "input": 300,
+    "output": 74,
+    "cache_read": 512,
+    "cache_write_5m": 0,
+    "cache_write_1h": 0,
+    "reasoning": 43,
+    "total": 886
+  }
+}

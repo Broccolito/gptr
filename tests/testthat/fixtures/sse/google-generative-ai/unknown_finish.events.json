@@ -1,0 +1,31 @@
+[
+  {
+    "type": "start",
+    "response_id": "r4"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "x"
+  },
+  {
+    "type": "text_end",
+    "index": 1,
+    "block": {
+      "type": "text",
+      "text": "x"
+    }
+  },
+  {
+    "type": "error",
+    "reason": "error",
+    "error": {
+      "class": "provider",
+      "status": null
+    }
+  }
+]

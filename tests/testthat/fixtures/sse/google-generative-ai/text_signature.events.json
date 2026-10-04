@@ -1,0 +1,28 @@
+[
+  {
+    "type": "start",
+    "response_id": "r2"
+  },
+  {
+    "type": "text_start",
+    "index": 1
+  },
+  {
+    "type": "text_delta",
+    "index": 1,
+    "delta": "The mean is 20.1."
+  },
+  {
+    "type": "text_end",
+    "index": 1,
+    "block": {
+      "type": "text",
+      "text": "The mean is 20.1.",
+      "signature": "Q2lnVGV4dFNpZw=="
+    }
+  },
+  {
+    "type": "done",
+    "reason": "stop"
+  }
+]
