@@ -2715,3 +2715,34 @@ pressure asks compact.should with twice the session's last request" (7 expectati
 (`task9-red-adaptations.log`). The child row is counted (18200 tokens instead of 3200, then
 `TRUE` instead of `FALSE`), the all-`NA` row is asked (3 calls instead of 2), and the failing
 service throws "compactor failed".
+
+## D-060 - P11 risk tables: a winning risk_rule row replaces only the cells it supplies, rows with an NA key are dropped (an NA subcommand is `*`), the table cache sees re-registered records (2026-10-04)
+
+P11 Task 1's generators and checksums are the plan's (1492 and 434 rows; `tools::md5sum()` equals the
+plan's values on R 4.5.0). Three defects of the plan-literal `R/perm-classify.R` concern the merge of
+`risk_rule` records (04 section 10.2 row 33, section 11.15, IC-69):
+1. **A winning row replaced the whole shipped row.** The kind requires only `package`, `function`
+   and `level`, and the plan filled every missing column with `""`. A plugin raising `base::saveRDS`
+   to level 3 therefore erased its category and its path argument `file`, and Task 3's walker would
+   no longer see the path class of the saved file (`control` is level 4): raising a level lowered
+   the risk. The row now replaces only the cells it supplies: the columns its record has, and in
+   that row only the cells that are not NA (rows bound together with `rbind()` or
+   `dplyr::bind_rows()` leave NA where a row gave no value). A new row still gets `""` for missing
+   and NA text cells.
+2. **Rows with an NA key matched every lookup of the same name.** `rows$package == pkg` is NA for an
+   NA package, so `risk_lookup("wipe", "mypkg")` returned an all-NA row. Rule rows with an NA
+   `package`, `function` or `command` are dropped. An NA `subcommand` means `*`, as an omitted
+   `subcommand` column does, so the row is kept. NA text in the other columns becomes `""` on a new
+   row (a later `nzchar(path_arg)` stays false), and factor columns become text.
+3. **The cache could serve a stale table.** It was keyed by the registry generation, the number of
+   records and their names, so removing a record and registering one of the same name with other
+   rows kept the old table. The key now hashes the records' name, rows and `lower`
+   (`hash_xxh128()`, P01).
+The glob rows' regular expressions are compiled once per merged table (no behaviour change).
+
+Validation: `progress/P11.md`, Task 1. Two blocks were added to `test-perm-classify.R`
+(10 expectations); against the plan-literal source they fail 5 (`task1-probe-plan-literal.log`).
+Review round 1 extended item 1 to NA cells and item 2 to NA subcommands: 6 expectations in the
+first added block and a third added block (4); against the round-0 source they fail 4
+(`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
+UTF-8 and the C locale.
