@@ -58,6 +58,13 @@ and after the suite through `dev/ci/check-connections.R`. A synthetic leaking
 connection is an explicit negative control. Ordinary R CMD check example
 checks remain enabled. The full wrapper must also pass after P01 integration.
 
+The combined P02/P04 snapshot exposed processx's two intentional process-wide
+supervisor FIFOs. IC-60 already disables this supervisor under R CMD check.
+The standalone connection gate now scopes the same `gptr.supervise = FALSE`
+option and restores the caller's value, including on error. It still compares
+the complete table without exemptions and retains its deliberate-leak negative
+control; child cleanup and orphan recovery tests still execute.
+
 ## D-007 — Stream parser boundary corrections (2026-10-03)
 
 The literal P04 splitter silently removed NUL bytes, changing provider data.

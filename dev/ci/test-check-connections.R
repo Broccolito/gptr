@@ -25,3 +25,14 @@ test_that("connection gate rejects a deliberately leaked connection", {
 test_that("connection gate preserves a failing suite's error", {
   expect_error(checker$check_connections(stop("test suite failed")), "test suite failed")
 })
+
+test_that("connection gate uses check-mode supervision and restores the caller's option", {
+  withr::local_options(gptr.supervise = TRUE)
+  expect_false(checker$check_connections(getOption("gptr.supervise")))
+  expect_true(getOption("gptr.supervise"))
+  expect_error(checker$check_connections({
+    expect_false(getOption("gptr.supervise"))
+    stop("test suite failed")
+  }), "test suite failed")
+  expect_true(getOption("gptr.supervise"))
+})

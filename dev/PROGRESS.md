@@ -6,7 +6,7 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 ## Current state
 
 - Branch: `codex/gptr-1.0-implementation`, based on `17a95dd`.
-- Active milestone: **M0**, implementing **P01 Foundation**.
+- Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
   IC-74 adds acceptance work that must be reconciled, not assumed complete.
 - All 21 P01 tasks passed focused red/green checks and independent review.
@@ -19,10 +19,16 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
   See [core task evidence](progress/P01.md) and
   [utilities](progress/P01-utilities.md), [provider/helpers](progress/P01-providers.md)
   and [infrastructure evidence](progress/P01-infrastructure.md) for results.
-- P02 Tasks 1–8 are committed; transactional loading, built-ins and conformance
-  checks are in progress. P03's vault and dotenv parser are committed; redaction,
-  loading and storage are under review. P04 has the splitter, request builder,
-  process supervision/job table and reactor core; transport integration remains.
+- P02 Tasks 1–11 are committed through `e2a5f57`; focused acceptance passed
+  1,406 assertions with clean lint, docs and examples. An immutable combined
+  snapshot at that commit is undergoing full package acceptance.
+- P03 Tasks 1–3 and 6–10 are committed: vault, whole/streaming redaction,
+  dotenv loading, credential storage, child environments and advisory secret
+  scanning. History handling, retroactive scrubbing and built-in integration
+  remain. D-010 records the streaming overflow rule that prevents raw leakage.
+- P04 Tasks 1–7 are committed: splitters, requests/retries, supervision/jobs,
+  reactor core and process execution. Child pipes, rate limiting, wire logs and
+  HTTP/retry integration remain in progress.
 - P05's independent usage/pricing component is committed with IC-74 unknown-
   usage semantics. No later plan or milestone is declared complete from these
   dependency-ready components.
@@ -68,13 +74,14 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Active ownership
 
-- `design_summary`: P03 vault/redaction, then secret scanning and built-in integration.
-- `auth_dotenv`: P03 dotenv loader and credential store (Tasks 6–8).
-- `requirements_audit`: P02 transactional loader (Task 9); P05 preparation ready.
-- `scientific_value`: P03 child environments, then P04 process engine (Task 7).
+- `design_summary`: P03 history handling and final built-in integration.
+- `auth_dotenv`: P03 retroactive scrubbing after the history task hands off.
+- `requirements_audit`: P04 rate limiter (Task 9).
+- `scientific_value`: P04 child pipes and nonblocking stdin (Task 8).
 - `plans_security_review`: independent reviews across the disjoint lanes.
-- `ollama_api_research`: P02 integration/conformance, serialized Git/docs queue.
-- Root: P04 HTTP/transport integration, package gates, GitHub and global records.
+- `ollama_api_research`: dependency-ready P05 provider/catalog components.
+- Root: P04 wire log/HTTP/retry integration after Task 8, package acceptance,
+  serialized Git/docs queue, GitHub and global records.
 
 Git commits and generated documentation are serialized. A lane may prepare an
 independent component in parallel, but its plan remains incomplete until all

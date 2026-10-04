@@ -1,6 +1,11 @@
 # CI-only resource check. R's _R_CHECK_CONNECTIONS_LEFT_OPEN_ covers examples;
 # this explicit comparison also checks the complete test suite.
 check_connections = function(code) {
+  # Match IC-60's R CMD check mode: processx's optional process-wide supervisor
+  # deliberately retains two FIFOs until R exits. Child cleanup and orphan
+  # recovery are still exercised; the table comparison has no exemptions.
+  old = options(gptr.supervise = FALSE)
+  on.exit(options(old), add = TRUE)
   before = showConnections(all = TRUE)
   value = force(code)
   after = showConnections(all = TRUE)

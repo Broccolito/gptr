@@ -97,3 +97,16 @@ through their documented mechanism.
 - No live model, CLI authentication, cross-platform, or release gate was run
   during this setup. Machine-specific inventory remains in ignored
   `dev/LOCAL_SETUP.md`.
+
+## Reusable isolated validation runner
+
+`dev/ci/isolated-check.R` sets fresh home, configuration, cache, data and project
+paths before any package load, clears known provider credential environment
+variables, and disables live tests. Select `test <filter>`, `lint [files ...]`,
+`document`, `connections`, or `check <output-directory>`. Use the absolute
+project-local R library when validating a Git archive outside this checkout.
+The connection action explicitly executes the full suite inside the checked
+scope; sourcing the gate file alone does not execute its main entry point.
+The connection gate uses IC-60 check-mode supervision and restores its option;
+its expanded harness tests passed 9 assertions, including the real leaked-file
+negative control and restoration after errors.
