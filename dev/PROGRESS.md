@@ -36,6 +36,12 @@ Resume log (newest last):
   Windows failures are handled by CI Task CI-3 (`progress/ci-hosted.md`).
 - Lanes now running: P06 (critical path), the P09 early lane (Tasks 1-9 where their real
   dependencies exist; Tasks 10-11 after P07/P08) and CI-3.
+- 2026-10-04: CI-3 `2246628` (portable test fixes; Windows hang gone). **P06 complete
+  locally**: Tasks 2-16 committed (`1414863` .. `a535986`), plan acceptance passed every row
+  (1,931 session/agent assertions; `progress/P06.md`). Early lanes: **P09 Tasks 1-9**
+  (`97c3e02` .. `b40b4d1`; Task 8 carries the temporary D-054 guard that P08 Task 10 must
+  remove), **P10 Tasks 1-7** (`47f4ed9` .. `a94716b`). P07 lane started; early lanes P11
+  (Tasks 1-6) and P15 (Tasks 1-6) running.
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
@@ -104,7 +110,7 @@ Resume log (newest last):
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
 | M0 Foundation | P01–P04 | paused; acceptance pending | All P01 tasks passed focused checks; integrated acceptance underway |
-| M1 Offline session kernel | P05–P08 | in progress | P05 plan acceptance passed locally (`df47cbe`); P06 underway |
+| M1 Offline session kernel | P05–P08 | in progress | P05 (`df47cbe`) and P06 (`a535986`) plan acceptance passed locally; P07 underway |
 | M2 Live R agent and decisions | P09–P13 | pending | — |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
