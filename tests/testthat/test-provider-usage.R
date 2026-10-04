@@ -180,3 +180,217 @@ test_that("price dates and tiers are validated and future rates are not borrowed
   expect_error(price_rows(list(tier = ">2k"), list(tier = ">2.0k")),
                class = "gptr_error_invalid_argument")
 })
+
+
+local_priced_provider = function(.env = parent.frame()) {
+  spec = gptr_provider("pricetest", api = "fake", models = list(list(
+    id = "m1", prices = price_rows(list(from = "2000-01-01", tier = "default", input = 4, output = 20,
+                                  cache_read = 0.2, cache_write_5m = 5, cache_write_1h = 8))
+  )))
+  off = gptr_register(spec)
+  withr::defer(off(), envir = .env)
+  spec
+}
+
+usage_msg = function(usage, route = "api", request_id = "q000000000001") {
+  msg_assistant("ok", api = "fake", provider = "pricetest", model = "m1", usage = usage,
+                route = route, request_id = request_id)
+}
+
+test_that("usage_row() prices a request and attributes it (INFRA-20)", {
+  local_priced_provider()
+  started = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
+  row = usage_row(usage_msg(usage_new(input = 50, output = 1200, cache_read = 200000,
+                                      cache_write_5m = 3000)),
+                  session = "s0123456789", agent = "main", parent_id = NA_character_,
+                  started = started, seconds = 1.5, multiplier = 1.1)
+  expect_named(row, names(usage_empty()))
+  expect_equal(nrow(row), 1L)
+  expect_equal(row$cost, 0.0792)
+  expect_equal(row$route, "api")
+  expect_equal(row$tier, "default")
+  expect_equal(row$request_id, "q000000000001")
+  expect_equal(row$provider, "pricetest")
+  expect_equal(row$model, "m1")
+  expect_equal(row$multiplier, 1.1)
+  expect_s3_class(row$started, "POSIXct")
+  generated = usage_row(usage_msg(usage_new(input = 1), request_id = NULL), "s0123456789",
+                        "main", NA_character_, started, 0.1, 1)
+  expect_match(generated$request_id, "^q[0-9a-f]{12}$")
+})
+
+test_that("plan-cli rows keep the CLI's own cost estimate", {
+  local_priced_provider()
+  row = usage_row(usage_msg(usage_new(input = 20, output = 172, cost = list(total = 0.0179)),
+                            route = "plan-cli"),
+                  "s0123456789", "main", NA_character_, Sys.time(), 2.7, 1)
+  expect_equal(row$cost, 0.0179)
+  expect_equal(row$route, "plan-cli")
+})
+
+test_that("child usage rolls up to the parent session (INFRA-20)", {
+  local_priced_provider()
+  t0 = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
+  row = function(input, output, session, agent, parent_id) {
+    usage_row(usage_msg(usage_new(input = input, output = output, cache_write_1h = 10)),
+              session, agent, parent_id, t0, 1, 1)
+  }
+  rows = rbind(row(1000, 100, "s0000000001", "main", NA_character_),
+               row(500, 50, "s0000000002", "stats", "s0000000001"),
+               row(400, 40, "s0000000003", "code", "s0000000001"),
+               row(100, 10, "s0000000004", "helper", "s0000000003"),
+               row(300, 30, "s0000000009", "main", NA_character_))
+  expect_true("route" %in% names(rows))
+  up = usage_rollup(rows)
+  expect_named(up, c("group", "requests", "input", "output", "cache_read", "cache_write",
+                     "cost"))
+  expect_equal(up$group, c("s0000000001", "s0000000009"))
+  expect_equal(up$requests, c(4L, 1L))
+  expect_equal(up$input, c(2000, 300))
+  expect_equal(up$cache_write, c(40, 10))
+  tree = rows[rows$session != "s0000000009", ]
+  expect_equal(up$cost[[1]], sum(tree$cost))
+  expect_equal(sum(tapply(tree$cost, tree$agent, sum)), up$cost[[1]])
+  expect_equal(sum(up$cost), sum(rows$cost))
+  expect_equal(nrow(usage_rollup(usage_empty())), 0L)
+})
+
+test_that("the process System 1 log is append-only", {
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  assign("s1_log", NULL, envir = the)
+  expect_equal(nrow(usage_log()), 0L)
+  expect_named(usage_log(), names(usage_empty()))
+  local_priced_provider()
+  row = usage_row(usage_msg(usage_new(input = 250, output = 3), route = "system-one"),
+                  NA_character_, "s1", NA_character_, Sys.time(), 0.4, 1)
+  usage_log_append(row)
+  usage_log_append(row)
+  log = usage_log()
+  expect_equal(nrow(log), 2L)
+  expect_equal(log$route, c("system-one", "system-one"))
+  expect_error(usage_log_append(list(a = 1)), class = "gptr_error_invalid_argument")
+})
+
+test_that("usage rows retain unknown observations, price evidence and elapsed time", {
+  local_priced_provider()
+  started = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
+  build = function(msg, time = started) {
+    usage_row(msg, "root", "main", NA_character_, time, NA_real_, 1)
+  }
+  row = build(usage_msg(NULL))
+  expect_true(all(is.na(unlist(row[usage_fields]))))
+  expect_true(is.na(row$cost))
+  expect_true(is.na(row$seconds))
+  expect_identical(row$tier, "default")
+  unknown = usage_msg(usage_new(input = 10))
+  unknown$model = "unpriced-model"
+  row = build(unknown)
+  expect_true(is.na(row$cost))
+  expect_true(is.na(row$tier))
+  before_price = build(usage_msg(usage_new(input = 10)),
+                       as.POSIXct("1999-12-31 12:00:00", tz = "UTC"))
+  expect_true(is.na(before_price$cost))
+  expect_true(is.na(before_price$tier))
+  future = gptr_provider("usagefree", api = "fake", models = list(list(
+    id = "local", prices = price_rows(list(from = "2000-01-01", input = 0, output = 0)))))
+  off = gptr_register(future)
+  withr::defer(off())
+  msg = msg_assistant("ok", api = "fake", provider = "usagefree", model = "local", usage = NULL)
+  local = build(msg)
+  expect_true(is.na(local$input))
+  expect_true(is.na(local$output))
+  expect_equal(local$cost, 0)
+})
+
+test_that("plan CLI missing cost is unknown while supplied zero remains known", {
+  local_priced_provider()
+  build = function(u) {
+    usage_row(usage_msg(u, route = "plan-cli"), "root", "main",
+               NA_character_, Sys.time(), 1, 1)
+  }
+  for (u in list(NULL, list(input = 10), list(input = 10, cost = NULL),
+                 list(input = 10, cost = list(input = 0.01)))) {
+    expect_true(is.na(build(u)$cost))
+  }
+  expect_equal(build(list(input = 10, cost = list(total = 0)))$cost, 0)
+  expect_equal(build(usage_new(input = 10, cost = list(total = 0.03)))$cost, 0.03)
+  expect_true(is.na(build(list(input = 10, cost = list(total = NA_real_)))$cost))
+})
+
+test_that("unknown token or charge components propagate through root rollups", {
+  local_priced_provider()
+  make = function(session, parent, input, output) {
+    usage_row(usage_msg(usage_new(input = input, output = output)), session, "main", parent,
+               Sys.time(), 1, 1)
+  }
+  rows = rbind(make("child", "root", NA_real_, 3),
+               make("root", NA_character_, 10, 4),
+               make("known", NA_character_, 20, 5))
+  up = usage_rollup(rows)
+  expect_identical(up$group, c("root", "known"))
+  expect_identical(up$requests, c(2L, 1L))
+  expect_true(is.na(up$input[1]))
+  expect_true(is.na(up$cost[1]))
+  expect_equal(up$output, c(7, 5))
+  expect_equal(up$input[2], 20)
+  rows$cache_write_1h[1] = NA_real_
+  expect_true(is.na(usage_rollup(rows)$cache_write[1]))
+  rows$session[1:2] = NA_character_
+  rows$parent_id[1:2] = NA_character_
+  expect_identical(usage_rollup(rows)$group, c(NA_character_, "known"))
+})
+
+test_that("usage rollup rejects inconsistent or cyclic session ancestry", {
+  local_priced_provider()
+  row = usage_row(usage_msg(usage_new(input = 1)), "a", "main", "b", Sys.time(), 1, 1)
+  other = row
+  other$session = "b"
+  other$parent_id = "a"
+  expect_error(usage_rollup(rbind(row, other)), class = "gptr_error_invalid_argument")
+  other$session = "a"
+  other$parent_id = "c"
+  expect_error(usage_rollup(rbind(row, other)), class = "gptr_error_invalid_argument")
+  row$parent_id = "a"
+  expect_error(usage_rollup(row), class = "gptr_error_invalid_argument")
+})
+
+test_that("usage log validates rows before mutation and returns independent copies", {
+  old = the$s1_log
+  withr::defer(assign("s1_log", old, envir = the))
+  the$s1_log = NULL
+  local_priced_provider()
+  row = usage_row(usage_msg(usage_new(input = 1)), "root", "main", NA_character_,
+                  Sys.time(), 1, 1)
+  expect_identical(usage_log_append(row), 1L)
+  row$input = 999
+  expect_equal(usage_log()$input, 1)
+  copy = usage_log()
+  copy$input = 888
+  expect_equal(usage_log()$input, 1)
+  for (value in list(-1, Inf, "bad", NaN)) {
+    bad = row
+    bad$cost = value
+    expect_error(usage_log_append(bad), class = "gptr_error_invalid_argument")
+    expect_identical(nrow(usage_log()), 1L)
+  }
+  bad = row
+  bad$started = "2026-01-01"
+  expect_error(usage_log_append(bad), class = "gptr_error_invalid_argument")
+  bad = row
+  bad$estimated = NA
+  expect_error(usage_log_append(bad), class = "gptr_error_invalid_argument")
+})
+
+test_that("usage row scalar fields cannot recycle into multiple accounting rows", {
+  local_priced_provider()
+  msg = usage_msg(usage_new(input = 1))
+  build = function(...) {
+    do.call(usage_row, utils::modifyList(list(msg = msg, session = "root", agent = "main",
+      parent_id = NA_character_, started = Sys.time(), seconds = 1, multiplier = 1), list(...)))
+  }
+  for (args in list(list(session = c("a", "b")), list(seconds = c(1, 2)),
+                    list(seconds = -1), list(multiplier = Inf), list(started = "bad"))) {
+    expect_error(do.call(build, args), class = "gptr_error_invalid_argument")
+  }
+})

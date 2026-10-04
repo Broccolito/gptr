@@ -169,3 +169,33 @@ commit of exactly the task's files with the plan's message. The separation of
 implementation, independent review and acceptance is unchanged; no gate is
 weakened. Pushing `main` triggers the hosted CI matrix, which supplies the
 cross-platform evidence previously obtained through the draft PR.
+
+## D-014 - IC-74 discovery and preflight choices in P05 Task 8 (2026-10-03)
+
+IC-74 (`spec/07-local-ollama.md` sections 2 and 2.1) adds `model_prepare()` and
+`provider_preflight()` but names no condition classes, and the plan's Task 8 literal predates
+it. P05 Task 8 fixes these behaviours, which P08 and P13 consume:
+
+1. **Condition classes.** Local-only refusals (non-loopback endpoint, cloud selector, remote
+   markers, evidence without local execution) signal `gptr_error_untrusted` (`what`, `path` =
+   the model ref, `origin`). Missing or stale discovery evidence, a missing capability, a
+   model-level type/api mismatch or an old server signal `gptr_error_not_available` (`member` =
+   the ref, `provided_by`). `gptr_models(provider = "ollama", refresh = TRUE)` can therefore
+   signal these two classes besides the `invalid_argument`/`network` of contract section 6.2.
+2. **Discovery egress.** Native discovery is itself refused before any request for a
+   non-loopback endpoint unless the protected safety record sets `ollama_local_only = FALSE`;
+   `gptr_models()` has no safety argument, so its Ollama refresh is loopback-only.
+3. **Listed names grant nothing.** Generic `discover()` results (LM Studio, llama.cpp, vLLM) add
+   descriptive entries without tools, vision or locality; the plan literal granted
+   `tool_call = TRUE`.
+4. **System 1 default.** `model_default("system1")` keeps the setting, then the TypeSafe key, then
+   a native classifier whose current private evidence passes the default local-only preflight
+   (07 section 5), skipping a provider disabled in the settings. It never discovers.
+5. **Checked model.** `provider_preflight()` returns the model narrowed to the evidence (tools,
+   reasoning, image input, context) with the evidence's digest, server version and locality,
+   and a zero metered price when the evidence establishes local execution (so a bare catalog
+   name such as `ollama/clef-flash` prices like its discovered `:latest` tag); a record whose
+   digest or server version differs from current evidence is refused, so a prepared model is
+   never silently replaced.
+
+Validation: `progress/P05.md`, Task 8 (`test-catalog-models.R` IC-74 tests).

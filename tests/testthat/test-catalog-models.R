@@ -421,3 +421,674 @@ test_that("pure resolution does not invoke provider discovery and rejects malfor
   ))))
   expect_error(model_resolve("ollama/broken"), class = "gptr_error_invalid_spec")
 })
+
+# ---- Task 8: the bounded catalog HTTP request, gptr_models(), defaults, explicit refresh, local
+# discovery and request preflight (IC-74, 07-local-ollama.md sections 2 and 2.1) -----------------
+
+test_that("catalog HTTP GET uses the reactor and preserves status headers and bytes", {
+  local_mocked_bindings(
+    reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
+                            run = NULL, provider = NULL, retry = NULL) {
+      expect_identical(spec$url, "https://catalog.example/models")
+      expect_identical(spec$method, "GET")
+      expect_null(spec$body)
+      expect_identical(spec$headers, list(accept = "application/json"))
+      expect_identical(provider, "catalog")
+      on_headers(200L, list(etag = "fixture"))
+      on_bytes(charToRaw("first"))
+      on_bytes(charToRaw("second"))
+      on_done(200L, list(etag = "fixture"))
+      "catalog-test"
+    },
+    reactor_pump = function(until, timeout) {
+      expect_identical(timeout, 1)
+      until()
+    },
+    reactor_cancel = function(...) stop("completed request must not be cancelled")
+  )
+  out = catalog_http_get("https://catalog.example/models", list(accept = "application/json"), 1)
+  expect_identical(out$status, 200L)
+  expect_identical(out$headers$etag, "fixture")
+  expect_identical(out$body, charToRaw("firstsecond"))
+})
+
+test_that("catalog HTTP supports metadata POST and HTTP error status", {
+  local_mocked_bindings(
+    reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
+                            run = NULL, provider = NULL, retry = NULL) {
+      expect_identical(spec$method, "POST")
+      expect_identical(spec$body, '{"model":"clef"}')
+      on_fail(gptr_condition("HTTP error", "network",
+                             fields = list(status = 404L, curl_code = NA_integer_)))
+      "catalog-test"
+    },
+    reactor_pump = function(until, timeout) until()
+  )
+  out = catalog_http_request("http://127.0.0.1:11434/api/show", method = "POST",
+                             body = '{"model":"clef"}')
+  expect_identical(out$status, 404L)
+  expect_identical(out$body, raw())
+})
+
+test_that("catalog HTTP cancels only its own transfer on timeout, interrupt or oversize", {
+  cancelled = character()
+  local_mocked_bindings(
+    reactor_http = function(...) "catalog-owned",
+    reactor_pump = function(...) FALSE,
+    reactor_cancel = function(ids) {
+      cancelled <<- c(cancelled, ids)
+      invisible(NULL)
+    }
+  )
+  expect_error(catalog_http_get("https://catalog.example", timeout = 1),
+               class = "gptr_error_network")
+  expect_identical(cancelled, "catalog-owned")
+  cancelled = character()
+  local_mocked_bindings(reactor_pump = function(...) stop("interrupted pump"))
+  expect_error(catalog_http_get("https://catalog.example"), "interrupted pump")
+  expect_identical(cancelled, "catalog-owned")
+  cancelled = character()
+  local_mocked_bindings(
+    reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
+                            run = NULL, provider = NULL, retry = NULL) {
+      expect_identical(retry, list(max_attempts = 1L))
+      on_headers(200L, list())
+      on_bytes(as.raw(1:8))
+      "catalog-large"
+    },
+    reactor_pump = function(until, timeout) until()
+  )
+  expect_error(catalog_http_request("https://catalog.example", attempts = 1L, max_bytes = 4),
+               class = "gptr_error_network")
+  expect_identical(cancelled, "catalog-large")
+})
+
+test_that("catalog HTTP validates arguments before dispatch and handles transport failure", {
+  local_mocked_bindings(reactor_http = function(...) stop("unexpected dispatch"))
+  expect_error(catalog_http_get("https://catalog.example", timeout = Inf),
+               class = "gptr_error_invalid_argument")
+  expect_error(catalog_http_get("not-a-url"), class = "gptr_error_invalid_argument")
+  expect_error(catalog_http_get("ftp://catalog.example/x"), class = "gptr_error_invalid_argument")
+  local_mocked_bindings(
+    reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
+                            run = NULL, provider = NULL, retry = NULL) {
+      on_fail(gptr_condition("unreachable", "network",
+                             fields = list(status = NA_integer_, curl_code = 7L)))
+      "catalog-test"
+    },
+    reactor_pump = function(until, timeout) until()
+  )
+  err = expect_error(catalog_http_get("https://catalog.example"), class = "gptr_error_network")
+  expect_identical(err$curl_code, 7L)
+})
+
+test_that("catalog_http_request() runs on the real reactor against loopback fixtures", {
+  ok = local_mock_server("json", body = "{\"version\":\"0.35.1\"}")
+  got = catalog_http_request(paste0(ok$url, "/api/version"), timeout = 5, attempts = 1L)
+  expect_identical(got$status, 200L)
+  expect_identical(json_decode(raw_to_utf8(got$body))$version, "0.35.1")
+  posted = catalog_http_request(paste0(ok$url, "/api/show"), method = "POST",
+                                headers = list(`content-type` = "application/json"),
+                                body = "{\"model\":\"clef\"}", timeout = 5, attempts = 1L)
+  expect_identical(posted$status, 200L)
+  log = ok$log()
+  expect_identical(log$method, c("GET", "POST"))
+  expect_identical(log$body[[2]], "{\"model\":\"clef\"}")
+  missing = local_mock_server("json", status = 404L, body = "{\"error\":\"none\"}")
+  expect_identical(catalog_http_get(paste0(missing$url, "/api/tags"), timeout = 5)$status, 404L)
+  hold = local_mock_server("hold_headers")
+  before = ls(reactor_get()$transfers)
+  err = expect_error(catalog_http_request(hold$url, timeout = 1, attempts = 1L),
+                     class = "gptr_error_network")
+  # the reactor's first-byte timer or the pump deadline, whichever fires first: both are 1 s
+  expect_match(conditionMessage(err), "1 s", fixed = TRUE)
+  expect_identical(ls(reactor_get()$transfers), before)
+})
+
+test_that("a loopback server's listed models join the catalog only on request", {
+  local_catalog()
+  local_mocked_bindings(
+    check_running = function() FALSE,
+    catalog_http_get = function(url, headers = list(), timeout = 30) {
+      expect_equal(url, "http://localhost:1234/v1/models")
+      expect_equal(timeout, 1)
+      list(status = 200L, headers = list(),
+           body = charToRaw('{"data":[{"id":"llama3.2:3b"},{"id":"qwen3.5:9b"}]}'))
+    }
+  )
+  expect_equal(nrow(gptr_models(provider = "lmstudio")), 0L)
+  found = gptr_models(provider = "lmstudio", refresh = TRUE)
+  expect_setequal(found$ref, c("lmstudio/llama3.2:3b", "lmstudio/qwen3.5:9b"))
+  # IC-74: a listed name grants no tools, vision or locality
+  m = model_resolve("lmstudio/qwen3.5:9b")
+  expect_false(m$tool_call)
+  expect_identical(m$input, "text")
+  expect_identical(m$locality, "unknown")
+})
+
+test_that("gptr_models() searches the catalog and lists prices in force", {
+  local_catalog()
+  df = gptr_models("sonnet")
+  expect_s3_class(df, "gptr_models")
+  expect_named(df, c("ref", "provider", "name", "context", "max_output", "input_price",
+                     "output_price", "reasoning", "aliases", "status"))
+  expect_equal(df$ref[[1]], "anthropic/claude-sonnet-5-5")
+  expect_equal(df$input_price[[1]], 2)
+  expect_equal(df$aliases[[1]], "sonnet")
+  claude = gptr_models("claude", provider = "anthropic")
+  expect_true(all(claude$provider == "anthropic"))
+  expect_true(nrow(claude) >= 4L)
+  expect_equal(nrow(gptr_models("[unclosed")), 0L)
+  expect_error(gptr_models(query = 1), class = "gptr_error_invalid_argument")
+  expect_error(gptr_models(refresh = NA), class = "gptr_error_invalid_argument")
+})
+
+test_that("model_default() follows the settings, then the first available key", {
+  local_catalog()
+  local_mocked_bindings(secret_lookup = function(name) NULL, auth_store_get = function(key) NULL,
+                        auth_store_read = function() list(),
+                        model_cli_available = function(id) FALSE)
+  withr::local_envvar(ANTHROPIC_API_KEY = "", OPENAI_API_KEY = "", GEMINI_API_KEY = "",
+                      GOOGLE_API_KEY = "", TYPESAFE_API_KEY = "")
+  expect_null(model_default("chat"))
+  expect_null(model_default("system1"))
+  withr::local_envvar(OPENAI_API_KEY = "sk-test-openai-000000000000")
+  expect_equal(model_default("chat"), "openai/gpt-6-sol")
+  expect_equal(model_default("small"), "openai/gpt-6-luna")
+  withr::local_envvar(TYPESAFE_API_KEY = "ts-test-000000000000")
+  expect_equal(model_default("system1"), "typesafe/jev-latest")
+  local_settings(model = "sonnet")
+  expect_equal(model_default("chat"), "sonnet")
+  expect_equal(model_default("small"), "anthropic/claude-haiku-4-5")
+  expect_true(all(c("sonnet", "jev", "claude_code") %in% catalog_aliases()))
+  expect_error(model_default("large"), class = "gptr_error_invalid_argument")
+})
+
+test_that("model_default() skips providers disabled in the settings", {
+  local_catalog()
+  local_mocked_bindings(model_cli_available = function(id) FALSE,
+                        model_key_present = function(id, vars) id %in% c("anthropic", "openai"))
+  expect_equal(model_default("chat"), "anthropic/claude-sonnet-5-5")
+  local_settings(providers = list(anthropic = list(enabled = FALSE)))
+  expect_equal(model_default("chat"), "openai/gpt-6-sol")
+})
+
+test_that("a detected subscription CLI is the last default route", {
+  local_catalog()
+  local_mocked_bindings(model_key_present = function(id, vars) FALSE)
+  off = gptr_register(gptr_provider("claude-cli", api = "cli-claude", type = "cli",
+                                    status = function(check) {
+                                      list(available = identical(check, FALSE))
+                                    }))
+  withr::defer(off())
+  expect_true(model_cli_available("claude-cli"))
+  expect_equal(model_default("chat"), "claude-cli/default")
+  expect_false(model_cli_available("no-such-cli"))
+})
+
+test_that("an explicit refresh revalidates with the ETag and caches in R_user_dir", {
+  dir = local_catalog()
+  api = list(anthropic = list(id = "anthropic", models = list(`claude-sonnet-6` = list(
+    id = "claude-sonnet-6", name = "Claude Sonnet 6", family = "claude-sonnet", reasoning = TRUE,
+    tool_call = TRUE, release_date = "2026-12-01", limit = list(context = 1e6, output = 128000),
+    modalities = list(input = list("text"), output = list("text")),
+    cost = list(input = 2, output = 10)
+  ))))
+  seen = new.env()
+  seen$headers = list()
+  local_mocked_bindings(catalog_http_get = function(url, headers = list(), timeout = 30) {
+    if (!identical(url, catalog_source_url)) return(list(status = 404L, headers = list(),
+                                                         body = raw()))
+    seen$headers[[length(seen$headers) + 1L]] = headers
+    if (identical(headers[["if-none-match"]], "W/\"v1\"")) {
+      return(list(status = 304L, headers = list(), body = raw()))
+    }
+    list(status = 200L, headers = list(ETag = "W/\"v1\""), body = charToRaw(json_encode(api)))
+  })
+  expect_true(catalog_refresh())
+  expect_true(file.exists(file.path(dir, "cache-models.json")))
+  expect_equal(readLines(file.path(dir, "cache-models.etag"), warn = FALSE), "W/\"v1\"")
+  expect_equal(model_resolve("sonnet")$ref, "anthropic/claude-sonnet-6")
+  expect_false(catalog_refresh())
+  expect_equal(seen$headers[[2]][["if-none-match"]], "W/\"v1\"")
+  local_mocked_bindings(catalog_http_get = function(url, headers = list(), timeout = 30) {
+    list(status = 503L, headers = list(), body = raw())
+  })
+  unlink(file.path(dir, "cache-models.etag"))
+  expect_error(catalog_refresh(), class = "gptr_error_network")
+})
+
+test_that("resolution is offline: builtins and gptr_models('sonnet') start no transfer", {
+  count = new.env()
+  count$transfers = 0L
+  local_mocked_bindings(reactor_http = function(...) {
+    count$transfers = count$transfers + 1L
+    "t1"
+  })
+  catalog_reset(discovered = TRUE)
+  withr::defer(catalog_reset(discovered = TRUE))
+  api = new.env()
+  api$specs = list()
+  api$register = function(spec) {
+    api$specs[[length(api$specs) + 1L]] = spec
+    invisible(function() NULL)
+  }
+  builtin_providers(api)
+  expect_length(api$specs, 17L)
+  expect_true(all(vapply(api$specs, function(s) inherits(s, "gptr_provider"), NA)))
+  expect_null(the$catalog)
+  df = gptr_models("sonnet")
+  expect_match(df$ref[[1]], "^anthropic/claude-sonnet-")
+  expect_equal(df$ref[[1]], model_resolve("sonnet")$ref)
+  expect_equal(count$transfers, 0L)
+})
+
+# Synthetic answers of a native Ollama server (07-local-ollama.md section 2): /api/version,
+# /api/tags and /api/show in the documented JSON shapes. No server runs and no request leaves
+# the process: catalog_http_request() is replaced and records what it was asked.
+ollama_fixture = function() {
+  list(
+    `qwen3:1.7b` = list(
+      tag = list(name = "qwen3:1.7b", model = "qwen3:1.7b", size = 1359293444,
+                 digest = strrep("1", 64),
+                 details = list(format = "gguf", family = "qwen3", parameter_size = "2.0B",
+                                quantization_level = "Q4_K_M")),
+      show = list(capabilities = list("completion", "tools", "thinking"),
+                  parameters = "num_ctx                        8192\nstop \"<|im_end|>\"",
+                  details = list(format = "gguf", family = "qwen3",
+                                 quantization_level = "Q4_K_M"),
+                  model_info = list(general.architecture = "qwen3",
+                                    qwen3.context_length = 40960))),
+    `clef-flash:latest` = list(
+      tag = list(name = "clef-flash:latest", model = "clef-flash:latest", size = 11e9,
+                 digest = strrep("2", 64),
+                 details = list(format = "gguf", family = "clef", quantization_level = "Q8_0")),
+      show = list(capabilities = list("decision"), parameters = "num_ctx 16384",
+                  details = list(format = "gguf", family = "clef", quantization_level = "Q8_0"),
+                  model_info = list(general.architecture = "clef", clef.context_length = 262144),
+                  projector_info = list(clip.has_vision_encoder = TRUE))),
+    `gpt-oss:120b-cloud` = list(
+      tag = list(name = "gpt-oss:120b-cloud", model = "gpt-oss:120b-cloud", size = 384,
+                 digest = strrep("3", 64), remote_model = "gpt-oss:120b",
+                 remote_host = "https://ollama.com:443",
+                 details = list(format = "", family = "gptoss", quantization_level = "")),
+      show = list(capabilities = list("completion", "tools", "thinking"),
+                  remote_model = "gpt-oss:120b", remote_host = "https://ollama.com:443",
+                  details = list(format = "", family = "gptoss")))
+  )
+}
+
+local_ollama_server = function(models = ollama_fixture(), version = "0.35.1",
+                               .env = parent.frame()) {
+  srv = new.env(parent = emptyenv())
+  srv$models = models
+  srv$version = version
+  srv$down = FALSE
+  srv$slow = character()
+  srv$calls = character()
+  srv$timeouts = numeric()
+  answer = function(x) list(status = 200L, headers = list(), body = charToRaw(json_encode(x)))
+  testthat::local_mocked_bindings(
+    check_running = function() FALSE,
+    catalog_http_request = function(url, method = "GET", headers = list(), body = NULL,
+                                    timeout = 30, ...) {
+      srv$calls = c(srv$calls, paste(method, url))
+      srv$timeouts = c(srv$timeouts, timeout)
+      if (srv$down) {
+        gptr_abort("Could not reach the fixture: connection refused", c("network", "provider"),
+                   provider = "catalog", status = NA_integer_, curl_code = 7L)
+      }
+      path = sub("^https?://[^/]+", "", url)
+      if (identical(path, "/api/version")) return(answer(list(version = srv$version)))
+      if (identical(path, "/api/tags")) {
+        return(answer(list(models = unname(lapply(srv$models, function(m) m$tag)))))
+      }
+      if (identical(path, "/api/show") && identical(method, "POST")) {
+        name = json_decode(body)$model
+        if (name %in% srv$slow) {
+          gptr_abort("No answer from the fixture within 1 s.", c("network", "provider"),
+                     provider = "catalog", status = NA_integer_, curl_code = 28L)
+        }
+        m = srv$models[[name]]
+        if (!is.null(m)) return(answer(m$show))
+      }
+      list(status = 404L, headers = list(), body = raw())
+    },
+    .env = .env
+  )
+  srv
+}
+
+test_that("native Ollama discovery reads version, tags and show only on explicit request", {
+  local_catalog()
+  srv = local_ollama_server()
+  expect_equal(nrow(gptr_models(provider = "ollama")), 0L)
+  expect_length(srv$calls, 0L)
+  found = gptr_models(provider = "ollama", refresh = TRUE)
+  expect_setequal(found$ref, c("ollama/qwen3:1.7b", "ollama/clef-flash:latest",
+                               "ollama/gpt-oss:120b-cloud"))
+  root = "http://127.0.0.1:11434"
+  expect_identical(srv$calls, c(paste0("GET ", root, c("/api/version", "/api/tags")),
+                                rep(paste0("POST ", root, "/api/show"), 3L)))
+  expect_true(all(srv$timeouts == 1))
+  expect_equal(found$input_price[found$ref == "ollama/qwen3:1.7b"], 0)
+  expect_true(is.na(found$input_price[found$ref == "ollama/gpt-oss:120b-cloud"]))
+  qwen = model_resolve("ollama/qwen3:1.7b")
+  expect_identical(qwen$type, "chat")
+  expect_identical(qwen$api, "openai-completions")
+  expect_true(qwen$tool_call)
+  expect_true(qwen$reasoning)
+  expect_identical(qwen$input, "text")
+  expect_identical(qwen$context, 8192)
+  expect_identical(qwen$locality, "local")
+  expect_identical(qwen$digest, strrep("1", 64))
+  expect_identical(qwen$server_version, "0.35.1")
+  expect_identical(qwen$quantization, "Q4_K_M")
+  expect_true(qwen$capabilities$tools)
+  expect_identical(qwen$prices$input, 0)
+  clef = model_resolve("ollama/clef-flash:latest")
+  expect_identical(clef$type, "classifier")
+  expect_identical(clef$api, "ollama-system-one")
+  expect_false(clef$tool_call)
+  expect_identical(clef$input, c("text", "image"))
+  expect_true(clef$decision$images)
+  expect_identical(clef$decision$server_min, "0.35.1")
+  expect_identical(clef$decision$max_active, 1L)
+  expect_identical(clef$context, 16384)
+  cloud = model_resolve("ollama/gpt-oss:120b-cloud")
+  expect_identical(cloud$locality, "remote")
+  expect_identical(cloud$remote_host, "https://ollama.com:443")
+  expect_equal(nrow(cloud$prices), 0L)
+  # listing, resolution and defaults afterwards contact nothing
+  n = length(srv$calls)
+  gptr_models("qwen")
+  model_resolve("ollama/qwen3:1.7b")
+  model_default("chat")
+  expect_length(srv$calls, n)
+  # the provider record's discover() is the same native path
+  expect_setequal(provider_get("ollama")$discover()$id, names(ollama_fixture()))
+  # never under R CMD check: no request and nothing discovered
+  catalog_reset(discovered = TRUE)
+  n = length(srv$calls)
+  local_mocked_bindings(check_running = function() TRUE)
+  expect_equal(nrow(gptr_models(provider = "ollama", refresh = TRUE)), 0L)
+  expect_length(srv$calls, n)
+})
+
+test_that("provider_preflight() is pure and passes other providers' models through", {
+  local_catalog()
+  local_mocked_bindings(catalog_http_request = function(...) stop("preflight did I/O"),
+                        reactor_http = function(...) stop("preflight started a transfer"))
+  m = model_resolve("sonnet")
+  expect_identical(provider_preflight(m, provider_get("anthropic")), m)
+  expect_error(provider_preflight(m, provider_get("anthropic"),
+                                  safety = list(ollama_local_only = NA)),
+               class = "gptr_error_invalid_argument")
+  expect_error(provider_preflight("sonnet", provider_get("anthropic")),
+               class = "gptr_error_invalid_argument")
+  err = expect_error(provider_preflight(model_resolve("ollama/qwen3:1.7b"), provider_get("ollama")),
+                     class = "gptr_error_not_available")
+  expect_match(conditionMessage(err), "model_prepare", fixed = TRUE)
+  expect_error(provider_preflight(model_resolve("ollama/qwen3:1.7b"), provider_get("lmstudio")),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("catalog fields, model specs and settings cannot self-attest local execution", {
+  local_catalog()
+  local_mocked_bindings(catalog_http_request = function(...) stop("no request expected"))
+  claimed = list(id = "qwen3:1.7b", type = "chat", tool_call = TRUE, locality = "local",
+                 digest = strrep("1", 64), server_version = "0.35.1",
+                 capabilities = list(completion = TRUE, tools = TRUE))
+  local_settings(providers = list(ollama = list(local_only = FALSE, models = list(claimed))))
+  m = model_resolve("ollama/qwen3:1.7b")
+  expect_identical(m$locality, "local")
+  m$ollama = list(verified = TRUE, source = "discovery")
+  expect_error(provider_preflight(m, provider_get("ollama")), class = "gptr_error_not_available")
+  off = gptr_register(gptr_spec("model", "ollama/clef-claimed", type = "classifier",
+                                api = "ollama-system-one", locality = "local",
+                                server_version = "0.35.1", digest = strrep("2", 64),
+                                decision = list(types = "noul", server_min = "0.35.1")))
+  withr::defer(off())
+  expect_error(provider_preflight(model_resolve("ollama/clef-claimed"), provider_get("ollama")),
+               class = "gptr_error_not_available")
+  # the provider's `local` hint is not evidence either
+  lab = gptr_register(gptr_provider("labollama", api = "ollama-system-one", local = TRUE,
+                                    base_url = "http://127.0.0.1:11434/v1",
+                                    models = list(list(id = "clef", type = "classifier"))))
+  withr::defer(lab())
+  expect_error(provider_preflight(model_resolve("labollama/clef"), provider_get("labollama")),
+               class = "gptr_error_not_available")
+})
+
+test_that("preflight checks evidence: locality, decision capability and server version", {
+  local_catalog()
+  srv = local_ollama_server()
+  gptr_models(provider = "ollama", refresh = TRUE)
+  n = length(srv$calls)
+  p = provider_get("ollama")
+  qwen = provider_preflight(model_resolve("ollama/qwen3:1.7b"), p)
+  expect_identical(qwen$ref, "ollama/qwen3:1.7b")
+  expect_true(qwen$tool_call)
+  expect_identical(qwen$locality, "local")
+  clef = provider_preflight(model_resolve("ollama/clef-flash:latest"), p)
+  expect_identical(clef$api, "ollama-system-one")
+  expect_identical(clef$server_version, "0.35.1")
+  expect_error(provider_preflight(model_resolve("ollama/gpt-oss:120b-cloud"), p),
+               class = "gptr_error_untrusted")
+  as_chat = model_resolve("ollama/clef-flash:latest")
+  as_chat$type = "chat"
+  as_chat$api = "openai-completions"
+  expect_error(provider_preflight(as_chat, p), class = "gptr_error_not_available")
+  as_s1 = model_resolve("ollama/qwen3:1.7b")
+  as_s1$type = "classifier"
+  as_s1$api = "ollama-system-one"
+  expect_error(provider_preflight(as_s1, p), class = "gptr_error_not_available")
+  # claimed capabilities shrink to the evidence
+  vision = model_resolve("ollama/qwen3:1.7b")
+  vision$input = c("text", "image")
+  expect_identical(provider_preflight(vision, p)$input, "text")
+  # a bare tag means :latest
+  bare = model_resolve("ollama/clef-flash:latest")
+  bare$id = "clef-flash"
+  bare$ref = "ollama/clef-flash"
+  expect_identical(provider_preflight(bare, p)$digest, strrep("2", 64))
+  expect_length(srv$calls, n)
+  # an older server: classifiers are refused, chat still passes
+  srv$version = "0.35.0"
+  gptr_models(provider = "ollama", refresh = TRUE)
+  err = expect_error(provider_preflight(model_resolve("ollama/clef-flash:latest"), p),
+                     class = "gptr_error_not_available")
+  expect_match(conditionMessage(err), "0.35.1", fixed = TRUE)
+  expect_identical(provider_preflight(model_resolve("ollama/qwen3:1.7b"), p)$server_version,
+                   "0.35.0")
+})
+
+test_that("discovery evidence is bound to endpoint, path, registry lifecycle and identity", {
+  local_catalog()
+  srv = local_ollama_server()
+  gptr_models(provider = "ollama", refresh = TRUE)
+  m = model_resolve("ollama/qwen3:1.7b")
+  expect_identical(provider_preflight(m, provider_get("ollama"))$digest, strrep("1", 64))
+  for (url in c("http://127.0.0.1:11435/v1", "http://127.0.0.1:11434/proxy/v1")) {
+    local({
+      local_settings(providers = list(ollama = list(base_url = url)))
+      err = expect_error(provider_preflight(m, provider_get("ollama")),
+                         class = "gptr_error_not_available")
+      expect_match(conditionMessage(err), "endpoint", fixed = TRUE)
+    })
+  }
+  local({
+    off = gptr_register(gptr_provider("ollama", api = "openai-completions", local = TRUE,
+                                      base_url = "http://127.0.0.1:11434/v1"))
+    withr::defer(off())
+    expect_error(provider_preflight(m, provider_get("ollama")),
+                 class = "gptr_error_not_available")
+  })
+  expect_identical(provider_preflight(m, provider_get("ollama"))$ref, m$ref)
+  reg = registry_env()
+  local({
+    generation = reg$generation
+    assign("generation", generation + 1L, envir = reg)
+    withr::defer(assign("generation", generation, envir = reg))
+    expect_error(provider_preflight(m, provider_get("ollama")),
+                 class = "gptr_error_not_available")
+  })
+  # a prepared model keeps its identity: a moved tag is not silently replaced
+  n = length(srv$calls)
+  frozen = model_prepare("ollama/qwen3:1.7b")
+  expect_length(srv$calls, n)
+  expect_identical(frozen$digest, strrep("1", 64))
+  srv$models[["qwen3:1.7b"]]$tag$digest = strrep("4", 64)
+  gptr_models(provider = "ollama", refresh = TRUE)
+  err = expect_error(provider_preflight(frozen, provider_get("ollama")),
+                     class = "gptr_error_not_available")
+  expect_match(conditionMessage(err), "changed", fixed = TRUE)
+  expect_identical(provider_preflight(model_resolve("ollama/qwen3:1.7b"),
+                                      provider_get("ollama"))$digest, strrep("4", 64))
+})
+
+test_that("only the protected safety record relaxes local-only; settings and models cannot", {
+  local_catalog()
+  srv = local_ollama_server()
+  gptr_models(provider = "ollama", refresh = TRUE)
+  n = length(srv$calls)
+  p = provider_get("ollama")
+  cloud = model_resolve("ollama/gpt-oss:120b-cloud")
+  local_settings(providers = list(ollama = list(local_only = FALSE)))
+  expect_error(provider_preflight(cloud, provider_get("ollama")), class = "gptr_error_untrusted")
+  expect_error(provider_preflight(cloud, p, safety = list()), class = "gptr_error_untrusted")
+  claimed = cloud
+  claimed$remote_host = NULL
+  claimed$remote_model = NULL
+  claimed$locality = "local"
+  claimed$local_only = FALSE
+  expect_error(provider_preflight(claimed, p), class = "gptr_error_untrusted")
+  relaxed = provider_preflight(cloud, p, safety = list(ollama_local_only = FALSE))
+  expect_identical(relaxed$locality, "remote")
+  expect_true(relaxed$tool_call)
+  expect_equal(nrow(relaxed$prices), 0L)
+  for (bad in list(NA, "false", c(FALSE, FALSE), 0L)) {
+    expect_error(provider_preflight(cloud, p, safety = list(ollama_local_only = bad)),
+                 class = "gptr_error_invalid_argument")
+  }
+  expect_error(provider_preflight(cloud, p, safety = "off"),
+               class = "gptr_error_invalid_argument")
+  expect_length(srv$calls, n)
+})
+
+test_that("model_prepare() discovers only missing or stale evidence and fails before egress", {
+  local_catalog()
+  srv = local_ollama_server()
+  root = "http://127.0.0.1:11434"
+  m = model_prepare("ollama/qwen3:1.7b")
+  expect_identical(srv$calls, c(paste0("GET ", root, c("/api/version", "/api/tags")),
+                                paste0("POST ", root, "/api/show")))
+  expect_identical(m$locality, "local")
+  expect_identical(m$digest, strrep("1", 64))
+  expect_identical(m$server_version, "0.35.1")
+  expect_true(m$tool_call)
+  n = length(srv$calls)
+  expect_identical(model_prepare("ollama/qwen3:1.7b")$ref, "ollama/qwen3:1.7b")
+  expect_identical(model_prepare("sonnet")$ref, "anthropic/claude-sonnet-5-5")
+  expect_length(srv$calls, n)
+  err = expect_error(model_prepare("ollama/llama3.2:3b"), class = "gptr_error_not_available")
+  expect_match(conditionMessage(err), "ollama pull llama3.2:3b", fixed = TRUE)
+  catalog_reset(discovered = TRUE)
+  srv$down = TRUE
+  err = expect_error(model_prepare("ollama/qwen3:1.7b"), class = "gptr_error_network")
+  expect_match(conditionMessage(err), "ollama serve", fixed = TRUE)
+  srv$down = FALSE
+  local({
+    local_mocked_bindings(check_running = function() TRUE)
+    n = length(srv$calls)
+    expect_error(model_prepare("ollama/qwen3:1.7b"), class = "gptr_error_not_available")
+    expect_length(srv$calls, n)
+  })
+  local({
+    local_settings(providers = list(ollama = list(base_url = "http://192.0.2.10:11434/v1")))
+    n = length(srv$calls)
+    expect_error(model_prepare("ollama/qwen3:1.7b"), class = "gptr_error_untrusted")
+    expect_error(gptr_models(provider = "ollama", refresh = TRUE),
+                 class = "gptr_error_untrusted")
+    expect_length(srv$calls, n)
+    remote = model_prepare("ollama/qwen3:1.7b", safety = list(ollama_local_only = FALSE))
+    expect_identical(remote$locality, "remote")
+    expect_identical(srv$calls[[n + 1L]], "GET http://192.0.2.10:11434/api/version")
+  })
+})
+
+test_that("model_default('system1') uses a verified local classifier without discovering", {
+  local_catalog()
+  srv = local_ollama_server()
+  local_mocked_bindings(model_key_present = function(id, vars) FALSE)
+  expect_null(model_default("system1"))
+  expect_length(srv$calls, 0L)
+  gptr_models(provider = "ollama", refresh = TRUE)
+  n = length(srv$calls)
+  expect_identical(model_default("system1"), "ollama/clef-flash:latest")
+  expect_length(srv$calls, n)
+  # a provider disabled in the settings is no default route, verified or not
+  local({
+    local_settings(providers = list(ollama = list(enabled = FALSE)))
+    expect_false(provider_get("ollama")$enabled)
+    expect_null(model_default("system1"))
+  })
+  expect_identical(model_default("system1"), "ollama/clef-flash:latest")
+  srv$version = "0.35.0"
+  gptr_models(provider = "ollama", refresh = TRUE)
+  expect_null(model_default("system1"))
+  local_mocked_bindings(model_key_present = function(id, vars) identical(id, "typesafe"))
+  expect_identical(model_default("system1"), "typesafe/jev-latest")
+})
+
+test_that("a bare catalog name prepared through its :latest evidence costs nothing locally", {
+  # the shipped snapshot describes ollama/clef-flash by its bare name (no price, no locality)
+  bare = list(provider = "ollama", id = "clef-flash", name = "Clef Flash", family = "clef",
+              type = "classifier", api = "ollama-system-one", locality = "unknown",
+              reasoning = FALSE, thinking_levels = list("off"), input = list("text", "image"),
+              tool_call = FALSE, structured_output = TRUE, status = "active",
+              decision = list(types = list("noul", "choice", "score"), images = TRUE,
+                              server_min = "0.35.1", max_active = 1L))
+  local_catalog(c(fx_models(), list(bare)))
+  srv = local_ollama_server()
+  usage = usage_new(input = 100, output = 2)
+  expect_equal(nrow(model_resolve("ollama/clef-flash")$prices), 0L)
+  m = model_prepare("ollama/clef-flash")
+  expect_identical(m$ref, "ollama/clef-flash")
+  expect_identical(m$locality, "local")
+  expect_identical(m$digest, strrep("2", 64))
+  expect_identical(usage_cost(usage, m)$cost$total, 0)
+  tagged = model_prepare("ollama/clef-flash:latest")
+  expect_identical(usage_cost(usage, tagged)$cost$total, 0)
+  expect_identical(m$prices, tagged$prices)
+  # the same evidence reached through a full listing
+  catalog_reset(discovered = TRUE)
+  gptr_models(provider = "ollama", refresh = TRUE)
+  n = length(srv$calls)
+  checked = provider_preflight(model_resolve("ollama/clef-flash"), provider_get("ollama"))
+  expect_identical(usage_cost(usage, checked)$cost$total, 0)
+  expect_length(srv$calls, n)
+})
+
+test_that("a model /api/show cannot describe does not hide the others or blame the server", {
+  local_catalog()
+  srv = local_ollama_server()
+  srv$slow = "clef-flash:latest"
+  found = gptr_models(provider = "ollama", refresh = TRUE)
+  expect_setequal(found$ref, c("ollama/qwen3:1.7b", "ollama/gpt-oss:120b-cloud"))
+  expect_length(srv$calls, 5L)
+  expect_null(model_default("system1"))
+  catalog_reset(discovered = TRUE)
+  err = expect_error(model_prepare("ollama/clef-flash"), class = "gptr_error_network")
+  expect_match(conditionMessage(err), "/api/show", fixed = TRUE)
+  expect_match(conditionMessage(err), "clef-flash:latest", fixed = TRUE)
+  expect_false(grepl("ollama serve", conditionMessage(err), fixed = TRUE))
+  expect_identical(err$curl_code, 28L)
+  expect_identical(model_prepare("ollama/qwen3:1.7b")$locality, "local")
+  # a server that stops answering after /api/tags lists nothing and names /api/show
+  catalog_reset(discovered = TRUE)
+  srv$slow = names(ollama_fixture())
+  err = expect_error(gptr_models(provider = "ollama", refresh = TRUE),
+                     class = "gptr_error_network")
+  expect_match(conditionMessage(err), "/api/show", fixed = TRUE)
+})

@@ -65,7 +65,7 @@ provider_table = function() {
     list(id = "fireworks", api = "openai-completions",
          base_url = "https://api.fireworks.ai/inference/v1", auth = "FIREWORKS_API_KEY"),
     list(id = "ollama", api = "openai-completions", base_url = "http://127.0.0.1:11434/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("ollama"),
+         auth = NULL, local = TRUE, discover = provider_ollama_discoverer("ollama"),
          compat = utils::modifyList(local, list(supports_reasoning_effort = TRUE,
                                                 supports_tool_choice = FALSE))),
     list(id = "lmstudio", api = "openai-completions", base_url = "http://localhost:1234/v1",
@@ -126,6 +126,22 @@ provider_discoverer = function(id) {
     body = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
     ids = vapply(body[["data"]] %||% list(), function(m) as.character(m[["id"]] %||% ""), "")
     data.frame(id = ids[nzchar(ids)], stringsAsFactors = FALSE)
+  }
+}
+
+#' The `discover` function of the Ollama record: P05's native discovery (07-local-ollama.md
+#' section 2; /api/version, /api/tags and /api/show of the record's own endpoint)
+#'
+#' Runs only on request, never at load and never under R CMD check; returns the listed ids.
+#' gptr_models(refresh = TRUE) and model_prepare() call catalog_ollama_discover() directly, so a
+#' replaced `discover` function can never supply the private evidence preflight accepts.
+#' @noRd
+provider_ollama_discoverer = function(id) {
+  force(id)
+  function() {
+    p = provider_get(id)
+    if (is.null(p)) return(NULL)
+    data.frame(id = catalog_ollama_discover(p), stringsAsFactors = FALSE)
   }
 }
 

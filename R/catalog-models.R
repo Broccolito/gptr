@@ -555,6 +555,10 @@ catalog_key = function() {
 }
 
 #' The merged catalog (04 section 11.10), rebuilt only when a layer changed
+#'
+#' `the$catalog` also keeps the discovery layer (`discovered`) and the private discovery evidence
+#' of native Ollama discovery (`evidence`, read only by provider_preflight()); neither is part
+#' of the returned catalog.
 #' @noRd
 catalog_get = function() {
   key = catalog_key()
@@ -563,15 +567,21 @@ catalog_get = function() {
     return(st[["value"]])
   }
   value = catalog_build()
-  the$catalog = list(key = key, value = value, discovered = st[["discovered"]])
+  the$catalog = list(key = key, value = value, discovered = st[["discovered"]],
+                     evidence = st[["evidence"]])
   value
 }
 
-#' Forget the merged catalog (and, with `discovered = TRUE`, live-discovered local models)
+#' Forget the merged catalog (and, with `discovered = TRUE`, live-discovered local models and
+#' their private discovery evidence)
 #' @noRd
 catalog_reset = function(discovered = FALSE) {
   st = the$catalog
-  the$catalog = if (discovered) NULL else list(discovered = st[["discovered"]])
+  the$catalog = if (discovered) {
+    NULL
+  } else {
+    list(discovered = st[["discovered"]], evidence = st[["evidence"]])
+  }
   invisible(NULL)
 }
 
@@ -905,3 +915,895 @@ model_resolve = function(ref, strict = TRUE) {
 #' Alias names of the merged catalog (for identifier_known(), P08)
 #' @noRd
 catalog_aliases = function() names(catalog_get()$aliases) %||% character()
+
+# ---- Defaults, the bounded catalog request, explicit refresh, local discovery, preflight ------
+# P05 Task 8 (04 sections 6.2, 7.5, 11.9 and 11.10; architecture section 8.4) with IC-74
+# (07-local-ollama.md sections 2 and 2.1): resolution, model_default() and ordinary listing never
+# discover; native Ollama discovery runs only on explicit request (gptr_models(refresh = TRUE,
+# provider = "ollama")) or explicit preparation (model_prepare()), never at load or under R CMD
+# check, and its validated results are the only source of the private evidence that
+# provider_preflight() accepts. Public model fields never attest anything.
+
+#' Seconds allowed for each request to a local server during discovery (report 09 section 4.6)
+#' @noRd
+catalog_local_timeout = 1
+
+#' Largest answer accepted from a local server's metadata endpoints, in bytes
+#' @noRd
+catalog_local_max_bytes = 8 * 1024^2
+
+#' The Ollama server version native decision models need (07-local-ollama.md section 1)
+#' @noRd
+catalog_ollama_min_version = "0.35.1"
+
+#' A single non-missing, non-empty string?
+#' @noRd
+catalog_chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+
+#' Is a provider usable as a default route: not disabled in the settings and holding a key?
+#' @noRd
+model_route_ready = function(id, vars) {
+  !isFALSE(provider_settings(id)[["enabled"]]) && model_key_present(id, vars)
+}
+
+#' Is a subscription CLI provider registered and reported available by its status()?
+#'
+#' `status()` is called with `check = FALSE` when it has that formal, so it reads cached data
+#' only (IC-65); the field read is `available` (P20 contract, ambiguity 18).
+#' @noRd
+model_cli_available = function(id) {
+  p = provider_get(id)
+  f = p[["status"]]
+  if (!is.function(f) || isFALSE(p[["enabled"]])) return(FALSE)
+  s = tryCatch(if ("check" %in% names(formals(f))) f(check = FALSE) else f(),
+               error = function(e) NULL)
+  isTRUE(s[["available"]])
+}
+
+#' The first native classifier with current local discovery evidence (no discovery, no I/O)
+#'
+#' A provider whose settings say `enabled: false` is skipped, as for every default route.
+#' @noRd
+catalog_local_classifier = function() {
+  ev = the$catalog[["evidence"]] %||% list()
+  keys = names(ev)
+  if (!length(keys)) return(NULL)
+  for (key in sort(keys, method = "radix")) {
+    e = ev[[key]]
+    if (!identical(e[["locality"]], "local") || !"decision" %in% e[["capabilities"]]) next
+    p = provider_get(e[["provider"]])
+    if (is.null(p) || isFALSE(p[["enabled"]])) next
+    ref = paste0(e[["provider"]], "/", e[["name"]])
+    rec = tryCatch(model_resolve(ref, strict = FALSE), gptr_error = function(err) NULL)
+    if (is.null(rec)) next
+    ok = tryCatch(provider_preflight(rec, p), gptr_error = function(err) NULL)
+    if (!is.null(ok)) return(ref)
+  }
+  NULL
+}
+
+#' Default model reference for a role (contract section 7.5; architecture section 8.4)
+#'
+#' The setting (`model`, `small_model`, `system1`) wins; otherwise the first available route:
+#' an Anthropic key, then OpenAI, then Gemini, then a detected CLI. A provider whose settings say
+#' `enabled: false` is no route. For System 1: the TypeSafe key, else a native classifier whose
+#' current discovery evidence verifies local execution, decision capability and the server
+#' version (07-local-ollama.md section 5). Never discovers, registers or materialises a key.
+#' @noRd
+model_default = function(role = c("chat", "small", "system1")) {
+  role = check_choice(role, c("chat", "small", "system1"), "role")
+  key = switch(role, chat = "model", small = "small_model", system1 = "system1")
+  v = setting_get(key)
+  if (catalog_chr1(v)) return(v)
+  if (identical(role, "system1")) {
+    if (model_route_ready("typesafe", "TYPESAFE_API_KEY")) return("typesafe/jev-latest")
+    return(catalog_local_classifier())
+  }
+  if (identical(role, "small")) {
+    base = setting_get("model")
+    rec = if (catalog_chr1(base)) {
+      tryCatch(model_resolve(base, strict = FALSE), gptr_error = function(e) NULL)
+    }
+    chat = if (is.null(rec)) model_default("chat") else rec$ref
+    if (is.null(chat)) return(NULL)
+    ctg = catalog_get()
+    spec = ctg$small[[sub("/.*$", "", chat)]]
+    small = if (is.null(spec)) NA_character_ else catalog_alias_target(spec, ctg$index)
+    return(if (is.na(small)) chat else small)
+  }
+  if (model_route_ready("anthropic", "ANTHROPIC_API_KEY")) {
+    "anthropic/claude-sonnet-5-5"
+  } else if (model_route_ready("openai", "OPENAI_API_KEY")) {
+    "openai/gpt-6-sol"
+  } else if (model_route_ready("google", c("GEMINI_API_KEY", "GOOGLE_API_KEY"))) {
+    "google/gemini-3.8-flash"
+  } else if (model_cli_available("claude-cli")) {
+    "claude-cli/default"
+  } else if (model_cli_available("codex")) {
+    "codex/default"
+  } else {
+    NULL
+  }
+}
+
+#' A case-insensitive header value from a named list or character vector
+#' @noRd
+catalog_header = function(headers, name) {
+  if (!length(headers) || is.null(names(headers))) return(NULL)
+  h = headers[tolower(names(headers)) == tolower(name)]
+  if (!length(h)) NULL else as.character(h[[1]])
+}
+
+#' One bounded request on the P04 reactor
+#'
+#' Queues one transfer with reactor_http() (which sets `followlocation = 0L`, IC-64) and pumps
+#' the reactor until it settles, for at most `timeout` seconds. Only this request's own transfer
+#' is cancelled, and only when it has not settled: on a pump timeout, an interrupt or error
+#' unwinding the pump, or a body above `max_bytes` (whose bytes are discarded). Returns
+#' `list(status, headers, body)` for any HTTP status: P04 delivers a non-2xx answer as its
+#' failure condition, whose `status` is kept (its body is P04's, for classification), so a 304
+#' arrives as the refused redirect (plan ambiguity 17). A failure without a status, a timeout
+#' and an oversized answer signal `gptr_error_network` (parent `gptr_error_provider`).
+#' @param attempts `NULL` for P04's retry default (`gptr.max_attempts`), else the attempts.
+#' @noRd
+catalog_http_request = function(url, method = "GET", headers = list(), body = NULL,
+                                timeout = 30, attempts = NULL, max_bytes = 64 * 1024^2) {
+  check_string(url, "url")
+  parts = http_url_parts(url)
+  if (is.null(parts) || !tolower(parts$scheme) %in% c("http", "https")) {
+    arg_abort(url, "url", "an absolute HTTP or HTTPS URL")
+  }
+  check_string(method, "method")
+  check_list(headers, "headers", named = TRUE)
+  if (!is.null(body) && !is.raw(body)) check_string(body, "body", empty = TRUE)
+  check_number(timeout, "timeout", min = 0.001, max = 600)
+  attempts = check_number(attempts, "attempts", min = 1, max = 10, int = TRUE, null = TRUE)
+  check_number(max_bytes, "max_bytes", min = 1, max = 2^31)
+  spec = list(url = url, method = toupper(method), headers = headers, body = body,
+              stream = "json", connect_timeout = timeout, first_byte_timeout = timeout,
+              idle_timeout = timeout)
+  st = new.env(parent = emptyenv())
+  st$chunks = list()
+  st$bytes = 0
+  st$settled = FALSE
+  st$stop = FALSE
+  st$status = NA_integer_
+  st$headers = list()
+  st$cnd = NULL
+  id = reactor_http(spec,
+                    on_bytes = function(bytes) {
+                      if (st$stop) return(invisible(NULL))
+                      st$bytes = st$bytes + length(bytes)
+                      if (st$bytes > max_bytes) {
+                        st$stop = TRUE
+                        st$chunks = list()
+                      } else {
+                        st$chunks[[length(st$chunks) + 1L]] = bytes
+                      }
+                      invisible(NULL)
+                    },
+                    on_done = function(status, hdrs) {
+                      st$status = status
+                      st$headers = hdrs
+                      st$settled = TRUE
+                    },
+                    on_fail = function(cnd) {
+                      st$cnd = cnd
+                      st$settled = TRUE
+                    },
+                    on_headers = function(status, hdrs) {
+                      # a second head follows a retry: start the body over
+                      st$status = status
+                      st$headers = hdrs
+                      st$chunks = list()
+                      st$bytes = 0
+                    },
+                    provider = "catalog",
+                    retry = if (is.null(attempts)) NULL else list(max_attempts = attempts))
+  on.exit(if (!st$settled) tryCatch(reactor_cancel(id), error = function(e) NULL), add = TRUE)
+  done = reactor_pump(until = function() st$settled || st$stop, timeout = timeout)
+  origin = url_origin(url)
+  if (st$stop) {
+    gptr_abort(paste0("The answer from ", origin, " exceeded ",
+                      format(max_bytes, scientific = FALSE), " bytes and was discarded."),
+               c("network", "provider"), provider = "catalog", status = st$status,
+               curl_code = NA_integer_)
+  }
+  if (!isTRUE(done)) {
+    gptr_abort(paste0("No answer from ", origin, " within ", timeout, " s."),
+               c("network", "provider"), provider = "catalog", status = NA_integer_,
+               curl_code = NA_integer_)
+  }
+  if (!is.null(st$cnd)) {
+    status = suppressWarnings(as.integer(st$cnd[["status"]] %||% NA_integer_))
+    if (length(status) == 1L && !is.na(status)) {
+      return(list(status = status, headers = list(), body = raw()))
+    }
+    code = suppressWarnings(as.integer(st$cnd[["curl_code"]] %||% NA_integer_))
+    gptr_abort(paste0("Could not reach ", origin, ": ", conditionMessage(st$cnd)),
+               c("network", "provider"), provider = "catalog", status = NA_integer_,
+               curl_code = if (length(code) == 1L) code else NA_integer_)
+  }
+  list(status = as.integer(st$status), headers = st$headers,
+       body = if (length(st$chunks)) do.call(c, st$chunks) else raw())
+}
+
+#' One bounded GET on the reactor (see catalog_http_request()); `list(status, headers, body)`
+#' @noRd
+catalog_http_get = function(url, headers = list(), timeout = 30) {
+  catalog_http_request(url, "GET", headers, NULL, timeout)
+}
+
+#' Refresh the catalog from models.dev with ETag revalidation (explicit request only)
+#'
+#' Writes `models.json` and `models.etag` into `R_user_dir("gptr", "cache")` (04 section 11.9);
+#' returns TRUE when a new catalog was written and FALSE on 304 Not Modified.
+#' @noRd
+catalog_refresh = function() {
+  gptr_user_dir("cache", create = TRUE)
+  json_path = catalog_cache_path()
+  etag_path = catalog_etag_path()
+  hdr = list(accept = "application/json")
+  if (file.exists(json_path) && file.exists(etag_path)) {
+    etag = readLines(etag_path, encoding = "UTF-8", warn = FALSE)[1]
+    if (catalog_chr1(etag) && !grepl("[[:cntrl:]]", etag)) hdr[["if-none-match"]] = etag
+  }
+  res = catalog_http_get(catalog_source_url, headers = hdr, timeout = 30)
+  if (identical(res$status, 304L)) return(invisible(FALSE))
+  refused = function(why, status) {
+    gptr_abort(paste0("models.dev ", why, "; the catalog was not refreshed."),
+               c("network", "provider"), provider = "models.dev", status = status,
+               curl_code = NA_integer_)
+  }
+  if (!identical(res$status, 200L)) refused(paste0("answered HTTP ", res$status), res$status)
+  api = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
+  if (!is.list(api)) refused("returned text that is not a JSON object", res$status)
+  decision = tryCatch({
+    d = catalog_http_get(catalog_decision_url, headers = list(accept = "application/json"),
+                         timeout = 30)
+    if (identical(d$status, 200L)) json_decode(raw_to_utf8(d$body)) else NULL
+  }, error = function(e) NULL)
+  snap = tryCatch(catalog_snapshot(api, decision, generated = format(Sys.Date(), "%Y-%m-%d")),
+                  gptr_error = function(e) e)
+  if (inherits(snap, "error")) {
+    refused(paste0("returned data gptr could not convert (", conditionMessage(snap), ")"),
+            res$status)
+  }
+  write_atomic(json_path, json_encode(snap))
+  etag = catalog_header(res$headers, "etag")
+  ok = catalog_chr1(etag) && !grepl("[[:cntrl:]]", etag) && nchar(etag) <= 1024L
+  if (ok) write_atomic(etag_path, etag) else unlink(etag_path)
+  catalog_reset(discovered = FALSE)
+  invisible(TRUE)
+}
+
+#' Store discovered entries (and their private evidence) as a provider's discovery layer
+#'
+#' `replace = TRUE` (a full listing) replaces the provider's layer and evidence; otherwise the
+#' entries and evidence are merged by model.
+#' @noRd
+catalog_discovered_set = function(pid, entries, evidence = list(), replace = TRUE) {
+  st = the$catalog %||% list()
+  disc = st[["discovered"]] %||% list()
+  evid = st[["evidence"]] %||% list()
+  if (replace) {
+    disc[[pid]] = entries
+    evid = evid[!startsWith(names(evid) %||% character(), paste0(pid, "/"))]
+  } else {
+    ids = vapply(entries, function(e) e[["id"]], "")
+    old = Filter(function(e) !(e[["id"]] %in% ids), disc[[pid]] %||% list())
+    disc[[pid]] = c(old, entries)
+  }
+  for (k in names(evidence)) evid[[k]] = evidence[[k]]
+  st[["discovered"]] = disc
+  st[["evidence"]] = evid
+  st[["value"]] = NULL
+  the$catalog = st
+  invisible(NULL)
+}
+
+#' Ask a local provider for its models and add them as the discovery layer (explicit request)
+#'
+#' An Ollama provider gets P05's native discovery (catalog_ollama_discover()). Any other local
+#' provider's `discover()` contributes descriptive entries only: a listed name grants no tools,
+#' vision, reasoning or locality (IC-74), and creates no evidence. Returns the ids, invisibly.
+#' @noRd
+catalog_discover = function(p, safety = NULL) {
+  if (catalog_ollama_provider(p)) return(catalog_ollama_discover(p, safety))
+  pid = p[["id"]] %||% p[["name"]]
+  df = tryCatch(p[["discover"]](), error = function(e) NULL)
+  if (!is.data.frame(df)) return(invisible(character()))
+  ids = if (is.null(df[["id"]])) character() else as.character(df[["id"]])
+  ids = unique(ids[!is.na(ids) & nzchar(ids) & !grepl("[[:cntrl:]]", ids)])
+  entries = lapply(ids, function(i) {
+    list(provider = pid, id = i, name = i, status = "active", locality = "unknown")
+  })
+  catalog_discovered_set(pid, entries)
+  invisible(ids)
+}
+
+#' Is a host name a loopback address (as the transport's URL parser normalises it)?
+#' @noRd
+catalog_loopback = function(host) {
+  h = tolower(as.character(host %||% ""))
+  length(h) == 1L && (h %in% c("localhost", "[::1]", "::1") ||
+                        grepl("^127(\\.[0-9]{1,3}){3}$", h))
+}
+
+#' A provider's endpoint: base URL, canonical origin, base path, native API root (the base
+#' without a trailing `/v1`, so `/api/...` and `/v1/systemone` never duplicate it) and loopback
+#' @noRd
+catalog_endpoint = function(p) {
+  base = if (is.list(p)) provider_base_url(p) else NULL
+  parts = if (is.null(base)) NULL else http_url_parts(base)
+  if (is.null(parts) || !tolower(parts$scheme) %in% c("http", "https")) return(NULL)
+  origin = url_origin(base)
+  if (is.na(origin)) return(NULL)
+  path = sub("/+$", "", parts$path %||% "")
+  list(base = base, origin = origin, path = path, root = paste0(origin, sub("/v1$", "", path)),
+       loopback = catalog_loopback(parts$host))
+}
+
+#' The registry lifecycle a provider's evidence is bound to: the process registry, its
+#' generation (gptr_reload()) and the winning provider record (replacement)
+#' @noRd
+catalog_lifecycle = function(pid) {
+  reg = registry_env()
+  recs = registry_candidates("provider", pid, NULL, reg)
+  list(registry = reg, generation = reg$generation,
+       record = if (length(recs)) recs[[1]][["id"]] else NA_character_)
+}
+
+#' Is this the Ollama provider (native discovery and the local-only policy, IC-74)?
+#' @noRd
+catalog_ollama_provider = function(p) {
+  is.list(p) && identical(p[["id"]] %||% p[["name"]], "ollama")
+}
+
+#' Does a model take an Ollama route (its provider is Ollama, or its api is the native one)?
+#' @noRd
+catalog_ollama_route = function(model, p) {
+  identical(model[["api"]], "ollama-system-one") || identical(model[["provider"]], "ollama") ||
+    catalog_ollama_provider(p)
+}
+
+#' The canonical Ollama tag of a model id (a bare name means `:latest`), for matching only
+#' @noRd
+catalog_ollama_tag = function(id) {
+  id = tolower(as.character(id)[1])
+  if (grepl(":", sub("^.*/", "", id), fixed = TRUE)) id else paste0(id, ":latest")
+}
+
+#' Does a model name select an Ollama cloud model (`...:<size>-cloud`, `...:cloud`)?
+#' @noRd
+catalog_ollama_cloud = function(id) {
+  catalog_chr1(id) && grepl("(:|-)cloud$", tolower(id))
+}
+
+#' The configured runtime context (`num_ctx`) of an /api/show `parameters` text, or NULL
+#' @noRd
+catalog_ollama_num_ctx = function(parameters) {
+  if (!catalog_chr1(parameters)) return(NULL)
+  m = regmatches(parameters, regexec("(?m)^[ \\t]*num_ctx[ \\t]+([0-9]+)[ \\t\\r]*$",
+                                     parameters, perl = TRUE))[[1]]
+  if (length(m) < 2L) return(NULL)
+  n = suppressWarnings(as.numeric(m[[2]]))
+  if (is.na(n) || !is.finite(n) || n < 1) NULL else n
+}
+
+#' The trained context length of an /api/show `model_info` object, or NULL
+#' @noRd
+catalog_ollama_trained_ctx = function(info) {
+  if (!is.list(info) || is.null(names(info))) return(NULL)
+  for (k in names(info)[endsWith(names(info), ".context_length")]) {
+    v = info[[k]]
+    if (is.numeric(v) && length(v) == 1L && is.finite(v) && v >= 1) return(as.numeric(v))
+  }
+  NULL
+}
+
+#' Is a server version at least `min`? (a pre-release of `min` is not)
+#' @noRd
+catalog_version_at_least = function(version, min) {
+  if (!catalog_chr1(version) || !catalog_chr1(min)) return(FALSE)
+  v = sub("[-+].*$", "", version)
+  m = sub("[-+].*$", "", min)
+  ok = "^[0-9]+(\\.[0-9]+)*$"
+  if (!grepl(ok, v) || !grepl(ok, m)) return(FALSE)
+  cmp = utils::compareVersion(v, m)
+  if (grepl("-", version, fixed = TRUE)) cmp > 0 else cmp >= 0
+}
+
+#' The price table of local inference: a zero metered API charge (07-local-ollama.md section 5),
+#' not a zero compute cost
+#' @noRd
+catalog_local_prices = function() list(catalog_price("default", 0, 0, 0, 0, 0))
+
+#' The decision record of a native Ollama classifier (07-local-ollama.md sections 2-4)
+#' @noRd
+catalog_ollama_decision = function(images) {
+  list(types = c("noul", "choice", "score"), images = images,
+       server_min = catalog_ollama_min_version, max_questions = 64L, max_options = 26L,
+       max_request_bytes_text = 65536L, max_request_bytes_images = 33554432L, max_active = 1L)
+}
+
+#' The catalog entry and the private evidence of one model a native Ollama server reports
+#'
+#' From /api/tags (name, digest, details, remote markers) and /api/show (capabilities,
+#' parameters, model_info, projector_info, remote markers). Capability booleans stay in
+#' `capabilities`; version, digest, limits and locality are typed fields. The effective context
+#' is the configured `num_ctx` bounded by the trained length, else unknown. Locality is `local`
+#' only for a loopback endpoint and a model without cloud selector or remote markers; local
+#' inference has a zero metered API price (not a zero compute cost).
+#' @noRd
+catalog_ollama_describe = function(pid, tag, show, version, ep, lifecycle) {
+  chr = function(x) if (catalog_chr1(x) && !grepl("[[:cntrl:]]", x)) x else NULL
+  name = chr(tag[["name"]]) %||% chr(tag[["model"]])
+  if (is.null(name)) return(NULL)
+  caps = unlist(show[["capabilities"]] %||% list(), use.names = FALSE)
+  caps = if (is.character(caps)) unique(caps[!is.na(caps) & grepl("^[a-z][a-z0-9_]*$", caps)])
+  caps = caps %||% character()
+  details = if (is.list(show[["details"]])) show[["details"]] else tag[["details"]] %||% list()
+  remote_host = chr(show[["remote_host"]]) %||% chr(tag[["remote_host"]])
+  remote_model = chr(show[["remote_model"]]) %||% chr(tag[["remote_model"]])
+  remote = !is.null(remote_host) || !is.null(remote_model) || catalog_ollama_cloud(name)
+  locality = if (remote || !isTRUE(ep$loopback)) "remote" else "local"
+  decision = "decision" %in% caps
+  vision = "vision" %in% caps || length(show[["projector_info"]]) > 0L
+  thinking = !decision && "thinking" %in% caps
+  configured = catalog_ollama_num_ctx(show[["parameters"]])
+  trained = catalog_ollama_trained_ctx(show[["model_info"]]) %||% Inf
+  context = if (is.null(configured)) NULL else min(configured, trained)
+  digest = chr(tag[["digest"]])
+  entry = list(provider = pid, id = name, name = name, family = chr(details[["family"]]),
+               type = if (decision) "classifier" else "chat",
+               api = if (decision) "ollama-system-one", context = context,
+               reasoning = thinking,
+               thinking_levels = I(if (thinking) c("off", "low", "medium", "high") else "off"),
+               input = I(if (vision) c("text", "image") else "text"),
+               tool_call = !decision && "tools" %in% caps, structured_output = decision,
+               status = "active", digest = digest,
+               server_version = if (!is.na(version)) version, locality = locality,
+               format = chr(details[["format"]]),
+               quantization = chr(details[["quantization_level"]]),
+               configured_context = configured, remote_host = remote_host,
+               remote_model = remote_model,
+               capabilities = if (length(caps)) stats::setNames(as.list(rep(TRUE, length(caps))),
+                                                                caps),
+               decision = if (decision) catalog_ollama_decision(vision),
+               prices = if (identical(locality, "local")) catalog_local_prices())
+  entry = Filter(Negate(is.null), entry)
+  # validates the typed metadata (signals gptr_error_invalid_spec for a malformed answer)
+  catalog_entry_metadata(entry, paste0(pid, "/", name))
+  evidence = list(provider = pid, model = catalog_ollama_tag(name), name = name,
+                  origin = ep$origin, path = ep$path, lifecycle = lifecycle,
+                  digest = digest %||% NA_character_, server_version = version,
+                  capabilities = caps, vision = vision, locality = locality,
+                  context = context %||% NA_real_, time = Sys.time())
+  list(key = paste0(pid, "/", catalog_ollama_tag(name)), entry = entry, evidence = evidence)
+}
+
+#' Refuse an Ollama route under the local-only policy (fails before egress)
+#' @noRd
+catalog_local_only_abort = function(ref, origin, why) {
+  gptr_abort(paste0("Local-only Ollama inference refused ", ref, ": ", why, ". gptr never ",
+                    "falls back to a cloud route; a remote or cloud-backed Ollama model needs ",
+                    "local-only turned off in your own user or session configuration and the ",
+                    "usual egress acknowledgement."),
+             "untrusted", what = "ollama local-only inference", path = ref,
+             origin = origin %||% NA_character_)
+}
+
+#' Refuse a model whose discovery evidence or capability does not support the request
+#' @noRd
+catalog_unavailable_abort = function(ref, why, provided_by) {
+  gptr_abort(paste0("Model ", ref, " cannot be used: ", why, "."), "not_available",
+             member = ref, provided_by = provided_by)
+}
+
+#' Native Ollama discovery: /api/version, /api/tags and /api/show (07-local-ollama.md section 2)
+#'
+#' Explicit only: gptr_models(provider = "ollama", refresh = TRUE) lists every installed model
+#' (`only = NULL`); model_prepare() asks for its selected model (`only = <id>`). Never under
+#' R CMD check (no request, nothing changes). Under the local-only policy (the default) a
+#' non-loopback endpoint is refused before any request. Each request is bounded (1 s, one
+#' attempt, 8 MiB). No answer to /api/version or /api/tags means no server; a model that
+#' /api/show does not describe (an HTTP error, malformed JSON or a transport failure) is skipped,
+#' and when nothing is described after such a transport failure the network error names
+#' /api/show and the model. Validated answers become the discovery layer and the private evidence,
+#' bound to the endpoint's canonical origin and base path, the model tag and digest, the server
+#' version and the registry lifecycle. Returns the discovered ids, invisibly.
+#' @noRd
+catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
+  local_only = catalog_local_only(safety)
+  pid = p[["id"]] %||% p[["name"]]
+  if (check_running()) return(invisible(character()))
+  ep = catalog_endpoint(p)
+  target = paste0(pid, "/", only %||% "*")
+  if (is.null(ep)) {
+    catalog_unavailable_abort(target, "its provider has no valid HTTP base URL",
+                              "a configured Ollama base_url")
+  }
+  if (local_only && !ep$loopback) {
+    catalog_local_only_abort(target, ep$origin, "its endpoint is not a loopback address")
+  }
+  fetch = function(path, body = NULL) {
+    hdr = c(list(accept = "application/json"),
+            if (!is.null(body)) list(`content-type` = "application/json"))
+    catalog_http_request(paste0(ep$root, path), method = if (is.null(body)) "GET" else "POST",
+                         headers = hdr, body = body, timeout = catalog_local_timeout,
+                         attempts = 1L, max_bytes = catalog_local_max_bytes)
+  }
+  # /api/version and /api/tags: a transport failure means no server answers
+  get = function(path) {
+    tryCatch(
+      fetch(path),
+      gptr_error_network = function(e) {
+        gptr_abort(paste0("No Ollama server answered at ", ep$origin, " (",
+                          conditionMessage(e), "). Start it yourself (for example ",
+                          "`ollama serve`) and try again; gptr never starts, installs or ",
+                          "updates Ollama."),
+                   c("network", "provider"), provider = pid,
+                   status = e[["status"]] %||% NA_integer_,
+                   curl_code = e[["curl_code"]] %||% NA_integer_)
+      })
+  }
+  answer = function(res, what) {
+    if (!identical(res$status, 200L)) {
+      catalog_unavailable_abort(target, paste0("the server at ", ep$origin, " answered HTTP ",
+                                               res$status, " to ", what, ", unlike Ollama"),
+                                "an Ollama server")
+    }
+    x = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
+    if (!is.list(x)) {
+      catalog_unavailable_abort(target, paste0("the server at ", ep$origin,
+                                               " answered ", what, " with malformed JSON"),
+                                "an Ollama server")
+    }
+    x
+  }
+  version = answer(get("/api/version"), "/api/version")[["version"]]
+  pattern = "^[0-9]+(\\.[0-9]+)+([-+][A-Za-z0-9.-]+)?$"
+  version = if (catalog_chr1(version) && grepl(pattern, version)) version else NA_character_
+  tags = answer(get("/api/tags"), "/api/tags")[["models"]]
+  tag_name = function(t) if (catalog_chr1(t[["name"]])) t[["name"]] else t[["model"]]
+  tags = Filter(function(t) is.list(t) && catalog_chr1(tag_name(t)),
+                if (is.list(tags)) tags else list())
+  if (!is.null(only)) {
+    want = catalog_ollama_tag(only)
+    tags = Filter(function(t) identical(catalog_ollama_tag(tag_name(t)), want), tags)
+    if (!length(tags)) {
+      catalog_unavailable_abort(target, paste0(
+        "it is not installed on the Ollama server at ", ep$origin, ". Install it yourself ",
+        "(for example `ollama pull ", only, "`), then prepare it again; gptr never downloads ",
+        "models"), paste0("ollama pull ", only))
+    }
+  }
+  lifecycle = catalog_lifecycle(pid)
+  entries = list()
+  evidence = list()
+  failed = NULL
+  for (t in tags) {
+    # a transport failure (a slow model, an oversized answer) skips that model, like a non-200
+    # answer, so one model never hides the others behind a server-down message
+    res = tryCatch(fetch("/api/show", json_encode(list(model = tag_name(t)))),
+                   gptr_error_network = function(e) e)
+    if (inherits(res, "gptr_error_network")) {
+      failed = list(model = tag_name(t), error = res)
+      next
+    }
+    if (!identical(res$status, 200L)) next
+    show = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
+    if (!is.list(show)) next
+    x = tryCatch(catalog_ollama_describe(pid, t, show, version, ep, lifecycle),
+                 gptr_error = function(e) NULL)
+    if (is.null(x)) next
+    entries[[length(entries) + 1L]] = x$entry
+    evidence[[x$key]] = x$evidence
+  }
+  if (!length(entries) && !is.null(failed)) {
+    e = failed$error
+    gptr_abort(paste0("The Ollama server at ", ep$origin, " answered /api/version and ",
+                      "/api/tags but did not describe ", failed$model, " through /api/show (",
+                      conditionMessage(e), "). Try again; each discovery request may take ",
+                      "at most ", catalog_local_timeout, " s."),
+               c("network", "provider"), provider = pid,
+               status = e[["status"]] %||% NA_integer_,
+               curl_code = e[["curl_code"]] %||% NA_integer_)
+  }
+  if (!is.null(only) && !length(entries)) {
+    catalog_unavailable_abort(target, paste0("the Ollama server at ", ep$origin,
+                                             " did not describe it (/api/show)"),
+                              "an Ollama server")
+  }
+  catalog_discovered_set(pid, entries, evidence, replace = is.null(only))
+  invisible(vapply(entries, function(e) e[["id"]], ""))
+}
+
+#' The local-only control of the protected safety record (07-local-ollama.md section 2.1)
+#'
+#' `safety` is the frozen P08/P06 safety record (a list or environment) or NULL. Only its
+#' `ollama_local_only` field is read; a missing record or field means TRUE. P05 never builds
+#' this record and never reads a setting for it: FALSE may come only from explicit human
+#' user/session configuration through P08/P06, never from merged provider settings, model
+#' metadata, project settings or per-call options.
+#' @noRd
+catalog_local_only = function(safety) {
+  if (is.null(safety)) return(TRUE)
+  v = if (is.environment(safety)) {
+    get0("ollama_local_only", envir = safety, inherits = FALSE)
+  } else if (is.list(safety)) {
+    safety[["ollama_local_only"]]
+  } else {
+    arg_abort(safety, "safety", "NULL or the protected safety record of the run")
+  }
+  if (is.null(v)) return(TRUE)
+  if (!is.logical(v) || length(v) != 1L || is.na(v)) {
+    arg_abort(v, "safety$ollama_local_only", "TRUE or FALSE")
+  }
+  v
+}
+
+#' Why private evidence no longer describes the selected model on this endpoint, or NULL
+#'
+#' Binding: canonical origin and base path, the registry lifecycle, and the identity a model
+#' record carries (digest, server version), so a prepared model is never silently replaced.
+#' @noRd
+catalog_evidence_stale = function(ev, model, p, ep) {
+  pid = p[["id"]] %||% p[["name"]]
+  if (!identical(ev[["origin"]], ep$origin) || !identical(ev[["path"]], ep$path)) {
+    return("the provider endpoint changed since discovery")
+  }
+  if (!identical(ev[["lifecycle"]], catalog_lifecycle(pid))) {
+    return("the provider registration changed since discovery (reload or replacement)")
+  }
+  digest = model[["digest"]]
+  if (!is.null(digest) && !identical(as.character(digest), ev[["digest"]])) {
+    return("the installed model changed since it was prepared (digest)")
+  }
+  version = model[["server_version"]]
+  if (!is.null(version) && !identical(as.character(version), ev[["server_version"]])) {
+    return("the server version changed since the model was prepared")
+  }
+  NULL
+}
+
+#' The private evidence of a model on a provider (NULL when there is none)
+#' @noRd
+catalog_evidence_get = function(model, p) {
+  key = paste0(p[["id"]] %||% p[["name"]], "/", catalog_ollama_tag(model[["id"]]))
+  the$catalog[["evidence"]][[key]]
+}
+
+#' Pure request preflight (07-local-ollama.md section 2.1; contract section 7.5)
+#'
+#' No I/O and no state change. Models of other routes are returned unchanged. An Ollama route
+#' (the `ollama` provider or the `ollama-system-one` api) needs current private evidence from
+#' P05 discovery for the selected model, bound to the provider's endpoint, base path, registry
+#' lifecycle and the record's identity. Under the local-only policy (default; only
+#' `safety$ollama_local_only = FALSE` relaxes it) a non-loopback endpoint, a cloud selector,
+#' remote markers or evidence without local execution are refused (`gptr_error_untrusted`).
+#' A classifier needs model-level `type = "classifier"` and `api = "ollama-system-one"`, the
+#' decision capability and the minimum server version; a chat model needs the completion
+#' capability and its provider's adapter (`gptr_error_not_available`). Returns the checked
+#' model: tools, reasoning, image input and context limited to the evidence, with the evidence's
+#' digest, server version and locality, and a zero metered price when the evidence establishes
+#' local execution (otherwise the catalog's own prices, unknown when it has none).
+#' @noRd
+provider_preflight = function(model, provider, safety = NULL) {
+  local_only = catalog_local_only(safety)
+  if (!is.list(model) || !catalog_chr1(model[["ref"]]) || !catalog_chr1(model[["id"]]) ||
+      !catalog_chr1(model[["provider"]])) {
+    arg_abort(model, "model", "a model record from model_resolve()")
+  }
+  if (!is.null(provider) && !is.list(provider)) {
+    arg_abort(provider, "provider", "a provider record or NULL")
+  }
+  if (!catalog_ollama_route(model, provider)) return(model)
+  ref = model[["ref"]]
+  pid = model[["provider"]]
+  if (is.null(provider)) {
+    catalog_unavailable_abort(ref, paste0("its provider ", pid, " is not registered"),
+                              "a registered provider")
+  }
+  if (!identical(provider[["id"]] %||% provider[["name"]], pid)) {
+    arg_abort(provider, "provider", paste0("the provider record of ", pid))
+  }
+  ep = catalog_endpoint(provider)
+  if (is.null(ep)) {
+    catalog_unavailable_abort(ref, "its provider has no valid HTTP base URL",
+                              "a configured base_url")
+  }
+  if (local_only) {
+    why = if (!ep$loopback) {
+      "its endpoint is not a loopback address"
+    } else if (catalog_ollama_cloud(model[["id"]])) {
+      "it names an Ollama cloud model"
+    } else if (!is.null(model[["remote_host"]]) || !is.null(model[["remote_model"]])) {
+      "its record names a remote host or model"
+    } else if (identical(model[["locality"]], "remote")) {
+      "its record says it runs remotely"
+    }
+    if (!is.null(why)) catalog_local_only_abort(ref, ep$origin, why)
+  }
+  ev = catalog_evidence_get(model, provider)
+  if (is.null(ev)) {
+    catalog_unavailable_abort(ref, paste0(
+      "there is no current discovery evidence from the Ollama server at ", ep$origin,
+      "; prepare it with model_prepare() (or list the server with gptr_models(provider = \"",
+      pid, "\", refresh = TRUE)) while the server runs with the model installed"),
+      "Ollama discovery")
+  }
+  stale = catalog_evidence_stale(ev, model, provider, ep)
+  if (!is.null(stale)) {
+    catalog_unavailable_abort(ref, paste0(stale, "; prepare it again with model_prepare()"),
+                              "Ollama discovery")
+  }
+  if (local_only && !identical(ev[["locality"]], "local")) {
+    catalog_local_only_abort(ref, ep$origin, "discovery did not establish local execution")
+  }
+  caps = ev[["capabilities"]]
+  classifier = identical(model[["type"]], "classifier") ||
+    identical(model[["api"]], "ollama-system-one")
+  if (classifier) {
+    if (!identical(model[["type"]], "classifier") ||
+        !identical(model[["api"]], "ollama-system-one")) {
+      catalog_unavailable_abort(ref, paste0("native decisions need the model-level type ",
+                                            "\"classifier\" and api \"ollama-system-one\""),
+                                "a native decision model")
+    }
+    if (!"decision" %in% caps) {
+      catalog_unavailable_abort(ref, "the server reports no decision capability for it",
+                                "a native decision model")
+    }
+    need = catalog_ollama_min_version
+    asked = model[["decision"]][["server_min"]]
+    if (catalog_chr1(asked) && catalog_version_at_least(asked, need)) need = asked
+    if (!catalog_version_at_least(ev[["server_version"]], need)) {
+      catalog_unavailable_abort(ref, paste0(
+        "native decisions need Ollama ", need, " or later; the server reports ",
+        if (catalog_chr1(ev[["server_version"]])) ev[["server_version"]] else "no version",
+        ". Update Ollama yourself"), paste0("Ollama >= ", need))
+    }
+    model$tool_call = FALSE
+    if (is.list(model[["decision"]])) {
+      model$decision$images = isTRUE(model$decision$images) && isTRUE(ev[["vision"]])
+    }
+  } else {
+    if (!"completion" %in% caps) {
+      catalog_unavailable_abort(ref, paste0("the server reports no conversational (completion) ",
+                                            "capability for it"), "a conversational model")
+    }
+    api = provider[["api"]] %||% "openai-completions"
+    if (!identical(model[["type"]], "chat") || !identical(model[["api"]], api)) {
+      catalog_unavailable_abort(ref, paste0("conversations need the type \"chat\" and the ",
+                                            "provider's api \"", api, "\""),
+                                "a conversational model")
+    }
+    model$tool_call = isTRUE(model[["tool_call"]]) && "tools" %in% caps
+    model$reasoning = isTRUE(model[["reasoning"]]) && "thinking" %in% caps
+    if (!model$reasoning) {
+      model$thinking_levels = "off"
+      if (!is.null(model[["thinking"]])) model$thinking = "off"
+    }
+  }
+  allowed = if (isTRUE(ev[["vision"]])) c("text", "image") else "text"
+  input = intersect(as.character(unlist(model[["input"]] %||% "text")), allowed)
+  model$input = if (length(input)) input else "text"
+  context = catalog_num(model[["context"]])
+  model$context = if (is.na(ev[["context"]])) NA_real_ else min(c(ev[["context"]], context),
+                                                                na.rm = TRUE)
+  if (!is.na(ev[["digest"]])) model$digest = ev[["digest"]]
+  if (!is.na(ev[["server_version"]])) model$server_version = ev[["server_version"]]
+  model$locality = ev[["locality"]]
+  # the price follows the evidence, whichever catalog name (bare or tagged) reached it
+  if (identical(ev[["locality"]], "local")) model$prices = prices_df(catalog_local_prices())
+  model
+}
+
+#' Explicit selected-model preparation (07-local-ollama.md section 2.1; contract section 7.5)
+#'
+#' Resolves `ref`; for an Ollama route whose private evidence is missing or stale, runs native
+#' discovery for that model only (never under R CMD check; refused before any request when the
+#' local-only policy forbids the endpoint), resolves again and preflights. Other routes are
+#' resolved and preflighted without I/O. Offline replay must not call this function (P08's
+#' replay guard runs first): replay uses the identity frozen with the recorded result.
+#' @noRd
+model_prepare = function(ref, safety = NULL) {
+  catalog_local_only(safety)
+  rec = model_resolve(ref)
+  p = provider_get(rec[["provider"]])
+  if (catalog_ollama_route(rec, p) && is.list(p)) {
+    ep = catalog_endpoint(p)
+    ev = catalog_evidence_get(rec, p)
+    if (!is.null(ep) && (is.null(ev) || !is.null(catalog_evidence_stale(ev, rec, p, ep)))) {
+      catalog_ollama_discover(p, safety, only = rec[["id"]])
+      rec = model_resolve(ref)
+    }
+  }
+  provider_preflight(rec, p, safety)
+}
+
+#' Regular-expression search with a fixed-string fallback for invalid patterns
+#' @noRd
+catalog_grepl = function(pattern, x) {
+  tryCatch(suppressWarnings(grepl(pattern, x, ignore.case = TRUE, perl = TRUE)),
+           error = function(e) grepl(tolower(pattern), tolower(x), fixed = TRUE))
+}
+
+#' List models from the model catalog
+#'
+#' Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
+#' prices and capabilities), a refreshed copy in `tools::R_user_dir("gptr", "cache")`, models
+#' declared by registered providers, user configuration and discovered local servers. Offline
+#' by default: only `refresh = TRUE` touches the network.
+#'
+#' @param query `NULL` or a regular expression or alias (for example `"sonnet"`), matched
+#'   against the reference, the name and the aliases; the model an alias resolves to is listed
+#'   first.
+#' @param provider `NULL` or a provider id (for example `"anthropic"`).
+#' @param refresh `TRUE` downloads the current models.dev catalog with ETag revalidation into
+#'   the user cache. For a local provider (`provider = "ollama"`, `"lmstudio"`, ...) it asks
+#'   that server for its installed models instead (a 1 second limit per request; for Ollama the
+#'   native `/api/version`, `/api/tags` and `/api/show` endpoints, on a loopback address only).
+#'   The only network use of this function; it never starts or installs a server and never
+#'   downloads a model.
+#' @return A `gptr_models` data frame with columns `ref`, `provider`, `name`, `context`,
+#'   `max_output`, `input_price`, `output_price` (USD per million tokens, in force today; `0`
+#'   for local inference, `NA` when unknown), `reasoning`, `aliases` and `status`.
+#' @examples
+#' gptr_models("sonnet")
+#' gptr_models(provider = "anthropic")
+#' @export
+gptr_models = function(query = NULL, provider = NULL, refresh = FALSE) {
+  check_string(query, "query", null = TRUE)
+  check_string(provider, "provider", null = TRUE)
+  check_flag(refresh, "refresh")
+  p = if (is.null(provider)) NULL else provider_get(provider)
+  if (!is.null(p)) provider = p[["id"]] %||% p[["name"]] %||% provider
+  if (refresh) {
+    local_server = catalog_ollama_provider(p) ||
+      (isTRUE(p[["local"]]) && is.function(p[["discover"]]))
+    if (local_server) catalog_discover(p) else catalog_refresh()
+  }
+  ctg = catalog_get()
+  idx = ctg$index
+  keep = rep(TRUE, nrow(idx))
+  if (!is.null(provider)) keep = keep & idx$provider == provider
+  first = character()
+  if (!is.null(query)) {
+    hit = tryCatch(model_resolve(query, strict = FALSE), gptr_error = function(e) NULL)
+    if (!is.null(hit)) first = hit$ref
+    found = catalog_grepl(query, idx$ref) | catalog_grepl(query, idx$name) |
+      catalog_grepl(query, idx$aliases)
+    keep = keep & (found | idx$ref %in% first)
+  }
+  rows = idx[keep, , drop = FALSE]
+  rows = rows[order(!(rows$ref %in% first), rows$provider, rows$ref, method = "radix"), ,
+              drop = FALSE]
+  entries = ctg$models[rows$ref]
+  today = lapply(entries, function(e) {
+    tryCatch(price_select(e[["prices"]], 0, Sys.Date()), error = function(err) NULL)
+  })
+  rate = function(k) {
+    vapply(today, function(r) if (is.null(r)) NA_real_ else as.numeric(r[[k]][[1]]), 0,
+           USE.NAMES = FALSE)
+  }
+  num = function(f) vapply(entries, f, 0, USE.NAMES = FALSE)
+  # the effective context, as in model records: the configured context bounds the advertised one
+  context = num(function(e) {
+    limits = list(limit = list(context = e[["context"]]),
+                  configured_context = e[["configured_context"]])
+    tryCatch(catalog_num(catalog_entry_context(limits)), error = function(err) NA_real_)
+  })
+  df = data.frame(ref = rows$ref, provider = rows$provider, name = rows$name,
+                  context = context, max_output = num(function(e) catalog_num(e[["max_output"]])),
+                  input_price = rate("input"), output_price = rate("output"),
+                  reasoning = vapply(entries, function(e) isTRUE(e[["reasoning"]]), NA,
+                                     USE.NAMES = FALSE),
+                  aliases = rows$aliases, status = rows$status, stringsAsFactors = FALSE)
+  rownames(df) = NULL
+  new_listing(df, "gptr_models",
+              footer = paste0("catalog ", ctg$generated, " (", ctg$source, "), ",
+                              nrow(idx), " models; gptr_models(refresh = TRUE) updates it"))
+}
