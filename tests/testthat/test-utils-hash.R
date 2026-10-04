@@ -108,9 +108,9 @@ test_that("fingerprint() is stable, sensitive to sampled values and cheap on ALT
   expect_false(identical(fingerprint(df), fingerprint(transform(df, a = a + 1L))))
   expect_match(fingerprint(new.env()), "^[0-9a-f]{64}$")
 })
-test_that("the copy-safety harness sees str(big) as a copy and a plain edit as in place", {
+test_that("the copy-safety harness sees a retained alias as a copy and a plain edit as in place", {
   expect_no_copy(setup = "big = runif(5e6)", action = "invisible(NULL)", label = "baseline")
-  expect_failure(expect_no_copy(setup = "big = runif(5e6)", action = "str(big)"))
+  expect_failure(expect_no_copy(setup = "big = runif(5e6)", action = "retained = big"))
 })
 
 test_that("the leaf functions fingerprint() and save_rds() leave `big` editable in place", {
@@ -144,4 +144,15 @@ test_that("the copy-safety harness requires a successful child exit", {
     ),
     "status 2"
   )
+})
+
+test_that("the copy-safety harness reads CRLF markers and still detects copies", {
+  output = paste0("GPTR-ACTION-START\r\nGPTR-ACTION-END\r\n", "GPTR-END\r\n")
+  local_mocked_bindings(run = function(...) {
+    list(status = 0L, stdout = output, stderr = "")
+  }, .package = "processx")
+  expect_identical(expect_no_copy("big = 1", "invisible(NULL)"), 0L)
+  output = paste0("GPTR-ACTION-START\r\nGPTR-ACTION-END\r\n",
+                  "tracemem[0x01 -> 0x02]:\r\nGPTR-END\r\n")
+  expect_failure(expect_no_copy("big = 1", "invisible(NULL)"), "1 copies")
 })

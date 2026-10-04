@@ -12,8 +12,10 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 - All 21 P01 tasks passed focused red/green checks and independent review.
   The immutable snapshot passed 1,599 offline assertions, the connection gate,
   documentation generation and lint. Installed-package checks found one test
-  inference issue; its explicit-package correction is being rechecked. Hosted CI
-  remains pending. See [integrated acceptance](progress/P01-acceptance.md).
+  inference issue; after its explicit-package correction, R CMD check passed
+  with 0 errors, 0 warnings and 0 notes. Hosted CI exposed two additional
+  test-harness portability assumptions; their reviewed corrections passed
+  focused local tests. A corrected hosted run remains pending. See [integrated acceptance](progress/P01-acceptance.md).
   See [core task evidence](progress/P01.md) and
   [utilities](progress/P01-utilities.md), [provider/helpers](progress/P01-providers.md)
   and [infrastructure evidence](progress/P01-infrastructure.md) for results.
@@ -62,10 +64,10 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 ## Active ownership
 
 - `design_summary`: P01 core complete; preparing P03 after P02 prerequisites.
-- `requirements_audit`: P04 reactor core (Task 6); IC-74/P05 preparation ready.
+- `requirements_audit`: P04 reactor core complete; independent P05 usage task.
 - `scientific_value`: P04 process supervision and job table (Tasks 4–5).
 - `plans_security_review`: independent P01 review, then registry/secrets review.
-- `ollama_api_research`: P02 implementation (Tasks 1–3 committed; Task 4 underway).
+- `ollama_api_research`: P02 implementation (Tasks 1–6 committed; Task 7 underway).
 - Root: integrated acceptance, P04, GitHub, global ledger and scheduling.
 
 Git commits and generated documentation are serialized. A lane may prepare an

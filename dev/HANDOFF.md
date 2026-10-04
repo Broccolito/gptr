@@ -33,10 +33,11 @@ Updated: 2026-10-03. State: active implementation, P01 not yet complete.
 Continue P01 from the latest completed task in `progress/P01.md` and the
 parallel utilities/providers/infrastructure logs. All 21 tasks have
 focused passing checks. Task 18 completed at `7d816e9`; full acceptance is pending.
-P02 Tasks 1–3 are committed and Task 4 is underway. Root captured P01 at
+P02 Tasks 1–6 are committed and Task 7 is underway. Root captured P01 at
 `eea1e36` before these commits; its 1,599 assertions, connection gate and lint
 passed. Installed-package checking found one mock-package inference issue;
-the one-line test correction is being rechecked in that snapshot. See
+the reviewed one-line correction (`d4aabfb`) passed R CMD check with
+0 errors, 0 warnings and 0 notes in that snapshot. See
 `progress/P01-acceptance.md` for exact evidence and pending hosted results. The README/About are
 updated and draft PR #4 tracks the work. roxygen2 7.3.3 is in `dev/.library`;
 use `R_LIBS_USER="$PWD/dev/.library" Rscript --vanilla` for development checks.
@@ -44,9 +45,12 @@ Optional tooling installation is complete (`progress/tooling.md`). Read ownershi
 in `PROGRESS.md` before editing or committing. No API should be described as
 available until its implementation is verified.
 
-Capture the completed P01 Git archive before
-integrating P02. Run full tests, lint, explicit connection gate, and R CMD check
-there with the isolated library and local-socket permission. No actual cloud
-providers or credentials are needed. Then enable the hosted matrix at that
-commit; track cross-platform outcomes separately from local results. P02 can
-continue once the snapshot is captured, with serialized docs/Git ownership.
+P01 local acceptance is complete on `eea1e36` plus the test correction from
+`d4aabfb`. Hosted CI on `eea1e36` is expected to expose the pre-fix installed-test
+error plus Windows CRLF-marker and oldrel-4 negative-control failures.
+The reviewed portability fixes passed focused local checks; they also need
+hosted verification. Publish a coherent later snapshot containing the corrections after P02
+acceptance, then record exact-SHA hosted outcomes. Do not mark the old CI as a
+pass. P04 Tasks 4–6 run in separate ownership lanes; before loading their source
+locally, isolate home/cache/config at process startup because the orphan sweep
+runs before test setup. No real secrets or providers are needed for these gates.

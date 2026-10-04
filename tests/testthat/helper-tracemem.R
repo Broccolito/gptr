@@ -53,7 +53,7 @@ expect_no_copy = function(setup, action, edit = "big[1] = 0", object = "big", al
     rscript_path(), c("--vanilla", script),
     env = env, error_on_status = FALSE, timeout = 300
   )
-  out = strsplit(res$stdout, "\n", fixed = TRUE)[[1L]]
+  out = strsplit(res$stdout, "\r?\n", perl = TRUE)[[1L]]
   label = label %||% action
   if (res$status != 0L || !("GPTR-END" %in% out)) {
     testthat::fail(paste0(

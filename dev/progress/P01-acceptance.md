@@ -28,12 +28,29 @@ source snapshot; later branch changes require their own gates.
   passed in the source tree because pkgload supplied that inference.
 - Added explicit `.package = "gptr"` to that test's mock call. The corrected
   snapshot is the target SHA above plus this one-line test change; runtime
-  source is unchanged. The complete installed-package check is being rerun.
-  Hosted results at the original SHA cannot validate this correction.
+  source is unchanged. The complete installed-package check then passed in 35.1 seconds:
+  **0 errors, 0 warnings, 0 notes**. The only two test skips are source-tree
+  metadata checks when running the installed package. The correction is
+  committed in `d4aabfb`; it also passed independent review. Hosted results at
+  the original SHA cannot validate this correction.
 
 ## Hosted validation
 
 The snapshot was pushed to the implementation branch and draft PR #4.
 [GitHub Actions run 37165877166](https://github.com/Broccolito/gptr/actions/runs/37165877166)
-has the exact target SHA. Its cross-platform result is pending. P01 acceptance
-is not complete until the required local and hosted checks pass.
+has the exact target SHA. Its completed jobs expose the pre-correction
+installed-test failure. Windows additionally found CRLF completion markers were
+not recognised; oldrel-4 Linux found the plan's `str(big)` negative control did
+not copy on that interpreter. The connection gate passed. Benchmark/copy-safety
+jobs without their later-plan suites are scaffolding successes, not those
+later acceptance results.
+
+The two portability corrections are recorded in D-009. Actual local regression:
+FAIL 3 / PASS 40 before the CRLF change, then **FAIL 0 / WARN 0 / SKIP 0 /
+PASS 43**, with both changed files lint-clean and independent review accepted.
+The old-R negative control now retains an explicit alias, which must force the
+next edit to copy; package functions remain subject to the same zero-copy rule.
+
+P01 acceptance remains pending a new hosted run containing all corrections.
+The macOS runner's extra NOTE names Apple system services creating temporary
+files; it is recorded as runner noise, not silently reported as a package pass.

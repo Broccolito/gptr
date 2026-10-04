@@ -66,3 +66,28 @@ represent NUL; error messages never include the input. This is an explicit R
 representation limit, not a claim that NUL is forbidden by the SSE standard.
 Invalid retry fields are ignored before choosing the last valid numeric retry.
 The contract's deliberate final-event flush behavior is preserved.
+
+
+## D-008 — Independent usage-accounting component (2026-10-03)
+
+P05 Task 1 consumes only P01 condition/list utilities and can be developed in a
+separate file while the M0 registry, secrets and transport integration proceeds.
+Its owner reconciles unknown usage and prices with IC-74 instead of copying the
+older plan's conversion of missing measurements into zero. No later usage rows
+or model resolution are implemented before their dependencies. This parallel
+component does not complete P05 or advance the milestone gate.
+
+
+## D-009 — Portable copy-safety controls (2026-10-03)
+
+Hosted P01 validation exposed two test-harness assumptions. Windows child stdout
+uses CRLF, so completion-marker parsing must accept CRLF as well as LF. A
+synthetic output regression checks both successful completion and detection of
+a copy under CRLF.
+
+The literal plan's `str(big)` negative control makes no observable next-edit
+copy on the hosted oldrel-4 R interpreter, although it does on this Mac. Use
+`retained = big` as the portable negative control: keeping a second reference
+must force the next edit to copy. The zero-copy requirement for the package's
+fingerprint/save operations and the real edit tests is unchanged. Full Windows
+and old-R acceptance still needs a new hosted run containing these corrections.
