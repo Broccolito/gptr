@@ -128,3 +128,29 @@ checks on a resource-healthy host with competing heavy validation paused, and
 record actual measurements. Ordinary functional tests should prefer event and
 ordering assertions. A timing failure needs investigation, not a silently
 loosened target or a substitute claim based only on receiving callbacks.
+
+## D-012 — Reactor retries fail closed and honour the hint's class (2026-10-03)
+
+P04 Task 12's literal plan code is changed in two behaviours; contract 8.1-8.2 governs both.
+
+1. **A malformed commitment fails closed.** The plan's `reactor_failure()` used
+   `isTRUE(tryCatch(tr$retry$committed(), error = function(e) TRUE))`, so a malformed result
+   (`NA`, a non-logical or a longer vector) counted as "not committed" and the request was
+   sent again. Now every result other than exactly `FALSE` counts as committed, the same as
+   an error: no retry, and the classed condition goes to `on_fail`. Contract 8.2 retries only
+   when `committed()` "is `FALSE`". A re-send after an ambiguous commitment could repeat side
+   effects that the stream already delivered, such as deltas shown or tool calls emitted.
+   Regression: "a malformed committed result fails closed without retrying".
+2. **`reactor_retry()` decides whether the hint is retryable.** In the plan, every in-stream
+   hint set `retry = TRUE`, except a `retry_after` above the cap. The decision now uses
+   `retry_classify()`'s table: `auth`, `spend_cap`, `redirect`, `retry_after`, `timeout_idle`
+   and `timeout_first_byte` are never retried. `overloaded`, `rate_limit`, `network`,
+   `timeout_connect` and a 408, 409, 429 or 5xx status are retried. This keeps the
+   nonretryable rules for every path that reports a failure: the spend cap is never retried,
+   401/403 are `auth`, 3xx are never retried (IC-64), and the INFRA-05 timers are never
+   retried. Only a retryable hint above `gptr.max_retry_delay` becomes class `retry_after`.
+   `timeout_*` classes keep the parent `gptr_error_timeout`, and the others keep
+   `gptr_error_provider` (contract 2.2). The condition's status is an integer, and its
+   request id comes from the attempt's 2xx head. Regressions: "stream retry hints validate
+   delays and preserve nonretryable classes" and "stream retry hints keep their class, the
+   integer status and the server's request id".

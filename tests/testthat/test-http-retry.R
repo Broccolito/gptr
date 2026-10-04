@@ -344,3 +344,507 @@ test_that("a provider named like the anonymous marker has its own static bucket"
   expect_false(ratelimit_admit("(none)"))
   expect_true(ratelimit_admit(NULL))
 })
+
+retry_spec = function(srv, ...) {
+  utils::modifyList(list(url = paste0(srv$url, "/v1/messages"), method = "POST",
+         headers = list(`content-type` = "application/json"),
+         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse"),
+    list(...))
+}
+
+# Run one transfer; `normaliser(st, event)` sees every SSE event, `committed` defaults to
+# "a content delta was seen", as provider_stream() wires it (contract 8.4)
+retry_run = function(spec, provider = NULL, retry = NULL, normaliser = NULL, timeout = 60) {
+  st = new.env()
+  st$done = FALSE
+  st$fail = NULL
+  st$status = NA_integer_
+  st$deltas = 0L
+  st$notes = list()
+  sp = sse_splitter()
+  retry = c(retry %||% list(), list(on_retry = function(type, info) {
+    st$notes[[length(st$notes) + 1L]] = c(list(type = type), info)
+  }))
+  if (is.null(retry$committed)) retry$committed = function() st$deltas > 0L
+  st$t0 = reactor_now()
+  on_bytes = function(x) {
+    for (e in sp$push(x)) {
+      if (identical(e$event, "content_block_delta")) st$deltas = st$deltas + 1L
+      if (!is.null(normaliser)) normaliser(st, e)
+    }
+  }
+  on_done = function(status, headers) {
+    st$status = status
+    st$done = TRUE
+  }
+  on_fail = function(cnd) {
+    st$fail = cnd
+    st$done = TRUE
+  }
+  st$id = reactor_http(spec, on_bytes = on_bytes, on_done = on_done, on_fail = on_fail,
+                       provider = provider, retry = retry)
+  reactor_pump(until = function() st$done, timeout = timeout)
+  st$elapsed = reactor_now() - st$t0
+  st
+}
+
+test_that("INFRA-06: retry-after: 2 is honoured before the stream succeeds", {
+  srv = local_mock_server("status", status = 429L, retry_after = 2, succeed_after = 1L)
+  st = retry_run(retry_spec(srv))
+  expect_null(st$fail)
+  expect_identical(st$status, 200L)
+  lg = srv$log()
+  expect_identical(nrow(lg), 2L)
+  gap = diff(as.numeric(lg$time))
+  expect_gte(gap, 1.8)
+  expect_lt(gap, 5)
+  expect_identical(st$notes[[1]]$type, "retry_start")
+  expect_identical(st$notes[[1]]$delay, 2)
+  expect_identical(st$notes[[1]]$class, "rate_limit")
+  expect_identical(st$notes[[2]]$type, "retry_end")
+  expect_true(st$notes[[2]]$ok)
+})
+
+test_that("INFRA-06: retry-after: 3600 fails at once and names the delay", {
+  srv = local_mock_server("status", status = 429L, retry_after = 3600)
+  st = retry_run(retry_spec(srv, request_id = "q00000000abcd"), provider = "mock-ra")
+  expect_s3_class(st$fail, "gptr_error_retry_after")
+  expect_s3_class(st$fail, "gptr_error_provider")
+  expect_identical(st$fail$retry_after, 3600)
+  expect_identical(st$fail$status, 429L)
+  expect_identical(st$fail$provider, "mock-ra")
+  expect_match(conditionMessage(st$fail), "3600")
+  expect_lt(st$elapsed, 5)
+  expect_identical(nrow(srv$log()), 1L)
+})
+
+test_that("INFRA-06: a spend-cap 429 is never retried", {
+  srv = local_mock_server("spend_cap")
+  st = retry_run(retry_spec(srv))
+  expect_s3_class(st$fail, "gptr_error_spend_cap")
+  expect_identical(st$fail$status, 429L)
+  expect_identical(nrow(srv$log()), 1L)
+  expect_length(st$notes, 0L)
+})
+
+test_that("INFRA-06: 5xx is retried with backoff up to success, and at most max_attempts", {
+  srv = local_mock_server("status", status = 529L, succeed_after = 2L)
+  st = retry_run(retry_spec(srv))
+  expect_null(st$fail)
+  expect_identical(nrow(srv$log()), 3L)
+  expect_identical(vapply(st$notes, function(n) n$type, ""),
+                   c("retry_start", "retry_start", "retry_end"))
+  always = local_mock_server("status", status = 503L)
+  st2 = retry_run(retry_spec(always), retry = list(max_attempts = 2L))
+  expect_s3_class(st2$fail, "gptr_error_overloaded")
+  expect_identical(nrow(always$log()), 2L)
+})
+
+test_that("INFRA-06: an overload before the first delta is retried; after deltas it fails", {
+  overload = function(st, e) {
+    if (identical(e$event, "error")) {
+      reactor_retry(st$id, list(class = "overloaded", status = 529L))
+    }
+  }
+  srv = local_mock_server("overload", attempts = 1L)
+  st = retry_run(retry_spec(srv), normaliser = overload)
+  expect_null(st$fail)
+  expect_identical(nrow(srv$log()), 2L)
+  expect_gt(st$deltas, 0L)
+  srv2 = local_mock_server("overload", attempts = 1L)
+  st2 = retry_run(retry_spec(srv2), retry = list(committed = function() TRUE),
+                  normaliser = overload)
+  expect_s3_class(st2$fail, "gptr_error_overloaded")
+  expect_identical(nrow(srv2$log()), 1L)
+})
+
+test_that("an in-stream retry abandons the first attempt for good", {
+  # the first attempt would stream for 2 s after the retry; none of it may reach the second
+  srv = local_mock_server("stream", n = 8L, interval = 0.25)
+  st = new.env()
+  st$heads = 0L
+  st$deltas = 0L
+  st$done = FALSE
+  st$fail = NULL
+  st$sp = sse_splitter()
+  on_headers = function(status, headers) {
+    st$heads = st$heads + 1L
+    st$sp = sse_splitter()
+  }
+  on_bytes = function(x) {
+    for (e in st$sp$push(x)) {
+      if (!identical(e$event, "content_block_delta")) next
+      st$deltas = st$deltas + 1L
+      if (st$heads == 1L) reactor_retry(st$id, list(class = "overloaded", status = 529L))
+    }
+  }
+  st$id = reactor_http(retry_spec(srv), on_bytes = on_bytes,
+                       on_done = function(status, headers) st$done = TRUE,
+                       on_fail = function(cnd) {
+                         st$fail = cnd
+                         st$done = TRUE
+                       },
+                       on_headers = on_headers, retry = list(committed = function() FALSE))
+  expect_true(reactor_pump(until = function() st$done, timeout = 30))
+  expect_null(st$fail)
+  expect_identical(st$heads, 2L)
+  expect_identical(st$deltas, 9L)
+  lg = srv$log()
+  expect_identical(nrow(lg), 2L)
+  expect_true(isTRUE(lg$disconnected[1]))
+})
+
+test_that("INFRA-21: a 20-transfer fan-out never exceeds the advertised request budget", {
+  srv = local_mock_server("stream", n = 2L, interval = 0.05)
+  # the budget resets after about 6 s: a sleep inside a callback would stall the timer below
+  reset = format(as.POSIXct(Sys.time() + 7), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  ratelimit_update("rl-fanout", list(`anthropic-ratelimit-requests-limit` = "5",
+                                     `anthropic-ratelimit-requests-remaining` = "5",
+                                     `anthropic-ratelimit-requests-reset` = reset))
+  t_reset = ratelimit_get("rl-fanout")$req_reset
+  # the budget above is the only limit under test: responses of the mock do not change it
+  local_mocked_bindings(ratelimit_update = function(provider, headers) invisible(NULL))
+  heads = new.env()
+  heads$t = numeric()
+  done = new.env()
+  done$n = 0L
+  ticks = new.env()
+  ticks$gap = 0
+  ticks$last = reactor_now()
+  tick = function() {
+    ticks$gap = max(ticks$gap, reactor_now() - ticks$last)
+    ticks$last = reactor_now()
+    if (done$n < 20L) ticks$id = reactor_timer(reactor_now() + 0.1, tick)
+  }
+  ticks$id = reactor_timer(reactor_now() + 0.1, tick)
+  # the ticker may still be armed when the pump returns: never leak it into later tests
+  withr::defer(reactor_cancel(ticks$id))
+  for (i in 1:20) {
+    reactor_http(retry_spec(srv), on_bytes = function(x) NULL,
+                 on_done = function(status, headers) done$n = done$n + 1L,
+                 on_fail = function(cnd) done$n = done$n + 1L,
+                 on_headers = function(status, headers) heads$t = c(heads$t, reactor_now()),
+                 provider = "rl-fanout")
+  }
+  expect_true(reactor_pump(until = function() done$n == 20L, timeout = 60))
+  expect_length(heads$t, 20L)
+  expect_lte(sum(heads$t < t_reset), 5L)
+  # admission never waited inside a callback: the 100 ms timer kept firing throughout
+  expect_lt(ticks$gap, 5)
+})
+
+test_that("retry_start cancellation leaves neither transfer nor timer", {
+  srv = local_mock_server("status", status = 503L, retry_after = 10)
+  r = reactor_get()
+  before = reactor_ids(r$timers)
+  withr::defer(reactor_cancel(setdiff(reactor_ids(r$timers), before)))
+  st = new.env()
+  st$cancelled = FALSE
+  st$terminal = 0L
+  st$id = reactor_http(retry_spec(srv), function(x) NULL,
+                       function(status, headers) st$terminal = st$terminal + 1L,
+                       function(cnd) st$terminal = st$terminal + 1L,
+                       provider = "retry-cancel-fixture",
+                       retry = list(on_retry = function(type, info) {
+                         if (identical(type, "retry_start")) {
+                           reactor_cancel(st$id)
+                           st$cancelled = TRUE
+                         }
+                       }))
+  withr::defer(reactor_cancel(st$id))
+  expect_true(reactor_pump(until = function() st$cancelled, timeout = 5))
+  expect_false(exists(st$id, envir = r$transfers, inherits = FALSE))
+  # no timer of this transfer survives (timers of earlier tests may fire meanwhile)
+  expect_length(setdiff(reactor_ids(r$timers), before), 0L)
+  expect_identical(st$terminal, 0L)
+})
+
+test_that("retry_end cancellation suppresses headers of the cancelled attempt", {
+  srv = local_mock_server("status", status = 503L, succeed_after = 1L)
+  st = new.env()
+  st$cancelled = FALSE
+  st$heads = 0L
+  st$terminal = 0L
+  st$id = reactor_http(retry_spec(srv), function(x) NULL,
+                       function(status, headers) st$terminal = st$terminal + 1L,
+                       function(cnd) st$terminal = st$terminal + 1L,
+                       on_headers = function(status, headers) st$heads = st$heads + 1L,
+                       retry = list(on_retry = function(type, info) {
+                         if (identical(type, "retry_end")) {
+                           reactor_cancel(st$id)
+                           st$cancelled = TRUE
+                         }
+                       }))
+  withr::defer(reactor_cancel(st$id))
+  expect_true(reactor_pump(until = function() st$cancelled, timeout = 10))
+  expect_identical(st$heads, 0L)
+  expect_identical(st$terminal, 0L)
+})
+
+test_that("an old callback error cannot terminate a newer retry attempt", {
+  srv = local_mock_server("stream", n = 2L, interval = 0.05)
+  st = new.env()
+  st$restarted = FALSE
+  st$done = FALSE
+  st$fail = NULL
+  st$id = reactor_http(retry_spec(srv), on_bytes = function(x) {
+    if (st$restarted) return(NULL)
+    st$restarted = TRUE
+    reactor_retry(st$id, list(class = "overloaded", status = 529L, retry_after = 0))
+    reactor_pump(until = function() {
+      tr = reactor_get()$transfers[[st$id]]
+      !is.null(tr) && tr$attempt == 2L && identical(tr$state, "active")
+    }, timeout = 5)
+    stop("the abandoned attempt callback failed")
+  }, on_done = function(status, headers) st$done = TRUE,
+  on_fail = function(cnd) st$fail = cnd, retry = list(committed = function() FALSE))
+  withr::defer(reactor_cancel(st$id))
+  expect_true(reactor_pump(until = function() st$done || !is.null(st$fail), timeout = 10))
+  expect_true(st$done)
+  expect_null(st$fail)
+  expect_identical(nrow(srv$log()), 2L)
+})
+
+test_that("a malformed committed result fails closed without retrying", {
+  srv = local_mock_server("status", status = 503L)
+  st = retry_run(retry_spec(srv), retry = list(max_attempts = 2L,
+                                             committed = function() NA))
+  expect_s3_class(st$fail, "gptr_error_overloaded")
+  expect_identical(nrow(srv$log()), 1L)
+  expect_length(st$notes, 0L)
+})
+
+test_that("cancellation from committed suppresses both retry and terminal delivery", {
+  srv = local_mock_server("status", status = 503L)
+  r = reactor_get()
+  before = reactor_ids(r$timers)
+  withr::defer(reactor_cancel(setdiff(reactor_ids(r$timers), before)))
+  st = new.env()
+  st$cancelled = FALSE
+  st$terminal = 0L
+  st$id = reactor_http(retry_spec(srv), function(x) NULL,
+                       function(status, headers) st$terminal = st$terminal + 1L,
+                       function(cnd) st$terminal = st$terminal + 1L,
+                       retry = list(committed = function() {
+                         reactor_cancel(st$id)
+                         st$cancelled = TRUE
+                         TRUE
+                       }))
+  expect_true(reactor_pump(until = function() st$cancelled, timeout = 5))
+  expect_identical(st$terminal, 0L)
+  expect_length(setdiff(reactor_ids(r$timers), before), 0L)
+  expect_false(exists(st$id, envir = r$transfers, inherits = FALSE))
+})
+
+test_that("stream retry hints validate delays and preserve nonretryable classes", {
+  st = new.env()
+  local_mocked_bindings(reactor_failure = function(r, tr, cl, status, ...) {
+    st$classification = cl
+    FALSE
+  })
+  id = reactor_http(list(url = "http://127.0.0.1:1/"), function(x) NULL,
+                    function(status, headers) NULL, function(cnd) NULL)
+  tr = reactor_get()$transfers[[id]]
+  tr$state = "active"
+  withr::defer(reactor_cancel(id))
+  for (value in list(-1, NA_real_, NaN, Inf, c(1, 2), "soon")) {
+    expect_error(reactor_retry(id, list(class = "overloaded", retry_after = value)),
+                  class = "gptr_error_invalid_argument")
+  }
+  for (class in c("auth", "spend_cap", "redirect", "retry_after", "timeout_idle",
+                  "timeout_first_byte")) {
+    expect_false(reactor_retry(id, list(class = class, status = 529L)))
+    expect_false(st$classification$retry)
+    expect_identical(st$classification$class[1L], class)
+  }
+})
+
+# Run one transfer and record its retry events and terminal callbacks in order:
+# "retry_start", "retry_end:TRUE" / "retry_end:FALSE", "done", "fail". `on_bytes(st, x)` and
+# `on_retry(st, type, info)` may act on the transfer (`st$id`); a hook that cancels it sets
+# `st$settled` so the pump returns.
+retry_trace = function(spec, retry = list(), on_bytes = NULL, on_retry = NULL, timeout = 20,
+                       .env = parent.frame()) {
+  st = new.env()
+  st$trace = character()
+  st$fail = NULL
+  st$settled = FALSE
+  retry$on_retry = function(type, info) {
+    note = if (identical(type, "retry_end")) paste0("retry_end:", info$ok) else type
+    st$trace = c(st$trace, note)
+    if (!is.null(on_retry)) on_retry(st, type, info)
+  }
+  st$id = reactor_http(spec, on_bytes = function(x) if (!is.null(on_bytes)) on_bytes(st, x),
+                       on_done = function(status, headers) {
+                         st$trace = c(st$trace, "done")
+                         st$settled = TRUE
+                       },
+                       on_fail = function(cnd) {
+                         st$trace = c(st$trace, "fail")
+                         st$fail = cnd
+                         st$settled = TRUE
+                       },
+                       retry = retry)
+  withr::defer(reactor_cancel(st$id), envir = .env)
+  st$pumped = reactor_pump(until = function() st$settled, timeout = timeout)
+  # nothing may arrive after the outcome (a cancelled transfer stays silent)
+  reactor_pump(timeout = 0.2)
+  st
+}
+
+test_that("one retry_end closes a retry, also when the re-sent attempt fails after its head", {
+  ok = local_mock_server("status", status = 503L, succeed_after = 1L)
+  st = retry_trace(retry_spec(ok))
+  expect_identical(st$trace, c("retry_start", "retry_end:TRUE", "done"))
+  # the default commitment: a 2xx byte reached on_bytes; the failure comes after the head
+  expected = c(stream = "gptr_error_overloaded", callback = "gptr_error_internal")
+  for (how in names(expected)) {
+    srv = local_mock_server("status", status = 503L, succeed_after = 1L)
+    on_bytes = function(st, x) {
+      if (!is.null(st$seen)) return(NULL)
+      st$seen = TRUE
+      if (identical(how, "stream")) {
+        reactor_retry(st$id, list(class = "overloaded", status = 529L))
+      } else {
+        stop("the normaliser failed")
+      }
+    }
+    st = retry_trace(retry_spec(srv), on_bytes = on_bytes)
+    expect_identical(st$trace, c("retry_start", "retry_end:TRUE", "fail"), label = how)
+    expect_s3_class(st$fail, expected[[how]])
+    expect_identical(nrow(srv$log()), 2L)
+  }
+})
+
+test_that("a failed re-send closes the retry before on_fail; cancelling from retry_end stops it", {
+  always = local_mock_server("status", status = 503L)
+  hold = local_mock_server("hold_headers")
+  real = http_handle
+  mode = new.env()
+  mode$path = "exhausted"
+  mode$calls = 0L
+  # the re-send (second handle) cannot start, or goes to a server that never answers
+  local_mocked_bindings(http_handle = function(spec) {
+    mode$calls = mode$calls + 1L
+    if (mode$calls >= 2L && identical(mode$path, "start")) {
+      gptr_abort("The request could not be prepared.", "internal", detail = "test")
+    }
+    if (mode$calls >= 2L && identical(mode$path, "first_byte")) {
+      spec$url = paste0(hold$url, "/v1/messages")
+    }
+    real(spec)
+  })
+  r = reactor_get()
+  before = reactor_ids(r$timers)
+  withr::defer(reactor_cancel(setdiff(reactor_ids(r$timers), before)))
+  cancel_at_end = function(st, type, info) {
+    if (identical(type, "retry_end")) {
+      st$cancelled = reactor_cancel(st$id)
+      st$settled = TRUE
+    }
+  }
+  expected = c(exhausted = "gptr_error_overloaded", start = "gptr_error_internal",
+               first_byte = "gptr_error_timeout_first_byte")
+  for (path in names(expected)) {
+    for (cancel in c(FALSE, TRUE)) {
+      mode$path = path
+      mode$calls = 0L
+      label = paste(path, if (cancel) "cancelled" else "failed")
+      st = retry_trace(retry_spec(always, first_byte_timeout = 1),
+                       retry = list(max_attempts = 2L),
+                       on_retry = if (cancel) cancel_at_end)
+      if (cancel) {
+        expect_identical(st$trace, c("retry_start", "retry_end:FALSE"), label = label)
+        expect_identical(st$cancelled, 1L, label = label)
+        expect_null(st$fail)
+      } else {
+        expect_identical(st$trace, c("retry_start", "retry_end:FALSE", "fail"), label = label)
+        expect_s3_class(st$fail, expected[[path]])
+      }
+      expect_false(exists(st$id, envir = r$transfers, inherits = FALSE))
+    }
+  }
+  expect_length(setdiff(reactor_ids(r$timers), before), 0L)
+})
+
+test_that("stream retry hints keep their class, the integer status and the server's request id", {
+  srv = local_mock_server("stream", n = 3L, interval = 0.05)
+  cases = list(
+    list(info = list(class = "overloaded", status = 529, retry_after = 3600), committed = FALSE,
+         class = c("gptr_error_retry_after", "gptr_error_provider")),
+    list(info = list(class = "overloaded", status = 529), committed = TRUE,
+         class = c("gptr_error_overloaded", "gptr_error_provider")),
+    list(info = list(class = "timeout_idle", status = 529), committed = FALSE,
+         class = c("gptr_error_timeout_idle", "gptr_error_timeout"))
+  )
+  fails = list()
+  for (i in seq_along(cases)) {
+    case = cases[[i]]
+    on_bytes = function(st, x) {
+      if (is.null(st$asked)) st$asked = reactor_retry(st$id, case$info)
+    }
+    st = retry_trace(retry_spec(srv, idle_timeout = 7),
+                     retry = list(committed = function() case$committed), on_bytes = on_bytes)
+    expect_false(st$asked)
+    expect_identical(st$trace, "fail")
+    for (cl in case$class) expect_s3_class(st$fail, cl)
+    expect_identical(st$fail$status, 529L)
+    # the request id comes from the server's 2xx head, not from the client's label
+    expect_identical(st$fail$request_id, paste0("req_mock_", i))
+    fails[[i]] = st$fail
+  }
+  expect_identical(nrow(srv$log()), length(cases))
+  # a retryable hint above gptr.max_retry_delay: no retry; class retry_after names the delay
+  expect_identical(fails[[1L]]$retry_after, 3600)
+  expect_identical(fails[[1L]]$error_type, "retry_after")
+  expect_match(conditionMessage(fails[[1L]]), "wait 3600 s")
+  # a stream timeout belongs to the timeout family, with the transfer's idle timeout
+  expect_false(inherits(fails[[3L]], "gptr_error_provider"))
+  expect_identical(fails[[3L]]$seconds, 7)
+})
+
+test_that("a stale callback of an abandoned attempt cannot retry the newer attempt", {
+  srv = local_mock_server("stream", n = 3L, interval = 0.05)
+  on_bytes = function(st, x) {
+    if (!is.null(st$first)) return(NULL)
+    st$first = reactor_retry(st$id, list(class = "overloaded", status = 529L, retry_after = 0))
+    # a nested pump lets the second attempt start while this old chunk is still delivered
+    reactor_pump(until = function() {
+      tr = reactor_get()$transfers[[st$id]]
+      !is.null(tr) && identical(tr$attempt, 2L) && identical(tr$state, "active")
+    }, timeout = 5)
+    # the next event of the old chunk asks for a retry again
+    st$stale = reactor_retry(st$id, list(class = "overloaded", status = 529L, retry_after = 0))
+  }
+  st = retry_trace(retry_spec(srv), retry = list(committed = function() FALSE),
+                   on_bytes = on_bytes)
+  expect_true(st$first)
+  expect_false(st$stale)
+  expect_identical(st$trace, c("retry_start", "retry_end:TRUE", "done"))
+  expect_identical(nrow(srv$log()), 2L)
+})
+
+test_that("reactor_retry() reports no re-send when retry_start cancelled the transfer", {
+  srv = local_mock_server("stream", n = 3L, interval = 0.05)
+  r = reactor_get()
+  before = reactor_ids(r$timers)
+  withr::defer(reactor_cancel(setdiff(reactor_ids(r$timers), before)))
+  cancel_at_start = function(st, type, info) {
+    if (identical(type, "retry_start")) {
+      st$cancelled = reactor_cancel(st$id)
+      st$settled = TRUE
+    }
+  }
+  on_bytes = function(st, x) {
+    if (is.null(st$asked)) {
+      st$asked = reactor_retry(st$id, list(class = "overloaded", status = 529L))
+    }
+  }
+  st = retry_trace(retry_spec(srv), retry = list(committed = function() FALSE),
+                   on_bytes = on_bytes, on_retry = cancel_at_start)
+  expect_false(st$asked)
+  expect_identical(st$cancelled, 1L)
+  expect_identical(st$trace, "retry_start")
+  expect_false(exists(st$id, envir = r$transfers, inherits = FALSE))
+  expect_length(setdiff(reactor_ids(r$timers), before), 0L)
+})

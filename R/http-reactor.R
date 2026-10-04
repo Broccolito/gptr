@@ -778,8 +778,10 @@ wire_log = function(tr, event, status = NULL) {
 #' `list(max_attempts = gptr.max_attempts, committed = function()
 #' lgl(1), on_retry = NULL)`; `on_retry(type, info)` receives `"retry_start"` (`info`:
 #' `attempt`, `delay`, `class`) and `"retry_end"` (`info`: `attempt`, `ok`), which P05 forwards
-#' to `emit` as the `retry_start`/`retry_end` events. Without `committed`, a transfer counts as
-#' committed once a 2xx body byte reached `on_bytes`.
+#' to `emit` as the `retry_start`/`retry_end` events. Exactly one `retry_end` closes each retry
+#' (one or more `retry_start`): `ok = TRUE` at the next 2xx head, else `ok = FALSE` just before
+#' `on_fail`; a transfer cancelled while its retry is open gets no `retry_end`. Without
+#' `committed`, a transfer counts as committed once a 2xx body byte reached `on_bytes`.
 #' @return the transfer id
 #' @noRd
 reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL,
@@ -869,6 +871,8 @@ reactor_admit = function(r) {
 reactor_start = function(r, tr) {
   tr$attempt = tr$attempt + 1L
   tr$state = "active"
+  tr$head_pending = FALSE
+  tr$bytes = 0
   tr$t_start = reactor_now()
   tr$t_first = NA_real_
   tr$t_last = tr$t_start
@@ -876,12 +880,11 @@ reactor_start = function(r, tr) {
   tr$headers = list()
   tr$ok = FALSE
   tr$err_body = list()
+  tr$handle = NULL
   h = tryCatch(http_handle(tr$spec), error = function(e) e)
   if (inherits(h, "error")) {
-    tr$state = "failed"
-    reactor_forget(r, tr)
-    wire_log(tr, "error")
-    reactor_call("on_fail", tr$on_fail, h)
+    # a re-send that cannot start still closes its retry (retry_end, ok = FALSE)
+    reactor_fail_deliver(r, tr, h)
     return(invisible(NULL))
   }
   tr$handle = h
@@ -934,17 +937,24 @@ reactor_deliver = function(r) {
 }
 
 #' Deliver one transfer's queued events in order
+#'
+#' `cb_attempt` names the attempt whose event is being delivered, so reactor_retry() can tell
+#' a callback of an abandoned attempt (still running after a nested pump started the next
+#' attempt) from one of the current attempt.
 #' @noRd
 reactor_deliver_one = function(r, tr) {
   tr$busy = TRUE
   on.exit({
     tr$busy = FALSE
+    tr$cb_attempt = NULL
   }, add = TRUE)
+  tr$cb_attempt = tr$attempt
   reactor_head_notify(r, tr)
   while (length(tr$inbox)) {
     ev = tr$inbox[[1L]]
     tr$inbox = tr$inbox[-1L]
     if (!identical(tr$attempt, ev$k)) next
+    tr$cb_attempt = ev$k
     switch(ev$type,
            data = reactor_on_data(r, tr, ev$value),
            done = reactor_on_done(r, tr, ev$value),
@@ -976,14 +986,13 @@ reactor_head = function(r, tr) {
 #' @noRd
 reactor_head_notify = function(r, tr) {
   if (!isTRUE(tr$head_pending)) return(invisible(NULL))
+  k = tr$attempt
   tr$head_pending = FALSE
-  if (tr$attempt > 1L && !is.null(tr$retry$on_retry)) {
-    reactor_call("on_retry", tr$retry$on_retry, "retry_end",
-                 list(attempt = tr$attempt, ok = TRUE))
-  }
+  # a 2xx head closes an open retry; retry_end may cancel the transfer
+  if (!reactor_retry_end(r, tr, TRUE)) return(invisible(NULL))
   if (!is.null(tr$on_headers)) {
     res = reactor_call("on_headers", tr$on_headers, tr$status, tr$headers)
-    if (inherits(res, "error") && identical(tr$state, "active")) {
+    if (inherits(res, "error") && reactor_attempt_owned(r, tr, k)) {
       cnd = transport_error(paste0("A headers callback failed: ", conditionMessage(res)),
                             "internal", detail = conditionMessage(res))
       reactor_abandon(r, tr, cnd)
@@ -996,17 +1005,18 @@ reactor_head_notify = function(r, tr) {
 #' @noRd
 reactor_on_data = function(r, tr, x) {
   if (!identical(tr$state, "active")) return(invisible(NULL))
+  k = tr$attempt
   reactor_head(r, tr)
   reactor_head_notify(r, tr)
   # on_headers may have cancelled or retried the transfer
-  if (!identical(tr$state, "active")) return(invisible(NULL))
+  if (!reactor_attempt_owned(r, tr, k)) return(invisible(NULL))
   tr$t_last = reactor_now()
   if (!length(x)) return(invisible(NULL))
   tr$bytes = tr$bytes + length(x)
   if (isTRUE(tr$ok)) {
     tr$delivered = TRUE
     res = reactor_call("on_bytes", tr$on_bytes, x)
-    if (inherits(res, "error") && identical(tr$state, "active")) {
+    if (inherits(res, "error") && reactor_attempt_owned(r, tr, k)) {
       cnd = transport_error(paste0("A stream callback failed: ", conditionMessage(res)),
                             "internal", detail = conditionMessage(res))
       reactor_abandon(r, tr, cnd)
@@ -1021,9 +1031,10 @@ reactor_on_data = function(r, tr, x) {
 #' @noRd
 reactor_on_done = function(r, tr, res) {
   if (!identical(tr$state, "active")) return(invisible(NULL))
+  k = tr$attempt
   reactor_head(r, tr)
   reactor_head_notify(r, tr)
-  if (!identical(tr$state, "active")) return(invisible(NULL))
+  if (!reactor_attempt_owned(r, tr, k)) return(invisible(NULL))
   status = as.integer(res$status_code)
   headers = tryCatch(curl::parse_headers_list(res$headers), error = function(e) list())
   if (!is.na(status) && status >= 200L && status < 300L) {
@@ -1074,23 +1085,87 @@ reactor_check_transfers = function(r) {
 #' Stop the active attempt and fail the transfer without retrying
 #' @noRd
 reactor_abandon = function(r, tr, cnd) {
-  tr$state = "failed"
   reactor_curl_cancel(r, tr$handle)
-  reactor_forget(r, tr)
-  wire_log(tr, "error", tr$status)
-  if (tr$attempt > 1L && !is.null(tr$retry$on_retry)) {
-    reactor_call("on_retry", tr$retry$on_retry, "retry_end",
-                 list(attempt = tr$attempt, ok = FALSE))
-  }
-  reactor_call("on_fail", tr$on_fail, cnd)
+  reactor_fail_deliver(r, tr, cnd, tr$status)
   invisible(NULL)
 }
 
-#' Fail a transfer after a classified failure
+#' Deliver a terminal failure: `retry_end` (ok = FALSE) for an open retry, then on_fail
+#'
+#' The caller has already stopped the attempt. While `retry_end` runs, the transfer stays
+#' registered in the state "failing" (neither active nor finished, still cancellable), so a
+#' reactor_cancel() from that callback suppresses on_fail as for any cancelled transfer.
+#' @return invisible(lgl(1)) TRUE when on_fail was called
+#' @noRd
+reactor_fail_deliver = function(r, tr, cnd, status = NA_integer_) {
+  tr$handle = NULL
+  tr$state = "failing"
+  if (!reactor_retry_end(r, tr, FALSE)) return(invisible(FALSE))
+  tr$state = "failed"
+  reactor_forget(r, tr)
+  wire_log(tr, "error", status)
+  reactor_call("on_fail", tr$on_fail, cnd)
+  invisible(TRUE)
+}
+
+#' Close an open retry with exactly one `on_retry("retry_end", ...)`
+#'
+#' `retry_open` is set by the `retry_start` of a scheduled re-send and cleared here, so every
+#' retry is closed once: `ok = TRUE` at the next 2xx head, `ok = FALSE` when the transfer fails
+#' (also when a later failure follows that head, which sends no second `retry_end`).
+#' @return lgl(1) FALSE when the callback cancelled the transfer or replaced the attempt
+#' @noRd
+reactor_retry_end = function(r, tr, ok) {
+  if (!isTRUE(tr$retry_open)) return(TRUE)
+  tr$retry_open = FALSE
+  if (is.null(tr$retry$on_retry)) return(TRUE)
+  state = tr$state
+  k = tr$attempt
+  reactor_call("on_retry", tr$retry$on_retry, "retry_end", list(attempt = k, ok = ok))
+  identical(r$transfers[[tr$id]], tr) && identical(tr$state, state) && identical(tr$attempt, k)
+}
+
+#' Retry or fail a transfer after a classified failure without blocking the reactor
 #' @return lgl(1) TRUE when a re-send was scheduled
 #' @noRd
 reactor_failure = function(r, tr, cl, status = NA_integer_, headers = list()) {
-  reactor_fail_final(r, tr, cl, status, headers)
+  k = tr$attempt
+  if (!reactor_attempt_owned(r, tr, k)) return(FALSE)
+  committed = !identical(tryCatch(tr$retry$committed(), error = function(e) TRUE), FALSE)
+  if (!reactor_attempt_owned(r, tr, k)) return(FALSE)
+  if (!isTRUE(cl$retry) || committed || tr$attempt >= tr$retry$max_attempts) {
+    return(reactor_fail_final(r, tr, cl, status, headers))
+  }
+  delay = cl$delay %||% retry_backoff(tr$attempt)
+  if (identical(tr$state, "active")) reactor_curl_cancel(r, tr$handle)
+  tr$state = "waiting"
+  tr$handle = NULL
+  tr$inbox = list()
+  tr$head_pending = FALSE
+  wire_log(tr, "retry", status)
+  # Install the timer before user callbacks so cancellation and shutdown can remove it.
+  tr$timer = reactor_timer(ratelimit_deadline(reactor_now(), delay), function() {
+    if (identical(r$transfers[[tr$id]], tr) && identical(tr$state, "waiting") &&
+        identical(tr$attempt, k)) {
+      tr$state = "queued"
+      r$queue = c(r$queue, tr$id)
+    }
+  }, run = tr$run)
+  # the retry stays open until exactly one retry_end closes it (reactor_retry_end())
+  tr$retry_open = TRUE
+  if (!is.null(tr$retry$on_retry)) {
+    reactor_call("on_retry", tr$retry$on_retry, "retry_start",
+                 list(attempt = k, delay = delay, class = cl$class[1L]))
+  }
+  # retry_start may have cancelled the transfer: then nothing will be re-sent
+  identical(r$transfers[[tr$id]], tr) && tr$state %in% c("waiting", "queued", "active")
+}
+
+#' Whether a callback still owns the same live attempt after calling user code
+#' @noRd
+reactor_attempt_owned = function(r, tr, k) {
+  identical(r$transfers[[tr$id]], tr) && identical(tr$state, "active") &&
+    identical(tr$attempt, k)
 }
 
 #' The terminal failure: the classed condition with the fields of contract 2.2, to on_fail
@@ -1098,8 +1173,8 @@ reactor_failure = function(r, tr, cl, status = NA_integer_, headers = list()) {
 #' @noRd
 reactor_fail_final = function(r, tr, cl, status = NA_integer_, headers = list()) {
   if (identical(tr$state, "active")) reactor_curl_cancel(r, tr$handle)
-  tr$state = "failed"
-  reactor_forget(r, tr)
+  tr$handle = NULL
+  tr$state = "failing"
   h = retry_headers(headers)
   rid = retry_header(h, "request-id") %||% retry_header(h, "x-request-id") %||% tr$request_id
   fields = list(provider = tr$provider,
@@ -1111,18 +1186,13 @@ reactor_fail_final = function(r, tr, cl, status = NA_integer_, headers = list())
     loc = retry_header(h, "location")
     fields$location_origin = if (is.null(loc)) NA_character_ else url_origin(loc)
   }
-  if (cl$class[1L] %in% c("timeout_idle", "timeout_connect")) {
-    idle = identical(cl$class[1L], "timeout_idle")
-    fields$seconds = if (idle) tr$timeouts$idle else tr$timeouts$connect
-    fields$what = if (idle) "idle stream" else "connect"
+  if (cl$class[1L] %in% c("timeout_idle", "timeout_connect", "timeout_first_byte")) {
+    what = sub("^timeout_", "", cl$class[1L])
+    fields$seconds = tr$timeouts[[what]]
+    fields$what = c(idle = "idle stream", connect = "connect", first_byte = "first byte")[[what]]
   }
   cnd = transport_error(cl$message, cl$class, .data = fields)
-  wire_log(tr, "error", status)
-  if (tr$attempt > 1L && !is.null(tr$retry$on_retry)) {
-    reactor_call("on_retry", tr$retry$on_retry, "retry_end",
-                 list(attempt = tr$attempt, ok = FALSE))
-  }
-  reactor_call("on_fail", tr$on_fail, cnd)
+  reactor_fail_deliver(r, tr, cnd, status)
   FALSE
 }
 
@@ -1171,4 +1241,55 @@ reactor_multi_run = function(r) {
 reactor_curl_cancel = function(r, h) {
   if (!is.null(h)) try(curl::multi_cancel(h), silent = TRUE)
   invisible(NULL)
+}
+
+#' Retry the current attempt after a retryable failure seen inside the stream
+#'
+#' The transport side of `opts$retry(info)` (contract 8.1): a normaliser calls it for, for
+#' example, an `overloaded_error` SSE event before the first delta. `info = list(class,
+#' status, retry_after)`. The transfer is re-sent only when the hint is retryable (by class or
+#' status), nothing was committed and attempts remain; otherwise `on_fail(cnd)` runs with the
+#' classed condition (`timeout_*` classes under `gptr_error_timeout`, others under
+#' `gptr_error_provider`). A call from a callback of an abandoned attempt does nothing.
+#' @param id the transfer id returned by reactor_http().
+#' @return invisible(lgl(1)) TRUE when a re-send was scheduled
+#' @noRd
+reactor_retry = function(id, info) {
+  check_string(id, "id")
+  r = reactor_get()
+  tr = r$transfers[[id]]
+  if (is.null(tr) || !identical(tr$state, "active")) return(invisible(FALSE))
+  # a callback of an abandoned attempt (a nested pump started the next one) is stale
+  if (!is.null(tr$cb_attempt) && !identical(tr$cb_attempt, tr$attempt)) {
+    return(invisible(FALSE))
+  }
+  check_list(info, "info", named = TRUE)
+  ra = info[["retry_after"]]
+  check_number(ra, "info$retry_after", min = 0, max = .Machine$double.xmax, null = TRUE)
+  max_delay = gptr_opt("max_retry_delay") %||% 60
+  check_number(max_delay, "gptr.max_retry_delay", min = 0, max = .Machine$double.xmax)
+  classes = info[["class"]] %||% "overloaded"
+  check_strings(classes, "info$class")
+  if (!length(classes) || any(!nzchar(classes))) {
+    arg_abort(classes, "info$class", "a nonempty vector of nonempty class names")
+  }
+  status = check_number(info[["status"]], "info$status", min = 100, max = 599, int = TRUE,
+                        null = TRUE)
+  status = status %||% tr$status %||% NA_integer_
+  # contract 2.2: timeout_* classes have the parent timeout, every other one provider
+  parent = if (grepl("^timeout(_|$)", classes[1L])) "timeout" else "provider"
+  cls = unique(c(classes, parent))
+  denied = c("auth", "spend_cap", "redirect", "retry_after", "timeout_idle", "timeout_first_byte")
+  retryable = !any(classes %in% denied) &&
+    (any(classes %in% c("overloaded", "rate_limit", "network", "timeout_connect")) ||
+       status %in% c(408L, 409L, 429L, 500:599))
+  cl = if (retryable && !is.null(ra) && ra > max_delay) {
+    list(retry = FALSE, delay = NULL, class = c("retry_after", "provider"), retry_after = ra,
+         message = paste0("stream error ", cls[1L], "; the server asked to wait ", ra, " s"))
+  } else {
+    list(retry = retryable, delay = ra, class = cls, retry_after = ra,
+         message = paste0("stream error: ", cls[1L]))
+  }
+  # the attempt's 2xx head supplies the request id of the condition
+  invisible(reactor_failure(r, tr, cl, status = status, headers = tr$headers))
 }
