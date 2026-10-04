@@ -643,3 +643,76 @@ cost is unknown.
 
 Validation: `progress/P06.md`, Task 4 (`test-session-budget.R`, `test-session-object.R`; the added
 tests failed 8 assertions against the plan-literal code).
+
+## D-025 - IC-74 budgets compare the known usage; an unknown cost cannot reach a budget (2026-10-04)
+
+P06 Task 5's literal `run_used()`, `budget_check()` and `budget_near()` predate IC-74
+(07-local-ollama.md section 5: "Missing usage remains unknown"). Since D-015, D-021 and D-022 a
+request of an unpriced model has cost `NA`, and a reported usage can carry an unknown column (for
+example the cache read). The plan summed each row with `+` and `sum()`, so one unknown value made
+the run's total `NA`, and `if (... used$cost >= lim$cost)` then stopped the engine with base R's
+unclassed "missing value where TRUE/FALSE needed" before every later request of the call. The
+behaviour now, which Task 10 (`run_request()`, `run_response()`, `run_budget_extend()`,
+`run_stop_budget()`), P19's shared pools and P20's `--max-budget-usd` consume:
+
+1. **Budgets compare the known part of the usage.** `run_used(run)` sums each token column and
+   the cost on its own with `na.rm = TRUE`. An unknown value adds nothing known, so it can never
+   reach a limit, and a row's known input and output still count when its cache read is unknown.
+   `turns` counts every request, known or not. The `used` that `budget_check()` returns and that
+   `budget_near` (and Task 10's `budget_exceeded` and `gptr.budget`) carries is therefore a lower
+   bound when a request's usage is unknown. It is never a claim that the unknown part was zero:
+   the session's own totals stay `NA` (D-021, D-024).
+2. **Consequence: the cost budget cannot be enforced for unpriced requests.** A call on a model
+   without price evidence is still capped by the token budget (default 2,000,000 tokens per
+   top-level call, IC-66), which Task 10 always feeds with known or estimated tokens (D-024 item 2).
+   Treating an unknown cost as reaching the cost budget (fail closed) was considered and rejected:
+   with the default 5 USD budget every unpriced cloud model would stop with status `budget` after
+   its first request, unless the user disabled the cost budget. A maintainer who prefers the
+   fail-closed reading changes only `run_used()`/`budget_check()`.
+3. **`budget_check(s, estimate)` refuses an estimate that is not one nonnegative number**
+   (`gptr_error_invalid_argument`, `arg = "estimate"`) instead of propagating `NA` into the
+   comparison. Task 10 passes `req$tokens_est %||% 0`.
+
+Validation: `progress/P06.md`, Task 5 (`test-session-budget.R`; the three added blocks failed 4
+times against the plan-literal source: three unclassed `if (NA)` errors and an `NA` token total).
+
+## D-026 - P12 conformance: no condition of any kind escapes, http_json goldens are not cases; classifier coverage open (2026-10-04)
+
+P12 Task 3's plan-literal `check_adapter()` (the `check.adapter` service behind `gptr_check()`
+for adapter specs, `R/provider-anthropic.R`) was changed in three ways. P02's `gptr_check()` and
+P24 consume it.
+
+1. **A warning or message from a normaliser fails `adapter.<case>.no_condition`.** 04 section
+   8.1 says "Normalisers never signal R conditions after `start`". The plan's replay caught only
+   errors. A normaliser that warned therefore passed the check, and its warnings reached the
+   caller of `check_adapter()` and `gptr_check()`. The new `adp_check_replay()` muffles warnings
+   and messages during the whole and chunked replays and records the first one as the case's
+   condition, so that case fails `.no_condition` and `.chunk_invariance` and nothing escapes.
+   `adp_replay()` is unchanged.
+2. **`http_json` fixtures exclude the golden files.** The plan selected `\.json$` files, which
+   also match `<case>.events.json`, `<case>.message.json` and `model.json`. For an `http_json`
+   adapter with a stream `parse`, those three were then replayed as extra cases. They are now
+   excluded. No P12 adapter uses `http_json`, so the four built-in results are unchanged.
+3. **Diagnostics and arguments.**
+   - If `build()` fails, the `adapter.tool_choice` row names the error. The plan reported every
+     failure as "a list tool_choice was sent".
+   - The `adapter.replay` row keeps `ok = TRUE` and carries the note "nothing to replay: no
+     stream normaliser (inprocess or classifier adapter)".
+   - `adapter` must be a list and `fixtures` `NULL` or one string, else
+     `gptr_error_invalid_argument`.
+
+**Open point (IC-74, not resolved).** The P12 row of 07-local-ollama.md section 6 says
+"classifier adapters receive conformance coverage". As in the plan (its ambiguity 15), Task 3
+returns only `adapter.replay` for a classifier adapter (`classify` without a stream `parse`). It
+does not replay classifier wire fixtures through
+`classify$parse(model, status, headers, body, questions)` or `run()`, and does not validate the
+canonical `noul`/`choice`/`score` records of 07 section 3. Two things are missing:
+- a classifier fixture layout, which no spec defines;
+- the canonical-answer validator, which P13 owns (`s1_dispatch()`, `R/s1-ollama.R`,
+  `fixtures/jev/`).
+
+The coordinator or maintainer must decide whether that coverage belongs in `check_adapter()` once
+P13 provides these, or in P13's own conformance tests.
+
+Validation: `progress/P12.md`, Task 3. The three added tests failed 7 + 1 + 1 assertions against
+the plan-literal source (269 escaped test warnings in the first run).

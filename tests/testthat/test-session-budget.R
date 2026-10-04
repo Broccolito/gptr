@@ -240,3 +240,142 @@ test_that("format_cost() prints dollars, and an unknown cost as unknown (IC-74)"
   expect_identical(format_cost(NA_real_), "unknown cost")
   expect_identical(format_cost(c(0.25, NA)), "unknown cost")
 })
+
+test_that("the default budget is 2e6 tokens and 5 USD per top-level call; NULL disables (IC-66)", {
+  s = test_session()
+  lim = run_budget_limits(s, list(), NULL)
+  expect_identical(lim$tokens, 2e6)
+  expect_identical(lim$cost, 5)
+  expect_null(lim$turns)
+  lim2 = run_budget_limits(s, list(budget = list(cost = NULL, turns = 3)), NULL)
+  expect_null(lim2$cost)
+  expect_identical(lim2$turns, 3)
+  outer = run_new(s, list(), NULL)
+  expect_identical(run_budget_limits(s, list(budget = list(turns = 1)), outer), list(turns = 1))
+})
+
+test_that("budget_check() is NULL outside a run and names the kind inside one", {
+  s = test_session()
+  expect_null(budget_check(s))
+  test_run(s, list(budget = list(turns = 1, tokens = 1000)))
+  expect_null(budget_check(s))
+  expect_identical(budget_check(s, estimate = 2000)$kind, "tokens")
+  usage_add(s, usage_fixture(session_data(s)$id, "q-turn"))
+  hit = budget_check(s)
+  expect_identical(hit$kind, "turns")
+  expect_identical(hit$used, 1L)
+})
+
+test_that("a child's usage is charged to its root: the root's cost budget stops the child", {
+  root = test_session()
+  test_run(root, list(budget = list(cost = 5)))
+  child = test_session(kind = "child", parent = root)
+  # the child's own limits are far above the cost, so only the root's 5 USD can stop it
+  test_run(child, list(budget = list(cost = 100, tokens = 1e9)))
+  expect_null(budget_check(child))
+  usage_add(child, usage_fixture(session_data(child)$id, "q-costly", cost = 6))
+  hit = budget_check(child)
+  expect_identical(hit$kind, "cost")
+  expect_equal(c(hit$budget, hit$used), c(5, 6))
+})
+
+test_that("children of a root without a run share one budget through opts$root (IC-66)", {
+  team = test_session(kind = "team")
+  tid = session_data(team)$id
+  a = test_session(kind = "child", parent = team)
+  b = test_session(kind = "child", parent = team)
+  ra = test_run(a, list(root = tid, budget = list(tokens = 1000)))
+  rb = test_run(b, list(root = tid, budget = list(tokens = 1000)))
+  # each child keeps only its share; the container holds the one per-call budget
+  expect_identical(ra$budget, list(tokens = 1000))
+  expect_identical(rb$budget_root, ra$budget_root)
+  expect_identical(ra$budget_root$budget$tokens, 1000)
+  expect_identical(ra$budget_root$budget$cost, 5)
+  usage_add(a, usage_fixture(session_data(a)$id, "q-a", input = 590))
+  expect_null(budget_check(a))
+  expect_null(budget_check(b))
+  usage_add(b, usage_fixture(session_data(b)$id, "q-b", input = 590))
+  hit = budget_check(b)
+  expect_identical(hit$kind, "tokens")
+  expect_equal(c(hit$budget, hit$used), c(1000, 1200))
+  expect_identical(budget_check(a)$kind, "tokens")
+  # a root that runs is charged through its own run; no pool is made
+  top = test_session()
+  top_run = test_run(top, list(budget = list(cost = 5)))
+  other = test_session()
+  ro = test_run(other, list(root = session_data(top)$id))
+  expect_null(ro$budget_root)
+  expect_identical(ro$budget, list())
+  expect_true(top_run$id %in% vapply(run_chain(ro), function(r) r$id, ""))
+})
+
+test_that("budget_near is emitted once per kind at 80%", {
+  s = test_session()
+  ev = local_events("budget_near")
+  run = test_run(s, list(budget = list(cost = 1)))
+  usage_add(s, usage_fixture(session_data(s)$id, "q1", cost = 0.85))
+  budget_near(run)
+  budget_near(run)
+  near = ev(s)
+  expect_length(near, 1L)
+  expect_identical(near[[1L]]$kind, "cost")
+  expect_equal(near[[1L]]$used, 0.85)
+})
+
+# ---------------------------------------------------------------- unknown usage in budgets (IC-74)
+
+test_that("an unknown cost neither reaches nor counts toward a cost budget (IC-74, D-025)", {
+  s = test_session()
+  sid = session_data(s)$id
+  ev = local_events("budget_near")
+  run = test_run(s, list(budget = list(cost = 1)))
+  # the provider's price is unknown: the request's cost is NA, never a known zero
+  usage_add(s, usage_fixture(sid, "q-unpriced", cost = NA_real_))
+  expect_identical(s$cost, NA_real_)
+  expect_null(budget_check(s))
+  budget_near(run)
+  expect_length(ev(s), 0L)
+  expect_identical(run_used(run)$cost, 0)
+  # known costs still count, whatever the unknown ones are
+  usage_add(s, usage_fixture(sid, "q-priced", cost = 0.9))
+  budget_near(run)
+  near = ev(s)
+  expect_length(near, 1L)
+  expect_equal(near[[1L]]$used, 0.9)
+  usage_add(s, usage_fixture(sid, "q-more", cost = 0.2))
+  hit = budget_check(s)
+  expect_identical(hit$kind, "cost")
+  expect_equal(c(hit$budget, hit$used), c(1, 1.1))
+})
+
+test_that("a token budget counts the known tokens of a row with an unknown column (IC-74)", {
+  s = test_session()
+  sid = session_data(s)$id
+  run = test_run(s, list(budget = list(tokens = 1000, cost = NULL)))
+  row = usage_fixture(sid, "q-cache", input = 900)
+  row$cache_read = NA_real_
+  usage_add(s, row)
+  used = run_used(run)
+  # input 900 + output 10 are known; the unknown cache read adds nothing known
+  expect_identical(used$tokens, 910)
+  expect_identical(used$turns, 1L)
+  expect_null(budget_check(s))
+  hit = budget_check(s, estimate = 100)
+  expect_identical(hit$kind, "tokens")
+  expect_identical(hit$used, 910)
+  # a request with nothing reported (every token column NA) is one request with no known tokens
+  none = usage_fixture(sid, "q-none")
+  none[usage_token_columns] = NA_real_
+  usage_add(s, none)
+  expect_identical(run_used(run)[c("tokens", "turns")], list(tokens = 910, turns = 2L))
+})
+
+test_that("budget_check() refuses an estimate that is not a nonnegative number", {
+  s = test_session()
+  test_run(s)
+  for (bad in list(NA_real_, -1, "10", c(1, 2), NULL)) {
+    err = expect_error(budget_check(s, estimate = bad), class = "gptr_error_invalid_argument")
+    expect_identical(err$arg, "estimate")
+  }
+  expect_null(budget_check(s, estimate = 0L))
+})

@@ -9,7 +9,9 @@
 #
 # IC-74 (07-local-ollama.md section 5): "Missing usage remains unknown". A token or cost value a
 # row does not carry is NA, never a known zero, and a sum over an unknown value is unknown; a
-# known zero (a zero metered local charge, a reported zero) stays zero.
+# known zero (a zero metered local charge, a reported zero) stays zero. Budgets compare only the
+# known part (run_used(), D-025): an unknown value adds nothing known, so it cannot reach a limit,
+# and the `used` a budget reports is then a lower bound.
 
 usage_columns = c("request_id", "session", "agent", "parent_id", "provider", "model", "route",
                   "input", "output", "cache_read", "cache_write_5m", "cache_write_1h", "reasoning",
@@ -209,5 +211,154 @@ ledger_mark_cached = function(s, request_id, cache_read) {
     return(invisible(NULL))
   }
   d$ledger = led
+  invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------- budgets (IC-66)
+
+#' Budget limits of a new run: the call's budget over the settings default for a root run; for a
+#' nested run, or a child whose run option `root` names another session (IC-66), only the call's
+#' own share (the root's limits still apply through run_chain(): min(share, root remaining))
+#' @noRd
+run_budget_limits = function(s, opts, outer) {
+  own = as.list(opts$budget %||% list())
+  if (!is.null(outer) || !is.null(run_budget_root(s, opts))) return(own)
+  defaults = setting_get("budget", session = s,
+                         default = list(tokens = 2e6, cost = 5, turns = NULL))
+  utils::modifyList(as.list(defaults), own)
+}
+
+#' The live root session named by the run option `root` (04 section 7.6: "the root session id
+#' for budgets, IC-66") when it is another session than `s`, else NULL
+#' @noRd
+run_budget_root = function(s, opts) {
+  rid = opts$root
+  if (!is.character(rid) || length(rid) != 1L || is.na(rid)) return(NULL)
+  if (identical(rid, session_data(s)$id)) return(NULL)
+  session_by_id(rid)
+}
+
+#' The shared budget pool of a root that has no run of its own: the container of a top-level team
+#' or fan-out (P19 passes its id as `opts$root`). Created once, on the root's live record, with
+#' the per-call default merged with the call's budget; it is charged with the root's usage since
+#' its creation (usage_add() rolls every child's rows up to the root). P19 creates one container
+#' per top-level call, so one pool per container is one budget per top-level call (IC-66).
+#' @return An environment with the fields run_chain(), run_used() and budget_near() read (`id`,
+#'   `shell`, `budget`, `usage_start`, `near`), or NULL.
+#' @noRd
+run_budget_pool = function(s, opts) {
+  root = run_budget_root(s, opts)
+  if (is.null(root)) return(NULL)
+  rl = session_live(root)
+  if (is.null(rl) || !is.null(rl$run)) return(NULL)
+  if (is.null(rl$budget_root)) {
+    rd = session_data(root)
+    pool = new.env(parent = emptyenv())
+    pool$id = paste0("root:", rd$id)
+    pool$shell = root
+    pool$budget = run_budget_limits(root, list(budget = opts$budget), NULL)
+    pool$usage_start = nrow(rd$usage)
+    pool$near = character()
+    rl$budget_root = pool
+  }
+  rl$budget_root
+}
+
+#' The runs whose budgets apply to a run: itself, its outer runs, the live runs of its session's
+#' ancestors (children charge the root), and the root named by the run option `root`: its run, or
+#' the shared pool of a root without a run (IC-66)
+#' @noRd
+run_chain = function(run) {
+  out = list()
+  ids = character()
+  add = function(r) {
+    if (!is.null(r) && !(r$id %in% ids)) {
+      out[[length(out) + 1L]] <<- r
+      ids <<- c(ids, r$id)
+    }
+  }
+  r = run
+  while (!is.null(r)) {
+    add(r)
+    r = r$outer
+  }
+  pid = session_data(run$shell)$parent_id
+  while (!is.null(pid)) {
+    p = session_by_id(pid)
+    if (is.null(p)) break
+    pl = session_live(p)
+    if (!is.null(pl$run)) add(pl$run)
+    pid = session_data(p)$parent_id
+  }
+  root = run_budget_root(run$shell, run$opts)
+  if (!is.null(root)) {
+    rl = session_live(root)
+    if (!is.null(rl$run)) add(rl$run)
+  }
+  add(run$budget_root)
+  out
+}
+
+#' Tokens, cost and requests charged to a run's session since the run started (children included)
+#'
+#' The known part of the usage (IC-74, D-025): an unknown (`NA`) token count or cost adds nothing
+#' known, so it can neither reach a budget nor be claimed as zero; each column is summed on its
+#' own, so a row's known input still counts when its cache read is unknown. `tokens` and `cost`
+#' are therefore lower bounds when a row is unknown; `turns` counts every request.
+#' @noRd
+run_used = function(run) {
+  u = session_data(run$shell)$usage
+  u = u[seq_len(nrow(u)) > run$usage_start, , drop = FALSE]
+  u = u[!duplicated(u$request_id), , drop = FALSE]
+  known = function(col) sum(u[[col]], na.rm = TRUE)
+  cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
+  list(tokens = sum(vapply(cols, known, numeric(1L))), cost = known("cost"), turns = nrow(u))
+}
+
+#' Check the budgets that apply to a session's current run
+#'
+#' Budgets compare the known usage of run_used() (IC-74, D-025): a request whose cost is unknown
+#' (an unpriced model) cannot reach the cost budget, and the token budget still applies to it.
+#' @param estimate Estimated input tokens of the next request (a nonnegative number).
+#' @return `NULL` or `list(kind, budget, used)`.
+#' @noRd
+budget_check = function(s, estimate = 0) {
+  check_number(estimate, "estimate", min = 0)
+  live = session_live(s)
+  run = if (is.null(live)) NULL else live$run
+  if (is.null(run)) return(NULL)
+  for (r in run_chain(run)) {
+    lim = r$budget
+    if (!length(lim)) next
+    used = run_used(r)
+    if (!is.null(lim$tokens) && used$tokens + estimate > lim$tokens) {
+      return(list(kind = "tokens", budget = lim$tokens, used = used$tokens))
+    }
+    if (!is.null(lim$cost) && used$cost >= lim$cost) {
+      return(list(kind = "cost", budget = lim$cost, used = used$cost))
+    }
+    if (!is.null(lim$turns) && used$turns >= lim$turns) {
+      return(list(kind = "turns", budget = lim$turns, used = used$turns))
+    }
+  }
+  NULL
+}
+
+#' Emit `budget_near` once per kind when a budget that applies to the run passes 80%
+#' @noRd
+budget_near = function(run) {
+  for (r in run_chain(run)) {
+    lim = r$budget
+    if (!length(lim)) next
+    used = run_used(r)
+    for (kind in intersect(names(lim), c("tokens", "cost", "turns"))) {
+      b = lim[[kind]]
+      if (is.null(b) || kind %in% r$near) next
+      if (used[[kind]] >= 0.8 * b) {
+        r$near = c(r$near, kind)
+        run_emit(run, "budget_near", kind = kind, budget = b, used = used[[kind]])
+      }
+    }
+  }
   invisible(NULL)
 }

@@ -104,6 +104,15 @@ test_session = function(mode = "auto", home = new.env(), model = "fake/fake-1", 
   session_new(model, mode, home = home, ...)
 }
 
+#' A run record attached to a session without starting it (unit tests of gates and budgets)
+test_run = function(s, opts = list(), .env = parent.frame()) {
+  run = run_new(s, opts, NULL)
+  live = session_live(s)
+  live$run = run
+  withr::defer(assign("run", NULL, envir = live), envir = .env)
+  run
+}
+
 #' A stored session with one prompt turn, a tool round trip and unicode text, built by appends
 written_session = function(.env = parent.frame()) {
   local_store(.env = .env)
@@ -141,8 +150,8 @@ answered_session = function(text = "The data has 32 rows.") {
   s
 }
 
-# test_run() (needs run_new(), P06 Task 5) and run_text() (needs session_run(), P06 Task 10)
-# are restored from the Task 1 plan by their first dependent tasks, once those functions exist.
+# run_text() (needs session_run(), P06 Task 10) is restored from the Task 1 plan by Task 10, once
+# session_run() exists.
 roles = function(s) vapply(s$messages, function(m) m$role, "")
 tool_results = function(s) Filter(function(m) identical(m$role, "tool_result"), s$messages)
 req_roles = function(req) vapply(req$messages, function(m) m$role, "")
