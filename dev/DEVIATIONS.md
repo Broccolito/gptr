@@ -327,3 +327,118 @@ P13 and P05 Task 11 consume:
    literal referenced their functions before they existed).
 
 Validation: `progress/P05.md`, Task 10 (`test-provider-registry.R`).
+
+## D-018 - process_jsonl turns the glue ends drop their child; send only to the open turn (2026-10-03)
+
+P05 Task 11's literal `process_jsonl` driver killed the session's child only on an abort or
+when a new `start` replaced it. Behaviours P06 and P20 consume:
+
+1. **A turn the glue ends itself forgets and kills its child.** Besides an abort, a local
+   failure (an adapter normaliser error, a retry hint, which `process_jsonl` cannot re-send, a
+   write failing after the spawn) and a run that settled while the turn was open end the turn
+   and kill the child after forgetting it (`opts$state$process = NULL`). Its late lines and exit
+   reach no turn, and the session's next turn must start a new child: a P20 adapter returns
+   `start` when `opts$state$process` is NULL (and resumes its CLI session itself if it wants the
+   context back). A turn the normaliser ends (`done`/`error` event) or the child's exit ends
+   keeps a living child for the next turn.
+   Every child the glue lets go of (these turns, a child a new `start` replaces, the job row's
+   `stop()`) is stopped by `stream_process_kill(p, watch, job)` (Task 11 review, round 2): P04's
+   `reactor_cancel()` of the child's watcher (the watcher goes, pending stdin is dropped, then
+   `kill_all()`), and the job row is removed at once, because P04 reports no exit for a
+   cancelled watcher. A child without a watcher is killed directly. `kill_all()` must never run
+   under a living watcher: processx 3.9.0's `$kill()`/`$kill_tree()` close the child's pipes
+   (`close_connections = TRUE`), so P04's line reader never reaches end of stream, the exit is
+   never reported (no `on_exit`, so the `cli` job row stays `running`) and the closed pipes are
+   polled in every later pump iteration (a full CPU core, measured by the reviewer). The job
+   row's `stop()` (`gptr_jobs(kill = TRUE)`, unload) also reports the exit to the turn that last
+   used the child from the next pump iteration (`reactor_timer()`), as P04 would have: an open
+   turn ends through the normaliser's `finish()`.
+   **For P20:** the planned `pcli_stop_child()` (P20 Task 9) forgets the child and then calls
+   `kill_all(p, grace = 1)` directly, which hits the same leak while P05's watcher is
+   registered. It should end with `stream_process_kill(p, state$watch, state$job)` instead (after
+   its interrupt and `write_close()`), or stop through the row (`jobs_env()$table[[state$job]]`).
+2. **`opts$send()` writes only to the open turn's own child.** A finished turn's `send()` writes
+   nothing, so an asynchronous control response (a `control_request` answered after an abort)
+   never reaches another child of the session.
+3. **inprocess** streams also let go of a settled run without `done` (as `stream_watch()`,
+   INFRA-15), and malformed generator steps end the stream with one `error` event.
+4. **A process turn does not depend on its watch task** (Task 11 review, round 1).
+   `provider_stream()` returns the watch task id for `process_jsonl` (04 section 8.4 step 5),
+   and P06's `run_abort()` and `run_settle()` cancel it (P04: removed without callbacks), so the
+   watch never sees that abort or settled run. Each line and the exit of the turn's child first
+   apply the watch's rule (`stream_over()`: an aborted turn ends as `aborted`, a settled run's
+   turn is let go without `done`), so the line never reaches the normaliser (no `gate` or
+   `mcp_dispatch` call for an ended run), and both drop the child. A turn still open when the
+   session's next turn starts (its child silent since the cancel) is let go and its child
+   dropped before `build()`, so `build()` sees no child and returns `start`. P05 owns the
+   `opts$state` fields `process`, `job`, `watch` (the child's P04 watcher id), `route`,
+   `route_exit` and `stream_turn`.
+   For P20: its `agent_end` hook (`pcli_stop_child()`, P20 Task 9) writes the interrupt and
+   pumps until the acknowledgement or the child's death. The first line the child sends after
+   the run settled now ends the turn and stops the child (`stream_process_kill()`: P04's
+   `reactor_cancel()` of the watcher, then `kill_all()`: interrupt, grace, kill), so the wait
+   ends at the child's death and the acknowledgement line is not pushed to the ended turn's
+   normaliser. P04 reports no exit for that child, so the wait must test the child itself
+   (`state$process` or `p$is_alive()`), not wait for an exit report. The rest of P20's design
+   holds: `state$process` is NULL afterwards and the next turn starts a child.
+
+Validation: `progress/P05.md`, Task 11 (`test-provider-registry.R`).
+
+## D-019 - Windows processes: CRLF output, asynchronous kills, blocking child stdin (2026-10-03)
+
+Hosted Windows release runs on `55ec31d` and `8e8d8e0` exposed eight process-engine failures,
+and the `8e8d8e0` run hung in "checking tests" for 68 minutes (the job of run 37170545611 on
+`a2ba302`, which had no time limit, was still running after two hours). CI Task CI-2 changes
+the following; contract 7.4 and IC-60 are otherwise unchanged.
+
+1. **CRLF child output.** R's stdout is a text-mode stream on Windows, so an R child's `"\n"`
+   reaches the pipe as CRLF and an explicit `"\r\n"` as `"\r\r\n"`. `line_reader()` already strips
+   one trailing CR (unchanged). `proc_run()` returns stdout and stderr as the child wrote them,
+   CRLF included, as P22's `bridge_decode()` expects, so the byte-exact and code-page tests
+   expect the platform's line end. The plan's fixtures that wrote an explicit CRLF (the
+   `line_reader()` test and the reactor's byte-exact pipe test) write a bare LF on Windows, so
+   one CRLF reaches the pipe on every OS. The `line_reader()` fixture also writes bytes instead
+   of escapes: on macOS its `-e` expression `cat('a\\r\\nb\\nc')` wrote `"a\nb\nc"` (measured),
+   so it had never tested CRLF there. New behaviour: `proc_run(echo = TRUE)` shows a CRLF line
+   end as LF before redaction, so a registered multi-line value is redacted in a Windows child's
+   output (hosted: `FAKEfirstLine\r\nFAKEsecondLine` was echoed unredacted). So that a value
+   which itself holds CRLF still matches a child that writes it verbatim (review round 1: it
+   leaked after the echo change), `secret_variants()` adds one derived form, the value with
+   CRLF turned into LF, to the forms of architecture 6.5 (URL-encoded, JSON-escaped, base64
+   cores). It only adds redaction; a value without CRLF has the same forms as before. The LF
+   form is kept whenever the value itself is long enough to be redacted
+   (`gptr.redact_min_chars`), not filtered by its own shorter length (review round 2: an
+   8-character `"Ab3\r\nXy9"` lost its 7-character LF form and leaked when written verbatim).
+2. **Tree markers on Windows.** `Rscript.exe` runs `Rterm.exe` as its child, which inherits the
+   marker, so the plan's `length(proc_tree(marker)) == 1L` was FALSE there. The two tests now
+   require the marked processes to be the child and its descendants only.
+3. **Asynchronous kills.** On Windows `ps::ps_kill()` calls `TerminateProcess()`, which returns
+   before the process has exited (on Unix `ps_kill()` sends SIGTERM and waits up to its grace
+   period before SIGKILL). The orphan sweep checked for survivors at once and kept the marker
+   file of an orphan that died moments later. New behaviour: `proc_cleanup_record()` (the sweep
+   and `kill_all()`) waits at most 2 s for the processes it signalled to stop reading as running
+   before it decides; it never waits on an unknown state, nor on a process whose kill failed
+   (`ps_kill()`'s per-handle results; a kept record must not delay every `library(gptr)`).
+   Nothing changes when the kill completed, as on Unix.
+4. **The boundary test of a reused PID record** mocked `ps::ps_kill_tree()` and expected no
+   call at all. processx's finalizer calls that binding by name with processx's own tree id, so
+   a garbage collection during the test reached the mock (hosted Windows: 3 calls; reproduced
+   on macOS by collecting a process started with `cleanup_tree = TRUE`). The test now collects
+   a synthetic finalizer of the same kind and fails only on a signalled gptr marker.
+5. **Blocking child stdin on Windows (open item, maintainer decision).** processx writes a
+   child's stdin with a blocking `WriteFile()` on Windows: the pipe is created without
+   `FILE_FLAG_OVERLAPPED`, in `PIPE_WAIT` mode, with a 64 KB buffer, and
+   `processx_c_connection_write_bytes()` passes no `OVERLAPPED` (processx `src/win/stdio.c`,
+   `src/processx-connection.c`). So IC-60's non-blocking `write_all()` holds only on Unix. On
+   Windows, a write blocks until the child has read enough; a child that stops reading stdin
+   while its stdout pipe is full (the 4 MB echo test) deadlocks the R process, and no
+   `gptr.stdin_timeout` or pump timeout can end a call that never returns. The two tests that
+   need a non-blocking write (the 4 MB echo and the stdin timeout on a child that reads nothing)
+   skip on Windows with this deviation's number; the other stdin tests still run there. Making
+   `write_all()` safe on Windows (for example a relay process or a bounded write size) is a
+   P04 product decision, not made here. P18, P19, P20 and P22 children that receive large
+   stdin payloads on Windows are affected until then.
+
+The hosted Windows release job also streams the offline suite file by file before R CMD check
+(`dev/ci/test-by-file.R`, 20-minute step limit, diagnosis only). Validation:
+`progress/ci-hosted.md`, Task CI-2.

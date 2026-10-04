@@ -988,3 +988,870 @@ test_that("an overload after a committed delta fails at once with the partial me
   expect_identical(nrow(srv$log()), 1L)
   expect_identical(ls(reactor_get()$tasks), character())
 })
+
+# ---- provider_stream(): inprocess (the fake provider on the real reactor) -------------------
+
+test_that("the fake provider streams through the inprocess transport", {
+  local_fake_provider(list("hello there"))
+  log = local_stream_log()
+  provider_stream(model_resolve("fake/fake-1"), stream_context(), list(), emit = log$emit,
+                  done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 5))
+  types = log$types()
+  expect_equal(types[[1]], "start")
+  expect_equal(types[[length(types)]], "done")
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "hello there")
+})
+
+test_that("an aborted inprocess stream ends with stop_reason aborted", {
+  local_fake_provider(list(list(hang = TRUE)))
+  log = local_stream_log()
+  signal = new.env()
+  signal$aborted = FALSE
+  signal$reason = "user"
+  provider_stream(model_resolve("fake/fake-1"), stream_context(), list(signal = signal),
+                  emit = log$emit, done = log$finish)
+  expect_true(reactor_pump(until = function() length(log$events) > 0L, timeout = 5))
+  signal$aborted = TRUE
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 5))
+  expect_equal(log$done[[1]]$stop_reason, "aborted")
+})
+
+# ---- provider_stream(): process_jsonl on scripted process functions -------------------------
+
+# Additions to the plan's helper: reactor_cancel() of a watcher id it handed out acts as P04's
+# (the watcher is gone, its child killed: `killed` counts it); `removed` lists the job rows
+# removed; `job$stop` is the row's stop().
+local_mock_process = function(.env = parent.frame()) {
+  pr = new.env()
+  pr$spawned = list()
+  pr$watchers = list()
+  pr$written = character()
+  pr$closed = 0L
+  pr$killed = 0L
+  pr$watch_ids = character()
+  pr$cancelled = character()
+  pr$removed = character()
+  testthat::local_mocked_bindings(
+    reactor_cancel = function(ids) {
+      live = ids %in% pr$watch_ids & !ids %in% pr$cancelled
+      pr$cancelled = c(pr$cancelled, ids)
+      pr$killed = pr$killed + sum(live)
+      invisible(sum(live | !ids %in% pr$watch_ids))
+    },
+    proc_spawn = function(command, args = character(), env = NULL, wd = NULL, stdin = NULL,
+                          stdout = "|", stderr = "|", cleanup_tree = TRUE,
+                          supervise = TRUE) {
+      k = length(pr$spawned) + 1L
+      pr$spawned[[k]] = list(command = command, args = args, env = env, stdin = stdin)
+      handle = new.env()
+      handle$get_pid = function() 4241L + k
+      handle
+    },
+    reactor_proc = function(proc, on_line, on_exit, run = NULL, stream = "stdout",
+                            on_stderr = NULL) {
+      pr$watchers[[length(pr$watchers) + 1L]] = list(on_line = on_line, on_exit = on_exit)
+      pr$on_line = on_line
+      pr$on_exit = on_exit
+      id = paste0("t", 50L + length(pr$watchers))
+      pr$watch_ids = c(pr$watch_ids, id)
+      id
+    },
+    write_all = function(p, data) {
+      pr$written = c(pr$written, data)
+      invisible(p)
+    },
+    write_close = function(p) {
+      pr$closed = pr$closed + 1L
+      invisible(p)
+    },
+    job_add = function(kind, id, name, pid = NA, stop, status = function() "running") {
+      pr$job = list(kind = kind, id = id, name = name, pid = pid, stop = stop)
+      invisible(id)
+    },
+    job_remove = function(id) {
+      pr$removed = c(pr$removed, id)
+      invisible(TRUE)
+    },
+    kill_all = function(p, grace = 2) {
+      pr$killed = pr$killed + 1L
+      invisible(TRUE)
+    },
+    child_env = function(profile, pass = character(), set = character(), provider = NULL) {
+      pr$profile = profile
+      pr$env_provider = provider
+      c(PATH = "/usr/bin", set)
+    },
+    .env = .env
+  )
+  pr
+}
+
+# A JSON-lines adapter: `start` only when no child runs (or always with close_stdin),
+# {"type":"delta","v":..} are deltas, {"type":"result"} ends the turn, {"type":"ping"} is a
+# control request answered with {"type":"pong"} through opts$send(). Additions to the plan's
+# helper: `start_with` replaces the scripted `fakecli` start (a real child), `seen$opts` collects
+# each turn's opts, `seen$units` each unit pushed, and {"type":"boom"} makes the normaliser fail.
+local_process_adapter = function(close_stdin = FALSE, start_with = NULL, seen = NULL,
+                                 .env = parent.frame()) {
+  build = function(model, context, opts) {
+    start = if (close_stdin || is.null(opts$state$process)) {
+      start_with %||% list(command = "fakecli", args = c("--json"), env_profile = "cli-claude",
+                           env = c(FAKE_CLI = "1"), wd = NULL)
+    }
+    list(start = start, send = list(list(type = "user", text = context$text)),
+         close_stdin = close_stdin)
+  }
+  parse = function(model, opts) {
+    if (is.environment(seen)) seen$opts[[length(seen$opts) + 1L]] = opts
+    s = new.env()
+    s$text = character()
+    current = function() {
+      msg_assistant(list(block_text(paste(s$text, collapse = ""))), api = model$api,
+                    provider = model$provider, model = model$id, route = "plan-cli",
+                    timestamp = 1)
+    }
+    list(
+      push = function(ev) {
+        if (is.environment(seen)) seen$units[[length(seen$units) + 1L]] = ev
+        type = ev$obj$type
+        if (identical(type, "boom")) stop("normaliser broke")
+        if (identical(type, "ping")) opts$send(list(type = "pong"))
+        if (identical(type, "delta")) {
+          if (!length(s$text)) {
+            opts$emit(ev_new("start", api = model$api, provider = model$provider,
+                             model = model$id, request_id = "q1", response_id = NULL))
+          }
+          s$text = c(s$text, ev$obj$v)
+          opts$emit(ev_new("text_delta", index = 1L, delta = ev$obj$v))
+        }
+        if (identical(type, "result")) {
+          opts$emit(ev_new("done", reason = "stop", message = current(), usage = NULL))
+          return(TRUE)
+        }
+        FALSE
+      },
+      finish = function() {
+        m = current()
+        opts$emit(ev_new("done", reason = "stop", message = m, usage = NULL))
+        m
+      },
+      fail = function(cnd) current(),
+      message = function() current()
+    )
+  }
+  api = if (close_stdin) "test-proc-eof" else "test-proc"
+  off1 = gptr_register(gptr_adapter(api, transport = "process_jsonl", build = build,
+                                    parse = parse))
+  off2 = gptr_register(gptr_provider("proctest", api = api, type = "cli",
+                                     models = list(list(id = "default"))))
+  withr::defer({
+    off1()
+    off2()
+  }, envir = .env)
+  model_resolve("proctest/default")
+}
+
+test_that("process_jsonl: one supervised child, JSON lines both ways, one done per turn", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter()
+  state = new.env()
+  log = local_stream_log()
+  provider_stream(model, stream_context("hi"), list(state = state), emit = log$emit,
+                  done = log$finish)
+  expect_length(pr$spawned, 1L)
+  expect_equal(pr$spawned[[1]]$command, "fakecli")
+  expect_equal(pr$spawned[[1]]$stdin, "|")
+  expect_equal(pr$profile, "cli-claude")
+  expect_null(pr$env_provider)
+  expect_equal(pr$job$kind, "cli")
+  expect_equal(pr$written, "{\"type\":\"user\",\"text\":\"hi\"}\n")
+  expect_equal(pr$closed, 0L)
+  pr$on_line("{\"type\":\"ping\"}")
+  expect_equal(pr$written[[2]], "{\"type\":\"pong\"}\n")
+  pr$on_line("not json at all")
+  pr$on_line("{\"type\":\"delta\",\"v\":\"Hi!\"}")
+  pr$on_line("{\"type\":\"result\"}")
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "Hi!")
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("again"), list(state = state), emit = log2$emit,
+                  done = log2$finish)
+  expect_length(pr$spawned, 1L)
+  pr$on_line("{\"type\":\"delta\",\"v\":\"Again\"}")
+  pr$on_line("{\"type\":\"result\"}")
+  expect_equal(msg_text(log2$done[[1]]), "Again")
+  expect_length(log$done, 1L)
+})
+
+test_that("process_jsonl with close_stdin writes the turn, then closes stdin", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter(close_stdin = TRUE)
+  log = local_stream_log()
+  provider_stream(model, stream_context("once"), list(state = new.env()), emit = log$emit,
+                  done = log$finish)
+  expect_length(pr$spawned, 1L)
+  expect_equal(pr$spawned[[1]]$stdin, "|")
+  expect_equal(pr$written, "{\"type\":\"user\",\"text\":\"once\"}\n")
+  expect_equal(pr$closed, 1L)
+  pr$on_line("{\"type\":\"delta\",\"v\":\"done\"}")
+  pr$on_exit(0L)
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "done")
+})
+
+test_that("a replaced child's late output and exit never reach the next turn", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter(close_stdin = TRUE)
+  state = new.env()
+  log1 = local_stream_log()
+  provider_stream(model, stream_context("one"), list(state = state), emit = log1$emit,
+                  done = log1$finish)
+  first = pr$watchers[[1]]
+  first$on_line("{\"type\":\"delta\",\"v\":\"A\"}")
+  first$on_line("{\"type\":\"result\"}")
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("two"), list(state = state), emit = log2$emit,
+                  done = log2$finish)
+  expect_length(pr$spawned, 2L)
+  expect_equal(pr$killed, 1L)
+  first$on_line("{\"type\":\"delta\",\"v\":\"stale\"}")
+  first$on_exit(0L)
+  expect_length(log2$done, 0L)
+  second = pr$watchers[[2]]
+  second$on_line("{\"type\":\"delta\",\"v\":\"B\"}")
+  second$on_exit(0L)
+  expect_equal(msg_text(log2$done[[1]]), "B")
+  expect_equal(msg_text(log1$done[[1]]), "A")
+})
+
+# ---- provider_stream(): the inprocess transport on a scripted reactor -----------------------
+
+# An inprocess adapter whose generator plays `seen$steps` (read when the stream starts; a
+# function step is called, so it may throw); `seen$calls` counts the generator calls
+local_gen_adapter = function(steps = list(), .env = parent.frame()) {
+  seen = new.env()
+  seen$steps = steps
+  seen$calls = 0L
+  stream = function(model, context, opts) {
+    steps = seen$steps
+    function() {
+      seen$calls = seen$calls + 1L
+      s = steps[[min(seen$calls, length(steps))]]
+      if (is.function(s)) s() else s
+    }
+  }
+  off1 = gptr_register(gptr_adapter("test-gen", transport = "inprocess", stream = stream))
+  off2 = gptr_register(gptr_provider("gentest", api = "test-gen", local = TRUE, offline = TRUE,
+                                     models = list(list(id = "g1"))))
+  withr::defer({
+    off1()
+    off2()
+  }, envir = .env)
+  seen$model = model_resolve("gentest/g1")
+  seen
+}
+
+gen_start = function() {
+  ev_new("start", api = "test-gen", provider = "gentest", model = "g1", request_id = NULL,
+         response_id = NULL)
+}
+
+gen_delta = function(v) ev_new("text_delta", index = 1L, delta = v)
+
+gen_step = function(..., wait = 0) list(events = list(...), wait = wait)
+
+test_that("an inprocess generator that throws, misbehaves or stops early ends the stream once", {
+  r = local_mock_reactor()
+  seen = local_gen_adapter()
+  first = gen_step(gen_start(), gen_delta("a"))
+  cases = list(
+    list(steps = list(first, function() stop("generator broke")), message = "generator broke"),
+    list(steps = list(first, "not a step"), message = "malformed"),
+    list(steps = list(first, list(events = list("not an event"))), message = "malformed"),
+    list(steps = list(first, NULL), message = "without a terminal event")
+  )
+  for (case in cases) {
+    seen$steps = case$steps
+    seen$calls = 0L
+    log = local_stream_log()
+    id = provider_stream(seen$model, stream_context(), list(), emit = log$emit,
+                         done = log$finish)
+    expect_equal(id, paste0("t", 200L + length(r$tasks)))
+    task = r$tasks[[length(r$tasks)]]
+    expect_true(task())
+    expect_false(task())
+    expect_false(task())
+    expect_equal(seen$calls, 2L)
+    expect_equal(log$types(), c("start", "text_delta", "error"))
+    err = log$events[[3]]
+    expect_equal(err$error$class, "internal")
+    expect_equal(err$error$request_id, "q000000000001")
+    expect_match(err$message$error_message, case$message, fixed = TRUE)
+    expect_length(log$done, 1L)
+    expect_equal(log$done[[1]]$stop_reason, "error")
+    expect_equal(log$done[[1]]$provider, "gentest")
+    expect_equal(msg_text(log$done[[1]]), "a")
+  }
+})
+
+test_that("the inprocess transport calls the generator again after `wait` seconds", {
+  r = local_mock_reactor()
+  clock = new.env()
+  clock$t = 10
+  local_mocked_bindings(reactor_now = function() clock$t)
+  final = msg_assistant(list(block_text("x")), api = "test-gen", provider = "gentest",
+                        model = "g1", timestamp = 1)
+  seen = local_gen_adapter(list(gen_step(gen_start(), wait = 2), gen_step(gen_delta("x")),
+                                gen_step(ev_new("done", reason = "stop", message = final,
+                                                usage = NULL))))
+  log = local_stream_log()
+  provider_stream(seen$model, stream_context(), list(), emit = log$emit, done = log$finish)
+  task = r$tasks[[1]]
+  expect_true(task())
+  expect_equal(seen$calls, 1L)
+  clock$t = 11.9
+  expect_true(task())
+  expect_equal(seen$calls, 1L)
+  clock$t = 12
+  expect_true(task())
+  expect_equal(seen$calls, 2L)
+  expect_false(task())
+  expect_equal(seen$calls, 3L)
+  expect_equal(log$types(), c("start", "text_delta", "done"))
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$request_id, "q000000000001")
+})
+
+test_that("an abort gives the inprocess generator two calls before the glue ends the stream", {
+  r = local_mock_reactor()
+  seen = local_gen_adapter(list(gen_step(gen_start(), gen_delta("p"), wait = 60), gen_step()))
+  signal = new.env()
+  signal$aborted = FALSE
+  signal$reason = "user"
+  log = local_stream_log()
+  provider_stream(seen$model, stream_context(), list(signal = signal), emit = log$emit,
+                  done = log$finish)
+  task = r$tasks[[1]]
+  expect_true(task())
+  expect_equal(seen$calls, 1L)
+  signal$aborted = TRUE
+  # the abort does not wait for the generator's `wait`
+  expect_true(task())
+  expect_true(task())
+  expect_equal(seen$calls, 3L)
+  expect_false(task())
+  expect_equal(seen$calls, 3L)
+  expect_equal(log$types(), c("start", "text_delta", "error"))
+  expect_equal(log$events[[3]]$reason, "aborted")
+  expect_equal(log$events[[3]]$error$class, "aborted")
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$stop_reason, "aborted")
+  expect_equal(log$done[[1]]$error_message, "user")
+  expect_equal(msg_text(log$done[[1]]), "p")
+})
+
+test_that("an inprocess stream whose run settles is let go without a done", {
+  r = local_mock_reactor()
+  seen = local_gen_adapter(list(gen_step(gen_start()), gen_step(gen_delta("late"))))
+  run = local_run("streaming")
+  log = local_stream_log()
+  provider_stream(seen$model, stream_context(), list(), emit = log$emit, done = log$finish,
+                  run = run)
+  task = r$tasks[[1]]
+  expect_true(task())
+  run$status = "error"
+  expect_false(task())
+  expect_equal(seen$calls, 1L)
+  expect_equal(log$types(), "start")
+  expect_length(log$done, 0L)
+})
+
+# ---- provider_stream(): process_jsonl failures and abort ------------------------------------
+
+test_that("an aborted process_jsonl turn forgets and kills its child", {
+  r = local_mock_reactor()
+  pr = local_mock_process()
+  seen = new.env()
+  seen$opts = list()
+  model = local_process_adapter(seen = seen)
+  state = new.env()
+  signal = new.env()
+  signal$aborted = FALSE
+  signal$reason = "user"
+  log = local_stream_log()
+  provider_stream(model, stream_context("hi"), list(state = state, signal = signal),
+                  emit = log$emit, done = log$finish)
+  first = pr$watchers[[1]]
+  first$on_line("{\"type\":\"delta\",\"v\":\"par\"}")
+  watch = r$tasks[[1]]
+  expect_true(watch())
+  signal$aborted = TRUE
+  expect_false(watch())
+  # through P04's reactor_cancel() of the child's watcher, which kills it; the job row goes
+  expect_identical(pr$cancelled, "t51")
+  expect_equal(pr$killed, 1L)
+  expect_identical(pr$removed, pr$job$id)
+  expect_null(state$process)
+  expect_length(log$done, 1L)
+  expect_equal(log$done[[1]]$stop_reason, "aborted")
+  expect_equal(msg_text(log$done[[1]]), "par")
+  n = length(log$events)
+  first$on_line("{\"type\":\"delta\",\"v\":\"late\"}")
+  first$on_exit(0L)
+  expect_length(log$events, n)
+  expect_length(log$done, 1L)
+  # the next turn starts a new child
+  signal$aborted = FALSE
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("again"), list(state = state, signal = signal),
+                  emit = log2$emit, done = log2$finish)
+  expect_length(pr$spawned, 2L)
+  # a late opts$send() of the aborted turn writes nothing; the open turn writes to its child
+  n = length(pr$written)
+  expect_false(seen$opts[[1]]$send(list(type = "late")))
+  expect_length(pr$written, n)
+  expect_true(seen$opts[[2]]$send(list(type = "pong")))
+  expect_equal(pr$written[[n + 1L]], "{\"type\":\"pong\"}\n")
+  pr$watchers[[2]]$on_line("{\"type\":\"delta\",\"v\":\"B\"}")
+  pr$watchers[[2]]$on_line("{\"type\":\"result\"}")
+  expect_equal(msg_text(log2$done[[1]]), "B")
+  expect_length(log$done, 1L)
+  # a turn that reuses the session's child stops it through that child's watcher and row
+  job2 = pr$job$id
+  log3 = local_stream_log()
+  provider_stream(model, stream_context("third"), list(state = state, signal = signal),
+                  emit = log3$emit, done = log3$finish)
+  expect_length(pr$spawned, 2L)
+  expect_false(job2 %in% pr$removed)
+  signal$aborted = TRUE
+  expect_false(r$tasks[[length(r$tasks)]]())
+  expect_equal(log3$done[[1]]$stop_reason, "aborted")
+  expect_identical(pr$cancelled, c("t51", "t52"))
+  expect_equal(pr$killed, 2L)
+  expect_true(job2 %in% pr$removed)
+  expect_null(state$process)
+})
+
+test_that("a process_jsonl turn that fails locally forgets and kills its child", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter()
+  state = new.env()
+  log = local_stream_log()
+  provider_stream(model, stream_context("hi"), list(state = state), emit = log$emit,
+                  done = log$finish)
+  first = pr$watchers[[1]]
+  first$on_line("{\"type\":\"delta\",\"v\":\"x\"}")
+  first$on_line("{\"type\":\"boom\"}")
+  expect_equal(log$types(), c("start", "text_delta", "error"))
+  expect_match(log$done[[1]]$error_message, "normaliser broke", fixed = TRUE)
+  expect_equal(log$done[[1]]$stop_reason, "error")
+  expect_identical(pr$cancelled, "t51")
+  expect_equal(pr$killed, 1L)
+  expect_identical(pr$removed, pr$job$id)
+  expect_null(state$process)
+  first$on_line("{\"type\":\"delta\",\"v\":\"late\"}")
+  first$on_exit(1L)
+  expect_length(log$events, 3L)
+  expect_length(log$done, 1L)
+  # a write that fails after the child started ends the turn and kills that child too
+  local_mocked_bindings(write_all = function(p, data) stop("stdin pipe closed"))
+  log2 = local_stream_log()
+  id = provider_stream(model, stream_context("two"), list(state = state), emit = log2$emit,
+                       done = log2$finish)
+  expect_true(is.na(id))
+  expect_length(pr$spawned, 2L)
+  expect_identical(pr$cancelled, c("t51", "t52"))
+  expect_equal(pr$killed, 2L)
+  expect_true(pr$job$id %in% pr$removed)
+  expect_null(state$process)
+  expect_equal(log2$types(), "error")
+  expect_length(log2$done, 1L)
+  expect_match(log2$done[[1]]$error_message, "stdin pipe closed", fixed = TRUE)
+  expect_equal(log2$done[[1]]$provider, "proctest")
+  # a child whose watcher could not be registered is killed directly; its row goes too
+  local_mocked_bindings(reactor_proc = function(...) stop("no watcher"))
+  log3 = local_stream_log()
+  id = provider_stream(model, stream_context("three"), list(state = state), emit = log3$emit,
+                       done = log3$finish)
+  expect_true(is.na(id))
+  expect_length(pr$spawned, 3L)
+  expect_identical(pr$cancelled, c("t51", "t52"))
+  expect_equal(pr$killed, 3L)
+  expect_true(pr$job$id %in% pr$removed)
+  expect_null(state$process)
+  expect_match(log3$done[[1]]$error_message, "no watcher", fixed = TRUE)
+})
+
+# P06's run_abort() and run_settle() cancel the id provider_stream() returned, which for
+# process_jsonl is the abort watch: the turn must still end and drop its child.
+test_that("a process_jsonl turn whose watch was cancelled ends at its child's next line or exit", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter()
+  # one turn with a delta; then the abort flag (or not), the cancelled id, the run's status
+  turn = function(status, abort) {
+    run = local_run("streaming")
+    state = new.env()
+    log = local_stream_log()
+    id = provider_stream(model, stream_context("hi"), list(state = state), emit = log$emit,
+                         done = log$finish, run = run)
+    child = pr$watchers[[length(pr$watchers)]]
+    child$on_line("{\"type\":\"delta\",\"v\":\"par\"}")
+    run$signal$aborted = abort
+    reactor_cancel(id)
+    run$status = status
+    list(state = state, log = log, child = child)
+  }
+  # run_settle() mid-turn: the line is not pushed (no pong), the turn is let go without a done
+  t1 = turn("error", abort = FALSE)
+  n = length(pr$written)
+  t1$child$on_line("{\"type\":\"ping\"}")
+  expect_length(pr$written, n)
+  expect_equal(pr$killed, 1L)
+  expect_null(t1$state$process)
+  t1$child$on_line("{\"type\":\"delta\",\"v\":\"late\"}")
+  t1$child$on_exit(0L)
+  expect_equal(t1$log$types(), c("start", "text_delta"))
+  expect_length(t1$log$done, 0L)
+  # run_abort(): the line ends the turn as aborted (as the watch would) and kills the child
+  t2 = turn("aborted", abort = TRUE)
+  t2$child$on_line("{\"type\":\"ping\"}")
+  expect_length(pr$written, n + 1L)
+  expect_equal(pr$killed, 2L)
+  expect_null(t2$state$process)
+  expect_equal(t2$log$types(), c("start", "text_delta", "error"))
+  expect_length(t2$log$done, 1L)
+  expect_equal(t2$log$done[[1]]$stop_reason, "aborted")
+  expect_equal(msg_text(t2$log$done[[1]]), "par")
+  # the exit of an aborted turn's child ends it as aborted (the normaliser's finish() says
+  # stop); the child is gone, so nothing is killed
+  t3 = turn("streaming", abort = TRUE)
+  t3$child$on_exit(0L)
+  expect_equal(pr$killed, 2L)
+  expect_null(t3$state$process)
+  expect_length(t3$log$done, 1L)
+  expect_equal(t3$log$done[[1]]$stop_reason, "aborted")
+  # the exit after the run settled lets go of the turn
+  t4 = turn("error", abort = FALSE)
+  t4$child$on_exit(0L)
+  expect_equal(pr$killed, 2L)
+  expect_null(t4$state$process)
+  expect_equal(t4$log$types(), c("start", "text_delta"))
+  expect_length(t4$log$done, 0L)
+})
+
+test_that("a new turn closes the session's earlier turn whose watch was cancelled", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter()
+  state = new.env()
+  run1 = local_run("streaming")
+  log1 = local_stream_log()
+  id1 = provider_stream(model, stream_context("one"), list(state = state), emit = log1$emit,
+                        done = log1$finish, run = run1)
+  first = pr$watchers[[1]]
+  first$on_line("{\"type\":\"delta\",\"v\":\"one-1\"}")
+  # P06's run_abort(): the flag, the cancelled id, the settled run; the child stays silent
+  run1$signal$aborted = TRUE
+  reactor_cancel(id1)
+  run1$status = "aborted"
+  run2 = local_run("requesting")
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("two"), list(state = state), emit = log2$emit,
+                  done = log2$finish, run = run2)
+  expect_length(pr$spawned, 2L)
+  expect_true("t51" %in% pr$cancelled)
+  expect_equal(pr$killed, 1L)
+  expect_length(log1$done, 0L)
+  first$on_line("{\"type\":\"delta\",\"v\":\"one-2\"}")
+  first$on_line("{\"type\":\"result\"}")
+  first$on_exit(0L)
+  expect_length(log2$events, 0L)
+  expect_length(log2$done, 0L)
+  second = pr$watchers[[2]]
+  second$on_line("{\"type\":\"delta\",\"v\":\"two-1\"}")
+  second$on_line("{\"type\":\"result\"}")
+  expect_length(log2$done, 1L)
+  expect_equal(msg_text(log2$done[[1]]), "two-1")
+  expect_equal(log1$types(), c("start", "text_delta"))
+  expect_length(log1$done, 0L)
+})
+
+test_that("process_jsonl pushes each JSON line as list(data, obj) and ignores other lines", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  seen = new.env()
+  model = local_process_adapter(seen = seen)
+  log = local_stream_log()
+  provider_stream(model, stream_context("hi"), list(state = new.env()), emit = log$emit,
+                  done = log$finish)
+  line = "{\"type\":\"delta\",\"v\":\"x y\",\"n\":[1,2]}"
+  pr$on_line("noise")
+  pr$on_line(line)
+  expect_length(seen$units, 1L)
+  expect_named(seen$units[[1]], c("data", "obj"))
+  expect_identical(seen$units[[1]]$data, line)
+  expect_identical(seen$units[[1]]$obj, json_decode(line))
+  expect_equal(log$types(), c("start", "text_delta"))
+})
+
+test_that("stopping a child's job row cancels its watcher; the open turn hears the exit later", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  timers = new.env()
+  timers$fns = list()
+  local_mocked_bindings(reactor_timer = function(at, fn, run = NULL) {
+    timers$fns[[length(timers$fns) + 1L]] = fn
+    paste0("t", 300L + length(timers$fns))
+  })
+  model = local_process_adapter()
+  state = new.env()
+  log = local_stream_log()
+  provider_stream(model, stream_context("hi"), list(state = state), emit = log$emit,
+                  done = log$finish)
+  pr$on_line("{\"type\":\"delta\",\"v\":\"par\"}")
+  # gptr_jobs(kill = TRUE) calls the row's stop(): P04's reactor_cancel() of the watcher kills
+  # the child and reports no exit, so the row goes now and the exit reaches the turn from the
+  # next pump iteration, as P04 reports an exit
+  job = pr$job
+  job$stop()
+  expect_identical(pr$cancelled, "t51")
+  expect_equal(pr$killed, 1L)
+  expect_identical(pr$removed, job$id)
+  expect_null(state$process)
+  expect_length(log$done, 0L)
+  expect_length(timers$fns, 1L)
+  timers$fns[[1]]()
+  expect_length(log$done, 1L)
+  expect_equal(msg_text(log$done[[1]]), "par")
+  expect_equal(log$types(), c("start", "text_delta", "done"))
+  # the next turn starts a new child; stopping it after its turn ended reaches no turn
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("again"), list(state = state), emit = log2$emit,
+                  done = log2$finish)
+  expect_length(pr$spawned, 2L)
+  pr$on_line("{\"type\":\"result\"}")
+  expect_length(log2$done, 1L)
+  pr$job$stop()
+  expect_identical(pr$cancelled, c("t51", "t52"))
+  expect_equal(pr$killed, 2L)
+  expect_null(state$process)
+  for (fn in timers$fns[-1L]) fn()
+  expect_length(log2$done, 1L)
+  expect_length(log$done, 1L)
+})
+
+test_that("process_jsonl passes start's args to proc_spawn() and its env to child_env()", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  model = local_process_adapter()
+  log = local_stream_log()
+  provider_stream(model, stream_context("hi"), list(state = new.env()), emit = log$emit,
+                  done = log$finish)
+  expect_equal(pr$spawned[[1]]$args, "--json")
+  expect_equal(pr$spawned[[1]]$env[["FAKE_CLI"]], "1")
+  expect_equal(pr$spawned[[1]]$env[["PATH"]], "/usr/bin")
+})
+
+test_that("a list env reaches child_env() as given; list args are flattened", {
+  local_mock_reactor()
+  pr = local_mock_process()
+  got = new.env()
+  local_mocked_bindings(child_env = function(profile, pass = character(), set = character(),
+                                             provider = NULL) {
+    got$profile = profile
+    got$set = set
+    c(PATH = "/usr/bin")
+  })
+  # a list env may hold secret handles (P20's codex token), which unlist() would break
+  handle = structure(list(id = "k0000001", name = "GPTR_MCP_TOKEN", fp = "abc123"),
+                     class = "gptr_secret")
+  play = function(start) {
+    model = local_process_adapter(close_stdin = TRUE, start_with = start)
+    log = local_stream_log()
+    provider_stream(model, stream_context("hi"), list(state = new.env()), emit = log$emit,
+                    done = log$finish)
+  }
+  env = list(GPTR_MCP_TOKEN = handle, MODE = "x")
+  play(list(command = "fakecli", args = list("exec", "--json"), env_profile = "cli-codex",
+            env = env))
+  expect_equal(got$profile, "cli-codex")
+  expect_identical(got$set, env)
+  expect_identical(pr$spawned[[1]]$args, c("exec", "--json"))
+  # chr args keep their attributes (the verbatim flag proc_spawn() reads)
+  play(list(command = "fakecli", args = structure("--json", verbatim = TRUE),
+            env_profile = "cli-codex"))
+  expect_identical(got$set, character())
+  expect_identical(pr$spawned[[2]]$args, structure("--json", verbatim = TRUE))
+})
+
+test_that("malformed process specs end the stream before any child starts", {
+  r = local_mock_reactor()
+  pr = local_mock_process()
+  seen = new.env()
+  noop = function(model, opts) {
+    list(push = function(ev) FALSE, finish = function() NULL, fail = function(cnd) NULL,
+         message = function() NULL)
+  }
+  off1 = gptr_register(gptr_adapter("test-proc-spec", transport = "process_jsonl",
+                                    build = function(model, context, opts) seen$spec,
+                                    parse = noop))
+  off2 = gptr_register(gptr_provider("procspec", api = "test-proc-spec", type = "cli",
+                                     models = list(list(id = "default"))))
+  withr::defer({
+    off1()
+    off2()
+  })
+  model = model_resolve("procspec/default")
+  cases = list(
+    list(spec = list(start = NULL, send = list(), close_stdin = FALSE), class = "internal",
+         message = "none is running"),
+    list(spec = list(start = list(args = "--json"), send = list()), class = "invalid_spec",
+         message = "command"),
+    list(spec = "nonsense", class = "invalid_spec", message = "process spec"),
+    list(spec = list(start = list(command = "fakecli"), send = list(type = "user")),
+         class = "invalid_spec", message = "send")
+  )
+  for (case in cases) {
+    seen$spec = case$spec
+    log = local_stream_log()
+    id = provider_stream(model, stream_context(), list(state = new.env()), emit = log$emit,
+                         done = log$finish)
+    expect_true(is.na(id))
+    expect_equal(log$types(), "error")
+    expect_equal(log$events[[1]]$error$class, case$class)
+    expect_length(log$done, 1L)
+    expect_equal(log$done[[1]]$stop_reason, "error")
+    expect_match(log$done[[1]]$error_message, case$message, fixed = TRUE)
+  }
+  expect_length(pr$spawned, 0L)
+  expect_length(pr$written, 0L)
+  expect_length(r$tasks, 0L)
+})
+
+# ---- provider_stream(): process_jsonl on P04's real process engine --------------------------
+
+test_that("process_jsonl drives a real child through P04's process engine", {
+  skip_on_cran()
+  # the child reads the turn's line and answers with a noise line, a delta (the line's length
+  # and the variable start$env set) and a result
+  child = paste0("x = readLines(file('stdin'), n = 1L); cat('noise\\n{\"type\":\"delta\",",
+                 "\"v\":\"', nchar(x), ':', Sys.getenv('GPTR_TEST_CHILD'), '\"}\\n",
+                 "{\"type\":\"result\"}\\n', sep = '')")
+  model = local_process_adapter(close_stdin = TRUE, start_with = list(
+    command = rscript_path(), args = c("--vanilla", "-e", child), env_profile = "helper",
+    env = c(GPTR_TEST_CHILD = "set-by-start"), wd = NULL
+  ))
+  state = new.env()
+  log = local_stream_log()
+  id = provider_stream(model, stream_context("hi"), list(state = state), emit = log$emit,
+                       done = log$finish)
+  p = state$process
+  withr::defer(kill_all(p, grace = 0))
+  job = state$job
+  expect_true(is.character(job) && exists(job, envir = jobs_env()$table, inherits = FALSE))
+  expect_equal(jobs_env()$table[[job]]$kind, "cli")
+  expect_true(reactor_pump(until = function() length(log$done) > 0L && is.null(state$process),
+                           timeout = 30))
+  expect_equal(log$types(), c("start", "text_delta", "done"))
+  expect_equal(msg_text(log$done[[1]]),
+               paste0(nchar(json_encode(list(type = "user", text = "hi"))), ":set-by-start"))
+  expect_false(exists(job, envir = jobs_env()$table, inherits = FALSE))
+  expect_true(reactor_pump(until = function() !id %in% ls(reactor_get()$tasks), timeout = 5))
+  expect_identical(ls(reactor_get()$procs), character())
+})
+
+# A real child that reads the turn's line, answers by its text ("boom": a normaliser failure;
+# "done": a result; otherwise it only waits) and then stays alive, stdin open or not
+real_child_start = function() {
+  child = paste0("con = file('stdin'); open(con); x = readLines(con, n = 1L); ",
+                 "v = if (grepl('boom', x)) 'boom' else if (grepl('done', x)) 'result' else ",
+                 "'wait'; cat('{\"type\":\"delta\",\"v\":\"part\"}\\n{\"type\":\"', v, ",
+                 "'\"}\\n', sep = ''); flush(stdout()); Sys.sleep(60)")
+  list(command = rscript_path(), args = c("--vanilla", "-e", child), env_profile = "helper")
+}
+
+# The watchers registered since `before`; a failing test cancels them, so none keeps polling
+local_new_watchers = function(.env = parent.frame()) {
+  before = ls(reactor_get()$procs)
+  live = function() setdiff(ls(reactor_get()$procs), before)
+  withr::defer(reactor_cancel(live()), envir = .env)
+  live
+}
+
+job_row = function(job) {
+  is.character(job) && exists(job, envir = jobs_env()$table, inherits = FALSE)
+}
+
+test_that("a real child whose turn the glue ends leaves no watcher and no job row", {
+  skip_on_cran()
+  live = local_new_watchers()
+  model = local_process_adapter(start_with = real_child_start())
+  state = new.env()
+  signal = new.env()
+  signal$aborted = FALSE
+  signal$reason = "user"
+  # an abort: P04 must forget the killed child's watcher (it polled closed pipes forever when
+  # the glue killed the child under it) and the job row goes with it
+  log = local_stream_log()
+  provider_stream(model, stream_context("hold"), list(state = state, signal = signal),
+                  emit = log$emit, done = log$finish)
+  job = state$job
+  expect_true(job_row(job))
+  expect_length(live(), 1L)
+  expect_true(reactor_pump(until = function() "text_delta" %in% log$types(), timeout = 30))
+  signal$aborted = TRUE
+  expect_true(reactor_pump(until = function() length(log$done) > 0L, timeout = 10))
+  expect_equal(log$done[[1]]$stop_reason, "aborted")
+  expect_null(state$process)
+  expect_true(reactor_pump(until = function() !length(live()) && !job_row(job), timeout = 3))
+  # a normaliser failure: the next turn starts a new child, which the failure drops the same way
+  signal$aborted = FALSE
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("boom"), list(state = state, signal = signal),
+                  emit = log2$emit, done = log2$finish)
+  job2 = state$job
+  expect_false(identical(job2, job))
+  expect_true(job_row(job2))
+  expect_true(reactor_pump(until = function() length(log2$done) > 0L, timeout = 30))
+  expect_equal(log2$done[[1]]$stop_reason, "error")
+  expect_match(log2$done[[1]]$error_message, "normaliser broke", fixed = TRUE)
+  expect_null(state$process)
+  expect_true(reactor_pump(until = function() !length(live()) && !job_row(job2), timeout = 3))
+})
+
+test_that("a real child replaced by the next turn or stopped by its job row leaves no watcher", {
+  skip_on_cran()
+  live = local_new_watchers()
+  model = local_process_adapter(close_stdin = TRUE, start_with = real_child_start())
+  state = new.env()
+  log1 = local_stream_log()
+  provider_stream(model, stream_context("done"), list(state = state), emit = log1$emit,
+                  done = log1$finish)
+  job1 = state$job
+  expect_true(reactor_pump(until = function() length(log1$done) > 0L, timeout = 30))
+  expect_equal(msg_text(log1$done[[1]]), "part")
+  # the child lives on after its turn; the next turn's `start` replaces it
+  expect_false(is.null(state$process))
+  log2 = local_stream_log()
+  provider_stream(model, stream_context("hold"), list(state = state), emit = log2$emit,
+                  done = log2$finish)
+  job2 = state$job
+  expect_true(reactor_pump(until = function() length(live()) == 1L && !job_row(job1),
+                           timeout = 3))
+  expect_true(job_row(job2))
+  expect_true(reactor_pump(until = function() "text_delta" %in% log2$types(), timeout = 30))
+  # gptr_jobs(kill = TRUE) calls the row's stop(): the watcher and the row go, and the open
+  # turn ends at the child's exit
+  jobs_env()$table[[job2]]$stop()
+  expect_true(reactor_pump(until = function() length(log2$done) > 0L, timeout = 10))
+  expect_equal(msg_text(log2$done[[1]]), "part")
+  expect_null(state$process)
+  expect_true(reactor_pump(until = function() !length(live()) && !job_row(job2), timeout = 3))
+})

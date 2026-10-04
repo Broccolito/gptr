@@ -530,11 +530,68 @@ stream_fail_local = function(st, reason, message, class, status = NA_integer_,
   invisible(NULL)
 }
 
-#' Cancel the stream's transfer, if it has one (a no-op once P04 forgot the transfer)
+#' Cancel the stream's transfer, or forget and kill its child (a no-op once P04 forgot the
+#' transfer or the turn let go of its child)
 #' @noRd
 stream_cancel = function(st) {
   if (identical(st$transport, "http") && !is.na(st$id)) {
     tryCatch(reactor_cancel(st$id), error = function(e) NULL)
+  }
+  if (identical(st$transport, "process")) stream_process_drop(st)
+  invisible(NULL)
+}
+
+#' Forget and kill the child of a process_jsonl turn the glue ends itself (abort, a local
+#' failure, a settled run)
+#'
+#' The child is forgotten first, so its late output and exit reach no turn, and the session's
+#' next turn starts a new child instead of reusing one in an unknown protocol state. It is
+#' stopped with stream_process_kill(), which also removes its job row.
+#' @noRd
+stream_process_drop = function(st) {
+  p = st$process
+  if (is.null(p)) return(invisible(FALSE))
+  st$process = NULL
+  state = st$opts$state
+  if (is.environment(state) && identical(state$process, p)) state$process = NULL
+  stream_process_kill(p, st$watch, st$job)
+  invisible(TRUE)
+}
+
+#' Stop a session child the glue lets go of, through P04's watcher; its job row goes too
+#'
+#' P04's reactor_cancel() of the child's watcher removes the watcher, drops the child's pending
+#' stdin and kills it with its tree (kill_all()); P04 then reports no exit, so nothing of the
+#' child reaches a turn. Never kill_all() under a living watcher: processx's kill closes the
+#' child's pipes, so the watcher would never see their end of stream, never report the exit (the
+#' job row would stay) and would poll the closed pipes in every later pump iteration. A child
+#' without a watcher (reactor_proc() failed, or the exit was reported) is killed directly.
+#' @noRd
+stream_process_kill = function(p, watch, job) {
+  n = 0L
+  if (is.character(watch)) n = tryCatch(reactor_cancel(watch), error = function(e) 0L)
+  if (!isTRUE(n > 0L)) tryCatch(kill_all(p), error = function(e) NULL)
+  if (is.character(job)) tryCatch(job_remove(job), error = function(e) NULL)
+  invisible(NULL)
+}
+
+#' The `stop()` of a session child's job row (gptr_jobs(kill = TRUE), the unload cleanup)
+#'
+#' The child is forgotten and stopped (stream_process_kill()). P04 reports no exit for a
+#' cancelled watcher, so the exit reaches the turn that last used the child from the next pump
+#' iteration, as P04 reports an exit: an open turn ends through the normaliser's finish(), an
+#' aborted one as aborted (`route_exit`).
+#' @noRd
+stream_process_stop = function(state, p, watch, job) {
+  current = identical(state$process, p)
+  f = if (current) state$route_exit else NULL
+  if (current) state$process = NULL
+  stream_process_kill(p, watch, job)
+  if (is.function(f)) {
+    reactor_timer(reactor_now(), function() {
+      status = tryCatch(p$get_exit_status(), error = function(e) NULL)
+      f(if (is.null(status)) NA_integer_ else status)
+    })
   }
   invisible(NULL)
 }
@@ -605,11 +662,6 @@ stream_normaliser_finish = function(st) {
 #' @noRd
 stream_abort = function(st) {
   if (st$finished) return(invisible(NULL))
-  if (!is.null(st$process)) {
-    # forget the child first, so its late output and exit reach no turn
-    if (identical(st$opts$state$process, st$process)) st$opts$state$process = NULL
-    tryCatch(kill_all(st$process), error = function(e) NULL)
-  }
   stream_cancel(st)
   reason = st$opts$signal$reason %||% "aborted"
   stream_fail_local(st, "aborted", as.character(reason)[[1]], "aborted")
@@ -635,22 +687,27 @@ stream_detach = function(st) {
   invisible(NULL)
 }
 
-#' A reactor task that turns `opts$signal$aborted` into stream_abort() and lets go of a stream
-#' whose run settled; returns the task id
+#' Turn `opts$signal$aborted` into stream_abort() and let go of a stream whose run settled;
+#' TRUE when the stream is over (it was before, or it ends now)
+#' @noRd
+stream_over = function(st) {
+  if (st$finished) return(TRUE)
+  if (isTRUE(st$opts$signal$aborted)) {
+    stream_abort(st)
+    return(TRUE)
+  }
+  if (stream_run_settled(st$run)) {
+    stream_detach(st)
+    return(TRUE)
+  }
+  FALSE
+}
+
+#' A reactor task that runs stream_over() every iteration until the stream is over; returns
+#' the task id
 #' @noRd
 stream_watch = function(st) {
-  reactor_task(function() {
-    if (st$finished) return(FALSE)
-    if (isTRUE(st$opts$signal$aborted)) {
-      stream_abort(st)
-      return(FALSE)
-    }
-    if (stream_run_settled(st$run)) {
-      stream_detach(st)
-      return(FALSE)
-    }
-    TRUE
-  }, run = st$run)
+  reactor_task(function() !stream_over(st), run = st$run)
 }
 
 #' The retry callback normalisers call for a retryable failure seen inside the stream
@@ -688,9 +745,13 @@ stream_retry = function(st, info) {
 }
 
 #' Write one JSON line to the stream's child (process_jsonl `opts$send`)
+#'
+#' Only the open turn's own child: a finished turn, or one whose child was dropped, writes
+#' nothing (the session may already run another child).
 #' @noRd
 stream_send = function(st, obj) {
-  p = st$process %||% st$opts$state$process
+  if (st$finished) return(invisible(FALSE))
+  p = st$process
   if (is.null(p)) return(invisible(FALSE))
   write_all(p, paste0(json_encode(obj), "\n"))
   invisible(TRUE)
@@ -857,10 +918,218 @@ stream_http = function(st, adapter) {
   st$id
 }
 
+#' One generator step of an inprocess adapter (IC-16, contract 8.1 `stream()`)
+#'
+#' The generator is called again once its `wait` has passed (the task itself runs every pump
+#' iteration, so an abort is seen at once). After an abort the generator gets two calls to end
+#' the stream itself (P01's fake does on the first); then the glue ends it as aborted. A run
+#' that settled lets go of the stream without `done` (INFRA-15), as stream_watch() does. A
+#' throwing generator, a malformed step and a NULL before the terminal event each end the
+#' stream with one `error` event.
+#' @noRd
+stream_inprocess_step = function(st, gen) {
+  if (st$finished) return(FALSE)
+  if (stream_run_settled(st$run)) {
+    stream_detach(st)
+    return(FALSE)
+  }
+  if (isTRUE(st$opts$signal$aborted)) {
+    st$aborts = st$aborts + 1L
+    if (st$aborts > 2L) {
+      stream_abort(st)
+      return(FALSE)
+    }
+  } else if (reactor_now() < st$next_at) {
+    return(TRUE)
+  }
+  res = tryCatch(gen(), error = function(e) {
+    stream_normaliser_fail(st, stream_error_condition(e, "inprocess generator"))
+    NULL
+  })
+  if (st$finished) return(FALSE)
+  if (is.null(res)) {
+    stream_fail_local(st, "error", "The stream ended without a terminal event.", "internal")
+    return(FALSE)
+  }
+  events = if (is.list(res)) res[["events"]] %||% list() else NULL
+  if (!is.list(events) || !all(vapply(events, is.list, NA))) {
+    stream_fail_local(st, "error", "The inprocess generator returned a malformed step.",
+                      "internal")
+    return(FALSE)
+  }
+  for (ev in events) {
+    stream_emit(st, ev)
+    if (st$finished) break
+  }
+  wait = suppressWarnings(as.numeric(res[["wait"]] %||% 0)[1L])
+  if (is.na(wait) || wait < 0) wait = 0
+  st$next_at = reactor_now() + wait
+  !st$finished
+}
+
+#' The inprocess transport: a generator pumped by reactor_task() (04 sections 8.1, 8.4 step 4)
+#'
+#' Returns the task id. An unexpected error inside a step ends the stream instead of only
+#' removing the task, so `done` is still called exactly once.
+#' @noRd
+stream_inprocess = function(st, adapter) {
+  st$transport = "inprocess"
+  st$adapter = adapter
+  gen = adapter$stream(st$model, st$context, st$opts)
+  if (!is.function(gen)) {
+    gptr_abort("The adapter's stream() returned no generator.", "invalid_spec",
+               kind = "adapter", name = adapter[["api"]] %||% "", field = "stream",
+               problem = "stream() must return a generator function")
+  }
+  st$next_at = -Inf
+  st$aborts = 0L
+  st$id = reactor_task(function() {
+    tryCatch(stream_inprocess_step(st, gen), error = function(e) {
+      stream_normaliser_fail(st, stream_error_condition(e, "inprocess transport"))
+      FALSE
+    })
+  }, run = st$run)
+  st$id
+}
+
+#' Refuse a malformed process_jsonl spec of an adapter (before any child starts)
+#' @noRd
+stream_process_spec_abort = function(st, field, problem) {
+  gptr_abort(paste0("The adapter's process spec is malformed: ", problem, "."), "invalid_spec",
+             kind = "adapter", name = st$adapter[["api"]] %||% st$model[["api"]] %||% "",
+             field = field, problem = problem)
+}
+
+#' Start the child of a process_jsonl adapter and watch its stdout
+#'
+#' stdin is a pipe fed by write_all() (non-blocking, IC-60). Only the session's current child
+#' (`opts$state$process`) routes lines and its exit to the open turn, so the late output of a
+#' child that was replaced or killed reaches no turn. The child environment is the profile's
+#' (`child_env()` without `provider`: no key is added to a CLI child, IC-65). The child, its
+#' job row and its watcher are the turn's (`st$process`, `st$job`, `st$watch`) as soon as each
+#' exists, so a failure below stops the child and removes the row (stream_cancel()). The row's
+#' `stop()` is stream_process_stop(); the session keeps the child's watcher id in
+#' `opts$state$watch` next to `process` and `job`.
+#' @noRd
+stream_process_start = function(st, start) {
+  state = st$opts$state
+  args = start[["args"]] %||% character()
+  if (is.list(args)) args = as.character(unlist(args))
+  env = child_env(start[["env_profile"]] %||% "helper", set = start[["env"]] %||% character())
+  p = proc_spawn(start[["command"]], args, env = env, wd = start[["wd"]], stdin = "|",
+                 stdout = "|", stderr = "|")
+  st$process = p
+  job = id_new("j", 8L)
+  st$job = job
+  watch = NULL
+  job_add("cli", job, st$model[["provider"]] %||% "", pid = p$get_pid(),
+          stop = function() stream_process_stop(state, p, watch, job))
+  state$process = p
+  state$job = job
+  state$watch = NULL
+  watch = reactor_proc(p,
+                       on_line = function(line) {
+                         if (!identical(state$process, p)) return(invisible(NULL))
+                         f = state$route
+                         if (is.function(f)) f(line)
+                       },
+                       on_exit = function(status) {
+                         job_remove(job)
+                         if (!identical(state$process, p)) return(invisible(NULL))
+                         state$process = NULL
+                         f = state$route_exit
+                         if (is.function(f)) f(status)
+                       },
+                       run = st$run)
+  st$watch = watch
+  state$watch = watch
+  p
+}
+
+#' The process_jsonl transport (04 section 8.4 step 3)
+#'
+#' One supervised child per session, kept in `opts$state$process` and the job table (kind
+#' `cli`): `build()` returns `start` to start a child (a running one is forgotten and stopped
+#' first, stream_process_kill()) or NULL to reuse it. The turn's `send` objects are written as
+#' JSON lines, then, with `close_stdin`, stdin is closed once they are written (P04's
+#' write_close()). Child stdout lines are parsed and pushed as `list(data, obj)` (non-JSON lines
+#' are ignored); the child's exit ends the turn through the normaliser's finish(). The spec is
+#' checked before any child starts. Returns the id of the abort watch task.
+#'
+#' The caller may cancel that id (P06's run_abort() and run_settle() cancel the run's ids), so
+#' the turn does not depend on the watch: a line or the exit of its child first runs
+#' stream_over() (an aborted turn ends as aborted, a settled run's turn is let go), and the
+#' session's next turn lets go of a turn still open (`opts$state$stream_turn`). Both drop the
+#' child, so the next turn starts a new one and the old turn's late output reaches no turn.
+#' @noRd
+stream_process = function(st, adapter) {
+  st$transport = "process"
+  st$adapter = adapter
+  state = st$opts$state
+  if (!is.environment(state)) {
+    gptr_abort("A process_jsonl stream needs `opts$state` to be an environment.",
+               "invalid_argument", arg = "opts$state", expected = "an environment")
+  }
+  # an earlier turn of the session still open was abandoned (its watch was cancelled)
+  prev = state$stream_turn
+  if (is.environment(prev) && !isTRUE(prev$finished)) stream_detach(prev)
+  state$stream_turn = st
+  spec = adapter$build(st$model, st$context, st$opts)
+  if (!is.list(spec)) {
+    stream_process_spec_abort(st, "build", "build() must return a process spec (a list)")
+  }
+  send = spec[["send"]] %||% list()
+  if (!is.list(send) || !is.null(names(send))) {
+    stream_process_spec_abort(st, "send", "send must be an unnamed list of JSON objects")
+  }
+  start = spec[["start"]]
+  if (!is.null(start)) {
+    cmd = if (is.list(start)) start[["command"]] else NULL
+    if (!is.character(cmd) || length(cmd) != 1L || is.na(cmd) || !nzchar(cmd)) {
+      stream_process_spec_abort(st, "start", "start must be a list with a command string")
+    }
+  }
+  st$norm = adapter$parse(st$model, st$opts)
+  lines = vapply(send, function(o) json_encode(o), "")
+  p = state$process
+  if (!is.null(start)) {
+    if (!is.null(p)) {
+      # forget the running child first, so its late output and exit reach no turn
+      state$process = NULL
+      stream_process_kill(p, state$watch, state$job)
+    }
+    p = stream_process_start(st, start)
+  } else {
+    st$watch = state$watch
+    st$job = state$job
+  }
+  if (is.null(p)) {
+    gptr_abort("The adapter reused a child process, but none is running for this session.",
+               "internal", detail = "process_jsonl without start")
+  }
+  st$process = p
+  state$route = function(line) {
+    if (stream_over(st)) return(invisible(NULL))
+    obj = tryCatch(json_decode(line), error = function(e) NULL)
+    if (is.list(obj)) stream_push(st, list(data = line, obj = obj))
+    invisible(NULL)
+  }
+  state$route_exit = function(status) {
+    st$process = NULL
+    if (!stream_over(st)) stream_normaliser_finish(st)
+    invisible(NULL)
+  }
+  for (l in lines) write_all(p, paste0(l, "\n"))
+  if (isTRUE(spec[["close_stdin"]])) write_close(p)
+  st$id = stream_watch(st)
+  st$id
+}
+
 #' The stream driver of an adapter transport, or NULL when provider_stream() has none
 #' @noRd
 stream_driver = function(transport) {
-  switch(transport, http_sse = , http_ndjson = , http_json = stream_http, NULL)
+  switch(transport, http_sse = , http_ndjson = , http_json = stream_http,
+         inprocess = stream_inprocess, process_jsonl = stream_process, NULL)
 }
 
 #' The protected safety record for the request preflight (07-local-ollama.md section 2.1)
@@ -931,7 +1200,8 @@ stream_conversational = function(model, adapter) {
 #' classifier-only adapter, a disabled provider (gptr_error_not_available), a refused preflight
 #' (gptr_error_not_available, gptr_error_untrusted) or a missing key (gptr_error_no_key) is
 #' signalled before anything starts; an adapter that fails while building the request ends the
-#' stream with an `error` event instead. Returns the transfer id, or NA when nothing started.
+#' stream with an `error` event instead. Returns the transfer id (HTTP transports), the task id
+#' (`inprocess`) or the abort watch task id (`process_jsonl`), or NA when nothing started.
 #' @noRd
 provider_stream = function(model, context, opts, emit, done, run = NULL) {
   opts = opts %||% list()
