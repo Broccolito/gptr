@@ -14,10 +14,11 @@ Description: Runs large language model agents inside the running 'R'
     runs the agent loop and returns a value that can be piped into further
     prompts. Supports the 'Anthropic', 'OpenAI' and 'Google Gemini'
     application programming interfaces, 'OpenAI'-compatible endpoints, the
-    'Claude Code' and 'Codex' command line tools, and System One
-    typed-decision models such as 'Jev'
+    'Claude Code' and 'Codex' command line tools, local 'Ollama' conversational
+    models, and System One
+    typed-decision models such as 'Jev', 'Clef' and 'Clef Flash'
     <https://typesafe.ai/blog/introducing-system-one-models-and-jev>, whose
-    calibrated yes/no, choice and score answers can be used directly in if()
+    typed yes/no, choice and score answers can be used directly in if()
     and for() statements. Tools for reading, writing, editing and searching
     files and for evaluating 'R' code are implemented in 'R'; skills,
     extensions, Model Context Protocol ('MCP') servers, sub-agents and
@@ -75,6 +76,7 @@ Language: en-US
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-SystemRequirements: Optional external programs: 'claude' (Claude Code)
+SystemRequirements: Optional: Ollama (>= 0.35.1) for native local decision models;
+    other optional external programs: 'claude' (Claude Code)
     and 'codex' (Codex) for subscription providers, 'quarto' for 'Quarto'
     documents, and a 'Chrome'-family browser for app screenshots.

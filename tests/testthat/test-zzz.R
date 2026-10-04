@@ -100,6 +100,8 @@ test_that("tests run with redirected homes, a temporary project and no keys (IC-
     expect_match(Sys.getenv(name), "gptr-tests-", fixed = TRUE, label = name)
   }
   expect_identical(Sys.getenv("GPTR_REPLAY"), "replay")
+  expect_identical(getOption("gptr.project_root"), Sys.getenv("GPTR_PROJECT_ROOT"))
+  expect_identical(getOption("gptr.replay"), "replay")
   expect_identical(Sys.getenv("OMP_THREAD_LIMIT"), "2")
   # R CMD check sets R_TESTS to the relative path startup.Rs, which R's base profile sources in
   # every R process; testthat blanks it for the whole run, so Rscript children of tests start
@@ -111,4 +113,63 @@ test_that("tests run with redirected homes, a temporary project and no keys (IC-
     expect_identical(Sys.getenv("ANTHROPIC_API_KEY"), "")
     expect_identical(Sys.getenv("TYPESAFE_API_KEY"), "")
   }
+})
+
+test_that(".onLoad runs on_load() expressions, then ext_load_builtins() when it exists", {
+  old = list(on_load = the$on_load, load_errors = the$load_errors)
+  withr::defer({
+    the$on_load = old$on_load
+    the$load_errors = old$load_errors
+  })
+  seen = new.env()
+  seen$calls = character()
+  the$on_load = list()
+  on_load(assign("calls", c(seen$calls, "declaration"), envir = seen))
+  local_mocked_bindings(ns_fun = function(name) {
+    if (identical(name, "ext_load_builtins")) {
+      function() assign("calls", c(seen$calls, "builtins"), envir = seen)
+    }
+  })
+  expect_null(.onLoad("lib", "gptr"))
+  expect_identical(seen$calls, c("declaration", "builtins"))
+})
+
+test_that(".onLoad records a failing ext_load_builtins() instead of failing the load", {
+  old = list(on_load = the$on_load, load_errors = the$load_errors)
+  withr::defer({
+    the$on_load = old$on_load
+    the$load_errors = old$load_errors
+  })
+  the$on_load = list()
+  the$load_errors = list()
+  local_mocked_bindings(ns_fun = function(name) function() stop("registry broke"))
+  expect_null(.onLoad("lib", "gptr"))
+  expect_length(the$load_errors, 1L)
+  expect_match(conditionMessage(the$load_errors[[1]]$error), "registry broke")
+})
+
+test_that(".onUnload runs registered cleanups in reverse order, each in try()", {
+  old = the$on_unload
+  withr::defer({
+    the$on_unload = old
+  })
+  seen = new.env()
+  seen$calls = character()
+  the$on_unload = list()
+  on_unload(function() assign("calls", c(seen$calls, "first"), envir = seen))
+  on_unload(function() stop("a failing cleanup does not stop the others"))
+  on_unload(function() assign("calls", c(seen$calls, "last"), envir = seen))
+  expect_null(.onUnload("lib"))
+  expect_identical(seen$calls, c("last", "first"))
+  expect_length(the$on_unload, 0L)
+})
+
+test_that("the package loaded without load-time errors", {
+  expect_length(the$load_errors, 0L)
+})
+
+test_that("imports_used() references every Imports package", {
+  used = vapply(imports_used(), function(f) is.function(f), logical(1))
+  expect_true(all(used))
+  expect_length(used, 14L)
 })

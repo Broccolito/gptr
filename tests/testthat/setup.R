@@ -37,6 +37,8 @@ local({
     )
   }
   withr::local_options(
+    gptr.project_root = paths[["project"]],
+    gptr.replay = "replay",
     gptr.interactive = FALSE,
     gptr.quiet = TRUE,
     .local_envir = testthat::teardown_env()
