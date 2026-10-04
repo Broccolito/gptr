@@ -1,0 +1,14 @@
+---
+title: "Report"
+---
+
+```{r setup}
+x = 1
+```
+
+````{r ask}
+cat("```not a fence end```\n")
+gptr("count letters in this prompt")
+````
+
+Some prose.

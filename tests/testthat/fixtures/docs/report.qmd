@@ -1,0 +1,8 @@
+---
+title: "Report"
+---
+
+```{r}
+#| label: ask
+gptr("count letters in this prompt")
+```

@@ -1,0 +1,15 @@
+---
+title: "Report"
+---
+
+```{r}
+#| label: ask
+gptr("count letters in this prompt")
+```
+
+```{r}
+#| label: gptr-9fbc33
+# >>> gptr:9fbc33 model=fake/fake-1 date=2026-09-29 prompt=3848b6ef5cca
+n = 1
+# <<< gptr:9fbc33
+```

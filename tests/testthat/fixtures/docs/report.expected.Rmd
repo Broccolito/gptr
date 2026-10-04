@@ -1,0 +1,22 @@
+---
+title: "Report"
+---
+
+```{r setup}
+x = 1
+```
+
+````{r ask}
+cat("```not a fence end```\n")
+gptr("count letters in this prompt")
+````
+
+````{r gptr-3fdfa0}
+# >>> gptr:3fdfa0 model=fake/fake-1 date=2026-09-29 prompt=3848b6ef5cca
+n = nchar("count letters in this prompt")
+n * 2
+## Decision: stub.
+# <<< gptr:3fdfa0
+````
+
+Some prose.

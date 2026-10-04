@@ -3514,3 +3514,92 @@ as P07's restore does.
 Validation: `progress/P07.md`, Task 7. Two tests (12 expectations) were added; on the plan
 literal 4 of them fail (`dev/.validation/P07/task7-plan-literal.log`). Final
 `^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 222 ]`.
+
+## D-070 - P15 document formats: chunks are divided and labelled as knitr does, an unterminated chunk is never written, each statement of a chunk owns its own agent chunk, an agent chunk's fence outgrows its body, inert blocks round-trip exactly, chunk prefixes are kept, a malformed transcript is not written (2026-10-04)
+
+P15 Task 5's plan-literal formats (`R/doc-formats.R`) were changed in seven ways. The
+`doc_format` functions of contract 10.2 row 18 and the helpers the plan lists keep their names
+and arguments; `doc_rmd_chunks()` gains a column `closed`; new internal helpers:
+`doc_rmd_unprefix()`, `doc_rmd_option_comment()`, `doc_rmd_yaml_label()`,
+`doc_rmd_pipe_label()`, `doc_rmd_owner()`, `doc_rmd_fence()`, `doc_rmd_refence()`.
+1. **Chunks are divided and labelled as knitr 1.52 (xfun 0.61) does.** The plan's goal is that
+   the label `knitr::opts_current$get("label")` reports for a running chunk finds that chunk
+   (self-review ambiguity 26), but on the 22-chunk probe document of the tests its parser
+   found 21 chunks and gave 14 of them another label than knitr; from the first disagreement on,
+   every later unlabelled chunk had the wrong `unnamed-chunk-<k>`, and the probe's one `gptr()`
+   call was not found (`dev/.validation/P15/task5-probe-plan-literal-labels.log`; knitr's own
+   labels: `task5-probe-knitr.log` and the live test). Now:
+   - a chunk ends only at a line with exactly its prefix and fence; a fence line of another
+     length is chunk content. The plan ended a ```` ``` ```` chunk at a ```` ```` ```` line inside a
+     string, so the `gptr()` call after it was never found.
+   - a begin line with the chunk's own prefix and fence opens a new chunk, and the open one is
+     unterminated (`closed = FALSE`, `end` is the line after its body). The plan swallowed the
+     next chunk.
+   - header labels are read as `xfun::csv_options()` reads them: the text is parsed as
+     `alist(...)` after xfun's `quote_label()`, never evaluated. So `{r label=foo}`,
+     `{r echo=FALSE, bar}` and `{r a b}` are labelled, which the plan missed.
+   - option lines count only at the start of the body, with xfun's `#| ` (space included) or
+     the engine's own comment (`//| ` for dot, `--| ` for sql). They are read after the chunk's
+     prefix is removed, as knitr does. `#| id:` and csv-style option lines are honoured. The
+     plan took a `#| label:` line anywhere in the body, kept the quotes of
+     `#| label: "x"`, and missed indented chunks.
+   - the YAML `label` (else `id`) scalar is read directly, in its plain, single-quoted and
+     double-quoted forms. `yaml::yaml.load()` turns non-ASCII text into `<c3><af>` escapes
+     outside a UTF-8 locale, even when given unmarked bytes (IC-62;
+     `task5-probe-yaml-clocale.log`). Other YAML types (`yes`, `1e5`) are read as their text.
+   A test checks the labels against a real `knitr::knit()` (skipped without knitr). Labels in
+   a C locale keep their UTF-8 text, as in a UTF-8 locale. In a C locale knitr itself escapes
+   non-ASCII labels, so such a label is not located there.
+2. **An unterminated chunk is never written into or after.** A calling chunk or a run of agent
+   chunks without its closing fence, a block whose agent chunk is unterminated, and a console
+   append after an unterminated last chunk all signal `gptr_error_doc_write` with `reason =
+   "malformed"`. Inserting after such a chunk would put the agent chunk inside it, or after the
+   next chunk's header line.
+3. **Each `gptr()` statement of a chunk owns its own agent chunk (contract 11.5 ownership).** All
+   top-level calls of an Rmd/qmd chunk share the run of agent chunks after it. The plan applied
+   `doc_run_owner()` to each call alone, so in a chunk with `gptr("load data")` and
+   `gptr("plot it")`, editing the second prompt claimed the first call's block by `call=1` as
+   stale and regenerated it with the wrong code. With the same prompt in two statements, the
+   second call replayed the first one's block and never ran. `doc_rmd_owner()` assigns blocks
+   one to one, in document order. First come prompt and `call=` matches, then prompt matches
+   (never a block of another same-prompt call of the statement, ambiguity 28), then `call=k`
+   (stale). The located call uses its runtime prompt hash; the other calls use their literals.
+   With a single call this is `doc_run_owner()`.
+4. **An agent chunk's fence outgrows its body.** The contract copies the owning chunk's fence. A
+   block whose code holds a line that starts with a backtick run at least that long (a
+   multi-line string with a fenced example) would end the chunk under knitr's or pandoc's
+   rules, or open another. The fence is then one backtick longer than that run, and a
+   rewrite lengthens both fences of the agent chunk (`doc_rmd_refence()`). Otherwise the
+   fence is copied as before.
+5. **Inert blocks round-trip exactly (G7 section 3.8).** The plan left body lines that already
+   started with `#~ ` unprefixed, so reviving a block changed a user's own `#~ ` comment. It
+   also treated lines that are not one whole block as a block, dropping the last line. Now an
+   undone block is left as is, a live block is not "revived", every non-empty line gets one
+   `#~ ` and loses exactly one, and anything but one whole block is returned unchanged.
+6. **Chunk prefixes are kept.** The inserted agent chunk indents its body with
+   `doc_indent_lines()`, like the rewrite, so blank lines carry no prefix. The plan's
+   `paste0(prefix, lines)` gave them one, and rewriting the same block changed the document.
+   `doc_rmd_chunk_eval()` reads and writes `#| eval: false` with the chunk's prefix, so an
+   indented qmd agent chunk can be made inert and revived. It reads and writes only the
+   chunk's leading option lines (from the first line, those that start with `#| ` after the
+   prefix: the rule of `doc_rmd_pipe_label()` and `xfun::divide_chunk()`). The plan matched
+   `#| eval: false` and `#| label:` on every line of the chunk, so reviving a block deleted a
+   `#| eval: false` line of its code (a string holding a Quarto chunk, as in item 4) and the
+   block came back "user-edited". It also never wrote the option when the code held such a
+   line, and put it after a `#| label:` line of the code when the chunk was labelled in its
+   header (review round 1).
+7. **A transcript with malformed markers is not written**, as `r` and `rmd` documents already
+   were not. With a duplicated block id, the plan spliced both ranges at once and failed with
+   a base R error.
+Also: site and block fields are read with `[[` (exact names, as D-064 item 3). In the tests,
+fixture lines are split by a test helper, because Task 4's `doc_read()` is not implemented yet:
+Task 4 needs P08's `settings_write()`. Calls inside blockquoted (`> `) chunks are still not
+located, as in the plan, because their R text does not parse.
+
+Validation: `progress/P15.md`, Task 5. The plan's 7 tests are unchanged apart from that fixture
+reader, and they pass on the plan literal with the plan's 39 expectations
+(`dev/.validation/P15/task5-green0-plan-literal.log`). Nine tests (56 expectations) were added.
+With the plan literal swapped into the loaded namespace, 34 of them fail and one test errors
+(`task5-adapt-red.log`). Review round 1 added a tenth (10 expectations; 6 fail before its fix,
+`task5-fix1-red.log`). Final `^doc-formats$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]`, the
+same under `LC_ALL=C LANG=C` (`task5-fix1-green.log`, `task5-fix1-green-clocale.log`).
