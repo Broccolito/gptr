@@ -1533,6 +1533,123 @@ to the plan's tests, which are unchanged. Against the plan-literal source the fo
 `[ FAIL 4 | WARN 1 | SKIP 0 | PASS 51 ]`. The final result for `env-snapshot|copy-eval` is
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 69 ]`, and `^env-snapshot$` under `LC_ALL=C` passes 66.
 
+## D-041 - P10 walker: the prune list always wins at the walk root, git's bracket-expression rules, one ignore-file precedence, non-ASCII, invalid and newline names, a git root at "/" (2026-10-04)
+
+P10 Task 2's plan-literal `R/tool-walk.R` (`walk_files()`, `glob_to_regex()`, the `.gitignore`
+engine; an L4 service that P11, P16 and P18 consume) had four defects. Its own 48 expectations
+pass against the literal source; each defect below was shown by an added test against that
+source (`dev/.validation/P10/task2-red-plan-literal.log` and `...-clocale.log`; items 5-7, found
+in review round 1, by `task2-fix1-red.log`; items 8-9, found in review round 2, by
+`task2-fix2-red*.log`). No exported signature changes; the returned data frame gains one
+attribute, `invalid_names` (item 7); `glob_to_regex()` can now raise `invalid_argument` for a glob
+that has no valid translation (item 8); the internal `glob_translate()` takes `git` instead of the
+plan's `braces` (item 8).
+
+1. **The prune list always wins** (contract section 7.10: the walker "skips `.git`,
+   `node_modules`, `renv`, `.venv`, `__pycache__`"; report 11 section 4.5: "always pruned").
+   The plan compiled the prune list as the first ignore rules, so a later negation in an ignore
+   file re-included a pruned directory. The common whitelist `.gitignore` (`*`, `!*/`, `!*.R`)
+   made the walker descend `.git/` and `node_modules/` and return `.git/hooks/h.R` and
+   `node_modules/m/x.R`. `walk_tree()` now evaluates the prune rules on their own (still with
+   the plan's anchoring and last-match-wins inside the list) and drops every entry they match
+   before the ignore rules are consulted. `prune = character()` still turns pruning off.
+2. **Bracket classes.** `glob_translate()` escaped the `]` that closes a POSIX class, so
+   `[[:digit:]]` matched the set `{[ : d i g t ]}` instead of a digit (in globs and in ignore
+   files), and it left a leading `]` unescaped after the `[^/` it emits for `[!...]`, so `[!]a]b`
+   compiled to "one non-slash character, then `a]b`". The new `glob_class_body()` kept a known
+   POSIX class verbatim and escaped every other `[`, `]` and backslash (superseded by item 8).
+3. **One ignore-file precedence.** The plan reads an ancestor directory's ignore files in the
+   order `.gitignore`, `.ignore`, `.gptrignore` (the last match wins, so `.gptrignore` wins) but
+   a walked directory's in `list.files()` order, where `.ignore` sorts last. The same tree then
+   gave different file sets when walked from its root and from a subdirectory. Walked
+   directories now use the ancestors' order.
+4. **Non-ASCII paths in a non-UTF-8 locale** (IC-62; architecture section 6.6; the hosted
+   `LC_ALL=C` job). `basename()` and `dirname()` stop with "unable to translate ... to native
+   encoding" on a marked UTF-8 non-ASCII string there, so `walk_files()` failed for any
+   non-ASCII root (`fs_case_insensitive()`, `git_root_of()`) or entry name (`ignore_eval()`).
+   The basename is now taken with `sub()` (`"(?s)^.*/"` since item 9), the two root helpers work
+   on the unmarked bytes of `fs_path()` (and `git_root_of()` returns `as_utf8()`), and
+   `resolve_tool_path()` passes `fs_path(p)` to `path.expand()`.
+5. **The prune list is anchored at the walk root.** The plan matched the prune list, like the
+   ignore rules, against paths relative to the git root, so its anchored entries
+   (`renv/library/`, `renv/staging/`, `renv/sandbox/`, `packrat/lib*/`, `packrat/src/`) never
+   applied when the walked directory was a subdirectory of a repository: `walk_files("proj")`
+   below a git root returned `renv/library/pkg/DESCRIPTION` while `walk_files("proj",
+   gitignore = FALSE)` pruned it (the prune list does not depend on git; report 11 section 4.5,
+   "git does not know gptr's default prune list"). The prune rules are now matched against the
+   path relative to the walk root, in both modes, as report 11's ripgrep accelerator does with
+   `wd = root`; ignore-file rules stay relative to the git root. Walking `renv/` itself now
+   lists `library/` unless an ignore file excludes it (renv's own `renv/.gitignore` does); an
+   explicit path inside a pruned directory was already honoured (report 11 risk 8).
+6. **A git root at the file-system root.** `git_root_of()` returns `/` or `C:/` there (with the
+   slash), and the plan's `substring(root, nchar(groot) + 2L)` then dropped the first character
+   of the relative prefix (`rivate/tmp/proj`), so ancestor ignore files were looked up at wrong
+   paths and silently skipped and anchored rules never matched. The prefix is measured, and the
+   ancestor and `.git/info/exclude` paths are joined, on the git root without trailing slashes.
+7. **Entry names that are not valid UTF-8** (IC-62 ingress). A name `as_utf8()` cannot repair
+   (for example Latin-1 bytes on Linux in a UTF-8 locale) stopped the whole walk in
+   `tolower()`/`sub(perl = TRUE)` (the plan's `tolower()` sort already failed on it). No UTF-8
+   path can name such an entry, and passing its bytes on would break JSON output downstream, so
+   the walker skips it right after listing (a directory is not descended) and counts it in the
+   new `invalid_names` attribute of `walk_tree()` and `walk_files()`, which P11's `find`/`ls`
+   can report. The listing goes through the new one-line helper `walk_list_dir()` so a test can
+   inject such a name (APFS cannot create one).
+
+8. **Bracket expressions follow git's wildmatch and always compile** (contract section 7.10:
+   `glob_to_regex()` returns a PCRE). Item 2 still emitted an invalid PCRE for legal patterns: a
+   class body that starts and ends with `:`, `.` or `=` (`[:digit:]`, `[=a=]`, the typo
+   `[[:digit:]`), a reversed range (`[z-a]`) or a `-` next to a POSIX class (`[[:digit:]-z]`). One
+   such line in any ignore file stopped the whole walk with a base-R error and a leaked PCRE
+   warning, and `glob_to_regex()` returned a pattern that does not compile. `glob_class()` now
+   replaces the plan's class scan and `glob_class_body()` with one parser that follows git's
+   wildmatch: after `!`/`^` a first `]` is literal, a backslash escapes the next character (the
+   plan kept it literal; `[\]]` is the set `{]}`), `-` is literal first, last or right after a
+   range or class, `[:name:]` closes at the first `]`, and every character is emitted escaped or
+   inside a range, so a class always compiles (`[:digit:]` is the set `{: d i g t}`). In ignore
+   files (`glob_translate(git = TRUE)`, which replaces the plan's `braces = FALSE`) the rest of
+   wildmatch applies: a reversed range keeps only its first character (`[z-a]` matches `z`); an
+   unclosed bracket expression or an unknown class name (`foo[bar`, `[[:word:]]`) matches nothing,
+   so the rule is dropped; a class never matches `/`; on a case-insensitive file system
+   (`core.ignorecase`, `fold = TRUE`) class characters are compared as written (`[A]` matches
+   nothing), a range also matches a lower-case letter whose capital it holds (`[*-a]` matches `b`),
+   `[:upper:]` and `[:lower:]` match every letter, and an escaped capital (`\A`) never matches. In
+   globs a reversed range or an unknown class name is an `invalid_argument` error (fd/globset
+   rejects a reversed range) and an unclosed `[` stays literal (plan). Brace alternation skips
+   escaped braces (`{a,\}` is literal). Safety net: `ignore_compile()` drops a rule whose PCRE does
+   not compile and `glob_to_regex()` raises `invalid_argument` for one (`{a,[}]`), both through
+   P02's `spec_regex_ok()` (`ext-specs.R`, L0). A scratch oracle of 114 one-line ignore files
+   (bracket edge cases and case-folding probes) agrees with `git ls-files` with `core.ignorecase`
+   true and false and in the UTF-8 and C locales, except one known difference kept by design:
+   wildmatch compares bytes, so `?` or a class matches one byte of a multi-byte UTF-8 character
+   there (`?[A-Z]` matches `\u00c9t` in git); the walker matches characters.
+9. **Names holding a newline.** Item 4's `sub(".*/", ...)` stops at a newline (PCRE `.`), so the
+   basename of `x\ny/z.log` was `x\nz.log` and unanchored rules missed it (the plan's
+   `basename()` was right). The `.*` of emitted patterns (`**`, the `(?:.*/)?` prefix of
+   `glob_to_regex()`) did not cross a newline either, and `$` also matches before a final newline.
+   The basename is now `sub("(?s)^.*/", ...)` and `glob_anchor()` anchors every emitted PCRE as
+   `(?s)^...\z`, in ignore rules and in `glob_to_regex()` (whose result now starts with `(?s)`;
+   its consumers use it with `perl = TRUE`). Git and fd match such names the same way.
+
+Validation: `progress/P10.md`, Task 2 (`test-tool-walk.R`). Ten blocks were added, 30
+expectations: "bracket classes keep POSIX classes and a literal `]` after the negation" (4),
+".gptrignore wins over .ignore, which wins over .gitignore, at every level" (2), "a negation in
+an ignore file never re-includes a pruned directory" (2), "non-ASCII directory and file names
+are walked and matched in any locale" (3), "the prune list is anchored at the walk root, also
+below a git root" (2), "a git root at the file-system root keeps the ancestor rules" (1, with
+`git_root_of()` mocked) and "an entry whose name is not valid UTF-8 is skipped and counted,
+never fatal" (2, with `walk_list_dir()` mocked); "bracket expressions follow git's wildmatch and
+always compile" (9), "case folding inside brackets follows git's wildmatch (core.ignorecase)" (2,
+with `fs_case_insensitive()` mocked both ways) and "a file name holding a newline is matched like
+git" (3, skipped on Windows). Against the plan-literal source:
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 54 ]` in a UTF-8 locale, `[ FAIL 6 | WARN 0 | SKIP 0 |
+PASS 51 ]` under `LC_ALL=C` (items 1-4, before items 5-7 existed). Items 5-7 against the round-0
+source: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 60 ]`. Items 8-9 against the round-1 source:
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 64 ]` (the bracket block stops at its first walk with the
+invalid-PCRE error; its 7 glob expectations all fail there too, `task2-fix2-red-globs.log`), and
+the case-folding block against the parser without folding `[ FAIL 1 | WARN 0 | SKIP 0 |
+PASS 77 ]`. Green is `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 78 ]` in both locales: the plan's 48
+expectations, unchanged, plus these 30.
+
 ## D-042 - P06 gptr_usage(): unknown usage prints as unknown, an unknown model is the NA group, the System 1 log is read without a catch-all (2026-10-04)
 
 P06 Task 11's literal `gptr_usage()` predates IC-74 (07-local-ollama.md section 5: "Missing usage
@@ -1638,3 +1755,44 @@ added to the plan's tests, which are unchanged. Against the plan-literal source:
 `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 103 ]` (items 1-7; item 8's red is in the review round 1 entry).
 Final `env-describe|copy-eval`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 160 ]`; `^env-describe$` under
 `LC_ALL=C` passes 153.
+
+## D-044 - P06 gptr_fork(): a cut keeps the entries that close its turn, an empty entry id is a classed refusal, a cancel reason must be one string, the IC-53 refusal names level 4 (2026-10-04)
+
+P06 Task 12's plan-literal `gptr_fork()` passes all of the plan's tests against the real P01-P05
+and P06 Tasks 1-11 code. Four details changed, each shown by an added test against that source:
+
+1. **A cut at the end of a turn keeps the entries that close the turn.** The plan's
+   `fork_boundaries()` placed a boundary on a message only, so `at = NULL` and `at = k` cut
+   before the entries that follow the turn's last message. The turn's `gptr.value` is such an
+   entry: `session_value_set()` (Task 4) appends it after the answer, and so do Task 9's
+   `run_returns()` and P08's gateway when they designate the value of a call. The fork kept the
+   value in memory (`fd$values`), but not in its transcript or its file. Task 13's planned
+   `store_rebuild()` restores values from the `gptr.value` entries of the path
+   (`rebuild_values()`), so a resumed fork would have lost the value of its last copied turn.
+   For an idle source, `gptr.forkOf.entry` was also not the source's leaf (S22 asserts that
+   equality; it held only while nothing followed the final answer). Now a boundary extends over
+   the entries that directly follow it and carry no message: a value, a model or mode change
+   made after the answer, a compaction, a label (still dropped by `store_fork()`). Operator
+   messages (`custom_message`) are relays for the model's next step and never extend a boundary.
+   Which messages are boundaries (no tool call awaiting its result, error and aborted replies
+   skipped) is unchanged, and so are a running source's cut and the turn numbers.
+2. **An empty entry id is refused with `gptr_error_invalid_argument`** (`arg = "at"`, 04 section
+   1.1). The plan's `exists("", envir = d$index)` raised base R's unclassed "invalid first
+   argument".
+3. **A cancel's reason is used only when it is one non-empty string**; otherwise the message says
+   "no reason given". The plan pasted a vector reason into a message of several lines and read
+   `dec$cancel`/`dec$reason` with `$`, which matches prefixes (D-030 item 8 precedent: exact
+   `[[`).
+4. **The IC-53 refusal of `session_control_check()` carries `risk = 4L`**, the level of the
+   `control` category (IC-53 item 3), as P02's `ext_control_guard()` and P08's planned
+   `control_check()` do. The plan gave `risk = NULL`. The tool name is read with `[[`.
+
+Not behavioural: the source's rank-0 specs are registered for the fork after `session_new()`
+returns, so the fork's finalizer (`session_shutdown`, P02's `registry_session_drop()`) removes
+them if a later step fails. The plan registered them first, under a fresh id that no live
+session might ever hold.
+
+Validation: `progress/P06.md`, Task 12. Seven blocks (51 expectations) were added to the plan's
+tests, which are unchanged. Against the plan-literal source:
+`[ FAIL 13 | WARN 0 | SKIP 0 | PASS 403 ]`, all 13 in the added blocks. Final
+`^session-(object|store)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 416 ]`.
