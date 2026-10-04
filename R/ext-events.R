@@ -187,7 +187,8 @@ ev_redact_payload = function(x, profile = "stream", preserve_replay = TRUE) {
     nm = if (is.null(nms)) "" else nms[[i]]
     if (nm %in% replay) next
     v = x[[i]]
-    generic = nm %in% c("input", "arguments", "raw_arguments", "details", "params", "attrs")
+    generic = nm %in% c("input", "arguments", "raw_arguments", "details", "params", "attrs",
+                        "headers", "settings", "env")
     if (is.character(v) || is.list(v)) {
       x[i] = list(ev_redact_payload(v, profile, preserve_replay && !generic))
     }

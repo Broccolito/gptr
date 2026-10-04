@@ -327,13 +327,14 @@ test_that("replay preservation cannot exempt arbitrary user fields from redactio
   redactor_set(function(x, profile = "persist") gsub("CANARY", "[redacted]", x, fixed = TRUE))
   user = list(json = "CANARY", signature = "CANARY", plain = "CANARY",
               nested = list(type = "opaque", json = "CANARY"))
-  payload = list(input = user, details = user, params = user,
+  payload = list(input = user, details = user, params = user, headers = user,
+    settings = user, env = user,
     message = list(content = list(block_text("CANARY", signature = "CANARY"),
       block_thinking("CANARY", signature = "CANARY", redacted = TRUE, data = "CANARY"),
       block_opaque("p", "a", "m", "CANARY"),
       block_tool_call("c1", "r", user, thought_signature = "CANARY"))))
   result = ev_redact_payload(payload)
-  for (field in c("input", "details", "params")) {
+  for (field in c("input", "details", "params", "headers", "settings", "env")) {
     expect_identical(result[[field]]$json, "[redacted]")
     expect_identical(result[[field]]$signature, "[redacted]")
     expect_identical(result[[field]]$nested$json, "[redacted]")
