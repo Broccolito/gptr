@@ -131,16 +131,19 @@ check_session_id = function(x, arg) {
 }
 
 #' Canonical model reference; lenient (an unknown model fails at the first request, not here)
+#'
+#' Pure resolution (no discovery, no I/O; IC-74). `type` is the resolved model type (`"chat"`,
+#' `"classifier"`, ...) or `NULL` when it is not known here (a router, an unresolved reference).
 #' @noRd
 model_canonical = function(model, strict = FALSE) {
-  if (startsWith(model, "router:")) return(list(ref = model, thinking = NULL))
+  if (startsWith(model, "router:")) return(list(ref = model, thinking = NULL, type = NULL))
   rec = if (strict) {
     model_resolve(model, strict = TRUE)
   } else {
     tryCatch(model_resolve(model, strict = FALSE), error = function(e) NULL)
   }
-  if (is.null(rec)) return(list(ref = model, thinking = NULL))
-  list(ref = rec$ref, thinking = rec$thinking)
+  if (is.null(rec)) return(list(ref = model, thinking = NULL, type = NULL))
+  list(ref = rec$ref, thinking = rec$thinking, type = rec$type)
 }
 
 #' The data environment of a session (read by every plan; written only through P06's verbs)
@@ -655,4 +658,189 @@ session_values_df = function(s) {
              class = vapply(vals, function(v) v$class %||% NA_character_, ""),
              bytes = vapply(vals, function(v) as.numeric(v$bytes %||% NA_real_), 1),
              stringsAsFactors = FALSE)
+}
+
+# ---------------------------------------------------------------------------- verbs
+
+#' Switch the session's model: resolve, append `model_change`, emit `model_select`
+#'
+#' Resolution is pure (no discovery, no I/O; IC-74): the request preflight runs at the next
+#' request, in `provider_stream()`. A decision-only (classifier) model answers typed System One
+#' questions and cannot hold a conversation, so it is refused before anything is recorded, with
+#' the condition of `provider_stream()`'s refusal (`gptr_error_not_available`, D-017).
+#' @noRd
+session_set_model = function(s, ref, reason = "user") {
+  check_class(s, "gptr_session", "s")
+  check_string(ref, "ref")
+  check_string(reason, "reason")
+  d = session_data(s)
+  m = model_canonical(ref, strict = TRUE)
+  stream_chat_model(m)
+  from = d$model
+  if (identical(from, m$ref) && identical(d$thinking, m$thinking)) return(invisible(s))
+  session_append(s, entry_model_change(m$ref, m$thinking, reason))
+  d$model = m$ref
+  d$thinking = m$thinking
+  session_emit(s, "model_select", from = from, to = m$ref, reason = reason)
+  invisible(s)
+}
+
+#' Switch the session's permission mode
+#'
+#' Appends `gptr.mode_change`. On an idle session the next user message carries the new `<mode>`
+#' block (P07's turn blocks); on a running session the run's mode changes at once and an operator
+#' message carrying the `<mode>` block is sent after the current tool results.
+#' @noRd
+session_set_mode = function(s, mode, source = "user") {
+  check_class(s, "gptr_session", "s")
+  mode = check_choice(mode, session_modes, "mode")
+  check_string(source, "source")
+  d = session_data(s)
+  from = d$mode
+  if (identical(from, mode)) return(invisible(s))
+  session_append(s, entry_custom("gptr.mode_change", list(from = from, to = mode, source = source)))
+  d$mode = mode
+  live = session_live(s)
+  run = if (is.null(live)) NULL else live$run
+  if (!is.null(run)) mode_apply_run(s, run, mode)
+  invisible(s)
+}
+
+#' Apply a session's new mode to its running run
+#'
+#' As at the run's start (`run_new()`): a nested run takes the stricter of its outer run's mode and
+#' the new one (IC-53 item 4), and the run evaluates `r` in a scratch overlay of its home exactly
+#' while its mode is `plan` (IC-15). When the run's mode changes, an operator `mode` message is
+#' queued for delivery after the current tool results.
+#' @noRd
+mode_apply_run = function(s, run, mode) {
+  eff = if (is.null(run$outer)) mode else run_mode_tighter(run$outer$mode, mode)
+  if (identical(run$mode, eff)) return(invisible(run))
+  run$mode = eff
+  if (!identical(eff, "plan")) {
+    run$scratch = NULL
+  } else if (is.null(run$scratch) && !is.null(run$home)) {
+    run$scratch = new.env(parent = run$home)
+  }
+  note = msg_operator("mode", mode_block_text(s, eff))
+  run$pending_operator = c(run$pending_operator, list(note))
+  invisible(run)
+}
+
+#' The `<mode>` block of a mode: the registered `mode` context block (P07), else a one-line notice
+#'
+#' The block's text is operator content, so only a record of rank 3 or more (user, plugin,
+#' built-in: the records that may hold operator authority, IC-52) may supply it; a session or
+#' project record named `mode` gives the notice. `provide()` sees only the session's ctx, so a
+#' body whose `attrs$name` names another mode (P07's provider describes the session's mode, which
+#' a nested run's effective mode may tighten, IC-53 item 4) also gives the notice.
+#' @noRd
+mode_block_text = function(s, mode) {
+  d = session_data(s)
+  live = session_live(s)
+  spec = mode_block_spec(d$id)
+  body = NULL
+  if (!is.null(spec) && is.function(spec$provide) && !is.null(live)) {
+    out = tryCatch(spec$provide(live$ctx, spec$budget %||% 300L), error = function(e) NULL)
+    if (is.list(out)) {
+      named = if (is.list(out[["attrs"]])) out[["attrs"]][["name"]] else NULL
+      out = if (is.null(named) || identical(named, mode)) out$text else NULL
+    }
+    body = out
+  }
+  if (!is.character(body) || length(body) != 1L || is.na(body) || !nzchar(body)) {
+    body = paste0("The permission mode is now ", mode, ".")
+  }
+  block_context("mode", body, attrs = list(name = mode))$text
+}
+
+#' The winning `mode` context block of a session when its record has rank 3 or more, else NULL
+#' @noRd
+mode_block_spec = function(sid) {
+  spec = tryCatch(registry_get("context_block", "mode", session = sid), error = function(e) NULL)
+  if (is.null(spec)) return(NULL)
+  win = registry_candidates("context_block", "mode", sid)
+  if (!length(win) || win[[1L]]$rank < 3L || !identical(win[[1L]]$spec, spec)) return(NULL)
+  spec
+}
+
+#' Enqueue a steer or a follow-up: the queue behind gptr_steer(), the pipe and ctx$send() (IC-55)
+#'
+#' Model code of the same session tree (an `r` evaluation of a run of the tree) cannot enqueue on
+#' a session of the tree: `gptr_error_permission`. The one exception is the first input of a
+#' session that has never run, queued as a follow-up (the prompt of a `.run = FALSE` call, P08
+#' ambiguity 5): no entries, no live run and an empty queue. A steer there would become an operator
+#' relay of model text at the session's first run (IC-55), so it is refused. The attachments are
+#' checked before the item enters the queue (`queue_blocks_check()`). The text and the attachments
+#' are redacted with the `context` profile at ingress.
+#' @return `s`, invisibly.
+#' @noRd
+session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_user",
+                           blocks = list()) {
+  check_class(s, "gptr_session", "s")
+  check_string(text, "text")
+  as = check_choice(as, c("steer", "follow_up"), "as")
+  source = check_choice(source, queue_sources, "source")
+  queue_blocks_check(blocks, as, source)
+  d = session_data(s)
+  cur = run_current()
+  q = d$queue
+  first_input = identical(as, "follow_up") && !length(d$entries) &&
+    is.null(session_live(s)$run) && !length(q$steer) && !length(q$follow_up)
+  if (!is.null(cur) && identical(cur$tool_call$name, "r") && !first_input &&
+      identical(session_root_id(cur$shell), session_root_id(s))) {
+    gptr_abort(paste0("model code cannot send steering messages to its own session tree (session ",
+                      d$id, ")"),
+               "permission", action = "steer the running session tree", tool = "r", risk = NULL,
+               how_to_allow = "send steering messages from outside the run", session = d$id)
+  }
+  item = list(text = redact(as_utf8(text), "context"), blocks = redact(blocks, "context"),
+              source = source, t = as.numeric(Sys.time()))
+  q[[as]][[length(q[[as]]) + 1L]] = item
+  d$queue = q
+  session_emit(s, "queue_update", steer = length(q$steer), follow_up = length(q$follow_up))
+  invisible(s)
+}
+
+#' Check the attachments of a queue item before it enters the queue
+#'
+#' Every item is delivered as a user-role message, except a steer from a user source, which
+#' becomes an operator relay whose content is text only (04 section 4.2, IC-55). The loop takes
+#' items off the queue destructively (`queue_item_message()` runs after the dequeue), so a block it
+#' could not deliver is refused here, while the caller can still act on it: `blocks` is an unnamed
+#' list of complete user content blocks (text, image or context), text blocks only for a steer
+#' from a user source. Otherwise `gptr_error_invalid_argument` with `arg = "blocks"`.
+#' @noRd
+queue_blocks_check = function(blocks, as, source) {
+  check_list(blocks, "blocks")
+  relay = identical(as, "steer") && source %in% queue_user_sources
+  types = if (relay) "text" else msg_block_types[["user"]]
+  expected = if (relay) {
+    paste0("an unnamed list of text blocks (a steering relay carries text only; send ",
+           "attachments as a follow-up)")
+  } else {
+    "an unnamed list of text, image or context blocks"
+  }
+  if (!is.null(names(blocks))) arg_abort(blocks, "blocks", expected)
+  is_string = function(x) is.character(x) && length(x) == 1L && !is.na(x)
+  for (b in blocks) {
+    ok = is.list(b) && is_string(b[["type"]]) && b[["type"]] %in% types &&
+      all(vapply(msg_block_fields[[b[["type"]]]], function(f) is_string(b[[f]]), NA))
+    if (!ok) arg_abort(blocks, "blocks", expected)
+  }
+  invisible(blocks)
+}
+
+#' The id of the root of a session tree (following live parents)
+#' @noRd
+session_root_id = function(s) {
+  d = session_data(s)
+  seen = d$id
+  while (!is.null(d$parent_id)) {
+    p = session_by_id(d$parent_id)
+    if (is.null(p) || d$parent_id %in% seen) return(d$parent_id)
+    d = session_data(p)
+    seen = c(seen, d$id)
+  }
+  d$id
 }
