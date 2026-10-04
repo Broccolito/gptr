@@ -173,3 +173,30 @@ test_that("imports_used() references every Imports package", {
   expect_true(all(used))
   expect_length(used, 14L)
 })
+
+test_that("the CI workflow mirrors CRAN and adds the contract's jobs (IC-59, IC-72, IC-73)", {
+  description = source_file("DESCRIPTION")
+  skip_if(is.null(description), "not running from the source tree")
+  path = file.path(dirname(description), ".github", "workflows", "R-CMD-check.yaml")
+  expect_true(file.exists(path))
+  jobs = yaml::read_yaml(path)$jobs
+  expect_setequal(
+    names(jobs),
+    c("R-CMD-check", "no-suggests", "c-locale", "copy-safety", "connections", "bench")
+  )
+  combos = vapply(jobs[["R-CMD-check"]]$strategy$matrix$config, function(x) {
+    paste(x$os, x$r)
+  }, "")
+  expect_true(all(c(
+    "macos-latest release", "windows-latest release", "ubuntu-latest devel",
+    "ubuntu-latest release", "ubuntu-latest oldrel-1", "ubuntu-latest oldrel-4"
+  ) %in% combos))
+  expect_false(jobs[["no-suggests"]]$env[["_R_CHECK_FORCE_SUGGESTS_"]])
+  expect_identical(jobs[["c-locale"]]$env[["LC_ALL"]], "C")
+  expect_setequal(unlist(jobs[["copy-safety"]]$strategy$matrix$r), c("release", "devel"))
+  copy_steps = vapply(jobs[["copy-safety"]]$steps, function(s) s$run %||% "", "")
+  expect_true(any(grepl("filter = \"copy\"", copy_steps, fixed = TRUE)))
+  expect_true(jobs$connections$env[["_R_CHECK_CONNECTIONS_LEFT_OPEN_"]])
+  bench_steps = vapply(jobs$bench$steps, function(s) s$run %||% "", "")
+  expect_true(any(grepl("dev/bench/tokens/run.R --check", bench_steps, fixed = TRUE)))
+})

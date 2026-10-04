@@ -1,0 +1,164 @@
+# gptr CI (P01; report 13 section 3.8, contract IC-59, IC-72, IC-73). The matrix mirrors CRAN:
+# macOS, Windows and Ubuntu release, devel and oldrel-1, oldrel-4 (proves R >= 4.2.0), a job
+# without Suggests, an LC_ALL=C job, the copy-safety suites, a connections-left-open run and the
+# token benchmark once dev/bench/tokens/run.R exists (P07).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+name: R-CMD-check.yaml
+
+permissions: read-all
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.config.os }}
+    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {os: macos-latest, r: 'release'}
+          - {os: windows-latest, r: 'release'}
+          - {os: windows-latest, r: 'oldrel-4'}
+          - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release'}
+          - {os: ubuntu-latest, r: 'release'}
+          - {os: ubuntu-latest, r: 'oldrel-1'}
+          - {os: ubuntu-latest, r: 'oldrel-4'}
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      _R_CHECK_THINGS_IN_OTHER_DIRS_: true
+      _R_CHECK_CRAN_INCOMING_: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual", "--compact-vignettes=gs+qpdf")'
+          args: 'c("--no-manual", "--as-cran")'
+          error-on: '"warning"'
+
+  no-suggests:
+    runs-on: ubuntu-latest
+    name: ubuntu-latest (release, no Suggests)
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_FORCE_SUGGESTS_: false
+      _R_CHECK_CRAN_INCOMING_: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          dependencies: '"hard"'
+          extra-packages: any::rcmdcheck any::testthat any::knitr any::rmarkdown
+          needs: check
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          args: 'c("--no-manual", "--as-cran")'
+          error-on: '"warning"'
+
+  c-locale:
+    runs-on: ubuntu-latest
+    name: ubuntu-latest (release, LC_ALL=C)
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      LC_ALL: C
+      LANG: C
+      _R_CHECK_CRAN_INCOMING_: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          args: 'c("--no-manual", "--as-cran")'
+          error-on: '"warning"'
+
+  copy-safety:
+    runs-on: ubuntu-latest
+    name: copy-safety (${{ matrix.r }})
+    strategy:
+      fail-fast: false
+      matrix:
+        r: ['release', 'devel']
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools
+      - name: Copy-safety suites
+        shell: bash
+        run: |
+          Rscript --vanilla -e 'stopifnot(capabilities("profmem"))'
+          if ls tests/testthat/test-copy-*.R > /dev/null 2>&1; then
+            Rscript --vanilla -e 'devtools::test(filter = "copy", stop_on_failure = TRUE)'
+          else
+            echo "No test-copy-*.R suites yet (they arrive with P08 and later plans)."
+          fi
+
+  connections:
+    runs-on: ubuntu-latest
+    name: connections left open
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::devtools
+      - name: Tests with _R_CHECK_CONNECTIONS_LEFT_OPEN_=true
+        run: Rscript --vanilla -e 'devtools::test(stop_on_failure = TRUE)'
+
+  bench:
+    runs-on: ubuntu-latest
+    name: token benchmark
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rtiktoken any::pkgload
+      - name: Token ratchet (dev/bench/tokens/run.R, from P07)
+        shell: bash
+        run: |
+          if [ -f dev/bench/tokens/run.R ]; then
+            Rscript --vanilla dev/bench/tokens/run.R --check
+          else
+            echo "dev/bench/tokens/run.R does not exist yet (P07 adds it)."
+          fi

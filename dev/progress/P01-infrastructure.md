@@ -28,3 +28,13 @@ Raw output is under ignored `dev/.validation/P01-Tnn-{red,green}.log`.
 - Red filter `lint-rules`: FAIL 4, WARN 0, SKIP 0, PASS 0 (missing scanner).
 - Green with `stop_on_failure = TRUE`: FAIL 0, WARN 0, SKIP 0, PASS 5.
 - Commit: `test(lint): enforce R source rules with negative controls`.
+
+## Task 21 — cross-platform CI workflow
+
+- Added macOS/Windows/Linux R checks, minimum-version matrix, no-Suggests and
+  C-locale jobs, copy-safety, connection and token-ratchet jobs.
+- Red filter `zzz`: FAIL 2, WARN 1, SKIP 0, PASS 55 (workflow absent).
+- Green with `stop_on_failure = TRUE`: FAIL 0, WARN 0, SKIP 0, PASS 64.
+- This verifies workflow structure locally. Hosted CI has not run on this
+  workflow yet; publication and exact-commit results will be recorded separately.
+- Commit: `ci: add cross-platform R checks and contract gates`.
