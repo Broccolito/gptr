@@ -8,6 +8,15 @@ format, option and test helper; its §13 lists the reconciliation edits made her
 of 2026-09-30 (`06-review-resolution.md`; contract §15, IC-32..IC-73) amended the scopes and acceptance checks
 below; each plan's "Review amendments" bullet lists what it must add. Every code sample uses `=` and `|>` (S-9).
 
+## Local-provider amendment (2026-10-03)
+
+Contract IC-74 and `07-local-ollama.md` add Ollama conversational and native
+Clef/Clef Flash decisions to the existing plans. Section 6 of that amendment
+maps required work to P01/P02, P05, P07/P08, P12, P13, P15, P24 and P25. P13 additionally
+owns `R/s1-ollama.R` and its corresponding offline/live tests. The dependency
+list remains unchanged. Earlier exact test counts/code snippets must be
+reconciled where the amendment changes their assumptions before implementation.
+
 ## How to read this document
 
 - **25 plans, P01-P25, in six milestones.** The order follows the winning skeleton (P-A): the whole S-8 session

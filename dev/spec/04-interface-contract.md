@@ -13,6 +13,8 @@ wins and the difference is listed in §13 (and `03`/`05` were edited to agree). 
 (IC-32..IC-73, 2026-09-30; issue-by-issue record in `06-review-resolution.md`) win over every earlier section of
 this document; the sections they touch were edited in place. All code uses `=` for assignment and `|>` for pipes
 (S-9); untrusted text is never a cli/glue format string (rule C1).
+The 2026-10-03 local-provider amendment **IC-74** below incorporates
+`07-local-ollama.md` and overrides earlier conflicting Jev-only assumptions.
 
 ---
 
@@ -801,8 +803,8 @@ the valid names):
 | `c("gptr_choice", "gptr_s1", "character")` | character | `names`, `s1_levels` (chr, options in request order; never `levels`), `probabilities` (num matrix, rows = elements, columns = `s1_levels`), `confidence` (num), `meta` |
 | `c("gptr_score", "gptr_s1", "numeric")` | double (expected 0-based level) | `names`, `s1_levels` (level descriptions), `probabilities` (matrix), `confidence`, `meta` |
 
-`meta` = `list(model = "jev-1.13.0" (physical id), alias = "jev-latest", engine = "typesafe" |
-"emulated:structured", calibrated = lgl(1), question = chr(1), date = "YYYY-MM-DD", cached = lgl (per element),
+`meta` = `list(model = "jev-1.13.0" (physical id), alias = "jev-latest", engine = provider ID |
+"emulated:structured", calibrated = lgl(1) (NA when unknown; IC-74), question = chr(1), date = "YYYY-MM-DD", cached = lgl (per element),
 errors = df(index, class, message) | NULL, usage = list(input, output, cost), request_ids = chr)`.
 
 Constructors [internal]: `new_gptr_decision(x, prob, threshold = 0.5, meta = list())`,
@@ -2990,7 +2992,7 @@ order and calls the generator again after `wait` seconds (default 0) through `re
 within 50 ms; the terminal event's `message` is the final message.
 
 **`classify`** (classifier providers): `list(build = function(model, state, questions, opts) <http request spec>,
-parse = function(model, status, headers, body) list(answers = named list (wire shape of 04a), usage =
+parse = function(model, status, headers, body, questions) list(answers = named list (canonical System One records; IC-74), usage =
 list(input, output), model_version = chr(1)))`; for `inprocess` classifiers `list(run = function(model, state,
 questions, opts) <parse result>)`. `parse` returns a classed, unsignalled `gptr_error_s1_*` object on failure.
 
@@ -3001,7 +3003,7 @@ models, IC-71); `request_params` (chr: non-prefix request fields a `request_para
 `tool_shape` (`"anthropic"`, `"responses"`, `"chat"`, `"gemini"`).
 
 Built-in adapters: `anthropic-messages`, `openai-responses`, `openai-completions`, `google-generative-ai` (P12),
-`typesafe-system-one`, `s1-emulate` (P13), `cli-claude`, `cli-codex` (P20), `fake`, `fake-classifier` (P01,
+`typesafe-system-one`, `ollama-system-one`, `s1-emulate` (P13; IC-74), `cli-claude`, `cli-codex` (P20), `fake`, `fake-classifier` (P01,
 declared by P05).
 
 ### 8.2 Reactor API (P04, `http-reactor.R`) [internal]
@@ -4909,3 +4911,16 @@ req-21, cons-19, cran-16)
   manual runs (+145), the `trusted="false"` sentence (+35), the Claude-CLI route's own framing beyond gptr's
   frozen prompt (UNCERTAIN until the live suite measures it), and the gptr MCP schemas Codex receives (four tools,
   about 700 tokens per turn inside its 19-38K).
+
+**IC-74 Local Ollama chat and native decisions (2026-10-03).**
+
+`07-local-ollama.md` is normative and incorporated in full. It takes precedence
+over conflicting earlier sections, including this section's older amendments,
+and over literal plan examples. It adds REQ-13a without changing the core Imports.
+P05/P08 dispatch from model-level `type`/`api`; Ollama's chat and classifier
+models share a provider but use different adapters. P13 owns `s1-ollama.R`,
+the `ollama-system-one` classifier adapter and corresponding conformance tests.
+The canonical answer contract, image option and cache identity, unknown
+calibration state, local-only protection, model discovery, usage accounting,
+and plan ownership/acceptance are specified there. Hosted Jev remains supported;
+Ollama requires no Jev key and is not a structured-chat emulation fallback.

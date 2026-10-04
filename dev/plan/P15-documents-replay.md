@@ -1,5 +1,14 @@
 # P15 Documents and Replay Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> ownership and acceptance matrix in section 6, before executing this plan.
+> Mixed Ollama chat/decision models, image decisions, model-level dispatch,
+> locality and calibration rules override conflicting code examples below.
+> The original task count and exact PASS counts predate this amendment;
+> reconcile the affected steps before implementation. No implementation has
+> been performed as part of this design update.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the user's script, R Markdown, Quarto or Jupyter document both the harness and the history (REQ-24-26): every top-level `gptr()` call gets an agent block of the code it ran, re-sourcing replays recorded blocks with zero model calls, and stale or live blocks regenerate in place without running the old code.

@@ -22,6 +22,12 @@ Keep any current machine inventory in `LOCAL_SETUP.md` (ignored; not distributed
    gate. Final state: 25 plans, 307 tasks, 0 error-level cross-plan findings, 0 parse errors, 0 lints. The tools
    are in `research/assets/consolidation-tools/`; re-run them after editing a plan.
 
+## Local models amendment
+
+`spec/07-local-ollama.md` (contract IC-74) makes Ollama chat and Clef/Clef Flash
+native decisions explicit. `research/04b-ollama-local-models.md` separates official
+API evidence from local validation. This is a design update, not implementation.
+
 ## Execution
 
 Implement the plans in the order of `plan/00-index.md` with the superpowers `subagent-driven-development` skill:

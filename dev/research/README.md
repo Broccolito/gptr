@@ -25,6 +25,7 @@ full report only for the exact specifications and verified prototypes you need.
 | 02 | Pi's agent loop, events, retry, compaction, session format; R loop, interrupts, steering |
 | 03 | Pi's unified provider layer, wire formats, OAuth; R SSE and partial-JSON parsers |
 | 04, 04a | System One models and the TypeSafe Jev API (04a: live verification from R) |
+| [04b](04b-ollama-local-models.md) | Ollama local chat and Clef decisions: official contracts, capabilities, locality and validation expectations |
 | 05 | Pi's extensions, skills, prompt templates, settings, trust, modes |
 | 06 | Pi's sub-agents, MCP client, tool search, codemode |
 | 07 | Anthropic Messages API; the Claude plan through Claude Code |

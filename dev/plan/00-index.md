@@ -7,6 +7,12 @@ paths were checked against the plan files on 2026-10-01 (307 `### Task` headings
 The preflight table below is the historical 2026-10-01 snapshot, not a current availability check.
 Verify tools locally and keep any machine-specific inventory in the ignored `dev/LOCAL_SETUP.md`.
 
+**Local Ollama amendment:** contract IC-74 and `../spec/07-local-ollama.md`
+add native Clef/Clef Flash decisions alongside local chat. Read its plan ownership
+matrix before executing affected plans; the 307-task/PASS-count snapshot predates
+this amendment. Ollama >= 0.35.1 and installed compatible models are optional
+requirements for its live tests, not core dependencies. Tests never pull models.
+
 Quick start:
 
 1. Read the files of section 1, in order.

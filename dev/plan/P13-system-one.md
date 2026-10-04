@@ -1,5 +1,14 @@
 # P13 System 1 Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> ownership and acceptance matrix in section 6, before executing this plan.
+> Mixed Ollama chat/decision models, image decisions, model-level dispatch,
+> locality and calibration rules override conflicting code examples below.
+> The original task count and exact PASS counts predate this amendment;
+> reconcile the affected steps before implementation. No implementation has
+> been performed as part of this design update.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Typed, vectorised System 1 decisions (`gptr(question, x, model = jev)`) that drop into `if`, `for` and `while`, answered by the TypeSafe Jev API (or an opt-in, uncalibrated emulation) on gptr's own reactor, cached per element and reachable from plugins and routers through `ctx$decide()` (REQ-20, INFRA-18).

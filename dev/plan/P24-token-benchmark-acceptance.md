@@ -1,5 +1,14 @@
 # P24 Token benchmark and end-to-end acceptance Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> ownership and acceptance matrix in section 6, before executing this plan.
+> Mixed Ollama chat/decision models, image decisions, model-level dispatch,
+> locality and calibration rules override conflicting code examples below.
+> The original task count and exact PASS counts predate this amendment;
+> reconcile the affected steps before implementation. No implementation has
+> been performed as part of this design update.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make gptr's token efficiency and its cross-cutting guarantees (secrets, rule C1, the permission kernel, the north-star examples, "everything a plugin") measurable and regression-proof, with the benchmark suites of architecture 12.7 under `dev/bench/` and four end-to-end test files.

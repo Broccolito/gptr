@@ -1,5 +1,14 @@
 # P08 Gateway and SDK Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> ownership and acceptance matrix in section 6, before executing this plan.
+> Mixed Ollama chat/decision models, image decisions, model-level dispatch,
+> locality and calibration rules override conflicting code examples below.
+> The original task count and exact PASS counts predate this amendment;
+> reconcile the affected steps before implementation. No implementation has
+> been performed as part of this design update.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `gptr()` itself (copy-safe base-R capture, identifier resolution, `{identifier}` interpolation, routing through registry `route` records) together with the settings layers, trust, egress and replay controls and the session SDK verbs, so that the whole S-8 session contract of milestone M1 runs offline on the fake provider.

@@ -631,3 +631,16 @@ decisions that changed, with their contract ids (`04-interface-contract.md` §15
 | Tokens | prompt text composed by owners; `r` schema variants; skill pseudo-paths; new measured baselines (1,271 / 2,360 / 2,844 / 2,987); CI token ratchet from M1; release live calibration | IC-68, IC-73 |
 | Extension API | router contract and dispatch; `ctx$set_model()`, `add_tools()`, `tokens()`, `eval()`, `describe()`; tool `render`; kinds `preset`, `risk_rule`, `renderer`, `search_source`, `store`, `evaluator`, `service` (38 in all); per-record overrides; session-scoped extensions; workers inherit the registry | IC-69 |
 | Release | DESCRIPTION authors with `cph`, `Copyright`, `VignetteBuilder` added by P25; no NOTE expected apart from the maintainer line; lint configuration and conventions corrected | IC-72 |
+
+## Local-provider amendment (2026-10-03)
+
+**D-29 / IC-74: first-class local conversation and decisions.** The maintainer
+requires Ollama support for ordinary LLMs and Clef/Clef Flash native typed
+decisions, including images. `07-local-ollama.md` fixes mixed-model routing,
+the `ollama-system-one` adapter, no-key local inference, local-only policy,
+calibration provenance and acceptance. This supersedes Jev-only assumptions in
+D-06 and later reconciliations; it does not remove hosted Jev or implement code.
+
+Publication claims must compare against capable persistent R/MCP/notebook
+alternatives. In-memory execution is not unique by itself; quality-adjusted
+token/cost savings and fresh-session reproducibility require live evaluation.

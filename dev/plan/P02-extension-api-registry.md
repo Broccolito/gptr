@@ -1,5 +1,11 @@
 # P02 Extension API and Registry Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> canonical classifier records and ownership matrix. Fake classifier answers
+> and adapter validation must match the amended contract. Older literal code
+> and PASS counts require reconciliation before implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the one public, versioned extension API (S-11, REQ-41) on which every gptr capability and every built-in registers: the registry keyed by `(kind, name)` with ranks, filters, diagnostics and a generation counter, the 37 kinds of `ext-specs.R` with their validators and the 11 exported constructors, the event catalogue and its dispatch semantics, the factory API object and `ctx`, transactional and lazy loading, the built-in declaration table, and the `gptr_check()` conformance suites.

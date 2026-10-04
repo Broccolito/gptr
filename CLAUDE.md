@@ -9,7 +9,7 @@ Machine-specific inventories belong in the ignored `dev/LOCAL_SETUP.md`, if need
 1. `dev/plan/00-index.md`: execution order, milestone gates, preflight.
 2. `dev/plan/00-conventions.md`: global constraints for every plan.
 3. `dev/spec/03-architecture.md`, `dev/spec/04-interface-contract.md` (§15 wins over earlier sections),
-   `dev/spec/05-plan-decomposition.md`.
+   `dev/spec/05-plan-decomposition.md`, and `dev/spec/07-local-ollama.md` (IC-74).
 4. The plan you are implementing, `dev/plan/Pxx-*.md`. Follow it task by task (test first, then code, then commit).
 
 Research is in `dev/research/` (start with `README.md` and `00-digest.md`). A report's Verification log

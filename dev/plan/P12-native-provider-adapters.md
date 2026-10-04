@@ -1,5 +1,14 @@
 # P12 Native Provider Adapters Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> ownership and acceptance matrix in section 6, before executing this plan.
+> Mixed Ollama chat/decision models, image decisions, model-level dispatch,
+> locality and calibration rules override conflicting code examples below.
+> The original task count and exact PASS counts predate this amendment;
+> reconcile the affected steps before implementation. No implementation has
+> been performed as part of this design update.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship gptr's four native wire adapters (`anthropic-messages`, `openai-responses`, `openai-completions`, `google-generative-ai`) with byte-exact replay of opaque provider data, request bodies driven by the cache plans of `prompt-cache.R`, `.opts$returns` support and a fixture-replay conformance check (REQ-11).

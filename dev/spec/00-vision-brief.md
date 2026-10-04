@@ -14,16 +14,18 @@ session** — the objects already in memory — instead of writing a script and
 re-running it from scratch. The same `gptr()` function is both an interactive
 chat in the R console and a programmable function you put in scripts, loops and
 `if` statements. It unifies slow "System 2" LLMs (Claude, GPT, Gemini, ...) with
-fast "System 1" typed-decision models (TypeSafe AI's Jev). The script/notebook
+fast "System 1" typed-decision models (hosted Jev and local Ollama Clef/Clef Flash). The script/notebook
 the user is working in *is* the harness and *is* the history.
 
 ## Why (the three headline benefits)
 
 1. **In-memory object compute.** A 5 GB Seurat object that takes 3–5 minutes to
    load is loaded once. The agent evaluates code in the user's environment, makes
-   a mistake, fixes it, and re-runs — without reloading. Other agents (Claude
-   Code, Codex, Pi) write an R script and `Rscript` it from zero each time, or use
-   a makeshift persistent side-terminal. gptr is native: it is a function running
+   a mistake, fixes it, and re-runs — without reloading. Script-restarting workflows
+   lose this state; other agents can also use persistent interpreters or R/MCP
+   tools, so evaluation must include those capable baselines (for example,
+   [btw](https://posit-dev.github.io/btw/) and
+   [TaskWeaver](https://microsoft.github.io/TaskWeaver/)). gptr is native: it is a function running
    in the session, so objects it creates are injected into the environment and
    the user's subsequent code just sees them.
 2. **System 1 + System 2 in one harness.** Generative LLMs for open-ended work;
@@ -96,6 +98,12 @@ the user is working in *is* the harness and *is* the history.
   variable is `TYPESAFE_API_KEY` (the name Pi uses), so the `.env` loader must
   accept aliases such as `jev-key` / `JEV_API_KEY` and map them onto it. The
   key must never be written into scripts, histories, logs or reports.
+- **REQ-13a** Local Ollama is first-class for conversational LLMs and native
+  typed decision models. Clef (27B) and Clef Flash (9B) support text and images
+  through Ollama >= 0.35.1. Native decisions use `/v1/systemone`, not chat JSON
+  emulation. No cloud key or silent cloud fallback is required. Model-level
+  capability discovery, local-only operation, provenance and acceptance are
+  specified in `07-local-ollama.md` and contract IC-74.
 - **REQ-14** Model routing: choose model per call / per agent / per task;
   switch models mid-conversation; cross-provider conversation hand-off.
 - **REQ-15** Provider setup UX: configure providers, keys and defaults from R.

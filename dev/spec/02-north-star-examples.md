@@ -302,3 +302,25 @@ gptr("Go ahead with that plan", mode = auto)
 
 The agent can also ask the user a question mid-task; in a non-interactive run
 with `mode = manual` it stops with a clear error instead of guessing.
+
+## NS-13: local conversation and typed decisions on one Ollama server
+
+Design examples for IC-74; these do not imply an implemented public API.
+The server and models are installed explicitly. No cloud key is needed, and
+local-only selection must not fall back to a hosted service.
+
+```r
+s = gptr("Summarize the variables already in my session", model = "ollama/qwen3:1.7b")
+route = gptr("Which kind of work is requested?", request,
+             model = "ollama/clef-flash", choices = c("analysis", "plot", "other"))
+if (gptr("Does this request require numerical analysis?", request,
+         model = "ollama/clef-flash")) {
+  s = s |> gptr("Perform the analysis using the existing objects")
+}
+```
+
+Switching the decision model to `ollama/clef` retains the typed interface when
+that model is installed. Image decisions use explicitly supplied raw image
+records in `.opts$system1_images`, as specified in `07-local-ollama.md` section 4.
+Probabilities and confidence are recorded with their provenance; they are not
+presented as validated scientific accuracy. Replay performs no model request.

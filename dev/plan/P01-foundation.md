@@ -1,5 +1,11 @@
 # P01 Foundation Implementation Plan
 
+> **Design amendment IC-74 (2026-10-03):** Read
+> [`../spec/07-local-ollama.md`](../spec/07-local-ollama.md), especially the
+> canonical classifier records and ownership matrix. Fake classifier answers
+> and adapter validation must match the amended contract. Older literal code
+> and PASS counts require reconciliation before implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the repository into a buildable, lint-clean, CRAN-checkable gptr 1.0 skeleton that holds every L0 utility, the JSON layer, the provider-neutral message and event model, the fake provider and the shared test infrastructure, on a CI matrix that mirrors CRAN's.

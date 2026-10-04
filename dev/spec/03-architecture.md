@@ -20,7 +20,9 @@ function and every cross-plan interface; this document fixes names, signatures, 
 Where the two differ, the contract wins; its §13 lists the reconciliation edits made to this document. The review
 round of 2026-09-30 (144 issues; `06-review-resolution.md`) is integrated here; its normative detail is the
 contract's §15 (IC-32..IC-73), cited below as [IC-nn]. Signature blocks in this document are indicative; the
-contract's signatures govern.
+contract's signatures govern. The local Ollama amendment of 2026-10-03,
+`07-local-ollama.md` (contract IC-74), extends these sections and takes precedence
+where older Jev-only assumptions conflict.
 
 ---
 
@@ -125,7 +127,7 @@ ecosystem is `gptr$...`, Shiny artifacts and runnable documents (P3, P11).
 | Area | Content |
 |---|---|
 | Gateway and sessions | `gptr()` with every north-star call shape; session object with reference semantics; pipe steering (idle = follow-up, running = steer); explicit `gptr_fork()` (overlay workspace); SDK verbs; Pi-v3-shaped JSONL store with resume; experimental `background = TRUE` |
-| Model access | Native adapters `anthropic-messages`, `openai-responses`, `openai-completions` (+ compat table for OpenRouter, Groq, DeepSeek, Mistral, Together, xAI, Cerebras, Fireworks, Ollama, LM Studio, llama.cpp, vLLM, Azure v1, Bedrock's OpenAI-compatible endpoint), `google-generative-ai`; `typesafe-system-one`; `cli-claude` (unmodified `claude` CLI); `cli-codex` (`codex exec --json`); `fake`; pruned models.dev catalog with prices |
+| Model access | Native adapters `anthropic-messages`, `openai-responses`, `openai-completions` (+ compat table for OpenRouter, Groq, DeepSeek, Mistral, Together, xAI, Cerebras, Fireworks, Ollama, LM Studio, llama.cpp, vLLM, Azure v1, Bedrock's OpenAI-compatible endpoint), `google-generative-ai`; `typesafe-system-one`, `ollama-system-one` (IC-74); `cli-claude` (unmodified `claude` CLI); `cli-codex` (`codex exec --json`); `fake`; pruned models.dev catalog with prices |
 | Tools | `r`, `read`, `edit` (accepts a pasted `*** Begin Patch` envelope), `write`, `ask`; namespace members `read/write/edit/grep/find/ls/help/search/describe/plot/out/sh/script/bg/jobs/py/sql/knit/app/mcp` |
 | Safety | Modes plan/manual/edits/auto; advisory classifier (R, shell, SQL, Python); rules; critical and secret guards; checkpoints with `/undo`, `/redo`, `/rewind`; vault, handles, redaction at every sink |
 | Documents | `.R`, `.Rmd`, `.qmd`, `.ipynb` blocks; replay modes; S1 and S2 caches; console transcripts; deferred Rscript writes |
@@ -286,7 +288,7 @@ Final areas, in layer order:
 `doc`, `artifact` (L4); `console` (L5); `gptr` (L6); plus `zzz.R`. `cli` means the subscription-CLI
 providers, never the cli package.
 
-### 3.2 `R/` files (118 files)
+### 3.2 `R/` files (119 files after IC-74)
 
 Every file has exactly one owning plan (`05-plan-decomposition.md`). "Builtin" names the factory the file
 declares, if any.
@@ -373,7 +375,8 @@ declares, if any.
 | `provider-openai-completions.R` | L1 | `openai-completions` adapter + compat flags; `<think>` splitter | openai-compat | P12 |
 | `provider-google.R` | L1 | `google-generative-ai` adapter: thought signatures, finish reasons | google | P12 |
 | `s1-types.R` | L1 | `gptr_decision`, `gptr_choice`, `gptr_score` and methods; delayed vctrs methods; `gptr_prob()` [IC-36] | - | P13 |
-| `s1-client.R` | L4 | `typesafe-system-one` adapter; bounded rounds on the reactor | system1 | P13 |
+| `s1-client.R` | L4 | native classifier dispatch; bounded rounds on the reactor | system1 | P13 |
+| `s1-ollama.R` | L4 | `ollama-system-one` adapter; text/image Clef decisions and normalization (IC-74) | system1 | P13 |
 | `s1-route.R` | L4 | System 1 route: batch rule, `as_state()`, thresholds, abstention and escalation | - | P13 |
 | `s1-cache.R` | L4 | per-element decision cache (memory, then `.gptr/cache/s1/`) | - | P13 |
 | `s1-emulate.R` | L4 | opt-in emulation through structured output (uncalibrated flag) | - | P13 |
@@ -1066,8 +1069,8 @@ transcript, tool results, images, marking cache reads [P-C §14.6, G2 est_* fiel
 | `c("gptr_choice", "gptr_s1", "character")` | character | `names`, `s1_levels` (options in request order; never `levels`), `probabilities` (matrix, rows = states), `confidence`, `meta` |
 | `c("gptr_score", "gptr_s1", "numeric")` | double (expected 0-based level) | `names`, `s1_levels`, `probabilities`, `confidence`, `meta` |
 
-`meta = list(model = "jev-1.13.0", alias = "jev-latest", engine = "typesafe" | "emulated:structured",
-calibrated, question, date, cached, errors, usage, request_ids)`. Methods: `[`, `[[`, `[<-` (degrades to the
+`meta = list(model = "jev-1.13.0", alias = "jev-latest", engine = provider ID | "emulated:structured",
+calibrated (NA when unknown; IC-74), question, date, cached, errors, usage, request_ids)`. Methods: `[`, `[[`, `[<-` (degrades to the
 bare vector for foreign values), `c`, `rep`, `format` (`TRUE (p=0.93)`), `print`, `as.data.frame`,
 `as.logical`/`as.character`/`as.double`, and `Ops`/`Math`/`Summary` group methods returning bare vectors (so
 `cell_type == "unclear"` is a plain logical); vctrs proxy/restore registered lazily.
@@ -1586,6 +1589,10 @@ gitignored by default (privacy over Quarto-style commit) [C-31]. `gptr_cache("pr
 `cache/tmp` older than 7 days (CRAN "actively managed" [17 fact-check]).
 
 ### 6.10 Consent, trust and egress (REQ-02)
+
+Ollama local-only inference and effective endpoint/model checks follow IC-74.
+A static provider `local` flag or loopback URL does not exempt a cloud-backed
+model or remote override from egress acknowledgement.
 
 - **Consent to write.** `.gptr/` only through `gptr_init()` or an interactive yes; documents only when
   designated or confirmed (§6.9.3); `R_user_dir()` small and pruned; everything else in `tempdir()`. Never
@@ -2139,9 +2146,15 @@ config < live discovery for local servers).
 
 ### 8.2 System 1
 
+Ollama's single provider hosts both chat and classifier model records. Dispatch
+uses the resolved model's `type` and `api`; P05 discovery and local-only policy
+follow `07-local-ollama.md` (IC-74). Conversational models keep the existing
+OpenAI-compatible chat adapter; Clef models use native typed decisions.
+
 | Provider id | Adapter | Authentication | Notes |
 |---|---|---|---|
 | `typesafe` | `typesafe-system-one` | `Authorization: Bearer`, key `TYPESAFE_API_KEY`; `gptr_env()` maps `jev-key`, `JEV_KEY`, `JEV_API_KEY`, `TYPESAFE_KEY` to it (REQ-13) | `POST {base}/systemone` with `{model, state, questions}`; types `choice`, `score`, boolean (wire `noul`); model alias `jev` -> `jev-latest` (physical id recorded in `meta`); vectorised on the reactor, at most 8 concurrent, 3 bounded rounds, and a static rate of 40 requests and 100K tokens per second in the provider record (Jev sends no rate-limit headers) [IC-64]; about 250-280 input tokens per request at $0.042/M; 20 requests in about 0.4 s [04, 04a] |
+| `ollama` (decision models) | `ollama-system-one` | none for verified loopback local inference | Ollama >= 0.35.1; `clef` and `clef-flash`; `/v1/systemone`; text/images; logical, choice and fractional score outputs; no silent cloud fallback; IC-74 |
 | gateway records | `typesafe-system-one` | the gateway's key | other hosts of the System One API listed in 04 §4 are data records on the same adapter |
 | `emulate:<model>` | `inprocess` over a System 2 adapter's structured output | the System 2 provider's | opt-in only; `meta$calibrated = FALSE`; never silent, never offered non-interactively |
 
