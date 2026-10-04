@@ -558,3 +558,295 @@ code_for_history = function(code) {
   }
   structure(out, needs = unique(c(needs, rw$needs)))
 }
+
+
+#' Files gptr_scrub() examines by default, without granting authority to transcript text
+#' @noRd
+scrub_default_paths = function() {
+  root = workspace_root(create = FALSE)
+  if (!dir.exists(root)) return(character())
+  if (!is.null(workspace_dir()) && !path_inside(root, project_root())) return(character())
+  dirs = file.path(root, c("sessions", "cache", "plans", "transcripts"))
+  dirs = dirs[dir.exists(dirs) & path_inside(dirs, root)]
+  session_dir = file.path(root, "sessions")
+  docs = if (session_dir %in% dirs) scrub_bound_documents(session_dir) else character()
+  c(dirs, docs)
+}
+
+#' Documents named by exact custom gptr.doc_block records, restricted to safe project paths
+#' @noRd
+scrub_bound_documents = function(dir) {
+  docs = character()
+  for (f in scrub_walk(dir)) {
+    if (!endsWith(f, ".jsonl")) next
+    txt = scrub_text(f, readBin(f, "raw", file.size(f)))
+    if (is.null(txt)) next
+    for (ln in strsplit(txt, "\n", fixed = TRUE)[[1L]]) {
+      rec = tryCatch(json_decode(ln), error = function(e) NULL)
+      if (!is.list(rec) || !identical(rec[["type"]], "custom") ||
+          !identical(rec[["customType"]], "gptr.doc_block")) next
+      data = rec[["data"]]
+      d = if (is.list(data)) data[["doc"]] else NULL
+      if (!is.character(d) || length(d) != 1L || is.na(d) || !nzchar(d)) next
+      lexical = gsub("\\", "/", d, fixed = TRUE)
+      if (grepl("^(/|~|[A-Za-z]:)|(^|/)\\.\\.(/|$)|[[:cntrl:]]", lexical)) next
+      path = file.path(project_root(), lexical)
+      if (file.exists(path) && !dir.exists(path) && path_inside(path, project_root()) &&
+          !scrub_guarded(path)) {
+        docs = c(docs, path)
+      }
+    }
+  }
+  unique(docs)
+}
+
+#' Guard configuration, credential and writer-lock metadata in default discovery
+#' @noRd
+scrub_guarded = function(path) {
+  guarded = path_class(path) %in% c("protected", "critical", "control", "instructions")
+  pattern = "(^|/)[^/]+[.]lock(/|$)|(^|/)[.]gptr/locks(/|$)"
+  guarded | grepl(pattern, path, ignore.case = TRUE) |
+    grepl(pattern, path_key(path), ignore.case = TRUE)
+}
+
+#' Expand a directory without escaping its resolved root or revisiting a symlink cycle
+#' @noRd
+scrub_walk = function(root) {
+  if (!dir.exists(root)) return(root[file_test("-f", root)])
+  pending = root
+  visited = character()
+  out = character()
+  while (length(pending)) {
+    dir = pending[1L]
+    pending = pending[-1L]
+    key = path_key(dir)
+    if (key %in% visited || !path_inside(dir, root)) next
+    visited = c(visited, key)
+    entries = list.files(dir, all.files = TRUE, full.names = TRUE, no.. = TRUE)
+    entries = entries[path_inside(entries, root)]
+    is_dir = dir.exists(entries)
+    descend = is_dir & !endsWith(tolower(basename(entries)), ".lock")
+    pending = c(pending, entries[descend])
+    out = c(out, entries[!is_dir & file_test("-f", entries)])
+  }
+  out
+}
+
+#' Expand authorized paths to regular files; explicit paths override the default scope
+#' @noRd
+scrub_files = function(paths) {
+  default = is.null(paths)
+  if (default) {
+    paths = scrub_default_paths()
+  } else if (!all(file.exists(paths))) {
+    gptr_abort("Every element of `paths` must be an existing file or directory.",
+               "invalid_argument", arg = "paths", expected = "existing files or directories")
+  }
+  out = unlist(lapply(paths, scrub_walk), use.names = FALSE)
+  if (!length(out)) return(character())
+  if (default) {
+    out = out[!scrub_guarded(out)]
+  }
+  unique(normalizePath(out, winslash = "/", mustWork = TRUE))
+}
+
+#' Read a file as UTF-8 text, or NULL for binary content (NUL bytes or invalid UTF-8)
+#' @noRd
+scrub_text = function(f, raw) {
+  if (!length(raw) || any(raw == as.raw(0L))) return(NULL)
+  txt = rawToChar(raw)
+  if (!validUTF8(txt)) return(NULL)
+  Encoding(txt) = "UTF-8"
+  txt
+}
+
+#' Text segments outside complete known markers (unknown marker-like text stays searchable)
+#' @noRd
+scrub_unmarked = function(txt, st) {
+  pattern = "\\[secret:[^\\]\\[\\s\"'\\\\{}]{1,200}\\]"
+  m = gregexpr(pattern, txt, perl = TRUE)[[1L]]
+  if (m[1L] < 0L) return(txt)
+  known = regmatches(txt, list(m))[[1L]] %in% redact_known_markers(st)
+  if (!any(known)) return(txt)
+  starts = m[known]
+  ends = starts + attr(m, "match.length")[known]
+  substring(txt, c(1L, ends), c(starts - 1L, nchar(txt)))
+}
+
+#' Occurrences of registered values and derived forms per file and secret name
+#' @noRd
+scrub_scan = function(files) {
+  st = secrets_state()
+  out = data.frame(file = character(), secret = character(), count = integer(),
+                   stringsAsFactors = FALSE)
+  if (!length(files) || !length(st$lits)) return(out)
+  names_of = sub("^\\[secret:(.*)\\]$", "\\1", st$marks)
+  rows = list()
+  for (f in files) {
+    size = file.size(f)
+    if (is.na(size) || size == 0) next
+    raw = readBin(f, "raw", size)
+    txt = scrub_text(f, raw)
+    hits = character()
+    if (is.null(txt)) {
+      for (k in seq_along(st$lits)) {
+        n = length(grepRaw(charToRaw(st$lits[k]), raw, fixed = TRUE, all = TRUE))
+        hits = c(hits, rep(names_of[k], n))
+      }
+    } else {
+      txt = scrub_unmarked(txt, st)
+      for (k in st$lits_long) {                 # long literals first, as redact_literals() does
+        n = sum(unlist(gregexpr(st$lits[k], txt, fixed = TRUE), use.names = FALSE) > 0L)
+        if (n) {
+          hits = c(hits, rep(names_of[k], n))
+          txt = unlist(strsplit(txt, st$lits[k], fixed = TRUE), use.names = FALSE)
+        }
+      }
+      for (re in st$lit_re) {
+        m = unlist(regmatches(txt, gregexpr(re, txt, perl = TRUE)), use.names = FALSE)
+        hits = c(hits, names_of[match(m, st$lits)])
+      }
+    }
+    if (!length(hits)) next
+    tab = table(hits)
+    rows[[length(rows) + 1L]] = data.frame(file = f, secret = names(tab),
+                                           count = as.integer(tab), stringsAsFactors = FALSE)
+  }
+  if (length(rows)) out = do.call(rbind, rows)
+  rownames(out) = NULL
+  out
+}
+
+#' Is this text a gptr session file (its first line is the session header)?
+#' @noRd
+scrub_is_session = function(txt) {
+  first = regmatches(txt, regexpr("^[^\n]*", txt))
+  identical(tryCatch(json_decode(first)[["type"]], error = function(e) NULL), "session")
+}
+
+#' Append the gptr.scrub custom entry (04 section 4.6) to a session file's text
+#' @noRd
+scrub_append_entry = function(txt, rows) {
+  lines = strsplit(txt, "\n", fixed = TRUE)[[1]]
+  lines = lines[nzchar(lines)]
+  entries = lapply(lines, function(ln) tryCatch(json_decode(ln), error = function(e) NULL))
+  entry_id = function(rec) {
+    id = if (is.list(rec)) rec[["id"]] else NULL
+    if (is.character(id) && length(id) == 1L && !is.na(id)) id else character()
+  }
+  last = entries[[length(entries)]]
+  parent = if (is.list(last) && !identical(last[["type"]], "session") &&
+               length(entry_id(last))) entry_id(last) else NULL
+  taken = unlist(lapply(entries, entry_id), use.names = FALSE)
+  now = Sys.time()
+  entry = list(type = "custom", id = id_entry(taken), parentId = parent,
+               timestamp = format(now, "%Y-%m-%dT%H:%M:%OS3Z", tz = "UTC"),
+               customType = "gptr.scrub",
+               data = list(date = format(now, "%Y-%m-%d", tz = "UTC"),
+                           secrets = I(redact_literals(sort(unique(rows$secret)), secrets_state())),
+                           count = sum(rows$count)))
+  paste0(txt, if (!endsWith(txt, "\n")) "\n", json_encode(entry), "\n")
+}
+
+#' Exclusively hold the P06 and P15 writer locks; never reclaim another owner's lock
+#' @noRd
+scrub_lock = function(f) {
+  root = workspace_root(create = FALSE)
+  lock_root = file.path(root, "locks")
+  links = Sys.readlink(c(root, lock_root))
+  if (any(!is.na(links) & nzchar(links)) || !path_inside(lock_root, root)) return(NULL)
+  locks = c(paste0(f, ".lock"), file.path(lock_root, cli::hash_sha1(path_key(f))))
+  owned = character()
+  complete = FALSE
+  on.exit(if (!complete) unlink(owned, recursive = TRUE), add = TRUE)
+  created = format(as.numeric(ps::ps_create_time(ps::ps_handle())), digits = 17)
+  for (i in seq_along(locks)) {
+    lock = locks[i]
+    dir.create(dirname(lock), recursive = TRUE, showWarnings = FALSE)
+    if (!dir.create(lock, showWarnings = FALSE)) return(NULL)
+    owned = c(owned, lock)
+    # P06 uses two lines and the pid file's 24-hour heartbeat; P15 uses one line.
+    stamp = if (i == 1L) c(as.character(Sys.getpid()), created) else paste(Sys.getpid(), created)
+    write_atomic(file.path(lock, "pid"), stamp)
+  }
+  complete = TRUE
+  owned
+}
+
+#' Rewrite one file while holding both writer locks and using its fresh on-disk contents
+#' @noRd
+scrub_rewrite_file = function(f) {
+  locks = scrub_lock(f)
+  if (is.null(locks)) return(FALSE)
+  on.exit(unlink(locks, recursive = TRUE), add = TRUE)
+  raw = readBin(f, "raw", file.size(f))
+  txt = scrub_text(f, raw)
+  if (is.null(txt)) return(FALSE)
+  rows = scrub_scan(f)
+  if (!nrow(rows)) return(TRUE)
+  new = redact_literals(txt, secrets_state())
+  if (scrub_is_session(txt)) new = scrub_append_entry(new, rows)
+  # Cooperating writers are locked; an intervening external edit is left intact.
+  if (!identical(readBin(f, "raw", file.size(f)), raw)) return(FALSE)
+  write_atomic(f, charToRaw(new))
+  TRUE
+}
+
+#' Rewrite listed text files; binary, externally changed and locked files remain untouched
+#' @noRd
+scrub_rewrite = function(found) {
+  files = unique(found$file)
+  skipped = files[!vapply(files, scrub_rewrite_file, logical(1))]
+  if (length(skipped)) {
+    gptr_inform(c(paste0("gptr_scrub() did not rewrite ", length(skipped),
+                         " file(s) (binary content, changed files, or existing writer locks):"),
+                  paste0("  ", skipped),
+                  "Close writers and resolve stale locks, then run gptr_scrub() again."),
+                "notice")
+  }
+  invisible(NULL)
+}
+
+#' Find, and optionally remove, registered secrets in persisted files
+#'
+#' Secrets are redacted when they enter a transcript, a cache or a document, but a value that
+#' reached a file before it was registered (for example a key pasted into a prompt and only
+#' later loaded with `gptr_env()`) stays there. `gptr_scrub()` scans persisted files for the
+#' values of every registered secret and their derived forms and reports where they occur.
+#' With `dry_run = FALSE` it rewrites those files, replacing each occurrence with a
+#' `[secret:NAME]` marker; this is the only sanctioned rewrite of append-only session files,
+#' each of which then gets a `gptr.scrub` entry. A key that reached a model or a commit must
+#' still be rotated.
+#'
+#' @param paths `NULL` for the workspace's sessions, caches, spill files, plans, transcripts
+#'   and safe relative document paths bound in this project. An explicit character vector of
+#'   files and directories overrides that scope; directory traversal stays within each root.
+#'   Binary files and files with existing writer locks (including stale locks) are reported
+#'   but not rewritten.
+#' @param dry_run If `TRUE` (the default), only report; if `FALSE`, rewrite the files.
+#' @param error If `TRUE`, signal an error of class `gptr_error_secret_found` when any file
+#'   contains a registered secret (for pre-commit hooks and CI).
+#' @return A data frame with columns `file`, `secret` (the variable name) and `count`; never
+#'   values. Returned visibly for a dry run, invisibly after a rewrite.
+#' @export
+#' @examples
+#' d = tempfile("proj")
+#' dir.create(d)
+#' writeLines("nothing secret here", file.path(d, "notes.txt"))
+#' gptr_scrub(d)
+gptr_scrub = function(paths = NULL, dry_run = TRUE, error = FALSE) {
+  check_strings(paths, "paths", null = TRUE)
+  check_flag(dry_run, "dry_run")
+  check_flag(error, "error")
+  found = scrub_scan(scrub_files(paths))
+  if (!dry_run && nrow(found)) scrub_rewrite(found)
+  if (error && nrow(found)) {
+    gptr_abort(c(paste0("Registered secrets were found",
+                        " in ", length(unique(found$file)), " file(s):"),
+                 paste0("  ", found$file, " (", found$secret, ": ", found$count, ")"),
+                 if (dry_run) "Run gptr_scrub(dry_run = FALSE), then rotate the keys." else
+                   "Rotate the keys that were exposed."),
+               "secret_found", findings = found)
+  }
+  if (dry_run) found else invisible(found)
+}

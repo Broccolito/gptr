@@ -629,3 +629,368 @@ test_that("unsafe replay-variable metadata remains a flagged marker", {
   expect_identical(code_for_history(h), h)
   expect_silent(parse(text = h))
 })
+
+
+session_lines = function(secret) {
+  c(
+    paste0("{\"type\":\"session\",\"version\":3,\"id\":\"s0123456789\",",
+           "\"timestamp\":\"2026-09-30T10:00:00.000Z\"}"),
+    paste0("{\"type\":\"message\",\"id\":\"a1b2c3d4\",\"parentId\":null,",
+           "\"timestamp\":\"2026-09-30T10:00:01.000Z\",\"message\":{\"role\":\"user\",",
+           "\"content\":[{\"type\":\"text\",\"text\":\"saw ", secret, "\"}]}}"),
+    paste0("{\"type\":\"custom\",\"id\":\"e5f6a7b8\",\"parentId\":\"a1b2c3d4\",",
+           "\"timestamp\":\"2026-09-30T10:00:02.000Z\",\"customType\":\"gptr.doc_block\",",
+           "\"data\":{\"doc\":\"analysis.R\",\"block\":\"7f3a21\"}}")
+  )
+}
+
+test_that("gptr_scrub() finds a value registered after it was written and rewrites it", {
+  vault_reset()
+  withr::defer(vault_reset())
+  d = withr::local_tempdir()
+  dir.create(file.path(d, "sessions"))
+  late = paste0("FAKE_late_key_", "0123456789abcdef")
+  writeLines(session_lines(late), file.path(d, "sessions", "s.jsonl"))
+  writeLines(c("x = 1", paste("#>", late)), file.path(d, "analysis.R"))
+  expect_identical(nrow(gptr_scrub(d)), 0L)
+  secret_register(late, "LATE_KEY", "session")
+  found = gptr_scrub(d)
+  expect_identical(sort(basename(found$file)), c("analysis.R", "s.jsonl"))
+  expect_identical(unique(found$secret), "LATE_KEY")
+  expect_identical(found$count, c(1L, 1L))
+  e = tryCatch(gptr_scrub(d, error = TRUE), error = identity)
+  expect_s3_class(e, "gptr_error_secret_found")
+  expect_identical(nrow(e$findings), 2L)
+  expect_false(grepl(late, conditionMessage(e), fixed = TRUE))
+  res = withVisible(gptr_scrub(d, dry_run = FALSE))
+  expect_false(res$visible)
+  expect_identical(nrow(res$value), 2L)
+  expect_identical(nrow(gptr_scrub(d)), 0L)
+  expect_no_error(gptr_scrub(d, error = TRUE))
+  expect_identical(readLines(file.path(d, "analysis.R")), c("x = 1", "#> [secret:LATE_KEY]"))
+})
+
+test_that("a rewritten session file stays valid JSONL and gets a gptr.scrub entry", {
+  vault_reset()
+  withr::defer(vault_reset())
+  d = withr::local_tempdir()
+  late = paste0("FAKE_late_key_", "0123456789abcdef")
+  f = file.path(d, "s.jsonl")
+  writeLines(session_lines(late), f)
+  secret_register(late, "LATE_KEY", "session")
+  gptr_scrub(f, dry_run = FALSE)
+  lines = readLines(f, encoding = "UTF-8")
+  expect_length(lines, 4L)
+  entries = lapply(lines, jsonlite::fromJSON, simplifyVector = FALSE)
+  last = entries[[4]]
+  expect_identical(last$type, "custom")
+  expect_identical(last$customType, "gptr.scrub")
+  expect_identical(last$parentId, "e5f6a7b8")
+  expect_match(last$id, "^[0-9a-f]{8,12}$")
+  expect_identical(unlist(last$data$secrets), "LATE_KEY")
+  expect_identical(last$data$count, 1L)
+  expect_identical(entries[[2]]$message$content[[1]]$text, "saw [secret:LATE_KEY]")
+})
+
+test_that("default paths cover the workspace and the documents bound in its sessions", {
+  vault_reset()
+  withr::defer(vault_reset())
+  late = paste0("FAKE_late_key_", "0123456789abcdef")
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  dir.create(file.path(proj, ".gptr", "sessions"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(proj, ".gptr", "cache", "tmp"), recursive = TRUE, showWarnings = FALSE)
+  writeLines(session_lines(late), file.path(proj, ".gptr", "sessions", "s.jsonl"))
+  writeLines(late, file.path(proj, ".gptr", "cache", "tmp", "gptr-output-o1a2b3.txt"))
+  writeLines(paste("#>", late), file.path(proj, "analysis.R"))
+  writeLines(late, file.path(proj, "unrelated.txt"))
+  secret_register(late, "LATE_KEY", "session")
+  found = gptr_scrub()
+  expect_setequal(basename(found$file), c("s.jsonl", "gptr-output-o1a2b3.txt", "analysis.R"))
+})
+
+test_that("binary files are reported but never rewritten; bad paths are refused", {
+  vault_reset()
+  withr::defer(vault_reset())
+  d = withr::local_tempdir()
+  late = paste0("FAKE_late_key_", "0123456789abcdef")
+  bin = file.path(d, "blob.bin")
+  writeBin(c(as.raw(0L), charToRaw(late), as.raw(0L)), bin)
+  secret_register(late, "LATE_KEY", "session")
+  expect_identical(gptr_scrub(d)$count, 1L)
+  local_gptr_options(quiet = FALSE)
+  expect_message(gptr_scrub(d, dry_run = FALSE), class = "gptr_message_notice")
+  expect_identical(gptr_scrub(d)$count, 1L)
+  expect_error(gptr_scrub(file.path(d, "missing")), class = "gptr_error_invalid_argument")
+  expect_error(gptr_scrub(d, dry_run = NA), class = "gptr_error_invalid_argument")
+})
+
+test_that("a long secret is counted and removed through the fixed-string path", {
+  vault_reset()
+  withr::defer(vault_reset())
+  d = withr::local_tempdir()
+  huge = paste0(strrep("FAKEhuge", 5000), "end")
+  writeLines(c("a", huge, "b"), file.path(d, "log.txt"))
+  secret_register(huge, "HUGE_TOKEN", "test")
+  expect_identical(gptr_scrub(d)$count, 1L)
+  gptr_scrub(d, dry_run = FALSE)
+  expect_identical(readLines(file.path(d, "log.txt")), c("a", "[secret:HUGE_TOKEN]", "b"))
+})
+
+test_that("the documented example runs on a clean directory", {
+  d = tempfile("proj")
+  dir.create(d)
+  withr::defer(unlink(d, recursive = TRUE))
+  writeLines("nothing secret here", file.path(d, "notes.txt"))
+  out = gptr_scrub(d)
+  expect_identical(names(out), c("file", "secret", "count"))
+  expect_identical(nrow(out), 0L)
+})
+
+test_that("scrub derives authority only from exact safe document records", {
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  dir.create(file.path(proj, ".gptr", "sessions"), showWarnings = FALSE)
+  late = "FAKE_scrub_authority_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  targets = c("allowed.R", "substring.R", "partial.R", ".Rprofile", ".env")
+  for (p in targets) writeLines(late, file.path(proj, p))
+  outside = withr::local_tempfile(fileext = ".R")
+  writeLines(late, outside)
+  record = function(doc) {
+    list(type = "custom", customType = "gptr.doc_block", data = list(doc = doc))
+  }
+  records = list(record("allowed.R"), record(".Rprofile"), record(".env"),
+                 record(outside), record("../outside.R"),
+                 list(type = "message", text = "gptr.doc_block",
+                      data = list(doc = "substring.R")),
+                 list(type = "custom", customType = "gptr.doc_block",
+                      data = list(document = "partial.R")))
+  writeLines(vapply(records, json_encode, ""), file.path(proj, ".gptr", "sessions", "s.jsonl"))
+  expect_identical(basename(gptr_scrub()$file), "allowed.R")
+  expect_identical(nrow(gptr_scrub(c(outside, file.path(proj, ".env")))), 2L)
+})
+
+test_that("scrub directory traversal never follows escaping symlinks", {
+  skip_on_os("windows")
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  cache = file.path(proj, ".gptr", "cache")
+  dir.create(cache, showWarnings = FALSE)
+  outside = withr::local_tempdir()
+  late = "FAKE_scrub_symlink_0123456789"
+  target = file.path(outside, "outside.txt")
+  writeLines(late, target)
+  expect_true(file.symlink(outside, file.path(cache, "escape")))
+  expect_true(file.symlink(target, file.path(cache, "escaped.txt")))
+  secret_register(late, "LATE_KEY", "test")
+  expect_identical(nrow(gptr_scrub()), 0L)
+  expect_identical(nrow(gptr_scrub(cache)), 0L)
+  expect_identical(nrow(gptr_scrub(target)), 1L)
+})
+
+test_that("scrub audit metadata and known markers remain idempotent", {
+  vault_reset()
+  withr::defer(vault_reset())
+  name = "FAKE_SCRUB_TOKEN_NAME"
+  secret_register(name, name, "test")
+  f = withr::local_tempfile(fileext = ".jsonl")
+  writeLines(session_lines(name), f)
+  gptr_scrub(f, dry_run = FALSE)
+  once = readBin(f, "raw", file.size(f))
+  expect_identical(nrow(gptr_scrub(f)), 0L)
+  gptr_scrub(f, dry_run = FALSE)
+  expect_identical(readBin(f, "raw", file.size(f)), once)
+  last = json_decode(tail(readLines(f, encoding = "UTF-8"), 1L))
+  expect_identical(unlist(last$data$secrets), paste0("[secret:", name, "]"))
+  # Arbitrary fields with the audit's name remain ordinary data.
+  writeLines(json_encode(list(data = list(secrets = name))), f)
+  expect_identical(gptr_scrub(f)$count, 1L)
+})
+
+test_that("scrub entry IDs account for JSON whitespace and exact metadata", {
+  vault_reset()
+  withr::defer(vault_reset())
+  f = withr::local_tempfile(fileext = ".jsonl")
+  late = "FAKE_scrub_id_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  writeLines(gsub('"id":', '"id" : ', session_lines(late), fixed = TRUE), f)
+  draws = 0L
+  testthat::local_mocked_bindings(id_new = function(prefix = "", n = 8L) {
+    draws <<- draws + 1L
+    c("a1b2c3d4", "e5f6a7b8", "feed1234")[draws]
+  })
+  gptr_scrub(f, dry_run = FALSE)
+  last = json_decode(tail(readLines(f, encoding = "UTF-8"), 1L))
+  expect_identical(last$parentId, "e5f6a7b8")
+  expect_identical(last$id, "feed1234")
+  expect_identical(draws, 3L)
+})
+
+test_that("scrub holds session and document writer locks throughout replacement", {
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  late = "FAKE_scrub_lock_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  f = file.path(proj, "session.jsonl")
+  writeLines(session_lines(late), f)
+  doc_lock = file.path(workspace_root(), "locks", cli::hash_sha1(path_key(f)))
+  atomic = write_atomic
+  testthat::local_mocked_bindings(write_atomic = function(path, content) {
+    if (identical(path, normalizePath(f))) {
+      expect_true(dir.exists(paste0(f, ".lock")))
+      expect_true(dir.exists(doc_lock))
+      holder = readLines(file.path(paste0(f, ".lock"), "pid"), encoding = "UTF-8")
+      expect_length(holder, 2L)
+      expect_identical(as.integer(holder[1]), Sys.getpid())
+      expect_false(dir.create(doc_lock, showWarnings = FALSE))
+    }
+    atomic(path, content)
+  })
+  gptr_scrub(f, dry_run = FALSE)
+  expect_false(dir.exists(paste0(f, ".lock")))
+  expect_false(dir.exists(doc_lock))
+})
+
+test_that("scrub refuses held document locks and preserves invalid UTF-8 bytes", {
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  late = "FAKE_scrub_lock_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  f = file.path(proj, "analysis.R")
+  writeLines(late, f)
+  lock = file.path(workspace_root(), "locks", cli::hash_sha1(path_key(f)))
+  dir.create(lock, recursive = TRUE)
+  writeLines(paste(Sys.getpid(), as.numeric(ps::ps_create_time(ps::ps_handle()))),
+             file.path(lock, "pid"))
+  before = readBin(f, "raw", file.size(f))
+  suppressMessages(gptr_scrub(f, dry_run = FALSE))
+  expect_identical(readBin(f, "raw", file.size(f)), before)
+  unlink(lock, recursive = TRUE)
+  bytes = c(as.raw(255), charToRaw(late))
+  writeBin(bytes, f)
+  expect_identical(gptr_scrub(f)$count, 1L)
+  suppressMessages(gptr_scrub(f, dry_run = FALSE))
+  expect_identical(readBin(f, "raw", file.size(f)), bytes)
+})
+
+test_that("scrub preserves old and incomplete session locks instead of stealing them", {
+  vault_reset()
+  withr::defer(vault_reset())
+  f = withr::local_tempfile(fileext = ".jsonl")
+  late = "FAKE_scrub_session_lock_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  writeLines(session_lines(late), f)
+  lock = paste0(f, ".lock")
+  dir.create(lock)
+  withr::defer(unlink(lock, recursive = TRUE))
+  before = readBin(f, "raw", file.size(f))
+  for (age in c(60, 25 * 3600)) {
+    writeLines(c(as.character(Sys.getpid()),
+                 format(as.numeric(ps::ps_create_time(ps::ps_handle())), digits = 17)),
+               file.path(lock, "pid"))
+    Sys.setFileTime(file.path(lock, "pid"), Sys.time() - age)
+    suppressMessages(gptr_scrub(f, dry_run = FALSE))
+    expect_identical(readBin(f, "raw", file.size(f)), before)
+    expect_true(dir.exists(lock))
+  }
+  unlink(file.path(lock, "pid"))
+  suppressMessages(gptr_scrub(f, dry_run = FALSE))
+  expect_identical(readBin(f, "raw", file.size(f)), before)
+  expect_true(dir.exists(lock))
+})
+
+test_that("scrub rereads after acquiring locks and releases locks after write errors", {
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  f = file.path(proj, "notes.txt")
+  late = "FAKE_scrub_fresh_read_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  writeLines(late, f)
+  acquire = scrub_lock
+  testthat::local_mocked_bindings(scrub_lock = function(path) {
+    writeLines(c(late, "concurrent addition"), path)
+    acquire(path)
+  })
+  gptr_scrub(f, dry_run = FALSE)
+  expect_identical(readLines(f, encoding = "UTF-8"),
+                   c("[secret:LATE_KEY]", "concurrent addition"))
+  writeLines(late, f)
+  atomic = write_atomic
+  testthat::local_mocked_bindings(write_atomic = function(path, content) {
+    if (identical(path, normalizePath(f))) stop("synthetic write failure")
+    atomic(path, content)
+  })
+  expect_error(gptr_scrub(f, dry_run = FALSE), "synthetic write failure")
+  expect_false(dir.exists(paste0(f, ".lock")))
+  expect_false(dir.exists(file.path(workspace_root(), "locks", cli::hash_sha1(path_key(f)))))
+})
+
+test_that("scrub refuses symlinked writer-lock roots without writing outside the workspace", {
+  skip_on_os("windows")
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  outside = withr::local_tempdir()
+  f = file.path(proj, "notes.txt")
+  late = "FAKE_scrub_lock_escape_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  writeLines(late, f)
+  lock_root = file.path(workspace_root(), "locks")
+  expect_true(file.symlink(outside, lock_root))
+  atomic = write_atomic
+  testthat::local_mocked_bindings(write_atomic = function(path, content) {
+    expect_false(path_inside(path, outside))
+    atomic(path, content)
+  })
+  suppressMessages(gptr_scrub(f, dry_run = FALSE))
+  expect_identical(readLines(f, encoding = "UTF-8"), late)
+  expect_length(list.files(outside, all.files = TRUE, no.. = TRUE), 0L)
+  expect_false(dir.exists(paste0(f, ".lock")))
+})
+
+test_that("dangling cache links do not prevent the scrub audit", {
+  skip_on_os("windows")
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  cache = file.path(proj, ".gptr", "cache")
+  dir.create(cache, showWarnings = FALSE)
+  expect_true(file.symlink(file.path(cache, "missing"), file.path(cache, "dangling")))
+  late = "FAKE_scrub_dangling_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  writeLines(late, file.path(cache, "output.txt"))
+  expect_identical(basename(gptr_scrub()$file), "output.txt")
+})
+
+test_that("scrub discovery does not turn lock metadata into rewrite targets", {
+  vault_reset()
+  withr::defer(vault_reset())
+  proj = local_project()
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj)
+  sessions = file.path(proj, ".gptr", "sessions")
+  dir.create(sessions, showWarnings = FALSE)
+  lock = file.path(sessions, "active.jsonl.lock")
+  dir.create(lock)
+  late = "FAKE_scrub_lock_metadata_0123456789"
+  secret_register(late, "LATE_KEY", "test")
+  pid = file.path(lock, "pid")
+  writeLines(late, pid)
+  rec = list(type = "custom", customType = "gptr.doc_block",
+             data = list(doc = ".gptr/sessions/active.jsonl.lock/pid"))
+  writeLines(json_encode(rec), file.path(sessions, "doc.jsonl"))
+  expect_identical(nrow(gptr_scrub()), 0L)
+  expect_identical(nrow(gptr_scrub(pid)), 1L)
+})
