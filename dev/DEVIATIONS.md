@@ -2682,3 +2682,36 @@ first fix `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 58 ]`, erroring at `basename(paths)
 (`task7-red-final-plan-literal.log`, `task7-red-final-relevance.log`). Final `^tool-search$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 63 ]` in the UTF-8 and the C locale (`task7-green.log`,
 `task7-green-clocale.log`).
+
+## D-058 - P09 model text: the context-pressure check reads the session's own last request, takes all-unknown token counts as no evidence, and survives a failing compact.should (2026-10-04)
+
+P09 Task 9's plan-literal `eval_pressure()` (`R/eval-format.R`) was changed in three ways. The
+signature of `format_eval_result()`, its result fields, its text layout and the plan's 10 test
+blocks (`tests/testthat/test-eval-format.R`) are unchanged; `eval_budget()` is plan-literal.
+
+1. **Only the session's own usage rows count.** The plan took the last row of
+   `session_data(s)$usage`. P06's `usage_add()` charges every request to the session and to each
+   live ancestor (root charging, IC-66), so the last row of a parent can be a child's (a
+   sub-agent) request, whose context is not the parent's. The row's `session` column holds the
+   requesting session's id, and `eval_pressure()` now keeps the rows with
+   `session == session_data(s)$id` before it takes the last one.
+2. **All-unknown token counts are not zero.** IC-74 (`spec/07-local-ollama.md` section 5):
+   "Missing usage remains unknown." When every token count of that row (input, cache read, both
+   cache writes, output) is `NA`, the plan summed them to 0 and asked `compact.should(s, 0, 0)`.
+   The check now returns `FALSE` (no evidence of pressure, no halving) without asking. Partly
+   known rows still sum their known counts, as in the plan.
+3. **A failing `compact.should` never fails the `r` result.** The service call is wrapped in
+   `tryCatch(..., error = function(e) FALSE)`, as P06's `run_compact_check()` wraps the same
+   service. An evaluation never throws (04 section 2.2); its formatter, which runs after the
+   code's side effects, now cannot throw because of P07 either.
+
+P07 is not implemented, so without a registered `compact.should` the budget is never halved
+(the plan's "absent: no halving"). Validation: `progress/P09.md`, Task 9. Two added blocks, "context
+pressure asks compact.should with twice the session's last request" (7 expectations) and
+"format_eval_result halves its budget while the session is under pressure" (3), mock
+`session_data()`, `ext_service_has()`, `ext_service_get()`, `eval_session()` and
+`eval_pressure()`. Against the plan-literal source
+(`dev/.validation/P09/task9-eval-format-plan-literal.R`): `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 34 ]`
+(`task9-red-adaptations.log`). The child row is counted (18200 tokens instead of 3200, then
+`TRUE` instead of `FALSE`), the all-`NA` row is asked (3 calls instead of 2), and the failing
+service throws "compactor failed".
