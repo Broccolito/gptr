@@ -59,12 +59,35 @@ proc_record_valid = function(rec, path) {
     proc_time_valid(rec$create_time) && proc_time_valid(rec$parent_create)
 }
 
+#' Recognize process absence without interpreting an arbitrary OS error as death
+#'
+#' On Linux, ps_handle() can raise os_error/ENOENT from /proc/<pid>/stat instead of
+#' no_such_process. Require a working independent PID inventory before accepting that
+#' error: initialization can also fail while reading global procfs information.
+#' @noRd
+proc_error_absent = function(error, pid) {
+  if (inherits(error, "no_such_process")) return(TRUE)
+  if (!inherits(error, "ps_error") || !inherits(error, "os_error")) return(FALSE)
+  code = error$errno
+  codes = ps::errno()
+  absent = codes$value[codes$name %in% c("ENOENT", "ESRCH")]
+  if (!is.numeric(code) || is.complex(code) || length(code) != 1L || is.na(code) ||
+      !code %in% absent) return(FALSE)
+  if (!proc_pid_valid(pid)) return(FALSE)
+  pids = tryCatch(ps::ps_pids(), error = function(e) integer())
+  is.numeric(pids) && all(vapply(pids, proc_pid_valid, logical(1))) &&
+    Sys.getpid() %in% pids && !pid %in% pids
+}
+
 #' Read a handle without treating access failures as proof that a process is gone
 #' @noRd
 proc_handle_alive = function(handle) {
   if (is.null(handle)) return(NA)
   tryCatch(ps::ps_is_running(handle) && !identical(ps::ps_status(handle), "zombie"),
-           error = function(e) if (inherits(e, "no_such_process")) FALSE else NA)
+           error = function(e) {
+             pid = tryCatch(ps::ps_pid(handle), error = function(e) NA_integer_)
+             if (proc_error_absent(e, pid)) FALSE else NA
+           })
 }
 
 #' Verify a recorded identity once, keeping the same handle for any later signal
@@ -76,7 +99,7 @@ proc_handle_alive = function(handle) {
 proc_identity = function(pid, create_time = NULL) {
   handle = tryCatch(ps::ps_handle(as.integer(pid)), error = identity)
   if (inherits(handle, "condition")) {
-    alive = if (inherits(handle, "no_such_process")) FALSE else NA
+    alive = if (proc_error_absent(handle, pid)) FALSE else NA
     return(list(handle = NULL, alive = alive))
   }
   want = suppressWarnings(as.numeric(create_time))

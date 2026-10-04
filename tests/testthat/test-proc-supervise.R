@@ -287,6 +287,68 @@ test_that("boundary: unreadable parent identity never authorizes orphan cleanup"
   expect_identical(calls, 0L)
 })
 
+test_that("boundary: Linux missing-process errors release only confirmed absent identities", {
+  codes = stats::setNames(ps::errno()$value, ps::errno()$name)
+  local_proc_state()
+  err = structure(list(message = "synthetic missing proc stat", errno = codes[["ENOENT"]]),
+                  class = c("os_error", "ps_error", "error", "condition"))
+  local_mocked_bindings(
+    ps_handle = function(...) stop(err),
+    ps_pids = function() Sys.getpid(),
+    .package = "ps"
+  )
+  expect_identical(proc_identity(42L, 10)$alive, FALSE)
+  err$errno = codes[["ESRCH"]]
+  expect_identical(proc_identity(42L, 10)$alive, FALSE)
+  marker = proc_marker_new()
+  path = write_proc_fixture(list(marker = marker, pid = 42L, create_time = 10,
+                                 parent_pid = 43L, parent_create = 11))
+  local_mocked_bindings(proc_tree = function(marker) list(), .package = "gptr")
+  expect_identical(proc_sweep(), 0L)
+  expect_false(file.exists(path))
+})
+
+test_that("boundary: a Linux status-read race recognizes the vanished handle", {
+  codes = stats::setNames(ps::errno()$value, ps::errno()$name)
+  err = structure(list(message = "synthetic missing proc stat", errno = codes[["ENOENT"]]),
+                  class = c("os_error", "ps_error", "error", "condition"))
+  local_mocked_bindings(
+    ps_is_running = function(p) TRUE,
+    ps_status = function(p) stop(err),
+    ps_pid = function(p) 42L,
+    ps_pids = function() Sys.getpid(),
+    .package = "ps"
+  )
+  expect_identical(proc_handle_alive(list(pid = 42L)), FALSE)
+})
+
+test_that("boundary: OS errors need an independent process inventory before declaring absence", {
+  codes = stats::setNames(ps::errno()$value, ps::errno()$name)
+  code = codes[["ENOENT"]]
+  pids = Sys.getpid()
+  local_mocked_bindings(
+    ps_handle = function(...) {
+      stop(structure(list(message = "synthetic OS failure", errno = code),
+                     class = c("os_error", "ps_error", "error", "condition")))
+    },
+    ps_pids = function() pids,
+    .package = "ps"
+  )
+  for (code in list(codes[["EACCES"]], codes[["EPERM"]], 0L, NA_integer_,
+                    character(), "2", c(2L, 3L), list(2L))) {
+    expect_identical(proc_identity(42L, 10)$alive, NA)
+  }
+  code = codes[["ENOENT"]]
+  for (pids in list(integer(), c(Sys.getpid(), 42L), 43L, c(Sys.getpid(), NA_real_),
+                    c(Sys.getpid(), Inf), c(Sys.getpid(), 1.5), c(Sys.getpid(), -1),
+                    c(Sys.getpid(), .Machine$integer.max + 1), c(Sys.getpid(), 1i))) {
+    expect_identical(proc_identity(42L, 10)$alive, NA)
+  }
+  local_mocked_bindings(ps_pids = function() stop("synthetic unreadable inventory"),
+                        .package = "ps")
+  expect_identical(proc_identity(42L, 10)$alive, NA)
+})
+
 test_that("boundary: JSON timestamp rounding does not turn a live parent into an orphan", {
   local_proc_state()
   saved = json_decode(json_encode(list(time = proc_create_time(Sys.getpid()))))$time

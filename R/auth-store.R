@@ -101,7 +101,7 @@ auth_lock_stale = function(lock) {
     h = ps::ps_handle(pid)
     ps::ps_is_running(h) &&
       (is.na(created) || abs(as.numeric(ps::ps_create_time(h)) - created) < 1)
-  }, error = function(e) if (inherits(e, "no_such_process")) FALSE else NA)
+  }, error = function(e) if (proc_error_absent(e, pid)) FALSE else NA)
   identical(alive, FALSE)
 }
 

@@ -117,6 +117,31 @@ test_that("a lock is stale only when its holder is gone, its pid was reused, or 
   expect_true(auth_lock_stale(file.path(d, "missing.lock")))
 })
 
+test_that("Linux missing-process errors release a lock only with confirmed holder absence", {
+  codes = stats::setNames(ps::errno()$value, ps::errno()$name)
+  lock = file.path(withr::local_tempdir(), "auth.json.lock")
+  dir.create(lock)
+  writeLines("42 10", file.path(lock, "pid"))
+  code = codes[["ENOENT"]]
+  pids = Sys.getpid()
+  local_mocked_bindings(
+    ps_handle = function(...) {
+      stop(structure(list(message = "synthetic OS failure", errno = code),
+                     class = c("os_error", "ps_error", "error", "condition")))
+    },
+    ps_pids = function() pids,
+    .package = "ps"
+  )
+  expect_true(auth_lock_stale(lock))
+  pids = c(Sys.getpid(), 42L)
+  expect_false(auth_lock_stale(lock))
+  pids = integer()
+  expect_false(auth_lock_stale(lock))
+  pids = Sys.getpid()
+  code = codes[["EACCES"]]
+  expect_false(auth_lock_stale(lock))
+})
+
 test_that("malformed stores and credential fields fail before writing values", {
   vault_reset()
   withr::defer(vault_reset())
