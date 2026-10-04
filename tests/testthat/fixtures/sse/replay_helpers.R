@@ -395,3 +395,59 @@ gemini_body_schema = function() {
              contents = list(type = "array", items = content))
   wire_object(top, "contents")
 }
+
+# ---- live tests (opt-in: GPTR_LIVE_TESTS=true and the provider's key) ----------------------------
+
+# Skip unless live tests are switched on and one of the key variables is set
+skip_unless_live = function(keys) {
+  testthat::skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"),
+                        "live tests need GPTR_LIVE_TESTS=true")
+  testthat::skip_if(!any(nzchar(Sys.getenv(keys))), paste(keys, collapse = " or "))
+}
+
+# One real request through provider_stream() and the reactor; returns the final message. A
+# transfer still streaming at the timeout is cancelled, so it stops billing and reaches no later
+# test (P04 has only first-byte and idle timers)
+live_stream = function(model, context) {
+  out = new.env(parent = emptyenv())
+  out$message = NULL
+  id = provider_stream(model, context, list(memo = new.env(parent = emptyenv())),
+                       emit = function(ev) NULL, done = function(msg) out$message = msg)
+  ok = reactor_pump(until = function() !is.null(out$message), timeout = 180)
+  if (!isTRUE(ok) && is.character(id) && length(id) == 1L && !is.na(id)) reactor_cancel(id)
+  out$message
+}
+
+# A live context: a terse system prompt, the `count` tool and the given messages. Each request
+# gets its own RNG-free request id (architecture 8.1: X-Client-Request-Id unique per request)
+live_context = function(messages, params = list()) {
+  tools = json_verbatim(paste0(
+    '[{"name":"count","description":"Count the rows of the data set d.",',
+    '"input_schema":{"type":"object","properties":{}}}]'
+  ))
+  ctx = ctx_fixture(messages, params = params, t1 = "")
+  ctx$system$t0 = "You are a terse assistant inside an R session."
+  ctx$tools_json = tools
+  ctx$params$max_tokens = 4096L
+  ctx$request_id = id_new("q", 12L)
+  ctx
+}
+
+# A text turn, then a tool round trip whose second request replays the first reply (with any
+# thinking, signatures, reasoning items or thought signatures) to the same model
+expect_live_round_trip = function(ref, thinking = "low") {
+  model = model_resolve(ref)
+  params = list(thinking = thinking)
+  first = live_stream(model, live_context(list(msg_user("Reply with the single word: ready.")),
+                                          params))
+  testthat::expect_identical(first$stop_reason, "stop", info = first$error_message %||% "")
+  testthat::expect_match(tolower(msg_text(first)), "ready")
+  ask = msg_user("Use the count tool to count the rows of d, then tell me the number.")
+  turn1 = live_stream(model, live_context(list(ask), params))
+  testthat::expect_identical(turn1$stop_reason, "tool_use", info = turn1$error_message %||% "")
+  calls = Filter(function(b) identical(b$type, "tool_call"), turn1$content)
+  results = lapply(calls, function(b) msg_tool_result(b$id, b$name, "32"))
+  turn2 = live_stream(model, live_context(c(list(ask, turn1), results), params))
+  testthat::expect_identical(turn2$stop_reason, "stop", info = turn2$error_message %||% "")
+  testthat::expect_match(msg_text(turn2), "32", fixed = TRUE)
+}

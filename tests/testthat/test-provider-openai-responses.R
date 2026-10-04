@@ -663,3 +663,38 @@ test_that("a forced choice: any is required, and returns = never forces a call (
   free = test_model(api, forced_tool_choice = FALSE)
   expect_false("tool_choice" %in% names(build(list(tool_choice = forced), free)))
 })
+
+# ---- the live helpers of Task 10 (review round 1) ----------------------------------------------
+
+test_that("each live request sends its own x-client-request-id (architecture 8.1)", {
+  # 08 section 3 via architecture section 8.1: "X-Client-Request-Id unique per request"; the
+  # three requests of a live round trip and every later run must not share ctx_fixture()'s id
+  model = test_model(api, provider = "openai", id = "gpt-6-sol")
+  ids = vapply(1:3, function(i) {
+    req = responses_build(model, live_context(list(msg_user("x"))), list())
+    req$headers$`x-client-request-id`
+  }, "")
+  expect_identical(anyDuplicated(ids), 0L)
+  expect_match(ids, "^q[0-9a-f]{12}$")
+})
+
+test_that("live_stream() cancels a transfer still running at its timeout, and only then", {
+  seen = new.env(parent = emptyenv())
+  seen$ids = character()
+  seen$pumped = FALSE
+  local_mocked_bindings(
+    provider_stream = function(model, context, opts, emit, done, run = NULL) "t-live",
+    reactor_pump = function(until, slice_ms = 100L, allow_runs = NULL, timeout = Inf) {
+      invisible(seen$pumped)
+    },
+    reactor_cancel = function(ids) {
+      seen$ids = c(seen$ids, ids)
+      invisible(1L)
+    }
+  )
+  expect_null(live_stream(NULL, list()))
+  expect_identical(seen$ids, "t-live")
+  seen$pumped = TRUE
+  live_stream(NULL, list())
+  expect_identical(seen$ids, "t-live")
+})
