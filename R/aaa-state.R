@@ -97,3 +97,117 @@ redact_hook = function(x, profile = "persist") {
     rep("[redaction failed]", length(x))
   })
 }
+
+# The bootstrap service table (contract IC-09, IC-34, section 7.0). Services are functions that a
+# later plan provides and an earlier plan calls. Each is registered from an on_load() expression
+# of its provider plan and owned by a built-in: when that built-in is filtered out, the service is
+# not available. Once P02 is loaded, a `service` registry record wins over this table.
+
+#' Service name -> providing plan (contract section 7.0); used in "not available" messages and by
+#' tests/testthat/helper-arch.R
+#' @noRd
+service_plans = c(
+  "settings.get" = "P08", "prompt.freeze" = "P07", "context.first" = "P07",
+  "context.turn" = "P07", "request.build" = "P07", "prefix.guard" = "P07",
+  "compact.should" = "P07", "compact.run" = "P07", "ns.resolve" = "P10",
+  "console.interrupt_policy" = "P14", "ui.get" = "P11", "risk.classify" = "P11",
+  "plan.pending" = "P11", "s1.decide" = "P13", "doc.site" = "P15", "doc.edit" = "P15",
+  "doc.s1_block" = "P15", "doc.replay" = "P15", "checkpoint.note" = "P16",
+  "agent_def.get" = "P17", "skill.catalog" = "P17", "skill.body" = "P17",
+  "plugin.enable" = "P17", "mcp.catalog" = "P18", "mcp.dispatch_local" = "P18",
+  "mcp.serve_ensure" = "P18", "bg.register" = "P21", "check.adapter" = "P12",
+  "trust.get" = "P08", "identifier.resolve" = "P08", "secret.lookup" = "P03",
+  "ctx.kernel" = "P06", "ctx.input" = "P07", "ns.names" = "P10", "eval.r" = "P09",
+  "describe" = "P09", "router.call" = "P08", "session.add_tools" = "P07",
+  "search.sources" = "P10"
+)
+
+#' Register a service in the bootstrap table (contract section 7.1)
+#'
+#' A second registration of the same name replaces the first; once P02 is loaded the replacement
+#' is also recorded as a registry diagnostic.
+#' @noRd
+ext_service_set = function(name, fun, provided_by, builtin = NULL) {
+  check_string(name, "name")
+  check_function(fun, "fun")
+  check_string(provided_by, "provided_by")
+  check_string(builtin, "builtin", null = TRUE)
+  replaced = !is.null(the$services[[name]])
+  the$services[[name]] = list(name = name, fun = fun, provided_by = provided_by, builtin = builtin)
+  diagnostic = ns_fun("registry_diagnostic")
+  if (replaced && !is.null(diagnostic)) {
+    try(
+      diagnostic(
+        source = if (is.null(builtin)) "service" else paste0("builtin:", builtin),
+        event = "service_replaced",
+        class = "service",
+        message = paste0("service '", name, "' was registered again and replaced")
+      ),
+      silent = TRUE
+    )
+  }
+  invisible(name)
+}
+
+#' The function of a service, or NULL: a `service` registry record (P02) wins; otherwise the
+#' bootstrap entry, provided its owning built-in is active (IC-34)
+#' @noRd
+service_lookup = function(name) {
+  fun = service_from_registry(name)
+  if (!is.null(fun)) return(fun)
+  entry = the$services[[name]]
+  if (is.null(entry) || !service_builtin_active(entry$builtin)) return(NULL)
+  entry$fun
+}
+
+#' Fetch a service function, or signal gptr_error_not_available naming the providing plan
+#' @noRd
+ext_service_get = function(name) {
+  check_string(name, "name")
+  fun = service_lookup(name)
+  if (!is.null(fun)) return(fun)
+  provider = the$services[[name]]$provided_by %||% unname(service_plans[name])
+  if (is.na(provider)) provider = "no known plan"
+  gptr_abort(
+    paste0(
+      "The gptr service '", name, "' is not available: it is provided by ", provider,
+      ", which is not loaded or is disabled."
+    ),
+    "not_available",
+    member = name,
+    provided_by = provider
+  )
+}
+
+#' TRUE when a service can be fetched
+#' @noRd
+ext_service_has = function(name) {
+  check_string(name, "name")
+  !is.null(service_lookup(name))
+}
+
+#' The function of a `service` registry record (P02), or NULL before P02 or when none exists
+#' @noRd
+service_from_registry = function(name) {
+  registry_get = ns_fun("registry_get")
+  if (is.null(registry_get)) return(NULL)
+  spec = tryCatch(registry_get("service", name), error = function(e) NULL)
+  if (is.null(spec) || !is.function(spec$fun)) NULL else spec$fun
+}
+
+#' Is the built-in that owns a bootstrap service loaded and not filtered out?
+#'
+#' Before P02 exists every built-in counts as active. Afterwards a built-in counts as filtered
+#' out when gptr_registry() lists records but none of source `builtin:<name>` is enabled (every
+#' built-in of contract section 10.3 registers at least one record); an empty registry (while
+#' the built-ins are still loading) counts as active.
+#' @noRd
+service_builtin_active = function(builtin) {
+  if (is.null(builtin)) return(TRUE)
+  registry = ns_fun("gptr_registry")
+  if (is.null(registry)) return(TRUE)
+  records = tryCatch(registry(), error = function(e) NULL)
+  if (is.null(records) || !nrow(records)) return(TRUE)
+  active = records$source[records$state != "disabled"]
+  paste0("builtin:", builtin) %in% active
+}

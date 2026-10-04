@@ -38,3 +38,18 @@ test_that("every documented option of contract section 3.1 has a default entry",
   )
   expect_setequal(names(gptr_option_defaults), documented)
 })
+
+test_that("setting_get() falls back to the option layer and then the default", {
+  local_mocked_bindings(service_lookup = function(name) NULL)
+  withr::local_options(gptr.model = NULL)
+  expect_identical(setting_get("model", default = "fallback"), "fallback")
+  withr::local_options(gptr.model = "fake/fake-1")
+  expect_identical(setting_get("model", default = "fallback"), "fake/fake-1")
+})
+
+test_that("setting_get() uses the settings.get service when it is registered", {
+  local_mocked_bindings(service_lookup = function(name) {
+    if (identical(name, "settings.get")) function(key, session = NULL) paste("layered", key)
+  })
+  expect_identical(setting_get("mode"), "layered mode")
+})

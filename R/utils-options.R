@@ -41,3 +41,13 @@ gptr_opt = function(name) {
   check_string(name, "name")
   getOption(paste0("gptr.", name), gptr_option_defaults[[name]])
 }
+
+#' Read a setting: the settings.get service (P08, all layers) when registered, else the option
+#' layer, else `default` (contract IC-09)
+#' @noRd
+setting_get = function(key, session = NULL, default = NULL) {
+  check_string(key, "key")
+  fun = service_lookup("settings.get")
+  value = if (is.null(fun)) gptr_opt(key) else fun(key, session = session)
+  value %||% default
+}

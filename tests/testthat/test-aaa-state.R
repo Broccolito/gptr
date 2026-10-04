@@ -98,3 +98,70 @@ test_that("a later-collating file can call on_load() at top level when installed
   )
   expect_identical(loaded$stdout, "loaded at .onLoad")
 })
+
+local_services = function(.env = parent.frame()) {
+  old = the$services
+  withr::defer({
+    the$services = old
+  }, envir = .env)
+  the$services = list()
+  invisible(NULL)
+}
+
+test_that("an unbound service signals not_available naming the providing plan (IC-09)", {
+  local_services()
+  expect_false(ext_service_has("settings.get"))
+  cnd = tryCatch(ext_service_get("settings.get"), error = identity)
+  expect_s3_class(cnd, "gptr_error_not_available")
+  expect_identical(cnd$member, "settings.get")
+  expect_identical(cnd$provided_by, "P08")
+  expect_match(conditionMessage(cnd), "P08", fixed = TRUE)
+  cnd = tryCatch(ext_service_get("no.such.service"), error = identity)
+  expect_identical(cnd$provided_by, "no known plan")
+})
+
+test_that("ext_service_set() registers and replaces services", {
+  local_services()
+  ext_service_set("describe", function(x, budget) "first", provided_by = "P09",
+                  builtin = "workspace")
+  expect_true(ext_service_has("describe"))
+  expect_identical(ext_service_get("describe")(1, 10), "first")
+  ext_service_set("describe", function(x, budget) "second", provided_by = "P09",
+                  builtin = "workspace")
+  expect_identical(ext_service_get("describe")(1, 10), "second")
+  expect_error(ext_service_set("x", "not a function", "P01"),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("a registry `service` record wins, and a filtered built-in hides its services (IC-34)", {
+  local_services()
+  ext_service_set("doc.site", function(session) "bootstrap", provided_by = "P15",
+                  builtin = "documents")
+  local_mocked_bindings(service_from_registry = function(name) function(session) "plugin")
+  expect_identical(ext_service_get("doc.site")(NULL), "plugin")
+  local_mocked_bindings(
+    service_from_registry = function(name) NULL,
+    service_builtin_active = function(builtin) !identical(builtin, "documents")
+  )
+  expect_false(ext_service_has("doc.site"))
+  expect_error(ext_service_get("doc.site"), class = "gptr_error_not_available")
+})
+
+test_that("service_builtin_active() reads the registry listing once P02 exists", {
+  expect_true(service_builtin_active(NULL))
+  listing = data.frame(
+    kind = c("route", "hook"), name = c("document", "x"),
+    source = c("builtin:documents", "builtin:tools"), state = c("disabled", "active")
+  )
+  local_mocked_bindings(ns_fun = function(name) {
+    if (identical(name, "gptr_registry")) function(...) listing
+  })
+  expect_false(service_builtin_active("documents"))
+  expect_true(service_builtin_active("tools"))
+})
+
+test_that("service_plans lists every service of contract section 7.0", {
+  expect_length(service_plans, 39L)
+  expect_false(anyDuplicated(names(service_plans)) > 0)
+  expect_true(all(grepl("^P[0-9]{2}$", service_plans)))
+})
