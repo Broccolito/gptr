@@ -41,3 +41,17 @@ the spill file, as IC-71 requires.
 - Focused `git diff --check` passes. The pre-existing testthat build-version
   warning remains outside test results.
 - Commit: `feat(utils): add output truncation, the out store, spill files and listings`.
+
+## Task 11 — streaming partial JSON
+
+Created `R/json-partial.R` and focused tests for incremental tool-argument
+previews, partial scalars/strings/containers, repaired control characters,
+UTF-8 byte boundaries, completed values and preview throttling.
+
+- Red filter `^json-partial$`: FAIL 7, WARN 0, SKIP 0, PASS 0; missing scanner.
+- Green after documentation: FAIL 0, WARN 0, SKIP 0, PASS 626, with zero-failure
+  assertions on the returned test results.
+- The suite exercised every split of the compound JSON fixture, incomplete
+  multibyte characters, and the 20,000-delta performance case under its five
+  second bound.
+- Commit: `feat(json): add the streaming partial-JSON scanner`.
