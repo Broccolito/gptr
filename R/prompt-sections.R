@@ -864,6 +864,142 @@ prompt_register_sections = function(gptr) {
   invisible(NULL)
 }
 
+# ---- the frozen prompt --------------------------------------------------------------------------
+
+#' The re-injection budgets the floor check cut, as the gptr.frozen entry records them, or NULL
+#'
+#' Only cut budgets (finite, non-negative numbers) are recorded: the full budgets (project `Inf`)
+#' have no JSON number and are what a restore falls back to.
+#' @noRd
+prompt_reinject_read = function(r) {
+  ok = function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0
+  if (!is.list(r) || !ok(r$project) || !ok(r$skills)) return(NULL)
+  list(project = as.numeric(r$project), skills = as.numeric(r$skills))
+}
+
+#' The gptr.frozen custom entry (contract section 4.6)
+#'
+#' `human` is an additional key (readers ignore unknown keys, contract section 11) so that a
+#' resumed session renders later mode blocks and schemas for the audience it was frozen for;
+#' `reinject` is another, present only when the floor check cut the re-injection budgets (IC-71),
+#' so that a restore keeps the cut.
+#' @noRd
+prompt_frozen_entry = function(frozen) {
+  secs = frozen$sections
+  data = list(preset = frozen$preset, t0 = frozen$t0, t1 = frozen$t1,
+              toolsJson = frozen$tools_json, toolNames = I(frozen$tool_names),
+              sections = lapply(seq_len(nrow(secs)), function(i) {
+                list(name = secs$name[i], tier = secs$tier[i], hash = secs$hash[i],
+                     tokens = secs$tokens[i])
+              }),
+              model = frozen$model, human = frozen$human)
+  cut = prompt_reinject_read(frozen$reinject)
+  if (!is.null(cut)) data$reinject = cut
+  list(type = "custom", custom_type = "gptr.frozen", data = data)
+}
+
+#' Rebuild the frozen list from the newest gptr.frozen entry on the active path, or NULL
+#' @noRd
+prompt_frozen_restore = function(s) {
+  path = prompt_path(s)
+  for (e in rev(path)) {
+    if (!identical(e$type, "custom") || !identical(e$custom_type, "gptr.frozen")) next
+    x = e$data
+    secs = x$sections %||% list()
+    df = data.frame(
+      name = vapply(secs, function(r) as.character(r$name %||% ""), ""),
+      tier = vapply(secs, function(r) as.character(r$tier %||% ""), ""),
+      hash = vapply(secs, function(r) as.character(r$hash %||% ""), ""),
+      tokens = vapply(secs, function(r) as.numeric(r$tokens %||% NA_real_), 0),
+      stringsAsFactors = FALSE
+    )
+    return(list(preset = x$preset, model = x$model, t0 = x$t0 %||% "", t1 = x$t1 %||% "",
+                tools_json = x$toolsJson %||% "[]",
+                tool_names = as.character(unlist(x$toolNames)), sections = df,
+                human = x$human %||% gptr_can_prompt(), document = NULL,
+                reinject = prompt_reinject_read(x$reinject) %||%
+                  list(project = Inf, skills = 10000)))
+  }
+  NULL
+}
+
+#' The compaction floor check at freeze (IC-71)
+#'
+#' The context right after a compaction is at least the static prefix, the project
+#' instructions, the skill re-injection budget and the checkpoint (about 634 tokens). When that
+#' floor is not below the compaction threshold, the re-injection budgets are cut to 25% of the
+#' threshold; when it is still not below, the model is refused for this preset. An unknown
+#' window (a router, an unknown or undiscovered model) is not checked.
+#'
+#' @param frozen The composed frozen list.
+#' @param project_tokens Estimated tokens of the session's project instruction blocks.
+#' @param skills_budget Skill re-injection budget (10,000 when skill blocks exist, else 0).
+#' @return `frozen`, with `reinject` cut when needed; signals `gptr_error_invalid_argument`.
+#' @noRd
+prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
+  m = prompt_model(frozen$model)
+  window = as.numeric(m$context %||% NA_real_)
+  if (!length(window) || is.na(window)) return(frozen)
+  thr = compact_threshold(window, as.numeric(m$max_output %||% NA_real_),
+                          gptr_opt("r_output_tokens"))
+  static = prompt_static_tokens(frozen)
+  floor = static + project_tokens + skills_budget + 634
+  if (floor < thr) return(frozen)
+  cut = max(0, 0.25 * thr)
+  frozen$reinject = list(project = cut, skills = min(skills_budget, cut))
+  floor = static + min(project_tokens, cut) + min(skills_budget, cut) + 634
+  if (floor < thr) return(frozen)
+  hint = if (identical(frozen$preset, "minimal")) {
+    "Use a model with a larger context window."
+  } else {
+    "Use preset = \"minimal\" or context = \"names\", or a model with a larger context window."
+  }
+  big = function(x) format(round(x), big.mark = ",", scientific = FALSE)
+  gptr_abort(paste0("The model ", frozen$model, " has a context window of ", big(window),
+                    " tokens, too small for the ", frozen$preset, " preset: after a compaction ",
+                    "the context (about ", big(floor), " tokens) would not be below the ",
+                    "compaction threshold (", big(thr), "). ", hint),
+             "invalid_argument", arg = "model",
+             expected = "a model whose context window leaves room after a compaction")
+}
+
+#' Freeze a session's prompt once (contract section 7.7; the prompt.freeze service)
+#'
+#' Called by the session kernel (P06) at the first run, before the first user message is
+#' appended, so gptr.frozen is the session's first entry (contract section 11.4). The project
+#' instructions of the floor check are rendered for the audience being frozen (`human`), so the
+#' floor counts exactly what the first message will send (IC-52 withholds them from a
+#' non-interactive `auto` or `edits` run in an untrusted project).
+#'
+#' @param s A `<session>`.
+#' @param opts Run options (see `prompt_compose()`); `refreeze = TRUE` ignores an earlier
+#'   gptr.frozen entry (a resumed foreign file, IC-52).
+#' @return The frozen list, invisibly.
+#' @noRd
+prompt_freeze = function(s, opts = list()) {
+  d = session_data(s)
+  if (!is.null(d$frozen) && !isTRUE(opts$refreeze)) return(invisible(d$frozen))
+  if (!isTRUE(opts$refreeze)) {
+    restored = prompt_frozen_restore(s)
+    if (!is.null(restored)) {
+      d$frozen = restored
+      return(invisible(restored))
+    }
+  }
+  frozen = prompt_compose(s, opts)
+  proj = context_block_by_name(s, "project_instructions",
+                               list(turn = 1L, placement = "first", preview = TRUE,
+                                    human = frozen$human))
+  proj_tokens = sum(vapply(proj, function(b) prompt_est(b$text, "prose", d$id), 0))
+  skills = if (is.null(registry_get("context_block", "skill_content", session = d$id))) 0 else 10000
+  frozen = prompt_floor_check(frozen, proj_tokens, skills)
+  d$frozen = frozen
+  session_append(s, prompt_frozen_entry(frozen))
+  invisible(frozen)
+}
+
+on_load(ext_service_set("prompt.freeze", prompt_freeze, provided_by = "P07", builtin = "prompt"))
+
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
 #'
 #' @param gptr The extension API object.

@@ -8,6 +8,9 @@
 
 #' The rendering input of context blocks (contract section 10.2 row 13, plus `mode`, `human`,
 #' `document` and `preview`, which P07's own providers read)
+#'
+#' `human` is the frozen audience; `input$human` sets it before `.d$frozen` exists (the freeze's
+#' floor check renders the project instructions for the audience it is freezing for).
 #' @noRd
 context_input = function(s, input, placement) {
   d = if (is.null(s)) NULL else session_data(s)
@@ -16,7 +19,8 @@ context_input = function(s, input, placement) {
   list(call = call, turn = input$turn %||% 1L, prompt = input$prompt, placement = placement,
        last_hash = NULL, opts = opts,
        mode = d$mode %||% setting_get("mode", session = s, default = "manual"),
-       human = d$frozen$human %||% gptr_can_prompt(), document = prompt_doc(s),
+       human = input$human %||% d$frozen$human %||% gptr_can_prompt(),
+       document = prompt_doc(s),
        preview = isTRUE(input$preview))
 }
 

@@ -627,3 +627,141 @@ test_that("a named override replaces or removes an r_session fragment", {
   expect_false(grepl(mine, fm$t0, fixed = TRUE))
   expect_false("shell" %in% fm$sections$name)
 })
+
+# ---- Task 7: freeze, the gptr.frozen entry and the compaction floor check -----------------------
+
+test_that("prompt_freeze stores the frozen prompt once and appends gptr.frozen first", {
+  s = p07_session()
+  d = session_data(s)
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_identical(d$frozen, fr)
+  expect_identical(fr$preset, "standard")
+  expect_true(all(c("t0", "t1", "tools_json", "tool_names", "sections") %in% names(fr)))
+  expect_identical(names(fr$sections), c("name", "tier", "hash", "tokens"))
+  path = prompt_path(s)
+  types = vapply(path, function(e) e$custom_type %||% e$type, "")
+  expect_identical(sum(types == "gptr.frozen"), 1L)
+  expect_false(any(types[seq_len(which(types == "gptr.frozen"))] == "message"))
+  frozen = path[[which(types == "gptr.frozen")]]
+  expect_identical(frozen$data$t0, fr$t0)
+  expect_identical(frozen$data$toolsJson, fr$tools_json)
+  expect_identical(frozen$data$preset, "standard")
+  n = length(d$entries)
+  expect_identical(prompt_freeze(s), fr)
+  expect_length(d$entries, n)
+  expect_identical(ext_service_get("prompt.freeze"), prompt_freeze)
+})
+
+test_that("a resumed session restores the frozen prompt from its gptr.frozen entry", {
+  s = p07_session()
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  d = session_data(s)
+  d$frozen = NULL
+  back = prompt_freeze(s)
+  expect_identical(back$t0, fr$t0)
+  expect_identical(back$t1, fr$t1)
+  expect_identical(back$tools_json, fr$tools_json)
+  expect_identical(back$sections$hash, fr$sections$hash)
+  expect_identical(back$human, FALSE)
+  n = length(d$entries)
+  again = prompt_freeze(s, list(refreeze = TRUE, interactive = FALSE))
+  expect_length(d$entries, n + 1L)
+  expect_identical(again$t0, fr$t0)
+})
+
+test_that("a model with an 8K window is refused for the standard preset (IC-71)", {
+  local_project(files = list("AGENTS.md" = paste(rep("- Always check the data dictionary.", 400),
+                                                 collapse = "\n")))
+  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  # manual mode: the untrusted project's instructions are sent (not withheld), so they count
+  s = p07_session("manual")
+  local_mocked_bindings(prompt_model = function(ref) {
+    list(ref = "tiny/tiny-8k", provider = "tiny", id = "tiny-8k", api = "fake", context = 8192,
+         max_output = 1024)
+  })
+  expect_error(prompt_freeze(s, list(interactive = FALSE)), "preset = \"minimal\"",
+               class = "gptr_error_invalid_argument")
+  expect_null(session_data(s)$frozen)
+  # refused before anything is stored: no gptr.frozen entry either
+  expect_length(session_data(s)$entries, 0L)
+})
+
+test_that("the floor check cuts re-injection budgets before it refuses (IC-71)", {
+  fr = list(model = "m", preset = "standard", tools_json = "",
+            sections = data.frame(tokens = 3000))
+  local_mocked_bindings(prompt_model = function(ref) list(context = 32768, max_output = 4096))
+  ok = prompt_floor_check(fr, project_tokens = 500, skills_budget = 10000)
+  expect_null(ok$reinject)
+  cut = prompt_floor_check(fr, project_tokens = 9000, skills_budget = 10000)
+  expect_equal(cut$reinject, list(project = 4096, skills = 4096))
+  big = fr
+  big$sections = data.frame(tokens = 16000)
+  expect_error(prompt_floor_check(big, 500, 0), class = "gptr_error_invalid_argument")
+})
+
+test_that("a 200K window passes the floor check with the full re-injection budgets", {
+  s = p07_session()
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_identical(fr$reinject, list(project = Inf, skills = 10000))
+})
+
+# A 24,000-token window with 1,024 output tokens: threshold 24000 - max(16384, 1024 + 2 * 4000)
+# = 7,616, so the re-injection budgets are cut to 1,904 when the floor reaches it. 900 lines of
+# AGENTS.md (about 7,400 estimated tokens) put the floor over the threshold; 25% fits.
+local_tiny_model = function(.env = parent.frame()) {
+  local_mocked_bindings(prompt_model = function(ref) {
+    list(ref = "tiny/tiny-24k", provider = "tiny", id = "tiny-24k", api = "fake", context = 24000,
+         max_output = 1024)
+  }, .env = .env)
+}
+
+block_kinds = function(blocks) vapply(blocks, function(b) b$kind %||% b$type, "")
+
+test_that("the floor counts the project instructions the frozen audience will be sent (IC-52)", {
+  local_project(files = list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
+  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  local_tiny_model()
+  # untrusted project, auto mode: a session frozen for a human (`interactive = TRUE`, as P06's
+  # run_freeze() passes the run's audience) is sent the instructions, so the floor counts them,
+  # whatever gptr_can_prompt() says (FALSE in the tests)
+  s = p07_session("auto")
+  fr = prompt_freeze(s, list(interactive = TRUE))
+  expect_equal(fr$reinject, list(project = 1904, skills = 0))
+  expect_true("project_instructions" %in% block_kinds(context_first_message(s, list())))
+  # a non-interactive run withholds them (notice), so they are not part of the floor, whatever
+  # gptr_can_prompt() says (TRUE here: the frozen audience, not the console, decides)
+  local_gptr_options(quiet = FALSE)
+  s2 = p07_session("auto")
+  local_mocked_bindings(gptr_can_prompt = function() TRUE)
+  expect_message(prompt_freeze(s2, list(interactive = FALSE)), "not trusted",
+                 class = "gptr_message_notice")
+  expect_identical(session_data(s2)$frozen$reinject, list(project = Inf, skills = 10000))
+  expect_false("reinject" %in% names(prompt_path(s2)[[1]]$data))
+  expect_false("project_instructions" %in% block_kinds(context_first_message(s2, list())))
+})
+
+test_that("cut re-injection budgets are recorded in gptr.frozen and survive a restore (IC-71)", {
+  local_project(files = list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
+  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  local_tiny_model()
+  s = p07_session("manual")
+  fr = prompt_freeze(s, list(interactive = FALSE))
+  expect_equal(fr$reinject, list(project = 1904, skills = 0))
+  expect_equal(prompt_path(s)[[1]]$data$reinject, list(project = 1904, skills = 0))
+  # the store's JSON line (P06) keeps them; JSON reads the whole numbers back as integers
+  line = json_encode(entry_to_json(prompt_path(s)[[1]]))
+  stored = entry_from_json(json_decode(line))
+  expect_identical(prompt_reinject_read(stored$data$reinject), list(project = 1904, skills = 0))
+  d = session_data(s)
+  d$frozen = NULL
+  expect_equal(prompt_freeze(s)$reinject, fr$reinject)
+  # full budgets (here: the instructions are withheld) are not recorded (Inf has no JSON
+  # number) and restore as the defaults
+  local_gptr_options(quiet = FALSE)
+  s2 = p07_session("auto")
+  expect_message(prompt_freeze(s2, list(interactive = FALSE)), class = "gptr_message_notice")
+  d2 = session_data(s2)
+  expect_false("reinject" %in% names(prompt_path(s2)[[1]]$data))
+  d2$frozen = NULL
+  expect_identical(prompt_freeze(s2)$reinject, list(project = Inf, skills = 10000))
+})
