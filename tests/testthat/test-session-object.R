@@ -1224,3 +1224,18 @@ test_that("a reconstructed session stays reconstructed when it is rebuilt from i
   expect_true(path_reconstructed(list(user, answer)))
   expect_false(path_reconstructed(list(user)))
 })
+
+# ---------------------------------------------------------------- exports (contract 14.1)
+
+test_that("NAMESPACE exports the session API and registers the session methods", {
+  ns = readLines(system.file("NAMESPACE", package = "gptr"), warn = FALSE)
+  exports = paste0("export(", c("gptr_fork", "gptr_last", "gptr_resume", "gptr_sessions",
+                                "gptr_usage"), ")")
+  methods = c("S3method(\"$\",gptr_session)", "S3method(\"$<-\",gptr_session)",
+              "S3method(\"[[\",gptr_session)", "S3method(\"[[<-\",gptr_session)",
+              "S3method(as.character,gptr_session)", "S3method(format,gptr_session)",
+              "S3method(names,gptr_session)", "S3method(print,gptr_session)",
+              "S3method(print,gptr_session_summary)", "S3method(summary,gptr_session)",
+              "S3method(utils::.DollarNames,gptr_session)", "S3method(utils::str,gptr_session)")
+  expect_identical(setdiff(c(exports, methods), ns), character())
+})
