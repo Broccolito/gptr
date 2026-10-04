@@ -199,3 +199,81 @@ it. P05 Task 8 fixes these behaviours, which P08 and P13 consume:
    never silently replaced.
 
 Validation: `progress/P05.md`, Task 8 (`test-catalog-models.R` IC-74 tests).
+
+## D-015 - IC-74 usage rows: unknown cost and tier stay NA; validated roll-up (2026-10-03)
+
+P05 Task 9's literal `usage_row()`/`usage_rollup()` predate IC-74 (07-local-ollama.md section 5:
+"Missing usage remains unknown"). Behaviours changed, which P06, P13 and P20 consume:
+
+1. **Cost only from evidence.** On the `api`, `system-one` and `emulated` routes the row's cost
+   comes only from the dated price tier in force (`usage_cost()`); an unresolved model or a
+   request before the first known price gives `NA`. The plan fell back to the message's own
+   `cost$total`, which for a `usage_new()` record without `cost` is the legacy constructor zero.
+   An explicit zero rate still gives a known zero cost, even with unknown tokens (Task 1 rule).
+   The priced record is the resolved record after the same pure, no-I/O `provider_preflight()`
+   the request ran (the plan priced the bare catalog record), so a bare Ollama name (shipped
+   `ollama/clef-flash`, no prices) whose current `:latest` evidence establishes local execution
+   records the zero metered charge that 07 section 5 requires, as the tagged name does; a record
+   the preflight refuses (no current evidence, a cloud model) keeps its catalog prices.
+2. **`tier` is `NA` when no price tier applies** (the plan wrote `"default"`).
+3. **`plan-cli` cost is the CLI's reported `cost$total`, read from the message's usage record:**
+   a supplied total (zero included) is kept, a missing one is `NA`, and an `estimated = TRUE`
+   record (contract 4.3: the provider reported nothing, so no `total_cost_usd`) is `NA`, so P06's
+   plan-literal estimator fallback in `run_response()` (`usage_new(..., estimated = TRUE)`) never
+   records a known zero. A `usage_new()` record always carries a total, so **P20 adapters pass
+   `cost = NULL` when the CLI reported usage but no `total_cost_usd`**.
+4. **Validation.** `usage_row()` refuses non-scalar or invalid `session`, `agent`, `parent_id`,
+   `started`, `seconds`, `multiplier` and message fields (`gptr_error_invalid_argument`) instead
+   of recycling them into several rows; `usage_log_append()` validates the section 4.3 column
+   types before the log changes; `usage_rollup()` refuses a session with two different recorded
+   `parent_id`s and cyclic ancestry (the plan stopped silently at a cycle). An `NA` `parent_id`
+   records no parent (contract 4.3; P13's System 1 rows of a child session), so it joins the
+   parent its session's other rows record. Rows without a session (process System 1 calls) form
+   the `NA` group; an `NA` value makes its group's sum `NA`.
+
+Validation: `progress/P05-usage.md`, Task 9 (`test-provider-usage.R`; the evidence-priced row
+in `test-catalog-models.R`).
+
+## D-016 - Hosted CI corrections: INFRA-01 measurement, undeclared built-ins, old Windows R (2026-10-03)
+
+Hosted run 37169255693 (`8e8d8e0`) and run 37170545611 (`a2ba302`) failed on every platform.
+CI Task CI-1 changes three behaviours of plan literals; contract and architecture targets stay.
+
+1. **INFRA-01 is measured on each stream's own schedule.** P04's tests anchored both targets at
+   the moment the transfers were queued, so connection setup and the mock server's accept/parse
+   time counted against them: hosted macOS measured 2.57 s and the hosted connection job 2.4830 s
+   and 2.553 s for six streams (limit 2.475 s), and one macOS delta gap exceeded 0.35 s. Locally
+   that setup is 0.06-0.12 s of a 2.34-2.37 s wall. The mock writes `message_start` with the
+   response head when it has read the request and delta i at `i * 0.25` s after it, so the
+   tests now measure from each stream's first event. "First delta within 0.35 s of the mock
+   writing it" (architecture 6.18) applies to every delta: its offset from its scheduled write
+   must stay below 0.35 s in either direction (late = stalled or slow delivery; early = the
+   first event came late; a batched stream has every delta far ahead of its schedule). "Six
+   streams of 1.00-2.25 s finish within 10% of the slowest" compares the span from the earliest
+   stream's first event to the last stream's end with 1.10 times the slowest stream's own span
+   (its first event to its end), which must itself be at least 2.25 - 0.35 s; serialised streams
+   (about 9.75 s) still fail. Both thresholds (0.35 s, 10%) are unchanged (D-011); synthetic
+   negative controls prove that a 0.4 s stall, a batched stream and serialised streams fail and
+   that 0.3 s of common connection setup does not. Locally: worst schedule offset 0.003-0.050 s,
+   six-stream ratio 1.000-1.004.
+2. **A built-in that no loaded plan declares is not filtered out.** Contract 7.0 makes a service
+   unavailable when absent or when its owning built-in is filtered out. P01's
+   `service_builtin_active()` also treated every built-in without records as filtered once the
+   registry listed any record, so P01's own test of a `describe` service (built-in `workspace`,
+   P09, not built yet) failed in every package run after P03/P05 built-ins began loading
+   records. Now a built-in without enabled records counts as filtered out only when it has
+   disabled records or is declared in `the$builtins` (declared but skipped by a filter, or
+   failed); a never-declared one stays active. Behaviour for every declared built-in is
+   unchanged. Consequence for P07 Task 2 and P08 Tasks 2/3/6: their bootstrap services become
+   available before their built-in is declared; their reviewed tests already avoid asserting
+   `not_available` there.
+3. **Windows R before 4.5.0 runs R CMD check without `_R_CHECK_THINGS_IN_OTHER_DIRS_`.** That
+   check reads `file.info()` owner columns, which Windows R has only from 4.5.0 (R NEWS); on
+   the oldrel-4 job (R 4.2.3) R CMD check aborted at its start and rcmdcheck still reported
+   success. The matrix entry sets it to `false` there only; every other configuration keeps it.
+   Every R CMD check job now fails unless `check/gptr.Rcheck/00check.log` has a `Status:` line,
+   every job has a time limit (120 minutes for R-devel, whose dependencies build from source
+   for about 65 minutes on a cold cache), and the connection gate runs the whole suite before
+   comparing the connection table, then fails on failed tests and on any leak (D-006).
+
+Validation: `progress/ci-hosted.md`, Task CI-1.

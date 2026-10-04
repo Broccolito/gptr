@@ -1070,6 +1070,46 @@ test_that("a bare catalog name prepared through its :latest evidence costs nothi
   expect_length(srv$calls, n)
 })
 
+test_that("usage rows price a bare local model through the same evidence (P05 Task 9)", {
+  # IC-74 (07 section 5): local usage records a zero metered API charge. The row applies the
+  # request's pure preflight to the resolved record; without current evidence it stays unknown.
+  bare = list(provider = "ollama", id = "clef-flash", name = "Clef Flash", family = "clef",
+              type = "classifier", api = "ollama-system-one", locality = "unknown",
+              reasoning = FALSE, thinking_levels = list("off"), input = list("text", "image"),
+              tool_call = FALSE, structured_output = TRUE, status = "active",
+              decision = list(types = list("noul", "choice", "score"), images = TRUE,
+                              server_min = "0.35.1", max_active = 1L))
+  local_catalog(c(fx_models(), list(bare)))
+  srv = local_ollama_server()
+  started = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
+  row = function(m) {
+    msg = msg_assistant(list(), api = m$api, provider = m$provider, model = m$id,
+                        usage = usage_new(input = 100, output = 2), route = "system-one")
+    usage_row(msg, NA_character_, "s1", NA_character_, started, 0.2, 1)
+  }
+  unprepared = row(model_resolve("ollama/clef-flash"))
+  expect_true(is.na(unprepared$cost))
+  expect_true(is.na(unprepared$tier))
+  m = model_prepare("ollama/clef-flash")
+  n = length(srv$calls)
+  local = row(m)
+  expect_identical(local$model, "clef-flash")
+  expect_identical(local$cost, 0)
+  expect_identical(local$tier, "default")
+  expect_identical(row(model_prepare("ollama/clef-flash:latest"))$cost, 0)
+  expect_length(srv$calls, n)
+  # a cloud model behind the same loopback server is not local: its cost stays unknown
+  gptr_models(provider = "ollama", refresh = TRUE)
+  n = length(srv$calls)
+  cloud = row(model_resolve("ollama/gpt-oss:120b-cloud"))
+  expect_true(is.na(cloud$cost))
+  expect_length(srv$calls, n)
+  # without current evidence (a rebuild or replay) the zero is never borrowed
+  catalog_reset(discovered = TRUE)
+  expect_true(is.na(row(m)$cost))
+  expect_length(srv$calls, n)
+})
+
 test_that("a model /api/show cannot describe does not hide the others or blame the server", {
   local_catalog()
   srv = local_ollama_server()

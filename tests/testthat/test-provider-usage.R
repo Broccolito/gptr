@@ -184,8 +184,9 @@ test_that("price dates and tiers are validated and future rates are not borrowed
 
 local_priced_provider = function(.env = parent.frame()) {
   spec = gptr_provider("pricetest", api = "fake", models = list(list(
-    id = "m1", prices = price_rows(list(from = "2000-01-01", tier = "default", input = 4, output = 20,
-                                  cache_read = 0.2, cache_write_5m = 5, cache_write_1h = 8))
+    id = "m1", prices = price_rows(list(from = "2000-01-01", tier = "default", input = 4,
+                                        output = 20, cache_read = 0.2, cache_write_5m = 5,
+                                        cache_write_1h = 8))
   )))
   off = gptr_register(spec)
   withr::defer(off(), envir = .env)
@@ -316,6 +317,10 @@ test_that("plan CLI missing cost is unknown while supplied zero remains known", 
   expect_equal(build(list(input = 10, cost = list(total = 0)))$cost, 0)
   expect_equal(build(usage_new(input = 10, cost = list(total = 0.03)))$cost, 0.03)
   expect_true(is.na(build(list(input = 10, cost = list(total = NA_real_)))$cost))
+  # an estimated record means the CLI reported nothing, so no total_cost_usd either (4.3)
+  estimated = build(usage_new(input = 100, output = 5, estimated = TRUE))
+  expect_true(estimated$estimated)
+  expect_true(is.na(estimated$cost))
 })
 
 test_that("unknown token or charge components propagate through root rollups", {
@@ -355,6 +360,28 @@ test_that("usage rollup rejects inconsistent or cyclic session ancestry", {
   expect_error(usage_rollup(row), class = "gptr_error_invalid_argument")
 })
 
+test_that("a row without a recorded parent still rolls up with its session's other rows", {
+  # contract 4.3: parent_id is the parent session id or NA; P13's System 1 rows carry the
+  # calling session with parent_id NA next to that session's own rows with their parent
+  local_priced_provider()
+  make = function(session, parent, input) {
+    usage_row(usage_msg(usage_new(input = input, output = 1)), session, "main", parent,
+              Sys.time(), 1, 1)
+  }
+  rows = rbind(make("child", "root", 10), make("root", NA_character_, 20),
+               make("child", NA_character_, 30))
+  up = usage_rollup(rows)
+  expect_identical(up$group, "root")
+  expect_identical(up$requests, 3L)
+  expect_equal(up$input, 60)
+  expect_equal(up$cost, sum(rows$cost))
+  # only an NA parent: the session is its own root
+  expect_identical(usage_rollup(rows[3, ])$group, "child")
+  # two different recorded parents are still refused
+  expect_error(usage_rollup(rbind(rows, make("child", "other", 1))),
+               class = "gptr_error_invalid_argument")
+})
+
 test_that("usage log validates rows before mutation and returns independent copies", {
   old = the$s1_log
   withr::defer(assign("s1_log", old, envir = the))
@@ -380,6 +407,21 @@ test_that("usage log validates rows before mutation and returns independent copi
   bad = row
   bad$estimated = NA
   expect_error(usage_log_append(bad), class = "gptr_error_invalid_argument")
+  bad = row
+  bad$route = "other"
+  expect_error(usage_log_append(bad), class = "gptr_error_invalid_argument")
+  bad = row
+  bad$request_id = NA_character_
+  expect_error(usage_log_append(bad), class = "gptr_error_invalid_argument")
+  expect_identical(nrow(usage_log()), 1L)
+  # rows appended after a read keep their order behind the rows already read
+  for (input in 2:3) {
+    more = row
+    more$input = input
+    usage_log_append(more)
+    expect_equal(usage_log()$input, seq_len(input))
+  }
+  expect_equal(usage_log()$input, 1:3)
 })
 
 test_that("usage row scalar fields cannot recycle into multiple accounting rows", {
@@ -392,5 +434,13 @@ test_that("usage row scalar fields cannot recycle into multiple accounting rows"
   for (args in list(list(session = c("a", "b")), list(seconds = c(1, 2)),
                     list(seconds = -1), list(multiplier = Inf), list(started = "bad"))) {
     expect_error(do.call(build, args), class = "gptr_error_invalid_argument")
+  }
+  for (args in list(list(agent = NA_character_), list(parent_id = 1), list(session = ""))) {
+    expect_error(do.call(build, args), class = "gptr_error_invalid_argument")
+  }
+  for (field in list(list(route = "other"), list(request_id = ""), list(model = 1))) {
+    bad = utils::modifyList(msg, field)
+    expect_error(usage_row(bad, "root", "main", NA_character_, Sys.time(), 1, 1),
+                 class = "gptr_error_invalid_argument")
   }
 })
