@@ -96,16 +96,19 @@ provider_default_models = function() {
 }
 
 #' An `auth` function for an optional key (vLLM): a bound handle when the key exists, else NULL
+#'
+#' Its `gptr_optional_auth` attribute names the variables, so the listing can look them up
+#' without registering (provider_credential(register = FALSE)).
 #' @noRd
 provider_optional_auth = function(id, vars) {
   force(id)
   force(vars)
-  function() {
+  structure(function() {
     p = provider_get(id)
     if (is.null(p)) return(NULL)
     p[["auth"]] = vars
     tryCatch(provider_credential(p), gptr_error_no_key = function(e) NULL)
-  }
+  }, gptr_optional_auth = vars)
 }
 
 #' A `discover` function for a loopback server: GET <base>/models with a 1 s timeout
@@ -301,7 +304,7 @@ credential_bind = function(h, origin) {
 
 #' A handle from a credential-store record (P03 returns handles for stored values)
 #' @noRd
-credential_from_store = function(rec, name, origin) {
+credential_from_store = function(rec, name, origin, register = TRUE) {
   if (is.null(rec)) return(NULL)
   if (inherits(rec, "gptr_secret")) return(rec)
   for (k in c("handle", "key")) {
@@ -310,9 +313,28 @@ credential_from_store = function(rec, name, origin) {
   }
   key = rec[["key"]]
   if (is.character(key) && length(key) == 1L && nzchar(key)) {
+    if (!register) return(credential_peek(key, name, origin))
     return(credential_register(key, name, "store", origin))
   }
   NULL
+}
+
+#' What credential_register() would yield, without registering or binding (the listing's view)
+#'
+#' NULL when the vault already holds the value under `name` bound to another origin (the
+#' registration would be refused); else a `gptr_credential_peek` record holding the name and
+#' P03's fingerprint (the first 6 hex of hash_sha256() of the UTF-8 value), never the value.
+#' @noRd
+credential_peek = function(value, name, origin) {
+  fp = substr(hash_sha256(as_utf8(value)), 1L, 6L)
+  st = the$secrets
+  entry = if (is.environment(st)) st$reg[[paste0(name, "#", fp)]] else NULL
+  if (is.list(entry)) {
+    h = structure(list(id = entry[["id"]], name = name, fp = fp, origin = entry[["origin"]]),
+                  class = "gptr_secret")
+    if (!credential_usable(h, origin)) return(NULL)
+  }
+  structure(list(name = name, fp = fp), class = "gptr_credential_peek")
 }
 
 #' Register an ambient value without overwriting an existing origin restriction
@@ -334,8 +356,15 @@ credential_register = function(value, name, source, origin) {
 #' anthropic provider refuses a subscription OAuth token (`sk-ant-oat`, architecture section
 #' 8.1) found in its variable, and the vault handle holding the same token: gptr_error_no_key
 #' naming the token type when nothing else is found.
+#'
+#' `register = FALSE` is gptr_providers()'s read-only lookup: the same order and outcome, but an
+#' environment (or plain stored) value is neither registered nor bound to this provider's origin
+#' (a listing must not decide which provider may use a shared variable, and emits nothing);
+#' the step answers a `gptr_credential_peek` record (name and fingerprint) instead of a handle.
+#' The built-in optional-key function (vLLM) is looked up the same way; a plugin's `auth`
+#' function is called as usual.
 #' @noRd
-provider_credential = function(provider) {
+provider_credential = function(provider, register = TRUE) {
   if (is.null(provider)) return(NULL)
   id = provider[["id"]] %||% provider[["name"]]
   auth = provider[["auth"]]
@@ -346,6 +375,12 @@ provider_credential = function(provider) {
                       "can be bound."), "no_key", provider = id, variables = character())
   }
   if (is.function(auth)) {
+    optional = attr(auth, "gptr_optional_auth", exact = TRUE)
+    if (!register && is.character(optional)) {
+      provider[["auth"]] = optional
+      return(tryCatch(provider_credential(provider, register = FALSE),
+                      gptr_error_no_key = function(e) NULL))
+    }
     h = auth()
     if (is.null(h)) return(NULL)
     if (inherits(h, "gptr_secret")) {
@@ -376,13 +411,18 @@ provider_credential = function(provider) {
     if (credential_usable(h, origin)) return(credential_bind(h, origin))
   }
   rec = tryCatch(auth_store_get(id), gptr_error = function(e) NULL)
-  h = credential_from_store(rec, vars[[1]], origin)
+  h = credential_from_store(rec, vars[[1]], origin, register)
+  if (inherits(h, "gptr_credential_peek")) return(h)
   if (credential_usable(h, origin)) return(credential_bind(h, origin))
   for (v in vars) {
     if (v %in% names(refused)) next
     value = Sys.getenv(v, unset = "")
     if (nzchar(value)) {
-      h = credential_register(value, v, "env", origin)
+      h = if (register) {
+        credential_register(value, v, "env", origin)
+      } else {
+        credential_peek(value, v, origin)
+      }
       if (!is.null(h)) return(h)
     }
   }
@@ -1243,4 +1283,210 @@ provider_stream = function(model, context, opts, emit, done, run = NULL) {
     stream_fail_local(st, "error", conditionMessage(cnd), cls)
     NA_character_
   })
+}
+
+# ---- gptr_providers(): the provider listing (04 sections 5.12 and 6.2, IC-65) -----------------
+
+#' A scalar string from a provider's `status()` field (a `package_version` included), else NA
+#' @noRd
+provider_status_text = function(x) {
+  if (inherits(x, "numeric_version")) x = as.character(x)
+  if (!is.atomic(x) || !length(x)) return(NA_character_)
+  v = as.character(x[[1]])
+  if (is.na(v) || !nzchar(v)) NA_character_ else v
+}
+
+#' One reachability probe: one GET of <base>/models without credentials, 2 s (IC-65)
+#'
+#' One attempt (P04's default retry policy would re-send it) with a small body bound: any HTTP
+#' status proves reachability (a 401 without a key included), so a status that arrives with an
+#' oversized answer counts too. Never under R CMD check.
+#' @noRd
+provider_ping = function(p) {
+  if (check_running()) return("not checked")
+  url = provider_base_url(p)
+  if (is.null(url)) return("no base url")
+  if (is.null(provider_origin(url))) return("invalid base url")
+  path = if (identical(p[["api"]], "anthropic-messages")) "/v1/models" else "/models"
+  res = tryCatch(catalog_http_request(paste0(url, path), "GET", list(), NULL, timeout = 2,
+                                      attempts = 1L, max_bytes = 65536),
+                 gptr_error = function(e) list(status = e[["status"]]))
+  code = suppressWarnings(as.integer(res[["status"]] %||% NA_integer_))
+  if (length(code) != 1L || is.na(code)) "unreachable" else paste0("reachable (HTTP ", code, ")")
+}
+
+#' Does a provider speak HTTP (contract 6.2: only HTTP providers are probed)?
+#'
+#' Its adapter's transport (a registry lookup, no I/O); without a registered adapter, the wire
+#' apis whose built-in adapters P12 and P13 register (HTTP); any other api counts as not HTTP.
+#' @noRd
+provider_http = function(p) {
+  api = p[["api"]]
+  if (!is.character(api) || length(api) != 1L || is.na(api) || !nzchar(api)) return(FALSE)
+  a = tryCatch(registry_get("adapter", api), error = function(e) NULL)
+  tr = if (is.list(a)) a[["transport"]] else NULL
+  if (is.character(tr) && length(tr) == 1L && !is.na(tr)) return(startsWith(tr, "http"))
+  api %in% c("anthropic-messages", "openai-responses", "openai-completions",
+             "google-generative-ai", "typesafe-system-one", "ollama-system-one")
+}
+
+#' Status and version of a provider; `check = TRUE` adds a reachability probe
+#'
+#' `disabled` when the settings say `providers.<id>.enabled: false`; else the provider's own
+#' `status()` (called as `status(check = check)` when it has a `check` formal, else `status()`;
+#' its fields `status`, `version` and `available`, plan ambiguity 18); else from the transport
+#' and the credential lookup `h` (a handle, a peek record, NULL or the condition it signalled):
+#' `error` when the lookup failed other than with `gptr_error_no_key`, `no base url` or
+#' `invalid base url` for an HTTP provider (provider_http()), `no key`, else `ready`.
+#' `check = TRUE` replaces `ready` and `no key` of an HTTP provider with the probe's answer, so
+#' both modes agree on every other status.
+#' @noRd
+provider_status = function(p, h, check) {
+  if (isFALSE(p[["enabled"]])) return(list(status = "disabled", version = NA_character_))
+  f = p[["status"]]
+  if (is.function(f)) {
+    s = tryCatch(if ("check" %in% names(formals(f))) f(check = check) else f(),
+                 error = function(e) list(status = "error"))
+    if (!is.list(s)) s = list()
+    status = provider_status_text(s[["status"]])
+    if (is.na(status)) {
+      avail = s[["available"]]
+      status = if (isTRUE(avail)) "ready" else if (isFALSE(avail)) "unavailable" else "unknown"
+    }
+    return(list(status = status, version = provider_status_text(s[["version"]])))
+  }
+  offline = isTRUE(p[["offline"]])
+  http = !offline && provider_http(p)
+  keyed = !is.null(p[["auth"]]) && !is.function(p[["auth"]]) && !offline
+  failed = inherits(h, "condition")
+  url = provider_base_url(p)
+  status = if (failed && !inherits(h, "gptr_error_no_key")) {
+    "error"
+  } else if (http && is.null(url)) {
+    "no base url"
+  } else if (http && is.null(provider_origin(url))) {
+    "invalid base url"
+  } else if (failed || (keyed && is.null(h))) {
+    "no key"
+  } else {
+    "ready"
+  }
+  if (check && http && status %in% c("ready", "no key")) status = provider_ping(p)
+  list(status = status, version = NA_character_)
+}
+
+#' The default model reference shown for a provider
+#'
+#' The architecture section 8.4 default of a built-in provider, else its newest active model in
+#' the merged catalog (`idx`, its lookup index). IC-74: a decision-only (classifier) model is
+#' never a conversational provider's default, and a classifier provider shows only those.
+#' @noRd
+provider_default_model = function(p, idx) {
+  id = p[["id"]] %||% p[["name"]]
+  d = provider_default_models()[id]
+  if (!is.na(d)) return(paste0(id, "/", d))
+  if (!is.data.frame(idx) || !nrow(idx)) return(NA_character_)
+  decision = identical(p[["type"]], "classifier")
+  ok = idx$provider == id & idx$status == "active" & (idx$type == "classifier") == decision
+  rows = idx[!is.na(ok) & ok, , drop = FALSE]
+  if (!nrow(rows)) return(NA_character_)
+  rows$ref[order(rows$release_date, decreasing = TRUE, method = "radix")][[1]]
+}
+
+#' Egress acknowledgement state of a provider (the acknowledgement itself is P08's)
+#'
+#' Offline providers need none; a local provider needs none only while its effective endpoint is
+#' a loopback address (IC-74: a remote Ollama endpoint needs the normal acknowledgement). Every
+#' other provider shows `ack` only when the user settings' `egress.<id>` says so.
+#' @noRd
+provider_egress = function(p) {
+  if (isTRUE(p[["offline"]])) return("ack")
+  if (isTRUE(p[["local"]]) && isTRUE(catalog_endpoint(p)[["loopback"]])) return("ack")
+  eg = setting_get("egress", default = list())
+  if (!is.list(eg)) eg = list()
+  if (identical(eg[[p[["id"]] %||% p[["name"]]]], "ack")) "ack" else "needed"
+}
+
+#' A provider for the listing: its effective record, or, when applying its settings failed
+#' (an invalid `providers.<id>.headers`), the registered record with the condition as `err`
+#' (NULL when the record disappeared on load)
+#' @noRd
+provider_listing_get = function(id) {
+  tryCatch(list(p = provider_get(id), err = NULL), error = function(e) {
+    p = tryCatch(registry_get("provider", id), error = function(e2) NULL)
+    list(p = if (is.null(p)) list(id = id) else p, err = e)
+  })
+}
+
+#' One row of the provider listing (a named list of scalar strings)
+#'
+#' The credential lookup registers and binds nothing (provider_credential(register = FALSE)).
+#' @noRd
+provider_listing_row = function(id, p, err, check, reg, idx) {
+  # a failing settings entry or `auth` function marks its own row, never the whole listing
+  h = if (is.null(err)) {
+    tryCatch(provider_credential(p, register = FALSE), error = function(e) e)
+  } else {
+    err
+  }
+  s = if (is.null(err)) {
+    provider_status(p, h, check)
+  } else {
+    list(status = "error", version = NA_character_)
+  }
+  src = if (is.null(reg)) character() else reg$source[reg$name == id & reg$state == "active"]
+  list(id = id, type = provider_status_text(p[["type"]] %||% "chat"),
+       api = provider_status_text(p[["api"]]),
+       credential = if (inherits(h, c("gptr_secret", "gptr_credential_peek"))) {
+         paste0(h[["name"]], " #", h[["fp"]])
+       } else {
+         NA_character_
+       },
+       source = if (length(src)) src[[1]] else NA_character_, status = s$status,
+       default_model = provider_default_model(p, idx), egress = provider_egress(p),
+       version = s$version)
+}
+
+#' List the configured model providers
+#'
+#' Shows every registered provider record: its wire api, where its credential comes from (as
+#' `NAME #fingerprint`, never the value), the registry source of the record, its status, default
+#' model, egress acknowledgement and, for subscription command-line tools, their version.
+#'
+#' `status` is `ready`, `no key`, `no base url` or `invalid base url` (HTTP providers),
+#' `disabled` (the settings say `providers.<id>.enabled: false`), `error` (the provider's
+#' settings or its credential lookup failed) or what a command-line provider reports; with
+#' `check = TRUE` the `ready` or `no key` of an HTTP provider becomes `reachable (HTTP <code>)`
+#' for a reachable endpoint (a 401 without a key still proves reachability), otherwise
+#' `unreachable`, or `not checked` under `R CMD check`. `egress` is `ack` when no
+#' acknowledgement is needed (offline providers, local servers at a loopback address) or the
+#' user has given it. Listing reads credentials only: it never registers an environment
+#' variable or binds it to a provider.
+#'
+#' @param check `FALSE` (default) performs no network or process input/output. `TRUE` also
+#'   probes each HTTP provider's models endpoint once without credentials (2 s timeout; skipped
+#'   under `R CMD check`) and lets command-line providers check their tool; it never sends a
+#'   paid request.
+#' @return A `gptr_providers` data frame with columns `id`, `type`, `api`, `credential`,
+#'   `source`, `status`, `default_model`, `egress` (`ack` or `needed`) and `version`.
+#' @examples
+#' gptr_providers()
+#' @export
+gptr_providers = function(check = FALSE) {
+  check_flag(check, "check")
+  ids = sort(registry_names("provider"), method = "radix")
+  provs = lapply(ids, provider_listing_get)
+  keep = !vapply(provs, function(x) is.null(x$p), NA)
+  ids = ids[keep]
+  provs = provs[keep]
+  reg = tryCatch(gptr_registry("provider"), gptr_error = function(e) NULL)
+  idx = tryCatch(catalog_get()$index, gptr_error = function(e) NULL)
+  rows = Map(function(id, x) provider_listing_row(id, x$p, x$err, check, reg, idx), ids, provs)
+  col = function(f) vapply(rows, function(r) r[[f]], "", USE.NAMES = FALSE)
+  df = data.frame(id = col("id"), type = col("type"), api = col("api"),
+                  credential = col("credential"), source = col("source"),
+                  status = col("status"), default_model = col("default_model"),
+                  egress = col("egress"), version = col("version"), stringsAsFactors = FALSE)
+  new_listing(df, "gptr_providers",
+              footer = "Credentials show variable names and fingerprints only.")
 }

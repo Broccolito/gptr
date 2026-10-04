@@ -1855,3 +1855,309 @@ test_that("a real child replaced by the next turn or stopped by its job row leav
   expect_null(state$process)
   expect_true(reactor_pump(until = function() !length(live()) && !job_row(job2), timeout = 3))
 })
+
+# ---- gptr_providers() ------------------------------------------------------------------------
+
+test_that("gptr_providers() lists providers with fingerprints and no I/O", {
+  count = new.env()
+  count$transfers = 0L
+  local_mocked_bindings(
+    reactor_http = function(...) {
+      count$transfers = count$transfers + 1L
+      "t1"
+    },
+    proc_spawn = function(...) stop("gptr_providers() must not start a process")
+  )
+  local_test_vault()
+  withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p05list-000000000000000000",
+                      GROQ_API_KEY = "")
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  local_settings(providers = list(cerebras = list(enabled = FALSE)))
+  df = gptr_providers()
+  expect_equal(df$status[df$id == "cerebras"], "disabled")
+  expect_equal(df$status[df$id == "groq"], "no key")
+  expect_s3_class(df, "gptr_providers")
+  expect_named(df, c("id", "type", "api", "credential", "source", "status", "default_model",
+                     "egress", "version"))
+  expect_true(all(builtin_ids %in% df$id))
+  a = df[df$id == "anthropic", ]
+  expect_match(a$credential, "^ANTHROPIC_API_KEY #[0-9a-f]+$")
+  expect_equal(a$status, "ready")
+  expect_equal(a$default_model, "anthropic/claude-sonnet-5-5")
+  expect_equal(a$egress, "needed")
+  expect_equal(df$egress[df$id == "ollama"], "ack")
+  expect_equal(df$status[df$id == "ollama"], "ready")
+  printed = paste(capture.output(print(df)), collapse = "\n")
+  expect_false(grepl("p05list", printed, fixed = TRUE))
+  expect_equal(count$transfers, 0L)
+  expect_error(gptr_providers(check = "yes"), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_providers(check = TRUE) probes models endpoints without credentials", {
+  urls = new.env()
+  urls$seen = character()
+  local_test_vault()
+  # one GET per provider (attempts = 1L): P04's default retry policy would re-send it
+  local_mocked_bindings(
+    check_running = function() FALSE,
+    auth_store_get = function(key) NULL,
+    catalog_http_request = function(url, method = "GET", headers = list(), body = NULL,
+                                    timeout = 30, attempts = NULL, max_bytes = 64 * 1024^2) {
+      urls$seen = c(urls$seen, url)
+      expect_equal(method, "GET")
+      expect_null(body)
+      expect_equal(timeout, 2)
+      expect_equal(attempts, 1L)
+      expect_length(headers, 0L)
+      list(status = 401L, headers = list(), body = raw())
+    }
+  )
+  local_settings(egress = list(anthropic = "ack"))
+  df = gptr_providers(check = TRUE)
+  expect_equal(df$status[df$id == "anthropic"], "reachable (HTTP 401)")
+  expect_true("https://api.anthropic.com/v1/models" %in% urls$seen)
+  expect_true("https://api.openai.com/v1/models" %in% urls$seen)
+  expect_equal(df$egress[df$id == "anthropic"], "ack")
+})
+
+test_that("the probe skips R CMD check and disabled providers; a failed answer is unreachable", {
+  local_test_vault()
+  seen = new.env()
+  seen$urls = character()
+  local_mocked_bindings(
+    check_running = function() TRUE,
+    auth_store_get = function(key) NULL,
+    catalog_http_request = function(...) stop("no probe under R CMD check")
+  )
+  withr::local_envvar(AZURE_OPENAI_ENDPOINT = "")
+  local_settings(providers = list(groq = list(enabled = FALSE),
+                                  deepseek = list(base_url = "not a url")))
+  df = gptr_providers()
+  expect_equal(df$status[df$id == "deepseek"], "invalid base url")
+  expect_equal(df$status[df$id == "azure"], "no base url")
+  df = gptr_providers(check = TRUE)
+  expect_equal(df$status[df$id == "anthropic"], "not checked")
+  expect_equal(df$status[df$id == "groq"], "disabled")
+  local_mocked_bindings(
+    check_running = function() FALSE,
+    catalog_http_request = function(url, method = "GET", headers = list(), body = NULL,
+                                    timeout = 30, attempts = NULL, max_bytes = 64 * 1024^2) {
+      seen$urls = c(seen$urls, url)
+      if (startsWith(url, "https://api.openai.com/")) {
+        # an answer above the probe's body bound still proves the endpoint answered
+        expect_lte(max_bytes, 65536)
+        gptr_abort("The answer exceeded the bound.", c("network", "provider"),
+                   provider = "catalog", status = 200L, curl_code = NA_integer_)
+      }
+      if (startsWith(url, "https://api.anthropic.com/")) {
+        gptr_abort("No answer.", c("network", "provider"), provider = "catalog",
+                   status = NA_integer_, curl_code = 28L)
+      }
+      list(status = 404L, headers = list(), body = raw())
+    }
+  )
+  df = gptr_providers(check = TRUE)
+  expect_equal(df$status[df$id == "openai"], "reachable (HTTP 200)")
+  expect_equal(df$status[df$id == "anthropic"], "unreachable")
+  expect_equal(df$status[df$id == "ollama"], "reachable (HTTP 404)")
+  expect_equal(df$status[df$id == "groq"], "disabled")
+  expect_false(any(grepl("groq", seen$urls, fixed = TRUE)))
+  expect_equal(df$status[df$id == "azure"], "no base url")
+  expect_false(any(grepl("azure", seen$urls, fixed = TRUE)))
+  expect_equal(df$status[df$id == "deepseek"], "invalid base url")
+  expect_false(any(grepl("not a url", seen$urls, fixed = TRUE)))
+})
+
+test_that("gptr_providers() reads a provider's status(), registry source and offline flag", {
+  local_test_vault()
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  calls = new.env()
+  calls$check = list()
+  checked = function(check = FALSE) {
+    calls$check[[length(calls$check) + 1L]] = check
+    list(status = if (check) "found (checked)" else "found",
+         version = package_version("2.1.0"), available = TRUE)
+  }
+  models = list(list(id = "judge", type = "classifier", release_date = "2026-01-01"),
+                list(id = "chatty", release_date = "2026-02-01"))
+  ok = ext_load(function(gptr) {
+    gptr$register(gptr_provider("p05-cli", api = "cli-p05", type = "cli", status = checked))
+    gptr$register(gptr_provider("p05-gone", api = "cli-p05", type = "cli",
+                                status = function() list(available = FALSE)))
+    gptr$register(gptr_provider("p05-broken", api = "cli-p05", type = "cli",
+                                status = function() stop("boom")))
+    gptr$register(gptr_provider("p05-odd", api = "cli-p05", type = "cli",
+                                status = function() "not a list"))
+    gptr$register(gptr_provider("p05-offline", api = "fake", auth = "P05_OFFLINE_KEY",
+                                offline = TRUE))
+    gptr$register(gptr_provider("p05-s1", api = "p05-decide", type = "classifier",
+                                base_url = "https://s1.example", models = models))
+    gptr$register(gptr_provider("p05-chat", api = "openai-completions",
+                                base_url = "https://chat.example/v1", models = models))
+    gptr$register(gptr_provider("p05-badauth", api = "openai-completions",
+                                base_url = "https://badauth.example/v1",
+                                auth = function() stop("auth exploded")))
+    gptr$register(gptr_provider("p05-rawauth", api = "openai-completions",
+                                base_url = "https://rawauth.example/v1",
+                                auth = function() "a raw string"))
+  }, source = "plugin:p05-status", rank = 5L)
+  withr::defer(ext_unload("plugin:p05-status"))
+  expect_true(ok)
+  local_mocked_bindings(proc_spawn = function(...) stop("no process with check = FALSE"))
+  df = gptr_providers()
+  cli = df[df$id == "p05-cli", ]
+  expect_equal(cli$type, "cli")
+  expect_equal(cli$api, "cli-p05")
+  expect_equal(cli$status, "found")
+  expect_equal(cli$version, "2.1.0")
+  expect_equal(cli$source, "plugin:p05-status")
+  expect_true(is.na(cli$credential))
+  expect_identical(calls$check, list(FALSE))
+  expect_equal(df$status[df$id == "p05-gone"], "unavailable")
+  expect_true(is.na(df$version[df$id == "p05-gone"]))
+  expect_equal(df$status[df$id == "p05-broken"], "error")
+  expect_equal(df$status[df$id == "p05-odd"], "unknown")
+  off = df[df$id == "p05-offline", ]
+  expect_equal(off$status, "ready")
+  expect_equal(off$egress, "ack")
+  expect_true(is.na(off$credential))
+  expect_equal(df$source[df$id == "anthropic"], "builtin:providers")
+  # IC-74: a decision-only model is never a chat provider's default, and vice versa
+  expect_equal(df$default_model[df$id == "p05-s1"], "p05-s1/judge")
+  expect_equal(df$default_model[df$id == "p05-chat"], "p05-chat/chatty")
+  expect_true(is.na(df$default_model[df$id == "ollama"]))
+  # a failing credential lookup (a plain R error included) marks its row, never the listing
+  expect_equal(df$status[df$id == "p05-badauth"], "error")
+  expect_equal(df$status[df$id == "p05-rawauth"], "error")
+  expect_true(is.na(df$credential[df$id == "p05-badauth"]))
+  # check = TRUE: status(check = TRUE) and no HTTP probe for a provider with its own status()
+  urls = new.env()
+  urls$seen = character()
+  local_mocked_bindings(
+    check_running = function() FALSE,
+    catalog_http_request = function(url, ...) {
+      urls$seen = c(urls$seen, url)
+      list(status = 200L, headers = list(), body = raw())
+    }
+  )
+  df = gptr_providers(check = TRUE)
+  expect_equal(df$status[df$id == "p05-cli"], "found (checked)")
+  expect_identical(calls$check, list(FALSE, TRUE))
+  expect_equal(df$status[df$id == "p05-offline"], "ready")
+  expect_true("https://chat.example/v1/models" %in% urls$seen)
+  expect_false(any(grepl("p05-cli|p05-offline", urls$seen)))
+  expect_equal(df$status[df$id == "p05-badauth"], "error")
+  expect_false(any(grepl("badauth", urls$seen, fixed = TRUE)))
+})
+
+test_that("a local provider needs no egress acknowledgement only at a loopback endpoint (IC-74)", {
+  local_test_vault()
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  local_settings(providers = list(ollama = list(base_url = "https://ollama.example/v1"),
+                                  llamacpp = list(base_url = "http://127.0.0.2:8080/v1")))
+  df = gptr_providers()
+  expect_equal(df$egress[df$id == "ollama"], "needed")
+  expect_equal(df$egress[df$id == "llamacpp"], "ack")
+  expect_equal(df$egress[df$id == "lmstudio"], "ack")
+  expect_equal(df$egress[df$id == "openai"], "needed")
+  local_settings(providers = list(ollama = list(base_url = "https://ollama.example/v1")),
+                 egress = list(ollama = "ack", openai = "yes"))
+  df = gptr_providers()
+  expect_equal(df$egress[df$id == "ollama"], "ack")
+  expect_equal(df$egress[df$id == "openai"], "needed")
+})
+
+test_that("base URL statuses and the probe follow the provider's transport (contract 6.2)", {
+  local_test_vault()
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  withr::local_envvar(VLLM_API_KEY = "")
+  reply = gptr_fake_provider(list("hi"), name = "p05-inproc-fake")
+  ok = ext_load(function(gptr) {
+    gptr$register(gptr_adapter("p05-inproc", transport = "inprocess",
+                               stream = function(model, context, opts) {
+                                 opts$provider = reply
+                                 fake_stream(model, context, opts)
+                               }))
+    gptr$register(gptr_adapter("p05-sse", transport = "http_sse",
+                               build = function(model, context, opts) list(),
+                               parse = function(model, opts) NULL))
+    gptr$register(gptr_provider("p05-inproc-prov", api = "p05-inproc"))
+    gptr$register(gptr_provider("p05-keyless", api = "p05-sse"))
+    gptr$register(gptr_provider("p05-nourl", api = "openai-completions"))
+  }, source = "plugin:p05-transport", rank = 5L)
+  withr::defer(ext_unload("plugin:p05-transport"))
+  expect_true(ok)
+  local_settings(providers = list(ollama = list(base_url = "not a url"),
+                                  vllm = list(base_url = "not a url either")))
+  statuses = function(df) {
+    stats::setNames(df$status[match(c("ollama", "vllm", "p05-keyless", "p05-nourl",
+                                      "p05-inproc-prov"), df$id)],
+                    c("ollama", "vllm", "p05-keyless", "p05-nourl", "p05-inproc-prov"))
+  }
+  want = c(ollama = "invalid base url", vllm = "invalid base url", `p05-keyless` = "no base url",
+           `p05-nourl` = "no base url", `p05-inproc-prov` = "ready")
+  # check = FALSE and check = TRUE agree on everything the probe does not answer
+  expect_equal(statuses(gptr_providers()), want)
+  urls = new.env()
+  urls$seen = character()
+  local_mocked_bindings(
+    check_running = function() FALSE,
+    catalog_http_request = function(url, ...) {
+      urls$seen = c(urls$seen, url)
+      list(status = 401L, headers = list(), body = raw())
+    }
+  )
+  df = gptr_providers(check = TRUE)
+  expect_equal(statuses(df), want)
+  expect_equal(df$status[df$id == "anthropic"], "reachable (HTTP 401)")
+  # only HTTP providers are probed, and never at a malformed or missing base URL
+  expect_false(any(grepl("not a url", urls$seen, fixed = TRUE)))
+  expect_false(any(grepl("p05-", urls$seen, fixed = TRUE)))
+})
+
+test_that("gptr_providers() neither registers nor binds an environment credential", {
+  vault = local_test_vault()
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  key = "sk-proj-p05peek-00000000000000000000000000"
+  vllm_key = "vllm-p05peek-0000000000000000"
+  withr::local_envvar(OPENAI_API_KEY = key, VLLM_API_KEY = vllm_key)
+  ok = ext_load(function(gptr) {
+    gptr$register(gptr_provider("gateway-p05", api = "openai-completions",
+                                base_url = "https://gateway.example/v1", auth = "OPENAI_API_KEY"))
+  }, source = "plugin:p05-gateway", rank = 5L)
+  withr::defer(ext_unload("plugin:p05-gateway"))
+  expect_true(ok)
+  fp = substr(hash_sha256(key), 1L, 6L)
+  df = gptr_providers()
+  # gateway-p05 sorts before openai: a binding listing would leave openai without its key
+  expect_equal(df$credential[df$id == "gateway-p05"], paste0("OPENAI_API_KEY #", fp))
+  expect_equal(df$credential[df$id == "openai"], paste0("OPENAI_API_KEY #", fp))
+  expect_equal(df$status[df$id == "openai"], "ready")
+  expect_equal(df$credential[df$id == "vllm"],
+               paste0("VLLM_API_KEY #", substr(hash_sha256(vllm_key), 1L, 6L)))
+  expect_length(ls(vault), 0L)
+  # the first real use binds the key; the listing then reports the other provider without it
+  h = provider_credential(provider_get("openai"))
+  expect_equal(h$fp, fp)
+  expect_equal(provider_origin(h$origin), "https://api.openai.com")
+  df = gptr_providers()
+  expect_equal(df$credential[df$id == "openai"], paste0("OPENAI_API_KEY #", fp))
+  expect_equal(df$status[df$id == "gateway-p05"], "no key")
+  expect_true(is.na(df$credential[df$id == "gateway-p05"]))
+  expect_equal(ls(vault), "OPENAI_API_KEY")
+})
+
+test_that("invalid settings for one provider mark its row, never the listing", {
+  local_test_vault()
+  local_mocked_bindings(auth_store_get = function(key) NULL)
+  local_settings(providers = list(groq = list(headers = list(1, 2))))
+  expect_error(provider_get("groq"), class = "gptr_error_invalid_argument")
+  df = gptr_providers()
+  g = df[df$id == "groq", ]
+  expect_equal(g$status, "error")
+  expect_equal(g$api, "openai-completions")
+  expect_equal(g$source, "builtin:providers")
+  expect_true(is.na(g$credential))
+  expect_true(all(builtin_ids %in% df$id))
+  expect_equal(df$status[df$id == "ollama"], "ready")
+})

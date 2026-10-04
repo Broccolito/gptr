@@ -467,10 +467,27 @@ P13 and P20 (`status()` functions) consume:
    (the condition's `status`). The probe runs only for rows whose status is `ready` or `no key`.
 4. **Failures stay in their row.** A credential lookup that fails other than with
    `gptr_error_no_key` (a plugin `auth` function that throws a plain R error or returns no
-   handle) shows `error` instead of aborting the listing. A keyed provider without a base URL
-   shows `no base url`, with a malformed one `invalid base url` (the plan showed `no key`), and
-   neither is probed. A provider's `status()` result lacking `status` maps `available`
-   (`TRUE` -> `ready`, `FALSE` -> `unavailable`, else `unknown`), as plan ambiguity 18 requires;
-   a `package_version` `version` is shown as text.
+   handle), and a provider whose settings cannot be applied (an invalid
+   `providers.<id>.headers`, which `provider_get()` refuses), show `error` instead of aborting
+   the listing. An HTTP provider (its adapter's transport, or a built-in HTTP api while P12/P13
+   have not registered the adapter) without a base URL shows `no base url`, with a malformed
+   one `invalid base url` (the plan showed `no key` or `ready`), in both `check` modes, and
+   neither is probed; only HTTP providers are probed (contract 6.2), so an `inprocess` or
+   `process_jsonl` provider keeps its `check = FALSE` status. A provider's `status()` result
+   lacking `status` maps `available` (`TRUE` -> `ready`, `FALSE` -> `unavailable`, else
+   `unknown`), as plan ambiguity 18 requires; a `package_version` `version` is shown as text.
+5. **The listing binds nothing.** The plan called `provider_credential()`, whose environment
+   step registers the variable's value and binds it to the first provider's origin: listing
+   providers in id order decided which provider could use a shared variable for the rest of
+   the session (a plugin `gateway` keyed by `OPENAI_API_KEY` left `openai` with `no key`) and
+   dispatched `secret_registered`, although contract 6.2 says the function emits nothing.
+   `gptr_providers()` calls `provider_credential(p, register = FALSE)`: the same order and
+   outcome, but an environment (or plain stored) value is only fingerprinted (P03's 6 hex), and
+   a value the vault already binds elsewhere counts as absent. vLLM's built-in optional-key
+   function is looked up the same way (its `gptr_optional_auth` attribute names the variable);
+   a plugin's `auth` function is still called. P03's `auth_store_get()` still registers stored
+   fields unbound when it reads them (its contract; no origin binding).
 
-Validation: `progress/P05.md`, Task 12 (`test-provider-registry.R`).
+Validation: `progress/P05.md`, Task 12 (`test-provider-registry.R`). This entry first landed in
+commit 90a43f5 (an unrelated CI commit); point 5 and the transport and settings parts of
+point 4 were added by Task 12's review round 1.
