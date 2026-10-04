@@ -3986,8 +3986,9 @@ were skipped without the new diagnostic. Green: `[ FAIL 0 | WARN 0 | SKIP 0 | PA
 - the pre-existing `test-zzz.R:301`;
 - five in P13's in-progress `test-s1-cache.R`;
 - ten order-dependent errors in `secret_late_check()` (`test-provider-registry.R` 9,
-  `test-session-budget.R` 1). Those two files pass alone (968) and together with this task's
-  files (1510).
+  `test-session-budget.R` 1). They are left behind by the provider end-to-end tests that the
+  P07 lane's untracked `R/prompt-cache.R` no longer skips. The two files pass alone (968) and
+  together with this task's files (1510).
 Lint clean.
 
 ## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen array will not declare is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
@@ -4374,12 +4375,12 @@ regression assertions (named image lists, an Ollama chat model without a digest)
 `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 108 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 113 ]`. Lint
 is clean.
 
-## D-081 - P07 request assembly: a session with a pending IC-52 refreeze is frozen afresh by request_build(), the session's thinking level is clamped to the target's levels and the target's level is read by exact name (2026-10-04)
+## D-081 - P07 request assembly: a session with a pending IC-52 refreeze is frozen afresh by request_build(), the session's thinking level is clamped to the target's levels, the target's level is read by exact name and images elided on the path are projected as sent (2026-10-04)
 
 P07 Task 10 (`R/prompt-cache.R`, `builtin_prompt()` in `R/prompt-sections.R`). The adapter
 context of contract 8.1, the element view, the ledger estimate, the `default` cache policy with
 its anchors, the gap rule and the cache key, the `request.build` service and the plan's 11 tests
-(52 expectations) are unchanged.
+(52 expectations) are unchanged, except that item 4 projects images already elided on the path.
 
 1. **A pending refreeze is honoured (IC-52).** The plan froze an unfrozen session with
    `prompt_freeze(s)`, which restores the newest `gptr.frozen` entry on the path. A foreign file
@@ -4400,6 +4401,31 @@ its anchors, the gap rule and the cache key, the `request.build` service and the
    `target[["thinking"]]`; `max_output` is read the same way, and a non-finite `max_output` gives
    the 8,192 default instead of an `NA` integer.
 
-Validation: `progress/P07.md`, Task 10. Two tests (13 expectations) were added; on the plan
-literal 9 of them fail (`dev/.validation/P07/task10-plan-literal.log`). Final `^prompt-cache$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 65 ]`.
+4. **Images elided on the path are projected as sent (IC-67; review round 1).** P05 leaves
+   `gptr.image_elision` to P06 or P07 (P05 decision 21), and P06's `run_build()` elides after
+   `request.build` returns. The plan's projection kept every image, so each image already elided
+   by an earlier request counted at full image cost in `tokens_est` and the `images` component
+   on every later request (4 images of 1000 x 1000 with `max_images = 1`: 5,184 instead of the
+   1,296 sent). That overstated estimate went into `budget_check()`, the ledger row,
+   `before_request` and the estimator multiplier. P06 D-036 item 8 already made the fallback and
+   `context_tokens()` count elided images as their omission text. New `prompt_elided_images(s)`
+   reads the ids of the path's `gptr.image_elision` entries. New `prompt_images_elided()`
+   replaces every block with such an id by `block_text("[image omitted: gptr$plot(\"<id>\")]")`.
+   The id is 8 hex of the data's sha256, and both the id and the text are byte for byte those of
+   P06's `images_elide()`. `prompt_request_context()` applies this to the projection (not to the
+   `extra` tail), so the context, the view and the estimate show what P06 sends, and P06's
+   `images_elide()` then leaves the messages unchanged (the test checks both). The rule is
+   reimplemented in P07 rather than calling P06's internal `image_id()` / `image_omitted_text()`,
+   because architecture 2.2 lets L3 `prompt` call only L0-L2 and the kernel SDK. The test ties
+   the copy to P06's real function. Consequences: the request after an elision hashes the elided
+   message as sent. Its view therefore differs there from the previous request, but its epoch
+   counts the new entry, so it is a stated break (Task 11). Task 13's checkpoint request, which
+   is sent without P06's `run_build()`, also carries the recorded elisions. Residual (P06,
+   routed to the coordinator): the one request at which P06 newly elides images is still
+   estimated before `images_elide()` runs, so that request alone overcounts. Fixing it would
+   need `run_build()` to re-estimate after appending a `gptr.image_elision` entry.
+
+Validation: `progress/P07.md`, Task 10. Three tests (21 expectations) were added. On the plan
+literal 9 of the first 13 fail (`dev/.validation/P07/task10-plan-literal.log`). Item 4's test
+was red with 4 of its 8 failing (`task10-fix1-red.log`). Final `^prompt-cache$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 73 ]`.

@@ -1425,6 +1425,7 @@ print.gptr_prompt_view = function(x, ...) {
 builtin_prompt = function(gptr) {
   prompt_register_presets(gptr)
   prompt_register_sections(gptr)
+  prompt_register_cache(gptr)
   invisible(NULL)
 }
 
