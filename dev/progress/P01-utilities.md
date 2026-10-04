@@ -76,3 +76,26 @@ properties, schema structure and concise tool signatures.
 Tasks 9–12 have actual red/green evidence, with 714 passing expectations across
 their four focused green runs. The complete P01 package/milestone gates remain
 the foundation owner's responsibility.
+
+## Task 12 follow-up — schema boundary review
+
+Review beyond the literal plan fixtures exposed additional accepted-input
+errors. Nullable object schemas skipped required/unknown-property checks or
+converted allowed null into an empty object; enum matching coerced JSON types
+and flattened nested values; JSON numbers accepted infinities/complex values;
+empty JSON arrays passed object schemas.
+
+- Regression-first run: FAIL 22, WARN 0, SKIP 0, PASS 47. Raw log:
+  `dev/.validation/P01-T12-edge-red.log`.
+- Corrected focused suite: FAIL 0, WARN 0, SKIP 0, PASS 69. The original 28
+  expectations still pass; 41 additional expectations cover union/null,
+  nested/type-aware enum, finite-number and empty-container behavior.
+- Enum equality preserves numeric integer/double equivalence, object key-order
+  independence, array order, and explicit null entries (`enum = list(NULL)`).
+- Empty objects remain named empty lists (`json_obj()`); unnamed empty lists
+  are arrays, per conventions section 6 and interface-contract section 4.1.
+  The existing `NULL` shorthand for a non-nullable object schema remains valid.
+- Focused lint: zero. No shared documentation output changed.
+- Independent review reproduced the original failures and checked corrected
+  nullable unions and null enums; no actionable issue remained in the fix.
+- Commit: `fix(json): preserve JSON types and nullable schema constraints`.

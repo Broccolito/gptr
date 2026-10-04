@@ -15,7 +15,9 @@ schema_types = c("object", "array", "string", "number", "integer", "boolean", "n
 #' @noRd
 schema_validate = function(schema, input) {
   check_list(schema, "schema")
-  if (is.null(input) && (identical(unlist(schema$type), "object") || !is.null(schema$properties))) {
+  types = unlist(schema$type)
+  object_schema = "object" %in% types || !is.null(schema$properties)
+  if (is.null(input) && !("null" %in% types) && object_schema) {
     input = json_obj()
   }
   res = schema_check(schema, input, "")
@@ -29,7 +31,7 @@ schema_label = function(path) {
 
 #' @noRd
 schema_is_object = function(value) {
-  is.list(value) && !is.data.frame(value) && (!length(value) || !is.null(names(value)))
+  is.list(value) && !is.data.frame(value) && !is.null(names(value))
 }
 
 #' @noRd
@@ -55,9 +57,10 @@ schema_check_type = function(type, value, schema) {
       }
     },
     string = list(ok = is.character(value) && schema_is_scalar(value), value = value),
-    number = list(ok = is.numeric(value) && schema_is_scalar(value), value = value),
+    number = list(ok = is.numeric(value) && !is.complex(value) && schema_is_scalar(value) &&
+                    is.finite(value), value = value),
     integer = {
-      ok = is.numeric(value) && schema_is_scalar(value) && is.finite(value) &&
+      ok = is.numeric(value) && !is.complex(value) && schema_is_scalar(value) && is.finite(value) &&
         value == round(value) && abs(value) <= .Machine$integer.max
       list(ok = ok, value = if (ok) as.integer(value) else value)
     },
@@ -65,6 +68,37 @@ schema_check_type = function(type, value, schema) {
     null = list(ok = is.null(value), value = value),
     list(ok = TRUE, value = value)
   )
+}
+
+#' JSON equality for enum values: object key order is ignored, array order and scalar types
+#' are preserved, and integer/double representations of the same finite number are equivalent.
+#' @noRd
+schema_json_equal = function(x, y) {
+  if (is.null(x) || is.null(y)) return(is.null(x) && is.null(y))
+  if (is.data.frame(x) || is.data.frame(y)) return(FALSE)
+  object_x = schema_is_object(x)
+  object_y = schema_is_object(y)
+  if (object_x || object_y) {
+    if (!(object_x && object_y) || length(x) != length(y) ||
+        !setequal(names(x), names(y)) || anyDuplicated(names(x)) || anyDuplicated(names(y))) {
+      return(FALSE)
+    }
+    return(all(vapply(names(x), function(name) schema_json_equal(x[[name]], y[[name]]), TRUE)))
+  }
+  array_x = is.list(x) || (is.atomic(x) && length(x) != 1L)
+  array_y = is.list(y) || (is.atomic(y) && length(y) != 1L)
+  if (array_x || array_y) {
+    if (!(array_x && array_y) || length(x) != length(y)) return(FALSE)
+    return(all(vapply(seq_along(x), function(i) schema_json_equal(x[[i]], y[[i]]), TRUE)))
+  }
+  if (is.numeric(x) && is.numeric(y) && !is.complex(x) && !is.complex(y)) {
+    return(is.finite(x) && is.finite(y) && x == y)
+  }
+  if (is.character(x) && is.character(y)) {
+    return(!is.na(x) && !is.na(y) && as_utf8(x) == as_utf8(y))
+  }
+  if (is.logical(x) && is.logical(y)) return(!is.na(x) && !is.na(y) && x == y)
+  FALSE
 }
 
 #' Recursive validation; returns list(value, errors)
@@ -90,14 +124,15 @@ schema_check = function(schema, value, path) {
     }
   }
   if (!is.null(schema$enum)) {
-    allowed = unlist(schema$enum)
-    if (!(is.atomic(value) && length(value) == 1L && value %in% allowed)) {
+    allowed = as.list(schema$enum)
+    if (!any(vapply(allowed, function(candidate) schema_json_equal(value, candidate), TRUE))) {
+      labels = vapply(allowed, json_encode, "")
       errors = c(errors, paste0(
-        schema_label(path), " must be one of ", paste0("\"", allowed, "\"", collapse = ", "), "."
+        schema_label(path), " must be one of ", paste(labels, collapse = ", "), "."
       ))
     }
   }
-  if (schema_is_object(value) && (identical(types, "object") || !is.null(schema$properties))) {
+  if (schema_is_object(value)) {
     props = schema$properties %||% list()
     required = as.character(unlist(schema$required))
     for (name in setdiff(required, names(value))) {
@@ -203,7 +238,7 @@ schema_problems_at = function(schema, path) {
   if (!is.null(schema$items)) {
     problems = c(problems, schema_problems_at(schema$items, paste0(path, "[]")))
   }
-  if (!is.null(schema$enum) && !length(unlist(schema$enum))) {
+  if (!is.null(schema$enum) && !length(schema$enum)) {
     problems = c(problems, where("enum must be a non-empty array"))
   }
   problems
