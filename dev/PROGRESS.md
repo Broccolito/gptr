@@ -19,8 +19,13 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
   See [core task evidence](progress/P01.md) and
   [utilities](progress/P01-utilities.md), [provider/helpers](progress/P01-providers.md)
   and [infrastructure evidence](progress/P01-infrastructure.md) for results.
-- P02 Tasks 1–2 passed 219 assertions and independent review in parallel; P04's independent splitter task
-  passed 70 focused assertions and review. These are not completed plans.
+- P02 Tasks 1–8 are committed; transactional loading, built-ins and conformance
+  checks are in progress. P03's vault and dotenv parser are committed; redaction,
+  loading and storage are under review. P04 has the splitter, request builder,
+  process supervision/job table and reactor core; transport integration remains.
+- P05's independent usage/pricing component is committed with IC-74 unknown-
+  usage semantics. No later plan or milestone is declared complete from these
+  dependency-ready components.
 - The old `get_response()` / `dataframe_to_text()` source and exports were
   already removed by `0a39627`. The README now describes the rebuild and labels
   planned capabilities clearly. GitHub About is updated; work is published in
@@ -63,12 +68,13 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Active ownership
 
-- `design_summary`: P01 core complete; preparing P03 after P02 prerequisites.
-- `requirements_audit`: P04 reactor core complete; independent P05 usage task.
-- `scientific_value`: P04 process supervision and job table (Tasks 4–5).
-- `plans_security_review`: independent P01 review, then registry/secrets review.
-- `ollama_api_research`: P02 implementation (Tasks 1–6 committed; Task 7 underway).
-- Root: integrated acceptance, P04, GitHub, global ledger and scheduling.
+- `design_summary`: P03 vault/redaction, then secret scanning and built-in integration.
+- `auth_dotenv`: P03 dotenv loader and credential store (Tasks 6–8).
+- `requirements_audit`: P02 transactional loader (Task 9); P05 preparation ready.
+- `scientific_value`: P03 child environments, then P04 process engine (Task 7).
+- `plans_security_review`: independent reviews across the disjoint lanes.
+- `ollama_api_research`: P02 integration/conformance, serialized Git/docs queue.
+- Root: P04 HTTP/transport integration, package gates, GitHub and global records.
 
 Git commits and generated documentation are serialized. A lane may prepare an
 independent component in parallel, but its plan remains incomplete until all
