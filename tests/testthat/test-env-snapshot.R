@@ -234,3 +234,21 @@ test_that("object names that are not valid UTF-8 are shown with byte escapes", {
   expect_true(any(grepl("^\\+ <e9>t<e9> numeric length 1 [0-9]+ B$", ch)))
   expect_true("user ran: x = '<e9>'" %in% ch)
 })
+
+# Added by P09 Task 8 (D-055): the evaluator diffs every evaluation's snapshots.
+
+test_that("env_diff orders non-ASCII and invalid names and keeps them exact", {
+  # ls() returns a name parsed from code with unknown encoding; R's radix sort refused it. R
+  # parses such a name only in a UTF-8 locale.
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "non-ASCII names parse only in a UTF-8 locale")
+  old = env_snapshot(new.env())
+  e = new.env()
+  eval(parse(text = "donn\u00e9es = 1; b = 2", encoding = "UTF-8", keep.source = FALSE), e)
+  assign(rawToChar(as.raw(c(0x61, 0xff))), 3, envir = e)
+  new = env_snapshot(e)
+  d = expect_no_warning(env_diff(old, new))
+  expect_length(d$added, 3L)
+  expect_equal(env_text(d$added), c("a<ff>", "b", "donn\u00e9es"))
+  expect_true(all(d$added %in% ls(e, all.names = TRUE)))
+  expect_equal(env_diff(new, old)$removed, d$added)
+})

@@ -64,3 +64,81 @@ test_that("the history task callback is handed the user's object and leaves it i
                  sep = "; ")
   expect_no_copy(setup, action, label = "top-level values handed to the history callback")
 })
+
+# P09 Task 8: the evaluator eval_r() (acceptance 3a and 3b).
+
+test_that("evaluation at top level and in globalenv() from a function edits in place", {
+  expect_no_copy(with_ev("big = runif(5e6)"),
+                 'invisible(eval_r("n = 1L; length(big)", globalenv()))', label = "top level")
+  expect_no_copy(
+    with_ev("big = runif(5e6)"),
+    'f = function(d) { eval_r("n = 1L; length(big)", globalenv()); invisible(NULL) }; f(big)',
+    label = "globalenv from a function"
+  )
+})
+
+test_that("evaluation in a function-frame home edits in place (G3 fact-check, IC-67)", {
+  expect_no_copy(
+    with_ev("big = runif(5e6)"),
+    'f = function(d) { eval_r("n = 1L; length(d)", environment()); invisible(NULL) }; f(big)',
+    label = "function-frame home"
+  )
+  rich = paste0("head(d); summary(d); x = d[1:5]; plot(d[1:10]); message(length(d)); ",
+                "warning('w'); d")
+  expect_no_copy(
+    with_ev("big = runif(5e6)"),
+    sprintf('f = function(d) { eval_r("%s", environment()); invisible(NULL) }; f(big)', rich),
+    label = "function-frame home: print, plot, message, warning"
+  )
+  expect_no_copy(
+    with_ev("big = runif(5e6); st = new.env(); st$id = 'agent'"),
+    paste0('f = function(d) { eval_r("x = stats::runif(2) + length(d)", environment(), ',
+           "rng = st); invisible(NULL) }; f(big)"),
+    label = "function-frame home with an agent RNG stream"
+  )
+})
+
+test_that("results aliasing a user object are cleared in place (R8, IC-67)", {
+  expect_no_copy(with_ev("big = runif(5e6)"), 'invisible(eval_r("big", globalenv()))',
+                 label = "symbol printed by name")
+  expect_no_copy(with_ev("big = runif(5e6)"), 'invisible(eval_r("(big)", globalenv()))',
+                 label = "(x)")
+  expect_no_copy(with_ev("big = runif(5e6)"),
+                 "invisible(eval_r('get(\"big\")', globalenv()))", label = "get(\"x\")")
+  expect_no_copy(with_ev("L = list(a = runif(5e6))"), 'invisible(eval_r("L$a", globalenv()))',
+                 edit = "L$a[1] = 0", object = "L$a", label = "L$a")
+  expect_no_copy(with_ev("x = list(a = runif(5e6))"),
+                 "invisible(eval_r('x[[\"a\"]]', globalenv()))",
+                 edit = "x[['a']][1] = 0", object = "x[['a']]", label = "x[[\"a\"]]")
+})
+
+test_that("an S4 slot result adds no copy to R's own slot-edit copy", {
+  setup = with_ev("setClass('B', representation(v = 'numeric')); x = new('B', v = runif(5e6))")
+  base = expect_no_copy(setup, "invisible(NULL)", edit = "x@v[1] = 0", object = "x@v",
+                        allow = 1L, label = "x@slot baseline")
+  expect_no_copy(setup, "invisible(eval_r('x@v', globalenv()))", edit = "x@v[1] = 0",
+                 object = "x@v", allow = base, label = "x@slot")
+})
+
+test_that("an error at top level after reading the object leaves it in place", {
+  expect_no_copy(with_ev("big = runif(5e6)"),
+                 "invisible(eval_r(\"n = length(big); stop('boom')\", globalenv()))",
+                 label = "error after reading")
+})
+
+# Added beyond the plan's Task 8 rows (review round 1, D-055 item 6): a visible value is printed
+# through a short-lived child of the home, whose binding is removed before eval_print() returns.
+
+test_that("values printed through the home's print methods leave the object in place", {
+  expect_no_copy(
+    with_ev("big = runif(5e6)"),
+    'f = function(d) { eval_r("(d); identity(d); d", environment()); invisible(NULL) }; f(big)',
+    label = "function-frame home: (d), identity(d), d"
+  )
+  expect_no_copy(
+    with_ev("big = structure(runif(5e6), class = 'gptrzz')"),
+    paste0("print.gptrzz = function(x, ...) cat('zz', length(x), '\\n'); ",
+           "invisible(eval_r('(big); identity(big)', globalenv()))"),
+    label = "a print method in globalenv(): (big), identity(big)"
+  )
+})

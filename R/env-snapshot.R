@@ -253,7 +253,8 @@ env_same = function(a, b) {
 #' `assigned`. A promise that was forced (promise -> value) is not a modification.
 #' @param old,new Snapshots (env_snapshot()).
 #' @param assigned Static assignment targets of the evaluated code.
-#' @return list(added, modified, removed), each a radix-sorted character vector.
+#' @return list(added, modified, removed), each a character vector of the exact binding names
+#'   in radix (C-locale) order of their display text (env_text()).
 #' @noRd
 env_diff = function(old, new, assigned = character()) {
   both = intersect(new$name, old$name)
@@ -261,7 +262,12 @@ env_diff = function(old, new, assigned = character()) {
   n = new[match(both, new$name), , drop = FALSE]
   forced = o$kind == "promise" & n$kind == "value"
   same = forced | (o$kind == n$kind & env_same(o$address, n$address) & env_same(o$fp, n$fp))
-  srt = function(x) sort(unique(as.character(x)), method = "radix")
+  # The radix key is the display text: R's radix sort refuses a non-ASCII string of unknown
+  # encoding, which is what ls() returns for a name such as `donn<e9>es` parsed from code
+  srt = function(x) {
+    x = unique(as.character(x))
+    x[order(env_text(x), method = "radix")]
+  }
   list(
     added = srt(setdiff(new$name, old$name)),
     modified = srt(c(both[!same], intersect(assigned, both))),

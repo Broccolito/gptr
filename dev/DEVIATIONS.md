@@ -2505,7 +2505,7 @@ reports `SKIP 1`. Tracked in `HANDOFF.md` (cross-plan obligations) and `progress
 P09 Task 8's plan-literal `eval_r()` helpers (`R/eval-core.R`) and Task 2's `env_diff()`
 (`R/env-snapshot.R`) were changed in the six ways below. Items 1-4 were found by a probe of the
 plan-literal source (`dev/.validation/P09/task8-eval-core-plan-literal.R`), items 5 and 6 by
-review round 1. The signatures of `eval_r()` and `env_diff()`, the `gptr_eval_result` fields,
+review round 1 and refined in review round 2. The signatures of `eval_r()` and `env_diff()`, the `gptr_eval_result` fields,
 the statuses, the event types and the plan's 24 test blocks (19 in `test-eval-core.R`, 5 in
 `test-copy-eval.R`) are unchanged.
 
@@ -2547,14 +2547,29 @@ the statuses, the event types and the plan's 24 test blocks (19 in `test-eval-co
    `sink.number(type = "message")` in `st$msg_sink`. When it differs at the restore,
    `eval_msg_sink_reset()` resets messages to stderr and, when the user had a message sink of
    their own, points them back to that connection while it is still open. The code's
-   connection is its own object in the home and stays open.
+   connection is its own object in the home and stays open. `eval_restore()` resets the
+   message sink before it closes the capture connection (review round 2): while output is
+   captured, `stdout()` is that connection, so `sink(stdout(), type = "message")` points
+   messages at it, and the plan's `close(st$con)` then threw "cannot close 'message' sink
+   connection" out of `eval_r()` (04 section 2.2), with `st$restored` already set, so the
+   options, the `askYesNo` trap, the plot device and the message sink stayed changed and the
+   user's later messages and errors went into an anonymous file. The close is now wrapped in
+   `tryCatch()`, so no restore step can skip the ones after it. A capture connection that
+   `eval_read_sink()` reopened, after the code closed both it and the user's message sink
+   connection, can take the user's connection number; `eval_msg_sink_reset()` never points
+   messages at it and falls back to stderr.
 6. **A visible value prints with the print methods visible from the home.** The plan's
    `eval_print()` called `print(value)` from the gptr namespace, so S3 methods were looked up
    from there (globalenv() and the search path). A method that the code defined in another home
    (a function frame, the plan-mode scratch overlay, an inline sub-agent overlay) printed `x`,
    which 04 prints as `print(<sym>)` in the home, but not `(x)` or `f(x)`. `eval_print()` now
-   does what R's console does (`PrintValueEnv()`): it evaluates `print(x)` in a short-lived
-   child of the home, with `x` bound to the value. S4 objects still go through `show()`. Before
+   does what R's console does (`PrintValueEnv()`): for an object or a function it evaluates
+   `print(x)` in a short-lived child of the home, with `x` bound to the value. Other values
+   print as in the plan, with `print(value)`, as the console prints them without dispatch
+   (review round 2): binding the empty symbol, which `formals(f)$a` or `alist(a = )$a` returns
+   for an argument without a default, to `x` made `print(x)` fail with 'argument "x" is
+   missing', so the evaluation stopped with status `error` where the console prints a blank
+   line. S4 objects still go through `show()`. Before
    it returns, the binding is removed and the child is detached (`parent.env(pe) =
    emptyenv()`). A child left pointing at a function-frame home counts as a reference to the
    frame, so R keeps the frame's arguments referenced after the function returns, and the
@@ -2567,11 +2582,15 @@ plan-literal sources they give `[ FAIL 5 | WARN 0 | SKIP 1 | PASS 220 ]` for
 `^(eval-core|env-snapshot)$` (`task8-red-adaptations.log`). For items 5 and 6 (review round 1),
 two blocks were added to `test-eval-core.R` (20 expectations) and one block of two rows to
 `test-copy-eval.R`. Against the round-0 source, `^(eval-core|copy-eval)$` gives
-`[ FAIL 8 | WARN 0 | SKIP 1 | PASS 204 ]` (`task8-fix1-red.log`). Final
-`^(eval-core|copy-eval|env-snapshot)$`: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 284 ]`
-(`task8-fix1-green.log`). Under `LC_ALL=C`, the three UTF-8-only blocks skip, and
-`^(eval-core|env-snapshot)$` gives `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 242 ]`
-(`task8-fix1-green-clocale.log`).
+`[ FAIL 8 | WARN 0 | SKIP 1 | PASS 204 ]` (`task8-fix1-red.log`). For review round 2, one
+block was added to `test-eval-core.R` (37 expectations) and 4 expectations to the print block.
+Against the round-1 source, `^eval-core$` gives `[ FAIL 35 | WARN 0 | SKIP 1 | PASS 192 ]`
+(`task8-fix2-red.log`); the reused-number check alone, against the reordered restore, gives
+`[ FAIL 2 | WARN 0 | SKIP 1 | PASS 229 ]` (`task8-fix2-red-slot.log`). Final
+`^(eval-core|copy-eval|env-snapshot)$`: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 325 ]`
+(`task8-fix2-green.log`). Under `LC_ALL=C`, the three UTF-8-only blocks skip, and
+`^(eval-core|env-snapshot)$` gives `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 283 ]`
+(`task8-fix2-green-clocale.log`).
 
 ## D-056 - P06 replay functions: header ids, value= names, models and document fields are checked first, doc is optional, a reconstruction is all or nothing, a header turn is one whole number, a session rebuilt for a replay takes model, mode and frozen prompt from the cut path, a reconstructed history stays reconstructed when rebuilt from its file (2026-10-04)
 
