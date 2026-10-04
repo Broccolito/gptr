@@ -1326,3 +1326,79 @@ plan-literal source. All 11 added blocks fail there, with 23 failed expectations
 answer, so a probe of the plan-literal `run_route()` (`task9-literal-probe.log`) shows the rest:
 a classifier answer is accepted, `list(model = 42)` raises `gptr_error_invalid_argument`, and a
 non-JSON state raises `gptr_error_internal` ("the session store failed").
+
+## D-037 - P09 static guard: namespaced indirect calls, function arguments, stdin readers and every secret marker are checked, parseable code never makes the guard throw (2026-10-04)
+
+P09 Task 1's plan-literal `eval_guard()`, `eval_assign_targets()` and `gptr_shim()`
+(`R/eval-guard.R`) were changed in the five ways below. Task 8's `eval_run()` calls all three
+without a handler, and P18's server `r` also uses the guard. Points 3-5 and the later items of
+point 2 came from the first review round.
+
+1. **Namespaced heads are checked like bare ones** (IC-67: `q`/`quit` "in any position (as a value,
+   a `FUN` argument, inside `match.fun`, `get`, `do.call`, `base::`)"; 04 section 7.9 stdin
+   readers). The plan set the call name only for a symbol head, so the indirect-string and stdin
+   checks never saw a `pkg::fun(...)` call. `base::do.call("q", list())`,
+   `base::match.fun("quit")()`, `base::get("q")()`, `base::readLines("stdin")` and
+   `base::scan()` passed the guard and would end or hang the user's session. `pkg::name` is still
+   always refused, and the name now also drives those checks. As a side effect
+   `base::quote(q())` is no longer flagged, the same as the bare `quote(q())` the plan already
+   exempts.
+2. **No parseable input makes the guard or the targets throw** (04 section 2.2 and 7.9: evaluation
+   failures never throw, they become events and a status). The plan's walkers indexed `e[[2L]]`
+   and `e[[3L]]` without a length check, and `scan()`'s file argument without a missing check.
+   `` `=`() ``, `` `for`() ``, `` `function`(x) ``, `` `$`() `` and `scan(, what = "a")` raised
+   "subscript out of bounds" or 'argument "file_arg" is missing'.
+   - An empty file argument now means scan()'s default `""`, which is standard input, so
+     `scan(, what = "a")` is refused as a stdin read.
+   - A `function` head counts as a definition only with a pairlist of formals and a body.
+   - `eval_guard_target_root()` returns `NULL` for an empty argument, so `setkey(, id)` and
+     `f(, 1)[1] = 2` no longer add a `""` target.
+   - An assignment with an empty right-hand side (`` `=`(x, ) ``) defines nothing; the plan's
+     `eval_guard_fun_defs()` raised 'argument "rhs" is missing'.
+   - `assign()`, `for` and target roots never yield an `NA` or `""` name
+     (`setkey(NA_character_, id)` gave `NA`).
+   - `gptr_shim()` rewrites only top-level calls. The plan assigned every rewritten element back,
+     and assigning a top-level `NULL` deletes it: `x = 1; NULL` lost an expression (its `srcref`
+     no longer lined up), and `NULL; gptr("a")` raised "subscript out of bounds".
+3. **Every literal secret marker is refused** (04 section 7.9 and 03 section 6.5: "a literal
+   `[secret:` marker"). The plan matched only `[secret:[A-Za-z0-9_.-]+]`, but the vault's own
+   names include `auth:<key>` and `auth:<key>:<field>` (`auth_secret_name()`), and
+   `secret_name_ok()` allows `/`, `@` and `+`. So `[secret:auth:openai]` passed. The guard now
+   uses the redactor's marker grammar (`R/auth-redact.R`). A `[secret:` that opens no complete
+   marker is refused as `"[secret:"` with a plain `Sys.getenv()` hint, as `secret_scan()` does.
+   Strings that are not valid UTF-8 are matched bytewise, without a warning.
+4. **Stdin readers are found by argument, as R matches it.** The plan looked only at the first
+   argument, and only of `readLines`, `readline`, `file`, `scan`, `source`, `read.table` and
+   `read.csv`. The guard now resolves the connection argument with `match.call()` against the
+   base or utils definition, so names, partial names and positions all count. It never evaluates
+   anything. `readLines()` without a connection reads `stdin()`, as does its default. `parse()`
+   joins `scan()`: with no `text`, the file `""` (the default) is the console. `readBin`,
+   `readChar`, `read.csv2`, `read.delim` and `read.delim2` are added for `"stdin"`. A call that
+   passes `...`, or that R would refuse (unused or ambiguous names), is not flagged.
+   `readline` is no longer counted as a reader, since its argument is a prompt; it stays blocked
+   as a call.
+5. **`q`/`quit` as the function argument, and quoted names after `::`** (IC-67: "a `FUN`
+   argument", "`base::`"). `match.fun()` looks a non-function value up by name, so
+   `q = 1; sapply("no", q)` calls `base::q()`. The plan exempted it because the code assigns `q`.
+   As the function argument (`what`, `FUN` or `f`, resolved by `match.call()`) of `do.call`,
+   `match.fun`, the apply family, `Map`, `Reduce`, `Filter`, `Find` and `Position`, `q`/`quit` is
+   now exempt only when the code defines a function of that name. Other arguments keep the value
+   rule, so `q = quantile(x); sapply(q, round)` passes. R also accepts `base::"q"`, which the
+   plan's symbol-only `::` check missed; a length-1 string name now counts like a symbol.
+
+Known limit, unchanged: the walkers recurse once per nesting level. A 2,000-term `x + x + ...`
+hits R's node stack in the walk even though R can evaluate it (measured with the sourced file:
+1,000 terms pass, 2,000 overflow). That is an error before anything is evaluated, so it fails
+closed.
+
+Validation: `progress/P09.md`, Task 1 (`test-eval-guard.R`). The plan's 52 expectations pass
+unchanged. The first two added blocks fail against the plan-literal source: 4 failures, then an
+error at `scan(, what = 'a')` (`dev/.validation/P09/task1-red-adaptations.log`). A probe of the
+plan-literal source gets 9 errors on odd calls; the adapted source gets 0
+(`task1-probe-plan-literal.log`, `task1-probe-adapted.log`). Review round 1: the new
+expectations failed before the fixes, `[ FAIL 19 | WARN 0 | SKIP 0 | PASS 78 ]`, then
+`[ FAIL 2 | WARN 0 | SKIP 0 | PASS 120 ]` for the shim and `NA` cases
+(`task1-fix1-red.log`, `task1-fix1-red2.log`). Green is 126. A fuzz of 70,000 parseable inputs
+(two seeds) gives 0 errors and 0 warnings from the guard, the targets and the shim
+(`task1-fix1-fuzz.log`, script `task1-fix1-fuzz.R`).
+
