@@ -3603,3 +3603,91 @@ With the plan literal swapped into the loaded namespace, 34 of them fail and one
 (`task5-adapt-red.log`). Review round 1 added a tenth (10 expectations; 6 fail before its fix,
 `task5-fix1-red.log`). Final `^doc-formats$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]`, the
 same under `LC_ALL=C LANG=C` (`task5-fix1-green.log`, `task5-fix1-green-clocale.log`).
+
+## D-071 - P15 notebook format: Python's shortest repr at powers of two, integers beyond 32 bits kept as written, unreadable notebooks are doc_write errors, nbformat's line splitting, each call of a calling cell owns its own agent cell, inert cells round-trip exactly, no cell id before nbformat 4.5 and agent cells also known by metadata.gptr.id, metadata.gptr read by its exact name (2026-10-04)
+
+P15 Task 6's plan-literal notebook format (`R/doc-formats.R`) was changed in eight ways. The
+functions the plan lists keep their names and arguments; `nb_json_num()` is vectorised and
+`nb_code_cell()` gains `cell_id = TRUE`. New internal helpers: `nb_json_back()`,
+`nb_json_next_up()`, `nb_json_shortest()`, `nb_keep_ints()`, `nb_cell_meta()`, `nb_is_agent()`,
+`nb_put()`, `nb_has_cell_ids()`.
+1. **Numbers keep Python's repr at powers of two, and are formatted together.** The plan took the
+   correctly rounded `%.<k>e` string of each length. Just below a power of two the gap between
+   doubles halves, so there Python's shortest round trip (Gay) can be the string one unit above:
+   2^-1017 is `7.120236347223045e-307`, the plan wrote `7.1202363472230444e-307`. Against
+   Python 3.14's `json.dumps()` on 39,243 doubles (random bit patterns, every power of two,
+   subnormals, extremes, Plotly-style decimals) the plan literal differs on 92, all powers of
+   two; the implementation on none (`dev/.validation/P15/task6-python-numbers.log`). The 17
+   lengths are parsed in one jsonlite call per 2,048 numbers, and the doubles of a list are
+   formatted together: 100,000 floats serialise in 1.7 s, the plan literal took 5.4 s
+   (`task6-timing.log`).
+2. **Integers beyond 32 bits keep their digits.** jsonlite reads them as doubles, so the plan
+   wrote `10000000000` back as `10000000000.0` and `-12345678901234567890` as
+   `-1.2345678901234567e+19`, changing untouched outputs (contract 11.5: only `source` and
+   `metadata.gptr` change; report 14 section 7 item 11 had left this open). When the text holds a
+   run of ten or more digits after `[`, `,` or `:`, the number tokens outside strings are matched
+   to the parsed numbers in document order and such integers carry their token (attribute
+   `nb_json`), written back verbatim; nothing is marked when the counts disagree. A 6.9 MB
+   notebook with a 300,000-escape string parses in 0.12 s (`task6-bigstring.log`).
+3. **Text that is not an nbformat 4 notebook is a `gptr_error_doc_write` (`reason =
+   "notebook"`).** The plan raised jsonlite's or base R's error for unparseable text or a JSON
+   scalar, and read `nb$nbformat` with partial matching, so `{"nbformat_minor": 4, ...}` passed as
+   version 4.
+4. **Source is split as nbformat splits it, and read back line for line.** `nb_source_split()`
+   follows nbformat's `split_lines()` (Python `str.splitlines(True)`: also `\r`, `\v`, `\f`,
+   `\x1c`-`\x1e`, U+0085, U+2028, U+2029; report 14 section 2.2.3 noted the gap), so Jupyter's
+   next save leaves an agent cell alone. `nb_cell_lines()` keeps a final empty line: the plan
+   dropped it, so a block whose body ended with a blank line came back "user-edited" (its `sha`
+   no longer matched).
+5. **Each top-level call of a calling cell owns its own agent cell (contract 11.5).** The plan
+   matched owners with `doc_run_owner(..., k = 1)` per call, so in a cell with `gptr("load data")`
+   and `gptr("plot it")`, editing the second prompt claimed the first call's cell as stale and
+   would overwrite it. The calling cell's calls now share its run of agent cells and are assigned
+   one to one by Task 5's `doc_rmd_owner()` (D-070 item 3). A call nested in a function, loop or
+   brace, or inside a marker block, owns no cell: `top_level = FALSE` (`in_block` set), and
+   upsert refuses it (`reason = "not found"`). The plan wrote an agent cell for it.
+6. **Inert cells round-trip exactly (G7 section 3.8, as D-070 item 5).** Every non-empty source
+   line gets one `#~ ` and reviving removes exactly one; the plan left a user's own `#~ ` line
+   unprefixed, so reviving changed it, and "revived" a live cell the same way. A cell already in
+   the requested state is left alone, and a notebook in which nothing changes is returned as it
+   was written rather than re-serialised.
+7. **Notebooks before nbformat 4.5 get agent cells without `id`, and agent cells are also
+   known by `metadata.gptr.id`.** Cell ids arrived with nbformat 4.5 (report 14 section 2.2.3
+   verified the 4.5 schema; the 4.0-4.4 cell schemas define no `id`, which was not re-verified
+   offline here), so an id in an older notebook makes it invalid for its declared version. 4.5
+   notebooks are unchanged: the agent cell has `"id": "gptr-<id>"`. `nb_cell_ids()` gives
+   `gptr-<id>` for a cell whose own id is not a `gptr-` id (none, or a fresh id from a save
+   that upgraded the notebook to 4.5 and gave every cell one; from memory JupyterLab 3+ and
+   Notebook 7 do this, not verified offline) and whose `metadata.gptr.id` is `<id>`, unless
+   some cell carries `gptr-<id>` itself or an earlier cell already claimed it, so a copy of an
+   agent cell (same metadata, its own id) stays an ordinary cell. Without the second case
+   (review round 1) such an upgrade made the agent cell an ordinary cell: locate owned nothing,
+   the next sync inserted a duplicate cell and undo found nothing. The cell keeps its id when
+   rewritten or made inert (only `source` and `metadata.gptr` change). Every lookup by
+   `gptr-<id>` (this task and the plan's Tasks 9-14) goes through `nb_cell_ids()`.
+8. **`metadata.gptr` is read by its exact name and added in sorted order.** The fixture's calling
+   cell has `metadata.gptr_test`; the plan's `$gptr` partially matches such a key, and an agent
+   cell whose metadata held only `gptr_note` made locate fail with "subscript out of bounds". A
+   `gptr` key added to existing metadata goes in nbformat's sorted position (the plan appended
+   it).
+Also: site, anchor and cell fields are read with `[[` (exact names, as D-064 item 3). In the
+tests the fixtures are split by the test helper of Task 5 and the byte round trip compares the
+serialised lines plus nbformat's final newline, because Task 4's `doc_read()`/`doc_write()` are
+not implemented yet (they wait for P08). Later tasks must look agent cells up through
+`nb_cell_ids()`/`nb_cell_meta()`, not `cell$id`/`cell$metadata$gptr` (the plan's Task 14
+`doc_blocks_ipynb()` reads both directly, which misses agent cells without a `gptr-` id, in
+4.0-4.4 notebooks or after an upgrade to 4.5 gave them fresh ids, and partially matches
+`gptr_*` keys).
+
+Validation: `progress/P15.md`, Task 6. The plan's 7 tests are unchanged apart from that fixture
+reader and pass on the plan literal with the plan's 60 expectations; eight tests (48
+expectations) were added, and each fails on the plan literal (16 failures, 3 errors;
+`task6-adapt-red.log`). Review round 1 added a ninth (15 expectations) for item 7's upgraded
+cells and copies; it failed 10 of them before the fix (`task6-fix1-red.log`). The fixture, the notebook after an upsert (non-ASCII, quotes, `</b>`,
+`\f`, U+2028, `\r` and a final blank line in the body), the same cell made inert, a 4.4
+notebook with an agent cell and the big-integer notebook before and after an upsert all equal
+Python's `json.dumps(json.loads(x), indent=1, sort_keys=True, ensure_ascii=False,
+separators=(",", ": ")) + "\n"`, and every source list equals `splitlines(True)` of its text
+(`task6-python-fixture.log`, `task6-python-notebooks.log`). Final `^doc-formats$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 228 ]`, the same under `LC_ALL=C LANG=C`
+(`task6-fix1-green.log`, `task6-fix1-green-clocale.log`).

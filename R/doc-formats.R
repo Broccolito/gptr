@@ -564,3 +564,520 @@ doc_transcript_locate = function(text, site) {
   list(stmt = NULL, blocks = doc_find_blocks(text)[0L, , drop = FALSE], hit = NULL, owned = NULL,
        insert_after = length(text), top_level = TRUE, in_block = NULL, ordinal = 1L, indent = "")
 }
+
+# ---- the notebook format: gptr's own nbformat 4 serializer (report 14 proto/ipynb.R, with the
+# verification log's corrected number formatting) -----------------------------------------------
+
+#' Escape a string as Python's json.dumps(ensure_ascii = False) does
+#' @noRd
+nb_json_escape = function(s) {
+  s = as_utf8(s)
+  s = gsub("\\", "\\\\", s, fixed = TRUE)
+  s = gsub("\"", "\\\"", s, fixed = TRUE)
+  s = gsub("\n", "\\n", s, fixed = TRUE)
+  s = gsub("\r", "\\r", s, fixed = TRUE)
+  s = gsub("\t", "\\t", s, fixed = TRUE)
+  s = gsub("\b", "\\b", s, fixed = TRUE)
+  s = gsub("\f", "\\f", s, fixed = TRUE)
+  ctl = gregexpr("[\001-\037]", s, perl = TRUE)
+  if (any(unlist(ctl) > 0L)) {
+    regmatches(s, ctl) = lapply(regmatches(s, ctl), function(ch) {
+      vapply(ch, function(c) sprintf("\\u%04x", utf8ToInt(c)), "", USE.NAMES = FALSE)
+    })
+  }
+  paste0("\"", s, "\"")
+}
+
+#' Doubles read back from number strings by jsonlite's correctly rounded parser (never
+#' as.numeric(), which is not correctly rounded; report 14 item 22)
+#' @noRd
+nb_json_back = function(s) {
+  as.double(unlist(json_decode(paste0("[", paste(s, collapse = ","), "]"))))
+}
+
+#' A `%.<k>e` number string one unit up in its last digit (`9.99e+02` gives `1.00e+03`)
+#' @noRd
+nb_json_next_up = function(s) {
+  ex = as.integer(sub("^.*e", "", s))
+  d = as.integer(strsplit(gsub(".", "", sub("e.*$", "", s), fixed = TRUE), "",
+                          fixed = TRUE)[[1L]])
+  i = length(d)
+  while (i >= 1L && d[i] == 9L) {
+    d[i] = 0L
+    i = i - 1L
+  }
+  if (i < 1L) {
+    d = c(1L, d[-length(d)])
+    ex = ex + 1L
+  } else {
+    d[i] = d[i] + 1L
+  }
+  paste0(d[1L], if (length(d) > 1L) paste0(".", paste(d[-1L], collapse = "")), "e",
+         sprintf("%+03d", ex))
+}
+
+#' The shortest `%.<k>e` string of each positive finite double that parses back to it (one parse
+#' for all 17 lengths). Just above a power of two the gap between doubles is twice the gap below
+#' it, so there the shortest string can be the one a unit above the correctly rounded one;
+#' Python's repr (David Gay's shortest round trip) takes it, so it is tried for powers of two.
+#' @noRd
+nb_json_shortest = function(ax) {
+  n = length(ax)
+  ks = 0:16
+  cand = matrix(sprintf(rep(paste0("%.", ks, "e"), each = n), rep(ax, length(ks))), nrow = n)
+  ok = matrix(nb_json_back(cand) == rep(ax, length(ks)), nrow = n)
+  first = max.col(ok, ties.method = "first")
+  s = cand[cbind(seq_len(n), first)]
+  for (i in which(ax == 2^round(log2(ax)) & first > 1L)) {
+    for (k in seq_len(first[i] - 1L)) {
+      nxt = nb_json_next_up(cand[i, k])
+      if (nb_json_back(nxt) == ax[i]) {
+        s[i] = nxt
+        break
+      }
+    }
+  }
+  s
+}
+
+#' Python repr() of numbers, vectorised: the shortest significand that parses back to the same
+#' double (report 14 verification log, item 23, and nb_json_shortest()), laid out as Python does
+#' (`1e+16`, `1e-05`, `0.0001`, `3.0`)
+#' @noRd
+nb_json_num = function(x) {
+  if (is.integer(x)) return(as.character(x))
+  x = as.double(x)
+  if (!all(is.finite(x))) {
+    gptr_abort("A notebook number is not finite.", "doc_write", path = NA, reason = "number")
+  }
+  out = character(length(x))
+  zero = x == 0
+  out[zero] = ifelse(1 / x[zero] < 0, "-0.0", "0.0")
+  nz = which(!zero)
+  if (!length(nz)) return(out)
+  ax = abs(x[nz])
+  s = character(length(nz))
+  for (from in seq(1L, length(nz), by = 2048L)) {
+    idx = from:min(length(nz), from + 2047L)
+    s[idx] = nb_json_shortest(ax[idx])
+  }
+  digits = sub("0+$", "", gsub(".", "", sub("e.*$", "", s), fixed = TRUE))
+  decpt = as.integer(sub("^.*e", "", s)) + 1L
+  nd = nchar(digits)
+  fixed = decpt > -4L & decpt <= 16L
+  small = fixed & decpt <= 0L
+  whole = fixed & !small & decpt >= nd
+  part = fixed & !small & !whole
+  expo = !fixed
+  r = character(length(nz))
+  if (any(small)) r[small] = paste0("0.", strrep("0", -decpt[small]), digits[small])
+  if (any(whole)) r[whole] = paste0(digits[whole], strrep("0", decpt[whole] - nd[whole]), ".0")
+  if (any(part)) {
+    r[part] = paste0(substr(digits[part], 1L, decpt[part]), ".",
+                     substring(digits[part], decpt[part] + 1L))
+  }
+  if (any(expo)) {
+    r[expo] = paste0(substr(digits[expo], 1L, 1L),
+                     ifelse(nd[expo] > 1L, paste0(".", substring(digits[expo], 2L)), ""),
+                     "e", sprintf("%+03d", decpt[expo] - 1L))
+  }
+  out[nz] = paste0(ifelse(x[nz] < 0, "-", ""), r)
+  out
+}
+
+#' Serialise a parsed notebook value like nbformat (indent unit, ", " and ": " separators). The
+#' plain doubles of a list are formatted together; a number carrying attribute `nb_json` (see
+#' nb_keep_ints()) is written as it was read.
+#' @noRd
+nb_json_write = function(x, indent = " ", level = 0L) {
+  if (is.null(x)) return("null")
+  if (is.list(x)) {
+    nms = names(x)
+    is_obj = !is.null(nms)
+    if (!length(x)) return(if (is_obj) "{}" else "[]")
+    num = vapply(x, function(v) {
+      is.double(v) && length(v) == 1L && !is.na(v) && is.null(attributes(v))
+    }, NA, USE.NAMES = FALSE)
+    items = character(length(x))
+    if (any(num)) items[num] = nb_json_num(unlist(x[num], use.names = FALSE))
+    if (!all(num)) {
+      items[!num] = vapply(x[!num], nb_json_write, "", indent = indent, level = level + 1L,
+                           USE.NAMES = FALSE)
+    }
+    if (is_obj) items = paste0(nb_json_escape(nms), ": ", items)
+    pad = strrep(indent, level)
+    pad1 = strrep(indent, level + 1L)
+    open = if (is_obj) "{" else "["
+    close = if (is_obj) "}" else "]"
+    return(paste0(open, "\n", paste0(pad1, items, collapse = ",\n"), "\n", pad, close))
+  }
+  if (length(x) != 1L) {
+    gptr_abort("A notebook value is not a scalar.", "doc_write", path = NA, reason = "notebook")
+  }
+  tok = attr(x, "nb_json", exact = TRUE)
+  if (is.character(tok) && length(tok) == 1L) return(tok)
+  if (is.na(x)) return("null")
+  if (is.logical(x)) return(if (x) "true" else "false")
+  if (is.numeric(x)) return(nb_json_num(x))
+  nb_json_escape(as.character(x))
+}
+
+#' Integers beyond 32 bits, which jsonlite reads as doubles, keep the digits they were written
+#' with (attribute `nb_json`): Python reads and writes them as integers. The number tokens outside
+#' strings are matched to the numbers of the parsed value in document order; only a text with a
+#' run of ten or more digits after `[`, `,` or `:` is scanned, and nothing is marked when the
+#' counts disagree.
+#' @noRd
+nb_keep_ints = function(nb, txt) {
+  if (!grepl("[\\[,:][ \t\r\n]*-?[0-9]{10,}[ \t\r\n]*[],}]", txt, perl = TRUE)) return(nb)
+  re = "\"(?:[^\"\\\\]++|\\\\.)*+\"|-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?"
+  tok = tryCatch(regmatches(txt, gregexpr(re, txt, perl = TRUE))[[1L]],
+                 error = function(e) NULL)
+  if (is.null(tok)) return(nb)
+  tok = tok[!startsWith(tok, "\"")]
+  n = 0L
+  out = rapply(nb, function(v) {
+    n <<- n + 1L
+    tk = if (n <= length(tok)) tok[n] else NA_character_
+    if (is.double(v) && !is.na(tk) && !grepl("[.eE]", tk)) attr(v, "nb_json") = tk
+    v
+  }, classes = c("integer", "numeric"), how = "replace")
+  if (n != length(tok)) return(nb)
+  out
+}
+
+#' Parse notebook lines (nbformat 4 only); attribute `indent` is the file's indentation unit.
+#' Text that is not a JSON object with `nbformat` 4 is a doc_write error.
+#' @noRd
+nb_parse = function(lines) {
+  txt = paste(as_utf8(as.character(lines)), collapse = "\n")
+  nb = tryCatch(json_decode(txt), error = function(e) NULL)
+  if (!is.list(nb) || is.null(names(nb))) {
+    gptr_abort("The notebook is not a JSON object.", "doc_write", path = NA, reason = "notebook")
+  }
+  v = nb[["nbformat"]]
+  if (!is.numeric(v) || length(v) != 1L || is.na(v) || v != 4) {
+    gptr_abort("Only nbformat 4 notebooks are supported.", "doc_write", path = NA,
+               reason = "notebook")
+  }
+  nb = nb_keep_ints(nb, txt)
+  second = regmatches(txt, regexpr("\n[ \t]+", txt))
+  attr(nb, "indent") = if (length(second)) sub("^\n", "", second) else " "
+  nb
+}
+
+#' Serialise a notebook to lines (the final newline is kept by doc_serialize())
+#' @noRd
+nb_serialize = function(nb) {
+  indent = attr(nb, "indent", exact = TRUE) %||% " "
+  attr(nb, "indent") = NULL
+  strsplit(nb_json_write(nb, indent), "\n", fixed = TRUE)[[1L]]
+}
+
+#' Split code into nbformat source lines as nbformat's split_lines() does (Python's
+#' `str.splitlines(True)`: a line ends after `\r\n`, `\n`, `\r`, `\v`, `\f`, `\x1c`-`\x1e`,
+#' U+0085, U+2028 or U+2029, and keeps its ending)
+#' @noRd
+nb_source_split = function(code) {
+  s = paste(as_utf8(as.character(code)), collapse = "\n")
+  if (!nzchar(s)) return(list())
+  m = gregexpr("\r\n|[\n\r\v\f\u001c\u001d\u001e\u0085\u2028\u2029]", s, perl = TRUE)[[1L]]
+  if (m[1L] == -1L) return(list(s))
+  ends = as.integer(m) + attr(m, "match.length") - 1L
+  parts = substring(s, c(1L, ends + 1L), c(ends, nchar(s)))
+  as.list(parts[nzchar(parts)])
+}
+
+#' Source lines of a notebook cell: its source joined and split at newlines; a final newline
+#' gives a final empty line, so the lines of nb_source_split() come back as they were
+#' @noRd
+nb_cell_lines = function(cell) {
+  src = paste(as_utf8(as.character(unlist(cell[["source"]]))), collapse = "")
+  if (!nzchar(src)) return(character())
+  strsplit(paste0(src, "\n"), "\n", fixed = TRUE)[[1L]]
+}
+
+#' The `metadata.gptr` object of a cell (read by its exact name), else an empty list
+#' @noRd
+nb_cell_meta = function(cell) {
+  md = if (is.list(cell)) cell[["metadata"]]
+  m = if (is.list(md)) md[["gptr"]]
+  if (is.list(m)) m else list()
+}
+
+#' Cell ids of a notebook, with agent cells known as `gptr-<id>`. A cell whose own id is not a
+#' `gptr-` id (none before nbformat 4.5, or a fresh one from a save that upgraded the notebook to
+#' 4.5) but whose `metadata.gptr.id` is `<id>` is known by `gptr-<id>` unless a cell carries that
+#' id itself or an earlier cell already claimed it (a copy of an agent cell keeps its own id).
+#' Other cells without an id give NA.
+#' @noRd
+nb_cell_ids = function(nb) {
+  cells = nb[["cells"]]
+  out = vapply(cells, function(cell) {
+    id = if (is.list(cell)) cell[["id"]]
+    if (is.character(id) && length(id) == 1L) id else NA_character_
+  }, "", USE.NAMES = FALSE)
+  gid = vapply(cells, function(cell) {
+    g = nb_cell_meta(cell)[["id"]]
+    ok = is.character(g) && length(g) == 1L && !is.na(g) && nzchar(g)
+    if (ok) paste0("gptr-", g) else NA_character_
+  }, "", USE.NAMES = FALSE)
+  for (i in which(!nb_is_agent(out) & !is.na(gid))) {
+    if (!(gid[i] %in% out)) out[i] = gid[i]
+  }
+  out
+}
+
+#' Which cell ids are agent cells (`gptr-<id>`)
+#' @noRd
+nb_is_agent = function(ids) {
+  !is.na(ids) & startsWith(ids, "gptr-")
+}
+
+#' Index of the j-th code cell (not an agent cell) calling gptr() with this prompt hash, or an
+#' identical call for computed prompts; NA when none
+#' @noRd
+nb_find_call_cell = function(nb, ph, call0 = NULL, j = 1L) {
+  cells = nb[["cells"]]
+  agent = nb_is_agent(nb_cell_ids(nb))
+  found = 0L
+  for (i in seq_along(cells)) {
+    if (agent[i] || !identical(cells[[i]][["cell_type"]], "code")) next
+    calls = doc_calls(nb_cell_lines(cells[[i]]))
+    if (length(doc_calls_have(calls, ph %||% NA_character_, call0))) {
+      found = found + 1L
+      if (found == j) return(i)
+    }
+  }
+  NA_integer_
+}
+
+#' Ordinal of calling cell `cell` among the code cells that call gptr() with the same prompt
+#' hash (or the same call, for computed prompts): the `j` of a notebook anchor
+#' @noRd
+nb_call_ordinal = function(nb, cell, ph, call0 = NULL) {
+  j = 1L
+  repeat {
+    k = nb_find_call_cell(nb, ph, call0, j)
+    if (is.na(k) || k >= cell) return(j)
+    j = j + 1L
+  }
+}
+
+#' Agent-cell metadata `metadata.gptr` from a block header (contract 11.5), keys sorted
+#' @noRd
+nb_meta = function(id, header) {
+  meta = c(list(id = id), header[!vapply(header, is.null, NA)])
+  meta = lapply(meta, function(v) if (is.numeric(v) && !is.integer(v)) as.character(v) else v)
+  meta[order(names(meta), method = "radix")]
+}
+
+#' Set key `key` of a JSON object (a named list); a new key goes in sorted order (nbformat's
+#' sort_keys)
+#' @noRd
+nb_put = function(obj, key, value) {
+  if (!is.list(obj) || is.null(names(obj))) obj = structure(list(), names = character())
+  had = key %in% names(obj)
+  obj[[key]] = value
+  if (!had) obj = obj[order(names(obj), method = "radix")]
+  obj
+}
+
+#' A new agent cell with nbformat's sorted keys; without `id` when the notebook predates
+#' nbformat 4.5, whose cell schema has no id (the cell is then known by its metadata.gptr.id)
+#' @noRd
+nb_code_cell = function(code, id, meta, cell_id = TRUE) {
+  cell = list(cell_type = "code", execution_count = NULL, id = paste0("gptr-", id),
+              metadata = list(gptr = meta), outputs = list(), source = nb_source_split(code))
+  if (!isTRUE(cell_id)) cell[["id"]] = NULL
+  cell
+}
+
+#' Does the notebook's format version have cell ids (nbformat 4.5 and later)?
+#' @noRd
+nb_has_cell_ids = function(nb) {
+  m = nb[["nbformat_minor"]]
+  is.numeric(m) && length(m) == 1L && !is.na(m) && m >= 5
+}
+
+#' The ipynb format's locate(): the calling cell (found by content: the j-th code cell calling
+#' gptr() with the anchor's prompt hash, or its call0; IC-51), the located call in it and the
+#' agent cells after it. The calling cell's top-level calls share that run of agent cells and
+#' own them one to one (doc_rmd_owner()); a call that is nested (in a function, loop, ...) or
+#' inside a marker block owns none (contract 11.5).
+#' @noRd
+doc_ipynb_locate = function(text, site) {
+  nb = nb_parse(text)
+  a = site[["anchor"]]
+  ph = a[["ph"]] %||% NA_character_
+  call0 = a[["call0"]]
+  # by content and ordinal, never by the cell index seen at locate time: agent cells inserted
+  # above (earlier pending blocks of the same sync) move the calling cells down
+  cell = nb_find_call_cell(nb, ph, call0, a[["j"]] %||% 1L)
+  out = list(stmt = NULL, blocks = NULL, hit = NULL, owned = NULL, insert_after = NULL,
+             top_level = FALSE, in_block = NULL, ordinal = 1L, indent = "", cell = cell)
+  if (is.na(cell)) return(out)
+  cells = nb[["cells"]]
+  calls = doc_calls(nb_cell_lines(cells[[cell]]))
+  calls$chunk = rep(cell, nrow(calls))
+  hit = calls[doc_calls_have(calls, ph, call0)[1L], , drop = FALSE]
+  out$hit = hit
+  out$stmt = c(cell, cell)
+  if (isTRUE(hit$nested)) return(out)
+  if (!is.na(hit$block)) {
+    out$in_block = hit$block
+    out$ordinal = hit$n_in_block
+    return(out)
+  }
+  out$ordinal = hit$n_in_stmt
+  out$top_level = TRUE
+  ids = nb_cell_ids(nb)
+  agent = nb_is_agent(ids)
+  run = integer()
+  k = cell + 1L
+  while (k <= length(cells) && agent[k]) {
+    run = c(run, k)
+    k = k + 1L
+  }
+  out$insert_after = if (length(run)) run[length(run)] else cell
+  if (!length(run)) return(out)
+  metas = lapply(cells[run], nb_cell_meta)
+  heads = data.frame(cell = run)
+  heads$header = metas
+  own = doc_rmd_owner(heads, calls, hit, site[["prompt_hash"]])
+  if (!is.null(own)) {
+    k = run[own$index]
+    meta = metas[[own$index]]
+    status = doc_block_status(meta, nb_cell_lines(cells[[k]]), site[["prompt_hash"]],
+                              site[["args_hash"]])
+    if (isTRUE(own$stale) && identical(status, "fresh")) status = "stale"
+    out$owned = list(id = meta[["id"]] %||% sub("^gptr-", "", ids[k]), header = meta,
+                     status = status, start = k, end = k)
+  }
+  out
+}
+
+#' The ipynb format's render(): body lines with the cell metadata as attribute `meta`
+#' @noRd
+doc_ipynb_render = function(block, site) {
+  structure(as.character(block[["body"]]), meta = nb_meta(block[["id"]], block[["header"]]))
+}
+
+#' The ipynb format's upsert(): only `source` and `metadata.gptr` change on a rewrite; a new agent
+#' cell goes after the run of agent cells that follows the calling cell
+#' @noRd
+doc_ipynb_upsert = function(text, site, lines, block_id) {
+  nb = nb_parse(text)
+  meta = attr(lines, "meta", exact = TRUE) %||% list(id = block_id)
+  hit = match(paste0("gptr-", block_id), nb_cell_ids(nb))
+  if (!is.na(hit)) {
+    cell = nb[["cells"]][[hit]]
+    cell = nb_put(cell, "metadata", nb_put(cell[["metadata"]], "gptr", meta))
+    cell[["source"]] = nb_source_split(as.character(lines))
+    nb[["cells"]][[hit]] = cell
+  } else {
+    loc = doc_ipynb_locate(text, site)
+    if (is.null(loc$stmt) || !isTRUE(loc$top_level)) {
+      gptr_abort("The calling cell was not found in the notebook.", "doc_write",
+                 path = site[["path"]] %||% NA, reason = "not found")
+    }
+    cell = nb_code_cell(as.character(lines), block_id, meta, nb_has_cell_ids(nb))
+    nb[["cells"]] = append(nb[["cells"]], list(cell), after = loc$insert_after)
+  }
+  nb_serialize(nb)
+}
+
+#' The ipynb format's inert(): every non-empty source line gets one `#~ ` (G7 section 3.8)
+#' @noRd
+doc_ipynb_inert = function(lines) {
+  lines = as.character(lines)
+  live = nzchar(lines)
+  lines[live] = paste0("#~ ", lines[live])
+  lines
+}
+
+#' Undo or revive agent cells of a notebook (G7 section 3.8: metadata.gptr.status = "undone" and
+#' `#~ ` source lines). A cell already in the requested state is left alone, reviving removes
+#' exactly the one `#~ ` inert added, and a notebook nothing is changed in is returned as it was.
+#' @noRd
+nb_inert_text = function(text, ids, inert = TRUE) {
+  nb = nb_parse(text)
+  cids = nb_cell_ids(nb)
+  changed = FALSE
+  for (id in ids) {
+    k = match(paste0("gptr-", id), cids)
+    if (is.na(k)) next
+    cell = nb[["cells"]][[k]]
+    meta = nb_cell_meta(cell)
+    if (identical(meta[["status"]], "undone") == isTRUE(inert)) next
+    src = nb_cell_lines(cell)
+    src = if (inert) doc_ipynb_inert(src) else sub("^#~ ", "", src)
+    meta[["status"]] = if (inert) "undone" else NULL
+    meta = meta[order(names(meta), method = "radix")]
+    cell = nb_put(cell, "metadata", nb_put(cell[["metadata"]], "gptr", meta))
+    cell[["source"]] = nb_source_split(src)
+    nb[["cells"]][[k]] = cell
+    changed = TRUE
+  }
+  if (!changed) return(text)
+  nb_serialize(nb)
+}
+
+# ---- the format registry -------------------------------------------------------------------------
+
+#' The five built-in doc_format specs (contract 7.15, 10.2 row 18)
+#' @noRd
+doc_formats_builtin = function() {
+  list(
+    r = gptr_spec("doc_format", "r", ext = c("R", "r"), locate = doc_r_locate,
+                  render = doc_r_render, upsert = doc_r_upsert, inert = doc_marker_inert),
+    rmd = gptr_spec("doc_format", "rmd", ext = c("Rmd", "rmd"), locate = doc_rmd_locate,
+                    render = doc_r_render, upsert = doc_rmd_upsert_fn("rmd"),
+                    inert = doc_marker_inert),
+    qmd = gptr_spec("doc_format", "qmd", ext = "qmd", locate = doc_rmd_locate,
+                    render = doc_r_render, upsert = doc_rmd_upsert_fn("qmd"),
+                    inert = doc_marker_inert),
+    ipynb = gptr_spec("doc_format", "ipynb", ext = "ipynb", locate = doc_ipynb_locate,
+                      render = doc_ipynb_render, upsert = doc_ipynb_upsert,
+                      inert = doc_ipynb_inert),
+    transcript = gptr_spec("doc_format", "transcript", ext = c("R", "r"),
+                           locate = doc_transcript_locate, render = doc_r_render,
+                           upsert = doc_transcript_upsert, inert = doc_marker_inert)
+  )
+}
+
+#' A doc_format spec by name: the registered one, else the built-in (before builtin:documents
+#' is loaded); NULL when builtin:documents is filtered out and nothing else provides it
+#' @noRd
+doc_format_get = function(name) {
+  if (is.null(name)) return(NULL)
+  spec = tryCatch(registry_get("doc_format", name), error = function(e) NULL)
+  if (!is.null(spec)) return(spec)
+  if (length(tryCatch(registry_names("doc_format"), error = function(e) character()))) {
+    return(NULL)
+  }
+  doc_formats_builtin()[[name]]
+}
+
+#' Text of a document with the given blocks made inert or live again (G7 sections 3.8, 4.4);
+#' in transcripts the owning `s_<hex>` statement line is prefixed too
+#' @noRd
+doc_inert_text = function(lines, fmt, ids, inert = TRUE, transcript = FALSE) {
+  if (identical(fmt, "ipynb")) return(nb_inert_text(lines, ids, inert))
+  for (id in ids) {
+    b = doc_find_blocks(lines)
+    k = which(b$id == id)
+    if (!length(k)) next
+    rng = b$start[k[1L]]:b$end[k[1L]]
+    lines[rng] = doc_inert_marker_lines(lines[rng], inert)
+    if (transcript) {
+      p = b$start[k[1L]] - 1L
+      while (p >= 1L && !nzchar(trimws(lines[p]))) p = p - 1L
+      if (p >= 1L && grepl("^(#~ )?s_[0-9a-f]{6} (=|\\|>) gptr\\(", lines[p])) {
+        lines[p] = if (inert) sub("^(#~ )?", "#~ ", lines[p]) else sub("^#~ ", "", lines[p])
+      }
+    }
+    if (fmt %in% c("rmd", "qmd")) lines = doc_rmd_chunk_eval(lines, id, inert, fmt)
+  }
+  lines
+}
