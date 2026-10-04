@@ -230,12 +230,18 @@ msg_validate = function(msg) {
     for (name in msg_block_fields[[block$type]]) {
       if (!is_string(block[[name]])) bad(paste0(field, "$", name), "must be a single string")
     }
-    if (identical(block$type, "tool_call") && !is.list(block$arguments)) {
-      bad(paste0(field, "$arguments"), "must be a named list")
+    if (identical(block$type, "tool_call")) {
+      arguments = block$arguments
+      nms = names(arguments)
+      if (!is.list(arguments) || is.null(nms) || anyNA(nms) ||
+            any(!nzchar(nms)) || anyDuplicated(nms)) {
+        bad(paste0(field, "$arguments"), "must be a list with unique, nonempty names")
+      }
     }
   }
-  if (!is.numeric(msg$timestamp) || length(msg$timestamp) != 1L) {
-    bad("timestamp", "must be a number")
+  if (!is.numeric(msg$timestamp) || is.complex(msg$timestamp) ||
+        length(msg$timestamp) != 1L || !is.finite(msg$timestamp)) {
+    bad("timestamp", "must be a finite real number")
   }
   if (msg$role == "user" && !in_set(msg$source, msg_sources)) {
     bad("source", "is not a known source")

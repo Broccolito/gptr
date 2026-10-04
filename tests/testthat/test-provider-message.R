@@ -169,3 +169,34 @@ test_that("unknown usage survives JSON round trips rather than becoming zero (IC
   expect_identical(legacy$cache_write_5m, 3)
   expect_identical(legacy$cache_write_1h, 0)
 })
+
+test_that("msg_validate rejects malformed imported tool argument objects", {
+  msg = msg_assistant(block_tool_call("c1", "r", list(code = "1")), "fake", "fake", "m")
+  invalid = list(
+    NULL, list(), list("unnamed"), stats::setNames(list(1), ""),
+    stats::setNames(list(1), NA_character_), list(code = "1", code = "2"), 1
+  )
+  for (arguments in invalid) {
+    msg$content[[1]]$arguments = arguments
+    cnd = tryCatch(msg_validate(msg), error = identity)
+    expect_s3_class(cnd, "gptr_error_internal")
+    expect_identical(cnd$detail, "content[[1]]$arguments")
+  }
+  msg$content[[1]]$arguments = json_obj()
+  expect_invisible(msg_validate(msg))
+  msg$content[[1]]$arguments = list(code = "1", data = list(rows = list(1, 2)))
+  expect_invisible(msg_validate(msg))
+})
+
+test_that("msg_validate rejects missing or nonfinite real timestamps", {
+  msg = msg_user("x", timestamp = 0)
+  invalid = list(NA_real_, NaN, Inf, -Inf, 1 + 1i, NULL, numeric(), c(1, 2), "1")
+  for (timestamp in invalid) {
+    msg$timestamp = timestamp
+    cnd = tryCatch(msg_validate(msg), error = identity)
+    expect_s3_class(cnd, "gptr_error_internal")
+    expect_identical(cnd$detail, "timestamp")
+  }
+  msg$timestamp = 0L
+  expect_invisible(msg_validate(msg))
+})
