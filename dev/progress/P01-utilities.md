@@ -26,3 +26,18 @@ formulas and updates the session multiplier only for sufficiently large samples.
 - Testthat emits its existing package-build warning outside test results
   (built under R 4.5.2, runtime R 4.5.0); test warnings remain zero.
 - Commit: `feat(utils): add the calibrated token estimator and its fixture`.
+
+## Task 10 — output budgets and listings
+
+Created `R/utils-text.R` and focused tests for token-budgeted head/tail output,
+session/process output stores, redacted spill-file recovery, terminal cleanup
+and listing output. The session lookup falls back to the process store and then
+the spill file, as IC-71 requires.
+
+- Red filter `^utils-text$`: FAIL 8, WARN 0, SKIP 0, PASS 0; missing functions.
+- Green after documentation: FAIL 0, WARN 0, SKIP 0, PASS 40, with zero-failure
+  assertions on the returned test results.
+- Shared `NAMESPACE` diff contains only `S3method(print,gptr_listing)`.
+- Focused `git diff --check` passes. The pre-existing testthat build-version
+  warning remains outside test results.
+- Commit: `feat(utils): add output truncation, the out store, spill files and listings`.
