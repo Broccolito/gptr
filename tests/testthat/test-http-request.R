@@ -112,3 +112,83 @@ test_that("request fields match exactly and HEAD configures a bodyless response"
   http_handle(list(url = "https://example.test", method = "HEAD"))
   expect_identical(captured$options$nobody, 1L)
 })
+
+request_spec = function(srv, ...) {
+  utils::modifyList(list(url = paste0(srv$url, "/v1/messages"), method = "POST",
+         headers = list(`content-type` = "application/json"),
+         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse"),
+    list(...))
+}
+
+# Run one transfer until it ends (not called run_request(): P06 defines that internal function)
+request_until_done = function(spec, timeout = 120, provider = NULL) {
+  st = new.env()
+  st$bytes = 0
+  st$done = FALSE
+  st$fail = NULL
+  st$status = NA_integer_
+  st$t0 = reactor_now()
+  reactor_http(spec, on_bytes = function(x) st$bytes = st$bytes + length(x),
+               on_done = function(status, headers) {
+                 st$status = status
+                 st$done = TRUE
+               },
+               on_fail = function(cnd) {
+                 st$fail = cnd
+                 st$done = TRUE
+               },
+               provider = provider)
+  reactor_pump(until = function() st$done, timeout = timeout)
+  st$elapsed = reactor_now() - st$t0
+  st
+}
+
+test_that("INFRA-05: held headers give gptr_error_timeout_first_byte", {
+  local_gptr_options(first_byte_timeout = 1)
+  srv = local_mock_server("hold_headers")
+  st = request_until_done(request_spec(srv), timeout = 30, provider = "mock")
+  expect_s3_class(st$fail, "gptr_error_timeout_first_byte")
+  expect_s3_class(st$fail, "gptr_error_timeout")
+  expect_identical(st$fail$seconds, 1)
+  expect_identical(st$fail$provider, "mock")
+  expect_lt(st$elapsed, 5)
+})
+
+test_that("INFRA-05: a stall mid-stream gives gptr_error_timeout_idle", {
+  local_gptr_options(idle_timeout = 1)
+  srv = local_mock_server("stall")
+  st = request_until_done(request_spec(srv), timeout = 30)
+  expect_gt(st$bytes, 0)
+  expect_s3_class(st$fail, "gptr_error_timeout_idle")
+  expect_lt(st$elapsed, 5)
+})
+
+test_that("INFRA-05: a stream sending one byte every 10 s for 60 s completes", {
+  # idle 15 s: the 10 s gaps stay under the idle timer, while 60 s is far beyond idle + 30 s,
+  # where libcurl's low-speed check (1 byte/s averaged) would have ended the stream
+  local_gptr_options(idle_timeout = 15)
+  srv = local_mock_server("bytes_per_10s", duration = 60)
+  st = request_until_done(request_spec(srv), timeout = 120)
+  expect_null(st$fail)
+  expect_identical(st$status, 200L)
+  expect_gte(st$elapsed, 55)
+})
+
+test_that("IC-64: a redirect is never followed and never carries the key", {
+  srv = local_mock_server("redirect")
+  key = "sk-redirect-test-0123456789abcdef"
+  h = secret_register(key, "GPTR_TEST_REDIRECT_KEY", origin = url_origin(srv$url))
+  st = request_until_done(request_spec(srv, headers = list(`x-api-key` = h)), timeout = 30)
+  expect_s3_class(st$fail, "gptr_error_redirect")
+  expect_s3_class(st$fail, "gptr_error_provider")
+  expect_false(is.na(st$fail$location_origin))
+  expect_false(identical(st$fail$location_origin, url_origin(srv$url)))
+  # P01's mock logs the requests of both origins; the first redacts key headers in its log, the
+  # second (the foreign server) logs every header byte it receives. One logged request, on the
+  # first origin's path, proves that the redirect target received nothing at all.
+  lg = srv$log()
+  expect_identical(nrow(lg), 1L)
+  expect_identical(lg$path, "/v1/messages")
+  expect_false(any(grepl(key, lg$headers, fixed = TRUE)))
+  expect_false(grepl(key, conditionMessage(st$fail), fixed = TRUE))
+})

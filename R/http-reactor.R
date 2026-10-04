@@ -262,12 +262,25 @@ reactor_step = function(r, allow_runs, slice_ms, t_end) {
 #' Wait for the next event: timers, tasks, the FIFO and child pipes
 #' @noRd
 reactor_io = function(r, allow_runs, slice_ms, t_end) {
+  reactor_admit(r)
   wait = reactor_wait_ms(r, allow_runs, slice_ms, t_end)
+  active = reactor_active(r)
   pollables = reactor_pollables(r)
+  if (length(active)) {
+    fds = curl::multi_fdset(pool = r$pool)
+    if (is.numeric(fds$timeout) && length(fds$timeout) == 1L && fds$timeout >= 0) {
+      wait = min(wait, fds$timeout)
+    }
+    pollables = c(list(processx::curl_fds(fds)), pollables)
+  }
   if (length(pollables)) {
     processx::poll(pollables, as.integer(min(wait, .Machine$integer.max)))
   } else if (wait > 0) {
     Sys.sleep(wait / 1000)
+  }
+  if (length(active)) {
+    reactor_multi_run(r)
+    reactor_check_transfers(r)
   }
   reactor_read_procs(r)
   reactor_drain_stdin(r)
@@ -281,6 +294,14 @@ reactor_wait_ms = function(r, allow_runs, slice_ms, t_end) {
   now = reactor_now()
   at = min(t_end, reactor_next_due(r))
   if (length(ls(r$stdin, sorted = FALSE))) at = min(at, now + 0.005)
+  for (id in ls(r$transfers, sorted = FALSE)) {
+    tr = r$transfers[[id]]
+    if (identical(tr$state, "active") && !isTRUE(tr$busy)) {
+      at = min(at, http_timeout_next(tr$t_start, tr$t_first, tr$t_last, tr$timeouts))
+    } else if (identical(tr$state, "queued")) {
+      at = min(at, ratelimit_next(tr$provider))
+    }
+  }
   max(0, min(as.numeric(slice_ms), (at - now) * 1000))
 }
 
@@ -405,6 +426,8 @@ reactor_cancel = function(ids) {
 #' @return int(1) 1 when something was cancelled
 #' @noRd
 reactor_cancel_id = function(r, id) {
+  tr = r$transfers[[id]]
+  if (!is.null(tr)) return(reactor_cancel_transfer(r, tr))
   if (exists(id, envir = r$timers, inherits = FALSE)) {
     rm(list = id, envir = r$timers)
     return(1L)
@@ -433,6 +456,9 @@ reactor_cancel_id = function(r, id) {
 reactor_shutdown = function() {
   r = get0("reactor", envir = the, inherits = FALSE)
   if (is.null(r)) return(invisible(NULL))
+  for (id in ls(r$transfers, sorted = FALSE)) {
+    try(reactor_cancel_transfer(r, r$transfers[[id]]), silent = TRUE)
+  }
   children = lapply(ls(r$procs, sorted = FALSE), function(id) r$procs[[id]]$p)
   pending = lapply(ls(r$stdin, sorted = FALSE), function(key) r$stdin[[key]]$p)
   # In-flight callbacks still hold r. Clear its tables before stopping children so
@@ -731,5 +757,418 @@ wire_log = function(tr, event, status = NULL) {
              bytes = tr$bytes, seconds = round(reactor_now() - tr$t_start, 3), event = event)
   rec = rec[!vapply(rec, is.null, NA)]
   tryCatch(wire_log_append(path, json_encode(redact(rec, "persist"))), error = function(e) NULL)
+  invisible(NULL)
+}
+
+# ---- HTTP transfers (INFRA-01, 05, 06, 21, 28; IC-64) --------------------------------------
+
+#' Queue one HTTP transfer
+#'
+#' `spec` is an adapter's `build()` result (contract 8.1): `url`, `method`, `headers`, `body`,
+#' `stream`. Optional fields read here: `request_id`, `model` and `session_id` (labels for the
+#' wire log and for condition fields) and `connect_timeout`, `first_byte_timeout`,
+#' `idle_timeout` (seconds; P05 copies them from `opts`). Callbacks: `on_headers(status,
+#' headers)` once per attempt that received a 2xx head (normally once; a second call follows a
+#' retry and means "start over"); `on_bytes(raw)` per body chunk of a 2xx response;
+#' `on_done(status, headers)` at the end; `on_fail(cnd)` with a classed, unsignalled
+#' `gptr_error_*` condition. Exactly one of `on_done` and `on_fail` runs, unless the transfer
+#' is cancelled. Callbacks run after curl::multi_run() has returned (never inside libcurl), so
+#' they may cancel, retry, start transfers or pump the reactor; the transfer's own later events
+#' reach it only after the running callback returned. `retry` is
+#' `list(max_attempts = gptr.max_attempts, committed = function()
+#' lgl(1), on_retry = NULL)`; `on_retry(type, info)` receives `"retry_start"` (`info`:
+#' `attempt`, `delay`, `class`) and `"retry_end"` (`info`: `attempt`, `ok`), which P05 forwards
+#' to `emit` as the `retry_start`/`retry_end` events. Without `committed`, a transfer counts as
+#' committed once a 2xx body byte reached `on_bytes`.
+#' @return the transfer id
+#' @noRd
+reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL,
+                        provider = NULL, retry = NULL) {
+  check_list(spec, "spec", named = TRUE)
+  check_string(spec[["url"]], "spec$url")
+  check_function(on_bytes, "on_bytes")
+  check_function(on_done, "on_done")
+  check_function(on_fail, "on_fail")
+  check_function(on_headers, "on_headers", null = TRUE)
+  check_string(provider, "provider", null = TRUE)
+  check_list(retry, "retry", named = TRUE, null = TRUE)
+  for (name in c("model", "request_id", "session_id")) {
+    check_string(spec[[name]], paste0("spec$", name), null = TRUE)
+  }
+  attempts = retry[["max_attempts"]] %||% gptr_opt("max_attempts") %||% 4L
+  check_number(attempts, "max_attempts", min = 1, int = TRUE)
+  check_function(retry[["committed"]], "retry$committed", null = TRUE)
+  check_function(retry[["on_retry"]], "retry$on_retry", null = TRUE)
+  check_number(gptr_opt("max_active"), "gptr.max_active", min = 1, int = TRUE)
+  r = reactor_get()
+  id = reactor_id(r)
+  tr = new.env(parent = emptyenv())
+  tr$id = id
+  tr$spec = spec
+  tr$on_bytes = on_bytes
+  tr$on_done = on_done
+  tr$on_fail = on_fail
+  tr$on_headers = on_headers
+  tr$run = reactor_run_id(run)
+  tr$session = spec[["session_id"]] %||% reactor_run_session(run)
+  tr$provider = provider
+  tr$model = spec[["model"]] %||% NA_character_
+  tr$request_id = spec[["request_id"]] %||% id_new("q", 12L)
+  tr$delivered = FALSE
+  tr$inbox = list()
+  tr$busy = FALSE
+  tr$head_pending = FALSE
+  committed = retry[["committed"]] %||% function() tr$delivered
+  tr$retry = list(max_attempts = as.integer(attempts),
+                  committed = committed, on_retry = retry[["on_retry"]])
+  tr$timeouts = http_timeouts(spec)
+  tr$attempt = 0L
+  tr$state = "queued"
+  tr$status = NA_integer_
+  tr$bytes = 0
+  tr$t_start = reactor_now()
+  assign(id, tr, envir = r$transfers)
+  r$queue = c(r$queue, id)
+  id
+}
+
+#' Ids of the transfers currently in the curl pool
+#' @noRd
+reactor_active = function(r) {
+  ids = ls(r$transfers, sorted = FALSE)
+  ids[vapply(ids, function(id) identical(r$transfers[[id]]$state, "active"), NA)]
+}
+
+#' Admit queued transfers while the global and per-provider slots allow (never waits)
+#'
+#' A transfer that cannot start calls its `on_fail` from here, and that callback may queue new
+#' transfers (a fallback request) or pump the reactor. The queue is therefore rebuilt at the end
+#' from every transfer that is still queued, so a transfer queued by such a callback is kept.
+#' @noRd
+reactor_admit = function(r) {
+  if (!length(r$queue)) return(invisible(NULL))
+  max_active = as.integer(gptr_opt("max_active") %||% 8L)
+  n = length(reactor_active(r))
+  for (id in r$queue) {
+    if (n >= max_active) break
+    tr = r$transfers[[id]]
+    if (is.null(tr) || !identical(tr$state, "queued")) next
+    if (!ratelimit_admit(tr$provider)) next
+    reactor_start(r, tr)
+    # a start that failed ran on_fail, which may have started transfers of its own
+    n = length(reactor_active(r))
+  }
+  queued = vapply(r$queue, function(id) identical(r$transfers[[id]]$state, "queued"), NA,
+                  USE.NAMES = FALSE)
+  r$queue = unique(r$queue[queued])
+  invisible(NULL)
+}
+
+#' Start (or re-send) one attempt of a transfer
+#' @noRd
+reactor_start = function(r, tr) {
+  tr$attempt = tr$attempt + 1L
+  tr$state = "active"
+  tr$t_start = reactor_now()
+  tr$t_first = NA_real_
+  tr$t_last = tr$t_start
+  tr$status = NA_integer_
+  tr$headers = list()
+  tr$ok = FALSE
+  tr$err_body = list()
+  h = tryCatch(http_handle(tr$spec), error = function(e) e)
+  if (inherits(h, "error")) {
+    tr$state = "failed"
+    reactor_forget(r, tr)
+    wire_log(tr, "error")
+    reactor_call("on_fail", tr$on_fail, h)
+    return(invisible(NULL))
+  }
+  tr$handle = h
+  wire_log(tr, "start")
+  # the curl callbacks only queue the event: reactor_deliver() hands it to the transfer's
+  # callbacks after curl::multi_run() has returned, outside libcurl, so on_bytes, on_headers,
+  # on_done and on_fail may cancel, retry, start transfers or pump the reactor (libcurl refuses
+  # every multi API call made from inside its own callbacks); events of an abandoned attempt
+  # are dropped, so they can never feed or finish the next attempt
+  k = tr$attempt
+  added = tryCatch({
+    curl::multi_add(h, pool = r$pool,
+                    data = function(x, final = FALSE) reactor_curl_event(tr, k, "data", x),
+                    done = function(res) reactor_curl_event(tr, k, "done", res),
+                    fail = function(msg) reactor_curl_event(tr, k, "fail", msg))
+    TRUE
+  }, error = function(e) e)
+  if (inherits(added, "error")) {
+    reactor_abandon(r, tr, transport_error(paste0("The transfer could not start: ",
+                                                  conditionMessage(added)), "internal",
+                                           detail = conditionMessage(added)))
+  }
+  invisible(NULL)
+}
+
+#' Queue one curl callback of an attempt (runs inside curl::multi_run(): no user code here)
+#' @noRd
+reactor_curl_event = function(tr, k, type, value) {
+  if (!identical(tr$attempt, k)) return(invisible(NULL))
+  if (identical(type, "data")) tr$t_last = reactor_now()
+  tr$inbox[[length(tr$inbox) + 1L]] = list(k = k, type = type, value = value)
+  invisible(NULL)
+}
+
+#' Deliver the queued curl events of every transfer (after curl::multi_run() returned)
+#'
+#' Events reach each transfer in arrival order. While one of a transfer's callbacks runs, the
+#' transfer is busy: a pump nested inside that callback (a hook calling System 1, say) skips
+#' it, so its next chunk is never delivered re-entrantly or ahead of the rest of the current
+#' one; the outer delivery picks it up when the callback returns.
+#' @noRd
+reactor_deliver = function(r) {
+  for (id in reactor_ids(r$transfers)) {
+    tr = r$transfers[[id]]
+    if (!is.null(tr) && !isTRUE(tr$busy) && (length(tr$inbox) || isTRUE(tr$head_pending))) {
+      reactor_deliver_one(r, tr)
+    }
+  }
+  invisible(NULL)
+}
+
+#' Deliver one transfer's queued events in order
+#' @noRd
+reactor_deliver_one = function(r, tr) {
+  tr$busy = TRUE
+  on.exit({
+    tr$busy = FALSE
+  }, add = TRUE)
+  reactor_head_notify(r, tr)
+  while (length(tr$inbox)) {
+    ev = tr$inbox[[1L]]
+    tr$inbox = tr$inbox[-1L]
+    if (!identical(tr$attempt, ev$k)) next
+    switch(ev$type,
+           data = reactor_on_data(r, tr, ev$value),
+           done = reactor_on_done(r, tr, ev$value),
+           fail = reactor_on_fail(r, tr, ev$value))
+  }
+  invisible(NULL)
+}
+
+#' Record the response head the first time it is visible (no user callback runs here)
+#' @noRd
+reactor_head = function(r, tr) {
+  if (!is.na(tr$t_first)) return(invisible(TRUE))
+  d = tryCatch(curl::handle_data(tr$handle), error = function(e) NULL)
+  status = if (is.null(d)) 0L else as.integer(d$status_code)
+  if (is.na(status) || status < 200L) return(invisible(FALSE))
+  tr$t_first = reactor_now()
+  tr$t_last = tr$t_first
+  tr$status = status
+  tr$headers = tryCatch(curl::parse_headers_list(d$headers), error = function(e) list())
+  tr$ok = status >= 200L && status < 300L
+  tr$head_pending = tr$ok
+  ratelimit_update(tr$provider, tr$headers)
+  invisible(TRUE)
+}
+
+#' Tell the callbacks about a 2xx head once per attempt: `retry_end` after a retry, on_headers
+#'
+#' Called only while the transfer's events are delivered (the transfer is busy).
+#' @noRd
+reactor_head_notify = function(r, tr) {
+  if (!isTRUE(tr$head_pending)) return(invisible(NULL))
+  tr$head_pending = FALSE
+  if (tr$attempt > 1L && !is.null(tr$retry$on_retry)) {
+    reactor_call("on_retry", tr$retry$on_retry, "retry_end",
+                 list(attempt = tr$attempt, ok = TRUE))
+  }
+  if (!is.null(tr$on_headers)) {
+    res = reactor_call("on_headers", tr$on_headers, tr$status, tr$headers)
+    if (inherits(res, "error") && identical(tr$state, "active")) {
+      cnd = transport_error(paste0("A headers callback failed: ", conditionMessage(res)),
+                            "internal", detail = conditionMessage(res))
+      reactor_abandon(r, tr, cnd)
+    }
+  }
+  invisible(NULL)
+}
+
+#' A delivered data event: 2xx bytes go to on_bytes, other bodies are kept for classification
+#' @noRd
+reactor_on_data = function(r, tr, x) {
+  if (!identical(tr$state, "active")) return(invisible(NULL))
+  reactor_head(r, tr)
+  reactor_head_notify(r, tr)
+  # on_headers may have cancelled or retried the transfer
+  if (!identical(tr$state, "active")) return(invisible(NULL))
+  tr$t_last = reactor_now()
+  if (!length(x)) return(invisible(NULL))
+  tr$bytes = tr$bytes + length(x)
+  if (isTRUE(tr$ok)) {
+    tr$delivered = TRUE
+    res = reactor_call("on_bytes", tr$on_bytes, x)
+    if (inherits(res, "error") && identical(tr$state, "active")) {
+      cnd = transport_error(paste0("A stream callback failed: ", conditionMessage(res)),
+                            "internal", detail = conditionMessage(res))
+      reactor_abandon(r, tr, cnd)
+    }
+  } else {
+    tr$err_body[[length(tr$err_body) + 1L]] = x
+  }
+  invisible(NULL)
+}
+
+#' A delivered done event: 2xx ends the transfer, anything else is classified
+#' @noRd
+reactor_on_done = function(r, tr, res) {
+  if (!identical(tr$state, "active")) return(invisible(NULL))
+  reactor_head(r, tr)
+  reactor_head_notify(r, tr)
+  if (!identical(tr$state, "active")) return(invisible(NULL))
+  status = as.integer(res$status_code)
+  headers = tryCatch(curl::parse_headers_list(res$headers), error = function(e) list())
+  if (!is.na(status) && status >= 200L && status < 300L) {
+    tr$state = "done"
+    reactor_forget(r, tr)
+    wire_log(tr, "done", status)
+    reactor_call("on_done", tr$on_done, status, headers)
+    return(invisible(NULL))
+  }
+  body = if (length(tr$err_body)) do.call(c, tr$err_body) else raw(0)
+  cl = retry_classify(status, headers, body)
+  reactor_failure(r, tr, cl, status = status, headers = headers)
+  invisible(NULL)
+}
+
+#' A delivered fail event: connection failures and other libcurl errors
+#' @noRd
+reactor_on_fail = function(r, tr, msg) {
+  if (!identical(tr$state, "active")) return(invisible(NULL))
+  cl = retry_classify(NA_integer_, list(), curl_error = msg)
+  reactor_failure(r, tr, cl, status = NA_integer_)
+  invisible(NULL)
+}
+
+#' Enforce the first-byte and idle timers of active transfers (INFRA-05; never retried)
+#'
+#' A busy transfer (one of its callbacks is running a nested pump) is skipped: its bytes may
+#' be waiting in its queue, and its callbacks must not run re-entrantly.
+#' @noRd
+reactor_check_transfers = function(r) {
+  now = reactor_now()
+  for (id in reactor_active(r)) {
+    tr = r$transfers[[id]]
+    if (is.null(tr) || isTRUE(tr$busy)) next
+    reactor_head(r, tr)
+    if (!identical(tr$state, "active")) next
+    hit = http_timeout_check(tr$t_start, tr$t_first, tr$t_last, tr$timeouts, now)
+    if (is.null(hit)) next
+    msg = paste0("No ", if (hit$what == "first byte") "first response byte" else "stream data",
+                 " for ", hit$seconds, " s (", url_for_log(tr$spec$url), ").")
+    cnd = transport_error(msg, hit$class, seconds = hit$seconds, what = hit$what,
+                          provider = tr$provider)
+    reactor_abandon(r, tr, cnd)
+  }
+  invisible(NULL)
+}
+
+#' Stop the active attempt and fail the transfer without retrying
+#' @noRd
+reactor_abandon = function(r, tr, cnd) {
+  tr$state = "failed"
+  reactor_curl_cancel(r, tr$handle)
+  reactor_forget(r, tr)
+  wire_log(tr, "error", tr$status)
+  if (tr$attempt > 1L && !is.null(tr$retry$on_retry)) {
+    reactor_call("on_retry", tr$retry$on_retry, "retry_end",
+                 list(attempt = tr$attempt, ok = FALSE))
+  }
+  reactor_call("on_fail", tr$on_fail, cnd)
+  invisible(NULL)
+}
+
+#' Fail a transfer after a classified failure
+#' @return lgl(1) TRUE when a re-send was scheduled
+#' @noRd
+reactor_failure = function(r, tr, cl, status = NA_integer_, headers = list()) {
+  reactor_fail_final(r, tr, cl, status, headers)
+}
+
+#' The terminal failure: the classed condition with the fields of contract 2.2, to on_fail
+#' @return FALSE
+#' @noRd
+reactor_fail_final = function(r, tr, cl, status = NA_integer_, headers = list()) {
+  if (identical(tr$state, "active")) reactor_curl_cancel(r, tr$handle)
+  tr$state = "failed"
+  reactor_forget(r, tr)
+  h = retry_headers(headers)
+  rid = retry_header(h, "request-id") %||% retry_header(h, "x-request-id") %||% tr$request_id
+  fields = list(provider = tr$provider,
+                model = if (is.na(tr$model)) NULL else tr$model, status = status,
+                request_id = rid, error_type = cl$class[1L], session = tr$session)
+  if (cl$class[1L] %in% c("rate_limit", "retry_after")) fields$retry_after = cl$retry_after
+  if (identical(cl$class[1L], "network")) fields$curl_code = NA_integer_
+  if (identical(cl$class[1L], "redirect")) {
+    loc = retry_header(h, "location")
+    fields$location_origin = if (is.null(loc)) NA_character_ else url_origin(loc)
+  }
+  if (cl$class[1L] %in% c("timeout_idle", "timeout_connect")) {
+    idle = identical(cl$class[1L], "timeout_idle")
+    fields$seconds = if (idle) tr$timeouts$idle else tr$timeouts$connect
+    fields$what = if (idle) "idle stream" else "connect"
+  }
+  cnd = transport_error(cl$message, cl$class, .data = fields)
+  wire_log(tr, "error", status)
+  if (tr$attempt > 1L && !is.null(tr$retry$on_retry)) {
+    reactor_call("on_retry", tr$retry$on_retry, "retry_end",
+                 list(attempt = tr$attempt, ok = FALSE))
+  }
+  reactor_call("on_fail", tr$on_fail, cnd)
+  FALSE
+}
+
+#' Remove a finished transfer from the reactor
+#' @noRd
+reactor_forget = function(r, tr) {
+  tr$handle = NULL
+  if (exists(tr$id, envir = r$transfers, inherits = FALSE)) rm(list = tr$id, envir = r$transfers)
+  r$queue = setdiff(r$queue, tr$id)
+  invisible(NULL)
+}
+
+#' Cancel one transfer without callbacks
+#' @return int(1) 1 when something was cancelled
+#' @noRd
+reactor_cancel_transfer = function(r, tr) {
+  if (tr$state %in% c("done", "failed", "cancelled")) return(0L)
+  if (identical(tr$state, "active")) reactor_curl_cancel(r, tr$handle)
+  if (identical(tr$state, "waiting") && !is.null(tr$timer)) {
+    if (exists(tr$timer, envir = r$timers, inherits = FALSE)) rm(list = tr$timer, envir = r$timers)
+  }
+  tr$state = "cancelled"
+  reactor_forget(r, tr)
+  wire_log(tr, "cancelled", tr$status)
+  1L
+}
+
+#' Let curl do its I/O, then deliver what arrived
+#'
+#' libcurl refuses every multi API call made from inside its own callbacks
+#' (`curl::multi_cancel()`, `curl::multi_add()` and `curl::multi_run()` signal "API function
+#' called from within callback"; verified with curl 7.0.0). The callbacks handed to
+#' `curl::multi_add()` therefore only queue events, and `reactor_deliver()` runs the
+#' transfers' callbacks once `multi_run()` has returned: a stream cancelled or retried from
+#' `on_bytes` really stops, and a callback may start transfers or pump the reactor.
+#' @noRd
+reactor_multi_run = function(r) {
+  curl::multi_run(timeout = 0, pool = r$pool)
+  for (id in reactor_active(r)) reactor_head(r, r$transfers[[id]])
+  reactor_deliver(r)
+  invisible(NULL)
+}
+
+#' Remove a handle from the pool (never called from inside curl::multi_run())
+#' @noRd
+reactor_curl_cancel = function(r, h) {
+  if (!is.null(h)) try(curl::multi_cancel(h), silent = TRUE)
   invisible(NULL)
 }

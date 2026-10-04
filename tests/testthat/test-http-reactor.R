@@ -504,3 +504,286 @@ test_that("wire default and fallback paths reject escaping symlinks", {
   wire_log(wire_tr(session = "s1111111111"), "start")
   expect_false(file.exists(target))
 })
+
+# A request spec for the mock server (P01's local_mock_server() answers every path under its
+# `url`, which carries the per-run token)
+mock_spec = function(srv, ...) {
+  utils::modifyList(list(url = paste0(srv$url, "/v1/messages"), method = "POST",
+         headers = list(`content-type` = "application/json", accept = "text/event-stream"),
+         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse"),
+    list(...))
+}
+
+# Start a transfer whose bytes go through sse_splitter(); returns its state environment
+start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {
+  st = new.env()
+  st$types = character()
+  st$arrivals = numeric()
+  st$done = FALSE
+  st$status = NA_integer_
+  st$fail = NULL
+  sp = sse_splitter()
+  st$t0 = reactor_now()
+  on_bytes = function(x) {
+    for (e in sp$push(x)) {
+      st$types = c(st$types, e$event %||% "message")
+      st$arrivals = c(st$arrivals, reactor_now())
+    }
+  }
+  on_done = function(status, headers) {
+    st$status = status
+    st$t_end = reactor_now()
+    st$done = TRUE
+  }
+  on_fail = function(cnd) {
+    st$fail = cnd
+    st$t_end = reactor_now()
+    st$done = TRUE
+  }
+  st$id = reactor_http(spec, on_bytes = on_bytes, on_done = on_done, on_fail = on_fail,
+                       provider = provider, retry = retry, run = run)
+  st
+}
+
+test_that("INFRA-01: deltas reach the callback as the mock writes them", {
+  srv = local_mock_server("stream", n = 12L, interval = 0.25)
+  st = start_transfer(mock_spec(srv))
+  expect_true(reactor_pump(until = function() st$done, timeout = 30))
+  expect_null(st$fail)
+  expect_identical(st$status, 200L)
+  delta = st$arrivals[st$types == "content_block_delta"]
+  expect_length(delta, 12L)
+  expect_lt(delta[1] - st$t0, 0.25 + 0.35)
+  expect_true(all(diff(delta) < 0.35))
+})
+
+test_that("INFRA-01: six streams of 1.00-2.25 s finish within 10% of the slowest", {
+  short = local_mock_server("stream", n = 4L, interval = 0.25)
+  long = local_mock_server("stream", n = 9L, interval = 0.25)
+  sts = c(lapply(1:3, function(i) start_transfer(mock_spec(short))),
+          lapply(1:3, function(i) start_transfer(mock_spec(long))))
+  t0 = reactor_now()
+  all_done = function() all(vapply(sts, function(s) s$done, NA))
+  expect_true(reactor_pump(until = all_done, timeout = 30))
+  expect_true(all(vapply(sts, function(s) is.null(s$fail), NA)))
+  wall = max(vapply(sts, function(s) s$t_end, 0)) - t0
+  expect_lte(wall, 1.10 * 9 * 0.25)
+})
+
+test_that("one pump drives an HTTP stream and a child process together", {
+  srv = local_mock_server("stream", n = 6L, interval = 0.2)
+  code = "for (i in 1:6) { Sys.sleep(0.2); cat('line', i, '\\n'); flush(stdout()) }"
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  ch = new.env()
+  ch$lines = character()
+  ch$status = NULL
+  reactor_proc(p, on_line = function(l) ch$lines = c(ch$lines, l),
+               on_exit = function(s) ch$status = s)
+  st = start_transfer(mock_spec(srv))
+  expect_true(reactor_pump(until = function() st$done && !is.null(ch$status), timeout = 60))
+  expect_identical(sum(st$types == "content_block_delta"), 6L)
+  expect_length(ch$lines, 6L)
+})
+
+test_that("the wire log records the start and the end of a real transfer", {
+  local_gptr_options(wire_log = TRUE)
+  srv = local_mock_server("stream", n = 2L, interval = 0.05)
+  st = start_transfer(mock_spec(srv, session_id = "s0123456789", request_id = "q000000000002",
+                                model = "mock-1"), provider = "mock")
+  expect_true(reactor_pump(until = function() st$done, timeout = 30))
+  lines = readLines(wire_log_path("s0123456789"), encoding = "UTF-8")
+  recs = lapply(lines[nzchar(lines)], json_decode)
+  mine = Filter(function(r) identical(r$request_id, "q000000000002"), recs)
+  expect_identical(vapply(mine, function(r) r$event, ""), c("start", "done"))
+  expect_identical(mine[[2]]$status, 200L)
+  expect_identical(mine[[2]]$provider, "mock")
+  expect_gt(mine[[2]]$bytes, 0)
+})
+
+test_that("reactor_cancel() stops a transfer without calling on_done or on_fail", {
+  srv = local_mock_server("stream", n = 40L, interval = 0.1)
+  st = start_transfer(mock_spec(srv))
+  expect_true(reactor_pump(until = function() length(st$types) >= 3L, timeout = 30))
+  expect_identical(reactor_cancel(st$id), 1L)
+  n = length(st$types)
+  reactor_pump(timeout = 0.5)
+  expect_false(st$done)
+  expect_identical(length(st$types), n)
+  expect_false(exists(st$id, envir = reactor_get()$transfers, inherits = FALSE))
+})
+
+test_that("reactor_cancel() called inside on_bytes really stops the stream", {
+  srv = local_mock_server("stream", n = 20L, interval = 0.1)
+  st = new.env()
+  st$calls = 0L
+  st$id = reactor_http(mock_spec(srv), on_bytes = function(x) {
+    st$calls = st$calls + 1L
+    if (st$calls == 1L) reactor_cancel(st$id)
+  }, on_done = function(status, headers) st$done = TRUE,
+  on_fail = function(cnd) st$done = TRUE)
+  expect_true(reactor_pump(until = function() st$calls >= 1L, timeout = 30))
+  # the mock logs `disconnected = TRUE` when the client hangs up before the stream ends, and
+  # `FALSE` when the stream ran to its end (a removal refused inside the callback)
+  reactor_pump(until = function() !is.na(srv$log()$disconnected[1]), timeout = 10)
+  expect_true(isTRUE(srv$log()$disconnected[1]))
+  expect_identical(st$calls, 1L)
+  expect_null(st$done)
+})
+
+test_that("callbacks may pump the reactor: nested transfers run, the outer stream stays ordered", {
+  srv = local_mock_server("stream", n = 6L, interval = 0.05)
+  # what a hook calling System 1 does from inside a stream callback: a nested transfer and pump
+  inner = function() {
+    s = start_transfer(mock_spec(srv))
+    reactor_pump(until = function() s$done, timeout = 30)
+    s
+  }
+  out = new.env()
+  out$types = character()
+  out$inner = list()
+  out$done = FALSE
+  sp = sse_splitter()
+  reactor_http(mock_spec(srv), on_bytes = function(x) {
+    for (e in sp$push(x)) {
+      out$types = c(out$types, e$event)
+      if (identical(e$event, "content_block_delta") && !length(out$inner)) {
+        out$inner[[1L]] = inner()
+      }
+    }
+  }, on_done = function(status, headers) {
+    out$inner[[2L]] = inner()
+    out$status = status
+    out$done = TRUE
+  }, on_fail = function(cnd) {
+    out$fail = cnd
+    out$done = TRUE
+  })
+  expect_true(reactor_pump(until = function() out$done, timeout = 60))
+  expect_null(out$fail)
+  expect_identical(out$status, 200L)
+  expect_identical(vapply(out$inner, function(s) s$status, 1L), c(200L, 200L))
+  expect_identical(out$types, c("message_start", "content_block_start",
+                                rep("content_block_delta", 6L), "content_block_stop",
+                                "message_delta", "message_stop"))
+})
+
+test_that("a failing on_bytes callback fails the transfer with gptr_error_internal", {
+  srv = local_mock_server("stream", n = 3L, interval = 0.05)
+  st = new.env()
+  st$fail = NULL
+  reactor_http(mock_spec(srv), on_bytes = function(x) stop("parser broke"),
+               on_done = function(status, headers) st$done = TRUE,
+               on_fail = function(cnd) st$fail = cnd)
+  expect_true(reactor_pump(until = function() !is.null(st$fail), timeout = 30))
+  expect_s3_class(st$fail, "gptr_error_internal")
+  expect_null(st$done)
+})
+
+test_that("a key handle bound to another origin fails the transfer before any connection", {
+  h = secret_register("sk-origin-test-0123456789abcdef", "GPTR_TEST_ORIGIN_KEY",
+                      origin = "https://api.example.test")
+  st = new.env()
+  st$fail = NULL
+  reactor_http(list(url = "https://evil.example.test/v1/messages", method = "POST",
+                    headers = list(`x-api-key` = h), body = "{}", stream = "sse"),
+               on_bytes = function(x) NULL, on_done = function(status, headers) NULL,
+               on_fail = function(cnd) st$fail = cnd)
+  expect_true(reactor_pump(until = function() !is.null(st$fail), timeout = 5))
+  expect_s3_class(st$fail, "gptr_error_untrusted")
+  expect_length(reactor_active(reactor_get()), 0L)
+})
+
+test_that("a transfer queued by a callback that runs during admission is not lost", {
+  srv = local_mock_server("stream", n = 2L, interval = 0.05)
+  h = secret_register("sk-admit-test-0123456789abcdef", "GPTR_TEST_ADMIT_KEY",
+                      origin = "https://api.example.test")
+  st = new.env()
+  st$second = NULL
+  # this transfer cannot start (its key is bound to another origin), so its on_fail runs inside
+  # admission; it queues a second transfer without pumping, as a fallback request would
+  reactor_http(list(url = "https://evil.example.test/v1/messages", method = "POST",
+                    headers = list(`x-api-key` = h), body = "{}", stream = "sse"),
+               on_bytes = function(x) NULL, on_done = function(status, headers) NULL,
+               on_fail = function(cnd) st$second = start_transfer(mock_spec(srv)))
+  expect_true(reactor_pump(until = function() isTRUE(st$second$done), timeout = 10))
+  expect_null(st$second$fail)
+  expect_identical(st$second$status, 200L)
+})
+
+test_that("HTTP registration validates retry controls and metadata before queueing", {
+  r = reactor_get()
+  before = reactor_ids(r$transfers)
+  withr::defer(reactor_cancel(setdiff(reactor_ids(r$transfers), before)))
+  spec = list(url = "http://127.0.0.1:1/")
+  start = function(spec, retry = NULL) {
+    reactor_http(spec, function(x) NULL, function(status, headers) NULL,
+                 function(cnd) NULL, retry = retry)
+  }
+  for (value in list(NA_real_, Inf, 0, -1, 1.5, c(1, 2), "2")) {
+    expect_error(start(spec, list(max_attempts = value)), class = "gptr_error_invalid_argument")
+  }
+  for (retry in list(list(committed = 1), list(on_retry = 1))) {
+    expect_error(start(spec, retry), class = "gptr_error_invalid_argument")
+  }
+  for (name in c("model", "request_id", "session_id")) {
+    bad = spec
+    bad[[name]] = c("a", "b")
+    expect_error(start(bad), class = "gptr_error_invalid_argument")
+  }
+  expect_identical(reactor_ids(r$transfers), before)
+})
+
+test_that("HTTP registration reads optional fields by exact names", {
+  local_gptr_options(max_attempts = 4L)
+  spec = list(url = "http://127.0.0.1:1/", model_extra = "wrong-model",
+              request_id_extra = "wrong-request", session_id_extra = "wrong-session")
+  id = reactor_http(spec, function(x) NULL, function(status, headers) NULL,
+                    function(cnd) NULL, retry = list(max_attempts_extra = 1L))
+  withr::defer(reactor_cancel(id))
+  tr = reactor_get()$transfers[[id]]
+  expect_true(is.na(tr$model))
+  expect_null(tr$session)
+  expect_match(tr$request_id, "^q[0-9a-f]{12}$")
+  expect_identical(tr$retry$max_attempts, 4L)
+})
+
+test_that("a failing headers callback fails once without delivering body bytes", {
+  srv = local_mock_server("stream", n = 3L, interval = 0.05)
+  st = new.env()
+  st$bytes = 0L
+  st$done = 0L
+  st$fail = list()
+  id = reactor_http(mock_spec(srv), on_bytes = function(x) st$bytes = st$bytes + length(x),
+                    on_headers = function(status, headers) stop("head parser broke"),
+                    on_done = function(status, headers) st$done = st$done + 1L,
+                    on_fail = function(cnd) st$fail[[length(st$fail) + 1L]] = cnd)
+  withr::defer(reactor_cancel(id))
+  expect_true(reactor_pump(until = function() length(st$fail) > 0L || st$done > 0L,
+                           timeout = 10))
+  expect_identical(st$done, 0L)
+  expect_identical(st$bytes, 0L)
+  expect_length(st$fail, 1L)
+  expect_s3_class(st$fail[[1L]], "gptr_error_internal")
+})
+
+test_that("headers are delivered before a body gap and may cancel the transfer", {
+  srv = local_mock_server("bytes_per_10s", duration = 10)
+  st = new.env()
+  st$heads = 0L
+  st$terminal = 0L
+  id = reactor_http(mock_spec(srv, idle_timeout = 1), on_bytes = function(x) NULL,
+                    on_headers = function(status, headers) {
+                      st$heads = st$heads + 1L
+                      reactor_cancel(st$id)
+                    },
+                    on_done = function(status, headers) st$terminal = st$terminal + 1L,
+                    on_fail = function(cnd) st$terminal = st$terminal + 1L)
+  st$id = id
+  withr::defer(reactor_cancel(id))
+  expect_true(reactor_pump(until = function() st$heads > 0L || st$terminal > 0L,
+                           timeout = 5))
+  expect_identical(st$heads, 1L)
+  expect_identical(st$terminal, 0L)
+  expect_false(exists(id, envir = reactor_get()$transfers, inherits = FALSE))
+})
