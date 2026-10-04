@@ -617,3 +617,29 @@ Four changes to P12 Task 2's plan-literal request builder (`R/provider-anthropic
 
 Validation: `progress/P12.md`, Task 2 review rounds 1 and 2. The round-1 regression tests failed 7
 assertions against the plan-literal source; the round-2 tests failed 6 (4 header, 2 image note).
+
+## D-024 - IC-74 usage roll-up: request ids are required, an unknown cache read stays unknown (2026-10-03)
+
+P06 Task 4's literal `usage_add()` and `ledger_mark_cached()` predate IC-74 (07-local-ollama.md
+section 5: "Missing usage remains unknown"). Two behaviours changed, which Tasks 10, 11 and 13,
+P18's tests and P19's roll-up consume:
+
+1. **Every usage row needs its request id.** `usage_add(s, row)` refuses a row whose
+   `request_id` is `NA` with `gptr_error_invalid_argument` (`arg = "row$request_id"`) before any
+   session changes. `session_usage_rows()` de-duplicates by request id (a request recorded twice
+   counts once), so distinct rows without an id would have collapsed into one and understated the
+   totals. P05's `usage_row()` always sets an id (it generates one when the message has none) and
+   every planned caller passes one.
+2. **An unknown cache read leaves the ledger's cache flags unknown.**
+   `ledger_mark_cached(s, request_id, cache_read)` with `cache_read = NA` (a reported usage whose
+   cache read is unknown) sets that request's `cached` flags to `NA`; the plan left them `FALSE`, a
+   claim that nothing was cached. A fully unreported usage (D-022) is first replaced by Task 10's
+   estimate, whose `cache_read` is 0, so it never reaches the ledger as `NA`. A known zero still leaves them `FALSE`, and a positive read marks the
+   leading components as planned.
+
+The session footer follows D-021: an unknown token count or cost prints as `unknown tokens` /
+`unknown cost` (new `format_cost()`), never `$NA` or zero, and `s$cost` is `NA` when any request's
+cost is unknown.
+
+Validation: `progress/P06.md`, Task 4 (`test-session-budget.R`, `test-session-object.R`; the added
+tests failed 8 assertions against the plan-literal code).

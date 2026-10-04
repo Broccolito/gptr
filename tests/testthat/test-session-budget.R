@@ -168,3 +168,75 @@ test_that("format_count() prints an unknown count as unknown and rounds across u
                    c(request_id = "character", component = "character", tokens = "double",
                      cached = "logical"))
 })
+
+test_that("usage rows roll up to every ancestor and are deduplicated per request", {
+  root = test_session()
+  child = test_session(kind = "child", parent = root)
+  usage_add(child, usage_fixture(session_data(child)$id, "q000000000001", cost = 0.5))
+  expect_named(child$usage, usage_columns)
+  expect_identical(nrow(root$usage), 1L)
+  expect_identical(root$usage$session, session_data(child)$id)
+  expect_equal(root$cost, 0.5)
+  expect_equal(attr(root$usage, "totals")[["cost"]], 0.5)
+  usage_add(child, usage_fixture(session_data(child)$id, "q000000000001", cost = 0.5))
+  expect_identical(nrow(root$usage), 1L)
+})
+
+test_that("ledger_add() records components and ledger_mark_cached() marks the cached prefix", {
+  s = test_session()
+  ledger_add(s, "q1", list(t0 = 600, tools = 400, transcript = 300))
+  ledger_mark_cached(s, "q1", cache_read = 1000)
+  led = session_data(s)$ledger
+  expect_identical(led$component, c("t0", "tools", "transcript"))
+  expect_identical(led$cached, c(TRUE, TRUE, FALSE))
+  expect_null(ledger_add(s, "q2", list()))
+})
+
+test_that("an unknown cost or token count rolls up to the ancestors as unknown (IC-74)", {
+  root = test_session()
+  child = test_session(kind = "child", parent = root)
+  cid = session_data(child)$id
+  usage_add(child, usage_fixture(cid, "q000000000001", cost = 0.5))
+  usage_add(child, usage_fixture(cid, "q000000000002", cost = NA_real_))
+  expect_identical(nrow(root$usage), 2L)
+  expect_identical(root$cost, NA_real_)
+  expect_identical(child$cost, NA_real_)
+  tot = attr(root$usage, "totals")
+  expect_identical(tot[["cost"]], NA_real_)
+  expect_identical(tot[["input"]], 200)
+  # a row that leaves its cache columns out has an unknown cache use (D-021)
+  usage_add(child, usage_conform(data.frame(request_id = "q000000000003", session = cid,
+                                            input = 1, output = 1, cost = 0,
+                                            stringsAsFactors = FALSE)))
+  expect_identical(attr(root$usage, "totals")[["cache_read"]], NA_real_)
+  expect_identical(attr(root$usage, "totals")[["input"]], 201)
+})
+
+test_that("usage_add() refuses a row without a request id, the de-duplication key", {
+  s = test_session()
+  row = usage_fixture(session_data(s)$id, NA_character_, cost = 0.25)
+  err = expect_error(usage_add(s, row), class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "row$request_id")
+  expect_identical(nrow(s$usage), 0L)
+  expect_identical(s$cost, 0)
+})
+
+test_that("ledger_mark_cached() leaves the cache unknown when the cache read is unknown (IC-74)", {
+  s = test_session()
+  ledger_add(s, "q1", list(t0 = 600, transcript = 300))
+  ledger_add(s, "q2", list(t0 = 600, transcript = 300))
+  ledger_mark_cached(s, "q1", cache_read = NA_real_)
+  ledger_mark_cached(s, "q2", cache_read = 0)
+  led = session_data(s)$ledger
+  expect_identical(led$cached, c(NA, NA, FALSE, FALSE))
+  expect_null(ledger_mark_cached(s, "q-none", cache_read = 100))
+})
+
+test_that("format_cost() prints dollars, and an unknown cost as unknown (IC-74)", {
+  expect_identical(format_cost(0.0123), "$0.0123")
+  expect_identical(format_cost(c(0.25, 0.5)), "$0.7500")
+  expect_identical(format_cost(numeric()), "$0.0000")
+  expect_identical(format_cost(0), "$0.0000")
+  expect_identical(format_cost(NA_real_), "unknown cost")
+  expect_identical(format_cost(c(0.25, NA)), "unknown cost")
+})

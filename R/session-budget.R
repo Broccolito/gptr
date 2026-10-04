@@ -126,3 +126,88 @@ format_count = function(n) {
   if (as.numeric(k) < 1000) return(paste0(k, "k"))
   paste0(sprintf("%.1f", n / 1e6), "M")
 }
+
+#' A short cost in USD: "$0.0123"; "unknown cost" when any cost is unknown (IC-74)
+#' @noRd
+format_cost = function(x) {
+  x = sum(x)
+  if (is.na(x)) return("unknown cost")
+  sprintf("$%.4f", x)
+}
+
+# ---------------------------------------------------------------------------- rows and the ledger
+
+#' Add a usage row to the session and every live ancestor (root charging, IC-66)
+#'
+#' The rows are conformed first (an absent observation stays unknown, D-021). Every row needs its
+#' request id: the id is the key that de-duplicates a request recorded twice, so rows without one
+#' could not be told apart and are refused (`gptr_error_invalid_argument`, `arg =
+#' "row$request_id"`); P05's `usage_row()` always sets one.
+#' @noRd
+usage_add = function(s, row) {
+  row = usage_conform(row)
+  if (anyNA(row$request_id)) {
+    gptr_abort("Invalid usage rows; every row needs its request id.", "invalid_argument",
+               arg = "row$request_id", expected = "a request id in every row")
+  }
+  cur = s
+  seen = character()
+  while (!is.null(cur)) {
+    d = session_data(cur)
+    if (d$id %in% seen) break
+    seen = c(seen, d$id)
+    d$usage = rbind(d$usage, row)
+    cur = if (is.null(d$parent_id)) NULL else session_by_id(d$parent_id)
+  }
+  invisible(row)
+}
+
+#' The usage rows of a session and its children, one per request, as a `gptr_usage` listing
+#'
+#' Attribute `totals` (usage_totals()): a total over an unknown value is unknown (IC-74).
+#' @noRd
+session_usage_rows = function(s) {
+  u = session_data(s)$usage
+  u = u[!duplicated(u$request_id), , drop = FALSE]
+  rownames(u) = NULL
+  out = new_listing(u, "gptr_usage")
+  attr(out, "totals") = usage_totals(u)
+  out
+}
+
+#' Add the per-component token estimate of one request (the ledger of gptr_usage(detail = TRUE))
+#' @param components Named list or vector: component -> estimated tokens (`t0`, `t1`, `tools`,
+#'   `project`, `environment`, `workspace`, `attached`, `transcript`, `tool_results`, `images`,
+#'   `other`).
+#' @noRd
+ledger_add = function(s, request_id, components) {
+  comp = unlist(components)
+  if (!length(comp)) return(invisible(NULL))
+  d = session_data(s)
+  rows = data.frame(request_id = request_id, component = names(comp), tokens = as.numeric(comp),
+                    cached = FALSE, stringsAsFactors = FALSE)
+  d$ledger = rbind(d$ledger, rows)
+  invisible(rows)
+}
+
+#' Mark the leading components of a request as cached, up to the reported cache-read tokens
+#'
+#' An unknown cache read (`NA`: the provider reported no usage, IC-74) leaves the request's
+#' `cached` flags unknown (`NA`) rather than claiming that nothing was cached; a known zero
+#' leaves them `FALSE`.
+#' @noRd
+ledger_mark_cached = function(s, request_id, cache_read) {
+  d = session_data(s)
+  i = which(d$ledger$request_id == request_id)
+  if (!length(i)) return(invisible(NULL))
+  led = d$ledger
+  if (length(cache_read) == 1L && is.na(cache_read)) {
+    led$cached[i] = NA
+  } else if (isTRUE(cache_read > 0)) {
+    led$cached[i] = cumsum(led$tokens[i]) <= cache_read
+  } else {
+    return(invisible(NULL))
+  }
+  d$ledger = led
+  invisible(NULL)
+}

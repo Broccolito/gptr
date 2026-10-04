@@ -121,6 +121,26 @@ written_session = function(.env = parent.frame()) {
   s
 }
 
+#' A one-turn session built by appends, with one usage row (no run needed). The row states its
+#' cache columns as known zeros: under IC-74 a column the row leaves out is unknown, which would
+#' make the footer's token count unknown.
+answered_session = function(text = "The data has 32 rows.") {
+  s = test_session()
+  d = session_data(s)
+  d$turns = 1L
+  session_append(s, entry_message(msg_user("How many rows?")))
+  session_append(s, entry_message(msg_assistant(text, api = "fake", provider = "fake",
+                                                model = "fake-1")))
+  d$last_text = text
+  usage_add(s, usage_conform(data.frame(request_id = "q000000000001", session = d$id,
+                                        agent = "main",
+                                        provider = "fake", model = "fake-1", route = "api",
+                                        input = 1200, output = 34, cache_read = 0,
+                                        cache_write_5m = 0, cache_write_1h = 0, cost = 0.0123,
+                                        stringsAsFactors = FALSE)))
+  s
+}
+
 # test_run() (needs run_new(), P06 Task 5) and run_text() (needs session_run(), P06 Task 10)
 # are restored from the Task 1 plan by their first dependent tasks, once those functions exist.
 roles = function(s) vapply(s$messages, function(m) m$role, "")

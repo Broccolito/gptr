@@ -24,8 +24,6 @@ live_new = function(s, home) {
   live$run = NULL
   live$listeners = list()
   live$store = NULL
-  # the session's gptr_ctx: P02's ctx_new(s) reads the id through the `$id` accessor of the shell
-  # and refuses a session whose id it cannot read, so the ctx is created once that accessor exists
   live$ctx = NULL
   live$memo = new.env(parent = emptyenv())
   live$adapter = new.env(parent = emptyenv())
@@ -38,6 +36,9 @@ live_new = function(s, home) {
   live$ext = new.env(parent = emptyenv())
   assign(d$id, rlang::new_weakref(key = s, value = live), envir = the$live)
   reg.finalizer(s, session_finalizer, onexit = TRUE)
+  # the session's gptr_ctx (P02's ctx_new() reads the id through the `$id` accessor of the shell);
+  # it is held by the weak registry's value only, so it does not keep the shell alive
+  live$ctx = ctx_new(s)
   # the IC-70 late-registration scan reads live sessions through this callback (P03)
   secret_live_entries_set(live_entries_all)
   live

@@ -287,3 +287,372 @@ final_text = function(path) {
 #' Drop NULL elements of a list (top level)
 #' @noRd
 drop_null = function(x) x[!vapply(x, is.null, NA)]
+
+# ---------------------------------------------------------------------------- accessors
+
+#' Session accessors
+#'
+#' `$` and `[[` read a session: `text`, `value`, `values`, `usage`, `cost`, `history`,
+#' `messages`, `model`, `mode`, `status`, `reason`, `id`, `kind`, `file`, `turns`, `envir`,
+#' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
+#' Sessions are changed only through `gptr()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
+#' signal `gptr_error_readonly`. Usage a provider did not report stays unknown: `cost` is `NA`
+#' when the cost of any request is unknown.
+#'
+#' @param x A `gptr_session`.
+#' @param name,i A member name; `[[` also takes an integer index into `children`.
+#' @param value Refused.
+#' @param ... Unused.
+#' @param pattern A regular expression for `.DollarNames()`.
+#' @return The member's value; `names()` and `.DollarNames()` return the member names.
+#' @name session-accessors
+#' @keywords internal
+NULL
+
+#' @rdname session-accessors
+#' @export
+`$.gptr_session` = function(x, name) session_get(x, name)
+
+#' @rdname session-accessors
+#' @export
+`[[.gptr_session` = function(x, i, ...) {
+  if (is.numeric(i)) {
+    kids = session_data(x)$children
+    n = length(kids)
+    ok = length(i) == 1L && !is.na(i) && i == round(i) && i >= 1 && i <= n
+    if (!ok) {
+      arg_abort(i, "i", if (n) paste0("a child index between 1 and ", n) else
+        "a member name (this session has no children to index)")
+    }
+    return(kids[[i]])
+  }
+  check_string(i, "i")
+  session_get(x, i)
+}
+
+#' @rdname session-accessors
+#' @export
+`$<-.gptr_session` = function(x, name, value) session_readonly(name)
+
+#' @rdname session-accessors
+#' @export
+`[[<-.gptr_session` = function(x, i, value) session_readonly(i)
+
+#' @rdname session-accessors
+#' @export
+names.gptr_session = function(x) c(session_accessors, names(session_data(x)$children))
+
+#' @rdname session-accessors
+#' @exportS3Method utils::.DollarNames
+.DollarNames.gptr_session = function(x, pattern = "") {
+  n = names.gptr_session(x)
+  n[grepl(pattern, n)]
+}
+
+#' Refuse an assignment to a session member
+#' @noRd
+session_readonly = function(field) {
+  field = paste(as.character(field), collapse = "")
+  gptr_abort(paste0("sessions are read-only: `", field, "` cannot be assigned; change a session ",
+                    "only through gptr() and the gptr_*() verbs"),
+             "readonly", object = "gptr_session", field = field)
+}
+
+#' The value of one accessor (04 section 5.1)
+#' @noRd
+session_get = function(s, name) {
+  d = session_data(s)
+  switch(name,
+    text = session_text(s),
+    value = session_value_get(s),
+    values = session_values_df(s),
+    usage = session_usage_rows(s),
+    cost = sum(session_usage_rows(s)$cost),
+    history = session_history(s),
+    messages = path_messages(entries_path(d)),
+    model = d$model,
+    mode = d$mode,
+    status = d$status,
+    reason = d$reason,
+    id = d$id,
+    kind = d$kind,
+    file = d$file,
+    turns = d$turns,
+    envir = session_home(s),
+    children = d$children,
+    ext = d$ext,
+    plan = d$plan,
+    last_rewind = d$last_rewind,
+    editor_text = d$editor_text,
+    {
+      child = if (length(d$children)) d$children[[name, exact = TRUE]] else NULL
+      if (!is.null(child)) return(child)
+      avail = c(session_accessors, names(d$children))
+      gptr_abort(paste0("`", name, "` is not a member of a gptr session; available: ",
+                        paste(avail, collapse = ", ")),
+                 "unknown_member", name = name, available = avail)
+    })
+}
+
+#' `$text`: the last final answer; team sessions join their reports; fan-outs give a named chr
+#' @noRd
+session_text = function(s) {
+  d = session_data(s)
+  if (identical(d$kind, "team") && length(d$children)) {
+    parts = vapply(names(d$children), function(nm) {
+      cd = session_data(d$children[[nm]])
+      paste0("### ", nm, " (", cd$model, ")\n", if (is.na(cd$last_text)) "" else cd$last_text)
+    }, "")
+    return(paste(parts, collapse = "\n\n"))
+  }
+  if (identical(d$kind, "fanout") && length(d$children)) {
+    return(vapply(d$children, function(ch) session_data(ch)$last_text, ""))
+  }
+  d$last_text
+}
+
+#' `$history`: one row per message on the active path
+#'
+#' An assistant message's `tokens` is its reported total (unknown, `NA`, when the provider
+#' reported none, IC-74); other messages are estimated.
+#' @noRd
+session_history = function(s) {
+  d = session_data(s)
+  path = Filter(function(e) e$type %in% c("message", "custom_message") && !is.null(e$message),
+                entries_path(d))
+  turn = 0L
+  rows = vector("list", length(path))
+  for (i in seq_along(path)) {
+    e = path[[i]]
+    m = e$message
+    if (identical(m$role, "user")) turn = as.integer(e$gptr$turn %||% (turn + 1L))
+    calls = Filter(function(b) identical(b$type, "tool_call"), m$content %||% list())
+    tools = if (identical(m$role, "tool_result")) m$tool_name else
+      paste(vapply(calls, function(b) b$name, ""), collapse = ",")
+    text = msg_text(m)
+    tokens = if (identical(m$role, "assistant") && !is.null(m$usage$total)) m$usage$total else
+      est_tokens(text, "prose")
+    rows[[i]] = data.frame(turn = turn, role = m$role, preview = substr(text, 1L, 60L),
+                           tools = tools, tokens = as.numeric(tokens), stringsAsFactors = FALSE)
+  }
+  if (!length(rows)) {
+    return(data.frame(turn = integer(), role = character(), preview = character(),
+                      tools = character(), tokens = numeric(), stringsAsFactors = FALSE))
+  }
+  do.call(rbind, rows)
+}
+
+# ---------------------------------------------------------------------------- printing
+
+#' Print a session: the last answer, then a dim footer
+#'
+#' The footer is `status . model . turns . tokens . cost . id`. A token count or cost that a
+#' provider did not report is printed as unknown, never as zero.
+#'
+#' @param x A `gptr_session`.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+print.gptr_session = function(x, ...) {
+  txt = session_text(x)
+  txt = txt[!is.na(txt) & nzchar(txt)]
+  if (length(txt)) msg_verbatim(txt)
+  msg_verbatim(cli::col_grey(session_footer(x)))
+  invisible(x)
+}
+
+#' The footer line: status . model . turns . tokens . cost . id
+#'
+#' Unknown tokens and costs print as `unknown tokens` and `unknown cost` (IC-74, D-021).
+#' @noRd
+session_footer = function(s) {
+  d = session_data(s)
+  u = session_usage_rows(s)
+  tokens = sum(u$input + u$output + u$cache_read + u$cache_write_5m + u$cache_write_1h)
+  dot = if (cli::is_utf8_output()) " \u00b7 " else " . "
+  paste(c(d$status, d$model, paste(d$turns, if (identical(d$turns, 1L)) "turn" else "turns"),
+          paste(format_count(tokens), "tokens"), format_cost(u$cost), d$id),
+        collapse = dot)
+}
+
+#' Format a session as its text
+#'
+#' @param x A `gptr_session`.
+#' @param ... Unused.
+#' @return `x$text`.
+#' @export
+format.gptr_session = function(x, ...) session_text(x)
+
+#' @rdname format.gptr_session
+#' @export
+as.character.gptr_session = function(x, ...) session_text(x)
+
+#' Summarise a session as its history
+#'
+#' @param object A `gptr_session`.
+#' @param ... Unused.
+#' @return A `gptr_session_summary` data frame (`turn`, `role`, `preview`, `tools`, `tokens`).
+#' @export
+summary.gptr_session = function(object, ...) {
+  structure(session_history(object), class = c("gptr_session_summary", "data.frame"))
+}
+
+#' Print a session summary
+#'
+#' @param x A `gptr_session_summary`.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+print.gptr_session_summary = function(x, ...) {
+  df = x
+  class(df) = "data.frame"
+  msg_verbatim(utils::capture.output(print(df, row.names = FALSE)))
+  invisible(x)
+}
+
+#' Show the structure of a session in one line (never touches user objects)
+#'
+#' @param object A `gptr_session`.
+#' @param ... Unused.
+#' @return `NULL`, invisibly.
+#' @exportS3Method utils::str
+str.gptr_session = function(object, ...) {
+  d = session_data(object)
+  msg_verbatim(paste0("<gptr_session ", d$id, " | ", d$kind, " | ", d$status, " | ", d$turns,
+                      " turns | ", d$model, ">"))
+  invisible(NULL)
+}
+
+# ---------------------------------------------------------------------------- the value policy
+
+#' Designate a value of the session (the section 5.1 value policy of 03)
+#'
+#' A name bound in the kept home (or globalenv) below `gptr.value_copy_max` is deep-copied; a
+#' larger one is held by name and address only (no reference); anything else is boxed. Appends a
+#' `gptr.value` entry holding metadata, never the value (rule R1).
+#' @param label chr(1): the expression label (the name of an anonymous value).
+#' @param value The value.
+#' @param name chr(1) or `NULL`: the binding name when the value is bound.
+#' @param forced_home The environment where `name` is bound when it is not the kept home.
+#' @return `invisible(NULL)`.
+#' @noRd
+session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
+  check_string(label, "label")
+  check_string(name, "name", null = TRUE)
+  check_env(forced_home, "forced_home", null = TRUE)
+  d = session_data(s)
+  kept = session_home(s)
+  where = forced_home %||% kept
+  bound = !is.null(name) && !is.null(where) &&
+    (identical(where, globalenv()) || identical(where, kept)) &&
+    exists(name, envir = where, inherits = FALSE)
+  facts = value_facts(value)
+  mode = if (!bound) "box" else if (facts$bytes < gptr_opt("value_copy_max")) "copy" else "name"
+  held = switch(mode, copy = rlang::duplicate(value, shallow = FALSE), name = NULL, box = value)
+  rec = list(turn = d$turns, mode = mode, name = name %||% label,
+             address = if (identical(mode, "name")) facts$address else NA_character_,
+             class = facts$class, bytes = facts$bytes, value = held)
+  vals = d$values
+  vals[[length(vals) + 1L]] = rec
+  d$values = vals
+  values_trim(d)
+  session_append(s, entry_custom("gptr.value",
+                                 drop_null(list(turn = rec$turn, mode = mode, name = rec$name,
+                                                address = if (identical(mode, "name")) rec$address,
+                                                class = rec$class, bytes = rec$bytes))))
+  invisible(NULL)
+}
+
+#' Facts of a value through one leaf (rule R4)
+#' @noRd
+value_facts = function(x) {
+  list(class = class(x)[1L], bytes = as.numeric(utils::object.size(x)),
+       address = rlang::obj_address(x))
+}
+
+#' Release the oldest held copies and boxes above `gptr.values_max_bytes` (the latest is kept)
+#' @noRd
+values_trim = function(d) {
+  vals = d$values
+  held = which(vapply(vals, function(v) !is.null(v$value), NA))
+  budget = gptr_opt("values_max_bytes")
+  while (length(held) > 1L && sum(vapply(vals[held], function(v) v$bytes, 1)) > budget) {
+    vals[[held[1L]]]["value"] = list(NULL)
+    vals[[held[1L]]]$released = TRUE
+    held = held[-1L]
+  }
+  d$values = vals
+  invisible(d)
+}
+
+#' The designated value: the latest by turn, or the one of `turn`; NULL when none
+#' @noRd
+session_value_get = function(s, turn = NULL) {
+  d = session_data(s)
+  if (d$kind %in% c("team", "fanout") && length(d$children)) {
+    return(lapply(d$children, function(ch) session_value_get(ch)))
+  }
+  if (!length(d$values)) return(NULL)
+  turns = vapply(d$values, function(v) as.integer(v$turn), 1L)
+  if (is.null(turn)) {
+    i = max(which(turns == max(turns)))
+  } else {
+    hit = which(turns == as.integer(turn))
+    if (!length(hit)) return(NULL)
+    i = max(hit)
+  }
+  value_resolve(s, d$values[[i]], latest = is.null(turn))
+}
+
+#' Resolve a value record: held copies and boxes directly, names through the kept home
+#' @noRd
+value_resolve = function(s, v, latest) {
+  if (v$mode %in% c("copy", "box")) {
+    if (is.null(v$value) && isTRUE(v$released)) {
+      gptr_inform(paste0("the value of turn ", v$turn, " was released (gptr.values_max_bytes)"),
+                  "notice")
+    }
+    return(v$value)
+  }
+  env = binding_env(v$name, session_home(s) %||% globalenv())
+  if (is.null(env)) {
+    gptr_inform(paste0("value `", v$name, "` (turn ", v$turn, ") is not bound in this R process"),
+                "notice")
+    return(NULL)
+  }
+  obj = get(v$name, envir = env, inherits = FALSE)
+  if (!is.na(v$address) && !identical(rlang::obj_address(obj), v$address)) {
+    gptr_inform(paste0("`", v$name, "` was re-bound after turn ", v$turn,
+                       if (latest) "; showing the current object" else "; that object is gone"),
+                "value_rebound")
+    if (!latest) return(NULL)
+  }
+  obj
+}
+
+#' The environment binding `name`: the home, then through fork overlays (environments with the
+#' `gptr_overlay` attribute) to the first non-overlay environment, then globalenv as the last
+#' resort (a `forced_home = globalenv()` binding); no other parent is searched (04 section 5.1)
+#' @noRd
+binding_env = function(name, env) {
+  while (!is.null(env)) {
+    if (exists(name, envir = env, inherits = FALSE)) return(env)
+    if (is.null(attr(env, "gptr_overlay", exact = TRUE))) break
+    env = parent.env(env)
+  }
+  g = globalenv()
+  if (!identical(env, g) && exists(name, envir = g, inherits = FALSE)) return(g)
+  NULL
+}
+
+#' `$values`: one row per designated value (turn, mode, name, class, bytes)
+#' @noRd
+session_values_df = function(s) {
+  vals = session_data(s)$values
+  data.frame(turn = vapply(vals, function(v) as.integer(v$turn), 1L),
+             mode = vapply(vals, function(v) v$mode, ""),
+             name = vapply(vals, function(v) v$name %||% NA_character_, ""),
+             class = vapply(vals, function(v) v$class %||% NA_character_, ""),
+             bytes = vapply(vals, function(v) as.numeric(v$bytes %||% NA_real_), 1),
+             stringsAsFactors = FALSE)
+}
