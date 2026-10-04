@@ -1,8 +1,17 @@
 # Shared helpers of the P13 test files (plan P13), sourced at the top of each of them. P13 owns
 # no helper-*.R file; these build on P01's test helpers (local_project(), local_gptr_options()),
-# P02's registry and P13's own functions. The plan's s1_fresh() (Task 5's s1_cache_swap()) and
-# s1_test_call() (P08's call_new()) are added by the tasks that provide those functions: the
-# package lint (object_usage_linter) refuses calls to functions that do not exist yet.
+# P02's registry and P13's own functions. The plan's s1_test_call() (P08's call_new()) is added
+# by the first task that uses it once P08 exists: the package lint (object_usage_linter) refuses
+# calls to functions that do not exist yet.
+
+# A temporary project and an empty System 1 memory cache for the calling test. `gptr = TRUE`
+# creates .gptr/, so answers go to the file cache under .gptr/cache/s1/.
+s1_fresh = function(gptr = FALSE, .env = parent.frame()) {
+  dir = local_project(gptr = gptr, .env = .env)
+  old = s1_cache_swap()
+  withr::defer(s1_cache_swap(old), envir = .env)
+  invisible(dir)
+}
 
 # One recorded wire fixture of tests/testthat/fixtures/jev/ as a list
 jev_fixture = function(name) {

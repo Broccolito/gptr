@@ -3786,7 +3786,7 @@ green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 127 ]`. Item 5 (review round 2): red
 
 ## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it), YAML aliases never expand without bound, an unreadable file never warns, a ~name skills.paths entry is project content, a name must match to its last character (P02's name rules now anchor with \z), and frontmatter text that would make yaml slow is refused before yaml runs (2026-10-04)
 
-P17 Task 2 (`R/skill-discover.R`), review rounds 1, 2, 3 and 4. The plan-literal code changed in
+P17 Task 2 (`R/skill-discover.R`), review rounds 1 to 5. The plan-literal code changed in
 items 1, 2 and 4-9 (item 8 also changes P02's `R/ext-specs.R`), and the plan's test file gained
 a temporary helper (item 3). Exported signatures, return shapes and the plan's 8 tests are
 unchanged.
@@ -3860,6 +3860,13 @@ unchanged.
      `allowed-tools must be a list of tool names; it was ignored`.
    - `skill_parse()` reads `disable-model-invocation` only as a logical scalar or a text scalar
      equal to `true` in any case; any other value is `FALSE` and is never converted to text.
+
+   These guards run after yaml has parsed. Review round 5 found one shape that yaml expands
+   itself: an aliased collection used as a mapping key (`? *a7`, `*a7 : 1`, `{*a7 : 1}`), which
+   yaml turns into text inside `yaml.load()`. A 453-byte chain of seven levels took 193 s, before
+   `fm_size_ok()` could look at anything. Item 9's limit of 4 references to anchors, checked
+   before yaml runs, now bounds every alias expansion. `fm_size_ok()` stays for what 4
+   references can still expand to (8,000 values referenced 4 times is refused).
 6. **An unreadable file is a diagnostic only (contract 6.3, 11.13; review round 3; Task 1
    code).** `read_utf8()`'s `file()` warns ("Permission denied") before it fails, and the
    warning escaped `frontmatter_read()`'s `tryCatch(error = )`, so `gptr_skills()` printed a
@@ -3889,41 +3896,64 @@ unchanged.
      IC-74's `decision.server_min`). The error messages still show the rule with `$`. No other
      P02 behaviour changes. `progress/P02.md` records it.
 9. **Frontmatter text that would make yaml slow is refused before yaml runs (contract 6.3 and
-   11.13, IC-52; review round 4; Task 1 code).** `yaml::yaml.load()` does work that grows faster
-   than its input, and `fm_yaml()` parses twice (typed and raw) before round 3's `fm_size_ok()`
-   can look at the result. Measured on this machine (two loads, as `fm_yaml()` did): 32,000
-   nested `[` in 64 KB took 6.3 s, 16,000 in 32 KB 1.6 s, 16,000 nested `- ` in 32 KB 1.0 s,
-   and a 17 KB map that merges a 1,000-key alias 2,000 times with `<<` took 11.0 s; the cost of
-   flow nesting grows with the square of the depth, so a 1 MB SKILL.md in an untrusted project
-   would take about half an hour. The new `fm_text_problem()` (`R/ext-plugins.R`) checks the
-   text first, and `fm_yaml()` returns `meta = NULL` with one of these error strings, so
-   `skill_parse()` skips the skill with that diagnostic and lists its siblings:
+   11.13, IC-52; review rounds 4 and 5; Task 1 code).** `yaml::yaml.load()` does work that grows
+   faster than its input, and `fm_yaml()` parses twice (typed and raw) before round 3's
+   `fm_size_ok()` can look at the result. Measured on this machine (two loads, as `fm_yaml()`
+   did): 32,000 nested `[` in 64 KB took 6.3 s, 16,000 in 32 KB 1.6 s, 16,000 nested `- ` in
+   32 KB 1.0 s, and a 17 KB map that merges a 1,000-key alias 2,000 times with `<<` took
+   11.0 s; the cost of flow nesting grows with the square of the depth, so a 1 MB SKILL.md in an
+   untrusted project would take about half an hour. The new `fm_text_problem()`
+   (`R/ext-plugins.R`) checks the text first, and `fm_yaml()` returns `meta = NULL` with one of
+   these error strings, so `skill_parse()` skips the skill with that diagnostic and lists its
+   siblings:
    - more than 32,768 bytes: `invalid YAML frontmatter: too large (more than 32768 bytes)`;
      real frontmatter is a few kilobytes (a skill description is at most 1,024 characters);
    - more than 1,000 `[` and `{` characters in all (a bound on the flow depth that quoted
      brackets cannot hide), or more than 64 `-` or `?` block entries in a row: `invalid YAML
      frontmatter: too deeply nested (...)`;
-   - a merge key `<<:` with more than 4 alias references: `invalid YAML frontmatter: too many
-     aliases with a merge key (more than 4)`.
+   - more than 4 references to the anchors the text defines: `invalid YAML frontmatter: too many
+     aliases (more than 4 references to anchors)`. A reference is any `*name` whose `name` is
+     also written as `&name` somewhere in the text. libyaml's anchor names are `[0-9A-Za-z_-]+`,
+     so both are read as that run. No position rule applies, so no key syntax, merge spelling or
+     separator (such as U+2028) can hide one. Markdown such as `*args` or `**bold**` counts only
+     when it names an anchor. Text without anchors is not checked.
+
+   Round 4 applied the alias limit only when a `<<:` merge key appeared on one line. Review round
+   5 found two ways around that, both checked here first:
+   - An aliased collection used as a mapping key, in any key syntax. yaml turns the key into text
+     and costs about ninefold per chain level: 345 bytes took 0.18 s, 399 bytes 3.8 s and 453
+     bytes 193 s, with no merge key and no deep nesting.
+   - A merge spelt `? <<` / `: [*b, ...]`, which R yaml still merges: 17 KB took 11.9 s. While
+     fixing this, the merge was also found to work with `!!merge x:` and with the
+     percent-encoded `!<tag:yaml.org,2002:%6Derge> x:`, which no text search for `<<` or
+     `merge` can catch.
+
+   Counting references by name catches all of these.
 
    The patterns are ASCII and matched on bytes, so text that is not valid UTF-8 neither warns
    nor errors. After the change the four documents above are refused in at most 0.012 s, and
    the largest accepted map (3,600 keys, 31 KB) parses in 0.11 s. Text that passes may still
    hold brackets inside quoted strings; only documents with more than 1,000 of them are
-   refused.
+   refused. After round 5, each of the reviewer's reproductions is refused in at most 0.01 s (the
+   chains of 5, 6 and 7 levels in all three key forms, and `? <<` and `!!merge` with 250 to 2,000
+   references). The costliest text still accepted is a 3,000-key map merged with 4 references:
+   0.28 s through `fm_yaml()`. For comparison, a literal 3,000-key merge with no alias takes
+   0.12 s and the plain map 0.06 s.
 
-Regression tests lock items 1, 2 and 4-9: ten appended to
-`tests/testthat/test-skill-discover.R`, four to `tests/testthat/test-ext-plugins.R` and one to
-`tests/testthat/test-ext-specs.R` (P02, 20 expectations). Every later P17 count for
-`test-skill-discover.R` is 52 higher (10 from round 1, 10 from round 2, 19 from round 3, 13
-from round 4): Task 3's red 36 -> 88, 64 -> 116, 99 -> 151, and Task 12's combined count
-260 -> 312. Every later count for `test-ext-plugins.R` is 46 higher (D-072's 13, plus 6 from
-round 1, 10 from round 3 and 17 from round 4): 82 -> 128, 133 -> 179, 166 -> 212,
-184 -> 230. Acceptance 1 becomes 542, acceptance 2b 151, acceptance 3a 230 and acceptance 4c
-381 (IC-74). The round-4 test of a directory name ending in a newline skips on Windows and on
-a file system that refuses the name, like round 3's unreadable-file test.
+Regression tests lock items 1, 2 and 4-9: eleven appended to
+`tests/testthat/test-skill-discover.R`, five to `tests/testthat/test-ext-plugins.R` and one to
+`tests/testthat/test-ext-specs.R` (P02, 20 expectations). Round 5 also changed the fixtures of
+round 3's alias tests in both P17 files: their chains now exceed the limit of 4 references, so
+fixtures within the limit show `fm_size_ok()` still refusing the expansion. Every later P17 count
+for `test-skill-discover.R` is 57 higher (10 from round 1, 10 from round 2, 19 from round 3, 13
+from round 4, 5 from round 5): Task 3's red 36 -> 93, 64 -> 121, 99 -> 156, and Task 12's
+combined count 260 -> 317. Every later count for `test-ext-plugins.R` is 79 higher (D-072's 13,
+plus 6 from round 1, 10 from round 3, 17 from round 4 and 33 from round 5): 82 -> 161,
+133 -> 212, 166 -> 245, 184 -> 263. Acceptance 1 becomes 580, acceptance 2b 156, acceptance 3a
+263 and acceptance 4c 419 (IC-74). The round-4 test of a directory name ending in a newline skips
+on Windows and on a file system that refuses the name, like round 3's unreadable-file test.
 
-Validation: `progress/P17.md`, Task 2, review rounds 1, 2, 3 and 4. Round 1 red: `^skill-discover$`
+Validation: `progress/P17.md`, Task 2, review rounds 1 to 5. Round 1 red: `^skill-discover$`
 `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 33 ]` (both new tests stop with the `NA` error), and
 `^ext-plugins$` `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 82 ]`. Green: `[ FAIL 0 | WARN 0 | SKIP 0 |
 PASS 43 ]` and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 86 ]`. With item 2 reverted, the
@@ -3946,6 +3976,19 @@ the P02 change, the P02 test fails (`[ FAIL 11 | WARN 0 | SKIP 0 | PASS 380 ]`).
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 504 ]` (skill-discover 85, ext-plugins 113, ext-specs 306);
 the whole suite `[ FAIL 1 | WARN 0 | SKIP 11 | PASS 13631 ]`, the failure being the
 pre-existing `test-zzz.R:301` of P15's `R/doc-blocks.R`. Lint clean.
+Round 5 (item 9's limit on references to anchors) red: `^(skill-discover|ext-plugins)$`
+`[ FAIL 18 | WARN 0 | SKIP 0 | PASS 218 ]`. The eleven key, merge and separator forms reached
+yaml or got the old merge message. The 4-reference document with Markdown asterisks was refused
+as a merge. The 7-level chain still got only the post-parse message, and the two untrusted skills
+were skipped without the new diagnostic. Green: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 236 ]`
+(skill-discover 90, ext-plugins 146); ext-specs is unchanged at 306. The whole suite gave
+`[ FAIL 16 | WARN 0 | SKIP 5 | PASS 13879 ]`, and none of the 16 comes from this task:
+- the pre-existing `test-zzz.R:301`;
+- five in P13's in-progress `test-s1-cache.R`;
+- ten order-dependent errors in `secret_late_check()` (`test-provider-registry.R` 9,
+  `test-session-budget.R` 1). Those two files pass alone (968) and together with this task's
+  files (1510).
+Lint clean.
 
 ## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen array will not declare is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
 
@@ -4261,3 +4304,102 @@ Validation: `progress/P07.md`, Task 9. Four tests (24 expectations) were added; 
 literal 5 expectations of the first three fail (`dev/.validation/P07/task9-plan-literal.log`),
 and the pending-refreeze test (review round 1) fails 3 on the first form of item 1
 (`task9-fix1-red.log`). Final `^prompt-sections$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 372 ]`.
+
+## D-080 - P13 System 1 cache: the call's adapter, model digest, server version and ordered images join the key, a choice key keeps its option order, an Ollama model without a digest is never cached, unknown values are stored as null, cached records are validated canonical answers (2026-10-04)
+
+P13 Task 5 (`R/s1-cache.R`, `tests/testthat/test-s1-cache.R`, `s1_fresh()` in
+`tests/testthat/fixtures/jev/harness.R`). The memory store before a workspace, the file layout
+`cache/s1/<2hex>/<sha256>.json`, the committed salt, the `cache_commit` `.gitignore`, the mtime
+touch on a hit, the 11 record fields and contract 11.9's key for a call without an identity follow
+the plan; its 7 tests and 32 assertions are kept (one changed and one added, item 5). Six points
+differ, each required by IC-74 (07-local-ollama.md sections 2-5) or by the reviewed forward notes
+of D-076 to D-078.
+
+1. **The call's identity joins the key (07 sections 2 and 4).** New `s1_cache_identity(model,
+   images = NULL)` builds, from the resolved and preflighted model record and the call's
+   `.opts$system1_images`, `list(adapter = <model api>, digest, server_version, images =
+   list(list(sha256, mime), ...))` with absent fields left out; the image bytes are hashed in
+   list order and never kept, and the list's names are dropped first (a named list would become a
+   JSON object whose keys `canonical_json()` sorts, losing the request order; review round 1).
+   `s1_cache_keys(salt, endpoint, model, question, states, identity = NULL)` adds a non-empty
+   identity as the key field `identity`, so new weights under the same tag, another server
+   version, another adapter, other image bytes, MIME types or image order never answer from the
+   cache. Without an identity the key is contract 11.9's verbatim. Jev gives
+   `list(adapter = "typesafe-system-one")`: its alias stays the key, so a new Jev release under
+   `jev-latest` still answers from the cache (contract 11.9).
+2. **No durable reuse without an immutable identity (07 sections 2 and 2.1).** An Ollama model
+   without a digest gets `mutable = TRUE`, and its keys are `NA_character_`. An Ollama model is
+   one on P05's Ollama route (`catalog_ollama_route()`): api `ollama-system-one` or provider
+   `ollama`, so an Ollama chat model used as an emulation target is covered too (review round 1;
+   07 section 2 states the rule for any mutable tag). `s1_cache_get(NA)` is NULL and
+   `s1_cache_put(NA, record)` stores nothing, in memory or on disk, so the caller needs no special
+   branch; under replay such a call is a miss.
+   Any other key that is not 64 lower-case hex digits is refused with
+   `gptr_error_invalid_argument` (keys become file names).
+3. **A choice key keeps the request order of its options (07 section 3: request option order and
+   tie behaviour).** `canonical_json()` sorts the named criteria, so the plan's key gave
+   `choices = c("dog", "cat")` and `c("cat", "dog")` the same key; a choice question now adds
+   `options` (its option names in request order). Noul and score keys are unchanged (score
+   criteria are an array).
+4. **Unknown values stay unknown (07 section 5; D-076).** The plan stored a missing token count as
+   0 (`usage$input %||% 0`); unknown counts, probabilities and confidences are now JSON null
+   (jsonlite writes `NA_real_` as the string `"NA"`) and read back as NA. Fields are read with
+   `[[`, since `$` partially matches a longer name such as `input_tokens`.
+5. **Cached records are validated canonical answers (07 section 3).** `s1_cache_answer(record,
+   question)` re-keys the stored probabilities into request order and runs Task 4's
+   `s1_check_answer()`, so a committed record that the question cannot have produced (unknown
+   choice, probabilities over other options or not summing to 1, a choice its probabilities do not
+   support, a score they do not give, an invalid confidence) is a miss (NULL), never an answer. A
+   score answer carries its `legend` rebuilt from the question; the record does not store it
+   (level descriptions are question text, IC-70). The plan's round-trip assertion therefore
+   expects the canonical score with its legend.
+6. **A file under another key or with broken JSON is a miss.** `s1_cache_get()` returns NULL when
+   the file cannot be read or parsed or its `key` field differs from the key asked.
+
+For later P13 tasks:
+
+- Task 8's `s1_answers()` should preflight the target model (`s1_preflight()`) before it computes
+  the keys, so the identity is the checked one (live lookup validates the currently resolved
+  identity, 07 section 4), and pass `s1_cache_identity(model, images)` to `s1_cache_keys()`.
+  Replay passes the frozen identity recorded with the result and the locally supplied images,
+  without discovery.
+- Task 8 must treat a NULL from `s1_cache_answer()` as a miss (the plan marked the element cached
+  unconditionally); NA keys need nothing.
+- Tasks 6 and 8 pass `usage = list(input, output)` with unknown counts as NULL or NA.
+
+Validation: `progress/P13.md`, Task 5. `^s1-cache$`: red `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 0 ]`
+(every failure a missing `s1_cache_*` function), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 106 ]`
+(plan assertions 32, one added to a plan test, 73 in six IC-74 tests). Review round 1 added 7
+regression assertions (named image lists, an Ollama chat model without a digest): red
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 108 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 113 ]`. Lint
+is clean.
+
+## D-081 - P07 request assembly: a session with a pending IC-52 refreeze is frozen afresh by request_build(), the session's thinking level is clamped to the target's levels and the target's level is read by exact name (2026-10-04)
+
+P07 Task 10 (`R/prompt-cache.R`, `builtin_prompt()` in `R/prompt-sections.R`). The adapter
+context of contract 8.1, the element view, the ledger estimate, the `default` cache policy with
+its anchors, the gap rule and the cache key, the `request.build` service and the plan's 11 tests
+(52 expectations) are unchanged.
+
+1. **A pending refreeze is honoured (IC-52).** The plan froze an unfrozen session with
+   `prompt_freeze(s)`, which restores the newest `gptr.frozen` entry on the path. A foreign file
+   resumed under IC-52 keeps that file's entry with `.d$refreeze = TRUE` (P06 `rebuild_fill()`),
+   so a request built before the session's first run (a manual compaction, Task 13's direct
+   `prompt_request_context()`) restored and sent the untrusted prompt that IC-52 says must be
+   rebuilt. New `prompt_request_frozen(s)` (used by `request_build()` and
+   `prompt_request_context()`) passes `refreeze = isTRUE(.d$refreeze)` and consumes the flag
+   afterwards, as P06's `run_freeze()` does. A run is unaffected: `run_freeze()` freezes first.
+2. **The session's level is clamped to the target (IC-74; P06 `run_target()`).** The plan took
+   `target$thinking %||% .d$thinking`, which sends the session's level unclamped to a model that
+   does not offer it when the target carries no level (a direct call, a compaction). The fallback
+   is now `model_clamp_thinking(target$thinking_levels, .d$thinking)`, P06's own rule; a target's
+   level still wins.
+3. **The target's level is read by exact name.** `target$thinking` partially matches
+   `thinking_levels` for a record without a `thinking` field, so the plan sent the model's whole
+   level vector as `params$thinking` (shown by the test: `c("off", "low")`). It is now
+   `target[["thinking"]]`; `max_output` is read the same way, and a non-finite `max_output` gives
+   the 8,192 default instead of an `NA` integer.
+
+Validation: `progress/P07.md`, Task 10. Two tests (13 expectations) were added; on the plan
+literal 9 of them fail (`dev/.validation/P07/task10-plan-literal.log`). Final `^prompt-cache$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 65 ]`.
