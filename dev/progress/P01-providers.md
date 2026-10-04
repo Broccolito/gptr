@@ -40,3 +40,14 @@ Owner: scientific_value. Scope: tasks 14-18 only. No Task 13 edits.
 - Generated public documentation with pinned roxygen2 7.3.3. All four owned source/test
   files passed scoped lint. Combined provider-event/provider-fake tests passed 116 assertions
   with FAIL 0 / WARN 0 / SKIP 0, exit 0. Task 15 is recorded in this commit.
+
+## Task 16 - shared fake and project helpers
+
+- Red: focused provider-fake tests failed 4 times (missing helper functions),
+  with 99 pre-existing assertions passing. The planned helpers made 124 assertions pass.
+- A new isolation regression then failed 4 assertions: a `../` fixture path could
+  escape the temporary project, and unnamed/duplicate fixture names were accepted.
+  The helper now validates every fixture path and name before writing any content.
+  The regression's attempted outside file was itself in a managed temporary directory.
+- Green: provider-fake tests passed 128 assertions, FAIL 0 / WARN 0 / SKIP 0, exit 0.
+  Explicit UTF-8 fixture reads follow the conventions. No public documentation changed.

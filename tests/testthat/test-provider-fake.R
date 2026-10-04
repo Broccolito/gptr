@@ -347,3 +347,74 @@ test_that("aborting during the initial delay still emits exactly one start", {
   expect_identical(step$events[[2]]$message$provider, "fake")
   expect_null(gen())
 })
+test_that("the reply helpers build replies the fake provider plays (contract section 12.2)", {
+  expect_identical(fake_text("hi", chunk = 1L), list(text = "hi", chunk = 1L))
+  expect_identical(
+    fake_tool("r", code = "1 + 1", .text = "Let me check."),
+    list(tool = "r", input = list(code = "1 + 1"), text = "Let me check.")
+  )
+  expect_identical(fake_tool("ls")$input, json_obj())
+  expect_identical(fake_tool("r", code = "x", .id = "call_9")$id, "call_9")
+  expect_identical(
+    fake_tools(list("read", list(path = "a.R")), list("ls")),
+    list(tools = list(list(name = "read", input = list(path = "a.R")),
+                      list(name = "ls", input = json_obj())))
+  )
+  expect_identical(fake_error(), list(error = "overloaded", status = 529L, after = 0L))
+  spec = local_fake_provider(list(
+    fake_tools(list("read", list(path = "a.R")), list("r", list(code = "1"))),
+    fake_error("rate limited", status = 429L, after = 1L)
+  ))
+  types = vapply(play_fake(spec), `[[`, "", "type")
+  expect_identical(types[length(types)], "done")
+  expect_identical(sum(types == "toolcall_start"), 2L)
+  last = play_fake(spec)
+  expect_identical(last[[length(last)]]$error$class, "rate_limit")
+  expect_length(fake_requests(spec), 2L)
+})
+
+test_that("local_project() makes a temporary project the working directory and root", {
+  outer = getwd()
+  local({
+    root = local_project(files = list("R/analysis.R" = c("x = 1", "y = 2")))
+    expect_identical(path_norm(getwd()), root)
+    expect_identical(project_root(), root)
+    expect_true(dir.exists(file.path(root, ".gptr", "sessions")))
+    expect_true(dir.exists(file.path(root, ".gptr", "cache", "tmp")))
+    expect_identical(workspace_dir(), file.path(root, ".gptr"))
+    expect_identical(
+      readLines(file.path(root, "R", "analysis.R"), encoding = "UTF-8"), c("x = 1", "y = 2")
+    )
+    bare = local_project(gptr = FALSE)
+    expect_null(workspace_dir())
+    expect_identical(project_root(), bare)
+  })
+  expect_identical(getwd(), outer)
+})
+
+test_that("local_project(trust = TRUE) records trust in the redirected user config", {
+  root = local_project(trust = TRUE)
+  file = file.path(tools::R_user_dir("gptr", "config"), "trust.json")
+  expect_match(file, "gptr-tests-", fixed = TRUE)
+  record = json_decode(readLines(file, encoding = "UTF-8"))
+  expect_true(record$projects[[path_key(root)]]$trusted)
+})
+
+test_that("local_gptr_options() prefixes names and restores them", {
+  local({
+    local_gptr_options(out_keep = 3L, gptr.quiet = FALSE)
+    expect_identical(getOption("gptr.out_keep"), 3L)
+    expect_false(getOption("gptr.quiet"))
+  })
+  expect_null(getOption("gptr.out_keep"))
+  expect_true(getOption("gptr.quiet"))
+})
+
+test_that("local_project() rejects paths escaping its temporary root before writing", {
+  outside = withr::local_tempfile(pattern = "gptr-outside-")
+  rel = file.path("..", basename(outside))
+  expect_error(local_project(files = stats::setNames(list("unsafe"), rel)), "inside")
+  expect_false(file.exists(outside))
+  expect_error(local_project(files = list("unnamed")), "named")
+  expect_error(local_project(files = list("same" = "a", "same" = "b")), "unique")
+})
