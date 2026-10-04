@@ -2658,17 +2658,19 @@ implementation (`task14-fix1-red.log`). Final `^session-object$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 463 ]` in the UTF-8 and the C locale (`task14-fix1-green.log`,
 `task14-fix1-green-C.log`).
 
-## D-057 - P10 grep, find and ls: a searched file and the relevance sort work with non-ASCII names in a C locale, the whole-file prefilter never drops a matching file, ls skips names that are not valid UTF-8, a failed long-line locate leaks no warning, a match-limit failure is always reported and costs only its own lines (2026-10-04)
+## D-057 - P10 grep, find and ls: a searched file and the relevance sort work with non-ASCII names in a C locale, the whole-file prefilter never drops a matching file, ls skips names that are not valid UTF-8, a failed long-line locate leaks no warning, a match-limit failure is always reported and costs only its own lines, a skipped file over 20 MB is always reported (2026-10-04)
 
 P10 Task 7's plan-literal `R/tool-search.R` passes the plan's 13 blocks (56 expectations, the
 ripgrep oracle included) in the UTF-8 and the C locale, and its (file, line) sets equal
 ripgrep's on 8 patterns over `R/`, `tests/` and `dev/spec/` (`dev/.validation/P10/task7-probe-rg-repo.log`).
 One defect, reproduced against that source (`task7-probe-plan-literal-clocale.log`,
 `task7-probe2-plan-literal-clocale.log`); review round 1 found three more (items 2-4,
-`task7-fix1-probe*-before.log`) and review round 2 two more (item 2's backreferences and item 5,
-`task7-fix2-probe1-before.log`). Item 3 adds the `invalid_names` attribute of `search_ls()`, and
-item 5 adds the "results may be incomplete" notice to the texts and prints that had none. No
-signature, class, column or other Pi text changes.
+`task7-fix1-probe*-before.log`), review round 2 two more (item 2's backreferences and item 5,
+`task7-fix2-probe1-before.log`) and review round 3 two more (item 2's skipped pattern text and
+item 6, `task7-review3-probe-possessive.log`, `task7-review3-probe-bigfile.log`). Item 3 adds the
+`invalid_names` attribute of `search_ls()`, item 5 adds the "results may be incomplete" notice to
+the texts and prints that had none, and item 6 adds the plan's skipped-file notice where it was
+missing. No signature, class, column or other Pi text changes.
 1. **`basename()` of a marked UTF-8 non-ASCII path stops in a non-UTF-8 locale** ("unable to
    translate ... to native encoding"; the base-R limit behind D-041 item 4 and D-051 item 6). Two
    plan calls hit it. `grep_candidates()` labelled a single searched file with `basename(root)`,
@@ -2698,7 +2700,18 @@ signature, class, column or other Pi text changes.
    atomic-group idiom) lost `ws.R:1` the same way (`rg -P` reports it). Backreferences (`\1`-`\9`,
    `\g`, `\k`, `(?P=`) now switch the prefilter off. The possessive test now reads `}+` only after
    a quantifier brace (`{n}`, `{n,m}`, `{,m}`), so `\p{L}+`, `\x{E9}+` and `\N{U+00E9}+` keep the
-   prefilter (`task7-fix2-probe4.log`).
+   prefilter (`task7-fix2-probe4.log`). Review round 3: PCRE2 looks for the possessive `+` only
+   after skipping `\Q`, `\E`, `(?#...)` comments and, under an `x` or `xx` option, white space and
+   `#` comments. So `a\s*\E+$`, `a\s*\Q\E+$`, `a\s*(?#c)+$`, `(?x:a\s* +$)`, `(?ix)A\s* +$` and
+   `(?xx)a\s* +$` were possessive although the test saw no `*+`, and lost `ws.R:1` (`rg -P`
+   reports it; `task7-review3-probe-possessive.log`). The prefilter is now also off for `\Q`,
+   `\E`, `(?#` and an option group containing `x`. An option setting or a callout between a
+   quantifier and `+` is a compile error, so PCRE2 skips nothing else there
+   (`task7-fix3-probe1-after.log`). A `fixed = TRUE, ignore_case = TRUE` pattern, which reaches
+   PCRE as `\Q...\E`, is literal: the test now skips it, so it keeps the prefilter, even with
+   `*+` or `\E` in its text (`task7-fix3-probe2.log`). The round-3 probe shows no dropped file
+   after the fix (`task7-fix3-probe-possessive-after.log`), and the ripgrep comparison over `R/`,
+   `tests/` and `dev/spec/` still agrees on every non-empty row (`task7-fix3-probe-rg-repo.log`).
 3. **`search_ls()` listed with `list.files()` directly**, bypassing D-041 item 7. A name that
    is not valid UTF-8 (Latin-1 bytes on Linux in a UTF-8 locale) reached `tolower()` in the name
    sort, which threw "invalid input ... in 'utf8towcs'", so `ls` failed for the whole
@@ -2731,6 +2744,16 @@ signature, class, column or other Pi text changes.
    (`task7-fix2-red-batch.log`). Over three `R/` files, `(\w+\s?)+$` now finds the per-line
    matcher's 258 rows instead of 240, in 9.3 s instead of 7.9 s; the per-line matcher alone
    takes 9.8 s (`task7-fix2-probe3.log`).
+6. **A file larger than 20 MB was skipped without its notice unless rows remained** (the plan's
+   "Files larger than 20 MB are skipped with a notice"; review round 3). `grep_tool_text()`
+   returned "No matches found" before it built the note, and `print.gptr_matches()` and
+   `print.gptr_files()` never showed `skipped_big`. Model code in `r` sees results through these
+   prints (`gptr$grep()`), so a skipped file went unreported there
+   (`task7-review3-probe-bigfile.log`). The new `search_skipped_note()`, next to
+   `search_incomplete_note()`, gives "<n> file(s) larger than 20MB skipped" to the direct text and
+   to both prints, with or without rows, before the incomplete note. `search_find()` and
+   `search_ls()` results carry no `skipped_big` and print no note
+   (`task7-fix3-probe-bigfile-after.log`).
 
 Validation: `progress/P10.md`, Task 7. Added block "non-ASCII file and directory names are
 searched, found and listed in any locale" (7 expectations, under
@@ -2751,8 +2774,15 @@ is reported without rows and loses only the lines it hits" (13 expectations). Th
 against the round-1 source (scratch copy) gives `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 91 ]`
 (`task7-fix2-red-final.log`), before the brace check was added. The brace check alone failed on
 the in-tree source before its fix: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 104 ]`
-(`task7-fix2-red-brace.log`). Final `^tool-search$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]` in
-the UTF-8 and the C locale (`task7-fix2-green.log`, `task7-fix2-green-clocale.log`).
+(`task7-fix2-red-brace.log`). Round-2 `^tool-search$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 105 ]`
+in the UTF-8 and the C locale (`task7-fix2-green.log`, `task7-fix2-green-clocale.log`). Review
+round 3 adds the blocks "a skipped file over 20 MB is reported with or without rows, in the text
+and prints" (10 expectations, a sparse 21 MB fixture) and "the prefilter is off when ignorable
+pattern text precedes a possessive +" (8 pattern rows and 2 checks that a fixed case-insensitive
+pattern and an `(?i)` pattern keep the prefilter). Against the round-2 source (in tree, before
+the fix): `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 110 ]` (`task7-fix3-red.log`): 7 missing notices
+and the 8 rows. Final `^tool-search$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 125 ]` in the UTF-8 and
+the C locale (`task7-fix3-green.log`, `task7-fix3-green-clocale.log`).
 
 ## D-058 - P09 model text: the context-pressure check reads the session's own last request, takes all-unknown token counts as no evidence, and survives a failing compact.should (2026-10-04)
 
