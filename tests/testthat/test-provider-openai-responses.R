@@ -330,3 +330,336 @@ test_that("a done item with an empty summary or content list keeps the streamed 
   expect_identical(r$message$content[[2L]]$json,
                    '{"type":"reasoning","id":"rs_e","summary":[],"encrypted_content":"gA=="}')
 })
+
+# ---- the request body and the built-in (Task 7) ------------------------------------------------
+
+test_that("Responses bodies: store = false, the cache key, explicit breakpoints (G4 3.7)", {
+  model = test_model(api, provider = "openai", id = "gpt-6-sol")
+  plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
+  req = responses_build(model, ctx_fixture(list(first_message()), cache_plan = plan),
+                        list(base_url = "https://api.openai.com/v1"))
+  body = json_decode(req$body)
+  expect_identical(names(body)[1:5], c("model", "store", "stream", "prompt_cache_key",
+                                       "prompt_cache_options"))
+  expect_identical(names(body)[length(body)], "input")
+  expect_false(body$store)
+  expect_identical(body$prompt_cache_key, "gptr:0123456789ab")
+  expect_equal(body$prompt_cache_options, list(mode = "implicit"))
+  dev = body$input[[1L]]
+  expect_identical(dev$role, "developer")
+  expect_equal(dev$content[[1L]]$prompt_cache_breakpoint, list(mode = "explicit"))
+  expect_equal(dev$content[[2L]]$prompt_cache_breakpoint, list(mode = "explicit"))
+  user = body$input[[2L]]$content
+  expect_equal(user[[1L]]$prompt_cache_breakpoint, list(mode = "explicit"))
+  expect_null(user[[2L]]$prompt_cache_breakpoint)
+  read_params = list(type = "object", required = list("path"),
+                     properties = list(path = list(type = "string")))
+  expect_identical(body$tools[[1L]], list(type = "function", name = "read",
+                                          description = "Read a file.",
+                                          parameters = read_params, strict = FALSE))
+  expect_identical(req$url, "https://api.openai.com/v1/responses")
+  expect_identical(req$headers$`x-client-request-id`, "q0123456789ab")
+  other = json_decode(responses_build(test_model(api), ctx_fixture(list(first_message())),
+                                      list())$body)
+  expect_null(other$prompt_cache_options)
+  expect_false(grepl("prompt_cache_breakpoint", json_encode(other$input), fixed = TRUE))
+})
+
+test_that("the default cache policy gives T0, T1 and project breakpoints (acceptance 4)", {
+  plan = default_plan(api)
+  expect_identical(plan$anchors, c("t0", "t1", "project"))
+  model = test_model(api, provider = "openai", id = "gpt-6-sol")
+  req = responses_build(model, ctx_fixture(list(first_message()), cache_plan = plan), list())
+  expect_identical(lengths(regmatches(req$body, gregexpr("prompt_cache_breakpoint", req$body))),
+                   3L)
+  expect_identical(json_decode(req$body)$prompt_cache_key, plan$key)
+})
+
+test_that("reasoning items, phase and fc_ ids replay byte for byte to the same model only", {
+  dir = sse_dir(api)
+  model = adp_fixture_model(api, dir)
+  msg = replay_case(api, responses_normaliser, "reasoning_tools")$message
+  ctx = ctx_fixture(list(first_message(), msg,
+                         msg_tool_result("call_fixture1|fc_fixture1", "r", "[1] 10")))
+  req = responses_build(model, ctx, list())
+  expect_true(grepl(msg$content[[2L]]$json, req$body, fixed = TRUE))
+  items = json_decode(req$body)$input
+  kinds = vapply(items, function(x) x$type %||% x$role, "")
+  expect_identical(kinds, c("developer", "user", "reasoning", "message", "function_call",
+                            "function_call_output"))
+  expect_identical(items[[4L]]$phase, "commentary")
+  expect_identical(items[[4L]]$id, "msg_fixture1")
+  expect_identical(items[[5L]]$id, "fc_fixture1")
+  expect_identical(items[[5L]]$call_id, "call_fixture1")
+  expect_identical(items[[6L]]$call_id, "call_fixture1")
+  other = json_decode(responses_build(test_model(api, id = "other-1"), ctx, list())$body)$input
+  kinds = vapply(other, function(x) x$type %||% x$role, "")
+  expect_false("reasoning" %in% kinds)
+  fc = other[[which(kinds == "function_call")]]
+  expect_null(fc$id)
+  expect_identical(fc$call_id, "call_fixture1")
+})
+
+test_that("a handed-off Anthropic conversation: no foreign opaque data, valid body (INFRA-08)", {
+  model = test_model(api, provider = "openai", id = "gpt-6-sol")
+  plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
+  h = handoff_entries()
+  expect_length(h$opaque, 2L)
+  # P05's projection (project_messages() ends with handoff_transform()), as request_build() runs it
+  msgs = project_messages(h$entries, h$leaf, model)
+  wire = responses_build(model, ctx_fixture(msgs, cache_plan = plan), list())$body
+  for (s in h$opaque) expect_false(grepl(s, wire, fixed = TRUE), label = s)
+  body = json_decode(wire)
+  expect_identical(schema_validate(responses_body_schema(), body)$errors, character())
+  expect_identical(names(body)[1:5], c("model", "store", "stream", "prompt_cache_key",
+                                       "prompt_cache_options"))
+  expect_identical(names(body)[length(body)], "input")
+  expect_identical(lengths(regmatches(wire, gregexpr("prompt_cache_breakpoint", wire,
+                                                     fixed = TRUE))), 3L)
+  kinds = vapply(body$input, function(x) x$type %||% x$role, "")
+  expect_identical(kinds, c("developer", "user", "assistant", "assistant", "function_call",
+                            "function_call", "function_call_output", "function_call_output"))
+  expect_identical(body$input[[3L]]$content,
+                   "The user wants mpg by cyl. Aggregate in the session.")
+  expect_identical(vapply(body$input[5:8], function(x) x$call_id, ""),
+                   c("toolu_01A", "toolu_01B", "toolu_01A", "toolu_01B"))
+  expect_null(body$input[[5L]]$id)
+  # the schema is closed: an Anthropic signature on an item does not validate
+  bad = body
+  bad$input[[5L]]$signature = h$opaque[[1L]]
+  expect_false(schema_validate(responses_body_schema(), bad)$ok)
+})
+
+test_that("a PNG tool result is sent as an input_image (acceptance 3)", {
+  model = test_model(api)
+  call = block_tool_call("call_9|fc_9", "r", list(code = "plot(1)"))
+  asst = msg_assistant(list(call), api = api, provider = model$provider, model = model$id,
+                       stop_reason = "tool_use")
+  res = msg_tool_result("call_9|fc_9", "r", list(block_text("drawn"), block_image(png_b64())))
+  body = json_decode(responses_build(model, ctx_fixture(list(msg_user("plot"), asst, res)),
+                                     list())$body)
+  out = body$input[[length(body$input)]]
+  expect_identical(out$type, "function_call_output")
+  expect_identical(out$output[[1L]], list(type = "input_text", text = "drawn"))
+  expect_identical(out$output[[2L]]$type, "input_image")
+  expect_identical(out$output[[2L]]$image_url, paste0("data:image/png;base64,", png_b64()))
+})
+
+test_that("reasoning effort, tool_choice, operators and returns follow 08 section 3.1", {
+  model = test_model(api, thinking_levels = c("off", "low", "high"))
+  body = json_decode(responses_build(model, ctx_fixture(list(msg_user("x")),
+                                                        params = list(thinking = "high")),
+                                     list())$body)
+  expect_equal(body$reasoning, list(effort = "high", summary = "auto"))
+  expect_identical(body$include, list("reasoning.encrypted_content"))
+  body = json_decode(responses_build(model, ctx_fixture(list(msg_user("x")),
+                                                        params = list(thinking = "off")),
+                                     list())$body)
+  expect_equal(body$reasoning, list(effort = "none"))
+  forced = list(tool_choice = list(type = "tool", name = "read"))
+  body = json_decode(responses_build(model, ctx_fixture(list(msg_user("x")), params = forced),
+                                     list())$body)
+  expect_equal(body$tool_choice, list(type = "function", name = "read"))
+  add = msg_operator("tool_change", "New tool: lint.",
+                     tool_add = list(list(name = "lint", description = "Lint a file.",
+                                          input_schema = list(type = "object"))))
+  items = json_decode(responses_build(model, ctx_fixture(list(msg_user("x"), add)),
+                                      list())$body)$input
+  expect_identical(items[[3L]], list(role = "developer", content = "New tool: lint."))
+  expect_identical(items[[4L]]$type, "additional_tools")
+  expect_identical(items[[4L]]$tools[[1L]]$name, "lint")
+  body = json_decode(responses_build(model, ctx_fixture(list(msg_user("x")),
+                                                        params = list(returns = count_schema())),
+                                     list())$body)
+  last = body$input[[length(body$input)]]
+  expect_identical(last$role, "developer")
+  expect_match(last$content, "JSON Schema", fixed = TRUE)
+  expect_null(body$text)
+})
+
+test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", {
+  model = test_model(api, provider = "openai", id = "gpt-6-sol")
+  plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
+  call = block_tool_call("call_A1|fc_A1", "r", list(code = "nrow(d)"))
+  asst = msg_assistant(list(block_text("Checking."), call), api = api, provider = "openai",
+                       model = "gpt-6-sol", stop_reason = "tool_use", timestamp = 2)
+  turn2 = list(first_message(), asst, msg_tool_result("call_A1|fc_A1", "r", "[1] 32"))
+  memo = new.env(parent = emptyenv())
+  b1 = responses_build(model, ctx_fixture(list(first_message()), cache_plan = plan),
+                       list(memo = memo))$body
+  b2 = responses_build(model, ctx_fixture(turn2, cache_plan = plan), list(memo = memo))$body
+  expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
+  expect_identical(b2, responses_build(model, ctx_fixture(turn2, cache_plan = plan), list())$body)
+})
+
+test_that("builtin:openai registers the adapter; check_adapter() and gptr_check() pass", {
+  a = adapter_get(api)
+  expect_identical(a$capabilities$operator_role, "developer")
+  expect_true(a$capabilities$tool_addition)
+  res = check_adapter(a, fixtures = sse_dir(api))
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
+  expect_true("adapter.reasoning_tools.roundtrip" %in% res$check)
+  expect_true(all(gptr_check(a)$ok))
+})
+
+test_that("returns = through the run loop on Responses: instruction and validation (INFRA-25)", {
+  skip_without_run_engine()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  local_scripted_provider(api)
+  local_count_tool()
+  wire = local_scripted_wire(list(responses_sse_tool("call_w1", "count", "{}"),
+                                  responses_sse_text("{\"n\":32}")))
+  s = session_new("scripted/scripted-1", "auto", home = new.env())
+  session_run(s, msg_user("How many rows?"), list(returns = count_schema()))
+  expect_identical(s$value$n, 32L)
+  expect_identical(vapply(s$messages, function(m) m$role, ""),
+                   c("user", "assistant", "tool_result", "assistant"))
+  expect_match(wire$requests[[2L]]$url, "/responses$")
+  # the run's returns schema reaches the wire as the closing developer instruction (IC-71)
+  first = json_decode(wire$requests[[1L]]$body)
+  closing = first$input[[length(first$input)]]
+  expect_identical(closing$role, "developer")
+  expect_match(closing$content, "JSON Schema", fixed = TRUE)
+  expect_null(first$tool_choice)
+  second = json_decode(wire$requests[[2L]]$body)$input
+  kinds = vapply(second, function(x) x$type %||% x$role, "")
+  expect_true(all(c("function_call", "function_call_output") %in% kinds))
+})
+
+test_that("end to end on the mock server: a Responses stream (skip on CRAN)", {
+  skip_on_cran()
+  srv = local_mock_server("openai_responses", n = 3L, interval = 0.02)
+  r = mock_stream(srv)
+  expect_identical(r$types, c("start", "text_start", rep("text_delta", 3L), "text_end", "done"))
+  expect_identical(msg_text(r$message), "tok01 tok02 tok03 ")
+  expect_identical(r$message$response_id, "resp_mock")
+})
+
+# The number of explicit cache breakpoints in a request body
+resp_breakpoints = function(body) {
+  lengths(regmatches(body, gregexpr("prompt_cache_breakpoint", body, fixed = TRUE)))
+}
+
+test_that("build() takes compat and headers from the record provider_stream() resolved (04 10.1)", {
+  # D-023, D-027 item 3: a session-scoped provider (`model = <spec>`) is invisible to the global
+  # lookup, so its compat (the explicit cache mode) and headers come from opts$provider or the
+  # session's own record; record headers never repeat or replace the adapter's
+  model = test_model(api, provider = "p12-resp", id = "resp-large")
+  rec = gptr_provider("p12-resp", api = api, base_url = "https://llm.corp.example/v1",
+                      compat = list(supportsExplicitPromptCacheMode = TRUE),
+                      headers = list(`X-Org` = "lab", `Content-Type` = "text/plain",
+                                     Authorization = "Bearer record",
+                                     `X-Client-Request-Id` = "fixed"))
+  plan = list(anchors = c("t0", "t1", "project"), tail_ttl = "5m", key = "gptr:0123456789ab")
+  ctx = ctx_fixture(list(first_message()), cache_plan = plan)
+  req = responses_build(model, ctx, list(provider = rec, credential = fake_handle("CORP_KEY")))
+  expect_equal(json_decode(req$body)$prompt_cache_options, list(mode = "implicit"))
+  expect_identical(resp_breakpoints(req$body), 3L)
+  h = req$headers
+  expect_identical(anyDuplicated(tolower(names(h))), 0L)
+  expect_identical(h$authorization, list("Bearer ", fake_handle("CORP_KEY")))
+  expect_identical(h$`content-type`, "application/json")
+  expect_identical(h$`x-client-request-id`, "q0123456789ab")
+  expect_identical(h$`X-Org`, "lab")
+  # without a credential the record's own credential header goes out as it is (D-023 item 3)
+  expect_identical(responses_build(model, ctx, list(provider = rec))$headers$Authorization,
+                   "Bearer record")
+  # the resolved openai record can switch the explicit cache mode off (plan ambiguity 13)
+  off = gptr_provider("openai", api = api, compat = list(explicit_cache_mode = FALSE))
+  oa = test_model(api, provider = "openai", id = "gpt-6-sol")
+  body = responses_build(oa, ctx, list(provider = off))$body
+  expect_null(json_decode(body)$prompt_cache_options)
+  expect_identical(resp_breakpoints(body), 0L)
+  # a record of another provider is ignored; nothing else is registered, so the defaults apply
+  other = gptr_provider("p12-other", api = api, compat = list(explicit_cache_mode = TRUE),
+                        headers = list(`X-Org` = "other"))
+  req = responses_build(model, ctx, list(provider = other))
+  expect_null(json_decode(req$body)$prompt_cache_options)
+  expect_null(req$headers$`X-Org`)
+  # the session's own record when build() gets only the session id
+  sid = "s_p12resp01"
+  withr::defer(registry_session_drop(sid))
+  registry_add(rec, source = "session", rank = 0L, session = sid)
+  req = responses_build(model, ctx, list(session = sid))
+  expect_equal(json_decode(req$body)$prompt_cache_options, list(mode = "implicit"))
+  expect_identical(req$headers$`X-Org`, "lab")
+})
+
+test_that("a model without tool calling gets no tools, tool_choice or added tools (IC-74)", {
+  # 07-local-ollama.md section 1: tool calling is enabled only when the model supports it
+  # (D-029 items 1 and 2 for this adapter); the history's calls and results are still sent
+  forced = list(type = "tool", name = "read")
+  blind = test_model(api, provider = "openai", id = "small-1", tool_call = FALSE)
+  call = block_tool_call("call_A1|fc_A1", "r", list(code = "nrow(d)"))
+  asst = msg_assistant(list(call), api = api, provider = "openai", model = "small-1",
+                       stop_reason = "tool_use", timestamp = 2)
+  add = msg_operator("tool_change", "New tool: lint.",
+                     tool_add = list(list(name = "lint", description = "Lint a file.",
+                                          input_schema = list(type = "object"))))
+  msgs = list(msg_user("x", timestamp = 1), asst,
+              msg_tool_result("call_A1|fc_A1", "r", "[1] 32", timestamp = 3), add)
+  for (tc in list("none", forced)) {
+    body = json_decode(responses_build(blind, ctx_fixture(msgs, params = list(tool_choice = tc)),
+                                       list())$body)
+    expect_false(any(c("tools", "tool_choice") %in% names(body)))
+    kinds = vapply(body$input, function(x) x$type %||% x$role, "")
+    expect_identical(kinds, c("developer", "user", "function_call", "function_call_output",
+                              "developer"))
+  }
+  # a request without any tools sends no tool_choice either; a model that calls tools keeps all
+  able = test_model(api, provider = "openai", id = "large-1")
+  ctx = ctx_fixture(list(msg_user("x")), params = list(tool_choice = "none"))
+  ctx$tools_json = NULL
+  expect_false(grepl("tool", responses_build(able, ctx, list())$body, fixed = TRUE))
+  body = json_decode(responses_build(able, ctx_fixture(msgs, params = list(tool_choice = "none")),
+                                     list())$body)
+  expect_identical(body$tool_choice, "none")
+  expect_length(body$tools, 2L)
+  expect_identical(body$input[[length(body$input)]]$type, "additional_tools")
+})
+
+test_that("a text signature replays only its own id and phase strings (no partial matching)", {
+  model = test_model(api)
+  input = function(sig) {
+    msg = msg_assistant(list(block_text("Done.", signature = sig)), api = api,
+                        provider = model$provider, model = model$id, timestamp = 2)
+    ctx = ctx_fixture(list(msg_user("x", timestamp = 1), msg))
+    json_decode(responses_build(model, ctx, list())$body)$input
+  }
+  it = input('{"v":1,"id":"msg_1","phase":"final_answer"}')[[3L]]
+  expect_identical(it[c("type", "id", "phase")],
+                   list(type = "message", id = "msg_1", phase = "final_answer"))
+  # a key that only starts with "id", a JSON scalar or an id that is not one string: plain text
+  for (sig in c('{"v":1,"identifier":"msg_x"}', "7", '{"id":7}', '{"id":["a","b"]}')) {
+    expect_identical(input(sig)[[3L]], list(role = "assistant", content = "Done."), label = sig)
+  }
+  # a phase that is not one string is left out
+  it = input('{"v":1,"id":"msg_2","phase":{"x":1}}')[[3L]]
+  expect_identical(it$id, "msg_2")
+  expect_null(it$phase)
+})
+
+test_that("a forced choice: any is required, and returns = never forces a call (IC-71)", {
+  # 08 section 3.1: tool_choice is "none", "required" or a named function, and a forced choice
+  # is sent only when the model allows it and `returns` is not set (IC-71: auto, the closing
+  # instruction and validation)
+  model = test_model(api)
+  build = function(params, m = model) {
+    json_decode(responses_build(m, ctx_fixture(list(msg_user("x")), params = params),
+                                list())$body)
+  }
+  forced = list(type = "tool", name = "read")
+  expect_identical(build(list(tool_choice = list(type = "any")))$tool_choice, "required")
+  expect_null(build(list(tool_choice = list(type = "auto")))$tool_choice)
+  for (tc in list(forced, list(type = "any"))) {
+    body = build(list(tool_choice = tc, returns = count_schema()))
+    expect_false("tool_choice" %in% names(body))
+    expect_length(body$tools, 2L)
+    last = body$input[[length(body$input)]]
+    expect_identical(last$role, "developer")
+    expect_match(last$content, "JSON Schema", fixed = TRUE)
+  }
+  # a model whose capability forbids a forced choice keeps the default auto
+  free = test_model(api, forced_tool_choice = FALSE)
+  expect_false("tool_choice" %in% names(build(list(tool_choice = forced), free)))
+})

@@ -1042,3 +1042,41 @@ the eight added tests fail 18 assertions there (2 null usages read as zero, the 
 the list code classified, the vector code throwing, the typeless SSE error, 2 for the bare-string
 error, 3 statuses, 2 for the `item_id` delta, 3 for the non-object item, 1 for `call_z|`, and the
 blanked thinking and text of empty done lists).
+
+## D-032 - P12 Responses request bodies: compat and headers from the resolved record, tools only where the model calls tools, signatures read by exact field (2026-10-04)
+
+P12 Task 7's plan-literal `responses_build()` and `responses_assistant()`
+(`R/provider-openai-responses.R`, the `build()` of the `openai-responses` adapter) were changed in
+three ways. P07's `request_build()`, P06's runs and P24 consume the bodies.
+
+1. **Compat and headers from the provider record `provider_stream()` resolved** (D-023 items 1 and
+   3 and D-027 item 3, which required this of Task 7). The plan's `compat_flags(model$provider,
+   model)` and `c(headers, adp_provider_headers(model))` looked the provider up globally, so a
+   session-scoped provider (`model = <spec>`, 04 section 10.1) lost its `compat` (the explicit
+   cache mode: `prompt_cache_options` and the explicit breakpoints) and its headers, a session
+   record shadowing `openai` could not switch the explicit mode off (plan ambiguity 13), and a
+   record header with the name of an adapter header was sent twice, which P04's `http_headers()`
+   refuses. Now `compat_flags(adp_provider_record(model, opts) %||% list(id = <provider>),
+   model)` and `adp_merge_headers(..., auth = "authorization")`.
+2. **Tools only for a model that calls tools; `tool_choice` only with a tools array**
+   (07-local-ollama.md section 1, IC-74: tool calling is "enabled only when the selected model
+   supports" it; D-029 items 1 and 2 for this adapter). A model record with `tool_call = FALSE`
+   gets no `tools`, no `tool_choice` and no `additional_tools` item (operator text is still sent as
+   a developer message, and the history's calls and results are still sent); a request without a
+   tools array sends no `tool_choice` (a forced choice would name an undeclared tool). The plan
+   sent all three whatever the model's tool calling and the tools. Reach as in D-029.1: the
+   catalog's `openai` models all declare `tool_call = TRUE`; a user or plugin `gptr_provider()`
+   model on this api must declare it.
+3. **Text signatures are read by exact field.** The plan's `sig$id` partial-matched another key
+   (`{"identifier":"msg_x"}` became a message item with id `msg_x`) and threw for a signature that
+   parses to a JSON scalar, so `build()` failed for that session. `responses_text_signature()` takes
+   the id and `phase` only when each is one string; otherwise the block replays as plain assistant
+   text, and a phase that is not one string is left out.
+
+Validation: `progress/P12.md`, Task 7. The plan's tests pass unchanged (the default cache-policy
+and INFRA-25 run tests skip until P07, and P06 with P07, are loaded); against the plan-literal
+source the three added tests fail 15 assertions (8 for the resolved record, 5 for tools and
+`tool_choice`, 2 for the signature); mutations that append the record headers or send
+`tool_choice` without tools fail 1 and 3 assertions. `gptr_check()` on the adapter: 31 checks, 0
+failed.
+

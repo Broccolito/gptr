@@ -255,3 +255,112 @@ mock_stream = function(srv, context = NULL, abort_after = NULL) {
   reactor_pump(until = function() !is.null(out$message), timeout = 30)
   list(events = log$events, types = types_of(log$events), message = out$message)
 }
+
+# A Responses stream with one function call
+responses_sse_tool = function(call_id, name, json) {
+  item = paste0('{"id":"fc_w1","type":"function_call","status":"completed","call_id":"', call_id,
+                '","name":"', name, '","arguments":', json_encode(json), "}")
+  paste0(
+    sse_event("response.created", paste0('{"type":"response.created","response":',
+                                         '{"id":"resp_w1","status":"in_progress",',
+                                         '"output":[]}}')),
+    sse_event("response.output_item.added", paste0('{"type":"response.output_item.added",',
+                                                   '"output_index":0,"item":', item, "}")),
+    sse_event("response.output_item.done", paste0('{"type":"response.output_item.done",',
+                                                  '"output_index":0,"item":', item, "}")),
+    sse_event("response.completed", paste0('{"type":"response.completed","response":',
+                                           '{"id":"resp_w1","status":"completed","output":[',
+                                           item, '],"usage":{"input_tokens":20,',
+                                           '"output_tokens":5}}}'))
+  )
+}
+
+# A Responses stream with one assistant message
+responses_sse_text = function(text) {
+  item = paste0('{"id":"msg_w2","type":"message","role":"assistant","status":"completed",',
+                '"phase":"final_answer","content":[{"type":"output_text","text":',
+                json_encode(text), ',"annotations":[]}]}')
+  paste0(
+    sse_event("response.created", paste0('{"type":"response.created","response":',
+                                         '{"id":"resp_w2","status":"in_progress",',
+                                         '"output":[]}}')),
+    sse_event("response.output_item.added", paste0('{"type":"response.output_item.added",',
+                                                   '"output_index":0,"item":', item, "}")),
+    sse_event("response.output_item.done", paste0('{"type":"response.output_item.done",',
+                                                  '"output_index":0,"item":', item, "}")),
+    sse_event("response.completed", paste0('{"type":"response.completed","response":',
+                                           '{"id":"resp_w2","status":"completed","output":[',
+                                           item, '],"usage":{"input_tokens":30,',
+                                           '"output_tokens":6}}}'))
+  )
+}
+
+# ---- INFRA-08 body leg (03 section 6.18 row 08): an Anthropic-origin transcript ----------------
+
+# Transcript entries (04 section 4.6 shape, as P06 stores them) of a conversation built on
+# Anthropic: the thinking_tools fixture turn (signed and redacted thinking, two parallel tool
+# calls) with its two results, then the messages of `more`. `opaque` holds every opaque string of
+# the assistant messages (signatures, redacted data, reasoning items and their encrypted content,
+# thought signatures), none of which a foreign target may receive
+handoff_entries = function(more = list()) {
+  turn = replay_case("anthropic-messages", anthropic_normaliser, "thinking_tools")$message
+  msgs = c(list(first_message(), turn,
+                msg_tool_result("toolu_01A", "r", "[1] 26.7 19.7 15.1", timestamp = 3),
+                msg_tool_result("toolu_01B", "read", "x = 1", timestamp = 4)), more)
+  entries = list()
+  opaque = character()
+  for (k in seq_along(msgs)) {
+    entries[[k]] = list(type = "message", id = paste0("e", k),
+                        parent_id = if (k > 1L) paste0("e", k - 1L),
+                        timestamp = "2026-10-01T10:00:00.000Z", message = msgs[[k]])
+    if (!identical(msgs[[k]][["role"]], "assistant")) next
+    for (b in msgs[[k]][["content"]]) {
+      opaque = c(opaque, b[["signature"]], b[["data"]], b[["thought_signature"]])
+      if (identical(b[["type"]], "opaque")) {
+        opaque = c(opaque, b[["json"]], json_decode(b[["json"]])[["encrypted_content"]])
+      }
+    }
+  }
+  list(entries = entries, leaf = paste0("e", length(msgs)),
+       opaque = unique(opaque[nzchar(opaque)]))
+}
+
+# A closed object schema for P01's schema_validate(): unknown keys are errors
+wire_object = function(properties, required = NULL) {
+  s = list(type = "object", properties = properties, additionalProperties = FALSE)
+  if (length(required)) s$required = required
+  s
+}
+
+# The schema fixture of a Responses request body (report 08 section 3.1; G4 section 3.7): the
+# fields and input items gptr sends, closed, so a foreign key such as a signature fails
+responses_body_schema = function() {
+  str = list(type = "string")
+  arr = list(type = "array")
+  enum = function(...) list(type = "string", enum = c(...))
+  breakpoint = wire_object(list(mode = enum("explicit")))
+  part = wire_object(list(type = enum("input_text", "input_image", "output_text"), text = str,
+                          detail = str, image_url = str, annotations = arr,
+                          prompt_cache_breakpoint = breakpoint), "type")
+  content = list(type = c("string", "array"), items = part)
+  item = wire_object(list(type = enum("message", "reasoning", "function_call",
+                                      "function_call_output", "additional_tools"),
+                          role = enum("developer", "user", "assistant"), id = str, status = str,
+                          phase = str, content = content, summary = arr,
+                          encrypted_content = str, call_id = str, name = str, arguments = str,
+                          output = content, tools = arr))
+  tool = wire_object(list(type = str, name = str, description = str,
+                          parameters = list(type = "object"), strict = list(type = "boolean")),
+                     c("type", "name", "parameters"))
+  top = list(model = str, store = list(type = "boolean", enum = FALSE),
+             stream = list(type = "boolean"), prompt_cache_key = str,
+             prompt_cache_options = wire_object(list(mode = str)),
+             reasoning = wire_object(list(effort = str, summary = str)),
+             include = list(type = "array", items = str),
+             max_output_tokens = list(type = "integer"),
+             tool_choice = list(type = c("string", "object")),
+             tools = list(type = "array", items = tool), service_tier = str,
+             metadata = list(type = "object"), safety_identifier = str,
+             input = list(type = "array", items = item))
+  wire_object(top, c("model", "store", "stream", "input"))
+}

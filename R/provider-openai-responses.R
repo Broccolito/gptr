@@ -310,3 +310,260 @@ responses_normaliser = function(model, opts) {
 
   adp_normaliser(st, push, finish)
 }
+
+# ---- openai-responses: request body ------------------------------------------------------------
+
+#' Adapter capabilities of openai-responses (04 section 8.1; IC-69, IC-71)
+#' @noRd
+responses_caps = function() {
+  list(images_in_results = TRUE, tool_addition = TRUE, structured_output = FALSE,
+       reasoning_replay = TRUE, parallel_tools = TRUE, forced_tool_choice = TRUE,
+       request_params = c("service_tier", "metadata", "safety_identifier"),
+       operator_role = "developer", cache = "openai", max_tool_name = 64L,
+       tool_shape = "responses")
+}
+
+#' A Responses input_image part (data URL), or an input_text note for a text-only model
+#' @noRd
+responses_image = function(b, images) {
+  if (!images) return(list(type = "input_text", text = adp_image_note()))
+  list(type = "input_image", detail = "auto",
+       image_url = paste0("data:", b$mime, ";base64,", b$data))
+}
+
+#' The input items of a user message; the anchored project block carries an explicit
+#' breakpoint when the cache plan names it (G4 section 3.7)
+#' @noRd
+responses_user = function(m, mark_anchor, images) {
+  parts = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    if (type %in% c("text", "context") && nzchar(b$text)) {
+      p = list(type = "input_text", text = b$text)
+      if (mark_anchor && type == "context" && isTRUE(b$anchor)) {
+        p$prompt_cache_breakpoint = list(mode = "explicit")
+      }
+      parts[[length(parts) + 1L]] = p
+    } else if (type == "image") {
+      parts[[length(parts) + 1L]] = responses_image(b, images)
+    }
+  }
+  if (!length(parts)) return(list())
+  list(list(role = "user", content = parts))
+}
+
+#' The message id and `phase` of a text signature `{"v":1,"id":...,"phase":...}` (the form the
+#' normaliser stores); NULL unless the id is one string. Fields are read with `[[`, so a key that
+#' only starts with `id` is never taken for it; a phase that is not one string is "" (left out)
+#' @noRd
+responses_text_signature = function(signature) {
+  sig = adp_json_try(responses_str(signature))
+  if (!adp_is_object(sig)) return(NULL)
+  id = responses_str(sig[["id"]])
+  if (!nzchar(id)) return(NULL)
+  list(id = id, phase = responses_str(sig[["phase"]]))
+}
+
+#' The input items of an assistant message: reasoning items, message ids with `phase` and
+#' `fc_` ids only for the same model; other models get plain text and call ids (Pi 296-306)
+#' @noRd
+responses_assistant = function(m, model) {
+  same = adp_same_model(m, model)
+  items = list()
+  for (b in m$content) {
+    type = b$type %||% ""
+    it = NULL
+    if (type == "opaque") {
+      if (same) it = json_verbatim(b$json)
+    } else if (type == "thinking") {
+      if (!same && nzchar(trimws(b$thinking))) it = list(role = "assistant", content = b$thinking)
+    } else if (type == "text") {
+      if (nzchar(b$text)) {
+        sig = if (same) responses_text_signature(b$signature)
+        if (!is.null(sig)) {
+          it = list(type = "message", role = "assistant", id = sig$id)
+          if (nzchar(sig$phase)) it$phase = sig$phase
+          it$status = "completed"
+          it$content = list(list(type = "output_text", text = b$text, annotations = list()))
+        } else {
+          it = list(role = "assistant", content = b$text)
+        }
+      }
+    } else if (type == "tool_call") {
+      ids = strsplit(b$id, "|", fixed = TRUE)[[1L]]
+      it = list(type = "function_call")
+      if (same && length(ids) > 1L && startsWith(ids[[2L]], "fc_")) it$id = ids[[2L]]
+      it$call_id = ids[[1L]]
+      it$name = b$name
+      it$arguments = json_encode(if (length(b$arguments)) b$arguments else json_obj())
+    }
+    if (!is.null(it)) items[[length(items) + 1L]] = it
+  }
+  items
+}
+
+#' The function_call_output item of a tool result (images as input_image parts, acceptance 3)
+#' @noRd
+responses_tool_result = function(r, images) {
+  texts = character()
+  imgs = list()
+  for (b in r$content) {
+    if (identical(b$type, "text")) texts = c(texts, b$text)
+    if (identical(b$type, "image")) imgs[[length(imgs) + 1L]] = responses_image(b, images)
+  }
+  txt = paste(texts, collapse = "\n")
+  call_id = strsplit(r$tool_call_id, "|", fixed = TRUE)[[1L]][[1L]]
+  output = if (!length(imgs)) {
+    if (nzchar(txt)) txt else "(no tool output)"
+  } else {
+    c(if (nzchar(txt)) list(list(type = "input_text", text = txt)), imgs)
+  }
+  list(list(type = "function_call_output", call_id = call_id, output = output))
+}
+
+#' Responses function tools from the frozen Anthropic-shape array (flat, strict = FALSE)
+#' @noRd
+responses_tools = function(tools) {
+  lapply(tools, function(t) {
+    list(type = "function", name = t$name, description = t$description %||% "",
+         parameters = t$input_schema, strict = FALSE)
+  })
+}
+
+#' The input items of an operator message: a developer message and an additional_tools item
+#' @noRd
+responses_operator = function(m, with_tools) {
+  items = list()
+  text = adp_operator_text(m)
+  if (nzchar(text)) items[[1L]] = list(role = "developer", content = text)
+  if (with_tools && length(m$tool_add)) {
+    defs = lapply(m$tool_add, function(t) {
+      list(name = t$name, description = t$description, input_schema = t$input_schema)
+    })
+    items[[length(items) + 1L]] = list(type = "additional_tools", role = "developer",
+                                       tools = responses_tools(defs))
+  }
+  items
+}
+
+#' The tool_choice field of a Responses request, or NULL for the default `auto`
+#' @noRd
+responses_tool_choice = function(tc, model, returns) {
+  if (identical(tc, "none")) return("none")
+  if (!adp_forced(tc) || !adp_forced_ok(model, responses_caps()) || !is.null(returns)) {
+    return(NULL)
+  }
+  if (identical(tc$type, "any")) "required" else list(type = "function", name = tc$name)
+}
+
+#' build() of the openai-responses adapter (04 section 8.1; G4 section 3.7: model, store,
+#' stream, prompt_cache_key, prompt_cache_options, reasoning, tools, input)
+#'
+#' The compat record (its explicit cache mode) and the provider headers come from the provider
+#' record provider_stream() resolved (`opts$provider`, the session's own record first; D-023,
+#' D-027), and the provider headers are merged by name. Tools and operator tool additions go only
+#' to a model that calls tools (`tool_call`; IC-74, 07-local-ollama.md section 1), and
+#' `tool_choice` only with a tools array (D-029).
+#' @noRd
+responses_build = function(model, context, opts) {
+  params = context$params %||% list()
+  plan = adp_cache_plan(context)
+  anchors = plan$anchors %||% character()
+  compat = compat_flags(adp_provider_record(model, opts) %||% list(id = adp_chr(model$provider)),
+                        model)
+  explicit = isTRUE(compat$explicit_cache_mode)
+  images = adp_images_ok(model)
+  tools_on = !isFALSE(model[["tool_call"]])
+  add_tools = tools_on && isTRUE(adp_model_cap(model, "tool_addition", TRUE))
+  msgs = context$messages %||% list()
+  anchor_at = adp_anchor_index(msgs)
+  tj = if (tools_on) adp_tools_json(opts, "openai-responses", context$tools_json, responses_tools)
+
+  head = list(model = model$id, store = FALSE, stream = TRUE)
+  if (!is.null(plan$key) && nzchar(plan$key)) head$prompt_cache_key = substr(plan$key, 1L, 64L)
+  if (explicit) head$prompt_cache_options = list(mode = "implicit")
+  if (isTRUE(model$reasoning)) {
+    level = params$thinking
+    if (identical(level, "off")) {
+      if ("off" %in% unlist(model$thinking_levels)) head$reasoning = list(effort = "none")
+    } else {
+      r = list()
+      eff = params$effort %||% level
+      if (!is.null(eff)) r$effort = eff
+      r$summary = "auto"
+      head$reasoning = r
+      head$include = list("reasoning.encrypted_content")
+    }
+  }
+  if (!is.null(params$max_tokens)) head$max_output_tokens = max(16L, as.integer(params$max_tokens))
+  if (!is.null(params$temperature) && !isTRUE(model$reasoning)) {
+    head$temperature = params$temperature
+  }
+  tc = if (!is.null(tj)) responses_tool_choice(params$tool_choice, model, params$returns)
+  if (!is.null(tc)) head$tool_choice = tc
+  for (f in responses_caps()$request_params) if (!is.null(params[[f]])) head[[f]] = params[[f]]
+
+  extra = character()
+  if (!is.null(tj)) extra = c(extra, paste0("\"tools\":", tj))
+
+  elements = character()
+  sys = list()
+  for (k in c("t0", "t1")) {
+    txt = context$system[[k]] %||% ""
+    if (!nzchar(txt)) next
+    p = list(type = "input_text", text = txt)
+    if (explicit && k %in% anchors) p$prompt_cache_breakpoint = list(mode = "explicit")
+    sys[[length(sys) + 1L]] = p
+  }
+  if (length(sys)) {
+    key = paste("openai-responses", "system", hash_xxh128(sys), sep = "|")
+    elements = c(elements, adp_memo(opts, key, function() {
+      json_encode(list(role = "developer", content = sys))
+    }))
+  }
+  mark_project = explicit && "project" %in% anchors
+  for (k in seq_along(msgs)) {
+    m = msgs[[k]]
+    role = m$role %||% ""
+    same = adp_same_model(m, model)
+    mark = mark_project && identical(k, anchor_at)
+    key = paste("openai-responses", role, adp_msg_key(m), same, mark, images, add_tools,
+                sep = "|")
+    el = adp_memo(opts, key, function() {
+      items = switch(role,
+                     user = responses_user(m, mark, images),
+                     assistant = responses_assistant(m, model),
+                     tool_result = responses_tool_result(m, images),
+                     operator = responses_operator(m, add_tools),
+                     list())
+      if (!length(items)) "" else paste(vapply(items, json_encode, ""), collapse = ",")
+    })
+    if (nzchar(el)) elements = c(elements, el)
+  }
+  if (!is.null(params$returns)) {
+    elements = c(elements, json_encode(list(role = "developer",
+                                            content = adp_returns_instruction(params$returns))))
+  }
+
+  headers = list(`content-type` = "application/json", accept = "text/event-stream")
+  if (!is.null(opts$credential)) {
+    headers$authorization = adp_header_secret(opts$credential, "Bearer ")
+  }
+  if (!is.null(context$request_id)) headers$`x-client-request-id` = context$request_id
+  headers = adp_merge_headers(headers, adp_provider_headers(model, opts), auth = "authorization")
+
+  list(url = adp_url(opts$base_url %||% "https://api.openai.com/v1", "responses"),
+       method = "POST", headers = headers,
+       body = adp_body(head, extra, "input", elements), stream = "sse")
+}
+
+#' builtin:openai: registers the openai-responses adapter (04 sections 7.12, 10.3)
+#' @noRd
+builtin_openai = function(gptr) {
+  gptr$register(gptr_adapter("openai-responses", transport = "http_sse",
+                             build = responses_build, parse = responses_normaliser,
+                             capabilities = responses_caps()))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("openai", builtin_openai))
