@@ -2381,10 +2381,10 @@ and `-clocale.log`; the plan-literal file is kept as `task6-plan-literal-tool-ed
    `Update case.R / Move to CASE.R` wrote the file and then removed it under its old name,
    leaving nothing. `patch_apply()` now refuses, before computing anything, a patch in which two
    operations name one file (`Invalid patch: more than one operation names <path>; put all
-   hunks of a file under one *** Update File.`); paths are compared after following links and,
-   when `fs_case_insensitive()`, with ASCII case folded. A move removes the source only when it
-   is a different file, and it removes the name it moved (a link itself), not the link's target:
-   the plan deleted the target and left a dangling link.
+   hunks of a file under one *** Update File.`); paths are compared by `patch_key()` (item 15).
+   A move removes the name it moved (a link itself), not the link's target: the plan deleted the
+   target and left a dangling link. Whether the old name is the file just written is asked of the
+   file system (item 13).
 3. **Hunk lines follow Codex's rule.** A line of an update hunk must start with " ", "-" or "+"
    (an empty line is empty context); the plan dropped the first character of any other line and
    used the rest as context. Such a line, and an `*** Update File` without hunks (also with only
@@ -2392,8 +2392,9 @@ and `-clocale.log`; the plan-literal file is kept as `task6-plan-literal-tool-ed
    tool input is invalid. edits must contain at least one replacement.`
 4. **`*** Delete File` is checked.** The plan's `file.remove()` deleted an empty directory and
    ignored a failed removal. A directory is refused before anything is written (`Could not delete
-   file: <path>. Error code: EISDIR.`); a removal goes through `unlink()` (which never removes a
-   directory) and a failure is `gptr_error_doc_write`. An `*** Add File` without content lines
+   file: <path>. Error code: EISDIR.`); a removal goes through `unlink(expand = FALSE)` (which
+   never removes a directory and never reads the name as a pattern, item 12) and a failure is
+   `gptr_error_doc_write`. An `*** Add File` without content lines
    writes an empty file (the plan wrote one newline).
 5. **An envelope whose hunk matched only through the fuzzy fallback reported no deviation.**
    `edit_from_patch()` set `fuzzy = FALSE`, `deviated = FALSE` and an empty `diff`, so the result
@@ -2428,12 +2429,157 @@ and `-clocale.log`; the plan-literal file is kept as `task6-plan-literal-tool-ed
     `oldText` in a large file). `fixed_positions()` now uses `strsplit()` and byte counts (0.03
     s, same positions: leftmost, non-overlapping).
 
+Independent review round 1 (each reproduced, then a regression test written and seen red):
+12. **A deleted or moved name was read as a wildcard pattern.** `unlink()` expands `*`, `?` and
+    `[...]` by default, so `*** Delete File: [abc].R` deleted `a.R` and `b.R`, kept `[abc].R` and
+    then failed, `*** Delete File: *.R` deleted every `.R` file, and moving `x?.R` also deleted
+    `xy.R`. `patch_remove()` calls `unlink(p, expand = FALSE)`. (The plan's `file.remove()` never
+    expanded, but removed empty directories, item 4.)
+13. **A move onto the same file spelled differently deleted it.** Item 2 compared the old and new
+    names as strings (only a final link followed, only ASCII case folded), so on APFS `ete.R ->
+    ETE.R` with accented letters, an NFC -> NFD rename and `a.R -> L/a.R` (`L` a link to the
+    directory) wrote the file and then removed its only copy. `patch_finish_move()` now asks the
+    file system after the write: an old name that is still a link is another entry and only the
+    link is removed; an old name that now reads as the bytes just written is the same entry and
+    is renamed to the new spelling (so a case-only rename takes effect; before, the name kept its
+    old case); any other old name is removed. A move to a link of the old file replaces the link
+    and removes the old name. A rename-first move was not used: when the old name is a link to
+    the new name, `rename()` puts a link to itself in place of the file before the write, and a
+    move across devices needs the write-then-remove path anyway.
+14. **An `oldText` of only whitespace matched between every two characters.** Fuzzy normalisation
+    makes it empty, and the empty needle matched at every byte: with `replace_all`, `\t -> X` on
+    `ab\ncd\n` wrote `aXbX\nXcd\nab\ncXdX\n`; without it the error was `Found 5 occurrences`,
+    and a unique exact tab could not be edited at all (the uniqueness count found an empty match
+    per byte). `fixed_positions()` returns no position for an empty needle, so such an edit fails
+    with Pi's `Could not find ...` text. The plan-literal source has the same defect.
+15. **Two operations on one file through a directory link or a folded name were not refused.**
+    `patch_key()` builds the key from the link target with its existing part resolved by
+    `normalizePath()` (directory links followed; the stored spelling on macOS and Windows) and, on
+    a case-insensitive file system, folds the whole key (Unicode lower case and NFC through
+    stringi, ASCII case without it). `L/a.R` + `D/a.R`, a non-ASCII case pair, an NFC/NFD pair and
+    two `*** Add File` names that differ only in case are refused. Limitation: names not created
+    yet are compared exactly on a case-sensitive file system, also on a normalisation-insensitive
+    one (APFS case-sensitive).
+16. **A last line removed through the fuzzy view left its trailing whitespace behind.** For `x =
+    1\ny = 2   ` (no final newline), the hunk `-y = 2` became `\ny = 2`, which also matches
+    exactly at the start of the last line, so the result was `x = 1   `. A block found at the end
+    of the fuzzy view only is now widened from the file's own last lines; the line before keeps
+    its bytes.
+17. **A move onto an existing directory** failed with a base R connection error after the earlier
+    operations were written (found while verifying item 13). It is refused before anything is
+    written: `Could not move file: <path> to <dest>. Error code: EISDIR.`
+
 Internal additions: `edit_source()` (the loading half of the plan's `edit_compute()`, which now
 takes an optional `src`), `edit_view()`, `edit_reasons()`, `patch_line_end()`,
-`patch_hunk_edits()`, `patch_remove()`.
+`patch_hunk_edits()`, `patch_remove()`, `patch_key()`, `patch_finish_move()`.
 
 Validation: `progress/P10.md`, Task 6. Eleven blocks (53 expectations) were added to the plan's
-15 blocks, which are unchanged. Against the plan-literal source the final test file gives
+15 blocks, which are unchanged. Against the plan-literal source the implementer's test file gives
 `[ FAIL 32 | WARN 1 | SKIP 0 | PASS 88 ]` (`task6-red-plan-literal.log`; every failure is in an
-added block). Final `^tool-edit$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 132 ]` in the UTF-8 and the
-C locale (`task6-green-final.log`, `task6-green-clocale.log`).
+added block). Implementation green: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 132 ]` in the UTF-8 and the
+C locale (`task6-green-final.log`, `task6-green-clocale.log`). Review round 1 added 4 blocks and 4
+expectations in 2 added blocks (30 expectations in all). Against the pre-fix source the final
+test file gives `[ FAIL 17 | WARN 5 | SKIP 0 | PASS 126 ]`, every failure in those 30
+(`task6-fix1-red-final.log`). Final `^tool-edit$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 162 ]` in
+both locales (`task6-fix1-green.log`, `task6-fix1-green-clocale.log`).
+
+## D-054 - P09 evaluator: TEMPORARY skip of the gptr-shim test until P08 adds gptr_return(); P08 Task 10 MUST remove it (2026-10-04)
+
+P09 Task 8 runs in an early lane, before P08. One plan test needs P08's exported
+`gptr_return()`: "the gptr shim reaches gptr:: when gptr is not visible from envir"
+(`tests/testthat/test-eval-core.R`). It evaluates `r = gptr_return(5)` in a
+`new.env(parent = baseenv())` home, so it needs a real `gptr::gptr_return`. Coordinator decision
+for the sequencing: that one test gets the guard
+`skip_if_not(exists("gptr_return", envir = asNamespace("gptr"), inherits = FALSE), ...)` and its
+body stays verbatim. `gptr_return()` is not stubbed. The shim itself (`gptr_shim()`, Task 1)
+is implemented and unit-tested in `test-eval-guard.R`.
+
+**The guard is TEMPORARY.** P08 Task 10 ("The session SDK verbs"), which adds `gptr_return()`,
+MUST delete the two comment lines and the two-line `skip_if_not()` call at the top of that
+block, then show the test passing (2 expectations) in its evidence. Until then `^eval-core$`
+reports `SKIP 1`. Tracked in `HANDOFF.md` (cross-plan obligations) and `progress/P09.md`
+("Pending removal").
+
+## D-055 - P09 evaluator: session changes are taken before gptr renders the plots; added promises and active bindings show their kind; non-ASCII and invalid names never make eval_r() throw; code that is not valid UTF-8 is a parse error (2026-10-04)
+
+P09 Task 8's plan-literal `eval_r()` helpers (`R/eval-core.R`) and Task 2's `env_diff()`
+(`R/env-snapshot.R`) were changed in the four ways below. Each was found by a probe of the
+plan-literal source (`dev/.validation/P09/task8-eval-core-plan-literal.R`). The signatures, the
+`gptr_eval_result` fields, the statuses, the event types and the plan's 24 test blocks (19 in
+`test-eval-core.R`, 5 in `test-copy-eval.R`) are unchanged.
+
+1. **Session changes are compared before the plots are rendered.** Rendering to PNG is gptr's
+   own work. The first plot of a process loads ragg, systemfonts and textshaping, and the plan
+   reported them as `changes$loaded`, which tells the model its code loaded them. This holds for
+   every first `r` call that plots. `eval_finish()` now stores `eval_session_state()` in
+   `st$state1` after `eval_restore()` and before `eval_plots_done()`, and `eval_result()` uses
+   it. Where nothing ran (blocked, parse error) it falls back to a fresh state. The `TZDIR`
+   rule is kept, because the evaluated code can format a time too.
+2. **An added promise or active binding shows its kind.** `delayedAssign()` and
+   `makeActiveBinding()` gave `+ p <NA NA>`, because the snapshot has no class or shape for
+   bindings it never forces. They are now `+ p <promise>` and `+ ab <active>`, as the `~`
+   lines already did, and the binding stays unforced.
+3. **Non-ASCII and invalid object names never make `eval_r()` throw.** `ls()` returns a name
+   parsed from code, such as `donn<e9>es = 1:3`, with unknown encoding. R's radix sort refuses
+   such a string ("Character encoding must be UTF-8, Latin-1 or bytes"), so `env_diff()` threw
+   after the code had run, and the result was lost (04 section 2.2: evaluation failures never
+   throw). `env_diff()` now orders the exact names by their display text, `env_text()`, still
+   with `method = "radix"`. The `+`/`~`/`-` lines pass names, classes and shapes through
+   `env_text()`, so a name that is not valid UTF-8 shows as `a<ff>` and the lines are valid
+   UTF-8 (IC-62; D-040 item 2). `workspace_lines()` still orders `snapshot$name` with
+   `method = "radix"`, the same failure. It is not on the evaluator's path and is left to
+   Task 10, whose `<workspace>` block calls it.
+4. **Code that is not valid UTF-8 after `as_utf8()` is a `parse_error`.** The plan's `gsub()`
+   threw "input string 1 is invalid" (with a translation warning) before parsing. Model code
+   arrives as JSON and is always valid, but `!expr` and `ctx$eval()` callers can pass bytes.
+   `eval_parse()` now returns the error `<gptr>: the code is not valid UTF-8 text; nothing was
+   evaluated.` and nothing runs. In a non-UTF-8 locale `as_utf8()` reads such bytes as native
+   text, so this cannot happen there.
+
+Validation: `progress/P09.md`, Task 8. Four blocks were added to `test-eval-core.R` (23
+expectations) and one to `test-env-snapshot.R` (5). Against the plan-literal sources they give
+`[ FAIL 5 | WARN 0 | SKIP 1 | PASS 220 ]` for `^(eval-core|env-snapshot)$`
+(`task8-red-adaptations.log`). Final `^(eval-core|copy-eval|env-snapshot)$`:
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 262 ]` (`task8-green.log`). Under `LC_ALL=C`, the three
+UTF-8-only blocks skip: `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 222 ]`
+(`task8-green-clocale.log`).
+
+## D-056 - P06 replay functions: header ids, value= names and document fields are checked first, doc is optional, a header turn is one whole number, a session rebuilt for a replay takes model, mode and frozen prompt from the cut path (2026-10-04)
+
+P06 Task 14's literal `session_replay_apply()` and `session_replay_new()` are changed in five
+ways. P15's replay (the `document` route of IC-45/IC-46) and P19's team replay consume them:
+
+1. **The header fields that name things are checked before anything is looked up or recorded.**
+   `header$session` must pass `check_session_id()` (Task 3, D-050 item 2) and `header$value` must
+   be one non-empty string; otherwise `gptr_error_invalid_argument` with `arg = "header$session"`
+   or `"header$value"`. In the plan a non-string or two-element id raised base R's unclassed
+   `get0()` error in `session_by_id()`, a path-like id was refused only by `session_new()`
+   (`arg = "opts$id"`), and a bad `value=` reached `exists()` after the `gptr.replay` entry had
+   been appended.
+2. **`doc` defaults to `NULL`, and its fields are checked.** IC-46 (section 15) calls
+   `session_replay_new(block, header, envir)`; 04 section 7.6 lists `doc` as a fourth argument. The
+   default satisfies both. `path`, `format`, `template` and `text` must be one string or `NULL`,
+   `code` and `output` character vectors without NA. In the plan a two-element template became the
+   joined prompt `"a\nb"`, and `text = 1` failed in P01's `as_content()` after the session had been
+   registered under the recorded id, so the next replay of that id returned the half-built session.
+3. **A header turn is one whole number >= 0, else unknown** (`replay_turn()`). The plan's
+   `as.integer()` truncated `"1.5"` and failed with "the condition has length > 1" for a
+   two-element turn, after the session was registered. An unknown turn means no cut for a rebuilt
+   session and turn 1 for a reconstruction (the plan's default); a reconstruction is at least
+   turn 1, since it always holds a user message.
+4. **A session rebuilt for a replay takes its model, mode and frozen prompt from the cut path.**
+   The plan moved the leaf back to the recorded turn and re-derived the turn, last answer, values
+   and status, but kept what `store_rebuild()` had read from the full path. A model change, a mode
+   change (to `auto`, for instance) or an IC-52 refreeze inside a later turn then decided how the
+   replayed session continued. `replay_rebuild()` now re-reads them with Task 13's
+   `rebuild_model()`, `rebuild_mode()` and `rebuild_frozen()`, the rule of D-050 item 3 (the
+   frozen prompt only when the file is not foreign, whose `refreeze` stays set).
+5. **A reconstructed answer that was not recorded does not point to absent code.** The plan's
+   placeholder said "its code is above" even when no code was recorded; that clause is now added
+   only when the `r` call is reconstructed. `last_text` stays `NA` (plan).
+
+Validation: `progress/P06.md`, Task 14 (`test-session-object.R`). Four blocks (45 expectations)
+were added to the plan's eight. Against the plan-literal source they gave 13 failures and 399
+passes, all failures in the added blocks (`task14-literal.log`). Final `^session-object$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 429 ]` in the UTF-8 and the C locale (`task14-green.log`,
+`task14-green-C.log`).
