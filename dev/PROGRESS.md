@@ -5,14 +5,21 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Current state
 
-**PAUSED by the maintainer on 2026-10-03 at approximately 18:44 PDT.**
-All agents stopped; the one active retry check was interrupted. Resume only on
-explicit user direction. Read [the complete paused handoff](HANDOFF.md) first.
-It records the exact staged/unstaged files, recovery copies, interrupted checks,
-commit boundaries, model allocation and next actions. Implementation HEAD at
-pause: `17aad27`; latest published checkpoint: `55ec31d`.
+**RESUMED 2026-10-03 by Claude Code (Opus 5.5)** on the maintainer's instruction,
+working directly on `main` (the implementation branch was fast-forwarded into
+`main`; PRs #3/#4 closed; other branches deleted). Read [HANDOFF.md](HANDOFF.md)
+for the takeover procedure. The current position is the newest commit on `main`
+plus the last task section of the newest `progress/Pxx.md` log.
 
-- Branch: `codex/gptr-1.0-implementation`, based on `17a95dd`.
+Resume log (newest last):
+
+- 2026-10-03: P05 Task 7 committed `7a70042` (staged work from the pause; guard
+  reviewed). P04 Task 12 committed `f5cf8ad`: a leaked INFRA-21 ticker polluted a
+  later test (fixed); independent review's 3 minor + 4 nit findings fixed
+  test-first (red 23, green 340; reactor/request 276; proc 269; lint clean; D-012).
+  Hosted CI on `8e8d8e0` (first push of `main`) is red on Ubuntu/macOS and the
+  connection job: diagnosis under way before the M0 gate.
+
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
   IC-74 adds acceptance work that must be reconciled, not assumed complete.
@@ -86,24 +93,12 @@ pause: `17aad27`; latest published checkpoint: `55ec31d`.
 | M4 Interoperability and agents | P18–P21 | pending | — |
 | M5 Applications, benchmarks, release | P22–P25 | pending | — |
 
-## Paused ownership (resume only on instruction)
+## Ownership since the resume
 
-The maintainer requested **Astra for implementation** and **Luna for testing**
-on 2026-10-03. Existing agents handed off at safe boundaries; their unfinished
-changes remain intact. New agents use explicit model selections.
-
-- `astra_auth` (`gpt-6-astra`): P03 retroactive scrubber and auth integration.
-- `astra_transport` (`gpt-6-astra`): P04 wire log, HTTP transfers and retries.
-- `astra_models` (`gpt-6-astra`): P05 credentials, transcript projection and catalog.
-- `astra_kernel` (`gpt-6-astra`): independent P06 agent-loop state machine.
-- `astra_portability` (`gpt-6-astra`): hosted Linux liveness/lock corrections.
-- `astra_review` (`gpt-6-astra`): independent auth/transport/model source review.
-- `astra_review_core` (`gpt-6-astra`): independent portability/kernel review.
-- `luna_core` (`gpt-6-luna`): P04 and immutable package/hosted validation.
-- `luna_auth_models` (`gpt-6-luna`): focused P03/P05 tests and lint.
-- Root: coordination, serialized Git/docs queue, acceptance decisions, GitHub
-  and global records. Runtime implementation and test execution are delegated
-  to the requested models.
+Coordinator (main Claude session): workflow orchestration, plan boundaries,
+`HANDOFF.md`/`PROGRESS.md`, pushes and milestone decisions. Per task, separate
+Claude subagents implement, independently review (re-running tests), fix and
+commit (D-013). The earlier Astra/Luna (Codex) lane assignments are historical.
 
 Git commits and generated documentation are serialized. A lane may prepare an
 independent component in parallel, but its plan remains incomplete until all

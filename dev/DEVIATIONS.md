@@ -154,3 +154,18 @@ P04 Task 12's literal plan code is changed in two behaviours; contract 8.1-8.2 g
    request id comes from the attempt's 2xx head. Regressions: "stream retry hints validate
    delays and preserve nonretryable classes" and "stream retry hints keep their class, the
    integer status and the server's request id".
+
+## D-013 — Claude subagent workflow replaces the Astra/Luna lanes (2026-10-03)
+
+The maintainer resumed the paused implementation with Claude Code and asked for
+all work to be consolidated onto `main` (no feature branch, no PRs) with periodic
+pushes. The handoff's model allocation (gpt-6-astra for implementation/review,
+gpt-6-luna for tests) is not available in this harness. Each task now runs as:
+a Claude implementer (actual red, implementation, actual green, scoped lint,
+evidence in `progress/Pxx.md`), a separate Claude reviewer that independently
+re-runs the focused tests and lint and audits the diff against plan and contract,
+a fixer for blocker/major/minor findings (up to two re-review rounds), then a
+commit of exactly the task's files with the plan's message. The separation of
+implementation, independent review and acceptance is unchanged; no gate is
+weakened. Pushing `main` triggers the hosted CI matrix, which supplies the
+cross-platform evidence previously obtained through the draft PR.

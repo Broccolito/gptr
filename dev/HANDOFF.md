@@ -1,27 +1,40 @@
-# GPTR implementation — paused handoff
+# GPTR implementation handoff
 
-**PAUSED by the maintainer on 2026-10-03 at approximately 18:44 PDT
-(2026-10-04 01:44 UTC), to conserve tokens and transfer work to another agent.**
-Do not resume implementation, tests, model downloads, CI polling or publishing
-until the maintainer explicitly resumes the work. All implementation/review
-agents stopped. Luna interrupted its one active retry test; it exited without
-a final result. No task-owned test process remains active. Previously dispatched
-GitHub Actions may continue remotely; no automation was created to resume work.
+**RESUMED on 2026-10-03 (evening PDT) by Claude Code (Opus 5.5) on the maintainer's
+explicit instruction**, after the pause recorded below. The maintainer also asked to
+consolidate everything onto `main`: the former `codex/gptr-1.0-implementation`
+branch was fast-forwarded into `main` (at `8e8d8e0`), draft PR #4 was closed as
+merged, PR #3 (legacy `get_response.R`) was closed, and the extra branches were
+deleted. **All work now happens directly on `main`, with periodic pushes.**
 
-## Start here on an authorized resume
+## Start here (any agent taking over)
 
-1. Read this file, `PROGRESS.md`, `DEVIATIONS.md`, `CLAUDE.md`, conventions,
-   definitive interface contract section 15, and `spec/07-local-ollama.md`.
+1. Read this file, `PROGRESS.md` (milestone ledger and current position),
+   `DEVIATIONS.md`, `CLAUDE.md`, `plan/00-index.md`, `plan/00-conventions.md`,
+   interface contract section 15 and `spec/07-local-ollama.md` (IC-74).
    Contract > architecture > decomposition > literal plan examples.
-2. Inspect Git before any edit. **Preserve the three staged Task 7 files and all
-   unfinished changes below. Do not reset, clean, stash-drop or regenerate over
-   them.** Historical agent handoffs from before the Astra/Luna switch are stale;
-   this handoff and current files take precedence.
-3. Use **gpt-6-astra for implementation/code fixes/source review** and
-   **gpt-6-luna for test execution/lint/validation reporting**, as explicitly
-   requested by the maintainer. Keep independent code review separate from tests.
-4. Follow the next-action sequence below. Do not describe a whole plan, milestone,
-   cross-platform gate or release as complete from component-level results.
+2. The current position is the newest commit on `main` plus the per-plan task logs
+   in `progress/Pxx.md`: every task appends its evidence section there before it
+   is committed (one commit per task, plan's conventional message). Run
+   `git log --oneline -15` and read the last task section of the newest log.
+3. Inspect `git status` before editing. Uncommitted files belong to the task in
+   flight (named in its progress section); never reset, clean or stash them away.
+4. Execution model since the resume (replaces the Astra/Luna lanes; see D-013):
+   one Claude subagent implements a task test-first (actual red, implement,
+   actual green, scoped lint, evidence), a separate Claude subagent independently
+   re-runs the tests and reviews the diff against plan and contract, a fixer
+   addresses blocker/major/minor findings (up to two rounds), then a committer
+   stages exactly the task's files. Orchestrated by the Workflow tool, one plan
+   (or plan slice) per workflow run; the coordinator updates this file and
+   `PROGRESS.md` at plan boundaries.
+5. Do not describe a whole plan, milestone, cross-platform gate or release as
+   complete from component-level results.
+
+## Pause record (historical, 2026-10-03 18:44 PDT)
+
+The maintainer paused the earlier Codex-driven implementation to transfer work.
+The sections below describe the state at that pause; items marked done in
+`PROGRESS.md` or the task logs since then supersede them.
 
 ## Git checkpoint and preservation
 
