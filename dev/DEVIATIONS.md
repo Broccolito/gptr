@@ -2124,3 +2124,61 @@ Validation: `progress/P10.md`, Task 4. Fifteen blocks (49 expectations) were add
 `LC_ALL=C`, `[ FAIL 23 | WARN 1 | SKIP 0 | PASS 89 ]` (`task4-fix1-red-plan-literal-clocale.log`;
 the non-ASCII index block is red in both locales, through `unable to translate` under `LC_ALL=C`).
 Final `^tool-read$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 129 ]`, the same under `LC_ALL=C`.
+
+## D-049 - P09 plot capture: while no human can see a device, a default device the code opens is offscreen too; a reused device number starts a new page; plot_png() keeps no PNG (2026-10-04)
+
+P09 Task 6's plan-literal `R/eval-plots.R` was changed in the three ways below. Each was found by
+a probe of the plan-literal source (`dev/.validation/P09/task6-probe.R`,
+`task6-probe-plan-literal.log`; the plan-literal file is kept as
+`task6-eval-plots-plan-literal.R`). `plot_png()`'s signature and result, the PNG size and
+devices, the visual-change and prefix heuristics, the low-level merge (`fig.keep = "high"`) and
+the plan's six test blocks are unchanged.
+
+1. **The `device` option opens pdf(NULL) while no human can see a device (IC-67).** The plan
+   opened one `pdf(NULL)` at `plot_begin()`. When the evaluated code closed it (`dev.off()`,
+   `graphics.off()`, a common model pattern after a plot) and drew again, R opened its default
+   device: `Rplots.pdf` in `getwd()` under Rscript, with its display list off, so the later
+   plots were not captured either. The same happened in device mode without a human after the
+   code closed the user's device. `plot_close()` then closed whatever device had reused the
+   number of the private one. 04 section 15 IC-67 and 03 section 6.12 ask for no `Rplots.pdf` in
+   the working directory. R opens the `device` option for every implicit device (`plot()`,
+   `par()`, `layout()`, grid drawing) and for `dev.new()`; `par()`, `layout()` and grid drawing
+   without `grid.newpage()` run no plot hook, so the hooks of Task 8 cannot cover it. Now
+   `plot_begin()` sets `options(device = <closure over the plot state>)` in "capture" mode and
+   in every mode when no human is present; the closure opens another
+   `pdf(NULL)` with the display list enabled (`plot_open_offscreen()`), whose number joins
+   `ps$our_devs`. `plot_close()` restores the option first and closes every device in
+   `ps$our_devs` that is still open. The option is set last in `plot_begin()`, so a failure
+   before it cannot leave it changed. With a human present in "auto" mode the option is not
+   touched: the human's default (screen) device opens as before. In "capture" mode
+   `plot_capture()` skips the user's devices open at `plot_begin()` (`ps$devs0`) but not a device
+   of `ps$our_devs`: after the code closed the user's device and the private one
+   (`graphics.off()`), R opens the next offscreen device at the user's old number, and its plots
+   are captured too (review round 1; the plan compared the number with `ps$our_dev` only).
+2. **A device number R reuses starts a new page.** `ps$last_dl` and `ps$last_k` are keyed by the
+   device number. A new offscreen device clears both for its number, so a page on it is never
+   treated as a low-level addition to the closed device's page. Without this, `plot(1:3)`,
+   `dev.off()`, `plot(1:3); abline(h = 2)` replaced the first recording instead of adding the
+   second plot (`task6-mutant-noclear.log`). `plot_close()` also drops `ps$last_dl` (capture has
+   ended; the recordings themselves are dropped by `plot_render_all()` as before).
+3. **`plot_png()` keeps no PNG.** Its PNG is only the source of the block's bytes, but the
+   plan left one file per call in `<workspace>/cache/tmp`, also when the replay failed (probe E).
+   It is now removed on exit. `plot_render_all()` removes the PNG of a replay that failed (its
+   other PNGs are the paths the `plot` events carry and stay, as planned).
+
+Known limits, unchanged from the plan's design: in "capture" mode with user devices open, code
+that closes the private device draws on the device R makes current, a user's device, which is
+not captured; a user's file device opened with its display list off holds no display list before
+`plot_begin()` enables it, so a low-level addition on it is recorded alone (`plot_render_all()`
+gives `NA` for it when the replay fails); a device the code opens explicitly (`png()`) at a number
+the private device used before is closed by `plot_close()`; R offers no public way to tell
+devices apart beyond their numbers (`dev.displaylist()` is internal, report 12 A5).
+
+Validation: `progress/P09.md`, Task 6. Three blocks (20 expectations) were added to the plan's 6
+blocks (32 expectations). The final test file against the plan-literal source gave 10 failed and
+42 passed expectations (`task6-red-adaptations-final.log`). Review round 1 added two blocks (14
+expectations): the capture-mode device at a reused user number failed 2 before its fix
+(`task6-fix1-red.log`), and a mutant of `plot_render_all()` that keeps a failed replay's PNG
+fails 1 (`task6-fix1-mutant-nounlink.log`). Final `^eval-plots$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 66 ]` (`task6-fix1-green.log`), the same under `LC_ALL=C` with
+`_R_CHECK_SCREEN_DEVICE_=stop` (`task6-fix1-green-clocale.log`).
