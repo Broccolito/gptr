@@ -13,6 +13,12 @@ token_cpt = c(
 #' @noRd
 token_cjk_pattern = "[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]"
 
+#' Whether an estimator input is one finite real number
+#' @noRd
+est_finite_number = function(x) {
+  is.numeric(x) && !is.complex(x) && length(x) == 1L && is.finite(x)
+}
+
 #' Estimated o200k tokens of `x` (joined with newlines) for a content class
 #' @noRd
 est_tokens = function(x, class = c("prose", "code", "r_output", "str", "csv", "json", "error",
@@ -48,6 +54,8 @@ est_tokens_each = function(x, class) {
 #' ceil(w/32) * ceil(h/32) * 1.2. Gemini 3: the default media resolution, 1120.
 #' @noRd
 est_image_tokens = function(width, height, api = "anthropic") {
+  if (!est_finite_number(width)) arg_abort(width, "width", "one finite real dimension")
+  if (!est_finite_number(height)) arg_abort(height, "height", "one finite real dimension")
   width = check_number(width, "width", min = 1)
   height = check_number(height, "height", min = 1)
   check_string(api, "api")
@@ -69,9 +77,13 @@ est_image_tokens = function(width, height, api = "anthropic") {
 #' new content is at least 150 tokens; the observed ratio is clamped to 0.5 to 3.
 #' @noRd
 est_multiplier = function(state, estimated, reported, prior) {
-  if (is.null(state)) state = list(m = prior, n = 0L)
-  usable = is.numeric(estimated) && is.numeric(reported) && length(estimated) == 1L &&
-    length(reported) == 1L && !is.na(estimated) && !is.na(reported) &&
+  if (is.null(state)) {
+    if (!est_finite_number(prior) || prior <= 0) {
+      arg_abort(prior, "prior", "one positive finite real multiplier")
+    }
+    state = list(m = prior, n = 0L)
+  }
+  usable = est_finite_number(estimated) && est_finite_number(reported) &&
     estimated >= 150 && reported > 0
   if (!usable) return(state)
   ratio = min(max(reported / estimated, 0.5), 3)

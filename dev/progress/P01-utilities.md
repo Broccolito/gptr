@@ -99,3 +99,22 @@ empty JSON arrays passed object schemas.
 - Independent review reproduced the original failures and checked corrected
   nullable unions and null enums; no actionable issue remained in the fix.
 - Commit: `fix(json): preserve JSON types and nullable schema constraints`.
+
+## Task 9 follow-up — finite estimator inputs
+
+Review found that infinite image dimensions failed with an untyped condition,
+and non-finite provider usage could produce a NaN calibration multiplier.
+Added local estimator guards without changing the shared numeric validator.
+
+- Regression-first run: FAIL 12, WARN 2, SKIP 0, PASS 28. Raw log:
+  `dev/.validation/P01-T09-edge-red.log`.
+- Corrected focused suite: FAIL 0, WARN 0, SKIP 0, PASS 69, with zero lint.
+  The original 20 expectations still pass, including all normal provider image
+  formulas and EWMA updates.
+- Non-finite/complex dimensions now produce typed invalid-argument conditions.
+  Non-finite/complex observed usage preserves the current calibration state.
+  New calibration requires a positive finite real prior; calls with existing
+  state still do not evaluate an omitted prior.
+- Independent review found no actionable issue in the guards or regression
+  coverage. No shared documentation output changed.
+- Commit: `fix(utils): reject invalid estimator dimensions and calibration inputs`.

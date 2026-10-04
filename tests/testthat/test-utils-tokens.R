@@ -51,3 +51,28 @@ test_that("est_multiplier() updates by EWMA only for large enough estimates", {
   state = est_multiplier(state, estimated = 1000, reported = 10000)
   expect_equal(state$m, exp(0.5 * log(1.35) + 0.5 * log(3)))
 })
+
+test_that("image dimensions reject non-finite and complex values with typed errors", {
+  for (value in list(Inf, -Inf, NaN, NA_real_, 1 + 1i)) {
+    for (api in c("anthropic", "openai-responses", "google-generative-ai")) {
+      expect_error(est_image_tokens(value, 512, api), class = "gptr_error_invalid_argument")
+      expect_error(est_image_tokens(768, value, api), class = "gptr_error_invalid_argument")
+    }
+  }
+})
+
+test_that("non-finite or complex usage cannot corrupt estimator calibration", {
+  state = list(m = 1.35, n = 2L)
+  for (value in list(Inf, -Inf, NaN, NA_real_, 1 + 1i)) {
+    expect_identical(est_multiplier(state, value, 1000), state)
+    expect_identical(est_multiplier(state, 1000, value), state)
+  }
+  expect_identical(est_multiplier(NULL, Inf, Inf, prior = 1), list(m = 1, n = 0L))
+})
+
+test_that("new estimator calibration requires a positive finite real prior", {
+  for (prior in list(Inf, -Inf, NaN, NA_real_, 1 + 1i, 0, -1, c(1, 2))) {
+    expect_error(est_multiplier(NULL, 1000, 1000, prior),
+                 class = "gptr_error_invalid_argument")
+  }
+})
