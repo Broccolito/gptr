@@ -308,3 +308,103 @@ prompt_register_cache = function(gptr) {
   gptr$register(gptr_spec("cache_policy", "default", plan = prompt_cache_plan_gap))
   invisible(NULL)
 }
+
+# ---- the prefix guard (G4 section 4.3.5) --------------------------------------------------------
+
+#' The model reference of a target ("<provider>/<id>"), read by exact names
+#' @noRd
+prompt_target_ref = function(target) {
+  target[["ref"]] %||% paste0(target[["provider"]] %||% "", "/", target[["id"]] %||% "")
+}
+
+#' The memo key of the last request view to a model ("prompt_view_<provider>/<id>")
+#' @noRd
+prompt_view_key = function(target) {
+  paste0("prompt_view_", prompt_target_ref(target))
+}
+
+#' Forget the stored request views of a session (on session_tree, i.e. a rewind)
+#' @noRd
+prefix_reset = function(s) {
+  memo = prompt_memo(s)
+  if (is.null(memo)) return(invisible(NULL))
+  keys = ls(memo, all.names = TRUE)
+  rm(list = keys[startsWith(keys, "prompt_view_")], envir = memo)
+  invisible(NULL)
+}
+
+#' Compare a request with the previous one to the same model (the prefix.guard service)
+#'
+#' The last view per model reference is kept in the session's memo. A view that extends the
+#' previous one element by element is quiet; the first request to a model, a request after a
+#' stated break (compaction, image elision, rewind: the view's `epoch` changed) and a request
+#' after `prefix_reset()` are not compared. On a break: emits `cache_break` (an `ev_new()` event
+#' with the envelope of contract 4.5: `run` and `agent` of the session's current run, else NULL
+#' and "main", `turn`; to the session's own ctx), appends a `gptr.cache_break` entry and acts per
+#' `gptr.check_prefix` (`"event"`
+#' records only, `"warn"` also signals `gptr_warning_cache_break`, `"error"` signals
+#' `gptr_error_internal`).
+#'
+#' @param s A `<session>`.
+#' @param target A model record.
+#' @param view The `view` of `request_build()`.
+#' @return `invisible(NULL)`.
+#' @noRd
+prefix_guard = function(s, target, view) {
+  memo = prompt_memo(s)
+  if (is.null(memo)) return(invisible(NULL))
+  ref = prompt_target_ref(target)
+  key = prompt_view_key(target)
+  prev = get0(key, envir = memo, inherits = FALSE)
+  assign(key, view, envir = memo)
+  if (is.null(prev) || !identical(attr(prev, "epoch"), attr(view, "epoch"))) {
+    return(invisible(NULL))
+  }
+  n = length(prev)
+  m = min(n, length(view))
+  same = unname(prev[seq_len(m)]) == unname(view[seq_len(m)])
+  if (length(view) >= n && all(same)) return(invisible(NULL))
+  i = if (all(same)) m + 1L else which(!same)[1]
+  first_diff = names(prev)[min(i, n)]
+  culprit = if (first_diff %in% c("tools", "t0", "t1")) {
+    "the frozen prompt changed after the session froze it (append a section patch instead)"
+  } else {
+    "a transcript entry changed after it was sent (entries are append-only)"
+  }
+  g0 = attr(prev, "generation")
+  g1 = attr(view, "generation")
+  if (!identical(g0, g1)) {
+    culprit = paste0(culprit, "; the registry changed in between (generation ", g0, " -> ",
+                     g1, ")")
+  }
+  provider = target[["provider"]]
+  model = target[["id"]]
+  d = session_data(s)
+  entry = d$leaf %||% NA_character_
+  run = session_live(s)$run
+  ev = ev_new("cache_break", session = d$id, run = if (is.null(run)) NULL else run$id,
+              agent = if (is.null(run)) "main" else run$opts$agent %||% "main",
+              turn = d$turns, provider = provider, model = model, first_diff = first_diff,
+              entry = entry, culprit = culprit)
+  ev_dispatch("cache_break", ev, session = s, ctx = prompt_ctx(s))
+  session_append(s, list(type = "custom", custom_type = "gptr.cache_break",
+                         data = list(provider = provider, model = model, firstDiff = first_diff,
+                                     entry = entry, culprit = culprit)))
+  msg = paste0("Prompt-cache prefix broken for ", ref, " at ", first_diff, ": ", culprit, ".")
+  action = gptr_opt("check_prefix")
+  if (identical(action, "warn")) gptr_warn(msg, "cache_break")
+  if (identical(action, "error")) gptr_abort(msg, "internal", detail = msg)
+  invisible(NULL)
+}
+
+on_load(ext_service_set("prefix.guard", prefix_guard, provided_by = "P07", builtin = "prompt"))
+
+#' Register the rewind reset of the prefix guard (a `session_tree` hook)
+#' @noRd
+prompt_register_guard = function(gptr) {
+  gptr$on("session_tree", function(event, ctx) {
+    if (!is.null(ctx$session)) prefix_reset(ctx$session)
+    NULL
+  })
+  invisible(NULL)
+}

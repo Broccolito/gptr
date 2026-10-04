@@ -1426,6 +1426,7 @@ builtin_prompt = function(gptr) {
   prompt_register_presets(gptr)
   prompt_register_sections(gptr)
   prompt_register_cache(gptr)
+  prompt_register_guard(gptr)
   invisible(NULL)
 }
 

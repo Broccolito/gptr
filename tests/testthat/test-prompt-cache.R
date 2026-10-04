@@ -271,3 +271,137 @@ test_that("images elided on the path are projected and estimated as sent (IC-67)
                    as.character(hash_sha256(prompt_message_json(sent[[k]]))))
   expect_match(prompt_message_json(sent[[k]]), "[image omitted: gptr$plot(", fixed = TRUE)
 })
+
+# ---- Task 11: the prefix guard ------------------------------------------------------------------
+
+breaks_of = function(s) {
+  Filter(function(e) identical(e$custom_type, "gptr.cache_break"), prompt_path(s))
+}
+
+count_breaks = function(.env = parent.frame()) {
+  hits = new.env()
+  hits$n = 0L
+  off = gptr_register(gptr_hook("cache_break", function(event, ctx) {
+    hits$n = hits$n + 1L
+    hits$event = event
+    NULL
+  }))
+  withr::defer(off(), envir = .env)
+  hits
+}
+
+test_that("the prefix guard stays quiet for appends and flags a rewritten prompt", {
+  s = p07_session()
+  p07_first_turn(s)
+  target = model_resolve("fake/fake-1")
+  hits = count_breaks()
+  prefix_guard(s, target, request_build(s, target)$view)
+  p07_reply(s, "ok")
+  prefix_guard(s, target, request_build(s, target)$view)
+  expect_identical(hits$n, 0L)
+  d = session_data(s)
+  d$frozen$t0 = paste0(d$frozen$t0, "\n<state>turn 2</state>")
+  prefix_guard(s, target, request_build(s, target)$view)
+  expect_identical(hits$n, 1L)
+  brk = breaks_of(s)
+  expect_length(brk, 1L)
+  expect_identical(brk[[1]]$data$firstDiff, "t0")
+  expect_identical(brk[[1]]$data$model, "fake-1")
+  expect_match(brk[[1]]$data$culprit, "frozen prompt changed", fixed = TRUE)
+  expect_identical(ext_service_get("prefix.guard"), prefix_guard)
+})
+
+test_that("an edited transcript entry is detected and gptr.check_prefix acts", {
+  s = p07_session()
+  p07_first_turn(s)
+  target = model_resolve("fake/fake-1")
+  prefix_guard(s, target, request_build(s, target)$view)
+  p07_reply(s, "ok")
+  d = session_data(s)
+  i = which(vapply(d$entries, function(e) identical(e$message$role, "user"), NA))[1]
+  k = length(d$entries[[i]]$message$content)
+  d$entries[[i]]$message$content[[k]]$text = "edited"
+  local_gptr_options(check_prefix = "warn")
+  expect_warning(prefix_guard(s, target, request_build(s, target)$view),
+                 class = "gptr_warning_cache_break")
+  expect_match(breaks_of(s)[[1]]$data$culprit, "transcript entry changed", fixed = TRUE)
+  p07_reply(s, "again")
+  d$entries[[i]]$message$content[[k]]$text = "edited twice"
+  local_gptr_options(check_prefix = "error")
+  expect_error(prefix_guard(s, target, request_build(s, target)$view),
+               class = "gptr_error_internal")
+})
+
+test_that("stated breaks and rewinds do not count as prefix breaks", {
+  s = p07_session()
+  p07_first_turn(s)
+  target = model_resolve("fake/fake-1")
+  prefix_guard(s, target, request_build(s, target)$view)
+  d = session_data(s)
+  d$frozen$t0 = paste0(d$frozen$t0, " changed")
+  session_append(s, list(type = "custom", custom_type = "gptr.image_elision",
+                         data = list(images = list())))
+  prefix_guard(s, target, request_build(s, target)$view)
+  prefix_reset(s)
+  d$frozen$t0 = paste0(d$frozen$t0, " again")
+  prefix_guard(s, target, request_build(s, target)$view)
+  expect_length(breaks_of(s), 0L)
+})
+
+test_that("a session_tree event resets the guard", {
+  s = p07_session()
+  p07_first_turn(s)
+  target = model_resolve("fake/fake-1")
+  prefix_guard(s, target, request_build(s, target)$view)
+  memo = session_live(s)$memo
+  expect_true(any(startsWith(ls(memo, all.names = TRUE), "prompt_view_")))
+  ev_dispatch("session_tree", list(from = "a", to = "b", report = character()), session = s,
+              ctx = prompt_ctx(s))
+  expect_false(any(startsWith(ls(memo, all.names = TRUE), "prompt_view_")))
+})
+
+test_that("cache_break carries the event envelope of contract 4.5 in and outside a run", {
+  # Review round 1: the payload lacked run, agent and turn (04 sections 4.5 and 10.4)
+  invisible(gc(verbose = FALSE))
+  local_fake_provider(list("one", "two"))
+  s = session_new("fake/fake-1", "auto", home = new.env())
+  hits = count_breaks()
+  seen = new.env()
+  off = gptr_register(gptr_hook("before_request", function(event, ctx) {
+    seen$before = event
+    NULL
+  }))
+  withr::defer(off())
+  session_run(s, msg_user("hello"))
+  expect_identical(hits$n, 0L)
+  d = session_data(s)
+  d$frozen$t0 = paste0(d$frozen$t0, "\n<state>changed</state>")
+  session_run(s, msg_user("again"))
+  expect_identical(s$status, "idle")
+  expect_identical(hits$n, 1L)
+  ev = hits$event
+  expect_identical(ev$type, "cache_break")
+  expect_identical(ev$session, d$id)
+  expect_true(is.character(ev$run) && length(ev$run) == 1L)
+  expect_identical(ev$run, seen$before$run)
+  expect_identical(ev$agent, "main")
+  expect_identical(ev$turn, seen$before$turn)
+  expect_true(is.numeric(ev$ts) && length(ev$ts) == 1L)
+  expect_identical(ev$provider, "fake")
+  expect_identical(ev$model, "fake-1")
+  expect_identical(ev$first_diff, "t0")
+  expect_identical(ev$entry, breaks_of(s)[[1]]$data$entry)
+  expect_match(ev$culprit, "frozen prompt changed", fixed = TRUE)
+  target = model_resolve("fake/fake-1")
+  prefix_reset(s)
+  prefix_guard(s, target, request_build(s, target)$view)
+  d$frozen$t0 = paste0(d$frozen$t0, " again")
+  leaf = d$leaf
+  prefix_guard(s, target, request_build(s, target)$view)
+  expect_identical(hits$n, 2L)
+  ev = hits$event
+  expect_true("run" %in% names(ev) && is.null(ev$run))
+  expect_identical(ev$agent, "main")
+  expect_identical(ev$turn, d$turns)
+  expect_identical(ev$entry, leaf)
+})
