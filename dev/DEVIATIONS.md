@@ -3160,10 +3160,11 @@ job. CI Task CI-4 fixes them. Two of its changes go beyond a test's portability 
 
 Validation: `progress/ci-hosted.md`, Task CI-4.
 
-## D-064 - P15 call scanner: UTF-8 bytes are parsed (IC-62), parse data is kept under sys.source(), ownership matches header keys exactly and never a missing prompt hash, a computed prompt = gives no literal (2026-10-04)
+## D-064 - P15 call scanner: UTF-8 bytes are parsed (IC-62), parse data is kept under sys.source(), ownership matches header keys exactly and never a missing prompt hash, a computed prompt = gives no literal, a piped call (native or magrittr) is identified as R calls it, call identity ignores source references (2026-10-04)
 
-P15 Task 2's plan-literal scanner and ownership functions (`R/doc-blocks.R`) were changed in five
-ways. Their interfaces and the contract 11.5 ownership rule are unchanged.
+P15 Task 2's plan-literal scanner and ownership functions (`R/doc-blocks.R`) were changed in eight
+ways. Their interfaces and the contract 11.5 ownership rule are unchanged. The call table gains
+one column, `ident` (item 6).
 1. **The scanner parses UTF-8 bytes.** The plan parsed `as_utf8()` (UTF-8-marked) text and
    decoded string literals with `str2lang()`. In a C locale (the architecture section 9 CI
    matrix has an `LC_ALL=C` job) the parser translates marked UTF-8 to the native encoding, so a
@@ -3203,13 +3204,67 @@ ways. Their interfaces and the contract 11.5 ownership rule are unchanged.
    located. A given `prompt =` whose value is not a string literal now gives NA, so the call is
    found by its text. `prompt = NULL` and an empty `prompt =` are not given (the default is
    `NULL`), and `` `prompt` = `` and `"prompt" =` bind `prompt` as in R (`doc_arg_name()`).
+6. **A piped call is identified as R calls it (review round 3).** The parser rewrites
+   `lhs |> gptr(q)` into `gptr(lhs, q)`, and `sys.call()` (the `call0` that Task 8's locator
+   passes to `doc_calls_have()`) reports the rewrite. The plan stored and compared only the
+   right-hand text `gptr(q)`. As a result, a computed-prompt call on the right of a pipe was
+   never found by identity: `df |> gptr(q)`, `x |> gptr(paste(...))`, and every later step of a
+   chain. A string-literal left side (`"Summarise mtcars" |> gptr()`) gave no prompt literal. Yet
+   its prompt is that left side (contract 6.1.1 step 2: after the rewrite it is the first unnamed
+   string literal). None of these calls could be located, recorded or replayed. The scanner now
+   fills a column `ident`. For the right-hand operand of a pipe it holds the text of the whole
+   pipe expression. That operand is a call whose parent expression has a `PIPE` child before it.
+   Parsing that text with `str2lang()` gives what `sys.call()` reports, for a single pipe, a
+   chain, a literal left side and the placeholder `_`. Any other call's `ident` is its own text.
+   `text` stays the call's own text. `doc_calls_have()` compares `ident`, and `th` (the anchor
+   identity) hashes `ident`. `doc_call_prompt()` treats the left side as the first unnamed
+   argument, so a string-literal left side is the prompt unless `prompt =` is given. With the
+   placeholder, the left side goes to the argument that holds `_`: `"x" |> gptr(prompt = _)`
+   prompts `"x"`, and `"ctx" |> gptr("p", ctx = _)` prompts `"p"`. Because the left side is the
+   first argument, a literal there wins over a later unnamed literal: `"S" |> gptr("more")` runs
+   `gptr("S", "more")` and prompts `"S"` (the runtime also warns `two_prompts`), pinned by a test
+   since review round 4. The plan literal has the same gap (`task2-fix3-adapt-red.log`). Item 8
+   covers magrittr's pipes.
+7. **Call identity ignores source references (review round 3).** Under `keep.source = TRUE`
+   (the default in interactive sessions, and `source(keep.source = TRUE)`), the call that
+   `sys.call()` reports carries source references. Each `function` or `\(x)` call holds a srcref
+   as its fourth element, and each `{` carries srcref attributes. The call parsed from the
+   scanner's text has neither. So `identical()` failed for
+   `gptr(paste("a", sapply(x, function(i) i)))`, and such a call could not be found by identity.
+   `doc_calls_have()` now compares both sides through the new `doc_call_norm()`. It drops srcref
+   elements and the srcref, srcfile and wholeSrcref attributes at every depth. It is gptr's own
+   helper rather than `utils::removeSource()`, which became thorough for language objects only in
+   R 4.4.0 (R NEWS, PR#18638); the package supports R >= 4.2.0.
+8. **A magrittr-piped call is identified as magrittr calls it (review round 4).** Users pipe into
+   `gptr()` with magrittr too (contract 6.1, `envir` row: a magrittr mask is replaced by its
+   parent; research 12 D3: `mice %>% gptr("describe")`), although magrittr is not a dependency.
+   magrittr 2.0.5 calls the right-hand side with `.` as its first argument unless an argument,
+   named or not, is `.` itself: `sys.call()` reports `x %>% gptr(q)` as `gptr(., q)` and
+   `x %>% gptr(q, .)` as `gptr(q, .)`, with `keep.source` FALSE and TRUE, under `%>%`, `%T>%`,
+   `%!>%` and `%<>%`; `%$%` calls it as written. The plan and round 3 kept `gptr(q)` as the
+   identity, so a magrittr-piped call with a computed prompt (`1 %>% gptr(q)`,
+   `1 %>% gptr(paste("a", q))`) or a literal left side (`"S" %>% gptr()`) was never found by
+   `doc_calls_have()` and could not be located, recorded or replayed. The scanner now treats a
+   `SPECIAL` token of those four pipes like `PIPE` (`doc_pipe_operands()` reports which), and
+   `ident` of the right-hand call is its text with `.` inserted as the first argument unless an
+   argument is `.` (`doc_dot_ident()`; `gptr(.)` when the call has no argument). `text` is
+   unchanged. For the prompt, `.` is a symbol, never a literal (contract 6.1.1 step 2): a
+   string-literal left side is the prompt as `prompt = .`, or when no unnamed literal is given and
+   `.` is the first unnamed argument, as the first length-1 character value (`"S" %>% gptr(q)`
+   prompts `"S"`; `"S" %>% gptr("more")` prompts `"more"`; `"S" %>% gptr(q, .)` gives NA, since
+   `q` may hold the prompt). A user-defined `%>%` with other semantics is not recognised.
 
 Validation: `progress/P15.md`, Task 2 (`test-doc-blocks.R`). The plan's 46 expectations are
-unchanged. Thirty-one were added (5 C-locale, 6 for the parse memo and `line_offset`, 3 ownership,
-4 parse data, 3 for `prompt =`, and 10 for call texts and long literals, run in both the C and a
-UTF-8 locale). Against the plan literal they fail 15 (`dev/.validation/P15/task2-adapt-red.log`,
-`task2-fix1-adapt-red.log`, `task2-fix2-adapt-red.log`). Final `^doc-blocks$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 136 ]` in the UTF-8 and the C locale.
+unchanged. Forty-nine were added: 5 C-locale, 6 for the parse memo and `line_offset`, 3
+ownership, 4 parse data, 3 for `prompt =`, 10 for call texts and long literals (run in both the C
+and a UTF-8 locale), 9 for native pipes, 4 for source references and 5 for magrittr pipes.
+Review round 3 also corrected one round-2 expectation: it now checks the piped call that the
+file's own parse gives. Against the plan literal the added blocks fail 27: 15 before round 3, 1
+more in the round-2 block, 6 in the round-3 blocks and 5 added in round 4
+(`dev/.validation/P15/task2-adapt-red.log`, `task2-fix1-adapt-red.log`,
+`task2-fix2-adapt-red.log`, `task2-fix3-adapt-red-round2.log`, `task2-fix3-adapt-red.log`,
+`task2-fix4-adapt-red.log`). Final `^doc-blocks$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 154 ]` in
+the UTF-8 and the C locale.
 
 ## D-065 - P07 composition: a session preset equal to the configured one is not an explicit choice, `tools.disable` also drops plugin direct tools, a failing tool schema leaves that tool out, section overrides follow Pi's rule without widening the preset (2026-10-04)
 
