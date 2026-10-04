@@ -38,6 +38,56 @@ remaining issue in Task 4 scope (read-only review; validation above is owner-run
 Raw local evidence: ignored
 `dev/.validation/P05/T04/`.
 
+## Task 5: transcript projection
+
+- Walks only the selected ancestry, with the documented previous-entry fallback
+  for a missing parent. A non-NULL unknown leaf is a typed error, including an
+  empty transcript; NULL remains the empty projection.
+- Applies the newest ancestry compaction as the replacement prefix and retains
+  its stored context blocks exactly. Older compaction entries inside the kept
+  range do not reintroduce superseded summaries. Compactions on other branches
+  have no effect; tool results whose calls were cut are dropped.
+- Drops errored/aborted assistant turns. Each open call receives one real or
+  synthetic result; duplicate, unmatched and late results are dropped, while
+  repeated IDs in later groups remain independent. Interrupted synthetic results
+  retain the assistant timestamp and elapsed-time wording, making repeated
+  projections stable. Other orphans receive `No result provided`.
+- Holds operator relays until tool results finish, preserving FIFO at normal
+  completion, abort/error boundaries and EOF. Both documented operator entry
+  shapes work; user extension notes remain user messages. Stored entries are
+  unchanged.
+
+### Test-first evidence
+
+1. Appended historical tests before projection source: RED 6 missing-function
+   errors with the 57 Task 4 expectations still passing.
+2. Literal Task 5 source: GREEN 83 expectations.
+3. Added partial-result/abort/error, relay FIFO, duplicate/unmatched/reused IDs,
+   branch compaction, multiple compactions, NULL kept range and empty-transcript
+   unknown-leaf regressions. Two initial test assertions incorrectly used
+   `msg_text()` for context blocks; corrected them to inspect context text and
+   serialized messages before evaluating the implementation failures.
+4. Corrected boundary RED: 3 failures, 118 passes (superseded compaction summary
+   retained; missing leaf silently accepted). Applied the two scoped fixes:
+   GREEN 121, zero failures, errors, test warnings or skips. One test-only brace
+   style finding was then corrected. Package-aware scoped lint: 0 for both files.
+   A standalone lint invocation without loading the namespace had unresolved
+   package-symbol findings; loading the package before lint resolved those.
+5. Timestamp boundary regressions produced RED 6 failures / 125 passes.
+   Numeric NA, NaN and infinite timestamps now map to zero, matching invalid
+   text timestamps; projection never emits a non-finite timestamp. Final GREEN:
+   131 passes, zero failures, errors, test warnings or skips; scoped lint zero.
+   Astra independent source review confirmed the finite guard on 2026-10-03.
+6. Luna independently reran the current exact source: GREEN 131, no failures,
+   warnings or skips, and both source and tests lint clean. Saved evidence:
+   `dev/.validation/P05/provider-transform-luna-green.log` and
+   `dev/.validation/P05/provider-transform-luna-lint.log`.
+
+Independent source review: plans_security_review/p02_metadata_review confirmed
+both fixes against the contract and found no further issue in that narrow pass;
+The additional Astra review found no remaining timestamp defect. Raw evidence is ignored under
+`dev/.validation/P05/T05/`.
+
 ## Validation process
 
 All R runs use `Rscript --vanilla`, the ignored project-local library, and fresh

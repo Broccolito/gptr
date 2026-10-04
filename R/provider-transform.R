@@ -259,3 +259,187 @@ id_alnum9_normaliser = function() {
     }
   }
 }
+
+#' The model-context message list for `target` along the path root -> `leaf`
+#'
+#' Never edits `entries` (R lists are values). Steps: walk the path; the newest compaction
+#' entry replaces everything before its first kept entry; entries become messages; errored and
+#' aborted assistant messages are dropped; orphaned tool calls get one synthetic error result;
+#' operator messages that arrive while tool results are pending are held until the results are
+#' complete; results that match no pending call are dropped; then [handoff_transform()].
+#' @noRd
+project_messages = function(entries, leaf, target) {
+  path = entry_compaction_cut(entry_path(entries, leaf))
+  msgs = unlist(lapply(path, entry_messages), recursive = FALSE) %||% list()
+  handoff_transform(project_structure(msgs), target)
+}
+
+#' Entries on the path root -> `leaf` (a missing parent re-parents to the previous entry)
+#' @noRd
+entry_path = function(entries, leaf) {
+  if (is.null(leaf)) return(list())
+  ids = vapply(entries, function(e) as.character(e[["id"]] %||% NA_character_), "")
+  pos = match(leaf, ids)
+  if (is.na(pos)) {
+    gptr_abort(paste0("The leaf entry ", leaf, " is not in the transcript."), "internal",
+               detail = "project_messages: unknown leaf")
+  }
+  chain = integer(length(entries))
+  seen = logical(length(entries))
+  k = 0L
+  while (!is.na(pos) && !seen[pos]) {
+    seen[pos] = TRUE
+    k = k + 1L
+    chain[k] = pos
+    parent = entries[[pos]][["parent_id"]]
+    if (is.null(parent) || is.na(parent[1])) break
+    nxt = match(parent, ids)
+    if (is.na(nxt)) nxt = if (pos > 1L) pos - 1L else NA_integer_
+    pos = nxt
+  }
+  entries[rev(chain[seq_len(k)])]
+}
+
+#' Apply the newest compaction entry: it first, then its kept range, then what follows it
+#' @noRd
+entry_compaction_cut = function(path) {
+  if (!length(path)) return(path)
+  types = vapply(path, function(e) as.character(e[["type"]] %||% ""), "")
+  ci = which(types == "compaction")
+  if (!length(ci)) return(path)
+  ci = max(ci)
+  first = path[[ci]][["first_kept_entry_id"]]
+  ids = vapply(path, function(e) as.character(e[["id"]] %||% ""), "")
+  from = if (is.null(first)) NA_integer_ else match(first, ids)
+  kept = if (!is.na(from) && from < ci) path[from:(ci - 1L)] else list()
+  kept = Filter(function(e) !identical(e[["type"]], "compaction"), kept)
+  after = if (ci < length(path)) path[(ci + 1L):length(path)] else list()
+  c(path[ci], kept, after)
+}
+
+#' Epoch milliseconds from an entry timestamp (ISO 8601 UTC); 0 when unparsable
+#' @noRd
+entry_ms = function(ts) {
+  if (is.numeric(ts) && length(ts)) {
+    return(if (is.finite(ts[[1]])) as.numeric(ts[[1]]) else 0)
+  }
+  if (!is.character(ts) || !length(ts) || is.na(ts[[1]])) return(0)
+  t = as.POSIXct(sub("Z$", "", ts[[1]]), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC")
+  if (is.na(t)) 0 else round(as.numeric(t) * 1000)
+}
+
+#' The model-context messages of one entry (a list of 0 or 1 messages)
+#' @noRd
+entry_messages = function(e) {
+  type = e[["type"]] %||% ""
+  if (identical(type, "message")) {
+    return(if (is.null(e[["message"]])) list() else list(e[["message"]]))
+  }
+  if (identical(type, "custom_message")) {
+    # P06 keeps a gptr.operator entry as list(type = "custom_message", message = <operator>);
+    # the flat form (custom_type, content, details) is accepted too. Other custom types are not
+    # model context.
+    m = e[["message"]]
+    if (is.list(m) && identical(m[["role"]], "operator")) return(list(m))
+    ct = e[["custom_type"]] %||% e[["raw"]][["customType"]]
+    if (identical(ct, "gptr.operator")) return(list(entry_operator(e)))
+    return(list())
+  }
+  if (identical(type, "compaction")) return(list(entry_compaction_message(e)))
+  list()
+}
+
+#' The operator message of a flat `gptr.operator` custom_message entry
+#' @noRd
+entry_operator = function(e) {
+  d = e[["details"]] %||% list()
+  texts = vapply(e[["content"]] %||% list(), function(b) as.character(b[["text"]] %||% ""), "")
+  msg_operator(d[["kind"]] %||% "reminder", paste(texts, collapse = "\n"),
+               tool_add = d[["tool_add"]], origin_text = d[["origin_text"]],
+               timestamp = entry_ms(e[["timestamp"]]))
+}
+
+#' The first user message a compaction entry stands for (its stored context blocks)
+#' @noRd
+entry_compaction_message = function(e) {
+  blocks = e[["gptr"]][["blocks"]]
+  if (!length(blocks)) {
+    tb = e[["tokens_before"]]
+    attrs = if (is.null(tb)) list() else list(tokens_before = format(tb, scientific = FALSE))
+    blocks = list(block_context("checkpoint", as.character(e[["summary"]] %||% ""),
+                                attrs = attrs))
+  }
+  msg_user(blocks, source = "prompt", timestamp = entry_ms(e[["timestamp"]]))
+}
+
+#' The synthetic result of an orphaned tool call (INFRA-04 wording)
+#'
+#' A call left open by an aborted run (the next assistant message is `aborted`) says how long
+#' after the call the run was interrupted; any other orphan says "No result provided".
+#' @noRd
+orphan_result = function(call, owner, next_msg) {
+  text = "No result provided"
+  aborted_turn = is.list(next_msg) && identical(next_msg[["role"]], "assistant") &&
+    identical(next_msg[["stop_reason"]], "aborted")
+  if (aborted_turn) {
+    s = (as.numeric(next_msg[["timestamp"]] %||% NA_real_) -
+           as.numeric(owner[["timestamp"]] %||% NA_real_)) / 1000
+    if (!is.na(s) && s >= 0) {
+      text = paste0("interrupted after ", format(round(s, 1), nsmall = 1),
+                    " s; side effects may have occurred")
+    }
+  }
+  msg_tool_result(call[["id"]], call[["name"]], list(block_text(text)), is_error = TRUE,
+                  timestamp = owner[["timestamp"]] %||% 0)
+}
+
+#' Structural projection: drop failed turns, close orphans, hold operator messages
+#' @noRd
+project_structure = function(msgs) {
+  out = list()
+  pending = list()
+  owner = NULL
+  answered = character()
+  held = list()
+  close_pending = function(next_msg) {
+    for (call in pending) {
+      if (!(call[["id"]] %in% answered)) {
+        out[[length(out) + 1L]] <<- orphan_result(call, owner, next_msg)
+      }
+    }
+    for (h in held) out[[length(out) + 1L]] <<- h
+    pending <<- list()
+    owner <<- NULL
+    answered <<- character()
+    held <<- list()
+  }
+  for (m in msgs) {
+    role = m[["role"]] %||% ""
+    if (identical(role, "assistant")) {
+      close_pending(m)
+      if ((m[["stop_reason"]] %||% "") %in% c("error", "aborted")) next
+      out[[length(out) + 1L]] = m
+      calls = Filter(function(b) identical(b[["type"]], "tool_call"), m[["content"]] %||% list())
+      if (length(calls)) {
+        pending = calls
+        owner = m
+      }
+    } else if (identical(role, "tool_result")) {
+      id = m[["tool_call_id"]] %||% ""
+      open = vapply(pending, function(b) as.character(b[["id"]]), "")
+      if (id %in% open && !(id %in% answered)) {
+        answered = c(answered, id)
+        out[[length(out) + 1L]] = m
+      }
+    } else if (identical(role, "operator") && length(pending)) {
+      held[[length(held) + 1L]] = m
+    } else if (identical(role, "user")) {
+      close_pending(m)
+      out[[length(out) + 1L]] = m
+    } else {
+      out[[length(out) + 1L]] = m
+    }
+  }
+  close_pending(NULL)
+  out
+}
