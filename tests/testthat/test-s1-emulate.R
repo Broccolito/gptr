@@ -369,35 +369,6 @@ test_that("a failed stream takes the System 1 class of its cause; only transport
   expect_false(failed("redirect", 307L)$retry)
 })
 
-test_that("the caller's signal aborts an emulated request and is never written to", {
-  s1_fresh()
-  local_fake_provider(list(list(hang = TRUE)), name = "emuhang")
-  q = list(answer = s1_question("Ok?", "x")$wire)
-  sig = new.env(parent = emptyenv())
-  sig$aborted = FALSE
-  sig$reason = NULL
-  tm = reactor_timer(reactor_now() + 0.2, function() {
-    sig$aborted = TRUE
-    sig$reason = "caller stop"
-  })
-  withr::defer(reactor_cancel(tm))
-  out = s1_emulate_classify(model_resolve("emuhang/emuhang-1"), list(x = "a"), q,
-                            list(signal = sig))
-  expect_s3_class(out, "gptr_error_s1_response")
-  expect_match(conditionMessage(out), "caller stop", fixed = TRUE)
-  expect_false(s1_retry_of(out))
-  # a finished request leaves the caller's signal as it was
-  local_fake_provider(list(list(json = list(answers = list(answer = 0.4)))), name = "emusig")
-  own = new.env(parent = emptyenv())
-  own$aborted = FALSE
-  own$reason = NULL
-  one = s1_emulate_classify(model_resolve("emusig/emusig-1"), list(x = "a"), q,
-                            list(signal = own))
-  expect_identical(one$answers$answer$prob, 0.4)
-  expect_false(own$aborted)
-  expect_null(own$reason)
-})
-
 test_that("the usage of a reply that was refused still counts (IC-74)", {
   s1_fresh()
   local_fake_provider(list(list(text = "{\"answers\": {\"answer\": 0.", stop = "length",

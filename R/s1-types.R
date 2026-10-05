@@ -47,20 +47,20 @@ s1_cached = function(x) {
   if (!is.null(cached) && length(cached) == length(x)) cached else NULL
 }
 
-#' Call-level meta of combined answers: the first part's, with `calibrated` TRUE only when every
-#' part is, FALSE when any part is FALSE, else NA, and absent when no part states it (IC-74)
+#' Combined calibration (IC-74): TRUE when every value is TRUE, FALSE when any is FALSE, else NA
+#' @noRd
+s1_calib = function(values) {
+  if (all(vapply(values, isTRUE, NA))) TRUE else if (any(vapply(values, isFALSE, NA))) FALSE else NA
+}
+
+#' Call-level meta of combined answers: the first part's, with s1_calib() of the parts'
+#' `calibrated`, absent when no part states it
 #' @noRd
 s1_meta_combine = function(metas) {
   out = metas[[1L]] %||% list()
   calib = lapply(metas, function(m) m[["calibrated"]])
   if (all(lengths(calib) == 0L)) return(out)
-  out[["calibrated"]] = if (all(vapply(calib, isTRUE, logical(1L)))) {
-    TRUE
-  } else if (any(vapply(calib, isFALSE, logical(1L)))) {
-    FALSE
-  } else {
-    NA
-  }
+  out[["calibrated"]] = s1_calib(calib)
   out
 }
 
@@ -78,36 +78,45 @@ new_gptr_decision = function(x, prob, threshold = 0.5, meta = list()) {
             class = c("gptr_decision", "gptr_s1", "logical"))
 }
 
-#' Build a gptr_choice: a character vector with one probability row per element
+#' Build a gptr_choice (`kind` "choice", character) or a gptr_score ("score", the expected
+#' 0-based level) with one probability row per element
 #' @noRd
-new_gptr_choice = function(x, levels, probabilities, confidence, meta = list()) {
-  value = as.character(x)
+s1_new_levels = function(kind, x, levels, probabilities, confidence, meta) {
+  choice = identical(kind, "choice")
+  value = if (choice) as.character(x) else as.double(x)
   names(value) = names(x)
   lv = as.character(levels)
   conf = as.double(confidence)
   if (length(conf) != length(value)) {
-    gptr_abort("A gptr_choice needs one confidence per element.", "internal",
-               detail = "new_gptr_choice")
+    gptr_abort(paste0("A gptr_", kind, " needs one confidence per element."), "internal",
+               detail = paste0("new_gptr_", kind))
   }
   structure(value, s1_levels = lv, probabilities = s1_matrix(probabilities, length(value), lv),
             confidence = unname(conf), meta = meta,
-            class = c("gptr_choice", "gptr_s1", "character"))
+            class = c(paste0("gptr_", kind), "gptr_s1", if (choice) "character" else "numeric"))
+}
+
+#' Build a gptr_choice: a character vector with one probability row per element
+#' @noRd
+new_gptr_choice = function(x, levels, probabilities, confidence, meta = list()) {
+  s1_new_levels("choice", x, levels, probabilities, confidence, meta)
 }
 
 #' Build a gptr_score: the expected 0-based level with one probability row per element
 #' @noRd
 new_gptr_score = function(x, levels, probabilities, confidence, meta = list()) {
-  value = as.double(x)
-  names(value) = names(x)
-  lv = as.character(levels)
-  conf = as.double(confidence)
-  if (length(conf) != length(value)) {
-    gptr_abort("A gptr_score needs one confidence per element.", "internal",
-               detail = "new_gptr_score")
+  s1_new_levels("score", x, levels, probabilities, confidence, meta)
+}
+
+#' A System 1 vector of the kind, levels and threshold of `to`; `p` is the decision's prob or the
+#' probability matrix
+#' @noRd
+s1_new_like = function(to, value, p, conf, meta) {
+  if (inherits(to, "gptr_decision")) {
+    return(new_gptr_decision(value, p, attr(to, "threshold", exact = TRUE), meta))
   }
-  structure(value, s1_levels = lv, probabilities = s1_matrix(probabilities, length(value), lv),
-            confidence = unname(conf), meta = meta,
-            class = c("gptr_score", "gptr_s1", "numeric"))
+  kind = if (inherits(to, "gptr_choice")) "choice" else "score"
+  s1_new_levels(kind, value, attr(to, "s1_levels", exact = TRUE), p, conf, meta)
 }
 
 #' Rebuild an object of the kind of `x` from a bare value and rows of x's attributes
@@ -116,18 +125,12 @@ new_gptr_score = function(x, levels, probabilities, confidence, meta = list()) {
 #' @noRd
 s1_rebuild = function(x, value, rows) {
   meta = s1_meta_take(attr(x, "meta", exact = TRUE) %||% list(), rows, length(x))
-  if (inherits(x, "gptr_decision")) {
-    return(new_gptr_decision(value, attr(x, "prob", exact = TRUE)[rows],
-                             attr(x, "threshold", exact = TRUE), meta))
-  }
-  lv = attr(x, "s1_levels", exact = TRUE)
-  p = attr(x, "probabilities", exact = TRUE)[rows, , drop = FALSE]
-  conf = attr(x, "confidence", exact = TRUE)[rows]
-  if (inherits(x, "gptr_choice")) {
-    new_gptr_choice(value, lv, p, conf, meta)
+  p = if (inherits(x, "gptr_decision")) {
+    attr(x, "prob", exact = TRUE)[rows]
   } else {
-    new_gptr_score(value, lv, p, conf, meta)
+    attr(x, "probabilities", exact = TRUE)[rows, , drop = FALSE]
   }
+  s1_new_like(x, value, p, attr(x, "confidence", exact = TRUE)[rows], meta)
 }
 
 #' Same System 1 kind with the same levels?
@@ -291,18 +294,13 @@ c.gptr_s1 = function(...) {
   } else {
     unlist(Map(function(cv, p) cv %||% rep(NA, length(p)), cached, parts), use.names = FALSE)
   }
-  if (inherits(first, "gptr_decision")) {
-    prob = unlist(lapply(parts, attr, which = "prob", exact = TRUE), use.names = FALSE)
-    return(new_gptr_decision(value, prob, attr(first, "threshold", exact = TRUE), meta))
-  }
-  p = do.call(rbind, lapply(parts, attr, which = "probabilities", exact = TRUE))
-  conf = unlist(lapply(parts, attr, which = "confidence", exact = TRUE), use.names = FALSE)
-  lv = attr(first, "s1_levels", exact = TRUE)
-  if (inherits(first, "gptr_choice")) {
-    new_gptr_choice(value, lv, p, conf, meta)
+  p = if (inherits(first, "gptr_decision")) {
+    unlist(lapply(parts, attr, which = "prob", exact = TRUE), use.names = FALSE)
   } else {
-    new_gptr_score(value, lv, p, conf, meta)
+    do.call(rbind, lapply(parts, attr, which = "probabilities", exact = TRUE))
   }
+  conf = unlist(lapply(parts, attr, which = "confidence", exact = TRUE), use.names = FALSE)
+  s1_new_like(first, value, p, conf, meta)
 }
 
 #' @method rep gptr_s1
@@ -323,32 +321,26 @@ unique.gptr_s1 = function(x, incomparables = FALSE, ...) {
 #' @export
 sort.gptr_s1 = function(x, decreasing = FALSE, ...) sort(s1_bare(x), decreasing = decreasing, ...)
 
-#' @method as.logical gptr_s1
-#' @export
-as.logical.gptr_s1 = function(x, ...) {
+#' The bare vector converted by `f`, keeping the names
+#' @noRd
+s1_as = function(x, f) {
   b = s1_bare(x)
-  out = as.logical(b)
+  out = f(b)
   names(out) = names(b)
   out
 }
+
+#' @method as.logical gptr_s1
+#' @export
+as.logical.gptr_s1 = function(x, ...) s1_as(x, as.logical)
 
 #' @method as.character gptr_s1
 #' @export
-as.character.gptr_s1 = function(x, ...) {
-  b = s1_bare(x)
-  out = as.character(b)
-  names(out) = names(b)
-  out
-}
+as.character.gptr_s1 = function(x, ...) s1_as(x, as.character)
 
 #' @method as.double gptr_s1
 #' @export
-as.double.gptr_s1 = function(x, ...) {
-  b = s1_bare(x)
-  out = as.double(b)
-  names(out) = names(b)
-  out
-}
+as.double.gptr_s1 = function(x, ...) s1_as(x, as.double)
 
 #' @method format gptr_s1
 #' @export
@@ -532,15 +524,8 @@ s1_vec_restore = function(x, to, ...) {
   cached = x$cached
   if (is.null(meta$cached) && all(is.na(cached))) cached = NULL
   meta$cached = cached
-  if (inherits(to, "gptr_decision")) {
-    return(new_gptr_decision(x$value, x$prob, attr(to, "threshold", exact = TRUE), meta))
-  }
-  lv = attr(to, "s1_levels", exact = TRUE)
-  if (inherits(to, "gptr_choice")) {
-    new_gptr_choice(x$value, lv, x$probabilities, x$confidence, meta)
-  } else {
-    new_gptr_score(x$value, lv, x$probabilities, x$confidence, meta)
-  }
+  p = if (inherits(to, "gptr_decision")) x$prob else x$probabilities
+  s1_new_like(to, x$value, p, x$confidence, meta)
 }
 
 #' vctrs equality proxy: the bare values, so grouping ignores the probabilities
@@ -612,7 +597,7 @@ on_load(s1_vctrs_register())
 #' @noRd
 s1_provider = function(x) {
   if (inherits(x, "gptr_provider")) return(x)
-  if (!is.character(x) || length(x) != 1L || is.na(x) || !nzchar(x)) return(NULL)
+  if (!rlang::is_string(x) || !nzchar(x)) return(NULL)
   provider_get(x)
 }
 
@@ -662,7 +647,7 @@ s1_cost = function(usage, model) {
 s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds) {
   u = usage_cost(usage_new(input = input, output = output), model)
   api = model[["api"]]
-  if (!is.character(api) || length(api) != 1L || is.na(api)) api = "unknown"
+  if (!rlang::is_string(api)) api = "unknown"
   rid = request_id
   if (is.atomic(rid) && length(rid) == 1L && (is.na(rid) || identical(unname(rid), ""))) {
     rid = NULL
@@ -755,7 +740,7 @@ s1_answer_probs = function(got, keys, tol = s1_round_tol) {
 s1_parse_choice = function(ch, p, keys, conf, bad, tol = s1_round_tol) {
   known = !anyNA(p)
   if (is.null(ch) && known) ch = keys[which.max(p)]
-  if (!is.character(ch) || length(ch) != 1L || is.na(ch) || !(ch %in% keys)) {
+  if (!rlang::is_string(ch) || !(ch %in% keys)) {
     return(bad("System 1 returned an unknown choice."))
   }
   if (known && p[[ch]] < max(p) - 2 * tol - 1e-9) {
@@ -786,27 +771,39 @@ s1_parse_score = function(given, p, keys, conf, legend, bad, tol = s1_round_tol)
   list(type = "score", score = sc, probabilities = p, confidence = conf, legend = legend)
 }
 
-#' The canonical answers of one state checked against the questions asked (07 section 3)
-#'
-#' One answer per question, of its type, returned in question order; else the unsignalled
-#' gptr_error_s1_response of the first problem.
+#' Answers keyed by question id, nothing extra and every question answered, each by
+#' `one(answer, question, id)`, in question order (07 section 3); else the first problem (`bad()`)
 #' @noRd
-s1_check_answers = function(answers, questions, model_id = NA_character_) {
-  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
+s1_answers_each = function(answers, questions, one, bad) {
   ids = names(questions)
   got = names(answers)
-  if (!is.list(answers) || is.null(got) || anyNA(got) || anyDuplicated(got) ||
-        length(got) != length(ids) || !setequal(got, ids)) {
-    return(bad("System 1 returned answers that do not match the questions asked."))
+  if (!is.list(answers) || (length(answers) && (is.null(got) || anyNA(got) ||
+                                                  anyDuplicated(got)))) {
+    return(bad("System 1 returned answers that are not keyed by question."))
+  }
+  extra = setdiff(got, ids)
+  if (length(extra)) {
+    return(bad(paste0("System 1 returned answers to questions that were not asked: ",
+                      paste(extra, collapse = ", "), ".")))
   }
   out = vector("list", length(ids))
   names(out) = ids
   for (id in ids) {
-    a = s1_check_answer(answers[[id]], questions[[id]], bad)
+    if (!(id %in% got)) {
+      return(bad(paste0("System 1 returned no answer for the question ", id, ".")))
+    }
+    a = one(answers[[id]], questions[[id]], id)
     if (inherits(a, "condition")) return(a)
     out[[id]] = a
   }
   out
+}
+
+#' The canonical answers of one state checked against the questions asked (s1_answers_each())
+#' @noRd
+s1_check_answers = function(answers, questions, model_id = NA_character_) {
+  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
+  s1_answers_each(answers, questions, function(a, q, id) s1_check_answer(a, q, bad), bad)
 }
 
 #' One canonical record checked against its question
@@ -815,7 +812,7 @@ s1_check_answers = function(answers, questions, model_id = NA_character_) {
 #' @noRd
 s1_check_answer = function(a, question, bad) {
   type = if (is.list(question)) question[["type"]] else NULL
-  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
+  if (!rlang::is_string(type, s1_types)) {
     return(bad("System 1 was sent a question without a known type."))
   }
   if (!is.list(a) || !identical(a[["type"]], type)) {

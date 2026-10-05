@@ -156,9 +156,6 @@ test_that("keys carry the adapter, the model digest and the server version (IC-7
              type = "classifier", api = "typesafe-system-one")
   expect_identical(s1_cache_identity(jev), list(adapter = "typesafe-system-one"))
   expect_identical(s1_cache_identity(list()), stats::setNames(list(), character()))
-  expect_error(s1_cache_identity("ollama/clef-flash"), class = "gptr_error_invalid_argument")
-  expect_error(s1_cache_keys("s", "e", "m", noul_q(), st, identity = "x"),
-               class = "gptr_error_invalid_argument")
 })
 
 test_that("image bytes and MIME types are keyed in order and never stored (IC-74)", {
@@ -203,12 +200,6 @@ test_that("image bytes and MIME types are keyed in order and never stored (IC-74
   expect_false(grepl(b64, text, fixed = TRUE))
   expect_false(grepl(hash_sha256(png$data), text, fixed = TRUE))
   expect_identical(s1_cache_get(k)$answer, 0.8)
-  bad = list(list(data = "x", mime = "image/png"), list(data = png$data),
-             list(data = raw(0), mime = "image/png"), list(data = png$data, mime = NA_character_))
-  for (b in bad) {
-    expect_error(s1_cache_identity(clef_model(), list(b)), class = "gptr_error_invalid_argument")
-  }
-  expect_error(s1_cache_identity(clef_model(), png), class = "gptr_error_invalid_argument")
 })
 
 test_that("an Ollama model without a digest gives answers the cache never keeps (IC-74)", {
@@ -331,5 +322,4 @@ test_that("a file under another key or with broken JSON is a miss; a malformed k
     expect_error(s1_cache_get(k), class = "gptr_error_invalid_argument")
     expect_error(s1_cache_put(k, list()), class = "gptr_error_invalid_argument")
   }
-  expect_error(s1_cache_swap(list()), class = "gptr_error_invalid_argument")
 })

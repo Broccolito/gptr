@@ -124,35 +124,15 @@ s1_emu_bad = function(reason) {
   gptr_abort(paste0("Emulated System 1 answer is malformed: ", reason), c("s1_response", "s1"))
 }
 
-#' The model's reply as canonical answers by question id, in question order (IC-74)
-#'
-#' The `answers` object must answer exactly the questions asked (07 section 3); anything else
-#' signals gptr_error_s1_response.
+#' The model's reply as canonical answers by question id, in question order (s1_answers_each());
+#' anything else signals gptr_error_s1_response
 #' @noRd
 s1_emu_wire = function(text, questions) {
   obj = tryCatch(json_decode(s1_emu_strip(text)), error = function(e) e)
   if (inherits(obj, "error")) s1_emu_bad("the model's reply is not JSON.")
   raw = if (is.list(obj) && !is.null(names(obj))) obj[["answers"]] else NULL
   if (!is.list(raw)) s1_emu_bad("the model returned no `answers` object.")
-  ids = names(questions)
-  got = names(raw)
-  if (length(raw) && (is.null(got) || anyNA(got) || !all(nzchar(got)) || anyDuplicated(got))) {
-    s1_emu_bad("the model returned answers that are not keyed by question.")
-  }
-  extra = setdiff(got, ids)
-  if (length(extra)) {
-    s1_emu_bad(paste0("the model answered questions that were not asked: ",
-                      paste(extra, collapse = ", "), "."))
-  }
-  out = vector("list", length(ids))
-  names(out) = ids
-  for (id in ids) {
-    if (!(id %in% got)) {
-      s1_emu_bad(paste0("the model returned no answer for the question ", id, "."))
-    }
-    out[[id]] = s1_emu_answer(raw[[id]], questions[[id]], id)
-  }
-  out
+  s1_answers_each(raw, questions, s1_emu_answer, s1_emu_bad)
 }
 
 #' One stated answer as a canonical record (IC-74)
@@ -162,7 +142,7 @@ s1_emu_wire = function(text, questions) {
 #' @noRd
 s1_emu_answer = function(v, q, id) {
   type = q[["type"]]
-  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
+  if (!rlang::is_string(type, s1_types)) {
     s1_emu_bad(paste0("the question ", id, " has no known type."))
   }
   if (identical(type, "noul")) {
@@ -201,7 +181,7 @@ s1_emu_answer = function(v, q, id) {
 #' @noRd
 s1_emu_version = function(msg, model) {
   for (v in list(msg[["response_model"]], msg[["model"]])) {
-    if (is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)) return(v)
+    if (rlang::is_string(v) && nzchar(v)) return(v)
   }
   model[["id"]]
 }
@@ -214,42 +194,6 @@ s1_emu_usage = function(msg) {
   list(input = s1_count(u[["input"]]), output = s1_count(u[["output"]]))
 }
 
-# P04's failure classes that are never retried (contract 2.2, IC-64): a refused redirect, a spend
-# cap, and a retry-after above gptr.max_retry_delay
-s1_emu_final = c("redirect", "spend_cap", "retry_after")
-
-#' The outcome of a stream that failed or was aborted, from its `error` event `err`
-#'
-#' The class follows the cause as in s1_transport_outcome(); an abort or a local failure is
-#' gptr_error_s1_response. Neither an abort nor a class of `s1_emu_final` is retried (IC-64).
-#' @noRd
-s1_emu_failed = function(msg, err, reason, model) {
-  st = err[["status"]]
-  status = if (is.numeric(st) && length(st) == 1L && !is.na(st)) as.integer(st) else NA_integer_
-  cls = err[["class"]]
-  cls = if (is.character(cls) && length(cls) && !is.na(cls[1L])) cls[1L] else ""
-  cls = sub("^gptr_error_", "", cls)
-  aborted = identical(reason, "aborted") || identical(cls, "aborted")
-  sub = if (aborted) {
-    "s1_response"
-  } else if (startsWith(cls, "timeout") || identical(cls, "network")) {
-    "s1_connection"
-  } else if (!is.na(status)) {
-    s1_status_class(status)
-  } else {
-    "s1_response"
-  }
-  rid = err[["request_id"]] %||% (if (is.list(msg)) msg[["request_id"]]) %||% NA_character_
-  text = if (is.list(msg)) msg[["error_message"]] else NULL
-  what = if (aborted) "was aborted: " else "failed: "
-  cnd = s1_condition(sub, paste0("Emulated System 1 request ", what,
-                                 as.character(text %||% reason)[1L]),
-                     status, if (nzchar(cls)) cls else NA_character_, as.character(rid)[1L],
-                     model[["id"]], retry_after = err[["retry_after"]])
-  retry = s1_retry_of(cnd) && !aborted && !(cls %in% s1_emu_final)
-  list(ok = FALSE, error = cnd, retry = retry, delay = s1_delay(err[["retry_after"]]))
-}
-
 #' The outcome of one emulated request
 #'
 #' A reply that did not stop normally or is malformed is gptr_error_s1_response, never retried,
@@ -257,10 +201,18 @@ s1_emu_failed = function(msg, err, reason, model) {
 #' @noRd
 s1_emu_outcome = function(msg, err, questions, model) {
   reason = if (is.list(msg)) msg[["stop_reason"]] else NULL
-  if (!is.character(reason) || length(reason) != 1L || is.na(reason)) reason = "error"
-  if (reason %in% c("error", "aborted")) return(s1_emu_failed(msg, err, reason, model))
+  if (!rlang::is_string(reason)) reason = "error"
+  if (reason %in% c("error", "aborted")) {
+    aborted = identical(reason, "aborted")
+    what = if (aborted) "was aborted: " else "failed: "
+    text = (if (is.list(msg)) msg[["error_message"]]) %||% reason
+    return(s1_failure(if (aborted) "aborted" else err[["class"]], err[["status"]],
+                      paste0("Emulated System 1 request ", what, as.character(text)[1L]),
+                      err[["request_id"]] %||% (if (is.list(msg)) msg[["request_id"]]),
+                      model[["id"]], err[["retry_after"]]))
+  }
   rid = msg[["request_id"]]
-  if (!is.character(rid) || length(rid) != 1L) rid = NA_character_
+  if (!rlang::is_string(rid)) rid = NA_character_
   usage = s1_emu_usage(msg)
   if (!identical(reason, "stop")) {
     cnd = s1_condition("s1_response", paste0("Emulated System 1 answer is incomplete: the model ",
@@ -295,7 +247,7 @@ s1_emu_ready = function(model, safety = NULL) {
                "not_available", member = ref, provided_by = "a conversational model")
   }
   pid = model[["provider"]]
-  provider = if (is.character(pid) && length(pid) == 1L && !is.na(pid)) s1_provider(pid)
+  provider = if (rlang::is_string(pid)) s1_provider(pid)
   s1_preflight(model, provider, safety = safety)
 }
 
@@ -306,34 +258,6 @@ s1_emu_notice = function(model) {
                      " are emulated through a chat model; their probabilities are not ",
                      "calibrated."),
               "notice", .once = "s1_emulated")
-}
-
-#' The abort signal of one emulated request (contract 8.1 `signal`)
-#'
-#' Aborted when released (s1_emu_release()) or while the caller's `parent` signal is; it never
-#' writes to the caller's signal, which other requests may share.
-#' @noRd
-s1_emu_signal = function(parent = NULL) {
-  own = new.env(parent = emptyenv())
-  own$aborted = FALSE
-  own$reason = NULL
-  up = function(field) if (is.environment(parent)) parent[[field]] else NULL
-  sig = new.env(parent = emptyenv())
-  makeActiveBinding("aborted", function(value) {
-    if (!missing(value)) {
-      own$aborted = isTRUE(value)
-      return(invisible(NULL))
-    }
-    isTRUE(own$aborted) || isTRUE(up("aborted"))
-  }, sig)
-  makeActiveBinding("reason", function(value) {
-    if (!missing(value)) {
-      own$reason = value
-      return(invisible(NULL))
-    }
-    if (isTRUE(own$aborted)) own$reason else up("reason")
-  }, sig)
-  sig
 }
 
 #' The emulated requests of one call that are still open, by job key (s1_emu_release())
@@ -363,17 +287,17 @@ s1_emu_release = function(jobs, reason = "The System 1 emulation was interrupted
 #' Jobs that send each state to the chat model through s1_stream(); each job returns the transfer
 #' or task id, so an interrupt can cancel it
 #'
-#' Each request gets its own signal linked to `stream_opts$signal` and stays in `jobs` until it
-#' reports (s1_emu_release()).
+#' Each request gets its own abort signal (contract 8.1) and stays in `jobs` until it reports
+#' (s1_emu_release()).
 #' @noRd
 s1_emu_start = function(model, questions, stream_opts = list(), jobs = s1_emu_jobs()) {
   schema = s1_emu_schema(questions)
-  parent = stream_opts[["signal"]]
   function(ustates) {
     function(j, done) {
       seen = new.env(parent = emptyenv())
       seen$error = NULL
-      sig = s1_emu_signal(parent)
+      sig = new.env(parent = emptyenv())
+      sig$aborted = FALSE
       jobs$n = jobs$n + 1L
       key = paste0("j", jobs$n)
       jobs$open[[key]] = sig
@@ -407,7 +331,7 @@ s1_emulate = function(model, states, questions, safety = NULL) {
 
 #' classify$run of the s1-emulate adapter: one state, canonical answers or a condition
 #'
-#' `opts$safety` and `opts$signal` (contract 8.1) are read by exact name and handed to the stream.
+#' `opts$safety` (contract 8.1) is read by its exact name and handed to the stream.
 #' @noRd
 s1_emulate_classify = function(model, state, questions, opts) {
   opts = if (is.list(opts)) opts else list()
@@ -415,8 +339,7 @@ s1_emulate_classify = function(model, state, questions, opts) {
   s1_emu_notice(model)
   jobs = s1_emu_jobs()
   on.exit(s1_emu_release(jobs), add = TRUE)
-  start = s1_emu_start(model, questions,
-                       list(safety = opts[["safety"]], signal = opts[["signal"]]), jobs)
+  start = s1_emu_start(model, questions, list(safety = opts[["safety"]]), jobs)
   out = s1_drive(1L, start(list(state)), 1L, 1L)[[1L]]
   if (isTRUE(out$ok)) {
     c(out$value, list(engine = "emulated:structured", calibrated = FALSE))

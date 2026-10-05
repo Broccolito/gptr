@@ -11,9 +11,10 @@ s1_fresh = function(gptr = FALSE, .env = parent.frame()) {
   invisible(dir)
 }
 
-# One recorded wire fixture of tests/testthat/fixtures/jev/ as a list
-jev_fixture = function(name) {
-  path = testthat::test_path("fixtures", "jev", paste0(name, ".json"))
+# One wire fixture as a list: recorded TypeSafe ones in fixtures/jev/, synthetic Ollama ones (the
+# documented shape of POST /v1/systemone, 07-local-ollama.md section 3) in fixtures/ollama/
+wire_fixture = function(name, dir = "jev") {
+  path = testthat::test_path("fixtures", dir, paste0(name, ".json"))
   json_decode(read_utf8(path)$text)
 }
 
@@ -51,35 +52,6 @@ s1_local_service = function(name, fun, .env = parent.frame()) {
   id = registry_add(gptr_spec("service", name, fun = fun), source = "user", rank = 3L)
   withr::defer(registry_remove(id), envir = .env)
   invisible(id)
-}
-
-# Register the typesafe-system-one adapter for the calling test when builtin:system1 has not
-# (Tasks 4-8 run before Task 9 registers the built-in)
-local_s1_adapter = function(.env = parent.frame()) {
-  if (!is.null(registry_get("adapter", "typesafe-system-one"))) return(invisible(NULL))
-  off = gptr_register(gptr_adapter("typesafe-system-one", transport = "http_json",
-                                   classify = list(build = s1_typesafe_build,
-                                                   parse = s1_typesafe_parse)))
-  withr::defer(off(), envir = .env)
-  invisible(NULL)
-}
-
-# Register the ollama-system-one adapter (IC-74) for the calling test when builtin:system1 has
-# not (the native Ollama task runs before Task 9 registers the built-in)
-local_s1_ollama_adapter = function(.env = parent.frame()) {
-  if (!is.null(registry_get("adapter", "ollama-system-one"))) return(invisible(NULL))
-  off = gptr_register(gptr_adapter("ollama-system-one", transport = "http_json",
-                                   classify = list(build = s1_ollama_build,
-                                                   parse = s1_ollama_parse)))
-  withr::defer(off(), envir = .env)
-  invisible(NULL)
-}
-
-# One synthetic wire fixture of tests/testthat/fixtures/ollama/ (the documented shape of Ollama's
-# POST /v1/systemone, 07-local-ollama.md section 3) as a list
-ollama_fixture = function(name) {
-  path = testthat::test_path("fixtures", "ollama", paste0(name, ".json"))
-  json_decode(read_utf8(path)$text)
 }
 
 # A classifier-route call (s1_call()) against Ollama's Clef Flash, or another `model`

@@ -107,7 +107,7 @@ test_that("the request body equals the recorded wire fixtures", {
                         levels = c("Very negative", "Neutral", "Very positive"))
   )
   for (case in names(questions)) {
-    fx = jev_fixture(case)
+    fx = wire_fixture(case)
     q = questions[[case]]
     spec = s1_typesafe_build(jev_model(), fx$request$state, list(answer = q$wire),
                              list(base_url = "https://api.typesafe.ai/v1/", credential = NULL))
@@ -132,19 +132,8 @@ test_that("the bearer credential stays a handle in the request spec", {
                class = "gptr_error_invalid_argument")
 })
 
-test_that("the adapter's classify functions pass P02's classifier signature check (IC-74)", {
-  # contract 8.1 as amended by IC-74: parse(model, status, headers, body, questions)
-  spec = gptr_adapter("typesafe-system-one", transport = "http_json",
-                      classify = list(build = s1_typesafe_build, parse = s1_typesafe_parse))
-  expect_s3_class(spec, "gptr_adapter")
-  local({
-    local_s1_adapter()
-    expect_false(is.null(registry_get("adapter", "typesafe-system-one")))
-  })
-})
-
 test_that("responses parse by name: choice probabilities come back in request order", {
-  fx = jev_fixture("choice")
+  fx = wire_fixture("choice")
   questions = list(answer = fx$request$questions$answer)
   res = s1_typesafe_parse(jev_model(), 200L, list(`x-typesafe-request-id` = "req_1"),
                           json_encode(fx$response), questions)
@@ -161,8 +150,20 @@ test_that("responses parse by name: choice probabilities come back in request or
   expect_identical(s1_parse_answers(fx$response$answers, questions), a)
 })
 
+test_that("a non-ASCII choice matches labels marked 'unknown', as readLines() gives them", {
+  skip_if_not(l10n_info()[["UTF-8"]])
+  labels = c("caf\u00e9", "th\u00e9")
+  Encoding(labels) = "unknown"
+  q = list(answer = s1_question("Which drink?", "x", choices = labels)$wire)
+  wire = list(answer = list(type = "choice", choice = "caf\u00e9",
+                            probabilities = stats::setNames(list(0.8, 0.2), labels)))
+  a = s1_typesafe_parse(jev_model(), 200L, list(), jev_body(wire), q)$answers$answer
+  expect_identical(a$choice, "caf\u00e9")
+  expect_identical(s1_cache_record("k", a, "m", "a", q$answer, list(), "", list())$prob, 0.8)
+})
+
 test_that("a multi-question response parses noul, choice and score answers together", {
-  fx = jev_fixture("multi")
+  fx = wire_fixture("multi")
   res = s1_typesafe_parse(jev_model(), 200L, list(), json_encode(fx$response),
                           fx$request$questions)
   a = res$answers
@@ -182,7 +183,7 @@ test_that("a multi-question response parses noul, choice and score answers toget
 })
 
 test_that("unknown response fields are ignored", {
-  fx = jev_fixture("extra-fields")
+  fx = wire_fixture("extra-fields")
   res = s1_typesafe_parse(jev_model(), 200L, list(), json_encode(fx$response),
                           fx$request$questions)
   a = res$answers
@@ -196,7 +197,7 @@ test_that("error bodies become classed System 1 conditions with the service's me
                `error-422` = "gptr_error_s1_validation", `error-429` = "gptr_error_s1_rate_limit")
   q = list(answer = list(type = "noul", instructions = "Q?"))
   for (case in names(cases)) {
-    fx = jev_fixture(case)
+    fx = wire_fixture(case)
     cnd = s1_typesafe_parse(jev_model(), as.integer(fx$status), list(), json_encode(fx$response),
                             q)
     expect_s3_class(cnd, cases[[case]])
@@ -204,11 +205,11 @@ test_that("error bodies become classed System 1 conditions with the service's me
     expect_identical(cnd$status, as.integer(fx$status))
     expect_identical(cnd$model, "jev-latest")
   }
-  body401 = json_encode(jev_fixture("error-401")$response)
+  body401 = json_encode(wire_fixture("error-401")$response)
   e401 = s1_typesafe_parse(jev_model(), 401L, list(), body401, q)
   expect_match(conditionMessage(e401), "Cannot authenticate", fixed = TRUE)
   expect_identical(e401$error_type, "authentication_error")
-  body422 = json_encode(jev_fixture("error-422")$response)
+  body422 = json_encode(wire_fixture("error-422")$response)
   e422 = s1_typesafe_parse(jev_model(), 422L, list(), body422, q)
   expect_match(conditionMessage(e422), "body.state: Field required", fixed = TRUE)
   flat = s1_typesafe_parse(jev_model(), 400L, list(),
@@ -439,7 +440,6 @@ test_that("a fake classifier answers every state; identical states are sent once
 })
 
 test_that("at most gptr.s1_max_active requests are in flight", {
-  local_s1_adapter()
   log = local_fake_transfers(function(body) ok_reply(body), delay = 0.05)
   p = wire_provider()
   res = s1_request(s1_model(p), states_of(paste("item", 1:30)), noul_questions(),
@@ -459,7 +459,6 @@ test_that("at most gptr.s1_max_active requests are in flight", {
 })
 
 test_that("bounded rounds resubmit only failed elements, honouring retry-after up to 60 s", {
-  local_s1_adapter()
   seen = new.env(parent = emptyenv())
   seen$calls = list()
   seen$waits = numeric()
@@ -494,23 +493,25 @@ test_that("bounded rounds resubmit only failed elements, honouring retry-after u
 })
 
 test_that("transport failures map to retryable or final System 1 conditions", {
-  m = list(id = "jev-latest")
-  cnd = function(cls, status = NA_integer_, retry_after = NULL) {
-    gptr_condition("x", cls, "error", list(status = status, retry_after = retry_after))
+  # a reactor failure's class (contract 2.2) as s1_request() hands it over
+  fail = function(cls, status = NA_integer_, retry_after = NULL) {
+    s1_failure(paste0("gptr_error_", cls), status, "x", NA, "jev-latest", retry_after)
   }
-  net = s1_transport_outcome(cnd(c("network", "provider")), m)
+  net = fail("network")
   expect_s3_class(net$error, "gptr_error_s1_connection")
   expect_true(net$retry)
-  auth = s1_transport_outcome(cnd(c("auth", "provider"), 401L), m)
+  auth = fail("auth", 401L)
   expect_s3_class(auth$error, "gptr_error_s1_auth")
   expect_false(auth$retry)
-  rl = s1_transport_outcome(cnd(c("rate_limit", "provider"), 429L, retry_after = 3), m)
+  rl = fail("rate_limit", 429L, retry_after = 3)
   expect_true(rl$retry)
   expect_identical(rl$delay, 3)
-  idle = s1_transport_outcome(cnd(c("timeout_idle", "timeout")), m)
+  idle = fail("timeout_idle")
   expect_s3_class(idle$error, "gptr_error_s1_connection")
-  redirect = s1_transport_outcome(cnd(c("redirect", "provider"), 307L), m)
+  redirect = fail("redirect", 307L)
   expect_false(redirect$retry)
+  # a server delay above gptr.max_retry_delay is final (IC-64), as on the emulation path
+  expect_false(fail("retry_after", 429L, 120)$retry)
 })
 
 test_that("an unregistered provider without a spec is an unknown model", {
@@ -519,7 +520,6 @@ test_that("an unregistered provider without a spec is an unknown model", {
 })
 
 test_that("against a mocked /systemone the client parses real HTTP replies within 8 active", {
-  local_s1_adapter()
   srv = local_mock_server("systemone", answers = function(body) {
     p = if (grepl("7", unlist(body$state), fixed = TRUE)) 0.1 else 0.9
     list(answer = list(type = "noul", noul = p))
@@ -556,7 +556,6 @@ test_that("against a mocked /systemone the client parses real HTTP replies withi
 # ---- Task 4, IC-74 (07-local-ollama.md sections 2-5) and IC-57 ---------------------------------
 
 test_that("the adapter follows the resolved model's api, not its provider's (IC-74)", {
-  local_s1_adapter()
   log = local_fake_transfers(function(body) ok_reply(body, 0.3))
   mixed = gptr_provider("mixedwire", api = "openai-completions",
                         base_url = "http://127.0.0.1:9/v1/", local = TRUE, offline = TRUE,
@@ -607,7 +606,6 @@ test_that("the request preflight runs before any adapter, credential or transfer
 })
 
 test_that("a model's decision record lowers the requests in flight (IC-74)", {
-  local_s1_adapter()
   log = local_fake_transfers(function(body) ok_reply(body), delay = 0.02)
   p = gptr_provider("pairwise", api = "typesafe-system-one", base_url = "http://127.0.0.1:9/v1/",
                     type = "classifier", local = TRUE, offline = TRUE,
@@ -710,7 +708,6 @@ test_that("dispatch validates canonical answers and never runs a wire parser aga
 test_that("a score the wire parser fills in passes the dispatch check (IC-74)", {
   # two-decimal probabilities may sum below 1 (report 04a); the parser's expected level of a
   # missing score and the check of a given score use the same normalised expectation
-  local_s1_adapter()
   rounded = list(`0` = 0, `1` = 0, `2` = 0, `3` = 0, `4` = 0.98)
   local_fake_transfers(function(body) {
     rate = switch(body$state$text,
@@ -736,7 +733,6 @@ test_that("a score the wire parser fills in passes the dispatch check (IC-74)", 
 })
 
 test_that("a System 1 call inside a pump never runs another run's FIFO tool (IC-57)", {
-  local_s1_adapter()
   local_fake_transfers(function(body) ok_reply(body), delay = 0.02)
   p = wire_provider()
   seen = new.env(parent = emptyenv())

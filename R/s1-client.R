@@ -139,52 +139,35 @@ s1_delay = function(x) {
   if (is.numeric(x) && length(x) == 1L && is.finite(x)) min(max(x, 0), 60) else NULL
 }
 
-#' A message or type field of an error body as one string, NULL when absent
-#'
-#' The text is untrusted: gptr_condition() pastes and redacts it, never interpolates it.
+#' An error body (any shape P04's retry_body_error() reads) as a System 1 condition
 #' @noRd
-s1_text = function(x) {
-  if (is.null(x)) return(NULL)
-  if (is.character(x) && length(x) && !anyNA(x)) return(paste(x, collapse = "; "))
-  json_encode(x)
-}
-
-#' One element of a `{"detail": [...]}` body: `loc.path: msg` for FastAPI's 422 records
-#' @noRd
-s1_error_item = function(e) {
-  if (!is.list(e) || is.null(names(e))) return(s1_text(e) %||% "invalid")
-  msg = s1_text(e[["msg"]]) %||% "invalid"
-  loc = unlist(e[["loc"]], use.names = FALSE)
-  if (!length(loc)) return(msg)
-  paste0(paste(loc, collapse = "."), ": ", msg)
-}
-
-#' An error body in any of the shapes of report 04 section 3.6 as a System 1 condition
-#' @noRd
-s1_http_error = function(status, obj, request_id, model_id, retry_after = NULL) {
-  msg = NULL
-  type = NULL
-  d = if (is.list(obj)) obj[["detail"]] else NULL
-  if (is.list(d) && !is.null(names(d))) {
-    msg = s1_text(d[["message"]])
-    type = s1_text(d[["error_type"]])
-  } else if (is.list(d) && length(d)) {
-    msg = paste(vapply(d, s1_error_item, ""), collapse = "; ")
-    type = "validation_error"
-  } else if (is.character(d)) {
-    msg = s1_text(d)
-  } else if (is.list(obj) && !is.null(obj[["message"]])) {
-    msg = s1_text(obj[["message"]])
-    type = s1_text(obj[["error_type"]])
-  } else if (is.list(obj) && is.list(obj[["error"]])) {
-    e = obj[["error"]]
-    msg = s1_text(e[["message"]])
-    type = s1_text(e[["type"]] %||% e[["code"]])
-  }
+s1_http_error = function(status, body, request_id, model_id) {
+  e = retry_body_error(body)
   text = paste0("System 1 request failed with HTTP ", status,
-                if (length(msg)) paste0(": ", msg) else "")
-  s1_condition(s1_status_class(status), text, status, type %||% NA_character_, request_id,
-               model_id, retry_after = retry_after)
+                if (nzchar(e$message)) paste0(": ", e$message))
+  s1_condition(s1_status_class(status), text, status, if (nzchar(e$type)) e$type else NA_character_,
+               request_id, model_id)
+}
+
+#' A failed request as an outcome (contract 2.2): timeouts and network failures are connection
+#' errors, a known status gives its class, anything else (an abort, a local failure) is a response
+#' error; an abort and P04's final classes are never retried (IC-64)
+#' @noRd
+s1_failure = function(cls, status, text, request_id, model_id, retry_after = NULL) {
+  cls = if (rlang::is_string(cls[1L])) sub("^gptr_error_", "", cls[1L]) else ""
+  if (!is.numeric(status) || length(status) != 1L) status = NA_integer_
+  sub = if (startsWith(cls, "timeout") || identical(cls, "network")) {
+    "s1_connection"
+  } else if (is.na(status) || identical(cls, "aborted")) {
+    "s1_response"
+  } else {
+    s1_status_class(status)
+  }
+  err = s1_condition(sub, text, status, if (nzchar(cls)) cls else NA_character_,
+                     as.character(request_id %||% NA_character_)[1L], model_id,
+                     retry_after = retry_after)
+  final = cls %in% c("aborted", "redirect", "spend_cap", "retry_after")
+  list(ok = FALSE, error = err, retry = s1_retry_of(err) && !final, delay = s1_delay(retry_after))
 }
 
 # ---- the typesafe-system-one adapter ------------------------------------------------------------
@@ -236,36 +219,44 @@ s1_typesafe_build = function(model, state, questions, opts) {
        stream = "json")
 }
 
-#' classify$parse of typesafe-system-one: one whole JSON body (contract 8.1, IC-74)
+#' classify$parse of the TypeSafe and Ollama decision APIs: one whole JSON body (contract 8.1)
 #'
 #' Returns `list(answers, usage, model_version, request_id)` with canonical answers, or an
-#' unsignalled `gptr_error_s1_*` condition carrying the status and request id.
+#' unsignalled `gptr_error_s1_*` condition; Ollama must answer with the model asked (IC-74).
 #' @noRd
-s1_typesafe_parse = function(model, status, headers, body, questions) {
-  rid = s1_header(headers, "x-typesafe-request-id")
+s1_wire_parse = function(model, status, headers, body, questions, ollama = FALSE) {
+  rid = s1_header(headers, if (ollama) "x-request-id" else "x-typesafe-request-id")
   model_id = model[["id"]] %||% NA_character_
   if (!is.numeric(status) || length(status) != 1L) status = NA_integer_
-  obj = tryCatch(json_decode(body), error = function(e) NULL)
   if (is.na(status) || status < 200L || status > 299L) {
-    return(s1_http_error(status, obj, rid, model_id))
+    return(s1_http_error(status, body, rid, model_id))
   }
-  answers = if (is.list(obj)) obj[["answers"]] else NULL
-  if (!is.list(answers)) {
-    return(s1_condition("s1_response", "System 1 returned a response without answers.", status,
-                        NA_character_, rid, model_id))
+  obj = tryCatch(json_decode(body), error = function(e) NULL)
+  version = if (is.list(obj)) obj[["model"]] %||% model_id
+  parsed = if (!is.list(obj) || !is.list(obj[["answers"]])) {
+    s1_condition("s1_response", "System 1 returned a response without answers.", model = model_id)
+  } else if (ollama && !(rlang::is_string(version) &&
+                           identical(s1_ollama_tag(version), s1_ollama_tag(model_id)))) {
+    s1_condition("s1_response", paste0("Ollama answered with another model than ", model_id,
+                                       if (rlang::is_string(version)) paste0(": ", version), "."),
+                 model = model_id)
+  } else {
+    s1_parse_answers(obj[["answers"]], questions, model_id, ollama)
   }
-  parsed = s1_parse_answers(answers, questions, model_id)
   if (inherits(parsed, "condition")) {
     parsed$status = as.integer(status)
     parsed$request_id = rid
     return(parsed)
   }
-  version = obj[["model"]]
-  if (!is.character(version) || length(version) != 1L || is.na(version) || !nzchar(version)) {
-    version = model_id
-  }
+  if (!rlang::is_string(version) || !nzchar(version)) version = model_id
   list(answers = parsed, usage = s1_usage_of(obj[["usage"]]), model_version = version,
        request_id = rid)
+}
+
+#' classify$parse of typesafe-system-one
+#' @noRd
+s1_typesafe_parse = function(model, status, headers, body, questions) {
+  s1_wire_parse(model, status, headers, body, questions)
 }
 
 # ---- answers ----------------------------------------------------------------------------------
@@ -297,27 +288,25 @@ s1_confidence_score = function(p) {
 #' @noRd
 s1_legend = function(question, keys) {
   vals = vapply(question[["criteria"]], function(x) {
-    if (is.character(x) && length(x) == 1L && !is.na(x)) x else json_encode(x)
+    if (rlang::is_string(x)) x else json_encode(x)
   }, "")
   stats::setNames(unname(vals), keys)
 }
 
-#' One wire answer as a canonical answer, probabilities re-keyed by option name (IC-74)
+#' One wire answer as a canonical answer, probabilities re-keyed by option name (07 section 3)
 #'
-#' The service's confidence is kept, recomputed only when absent; an empty probability map is
-#' unknown (NA), not zero. Problems are unsignalled `gptr_error_s1_response` conditions.
+#' TypeSafe's answer may leave out its probabilities (NA, not zero), its confidence (recomputed)
+#' and its choice or score; Ollama's needs probabilities and a score, is checked at four decimals
+#' and its confidence must match the entropy formula (D-120). Problems are unsignalled conditions.
 #' @noRd
-s1_parse_answer = function(answer, question, model_id = NA_character_) {
+s1_parse_answer = function(answer, question, model_id = NA_character_, ollama = FALSE) {
   bad = function(msg) s1_condition("s1_response", msg, model = model_id)
   type = if (is.list(question)) question[["type"]] else NULL
-  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
+  if (!rlang::is_string(type, s1_types)) {
     return(bad("System 1 was sent a question without a known type."))
   }
-  if (!is.list(answer)) return(bad("System 1 returned no answer for the question."))
-  got_type = answer[["type"]]
-  if (!identical(got_type, type)) {
-    shown = if (is.character(got_type) && length(got_type) == 1L) got_type else "missing"
-    return(bad(paste0("System 1 returned a ", shown, " answer for a ", type, " question.")))
+  if (!is.list(answer) || !identical(answer[["type"]], type)) {
+    return(bad(paste0("System 1 returned an answer that is not a ", type, " answer.")))
   }
   if (identical(type, "noul")) {
     p = s1_unit(answer[["noul"]])
@@ -326,50 +315,52 @@ s1_parse_answer = function(answer, question, model_id = NA_character_) {
   }
   keys = s1_option_keys(question)
   if (is.null(keys)) return(bad("System 1 was sent a question without valid options."))
-  p = s1_answer_probs(answer[["probabilities"]], keys)
-  if (is.character(p)) return(bad(p))
-  known = !anyNA(p)
-  conf = NA_real_
-  if (known) {
-    given = answer[["confidence"]]
-    if (is.null(given)) {
-      conf = if (identical(type, "choice")) s1_confidence_choice(p) else s1_confidence_score(p)
-    } else {
-      conf = s1_unit(given)
-      if (is.na(conf)) return(bad("System 1 returned an invalid confidence."))
-    }
+  got = answer[["probabilities"]]
+  if (ollama && !(is.list(got) && length(got))) {
+    return(bad(paste0("System 1 returned a ", type, " answer without probabilities.")))
   }
-  if (identical(type, "choice")) return(s1_parse_choice(answer[["choice"]], p, keys, conf, bad))
-  s1_parse_score(answer[["score"]], p, keys, conf, s1_legend(question, keys), bad)
+  tol = if (ollama) s1_ollama_round_tol else s1_round_tol
+  p = s1_answer_probs(got, keys, tol)
+  if (is.character(p)) return(bad(p))
+  conf = if (anyNA(p)) {
+    NA_real_
+  } else if (ollama) {
+    s1_ollama_confidence(p)
+  } else if (identical(type, "choice")) {
+    s1_confidence_choice(p)
+  } else {
+    s1_confidence_score(p)
+  }
+  given = answer[["confidence"]]
+  if (!is.null(given) && !anyNA(p)) {
+    wire = s1_unit(given)
+    if (is.na(wire)) return(bad("System 1 returned an invalid confidence."))
+    if (ollama && abs(wire - conf) > s1_ollama_conf_tol) {
+      return(bad("System 1 returned a confidence that its probabilities do not give."))
+    }
+    conf = wire
+  }
+  if (identical(type, "choice")) {
+    return(s1_parse_choice(answer[["choice"]], p, keys, conf, bad, tol))
+  }
+  legend = answer[["legend"]]
+  if (ollama && !is.null(legend) && !(is.list(legend) && length(legend) == length(keys) &&
+                                        setequal(names(legend), keys) &&
+                                        all(vapply(legend, rlang::is_string, NA)))) {
+    return(bad("System 1 returned a score legend that does not name the levels asked."))
+  }
+  if (ollama && is.null(answer[["score"]])) {
+    return(bad("System 1 returned a score answer without a score."))
+  }
+  s1_parse_score(answer[["score"]], p, keys, conf, s1_legend(question, keys), bad, tol)
 }
 
-#' All answers of one response, exactly the questions asked in their order (07 section 3), or the
-#' condition of the first problem
+#' All answers of one response (s1_answers_each()), or the condition of the first problem
 #' @noRd
-s1_parse_answers = function(answers, questions, model_id = NA_character_) {
-  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
-  ids = names(questions)
-  got = names(answers)
-  if (!is.list(answers) || (length(answers) && (is.null(got) || anyNA(got) ||
-                                                  anyDuplicated(got)))) {
-    return(bad("System 1 returned answers that are not keyed by question."))
-  }
-  extra = setdiff(got, ids)
-  if (length(extra)) {
-    return(bad(paste0("System 1 returned answers to questions that were not asked: ",
-                      paste(extra, collapse = ", "), ".")))
-  }
-  out = vector("list", length(ids))
-  names(out) = ids
-  for (id in ids) {
-    if (!(id %in% got)) {
-      return(bad(paste0("System 1 returned no answer for the question ", id, ".")))
-    }
-    a = s1_parse_answer(answers[[id]], questions[[id]], model_id)
-    if (inherits(a, "condition")) return(a)
-    out[[id]] = a
-  }
-  out
+s1_parse_answers = function(answers, questions, model_id = NA_character_, ollama = FALSE) {
+  s1_answers_each(answers, questions,
+                  function(a, q, id) s1_parse_answer(a, q, model_id, ollama),
+                  function(msg) s1_condition("s1_response", msg, model = model_id))
 }
 
 # ---- concurrent requests on the reactor ---------------------------------------------------------
@@ -411,28 +402,6 @@ s1_outcome = function(res, model_id = NA_character_) {
     return(list(ok = FALSE, error = err, retry = FALSE, delay = NULL))
   }
   list(ok = TRUE, value = res)
-}
-
-#' The outcome of a transport failure (a classed, unsignalled condition from the reactor)
-#'
-#' The class follows the status (contract 8.2), timeouts and network failures are connection
-#' errors, and a refused redirect is never retried (IC-64).
-#' @noRd
-s1_transport_outcome = function(cnd, model) {
-  st = cnd[["status"]]
-  status = if (is.numeric(st) && length(st) == 1L) as.integer(st) else NA_integer_
-  sub = if (inherits(cnd, "gptr_error_timeout") || inherits(cnd, "gptr_error_network")) {
-    "s1_connection"
-  } else {
-    s1_status_class(status)
-  }
-  err = s1_condition(sub, paste0("System 1 request failed: ", conditionMessage(cnd)), status,
-                     as.character(cnd[["error_type"]] %||% NA_character_)[1L],
-                     as.character(cnd[["request_id"]] %||% NA_character_)[1L], model[["id"]],
-                     retry_after = cnd[["retry_after"]])
-  list(ok = FALSE, error = err,
-       retry = s1_retry_of(err) && !inherits(cnd, "gptr_error_redirect"),
-       delay = s1_delay(cnd[["retry_after"]]))
 }
 
 #' Pump the reactor until `until()` holds
@@ -506,7 +475,7 @@ s1_own_active = function(model) {
 #' @noRd
 s1_gate = function(model, base_url) {
   if (is.null(s1_own_active(model))) return(NULL)
-  if (!is.character(base_url) || length(base_url) != 1L || is.na(base_url)) return(NULL)
+  if (!rlang::is_string(base_url)) return(NULL)
   origin = url_origin(base_url)
   if (is.na(origin)) return(NULL)
   list(key = origin, cap = s1_active_cap(model))
@@ -551,7 +520,7 @@ s1_round = function(idx, start, max_active, gate = NULL) {
       }
       # do.call() passes values: a lazy `idx[k]` or `finish(k)` would be forced after `k` moved on
       id = do.call(start, list(idx[k], finish(k)))
-      if (is.character(id) && length(id) == 1L && !is.na(id)) st$ids = c(st$ids, id)
+      if (rlang::is_string(id)) st$ids = c(st$ids, id)
     }
     st$done >= n
   }
@@ -614,37 +583,24 @@ s1_active_cap = function(model) {
   cap
 }
 
-#' The calibration of a call: the results' statements (absent ones take `default`) combined by
-#' s1_meta_combine() (07 section 3)
-#' @noRd
-s1_calibration = function(default, stated) {
-  if (!length(stated)) return(default)
-  metas = lapply(stated, function(v) list(calibrated = v %||% default))
-  s1_meta_combine(metas)[["calibrated"]] %||% default
-}
-
 #' The provenance of a call (07 section 3): the checked model's fields come before what an
 #' adapter result reports, and locality is "unknown" unless one of them establishes it
 #' @noRd
 s1_provenance = function(model, values, engine) {
-  chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
-  place = function(x) chr1(x) && x %in% c("local", "remote", "unknown")
-  pick = function(own, field, valid) {
-    if (valid(own)) return(own)
-    for (v in values) {
-      if (valid(v[[field]])) return(v[[field]])
+  pick = function(field, own = field, valid = NULL) {
+    for (v in c(list(model[[own]]), lapply(values, function(r) r[[field]]))) {
+      if (rlang::is_string(v, valid) && nzchar(v)) return(v)
     }
     NULL
   }
-  given = function(x) !is.null(x)
   list(provider = model[["provider"]] %||% NA_character_,
        api = model[["api"]] %||% NA_character_,
        execution = if (identical(engine, "emulated:structured")) "emulated" else "native",
-       locality = pick(model[["locality"]], "locality", place) %||% "unknown",
-       digest = pick(model[["digest"]], "model_digest", chr1) %||% NA_character_,
-       server_version = pick(model[["server_version"]], "server_version", chr1) %||%
-         NA_character_,
-       calibration_provenance = pick(NULL, "calibration_provenance", given))
+       locality = pick("locality", valid = c("local", "remote", "unknown")) %||% "unknown",
+       digest = pick("model_digest", "digest") %||% NA_character_,
+       server_version = pick("server_version") %||% NA_character_,
+       calibration_provenance = Find(Negate(is.null),
+                                     lapply(values, function(r) r[["calibration_provenance"]])))
 }
 
 #' Deduplicate states, run one job per unique state and shape the result
@@ -710,7 +666,11 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
   list(answers = answers, conditions = conditions, errors = s1_errors_df(conditions),
        usages = usages, usage = usage, model_version = version %||% model$id,
        request_ids = rids, engine = engine,
-       calibrated = s1_calibration(calibrated, lapply(values, function(v) v[["calibrated"]])),
+       calibrated = if (length(values)) {
+         s1_calib(lapply(values, function(v) v[["calibrated"]] %||% calibrated))
+       } else {
+         calibrated
+       },
        provenance = s1_provenance(model, values, engine))
 }
 
@@ -718,7 +678,7 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
 #' @noRd
 s1_request_id = function(value) {
   rid = value[["request_id"]]
-  if (is.character(rid) && length(rid) == 1L && !is.na(rid) && nzchar(rid)) rid else NA_character_
+  if (rlang::is_string(rid) && nzchar(rid)) rid else NA_character_
 }
 
 #' The meta$engine of a classifier model: its provider id (contract 5.2, IC-74),
@@ -745,7 +705,7 @@ s1_request = function(model, states, questions, opts = list()) {
   }
   model = s1_ollama_ready(s1_preflight(model, provider, safety = opts[["safety"]]))
   api = model[["api"]]
-  if (!is.character(api) || length(api) != 1L || is.na(api)) api = provider[["api"]]
+  if (!rlang::is_string(api)) api = provider[["api"]]
   adapter = s1_adapter(api)
   cl = adapter[["classify"]]
   run = if (is.list(cl)) cl[["run"]] else NULL
@@ -757,7 +717,6 @@ s1_request = function(model, states, questions, opts = list()) {
   }
   signal = new.env(parent = emptyenv())
   signal$aborted = FALSE
-  signal$reason = NULL
   keyless = identical(api, s1_ollama_api)
   aopts = list(credential = if (!keyless) s1_credential(provider),
                base_url = s1_base_url(provider), signal = signal, provider = provider,
@@ -793,7 +752,11 @@ s1_request = function(model, states, questions, opts = list()) {
                                })
                 done(s1_outcome(res, model$id))
               },
-              on_fail = function(cnd) done(s1_transport_outcome(cnd, model)))
+              on_fail = function(cnd) {
+                done(s1_failure(class(cnd), cnd[["status"]],
+                                paste0("System 1 request failed: ", conditionMessage(cnd)),
+                                cnd[["request_id"]], model$id, cnd[["retry_after"]]))
+              })
     }
   }
   s1_dispatch(model, states, questions, start_for, s1_engine(model), NA, gate)

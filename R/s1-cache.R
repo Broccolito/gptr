@@ -15,7 +15,6 @@ s1_cache_mem = function() {
 #' Replace the in-memory cache and return the previous one (tests, cache clearing)
 #' @noRd
 s1_cache_swap = function(env = new.env(parent = emptyenv())) {
-  if (!is.environment(env)) arg_abort(env, "env", "an environment")
   old = s1_cache_mem()
   the$s1_cache = env
   invisible(old)
@@ -62,25 +61,16 @@ s1_cache_salt = function(ws = workspace_dir()) {
 #' model without a digest is `mutable`, and s1_cache_keys() gives it NA keys (07 section 2).
 #' @noRd
 s1_cache_identity = function(model, images = NULL) {
-  if (!is.list(model)) arg_abort(model, "model", "a resolved model record (a list)")
-  if (!is.null(images) && !is.list(images)) {
-    arg_abort(images, "images", "a list of image records list(data = <raw>, mime) or NULL")
-  }
-  chr1 = function(x) if (is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)) x
-  api = chr1(model[["api"]])
-  digest = chr1(model[["digest"]])
+  api = model[["api"]]
+  digest = model[["digest"]]
+  if (!rlang::is_string(digest) || !nzchar(digest)) digest = NULL
   # names would make the images a JSON object, which canonical_json() sorts: list order counts
   shown = lapply(unname(images), function(im) {
-    ok = is.list(im) && is.raw(im[["data"]]) && length(im[["data"]]) > 0L &&
-      !is.null(chr1(im[["mime"]]))
-    if (!ok) {
-      arg_abort(im, "images", "image records list(data = <raw bytes>, mime = <MIME type>)")
-    }
     list(sha256 = hash_sha256(im[["data"]]), mime = im[["mime"]])
   })
   # an Ollama route as in P05's catalog_ollama_route(): the native api or the ollama provider
   ollama = identical(api, "ollama-system-one") || identical(model[["provider"]], "ollama")
-  id = list(adapter = api, digest = digest, server_version = chr1(model[["server_version"]]),
+  id = list(adapter = api, digest = digest, server_version = model[["server_version"]],
             images = if (length(shown)) shown,
             mutable = if (ollama && is.null(digest)) TRUE)
   Filter(Negate(is.null), id)
@@ -92,19 +82,6 @@ s1_cache_identity = function(model, images = NULL) {
 #' mutable identity gives NA keys, which are never cached.
 #' @noRd
 s1_cache_keys = function(salt, endpoint, model, question, states, identity = NULL) {
-  check_string(salt, "salt", empty = TRUE)
-  check_string(endpoint, "endpoint")
-  check_string(model, "model")
-  text = if (is.list(question)) question[["instructions"]] else NULL
-  if (!is.character(text) || length(text) != 1L || is.na(text) ||
-        !isTRUE(question[["type"]] %in% s1_types)) {
-    arg_abort(question, "question", "a wire question with instructions and a type")
-  }
-  if (!is.list(states)) arg_abort(states, "states", "a list of states")
-  named = is.list(identity) && (!length(identity) || !is.null(names(identity)))
-  if (!is.null(identity) && !named) {
-    arg_abort(identity, "identity", "a call identity from s1_cache_identity() or NULL")
-  }
   if (!length(states)) return(character())
   if (isTRUE(identity[["mutable"]])) return(rep(NA_character_, length(states)))
   base = list(schema = s1_cache_schema, salt = salt, endpoint = endpoint, model = model,
@@ -179,16 +156,12 @@ s1_cache_num = function(x) {
 #' JSON null (IC-74), and a score's legend (level descriptions, i.e. question text) is not stored.
 #' @noRd
 s1_cache_record = function(key, answer, model_version, alias, question, state, salt, usage) {
-  type = if (is.list(answer)) answer[["type"]] else NULL
-  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
-    arg_abort(answer, "answer", "a canonical System 1 answer")
-  }
+  type = answer[["type"]]
   probs = answer[["probabilities"]]
   choice = answer[["choice"]]
   value = switch(type, noul = answer[["prob"]], choice = choice, score = answer[["score"]])
   prob = switch(type, noul = answer[["prob"]],
-                choice = if (is.character(choice) && length(choice) == 1L &&
-                               choice %in% names(probs)) probs[[choice]],
+                choice = if (rlang::is_string(choice) && choice %in% names(probs)) probs[[choice]],
                 score = NULL)
   list(key = key, model = model_version, alias = alias,
        question_sha256 = hash_sha256(canonical_json(list(question = question[["instructions"]],

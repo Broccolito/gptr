@@ -52,7 +52,7 @@ test_that("large values are described instead of sent, and long text is cut", {
   e = new.env()
   e$big = I(seq_len(5000) / 7)
   inner = new.env(parent = e)
-  st = s1_states_at(e$big, "big", name = "big", envir = inner)
+  st = s1_states(e$big, "big", name = "big", envir = inner)
   expect_identical(st[[1]]$big, "<numeric> 5000 values\nbig")
   el = s1_states(list(seq_len(5000) / 7, "short"), "item")
   expect_identical(el[[1]]$item, "<numeric> described")

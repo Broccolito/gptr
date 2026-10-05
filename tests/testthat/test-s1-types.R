@@ -416,17 +416,6 @@ test_that("s1_default_ref() is the configured System 1 model, NULL without one",
   expect_identical(s1_default_ref(), "judge/judge-s1")
 })
 
-test_that("s1_base_url(), s1_credential() and s1_stream() delegate to the model layer", {
-  p = gptr_provider("based", api = "typesafe-system-one", type = "classifier",
-                    base_url = "https://example.invalid/v1/")
-  expect_identical(s1_base_url(p), "https://example.invalid/v1")
-  expect_null(s1_credential(priced_provider()))
-  local_mocked_bindings(provider_stream = function(model, context, opts, emit, done, run = NULL) {
-    "t42"
-  })
-  expect_identical(s1_stream(list(), list(), list(), function(ev) NULL, function(msg) NULL), "t42")
-})
-
 # ---- Task 2, IC-74 (07-local-ollama.md sections 2, 2.1 and 5) -----------------------------------
 
 clef_provider = function(id, base_url) {

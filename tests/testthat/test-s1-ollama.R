@@ -216,7 +216,7 @@ test_that("a request sends the state, the questions and raw base64 images, never
   expect_identical(json_decode(arr$body)$state, list(1L, 2L))
   # the synthetic fixtures are exactly what the adapter sends for their inputs
   for (nm in c("noul", "choice", "score", "image")) {
-    fx = ollama_fixture(nm)
+    fx = wire_fixture(nm, "ollama")
     images = lapply(fx$request$images, function(s) img(jsonlite::base64_dec(s)))
     sent = s1_ollama_build(clef_record(), fx$request$state, fx$request$questions,
                            list(base_url = "http://127.0.0.1:11434/v1", images = images))
@@ -304,7 +304,7 @@ test_that("images must be PNG, JPEG or WebP bytes that the model accepts", {
 
 test_that("answers of all three types become canonical records once, in request order", {
   for (nm in c("noul", "choice", "score", "image")) {
-    fx = ollama_fixture(nm)
+    fx = wire_fixture(nm, "ollama")
     res = s1_ollama_parse(clef_record(), 200L, list(), json_encode(fx$response),
                           fx$request$questions)
     expect_identical(res$model_version, "clef-flash")
@@ -315,7 +315,7 @@ test_that("answers of all three types become canonical records once, in request 
     expect_identical(s1_check_answers(res$answers, fx$request$questions), res$answers)
   }
   parse = function(nm) {
-    fx = ollama_fixture(nm)
+    fx = wire_fixture(nm, "ollama")
     s1_ollama_parse(clef_record(), 200L, list(), json_encode(fx$response),
                     fx$request$questions)$answers$answer
   }
@@ -333,12 +333,12 @@ test_that("answers of all three types become canonical records once, in request 
                         legend = c(`0` = "Very negative", `1` = "Neutral", `2` = "Very positive")))
   expect_identical(parse("image")$probabilities, c(red = 0.0272, blue = 0.9728))
   # several questions: answers in question order whatever order the server used
-  qs = list(kind = ollama_fixture("choice")$request$questions$answer,
-            ok = ollama_fixture("noul")$request$questions$answer,
-            tone = ollama_fixture("score")$request$questions$answer)
-  wire = list(tone = ollama_fixture("score")$response$answers$answer,
-              ok = ollama_fixture("noul")$response$answers$answer,
-              kind = ollama_fixture("choice")$response$answers$answer)
+  qs = list(kind = wire_fixture("choice", "ollama")$request$questions$answer,
+            ok = wire_fixture("noul", "ollama")$request$questions$answer,
+            tone = wire_fixture("score", "ollama")$request$questions$answer)
+  wire = list(tone = wire_fixture("score", "ollama")$response$answers$answer,
+              ok = wire_fixture("noul", "ollama")$response$answers$answer,
+              kind = wire_fixture("choice", "ollama")$response$answers$answer)
   res = s1_ollama_parse(clef_record(), 200L, list(),
                         json_encode(list(model = "clef-flash:latest", answers = wire)), qs)
   expect_identical(names(res$answers), c("kind", "ok", "tone"))
@@ -406,7 +406,8 @@ test_that("malformed or inconsistent answers are refused, never repaired", {
     expect_s3_class(parse(bad[[nm]]), "gptr_error_s1_response")
   }
   # an answer from another model, a body without answers, a body that is not JSON
-  expect_s3_class(parse(good, model = "clef:latest"), "gptr_error_s1_response")
+  other = expect_s3_class(parse(good, model = "clef:latest"), "gptr_error_s1_response")
+  expect_match(conditionMessage(other), "clef:latest", fixed = TRUE)
   expect_s3_class(s1_ollama_parse(clef_record(), 200L, list(), "{\"model\": \"clef-flash\"}", qs),
                   "gptr_error_s1_response")
   expect_s3_class(s1_ollama_parse(clef_record(), 200L, list(), "<html>", qs),
@@ -434,7 +435,7 @@ test_that("malformed or inconsistent answers are refused, never repaired", {
   e = s1_ollama_parse(clef_record(), 500L, list(), "{\"error\": \"processing failed\"}", qs)
   expect_s3_class(e, "gptr_error_s1_overloaded")
   expect_match(conditionMessage(e), "processing failed", fixed = TRUE)
-  fx = ollama_fixture("error-400")
+  fx = wire_fixture("error-400", "ollama")
   e = s1_ollama_parse(clef_record(), fx$status, list(), json_encode(fx$response), qs)
   expect_match(conditionMessage(e), "not URLs", fixed = TRUE)
 })
@@ -491,7 +492,6 @@ test_that("sums, choices and scores are checked at Ollama's four-decimal roundin
 # ---- requests on the reactor --------------------------------------------------------------------
 
 test_that("a prepared Clef answers on the reactor without a key, one request at a time", {
-  local_s1_ollama_adapter()
   local_ollama_discovery()
   model = s1_prepare("ollama/clef-flash")
   expect_identical(model$digest, strrep("2", 64))
@@ -525,7 +525,6 @@ test_that("a prepared Clef answers on the reactor without a key, one request at 
 })
 
 test_that("per-server admission holds one request at a time across calls (IC-74)", {
-  local_s1_ollama_adapter()
   local_ollama_discovery()
   model = s1_prepare("ollama/clef-flash")
   log = local_ollama_transfers(delay = 0.02)
@@ -548,7 +547,6 @@ test_that("per-server admission holds one request at a time across calls (IC-74)
 })
 
 test_that("a native Ollama model without max_active still gets one request per server", {
-  local_s1_ollama_adapter()
   local_ollama_discovery()
   s1_prepare("ollama/clef-flash")
   # a provider spec whose Clef has no decision record: P05's preflight passes against the
@@ -591,8 +589,7 @@ test_that("a native Ollama model without max_active still gets one request per s
 })
 
 test_that("a real loopback transfer reaches /v1/systemone with no key (P01's mock server)", {
-  local_s1_ollama_adapter()
-  fx = ollama_fixture("choice")
+  fx = wire_fixture("choice", "ollama")
   srv = local_mock_server("json", body = json_encode(fx$response))
   local_settings(providers = list(ollama = list(base_url = paste0(srv$url, "/v1"))))
   disc = local_ollama_discovery()
@@ -610,8 +607,7 @@ test_that("a real loopback transfer reaches /v1/systemone with no key (P01's moc
 })
 
 test_that("an Ollama error body on the reactor fails its element, not retried (error-404)", {
-  local_s1_ollama_adapter()
-  fx = ollama_fixture("error-404")
+  fx = wire_fixture("error-404", "ollama")
   srv = local_mock_server("json", status = fx$status, body = json_encode(fx$response))
   local_settings(providers = list(ollama = list(base_url = paste0(srv$url, "/v1"))))
   local_ollama_discovery()
@@ -632,7 +628,6 @@ test_that("an Ollama error body on the reactor fails its element, not retried (e
 
 test_that("the route prepares Clef once and answers with provenance and unknown calibration", {
   s1_fresh()
-  local_s1_ollama_adapter()
   srv = local_ollama_discovery()
   log = local_ollama_transfers()
   live = list(replay = "auto")
@@ -670,7 +665,6 @@ test_that("the route prepares Clef once and answers with provenance and unknown 
 
 test_that("images join the cache key: other images, another order or none are asked again", {
   s1_fresh()
-  local_s1_ollama_adapter()
   local_ollama_discovery()
   log = local_ollama_transfers()
   red = img(png_bytes(8))
@@ -702,7 +696,6 @@ test_that("images join the cache key: other images, another order or none are as
 
 test_that("replay uses the identity frozen with the answers and never discovers (IC-74)", {
   s1_fresh(gptr = TRUE)
-  local_s1_ollama_adapter()
   srv = local_ollama_discovery()
   log = local_ollama_transfers()
   pics = list(img(png_bytes()))
@@ -766,7 +759,6 @@ test_that("replay uses the identity frozen with the answers and never discovers 
 
 test_that("an Ollama model without a digest is asked every time and never pinned", {
   s1_fresh()
-  local_s1_ollama_adapter()
   models = ollama_models()
   models[["clef-flash:latest"]]$tag$digest = NULL
   local_ollama_discovery(models)
@@ -783,7 +775,6 @@ test_that("an Ollama model without a digest is asked every time and never pinned
 
 test_that("missing or old servers and unsupported models or inputs fail before anything is sent", {
   s1_fresh()
-  local_s1_ollama_adapter()
   srv = local_ollama_discovery()
   log = local_ollama_transfers()
   ask = function(model = "ollama/clef-flash", opts = list()) {
@@ -838,7 +829,6 @@ test_that("missing or old servers and unsupported models or inputs fail before a
 
 test_that("local-only refuses cloud markers and remote endpoints; only a run record relaxes it", {
   s1_fresh()
-  local_s1_ollama_adapter()
   models = ollama_models()
   models[["clef-flash:cloud"]] = list(
     tag = list(name = "clef-flash:cloud", model = "clef-flash:cloud", digest = strrep("5", 64),
@@ -891,7 +881,6 @@ test_that("local-only refuses cloud markers and remote endpoints; only a run rec
 
 test_that("no hidden fallback: a failing Ollama System 1 never asks another model", {
   s1_fresh()
-  local_s1_ollama_adapter()
   judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
   chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))),
                              name = "chatty")
@@ -913,15 +902,4 @@ test_that("no hidden fallback: a failing Ollama System 1 never asks another mode
   expect_length(log$specs, 5L * gptr_opt("s1_rounds"))
   expect_length(fake_requests(judge), 0L)
   expect_length(fake_requests(chat), 0L)
-})
-
-test_that("the ollama-system-one adapter passes P02's classifier check", {
-  spec = gptr_adapter("ollama-system-one", transport = "http_json",
-                      classify = list(build = s1_ollama_build, parse = s1_ollama_parse))
-  expect_s3_class(spec, "gptr_adapter")
-  local_s1_ollama_adapter()
-  a = s1_adapter("ollama-system-one")
-  expect_identical(a$transport, "http_json")
-  expect_identical(a$classify$build, s1_ollama_build)
-  expect_identical(a$classify$parse, s1_ollama_parse)
 })

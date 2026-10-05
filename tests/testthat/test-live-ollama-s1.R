@@ -39,7 +39,6 @@ live_conf = function(p) {
 test_that("Clef Flash answers yes/no, choice and fractional score questions (live)", {
   skip_unless_ollama("ollama/clef-flash")
   s1_fresh()
-  local_s1_ollama_adapter()
   live = list(replay = "live")
   q = "Does this request need R code to answer it?"
   yes = ollama_call(q, text = "Fit a linear model to mtcars and plot the residuals.", args = live)
@@ -72,7 +71,6 @@ test_that("Clef Flash tells paired synthetic images apart and refuses invalid on
   model = skip_unless_ollama("ollama/clef-flash")
   if (!isTRUE(model$decision$images)) skip("the server reports no vision support for Clef Flash")
   s1_fresh()
-  local_s1_ollama_adapter()
   ask = function(image) {
     ollama_call("Which colour is the rectangle in the image?", text = "One rectangle.",
                 args = list(replay = "live", choices = c("red", "blue"),
@@ -87,7 +85,6 @@ test_that("Clef Flash tells paired synthetic images apart and refuses invalid on
 test_that("Clef answers on its own when it is installed (live)", {
   skip_unless_ollama("ollama/clef")
   s1_fresh()
-  local_s1_ollama_adapter()
   d = ollama_call("Does this request need R code to answer it?",
                   text = "Fit a linear model to mtcars.", model = "ollama/clef",
                   args = list(replay = "live"))

@@ -233,11 +233,7 @@ as_state.gptr_session = function(x, label, ...) {
   cap = gptr_opt("s1_state_max")
   facts = character()
   if (!identical(d$status, "idle")) {
-    reason = if (is.character(d$reason) && length(d$reason) == 1L && !is.na(d$reason)) {
-      paste0(" (", d$reason, ")")
-    } else {
-      ""
-    }
+    reason = if (rlang::is_string(d$reason)) paste0(" (", d$reason, ")") else ""
     facts = c(facts, paste0("Status: ", d$status, reason))
   }
   if (length(d$values)) {
@@ -245,7 +241,7 @@ as_state.gptr_session = function(x, label, ...) {
     facts = c(facts, paste0("Value: ", v$name %||% "(unnamed)", " <", v$class[1L], ">"))
   }
   answer = d$last_text
-  if (!is.character(answer) || length(answer) != 1L || is.na(answer)) answer = "(no answer yet)"
+  if (!rlang::is_string(answer)) answer = "(no answer yet)"
   head = paste(c(facts, "Answer: "), collapse = "\n")
   room = max(0L, cap - nchar(head))
   if (nchar(answer) > room) answer = paste0(substr(answer, 1L, max(0L, room - 3L)), "...")
@@ -278,12 +274,9 @@ s1_check_cap = function(n) {
 #'
 #' One state per element of an atomic vector (POSIXlt too) or unnamed list, per row of a data
 #' frame (`attr(, "split")` when several); one state for anything else, `I(x)` included (D-110).
+#' A value read from a known binding is described by `name` seen from `envir`.
 #' @noRd
-s1_states = function(values, label, labels = NULL) s1_states_at(values, label, labels)
-
-#' s1_states() for a value read from a known binding (`name` seen from `envir`)
-#' @noRd
-s1_states_at = function(values, label, labels = NULL, name = NULL, envir = NULL) {
+s1_states = function(values, label, labels = NULL, name = NULL, envir = NULL) {
   lt = inherits(values, "POSIXlt")
   one = is.null(values) || inherits(values, "AsIs") || inherits(values, "gptr_session") ||
     is.environment(values) || is.function(values) || isS4(values) ||
@@ -331,7 +324,7 @@ s1_states_at = function(values, label, labels = NULL, name = NULL, envir = NULL)
 #' @noRd
 s1_part = function(value, label, display = label, name = NULL, envir = NULL) {
   list(label = label, display = display,
-       states = s1_states_at(value, label, name = name, envir = envir))
+       states = s1_states(value, label, name = name, envir = envir))
 }
 
 #' A state key from a context label ("samples$description" -> "samples_description")
@@ -414,14 +407,14 @@ s1_zip = function(parts) {
 #' @noRd
 s1_emulation_setting = function() {
   v = setting_get("system1")
-  if (is.character(v) && length(v) == 1L && !is.na(v) && startsWith(v, "emulate:")) v else NULL
+  if (rlang::is_string(v) && startsWith(v, "emulate:")) v else NULL
 }
 
 #' Is `model` (a reference, a provider id or a provider spec) a classifier, or an emulation
 #' reference? Never signals; the model's own resolved type decides (IC-74, 07 section 2).
 #' @noRd
 s1_is_classifier = function(model) {
-  ref = is.character(model) && length(model) == 1L && !is.na(model) && nzchar(model)
+  ref = rlang::is_string(model) && nzchar(model)
   if (ref && startsWith(model, "emulate:")) return(TRUE)
   if (!ref && !inherits(model, "gptr_provider")) return(FALSE)
   type = tryCatch({
@@ -478,7 +471,7 @@ s1_target = function(model) {
   if (inherits(model, "gptr_provider")) {
     return(s1_target_of(s1_model(model), model, model[["id"]] %||% model[["name"]]))
   }
-  if (!is.character(model) || length(model) != 1L || is.na(model) || !nzchar(model)) {
+  if (!rlang::is_string(model) || !nzchar(model)) {
     arg_abort(model, "model", "a System 1 model reference, provider id or provider spec")
   }
   ref = model
@@ -547,9 +540,6 @@ s1_images = function(images, target) {
                "invalid_argument", arg = ".opts$system1_images",
                expected = "images only for a decision model that accepts them")
   }
-  if (!is.list(images) || is.object(images)) {
-    arg_abort(images, ".opts$system1_images", "a list of image records list(data, mime)")
-  }
   # Ollama's endpoint: PNG, JPEG or WebP bytes within its image body limit, before any request
   if (s1_ollama_native(target$model)) s1_ollama_images_check(images, target$model)
   unname(images)
@@ -587,8 +577,7 @@ s1_build = function(q, answers, nm, threshold, meta) {
     names(value) = nm
     return(new_gptr_decision(value, prob, threshold, meta))
   }
-  k = length(q$options)
-  m = matrix(NA_real_, n, k)
+  m = matrix(NA_real_, n, length(q$options))
   conf = rep(NA_real_, n)
   choice = identical(q$type, "choice")
   value = if (choice) rep(NA_character_, n) else rep(NA_real_, n)
@@ -600,11 +589,7 @@ s1_build = function(q, answers, nm, threshold, meta) {
     value[i] = if (choice) a[["choice"]] else a[["score"]]
   }
   names(value) = nm
-  if (choice) {
-    new_gptr_choice(value, q$options, m, conf, meta)
-  } else {
-    new_gptr_score(value, q$options, m, conf, meta)
-  }
+  s1_new_levels(q$type, value, q$options, m, conf, meta)
 }
 
 #' Validate the answer-shape arguments: threshold in (0, 1), min_confidence in [0, 1], uncertain
@@ -802,7 +787,7 @@ s1_meta = function(prompt, target, got) {
   calibrated = if (is.null(res)) {
     target$calibrated
   } else if (any(got$cached)) {
-    s1_calibration(NA, list(target$calibrated, res[["calibrated"]]))
+    s1_calib(list(target$calibrated, res[["calibrated"]]))
   } else {
     res[["calibrated"]]
   }
@@ -829,7 +814,7 @@ s1_meta = function(prompt, target, got) {
 #' @noRd
 s1_cached_version = function(rec) {
   v = rec[["model"]]
-  if (is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)) v else NULL
+  if (rlang::is_string(v) && nzchar(v)) v else NULL
 }
 
 #' Answers for the states: the cache first (skipped in live mode), then requests for the misses
@@ -912,7 +897,6 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
   a = s1_check_args(q, args)
   states = zipped$states
   n = length(states)
-  s1_check_cap(n)
   if (!is.null(zipped$split)) {
     gptr_inform(paste0("System 1 judged each row of ", zipped$split, " separately (", n,
                        " states). To judge the whole table as one input, pass I(",

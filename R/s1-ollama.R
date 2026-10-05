@@ -39,7 +39,7 @@ s1_ollama_native = function(model) is.list(model) && identical(model[["api"]], s
 #' root is never doubled); NULL when the base is not one HTTP(S) URL
 #' @noRd
 s1_ollama_endpoint = function(base_url) {
-  if (!is.character(base_url) || length(base_url) != 1L || is.na(base_url)) return(NULL)
+  if (!rlang::is_string(base_url)) return(NULL)
   parts = http_url_parts(base_url)
   if (is.null(parts) || !tolower(parts$scheme) %in% c("http", "https")) return(NULL)
   origin = url_origin(base_url)
@@ -71,17 +71,15 @@ s1_ollama_body_limit = function(model, images) {
 #' same digest), NULL when unknown; a pure catalog read
 #' @noRd
 s1_ollama_format = function(model) {
-  chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
-  if (chr1(model[["format"]])) return(model[["format"]])
+  fmt = model[["format"]]
   digest = model[["digest"]]
-  if (!chr1(digest) || !chr1(model[["provider"]]) || !chr1(model[["id"]])) return(NULL)
-  tagged = tryCatch(s1_model(paste0(model[["provider"]], "/", s1_ollama_tag(model[["id"]])),
-                             strict = FALSE),
-                    error = function(e) NULL)
-  if (is.list(tagged) && identical(tagged[["digest"]], digest) && chr1(tagged[["format"]])) {
-    return(tagged[["format"]])
+  if (is.null(fmt) && !is.null(digest)) {
+    tagged = tryCatch(s1_model(paste0(model[["provider"]], "/", s1_ollama_tag(model[["id"]])),
+                               strict = FALSE),
+                      error = function(e) NULL)
+    if (is.list(tagged) && identical(tagged[["digest"]], digest)) fmt = tagged[["format"]]
   }
-  NULL
+  if (rlang::is_string(fmt) && nzchar(fmt)) fmt
 }
 
 #' A checked native model the decision endpoint can serve: weights reported in a format other than
@@ -135,7 +133,7 @@ s1_ollama_images_check = function(images, model) {
   for (k in seq_along(images)) {
     im = images[[k]]
     ok = is.list(im) && is.raw(im[["data"]]) && length(im[["data"]]) > 0L &&
-      is.character(im[["mime"]]) && length(im[["mime"]]) == 1L && !is.na(im[["mime"]])
+      rlang::is_string(im[["mime"]])
     if (!ok) arg_abort(im, ".opts$system1_images", expected)
     if (!im[["mime"]] %in% s1_ollama_mimes) {
       gptr_abort(paste0("Image ", k, " is ", im[["mime"]], ": Ollama's decision endpoint takes ",
@@ -184,7 +182,7 @@ s1_ollama_questions_check = function(questions, model) {
     q = questions[[id]]
     type = if (is.list(q)) q[["type"]] else NULL
     known = intersect(types, s1_types)
-    if (!is.character(type) || length(type) != 1L || !isTRUE(type %in% known)) {
+    if (!rlang::is_string(type, known)) {
       bad(paste0("The question ", id, " has a type this model does not answer (",
                  paste(known, collapse = ", "), ")."))
     }
@@ -269,121 +267,10 @@ s1_ollama_confidence = function(p) {
   min(1, max(0, 1 - (-sum(q * log(q))) / log(n)))
 }
 
-#' One wire answer as a canonical record (07 section 3), or an unsignalled gptr_error_s1_response
-#'
-#' Probabilities are required and checked at Ollama's rounding; a wire confidence must match the
-#' entropy confidence within s1_ollama_conf_tol (D-120).
-#' @noRd
-s1_ollama_answer = function(answer, question, model_id) {
-  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
-  type = if (is.list(question)) question[["type"]] else NULL
-  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
-    return(bad("Ollama was sent a question without a known type."))
-  }
-  if (!is.list(answer) || !identical(answer[["type"]], type)) {
-    return(bad(paste0("Ollama returned an answer that is not a ", type, " answer.")))
-  }
-  if (identical(type, "noul")) {
-    p = s1_unit(answer[["noul"]])
-    if (is.na(p)) return(bad("Ollama returned an invalid noul probability."))
-    return(list(type = "noul", prob = p))
-  }
-  keys = s1_option_keys(question)
-  if (is.null(keys)) return(bad("Ollama was sent a question without valid options."))
-  got = answer[["probabilities"]]
-  if (!is.list(got) || !length(got)) {
-    return(bad(paste0("Ollama returned a ", type, " answer without probabilities.")))
-  }
-  p = s1_answer_probs(got, keys, s1_ollama_round_tol)
-  if (is.character(p)) return(bad(sub("^System 1", "Ollama", p)))
-  conf = s1_ollama_confidence(p)
-  given = answer[["confidence"]]
-  if (!is.null(given)) {
-    wire = s1_unit(given)
-    if (is.na(wire)) return(bad("Ollama returned an invalid confidence."))
-    if (abs(wire - conf) > s1_ollama_conf_tol) {
-      return(bad(paste0("Ollama returned a confidence that its probabilities do not give ",
-                        "(1 - H(p) / log(N)).")))
-    }
-    conf = wire
-  }
-  if (identical(type, "choice")) {
-    return(s1_parse_choice(answer[["choice"]], p, keys, conf, bad, s1_ollama_round_tol))
-  }
-  legend = answer[["legend"]]
-  if (!is.null(legend)) {
-    ln = names(legend)
-    ok = is.list(legend) && !is.null(ln) && !anyNA(ln) && !anyDuplicated(ln) &&
-      length(ln) == length(keys) && setequal(ln, keys) &&
-      all(vapply(legend, function(x) is.character(x) && length(x) == 1L && !is.na(x), NA))
-    if (!ok) return(bad("Ollama returned a score legend that does not name the levels asked."))
-  }
-  if (is.null(answer[["score"]])) return(bad("Ollama returned a score answer without a score."))
-  s1_parse_score(answer[["score"]], p, keys, conf, s1_legend(question, keys), bad,
-                 s1_ollama_round_tol)
-}
-
-#' Every answer of one response by question id, in question order, or the first problem
-#' @noRd
-s1_ollama_answers = function(answers, questions, model_id) {
-  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
-  ids = names(questions)
-  got = names(answers)
-  if (!is.list(answers) || !length(answers) || is.null(got) || anyNA(got) || anyDuplicated(got)) {
-    return(bad("Ollama returned answers that are not keyed by question."))
-  }
-  extra = setdiff(got, ids)
-  if (length(extra)) {
-    return(bad(paste0("Ollama returned answers to questions that were not asked: ",
-                      paste(extra, collapse = ", "), ".")))
-  }
-  out = vector("list", length(ids))
-  names(out) = ids
-  for (id in ids) {
-    if (!(id %in% got)) return(bad(paste0("Ollama returned no answer for the question ", id, ".")))
-    a = s1_ollama_answer(answers[[id]], questions[[id]], model_id)
-    if (inherits(a, "condition")) return(a)
-    out[[id]] = a
-  }
-  out
-}
-
-#' classify$parse of ollama-system-one: one whole JSON body (contract 8.1, IC-74)
-#'
-#' Returns `list(answers, usage, model_version, request_id)`, or an unsignalled `gptr_error_s1_*`
-#' condition; an answer from another model is `s1_response`.
+#' classify$parse of ollama-system-one (s1_wire_parse())
 #' @noRd
 s1_ollama_parse = function(model, status, headers, body, questions) {
-  model_id = model[["id"]] %||% NA_character_
-  rid = s1_header(headers, "x-request-id")
-  if (!is.numeric(status) || length(status) != 1L) status = NA_integer_
-  obj = tryCatch(json_decode(body), error = function(e) NULL)
-  if (is.na(status) || status < 200L || status > 299L) {
-    err = if (is.list(obj)) obj[["error"]] else NULL
-    if (is.character(err)) obj = list(error = list(message = paste(err, collapse = "; ")))
-    return(s1_http_error(status, obj, rid, model_id))
-  }
-  fail = function(msg) {
-    s1_condition("s1_response", msg, status, NA_character_, rid, model_id)
-  }
-  answers = if (is.list(obj)) obj[["answers"]] else NULL
-  if (!is.list(answers)) return(fail("Ollama returned a response without answers."))
-  version = obj[["model"]]
-  if (is.null(version)) version = model_id
-  if (!is.character(version) || length(version) != 1L || is.na(version) || !nzchar(version)) {
-    return(fail("Ollama returned a response with an invalid model name."))
-  }
-  if (!identical(s1_ollama_tag(version), s1_ollama_tag(model_id))) {
-    return(fail(paste0("Ollama answered with the model ", version, ", not ", model_id, ".")))
-  }
-  parsed = s1_ollama_answers(answers, questions, model_id)
-  if (inherits(parsed, "condition")) {
-    parsed$status = as.integer(status)
-    parsed$request_id = rid
-    return(parsed)
-  }
-  list(answers = parsed, usage = s1_usage_of(obj[["usage"]]), model_version = version,
-       request_id = rid)
+  s1_wire_parse(model, status, headers, body, questions, ollama = TRUE)
 }
 
 # ---- replay with the frozen identity ------------------------------------------------------------
@@ -402,11 +289,10 @@ s1_ollama_pin_keys = function(salt, target, wire, states, images = NULL) {
 #' checked model that gave it (adapter, digest, server version, locality); no state, no image
 #' @noRd
 s1_ollama_pin = function(pin_key, key, model) {
-  chr1 = function(x) if (is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)) x
   list(key = pin_key, answer_key = key,
-       identity = list(adapter = chr1(model[["api"]]), digest = chr1(model[["digest"]]),
-                       server_version = chr1(model[["server_version"]]),
-                       locality = chr1(model[["locality"]]) %||% "unknown"),
+       identity = list(adapter = model[["api"]], digest = model[["digest"]],
+                       server_version = model[["server_version"]],
+                       locality = model[["locality"]] %||% "unknown"),
        date = format(Sys.Date()))
 }
 
@@ -424,14 +310,13 @@ s1_ollama_unrecorded = function(target, why) {
 #' record that pins a digest must name the recorded one
 #' @noRd
 s1_ollama_frozen = function(pin, target) {
-  chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
   id = if (is.list(pin)) pin[["identity"]] else NULL
-  ok = is.list(id) && identical(id[["adapter"]], s1_ollama_api) && chr1(id[["digest"]]) &&
-    chr1(id[["server_version"]]) && isTRUE(id[["locality"]] %in% c("local", "remote", "unknown")) &&
-    chr1(pin[["answer_key"]])
+  ok = is.list(id) && identical(id[["adapter"]], s1_ollama_api) &&
+    rlang::is_string(id[["digest"]]) && rlang::is_string(id[["server_version"]]) &&
+    rlang::is_string(id[["locality"]], c("local", "remote", "unknown"))
   if (!ok) s1_ollama_unrecorded(target, "they were recorded without the model identity")
   pinned = target$model[["digest"]]
-  if (chr1(pinned) && !identical(pinned, id[["digest"]])) {
+  if (!is.null(pinned) && !identical(pinned, id[["digest"]])) {
     s1_ollama_unrecorded(target, paste0("the model record pinned the digest ", pinned,
                                         ", and the answers were recorded with ", id[["digest"]]))
   }
