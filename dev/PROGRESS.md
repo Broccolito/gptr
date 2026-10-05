@@ -50,6 +50,12 @@ Resume log (newest last):
   finalizer race** `a5af999` (D-085: GC-time `session_shutdown` deferred to safe points; registry
   loops tolerate removed records), FIX-2 `13ddf95`, FIX-3 `106434a` (`progress/fixes.md`).
   **P08 lane started** (gateway/SDK; unblocks P14, P15 Task 4, P13 Task 7, P11 Task 6).
+- 2026-10-04 (evening): **P07 complete locally**: Tasks 13-16 (`4bf7afd` .. `82377fe`) and
+  plan acceptance `698e495` (every row green: 1,021 prompt assertions; token benchmark
+  `run.R --check` OK; lint clean on the committed tree). FIX-1's `gc()` test workarounds removed.
+  The two P12 tests that waited for P06/P07 now run and pass (1,086 adapter assertions, SKIP 0).
+  P18 Tasks 1, 3 committed; P18 Tasks 2, 4, 5 and all of P14 wait for **P11 Task 8** (`ui.get`
+  and the scripted UI). Running: P08, P11, P20 (early), P12 acceptance, P09 Tasks 10-11.
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
@@ -118,7 +124,7 @@ Resume log (newest last):
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
 | M0 Foundation | P01–P04 | paused; acceptance pending | All P01 tasks passed focused checks; integrated acceptance underway |
-| M1 Offline session kernel | P05–P08 | in progress | P05 (`df47cbe`) and P06 (`a535986`) plan acceptance passed locally; P07 underway |
+| M1 Offline session kernel | P05–P08 | in progress | P05 (`df47cbe`), P06 (`a535986`) and P07 (`698e495`) plan acceptance passed locally; P08 underway |
 | M2 Live R agent and decisions | P09–P13 | pending | — |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
