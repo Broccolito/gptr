@@ -9442,3 +9442,119 @@ in the shown code (1), and dispatch through `knitr::knit_print()` to the lazily 
 (2; coverage). Against the plan literal (`task16-plan-literal.R`) they fail 11 expectations
 (`task16-fix1-red-plan-literal.log`; the skip-inside-a-child test passes there). Validation:
 `progress/P15.md`, Task 16.
+
+## D-131 - P15 NS-7 golden transcript: the fixture binds `analysis.R` inside its `pbmc` objects expression instead of through a separate `.doc` object, because P09's workspace block lists dot names (2026-10-05)
+
+P15 Task 19 adds `dev/bench/tokens/fixtures/ns07-script-history.json` and its `baseline.csv` row
+through P07's runner. The fixture differs from the plan's Step 1 block in one place:
+
+1. **No `.doc` object.** The plan binds the document through a second `objects` entry,
+   `".doc": "gptr::gptr_doc(file.path(getwd(), 'analysis.R'))"`, and says that "the object is
+   named `.doc`, so the workspace listing ignores it". P09's workspace snapshot lists every
+   binding with `ls(all.names = TRUE)` (its plan and `env_snap_rows()`; only `.Random.seed` and
+   `.Last.value` are left out), so with the plan literal the first message carried
+   `<workspace env="<environment>" objects="2">` with a `.doc  NULL  length 0  0 B` line
+   (`gptr_doc()` returns the previous binding, `NULL`, invisibly). NS-7 is NS-1's request, whose
+   workspace is `pbmc` alone (02 sections 1 and 7). The fixture now makes the same call at the
+   start of the `pbmc` expression,
+   `{gptr::gptr_doc(file.path(getwd(), 'analysis.R')); data.frame(...)}`, which is still the
+   runner's one code hook (an `objects` expression evaluated with `baseenv()`
+   as parent after the runner set the working directory and `GPTR_PROJECT_ROOT`). The workspace
+   then lists `pbmc` alone; the frozen prefix is unchanged (the binding exists before
+   `session_new()` either way). Measured on the working tree: `input_total` 5,918 with the plan
+   literal, 5,894 with the adapted fixture; every other column is equal
+   (`task19-red-plan-literal.log`, `task19-red.log`, `task19-probe-plan-literal.log`,
+   `task19-probe.log`). `run.R` is unchanged.
+
+Validation: `progress/P15.md`, Task 19.
+
+## D-132 - P11 R classifier follows the classifier standard: level 0 only for the tables' known read-only calls (an unlisted base function is level 1), a function the code computes, passes, binds lazily or builds at run time and code gptr cannot read are level 3, literal arguments are read through do.call(), exec(), aliases and wrappers, paths through setwd(), withr, partial names, `...`, c(), file.path() and connections, moves remove and links reach their source, gptr's namespace reached by any route is control, gptr$ members and process calls take their contract levels (2026-10-05)
+
+P11 Task 3 appends the plan's R classifier (`gptr_risk()`, `format`/`print` methods,
+`risk_classify()` and the `risk.classify` service, `risk_norm()`, `risk_escape()`,
+`risk_scan()`, `risk_parse()` and the walker's helpers) with the plan's interfaces, field names
+and display. The plan-literal walker gave level 0 or 1 to code that calls a function it cannot
+name, and the coordinator's classifier standard (D-061: (A) level 0 is an allowlist, (B) a
+construct gptr does not model is at least level 3, (C) level 4 only where literal text names a
+critical or control target) binds R code too. The classifier stays advisory (03 section 6.8.1).
+
+1. **Computed calls are level 3 `dynamic`** (plan: 0 or 1). `get()`, `get0()`, `mget()`,
+   `dynGet()`, `getExportedValue()`, `getFromNamespace()` of a name the code computes (plan 1;
+   the table row is 3), so report 18's row `nm = 'mtcars'; get(nm)` changes from 1 to 3 (the
+   only changed plan expectation); `parse(text =)`, `str2lang()`, `str2expression()` of computed
+   text (plan 1); a computed function in a function slot of a higher-order function (plan 1
+   except do.call/exec/invoke; `tryCatch()`/`withCallingHandlers()` handlers are slots too);
+   calls of a formal argument, a loop variable or a name bound to a value the code computes
+   (`f = funs[[1]]; f('x')`; plan: formals unflagged, the others 1; a name bound to a constant
+   or to a known read-only call that returns data is no function, `risk_plain_value()`); a
+   method of an object gptr cannot resolve (`obj$m()`, `obj[["m"]]()`, `obj@m()`,
+   `baseenv()$unlink()`: plan 0), while an object in `envir` holding a user closure is read
+   through its body and one holding a package function under its own name takes that row;
+   closures built at run time (factory results, R6 methods, `purrr::partial()`), promises and
+   active bindings (plan 1); a user function nested deeper than the plan's two levels (plan 0);
+   a function whose body, formals or environment the code changes, when called (a literal
+   quoted body it installs is read where it is called); `trace()` (its tracer read as code);
+   `options()`, `Sys.setenv()`, `Sys.unsetenv()` with names gptr cannot read, also through a
+   higher-order function or an alias (plan 2; a computed `Sys.unsetenv()` was 4 and is 3 under
+   (C)); `gptr_cache()`/`gptr_scrub()` with a computed action or `dry_run` (plan 4, (C)).
+2. **Level 0 is the tables' read-only rows.** A function of a base package that the tables do
+   not list is level 1 `unlisted` (plan 0); syntax and control flow (`risk_r_syntax`) are
+   exempt. A function R finds in one base package and the table lists under another (`plot()`
+   moved from graphics to base in R 4.0) takes that row. A user function that shadows a table
+   function (`summary = function(x) unlink(...)`) is read through its body (the plan used the
+   row).
+3. **Literal arguments are read where the call is made.** `do.call()`, `rlang::exec()` and
+   `purrr::invoke()` with a literal function and argument list are read as that call
+   (`do.call(Sys.setenv, list(GPTR_MODE = 'auto'))` 4); an alias is the aliased call
+   (`f = unlink; f('~', recursive = TRUE)` 4); `Negate()`, `Vectorize()` and purrr's adverbs
+   pass their function on; `eval()`/`evalq()` of a literal `quote()` and formal defaults are
+   code; `.()` inside `bquote()` runs; a formula is no longer quoting (model functions
+   evaluate its terms and purrr's `~ .x` is a function). Quoted code stays capped at 2 for
+   every row, not only table rows.
+4. **Paths.** Literal paths are read with Task 2's readers (globs name guarded names, a `.gptr`
+   directory is control, a recursive delete above the root or home or of a top-level directory
+   is 4), from the root, R's working directory and every directory a literal `setwd()`,
+   `withr::with_dir()` or `local_dir()` can leave (a computed one is unknown). Path arguments are
+   found by partial names, in every unnamed argument of `...` rows, inside `c()`, `file.path()`,
+   `paste0()`, `path.expand()`, `normalizePath()`, `here()`, `fs::path()` and `file()`-like
+   connections. `file.rename()`/`fs::file_move()` remove their source (control, critical,
+   protected or a wipe 4; outside or unknown 3), links (`file.symlink()`, `file.link()`,
+   `Sys.junction()`, `fs::link_create()`) reach theirs (4/3), copies read theirs (a secret file 3)
+   and fs destinations are writes; `download.file()`'s destfile is a write; `untar()`/`unzip()`
+   are at least 3 (4 into a control directory); `open(con, 'w')` and `fifo(..., 'w')` are 2.
+5. **Processes.** `system()`, `shell()` and `pipe()` lines, `system2()` as the shell line it
+   builds, `processx::run()` and `processx::process$new()` argv with `wd`, `env` and `input`
+   (environment names become prefix assignments and input is piped, so Task 2's rules read
+   them); `process$new()` and an indirect `get('system')` keep the table's 3; a program run after
+   the code changed environment variables outside `risk_env_inert_re` is 3.
+6. **gptr$ members take 04 section 9.4's levels** (the plan floored lower): `bg` 3 (plan 1),
+   `script` 3 with a shell script read as one command text (heredocs, `cd`) and R or Python
+   scripts read too (plan 1, line by line), `knit` engines other than the shell ones 3, MCP
+   members 3 (their annotations are known only at call time; "none" is 3; plan 1), plugin
+   members with their own `risk` function and unregistered members 3 (plan 2); `sh`/`bg`
+   read `wd`, `env` and `input`.
+7. **IC-53: gptr's namespace by any route is level 4 `control`:** `asNamespace()`,
+   `getNamespace()`, `loadNamespace()`, `.getNamespace()`, `getNamespaceInfo()`,
+   `rlang::ns_env()` of "gptr", `getFromNamespace(x, "gptr")`, and `environment()`,
+   `rlang::fn_env()`, `rlang::get_env()` or `topenv()` of a gptr function. withr's and
+   rlang's option and environment setters are read as `options()` and `Sys.setenv()`
+   (`withr::local_options(gptr.secret_guard = FALSE)` 4); `op = options(digits = 3);
+   options(op)` reads the recorded names (2).
+8. **Robustness.** The code is read as P09's evaluator reads it (CR and CR LF line ends become LF;
+   a parse that fails with `encoding = "UTF-8"` is tried as the evaluator parses); text that
+   is not UTF-8 never errors or warns; a walk that cannot finish (R's expression limit: a
+   6,000-term sum) or a failing secret scan is a level-3 row; `source()` of a readable file
+   keeps the table's 3 as a floor (the file may change before it runs; plan max(1, content));
+   `risk_norm()` reads a malformed level as 3, as P06's `call_risk()` does (plan 2). Two
+   `@noRd` titles that roxygen read as links (`[leaf]`, `x[i]`) are reworded.
+
+Known limits (advisory classifier): a function of a package outside the tables is level 1
+whatever it does (IC-54; `ps::ps_kill(ps::ps_handle())` stops R; a table row or a `risk_rule`
+raises it); a computed function handed to a higher-order function outside `risk_hof_args` is
+not seen; a function stored with `list(unlink)` and called through an unknown higher-order
+function is not seen; S4 methods and package load hooks are not read; an anonymous function's
+formals are not bound to the arguments of its immediate call (`(\(f) f('~'))(unlink)` is 3,
+not 4); a path the code computes is `unknown` (a write 2, a delete 3), as a plain parameter
+is in D-061.
+
+Validation: `progress/P11.md`, Task 3.
