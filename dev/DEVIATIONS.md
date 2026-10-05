@@ -9275,6 +9275,111 @@ expectations on the previous source (`task15-fix1-red.log`); green
 (`task15-fix2-red.log`); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 500 ]` in the default and the
 C locale (`task15-fix2-green.log`, `task15-fix2-green-clocale.log`).
 
+## D-129 - P17 skill.body: a skill found in the registry is served without a sync only while its SKILL.md exists and the registry holds the current trusted project's skills; the catalog budget's order is tested (2026-10-05)
+
+P17 Task 4 (`R/skill-discover.R`), review rounds 1 and 2. The plan-literal `skill_body()` changed.
+`skill_sync()` and `skill_collect()` were refactored without changing their behaviour. The
+signature, return shape and conditions of `skill_body()` and the plan's 9 tests are unchanged.
+
+1. **A registered skill is checked again (IC-52; 04 section 10.1; the plan's own `skill_body()`
+   rule).** The plan's `skill_body()` synced only when the name was missing from the registry.
+   Otherwise it returned whatever the last `skill_sync()` had registered. P08 builds `skills =`
+   preloads in `gateway_input()` before `run_start()` emits `session_start`, so a preload read
+   the registry that an earlier sync had left. The reviewers reproduced five results, and the
+   tests below now lock each one out:
+   - A project skill was still served after `gptr_trust(p, FALSE)` or after a trust fingerprint
+     mismatch. `gptr("hi", skills = "proj-skill")` then put its body in the first user message
+     while T1 correctly omitted it.
+   - After the working directory moved to another project, the old project's skill of the same
+     name was served instead of the new project's. When the new project was untrusted, it was
+     served instead of `gptr_error_untrusted`.
+   - A `SKILL.md` deleted after the sync gave a silent empty body.
+   - A project nested inside another kept its skill (round 2). A skill synced in an inner
+     project B was still served from the outer trusted project A after B's trust was removed,
+     although `skill_discover()` in A does not list it.
+   - A user, package or built-in skill was not displaced by a project skill of the same name
+     (round 2). After a sync in a project without that skill, the skill registered at rank 3 was
+     still served in a trusted project whose own skill should win at rank 1. So
+     `gptr(skills = "dup-skill")` preloaded the user copy, while the catalog and the later
+     `read skill:dup-skill/...` calls of the same session served the project copy.
+
+   The plan says an untrusted project's skill signals `gptr_error_untrusted`. IC-52 says only
+   skills from user directories, installed packages and trusted projects are used.
+
+   **Fix.** `skill_spec_current(spec)` now requires two things:
+   - The `SKILL.md` still exists (`skill_file_ok()`, through P10's `fs_path()`).
+   - `skill_project_synced()` holds: the registered `skills:project` group is the one
+     `skill_sync()` would write now. To decide, it walks only the current project skill roots
+     (the `.gptr/skills`, `.agents/skills` and `.claude/skills` directories from the working
+     directory up to the project root, plus the relative `skills.paths` entries) with
+     `skill_collect(roots)`. It takes the group from `skill_groups()` and compares its
+     `skill_group_sig()` (the files' paths, times and sizes) with the registered one. With an
+     untrusted project, or one without skills, no group may be registered.
+
+   Round 1's test of "`trust_ok()` and the file inside `project_root()`" is gone, because it
+   missed both round-2 cases. `skill_sync()` now builds its groups and signatures with the same
+   two helpers, so the check and the sync cannot drift apart. A spec that fails the check is
+   looked up again after `skill_sync()`. It then falls through to the existing
+   `gptr_error_untrusted` / `gptr_error_invalid_argument` branch, or it resolves to the winner
+   that the sync registers.
+
+   **Cost.** No sync runs while the registry is current. This includes a trusted relative
+   `skills.paths` entry outside the project root, such as `../shared` (D-074 item 4); round 1
+   still synced on every call for those. Each `skill.body` call, which means each preload and
+   each `read skill:<name>/...`, costs the bounded walk of the project skill roots, cached
+   parses (one `file.info()` per `SKILL.md`) and one `trust.get` lookup.
+
+   **Not covered.** A newly added user or package skill directory that would win a name within
+   its own rank is still picked up only by the next sync, which is the `session_start` hook.
+2. **Test-only: `skills_budget()`'s order.** No test pinned the order `gptr.skills_budget`, then
+   the `skills.budget` setting, then 1,500, which the plan header and its self-review claim for
+   Task 4. One test now checks each level, and checks that the `skills` section follows a budget
+   too small for any entry.
+
+**Counts.** Nine regression tests (32 expectations) are appended to
+`tests/testthat/test-skill-discover.R` after the plan's 9 Task 4 tests: five from round 1 (16
+expectations) and four from round 2 (16 expectations). Every later count for that file is 32
+higher (IC-74):
+
+| Count | Before | After |
+|---|---|---|
+| Task 4 | 163 | 195 |
+| Acceptance 2b | 163 | 195 |
+| Task 12's second command (`skill\|subagent-defs`), after D-074, D-084 and D-086 | 386 | 418 |
+| Acceptance 1, after D-088 | 745 | 777 |
+| Acceptance 4c, after D-088 | 522 | 554 |
+
+**Validation.** See `progress/P17.md`, Task 4, review rounds 1 and 2. All runs use `^skill-discover$`.
+
+| Run | Result | Log |
+|---|---|---|
+| Round 1 red | `[ FAIL 9 \| WARN 0 \| SKIP 0 \| PASS 170 ]` | `task4-fix1-red.log` |
+| Round 1 green | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 179 ]` | `task4-fix1-green.log` |
+| Round 2 red | `[ FAIL 8 \| WARN 0 \| SKIP 0 \| PASS 187 ]` | `task4-fix2-red.log` |
+| Round 2 green | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 195 ]` | `task4-fix2-green.log` |
+
+In round 1 red, the budget test passes because it pins behaviour that was already right. In round 2
+red, the eight failures are the nested project (3), the shadowed user skill (2 direct, 2 e2e), and a
+sync on every call for `../shared` (1).
+
+Round 1 mutants (`task4-fix1-mutation-*.log`), against that round's source:
+
+| Mutant | Result |
+|---|---|
+| No trust check | `[ FAIL 4 \| ... \| PASS 175 ]` |
+| No project-root check | `[ FAIL 2 \| ... \| PASS 177 ]` |
+| No option branch of `skills_budget()` | `[ FAIL 3 \| ... \| PASS 176 ]` |
+| No setting branch | `[ FAIL 1 \| ... \| PASS 178 ]` |
+
+Round 2 mutants (`task4-fix2-mutation-*.log`):
+
+| Mutant | Result |
+|---|---|
+| No `skill_project_synced()` | `[ FAIL 14 \| ... \| PASS 181 ]` |
+| Presence check only, with no signature comparison | `[ FAIL 2 \| ... \| PASS 193 ]` (the round-1 move between two trusted projects) |
+
+Lint is clean.
+
 ## D-130 - P15 knitr integration: what knit_print shows is redacted like the recorded blocks (IC-74), the label hook is also removed when a knit fails, and a nested knit never ends the skip of the knit that runs it (2026-10-05)
 
 P15 Task 16 (`R/doc-knitr.R`; `doc_skip_old()` in `R/doc-replay.R`; tests in

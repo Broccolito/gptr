@@ -204,10 +204,10 @@ skill_roots = function() {
 #'
 #' `rows$visible` is TRUE for the skills that enter the catalog: trusted, not
 #' `disable-model-invocation`, and the winner of their name (lowest rank, then discovery order).
-#' Untrusted project skills are listed but never visible (IC-52).
+#' Untrusted project skills are listed but never visible (IC-52). `roots` (default: every root)
+#' lets `skill_project_synced()` walk the project roots only.
 #' @noRd
-skill_collect = function() {
-  roots = skill_roots()
+skill_collect = function(roots = skill_roots()) {
   rows = list()
   specs = list()
   seen = character()
@@ -277,3 +277,254 @@ gptr_skills = function(scope = c("all", "project", "user", "packages")) {
   rownames(out) = NULL
   new_listing(out, "gptr_skills")
 }
+
+# ---- registry sync, catalog, preloads, builtin:skills ----------------------------------------
+
+#' First line of the `skills` section (verbatim, architecture section 7.3)
+#' @noRd
+skills_catalog_header = paste0(
+  "Skills hold specialized instructions. When a task matches a skill's description, ",
+  "read its SKILL.md with the read tool before starting; paths inside it are relative ",
+  "to the skill (read skill:<name>/<path>)."
+)
+
+#' Register discovered skills, one registry group per source
+#'
+#' Trusted project skills at rank 1, user skills at rank 3, attached packages at rank 5 and
+#' gptr's own at rank 6. Untrusted project skills are never registered (IC-52); plugin skills
+#' are registered by `plugin_enable()`.
+#' @noRd
+skill_sync = function() {
+  col = skill_collect()
+  df = col$rows
+  if (any(df$origin == "project" & !df$trusted)) {
+    gptr_inform(paste0("Project skills are listed but not used until the project is trusted ",
+                       "(gptr_trust())."), "notice",
+                .once = paste0("skills-untrusted:", path_key(project_root())))
+  }
+  groups = skill_groups(df)
+  for (g in names(groups)) {
+    i = groups[[g]]
+    res_register(paste0("skills:", g), col$specs[i], source = g, rank = df$rank[i[1L]],
+                 sig = skill_group_sig(df, g, i))
+  }
+  res_prune("skills:", paste0("skills:", names(groups)))
+  invisible(NULL)
+}
+
+#' The registry groups `skill_sync()` writes for discovered rows: `list(<source> = rows)`
+#'
+#' Trusted, non-plugin rows split by registry source, keeping the first row of each name.
+#' @noRd
+skill_groups = function(df) {
+  idx = which(df$trusted & df$origin != "plugin")
+  lapply(split(idx, df$reg[idx]), function(i) i[!duplicated(df$name[i])])
+}
+
+#' Signature of one registry group of skills: the source, then each file's path, time and size
+#' @noRd
+skill_group_sig = function(df, g, i) paste(g, res_file_sig(df$path[i]))
+
+#' Skill specs the catalog may show for a session: model-invocable registered skills
+#' @noRd
+skill_visible_specs = function(session = NULL) {
+  specs = tryCatch(registry_all("skill", session = res_session_id(session)),
+                   error = function(e) list())
+  Filter(function(s) !isTRUE(s[["disable_model_invocation"]]) && !isTRUE(s[["lazy"]]), specs)
+}
+
+#' Catalog budget: `gptr.skills_budget` when set, else the `skills.budget` setting, else 1,500
+#' @noRd
+skills_budget = function() {
+  if (!is.null(getOption("gptr.skills_budget"))) return(as.integer(gptr_opt("skills_budget")))
+  b = setting_get("skills", default = list())[["budget"]]
+  as.integer(b %||% gptr_opt("skills_budget") %||% 1500L)
+}
+
+#' The compact skill catalog (service `skill.catalog`; contract 7.0; G2 (b); IC-68)
+#'
+#' The verbatim header line, then one `- name: description [skill:name/SKILL.md]` line per
+#' visible skill in name order. Over `budget` estimated tokens, descriptions of the least
+#' recently used skills are dropped first, then whole entries, which a closing line points to
+#' `gptr$search()`. Returns `""` when there is no skill.
+#' @noRd
+skill_catalog = function(session = NULL, budget = skills_budget()) {
+  specs = skill_visible_specs(session)
+  if (!length(specs)) return("")
+  nm = vapply(specs, function(s) s[["name"]], "")
+  o = order(nm, method = "radix")
+  specs = specs[o]
+  nm = nm[o]
+  desc = vapply(specs, function(s) s[["description"]], "")
+  full = skill_line(nm, desc)
+  bare = paste0("- ", nm, " [skill:", nm, "/SKILL.md]")
+  tok = function(x) vapply(x, est_tokens, 0, class = "prose", USE.NAMES = FALSE)
+  cost = tok(full)
+  cost_bare = tok(bare)
+  head_cost = est_tokens(skills_catalog_header, "prose")
+  lines = full
+  keep = rep(TRUE, length(nm))
+  total = function() head_cost + sum(cost[keep]) + sum(keep)
+  lru = order(res_last_used(nm), -seq_along(nm), method = "radix")
+  for (i in lru) {
+    if (total() <= budget) break
+    lines[i] = bare[i]
+    cost[i] = cost_bare[i]
+  }
+  more_cost = est_tokens("(999 more skills: gptr$search(\"words\") finds them)", "prose")
+  if (total() > budget) {
+    for (i in lru) {
+      if (head_cost + sum(cost[keep]) + sum(keep) + more_cost <= budget) break
+      keep[i] = FALSE
+    }
+  }
+  out = c(skills_catalog_header, lines[keep])
+  if (any(!keep)) {
+    out = c(out, paste0("(", sum(!keep), " more skills: gptr$search(\"words\") finds them)"))
+  }
+  paste(out, collapse = "\n")
+}
+
+#' Find a registered skill by name: exact, then after `res_norm()` (IC-42)
+#'
+#' Skills of plugins enabled for one session are found through the plugin table: those of
+#' `session`, or of any session when `session` is NULL (the `skill.body` service has no
+#' session argument).
+#' @noRd
+skill_find = function(name, session = NULL) {
+  sid = res_session_id(session)
+  hit = res_match(name, registry_names("skill", session = sid), "skill")
+  if (length(hit)) return(registry_get("skill", hit, session = sid))
+  for (e in res_state()$plugins) {
+    if (!is.null(sid) && !is.null(e$session) && !identical(e$session, sid)) next
+    for (s in e$specs) {
+      if (inherits(s, "gptr_skill") && identical(res_norm(s[["name"]]), res_norm(name))) {
+        return(s)
+      }
+    }
+  }
+  NULL
+}
+
+#' Does a skill's `SKILL.md` still exist?
+#' @noRd
+skill_file_ok = function(path) {
+  is.character(path) && length(path) == 1L && !is.na(path) && file.exists(fs_path(path))
+}
+
+#' Does the registry hold the project skills a sync would register now?
+#'
+#' The `skills:project` group must be the one `skill_sync()` would write from the current project
+#' skill roots: none when the project is not trusted (IC-52) or has no skills, otherwise the same
+#' files with the same times and sizes. Only the project roots are walked (D-129).
+#' @noRd
+skill_project_synced = function() {
+  roots = skill_roots()
+  df = skill_collect(roots[roots$origin == "project", , drop = FALSE])$rows
+  want = skill_groups(df)[["project"]]
+  have = res_state()$groups[["skills:project"]]
+  if (is.null(want)) return(is.null(have))
+  !is.null(have) && identical(have$sig, skill_group_sig(df, "project", want))
+}
+
+#' May `skill_body()` serve a skill it found in the registry without syncing first?
+#'
+#' The registry holds what the last `skill_sync()` saw, and P08 builds `skills =` preloads before
+#' `session_start` syncs again. So the `SKILL.md` must still exist and the registered project
+#' skills must be the current project's (`skill_project_synced()`): a project skill of another,
+#' an untrusted or a nested project is never served, and a current project skill displaces a
+#' user, package or built-in skill of its name (rank 1, 04 section 10.1; IC-52; D-129).
+#' @noRd
+skill_spec_current = function(spec) {
+  skill_file_ok(spec[["path"]]) && skill_project_synced()
+}
+
+#' The body of a skill (service `skill.body`; contract 7.0)
+#'
+#' Returns `list(text, dir, name)`: the body without frontmatter plus one line naming the
+#' `skill:<name>/<path>` pseudo-paths, the skill directory and the canonical name. Used by
+#' `skills =` preloads and by `read` of `skill:<name>/...` pseudo-paths (P10); it marks the skill
+#' as used for catalog trimming. A registered skill that is no longer current
+#' (`skill_spec_current()`) is looked up again after a sync. An untrusted project's skill signals
+#' `gptr_error_untrusted`; an unknown name, or a skill whose `SKILL.md` is gone,
+#' `gptr_error_invalid_argument`.
+#' @noRd
+skill_body = function(name, session = NULL) {
+  check_string(name, "name")
+  spec = skill_find(name, session)
+  if (is.null(spec) || !skill_spec_current(spec)) {
+    skill_sync()
+    spec = skill_find(name, session)
+    if (!is.null(spec) && !skill_file_ok(spec[["path"]])) spec = NULL
+  }
+  if (is.null(spec)) {
+    df = skill_discover("project")
+    hit = df[!df$trusted & res_norm(df$name) == res_norm(name), , drop = FALSE]
+    if (nrow(hit)) {
+      gptr_abort(paste0("This skill belongs to a project that is not trusted; trust it with ",
+                        "gptr_trust() to use its skills."), "untrusted", what = "skill",
+                 path = hit$path[1L], origin = "project")
+    }
+    gptr_abort("No skill with this name is available; gptr_skills() lists them.",
+               "invalid_argument", arg = "skills",
+               expected = "a skill name listed by gptr_skills()")
+  }
+  fm = frontmatter_read(spec[["path"]])
+  res_touch(spec[["name"]])
+  list(text = paste0(fm$body %||% "", "\n\nFiles of this skill: read skill:", spec[["name"]],
+                     "/<path>."),
+       dir = spec[["dir"]], name = spec[["name"]])
+}
+
+#' Text of the `skills` prompt section (T1, order 820): only when `read` is active
+#' @noRd
+skills_section_text = function(ctx) {
+  if (!("read" %in% ctx$input$tool_names)) return(NULL)
+  txt = skill_catalog(ctx$session, skills_budget())
+  if (nzchar(txt)) txt else NULL
+}
+
+#' Resource handler for plugin `skills/` directories (installed with `res_handler_set()`)
+#' @noRd
+skill_dir_specs = function(paths, p, labels = NULL) {
+  out = list()
+  for (d in paths) {
+    for (f in skill_walk(d)) {
+      s = skill_parse_cached(f)
+      if (is.null(s)) next
+      s[["source"]] = paste0("plugin:", p$name)
+      out[[length(out) + 1L]] = s
+    }
+  }
+  nm = vapply(out, function(s) s[["name"]], "")
+  out[!duplicated(nm)]
+}
+
+#' Is this a child session (depth > 0)? Children reuse what their root session synced.
+#' @noRd
+skill_child_session = function(ctx) {
+  s = ctx$session
+  !is.null(s) && isTRUE(tryCatch(session_data(s)$depth > 0L, error = function(e) FALSE))
+}
+
+#' `session_start` hook of `builtin:skills`: sync the skills of a top-level session
+#' @noRd
+skills_on_session_start = function(event, ctx) {
+  if (skill_child_session(ctx)) return(NULL)
+  skill_sync()
+  NULL
+}
+
+#' The `builtin:skills` factory (contract 04 sections 7.17 and 10.3)
+#' @noRd
+builtin_skills = function(gptr) {
+  gptr$register(gptr_prompt_section("skills", skills_section_text, tier = "T1",
+                                    order = 820L, budget = 1500L))
+  gptr$on("session_start", skills_on_session_start)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("skills", builtin_skills))
+on_load(ext_service_set("skill.catalog", skill_catalog, provided_by = "P17", builtin = "skills"))
+on_load(ext_service_set("skill.body", skill_body, provided_by = "P17", builtin = "skills"))
+on_load(res_handler_set("skills", skill_dir_specs))
