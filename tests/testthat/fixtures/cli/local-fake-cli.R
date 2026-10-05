@@ -149,3 +149,30 @@ stub_process = function(pid = 4242L) {
   class(p) = c("stub_process", "process")
   p
 }
+
+# A normaliser of one turn whose wall-clock timer is cancelled when the test ends
+local_normaliser = function(parse, model, opts, .env = parent.frame()) {
+  n = parse(model, opts)
+  withr::defer({
+    t = opts$state$turn_timer
+    if (!is.null(t)) reactor_cancel(t)
+  }, envir = .env)
+  n
+}
+
+# Feed a fixture transcript to a normaliser as process lines (fake-CLI directives skipped);
+# TRUE when the turn completed
+feed_fixture = function(n, name) {
+  done = FALSE
+  lines = readLines(file.path(fake_cli_fixtures(), name), encoding = "UTF-8", warn = FALSE)
+  for (ln in lines[nzchar(lines)]) {
+    obj = json_decode(ln)
+    if (!is.null(obj[["fake"]])) next
+    done = n$push(list(data = ln, obj = obj))
+    if (isTRUE(done)) break
+  }
+  done
+}
+
+# Push one object as a process line
+push_obj = function(n, obj) n$push(list(data = json_encode(obj), obj = obj))

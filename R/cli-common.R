@@ -956,11 +956,30 @@ pcli_fail = function(s, class, message, reason = "error", status = NA_integer_, 
 pcli_turn_seconds = function() as.numeric(gptr_opt("cli_turn_timeout") %||% 3600)
 
 #' Start the per-turn wall-clock timer
+#'
+#' A timer still recorded in the adapter state belongs to an earlier turn of the session that
+#' P05 ended without its normaliser (stream_abort(), stream_detach(), a failure of its driver):
+#' P05 starts a turn only after letting go of the earlier one, so that timer is cancelled first
+#' and never fires into this turn (D-104).
 #' @noRd
 pcli_turn_timer = function(s, on_timeout) {
+  old = s$state$turn_timer
+  if (is.character(old)) tryCatch(reactor_cancel(old), error = function(e) NULL)
   s$timer = reactor_timer(reactor_now() + pcli_turn_seconds(), on_timeout, run = s$opts[["run"]])
   s$state$turn_timer = s$timer
   invisible(s$timer)
+}
+
+#' Is `s` still its session's current turn?
+#'
+#' The adapter state is the session's (per provider), so a late callback of a turn that P05
+#' ended without its normaliser (its wall-clock timer, a `tools/call` waiting in P04's tool
+#' FIFO) must not act on it: pcli_finish() and pcli_stop_child() would close the next turn and
+#' stop its child. The token is the turn's timer id, which pcli_turn_timer() records in the state
+#' and pcli_finish() and pcli_stop_child() clear (D-104).
+#' @noRd
+pcli_turn_current = function(s) {
+  is.character(s$timer) && identical(s$state$turn_timer, s$timer)
 }
 
 #' One redacted wire-log line per CLI turn start and terminal event (P04's per-session file,

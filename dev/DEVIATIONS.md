@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2958,7 +2958,26 @@ read a line differently (brace expansion, a descriptor such as `10>`), both read
 classified and the higher counts; so are the Windows and the sh reading of a backslash, and the
 readings of a parameter default (round 4), and every directory a `cd` can leave the shell in
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
-added, item 12 what round 4 added, item 13 what round 5 added and item 14 what round 6 added:
+added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added and
+item 15 what round 7 (the classifier standard) added.
+
+**The classifier standard (coordinator decision, review round 7; it wins over the wording above
+and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
+flagged": it is an allowlist. A shell line is level 0 only when every simple command is a known
+read-only program (a level-0 row of `risk-commands.csv`, or a modelled reading such as `find`
+without actions) used with options the classifier reads as read-only, and every word is a
+literal or a plain parameter reference (`$NAME`, `${NAME}`, `$1`, `"$@"` and the other special
+parameters). (B) A construct the classifier does not model is at least level 3 (dynamic code, 03
+section 6.8.1; computed commands, 6.8.4): arithmetic expansions and commands, `[[ ]]` with
+arithmetic operators, parameter expansions with any operator, `let`, `declare`/`typeset`,
+`printf -v`, `read` into variables, `eval`, `source`/`.`, aliases, computed programs, options and
+awk/sed program text, unknown programs. Command text gptr can still recognise inside such a
+construct is classified recursively and may raise the line further. (C) Level 4 is required
+only where a critical or control target is identifiable from literal text (a literal path, a
+glob that can match a guarded name, a recognised command, a q()-equivalent); a payload hidden
+inside an unmodelled construct is level 3, which auto mode allows by design (the classifier is
+advisory and not a security boundary, 6.8.1). The standard is about shell lines; Python is never
+below 1, and SQL keeps its keyword reading (Known limits).
 1. **Shell syntax.** Substitutions are found by a scan that follows quotes, backslashes and
    nesting, and each is classified as a command line, recursively (the plan read one level with a
    regular expression: `echo $(rm -rf ~ $(true))` was 0), process substitutions `<(...)`/`>(...)`
@@ -3408,9 +3427,128 @@ added, item 12 what round 4 added, item 13 what round 5 added and item 14 what r
     - Changed rows: none of the 1,124 earlier expectations changed. A guard row of mine was
       wrong before the fix: `for f in a.csv b.csv; do cp "$f" out/; done` is 3, not 2, because
       the `unknown` reading of `$f` stays (it was 3 before too).
+15. **Review round 7 (the classifier standard).**
+    - *The level-0 allowlist gate.* A final pass of `risk_command()` gives a line with a
+      construct gptr does not model a level-3 `dynamic` row (call "not modelled: <construct>";
+      never for an argv, which no shell expands). `risk_sh_unmodelled()` scans the line as sh
+      reads it (after `risk_sh_prepare()`; outside single quotes and escapes, so double-quoted
+      text and unquoted heredoc bodies count) for arithmetic expansions (`$((...))`, `$[...]`),
+      arithmetic commands (`((...))`, `for ((...))`), parameter expansions with any operator
+      (all but `${NAME}`, `${N}` and the special parameters: `${x:-y}`, `${#x}`, `${x@P}`,
+      `${!x}`, `${x:0:2}`, `${a[i]}`), command substitutions (`$(...)`, backticks, `$(<f)`),
+      process substitutions (`<(...)`, `>(...)`) and array assignments (`a=(...)`). Item 1's
+      "an arithmetic `$((...))` is no command" still holds for the substitutions inside it, which
+      are classified (`echo $(( $(rm -rf ~) ))` 4), but the expansion itself is now 3.
+      `risk_sh_gate()` reads each simple command of each reading (bash, dash, backslash): a
+      command name the shell computes (`$CMD`, `"$PROG"`, `$(...)`), a computed word among a
+      wrapper's options (`env $X ls`, `nice -n "$N" ls`; a prefix assignment's value is not one),
+      an array element assignment (`a[i]=x`, also through `local`/`readonly`/`export`), the
+      builtins of `risk_sh_state_builtins` (`let`, `declare`, `typeset`, `read`, `mapfile`,
+      `readarray`, `getopts`, `eval`, `source`, `.`, `alias`, `unalias`, `coproc`, `enable`,
+      `hash`, `shopt`: they set variables, attributes, aliases or the shell's state from text
+      gptr does not read), `local`/`readonly`/`export` with attribute options, `printf -v` (or a
+      computed first printf word), `[[ ]]` with `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge` or `-v`
+      (bash evaluates those operands, subscripts included, as arithmetic: with
+      `x='a[$(cmd)]'`, `[[ $x -eq 0 ]]` runs cmd in bash 3.2.57 and 5.3), `[`/`test` with `-v`
+      (bash 5.3's `[ -v 'a[$(cmd)]' ]` runs cmd; `[ x -eq y ]` does not evaluate arithmetic) or
+      an unquoted expansion, awk, gawk, sed, jq and yq program text the shell computes
+      (`awk "$prog"`, `sed -n "${n}p"`, `jq ".[$i]"`, `awk "{print \$1 > \"$out\"}"`;
+      `risk_cmd_code_at()`), and, for a program outside `risk_cmd_inert`, an option the shell
+      computes: before a literal `--`, a word with an unquoted expansion (the shell splits it) or
+      one that starts with an expansion or a single `-` (`sort "$OPTS"`, `sort -r$X`,
+      `find "$d"`, `git log $RANGE`, `curl "$URL"`); a long option's value after `=` is not one.
+      `risk_cmd_inert` lists the read-only programs none of whose options writes, runs code or
+      changes state (cat, head, tail, ls, grep, wc, diff, du, ps, jq, echo, cd, ...), so a plain
+      parameter there stays 0 as (A) allows (`cat "$f"`, `wc -l "$f"`, `grep -n "$p" f.txt`,
+      `ls "$DIR"`). The tokeniser gives each word attribute `expand` (0 nothing expanded, 1 a `$`
+      or backtick inside double quotes, 2 one outside quotes), `risk_sh_split()` carries it, and
+      `risk_cmd_args()` also returns the indices of operands and values (`ops_at`, `vals_at`).
+    - *Rows the gate changed* (each was below 3 and is 3, as intended): `echo $((1 + 2))`,
+      `x=$(cat a.txt)`, `x=$(echo 'rm -rf ~')` and `printf -v x %s 1` (0);
+      `git commit -m "$(cat <<'EOF' ... EOF)"` and `echo $(echo x > notes.txt); cd $DIR` (2; a
+      path check keeps the second one's redirect read from the known directory). Common forms that
+      become 3: any line with `$(...)`, backticks or `<(...)` (`echo "$(date)"`,
+      `diff <(sort a) <(sort b)`, a commit message heredoc), arithmetic (`i=$((i+1))`),
+      `${x:-y}`, `read`, `declare`, and computed options of programs outside the inert list
+      (`git commit -m "$MSG"`, `find "$d" -name x`, `rg -n "$PAT"`). Guard rows stay 0: `ls -la`,
+      `git status`, `cat file.txt`, `echo hello`, `grep -n x file`, `echo $HOME`,
+      `for f in *.csv; do wc -l "$f"; done`, `[ -f "$f" ]`, `[[ -f data.csv ]]`,
+      `awk '{print $1}' f`, `echo '$((1+2))'`, `case $x in a) ls;; esac`, `cd "$d" && ls`.
+    - *Literal options of read programs* (so that (A)'s "options read as read-only" holds):
+      `less`/`more` `-o`/`-O`/`--log-file` write their file, a `+cmd` other than `+N`, `+G`,
+      `+F` and `+/pattern` and the lesskey options are 3 `dynamic`, and the line of `+!cmd` or
+      `+|cmd` is classified (`less '+!rm -rf ~' f` 4); `file -C` writes `<magic>.mgc`;
+      `date -s`/`--set`, a BSD `date` operand without `-j`, and `hostname NAME` or `-F` set the
+      system's state (3 `process`); GNU `date -f FILE` reads FILE; `git help -w` opens a browser
+      (3); sed's `r`/`R`, awk's `getline < "file"` and jq's `--rawfile`/`--slurpfile` read their
+      files (a secret file is 3 `secret`); yq's `load*()` is 3 `dynamic` and `env()`,
+      `strenv()`, `$ENV` a 2 `secret` read; `yq -s`/`--split-exp` writes files an expression
+      names (3, class `unknown`); `tree -R` writes `00Tree.html` in each directory it lists (3,
+      `./*/00Tree.html` is a wildcard write); `git diff --no-index` reads its two files as diff
+      does (`git diff --no-index ~/.ssh/id_rsa /dev/null` 3 `secret`; `/etc/hosts` 1).
+    - *cp with a trailing slash.* BSD cp (macOS) copies what `src/` holds, as for `src/.`:
+      `risk_cmd_copy_targets()` gives such a source the names `src`, `*` and `.*` in the
+      destination directory (both cp readings), so `cp -R backup/ .gptr` is 4 `control` (was 2)
+      and `cp -R backup/ out/` 4 (was 2, as `cp -r backup/. out/` already was: `.*` can be
+      `.Rprofile`, control in any directory). `mv src/ dir/` and `cp -R src/ new` (no such
+      directory) keep 2.
+    - *Globs can stand for non-dot guarded names.* `risk_glob_paths()` lets each component stand
+      for every guarded name of its directory it can match: besides the dot names, the names
+      P01's `path_class()` guards in any directory (`risk_cmd_guard_names`: `AGENTS.md`,
+      `CLAUDE.md` instructions; `renv.lock`, `<name>.env` protected; `Rprofile.site`,
+      `Renviron.site` control) and `Makevars` in `.R/`; find's and fd's name narrowing read the
+      same names. `risk_cmd_guards()` adds gptr's configuration directory
+      (`R_user_dir("gptr", "config")`), `~/.R/Makevars` and the files R_PROFILE_USER and
+      R_ENVIRON_USER name to the project root and home: deleting one or a directory above it is a
+      wipe (4), and a glob component can name the next directory toward one. `rm renv.l*`,
+      `rm -f *.env`, `cp x Rprofile.s*`, `echo x > Renviron.*`, `rm -rf ~/.R/*`,
+      `cp x ~/.R/Make*`, `rm -rf ~/.R` and deleting the configuration directory's parent are 4;
+      `cp x AGENTS.m?` and `echo x > CLAUDE.*` 3. By the same rule (P01 guards `Rprofile.site`
+      in any directory), a glob that matches every name matches it: `rm -rf build/*`,
+      `rm -rf build/[a-z]*`, `cd build && rm -rf *`, `cd build || exit 1; rm -rf *`,
+      `cd build && rm -rf * && cd .. && ls` and `cd /tmp/x && rm -rf *` are 4 (were 3) and
+      `cp -r data/* ./` is 4 (was 2); reads rise too: `ls *` and `du -sh *` are 2 (`renv.lock`
+      is protected), `grep TODO *` and `cat *` 3 (`<name>.env` is a secret file). `rm out/*.o`
+      (3) and `ls *.md` (0) are unchanged. The cd rows keep their point through path checks: after
+      `&&` or `|| exit` the root is never read (no `critical` row), after `;` it is.
+    - *R stopped from a shell or from Python is q().* gptr's shell runs as R's child and gptr$py
+      inside R's process. `risk_kill_r()`: `kill` of `$PPID`/`${PPID}`, `-$PPID` (R's process
+      group), `0` or `-1` (after the signal), `pkill` with a pattern (a regular expression; `-f`
+      against command lines, `-x` whole names, `-i` any case) or `killall` with a name (`-m`/`-r`
+      a pattern) that matches R, Rscript, rsession, Rterm, Rgui, RStudio or Positron, and
+      `pkill -u`/`killall -u` without a pattern are 4 `critical` (`sudo kill -9 $PPID` too);
+      `kill 12345`, `kill %1`, `kill $$`, `pkill -x python3`, `killall node` and `kill -l` keep
+      3. Python: `os._exit()` (and `_exit()`), `os.abort()`, `os.exec*()` (which replace R's
+      process), `signal.raise_signal()`, `signal.pthread_kill()`, `os.kill()`/`os.killpg()` of
+      `getpid()`, `getppid()`, `getpgrp()`, `getpgid()`, `0` or `-1`, and `from os|posix|signal
+      import` of these are 4 `critical`; `os.kill(1234, 9)` keeps 3.
+    - *Python writes.* The `file_write` rule adds pandas `to_markdown`, `to_html`, `to_string`,
+      `to_latex`, `to_hdf`, `to_xml`, `to_stata` and `to_orc`, pathlib's `.rename()`,
+      `.replace()`, `.touch()`, `.symlink_to()`, `.hardlink_to()` and `.link_to()`, `os.open()`
+      with `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_TRUNC` or `O_APPEND`, and `.extractall()`/
+      `shutil.unpack_archive()`; a literal guarded target takes its class
+      (`Path('a').rename('.Rprofile')` 4, `shutil.unpack_archive('a.zip', '.gptr')` 4,
+      `df.to_markdown('AGENTS.md')` 3), otherwise the row is 2 (`os.open(p, os.O_RDONLY)` keeps
+      1). `str.replace()` and `DataFrame.rename()` read as writes as well: Python is at least
+      level 1, and the reading only rises.
+    - *PCRE anchors.* With `perl = TRUE`, `$` also matches before a final newline, so a quoted
+      word ending in a newline matched exact patterns: `echo x > "/dev/null<newline>"` wrote
+      nothing (0), `git -c 'color.ui<newline>=x' log` was a safe key (0), and
+      `python3 '--version<newline>'` and `make '-n<newline>'` were 0. Every end anchor of a PCRE
+      pattern in `R/perm-classify.R` is now `\z` (null devices, top-level directories, the
+      `$PWD`/`$OLDPWD` forms, git's safe, program-running and read keys and list/write options,
+      every `has()` option pattern, the glob regular expressions of Task 1 and Task 2, sed's `s`
+      command, awk's print targets, curl's and wget's sending and config options, SQL dollar
+      quotes, MySQL comments and acting pragmas); the four lines are 3 and
+      `risk_cmd_prog("ls\n")` is `?`. P03's `scan_secret_path_re` (`auth-secrets.R`, another
+      plan's file) keeps its `$`, which only makes a secret-file match more likely.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
-below is level 3 or the level of what can be read, never 0, except the SQL functions named
-last): scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
+below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
+functions named last). (A) admits a plain parameter as an operand, and as an option of a
+program in `risk_cmd_inert` (whose options only read), so `cat "$f"` or `ls $DIR` stays 0
+whatever the variable names (a read of a computed path reads at its `unknown` class, 0). pkill
+and killall patterns are matched against a fixed list of R's process names and command lines.
+Scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
 configuration read by `curl -K`, `wget -e`/`--config` (3 `dynamic` since round 4) or `git` from
 the repository, the values of variables the line does not assign literally (from the
 environment, `read`, a function or a sourced file) and of positional parameters (`$X`, `"$@"`:
@@ -3452,8 +3590,14 @@ round 5 added item 13, with nine blocks (232 expectations), one raised row and o
 assertion; the final test file fails 157 against the round-4 source (`task2-fix5-red-final.log`).
 Review round 6 added item 14 and the amendments it names, with five blocks (126 expectations)
 and no changed row; the final test file fails 93 against the round-5 source
-(`task2-fix6-red-final.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1250 ]`
-in the UTF-8 and the C locale.
+(`task2-fix6-red-final.log`). Review round 7 (the classifier standard) added item 15 with
+eight blocks (291 expectations), eight expectations in two older blocks and thirteen changed
+rows (six by the gate, seven by the non-dot glob names, listed in item 15); the first seven new
+blocks fail 161 against the round-6 source (`task2-std-red.log`), the anchor and read-option
+blocks fail 22 against the intermediate source that had the gate and the static fixes but not
+those (`task2-std-red2.log`). Final `^perm-classify$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1549 ]` in the UTF-8 and the C locale
+(`task2-std-green.log`, `task2-std-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -6191,3 +6335,318 @@ plan-literal source `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 123 ]`
 Review round 1 (`.opts$safety` reserved, `dot_labels()` of an empty argument): regression red
 `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 171 ]` (`task5-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 178 ]` (`task5-fix1-green.log`).
+
+## D-103 - P15 locator: the steps of a pipeline that repeats a prompt are told apart by their call, a notebook call with a computed prompt is anchored by its call, the remembered transcript target is read through the IC-52 check, nobody is asked where to record when no target can be offered, a malformed context item or session never stops the console fallback, a call nested in a running document is no console turn, and a relative `Rscript --file=` is resolved from the launch directory (2026-10-04)
+
+P15 Task 8's literal `R/doc-locate.R` (and its IDE queries in `R/doc-io.R`) is kept except for
+seven behaviours:
+
+1. **Pipeline steps with the same prompt are located as themselves (contract 11.5; plan
+   self-review ambiguity 28).** The plan anchored a call on the first row of its statement (or,
+   under `Rscript`, of its file) that has its prompt hash. In
+   `out = gptr("draft") |> gptr("improve it") |> gptr("improve it")` the third call was then
+   located as the second (ordinal 2, owning `call=2`'s block) under `source()` with and without
+   srcrefs, and under `Rscript` the second and third steps swapped ordinals. Ambiguity 28 only
+   works if the locator tells these calls apart. `doc_by_identity()` keeps, among rows with the
+   same prompt hash, those whose identity text parses to the evaluated call (`sys.call()`, through
+   Task 2's `doc_calls_have()`); without a call, or when no row is that call, the rows are kept.
+   The `Rscript` execution counter is keyed by the candidate rows' own identity: their prompt
+   hash (none for a computed prompt) plus their identity hashes. Repeated identical statements
+   still count 1, 2, ... as in the plan. The plan keyed it by the runtime prompt hash, so for
+   `q = "a"; x = gptr(q); q = "b"; y = gptr(q)` each runtime value started its own counter and
+   both executions were located at `x = gptr(q)` (review round 1).
+2. **A notebook call with a computed prompt is anchored by its call (contract 11.5, ambiguity
+   27).** The plan stored the runtime prompt hash in the notebook anchor and dropped the call.
+   The cell's row for `gptr(paste("dy", "n"))` has no prompt hash, so `doc_ipynb_locate()` never
+   found the cell again: the call was reported as not top-level and owned no agent cell.
+   `doc_nb_anchor()` stores the prompt hash as written in the cell (NA for a computed prompt)
+   and the call when it is NA, as the `r` format's anchors already do.
+3. **The remembered transcript target goes through the IC-52 check (Task 7 obligations,
+   D-100 items 3 and 4).** `doc_transcript_target()` reads the target through
+   `doc_project_entry()` and `doc_remembered_target()`. The plan's
+   `doc_project_get()$transcript$target` threw `$ operator is invalid for atomic vectors` for
+   `{"transcript": "a.R"}`.
+   `doc_remembered_target()` now calls `doc_target_valid()` instead of repeating its rule, and
+   `doc_target_valid()` answers `FALSE` for anything but one non-missing string (a vector made
+   the plan's `if()` fail).
+4. **Nobody is asked where to record when no target can be offered.** With no valid active
+   document and no `.gptr/` workspace, the plan still asked whether to record into
+   `.gptr/transcripts/`. A yes then remembered `"off"` for the project, because no transcript
+   can be created there, so transcripts stayed off after `gptr_init()`. `doc_ask_transcript()`
+   now offers only targets that exist. It returns NA when there is nothing to offer, when the
+   UI backend reports it cannot ask (`has_ui()` false), or when its `select()` throws (a failing
+   dialog is not an answer, contract 10.2 row 22; the plan turned the error into "Nowhere" and
+   remembered `"off"` for the project). Then nothing is remembered and the next turn asks
+   again. A cancel (`select()` returns NA) stays the plan's "Nowhere". With an active document
+   and no workspace, the yes/no question names that document.
+5. **The console fallback never throws.** `doc_locate()` read `x$kind` of every context item
+   and `session_data()` of the session. A context item that is not a list, or a session that is
+   not one, made the whole locate fail inside the `document` route. Context items are read with
+   `[[` and only symbol items with one name count (`doc_context_labels()`). The session id and
+   the console site are computed inside `tryCatch()`.
+6. **A call nested in a running document is no console turn (03 section 6.9.3: calls nested in
+   functions and loops have no block; contract 11.5; IC-56 reads `call$top_level`; review
+   round 2).** The plan fell back to the console site whenever a finder saw a running document
+   (a `source()` frame, knitr or Quarto, `Rscript --file=`) but none of its statements held the
+   call: a call inside a function (a package helper, or one defined in the script without
+   srcrefs), a later pass of a top-level loop under `Rscript` (the execution counter ran past
+   the file's rows) or an evaluated text. With a transcript target that call became a top-level
+   console turn: with `gptr_doc("analysis.R")`, sourcing `f = function() gptr("inner")`,
+   `inner = f()` with `keep.source = FALSE` gave `kind = "console"`, `path` analysis.R itself,
+   `call$top_level = TRUE`, so Task 11 would have appended `s_<hex> = gptr("inner")` to the
+   script, and Task 13's route (whose console question runs on a `NULL` site) would have asked
+   about it interactively. With srcrefs the same call was a nested `srcref` site. Now the first
+   finder that sees a running document decides: `doc_locate()` returns that document's site
+   (`doc_site_base()`, shared with `doc_site_finish()`) with no statement, anchor or block and
+   `top_level = FALSE` (`format` NA for a document gptr cannot record into, such as a sourced
+   `.txt` file), neither the IDE's buffer nor the console is consulted, and `call$top_level` is
+   `FALSE`, with or without srcrefs and whether or not a transcript target exists. Task 13's
+   route then skips the call (`!isTRUE(site$top_level) && is.null(site$in_block)`), as do the
+   `doc.s1_block` and `doc.replay` services. Only a failing IDE location (a heuristic: the
+   active editor is no proof that the call came from it) still falls back to the console, and
+   console calls nested in functions stay transcript turns (plan review row 16). So that the
+   IDE finder still sees RStudio's Source of a dirty or unsaved buffer, the `source()` frame
+   finder now ignores `.active-rstudio-document` (the rule `doc_srcfile_path()` already applies
+   to srcrefs, 03 section 6.9.3): that copy of the buffer is no document, and the call is
+   located in the editor as the plan's fall-through did.
+7. **A relative `Rscript --file=` is resolved from the launch directory (review round 3).** The
+   plan resolved the script's path against the working directory. After the script called
+   `setwd()`, none of its later `gptr()` calls were located, so they were never recorded or
+   replayed: they ran live on every execution under `auto`, and P08's guard refused them under
+   `replay`. A file of the same name in the new directory was taken as the script.
+   `doc_rscript_file()` now tries the launch directory first. On Unix, R's front end `bin/R` is
+   a `/bin/sh` script, and sh exports the actual working directory as PWD at startup (checked
+   with a stale and with an unset PWD); `setwd()` does not change it. The working directory is
+   the fallback, as in the plan: on Windows, or when PWD is not absolute. The file must still
+   exist and have the `r` format. R CMD check runs tests through `R CMD BATCH`, which passes
+   `-f file`, not `--file=`, so it is unaffected.
+
+Also, without a behaviour change: the site keeps `stmt`, `in_block`, `block` and `anchor` as
+named `NULL` fields (contract 7.15 lists them), where the plan's `site$x = NULL` dropped them.
+`doc_command_args()` wraps `commandArgs(FALSE)` so the `Rscript` finder can be tested in
+process.
+
+Test side (review round 3; like the asserted fixture copy of progress item 0): every test process
+started by `Rscript <file>` is an `Rscript --file=` run, so under item 6 a call that file does not
+hold is nested there instead of reaching the console. The plan's tests "without srcrefs the
+source() frame locates the statement, unless switched off" and "calls in no document go to the
+console transcript target, if any", and the addition "a malformed session or context item never
+stops the console fallback", passed only when the runner was given as a relative path that no
+longer resolved after `local_project()` changed the working directory. With an absolute runner
+path they gave `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 137 ]`. The test file's helper
+`local_no_running_document()` mocks `doc_command_args()` (no `--file=`) and
+`doc_ide_available()` (FALSE, for an interactive run in an IDE whose editor holds the test file).
+Each of these three tests calls it: one added line in each plan test.
+
+Known limits, kept as planned: under `Rscript` the per-(file, call) counter cannot tell a
+`gptr()` call inside a top-level loop from a later top-level call with the same prompt. Under
+knitr and Quarto there is no file srcref and no counter, so two identical calls in one chunk
+(`a = gptr("x")` then `b = gptr("x")`) are both located as the first: the second owns, replays
+or replaces the first one's agent chunk.
+
+Validation: `progress/P15.md`, Task 8. Red (no `R/doc-locate.R`) `^doc-locate$`
+`[ FAIL 14 | WARN 0 | SKIP 0 | PASS 0 ]` (`dev/.validation/P15/task8-red.log`). Against the
+plan-literal source swapped into the namespace (`task8-adapt-harness.R`, with
+`task8-plan-literal-seam.R`, which only adds the `doc_command_args()` seam), 74 expectations ran:
+7 failed and 3 tests errored, all in the adaptation tests (`task8-adapt-red.log`). Green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 89 ]`, the same under `LC_ALL=C` (`task8-green.log`,
+`task8-green-clocale.log`). Review round 1 added three tests (+25 expectations): red
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 104 ]` (`task8-fix1-red.log`), then green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 114 ]`, the same under `LC_ALL=C` (`task8-fix1-green.log`,
+`task8-fix1-green-clocale.log`). Review round 2 added three tests and changed one expectation
+(+32 expectations): red `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 126 ]` (`task8-fix2-red.log`); after
+the first change the RStudio buffer-copy test failed 6 times (`task8-fix2-red-rstudio.log`; it
+passes on the earlier loop, `task8-fix2-rstudio-pre.log`); then green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 146 ]`, the same under `LC_ALL=C` (`task8-fix2-green.log`,
+`task8-fix2-green-clocale.log`). Review round 3 added one test (+7 expectations) and the helper:
+with an absolute runner path, red was `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 137 ]` before the helper
+(`task8-fix3-red-abs.log`) and `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 149 ]` with it, before item 7
+(`task8-fix3-red.log`). Green was `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 153 ]` with both an absolute
+and a relative runner path, and the same under `LC_ALL=C` (`task8-fix3-green-abs.log`,
+`task8-fix3-green.log`, `task8-fix3-green-clocale.log`). The plan expects 49.
+
+## D-104 - P20 cli-claude normaliser: unreported usage and cost stay unknown, no R condition escapes the normaliser and an error there stops the child, control answers are built before they are sent, a queued tools/call of an ended turn is refused, the wall clock of an aborted run ends the turn as aborted and stops the child, and a turn P05 ended without its normaliser never acts on the session's next turn (2026-10-04)
+
+P20 Task 6's plan-literal normaliser in `R/cli-claude.R` changed in six ways (item 6 also in
+two helpers of P20 Task 4's `R/cli-common.R`); the plan's eight tests, its test support and its
+three fixtures are verbatim (`claude-call2.ndjson` equals report
+07 section 3.14 except the two `<-` the plan writes as `=`):
+
+1. **Unreported usage and cost are unknown (IC-74; D-015 point 3).** `pcli_claude_usage()` built
+   `usage_new(..., cost = list(total = pcli_claude_cost(...)))`: without `total_cost_usd` the
+   cost had a `NA` total but zero components, and with it the four components were the
+   constructor's legacy zeros although the CLI reports only the total; a `result` line without
+   any cache field had a known `cache_write_1h = 0`. Now the cost is `NULL` (usage_new()'s
+   `cost_unknown()`) when the CLI reported no cost, and `list(input = NA, output = NA,
+   cache_read = NA, cache_write = NA, total = <increase>)` when it did; a reported `0` stays a
+   known zero. A bare `cache_creation_input_tokens` still counts as 5-minute writes with
+   `cache_write_1h = 0` (07 section 3.5); without it both are unknown. A count or
+   `total_cost_usd` that is not one finite nonnegative number is unknown (the plan passed a
+   string to `usage_new()`, which aborts, and `as.numeric("0.5")` became a cost), and an invalid
+   total leaves the child's cost baseline unchanged.
+2. **No R condition escapes the normaliser (contract 8.1).** The plan's `push()`, `finish()`
+   and `fail()` were unguarded: a malformed `result` line (a non-string `terminal_reason` made
+   `startsWith()` fail; a non-number count made `usage_new()` abort) signalled an R error from
+   `push()`, and a numeric `stop_reason` picked a `switch()` alternative by position. The three
+   functions now turn an error into the turn's one terminal `error` event (class `internal`), as
+   P12's `adp_normaliser()` does, and `stop_reason`, `terminal_reason`, `subtype` and the init
+   line's `model` are read only when they are one string (`pcli_claude_chr()`). An error in
+   `push()` also stops the child (`pcli_stop_child(state, wait_ack = FALSE)`, after the turn
+   closed, so no interrupt): the CLI may still be working on the turn, and the terminal event
+   finishes P05's stream, so P05 no longer drops the child as it does for an error escaping
+   `push()` (`stream_fail_live()`), the next turn's `stream_process()` does not let go of a
+   finished turn, and with `turn_open = FALSE` builtin:cli's `agent_end` hook would leave it
+   running; `pcli_claude_build()` would then reuse it and the next turn would read the earlier
+   turn's late output and cost (review round 1).
+3. **A queued `tools/call` of an ended turn is refused.** The FIFO job of an `mcp_message`
+   `tools/call` checked only the abort flag, so when the per-turn wall clock ended the turn (and
+   stopped the child) while the job waited in P04's tool FIFO, which runs jobs whether or not
+   their run has settled, the R code was still evaluated through `opts$mcp_dispatch` for a turn
+   that had already failed. The job now answers "The gptr turn is over." without dispatching.
+4. **The wall clock of an aborted run ends the turn as aborted.** `pcli_claude_timeout()` set
+   `s$done` without a terminal event or message in an aborted run, so `finish()` and `fail()`
+   then returned `NULL` (contract 8.1: the final assistant message) and the wire log had no
+   terminal line. It now calls `pcli_fail(s, "aborted", ...)` (one terminal event, the
+   message, the wire-log line) and then stops the child without an interrupt
+   (`pcli_stop_child(state, wait_ack = FALSE)` after the turn closed). In the plan the
+   unfinished stream made the next turn's `stream_process()` let go of the child; the terminal
+   event finishes the stream, `run_abort()` has cancelled P05's abort watch, and `agent_end`
+   stops only a child whose turn is open, so without the stop the next turn reused the aborted
+   turn's child (review round 1).
+5. **Control answers are built before they are sent.** The plan passed the answer to
+   `pcli_send()` as an unevaluated argument (`pcli_send(opts, pcli_control_ok(id,
+   pcli_claude_permission(req, opts)))`), so it was computed only when the transport's `send()`
+   forced it, inside `pcli_send()`'s `tryCatch()` and, in P05's `stream_send()`, after its
+   finished and process checks: an R error while computing it (a non-string `tool_name` in
+   `startsWith()`, a gate result that is not a list, a JSON-RPC error for a `message` that is not
+   an object) was swallowed, no `control_response` was written and the CLI waited for it until
+   `gptr.cli_turn_timeout` (default 3600 s); the gate also ran inside the write path.
+   `pcli_claude_control()` and `pcli_claude_mcp()`'s `answer()` now build the response first, so
+   such an error reaches `push()` and ends the turn as in item 2 (review round 1).
+6. **A turn P05 ended without its normaliser never acts on the session's next turn.** The
+   adapter state is the session's (per provider), and P05 often ends a `process_jsonl` turn
+   without telling the normaliser (`stream_abort()` through `stream_over()`, `stream_detach()` of
+   a settled run or of an earlier unfinished turn, a failure of its driver after `parse()`). The
+   turn's wall-clock timer then stayed armed for `gptr.cli_turn_timeout` (3600 s by default) and,
+   when it fired during a later turn, `pcli_fail()` -> `pcli_finish()` set `turn_open = FALSE`
+   and `turn_timer = NULL` in the shared state and `pcli_stop_child()` stopped the later turn's
+   child; P05 had cancelled that child's watcher, so the later turn saw no exit and hung until
+   its own wall clock, then failed as out of budget (review round 2, reproduced through P05's
+   `provider_stream()` with the fake claude; item 4 made the aborted case, the usual end of an
+   abort, stop the child). A `tools/call` of such a turn still in P04's tool FIFO was evaluated
+   too. Now P20 Task 4's `pcli_turn_timer()` cancels a timer still recorded in the state before
+   it arms the new turn's (P05 starts a turn only after letting go of the earlier one), and the
+   new `pcli_turn_current(s)` (the turn's timer id is still the state's `turn_timer`, which
+   `pcli_finish()` and `pcli_stop_child()` clear) guards `pcli_claude_timeout()` and the FIFO job
+   of `pcli_claude_mcp()`: a turn that is no longer current does nothing on its wall clock and
+   answers a queued `tools/call` with "The gptr turn is over." without dispatching it. Both
+   helpers are in `R/cli-common.R`, so Task 8's `pcli_codex_timeout()` (which ends the turn with
+   `kill = TRUE`) should check `pcli_turn_current(s)` the same way.
+
+Not changed and recorded here (D-019 item 5): the control responses go through P05's
+`opts$send()`, which writes with `write_all()`; a `tools/call` answer carries the tool's result
+(text truncated by the tool layer, plots as base64), so on Windows the write blocks until the CLI
+has read it. The CLI is waiting for that answer and reads its stdin, so the expected effect is a
+short pause, not a hang (not verified on Windows).
+
+Validation: `progress/P20.md`, Task 6. Seven tests added (+72 expectations). Against the
+plan-literal source the plan's tests pass (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 119 ]`,
+`dev/.validation/P20/task6-plan-literal.log`) and the first four added tests fail
+(`[ FAIL 13 | WARN 0 | SKIP 0 | PASS 126 ]`, `task6-adapt-red.log`); review round 1 added the
+child-stop assertions and the fifth test (`[ FAIL 9 | WARN 0 | SKIP 0 | PASS 151 ]` before the
+fix, `task6-fix1-red.log`); review round 2 added the sixth and seventh tests
+(`[ FAIL 14 | WARN 0 | SKIP 0 | PASS 177 ]` before the fix, `task6-fix2-red.log`); then
+`^cli-claude$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 191 ]` (`task6-fix2-green.log`), so every
+later plan count for `test-cli-claude.R` is 86 higher (14 from D-101, 72 from D-104).
+
+## D-105 - P08 identifiers: agent definitions written as gptr_agent() or gptr::gptr_agent() take their list names, a mode is exactly one of the four and is refused without echoing the value, an exact name wins over a normalised spelling (bare and in the alias mask, where a spelling of several names stays unbound), empty or missing aliases never enter the identifier pool, agent names are checked against P06's accessor list, and a function written inline in a mask, or made there by a factory, keeps the mask as its scope without its alias bindings (2026-10-04)
+
+P08 Task 6's literal `R/gptr-capture.R` (identifier resolution, contract 6.1.3; the
+`identifier.resolve` service) is kept, with these differences, which Task 8 (`gptr()`), Task 9
+(`gateway_run()`) and P17/P19 (agent definitions) consume:
+
+1. **`agents = list(stats = gptr_agent(...))` and `gptr::gptr_agent(...)`** take their list names
+   like `agent(...)` does (`agents_is_definition()`). IC-42 has package-facing documentation and
+   package code write `gptr::gptr_agent()`, and contract 6.1 names agents by their list names;
+   the plan passed the list name only into calls headed `agent`, so the package form failed in
+   P02's `spec_finish()` with `gptr_error_invalid_spec` ("field 'name' must be a non-empty
+   string"). A name the call gives itself (named or first positional) is still kept.
+2. **`mode` is exactly one of the four and is refused without its value** (contract 1.1: an
+   `invalid_argument` message never includes the argument's value). The plan's message ended
+   `not "<value>"`, and the value may come from a variable (`mode = !!x`). The plan also checked
+   only `all(x %in% modes)`, so `mode = c(plan, auto)`, `mode = character()`, a bound vector of
+   two modes and `mode = +plan` resolved (contract 6.1: one of `plan`, `manual`, `edits`,
+   `auto`), and Task 8's `mode_tighter()` would then fail with a raw R error. `ident_check_chr()`
+   now wants length 1 for `mode`, and the new `ident_whole()` checks the element-wise results of
+   `c()`/`list()` and `+name`/`-name` as a whole; an empty `c()` stays `NULL` (the default).
+3. **An exact name wins, bare and in the alias mask; a spelling of several names is bound to
+   none.** For skills, plugins, extensions and agents the mask also binds the `_` and `.`
+   spellings of a `-` name (IC-42: `name_norm()` maps both to `-`; the plan bound only `_`, so
+   `single.cell` resolved bare but not inside a call). The plan let such a spelling overwrite a
+   registered name spelt exactly so (`single_cell` read as `single-cell` although `single_cell`
+   is registered). `ident_mask_vals()` now binds a spelling only when it is not itself a known
+   name and `name_norm()` maps it to exactly one known name, computed across both separators: a
+   spelling that normalises to several names (`single_cell` with `single-cell` and
+   `single.cell` registered; `a_b.c` with `a-b.c` and `a_b-c`) stays unbound in the mask
+   (`object not found`), just as the bare symbol is `gptr_error_invalid_identifier` listing the
+   candidates (contract 6.1.3). `identifier_match()` likewise returns an exact name before it
+   compares normalised names, so a bare `single_cell` is `"single_cell"` when that name is
+   registered next to `single-cell`, as the string `"single_cell"` and the mask already were; a
+   name that is no known name still lists every normalised match, as the plan's test expects.
+   Spellings other than the uniform `_` and `.` ones (`Single_Cell`) resolve bare only.
+4. **Empty or missing names never enter the identifier pool.** A provider alias `""` made every
+   alias-mask evaluation fail in `list2env()` ("attempt to use zero-length variable name") and
+   made `identifier_known("", "model")` TRUE; `NA` became a binding named `"NA"`.
+5. **`session_accessor_names()` returns P06's `session_accessors`** instead of a third copy of
+   the IC-71 list (P02's `kind_check_agent()` keeps its own, as L0 may not read L3); a test checks
+   that P02 refuses every one of them as an agent name.
+6. **A function written inline in a mask, or made there by a factory, keeps the mask as its
+   scope, without its alias bindings (a narrow exception to rule R3, 03 section 6.4).** Contract 6.1 lets `extensions` take `function(gptr)` factories and
+   `tools` lists of `<spec:tool>`, and Task 8 sends these expressions to
+   `resolve_identifier()` (only symbols and `I()` are forced). A closure created while the alias
+   mask (or the agents mask) is evaluated has the mask as its environment, so the plan's
+   unconditional `parent.env(mask) = emptyenv()` left `extensions = function(gptr) {...}`,
+   `extensions = c("audit", function(gptr) ...)`, `tools = list(gptr_tool(..., execute =
+   function(input, ctx) ...))` and an agent's inline tool unable to find any function, not even
+   `{`. The same held for closures a helper constructor makes in the mask (`tools =
+   list(make_tool(con))`, `extensions = make_ext(k)`): their environment is the constructor's
+   frame, whose arguments stay promises of the mask until forced, so the first call failed with
+   `object 'k' not found`; and for a wrapper that forces a function written inline
+   (`extensions = wrap(function(gptr) ...)`). `ident_mask()` and `resolve_agents()` now detach
+   the mask, on error too, unless the returned value can reach it (`ident_holds_env()`,
+   `ident_env_reaches()`): through a closure's environment, an environment, a list element or an
+   attribute (a formula's `.Environment`), and for every environment on the way up to the
+   caller or a named environment (global, base, empty, namespaces, attached packages) through
+   its bound values. An unforced promise, non-empty dots and an active binding count as
+   reaching the mask, because base R cannot read a promise's environment and active bindings
+   are never called; the walk records visited environments by address (rule R2), and nesting
+   deeper than 64 or more than 100000 steps counts as reaching. Erring this way only leaves an
+   otherwise unreferenced mask attached until it is collected. A kept mask loses the bindings
+   it was given that still hold their value (the alias strings; `agent` in the agents mask), so
+   the functions it scopes see the caller's variables as after direct evaluation (a user's `r`
+   is no longer the string `"r"` inside an inline tool); names the expression assigned itself
+   stay. A promise of the mask forced later therefore also reads an alias name from the caller.
+   R3 detaches masks so that a garbage mask never pins the caller's frame; a function the user
+   wrote inline, or a promise a factory holds, references that frame through R's own scoping,
+   exactly as direct evaluation would, and only for as long as the user's value lives. Every
+   other mask is still detached (tests for a plain result, a refused function, a function bound
+   outside the mask and a package function).
+
+IC-74 adds no behaviour here: identifier resolution reads only catalog aliases and registry names
+and never discovers or prepares a model (07-local-ollama.md section 2.1); a test mocks P05's
+`catalog_discover()`, `catalog_ollama_discover()` and `model_prepare()` to fail and resolves
+`model` and `system1` identifiers.
+
+Validation: `progress/P08.md`, Task 6. Red (no source) `^gptr-capture$`
+`[ FAIL 14 | WARN 0 | SKIP 0 | PASS 178 ]` (`dev/.validation/P08/task6-red.log`); against the
+plan-literal source `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 274 ]`
+(`task6-red-adaptations-against-plan-literal.log`, every failure in the adaptation tests); first
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 289 ]` (`task6-green.log`). Review round 1 (items 2, 3
+and 6): red `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 291 ]` (`task6-fix1-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 320 ]` (`task6-fix1-green.log`; the plan's 6 tests add
+exactly its 31 expectations, the adaptation tests 111). Review round 2 (items 3 and 6): the 14
+regression checks one per test against the round-1 source `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 0 ]`
+(`task6-fix2-red-granular.log`) and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 14 ]` with the fix
+(`task6-fix2-green-granular.log`); in the test file red `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 317 ]`
+(`task6-fix2-red.log`), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 342 ]`
+(`task6-fix2-green-1.log`; the adaptation tests now add 133).
