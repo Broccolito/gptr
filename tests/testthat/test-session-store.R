@@ -935,6 +935,100 @@ test_that("a rebuilt session takes its mode, model and frozen prompt from its ac
   expect_identical(r$status, "interrupted")
 })
 
+# FIX-3 (the open item of D-069): P07's gptr.frozen entry also records the audience the prompt
+# was frozen for (`human`) and, when IC-71's floor check cut them, the re-injection budgets
+# (`reinject`). A session rebuilt from its file, a fork of it and that fork rebuilt from its own
+# file keep both, as P07's own restore reads them.
+
+# The re-injection budgets IC-71 cuts for a small window, and P07's floor check stubbed to make
+# that cut (the rule itself is tested by P07; here only the record of the cut matters). Defined
+# at the top level so that the stub keeps no test frame, and with it no session, alive.
+fix3_cut = list(project = 1904, skills = 0)
+fix3_floor_cut = function(frozen, project_tokens, skills_budget = 0) {
+  frozen$reinject = fix3_cut
+  frozen
+}
+
+test_that("a resumed session and its forks keep the frozen audience and budget cut (FIX-3)", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list("first answer", "fork answer"))
+  s = test_session(home = globalenv())
+  # the run option freezes for a human (gptr_can_prompt() is FALSE in the tests)
+  testthat::with_mocked_bindings(run_text(s, "one", list(interactive = TRUE)),
+                                 prompt_floor_check = fix3_floor_cut)
+  d = session_data(s)
+  expect_identical(d$entries[[1L]]$custom_type, "gptr.frozen")
+  expect_identical(d$entries[[1L]]$data[c("human", "reinject")],
+                   list(human = TRUE, reinject = fix3_cut))
+  expect_identical(d$frozen[c("human", "reinject")], list(human = TRUE, reinject = fix3_cut))
+  file = s$file
+  other = test_session()
+  rm(s, d)
+  invisible(gc())
+  # store_rebuild(): the JSON line gives the whole numbers back as integers, read as P07 reads them
+  r = gptr_resume(file, envir = new.env())
+  rf = session_data(r)$frozen
+  expect_identical(rf[c("human", "reinject")], list(human = TRUE, reinject = fix3_cut))
+  expect_identical(rf, prompt_frozen_restore(r))
+  # a fork of the resumed session shares its frozen prompt
+  f = gptr_fork(r)
+  expect_identical(session_data(f)$frozen, rf)
+  run_text(f, "branch")
+  expect_identical(f$text, "fork answer")
+  fork_file = f$file
+  other = test_session()
+  rm(f)
+  invisible(gc())
+  # the fork rebuilt from its own file reads the gptr.frozen entry it copied
+  rebuilt = session_data(gptr_resume(fork_file, envir = new.env()))$frozen
+  expect_identical(rebuilt[c("human", "reinject")], list(human = TRUE, reinject = fix3_cut))
+})
+
+test_that("a session frozen for nobody resumes frozen for nobody, with full budgets (FIX-3)", {
+  local_store()
+  local_permissive()
+  local_fake_provider(list("answer"))
+  s = test_session(home = globalenv())
+  run_text(s, "one")
+  stored = session_data(s)$entries[[1L]]$data
+  expect_identical(stored$human, FALSE)
+  # full budgets are not recorded (Inf has no JSON number)
+  expect_false("reinject" %in% names(stored))
+  file = s$file
+  other = test_session()
+  rm(s)
+  invisible(gc())
+  # the recorded audience decides, not whether this console can prompt now
+  r = testthat::with_mocked_bindings(gptr_resume(file, envir = new.env()),
+                                     gptr_can_prompt = function() TRUE)
+  expect_identical(session_data(r)$frozen[c("human", "reinject")],
+                   list(human = FALSE, reinject = list(project = Inf, skills = 10000)))
+})
+
+test_that("rebuild_frozen() falls back as P07's restore does when a key is missing (FIX-3)", {
+  entry = function(...) {
+    entry_custom("gptr.frozen", list(preset = "standard", t0 = "T0", t1 = "", toolsJson = "[]",
+                                     toolNames = list(), sections = list(),
+                                     model = "fake/fake-1", ...))
+  }
+  full = list(project = Inf, skills = 10000)
+  # no `human` (P06's fallback freeze records none): the audience of this console
+  for (can in c(TRUE, FALSE)) {
+    fr = testthat::with_mocked_bindings(rebuild_frozen(list(entry())),
+                                        gptr_can_prompt = function() can)
+    expect_identical(fr[c("human", "document", "reinject")],
+                     list(human = can, document = NULL, reinject = full))
+  }
+  # only two finite, non-negative numbers are a cut (P07's prompt_reinject_read())
+  for (bad in list(list(project = -1, skills = 0), list(project = 10), "1904",
+                   list(project = 1904, skills = NA_real_))) {
+    expect_identical(rebuild_frozen(list(entry(human = FALSE, reinject = bad)))$reinject, full)
+  }
+  cut = rebuild_frozen(list(entry(human = FALSE, reinject = list(project = 1904L, skills = 0L))))
+  expect_identical(cut$reinject, list(project = 1904, skills = 0))
+})
+
 test_that("a rebuild that fails after the session exists leaves no live session behind", {
   s = stored_run()
   file = s$file

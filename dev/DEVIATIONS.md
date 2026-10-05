@@ -3618,10 +3618,14 @@ expectations are unchanged.
    written (`Inf` has no JSON number). An extra key, like the plan's own `human` (contract 11:
    readers ignore unknown keys).
 
-Open for P06 (not changed here): `rebuild_frozen()` (`R/session-store.R`), the resume path of
-`store_rebuild()`, copies neither `human` nor `reinject` from `gptr.frozen`, so a session resumed
-from its file renders for `gptr_can_prompt()` and re-injects the full budgets until it reads both
-as P07's restore does.
+Closed by follow-up FIX-3 (P06, `R/session-store.R`; was open for P06): `rebuild_frozen()`, used by
+`store_rebuild()` and by a replay's cut (`replay_rebuild()`), copied neither `human` nor
+`reinject` from `gptr.frozen`, so a session resumed from its file rendered for
+`gptr_can_prompt()` and re-injected the full budgets. It now reads both as P07's restore does
+(`human`, else `gptr_can_prompt()`; `reinject` through `prompt_reinject_read()`, else the full
+budgets) and returns the same frozen list as `prompt_frozen_restore()`. A resumed session, a
+fork of it (`fork_frozen()` shares the source's `.d$frozen`) and that fork rebuilt from its own
+file keep both. Evidence: `progress/fixes.md`, Task FIX-3.
 
 Validation: `progress/P07.md`, Task 7. Two tests (12 expectations) were added; on the plan
 literal 4 of them fail (`dev/.validation/P07/task7-plan-literal.log`). Final
@@ -5116,3 +5120,36 @@ Validation: `progress/P17.md`, Task 9. `^ext-plugins$`: red
 `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 176 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 238 ]`; after
 review round 1 (item 4) red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 252 ]`, green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 257 ]`; lint clean.
+
+## D-089 - P18 OAuth building blocks: form values are always percent-encoded from UTF-8, query pairs split at their first `=` and tolerate malformed escapes, redirect and metadata fields match exactly, challenges also read token values, metadata endpoints are single strings and a scope vector is joined (2026-10-04)
+
+P18 Task 1 (`R/auth-oauth.R`). The plan's 8 tests are kept byte for byte (one
+`withr::defer(dead$kill())` added, conventions section 7) and the rest of the source is the
+plan's. Six places of the plan-literal code changed:
+
+1. **`form_encode()` uses `curl::curl_escape()`** on `as_utf8()` values (curl is an Import).
+   `utils::URLencode(reserved = TRUE)` keeps `repeated = FALSE`, so a value already containing a
+   `%xx` sequence (`"50%25"`, possible in a client secret, code or refresh token) was sent
+   unencoded and decoded to a different value by the server; multibyte characters were split
+   through the native locale. An all-`NULL` field list gives `""`, not `"="`.
+2. **`query_parse()`** splits each pair at its first `=` (`strsplit()` drops trailing empty
+   pieces, so a padded value `abc==` became `abc=`), skips empty pairs and decodes with
+   `curl::curl_unescape()`, which keeps a malformed escape as typed; `utils::URLdecode()` warned
+   on `%zz` and stopped with "embedded nul in string" on a trailing `%` in a pasted redirect.
+3. **Exact field access** (`[[`) in `oauth_parse_redirect()` and `oauth_check_metadata()`: with
+   `$`, a redirect carrying `code_x` but no `code` returned `code_x`'s value as the code, and a
+   missing `iss` or `error` would partially match `issuer` or `error_description`.
+4. **`oauth_parse_challenge()`** also reads RFC 7235 token values (`error=invalid_token`) and
+   quoted-pair escapes, with parameter names in lower case (RFC 7235: case-insensitive).
+5. **`oauth_check_metadata()`** refuses metadata whose authorization or token endpoint is not
+   one non-empty string (the plan accepted any character vector).
+6. **`oauth_authorize_url()`** joins a scope vector with spaces and drops empty scopes (the
+   plan's `length(scope) && nzchar(scope)` stopped on a two-element scope).
+
+One regression test (9 expectations) follows the plan's tests; against the plan-literal source
+all 9 fail (`dev/.validation/P18/task1-extra-red-against-plan-literal.log`). Every later P18
+count for `test-auth-oauth.R` is 9 higher (Task 2: 99 -> 108; the five P18 test files together:
+490 -> 499).
+
+Validation: `progress/P18.md`, Task 1. `^auth-oauth$`: red `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 56 ]`; lint clean.

@@ -1145,6 +1145,39 @@ test_that("a session rebuilt for a replay takes model, mode and frozen prompt fr
   expect_identical(roles(r), c("user", "assistant"))
 })
 
+test_that("a replay cut takes the frozen audience and budget cut of its own path (FIX-3)", {
+  local_store()
+  s = test_session(home = globalenv())
+  d = session_data(s)
+  frozen = function(t0, ...) {
+    entry_custom("gptr.frozen", list(preset = "standard", t0 = t0, t1 = "", toolsJson = "[]",
+                                     toolNames = list(), sections = list(),
+                                     model = "fake/fake-1", ...))
+  }
+  answer = function(text) {
+    entry_message(msg_assistant(text, api = "fake", provider = "fake", model = "fake-1"))
+  }
+  # turn 1 runs under a prompt frozen for a human with cut re-injection budgets (P07's extra
+  # keys, D-069); turn 2 under one refrozen for nobody with the full budgets (no `reinject`)
+  session_append(s, frozen("T0-first", human = TRUE, reinject = list(project = 1904, skills = 0)))
+  d$turns = 1L
+  session_append(s, entry_message(msg_user("one")))
+  session_append(s, answer("first answer"))
+  d$turns = 2L
+  session_append(s, entry_message(msg_user("two")))
+  session_append(s, frozen("T0-second", human = FALSE))
+  session_append(s, answer("second answer"))
+  id = s$id
+  other = test_session()
+  rm(s, d)
+  invisible(gc())
+  r = session_replay_new("a1b2c3", list(session = id, turn = "1"), envir = new.env(), doc = NULL)
+  fr = session_data(r)$frozen
+  expect_identical(fr$t0, "T0-first")
+  expect_identical(fr[c("human", "reinject")],
+                   list(human = TRUE, reinject = list(project = 1904, skills = 0)))
+})
+
 # Review round 1: a header model is checked first, a reconstruction is all or nothing, and a
 # session reconstructed from its document stays reconstructed when rebuilt from its file.
 

@@ -270,3 +270,111 @@ Files of this task:
 - `tests/testthat/test-doc-blocks.R`
 - `dev/progress/fixes.md`
 - `dev/progress/P15.md` (cross-reference line)
+
+## Task FIX-3 - rebuild_frozen() keeps human and reinject
+
+Owner: P06 (`R/session-store.R`, Task 13 rebuild; also the replay cut of Task 12's
+`replay_rebuild()` in `R/session-object.R`, which calls the same function). Coordinator-scheduled.
+Closes the open item of D-069; no new deviation entry (the extra keys are D-069's own).
+
+**Defect** (`progress/P07.md`, Task 7 review item 3; D-069 "Open for P06"). P07 writes two extra
+keys in `gptr.frozen`: `human`, the audience the prompt was frozen for, and `reinject`, the
+re-injection budgets when IC-71's floor check cut them (finite, non-negative `project` and
+`skills`; full budgets are not written). P07's `prompt_frozen_restore()` reads both back.
+P06's `rebuild_frozen()` copied neither. It is the restore of `store_rebuild()` (every
+`gptr_resume()` of a file) and of a replay's cut. A resumed session therefore had no
+`.d$frozen$human`, so P07's consumers fell back to `gptr_can_prompt()` (mode block, `ask`
+schema, IC-52 withholding). It had no `.d$frozen$reinject` either, so the compactor re-injected
+the full budgets instead of the recorded cut. A fork of a resumed session inherits the
+source's `.d$frozen` (`fork_frozen()`), and so did the fork.
+
+**Built.** `rebuild_frozen()` now returns the same frozen list as `prompt_frozen_restore()`. It
+has the same ten fields in the same order: the seven it had, plus `human = x$human %||%
+gptr_can_prompt()`, `document = NULL` and `reinject = prompt_reinject_read(x$reinject) %||%
+list(project = Inf, skills = 10000)`. The cut is read with P07's own reader, so the rule (two
+finite, non-negative numbers; JSON integers become doubles) has one home. The call from
+`session-store.R` (L3) to `prompt-sections.R` (L3) is within one layer (architecture 2.2, L3 =
+`session`, `agent-run`, `prompt`); `^arch-layers$` is green. The roxygen block lists the
+fields and their fallbacks. No P07 file was touched.
+
+**Tests** (written first; +4 tests, 20 expectations).
+
+`tests/testthat/test-session-store.R`:
+
+1. "a resumed session and its forks keep the frozen audience and budget cut (FIX-3)" (8). A real
+   first run freezes through P07's `prompt_freeze()` with the run option `interactive = TRUE`
+   (`gptr_can_prompt()` is FALSE in the tests). P07's `prompt_floor_check()` is stubbed to make
+   the IC-71 cut (1904/0); the arithmetic is P07's and tested there. Preconditions: the
+   `gptr.frozen` entry and `.d$frozen` hold `human = TRUE` and the cut. Then the session is
+   resumed from its file, and its frozen list must be `identical()` to
+   `prompt_frozen_restore()`. A fork of the resumed session shares it, runs one turn, and is
+   resumed from its own file: both keys are kept. The stub is a top-level function, so it keeps
+   no test frame, and no session, alive (the FIX-1 pattern).
+2. "a session frozen for nobody resumes frozen for nobody, with full budgets (FIX-3)" (3). A
+   default run records `human = FALSE` and no `reinject`. It is resumed under a mocked
+   `gptr_can_prompt()` that returns TRUE, and keeps `human = FALSE` with the full budgets: the
+   recorded audience decides, not the console.
+3. "rebuild_frozen() falls back as P07's restore does when a key is missing (FIX-3)" (7). With
+   no `human`, the value is the console's (TRUE and FALSE mocked); `document` is NULL. A
+   malformed `reinject` (negative, one field, a string, NA) gives the full budgets. Integer
+   JSON numbers come back as doubles.
+
+`tests/testthat/test-session-object.R`:
+
+4. "a replay cut takes the frozen audience and budget cut of its own path (FIX-3)" (2). Turn 1
+   runs under an entry with `human = TRUE` and a cut; turn 2 is refrozen for nobody. A replay
+   of turn 1 takes T0, `human` and `reinject` from the turn-1 entry (`replay_rebuild()`).
+
+**Red** (HEAD's `R/session-store.R`, `^session-(store|object)$`):
+
+- Before test 3 was added (`task3-red.log`): `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 706 ]`.
+- With all four tests (`task3-red2.log`; HEAD's file put back for the run, then the fix
+  restored): `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 706 ]`.
+
+The failures are exactly the missing fields. `human` and `reinject` are absent (NULL) after a
+resume (store lines 972, 985, 1005) and after the replay cut (object line 1177). Against
+`prompt_frozen_restore()` the length is 7 instead of 10 (line 973). Test 3 fails all 7 of its
+expectations. Every precondition passes on HEAD: the entry, `.d$frozen`, the fork sharing the
+source's list, and the fork's answer.
+
+**Green.**
+
+- `^session-(store|object)$` (`task3-green.log`): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 718 ]`.
+  That is 698 existing expectations plus 20 new; no existing expectation changed.
+- `^(session-|agent-run$)` (`task3-session-agent.log`): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1642 ]`.
+  `^session-store$` once more (`task3-repeat.log`): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 252 ]`.
+- Neighbours. These were run before test 3 was added; test 3 is a pure unit test of
+  `rebuild_frozen()`.
+  - `^(arch-layers|lint-rules)$` (`task3-arch-lint-rules.log`): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 18 ]`.
+  - `^(doc-|ckpt-|agent-|ext-registry$|ext-events$)` (`task3-neighbours.log`):
+    `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1815 ]`.
+  - P07, read-only check, `^prompt-` (`task3-prompt.log`, on the P07 lane's working tree):
+    `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 894 ]`.
+
+**Lint** (`task3-lint.log`): no lints in `R/session-store.R`,
+`tests/testthat/test-session-store.R` and `tests/testthat/test-session-object.R`. Added lines
+are ASCII-only. All functions are internal (`@noRd`), so `document` was not run; no `NAMESPACE`
+or `man/` change.
+
+**Adaptations.**
+
+- The coordinator offered calling `prompt_frozen_restore()`. It takes a session and reads the
+  session's active path, while `rebuild_frozen()` takes a path (the replay cut passes a cut
+  path). So the function keeps its signature, reads the two keys with P07's rule, and the test
+  asserts equality with `prompt_frozen_restore()`. The 10,000-token skills default is P07's
+  constant, repeated as P07's restore and compactor repeat it.
+- `document = NULL` is included only so that the list matches P07's restore in shape;
+  `.d$frozen$document` was NULL before as well.
+- Not in scope: P07 review item 2 (`progress/P07.md`, a fork of a foreign-resumed session before
+  its first run restores the foreign prompt). That is a separate P06 follow-up.
+
+Commit message: `fix(session): keep human and reinject when rebuilding the frozen prompt`.
+
+Files of this task:
+
+- `R/session-store.R`
+- `tests/testthat/test-session-store.R`
+- `tests/testthat/test-session-object.R`
+- `dev/DEVIATIONS.md` (the D-069 hunk only: the open item is closed)
+- `dev/progress/fixes.md`
+- `dev/progress/P06.md` (cross-reference line)

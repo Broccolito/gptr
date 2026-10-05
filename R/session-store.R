@@ -570,8 +570,15 @@ rebuild_status = function(path) {
 }
 
 #' The frozen prompt of a rebuilt session, from the last gptr.frozen entry of the active path
-#' (NULL without one), as fork_frozen() and P07's restore read it; the fields are those P07's
-#' own restore reads back (`preset`, `model`, `t0`, `t1`, `tools_json`, `tool_names`, `sections`)
+#' (NULL without one), as fork_frozen() and P07's restore read it
+#'
+#' The fields and their defaults are those P07's own restore (`prompt_frozen_restore()`) reads
+#' back: `preset`, `model`, `t0`, `t1`, `tools_json`, `tool_names`, `sections`, `human` (the
+#' audience the prompt was frozen for, else `gptr_can_prompt()`), `document` (NULL) and
+#' `reinject` (the re-injection budgets IC-71's floor check cut, read with P07's
+#' `prompt_reinject_read()`, else the full budgets). `human` and `reinject` are P07's extra keys
+#' of the entry (D-069), so a resumed or forked session renders for the frozen audience and keeps
+#' the cut.
 #' @noRd
 rebuild_frozen = function(path) {
   for (e in rev(path)) {
@@ -580,7 +587,10 @@ rebuild_frozen = function(path) {
       return(list(preset = x$preset, model = x$model, t0 = x$t0 %||% "", t1 = x$t1 %||% "",
                   tools_json = x$toolsJson %||% "[]",
                   tool_names = as.character(unlist(x$toolNames)),
-                  sections = frozen_sections_df(x$sections)))
+                  sections = frozen_sections_df(x$sections),
+                  human = x$human %||% gptr_can_prompt(), document = NULL,
+                  reinject = prompt_reinject_read(x$reinject) %||%
+                    list(project = Inf, skills = 10000)))
     }
   }
   NULL
