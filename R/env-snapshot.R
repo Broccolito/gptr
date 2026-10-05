@@ -355,3 +355,243 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
   }
   c(lines, more(rest))
 }
+
+# ---------------------------------------------------------------- builtin:workspace
+# Context blocks of architecture section 7.4-7.5 (IC-38), the `r_env` section, the `evaluator`
+# record `r` and the `eval.r` and `describe` services (IC-69, IC-34).
+
+#' The context mode of the call: "summary" (default), "names" or "none" (`.opts$context`)
+#' @noRd
+env_context_mode = function(ctx) {
+  mode = ctx$input$opts$context
+  if (is.character(mode) && length(mode) == 1L && mode %in% c("summary", "names", "none")) {
+    return(mode)
+  }
+  "summary"
+}
+
+#' The environment the workspace blocks list: the kept home, else the run's environment
+#' @noRd
+env_home = function(ctx) {
+  s = ctx$session
+  home = if (is.null(s)) NULL else session_home(s)
+  home %||% ctx$envir
+}
+
+#' Per-session workspace memory, an environment that is never persisted (snapshot addresses mean
+#' nothing in another process)
+#'
+#' For a live session it is kept in the live record's `memo` (D-112): `ctx$state()` is one state
+#' per extension source, and P07 calls block providers without a handler source while P02 calls
+#' the agent_end hook as `builtin:workspace`, so the two would see different states, and an
+#' environment in the shared state of sourceless callers would stop P06 from persisting it.
+#' Without a live session: inside `ctx$state()`, else a fresh environment (nothing is kept).
+#' @noRd
+env_memory = function(ctx) {
+  s = ctx$session
+  live = if (inherits(s, "gptr_session")) session_live(s) else NULL
+  holder = if (is.null(live)) ctx$state() else live$memo
+  if (!is.environment(holder)) return(new.env(parent = emptyenv()))
+  mem = get0("gptr_workspace", envir = holder, inherits = FALSE)
+  if (!is.environment(mem)) {
+    mem = new.env(parent = emptyenv())
+    assign("gptr_workspace", mem, envir = holder)
+  }
+  mem
+}
+
+#' Remember the snapshot and the time for the next `<workspace_changes>`; start the history
+#' log for a session with a kept home (env-history.R). A preview (`gptr_prompt()`, P07's
+#' `input$preview`) changes neither (D-112).
+#' @noRd
+env_remember = function(ctx, snap) {
+  if (isTRUE(ctx$input$preview)) return(invisible())
+  mem = env_memory(ctx)
+  mem$snapshot = snap
+  mem$since = as.numeric(Sys.time())
+  s = ctx$session
+  if (!is.null(s) && !is.null(session_home(s))) user_log_start(session_data(s)$id)
+  invisible()
+}
+
+#' Names-only workspace listing (`.opts$context = "names"`)
+#' @noRd
+env_names_lines = function(snap, budget) {
+  if (!nrow(snap)) return(character())
+  dsc_fit(paste(snap$name, collapse = ", "), budget)
+}
+
+#' `<workspace env=".." objects="n">`: one line per object, largest first (first message)
+#' @noRd
+env_block_workspace = function(ctx, budget) {
+  mode = env_context_mode(ctx)
+  envir = env_home(ctx)
+  if (identical(mode, "none") || is.null(envir)) return(NULL)
+  snap = env_snapshot(envir, env_memory(ctx)$snapshot)
+  env_remember(ctx, snap)
+  lines = if (identical(mode, "names")) {
+    env_names_lines(snap, budget)
+  } else {
+    workspace_lines(snap, budget)
+  }
+  if (!length(lines)) lines = "(no objects)"
+  # P06's home_label is "<none>" for a session without a home (the run's environment is listed)
+  label = if (is.null(ctx$session)) NULL else session_data(ctx$session)$home_label
+  if (!is.character(label) || length(label) != 1L || is.na(label) || label == "<none>") {
+    label = if (identical(envir, globalenv())) "globalenv" else "<environment>"
+  }
+  list(text = paste(lines, collapse = "\n"),
+       attrs = list(env = label, objects = as.character(nrow(snap))))
+}
+
+#' `<workspace_changes>`: objects the user added, changed or removed and the expressions they
+#' ran since the last request (turn messages; NULL when nothing changed)
+#' @noRd
+env_block_changes = function(ctx, budget) {
+  envir = env_home(ctx)
+  if (identical(env_context_mode(ctx), "none") || is.null(envir)) return(NULL)
+  mem = env_memory(ctx)
+  old = mem$snapshot
+  new = env_snapshot(envir, old)
+  ran = user_expr_log(since = mem$since)
+  env_remember(ctx, new)
+  d = if (is.null(old)) {
+    list(added = character(), modified = character(), removed = character())
+  } else {
+    env_diff(old, new)
+  }
+  lines = changes_lines(d, new, ran, budget)
+  if (!length(lines)) return(NULL)
+  paste(lines, collapse = "\n")
+}
+
+#' Description of context item i of the call; an error becomes a one-line note
+#'
+#' The tryCatch() frame holds the gptr_call, whose `envir` binding the gateway resets at
+#' settlement (architecture section 6.4 R2), never a user object.
+#' @noRd
+env_attached_one = function(call, i, budget, label, prefix, header_only) {
+  force(call)
+  force(i)
+  force(budget)
+  force(label)
+  force(prefix)
+  force(header_only)
+  d = tryCatch(
+    if (header_only) {
+      gptr_describe(call_value(call, i), budget = 20L, level = 1L)
+    } else {
+      describe_value(call_value(call, i), budget)
+    },
+    error = function(e) paste0("<?> (describe failed: ", conditionMessage(e), ")")
+  )
+  if (prefix) d[1L] = paste0(label, ": ", d[1L])
+  paste(d, collapse = "\n")
+}
+
+#' `<attached name="..">`: gptr_describe() of the call's context objects (first message and
+#' turns, placement "both", IC-38); 150 tokens per object, at least 60 when many share the
+#' block budget
+#' @noRd
+env_block_attached = function(ctx, budget) {
+  call = ctx$input$call
+  mode = env_context_mode(ctx)
+  if (is.null(call) || identical(mode, "none") || !length(call$context)) return(NULL)
+  n = length(call$context)
+  per = as.integer(min(150L, max(60L, budget %/% n)))
+  labels = vapply(call$context, function(it) as.character(it$label %||% ""), "")
+  parts = character(n)
+  for (i in seq_len(n)) {
+    parts[i] = env_attached_one(call, i, per, labels[i], n > 1L, identical(mode, "names"))
+  }
+  list(text = paste(parts, collapse = "\n"), attrs = list(name = paste(labels, collapse = ", ")))
+}
+
+#' `<skill_content name="..">`: bodies of the skills preloaded with `skills =` (5,000 tokens per
+#' skill; P17's `skill.body` service; NULL before P17 is loaded)
+#' @noRd
+env_block_skills = function(ctx, budget) {
+  call = ctx$input$call
+  skills = if (is.null(call)) NULL else call$ids$skills
+  if (!length(skills) || !ext_service_has("skill.body")) return(NULL)
+  body = ext_service_get("skill.body")
+  per = as.integer(max(200L, min(5000L, budget %/% length(skills))))
+  parts = character(length(skills))
+  for (k in seq_along(skills)) {
+    b = body(skills[k])
+    txt = if (is.list(b)) b$text else b
+    lines = strsplit(as.character(txt %||% ""), "\n", fixed = TRUE)[[1L]]
+    while (length(lines) > 1L && env_tokens(lines, "prose") > per) lines = lines[-length(lines)]
+    parts[k] = paste(c(if (length(skills) > 1L) sprintf("[skill: %s]", skills[k]), lines),
+                     collapse = "\n")
+  }
+  list(text = paste(parts, collapse = "\n\n"),
+       attrs = list(name = paste(skills, collapse = ", ")))
+}
+
+#' The `eval.r` service: eval_r() through the `evaluator` record named by the `evaluator`
+#' setting (default "r"; IC-69)
+#' @noRd
+env_eval_service = function(code, envir, ...) {
+  name = setting_get("evaluator", default = "r") %||% "r"
+  ev = registry_get("evaluator", name)
+  if (is.null(ev)) ev = registry_get("evaluator", "r")
+  fun = if (is.null(ev) || !is.function(ev$eval)) eval_r else ev$eval
+  fun(code, envir, ...)
+}
+
+#' The `describe` service: gptr_describe() within the budget (ctx$describe())
+#' @noRd
+env_describe_service = function(x, budget = 150L) {
+  describe_value(x, budget)
+}
+
+#' agent_end hook: remember the workspace, so the next `<workspace_changes>` shows only what the
+#' user changed between requests; only for sessions whose workspace block ran (a session with
+#' `.opts$context = "none"` pays for no snapshot)
+#' @noRd
+env_on_agent_end = function(event, ctx) {
+  envir = env_home(ctx)
+  old = env_memory(ctx)$snapshot
+  if (!is.null(envir) && !is.null(old)) env_remember(ctx, env_snapshot(envir, old))
+  NULL
+}
+
+#' session_shutdown hook: release the history log of the session
+#' @noRd
+env_on_shutdown = function(event, ctx) {
+  if (is.character(event$session) && length(event$session) == 1L) {
+    user_log_release(event$session)
+  }
+  NULL
+}
+
+#' The built-in `workspace` extension (architecture sections 7.4-7.5; 04 section 7.9)
+#'
+#' Context blocks `workspace` (first, order 500, 600 tokens), `workspace_changes` (turn, order
+#' 100, 300 tokens), `attached` (both, order 600) and `skill_content` (both, order 700) (IC-38);
+#' the T1 prompt section `r_env` (order 900, 450 tokens); the `evaluator` record `r` (IC-69);
+#' hooks on `agent_end` and `session_shutdown`. The services `eval.r` and `describe` are
+#' registered below, owned by this built-in (IC-34).
+#' @noRd
+builtin_workspace = function(gptr) {
+  gptr$register(gptr_context_block("workspace", env_block_workspace, placement = "first",
+                                   budget = 600L, order = 500L))
+  gptr$register(gptr_context_block("workspace_changes", env_block_changes, placement = "turn",
+                                   budget = 300L, order = 100L))
+  gptr$register(gptr_context_block("attached", env_block_attached, placement = "both",
+                                   budget = 1200L, order = 600L))
+  gptr$register(gptr_context_block("skill_content", env_block_skills, placement = "both",
+                                   budget = 10000L, order = 700L))
+  gptr$register(gptr_prompt_section("r_env", function(ctx) r_env_probe(), tier = "T1",
+                                    order = 900L, budget = 450L))
+  gptr$register(gptr_spec("evaluator", "r", eval = eval_r))
+  gptr$on("agent_end", env_on_agent_end)
+  gptr$on("session_shutdown", env_on_shutdown)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("workspace", builtin_workspace))
+on_load(ext_service_set("eval.r", env_eval_service, provided_by = "P09", builtin = "workspace"))
+on_load(ext_service_set("describe", env_describe_service, provided_by = "P09",
+                        builtin = "workspace"))

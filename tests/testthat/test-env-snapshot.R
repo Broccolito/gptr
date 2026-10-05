@@ -252,3 +252,283 @@ test_that("env_diff orders non-ASCII and invalid names and keeps them exact", {
   expect_true(all(d$added %in% ls(e, all.names = TRUE)))
   expect_equal(env_diff(new, old)$removed, d$added)
 })
+
+# ---------------------------------------------------------------- builtin:workspace
+
+fake_ctx = function(envir = NULL, call = NULL, opts = list()) {
+  state = new.env()
+  list(session = NULL, envir = envir, state = function() state,
+       input = list(call = call, turn = 1L, prompt = "p", placement = "first",
+                    last_hash = NULL, opts = opts))
+}
+
+fake_call = function(envir, ...) {
+  labels = c(...)
+  items = lapply(labels, function(l) {
+    list(label = l, kind = "symbol", name = l, slot = NULL, facts = list())
+  })
+  cl = new.env()
+  cl$context = items
+  cl$envir = envir
+  cl$values = new.env()
+  cl$ids = list()
+  class(cl) = "gptr_call"
+  cl
+}
+
+test_that("the workspace block lists the environment within its budget", {
+  e = new.env()
+  e$mt = mtcars
+  e$v = 1:10 + 0
+  b = env_block_workspace(fake_ctx(e), 600L)
+  expect_equal(b$attrs, list(env = "<environment>", objects = "2"))
+  expect_equal(env_block_workspace(fake_ctx(globalenv()), 600L)$attrs$env, "globalenv")
+  lines = strsplit(b$text, "\n")[[1]]
+  expect_equal(lines[1], "mt  data.frame  32 x 11  7 KB")
+  expect_match(lines[2], "^v   numeric     length 10  [0-9]+ B$")
+  names_only = env_block_workspace(fake_ctx(e, opts = list(context = "names")), 600L)
+  expect_equal(names_only$text, "mt, v")
+  expect_null(env_block_workspace(fake_ctx(e, opts = list(context = "none")), 600L))
+  expect_null(env_block_workspace(fake_ctx(NULL), 600L))
+})
+
+test_that("workspace_changes reports what changed since the last block", {
+  user_log_stop()
+  withr::defer(user_log_stop())
+  e = new.env()
+  e$a = 1
+  e$b = 2
+  ctx = fake_ctx(e)
+  env_block_workspace(ctx, 600L)
+  expect_null(env_block_changes(ctx, 300L))
+  e$a = 10
+  e$c = data.frame(x = 1:3)
+  rm("b", envir = e)
+  user_log_push(str2lang("c = data.frame(x = 1:3)"))
+  lines = strsplit(env_block_changes(ctx, 300L), "\n")[[1]]
+  expect_match(lines[1], "^\\+ c data.frame 3 x 1 [0-9]+ B$")
+  expect_equal(lines[-1], c("~ a", "- b", "user ran: c = data.frame(x = 1:3)"))
+  expect_null(env_block_changes(ctx, 300L))
+})
+
+test_that("the agent_end hook resets the baseline of workspace_changes", {
+  e = new.env()
+  e$a = 1
+  ctx = fake_ctx(e)
+  env_block_workspace(ctx, 600L)
+  e$made_by_agent = 2
+  expect_null(env_on_agent_end(list(type = "agent_end"), ctx))
+  expect_null(env_block_changes(ctx, 300L))
+  quiet = fake_ctx(e, opts = list(context = "none"))
+  expect_null(env_on_agent_end(list(type = "agent_end"), quiet))
+  expect_null(env_memory(quiet)$snapshot)
+})
+
+test_that("the attached block describes each context object by label", {
+  e = new.env()
+  e$mt = mtcars
+  e$v = c(1.5, 2.5)
+  one = env_block_attached(fake_ctx(e, call = fake_call(e, "mt")), 1200L)
+  expect_equal(one$attrs, list(name = "mt"))
+  expect_match(one$text, "^<data.frame> 32 x 11, 7 KB")
+  two = env_block_attached(fake_ctx(e, call = fake_call(e, "mt", "v")), 1200L)
+  expect_equal(two$attrs, list(name = "mt, v"))
+  expect_match(two$text, "^mt: <data.frame> 32 x 11, 7 KB")
+  expect_match(two$text, "\nv: <numeric> length 2")
+  names_ctx = fake_ctx(e, call = fake_call(e, "mt"), opts = list(context = "names"))
+  hdr = env_block_attached(names_ctx, 1200L)
+  expect_equal(hdr$text, "<data.frame> 32 x 11, 7 KB")
+  expect_null(env_block_attached(fake_ctx(e, call = fake_call(e)), 1200L))
+})
+
+test_that("preloaded skills come from the skill.body service", {
+  e = new.env()
+  cl = fake_call(e)
+  cl$ids = list(skills = "high-performance-r")
+  local_mocked_bindings(ext_service_has = function(name) FALSE)
+  expect_null(env_block_skills(fake_ctx(e, call = cl), 10000L))
+  local_mocked_bindings(
+    ext_service_has = function(name) identical(name, "skill.body"),
+    ext_service_get = function(name) {
+      function(nm) list(text = "# Skill\nUse data.table.", dir = ".")
+    }
+  )
+  b = env_block_skills(fake_ctx(e, call = cl), 10000L)
+  expect_equal(b, list(text = "# Skill\nUse data.table.",
+                       attrs = list(name = "high-performance-r")))
+})
+
+test_that("builtin_workspace registers the blocks, the section, the evaluator and two hooks", {
+  got = new.env()
+  got$specs = list()
+  got$events = character()
+  api = list(
+    register = function(spec) {
+      got$specs[[length(got$specs) + 1L]] = spec
+      invisible(NULL)
+    },
+    on = function(event, handler, matcher = NULL) {
+      got$events = c(got$events, event)
+      invisible(NULL)
+    }
+  )
+  builtin_workspace(api)
+  kinds = vapply(got$specs, function(s) s$kind, "")
+  names = vapply(got$specs, function(s) s$name, "")
+  blocks = got$specs[kinds == "context_block"]
+  expect_equal(names[kinds == "context_block"],
+               c("workspace", "workspace_changes", "attached", "skill_content"))
+  expect_equal(vapply(blocks, function(s) s$placement, ""), c("first", "turn", "both", "both"))
+  expect_equal(vapply(blocks, function(s) as.integer(s$order), 1L), c(500L, 100L, 600L, 700L))
+  section = got$specs[[which(kinds == "prompt_section")]]
+  expect_equal(c(section$name, section$tier), c("r_env", "T1"))
+  expect_equal(as.integer(c(section$order, section$budget)), c(900L, 450L))
+  expect_identical(got$specs[[which(kinds == "evaluator")]]$eval, eval_r)
+  expect_equal(got$events, c("agent_end", "session_shutdown"))
+})
+
+test_that("the eval.r and describe services are registered by builtin:workspace", {
+  expect_true(ext_service_has("eval.r"))
+  expect_true(ext_service_has("describe"))
+  e = new.env()
+  res = ext_service_get("eval.r")("z = 2 + 2", envir = e)
+  expect_s3_class(res, "gptr_eval_result")
+  expect_equal(e$z, 4)
+  expect_equal(ext_service_get("describe")(mtcars, 60L)[1], "<data.frame> 32 x 11, 7 KB")
+})
+
+test_that("the loaded registry holds the workspace records (P02)", {
+  reg = gptr_registry()
+  mine = reg[reg$source == "builtin:workspace", , drop = FALSE]
+  expect_true(all(c("workspace", "workspace_changes", "attached", "skill_content") %in%
+                    mine$name[mine$kind == "context_block"]))
+  expect_true("r_env" %in% mine$name[mine$kind == "prompt_section"])
+  expect_true("r" %in% mine$name[mine$kind == "evaluator"])
+  expect_identical(registry_get("evaluator", "r")$eval, eval_r)
+})
+
+# Added by P09 Task 10: the blocks with a real session ctx, previews, labels, names (D-112)
+
+block_kinds = function(blocks) vapply(blocks, function(b) b$kind %||% "", "")
+
+test_that("block providers and the agent_end hook of a session share one baseline", {
+  local_fake_provider(list("ok"))
+  user_log_stop()
+  withr::defer(user_log_stop())
+  e = new.env()
+  e$a = 1
+  s = session_new("fake/fake-1", "auto", home = e)
+  expect_true("workspace" %in% block_kinds(context_first_message(s, list(turn = 1L,
+                                                                          prompt = "p"))))
+  # P07 calls providers without a handler source: the plugin state they would see stays
+  # JSON-able, so P06 still persists the state that plugin tools keep there
+  st = session_live(s)$ctx$state()
+  expect_false(any(vapply(as.list(st), is.environment, NA)))
+  e$made_by_agent = 2
+  session_emit(s, "agent_end", status = "idle")
+  expect_false("workspace_changes" %in%
+                 block_kinds(context_turn_blocks(s, list(turn = 2L, prompt = "q"))))
+  e$made_by_user = 3
+  turn = context_turn_blocks(s, list(turn = 3L, prompt = "r"))
+  ch = Filter(function(b) identical(b$kind, "workspace_changes"), turn)
+  expect_length(ch, 1L)
+  expect_match(ch[[1]]$text, "+ made_by_user numeric length 1", fixed = TRUE)
+  expect_no_match(ch[[1]]$text, "made_by_agent", fixed = TRUE)
+})
+
+test_that("a prompt preview leaves the workspace baseline and the history log alone", {
+  local_fake_provider(list("ok"))
+  user_log_stop()
+  withr::defer(user_log_stop())
+  e = new.env()
+  e$a = 1
+  s = session_new("fake/fake-1", "auto", home = e)
+  first = context_first_message(s, list(turn = 1L, prompt = NULL, preview = TRUE))
+  expect_true("workspace" %in% block_kinds(first))
+  expect_false(user_log_registered())
+  expect_null(env_memory(session_live(s)$ctx)$snapshot)
+})
+
+test_that("the env attribute is the session's home label unless the session has none", {
+  user_log_stop()
+  withr::defer(user_log_stop())
+  e = new.env()
+  e$a = 1
+  ctx = fake_ctx(e)
+  ctx$session = structure(list(), class = "p09_session_stub")
+  label = "<none>"
+  local_mocked_bindings(
+    session_home = function(s) NULL,
+    session_data = function(s) list(id = "p09-s1", home_label = label)
+  )
+  expect_equal(env_block_workspace(ctx, 600L)$attrs$env, "<environment>")
+  label = "frame of f()"
+  expect_equal(env_block_workspace(ctx, 600L)$attrs$env, "frame of f()")
+})
+
+test_that("the workspace blocks list non-ASCII and invalid object names", {
+  # ls() returns a name parsed from code with unknown encoding; R parses such a name only in a
+  # UTF-8 locale. workspace_lines() sorts by size first, so R never checks the name's encoding.
+  skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "non-ASCII names parse only in a UTF-8 locale")
+  e = new.env()
+  eval(parse(text = "donn\u00e9es = 1:3; b = 2", encoding = "UTF-8", keep.source = FALSE), e)
+  assign(rawToChar(as.raw(c(0x61, 0xff))), c(1, 2), envir = e)
+  ctx = fake_ctx(e)
+  b = env_block_workspace(ctx, 600L)
+  expect_true(validUTF8(b$text))
+  expect_setequal(sub(" .*$", "", strsplit(b$text, "\n")[[1]]), c("a<ff>", "b", "donn\u00e9es"))
+  nm = env_block_workspace(fake_ctx(e, opts = list(context = "names")), 600L)
+  expect_true(validUTF8(nm$text))
+  expect_setequal(strsplit(nm$text, ", ", fixed = TRUE)[[1]], c("a<ff>", "b", "donn\u00e9es"))
+  eval(parse(text = "\u00e9t\u00e9 = 1", encoding = "UTF-8", keep.source = FALSE), e)
+  ch = env_block_changes(ctx, 300L)
+  expect_true(validUTF8(ch))
+  expect_match(ch, "^\\+ \u00e9t\u00e9 numeric length 1 [0-9]+ B$")
+})
+
+test_that("the session_shutdown hook releases the session's history log", {
+  user_log_stop()
+  withr::defer(user_log_stop())
+  user_log_start("p09-a")
+  user_log_start("p09-b")
+  expect_null(env_on_shutdown(list(type = "session_shutdown", session = "p09-a"), NULL))
+  expect_true(user_log_registered())
+  expect_null(env_on_shutdown(list(type = "session_shutdown", session = "p09-b"), NULL))
+  expect_false(user_log_registered())
+  expect_null(env_on_shutdown(list(type = "session_shutdown", session = NULL), NULL))
+})
+
+test_that("the eval.r service runs the evaluator the evaluator setting names (IC-69)", {
+  off = gptr_register(gptr_spec("evaluator", "p09-echo",
+                                eval = function(code, envir, ...) paste("echo:", code)))
+  withr::defer(off())
+  chosen = "p09-echo"
+  local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) {
+    if (identical(key, "evaluator")) chosen else default
+  })
+  e = new.env()
+  expect_equal(ext_service_get("eval.r")("1 + 1", envir = e), "echo: 1 + 1")
+  chosen = "p09-missing"
+  expect_s3_class(ext_service_get("eval.r")("y = 1", envir = e), "gptr_eval_result")
+  expect_equal(e$y, 1)
+})
+
+test_that("a call's first message sends <attached> after <workspace>, and turns again (IC-38)", {
+  # P07's own versions of this check skip once P09 registers the attached block
+  local_fake_provider(list("ok"))
+  user_log_stop()
+  withr::defer(user_log_stop())
+  e = new.env()
+  e$mt = mtcars
+  s = session_new("fake/fake-1", "auto", home = e)
+  item = list(label = "mt", kind = "symbol", name = "mt", slot = NULL,
+              facts = list(class = "data.frame"))
+  cl = call_new(prompt = "x", context = list(item), envir = e, args = list(opts = list()))
+  b = context_first_message(s, list(call = cl, turn = 1L, prompt = "x"))
+  k = block_kinds(b)
+  expect_true(which(k == "attached") > which(k == "workspace"))
+  expect_match(b[[which(k == "attached")]]$text,
+               "^<attached name=\"mt\">\n<data.frame> 32 x 11, 7 KB")
+  turn = context_turn_blocks(s, list(call = cl, turn = 2L, prompt = "y"))
+  expect_true("attached" %in% block_kinds(turn))
+})

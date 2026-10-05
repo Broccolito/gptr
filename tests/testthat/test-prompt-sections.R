@@ -717,10 +717,22 @@ local_tiny_model = function(.env = parent.frame()) {
 
 block_kinds = function(blocks) vapply(blocks, function(b) b$kind %||% b$type, "")
 
+# P09 registers the skill_content block, whose 10,000-token re-injection budget alone overruns
+# the tiny window's threshold: the floor tests below hide that block, so the skills budget is 0
+# and the floor varies with the project instructions only
+local_no_skill_block = function(.env = parent.frame()) {
+  real = registry_get
+  local_mocked_bindings(registry_get = function(kind, name, session = NULL) {
+    if (identical(kind, "context_block") && identical(name, "skill_content")) return(NULL)
+    real(kind, name, session)
+  }, .env = .env)
+}
+
 test_that("the floor counts the project instructions the frozen audience will be sent (IC-52)", {
   local_project(files = list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
   withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
   local_tiny_model()
+  local_no_skill_block()
   # untrusted project, auto mode: a session frozen for a human (`interactive = TRUE`, as P06's
   # run_freeze() passes the run's audience) is sent the instructions, so the floor counts them,
   # whatever gptr_can_prompt() says (FALSE in the tests)
@@ -744,6 +756,7 @@ test_that("cut re-injection budgets are recorded in gptr.frozen and survive a re
   local_project(files = list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
   withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
   local_tiny_model()
+  local_no_skill_block()
   s = p07_session("manual")
   fr = prompt_freeze(s, list(interactive = FALSE))
   expect_equal(fr$reinject, list(project = 1904, skills = 0))
