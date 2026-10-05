@@ -154,7 +154,7 @@ function commitPrompt(t, files, msg, push) {
 Files reported for this task: ${JSON.stringify(files)}
 Commit subject from the plan: ${JSON.stringify(msg)}
 Steps:
-1. 'git status --short'. Stage EXACTLY this task's files with explicit 'git add -- <paths>' (include files listed above that exist and are modified/untracked; also include NAMESPACE/man/*.Rd changes and dev/progress or dev/DEVIATIONS.md edits if they belong to this task). Never 'git add -A' or '.', never stage anything under .secrets/, dev/.validation/, dev/.library/ or *.env. If an unrelated modified file exists that clearly is not this task's, leave it unstaged and mention it in 'note'.
+1. 'git status --short'. Stage EXACTLY this task's files with explicit 'git add -- <paths>' (include files listed above that exist and are modified/untracked; also include NAMESPACE/man/*.Rd changes and dev/progress or dev/DEVIATIONS.md edits if they belong to this task). Never 'git add -A' or '.', never stage anything under .secrets/, dev/.validation/, dev/.library/ or *.env. If an unrelated modified file exists that clearly is not this task's, leave it unstaged and mention it in 'note'. SHARED FILES (NAMESPACE, man/*.Rd, dev/DEVIATIONS.md, dev/progress/*.md, any file another lane also edits): run 'git diff -- <file>' first; if any hunk is not this task's, never 'git add' the whole file: stage only this task's hunks (write a filtered patch and 'git apply --cached <patch>'), then confirm with 'git diff --cached -- <file>' that only this task's lines are staged.
 2. Commit with: git commit -F - <<'EOF'
 <subject>
 
