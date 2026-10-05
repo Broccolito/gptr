@@ -2,10 +2,6 @@
 # and gptr_prompt().
 
 p07_session = function(mode = "auto", preset = NULL, .env = parent.frame()) {
-  # Collect the sessions of earlier tests now, so that their finalizers (P06 session_finalizer(),
-  # which drops their registry records) do not run in the middle of a registry lookup: that
-  # known GC race in P02's registry_recs() is routed to the coordinator (progress/P07.md).
-  invisible(gc(verbose = FALSE))
   local_fake_provider(list("ok"), .env = .env)
   session_new("fake/fake-1", mode, home = new.env(), preset = preset)
 }

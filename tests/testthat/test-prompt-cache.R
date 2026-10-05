@@ -1,10 +1,6 @@
 # P07 Tasks 10-11: request assembly, cache plans, the gap-based tail TTL and the prefix guard.
 
 p07_session = function(mode = "auto", .env = parent.frame()) {
-  # Collect earlier tests' sessions now, so that their finalizers (P06 session_finalizer(), which
-  # drops their registry records) do not run in the middle of a registry lookup: the known GC
-  # race in P02's registry_recs() (progress/P07.md, Tasks 5-8).
-  invisible(gc(verbose = FALSE))
   local_fake_provider(list("ok"), .env = .env)
   session_new("fake/fake-1", mode, home = new.env())
 }
@@ -362,7 +358,6 @@ test_that("a session_tree event resets the guard", {
 
 test_that("cache_break carries the event envelope of contract 4.5 in and outside a run", {
   # Review round 1: the payload lacked run, agent and turn (04 sections 4.5 and 10.4)
-  invisible(gc(verbose = FALSE))
   local_fake_provider(list("one", "two"))
   s = session_new("fake/fake-1", "auto", home = new.env())
   hits = count_breaks()

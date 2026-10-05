@@ -4946,7 +4946,7 @@ Validation: `progress/P17.md`, Task 7. `^subagent-defs$`: red
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 31 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`; lint
 clean.
 
-## D-087 - P07 compaction runs: compaction events carry the contract 4.5 envelope; inside a run the checkpoint request uses the run's model and protected safety record, and an overflow compaction of a router session asks the router; a request that cannot start, or an empty reply, still leaves a harness-state checkpoint; the continuation line keeps the user-message budget; malformed hook and compactor results are diagnostics, and the harness's details fields win; reason and focus are validated; the tool additions and section patches a compaction drops are announced again after it; an aborted run records no compaction; the usage of every checkpoint request is kept (2026-10-04)
+## D-087 - P07 compaction runs: compaction events carry the contract 4.5 envelope; inside a run the checkpoint request uses the run's model and protected safety record, and an overflow compaction of a router session asks the router; a request that cannot start, or an empty reply, still leaves a harness-state checkpoint; malformed hook and compactor results are diagnostics, and the harness's details fields win; reason and focus are validated; the tool additions and section patches a compaction drops are announced again after it; an aborted run records no compaction; the usage of every checkpoint request is kept; an unknown token count stays unknown; the continuation carries the latest request's images (2026-10-04)
 
 P07 Task 13 (`R/prompt-compact.R`). `compact_last()`, `compact_request_text()`,
 `compact_header()`, `compact_skills()`, `builtin_compaction()` and its `on_load()`, the
@@ -4988,11 +4988,18 @@ real P05/P06 interfaces, and each has a test.
    does; nothing is sent.
 4. **An empty reply is asked again once,** like a reply that calls a tool or stops on length. The
    plan accepted it as an empty `<summary>`.
-5. **The continuation line keeps the user-message budget (architecture 12.2: 2,000).** The
-   plan's `Continue from the checkpoint. The latest request was: <text>` repeated the latest
-   request whole, so a 5,000-word prompt (6,893 tokens) rode in the new first message beside the
-   budgeted `<user_messages>`. It is now cut with Task 12's `compact_clip()` (line within 2,000
-   tokens; a request that fits is unchanged).
+5. **The continuation line is the plan's (withdrawn in review round 2).** The implementation
+   cut the latest request in `Continue from the checkpoint. The latest request was: <text>` to
+   2,000 tokens with Task 12's `compact_clip()`, reading architecture 12.2's "user messages
+   2,000" as its budget. That budget belongs to the checkpoint's `<user_messages>` list, which is
+   clipped there; nothing bounds the continuation line, and the plan and G4's
+   `make_compaction_entry()` repeat the request whole. With `keep_recent = 0`, and P06 appending
+   a new prompt before `run_compact_check()`, the line is the only copy of a prompt the model has
+   not answered yet, so the cut silently dropped the user's input past about 2,000 tokens (only
+   the model saw the truncation notice). The line is the plan's again. A request too large to
+   fit after a compaction surfaces as `context_overflow` after the one compact-and-retry
+   (INFRA-26), and the 20% growth rule (IC-71) keeps a threshold compaction from looping. Not a
+   deviation any more; kept as the record of the reverted change.
 6. **Results.** A `session_before_compact` result without content blocks is a diagnostic
    (`malformed_result`) and the compactor runs; the plan aborted the whole compaction. A plugin
    compactor's result without blocks counts as a failure and falls back to `checkpoint` (contract
@@ -5003,7 +5010,10 @@ real P05/P06 interfaces, and each has a test.
    `lgl(1)` with a reason), and an unknown token count or idle time (`NA`) is no evidence. The
    plan reached `if (NA)` and fell back to `FALSE` through a diagnostic.
 8. **Arguments.** `compact_run()` refuses a `reason` other than the four of contract 10.4 and a
-   `focus` that is not a string (`gptr_error_invalid_argument`).
+   `focus` that is not a string (`gptr_error_invalid_argument`). Review round 3: it now uses the
+   value P01's `check_choice()` returns, so the whole vector of the four reads as `"threshold"`
+   (P01's `match.arg()`-like convention); before, the check passed it and the vector itself was
+   sent in `session_before_compact` and stored as `details$reason`.
 9. Without a test of its own (the plan's tests cover the same output): the `<mode>` block comes
    from the registered `mode` context block (P07's text when none renders), so a replaced mode
    block is deduplicated against the compaction. A dropped project block is hashed with Task 5's
@@ -5034,18 +5044,55 @@ real P05/P06 interfaces, and each has a test.
     when the session's run is aborted or settles (another reactor callback: `run_abort()`, a
     budget or timer stop, a hook's `ctx$abort()`); `compact_ask_once()`'s exit handler then
     cancels the transfer, the request is not retried, and `compact_run()` records nothing. The
-    plan waited for the whole reply and appended a compaction for the aborted run.
+    plan waited for the whole reply and appended a compaction for the aborted run. Review round
+    3: P06's `run_abort()` settles the run, and `run_settle()` clears the live record's `run`, so
+    the round-1 check, which read `session_live(s)$run` again after the wait, found no run and
+    `compact_run()` still appended a harness-state checkpoint, its operator messages and
+    `session_compact` to the aborted session (the round-1 test only set `run$signal$aborted` on
+    a stand-in run). `compact_run()` and `compact_checkpoint()` now read the run once when they
+    start (`compact_live_run()`) and pass it to `compact_ask()`/`compact_ask_once()`; every
+    halted check tests that run (`compact_run_halted()`). The test aborts a real `session_run()`
+    with P06's `run_abort(r, "user")` while the checkpoint reply is awaited.
 13. **Usage of every attempt (review round 1, contract 10.2 `usage`).** The compactor's `usage`
     held only the final attempt's usage; a rejected first reply (a tool call, a `length` stop or
     an empty reply) was billed but dropped. `compact_ask()` now returns the sum of every reply's
     usage (`compact_usage_sum()`: a single record unchanged, several summed field by field, an
-    unknown count or cost makes the sum unknown, IC-74).
+    unknown count or cost makes the sum unknown, IC-74). Review round 3: a reply without a usage
+    record was left out of the sum, so a rejected reply that reported nothing gave the known
+    total of the other reply; it now counts as unknown usage (P05's `usage_as()`: absent observed
+    usage is not a zero-token request), so the sum is unknown. A single reply without a record
+    still leaves the compaction without `usage`.
+14. **An unknown token count (review round 2, IC-74).** When no model resolves, the plan's
+    `compact_run()` kept the context's token count at 0, sent that in `session_before_compact`
+    and `session_compact` and stored it as the `tokens_before` of a hook-supplied result. It is
+    now `NA` in both events, and the entry omits `tokens_before` (contract 4.6 `tokensBefore` is
+    a number; `json_encode()` would write `NA` as the string "NA"). A compactor given an unknown
+    count (`ctx$input$tokens` `NA`) estimates the checkpoint's `tokens_before` attribute with the
+    model it resolved instead of writing "NA".
+15. **The latest request's images (review round 3).** The plan's continuation line
+    (`Continue from the checkpoint. The latest request was: <text>`) repeats the request's text
+    only. With `keep_recent = 0`, and P06 appending a new prompt before `run_compact_check()`, a
+    threshold compaction at that boundary left the model a prompt such as "what is in this
+    image?" without the image (the retried request had no image block). The compaction's blocks
+    now carry the image blocks of the latest request right before the continuation line
+    (`compact_request_images()`: walking back from the leaf, the images of the user's messages up
+    to and including the newest one with text, the request the line names; a compaction entry
+    on the way contributes the images it carried, so a later compaction keeps them once; a
+    steering relay is text only). The images are the user's blocks as sent (P06's image elision
+    by id still applies to every copy), the session file keeps them with the compaction entry,
+    and `tokens_after` counts the result's images with the request estimator's image rule. An
+    earlier request's images are not repeated; the model's summary describes them.
 
-Validation: `progress/P07.md`, Task 13. Sixteen tests (94 expectations) were added: ten (59) by
-the implementation, six (35) by review round 1. On the plan literal the first ten's 19 fail and
-the plan's 55 pass (`dev/.validation/P07/task13-plan-literal.log`); on the pre-review source the
-six review tests fail 19 (`task13-fix1-red-final.log`). Final `^prompt-compact$`
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 237 ]`.
+Validation: `progress/P07.md`, Task 13. Twenty-one tests (133 expectations) were added: ten by
+the implementation (59; review round 2 replaced its continuation-line test, 3 expectations, with
+one of 7 that asserts the request survives whole), six (35) by review round 1 (review round 3
+rewrote its abort test on a real run, 3 -> 9 expectations), one (8) by review round 2 and four
+(21) by review round 3. On the plan literal the implementation's ten failed 19 and the plan's 55
+passed (`dev/.validation/P07/task13-plan-literal.log`; 2 of those failures were the withdrawn
+item 5); on the pre-review source the six round-1 tests fail 19 (`task13-fix1-red-final.log`).
+Round 2 red `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 240 ]` (`task13-fix2-red.log`); round 3 red
+`[ FAIL 10 | WARN 0 | SKIP 0 | PASS 260 ]` (`task13-fix3-red.log`). Final `^prompt-compact$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 276 ]`.
 
 ## D-088 - P17 plugin resolution: a manifest that is not a JSON object is a diagnostic, an installed Claude plugin uses its newest install path that exists and malformed entries are skipped, a `~` path expands with `user_home()`, and an installed Claude plugin without a manifest name is named by its installed key (2026-10-04)
 
@@ -5153,3 +5200,82 @@ count for `test-auth-oauth.R` is 9 higher (Task 2: 99 -> 108; the five P18 test 
 
 Validation: `progress/P18.md`, Task 1. `^auth-oauth$`: red `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`,
 green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 56 ]`; lint clean.
+
+## D-090 - P18 MCP wire helpers: placeholders expand in one pass with literal variable values and expanded defaults, scalars that do not convert are argument errors, whole numbers up to 2^53 - 1 are sent with every digit, malformed cache files read as absent, logs rotate portably, and env entries become strings (2026-10-04)
+
+P18 Task 3 (`R/mcp-client.R`). The plan's 7 tests are kept byte for byte (the cache test also
+points `R_USER_CACHE_DIR` at a per-test directory, the plan's per-test user-directory rule) and
+the rest of the source is the plan's. Six places of the plan-literal code changed:
+
+1. **One-pass placeholder expansion** (`mcp_expand1()`, `mcp_placeholder_value()`,
+   `mcp_placeholder_re`). The plan re-scanned the string after each splice, so a variable value
+   containing `${OTHER}` was expanded again, more than 50 placeholders stayed unexpanded, and a
+   home or project path containing `${userHome}`/`${workspaceFolder}` never terminated. A
+   variable's value is now spliced in literally; a `:-` default (config text, balanced braces)
+   is expanded in turn, so `${DB:-${workspaceFolder}/data.db}` still works. `NA` stays `NA`. A
+   default with an unbalanced `{` leaves its placeholder unexpanded.
+2. **Strict scalars** (`mcp_scalar()`, `whole()`, `mcp_number()`, `mcp_coerce()`): a value that
+   does not convert to one non-missing finite scalar (`"abc"`, `Inf` or `-Inf` for a number) is
+   `gptr_error_invalid_argument` instead of JSON `"NA"` or `"Inf"`; `Inf` is not a whole number.
+   A whole number beyond the integer range, up to 2^53 - 1 (RFC 8259 section 6), is sent as
+   verbatim JSON with every digit (`json_verbatim(sprintf("%.0f", v))`, for `integer` and
+   `number` properties): `json_encode()` keeps 15 significant digits, so `1759600000000123`
+   would arrive as `1.75960000000012e+15` (the plan sent `"NA"` for an `integer`). An `integer`
+   beyond 2^53 - 1 is an argument error. A length-1 `NA` is omitted at every level (also under
+   `anyOf`).
+3. **`mcp_value()`** simplifies with `jsonlite::parse_json(simplifyVector = TRUE)` (same result
+   as `fromJSON()`, never reads its input as a file or URL).
+4. **Caches**: a cache file that is not a JSON object reads as absent (the plan's era read
+   stopped on `$` of an atomic vector), and so does an era entry whose `era` is not `"modern"`
+   or `"legacy"` or whose `date` is not one string (`as.POSIXct()` stopped on a list or a
+   vector, on the handshake path, until the file was deleted); `mcp_era_get()` reads its fields
+   with exact `[[`. `mcp_tools_cache_fresh()` always returns a flag.
+5. **Logs**: `mcp_log_append()` joins text given in pieces and removes the old `.1` before
+   rotating (`file.rename()` does not replace an existing file on Windows).
+6. **Env and header maps** (new `mcp_map_chr()`): numbers and logicals become their JSON text
+   (`"8080"`, `"true"`) and names are kept, so `child_env(set =)` accepts them; secret
+   registration walks env entries by position and skips unnamed ones (the plan stopped with
+   "subscript out of bounds"). The helper is deliberately not called `mcp_chr()`: Task 6 defines
+   `mcp_chr()` in `R/mcp-config.R` (plan line 4364), which drops names and writes `"TRUE"`; a
+   second definition would fail `test-arch-layers.R` ("every function one home"), and Task 6's,
+   collated later, would win and leave env unnamed, which `child_env()` refuses. Task 6 keeps
+   the plan's `mcp_chr()` unchanged.
+
+Four regression tests (22 expectations) follow the plan's tests; against the plan-literal source
+the first 14 fail 7 (with 3 coercion warnings; the expansion test stopped by a 3 s bound) plus 4
+in a second probe of the expansion test's later expectations
+(`dev/.validation/P18/task3-extra-red-against-plan-literal.log`); the 8 added in review round 1
+fail 5 against the round-0 source (`task3-fix1-red.log`). Every later P18 count for
+`test-mcp-client.R` is 22 higher (Task 4: 94 -> 116; Task 5: 124 -> 146; the five P18 test files
+together: 499 -> 521).
+
+Validation: `progress/P18.md`, Task 3. `^mcp-client$`: red `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 66 ]` (also in a C locale); lint clean.
+
+## D-091 - P08 settings files: the providers setting validates local_only (IC-74), a lock being released is not stale, a control refusal names the running tool (2026-10-04)
+
+P08 Task 1's literal `R/gptr-config.R` predates IC-74. Behaviours changed, which P08's later tasks,
+P11 and P15 consume:
+
+1. **`providers.<id>.local_only` is TRUE or FALSE.** 07-local-ollama.md section 5 makes
+   `providers$ollama$local_only` "a scalar non-NA logical" (default `TRUE`). The plan's validator
+   of the core `providers` setting checked only for a named list; `settings_check_providers()`
+   also requires every `providers.<id>` entry to be an object and `local_only`, when given, to be
+   `TRUE` or `FALSE` (`gptr_error_invalid_argument`, `arg = "providers.<id>.local_only"`). `NULL`
+   means unset, which P05's `catalog_local_only()` reads as the strict `TRUE`. Validation does not
+   protect the value: the run's `safety$ollama_local_only` (D-014, D-017) must be built from the
+   user settings file and the session layer only (human configuration), never from the merged
+   layers, the project or user-level project file, `options()`, `.opts` or call data, where a
+   value may only tighten. That is an obligation of P08 Tasks 3 and 9; Task 4's `egress_check()`
+   applies the effective-origin rule of D-020 item 1.
+2. **A lock being released is not stale.** `lock_stale()` read the pid file after a
+   `file.exists()` check, so an owner releasing the lock in between made `read_utf8()`'s error
+   escape from `file_lock()` and `settings_write()`. An unreadable pid file now counts as not
+   stale and the 50 x 100 ms loop retries (IC-71).
+3. **The refusal names the running tool.** `control_check()` fills the `tool` field of
+   `gptr_error_permission` from `run$tool_call$name` (else `"r"`), as P06's
+   `session_control_check()` does; the plan always said `"r"`.
+
+Validation: `progress/P08.md`, Task 1. `^gptr-config$`: red `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 49 ]` (plan 30; the IC-74 test adds 15, the tool-name
+test 4, which fails 1 against the plan-literal line); lint clean.
