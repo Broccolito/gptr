@@ -204,7 +204,8 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
 }
 
 #' Skip the old block of a regenerated call in the running driver: the innermost gptr_source()
-#' frame, when it sources this document, skips the block's top-level expressions
+#' frame, when it sources this document, skips the block's top-level expressions; knitr (and
+#' Quarto) skip its agent chunk for the rest of the knit (the scoped label hook)
 #' @noRd
 doc_skip_old = function(site) {
   id = site$block$id
@@ -217,6 +218,8 @@ doc_skip_old = function(site) {
       fr$skip = union(fr$skip, id)
       st$sources[[n]] = fr
     }
+  } else if (identical(site$driver, "knitr")) {
+    doc_knitr_skip(paste0("gptr-", id))
   }
   invisible(NULL)
 }

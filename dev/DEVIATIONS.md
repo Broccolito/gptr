@@ -9274,3 +9274,66 @@ expectations on the previous source (`task15-fix1-red.log`); green
 2 regression tests give `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 491 ]` on the previous source
 (`task15-fix2-red.log`); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 500 ]` in the default and the
 C locale (`task15-fix2-green.log`, `task15-fix2-green-clocale.log`).
+
+## D-130 - P15 knitr integration: what knit_print shows is redacted like the recorded blocks (IC-74), the label hook is also removed when a knit fails, and a nested knit never ends the skip of the knit that runs it (2026-10-05)
+
+P15 Task 16 (`R/doc-knitr.R`; `doc_skip_old()` in `R/doc-replay.R`; tests in
+`test-doc-knitr.R`). The two `knit_print` methods, `doc_knit_code()`, the lazy registration with
+`s3_register()`, the chained label hook and its `document` cleanup hook are the plan's; the
+plan's 4 tests pass unchanged apart from the fixture path (item 4).
+
+1. **Redacted output (IC-74, 07 section 6 P15 row: "redacted, consented workflow records").** The
+   rendered document is a durable record, like the agent chunk that `doc_block_lines()` redacts
+   with the `persist` profile and the one-line block that `doc.s1_block` redacts (D-122). The
+   plan printed `x$text` and the System 1 summary as they were. The answer comes from entries
+   redacted at ingress, so only secrets known when they were appended were masked: a value
+   registered later (IC-70's late registration), which `doc_block_lines()` masks again when it
+   writes, reached the knitted output, and so did a free-text choice level. Both methods now pass
+   their text through `redact(, "persist")`. The code part needed no change:
+   `doc_turn_body()` already rewrites a registered literal to `Sys.getenv("NAME")`, as in the
+   block.
+2. **The skip is scoped to one knit also when the knit fails.** knitr calls the `document` hook
+   only after the last chunk, so a chunk error (`error = FALSE`, rmarkdown's default) after a
+   regeneration left the plan's label hook installed with its label in `knitr_skip` and
+   `knitr_hooked` TRUE. `knit()` then reset the `document` hook to its default, so no cleanup ever
+   ran again: every later knit in that R session silently skipped the regenerated (now fresh)
+   agent chunk, so its objects were missing while the call replayed. `doc_knitr_skip()` now also
+   sets a `knit_hooks` `after.knit` hook, which `knit()` runs from `on.exit()` (after its own
+   default-hook reset) on success, error and interrupt. `doc_knitr_unhook(old, mine)` restores
+   each of the three hooks only while it is still the one `doc_knitr_skip()` set (so the default
+   `document` hook that `knit()` restored is kept), whatever the skip state says, so calling it
+   again is harmless and hooks that code around a nested knit saved and restored are still
+   removed. The signature changes from the plan's `doc_knitr_unhook(old_label, old_doc)`
+   (internal, no other caller). On a knitr without `after.knit` the plan's behaviour remains.
+3. **A nested knit never ends the skip of the knit that runs it.** knitr's hooks are global, so
+   the `document` and `after.knit` hooks also fire at the end of every knit run while the skip is
+   active: a child knit (`knit_child()` runs `knit()`; verified with knitr 1.52) and a knit or
+   render run from a chunk (`knitr::knit()`, `rmarkdown::render()`). The plan's `document` hook
+   therefore removed the label hook when such a knit ran between the regenerating chunk and its
+   old agent chunk, and the old code ran. `doc_knitr_skip()` records how many `knitr::knit()`
+   frames are on the call stack (`doc_knit_depth()`, at least 1), and both hooks end the skip only
+   in a knit at that depth or shallower: the knit that set it, or one around it (they still chain
+   the previous hooks). A skip set inside a child
+   knit therefore ends with the child, whose document holds the old agent chunk.
+   Review round 1 found that the first version (hooks inert in child mode only, `doc_knitr_unhook()`
+   guarded by `knitr_hooked`) still let a nested `rmarkdown::render()` end the parent's skip, and,
+   because `render()` restores the hooks it saved (gptr's), left gptr's label and `after.knit`
+   hooks installed for the rest of the session.
+4. Test-only: the fixture path is resolved with `normalizePath(test_path())` before
+   `local_project()` changes the working directory (the coordinator's rule for P15); the plan's
+   relative path made `file.copy()` fail silently and `knit()` error.
+5. The code that `knit_print.gptr_session()` shows is fenced with `doc_rmd_fence()` (the agent
+   chunk's rule: one backtick longer than the longest backtick run that starts a code line,
+   at least three) instead of the plan's fixed three backticks, so a backtick line in the code (a
+   multi-line string) no longer ends the code block early. Outputs without such lines are the
+   plan's.
+
+Also the Task 12 obligation (D-119 item 3): `doc_skip_old()` gains the plan's knitr branch,
+`doc_knitr_skip(paste0("gptr-", id))` for the `knitr` driver (knitr and Quarto sites).
+
+Seven addition tests (37 expectations): redaction (3), a failed knit (7), a child knit (6), a
+skip set inside a child knit (4), a plain and a hook-restoring nested knit (14), a backtick line
+in the shown code (1), and dispatch through `knitr::knit_print()` to the lazily registered methods
+(2; coverage). Against the plan literal (`task16-plan-literal.R`) they fail 11 expectations
+(`task16-fix1-red-plan-literal.log`; the skip-inside-a-child test passes there). Validation:
+`progress/P15.md`, Task 16.
