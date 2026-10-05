@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords and literal text fed to a shell never hide a command, program-running options and environment values are read as command lines, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2958,7 +2958,7 @@ read a line differently (brace expansion, a descriptor such as `10>`), both read
 classified and the higher counts; so are the Windows and the sh reading of a backslash, and the
 readings of a parameter default (round 4), and every directory a `cd` can leave the shell in
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
-added, item 12 what round 4 added and item 13 what round 5 added:
+added, item 12 what round 4 added, item 13 what round 5 added and item 14 what round 6 added:
 1. **Shell syntax.** Substitutions are found by a scan that follows quotes, backslashes and
    nesting, and each is classified as a command line, recursively (the plan read one level with a
    regular expression: `echo $(rm -rf ~ $(true))` was 0), process substitutions `<(...)`/`>(...)`
@@ -3350,14 +3350,79 @@ added, item 12 what round 4 added and item 13 what round 5 added:
     - Changed rows: raised `import os as o; o.system('rm -rf ~')` from 3 to 4 (its command line is
       read); the `(cd .gptr; ...)` redirect check accepts the extra failed-cd row. No row was
       lowered.
-Known limits (advisory classifier, not a security boundary; each is level 3 or the level of what
-can be read, never 0): scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
+14. **Review round 6 (fail-safe).**
+    - *Quoted reserved words.* sh, bash and dash read a word as a reserved word only when no
+      character of it is quoted or escaped, and only where a command starts: `"case" x`,
+      `c"ase"`, `\case` and `X=1 case x` run a program named `case`. The tokeniser now marks each
+      word that held a quote or an escape (attribute `quoted`, carried by `risk_sh_split()`), and
+      the walker, `risk_cmd_unwrap()` and `risk_cmd_simple()` (`reserved = FALSE`) read such a word,
+      or a reserved word after a prefix assignment or a wrapper, as a command name (an unknown
+      program, 3). Before, `"case" x; rm -rf ~` started a case statement whose later commands were
+      skipped as patterns (0), and a quoted `}` closed a group early, so `{ echo 'rm -rf ~'; "}"; }
+      | sh` lost the piped text (3); both are 4 now. A quoted `esac` in a pattern stays a pattern,
+      and the `|| exit` check skips only unquoted keywords (`cd build || "}" exit; rm -rf *` is 4).
+    - *`esac` after `;;`.* The `esac` that ends a case after `;;`, `;&` or `;;&` was read in
+      pattern mode and skipped with its redirects, so `case x in x) echo x;; esac > .Rprofile` and
+      the six other reviewer forms were 0; the walker now drops only the `esac` word and reads the
+      rest of that command as any other (4; `> notes.txt` 2, `> /etc/x` 3).
+    - *SQL.* `load_extension()`, the dblink functions and MySQL's `sys_exec`/`sys_eval` (and
+      SQLite's `fts3_tokenizer()`) are 3 `dynamic` from inside any statement, the SQL text dblink
+      carries is classified as SQL (`dblink_exec(..., 'COPY t TO ''.gptr/settings.json''')` is 4;
+      nesting deeper than three is 3); functions that signal the server (`pg_terminate_backend()`,
+      `pg_reload_conf()`, replication slots, ...) are 3 `process`; `set_config()`, `setval()`,
+      `nextval()`, the large-object writers and advisory locks are 2. PRAGMA's function form
+      (`journal_mode(WAL)`, `wal_checkpoint(TRUNCATE)`, `create_fts_index(...)`) is 2 like `= v`,
+      unless the pragma reads a table or schema argument (`table_info(t)`, `index_list(t)`, ...
+      stay 0); pragmas that act without a value (`optimize`, `wal_checkpoint`,
+      `incremental_vacuum`, DuckDB's `checkpoint`, `enable_*`/`disable_*`) are 2 and `drop_*` 3. The
+      command line of `COPY ... TO/FROM PROGRAM` and of file_fdw's `program` option is classified
+      as a command run in a directory gptr does not know (`COPY t TO PROGRAM 'rm -rf ~'` 4).
+      Self-review: `CREATE FUNCTION`, `PROCEDURE`, `TRIGGER`, `RULE`, `EXTENSION` and `LANGUAGE`
+      store code that later read-only-looking statements run: 3 (was 2).
+    - *Shells that read standard input.* Besides a shell with no `-c` and no script operand,
+      `su` without `-c`, `sudo`/`doas` with `-s` or `-i` and no command, `busybox sh`/`toybox sh`,
+      a script operand `/dev/stdin` or `/dev/fd/0`, `script` without `-c`, `at` and `batch`
+      without `-f`/`-l`/`-r`/`-d`/`-c`, `crontab` with no file or `-`, and (self-review) `ssh HOST`
+      with no command run the literal text piped or redirected into them
+      (`risk_cmd_stdin_shell()`); an output process substitution `>(sh)` reads what the line
+      writes (`echo 'rm -rf ~' > >(sh)`, `tee >(bash)`). Each reviewer form was 3 and is 4;
+      `sudo -s ls` and `su -c ls` keep 3. Self-review: literal text or a heredoc fed to an
+      interpreter with no program operand (`python3`, `R --no-save`, `Rscript -`, `perl`, ...) is
+      its program, read as `-c`/`-e` code is (`echo "import os; os.system('rm -rf ~')" | python3`
+      was 3, now 4; `| python3 script.py` keeps 3).
+    - *Values the line makes visible.* A plain assignment (`x=~`, also through export, declare,
+      typeset, local and readonly) and a for or select loop's words give the variable those values
+      for the rest of the line (`risk_cmd_vars_set()`, at most eight values a name); a later
+      command is also read with each value in place of `$NAME`, `${NAME}` or `${NAME...}`, and an
+      unquoted whole-word expansion also split at white space (`risk_cmd_var_subst()`); the
+      `unknown` reading stays. The same values reach heredoc text, the text echo or printf writes
+      into a pipe, and (self-review) the substitutions of the line (`risk_sh_var_text()`,
+      `risk_sh_line_vars()`). `x=~; rm -rf $x`, `for d in ~ /; do rm -rf $d; done`,
+      `for f in .gptr/*; do rm -rf "$f"; done`, `x=~; echo "rm -rf $x" | sh` and
+      `x=~; echo $(rm -rf $x)` were 3, now 4; `x=build; rm -rf $x` and `x=~ rm -rf $x` (a prefix
+      assignment does not reach its own command's words) keep 3. xargs fed by find, fd, ls, dir,
+      `git ls-files` or `rg --files` appends what that program prints, as find's `-exec {}` stands
+      for it (`risk_cmd_lister_reach()`, `risk_find_parse()`, `risk_fd_stand()`):
+      `find . | xargs rm -rf`, `ls -A | xargs rm -rf` and `git ls-files | xargs rm -f` were 3,
+      now 4; `find . -name '*.o' | xargs rm` keeps 3 (a name test narrows it).
+    - Changed rows: none of the 1,124 earlier expectations changed. A guard row of mine was
+      wrong before the fix: `for f in a.csv b.csv; do cp "$f" out/; done` is 3, not 2, because
+      the `unknown` reading of `$f` stays (it was 3 before too).
+Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
+below is level 3 or the level of what can be read, never 0, except the SQL functions named
+last): scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
 configuration read by `curl -K`, `wget -e`/`--config` (3 `dynamic` since round 4) or `git` from
-the repository, the values of variables and positional parameters (`$X`, `"$@"`: `unknown`), commands hidden by `eval` of
-computed strings beyond the rules above, Python reached through other indirections (an alias of
-`r`, a process call whose command is built at run time), SQL functions with side effects inside a
-SELECT other than the file writers above, and heredocs or here-strings read by a program other
-than a shell, `source`, xargs, sftp or ftp (an interpreter is 3 `process` anyway). `set -e` and
+the repository, the values of variables the line does not assign literally (from the
+environment, `read`, a function or a sourced file) and of positional parameters (`$X`, `"$@"`:
+`unknown`; item 14 reads the values the line assigns), the names xargs gets from a program
+other than echo, printf, a heredoc, find, fd, ls, dir, `git ls-files` or `rg --files` (`cat list
+| xargs rm` is 3), commands hidden by `eval` of computed strings beyond the rules above, Python
+reached through other indirections (an alias of `r`, a process call whose command is built at
+run time), heredocs or here-strings read by a program other than a shell, an interpreter,
+`source`, xargs, sftp or ftp, and, the one limit that can be 0, a SELECT that calls a
+user-defined function, a stored procedure's side effects or a server function gptr does not
+list (item 14 lists the code, signal and state functions it reads; the statement shows nothing
+else): such a statement is read by its leading keyword, as G5 reads it. `set -e` and
 `if cd x; then ...` are not modelled: a `cd` there is read as one that may fail (a higher level,
 never a lower one). A link made by `mklink` or `New-Item` is not followed on the line (its
 guarded source is flagged). CDPATH set by a file the shell sources is read only through the
@@ -3385,8 +3450,10 @@ first 142 new expectations and the first changed row fail 94 against the round-2
 3); the final test file fails 101 against the round-3 source (`task2-fix4-red-final.log`). Review
 round 5 added item 13, with nine blocks (232 expectations), one raised row and one changed
 assertion; the final test file fails 157 against the round-4 source (`task2-fix5-red-final.log`).
-Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1124 ]` in the UTF-8 and the C
-locale.
+Review round 6 added item 14 and the amendments it names, with five blocks (126 expectations)
+and no changed row; the final test file fails 93 against the round-5 source
+(`task2-fix6-red-final.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1250 ]`
+in the UTF-8 and the C locale.
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -5970,9 +6037,9 @@ plan-literal source `[ FAIL 14 | WARN 0 | SKIP 1 | PASS 302 ]`
 (`task4-red-adaptations-against-plan-literal.log`, every failure in the adaptation tests); green
 `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 337 ]` (`task4-green.log`).
 
-## D-100 - P15 write consent and S2: a document control refusal names the running tool, and an S2 file that is not a JSON object is a miss (2026-10-04)
+## D-100 - P15 write consent and S2: a document control refusal names the running tool, an S2 file that is not a JSON object is a miss, and a remembered transcript target grants consent only when it is well formed and a target IC-52 allows (2026-10-04)
 
-P15 Task 7's literal `R/doc-replay.R` is kept except for two behaviours:
+P15 Task 7's literal `R/doc-replay.R` is kept except for four behaviours:
 
 1. **The refusal names the running tool (IC-53, contract 2.2).** `doc_control_guard()` fills the
    `tool` field of `gptr_error_permission` from `run$tool_call$name` (else `"r"`), as P08's
@@ -5982,6 +6049,27 @@ P15 Task 7's literal `R/doc-replay.R` is kept except for two behaviours:
 2. **An S2 file that is not a JSON object is a miss (contract 11.9).** `s2_get()` returned any
    parsed JSON value, so a cache file holding a scalar or an array reached callers that read
    `$answer`; it now returns the record only when it is a named list, else `NULL`.
+3. **A malformed user-level project file is ignored (contract 11.3).** The plan's
+   `doc_consent()` read `pf$transcript$target` with `$`, so a `transcript` entry that is not a
+   JSON object (`{"transcript": "a.R"}`) made `doc_consent()` and `doc_consent_possible()`
+   throw `$ operator is invalid for atomic vectors` for every document of the project. Task 4's
+   writer `doc_project_update()` already replaces such a value. `doc_project_entry(pf, key,
+   name)` reads `record` and `transcript` entries with `[[` (no partial matching), a value that
+   is not a JSON object is absent, and a target counts only as one non-empty string.
+4. **A remembered transcript target is consent only where IC-52 allows a target.** IC-52 says
+   transcript targets lie inside the project root, have a document extension and are not a
+   control or protected path; plan self-review item 13 applies that rule to remembered
+   transcript targets, and Task 8's `doc_transcript_target()` ignores a target that fails
+   `doc_target_valid()`. The plan's `doc_consent()` granted consent to any remembered target,
+   so `../outside.R` or `.gptr/extensions/x.R` became writable. `doc_remembered_target(pf)` now
+   returns the absolute target only when it passes the same rule as Task 8's
+   `doc_target_valid()`: a known document format, strictly inside `project_root()`, and a path
+   class that is not `control`, `protected`, `critical`, `instructions`, `url` or `wildcard`.
+   Task 8 obligations: once `doc_target_valid()` exists, `doc_remembered_target()` calls it
+   instead of repeating the rule, and `doc_transcript_target()` reads the remembered target
+   through `doc_project_entry()` (its literal `doc_project_get()$transcript$target` has the
+   item 3 failure). The binding of `gptr_doc()` still accepts a document outside the root
+   (self-review item 13).
 
 Unchanged and now pinned by tests: the S2 answer is redacted with the `persist` profile at
 ingress, and every other field the caller passes (IC-74: provider, model digest, locality,
@@ -5993,4 +6081,38 @@ Validation: `progress/P15.md`, Task 7. Red (no `R/doc-replay.R`) `^doc-replay$`
 `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]` (`dev/.validation/P15/task7-red.log`); against the
 plan-literal source `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 38 ]` (`task7-plan-literal.log`: the
 tool name and the scalar S2 file); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 40 ]`
-(`task7-green.log`).
+(`task7-green.log`). Items 3 and 4 (review round 1): with 2 regression tests added and the
+round-0 source, `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 41 ]` (`task7-fix1-red.log`); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 52 ]` (`task7-fix1-green.log`).
+
+## D-101 - P20 cli-claude build: a budget value that is not finite adds no flag and a large turn cap stays a number, and white-space-only text never becomes a content block (2026-10-04)
+
+P20 Task 5's plan-literal `R/cli-claude.R` changed in two ways; the plan's five tests are
+verbatim:
+
+1. **Budget flags are finite numbers.** `pcli_claude_args()` turned `turns` into
+   `as.character(max(1L, as.integer(turns)))` and `cost` into `format(max(0.01, round(cost, 4)))`
+   for any value `pcli_scalar_num()` accepts, which includes `Inf`. `Inf` or a turn cap above
+   `.Machine$integer.max` gave an R warning inside `build()` and the argv words `"NA"` or `"Inf"`,
+   which are not numbers. A value that is not finite now adds no flag (no limit, as without a
+   budget; P06's `budget_check()` stays authoritative between requests, plan ambiguity 2), and
+   `--max-turns` is `format(max(1, floor(turns)), scientific = FALSE)`, the same word as before
+   for every value below 2^31.
+2. **White-space-only text is dropped.** `pcli_claude_content()` kept every text or context
+   block whose text was non-empty, so a block of blanks or newlines reached the CLI's Messages
+   API request, which refuses white-space-only text blocks. It now keeps a text block only when
+   `nzchar(trimws(text))`, as P12's `anthropic_user()` does; input without any block is still
+   the single `(no new input)` block.
+
+Not changed and recorded here: the first user line of a fresh claude child carries the earlier
+conversation and the input's base64 images, so its size is not bounded; P05's transport writes it
+with `write_all()`, which blocks on Windows until the CLI has read it (D-019 item 5, an open P04
+decision). A deadlock needs a CLI that stops reading stdin while its stdout pipe is full; the
+stream-json CLI is meant to read stdin as it arrives (not verified on Windows), so the expected
+effect is a pause of the R session during a large write, not a hang. Bounding the line would drop conversation or images.
+
+Validation: `progress/P20.md`, Task 5. Two tests added (+5 expectations). Against the
+plan-literal source `[ FAIL 4 | WARN 2 | SKIP 0 | PASS 39 ]`
+(`dev/.validation/P20/task5-plan-literal.log`; the two warnings are `as.integer()`'s NA
+coercions); final `^cli-claude$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 43 ]` (`task5-green.log`),
+so every later plan count for `test-cli-claude.R` is 5 higher.
