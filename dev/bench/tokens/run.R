@@ -133,10 +133,12 @@ bench_case = function(fx, standins, tok) {
       session_set_model(s, turn$model, reason = "user")
       target = model_resolve(turn$model)
     }
-    call = list(context = lapply(turn$context, function(o) {
+    # P08's gptr_call record (contract 7.8): P09's `attached` block reads the objects through
+    # call_value(), which refuses anything else
+    call = call_new(context = lapply(turn$context, function(o) {
       list(label = o$label, kind = "symbol", name = o$label,
            facts = list(class = unlist(o$class)))
-    }), envir = home, values = new.env(parent = emptyenv()), args = list(opts = list()))
+    }), envir = home, args = list(opts = list()))
     input = list(call = call, turn = k, prompt = turn$prompt)
     blocks = if (k == 1L) context_first_message(s, input) else context_turn_blocks(s, input)
     if (k == 1L) {

@@ -2497,7 +2497,7 @@ test file gives `[ FAIL 17 | WARN 5 | SKIP 0 | PASS 126 ]`, every failure in tho
 (`task6-fix1-red-final.log`). Final `^tool-edit$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 162 ]` in
 both locales (`task6-fix1-green.log`, `task6-fix1-green-clocale.log`).
 
-## D-054 - P09 evaluator: TEMPORARY skip of the gptr-shim test until P08 adds gptr_return(); P08 Task 10 MUST remove it (2026-10-04)
+## D-054 - P09 evaluator: TEMPORARY skip of the gptr-shim test until P08 adds gptr_return(); P08 Task 10 MUST remove it (2026-10-04; CLOSED 2026-10-05 by P08 Task 10)
 
 P09 Task 8 runs in an early lane, before P08. One plan test needs P08's exported
 `gptr_return()`: "the gptr shim reaches gptr:: when gptr is not visible from envir"
@@ -2513,6 +2513,16 @@ MUST delete the two comment lines and the two-line `skip_if_not()` call at the t
 block, then show the test passing (2 expectations) in its evidence. Until then `^eval-core$`
 reports `SKIP 1`. Tracked in `HANDOFF.md` (cross-plan obligations) and `progress/P09.md`
 ("Pending removal").
+
+**Closed (2026-10-05, P08 Task 10).** The two comment lines and the `skip_if_not()` call are
+deleted; the body is unchanged. The test needs `gptr::gptr_return` to be a real export: under
+`devtools::test()` pkgload's `load_all()` exposes every object in the package environment but
+`::` still reads the NAMESPACE exports, so without `export(gptr_return)` the evaluation ended in
+status `error` ("'gptr_return' is not an exported object from 'namespace:gptr'";
+`dev/.validation/P08/task10-d054-eval-core-red-without-export.log`, `[ FAIL 2 | WARN 0 | SKIP 0 |
+PASS 231 ]`). P08 Task 10 therefore takes `export(gptr_return)` and `man/gptr_return.Rd` now
+(D-123 item 3). `^eval-core$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 233 ]`, the shim test with its
+2 expectations (`dev/.validation/P08/task10-d054-eval-core-counts.log`).
 
 ## D-055 - P09 evaluator: session changes are taken before gptr renders the plots; added promises and active bindings show their kind; non-ASCII and invalid names never make eval_r() throw; code that is not valid UTF-8 is a parse error; a message sink the code leaves open is undone; values print with the home's print methods (2026-10-04)
 
@@ -3824,8 +3834,8 @@ below 1, and SQL keeps its keyword reading (Known limits).
       running them: `cp *.txt out/`, `touch *.txt`, `tee *.log`, `chmod +x *.sh`, `git add *.R`
       and `git checkout *.R`. `cp R/*.R out/`, `cp -- *.txt out/` and `touch -- *.txt` stay 2.
 20. **Review round 12 (findings against the standard).** Both findings were reproduced with a
-    probe (`task2-fix12-probe-before.log`: every listed line was 0) and judged by (A)-(C); one
-    blocker and one major were accepted.
+    probe (`task2-fix12-probe-before.log`: each of the reviewer's lines was 0) and judged by
+    (A)-(C); one blocker and one major were accepted.
     - *A glob moves the words after it (A, B).* A glob expands to every name it matches, so its
       later names and the words after it move on by as many. Round 11 read that only where a
       name can start with `-`. A glob at or before awk, gawk, sed, jq or yq program text
@@ -3967,10 +3977,10 @@ expectations), and one changed assertion. The final test file fails 127 against 
 source (`task2-fix11-red-final.log`). The first red run, in the working tree before the source
 changed and before the self-review rows were added, failed 99 (`task2-fix11-red.log`)
 (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2292 ]` at the end of round 11). Review round 12 added item
-20 with one block (169 expectations) and no changed old row. The final test file fails 118
+20 with one block (170 expectations) and no changed old row. The final test file fails 118
 against the round-11 source (`task2-fix12-red-final.log`: 117 failures and the `sed -e` error,
 which ends its block); the block as first written failed 117 in the working tree
-(`task2-fix12-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2461 ]` in
+(`task2-fix12-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2462 ]` in
 the UTF-8 and the C locale (`task2-fix12-green.log`, `task2-fix12-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
@@ -8436,3 +8446,187 @@ an envelope in `newText` rated 2 while `.gptr/mcp.json` is written) and after
 (`task10-probe1-after.log`). Review round 1 (items 4-6): the 3 added blocks are red before the fix
 `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 385 ]` (`task10-fix1-red.log`). Final `^tool-namespace$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 398 ]` (`task10-fix1-green.log`).
+
+## D-122 - P15 builtin:documents: a console call located after the transcript question is top level, a failing sidecar recovery never disables the route, doc.edit protects a hand-edited block also against a loose match and `old_text`, an open notebook or the running Rscript script is never made inert, rewind entries keep the recorded format, an all-NA score summary reads "mean NA", and document formats are read without tools::file_ext() (2026-10-05)
+
+P15 Task 13 registers `builtin:documents` (the five formats, the route `document` at order 50,
+the `documents` section, the `agent_end`, `session_tree`, `console:command` and `console:direct`
+handlers, and the services `doc.site`, `doc.edit`, `doc.s1_block`, `doc.replay`). The plan's
+source passes all of its own tests unchanged (`dev/.validation/P15/task13-green0.log`). Against
+the plan-literal source the final tests fail 18 (`task13-adapt-red-plan-literal.log`). The
+following changes go beyond the plan literal; no signature, condition class, event payload, entry
+shape or section text changes.
+1. **A console call located after the transcript question is top level.** `doc_locate()` sets
+   `call$top_level` and gives a console site `top_level = TRUE`. When no target was remembered,
+   the route asks where to record (IC-49, IC-52) and builds the console site itself, but the plan
+   left `call$top_level` at the `FALSE` that `doc_locate()` had set. The route now sets it to
+   `TRUE` when the question gave a site, as a remembered target would have.
+2. **A failing sidecar recovery is a diagnostic.** P08's `route_matches()` turns an error in
+   `match()` into a skipped route, so a sidecar that `doc_recover()` cannot read made the call
+   bypass `document`: a fresh block ran live instead of replaying (IC-45). The recovery is now
+   wrapped in `tryCatch()` with a `registry_diagnostic()`; replay and recording go on.
+3. **doc.edit never changes a hand-edited block** (contract 7.0, 7.10). The plan refused an edit
+   only when its `oldText` matched a hand-edited block's lines exactly. P10's edit tool also
+   accepts `old_text` (`edit_normalize_args()`) and matches loosely when the exact text is not
+   found. With the plan literal, a loose match rewrote the hand edit and then refreshed the
+   block's `date=` and `sha=`, so the block read as gptr's own. Now `old_text` is read too, and
+   after the tool ran, a hand-edited block whose body changed is restored (the text before the
+   edit is written back under the md5 check) and the edit is refused with the same error result.
+4. **An open notebook and the running script are never made inert.** IC-50: gptr never writes the
+   notebook open in this Jupyter kernel; D-109: the script this process runs under Rscript is
+   written only at its exit. `doc_set_inert()` (the `session_tree` hook) wrote both. It now
+   writes neither, returns `FALSE` and prints one notice.
+5. **Rewind entries keep the recorded format.** The plan wrote `doc_format_of(doc)` into the
+   `gptr.doc_block` entries it appends, so a console transcript block (recorded with `format =
+   "transcript"`) was logged as `"r"` when undone or revived. The entry now repeats the format the
+   block was recorded with. Records without a string `doc` or `block` are skipped instead of
+   failing `vapply()`.
+6. **An all-NA score summary reads "mean NA".** The plan's `doc_s1_summary()` gave
+   `mean NaN` (the mean of nothing) where P13's own `s1_summary()` gives `mean NA`.
+7. **Document formats are read with P01's `path_ext()`** (FIX-5, CI-5, D-111 item 1).
+   `doc_format_of()` called `tools::file_ext()`, which on R >= 4.6 calls `basename()` and stops on
+   a non-ASCII document name in a non-UTF-8 locale. Every caller of `doc_format_of()` (the
+   locator, the writer, transcript targets) is affected. R 4.6's rule is kept: `".R"` has no
+   extension.
+
+Not behavioural: `doc_console_append()` leaves redaction to `doc_transcript_append()`, which
+already redacts with the persist profile (D-117 item 3); the `doc.replay` test gives itself its
+own replay table (`local_replay_table()`, D-119 item 5's test isolation).
+
+IC-74 (07 section 6, P15 row): console lines, rewind notes and System 1 one-line blocks are
+written only under write consent and redacted; the one-line block's `model=` keeps the model
+P13's `meta` names; the route replays with no provider call and no discovery (Task 12).
+
+Validation: `progress/P15.md`, Task 13. `^doc-(formats|replay|io)$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 903 ]`, the same under `LC_ALL=C LANG=C`.
+
+## D-123 - P08 session SDK verbs: a verb that starts a run freezes its safety record then and re-checks egress and replay under it (a refusal keeps the pending call), one approved gptr_cancel() call covers every session it names, and export(gptr_return) is taken early for D-054 (2026-10-05)
+
+P08 Task 10 (`R/gptr-sdk.R`, `tests/testthat/test-gptr-sdk.R`). The plan's six verbs, signatures,
+classes and its 13 tests are unchanged (they give exactly the plan's 55 expectations); three
+behavioural changes, each with its own test:
+
+1. **A run that a verb starts is guarded and frozen when it starts** (IC-74, 07 section 5;
+   IC-45; IC-29; the Task 9 obligation of D-114 review round 3). The plan's `sdk_start()` called
+   `run_start(s, NULL, opts)` directly, so a `.run = FALSE` run got P06's plain
+   `safety_snapshot()` without the protected `ollama_local_only`, and nothing re-checked egress
+   or replay after the queue-time check. `sdk_start()` now takes a root run's record once
+   (`gateway_run_safety()`), runs `gateway_guards()` under it (the pending call's own `replay =`
+   and `.opts$context`; for a queued follow-up without a pending call, the settings and the
+   process mode) and starts the run with `gateway_run_start(s, NULL, opts, cur, safety)`. The
+   guards run before the pending options are taken, so a refusal leaves the session idle with its
+   pending call and held record in place for a later retry. Tests "a pending run freezes its
+   safety record when a verb starts it (07 section 5)" (5: relaxed by a human after queueing is
+   `FALSE` at start, tightened again is `TRUE`, options set in between never relax it) and
+   "starting a pending run re-checks egress and replay; a refusal keeps it pending" (11: an
+   acknowledgement withdrawn after queueing is `gptr_error_egress` naming the provider, the
+   process switched to replay is `gptr_error_not_recorded`, no request either time, the call
+   still pending, then one request once both allow it). Against the plan-literal source the
+   first fails 3 times (no `ollama_local_only` in the record) and the second 6 times (the
+   withdrawn acknowledgement was ignored and the live request was sent).
+2. **One approved `gptr_cancel()` call consumes one token** (IC-53 item 3: "the dispatcher
+   approved exactly that call ... a one-shot token on the run"). The plan's loop called
+   `gateway_control_other()` per session, so cancelling two other sessions from model code needed
+   two approvals and failed after aborting the first. `sdk_control_other()` checks once per call,
+   when any named session is not the running one, before anything is aborted. Test "one approved
+   gptr_cancel() call may cancel a list of other sessions (IC-53)" (4; an error against the
+   plan-literal source).
+3. **`export(gptr_return)` and `man/gptr_return.Rd` are taken in this task** (D-054; plan Task 12
+   generates P08's NAMESPACE). D-054's test evaluates `r = gptr_return(5)` in a home that cannot
+   see gptr, so `gptr_shim()` rewrites the call to `gptr::gptr_return`, which `::` resolves only
+   for a NAMESPACE export, also under `load_all()`. The lines come from the document action in a
+   scratch copy of `HEAD` plus `R/gptr-sdk.R` (`dev/.validation/P08/task10-document-scratch.log`);
+   the example (`y = gptr_return(1:3)`) needs nothing else. The other five verbs keep their
+   roxygen tags but wait for Task 12 with `gptr` and its six methods (D-113 item 3): their
+   examples call `gptr()`, which is not exported yet, so R CMD check would fail them. A document
+   run in the shared tree must not commit those lines before Task 12.
+
+Coverage tests for plan behaviour without a plan test (pass against the plan-literal source too):
+"a follow-up on a session without a kept home runs in the verb's caller [R2]" (5) and
+"gptr_return() keeps a name bound in the kept home by name (03 5.1)" (4).
+
+Validation: `progress/P08.md`, Task 10. Red (no source) `^gptr-sdk$`
+`[ FAIL 20 | WARN 0 | SKIP 0 | PASS 6 ]`; against the plan-literal source 9 failures and one
+error in the adaptation tests only (`task10-red-adaptations-against-plan-literal.log`); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 84 ]` (55 plan + 29 adaptation and coverage expectations).
+
+## D-124 - P13 builtin:system1: the built-in also registers the ollama-system-one adapter (IC-74), the Jev provider records carry their prices as a data frame, and seven Task 9 tests follow the test process's replay option, D-099's egress rule, the mock server's working directory and P01's fake classifier, and (review round 1) P07's `{s1}` alias still names `jev` when only a local classifier makes System 1 usable (forward note) (2026-10-05)
+
+P13 Task 9 (`R/s1-client.R`; tests appended to `test-s1-client.R`, `test-s1-route.R`,
+`test-s1-emulate.R`). The section text, the provider ids, URLs, keys, rate and model ids, the
+route (order 10), the section (T0, 650, 150) and the `s1.decide` declaration are the plan's.
+
+1. **`ollama-system-one` is registered by `builtin_system1()`** (IC-74; 07-local-ollama.md
+   sections 3 and 6; D-120 item 11). P05's built-in `ollama` record and its Clef catalog
+   entries route decision models to that api, and until now only tests registered it
+   (`local_s1_ollama_adapter()`). The built-in test also checks its transport and classify
+   functions.
+2. **Prices are a data frame.** The plan's `s1_jev_model()` gave `prices` as a list of price
+   records (catalog JSON shape), which P02's `kind_check_provider()` refuses (`prices` must be a
+   data frame), so `builtin:system1` would fail to load. The same rates ($0.042 per million input
+   tokens, output and cache reads free, from 2026-09-15) are a one-row data frame, as P01's fake
+   records carry them.
+3. **Tests.** `setup.R` and `dev/ci/isolated-check.R` set `options(gptr.replay = "replay")`,
+   which `replay_mode()` reads before `GPTR_REPLAY`. The three tests that set
+   `GPTR_REPLAY = "live"` therefore also set the option.
+   - The IC-47 test's `remote` spec (`local = TRUE`, not offline) names a loopback endpoint,
+     because the `local` hint alone needs the egress acknowledgement (D-099).
+   - The four mock-server tests (the choices test below included) start the server before
+     `s1_fresh()` moves the working directory, which `test_path()` resolves against.
+   - The INFRA-18 choices test asks the mocked `/systemone` through the TypeSafe adapter rather
+     than P01's fake classifier. The fake refuses undescribed choices (`{"liver": null}`, 04a's
+     wire shape; D-077), and a factor's options never carry descriptions. The plan's assertions
+     are unchanged, plus one: the refused labels send nothing.
+   - The section test adds IC-74's local case: with a verified local classifier (P05's
+     `catalog_local_classifier()` mocked) and no TypeSafe key, the section is shown.
+
+Review round 1 (`progress/P13.md`, Task 9 review round 1):
+
+4. **Open gap, forward note to P07's owner and the coordinator; no P13 code change.** With only
+   a verified local classifier (no TypeSafe key, `system1` unset), the section is shown as 07
+   section 5 requires, but P07's `prompt_s1_alias()` writes `jev` for `{s1}`, and `s1_target()`
+   resolves `jev` to `typesafe/jev-latest` (07 section 1), which fails without a key
+   (`task9-fix1-probe.log`). Contract 9.3 fills `{s1}` with the configured System 1 alias, which
+   here is the local classifier. The fix belongs to `prompt_s1_alias()` (07 section 6: P07/P08
+   own "local classifier prompt without keys"), which also fills `{s1}` in P15's `documents`
+   section: when the session's `system1` setting is unset and `model_default("system1")` is not
+   `typesafe/*`, write that reference quoted (`"ollama/clef-flash"`). Giving `jev` a local
+   meaning in `s1_target()` instead would redirect a user's own `model = "jev"`, so it is left to
+   the coordinator. With the fix, add a test that the rendered `{s1}` names a model that
+   `s1_target()` reaches without a key.
+
+Validation: `progress/P13.md`, Task 9. Red `[ FAIL 34 | WARN 0 | SKIP 0 | PASS 658 ]`
+(`task9-red.log`; every failure the missing route, provider, section or service). Negative
+control: the final tests on a scratch copy without the two `on_load()` declarations,
+`[ FAIL 33 | WARN 0 | SKIP 0 | PASS 663 ]` (`task9-red-final.log`). Green
+`^s1-(client|emulate|route)$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 781 ]` (`task9-green.log`;
+unchanged after review round 1, `task9-fix1-green.log`).
+
+## D-125 - P10 golden transcript: P07's token runner passes P08's gptr_call record to the context blocks, so P09's attached block describes the fixture's objects instead of rendering a describe failure (2026-10-05)
+
+P10 Task 13 adds `dev/bench/tokens/fixtures/ns02b-data-first-pipe.json` (byte-identical to the
+plan) and its `baseline.csv` row through P07's runner. One change outside the task's file list:
+
+1. **`bench_case()` builds its call with `call_new()`** (`dev/bench/tokens/run.R`, P07's
+   development runner). P07's runner passed a plain list shaped like a call record as
+   `input$call`. P07's plan says `input$call` is P08's `gptr_call` (contract 7.8), and P08's
+   `call_value()` refuses anything else (D-102 item 6, which added the class check). Since P09's
+   `attached` block exists, the runner's first message therefore read
+   ``<?> (describe failed: `call` must be an object of class <gptr_call>, not a list of
+   length 4.)`` instead of a description of `mice`. So the measured `input_total` was lower than
+   real (`ns02b-data-first-pipe` 3,092 instead of 3,280) and `facts` found only the block's name
+   (1 instead of 4, which would have made the row's no-loss gate empty). `bench_case()` now calls
+   `call_new(context = ..., envir = home, args = list(opts = list()))`, with the same context
+   items, environment and options as before. With that, the row equals the plan's figures
+   exactly: `2,1271,3280,130,0,0,4,1638,4014`. The tolerances, gates, static prefixes, the
+   `prefix = 0.02,` line that P24 edits, and P07's committed rows are unchanged. P07's own rows
+   now measure their `<attached>` block too (`ns02-mixed-model`: `facts` 1 -> 4, `input_total`
+   5,570 -> 5,750), which is still below their baselines (6,088). As the plan says, P10 updates
+   only its own row.
+
+Validation: `progress/P10.md`, Task 13. The probe `task13-attached-probe.log` shows the
+`attached` text before (the describe failure) and with `call_new()` (the data frame with its
+three columns). The bench logs are `task13-red.log` (before the fix: `facts 1`,
+`input_total 3092`), `task13-red2-runner-fixed.log` (the plan's error, `no baseline row`) and
+`task13-green.log` (`OK: 4 static prefixes and 3 golden transcripts within the baseline
+tolerances`).

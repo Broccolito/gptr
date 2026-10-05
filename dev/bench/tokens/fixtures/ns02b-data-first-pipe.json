@@ -1,0 +1,60 @@
+{
+  "id": "ns02b-data-first-pipe",
+  "north_star": 2,
+  "description": "mice |> gptr(\"Which columns have missing values, and how should I impute them?\") in an Rscript run with a small model: minimal preset, auto mode, no human, no bound document; one composed r call that calls the gptr$describe() member, then the answer.",
+  "mode": "auto",
+  "human": false,
+  "preset": "minimal",
+  "models": [
+    "benchsmall/benchsmall-1"
+  ],
+  "standins": [],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: Rscript (no human present)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Mixed models: lme4; report estimates with 95% confidence intervals."
+  },
+  "objects": {
+    "mice": "data.frame(mouse = rep(sprintf('m%02d', 1:12), each = 4), diet = rep(c('control', 'HF'), 24), weight = replace(round(20 + (1:48) %% 7 + rep(c(0, 3), 24), 1), c(5, 17, 30), NA))"
+  },
+  "facts": [
+    "mice",
+    "weight",
+    "diet",
+    "mouse"
+  ],
+  "turns": [
+    {
+      "prompt": "Which columns have missing values, and how should I impute them?",
+      "source": "prompt",
+      "context": [
+        {
+          "label": "mice",
+          "class": "data.frame"
+        }
+      ],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\ngptr$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)"
+              },
+              "result": "weight \n     3 \n<numeric> length 48, 432 B\n  min 20, median 25, max 29; 6.2% NA\ncontrol      HF \n      2       1 \n+ miss <numeric length 3>",
+              "details": {
+                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\ngptr$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)",
+                "status": "ok"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Only `weight` has missing values: 3 of 48 rows (2 control, 1 HF). Weight is measured four times per mouse, so impute within mouse (the mean of that mouse's observed weights), or skip imputation and fit the mixed model on the 45 observed rows, which handles unbalanced repeats. The counts per column are in `miss`.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}
