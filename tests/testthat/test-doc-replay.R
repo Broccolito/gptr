@@ -1751,3 +1751,237 @@ test_that("gptr_cache(\"prune\") keeps the answers of queued blocks (IC-50, IC-5
   expect_identical(gptr_cache("prune", "s2"), 4L)
   expect_identical(gptr_cache()$entries, c(0L, 0L, 0L, 0L))
 })
+
+# ---- Task 15: gptr_source() (contract 6.4; report 14 section 4.4.2) -----------------------------
+
+# An environment whose gptr() stands in for the gateway: the document route first, then (when it
+# passes) a scripted "run" that evaluates `code` in the caller's frame as the agent's r call and
+# writes the block through the agent_end hook, as the real run does
+doc_source_env = function(code = "n = 99", log = new.env()) {
+  e = new.env()
+  log$runs = 0L
+  e$log = log
+  e$gptr = function(prompt, ..., replay = NULL) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$interp = character()
+    call$context = list()
+    call$session = NULL
+    call$envir = parent.frame()
+    call$args = list(replay = replay)
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    call$doc = NULL
+    if (doc_route_match(call)) {
+      res = doc_route_run(call)
+      if (!inherits(res, "gptr_route_pass")) return(res)
+    }
+    log$runs = log$runs + 1L
+    log$site = call$doc
+    eval(parse(text = code), call$envir)
+    s = doc_test_session(list(doc_test_turn(code, prompt = prompt)))
+    doc_on_agent_end(list(status = "idle", doc = call$doc, turns = 1L), list(session = s))
+    s
+  }
+  e
+}
+
+test_that("gptr_source() replays fresh blocks, regenerates stale ones and skips their old code", {
+  local_project()
+  local_gptr_options(record = "auto")
+  withr::local_options(gptr.replay = NULL)
+  f = file.path(getwd(), "analysis.R")
+  fresh_body = "a = 1"
+  writeLines(c(
+    "fresh = gptr(\"first step\")",
+    doc_render_block("aaaaaa", list(model = "m", prompt = prompt_hash("first step"),
+                                    sha = doc_body_sha(fresh_body)), fresh_body),
+    "stale = gptr(\"second step, reworded\")",
+    doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("second step")),
+                     "old_ran = TRUE"),
+    "after = a + 1"), f)
+  e = doc_source_env(code = "n = 99")
+  out = gptr_source(f, replay = "auto", envir = e)
+  expect_identical(e$log$runs, 1L)
+  expect_identical(e$log$site$kind, "srcref")
+  expect_identical(e$log$site$driver, "gptr_source")
+  expect_identical(e$a, 1)
+  expect_identical(e$n, 99)
+  expect_false(exists("old_ran", envir = e, inherits = FALSE))
+  expect_identical(e$after, 2)
+  expect_identical(out$id, c("aaaaaa", "bbbbbb"))
+  expect_identical(out$action, c("replayed", "regenerated"))
+  expect_identical(out$status, c("fresh", "fresh"))
+  b = doc_find_blocks(readLines(f))
+  expect_identical(doc_block_body(readLines(f), b[2, ]), "n = 99")
+  expect_identical(b$header[[2]]$prompt, prompt_hash("second step, reworded"))
+  expect_null(getOption("gptr.replay"))
+})
+
+test_that("a call without a block runs and is recorded; replay mode refuses a stale block", {
+  local_project()
+  local_gptr_options(record = "auto")
+  withr::local_options(gptr.replay = NULL)
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c("x = gptr(\"count rows\")", "y = 2"), f)
+  e = doc_source_env(code = "n = nrow(mtcars)")
+  out = gptr_source(f, replay = "auto", envir = e)
+  expect_identical(out$action, "ran")
+  expect_identical(e$n, 32L)
+  again = gptr_source(f, replay = "replay", envir = e)
+  expect_identical(again$action, "replayed")
+  expect_identical(e$log$runs, 1L)
+  txt = readLines(f)
+  txt[1] = "x = gptr(\"count the rows\")"
+  writeLines(txt, f)
+  expect_error(gptr_source(f, replay = "replay", envir = e), class = "gptr_error_stale_block")
+  expect_null(getOption("gptr.replay"))
+  expect_length(doc_state()$sources, 0L)
+})
+
+test_that("gptr_source() validates its arguments and runs plain scripts", {
+  local_project()
+  f = file.path(getwd(), "plain.R")
+  writeLines(c("x = 1", "y = x + 1"), f)
+  e = new.env()
+  out = gptr_source(f, replay = "replay", envir = e)
+  expect_identical(e$y, 2)
+  expect_identical(nrow(out), 0L)
+  expect_named(out, c("id", "lines", "prompt", "status", "model", "date", "tokens", "cost",
+                      "session", "action"))
+  expect_error(gptr_source(f, replay = "sometimes"), class = "gptr_error_invalid_argument")
+  rmd = file.path(getwd(), "r.Rmd")
+  writeLines("x", rmd)
+  expect_error(gptr_source(rmd), class = "gptr_error_invalid_argument")
+  echoed = cli::cli_fmt(gptr_source(f, envir = e, echo = TRUE))
+  expect_identical(echoed, c("> x = 1", "> y = x + 1"))
+})
+
+# ---- Task 15 additions (dev/DEVIATIONS.md D-128) ------------------------------------------------
+
+test_that("gptr_source() keeps UTF-8 literals exact in a non-UTF-8 locale (IC-62)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  word = "caf\u00e9"
+  prompt = paste(word, "step")
+  body = "a = 1"
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c(paste0("x = \"", word, "\""), paste0("fresh = gptr(\"", prompt, "\")"),
+               doc_render_block("aaaaaa", list(model = "m", prompt = prompt_hash(prompt),
+                                               sha = doc_body_sha(body)), body)),
+             f, useBytes = TRUE)
+  bytes = readBin(f, "raw", n = file.size(f))
+  local_name_locale()
+  e = doc_source_env()
+  out = gptr_source(f, replay = "replay", envir = e)
+  expect_identical(e$x, word)
+  expect_identical(charToRaw(e$x), charToRaw(word))
+  expect_identical(out$action, "replayed")
+  expect_identical(e$log$runs, 0L)
+  expect_identical(e$a, 1)
+  expect_identical(readBin(f, "raw", n = file.size(f)), bytes)
+})
+
+test_that("gptr_source() of a missing file or a directory is an invalid argument", {
+  local_project()
+  err = expect_error(gptr_source(file.path(getwd(), "missing.R"), envir = new.env()),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "file")
+  dir.create(file.path(getwd(), "d.R"))
+  expect_error(gptr_source(file.path(getwd(), "d.R"), envir = new.env()),
+               class = "gptr_error_invalid_argument")
+  expect_length(doc_state()$sources, 0L)
+})
+
+test_that("gptr_source() without `replay` keeps GPTR_REPLAY and the replay setting (7.8)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  withr::local_options(gptr.replay = NULL)
+  withr::local_envvar(GPTR_REPLAY = "replay")
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c("x = gptr(\"count the rows\")",
+               doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("count rows")),
+                                "old_ran = TRUE")), f)
+  before = readLines(f)
+  e = doc_source_env()
+  expect_error(gptr_source(f, envir = e), class = "gptr_error_stale_block")
+  expect_identical(e$log$runs, 0L)
+  expect_false(exists("old_ran", envir = e, inherits = FALSE))
+  expect_identical(readLines(f), before)
+  expect_null(getOption("gptr.replay"))
+  withr::local_envvar(GPTR_REPLAY = NA, R_USER_CONFIG_DIR = withr::local_tempdir("gptr-config-"))
+  writeLines('{"replay": "replay"}', settings_path("user", create = TRUE))
+  expect_identical(replay_mode(), "replay")
+  expect_error(gptr_source(f, envir = e), class = "gptr_error_stale_block")
+  expect_identical(e$log$runs, 0L)
+  expect_identical(readLines(f), before)
+  out = gptr_source(f, replay = "auto", envir = e)
+  expect_identical(e$log$runs, 1L)
+  expect_identical(out$action, "regenerated")
+  expect_null(getOption("gptr.replay"))
+  expect_length(doc_state()$sources, 0L)
+})
+
+test_that("gptr_source() reports a stale call it ran without write consent as `ran`", {
+  local_project()
+  local_gptr_options(record = "off")
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c("x = gptr(\"count the rows\")",
+               doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("count rows")),
+                                "old_ran = TRUE")), f)
+  before = readLines(f)
+  e = doc_source_env(code = "n = 99")
+  out = gptr_source(f, replay = "auto", envir = e)
+  expect_identical(e$log$runs, 1L)
+  expect_identical(e$n, 99)
+  expect_false(exists("old_ran", envir = e, inherits = FALSE))
+  expect_identical(readLines(f), before)
+  expect_identical(out$id, "bbbbbb")
+  expect_identical(out$action, "ran")
+  expect_identical(out$status, "stale")
+})
+
+test_that("gptr_source() skips a regenerated block's old code below a #line comment", {
+  local_project()
+  local_gptr_options(record = "auto")
+  withr::local_options(gptr.replay = NULL)
+  f = file.path(getwd(), "analysis.R")
+  # R's parser reads a comment that starts with "#line <digits>" as a line directive: the first
+  # and last lines of every later srcref (fields 1 and 3) shift, its parsed lines (7, 8) do not
+  writeLines(c(
+    "#line 50 is where the old analysis began",
+    "x = 1",
+    "stale = gptr(\"second step, reworded\")",
+    doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("second step")),
+                     c("old_ran = TRUE", "x = 0")),
+    "after = x + 1"), f)
+  e = doc_source_env(code = "n = 99")
+  out = gptr_source(f, replay = "auto", envir = e)
+  expect_identical(e$log$runs, 1L)
+  expect_identical(e$n, 99)
+  expect_false(exists("old_ran", envir = e, inherits = FALSE))
+  expect_identical(e$after, 2)
+  expect_identical(out$action, "regenerated")
+  b = doc_find_blocks(readLines(f))
+  expect_identical(doc_block_body(readLines(f), b[1, ]), "n = 99")
+  expect_null(getOption("gptr.replay"))
+})
+
+test_that("gptr_source() of a file it cannot read as UTF-8 is an invalid argument", {
+  local_project()
+  f = file.path(getwd(), "latin1.R")
+  writeBin(c(charToRaw("x = \""), as.raw(0xe9), charToRaw("\"\n")), f)
+  e = new.env()
+  err = expect_error(gptr_source(f, envir = e), class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "file")
+  expect_false(inherits(err, "gptr_error_doc_write"))
+  expect_false(exists("x", envir = e, inherits = FALSE))
+  testthat::local_mocked_bindings(doc_read = function(path) {
+    gptr_abort(paste0("Cannot read the document: ", path), "doc_write", path = path,
+               reason = "unreadable")
+  })
+  err = expect_error(gptr_source(f, envir = e), class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "file")
+  expect_length(doc_state()$sources, 0L)
+})

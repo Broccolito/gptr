@@ -1227,3 +1227,91 @@ doc_catalog_prune = function() {
   old = f[order(file.info(f, extra_cols = FALSE)$mtime, decreasing = TRUE)][-1L]
   as.integer(sum(suppressWarnings(file.remove(old))))
 }
+
+# ---- gptr_source() (contract 6.4; report 14 section 4.4.2) -------------------------------------
+
+#' Source a history document, regenerating stale blocks without running the old code
+#'
+#' Evaluates `file` top-level expression by expression in `envir`, like [source()] with
+#' `keep.source = TRUE`. A `gptr()` call whose block is fresh replays without calling a model
+#' and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
+#' values interpolated into it changed), or every call under `replay = "live"`, asks the model
+#' again and rewrites its block in place, and the old block is skipped, which base `source()`
+#' cannot do.
+#'
+#' @param file Path of an `.R` document.
+#' @param replay Replay mode for the calls in the file: `"auto"`, `"replay"`, `"live"` or
+#'   `"record"`. A call's own `replay =` argument wins. Left missing, each call resolves its
+#'   mode as `gptr()` does: the `gptr.replay` option, then the `GPTR_REPLAY` environment
+#'   variable, then the `replay` setting, then `"auto"`.
+#' @param envir Environment in which the expressions are evaluated.
+#' @param echo `TRUE` prints each expression before it is evaluated.
+#' @return Invisibly, the `gptr_blocks` listing of the file after the run with an extra column
+#'   `action`: `replayed`, `regenerated`, `ran`, `skipped`, or `NA` for blocks no call touched.
+#'   A stale block whose call ran but could not be rewritten (for example without write consent)
+#'   is `ran` and keeps its status.
+#' @export
+#' @examples
+#' f = tempfile(fileext = ".R")
+#' writeLines(c("x = 1", "y = x + 1"), f)
+#' gptr_source(f, replay = "replay", envir = new.env())
+gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(),
+                       echo = FALSE) {
+  scoped = !missing(replay)
+  check_string(file, "file")
+  replay = check_choice(replay, c("auto", "replay", "live", "record"), "replay")
+  check_env(envir, "envir")
+  check_flag(echo, "echo")
+  path = path_norm(file)
+  if (!identical(doc_format_of(path), "r")) {
+    gptr_abort("gptr_source() runs .R documents; knit .Rmd and .qmd documents instead.",
+               "invalid_argument", arg = "file", expected = "an .R file")
+  }
+  if (!file.exists(path) || dir.exists(path)) {
+    gptr_abort(paste0("Document not found: ", path), "invalid_argument", arg = "file",
+               expected = "an existing .R file")
+  }
+  doc_recover(path)
+  # A file that cannot be read, or is not valid UTF-8, is a bad `file` argument, not a failed
+  # document write (contract 6.4 lists no doc_write here)
+  doc = tryCatch(doc_read(path), gptr_error_doc_write = function(e) {
+    gptr_abort(conditionMessage(e), "invalid_argument", arg = "file",
+               expected = "a readable UTF-8 .R file")
+  })
+  srcfile = srcfilecopy(path, doc$lines, file.mtime(path), isFile = TRUE)
+  # The lines are marked UTF-8; `encoding = "UTF-8"` keeps the parser from translating them to
+  # the native encoding, which in a non-UTF-8 locale turns every non-ASCII character of a
+  # string literal (a prompt included) into "<U+00E9>" text (IC-62)
+  exprs = parse(text = doc$lines, keep.source = TRUE, srcfile = srcfile, encoding = "UTF-8")
+  srcs = attr(exprs, "srcref")
+  blocks = doc_find_blocks(doc$lines)
+  # The block of each expression, by its parsed lines (srcref fields 7 and 8, as the locator's
+  # doc_site_srcref() reads them): fields 1 and 3 follow `#line` directives, and R's parser
+  # reads any comment that starts with "#line <digits>" as one
+  owner = vapply(srcs, function(sr) {
+    k = which(sr[7L] > blocks$start & sr[8L] < blocks$end)
+    if (length(k)) blocks$id[k[1L]] else NA_character_
+  }, "")
+  st = doc_state()
+  depth = doc_source_push(path)
+  on.exit(doc_source_pop(depth), add = TRUE)
+  # Only a given `replay` is scoped over the file: left missing, each call resolves its mode
+  # through replay_mode() (gptr.replay > GPTR_REPLAY > settings > "auto"), so GPTR_REPLAY=replay
+  # still proves the file makes no model call (contract 7.8)
+  if (scoped) {
+    old = options(gptr.replay = replay)
+    on.exit(options(old), add = TRUE)
+  }
+  for (i in seq_along(exprs)) {
+    if (!is.na(owner[i]) && owner[i] %in% st$sources[[depth]]$skip) next
+    if (echo) msg_verbatim(paste0("> ", as.character(srcs[[i]])))
+    eval(exprs[i], envir)
+  }
+  acts = st$sources[[depth]]$log
+  # A stale block whose call ran live but was not rewritten (no write consent, a locked or
+  # conflicting document) logged nothing: its old code was skipped and the call ran
+  for (id in setdiff(st$sources[[depth]]$skip, names(acts))) acts[[id]] = "ran"
+  out = gptr_blocks(path)
+  out$action = vapply(out$id, function(id) acts[[id]] %||% NA_character_, "", USE.NAMES = FALSE)
+  invisible(out)
+}
