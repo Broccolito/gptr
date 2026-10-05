@@ -26,6 +26,8 @@ overrides its body.
 - **Naming.** The package is `gptr`; the main entry point users call is `peter()` (in scripts and at
   the console), and its member namespace is `peter$...`. Other exports keep the `gptr_` prefix.
   Older spec/plan text that says `gptr()` or `gptr$` means `peter()` / `peter$` (rename: D-135).
+  The name honours Peter Wason (System 1 / System 2 reasoning) and Peter Naur (Backus-Naur form;
+  sessions recorded as runnable documents); keep that rationale in the README and `?peter`.
 - R style: assign with `=`, never `<-`; pipe with `|>`, never `%>%`. `.lintr` (created by P01 Task 1) enforces it.
 - After editing any plan, re-run the cross-plan checks in `dev/research/assets/consolidation-tools/README.md`.
 - Run R as `Rscript --vanilla`. Tests: `Rscript --vanilla -e 'devtools::test(filter = "<name>")'`.

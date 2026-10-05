@@ -108,7 +108,15 @@ the user is working in *is* the harness and *is* the history.
   switch models mid-conversation; cross-provider conversation hand-off.
 - **REQ-15** Provider setup UX: configure providers, keys and defaults from R.
 
-### The `gptr()` function
+### The `peter()` function (formerly `gptr()`)
+
+Maintainer decision 2026-10-05 (D-135): the package stays `gptr`; the entry point is `peter()`
+and its namespace `peter$...`; other exports keep the `gptr_` prefix. The name honours Peter
+Cathcart Wason, whose work on reasoning with Jonathan Evans framed the dual-process ("System 1"
+and "System 2") view that gptr combines in one agent flow, and Peter Naur of the Backus-Naur
+form, in the spirit of recording agent sessions as readable, replayable R scripts, R Markdown,
+Quarto documents and Jupyter notebooks. Below, `gptr()` reads as `peter()`.
+
 `gptr(...)` is the **single gateway** to the harness (maintainer decision,
 2026-09-29): one variadic function that either launches the interactive
 session or acts as the function that receives a prompt. **Prompts are always

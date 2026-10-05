@@ -25,10 +25,23 @@ R environment, so useful intermediate objects remain available for your own
 code. Prompts, concrete R code and typed model decisions can be combined using
 ordinary R functions, pipes, loops and conditionals.
 
-The planned `gptr()` gateway serves both interactive conversation and
+The planned `peter()` entry point serves both interactive conversation and
 programmatic workflows. The same design targets terminal R, RStudio, Positron,
 R Markdown, Quarto and Jupyter with IRkernel, with plots and Shiny applications
 as analysis outputs.
+
+## Why `peter()`?
+
+The package is `gptr`; you talk to its agent through `peter()`. The name honours two Peters:
+
+- **Peter Cathcart Wason** (1924-2003), the cognitive psychologist whose work on human
+  reasoning, with Jonathan Evans, framed the dual-process view later known as "System 1" and
+  "System 2" thinking. gptr joins both kinds of model in one agent flow: fast, typed System 1
+  decisions inside R control flow, and System 2 reasoning models that plan and write code.
+- **Peter Naur** (1928-2016), whose name the Backus-Naur form carries: a notation for writing
+  down the syntax of programming languages. In that spirit, gptr records agent sessions as
+  ordinary documents - R scripts, R Markdown and Quarto files, Jupyter notebooks - that can be
+  read, edited and replayed.
 
 ## Design principles
 

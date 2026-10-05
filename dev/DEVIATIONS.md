@@ -9641,3 +9641,10 @@ Validation: `progress/P17.md`, Task 6.
    section 11): smallest design that meets the contract, one conservative rule over many special
    cases, no duplicated logic or redundant text. A retrospective simplicity review of the existing
    code follows; it changes no contract behaviour and keeps every acceptance test.
+3. **Why `peter`.** The name honours Peter Cathcart Wason (1924-2003), whose work on human
+   reasoning with Jonathan Evans framed the dual-process ("System 1" / "System 2") view that gptr
+   unifies (typed System 1 decisions inside R control flow, System 2 reasoning models in the agent
+   loop), and Peter Naur (1928-2016) of the Backus-Naur form, a notation for the syntax of
+   programming languages, in the spirit of recording agent sessions as readable, replayable
+   documents (R scripts, R Markdown/Quarto, Jupyter notebooks). The README and `?peter` say so.
+   The maintainer confirmed both naming calls (namespace `peter$`, other exports keep `gptr_`).
