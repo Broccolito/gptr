@@ -5901,3 +5901,96 @@ tests are verbatim. Against the plan-literal source `[ FAIL 8 | WARN 0 | SKIP 0 
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 223 ]` (`task4-green.log`), so every later plan count for
 `test-cli-common.R` is 82 higher on macOS and Linux (17 from D-093, 23 from D-095, 22 from
 D-097, 20 from this entry).
+
+## D-099 - P08 replay and egress: egress follows the effective endpoint and the Ollama local-only control, acknowledgements are keyed by the provider's own id and recorded under the file lock, nobody is asked inside a run that cannot ask, and the replay guard resolves references without discovery (2026-10-04)
+
+P08 Task 4's literal `replay_mode()`/`replay_guard()`/`egress_check()` (`R/gptr-config.R`)
+predate IC-74. Behaviours that differ from the plan literal, which Task 7 (`gptr_config()`),
+Task 9 (`gateway_guards()`, `router_guards()`), P13, P19 and P05's `gptr_providers()` consume:
+
+1. **Egress follows the effective endpoint (IC-74; architecture 6.10 "A static provider `local`
+   flag or loopback URL does not exempt a cloud-backed model or remote override"; 07 section 5;
+   D-020 item 1).** The plan exempted every provider whose record says `local = TRUE`. The new
+   `egress_state(p)` exempts an offline provider, and a local one only when its effective endpoint
+   (P05's `catalog_endpoint()`: settings `base_url` > record > environment template) is a loopback
+   address; a local provider without an HTTP endpoint is not exempt either (as `gptr_providers()`
+   shows it). So a remote `providers.ollama.base_url` or a LAN `lmstudio` needs the
+   acknowledgement, and the refusal names the origin and why.
+2. **A loopback Ollama is exempt only while local-only inference is enforced (07 sections 2.1 and
+   5: "FALSE relaxes only local-only rejection; normal egress acknowledgement remains required";
+   "a cloud route requires ... local-only disabled, and the normal egress acknowledgement").**
+   Only under the local-only policy does P05's preflight refuse a cloud model or a remote marker
+   behind a loopback server before anything is sent, and `egress_check(provider_id)` cannot see
+   the model. For an Ollama route provider (id `ollama`, or api `ollama-system-one`) the
+   exemption therefore also needs `settings_local_only("ollama")` (the protected user/session
+   control, D-094 item 1) and, inside a run, the run's frozen `safety$ollama_local_only`
+   (`catalog_local_only()`); when either relaxes it, the acknowledgement is required. Other local
+   servers (LM Studio, llama.cpp, vLLM) are not governed by this control. Projects, options,
+   `.opts` and model code cannot relax the control (D-094), so they cannot remove an
+   acknowledgement requirement either.
+3. **Acknowledgements are keyed by the provider's own id.** An alias finds the provider, and the
+   acknowledgement, the condition's `provider` and the hint use its id (as `gptr_providers()`
+   reads `egress.<id>`). An id that is not a plain provider id (`^[a-z0-9][a-z0-9-]*$`) is
+   `gptr_error_invalid_argument` (`arg = "provider_id"`), because the hint pastes it into code the
+   user is told to run.
+4. **The acknowledgement is recorded under the user file's lock (IC-71).** The plan read the
+   acknowledgements outside the lock and wrote the whole `egress` object back, so one given by
+   another R process in between was lost. `egress_record()` loads the file under its lock
+   (`settings_file_load()`), adds the one entry and writes it, keeping the other keys' JSON form;
+   a file that is not a JSON object is never rewritten.
+5. **Nobody is asked inside a run that cannot ask (IC-43, IC-53).** Besides `gptr_can_prompt()`,
+   a run whose safety record says `can_prompt = FALSE` (a background run, a child without a
+   human) never asks; the call stops with `gptr_error_egress`.
+6. **The question names the effective endpoint** (`<id> (<origin>)`) when the provider has one.
+7. **`replay_guard()` resolves a reference before splitting it.** The plan cut a reference at
+   its first `:` (the thinking suffix) and then at `/`, so a provider-less colon id such as
+   `qwen3:1.7b` was looked up as `qwen3`, another model. A string is now resolved with
+   `model_resolve(strict = FALSE)` (deterministic, no discovery, 07 section 2.1); an unknown one
+   names the provider before its first `/`, or itself (and is refused in replay mode). Fields
+   are read with `[[` (no partial matching), and `what` must be one string. Nothing in replay
+   mode discovers, prepares or contacts a provider (07 section 4; a local server is not offline,
+   so replay refuses it).
+8. **Test split, temporary.** The plan's test evaluated the `how_to_ack` hint, which calls
+   `gptr_config()` (Task 7). The hint's string and its parse are checked now; the evaluation is a
+   separate test, "following the egress hint keeps the acknowledgements already given", skipped
+   while `gptr_config()` is absent. **P08 Task 7 MUST remove that skip.**
+
+Obligations: **Task 9's `gateway_guards()`/`router_guards()`** must not skip `egress_check()` on
+the `local` hint (plan literal `local = isTRUE(pr$local) || isTRUE(pr$offline)`); they use
+`egress_state(<session provider record>)$exempt` (a session-scoped record that `provider_get()`
+cannot see) and otherwise call `egress_check()`, keeping the `.opts$context = "none"` exemption.
+The P13 (`s1_*`, plan line 3800) and P19 (`subagent_guards()`, plan line 822) literals skip
+`egress_check()` for `local` providers in the same way and should use `egress_state()`. P05's
+`provider_egress()` (the `gptr_providers()` column) still shows `ack` for a loopback Ollama while
+local-only is relaxed; it should follow item 2 (P05 follow-up, not done here).
+
+Validation: `progress/P08.md`, Task 4. Red (no Task 4 code) `^gptr-config$`
+`[ FAIL 14 | WARN 0 | SKIP 1 | PASS 262 ]` (`dev/.validation/P08/task4-red.log`); against the
+plan-literal source `[ FAIL 14 | WARN 0 | SKIP 1 | PASS 302 ]`
+(`task4-red-adaptations-against-plan-literal.log`, every failure in the adaptation tests); green
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 337 ]` (`task4-green.log`).
+
+## D-100 - P15 write consent and S2: a document control refusal names the running tool, and an S2 file that is not a JSON object is a miss (2026-10-04)
+
+P15 Task 7's literal `R/doc-replay.R` is kept except for two behaviours:
+
+1. **The refusal names the running tool (IC-53, contract 2.2).** `doc_control_guard()` fills the
+   `tool` field of `gptr_error_permission` from `run$tool_call$name` (else `"r"`), as P08's
+   `control_check()` (D-091 item 3) and P06's `session_control_check()` do; the plan always said
+   `"r"`. `control_check()` itself stays out of reach (L6, not in IC-33's kernel SDK), so the L4
+   copy keeps the same token protocol (`run$signal$control`, one-shot).
+2. **An S2 file that is not a JSON object is a miss (contract 11.9).** `s2_get()` returned any
+   parsed JSON value, so a cache file holding a scalar or an array reached callers that read
+   `$answer`; it now returns the record only when it is a named list, else `NULL`.
+
+Unchanged and now pinned by tests: the S2 answer is redacted with the `persist` profile at
+ingress, and every other field the caller passes (IC-74: provider, model digest, locality,
+image digests) is stored and read back unchanged. `s2_put()` writes to `s2_path(key)` (the plan
+built the same path from `workspace_root()`; `doc_root()` names the same directory and
+`dir.create(recursive = TRUE)` creates it).
+
+Validation: `progress/P15.md`, Task 7. Red (no `R/doc-replay.R`) `^doc-replay$`
+`[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]` (`dev/.validation/P15/task7-red.log`); against the
+plan-literal source `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 38 ]` (`task7-plan-literal.log`: the
+tool name and the scalar S2 file); green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 40 ]`
+(`task7-green.log`).

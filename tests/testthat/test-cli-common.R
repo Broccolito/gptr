@@ -446,3 +446,236 @@ test_that("a malformed rate_limit_event leaves NA fields instead of an error", {
   expect_true(is.na(rec$seven_day))
   expect_identical(pcli_cache$plan[["claude-cli"]], rec)
 })
+
+# ---- shared turn helpers (Task 4) ---------------------------------------------------------------
+
+test_that("the new input and a synthetic history come from the projected messages", {
+  msgs = list(msg_user("first question"),
+              msg_assistant(list(block_text("first answer")), api = "fake", provider = "fake",
+                            model = "fake-1"),
+              msg_user(list(block_context("workspace", "x = 1"), block_text("second question"))))
+  parts = pcli_split(msgs)
+  expect_length(parts$prior, 2L)
+  expect_length(parts$input, 1L)
+  expect_match(pcli_history_text(parts$prior), "User: first question\n\nAssistant: first answer",
+               fixed = TRUE)
+  expect_match(pcli_history_text(parts$prior), "^<conversation_history>\n")
+  expect_identical(pcli_input_text(parts$input),
+                   "<workspace>\nx = 1\n</workspace>\n\nsecond question")
+  expect_identical(pcli_history_text(list()), "")
+  expect_identical(pcli_input_text(list()), "(no new input)")
+  ctx = list(system = list(t0 = "You are gptr.", t1 = "Project notes."))
+  expect_identical(pcli_system_text(ctx), "You are gptr.\n\nProject notes.")
+})
+
+test_that("a CLI sees only the turns after the last one its own provider answered", {
+  mine = function(text) {
+    msg_assistant(list(block_text(text)), api = "cli-claude", provider = "fakeclaude",
+                  model = "claude-sonnet-5-5")
+  }
+  other = function(text) {
+    msg_assistant(list(block_text(text)), api = "anthropic-messages", provider = "anthropic",
+                  model = "claude-sonnet-5-5")
+  }
+  prior = list(msg_user("one"), mine("a1"), msg_user("two"), other("a2"))
+  unseen = pcli_unseen(prior, "fakeclaude")
+  expect_length(unseen, 2L)
+  expect_identical(msg_text(unseen[[2]]), "a2")
+  expect_length(pcli_unseen(prior[1:2], "fakeclaude"), 0L)
+  expect_length(pcli_unseen(prior, "codex"), 4L)
+  expect_length(pcli_unseen(list(), "fakeclaude"), 0L)
+})
+
+test_that("pcli_params() reads the mode and budget patched in by request_params", {
+  p = pcli_params(list(params = list(cli_mode = "auto", cli_budget = list(turns = 3, cost = 1.5))))
+  expect_identical(p, list(mode = "auto", turns = 3, cost = 1.5))
+  p = pcli_params(list(params = list(max_tokens = 1000L)))
+  expect_identical(p$mode, "manual")
+  expect_null(p$turns)
+  expect_null(p$cost)
+  expect_identical(pcli_params(list(params = list(cli_mode = "yolo")))$mode, "manual")
+})
+
+test_that("one CLI turn emits one start and one terminal event and closes the turn", {
+  opts = stub_opts()
+  opts$state$pcli_request_id = "q000000000001"
+  s = pcli_turn_new(stub_model("codex"), opts)
+  expect_true(opts$state$turn_open)
+  pcli_text_block(s, "thinking it over", kind = "thinking")
+  pcli_text_block(s, "All done.")
+  msg = pcli_done(s, usage_new(input = 10, output = 5), "stop", "completed")
+  expect_identical(event_types(opts),
+                   c("start", "thinking_start", "thinking_delta", "thinking_end", "text_start",
+                     "text_delta", "text_end", "done"))
+  expect_identical(msg$route, "plan-cli")
+  expect_identical(msg$request_id, "q000000000001")
+  expect_identical(msg_text(msg), "All done.")
+  expect_identical(msg$content[[1]]$type, "thinking")
+  expect_equal(msg$usage$input, 10)
+  expect_false(opts$state$turn_open)
+  expect_identical(pcli_fail(s, "provider", "too late"), msg)
+  expect_length(opts$log$events, 8L)
+})
+
+test_that("a failed turn emits one error event with the class and the partial message", {
+  opts = stub_opts()
+  s = pcli_turn_new(stub_model("claude"), opts)
+  pcli_text_block(s, "partial")
+  msg = pcli_fail(s, "billing", "billed to an API key", status = 402L)
+  expect_identical(event_types(opts), c("start", "text_start", "text_delta", "text_end", "error"))
+  err = opts$log$events[[5]]$error
+  expect_identical(err$class, "billing")
+  expect_identical(err$status, 402L)
+  expect_identical(msg$stop_reason, "error")
+  expect_identical(msg$error_message, "billed to an API key")
+  expect_identical(msg_text(msg), "partial")
+  expect_identical(pcli_done(s, usage_new()), msg)
+})
+
+test_that("a CLI turn without reported usage records unknown usage, never zeros (IC-74)", {
+  opts = stub_opts()
+  s = pcli_turn_new(stub_model("claude"), opts)
+  msg = pcli_fail(s, "billing", "billed to an API key")
+  expect_true(is.na(msg$usage$input))
+  expect_true(is.na(msg$usage$output))
+  expect_true(is.na(msg$usage$cost$total))
+  opts = stub_opts()
+  s = pcli_turn_new(stub_model("codex"), opts)
+  pcli_text_block(s, "Hi.")
+  msg = pcli_done(s, NULL)
+  expect_true(is.na(msg$usage$total))
+  expect_true(is.na(msg$usage$cost$total))
+  done = opts$log$events[[length(opts$log$events)]]
+  expect_identical(done$type, "done")
+  expect_identical(done$usage, msg$usage)
+  # reported tokens without total_cost_usd keep an unknown cost; a reported zero stays zero
+  s = pcli_turn_new(stub_model("codex"), stub_opts())
+  msg = pcli_done(s, usage_new(input = 10, output = 5, cost = NULL))
+  expect_equal(msg$usage$input, 10)
+  expect_true(is.na(msg$usage$cost$total))
+  s = pcli_turn_new(stub_model("claude"), stub_opts())
+  msg = pcli_done(s, usage_new(input = 10, output = 5, cost = list(total = 0)))
+  expect_identical(msg$usage$cost$total, 0)
+})
+
+test_that("the child table holds adapter states weakly", {
+  st = new.env()
+  pcli_track("s00000000aa", st)
+  expect_identical(pcli_tracked("s00000000aa"), st)
+  rm(st)
+  gc()
+  expect_null(pcli_tracked("s00000000aa"))
+  st2 = new.env()
+  pcli_track("s00000000bb", st2)
+  pcli_untrack("s00000000bb")
+  expect_null(pcli_tracked("s00000000bb"))
+})
+
+test_that("stopping a claude child mid-turn sends the interrupt, then kill_all()", {
+  seen = new.env()
+  seen$written = character()
+  seen$killed = 0L
+  seen$closed = 0L
+  p = stub_process()
+  state = new.env()
+  state$process = p
+  state$cli_api = "cli-claude"
+  state$turn_open = TRUE
+  local_mocked_bindings(
+    write_all = function(p, data) {
+      seen$written = c(seen$written, data)
+      invisible(p)
+    },
+    write_close = function(p) {
+      seen$closed = seen$closed + 1L
+      invisible(p)
+    },
+    reactor_pump = function(until = function() FALSE, slice_ms = 100L, allow_runs = NULL,
+                            timeout = Inf) {
+      seen$allow = allow_runs
+      state$interrupt_acked = TRUE
+      invisible(until())
+    },
+    kill_all = function(p, grace = 2) {
+      seen$killed = seen$killed + 1L
+      p$alive = FALSE
+      invisible(TRUE)
+    }
+  )
+  expect_true(pcli_stop_child(state))
+  line = json_decode(seen$written[[1]])
+  expect_identical(line$type, "control_request")
+  expect_identical(line$request$subtype, "interrupt")
+  expect_identical(line$request_id, state$interrupt_id)
+  expect_identical(seen$allow, character())
+  expect_identical(seen$killed, 1L)
+  expect_identical(seen$closed, 1L)
+  expect_null(state$process)
+  expect_false(state$turn_open)
+  codex = new.env()
+  codex$process = stub_process(4343L)
+  codex$cli_api = "cli-codex"
+  codex$turn_open = TRUE
+  expect_true(pcli_stop_child(codex))
+  expect_length(seen$written, 1L)
+  expect_identical(seen$killed, 2L)
+  expect_false(pcli_stop_child(codex))
+})
+
+test_that("a watched child is stopped through P05's glue: no watcher and no job row stay", {
+  skip_on_cran()
+  # the child of P05's process_jsonl transport has a P04 watcher and a `cli` job row (D-018);
+  # kill_all() under the living watcher would leave both behind
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"), stdin = "|")
+  withr::defer(kill_all(p, grace = 0))
+  job = id_new("j", 8L)
+  job_add("cli", job, "fakecodex", pid = p$get_pid(), stop = function() NULL)
+  withr::defer(job_remove(job))
+  watch = reactor_proc(p, on_line = function(line) NULL, on_exit = function(status) NULL)
+  withr::defer(reactor_cancel(watch))
+  state = new.env()
+  state$process = p
+  state$watch = watch
+  state$job = job
+  state$cli_api = "cli-codex"
+  state$turn_open = TRUE
+  expect_true(pcli_stop_child(state))
+  expect_null(state$process)
+  expect_false(state$turn_open)
+  expect_false(watch %in% ls(reactor_get()$procs))
+  expect_false(exists(job, envir = jobs_env()$table, inherits = FALSE))
+  expect_false(p$is_alive())
+})
+
+test_that("the wire log gets one redacted line per CLI turn start and terminal event", {
+  local_project()
+  local_gptr_options(wire_log = TRUE)
+  n0 = nrow(showConnections())
+  opts = stub_opts()
+  s = pcli_turn_new(stub_model("claude"), opts)
+  pcli_wire_log(s, "start")
+  pcli_done(s, usage_new())
+  rows = lapply(readLines(wire_log_path(opts$session), encoding = "UTF-8"), json_decode)
+  expect_identical(vapply(rows, function(r) r$event, ""), c("start", "done"))
+  expect_identical(rows[[1]]$url, "cli:claude")
+  expect_identical(rows[[2]]$provider, "fakeclaude")
+  expect_identical(nrow(showConnections()), n0)
+})
+
+test_that("wire-log values are redacted before encoding, so each line stays valid JSON", {
+  local_project()
+  local_gptr_options(wire_log = TRUE)
+  # a rule ending in \S* (common in redaction rules) runs on to the end of a compact JSON line
+  off = gptr_register(gptr_spec("redaction_rule", "demo-run", pattern = "demo_[0-9]{4}\\S*",
+                                anchor = "demo_", marker = "demo-run",
+                                profiles = c("stream", "code", "context", "persist")))
+  withr::defer(off())
+  opts = stub_opts()
+  s = pcli_turn_new(stub_model("claude", id = "demo_1234-model"), opts)
+  pcli_wire_log(s, "start")
+  rec = json_decode(readLines(wire_log_path(opts$session), encoding = "UTF-8")[[1]])
+  expect_identical(rec$model, "[secret:demo-run]")
+  expect_identical(rec$provider, "fakeclaude")
+  expect_identical(rec$url, "cli:claude")
+  expect_identical(rec$event, "start")
+})

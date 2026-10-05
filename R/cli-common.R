@@ -561,3 +561,422 @@ pcli_fake_provider = function(cli = c("claude", "codex"), id = NULL, models = NU
   gptr_provider(id, api = api, type = "cli", models = entries,
                 status = pcli_status(cli, id, api), offline = TRUE)
 }
+
+# ---- turn helpers shared by the two adapters (Task 4) -----------------------------------------
+
+#' Split projected messages into the earlier conversation and the new input (the messages
+#' after the last assistant message)
+#' @noRd
+pcli_split = function(messages) {
+  roles = vapply(messages, function(m) m[["role"]] %||% "", "")
+  last = max(c(0L, which(roles == "assistant")))
+  keep = seq_along(messages) > last
+  list(prior = messages[!keep], input = messages[keep])
+}
+
+#' The earlier messages a CLI conversation has not seen: those after the last assistant message
+#' that `provider` answered (a reused child, a resumed claude session or a resumed Codex thread
+#' holds the rest); all of `prior` when it answered none (03 8.3: another model may have
+#' answered them; REQ-34)
+#' @noRd
+pcli_unseen = function(prior, provider) {
+  mine = vapply(prior, function(m) {
+    identical(m[["role"]], "assistant") && identical(m[["provider"]], provider)
+  }, NA)
+  k = max(c(0L, which(mine)))
+  prior[seq_along(prior) > k]
+}
+
+#' Plain text of one content block (context blocks carry their rendered text, 04 4.1)
+#' @noRd
+pcli_block_text = function(b) {
+  switch(b[["type"]] %||% "",
+         text = b[["text"]] %||% "",
+         context = b[["text"]] %||% "",
+         image = "[image omitted]",
+         tool_call = paste0("[called tool ", b[["name"]] %||% "?", "]"),
+         "")
+}
+
+#' Plain text of one message, its blocks joined by blank lines
+#' @noRd
+pcli_message_text = function(m) {
+  parts = vapply(m[["content"]] %||% list(), pcli_block_text, "")
+  paste(parts[nzchar(parts)], collapse = "\n\n")
+}
+
+#' Plain text of the new input; never empty
+#' @noRd
+pcli_input_text = function(messages) {
+  parts = vapply(messages, pcli_message_text, "")
+  text = paste(parts[nzchar(parts)], collapse = "\n\n")
+  if (nzchar(text)) text else "(no new input)"
+}
+
+#' A synthetic history for a CLI that has not seen the earlier turns (03 8.3: another model
+#' answered them, or the CLI cannot resume); tool results longer than 2,000 characters are cut
+#' @noRd
+pcli_history_text = function(prior) {
+  if (!length(prior)) return("")
+  lines = vapply(prior, function(m) {
+    role = m[["role"]] %||% ""
+    txt = trimws(pcli_message_text(m))
+    if (identical(role, "tool_result") && nchar(txt) > 2000L) {
+      txt = paste0(substr(txt, 1L, 2000L), " [...]")
+    }
+    label = switch(role, user = "User", assistant = "Assistant", operator = "Harness note",
+                   tool_result = paste0("Tool result (", m[["tool_name"]] %||% "tool", ")"),
+                   "Note")
+    paste0(label, ": ", txt)
+  }, "")
+  paste0("<conversation_history>\nThe conversation so far (earlier turns ran on another ",
+         "model or in an earlier CLI process):\n\n", paste(lines, collapse = "\n\n"),
+         "\n</conversation_history>\n\n")
+}
+
+#' The frozen system text of a request context: T0, a blank line, T1 (04 8.1)
+#' @noRd
+pcli_system_text = function(context) {
+  parts = c(context[["system"]][["t0"]], context[["system"]][["t1"]])
+  parts = parts[nzchar(parts)]
+  paste(parts, collapse = "\n\n")
+}
+
+#' A positive number or NULL
+#' @noRd
+pcli_scalar_num = function(x) {
+  if (is.numeric(x) && length(x) == 1L && !is.na(x) && x > 0) as.numeric(x) else NULL
+}
+
+#' The run's mode and remaining budget, patched into `context$params` by builtin:cli's
+#' `request_params` hook (fields `cli_mode`, `cli_budget`); without them (a direct adapter
+#' call) the strictest mapping applies: mode `manual` and no budget flags
+#' @return list(mode = chr(1), turns = num(1) | NULL, cost = num(1) | NULL)
+#' @noRd
+pcli_params = function(context) {
+  p = context[["params"]] %||% list()
+  mode = p[["cli_mode"]]
+  ok = is.character(mode) && length(mode) == 1L && !is.na(mode) &&
+    mode %in% c("plan", "manual", "edits", "auto")
+  b = p[["cli_budget"]] %||% list()
+  list(mode = if (ok) mode else "manual", turns = pcli_scalar_num(b[["turns"]]),
+       cost = pcli_scalar_num(b[["cost"]]))
+}
+
+#' The adapter state environment of a request (04 8.1 `opts$state`; a fresh one when absent)
+#' @noRd
+pcli_state = function(opts) {
+  st = opts[["state"]]
+  if (is.environment(st)) st else new.env(parent = emptyenv())
+}
+
+#' The CLI child recorded by P05's process_jsonl transport in the adapter state, or NULL
+#' @noRd
+pcli_child = function(state) {
+  p = if (is.environment(state)) state$process else NULL
+  if (inherits(p, "process")) p else NULL
+}
+
+#' Is a processx child alive?
+#' @noRd
+pcli_alive = function(p) {
+  !is.null(p) && isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))
+}
+
+#' Remember the adapter state of a session that runs a CLI child, weakly: the session's live
+#' record owns the state, so the table never keeps a session alive
+#' @noRd
+pcli_track = function(session, state) {
+  ok = is.character(session) && length(session) == 1L && !is.na(session) && nzchar(session)
+  if (!ok || !is.environment(state)) return(invisible(NULL))
+  tab = pcli_cache$children
+  if (is.null(tab)) {
+    tab = new.env(parent = emptyenv())
+    pcli_cache$children = tab
+  }
+  assign(session, rlang::new_weakref(state), envir = tab)
+  invisible(NULL)
+}
+
+#' The adapter state of a session's CLI child, or NULL
+#' @noRd
+pcli_tracked = function(session) {
+  tab = pcli_cache$children
+  ok = is.character(session) && length(session) == 1L && !is.na(session) && nzchar(session)
+  if (is.null(tab) || !ok) return(NULL)
+  w = get0(session, envir = tab, inherits = FALSE)
+  if (is.null(w)) return(NULL)
+  st = rlang::wref_key(w)
+  if (is.null(st)) rm(list = session, envir = tab)
+  st
+}
+
+#' Forget a session in the child table
+#' @noRd
+pcli_untrack = function(session) {
+  tab = pcli_cache$children
+  if (!is.null(tab) && is.character(session) && length(session) == 1L &&
+      exists(session, envir = tab, inherits = FALSE)) {
+    rm(list = session, envir = tab)
+  }
+  invisible(NULL)
+}
+
+#' A fresh control-request id `req_<n>_<8 hex>` (07 3.10 shape; RNG-free, IC-61)
+#' @noRd
+pcli_request_id = function(state) {
+  n = (state$n_req %||% 0L) + 1L
+  state$n_req = n
+  paste0("req_", n, "_", id_new("", 8L))
+}
+
+#' A control request line of the claude stream-json protocol (07 3.10)
+#' @noRd
+pcli_control_request = function(state, request) {
+  list(type = "control_request", request_id = pcli_request_id(state), request = request)
+}
+
+#' Write one JSON line to the child through the transport's `opts$send()` (04 8.1)
+#' @noRd
+pcli_send = function(opts, obj) {
+  send = opts[["send"]]
+  if (is.function(send)) tryCatch(send(obj), error = function(e) NULL)
+  invisible(NULL)
+}
+
+#' Stop the CLI child of a session (03 8.3; 07 3.9-3.10; 15 2.9)
+#'
+#' A claude child in the middle of a turn first gets the control-protocol interrupt; with
+#' `wait_ack` the reactor is pumped (no FIFO tool runs) until the CLI acknowledges it or `grace`
+#' seconds pass. Then the child is forgotten (its late lines and exit reach no turn), its stdin
+#' is closed (a stream-json claude CLI exits at end of input) and P05's stream_process_kill()
+#' stops it: P04's reactor_cancel() of the child's watcher (interrupt, grace, kill_all() of the
+#' process tree) and the removal of its `cli` job row. kill_all() under the living watcher would
+#' leave the watcher polling the closed pipes and the job row `running` (D-018); a child without
+#' a watcher is killed directly. Called by builtin:cli's `agent_end` hook for a run that ended
+#' during a turn (Ctrl-C, gptr_cancel()) or that leaves a budgeted claude child behind, by its
+#' `session_shutdown` hook, and without the wait by the adapters themselves (billing stop, turn
+#' cap, wall-clock limit, a claude child replaced at a new run).
+#' @noRd
+pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
+  if (!is.environment(state)) return(invisible(FALSE))
+  if (!is.null(state$turn_timer)) {
+    tryCatch(reactor_cancel(state$turn_timer), error = function(e) NULL)
+    state$turn_timer = NULL
+  }
+  p = pcli_child(state)
+  if (!pcli_alive(p)) {
+    state$turn_open = FALSE
+    return(invisible(FALSE))
+  }
+  # the watcher and job row P05's transport keeps next to `process` belong to this child
+  watch = state$watch
+  job = state$job
+  if (identical(state$cli_api, "cli-claude") && isTRUE(state$turn_open)) {
+    req = pcli_control_request(state, list(subtype = "interrupt"))
+    state$interrupt_id = req$request_id
+    state$interrupt_acked = FALSE
+    sent = tryCatch({
+      write_all(p, paste0(json_encode(req), "\n"))
+      TRUE
+    }, error = function(e) FALSE)
+    if (sent && isTRUE(wait_ack)) {
+      tryCatch(reactor_pump(until = function() isTRUE(state$interrupt_acked) || !pcli_alive(p),
+                            slice_ms = 20L, allow_runs = character(), timeout = grace),
+               error = function(e) NULL, interrupt = function(e) NULL)
+    }
+  }
+  state$turn_open = FALSE
+  if (identical(state$process, p)) state$process = NULL
+  tryCatch(write_close(p), error = function(e) NULL)
+  tryCatch(stream_process_kill(p, watch, job), error = function(e) NULL)
+  invisible(TRUE)
+}
+
+#' Parse one output line when the transport did not (P05 passes `obj`)
+#' @noRd
+pcli_parse_line = function(x) {
+  if (!is.character(x) || length(x) != 1L || !nzchar(x)) return(NULL)
+  tryCatch(json_decode(x), error = function(e) NULL)
+}
+
+#' The state of one CLI turn (one INFRA-02 stream: one `start`, one terminal event)
+#' @noRd
+pcli_turn_new = function(model, opts) {
+  s = new.env(parent = emptyenv())
+  s$model = model
+  s$opts = opts
+  s$state = pcli_state(opts)
+  s$started = FALSE
+  s$done = FALSE
+  s$blocks = list()
+  s$open = list()
+  s$n = 0L
+  s$msg = NULL
+  s$response_id = NULL
+  s$response_model = NULL
+  s$t0 = reactor_now()
+  s$timer = NULL
+  s$state$turn_open = TRUE
+  s
+}
+
+#' Has the run been aborted (04 8.1 `opts$signal`)?
+#' @noRd
+pcli_aborted = function(s) isTRUE(s$opts[["signal"]]$aborted)
+
+#' Emit the turn's `start` event once (04 4.5)
+#' @noRd
+pcli_start = function(s, response_id = NULL) {
+  if (!is.null(response_id)) s$response_id = response_id
+  if (s$started) return(invisible(NULL))
+  s$started = TRUE
+  m = s$model
+  emit = s$opts[["emit"]]
+  if (is.function(emit)) {
+    emit(ev_new("start", api = m$api, provider = m$provider, model = m$id,
+                request_id = s$state$pcli_request_id, response_id = s$response_id))
+  }
+  invisible(NULL)
+}
+
+#' Emit a whole text or thinking block (start, one delta, end) and keep it
+#' @noRd
+pcli_text_block = function(s, text, kind = "text") {
+  if (!is.character(text) || length(text) != 1L || !nzchar(text)) return(invisible(NULL))
+  pcli_start(s)
+  m = s$model
+  blk = if (identical(kind, "thinking")) {
+    block_thinking(text, origin = list(api = m$api, provider = m$provider, model = m$id))
+  } else {
+    block_text(text)
+  }
+  s$n = s$n + 1L
+  i = s$n
+  emit = s$opts[["emit"]]
+  if (is.function(emit)) {
+    emit(ev_new(paste0(kind, "_start"), index = i))
+    emit(ev_new(paste0(kind, "_delta"), index = i, delta = text))
+    emit(ev_new(paste0(kind, "_end"), index = i, block = blk))
+  }
+  s$blocks[[i]] = blk
+  invisible(blk)
+}
+
+#' The content blocks of the turn in index order (text and thinking only: tools ran inside the
+#' CLI): finished blocks, and the text so far of blocks still streaming (a partial message)
+#' @noRd
+pcli_blocks = function(s) {
+  out = list()
+  for (i in seq_len(s$n)) {
+    b = if (i <= length(s$blocks)) s$blocks[[i]] else NULL
+    o = if (i <= length(s$open)) s$open[[i]] else NULL
+    if (is.null(b) && is.environment(o) && o$n > 0L) {
+      txt = paste(unlist(o$parts[seq_len(o$n)], use.names = FALSE), collapse = "")
+      b = if (identical(o$kind, "thinking")) block_thinking(txt) else block_text(txt)
+    }
+    if (!is.null(b)) out[[length(out) + 1L]] = b
+  }
+  out
+}
+
+#' The turn's assistant message (route plan-cli; 04 4.2)
+#'
+#' Without `usage` (the CLI reported none, as for a turn that failed before its result) every
+#' counter and the cost are unknown (NA, P05's usage_as(NULL)), never usage_new()'s legacy zeros
+#' (IC-74: missing usage remains unknown; D-015, D-022).
+#' @noRd
+pcli_message = function(s, stop_reason = "stop", usage = NULL, error_message = NULL,
+                       raw_stop_reason = NULL) {
+  m = s$model
+  msg_assistant(pcli_blocks(s), api = m$api, provider = m$provider, model = m$id,
+                usage = usage %||% usage_as(NULL), stop_reason = stop_reason,
+                response_id = s$response_id, response_model = s$response_model,
+                error_message = error_message, raw_stop_reason = raw_stop_reason,
+                route = "plan-cli", request_id = s$state$pcli_request_id)
+}
+
+#' End the turn: remember the message, cancel the wall-clock timer, release the served mark of a
+#' codex exec, log the terminal event
+#' @noRd
+pcli_finish = function(s, msg, event) {
+  s$done = TRUE
+  s$msg = msg
+  s$state$turn_open = FALSE
+  if (!is.null(s$timer)) {
+    tryCatch(reactor_cancel(s$timer), error = function(e) NULL)
+    s$timer = NULL
+    s$state$turn_timer = NULL
+  }
+  served = s$state$served_run
+  if (is.character(served) && length(served) == 1L) {
+    tryCatch(reactor_served(served, FALSE), error = function(e) NULL)
+    s$state$served_run = NULL
+  }
+  pcli_wire_log(s, event)
+  invisible(msg)
+}
+
+#' Emit the terminal `done` event and return the final message
+#'
+#' The event's `usage` is the message's (unknown when the CLI reported none, IC-74). An adapter
+#' passes `cost = NULL` to usage_new() when the CLI reported tokens but no cost (D-015 point 3).
+#' @noRd
+pcli_done = function(s, usage, stop_reason = "stop", raw_stop_reason = NULL) {
+  if (s$done) return(s$msg)
+  pcli_start(s)
+  msg = pcli_message(s, stop_reason, usage, raw_stop_reason = raw_stop_reason)
+  emit = s$opts[["emit"]]
+  if (is.function(emit)) {
+    emit(ev_new("done", reason = stop_reason, message = msg, usage = msg$usage))
+  }
+  pcli_finish(s, msg, "done")
+}
+
+#' Emit the one terminal `error` event (INFRA-02) with the partial message and return it
+#'
+#' `class` is a condition suffix of 04 2.2 (P06 turns it into the run's condition); the
+#' event's `error` is list(class, status, request_id, retry_after) (04 4.5).
+#' @noRd
+pcli_fail = function(s, class, message, reason = "error", status = NA_integer_, usage = NULL,
+                    retry_after = NULL) {
+  if (s$done) return(s$msg)
+  pcli_start(s)
+  msg = pcli_message(s, reason, usage, error_message = message)
+  status = suppressWarnings(as.integer(status %||% NA_integer_))
+  err = list(class = class, status = if (length(status) != 1L || is.na(status)) NULL else status,
+             request_id = s$state$pcli_request_id, retry_after = retry_after)
+  emit = s$opts[["emit"]]
+  if (is.function(emit)) emit(ev_new("error", reason = reason, message = msg, error = err))
+  pcli_finish(s, msg, "error")
+}
+
+#' The wall-clock limit of one CLI turn in seconds (option gptr.cli_turn_timeout, IC-65)
+#' @noRd
+pcli_turn_seconds = function() as.numeric(gptr_opt("cli_turn_timeout") %||% 3600)
+
+#' Start the per-turn wall-clock timer
+#' @noRd
+pcli_turn_timer = function(s, on_timeout) {
+  s$timer = reactor_timer(reactor_now() + pcli_turn_seconds(), on_timeout, run = s$opts[["run"]])
+  s$state$turn_timer = s$timer
+  invisible(s$timer)
+}
+
+#' One redacted wire-log line per CLI turn start and terminal event (P04's per-session file,
+#' IC-65; `url` names the CLI because there is no HTTP request; never prompts or output). As
+#' P04's wire_log(), the record's values are redacted before encoding, so a redaction rule can
+#' never cut across the JSON syntax of the line.
+#' @noRd
+pcli_wire_log = function(s, event) {
+  path = tryCatch(wire_log_path(s$opts[["session"]]), error = function(e) NULL)
+  if (is.null(path)) return(invisible(NULL))
+  m = s$model
+  rec = list(ts = round(as.numeric(Sys.time()), 3), request_id = s$state$pcli_request_id,
+             provider = m$provider, model = m$id,
+             url = paste0("cli:", sub("^cli-", "", m$api %||% "")),
+             seconds = round(reactor_now() - s$t0, 3), event = event)
+  rec = rec[!vapply(rec, is.null, NA)]
+  tryCatch(wire_log_append(path, json_encode(redact(rec, "persist"))), error = function(e) NULL)
+  invisible(path)
+}

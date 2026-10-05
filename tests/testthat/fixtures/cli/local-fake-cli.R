@@ -83,3 +83,69 @@ local_fake_cli = function(cli, case = "text", models = NULL, register = TRUE,
   c(fake, list(provider = spec, id = spec$id,
                model = paste0(spec$id, "/", spec$models[[1L]]$id)))
 }
+
+# Adapter options (contract 8.1) whose effects are recorded in opts$log: emitted events, lines
+# sent to the child, MCP messages dispatched, gate calls
+stub_opts = function(gate = NULL, dispatch = NULL, ...) {
+  log = new.env(parent = emptyenv())
+  log$events = list()
+  log$sent = list()
+  log$dispatched = list()
+  log$gated = list()
+  signal = new.env(parent = emptyenv())
+  signal$aborted = FALSE
+  signal$reason = NULL
+  opts = list(
+    emit = function(ev) {
+      log$events[[length(log$events) + 1L]] = ev
+      invisible(NULL)
+    },
+    send = function(obj) {
+      log$sent[[length(log$sent) + 1L]] = obj
+      invisible(NULL)
+    },
+    retry = function(info) invisible(NULL),
+    signal = signal,
+    state = new.env(parent = emptyenv()),
+    memo = new.env(parent = emptyenv()),
+    gate = gate %||% function(call) {
+      log$gated[[length(log$gated) + 1L]] = call
+      list(decision = "deny", reason = "denied in tests")
+    },
+    mcp_dispatch = dispatch %||% function(message) {
+      log$dispatched[[length(log$dispatched) + 1L]] = message
+      if (is.null(message[["id"]])) return(NULL)
+      list(jsonrpc = "2.0", id = message[["id"]],
+           result = list(content = list(list(type = "text", text = "[1] 24")),
+                         isError = FALSE))
+    },
+    tool_result = function(result, call) NULL,
+    run = NULL,
+    session = "s0123456789"
+  )
+  extra = list(...)
+  for (k in names(extra)) opts[k] = list(extra[[k]])
+  opts$log = log
+  opts
+}
+
+# A model record of a fake CLI provider (contract 4.9 fields the adapters read)
+stub_model = function(cli = "claude", id = NULL) {
+  id = id %||% (if (identical(cli, "claude")) "claude-sonnet-5-5" else "gpt-6-sol")
+  provider = paste0("fake", cli)
+  list(ref = paste0(provider, "/", id), provider = provider, id = id,
+       api = paste0("cli-", cli), type = "cli")
+}
+
+# Types of the events an adapter emitted
+event_types = function(opts) vapply(opts$log$events, function(e) e[["type"]], "")
+
+# A processx-like stand-in for a CLI child (class "process"; alive until killed)
+stub_process = function(pid = 4242L) {
+  p = new.env(parent = emptyenv())
+  p$alive = TRUE
+  p$is_alive = function() p$alive
+  p$get_pid = function() pid
+  class(p) = c("stub_process", "process")
+  p
+}
