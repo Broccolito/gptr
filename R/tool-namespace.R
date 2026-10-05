@@ -154,3 +154,565 @@ print.gptr_text = function(x, ...) {
   ns_print_lines(c(s$head, mid, s$tail))
   invisible(x)
 }
+
+# ---- member closures (contract sections 5.3 and 7.10) --------------------------------------------
+
+ns_builtin_members = c("read", "write", "edit", "grep", "find", "ls", "help", "search", "describe",
+                       "plot", "out")
+ns_reserved = c(ns_builtin_members, "sh", "script", "bg", "jobs", "py", "sql", "knit", "app", "mcp")
+
+# Namespace providers registered by later plans (`mcp`, P18), and names already refused (one
+# diagnostic each). Configuration only: no run state, no user object.
+ns_providers = new.env(parent = emptyenv())
+ns_refused = new.env(parent = emptyenv())
+
+#' Registry name of a tool spec: "grep", or "<namespace>/<name>" for namespaced members
+#' @noRd
+ns_tool_name = function(spec) {
+  if (is.null(spec$namespace)) spec$name else paste0(spec$namespace, "/", spec$name)
+}
+
+#' Formals of a member function as formals(args(fun)), so a primitive (fun = sum) has the formals
+#' args() gives it, as P02's kind_check_tool() reads them; `...` for a primitive args() knows
+#' nothing of
+#' @noRd
+ns_fun_formals = function(fun) {
+  a = args(fun)
+  if (is.function(a)) formals(a) else as.pairlist(alist(... = ))
+}
+
+#' "(pattern, path = \".\", ...)" from a function's formals; `dots = FALSE` leaves out a `...`
+#' formal (the built-in grep and ls accept Pi's argument names through it)
+#' @noRd
+ns_formals_text = function(fun, dots = TRUE) {
+  if (!is.function(fun)) return("()")
+  f = ns_fun_formals(fun)
+  if (!dots) f = f[names(f) != "..."]
+  parts = vapply(seq_along(f), function(i) {
+    if (identical(f[[i]], quote(expr = ))) return(names(f)[i])
+    paste0(names(f)[i], " = ", paste(deparse(f[[i]], width.cutoff = 500L), collapse = " "))
+  }, "")
+  paste0("(", paste(parts, collapse = ", "), ")")
+}
+
+#' A JSON Schema derived from a function's formals (contract section 9.1: all strings, required when
+#' there is no default)
+#' @noRd
+ns_formals_schema = function(fun) {
+  if (!is.function(fun)) return(list(type = "object", properties = json_obj()))
+  f = ns_fun_formals(fun)
+  f = f[names(f) != "..."]
+  empty = vapply(seq_along(f), function(i) identical(f[[i]], quote(expr = )), NA)
+  props = stats::setNames(rep(list(list(type = "string")), length(f)), names(f))
+  list(type = "object", required = I(names(f)[empty]),
+       properties = if (length(props)) props else json_obj())
+}
+
+#' Formals from a JSON Schema: required properties first (no default), optional ones default NULL;
+#' `...` when the schema is not a list (a `function(ctx)` evaluated at freeze, contract 9.1), as in
+#' P02's generated `fun`
+#' @noRd
+ns_schema_formals = function(schema) {
+  if (!is.list(schema)) return(as.pairlist(alist(... = )))
+  props = names(schema$properties %||% list())
+  req = as.character(unlist(schema$required %||% list()))
+  nms = c(intersect(req, props), setdiff(props, req))
+  f = rep(list(quote(expr = )), length(nms))
+  names(f) = nms
+  for (nm in setdiff(nms, req)) f[nm] = list(NULL)
+  as.pairlist(f)
+}
+
+#' One-line signature of a member: the spec's own `signature`; for namespaced (plugin) members the
+#' typed catalog line `gptr$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>`
+#' (contract section 9.3); otherwise the R formals `gptr$<name>(<formals>)  # <first sentence>`
+#' @noRd
+member_signature = function(spec) {
+  if (is.character(spec$signature) && length(spec$signature) == 1L) return(spec$signature)
+  if (!is.null(spec$namespace)) {
+    qualified = paste0(spec$namespace, "$", spec$name)
+    if (!is.list(spec$parameters) && !is.function(spec$fun)) {
+      return(ns_signature_line(qualified, function(...) NULL, spec$description))
+    }
+    schema = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
+    return(schema_signature(qualified, schema, description = spec$description, prefix = "gptr$"))
+  }
+  fun = spec$fun
+  if (!is.function(fun)) {
+    fun = function() NULL
+    formals(fun) = ns_schema_formals(spec$parameters)
+  }
+  ns_signature_line(spec$name, fun, spec$description)
+}
+
+#' Catalog line of a registered spec, or of a lazy plugin's placeholder from its manifest
+#' declaration without activating the plugin (contract section 10.8): `gptr$<ns>$<signature>  #
+#' <first sentence>`; NULL for a placeholder that declares no signature
+#' @noRd
+ns_spec_line = function(spec, key) {
+  if (!isTRUE(spec$lazy)) return(member_signature(spec))
+  decl = spec$declaration
+  sig = if (is.list(decl)) decl$signature else NULL
+  if (!is.character(sig) || length(sig) != 1L || !nzchar(sig)) return(NULL)
+  sentence = first_sentence(as.character(decl$description %||% ""))
+  ns = if (grepl("/", key, fixed = TRUE)) paste0(sub("/.*$", "", key), "$") else ""
+  paste0("gptr$", ns, sig, if (nzchar(sentence)) paste0("  # ", sentence))
+}
+
+#' Is an un-namespaced spec a `gptr$` member? A `fun`, or an `execute` when the spec is `deferred`
+#' (contract 9.1: "found only through gptr$search() (still callable)"), and not `hidden` (IC-37)
+#' @noRd
+ns_member_ok = function(spec) {
+  !is.null(spec) && !isTRUE(spec$lazy) && is.null(spec$namespace) &&
+    !identical(spec$exposure, "hidden") &&
+    (is.function(spec$fun) || (identical(spec$exposure, "deferred") && is.function(spec$execute)))
+}
+
+#' `gptr$<name>(<formals>)  # <first sentence>`
+#' @noRd
+ns_signature_line = function(name, fun, description, dots = TRUE) {
+  sentence = first_sentence(description %||% "")
+  comment = if (nzchar(sentence)) paste0("  # ", sentence)
+  paste0("gptr$", name, ns_formals_text(fun, dots), comment)
+}
+
+#' Names of formals without a default (`...` excluded)
+#' @noRd
+ns_required_formals = function(fmls) {
+  if (!length(fmls)) return(character())
+  empty = vapply(seq_along(fmls), function(i) identical(fmls[[i]], quote(expr = )), NA)
+  setdiff(names(fmls)[empty], "...")
+}
+
+#' Signal a missing required argument of a member call
+#'
+#' The calls evaluated in the member's frame inline base::missing(), base::substitute() and
+#' base::list() (here and in ns_collect_input()): a symbol would be looked up in that frame first,
+#' so an argument named `missing` holding a function would be called (and any argument of that name
+#' forced).
+#' @noRd
+ns_check_required = function(frame, required, tool_name) {
+  for (nm in required) {
+    if (eval(as.call(list(base::missing, as.name(nm))), frame)) {
+      shown = sub("/", "$", tool_name, fixed = TRUE)
+      gptr_abort(paste0("gptr$", shown, "(): argument `", nm, "` is missing."),
+                 "invalid_argument", arg = nm, expected = "a value")
+    }
+  }
+  invisible(NULL)
+}
+
+#' The input list of a nested member call for the gate: the supplied arguments only (the member's
+#' own defaults apply when its function runs), or, for `gate_only` members, short labels of the
+#' argument expressions, so no user object ever enters a list (a list that becomes garbage leaves
+#' the object's reference count raised; architecture section 6.4 rule R1)
+#' @noRd
+ns_collect_input = function(frame, arg_names, gate_only = FALSE) {
+  input = list()
+  for (nm in setdiff(arg_names, "...")) {
+    if (eval(as.call(list(base::missing, as.name(nm))), frame)) next
+    if (gate_only) {
+      expr = eval(as.call(list(base::substitute, as.name(nm))), frame)
+      input[[nm]] = if (is.atomic(expr) && length(expr) == 1L) {
+        expr
+      } else {
+        substr(paste(deparse(expr, width.cutoff = 60L), collapse = " "), 1L, 80L)
+      }
+      next
+    }
+    val = get(nm, envir = frame, inherits = FALSE)
+    if (!is.null(val)) input[[nm]] = val
+  }
+  if ("..." %in% arg_names && !gate_only) {
+    input = c(input, eval(as.call(list(base::list, quote(...))), frame))
+  }
+  if (!length(input)) json_obj() else input
+}
+
+#' Call symbols `fun(a = a, b = b, ...)` for a member's formals
+#' @noRd
+ns_arg_symbols = function(arg_names) {
+  out = lapply(arg_names, as.name)
+  names(out) = ifelse(arg_names == "...", "", arg_names)
+  out
+}
+
+#' Text of a tool result (its text blocks joined)
+#' @noRd
+ns_result_text = function(res) {
+  blocks = Filter(function(b) identical(b$type, "text"), res$content %||% list())
+  txt = vapply(blocks, function(b) b$text, "")
+  paste(txt, collapse = "\n")
+}
+
+#' A member function for an execute-only spec (P02 normally generates `fun`; this is the fallback)
+#'
+#' As P02's generated `fun`, `exec` gets the process ctx (ctx_default(NULL), contract 10.6), and
+#' the body is a call of an inlined closure on the inlined base::environment(), so a schema
+#' property named `exec`, `arg_names` or `tool_name` cannot shadow the machinery.
+#' @noRd
+ns_generated_fun = function(fmls, exec, tool_name) {
+  arg_names = names(fmls) %||% character()
+  run = function(frame) {
+    input = ns_collect_input(frame, arg_names, FALSE)
+    res = as_tool_result(exec(input, ctx_default(NULL)))
+    if (isTRUE(res$is_error)) {
+      gptr_abort(ns_result_text(res), "tool", tool = tool_name, status = "error")
+    }
+    res$value %||% ns_result_text(res)
+  }
+  f = function() NULL
+  formals(f) = fmls
+  body(f) = as.call(list(run, as.call(list(base::environment))))
+  f
+}
+
+#' `gptr$describe(x, budget = 150L)`: gptr_describe() of the object (P09), as printable text
+#'
+#' Copy-safety rule R4: `x` reaches only the describer's leaf functions; nothing keeps it.
+#' @noRd
+member_describe = function(x, budget = 150L) {
+  budget = check_number(budget, "budget", min = 20, int = TRUE)
+  new_gptr_text(gptr_describe(x, budget = budget))
+}
+
+#' Edit through the document backend when `path` is a bound history document (the `doc.edit` service
+#' of P15; NULL when P15 is absent or the path is not a bound document)
+#' @noRd
+edit_route_document = function(path, edits, session = NULL) {
+  if (!is.null(edit_envelope_of(edits)) || !ext_service_has("doc.edit")) return(NULL)
+  ext_service_get("doc.edit")(resolve_tool_path(path), edit_normalize_args(edits), session)
+}
+
+#' The value of an edit routed to the document backend, as a `gptr_patch`
+#' @noRd
+ns_routed_patch = function(path, res) {
+  if (inherits(res$value, "gptr_patch")) return(res$value)
+  d = res$details %||% list()
+  new_gptr_patch(path, ns_result_text(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
+}
+
+#' `gptr$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`; an edit the document backend
+#' refused (an error result, e.g. a block the user edited by hand) signals gptr_error_tool
+#' @noRd
+member_edit = function(path, edits, replace_all = FALSE) {
+  routed = edit_route_document(path, edits)
+  if (!is.null(routed)) {
+    if (isTRUE(routed$is_error)) {
+      gptr_abort(ns_result_text(routed), "tool", tool = "edit", status = "error")
+    }
+    return(ns_routed_patch(path, routed))
+  }
+  ed = edit_file(path, edits, replace_all = replace_all)
+  new_gptr_patch(path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
+}
+
+#' Behaviour of built-in members: `write` and `plot` return invisibly; P10's own `describe` passes
+#' only labels of its arguments to the gate and computes its description locally (rule R1); P10's
+#' own `edit` sends a patch envelope to the gate as `patch` (the edit schema's `edits` is an array
+#' of objects)
+#' @noRd
+ns_member_flags = function(spec) {
+  name = ns_tool_name(spec)
+  own = function(fun) identical(spec$fun, fun)
+  prepare = if (own(member_edit)) edit_nested_input else identity
+  list(gate_only = own(member_describe), visible = !(name %in% c("write", "plot")),
+       prepare = prepare)
+}
+
+#' A `gptr_member` closure for a tool spec (contract section 7.10)
+#'
+#' Formals come from the spec's `fun` (the R-callable form, whose defaults are the member's; through
+#' args(), so a primitive keeps its formals) or, for an execute-only spec, from its schema (required
+#' properties first, optional ones default NULL; `...` for a schema computed at freeze).
+#' Called while an `r` evaluation runs (model code), the call passes the gate through
+#' dispatch_nested() (P06), which records it in the outer result's `details$nested`; called by the
+#' user it runs the spec's `fun` directly. Arguments reach `fun` as promises through a call of
+#' symbols, never through a list. The member's own frame holds only its arguments: its body is a
+#' call of an inlined closure on the inlined base::environment(), so an argument named `frame`,
+#' `value`, `flags` or `environment` cannot shadow the machinery; `fun` is called through a symbol
+#' that names no argument (`member_fun`, dot-prefixed until it differs from every formal), bound in
+#' the closure's environment, so an argument named `member_fun` is neither called nor forced.
+#' @param spec A `gptr_tool` spec with a `fun` or an `execute`.
+#' @return A function of class `c("gptr_member", "function")` with attributes `tool`, `spec`,
+#'   `signature`.
+#' @noRd
+member_closure = function(spec) {
+  check_class(spec, "gptr_tool", "spec")
+  tool_name = ns_tool_name(spec)
+  member_fun = spec$fun
+  fmls = if (is.function(member_fun)) {
+    ns_fun_formals(member_fun)
+  } else {
+    ns_schema_formals(spec$parameters)
+  }
+  if (!is.function(member_fun)) member_fun = ns_generated_fun(fmls, spec$execute, tool_name)
+  arg_names = names(fmls) %||% character()
+  required = ns_required_formals(fmls)
+  flags = ns_member_flags(spec)
+  fun_sym = "member_fun"
+  while (fun_sym %in% arg_names) fun_sym = paste0(".", fun_sym)
+  assign(fun_sym, member_fun, envir = environment())
+  call_fun = as.call(c(list(as.name(fun_sym)), ns_arg_symbols(arg_names)))
+  run = function(frame) {
+    ns_check_required(frame, required, tool_name)
+    rc = ns_r_call()
+    if (!is.null(rc)) {
+      input = flags$prepare(ns_collect_input(frame, arg_names, flags$gate_only))
+      value = dispatch_nested(tool_name, input, rc$ctx)
+      if (!flags$gate_only) return(if (flags$visible) value else invisible(value))
+    }
+    eval(call_fun, frame)
+  }
+  f = function() NULL
+  formals(f) = fmls
+  body(f) = as.call(list(run, as.call(list(base::environment))))
+  structure(f, class = c("gptr_member", "function"), tool = tool_name, spec = spec,
+            signature = member_signature(spec))
+}
+
+#' Print a member: its one-line signature with the first sentence of its description
+#'
+#' @param x A `gptr_member` function.
+#' @param ... Ignored.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_member = function(x, ...) {
+  ns_print_lines(attr(x, "signature") %||% "<gptr member>")
+  invisible(x)
+}
+
+# ---- resolution (the ns.resolve and ns.names services) -------------------------------------------
+
+#' The session of the innermost running `r` evaluation, or NULL at the console
+#' @noRd
+ns_current_session = function() {
+  rc = ns_r_call()
+  if (is.null(rc) || is.null(rc$ctx)) NULL else rc$ctx$session
+}
+
+#' Id of that session (session-scoped rank-0 tools are visible to it), or NULL
+#' @noRd
+ns_session_id = function() {
+  s = ns_current_session()
+  if (is.null(s)) NULL else s$id
+}
+
+#' Record a refused namespace once, as a registry diagnostic
+#' @noRd
+ns_refuse = function(name, why) {
+  if (exists(name, envir = ns_refused, inherits = FALSE)) return(invisible(NULL))
+  assign(name, TRUE, envir = ns_refused)
+  registry_diagnostic("builtin:tools", "member_refused", "invalid_spec",
+                      paste0("gptr$", name, " refused: ", why))
+  invisible(NULL)
+}
+
+#' The member spec of an un-namespaced name, or NULL (IC-37: a spec with a `fun`, no namespace, not
+#' `hidden`; P02 refuses a plugin `r` member without a namespace at registration). Resolving a name
+#' is a first use: registry_get() activates a lazy plugin that provides it (contract 10.8)
+#' @noRd
+ns_member_spec = function(name, sid = NULL) {
+  if (grepl("/", name, fixed = TRUE)) return(NULL)
+  spec = registry_get("tool", name, session = sid)
+  if (!ns_member_ok(spec)) return(NULL)
+  spec
+}
+
+#' Un-namespaced member names, from registry_all("tool"), which leaves lazy placeholders
+#' unactivated (completion and catalogs never load a plugin)
+#' @noRd
+ns_member_names = function(sid = NULL) {
+  specs = registry_all("tool", session = sid)
+  keys = names(specs)
+  if (!length(keys)) return(character())
+  ok = vapply(seq_along(specs), function(i) {
+    !grepl("/", keys[i], fixed = TRUE) && ns_member_ok(specs[[i]])
+  }, NA)
+  keys[ok]
+}
+
+#' Registry keys "<namespace>/<name>" of the namespaced tools that are not `hidden` (IC-37: a hidden
+#' spec is callable by gptr code only, so resolution refuses it and no listing shows it), from
+#' registry_all("tool"), which leaves lazy placeholders unactivated
+#' @noRd
+ns_plugin_keys = function(sid = NULL) {
+  specs = registry_all("tool", session = sid)
+  keys = names(specs)
+  if (!length(keys)) return(character())
+  ok = vapply(seq_along(specs), function(i) {
+    grepl("/", keys[i], fixed = TRUE) && !identical(specs[[i]]$exposure, "hidden")
+  }, NA)
+  keys[ok]
+}
+
+#' Plugin namespaces (prefixes of "<namespace>/<name>" tool names) that are neither reserved nor
+#' member or provider names (IC-37); refused ones get a diagnostic
+#' @noRd
+ns_plugin_namespaces = function(sid = NULL, members = ns_member_names(sid)) {
+  ns = unique(sub("/.*$", "", ns_plugin_keys(sid)))
+  taken = unique(c(ns_reserved, members, ls(ns_providers)))
+  for (b in ns[ns %in% taken]) {
+    ns_refuse(paste0(b, "$"), "the namespace is a reserved or existing member name")
+  }
+  sort(ns[!(ns %in% taken)], method = "radix")
+}
+
+#' Names completing `gptr$` (the `ns.names` service behind P08's `.DollarNames.gptr_gateway`)
+#'
+#' @param pattern A regular expression from the completion engine ("" for all).
+#' @return Sorted chr of member, provider and plugin-namespace names.
+#' @noRd
+ns_names = function(pattern) {
+  sid = ns_session_id()
+  members = ns_member_names(sid)
+  all = unique(c(members, ls(ns_providers), ns_plugin_namespaces(sid, members)))
+  all = sort(all, method = "radix")
+  if (is.null(pattern) || !nzchar(pattern)) return(all)
+  prefix = function(cnd) startsWith(all, pattern)
+  all[tryCatch(grepl(pattern, all), warning = prefix, error = prefix)]
+}
+
+#' A `gptr_ns` node (contract section 5.3): an environment with bindings `path` and `kind`, and for
+#' provider nodes optional `members()` (chr of names) and `signatures()` (chr of lines) functions
+#' @noRd
+ns_node = function(path, kind = "plugin", members = NULL, signatures = NULL) {
+  check_strings(path, "path")
+  check_choice(kind, c("plugin", "mcp", "mcp_server"), "kind")
+  node = new.env(parent = emptyenv())
+  assign("path", as.character(path), envir = node)
+  assign("kind", kind, envir = node)
+  if (is.function(members)) assign("members", members, envir = node)
+  if (is.function(signatures)) assign("signatures", signatures, envir = node)
+  class(node) = "gptr_ns"
+  node
+}
+
+#' Register a namespace provider (contract section 7.10): `fun(path)` returns a member closure or a
+#' `gptr_ns` node for `gptr$<name>$...` (P18 registers "mcp")
+#' @noRd
+ns_register_provider = function(name, fun) {
+  check_string(name, "name")
+  check_function(fun, "fun")
+  if (name %in% setdiff(ns_builtin_members, "mcp")) {
+    gptr_abort(paste0("`", name, "` is a built-in member name."), "invalid_argument", arg = "name",
+               expected = "a name that is not a built-in member")
+  }
+  assign(name, fun, envir = ns_providers)
+  invisible(name)
+}
+
+#' Unknown member: gptr_error_unknown_member listing the members
+#' @noRd
+ns_unknown = function(path) {
+  avail = ns_names("")
+  gptr_abort(paste0("gptr$", paste(path, collapse = "$"), " is not a gptr member. Members: ",
+                    paste(avail, collapse = ", "), "."),
+             "unknown_member", name = paste(path, collapse = "$"), available = avail)
+}
+
+#' Resolve `gptr$<a>` or `gptr$<a>$<b>...` (the `ns.resolve` service behind P08's `$.gptr_gateway`)
+#'
+#' No I/O and no connections: only registry lookups and closure construction.
+#' @param path chr: the member path, e.g. "grep" or c("demo", "summarise").
+#' @return A `gptr_member` closure or a `gptr_ns` node.
+#' @noRd
+ns_resolve = function(path) {
+  check_strings(path, "path")
+  if (!length(path) || !nzchar(path[[1L]])) ns_unknown(path)
+  sid = ns_session_id()
+  head = path[[1L]]
+  if (length(path) == 1L) {
+    spec = ns_member_spec(head, sid)
+    if (!is.null(spec)) return(member_closure(spec))
+  }
+  prov = get0(head, envir = ns_providers, inherits = FALSE)
+  if (is.function(prov)) return(prov(path))
+  if (length(path) <= 2L && head %in% ns_plugin_namespaces(sid)) {
+    if (length(path) == 1L) return(ns_node(head, "plugin"))
+    spec = registry_get("tool", paste0(head, "/", path[[2L]]), session = sid)
+    if (!is.null(spec) && (is.function(spec$fun) || is.function(spec$execute)) &&
+          !identical(spec$exposure, "hidden")) {
+      return(member_closure(spec))
+    }
+  }
+  ns_unknown(path)
+}
+
+#' @export
+#' @noRd
+`$.gptr_ns` = function(x, name) ns_resolve(c(get("path", envir = x, inherits = FALSE), name))
+
+#' @export
+#' @noRd
+`[[.gptr_ns` = function(x, i, ...) ns_resolve(c(get("path", envir = x, inherits = FALSE), i))
+
+#' @export
+#' @noRd
+`$<-.gptr_ns` = function(x, name, value) {
+  gptr_abort("gptr namespaces are read-only.", "readonly", object = "gptr_ns",
+             field = as.character(name))
+}
+
+#' @export
+#' @noRd
+`[[<-.gptr_ns` = function(x, i, ..., value) {
+  gptr_abort("gptr namespaces are read-only.", "readonly", object = "gptr_ns",
+             field = as.character(i))
+}
+
+#' Member names of a namespace node
+#'
+#' @param x A `gptr_ns` node.
+#' @return Sorted chr.
+#' @export
+#' @noRd
+names.gptr_ns = function(x) {
+  members = get0("members", envir = x, inherits = FALSE)
+  if (is.function(members)) return(sort(as.character(members()), method = "radix"))
+  if (!identical(get("kind", envir = x, inherits = FALSE), "plugin")) return(character())
+  pre = paste0(get("path", envir = x, inherits = FALSE)[1L], "/")
+  keys = ns_plugin_keys(ns_session_id())
+  sort(substring(keys[startsWith(keys, pre)], nchar(pre) + 1L), method = "radix")
+}
+
+#' @exportS3Method utils::.DollarNames
+#' @noRd
+.DollarNames.gptr_ns = function(x, pattern = "") {
+  nms = names(x)
+  if (is.null(pattern) || !nzchar(pattern)) return(nms)
+  prefix = function(cnd) startsWith(nms, pattern)
+  nms[tryCatch(grepl(pattern, nms), warning = prefix, error = prefix)]
+}
+
+#' Print a namespace node: its member signatures within the member budget
+#'
+#' @param x A `gptr_ns` node.
+#' @param ... Ignored.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_ns = function(x, ...) {
+  path = get("path", envir = x, inherits = FALSE)
+  nms = names(x)
+  sigs = get0("signatures", envir = x, inherits = FALSE)
+  lines = if (is.function(sigs)) {
+    as.character(sigs())
+  } else if (identical(get("kind", envir = x, inherits = FALSE), "plugin")) {
+    specs = registry_all("tool", session = ns_session_id())
+    vapply(nms, function(n) {
+      key = paste0(path[1L], "/", n)
+      line = if (is.null(specs[[key]])) NULL else ns_spec_line(specs[[key]], key)
+      line %||% paste0("gptr$", path[1L], "$", n)
+    }, "", USE.NAMES = FALSE)
+  } else {
+    paste0("gptr$", paste(path, collapse = "$"), "$", nms)
+  }
+  shown = budget_head(lines, member_budget())
+  title = paste0("<gptr namespace gptr$", paste(path, collapse = "$"), ": ", length(nms),
+                 " members>")
+  more = if (shown$omitted > 0L) paste0("(+ ", shown$omitted, " more: names(x))")
+  ns_print_lines(c(title, shown$lines, more))
+  invisible(x)
+}
