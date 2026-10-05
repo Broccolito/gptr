@@ -185,3 +185,277 @@ test_that("providers.<id>.local_only is TRUE or FALSE and entries are objects (I
   expect_identical(cnd$arg, "providers.ollama")
   expect_error(validate(list(list(local_only = TRUE))), class = "gptr_error_invalid_argument")
 })
+
+# ------------------------------------------------------------------ Task 2: project trust
+
+test_that("gptr_trust() records a decision with a fingerprint (IC-52)", {
+  proj = local_gw()
+  expect_identical(gptr_trust(proj), NA)
+  expect_false(trust_get(proj))
+  expect_identical(gptr_trust(proj, TRUE), NA)
+  expect_true(gptr_trust(proj))
+  expect_true(trust_get(proj))
+  store = json_decode(paste(readLines(trust_file(), encoding = "UTF-8"), collapse = "\n"))
+  rec = store$projects[[path_key(proj)]]
+  expect_true(rec$trusted)
+  expect_match(rec$fingerprint, "^[0-9a-f]{64}$")
+})
+
+test_that("a changed trust-gated file makes the project untrusted again", {
+  proj = local_gw()
+  writeLines('{"preset": "extended"}', file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  expect_true(trust_get(proj))
+  writeLines('{"preset": "extended", "mode": "auto"}', file.path(proj, ".gptr", "settings.json"))
+  expect_false(trust_get(proj))
+  expect_true(gptr_trust(proj))
+})
+
+test_that("gptr's own writes to a trusted project re-fingerprint it", {
+  proj = local_gw()
+  gptr_trust(proj, TRUE)
+  settings_write("project", list(preset = "minimal"))
+  expect_true(trust_get(proj))
+})
+
+# The bootstrap entry only: ext_service_get() serves it once builtin:gateway is loaded (Task 9
+# tests that), because P01's service_builtin_active() hides a service of a built-in that the
+# registry does not list yet.
+test_that("trust_get() is registered as the trust.get service of builtin:gateway (IC-33)", {
+  proj = local_gw()
+  entry = the$services[["trust.get"]]
+  expect_identical(entry[c("provided_by", "builtin")],
+                   list(provided_by = "P08", builtin = "gateway"))
+  gptr_trust(proj, TRUE)
+  expect_true(entry$fun(proj))
+})
+
+test_that("a trust decision taken in this process lapses when a gated file changes (IC-52)", {
+  proj = local_gw()
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
+  withr::defer(off())
+  expect_true(trust_resolve(proj))
+  expect_true(trust_get(proj))
+  writeLines('{"mode": "auto"}', file.path(proj, ".gptr", "settings.json"))
+  expect_false(trust_get(proj))
+})
+
+test_that("untrusted project resources are ignored non-interactively, with one notice", {
+  proj = local_gw()
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  local_gptr_options(quiet = FALSE)
+  expect_message(trust_resolve(proj), class = "gptr_message_notice")
+  expect_false(trust_resolve(proj))
+})
+
+test_that("a project_trust handler decides first and can remember (IC-71)", {
+  proj = local_gw()
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  off = gptr_register(gptr_hook("project_trust", function(event, ctx) {
+    list(decision = "yes", remember = TRUE)
+  }))
+  withr::defer(off())
+  expect_true(trust_resolve(proj))
+  expect_true(gptr_trust(proj))
+})
+
+test_that("with a human the question lists the files changed since trust was given", {
+  proj = local_gw()
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  writeLines('{"mode": "auto"}', file.path(proj, ".gptr", "settings.json"))
+  local_gptr_options(interactive = TRUE)
+  box = new.env()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$question = question
+    TRUE
+  })
+  expect_true(trust_resolve(proj))
+  expect_match(box$question, ".gptr/settings.json", fixed = TRUE)
+  expect_true(trust_get(proj))
+})
+
+test_that("gptr_trust() is refused from model code during a run (IC-53)", {
+  proj = local_gw()
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  expect_error(gptr_trust(proj, TRUE), class = "gptr_error_permission")
+  expect_identical(gptr_trust(proj), NA)
+})
+
+# Task 2 adaptations (see dev/progress/P08.md, Task 2).
+
+test_that("both .env files P03 discovers are trust-gated (IC-52)", {
+  proj = local_gw()
+  writeLines("A=1", file.path(proj, ".gptr", ".env"))
+  gptr_trust(proj, TRUE)
+  expect_identical(names(trust_fingerprint(proj)$files), ".gptr/.env")
+  writeLines("A=22", file.path(proj, ".gptr", ".env"))
+  expect_false(trust_get(proj))
+  gptr_trust(proj, TRUE)
+  expect_true(trust_get(proj))
+  writeLines("B=1", file.path(proj, ".env"))
+  expect_false(trust_get(proj))
+  expect_identical(names(trust_fingerprint(proj)$files), c(".env", ".gptr/.env"))
+})
+
+test_that("a gated file rewritten at the same size with its old mtime still voids trust", {
+  skip_on_os("windows")
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  stamp = function() paste(format(as.numeric(file.info(p)$mtime), digits = 15), file.size(p))
+  writeLines('{"mode": "plan"}', p)
+  gptr_trust(proj, TRUE)
+  expect_true(trust_get(proj))
+  old = file.info(p)$mtime
+  before = stamp()
+  Sys.sleep(0.05)
+  writeLines('{"mode": "auto"}', p)
+  Sys.setFileTime(p, old)
+  expect_identical(stamp(), before)
+  expect_false(trust_get(proj))
+})
+
+test_that("gptr's own write keeps an in-process decision without recording it (IC-52)", {
+  proj = local_gw()
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
+  withr::defer(off())
+  expect_true(trust_resolve(proj))
+  settings_write("project", list(mode = "plan"))
+  expect_true(trust_get(proj))
+  expect_identical(gptr_trust(proj), NA)
+})
+
+test_that("gptr's own write does not restore a trust that a foreign change voided (IC-52)", {
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  writeLines("{}", p)
+  gptr_trust(proj, TRUE)
+  writeLines('{"mode": "auto"}', p)
+  settings_write("project", list(preset = "minimal"))
+  expect_false(trust_get(proj))
+  expect_identical(settings_read("project")$mode, "auto")
+})
+
+test_that("a trust.json gptr cannot read trusts nothing and is never rewritten", {
+  proj = local_gw()
+  p = trust_file(create = TRUE)
+  for (txt in c("[1, 2]", "{\"version\": 1, \"projects\": [\"x\"]}", "{\"projects\": {},}")) {
+    writeLines(txt, p)
+    before = readBin(p, "raw", file.size(p))
+    expect_identical(gptr_trust(proj), NA)
+    expect_false(trust_get(proj))
+    cnd = expect_error(gptr_trust(proj, TRUE), class = "gptr_error_workspace")
+    expect_identical(cnd$path, p)
+    expect_identical(readBin(p, "raw", file.size(p)), before)
+    expect_false(dir.exists(paste0(p, ".lock")))
+  }
+})
+
+test_that("trust.json keeps other projects and fields; each changed file is listed (IC-52)", {
+  proj = local_gw()
+  p = trust_file(create = TRUE)
+  other = list(trusted = TRUE, date = "2026-09-29", fingerprint = strrep("0", 64),
+               base_url_confirmed = list(corp = "https://llm.example.com"))
+  writeLines(json_encode(list(version = 1L, projects = list("/elsewhere" = other))), p)
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  dir.create(file.path(proj, ".gptr", "agents"))
+  writeLines("a", file.path(proj, ".gptr", "agents", "a.md"))
+  gptr_trust(proj, TRUE)
+  store = json_decode(read_utf8(p)$text)
+  expect_identical(store$projects[["/elsewhere"]], other)
+  rec = store$projects[[path_key(proj)]]
+  expect_identical(sort(names(rec$files)), c(".gptr/agents/a.md", ".gptr/settings.json"))
+  writeLines("b", file.path(proj, ".gptr", "agents", "b.md"))
+  unlink(file.path(proj, ".gptr", "settings.json"))
+  local_gptr_options(interactive = TRUE)
+  box = new.env()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$question = question
+    FALSE
+  })
+  expect_false(trust_resolve(proj))
+  expect_match(box$question, ".gptr/agents/b.md, .gptr/settings.json.", fixed = TRUE)
+  expect_false(gptr_trust(proj))
+  expect_false(trust_resolve(proj))
+})
+
+test_that("a malformed project_trust answer has no opinion; each new fingerprint gets a notice", {
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  writeLines("{}", p)
+  off = gptr_register(gptr_hook("project_trust", function(event, ctx) {
+    list(decision = "maybe", remember = TRUE)
+  }))
+  withr::defer(off())
+  local_gptr_options(quiet = FALSE)
+  malformed = function() {
+    d = gptr_registry(diagnostics = TRUE)
+    sum(d$source == "builtin:gateway" & d$event == "project_trust" &
+          d$class == "malformed_decision")
+  }
+  n0 = malformed()
+  expect_message(expect_false(trust_resolve(proj)), class = "gptr_message_notice")
+  expect_gt(malformed(), n0)
+  expect_identical(gptr_trust(proj), NA)
+  expect_silent(expect_false(trust_resolve(proj)))
+  gptr_trust(proj, TRUE)
+  expect_true(trust_resolve(proj))
+  writeLines('{"mode": "auto"}', p)
+  expect_message(expect_false(trust_resolve(proj)), ".gptr/settings.json", fixed = TRUE,
+                 class = "gptr_message_notice")
+  expect_silent(expect_false(trust_resolve(proj)))
+  writeLines('{"mode": "edits"}', p)
+  expect_message(expect_false(trust_resolve(proj)), class = "gptr_message_notice")
+})
+
+# Task 2 review round 1: gptr's own write re-fingerprints only its own change (IC-52).
+
+# Replaces settings_file_write() for the rest of the calling test: after gptr writes a project's
+# .gptr/settings.json, `foreign(path)` changes the tree as another writer would (a git pull)
+# before gptr fingerprints it again; writes of other files (trust.json) are left alone.
+local_foreign_writer = function(foreign, .env = parent.frame()) {
+  real = settings_file_write
+  local_mocked_bindings(settings_file_write = function(path, value) {
+    out = real(path, value)
+    if (identical(basename(path), "settings.json")) foreign(path)
+    out
+  }, .env = .env)
+}
+
+test_that("gptr's own write does not carry trust over a gated file changed beside it (IC-52)", {
+  proj = local_gw()
+  mcp = file.path(proj, ".gptr", "mcp.json")
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  local_foreign_writer(function(path) {
+    writeLines('{"mcpServers": {"evil": {"command": "sh"}}}', mcp)
+  })
+  settings_write("project", list(mode = "plan"))
+  expect_identical(settings_read("project")$mode, "plan")
+  expect_false(trust_get(proj))
+  expect_false(".gptr/mcp.json" %in% names(trust_record(proj)$files))
+  local_gptr_options(interactive = TRUE)
+  box = new.env()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$question = question
+    FALSE
+  })
+  expect_false(trust_resolve(proj))
+  expect_match(box$question, ".gptr/mcp.json", fixed = TRUE)
+})
+
+test_that("gptr's own write does not carry trust over a foreign rewrite of its file (IC-52)", {
+  proj = local_gw()
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  off = gptr_register(gptr_hook("project_trust", function(event, ctx) list(decision = "yes")))
+  withr::defer(off())
+  expect_true(trust_resolve(proj))
+  local_foreign_writer(function(path) writeLines('{"mode": "auto"}', path))
+  settings_write("project", list(mode = "plan"))
+  expect_identical(settings_read("project")$mode, "auto")
+  expect_false(trust_get(proj))
+  expect_identical(gptr_trust(proj), NA)
+})

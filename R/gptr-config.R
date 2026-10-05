@@ -273,15 +273,17 @@ settings_arrays = function(x) {
   x
 }
 
-#' Writes a settings file atomically (UTF-8, LF, final newline) and drops its cache entry
+#' Writes a settings file atomically (UTF-8, LF, final newline) and drops its cache entry.
+#' Returns the sha256 of the bytes written, invisibly (settings_write() checks its own write).
 #' @noRd
 settings_file_write = function(path, value) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   text = if (length(value)) json_encode(settings_arrays(value), pretty = TRUE) else "{}"
-  write_atomic(path, text)
+  bytes = charToRaw(paste0(paste(as_utf8(text), collapse = "\n"), "\n"))
+  write_atomic(path, bytes)
   st = gateway_state()
   if (exists(path, envir = st$files, inherits = FALSE)) rm(list = path, envir = st$files)
-  invisible(path)
+  invisible(hash_sha256(bytes))
 }
 
 #' Merges a patch at top level; a NULL value removes the key
@@ -359,8 +361,14 @@ settings_read = function(scope) {
 #' process layer; NULL values remove keys (contract 7.8). The file is merged in its unsimplified
 #' JSON form, so the keys the patch does not name keep their JSON types (contract 11: unknown
 #' keys are preserved on rewrite), and a file that is not a JSON object is left alone
-#' (`gptr_error_workspace`, settings_file_load()). Returns the merged value as settings_read()
-#' simplifies it.
+#' (`gptr_error_workspace`, settings_file_load()). A write to the settings of a trusted project
+#' keeps the trust that held just before it (read under the lock): a recorded trust gets the new
+#' fingerprint in trust.json, a decision of this process gets it in memory (gptr's own writes
+#' re-fingerprint, IC-52; an in-process decision is never turned into a recorded one, and a trust
+#' a foreign change had already voided is not restored). Only gptr's own change is carried over:
+#' when another gated file changed beside the write, or settings.json no longer holds the bytes
+#' gptr wrote, the trust lapses and the human is asked again (trust_own_write()). Returns the
+#' merged value as settings_read() simplifies it.
 #' @noRd
 settings_write = function(scope, patch) {
   scope = check_choice(scope, c("session", "project", "user", "user_project"), "scope")
@@ -371,14 +379,23 @@ settings_write = function(scope, patch) {
     return(invisible(cur))
   }
   path = settings_path(scope, create = TRUE)
+  root = project_root()
   lock = file_lock(path)
   on.exit(file_unlock(lock), add = TRUE)
+  was = if (identical(scope, "project")) trust_holds(root) else list(record = FALSE, live = FALSE)
   cur = settings_merge_top(settings_file_load(path), patch)
   if (identical(scope, "user_project")) {
     cur$version = cur$version %||% 1L
-    cur$root = cur$root %||% project_root()
+    cur$root = cur$root %||% root
   }
-  settings_file_write(path, cur)
+  wrote = settings_file_write(path, cur)
+  if (isTRUE(was$record) || isTRUE(was$live)) {
+    now = trust_fingerprint(root)
+    if (trust_own_write(was$fp, now, path_rel(path, root = root), wrote)) {
+      if (isTRUE(was$record)) trust_store(root, TRUE, now)
+      if (isTRUE(was$live)) trust_mark(root, TRUE, now)
+    }
+  }
   invisible(json_simplify(cur))
 }
 
@@ -407,3 +424,271 @@ control_check = function(what) {
              how_to_allow = "call it yourself outside gptr(), or approve the r call when asked",
              session = run$session)
 }
+
+# ------------------------------------------------------------- trust (contract 6.2, 11.8; IC-52)
+
+#' Path of `trust.json` in the user config directory
+#' @noRd
+trust_file = function(create = FALSE) {
+  file.path(gptr_user_dir("config", create = create), "trust.json")
+}
+
+#' The trust store for reading: list(version, projects = named list keyed by path_key(root)).
+#' A file that is not a JSON object, or whose `projects` is not an object, trusts nothing.
+#' @noRd
+trust_read = function(fresh = FALSE) {
+  x = settings_file_read(trust_file(), fresh = fresh)
+  p = x[["projects"]]
+  if (!is.list(p) || (length(p) && is.null(names(p)))) x$projects = list()
+  x
+}
+
+#' The trust store for a read-modify-write under its lock: the unsimplified object of
+#' settings_file_load(); a file whose `projects` is not an object is never rewritten
+#' (`gptr_error_workspace`), as settings_file_load() refuses a file that is not an object
+#' @noRd
+trust_load = function(path) {
+  x = settings_file_load(path)
+  p = x[["projects"]]
+  if (!is.null(p) && !(is.list(p) && (!length(p) || !is.null(names(p))))) {
+    gptr_abort(c(paste0("The trust store ", path, " has no `projects` object, so gptr will not ",
+                        "rewrite it."),
+                 "Fix the file or remove it, then try again."), "workspace", path = path)
+  }
+  x
+}
+
+#' The recorded trust entry of a project root, or NULL
+#' @noRd
+trust_record = function(root) {
+  rec = trust_read()$projects[[path_key(root)]]
+  if (is.list(rec)) rec else NULL
+}
+
+#' Existing trust-gated files of a project (IC-52): .gptr/settings.json, mcp.json, SYSTEM.md,
+#' APPEND_SYSTEM.md, the files under extensions/, plugins/ and agents/, and the .env files that
+#' P03's automatic discovery reads (dotenv_project_files(): .gptr/.env and .env)
+#' @noRd
+trust_gated_paths = function(root) {
+  ws = file.path(root, ".gptr")
+  files = file.path(ws, c("settings.json", "mcp.json", "SYSTEM.md", "APPEND_SYSTEM.md"))
+  found = c(files[file.exists(files) & !dir.exists(files)], dotenv_project_files(root))
+  for (d in file.path(ws, c("extensions", "plugins", "agents"))) {
+    if (dir.exists(d)) {
+      found = c(found, list.files(d, recursive = TRUE, full.names = TRUE, all.files = TRUE))
+    }
+  }
+  unique(found)
+}
+
+#' TRUE when the project holds anything the trust question is about (IC-52): trust-gated files,
+#' AGENTS.md, CLAUDE.md, .gptr/skills/ or .gptr/agents/
+#' @noRd
+trust_resources_present = function(root) {
+  length(trust_gated_paths(root)) > 0L ||
+    any(file.exists(file.path(root, c("AGENTS.md", "CLAUDE.md")))) ||
+    any(dir.exists(file.path(root, ".gptr", c("skills", "agents"))))
+}
+
+#' sha256 of one gated file's bytes; a file that cannot be read (gptr cannot load it either)
+#' hashes as "unreadable", so its fingerprint changes once it can be read
+#' @noRd
+trust_file_hash = function(path) {
+  tryCatch(hash_sha256(readBin(path, "raw", n = max(1, file.size(path)))),
+           warning = function(w) "unreadable", error = function(e) "unreadable")
+}
+
+#' Trust fingerprint (IC-52): sha256 of the canonical JSON object of the gated files' root-relative
+#' paths and content hashes (keys in radix order, so no path can be confused with a hash). Cached
+#' by path, mtime, ctime and size: ctime moves on every write and on every mtime reset, so a
+#' same-size rewrite that restores the old mtime is not served from the cache. Returns
+#' list(fp = chr(1), files = chr of file hashes named by relative path, in radix order).
+#' @noRd
+trust_fingerprint = function(root) {
+  paths = trust_gated_paths(root)
+  info = file.info(paths, extra_cols = FALSE)
+  stamp = paste(paths, format(as.numeric(info$mtime), digits = 15),
+                format(as.numeric(info$ctime), digits = 15), info$size, collapse = "|")
+  st = gateway_state()
+  key = path_key(root)
+  hit = get0(key, envir = st$fingerprints, inherits = FALSE)
+  if (!is.null(hit) && identical(hit$stamp, stamp)) return(hit$value)
+  rel = path_rel(paths, root = root)
+  hashes = vapply(paths, trust_file_hash, "", USE.NAMES = FALSE)
+  names(hashes) = rel
+  hashes = hashes[order(rel, method = "radix")]
+  fp = hash_sha256(canonical_json(if (length(hashes)) as.list(hashes) else json_obj()))
+  value = list(fp = fp, files = hashes)
+  assign(key, list(stamp = stamp, value = value), envir = st$fingerprints)
+  value
+}
+
+#' Records a trust decision with a fingerprint (atomic, under a short lock): by default the
+#' current one, or `fp` (a trust_fingerprint() value), the state a question was asked about. The
+#' per-file hashes are kept too, so a later mismatch can list the changed files; the other
+#' projects and the entry's other fields (`base_url_confirmed`) are kept.
+#' @noRd
+trust_store = function(root, trusted, fp = NULL) {
+  path = trust_file(create = TRUE)
+  fp = fp %||% trust_fingerprint(root)
+  lock = file_lock(path)
+  on.exit(file_unlock(lock), add = TRUE)
+  x = trust_load(path)
+  key = path_key(root)
+  rec = x[["projects"]][[key]]
+  if (!is.list(rec) || (length(rec) && is.null(names(rec)))) rec = list()
+  rec$trusted = isTRUE(trusted)
+  rec$date = format(Sys.Date())
+  rec$fingerprint = fp$fp
+  rec$files = if (length(fp$files)) as.list(fp$files) else json_obj()
+  x$version = x[["version"]] %||% 1L
+  x$projects[[key]] = rec
+  settings_file_write(path, x)
+  st = gateway_state()
+  if (exists(key, envir = st$trust, inherits = FALSE)) rm(list = key, envir = st$trust)
+  invisible(rec)
+}
+
+#' Remembers a trust decision taken in this process (a `project_trust` handler or the interactive
+#' question) together with the fingerprint it was taken for (`fp`, a trust_fingerprint() value;
+#' default the current one): it holds only while the gated files are unchanged (IC-52: "Control
+#' files modified during the process are not loaded again without confirmation")
+#' @noRd
+trust_mark = function(root, decision, fp = NULL) {
+  fp = fp %||% trust_fingerprint(root)
+  assign(path_key(root), list(decision = isTRUE(decision), fp = fp$fp),
+         envir = gateway_state()$trust)
+  invisible(decision)
+}
+
+#' Which trust holds for a project root now: `record` (trust.json says trusted and the
+#' fingerprint matches) and `live` (a decision of this process whose fingerprint matches), with
+#' `fp`, the trust_fingerprint() value they were checked against (NULL when neither was trusted)
+#' @noRd
+trust_holds = function(root) {
+  key = path_key(root)
+  hit = get0(key, envir = gateway_state()$trust, inherits = FALSE)
+  rec = trust_record(root)
+  live = is.list(hit) && isTRUE(hit$decision)
+  recorded = !is.null(rec) && isTRUE(rec[["trusted"]])
+  if (!live && !recorded) return(list(record = FALSE, live = FALSE, fp = NULL))
+  fp = trust_fingerprint(root)
+  list(record = recorded && identical(rec[["fingerprint"]], fp$fp),
+       live = live && identical(hit$fp, fp$fp), fp = fp)
+}
+
+#' TRUE when the only change from fingerprint `before` to `after` (trust_fingerprint() values) is
+#' gptr's own write of the gated file `rel`, which must hold exactly the bytes whose sha256 is
+#' `hash`: every other gated file is unchanged, none appeared or went away (IC-52: gptr's own
+#' writes re-fingerprint; any other change needs the human's confirmation)
+#' @noRd
+trust_own_write = function(before, after, rel, hash) {
+  if (is.null(before) || is.null(after)) return(FALSE)
+  others = function(x) {
+    x = x[names(x) != rel]
+    paste(names(x), x, sep = "\t")
+  }
+  identical(unname(after$files[rel]), hash) &&
+    identical(others(before$files), others(after$files))
+}
+
+#' TRUE only when the project is recorded as trusted, or a `project_trust` handler or the user
+#' accepted it in this process, and the trust fingerprint still matches (the `trust.get`
+#' service; IC-33, IC-52)
+#' @noRd
+trust_get = function(path = getwd()) {
+  h = trust_holds(project_root(path))
+  h$record || h$live
+}
+
+#' The decision of a `project_trust` handler: TRUE ("yes"), FALSE ("no") or NA (no handler, or an
+#' answer that is not "yes" or "no", which is a diagnostic and has no opinion)
+#' @noRd
+trust_answer = function(res) {
+  if (!is.list(res) || !length(res)) return(NA)
+  d = res[["decision"]]
+  if (is.character(d) && length(d) == 1L && !is.na(d) && d %in% c("yes", "no")) {
+    return(identical(d, "yes"))
+  }
+  registry_diagnostic("builtin:gateway", "project_trust", "malformed_decision",
+                      "a project_trust handler answered without decision = \"yes\" or \"no\"")
+  NA
+}
+
+#' Decides trust for a project root once per process and fingerprint: the recorded decision, else
+#' the first decision of `project_trust` handlers, else the interactive question, else untrusted
+#' with one notice per fingerprint. A changed gated file voids an earlier in-process decision and
+#' a recorded trust (IC-52); a recorded "no" stands until gptr_trust() changes it.
+#' @noRd
+trust_resolve = function(root) {
+  h = trust_holds(root)
+  if (h$record || h$live) return(TRUE)
+  key = path_key(root)
+  fp = trust_fingerprint(root)
+  done = get0(key, envir = gateway_state()$trust, inherits = FALSE)
+  if (is.list(done) && identical(done$fp, fp$fp)) return(isTRUE(done$decision))
+  if (!trust_resources_present(root)) return(FALSE)
+  rec = trust_record(root)
+  if (!is.null(rec) && !isTRUE(rec[["trusted"]])) {
+    trust_mark(root, FALSE, fp)
+    return(FALSE)
+  }
+  old = unlist(rec[["files"]])
+  if (!is.character(old) || is.null(names(old))) old = character()
+  now = fp$files
+  changed = names(now)[is.na(old[names(now)]) | old[names(now)] != now]
+  changed = sort(unique(c(changed, setdiff(names(old), names(now)))), method = "radix")
+  since = if (!is.null(rec) && length(changed)) paste(changed, collapse = ", ") else NULL
+  res = ev_dispatch("project_trust", ev_new("project_trust", cwd = root, changed = changed))
+  decision = trust_answer(res)
+  if (!is.na(decision)) {
+    if (isTRUE(res[["remember"]])) trust_store(root, decision, fp)
+  } else if (gptr_can_prompt()) {
+    what = if (is.null(since)) "" else paste0(" Changed since you last trusted it: ", since, ".")
+    decision = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
+                                          "servers)?", what)))
+    trust_store(root, decision, fp)
+  } else {
+    why = if (is.null(since)) "" else paste0(" (changed since you trusted it: ", since, ")")
+    gptr_inform(paste0("Project resources in ", root, " were not loaded because the project is ",
+                       "not trusted", why, ". Use gptr_trust() to trust it."), "notice",
+                .once = paste0("trust:", key, ":", fp$fp))
+    decision = FALSE
+  }
+  trust_mark(root, decision, fp)
+  decision
+}
+
+#' Record or read whether a project is trusted
+#'
+#' Trust decides whether gptr applies or runs what a project directory contains: project
+#' settings beyond tightening, `.gptr/extensions/` and project plugins, project MCP servers,
+#' `SYSTEM.md` and `APPEND_SYSTEM.md`, project `.env` discovery, provider base-URL overrides, the
+#' tool and model fields of project agent files, and the authority of project instructions. The
+#' decision is kept in `tools::R_user_dir("gptr", "config")/trust.json` with a fingerprint of the
+#' trust-gated files; when they change, the project counts as untrusted again until you confirm.
+#' Called from model code during a run, recording a decision is refused.
+#'
+#' @param path A directory inside the project; its project root is used.
+#' @param trust `NULL` to read the decision, `TRUE` or `FALSE` to record one.
+#' @return With `trust = NULL`, the recorded decision: `TRUE`, `FALSE` or `NA` (undecided).
+#'   Otherwise the previous decision, invisibly.
+#' @examples
+#' d = tempfile("proj")
+#' dir.create(d)
+#' gptr_trust(d)
+#' unlink(d, recursive = TRUE)
+#' @export
+gptr_trust = function(path = ".", trust = NULL) {
+  check_string(path, "path")
+  check_flag(trust, "trust", null = TRUE)
+  root = project_root(path)
+  rec = trust_record(root)
+  prev = if (is.null(rec)) NA else isTRUE(rec[["trusted"]])
+  if (is.null(trust)) return(prev)
+  control_check("gptr_trust")
+  trust_store(root, trust)
+  invisible(prev)
+}
+
+on_load(ext_service_set("trust.get", trust_get, provided_by = "P08", builtin = "gateway"))

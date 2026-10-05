@@ -2919,7 +2919,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, substitutions, cd, case), null devices and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords and literal text fed to a shell never hide a command, program-running options and environment values are read as command lines, every write and every guarded operand of an unmodelled program takes its path class, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords and literal text fed to a shell never hide a command, program-running options and environment values are read as command lines, every write, every guarded operand of an unmodelled program and git's working-tree paths take their path class, a file a command reads takes its read level, a secret with a network sink is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2938,10 +2938,12 @@ a program it does not model are flagged as writes; and code it cannot read (a co
 program word, a script file, a brace expansion too long to list, a quote or substitution that is
 not closed, nesting deeper than 25) is level 3 `dynamic`, the level 03 section 6.8.1 gives dynamic
 code (auto mode allows it; manual and edits ask). Level 4 is kept for what the classifier can see:
-a critical, protected or control target, or a command line it can read that is level 4. Where bash
-(macOS /bin/sh, Git Bash) and dash (Linux /bin/sh) read a line differently (brace expansion, a
-descriptor such as `10>`), both readings are classified and the higher counts. Items 1-10 are the
-rounds 0-2 behaviour; item 11 lists what round 3 added:
+a critical, protected or control target, a command line it can read that is level 4, or a secret
+read on a line with a network sink. Where bash (macOS /bin/sh, Git Bash) and dash (Linux /bin/sh)
+read a line differently (brace expansion, a descriptor such as `10>`), both readings are
+classified and the higher counts; so are the Windows and the sh reading of a backslash, and the
+readings of a parameter default (round 4). Items 1-10 are the rounds 0-2 behaviour; item 11 lists
+what round 3 added and item 12 what round 4 added:
 1. **Shell syntax.** Substitutions are found by a scan that follows quotes, backslashes and
    nesting, and each is classified as a command line, recursively (the plan read one level with a
    regular expression: `echo $(rm -rf ~ $(true))` was 0), process substitutions `<(...)`/`>(...)`
@@ -2956,7 +2958,8 @@ rounds 0-2 behaviour; item 11 lists what round 3 added:
    (`cd /tmp & rm -rf *`) changes nothing. A bare digit after `>` is a file; only after `>&` is it a
    descriptor; `>|` is `>`. The tokeniser reads backslash escapes (outside quotes before a shell
    metacharacter, quote, `$` or backtick, and `\"`, `\\`, `\$`, `` \` `` in double quotes; other
-   backslashes stay, so Windows paths keep theirs): `echo \' ; rm -rf ~ ; echo \'` was 0, now 4.
+   backslashes stay, so Windows paths keep theirs, and a second reading drops them as sh does, item
+   12): `echo \' ; rm -rf ~ ; echo \'` was 0, now 4.
    Before any scan the line is read as sh reads it (`risk_sh_prepare()`), at any nesting of
    `$(...)`: an unquoted `#` that starts a word comments out the rest of its line (`a#b`,
    `${x#a}` and `$#` are no comments); `$'...'` is ANSI-C quoting and is decoded (`\'`, `\xHH`,
@@ -2976,8 +2979,9 @@ rounds 0-2 behaviour; item 11 lists what round 3 added:
 3. **Shell-word paths** (`risk_cmd_path_class()`): `$HOME`/`${HOME}` (and `${HOME:?}`,
    `${HOME:-x}`, `${HOME%/}`) is `~`, `$PWD` (and `$(pwd)`) the working directory; any other `$`,
    backtick or `%VAR%` word is `unknown` (P01 joined it to the root as `workspace`, so `cp x $DEST`
-   was an edits-mode auto-approval). A glob takes its directory's class when that is `control`,
-   `protected` or `instructions` (any glob in `.gptr/` is `control`), and a bare `*` in a critical
+   was an edits-mode auto-approval; parameter defaults, Windows home names and `$OLDPWD`: item
+   12). A glob takes its directory's class when that is `control`, `protected` or `instructions`
+   (any glob in `.gptr/` is `control`), and a bare `*` in a critical
    directory is `critical` (`rm -rf *` at the root, `~/*`, `/*`, `"$PWD"/*`: 4, like `rm -rf ~`).
    Deleting or moving away the root, home, a directory above either (any expansion of `$HOME` or
    `$PWD`, such as `${PWD%/*}`), or a `.gptr/` directory is level 4. `~+` is the working
@@ -3011,8 +3015,9 @@ rounds 0-2 behaviour; item 11 lists what round 3 added:
    allowlist of keys that cannot run a program
    (pager keys are checked by value, so the plan's `-c core.pager=cat` stays 0; `core.fsmonitor`,
    `alias.*`, `core.sshCommand` are 3), `--exec-path=`, `--upload-pack`/`--receive-pack`/`--exec`,
-   `rebase -x`, `grep -O`, `bisect run` and `submodule foreach` are `dynamic`. A bare `git stash`
-   (push and reset) is 2, `git branch <name>`/`git tag <name>` (listing forms stay 0) are 2, `reflog
+   `rebase -x`, `grep -O`, `bisect run` and `submodule foreach` are `dynamic` (and their command
+   lines are classified, item 12; so are the working-tree paths git deletes, moves, restores or
+   creates). A bare `git stash` (push and reset) is 2, `git branch <name>`/`git tag <name>` (listing forms stay 0) are 2, `reflog
    expire|delete` is 3. Levels are only raised, so `-D` never lowers a row a `risk_rule` raised; the
    plan's `branch -d`/`tag -a` kept category `read` at level 2, now `file_write`. Files git writes
    take their path class, resolved from `-C`: `--output`, `archive -o`, `format-patch -o DIR`
@@ -3168,10 +3173,82 @@ rounds 0-2 behaviour; item 11 lists what round 3 added:
       is scanned under its own name too; `os.posix_spawn[p]`, `os.fork`,
       `from os|subprocess|shutil import *`, `getattr(os, ...)`, `sys.modules` and `__builtins__`
       are flagged (all were 1, now 3).
+12. **Review round 4 (fail-safe).**
+    - *Backslashes.* sh (macOS /bin/sh, dash, Git Bash) drops an unquoted backslash before an
+      ordinary character, and the tokeniser kept it (Windows paths): `touch .Rprofil\e` was 2
+      `workspace`, an edits-mode auto-approval of a control write, and `cp x .gptr/settings\.json`,
+      `echo x > .Rprof\ile`, `mv .gpt\r old`, `cd .gpt\r && echo x > settings.json` were 2,
+      `rm -rf .gp\tr` 3. A line with such a backslash is also read with it dropped
+      (`risk_sh_tokens(posix = TRUE)`, in the bash and the dash reading), and the higher result
+      counts (all now 4); a word that starts with a drive (`C:\`) keeps its backslashes in both
+      readings (`C:\Git\bin\git.exe status` stays 0). The literal `cd` targets of a line (for its
+      substitutions) and the words xargs reads are read both ways too.
+    - *Parameter defaults and home names.* `${NAME:-w}`, `${NAME-w}`, `${NAME:=w}`, `${NAME=w}`,
+      `${NAME:+w}` and `${NAME+w}` are also read as `w`, and the worst class of the readings counts
+      (`rm -rf ${X:-~}`, `rm -rf "${DIR:-$HOME}"`, `rm -rf ${X:-.gptr}`,
+      `echo x > ${X:-.Rprofile}` were 3, now 4; `echo x > ${X:-out.txt}` is 3). `$USERPROFILE`,
+      `${USERPROFILE}`, `%USERPROFILE%`, `$env:USERPROFILE` and `$env:HOME` are `~`; `$HOME*` is a
+      glob next to the home directory that matches it; bash's `$"..."` is `"..."`; after a `cd` on
+      the line, `$OLDPWD`, `~-` and `cd -` name the directory it left (`rm -rf "$USERPROFILE"`,
+      `rd /s /q %USERPROFILE%`, `rm -rf $HOME*`, `rm -rf $".gptr"`, `cd /tmp && rm -rf $OLDPWD`
+      were 3, now 4; `rm -rf ~-` and `rm -rf $OLDPWD` alone stay 3).
+    - *Globs that match `..`.* A glob component that starts with `.` or a bracket also names `.`
+      and `..` when it matches them (bash 3.2 and dash expand `.?/` and `.[.]/` to `../`):
+      `rm -rf .?/*` and `rm -rf .[.]/*` were 3, now 4 like `rm -rf ../*`.
+    - *git's working-tree paths* (`risk_git_paths()`, resolved from `-C`). `git rm` (not
+      `--cached`) deletes as mv's sources do: a guarded path or a wipe is 4, one outside the
+      project, an instructions file or one gptr cannot name 3, a workspace file keeps the row's 2.
+      `git clean` deletes below each path, or below the working directory (`git clean -fdx` at the
+      root is 4; `-n` keeps the row's 3). `git mv` is classified as `mv`. `git restore`, `git
+      checkout` and `git stash push` overwrite their paths with their write level, the whole tree
+      (`.`) being 3 like `git reset --hard`; `restore --staged` writes no file. The directory
+      `clone`, `init`, `worktree add` and `submodule add` create is a write (`.` excluded);
+      `clone --template`, `-u`/`--upload-pack` and a program-running `clone -c` are `dynamic`. Any
+      other subcommand rated 2 or more whose operands are not refs, messages or index entries has
+      its guarded operands flagged (`git merge-file .Rprofile a b`). `git rm -rf .gptr`,
+      `git rm -rf .`, `git mv .gptr old`, `git mv x .Rprofile`, `git restore .gptr/settings.json`,
+      `git -C .gptr rm settings.json`, `git clone URL .gptr` and `git init ~` were 2,
+      `git checkout HEAD~3 -- .gptr/settings.json` and `git clean -fdx .gptr` 3; all are 4.
+      `git add` and `git commit` operands stay unflagged (`git commit -m .Rprofile` is 2). The
+      command lines of `rebase -x`/`--exec`, `filter-branch --*-filter`, `grep -O`, `bisect run`,
+      `submodule foreach` and `--upload-pack`/`--receive-pack`/`--exec` are classified
+      (`git rebase -x 'rm -rf ~' HEAD~3` was 3, now 4).
+    - *Reads.* A file a command reads takes the read level of its path class (03 section 6.8.1,
+      the read tool's contract row, the plan's `risk_path_level("read", ...)`): outside the project,
+      or a critical directory other than the project root, 1; protected or a URL 2. The contents
+      of a secret file (P03's `scan_secret_path_re`: keys, `.env`, `.Renviron`, `.netrc`,
+      `~/.ssh/`, ...) are a 3 `secret` read, as `readLines()` of one is in R. Read programs (the
+      level-0 `read` rows except echo, printf, test, basename and the like) read their operands,
+      not the pattern of grep, rg, ag, jq or Select-String and not the values of their count,
+      delimiter and pattern options; listings (ls, find, fd, tree, du, stat, wc, ...) read names
+      only (no secret row) and, with no path, the working directory. So do sed's and awk's files,
+      sort's, uniq's and xxd's input, yq's files, input redirects, cp's sources, `source`/`.`,
+      curl's `-T`, `-K` and `@file` data, wget's `--post-file`, `--body-file` and `-i`, and the
+      literal paths a SQL query reads (`read_text('...')`, `pg_read_file('...')`,
+      `FROM 'file'`). `cat ~/.ssh/id_rsa`, `cat .env`, `grep -r x ~/.ssh` and
+      `SELECT * FROM read_text('~/.ssh/id_rsa')` were 0, now 3; `ls ~/.ssh` 2; `cat /etc/passwd`
+      1. The plan's `rg -n TODO R/ | head -20` and `ls -la; wc -l data.csv` stay 0.
+    - *Secrets.* A secret-looking variable (P03's `is_secret_name()`) expanded in any word, prefix
+      value or heredoc (`$NAME`, `${NAME}`, `%NAME%`, `$env:NAME`), and `printenv NAME` of one, is
+      a 2 `secret` read (only echo and printf were checked). A line that reads a secret (such a
+      variable, a secret file's contents, an environment dump by env, printenv, set or export
+      without operands) and has a network sink gets a 4 `secret` row (03 section 6.8.1; P03's
+      `secret_to_network`): `curl -H "Authorization: $GITHUB_TOKEN" ...` was 2,
+      `echo $ANTHROPIC_API_KEY | curl -d @- ...` 3, now 4; `set -e; curl ...` and
+      `export X=1; curl ...` stay 2. Python code that reads a secret-named variable, a computed
+      name or the whole environment and makes a network call is 4 as well.
+    - *Code gptr cannot read.* An awk program file (`-f`, `-E`), a gawk `-i` library other than
+      `inplace`, a sed script file (without `--sandbox`), and the options curl reads from `-K`/
+      `--config` and wget from `-e`/`--execute`/`--config` are 3 `dynamic` (they were 0 or 2;
+      `gawk -i inplace -v x=1 -f prog.awk notes.txt` and `gawk -p -f prog.awk data.txt` were 2,
+      now 3).
+    - *Python.* `.unlink(`/`.rmdir(` after any expression (`Path('x').unlink()`),
+      `asyncio.create_subprocess_shell`/`_exec` (also imported or aliased), `os.kill` and
+      `os.killpg` were 1, now 3.
 Known limits (advisory classifier, not a security boundary; each is level 3 or the level of what
 can be read, never 0): scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
-configuration read by `curl -K`, `wget -e`/`--config` or `git` from the repository, the values of
-variables and positional parameters (`$X`, `"$@"`: `unknown`), commands hidden by `eval` of
+configuration read by `curl -K`, `wget -e`/`--config` (3 `dynamic` since round 4) or `git` from
+the repository, the values of variables and positional parameters (`$X`, `"$@"`: `unknown`), commands hidden by `eval` of
 computed strings beyond the rules above, Python reached through other indirections, SQL functions
 with side effects inside a SELECT, and heredocs or here-strings read by a program other than a
 shell, `source` or xargs (an interpreter is 3 `process` anyway). A substitution in an unquoted
@@ -3193,8 +3270,10 @@ blocks (109 expectations); the first 103 fail 70 against the round-1 source
 (`task2-fix2-red.log`). Review round 3 added the fail-safe principle and item 11, with nine blocks
 (180 expectations) and four raised rows (`cd ~- && rm -rf *`, `fd -x rm`, the two `git -c` program rows: 3 to 4); the
 first 142 new expectations and the first changed row fail 94 against the round-2 source
-(`task2-fix3-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 736 ]` in the
-UTF-8 and the C locale.
+(`task2-fix3-red.log`). Review round 4 added item 12 and the amendments it names, with six blocks
+(150 expectations), two path checks in older blocks and two raised rows (the `gawk -f` rows: 2 to
+3); the final test file fails 101 against the round-3 source (`task2-fix4-red-final.log`). Final
+`^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 888 ]` in the UTF-8 and the C locale.
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -5306,3 +5385,136 @@ test 4, which fails 1 against the plan-literal line); lint clean. Review round 1
 lock test fails 2 against the plan-literal `lock_stale()` (`task1-fix1-red-lock-against-plan-literal.log`);
 final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 70 ]`, so every later plan count for `test-gptr-config.R` is
 40 higher (Task 2: 55 -> 95; Task 3: 79 -> 119; Task 4: 97 -> 137; Task 7: 130 -> 170).
+
+## D-092 - P08 project trust: both .env files P03 discovers are trust-gated, the fingerprint is the hash of a canonical JSON object and its cache also keys on ctime, an unreadable trust.json is never rewritten, a malformed project_trust answer has no opinion, the notice repeats per fingerprint and names the changed files, a decision is bound to the state it was asked about, gptr's own write carries trust over only its own change, and the removal of P17's test-side trust.get moves to Task 9 (2026-10-04)
+
+P08 Task 2's literal trust code (`R/gptr-config.R`) was reconciled with IC-52, P03's real
+`.env` discovery and Task 1's review obligations. Behaviours that differ from the plan literal,
+which Task 9, P07, P15, P17 and P18 consume through `trust.get` and `trust_resolve()`:
+
+1. **Both `.env` files P03 discovers are trust-gated (IC-52 "an auto-discovered `.env`").** P03's
+   `dotenv_discover()` reads `.gptr/.env` and `.env` (`dotenv_project_files()`); the plan gated
+   only `.env`, so a changed `.gptr/.env` kept a recorded trust and its secrets were registered.
+   `trust_gated_paths()` now takes P03's list (an L0 call).
+2. **The fingerprint cannot be served stale or confused.** The plan cached it by path, mtime and
+   size; a same-size rewrite that restores the old mtime (`Sys.setFileTime()`, `touch -m`) left
+   that stamp byte-identical (checked on APFS), so `trust_get()` kept answering `TRUE` for changed
+   control files (IC-52, IC-54 "not loaded again without confirmation"). The stamp also holds the
+   ctime, which every write and every mtime reset moves (on Windows ctime is the creation time,
+   so this adds nothing there; the test skips on Windows). The hashed text is
+   `canonical_json()` of the `{relative path: sha256}` object rather than `"<path> <hash>"`
+   lines, so a file name holding a newline and a hash cannot make two file sets hash alike. A
+   gated file that cannot be read hashes as `"unreadable"` (gptr cannot load it either) instead
+   of failing every `trust_get()`.
+3. **An unreadable `trust.json` trusts nothing and is never rewritten (Task 1 obligation,
+   D-091 item 4).** The plan's `trust_store()` read the store with the lenient cached read, which
+   gives an empty list for a file that is not a JSON object, so one `gptr_trust()` replaced every
+   other project's decision. `trust_store()` loads with `settings_file_load()` (strict) plus a
+   check that `projects` is an object (`trust_load()`): otherwise `gptr_error_workspace` (`path`)
+   under the lock, with the bytes unchanged. The read side (`trust_read()`) treats such a file, or
+   a `projects` that is not an object, as no records; `trust_record()` ignores an entry that is
+   not an object. Other projects and an entry's other fields (`base_url_confirmed`) are kept.
+4. **A malformed `project_trust` answer has no opinion.** The plan took any character `decision`
+   as a decision ("maybe" meant "no", and with `remember = TRUE` was recorded). Contract 10.4
+   allows `"yes"` or `"no"`; anything else is a `builtin:gateway` diagnostic and resolution goes
+   on to the question or the notice.
+5. **The non-interactive notice repeats per fingerprint and names the changed files.** IC-52: on
+   a mismatch "non-interactively they are ignored with a notice". The plan's once-key was the
+   root, so after the first notice no later change was ever announced; the key is now root and
+   fingerprint (an unchanged project stays silent through `trust_mark()`), and when a trusted
+   record exists the notice and the question list the changed, added and removed files. For a
+   project never trusted, the question no longer says "changed since you last trusted it".
+6. **A decision is bound to the state it was asked about.** `trust_store()` and `trust_mark()`
+   take an optional fingerprint; `trust_resolve()` passes the one the handlers and the human saw,
+   so a gated file changed while the question was open is not covered by the answer.
+   `trust_resolve(root)` reads `trust_holds(root)` directly (the plan's `trust_get(root)`
+   re-resolved `project_root()` from the root, which can climb to an enclosing project), and the
+   replaced `settings_write()` reads the trust that held under the settings lock; it keeps Task
+   1's `settings_file_load()` merge (D-091 items 4-5).
+7. **P17's test-side `trust.get` (D-074 item 3) stays until Task 9.** D-074 says Task 2 must
+   delete `local_trust_record()` from `tests/testthat/test-skill-discover.R` and show the test
+   passing against the real service. Task 2 registers only the bootstrap entry; P01's
+   `service_builtin_active()` hides it until the registry lists `builtin:gateway` (Task 9; plan
+   ambiguity 19). In a scratch copy without the helper the test fails 2
+   (`task2-d074-helper-removed.log`); with the bootstrap entry made visible
+   (`service_builtin_active()` mocked) it passes 128 (`task2-d074-real-service-visible.log`).
+   **P08 Task 9 MUST delete `local_trust_record()` (comment, definition, one call)** and show
+   that test passing; until then the helper's own guard keeps it correct (it yields once
+   `ext_service_has("trust.get")` holds).
+8. **gptr's own write carries trust over only its own change (review round 1; IC-52 "gptr's own
+   writes re-fingerprint").** The plan's `settings_write()` re-fingerprinted the whole project
+   after writing `.gptr/settings.json` and recorded (or marked) that fingerprint as trusted, so a
+   gated file another writer changed in that window (`.gptr/mcp.json`, `extensions/`, `.env`, or
+   `settings.json` itself rewritten after gptr's write) became trusted without the human seeing
+   it. `trust_holds()` now also returns the fingerprint it checked under the settings lock (`fp`),
+   `settings_file_write()` returns the sha256 of the bytes it wrote (it builds the same bytes
+   `write_atomic()` wrote from the text), and `trust_own_write()` lets the trust carry over only
+   when every other gated file is unchanged (none added or removed) and `settings.json` holds
+   exactly gptr's bytes; the new fingerprint is passed to `trust_store()`/`trust_mark()`.
+   Otherwise the trust lapses and `trust_resolve()` lists the changed files and asks again.
+
+Validation: `progress/P08.md`, Task 2. `^gptr-config$`: red `[ FAIL 17 | WARN 0 | SKIP 0 | PASS 70 ]`,
+green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 144 ]` (plan 55, which is 95 after D-091; the seven
+adaptation tests add 49). Against the plan-literal trust code the adaptation tests fail 17
+(`dev/.validation/P08/task2-red-adaptations-against-plan-literal.log`); lint clean. Review round 1
+(item 8, plus a diagnostic assertion for item 4) added two tests and one expectation (+10): red
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 149 ]` (`task2-fix1-red.log`), final green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 154 ]` (`task2-fix1-green.log`). Later plan counts for
+`test-gptr-config.R` are 99 higher (Task 3: 79 -> 178; Task 4: 97 -> 196; Task 7: 130 -> 229).
+
+## D-093 - P20 CLI discovery: the PATH test runs the platform's own branch, a directory in options(gptr.cli_path) is not a CLI, an option without the names claude/codex is an argument error, two IC-65 orderings are pinned by tests, the vendored codex.exe path is normalised, and a non-executable install location is skipped (2026-10-04)
+
+P20 Task 1's plan-literal `R/cli-common.R` and `tests/testthat/test-cli-common.R` changed after
+review rounds 1 (items 1-4) and 2 (items 5-6):
+
+1. **The PATH test runs the platform's own branch.** The plan's test "pcli_find() scans PATH
+   without a process, then the per-OS install locations" mocked `pcli_is_windows()` to `FALSE`
+   and created an extensionless `claude`. On native Windows R's `file.access(x, 1)` counts only
+   directories and `.exe`/`.com`/`.cmd`/`.bat` files as executable, so the Unix execute check
+   dropped the PATH copy and `pcli_find()` returned `~/.local/bin/claude`: the test failed on
+   the `windows-latest` jobs of `R-CMD-check.yaml`. The test no longer mocks
+   `pcli_is_windows()`; it creates `pcli_exe_names("claude")[[1L]]` (`claude.exe` on Windows,
+   `claude` elsewhere), so each OS runs its own discovery branch. The source is unchanged.
+2. **A directory is not a CLI.** The `options(gptr.cli_path)` branch of `pcli_find()` checked
+   only `file.exists()`, which is `TRUE` for a directory, so a directory was recorded and
+   returned as the command. It now signals `gptr_error_cli_missing` (contract 7.20, "the
+   `claude`/`codex` binary was not found"), as the PATH and install-location branches already
+   skip directories; the message says "does not exist or is a directory".
+3. **`options(gptr.cli_path)` must be `NULL` or a list named `claude` and/or `codex`** (04 3.1,
+   "named list | NULL"). The plan ignored an unnamed value, a misspelt or mis-cased name
+   (`list(Claude = )`) and fell back to PATH, so gptr ran whichever CLI PATH held instead of
+   the one the user chose. A non-empty value without names, with a name other than `claude` or
+   `codex`, or with a duplicated name is now `gptr_error_invalid_argument`
+   (`arg = "options(gptr.cli_path)"`, through P01's `arg_abort()`), and the cache records
+   `error = "invalid options(gptr.cli_path)"` so that Task 3's `status()` reports it instead of
+   "not found". An empty list counts as `NULL`. Every plan use (`local_fake_cli_path()` and the
+   Task 3 tests) passes a named list and is unaffected.
+4. **Two IC-65 orderings are pinned by tests.** A native `claude.exe` anywhere on PATH comes
+   before an earlier-on-PATH `claude.cmd` (07 6.2; it depends on the column-major order of
+   `outer(dirs, names, file.path)`), and the Unix install locations are exactly `~/.local/bin`,
+   `/opt/homebrew/bin`, `/usr/local/bin`, `~/.npm-global/bin` (plus `~/.claude/local` for
+   claude). The code already behaved so; the tests are new.
+5. **`pcli_codex_vendored()` returns a normalised path** (review round 2). It built its result
+   from `dirname(shim)`, and on Windows `dirname()` returns "/" separators while a `tempfile()`
+   path keeps backslashes, so the plan-literal `expect_identical(pcli_codex_vendored(shim), exe)`
+   failed on the `windows-latest` jobs. The function now returns
+   `normalizePath(<hit>, winslash = "/")` (callers already normalised it in `pcli_found()`), and
+   the test compares it with `normalizePath(exe, winslash = "/")`.
+6. **An install location without the execute bit is skipped on Unix** (review round 2), as
+   `pcli_on_path()` already skips such a file on PATH. Before, a mode-0644 `~/.local/bin/claude`
+   was returned and recorded as the CLI, and the run failed later in processx instead of with
+   `gptr_error_cli_missing` and the install hint. Shims are exempt, since they never run. A new
+   test (skipped on Windows, which has no execute bit) pins it.
+
+Validation: `progress/P20.md`, Task 1. Four tests added and one changed (+14 expectations). Red
+against the round-0 source `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 32 ]`
+(`dev/.validation/P20/task1-fix1-red.log`); a mutation that swaps the `outer()` arguments and
+drops `/opt/homebrew/bin` fails 3 of the new ordering expectations
+(`task1-fix1-mutation-red.log`); the plan-literal PATH test fails under an emulation of Windows'
+`file.access()` and the new one passes (`task1-fix1-windows-emulation.log`). Round 2 added one
+test and changed one expectation (+3 expectations): red against the round-1 source
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 39 ]` (`task1-fix2-red.log`). Final `^cli-common$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 43 ]` (plan 26; `task1-fix2-green.log`), so every later plan
+count for `test-cli-common.R` is 17 higher on macOS and Linux (Task 2 red
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 43 ]`, and so on); on Windows the execute-bit test skips, so
+counts there are 14 higher plus `SKIP 1`.
