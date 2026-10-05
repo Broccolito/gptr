@@ -5739,10 +5739,11 @@ it); final `^cli-common$`
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]` (`task2-fix1-green.log`), so every later plan count
 for `test-cli-common.R` is 40 higher on macOS and Linux (17 from D-093, 23 from this entry).
 
-## D-096 - P15 document I/O: a document lock that is gone or being released is not stale, a lock is never left without its pid file, NUL bytes are an encoding refusal and a directory a missing document, the md5 is taken before the bytes are read, mixed line endings keep the majority ending, and a record map that is not an object is replaced (2026-10-04)
+## D-096 - P15 document I/O: a document lock that is gone or being released is not stale, a lock is never left without its pid file, NUL bytes are an encoding refusal and a directory a missing document, the md5 is that of the bytes read and of the bytes written, mixed line endings keep the majority ending, an unreadable file is a doc_write refusal, and the project file's record and transcript objects are updated in place under a P15 lock (2026-10-04)
 
-P15 Task 4's literal `R/doc-io.R` (plan lines 2061-2321) is implemented with six changes. Each
-is pinned by a test under "Task 4 adaptations" in `tests/testthat/test-doc-io.R`, and each of
+P15 Task 4's literal `R/doc-io.R` (plan lines 2061-2321) is implemented with ten changes (items
+7-10 and the final form of item 4 come from review round 1). Each is pinned by a test under
+"Task 4 adaptations" or "Task 4 review round 1" in `tests/testthat/test-doc-io.R`, and each of
 those tests fails against the plan literal:
 
 1. **A lock being released is not stale (IC-71; D-091 item 2 for document locks).**
@@ -5759,10 +5760,14 @@ those tests fails against the plan literal:
 3. **NUL bytes are `reason = "encoding"`; a directory is `"missing"`.** `rawToChar()` refuses
    embedded NULs with a base error, so a UTF-16 document (or any NUL byte) escaped as a plain
    error instead of `gptr_error_doc_write`. `readBin()` of a directory failed the same way.
-4. **The md5 is taken before the bytes are read.** The plan computed it after splitting the
-   lines. A change made between the read and the md5 became the recorded base, so the next
-   checked `doc_write()` overwrote it (contract 7.15's md5 conflict check). Such a change now
-   makes the next write a `conflict`. `doc_write()` keeps the plan's md5-after-write.
+4. **The md5 is that of the bytes read.** The plan computed it with `tools::md5sum()` after
+   splitting the lines. A change made between the read and the md5 became the recorded base,
+   so the next checked `doc_write()` overwrote it (contract 7.15's md5 conflict check). Round 0
+   moved the md5 before the read, which still left the window between the `file.info()` size
+   and the hash: a file that grew there was hashed whole but read truncated, and the next write
+   dropped the appended text (review round 1). The md5 is now `cli::hash_raw_md5()` of exactly
+   the bytes read (the same hex as `tools::md5sum()` of the file; a test pins this), so any
+   change on disk during or after the read makes the next write a `conflict`.
 5. **Mixed line endings keep the majority ending.** The plan wrote every line with CRLF as
    soon as one CRLF occurred, so one block inserted into a mostly-LF file rewrote every line.
    `doc_eol_of()` now picks CRLF only when at least as many lines end in CRLF as in a bare LF.
@@ -5770,13 +5775,28 @@ those tests fails against the plan literal:
    normalised.
 6. **A `record` value that is not a JSON object is replaced.** The plan extended it into
    `{"1": ..., "<document>": ...}`.
-
-Not changed (a known limit; P08 decides): `settings_write()` merges top-level keys under its
-short lock. `doc_project_remember()` therefore reads the `record` map outside that lock (plan
-ambiguity 12). If two processes remember answers for different documents at the same moment,
-one answer can be lost, and that document's question is asked again. A nested patch in P08's
-`settings_write()` would close this gap. The file is the one P08's
-`settings_path("user_project")` names; a test pins this.
+7. **`doc_write()` records the md5 of the bytes it wrote.** The plan hashed the file again after
+   `write_atomic()`, so an edit landing between the rename and that hash became the base of the
+   next checked write and was overwritten. An edit there is now a `conflict`.
+8. **A file that cannot be opened is `reason = "unreadable"`.** `readBin()` of a file without
+   read permission raised a base error and a connection warning instead of
+   `gptr_error_doc_write` (the same escape item 3 closes for NULs and directories). A file that
+   vanishes between the size and the read is `"missing"`. Callers of `doc_write()` re-raise any
+   reason but `"conflict"`, so the new reason changes no caller.
+9. **`doc_project_transcript()` keeps the other keys of `transcript`.** The plan replaced the
+   whole object with `{"target": ...}`, against contract 11 ("Unknown keys are preserved on
+   rewrite"). It now updates `target` in place as `doc_project_remember()` updates `record`; a
+   `transcript` value that is not an object is replaced.
+10. **The `record` and `transcript` updates hold a P15 lock.** P08's `settings_write()` merges
+    top-level keys only under its short lock, so the read-modify-write of `record` (plan
+    ambiguity 12) could lose one of two answers remembered at the same moment by two processes.
+    Only P15 writes `record` and `transcript`, and every other writer patches other top-level
+    keys under P08's lock, so serialising P15's own update is enough: `doc_project_update()`
+    holds a `doc_lock_acquire()` lock at `<project file>.doc-lock` across the read and the
+    `settings_write()` (pid + creation time, IC-71). When another live process still holds it
+    after 1 s, the update goes ahead without it rather than being dropped. Round 0 recorded this
+    as a known limit for P08; no P08 change is needed now. The file is the one P08's
+    `settings_path("user_project")` names; a test pins this.
 
 Test-side (no behaviour change): the plan's "the byte fixtures round-trip exactly" called
 `testthat::test_path()` after `local_project()` had changed the working directory, so the
@@ -5785,10 +5805,14 @@ resolved first, and the copy is asserted. Later tasks that extend `test-doc-io.R
 must resolve fixture paths before `local_project()` in the same way.
 
 Validation: `progress/P15.md`, Task 4. Red (no source) `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 1 ]`.
-The plan literal gives `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 58 ]`: every failure is in the six
-adaptation tests (`dev/.validation/P15/task4-adapt-red.log`). Green: `^doc-io$`
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 73 ]`, the same under `LC_ALL=C`. The plan expects 41; the
-difference is 1 asserted copy, 6 for the gptr_source() frame test and 25 for the adaptations.
+The plan literal gives `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 58 ]` against the round-0 tests:
+every failure is in the six adaptation tests (`dev/.validation/P15/task4-adapt-red.log`). Items
+7-10: the four review-round-1 tests give `[ FAIL 7 | WARN 1 | SKIP 0 | PASS 80 ]` against the
+round-0 source (`task4-fix1-red.log`), and the plan literal against the final tests gives
+`[ FAIL 17 | WARN 1 | SKIP 0 | PASS 65 ]` (the same 10 and these 7; `task4-fix1-plan-literal.log`).
+Green: `^doc-io$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 88 ]`,
+the same under `LC_ALL=C`. The plan expects 41; the difference is 1 asserted copy, 6 for the
+gptr_source() frame test, 25 for items 1-6 and 15 for items 4 and 7-10 (review round 1).
 
 ## D-097 - P20 status and model entries: codex/default is a model the Codex route lists, status(check = TRUE) runs the capability probe, and a malformed rate_limit_event reads as NA (2026-10-04)
 
