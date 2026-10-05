@@ -609,13 +609,14 @@ ev_dispatch = function(event, payload, session = NULL, ctx = NULL) {
 #'
 #' P06's session finalizer runs at whatever allocation triggers a garbage collection, possibly in
 #' the middle of a loop over registry state; dispatching there would run arbitrary hooks and drop
-#' records under that loop. This only adds one binding to the current registry's `deferred`
-#' queue, under a key no queued event has (a finalizer that runs inside another ev_defer() call
-#' takes the next number), so no other code reads and rewrites the binding it adds; ev_drain()
-#' dispatches it. `session` is a session id (never the shell being finalized).
+#' records under that loop. This only adds one binding to the live registry's `deferred` queue
+#' (never gptr_check()'s scratch), under a key no queued event has (a finalizer that runs inside
+#' another ev_defer() call takes the next number), so no other code reads and rewrites the binding
+#' it adds; ev_drain() dispatches it. `session` is a session id (never the shell being finalized).
 #' @noRd
 ev_defer = function(event, payload, session = NULL) {
   reg = registry_env()
+  reg = reg$check_origin %||% reg
   item = list(event = event, payload = payload, session = ext_session_id(session))
   repeat {
     reg$deferred_seq = reg$deferred_seq + 1L

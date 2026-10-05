@@ -511,6 +511,25 @@ test_that("checks see the live registry's records and services but never change 
   expect_false(is.null(registry_get("command", "mine", session = "s1")))
 })
 
+test_that("a session finalized during a check keeps its deferred shutdown (D-085)", {
+  reg = local_registry()
+  seen = new.env(parent = emptyenv())
+  seen$reasons = character()
+  hook_add("session_shutdown", function(event, ctx) {
+    seen$reasons = c(seen$reasons, event$reason)
+    NULL
+  })
+  registry_add(gptr_command("mine", function(args, ctx) "x"), "session", 0L, session = "s1")
+  gptr_check(function(gptr) {
+    # what session_finalizer() does when a collection runs inside the scratch registry
+    ev_defer("session_shutdown", list(reason = "gc"), session = "s1")
+    gptr$register(gptr_command("probe", function(args, ctx) NULL))
+  })
+  expect_null(registry_get("command", "mine", session = "s1"))
+  expect_identical(seen$reasons, "gc")
+  expect_length(ls(reg$deferred), 0L)
+})
+
 test_that("the identifier scan knows arrow assignments and for-loop variables (IC-42)", {
   arrowed = function(file) NULL
   body(arrowed) = call("{", call(ext_binding_heads[[2]], as.name("judge"), "jev"),
