@@ -462,6 +462,8 @@ test_that("control files gptr cannot hash are kept by a marker, so an auto exec 
   hook = file.path(root, ".git", "hooks", "pre-commit")
   made = suppressWarnings(file.symlink(file.path(root, "gone-1.sh"), hook))
   skip_if_not(isTRUE(made), "symbolic links are not available")
+  # R reads no link target on Windows (Sys.readlink() gives ""): there the link is unreadable
+  readable = nzchar(pcli_control_link(hook))
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(pcli_is_windows = function() FALSE,
                         pcli_probe = function(path) list(resume = FALSE),
@@ -474,12 +476,19 @@ test_that("control files gptr cannot hash are kept by a marker, so an auto exec 
   args = spec$start$args
   expect_identical(args[[match("--sandbox", args) + 1L]], "workspace-write")
   before = opts$state$codex_control
-  expect_identical(before[[path_norm(hook)]], paste0("link:", file.path(root, "gone-1.sh")))
+  marker = before[[path_norm(hook)]]
+  if (readable) {
+    expect_identical(marker, paste0("link:", file.path(root, "gone-1.sh")))
+  } else {
+    expect_match(marker, "^unreadable")
+  }
   expect_true(path_norm(file.path(root, ".git", "hooks", "pre-push")) %in% names(before))
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_no_warning(expect_true(feed_fixture(n, "codex-text.jsonl")))
   expect_identical(event_types(opts)[[length(opts$log$events)]], "done")
-  # the dangling link pointed somewhere else is a change
+  # the dangling link pointed somewhere else is a change (R on Windows can neither read nor
+  # unlink a file link)
+  skip_if_not(readable, "R reads no symbolic link target on this platform")
   opts2 = stub_opts()
   opts2$state$codex_sandbox = "workspace-write"
   opts2$state$codex_control = pcli_control_hash(root)

@@ -248,7 +248,16 @@ test_that("the Windows release job streams the offline suite file by file, bound
   # before R CMD check, so a hang there cannot use up the job's limit first
   expect_true(length(diag) == 1L && length(check) == 1L && diag < check)
   expect_identical(step[["if"]], "runner.os == 'Windows' && matrix.config.r == 'release'")
-  expect_true(is.numeric(step[["timeout-minutes"]]) && step[["timeout-minutes"]] <= 20)
+  expect_true(is.numeric(step[["timeout-minutes"]]) && step[["timeout-minutes"]] <= 30)
+  # the stream must not use up R CMD check's time: the job's limit leaves the check the 45
+  # minutes of every other check job (CI-6: a 45-minute job cancelled the check after 19)
+  config = jobs[["R-CMD-check"]]$strategy$matrix$config
+  combos = vapply(config, function(x) paste(x$os, x$r), "")
+  minutes = vapply(config, function(x) as.numeric(x$minutes %||% 45), 0)
+  expect_identical(jobs[["R-CMD-check"]][["timeout-minutes"]],
+                   "${{ matrix.config.minutes || 45 }}")
+  expect_gte(minutes[combos == "windows-latest release"], step[["timeout-minutes"]] + 45)
+  expect_identical(unname(minutes[combos == "ubuntu-latest devel"]), 120)
   # diagnosis only: R CMD check stays the gate
   expect_true(isTRUE(step[["continue-on-error"]]))
   expect_identical(step$env[["NOT_CRAN"]], "true")

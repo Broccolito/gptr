@@ -481,11 +481,18 @@ ctx_default = function(session) {
 }
 
 #' Get a ctx member; unknown names signal gptr_error_unknown_member
+#'
+#' An active member (`envir`, `run`, `input`) is read by calling its function: R >= 4.6 marks a
+#' value read through an active binding as not mutable, which pins a function-frame home so R
+#' never releases its arguments (rule R2, IC-41; CI-6).
 #' @export
 #' @noRd
 `$.gptr_ctx` = function(x, name) {
   ext_warn_deprecated("ctx", name)
-  if (exists(name, envir = x, inherits = FALSE)) return(get(name, envir = x, inherits = FALSE))
+  if (exists(name, envir = x, inherits = FALSE)) {
+    if (bindingIsActive(name, x)) return(activeBindingFunction(name, x)())
+    return(get(name, envir = x, inherits = FALSE))
+  }
   gptr_abort(paste0("ctx has no member '", name, "'."), "unknown_member", name = name,
              available = ctx_members)
 }

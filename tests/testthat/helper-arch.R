@@ -233,14 +233,15 @@ pd_calls = function(path) {
   if (is.null(pd)) return(empty)
   calls = pd[pd$token == "SYMBOL_FUNCTION_CALL", ]
   if (!nrow(calls)) return(empty)
-  pkg = vapply(calls$parent, function(id) {
-    hit = pd$text[pd$parent == id & pd$token == "SYMBOL_PACKAGE"]
-    if (length(hit)) hit[[1L]] else ""
-  }, "")
+  # one lookup for all calls: a scan of the parse data per call made this quadratic (CI-6:
+  # R/perm-classify.R alone took 111 s, the arch and lint tests 3 min each on hosted Linux)
+  pkgs = pd[pd$token == "SYMBOL_PACKAGE", ]
+  pkg = pkgs$text[match(calls$parent, pkgs$parent)]
+  pkg[is.na(pkg)] = ""
   call_ids = pd$parent[match(calls$parent, pd$id)]
   data.frame(
     file = basename(path), line = calls$line1, fun = calls$text, pkg = pkg,
-    text = vapply(call_ids, function(id) utils::getParseText(pd, id), "")
+    text = utils::getParseText(pd, call_ids)
   )
 }
 

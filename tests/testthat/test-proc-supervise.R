@@ -86,7 +86,18 @@ test_that("kill_all() leaves no descendant", {
   expect_true(wait_until(function() length(kids()) >= 1L, 30))
   tree = c(p$get_pid(), vapply(kids(), ps::ps_pid, 1L))
   expect_true(kill_all(p, grace = 1))
-  expect_true(wait_until(function() !any(vapply(tree, pid_alive, NA)), 5))
+  # failed twice on hosted Linux (CI-6): name each survivor for the next diagnosis
+  proc_line = function(pid) {
+    h = ps::ps_handle(pid)
+    sprintf("%d %s (%s, parent %d)", pid, ps::ps_name(h), ps::ps_status(h), ps::ps_ppid(h))
+  }
+  survivors = function() {
+    pids = tree[vapply(tree, pid_alive, NA)]
+    vapply(pids, function(pid) tryCatch(proc_line(pid), error = function(e) paste(pid, "gone")), "")
+  }
+  gone = wait_until(function() !any(vapply(tree, pid_alive, NA)), 5)
+  expect_true(gone, label = paste("no survivor of", toString(tree), "| alive:",
+                                  toString(survivors())))
 })
 
 test_that("proc_sweep() kills the trees of markers whose parent process is gone", {

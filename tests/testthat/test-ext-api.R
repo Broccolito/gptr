@@ -257,6 +257,28 @@ test_that("ctx members call the P06 kernel with the ctx first, lazily at call ti
   expect_s3_class(ctx$usage(), "data.frame")
 })
 
+test_that("ctx$envir calls the member's function, not R's binding read (R >= 4.6, CI-6)", {
+  # R 4.6 marks what an active binding returns as not mutable. For a function-frame home that
+  # pins the frame, so R never releases its arguments and the user's next edit copies (IC-41).
+  # R's own binding read calls the function from globalenv().
+  local_registry()
+  local_no_bootstrap_services()
+  ctx = ctx_new("s1")
+  home = new.env()
+  log = new.env()
+  log$by_binding = logical()
+  makeActiveBinding("envir", function() {
+    log$by_binding = c(log$by_binding, identical(parent.frame(), globalenv()))
+    home
+  }, ctx)
+  expect_identical(ctx$envir, home)
+  expect_identical(ctx[["envir"]], home)
+  expect_identical(log$by_binding, c(FALSE, FALSE))
+  # control: get() reads through the binding
+  expect_identical(get("envir", envir = ctx), home)
+  expect_identical(log$by_binding, c(FALSE, FALSE, TRUE))
+})
+
 test_that("ctx services: ui, risk, secret, tokens, eval, describe, decide, add_tools, input", {
   local_registry()
   local_no_bootstrap_services()

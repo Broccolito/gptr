@@ -25,18 +25,19 @@ jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
-    # R-devel installs every dependency from source (about 65 minutes on a cold cache)
-    timeout-minutes: ${{ matrix.config.r == 'devel' && 120 || 45 }}
+    timeout-minutes: ${{ matrix.config.minutes || 45 }}
     strategy:
       fail-fast: false
       matrix:
         config:
           - {os: macos-latest, r: 'release'}
-          - {os: windows-latest, r: 'release'}
+          # the file-by-file stream (at most 30 minutes) runs before the 45 of the check
+          - {os: windows-latest, r: 'release', minutes: 75}
           # Windows R before 4.5.0: file.info() has no owner columns, which
           # _R_CHECK_THINGS_IN_OTHER_DIRS_ needs (R CMD check aborts at its start otherwise)
           - {os: windows-latest, r: 'oldrel-4', things-in-other-dirs: 'false'}
-          - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release'}
+          # R-devel installs every dependency from source (about 65 minutes on a cold cache)
+          - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
           - {os: ubuntu-latest, r: 'release'}
           - {os: ubuntu-latest, r: 'oldrel-1'}
           - {os: ubuntu-latest, r: 'oldrel-4'}
@@ -62,7 +63,7 @@ jobs:
       # first, within its own limit; it only diagnoses, and the R CMD check below is the gate.
       - name: Offline tests file by file (Windows release diagnosis)
         if: runner.os == 'Windows' && matrix.config.r == 'release'
-        timeout-minutes: 20
+        timeout-minutes: 30
         continue-on-error: true
         shell: bash
         env:

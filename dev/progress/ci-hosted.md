@@ -1016,3 +1016,158 @@ Open items:
   `file.exists()` and `readBin()` also need `fs_path()` for such a path (`file.exists()` warns
   "unable to translate" in a C locale, checked on R 4.5.0); recorded in `progress/P17.md`.
 - Windows `Rscript*` temp detritus NOTE: unchanged from CI-3.
+
+## Task CI-6 - Hosted regressions after the gateway, documents and System 1 waves
+
+Hosted evidence (job logs fetched with `gh api .../actions/jobs/<id>/logs`): run 37329796830 on
+`718659d` and runs 37317629994 (`0c37a8d`), 37313611932 (`e214a61`) and 37303873005
+(`602ba53`), all complete. Ubuntu oldrel-4 (R 4.2.3) and the token benchmark passed in all four,
+Ubuntu oldrel-1 (R 4.5.3) in three.
+
+| Failure | Where | Cause |
+|---|---|---|
+| `test-copy-gateway.R:108` "no copy of big after tool code run in a function-frame home (G3 verification log)": 1 copy of `big` (allowed 0) | every R 4.6.1 and R-devel job of all four runs: Ubuntu release, devel, LC_ALL=C, no-Suggests, macOS, Windows release, copy-safety release and devel, connections; never on R 4.5.3 or 4.2.3 (locally R 4.5.0 passed) | R 4.6.0 marks a value read through an active binding as not mutable (svn r89121, `getActiveValue()`), which pins an environment's reference count. The row's tool reads `ctx$envir` and `$.gptr_ctx` read it through the binding, so the function frame was never cleaned up and the forced argument `d` kept `big` shared |
+| `test-cli-codex.R:477` (`"unreadable:0 NA"`, not `link:<target>`), `:480` (a warning "cannot open file ... pre-commit"), `:489`, `:490`, and 6 test warnings | both Windows jobs, all four runs (Windows release: R CMD check of `602ba53` and every stream) | R reads no link target on Windows (`Sys.readlink()` gives ""), `file.info()` of the dangling link warns out of the exec, and R cannot unlink a file link ("cannot delete reparse point") |
+| windows-latest (release) cancelled | `718659d`, `0c37a8d`, `e214a61` (`602ba53` finished) | not a hang. The 20-minute stream timed out in `test-lint-rules.R` (1,095 s in; it reached `test-tool-search.R` on `602ba53`), leaving R CMD check 23 of the job's 45 minutes; its tests were cancelled after 19.5. Windows oldrel-4 tests took 25 minutes (13 on `602ba53`). The growth is P01's `pd_calls()`, quadratic in a file's size: P11's `R/perm-classify.R` (194 lines on `602ba53`, 6,590 at HEAD) took 111 s alone locally in its 10,131-line working-tree form, and `test-arch-layers.R` / `test-lint-rules.R` grew from 82 / 67 s (`602ba53`) to 183 / 161 s on the Linux connections job (arch 117 to 285 s on the Windows stream) |
+| `test-proc-supervise.R:89` "kill_all() leaves no descendant" | Ubuntu oldrel-1 (`e214a61`), connections (`0c37a8d`); passed in all other jobs | flaky, cause unknown (see open items) |
+| `test-http-sse.R:126` INFRA-23 CPU (1.01 to 1.39 s); `test-http-reactor.R:636` INFRA-01 first deltas 0.38 / 0.181 s late (Windows stream, `0c37a8d`) and the six-stream row (`_problems/test-http-reactor-667.R`, Windows release check of `718659d`, cancelled before its message) | Windows only. INFRA-23 failed 5 times in the 9 Windows executions that report it: Windows oldrel-4 R CMD check of `0c37a8d` (1.010) and `e214a61` (1.060), and the Windows release stream of `718659d` (1.020), `0c37a8d` (1.39) and `e214a61` (1.080). It passed in Windows oldrel-4 of `602ba53` and `718659d` and in the stream and R CMD check of Windows release on `602ba53`; the three cancelled Windows release checks did not report it | timing on hosted Windows; open items of CI-1/CI-3 (P04) |
+
+Totals on `718659d`: Ubuntu release `Status: 1 ERROR`, `[ FAIL 1 | WARN 0 | SKIP 30 | PASS 22031 ]`;
+macOS `1 ERROR, 1 NOTE`, `[ FAIL 1 | WARN 0 | SKIP 28 | PASS 22045 ]`; Windows oldrel-4 `1 ERROR,
+2 NOTEs`, `[ FAIL 4 | WARN 6 | SKIP 63 | PASS 21889 ]`; copy-safety `[ FAIL 1 | WARN 0 | SKIP 0 |
+PASS 50 ]`; connections `[ FAIL 1 | WARN 0 | SKIP 17 | PASS 22107 ]`, connection table unchanged.
+No WARNING anywhere. The NOTEs do not gate: macOS service folders under `/var/folders/.../T`,
+Windows `Rscript*` temp detritus (CI-3) and installed size 6.8 MB.
+
+What was built:
+
+1. `R/ext-api.R` (P02; D-137 item 1): `$.gptr_ctx` (and so `[[.gptr_ctx`) calls an active
+   member's function with `activeBindingFunction()` instead of reading the binding. New test in
+   `test-ext-api.R`: `ctx$envir` and `ctx[["envir"]]` reach the member without R's binding read
+   (which calls the function from `globalenv()`); `get()` is the control.
+2. `R/cli-codex.R` (P20; D-137 item 2): `pcli_control_digest()` suppresses `file.info()`'s
+   warning for an entry it marks `unreadable`. `test-cli-codex.R`: where `pcli_control_link()`
+   reads no target the marker must start `unreadable`, and the re-pointed-link part is skipped.
+3. `tests/testthat/helper-arch.R` (P01): `pd_calls()` looks up packages with one `match()` and
+   call text with one vectorised `getParseText()`. Same output on all 95 files under `R/`
+   (51,296 calls), 152.2 s before, 5.4 s after (`task6-pdcalls-equivalence.log`).
+4. Workflow: per-entry `minutes` (`timeout-minutes: ${{ matrix.config.minutes || 45 }}`;
+   Windows release 75, R-devel 120 as before, others 45); the stream's limit is 30 minutes.
+   `test-zzz.R` (CI-2's stream test): stream limit at most 30, and the Windows release limit at
+   least the stream's plus 45.
+5. `test-proc-supervise.R` (P04): the survivors of "kill_all() leaves no descendant" are named
+   in its failure message (pid, name, status, parent); the expectation is unchanged.
+
+Adaptations: no plan literal covers these corrections (P01 Task 21's rule that the hosted jobs
+pass). P20 is not one of the listed completed plans, but its files are committed, unmodified in
+the working tree and its lane is not running; the change is noted in `progress/P20.md`. Notes
+also in `progress/P01.md`, `P02.md`, `P04.md`, `P08.md`. D-136 was taken by the P10 lane while
+this task ran, so this entry is D-137. Its text was committed with the P10 commit `ff3a558`
+(review round 1), so the CI-6 commit has no `dev/DEVIATIONS.md` hunk.
+
+Red (actual, `isolated-check.R`):
+
+- `^(ext-api|zzz)$`: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 321 ]` (`task6-red-extapi-zzz.log`):
+  `test-ext-api.R:276`, `:279` (`by_binding` TRUE TRUE: `$.gptr_ctx` read through the binding),
+  `test-zzz.R:257`, `:259` (45 < 20 + 45), `:260`.
+- R 4.6 emulated on R 4.5.0 (scratch probe `ci6/test-r46-emulation.R`): the G3 row with ctx's
+  `envir` binding marking what R's binding read returns as not mutable (`lockBinding()` sets the
+  same mark): "G3 row (R 4.6 rule emulated): 1 copies of `big` (allowed 0)", the hosted message;
+  the same row without emulation passed, and a frame pinned the same way copies once (control)
+  (`task6-red-r46-emulation.log`).
+- Windows link reading simulated on macOS (`pcli_control_link()` mocked to "", clean export of
+  HEAD with HEAD's test): `^cli-codex$` `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 222 ]` at the hosted
+  `:477`, `:489`, `:490` (one line later) (`task6-red-winsim-cli-codex.log`). The `file.info()`
+  warning (`:480`) is Windows-only; its red evidence is the hosted log.
+- Baseline `^arch-layers$` on the working tree: `PASS 13` in 2 min 42 s
+  (`task6-baseline-arch-layers.log`).
+
+Green (actual):
+
+- `^(ext-api|zzz|cli-codex|arch-layers|lint-rules|proc-supervise)$`: `[ FAIL 0 | WARN 0 | SKIP 0 |
+  PASS 711 ]` in 31 s (`task6-green-focused.log`); per file 232 (227 + 5), 94 (91 + 3), 226,
+  13, 5, 141 (`task6-green-<file>.log`; `proc-supervise` re-run after the last edit).
+- The emulation probe after the fix: 4 of 4 (`task6-green-r46-emulation.log`).
+- Windows simulation with this task's files: `^cli-codex$`
+  `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 223 ]`, the skip "R reads no symbolic link target on this
+  platform" (`task6-winsim-cli-codex.log`).
+- Neighbours `^(ext-|agent-|env-|prompt-|gptr-|session-|cli-|copy-|s1-|eval-)` on the working
+  tree: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 8824 ]`; the skips are the hosted ones (P09/P10/P11/P13
+  load-order skips) (`task6-neighbours.log`).
+- YAML parsed with Python (`task6-yaml.log`) and by `test-zzz.R`.
+- R CMD check (`isolated-check.R check`) of a clean `git archive` export of `6ab1d87` (docs-only
+  commits after `718659d` and `7d89173`) plus this task's 8 files: `Status: 1 NOTE`, `0 errors |
+  0 warnings | 1 note` (future file timestamps: no time server from this sandbox), tests
+  `[ FAIL 0 | WARN 0 | SKIP 28 | PASS 22054 ]` in 380 s; the skips are the expected live, keyring,
+  load-order and source-tree skips (`task6-check.log`, `task6-check-00check.log`,
+  `task6-check-testthat.Rout`).
+
+Lint: `isolated-check.R lint` on `R/ext-api.R`, `R/cli-codex.R`, `helper-arch.R`,
+`test-cli-codex.R`, `test-ext-api.R`, `test-proc-supervise.R`, `test-zzz.R`: no lints
+(`task6-lint.log`, `task6-lint-proc-supervise.log`; one brace lint fixed first). ASCII-only, no
+new line over 100 characters. Roxygen changed only in `@noRd` blocks, so no `document` run.
+
+Logs: `dev/.validation/CI/task6-*.log`. Hosted job logs, refetch by id: run 37329796830:
+111829715976 (Ubuntu release), 111829715385 (devel), 111829715175 (LC_ALL=C), 111829715349
+(no-Suggests), 111829715623 (macOS), 111829715398 (Windows release), 111829715410 (Windows
+oldrel-4), 111829715066 / 111829715411 (copy-safety), 111829715130 (connections); run
+37317629994: 111794347652, 111794347381, 111794347198, 111794347321, 111794346793, 111794347393;
+run 37313611932: 111774764214, 111774764612, 111774764457, 111774764344, 111774764948,
+111774764679, 111774764366; run 37303873005: 111746633383, 111746633591, 111746633023,
+111746633222, 111746633623, 111746633574, 111746634231, 111746633310, 111746633425.
+
+To be confirmed by the hosted run of the pushed commit: every R 4.6.1 and devel job, both
+copy-safety jobs and connections pass `test-copy-gateway.R`; both Windows jobs pass
+`test-cli-codex.R` without warnings; Windows release finishes its stream and R CMD check within
+75 minutes.
+
+Open items:
+
+- `test-proc-supervise.R:89` (P04): 2 failures in 4 runs, Linux only. A plausible cause, not
+  verified: the grandchild is between `fork()` and `exec()` when `p$kill_tree()` reads the
+  environments, so the marker search misses it once. The next failure message names the
+  survivor.
+- INFRA-23 (`test-http-sse.R:126`) on hosted Windows: 5 failures in 9 executions in these four
+  runs (1.01 to 1.39 s of CPU), in the gating R CMD check of Windows oldrel-4 (`0c37a8d`,
+  `e214a61`) and in the Windows release stream (`718659d`, `0c37a8d`, `e214a61`). INFRA-01 on
+  hosted Windows release (stream `0c37a8d`; check `718659d`). The P04 decisions of CI-1/CI-3 are
+  still open; either can fail a Windows job. The stream (non-gating) failed INFRA-23 in 3 of its
+  4 runs here and can now finish within its 30 minutes, so expect it to report the test again.
+- Code that reads a ctx member with `get()`/`mget()`/`as.list()` still pins a function frame on
+  R >= 4.6 (D-137 item 1); none in `R/` today.
+
+### Review round 1 (Task CI-6, 2026-10-05)
+
+Verdict: clear, with one minor finding and one nit. The reviewer re-ran every filter (focused
+`PASS 711`, neighbours `PASS 8824`), the R 4.6 emulation probe (4 of 4), `pd_calls()` old against
+new on 208 files (123,968 calls, identical, 237.1 s to 10.7 s) and a Windows `file.info()` warning
+probe (0 warnings escape the new `pcli_control_digest()`, 1 escaped HEAD's).
+
+- Minor, fixed: the staging note for D-137 was out of date. The P10 lane's commit `ff3a558`
+  committed `dev/DEVIATIONS.md` with D-134, D-136 and this task's D-137 section, word for word;
+  `git diff HEAD -- dev/DEVIATIONS.md` is empty. The Adaptations paragraph now says so. The CI-6
+  commit leaves `dev/DEVIATIONS.md` out.
+- Nit, fixed: the INFRA-23 row and open item counted only the Windows oldrel-4 failures. The
+  non-gating Windows release stream also failed `test-http-sse.R:126` on `718659d` (1.020),
+  `0c37a8d` (1.39) and `e214a61` (1.080) (scratchpad `ci/r718-winrel.log`, `r0c3-winrel.log`,
+  `re21-winrel.log`). That makes 5 failures in the 9 Windows executions that report the test (it
+  passed in Windows oldrel-4 of `602ba53` and `718659d` and in both Windows release steps of
+  `602ba53`; the three cancelled Windows release checks did not report it). Both places now give
+  these counts.
+
+No code changed in this round, so there is no regression red/green. Both findings were
+documentation only.
+
+Green after the round (`isolated-check.R`):
+`^(ext-api|zzz|cli-codex|arch-layers|lint-rules|proc-supervise)$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 711 ]` (`task6-fix1-focused.log`). Lint of the 7 R and test
+files: no lints (`task6-fix1-lint.log`). No roxygen change, so no `document` run.
+
+Files for the CI-6 commit (14), whole files: `.github/workflows/R-CMD-check.yaml`, `R/cli-codex.R`,
+`R/ext-api.R`, `tests/testthat/helper-arch.R`, `tests/testthat/test-cli-codex.R`,
+`tests/testthat/test-ext-api.R`, `tests/testthat/test-proc-supervise.R`,
+`tests/testthat/test-zzz.R`, `dev/progress/ci-hosted.md`, `dev/progress/P01.md`, `P02.md`,
+`P04.md`, `P08.md` and `P20.md`. Each of these files has only this task's hunks. Leave out
+`dev/DEVIATIONS.md`, `NAMESPACE`, `man/`, the untracked `AGENTS.md` and the other lanes'
+working-tree files (`R/agent-*.R`, `R/session-*.R`, `R/ext-plugins.R`, `R/perm-classify.R`,
+`R/s1-types.R`, `R/subagent-defs.R`, `dev/progress/P10.md`, `P11.md`, `P17.md` and their tests).

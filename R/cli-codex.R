@@ -193,13 +193,15 @@ pcli_control_link = function(paths) {
 
 #' The content hash of one control file; one gptr cannot read gets a marker instead, so that
 #' hashing never fails and a change to the entry still shows: `link:<target>` for a link whose
-#' target is gone, else `unreadable:<size> <modification time>` (D-106)
+#' target is gone, else `unreadable:<size> <modification time>` (D-106). R reads no link target
+#' on Windows, where `file.info()` of a dangling link also warns; the marker says it already.
 #' @noRd
 pcli_control_digest = function(path) {
   tryCatch(as.character(hash_file(path)), error = function(e) {
     target = pcli_control_link(path)
     if (nzchar(target)) return(paste0("link:", target))
-    info = tryCatch(file.info(path, extra_cols = FALSE), error = function(e2) NULL)
+    info = tryCatch(suppressWarnings(file.info(path, extra_cols = FALSE)),
+                    error = function(e2) NULL)
     if (is.null(info) || nrow(info) != 1L) return("unreadable")
     paste0("unreadable:", info$size, " ", format(as.numeric(info$mtime), digits = 15))
   })
