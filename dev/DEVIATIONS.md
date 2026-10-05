@@ -200,7 +200,7 @@ it. P05 Task 8 fixes these behaviours, which P08 and P13 consume:
 
 Validation: `progress/P05.md`, Task 8 (`test-catalog-models.R` IC-74 tests).
 
-## D-015 - IC-74 usage rows: unknown cost and tier stay NA; validated roll-up (2026-10-03)
+## D-015 - IC-74 usage rows: unknown cost and tier stay NA; validated rows (2026-10-03)
 
 P05 Task 9's literal `usage_row()`/`usage_rollup()` predate IC-74 (07-local-ollama.md section 5:
 "Missing usage remains unknown"). Behaviours changed, which P06, P13 and P20 consume:
@@ -225,11 +225,9 @@ P05 Task 9's literal `usage_row()`/`usage_rollup()` predate IC-74 (07-local-olla
 4. **Validation.** `usage_row()` refuses non-scalar or invalid `session`, `agent`, `parent_id`,
    `started`, `seconds`, `multiplier` and message fields (`gptr_error_invalid_argument`) instead
    of recycling them into several rows; `usage_log_append()` validates the section 4.3 column
-   types before the log changes; `usage_rollup()` refuses a session with two different recorded
-   `parent_id`s and cyclic ancestry (the plan stopped silently at a cycle). An `NA` `parent_id`
-   records no parent (contract 4.3; P13's System 1 rows of a child session), so it joins the
-   parent its session's other rows record. Rows without a session (process System 1 calls) form
-   the `NA` group; an `NA` value makes its group's sum `NA`.
+   types before the log changes. An `NA` `parent_id` records no parent (contract 4.3; P13's
+   System 1 rows of a child session). The `usage_rollup()` rules of this item are superseded by
+   D-140 (the helper is gone; P06's `usage_add()` rolls usage up, IC-66).
 
 Validation: `progress/P05-usage.md`, Task 9 (`test-provider-usage.R`; the evidence-priced row
 in `test-catalog-models.R`).
@@ -9875,6 +9873,21 @@ Validation: `progress/ci-hosted.md`, Task CI-6.
   `builtin:workspace` is replaced or disabled without an `attached` block: no attached rendering.
 - Tests: test-prompt-cache.R (1) and test-prompt-context.R (2) always-skipped stub tests removed.
   Evidence: progress/simplicity.md P07-S.
+
+## D-140 - P05 model-layer duplication: no roll-up helper, compat in records, Mistral id seed (2026-10-05)
+- Rule: `usage_rollup()`/`usage_roots()` are gone (no caller; P06's `usage_add()` charges every
+  ancestor, IC-66); D-015 item 4's roll-up part is superseded; P05 acceptance row 5 cites
+  test-session-budget.R.
+- Rule: Chat Completions tool ids use P05's `id_alnum9()`/`id_completions()`: a Mistral id that
+  is not 9 alphanumerics keeps its alphanumerics when they are 9, else hashes them (not the raw
+  id; still deterministic); only the first `|` splits a `call|item` id.
+- Rule: per-provider compat flags live only in `provider_table()` records; `compat_flags()`
+  detects only from the base URL and `local` (no provider-id switch).
+- Rule: a `stop` with a tool call is `tool_use` in every native normaliser (`adp_done()`).
+- Contract-visible: none (04 sections 4.2, 7.5 and 7.12 unchanged).
+- Tests: test-provider-usage.R (3 roll-up tests, one roll-up half), test-provider-registry.R (1
+  near-duplicate) removed; 3 table-driven tests in test-provider-anthropic.R replace 12
+  per-adapter copies. Evidence: progress/simplicity.md P05-S.
 
 ## D-141 - P04 pid_alive() reads an unreadable process as alive (2026-10-05)
 - Rule: `pid_alive(pid, create_time)` is a valid pid and `!isFALSE(proc_identity(pid,

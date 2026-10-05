@@ -37,16 +37,6 @@ resp_text = function(text = "x") {
 
 # ---- the normaliser (Task 6) -------------------------------------------------------------------
 
-test_that("responses fixtures give the golden events and final messages (INFRA-02)", {
-  expect_all_golden(api, responses_normaliser)
-})
-
-test_that("responses events do not depend on how the bytes are chunked (INFRA-23)", {
-  for (case in c("reasoning_tools", "backfill", "truncated")) {
-    expect_chunk_invariant(api, responses_normaliser, case)
-  }
-})
-
 test_that("reasoning items, phase and fc_/call_ ids are kept verbatim (INFRA-07)", {
   msg = replay_case(api, responses_normaliser, "reasoning_tools")$message
   types = vapply(msg$content, function(b) b$type, "")
@@ -490,16 +480,6 @@ test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", 
   b2 = responses_build(model, ctx_fixture(turn2, cache_plan = plan), list(memo = memo))$body
   expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
   expect_identical(b2, responses_build(model, ctx_fixture(turn2, cache_plan = plan), list())$body)
-})
-
-test_that("builtin:openai registers the adapter; check_adapter() and gptr_check() pass", {
-  a = adapter_get(api)
-  expect_identical(a$capabilities$operator_role, "developer")
-  expect_true(a$capabilities$tool_addition)
-  res = check_adapter(a, fixtures = sse_dir(api))
-  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
-  expect_true("adapter.reasoning_tools.roundtrip" %in% res$check)
-  expect_true(all(gptr_check(a)$ok))
 })
 
 test_that("returns = through the run loop on Responses: instruction and validation (INFRA-25)", {

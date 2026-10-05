@@ -211,6 +211,49 @@ adp_count = function(x) {
   if (ok) as.numeric(x) else NA_real_
 }
 
+#' One count of a reported usage object: NULL when the field is left out, else adp_count()
+#' @noRd
+adp_count_at = function(x, key) {
+  if (!is.list(x) || !(key %in% names(x))) return(NULL)
+  adp_count(x[[key]])
+}
+
+#' The first known of several reported counts: NA when only unknown ones were reported, P05's
+#' legacy zero when none was (D-022)
+#' @noRd
+adp_first = function(...) {
+  vals = Filter(Negate(is.null), list(...))
+  if (!length(vals)) return(0)
+  known = Filter(Negate(is.na), vals)
+  if (length(known)) known[[1L]] else NA_real_
+}
+
+#' Record an OpenAI usage object: Chat Completions (`prompt`/`completion` tokens, cache hits also
+#' under `hits`) or Responses (`input`/`output`); input excludes cache reads and writes, each
+#' report replaces the last and a null stays NA (IC-74; Pi parseChunkUsage, 08 section 3.3)
+#' @noRd
+adp_openai_usage = function(st, u, input, output, hits = character()) {
+  if (!is.list(u)) return(invisible(NULL))
+  details = u[[paste0(input, "_tokens_details")]]
+  cached = do.call(adp_first, c(list(adp_count_at(details, "cached_tokens")),
+                                lapply(hits, adp_count_at, x = u)))
+  cwrite = adp_first(adp_count_at(details, "cache_write_tokens"))
+  prompt = adp_first(adp_count_at(u, paste0(input, "_tokens")))
+  reasoning = adp_count_at(u[[paste0(output, "_tokens_details")]], "reasoning_tokens")
+  st$usage = list(input = max(0, prompt - cached - cwrite),
+                  output = adp_first(adp_count_at(u, paste0(output, "_tokens"))),
+                  cache_read = cached, cache_write_5m = cwrite, reasoning = adp_first(reasoning))
+  invisible(NULL)
+}
+
+#' An HTTP status in a provider error code: a whole number in 100..599, never coerced (D-034)
+#' @noRd
+adp_http_status = function(code) {
+  ok = is.numeric(code) && length(code) == 1L && !is.na(code) && code >= 100 && code <= 599 &&
+    code == round(code)
+  if (ok) as.integer(code) else NA_integer_
+}
+
 #' Record one reported usage field: a value replaces the earlier one; a null keeps it and is NA
 #' (IC-74) only when nothing was recorded before
 #' @noRd
@@ -243,13 +286,6 @@ adp_usage = function(st) {
   })
 }
 
-#' The route of a model's messages (04 section 4.2): `plan-cli` for CLI models (P20 reuses the
-#' Anthropic normaliser), `system-one` for classifiers, else `api`
-#' @noRd
-adp_route = function(model) {
-  switch(model$type %||% "chat", cli = "plan-cli", classifier = "system-one", "api")
-}
-
 #' The current assistant message (materialised on demand, never per delta)
 #' @noRd
 adp_message = function(st) {
@@ -265,7 +301,7 @@ adp_message = function(st) {
   msg_assistant(content, api = m$api, provider = m$provider, model = m$id, usage = adp_usage(st),
                 stop_reason = st$stop_reason %||% "stop", response_id = st$response_id,
                 response_model = st$response_model, error_message = st$error_message,
-                raw_stop_reason = st$raw_stop, route = adp_route(m))
+                raw_stop_reason = st$raw_stop, route = stream_route(m))
 }
 
 #' Emit the one terminal error event with the partial message
@@ -279,7 +315,7 @@ adp_error = function(st, message, class = "provider", status = NA_integer_, retr
   m = st$model
   msg = tryCatch(adp_message(st), error = function(e) {
     msg_assistant(list(), api = m$api, provider = m$provider, model = m$id,
-                  stop_reason = st$stop_reason, error_message = message, route = adp_route(m))
+                  stop_reason = st$stop_reason, error_message = message, route = stream_route(m))
   })
   st$final = msg
   st$terminal = TRUE
@@ -291,15 +327,20 @@ adp_error = function(st, message, class = "provider", status = NA_integer_, retr
 }
 
 #' Close open slots and emit the terminal event: done, or error for an error stop reason
+#' A `stop` with a tool call is `tool_use` (04 section 4.2).
 #' @noRd
 adp_done = function(st) {
   if (st$terminal) return(st$final)
+  calls = FALSE
   for (i in seq_len(st$n)) {
-    if (!st$blocks[[i]]$done && st$blocks[[i]]$type != "opaque") adp_close(st, i)
+    b = st$blocks[[i]]
+    calls = calls || b$type == "tool_call"
+    if (!b$done && b$type != "opaque") adp_close(st, i)
   }
   if (is.null(st$stop_reason)) {
     return(adp_error(st, "The stream ended without a stop reason.", class = "network"))
   }
+  if (calls && identical(st$stop_reason, "stop")) st$stop_reason = "tool_use"
   if (st$stop_reason %in% c("error", "aborted")) {
     return(adp_error(st, st$error_message %||% "The provider reported an error.",
                      aborted = identical(st$stop_reason, "aborted")))
@@ -383,7 +424,7 @@ adp_normaliser = function(st, push, finish, push_parsed = NULL) {
                                stop_reason = "error",
                                error_message = paste0("The partial message could not be built: ",
                                                       conditionMessage(e)),
-                               route = adp_route(m))
+                               route = stream_route(m))
                })
              })
   if (!is.null(push_parsed)) out$push_parsed = adp_guard(st, push_parsed)
@@ -754,13 +795,6 @@ adp_model_cap = function(model, name, default = FALSE) {
   if (is.null(v) || length(v) != 1L || is.na(v)) default else v
 }
 
-#' Was msg produced by exactly this model through this api? (opaque data replays only then)
-#' @noRd
-adp_same_model = function(msg, model) {
-  identical(msg$api, model$api) && identical(msg$provider, model$provider) &&
-    identical(msg$model, model$id)
-}
-
 #' Does the model take image input? (images are otherwise replaced by a one-line note)
 #' @noRd
 adp_images_ok = function(model) "image" %in% unlist(model$input %||% "text")
@@ -864,10 +898,6 @@ adp_msg_key = function(msg) {
   hash_xxh128(msg[intersect(keep, names(msg))])
 }
 
-#' Tool-call ids restricted to `[A-Za-z0-9_-]` and a maximum length
-#' @noRd
-adp_sanitize_id = function(id, max = 64L) substr(gsub("[^A-Za-z0-9_-]", "_", id), 1L, max)
-
 #' The frozen tool array converted once per session for an api; NULL when there are no tools
 #' @noRd
 adp_tools_json = function(opts, api, tools_json, convert) {
@@ -891,6 +921,25 @@ adp_has_tool_calls = function(msgs) {
     }
   }
   FALSE
+}
+
+#' Consecutive messages as runs: a stretch of one of `roles` is one run, any other message its own
+#' Each run is `list(at, role, msgs, after)`: first index, role, messages and the next role (NULL
+#' at the end).
+#' @noRd
+adp_runs = function(msgs, roles) {
+  n = length(msgs)
+  out = list()
+  i = 1L
+  while (i <= n) {
+    role = msgs[[i]]$role %||% ""
+    j = i + 1L
+    if (role %in% roles) while (j <= n && identical(msgs[[j]]$role, role)) j = j + 1L
+    out[[length(out) + 1L]] = list(at = i, role = role, msgs = msgs[i:(j - 1L)],
+                                   after = if (j <= n) msgs[[j]]$role %||% "")
+    i = j
+  }
+  out
 }
 
 #' Index of the first user message that holds an anchored context block (the BP2 anchor)
@@ -993,7 +1042,7 @@ anthropic_user = function(m, mark_anchor, images) {
 #' byte for byte only to the model that produced them (INFRA-07)
 #' @noRd
 anthropic_assistant = function(m, model) {
-  same = adp_same_model(m, model)
+  same = handoff_same_model(m, model)
   parts = list()
   for (b in m$content) {
     type = b$type %||% ""
@@ -1010,7 +1059,7 @@ anthropic_assistant = function(m, model) {
       }
     } else if (type == "tool_call") {
       args = if (length(b$arguments)) b$arguments else json_obj()
-      p = list(type = "tool_use", id = adp_sanitize_id(b$id), name = b$name, input = args)
+      p = list(type = "tool_use", id = id_sanitize(b$id, 64L), name = b$name, input = args)
     } else if (type == "opaque") {
       if (same) p = json_verbatim(b$json)
     }
@@ -1037,7 +1086,7 @@ anthropic_tool_result = function(r, images) {
   if (!has_text && images && length(content)) {
     content = c(list(list(type = "text", text = "(see attached image)")), content)
   }
-  out = list(type = "tool_result", tool_use_id = adp_sanitize_id(r$tool_call_id))
+  out = list(type = "tool_result", tool_use_id = id_sanitize(r$tool_call_id, 64L))
   if (length(content)) out$content = content
   if (isTRUE(r$is_error)) out$is_error = TRUE
   out
@@ -1073,46 +1122,41 @@ anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FAL
   images = adp_images_ok(model)
   anchor_at = if ("project" %in% anchors) adp_anchor_index(msgs) else 0L
   prev = "none"
-  n = length(msgs)
-  i = 1L
-  while (i <= n) {
-    m = msgs[[i]]
-    role = m$role %||% ""
-    if (role %in% c("tool_result", "operator")) {
-      j = i
-      while (j <= n && identical(msgs[[j]]$role, role)) j = j + 1L
-      group = msgs[i:(j - 1L)]
-      if (role == "tool_result") {
-        key = paste(c("anthropic", "results", images, vapply(group, adp_msg_key, "")),
-                    collapse = "|")
-        el = adp_memo(opts, key, function() {
-          json_encode(list(role = "user",
-                           content = lapply(group, anthropic_tool_result, images = images)))
-        })
-        out = c(out, el)
-        prev = "user"
-      } else {
-        nxt = if (j <= n) msgs[[j]]$role %||% "" else if (tail) "user" else "end"
-        as_system = mid && identical(prev, "user") && nxt %in% c("assistant", "end")
-        with_tools = as_system && add_tools &&
-          any(vapply(group, function(op) length(op$tool_add) > 0L, logical(1)))
-        if (with_tools) betas = c(betas, "inline-tools-2026-09-15")
-        key = paste(c("anthropic", "operator", vapply(group, adp_msg_key, ""), as_system,
-                      with_tools), collapse = "|")
-        el = adp_memo(opts, key, function() {
-          x = anthropic_operator(group, as_system, with_tools)
-          if (is.null(x)) "" else json_encode(x)
-        })
-        if (nzchar(el)) {
-          out = c(out, el)
-          prev = if (as_system) "system" else "user"
-        }
-      }
-      i = j
+  for (run in adp_runs(msgs, c("tool_result", "operator"))) {
+    role = run$role
+    group = run$msgs
+    if (role == "tool_result") {
+      key = paste(c("anthropic", "results", images, vapply(group, adp_msg_key, "")),
+                  collapse = "|")
+      el = adp_memo(opts, key, function() {
+        json_encode(list(role = "user",
+                         content = lapply(group, anthropic_tool_result, images = images)))
+      })
+      out = c(out, el)
+      prev = "user"
       next
     }
-    same = adp_same_model(m, model)
-    mark = identical(i, anchor_at)
+    if (role == "operator") {
+      nxt = run$after %||% (if (tail) "user" else "end")
+      as_system = mid && identical(prev, "user") && nxt %in% c("assistant", "end")
+      with_tools = as_system && add_tools &&
+        any(vapply(group, function(op) length(op$tool_add) > 0L, logical(1)))
+      if (with_tools) betas = c(betas, "inline-tools-2026-09-15")
+      key = paste(c("anthropic", "operator", vapply(group, adp_msg_key, ""), as_system,
+                    with_tools), collapse = "|")
+      el = adp_memo(opts, key, function() {
+        x = anthropic_operator(group, as_system, with_tools)
+        if (is.null(x)) "" else json_encode(x)
+      })
+      if (nzchar(el)) {
+        out = c(out, el)
+        prev = if (as_system) "system" else "user"
+      }
+      next
+    }
+    m = group[[1L]]
+    same = handoff_same_model(m, model)
+    mark = identical(run$at, anchor_at)
     key = paste("anthropic", role, adp_msg_key(m), same, mark, images, sep = "|")
     el = adp_memo(opts, key, function() {
       x = NULL
@@ -1124,7 +1168,6 @@ anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FAL
       out = c(out, el)
       prev = role
     }
-    i = i + 1L
   }
   list(elements = out, betas = unique(betas), prev = prev, mid = mid)
 }

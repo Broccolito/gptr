@@ -62,10 +62,7 @@ catalog_seed = function() {
          type = "classifier", api = "ollama-system-one", locality = "unknown",
          reasoning = FALSE, thinking_levels = I("off"), input = I(c("text", "image")),
          tool_call = FALSE, structured_output = TRUE, status = "active",
-         decision = list(types = c("noul", "choice", "score"), images = TRUE,
-                          server_min = "0.35.1", max_questions = 64L, max_options = 26L,
-                          max_request_bytes_text = 65536L,
-                          max_request_bytes_images = 33554432L, max_active = 1L))
+         decision = catalog_ollama_decision(TRUE))
   }
   list(
     clef("clef", "Clef"),
@@ -473,13 +470,6 @@ catalog_alias_target = function(a, idx) {
   cand$ref[[1]]
 }
 
-#' Alias name -> target ref (NA when an alias resolves to nothing)
-#' @noRd
-catalog_alias_targets = function(aliases, idx) {
-  if (!length(aliases)) return(character())
-  vapply(aliases, catalog_alias_target, "", idx = idx)
-}
-
 #' Build the merged catalog: base < overrides < provider specs < model specs < user config <
 #' discovery
 #' @noRd
@@ -510,7 +500,7 @@ catalog_build = function() {
                                            ov[["providers"]] %||% list()),
              models = models, aliases = aliases, small = ov[["small"]])
   ctg$index = catalog_index(models)
-  ctg$alias_targets = catalog_alias_targets(ctg$aliases, ctg$index)
+  ctg$alias_targets = vapply(ctg$aliases, catalog_alias_target, "", idx = ctg$index)
   targets = ctg$alias_targets
   ctg$index$aliases = vapply(ctg$index$ref, function(r) {
     paste(names(targets)[!is.na(targets) & targets == r], collapse = ",")
@@ -594,8 +584,8 @@ model_key_present = function(id, vars) {
   if (any(vapply(vars, function(v) !is.null(secret_lookup(v)), NA))) return(TRUE)
   rec = tryCatch(auth_store_read()[[id]], error = function(e) NULL)
   if (!is.list(rec)) return(FALSE)
-  present = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
-  present(rec[["key"]]) || present(rec[["refresh"]]) || is.list(rec[["keyring"]])
+  (rlang::is_string(rec[["key"]]) && nzchar(rec[["key"]])) ||
+    (rlang::is_string(rec[["refresh"]]) && nzchar(rec[["refresh"]])) || is.list(rec[["keyring"]])
 }
 
 #' Does a provider with key variables have a credential now?
@@ -903,10 +893,6 @@ catalog_local_max_bytes = 8 * 1024^2
 #' @noRd
 catalog_ollama_min_version = "0.35.1"
 
-#' A single non-missing, non-empty string?
-#' @noRd
-catalog_chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
-
 #' Is a provider usable as a default route: not disabled in the settings and holding a key?
 #' @noRd
 model_route_ready = function(id, vars) {
@@ -954,14 +940,14 @@ model_default = function(role = c("chat", "small", "system1")) {
   role = check_choice(role, c("chat", "small", "system1"), "role")
   key = switch(role, chat = "model", small = "small_model", system1 = "system1")
   v = setting_get(key)
-  if (catalog_chr1(v)) return(v)
+  if (rlang::is_string(v) && nzchar(v)) return(v)
   if (identical(role, "system1")) {
     if (model_route_ready("typesafe", "TYPESAFE_API_KEY")) return("typesafe/jev-latest")
     return(catalog_local_classifier())
   }
   if (identical(role, "small")) {
     base = setting_get("model")
-    rec = if (catalog_chr1(base)) {
+    rec = if (rlang::is_string(base) && nzchar(base)) {
       tryCatch(model_resolve(base, strict = FALSE), gptr_error = function(e) NULL)
     }
     chat = if (is.null(rec)) model_default("chat") else rec$ref
@@ -1080,12 +1066,6 @@ catalog_http_request = function(url, method = "GET", headers = list(), body = NU
        body = if (length(st$chunks)) do.call(c, st$chunks) else raw())
 }
 
-#' One bounded GET on the reactor (see catalog_http_request()); `list(status, headers, body)`
-#' @noRd
-catalog_http_get = function(url, headers = list(), timeout = 30) {
-  catalog_http_request(url, "GET", headers, NULL, timeout)
-}
-
 #' Refresh the catalog from models.dev with ETag revalidation (explicit request only)
 #' Writes the user cache (04 section 11.9); TRUE for a new catalog, FALSE on 304 Not Modified.
 #' @noRd
@@ -1096,9 +1076,11 @@ catalog_refresh = function() {
   hdr = list(accept = "application/json")
   if (file.exists(json_path) && file.exists(etag_path)) {
     etag = readLines(etag_path, encoding = "UTF-8", warn = FALSE)[1]
-    if (catalog_chr1(etag) && !grepl("[[:cntrl:]]", etag)) hdr[["if-none-match"]] = etag
+    if (rlang::is_string(etag) && nzchar(etag) && !grepl("[[:cntrl:]]", etag)) {
+      hdr[["if-none-match"]] = etag
+    }
   }
-  res = catalog_http_get(catalog_source_url, headers = hdr, timeout = 30)
+  res = catalog_http_request(catalog_source_url, headers = hdr)
   if (identical(res$status, 304L)) return(invisible(FALSE))
   refused = function(why, status) {
     gptr_abort(paste0("models.dev ", why, "; the catalog was not refreshed."),
@@ -1109,8 +1091,7 @@ catalog_refresh = function() {
   api = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)
   if (!is.list(api)) refused("returned text that is not a JSON object", res$status)
   decision = tryCatch({
-    d = catalog_http_get(catalog_decision_url, headers = list(accept = "application/json"),
-                         timeout = 30)
+    d = catalog_http_request(catalog_decision_url, headers = list(accept = "application/json"))
     if (identical(d$status, 200L)) json_decode(raw_to_utf8(d$body)) else NULL
   }, error = function(e) NULL)
   snap = tryCatch(catalog_snapshot(api, decision, generated = format(Sys.Date(), "%Y-%m-%d")),
@@ -1121,7 +1102,8 @@ catalog_refresh = function() {
   }
   write_atomic(json_path, json_encode(snap))
   etag = catalog_header(res$headers, "etag")
-  ok = catalog_chr1(etag) && !grepl("[[:cntrl:]]", etag) && nchar(etag) <= 1024L
+  ok = rlang::is_string(etag) && nzchar(etag) && !grepl("[[:cntrl:]]", etag) &&
+    nchar(etag) <= 1024L
   if (ok) write_atomic(etag_path, etag) else unlink(etag_path)
   catalog_reset(discovered = FALSE)
   invisible(TRUE)
@@ -1223,13 +1205,13 @@ catalog_ollama_tag = function(id) {
 #' Does a model name select an Ollama cloud model (`...:<size>-cloud`, `...:cloud`)?
 #' @noRd
 catalog_ollama_cloud = function(id) {
-  catalog_chr1(id) && grepl("(:|-)cloud$", tolower(id))
+  rlang::is_string(id) && grepl("(:|-)cloud$", tolower(id))
 }
 
 #' The configured runtime context (`num_ctx`) of an /api/show `parameters` text, or NULL
 #' @noRd
 catalog_ollama_num_ctx = function(parameters) {
-  if (!catalog_chr1(parameters)) return(NULL)
+  if (!rlang::is_string(parameters)) return(NULL)
   m = regmatches(parameters, regexec("(?m)^[ \\t]*num_ctx[ \\t]+([0-9]+)[ \\t\\r]*$",
                                      parameters, perl = TRUE))[[1]]
   if (length(m) < 2L) return(NULL)
@@ -1251,7 +1233,7 @@ catalog_ollama_trained_ctx = function(info) {
 #' Is a server version at least `min`? (a pre-release of `min` is not)
 #' @noRd
 catalog_version_at_least = function(version, min) {
-  if (!catalog_chr1(version) || !catalog_chr1(min)) return(FALSE)
+  if (!rlang::is_string(version) || !rlang::is_string(min)) return(FALSE)
   v = sub("[-+].*$", "", version)
   m = sub("[-+].*$", "", min)
   ok = "^[0-9]+(\\.[0-9]+)*$"
@@ -1278,7 +1260,7 @@ catalog_ollama_decision = function(images) {
 #' only on a loopback endpoint without cloud selector or remote markers (zero metered price).
 #' @noRd
 catalog_ollama_describe = function(pid, tag, show, version, ep, lifecycle) {
-  chr = function(x) if (catalog_chr1(x) && !grepl("[[:cntrl:]]", x)) x else NULL
+  chr = function(x) if (rlang::is_string(x) && nzchar(x) && !grepl("[[:cntrl:]]", x)) x
   name = chr(tag[["name"]]) %||% chr(tag[["model"]])
   if (is.null(name)) return(NULL)
   caps = unlist(show[["capabilities"]] %||% list(), use.names = FALSE)
@@ -1396,10 +1378,12 @@ catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
   }
   version = answer(get("/api/version"), "/api/version")[["version"]]
   pattern = "^[0-9]+(\\.[0-9]+)+([-+][A-Za-z0-9.-]+)?$"
-  version = if (catalog_chr1(version) && grepl(pattern, version)) version else NA_character_
+  version = if (rlang::is_string(version) && grepl(pattern, version)) version else NA_character_
   tags = answer(get("/api/tags"), "/api/tags")[["models"]]
-  tag_name = function(t) if (catalog_chr1(t[["name"]])) t[["name"]] else t[["model"]]
-  tags = Filter(function(t) is.list(t) && catalog_chr1(tag_name(t)),
+  tag_name = function(t) {
+    if (rlang::is_string(t[["name"]]) && nzchar(t[["name"]])) t[["name"]] else t[["model"]]
+  }
+  tags = Filter(function(t) is.list(t) && rlang::is_string(tag_name(t)) && nzchar(tag_name(t)),
                 if (is.list(tags)) tags else list())
   if (!is.null(only)) {
     want = catalog_ollama_tag(only)
@@ -1507,10 +1491,10 @@ catalog_evidence_get = function(model, p) {
 #' @noRd
 provider_preflight = function(model, provider, safety = NULL) {
   local_only = catalog_local_only(safety)
-  if (!is.list(model) || !catalog_chr1(model[["ref"]]) || !catalog_chr1(model[["id"]]) ||
-      !catalog_chr1(model[["provider"]])) {
-    arg_abort(model, "model", "a model record from model_resolve()")
-  }
+  ok = is.list(model) && all(vapply(c("ref", "id", "provider"), function(k) {
+    rlang::is_string(model[[k]]) && nzchar(model[[k]])
+  }, NA))
+  if (!ok) arg_abort(model, "model", "a model record from model_resolve()")
   if (!is.null(provider) && !is.list(provider)) {
     arg_abort(provider, "provider", "a provider record or NULL")
   }
@@ -1573,11 +1557,12 @@ provider_preflight = function(model, provider, safety = NULL) {
     }
     need = catalog_ollama_min_version
     asked = model[["decision"]][["server_min"]]
-    if (catalog_chr1(asked) && catalog_version_at_least(asked, need)) need = asked
-    if (!catalog_version_at_least(ev[["server_version"]], need)) {
+    if (catalog_version_at_least(asked, need)) need = asked
+    have = ev[["server_version"]]
+    if (!catalog_version_at_least(have, need)) {
       catalog_unavailable_abort(ref, paste0(
         "native decisions need Ollama ", need, " or later; the server reports ",
-        if (catalog_chr1(ev[["server_version"]])) ev[["server_version"]] else "no version",
+        if (rlang::is_string(have) && nzchar(have)) have else "no version",
         ". Update Ollama yourself"), paste0("Ollama >= ", need))
     }
     model$tool_call = FALSE

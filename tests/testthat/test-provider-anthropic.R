@@ -4,10 +4,32 @@ source(testthat::test_path("fixtures", "sse", "replay_helpers.R"), local = TRUE)
 
 api = "anthropic-messages"
 
+# The four native adapters (P12): normaliser, chunking cases, capabilities, a roundtrip case
+native_adapters = list(
+  "anthropic-messages" = list(parse = anthropic_normaliser,
+                              chunks = c("text", "thinking_tools", "truncated"),
+                              caps = list(forced_tool_choice = FALSE,
+                                          request_params = c("service_tier", "metadata"),
+                                          max_tool_name = 128L)),
+  "openai-completions" = list(parse = completions_normaliser,
+                              chunks = c("tools", "think_tags", "error_chunk"),
+                              caps = list(tool_shape = "chat", cache = "openrouter",
+                                          request_params = c("service_tier", "metadata", "user")),
+                              roundtrip = "tools"),
+  "openai-responses" = list(parse = responses_normaliser,
+                            chunks = c("reasoning_tools", "backfill", "truncated"),
+                            caps = list(operator_role = "developer", tool_addition = TRUE),
+                            roundtrip = "reasoning_tools"),
+  "google-generative-ai" = list(parse = google_normaliser,
+                                chunks = c("thought_tools", "text_signature", "truncated"),
+                                caps = list(tool_shape = "gemini", cache = "gemini"),
+                                roundtrip = "thought_tools")
+)
+
 # ---- the normaliser (Task 1) -----------------------------------------------------------------
 
-test_that("anthropic fixtures give the golden events and final messages (INFRA-02)", {
-  expect_all_golden(api, anthropic_normaliser)
+test_that("native adapter fixtures give the golden events and final messages (INFRA-02)", {
+  for (k in names(native_adapters)) expect_all_golden(k, native_adapters[[k]]$parse)
 })
 
 test_that("every anthropic fixture has one start first and one terminal event last", {
@@ -17,9 +39,11 @@ test_that("every anthropic fixture has one start first and one terminal event la
   }
 })
 
-test_that("anthropic events do not depend on how the bytes are chunked (INFRA-23)", {
-  for (case in c("text", "thinking_tools", "truncated")) {
-    expect_chunk_invariant(api, anthropic_normaliser, case)
+test_that("native adapter events do not depend on how the bytes are chunked (INFRA-23)", {
+  for (k in names(native_adapters)) {
+    for (case in native_adapters[[k]]$chunks) {
+      expect_chunk_invariant(k, native_adapters[[k]]$parse, case)
+    }
   }
 })
 
@@ -731,13 +755,19 @@ test_that("declared request params reach the body; others do not (IC-69)", {
   expect_null(body$user)
 })
 
-test_that("builtin:anthropic registers the adapter with its capabilities", {
-  a = adapter_get(api)
-  expect_s3_class(a, "gptr_adapter")
-  expect_identical(a$transport, "http_sse")
-  expect_false(a$capabilities$forced_tool_choice)
-  expect_identical(a$capabilities$request_params, c("service_tier", "metadata"))
-  expect_identical(a$capabilities$max_tool_name, 128L)
+test_that("builtin adapters keep their capabilities and pass check_adapter() and gptr_check()", {
+  for (k in names(native_adapters)) {
+    x = native_adapters[[k]]
+    a = adapter_get(k)
+    expect_s3_class(a, "gptr_adapter")
+    expect_identical(a$transport, "http_sse")
+    expect_identical(a$capabilities[names(x$caps)], x$caps)
+    if (k == api) next
+    res = check_adapter(a, fixtures = sse_dir(k))
+    expect_true(all(res$ok), label = paste(k, res$check[!res$ok], collapse = "; "))
+    expect_true(paste0("adapter.", x$roundtrip, ".roundtrip") %in% res$check)
+    expect_true(all(gptr_check(a)$ok))
+  }
 })
 
 test_that("provider_stream() puts the returns schema on the wire (INFRA-25)", {

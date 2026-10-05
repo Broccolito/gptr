@@ -25,16 +25,6 @@ gem_chunk = function(parts, finish = NULL, usage = NULL, rid = "rx") {
 
 # ---- the normaliser (Task 8) -------------------------------------------------------------------
 
-test_that("google fixtures give the golden events and final messages (INFRA-02)", {
-  expect_all_golden(api, google_normaliser)
-})
-
-test_that("google events do not depend on how the bytes are chunked (INFRA-23)", {
-  for (case in c("thought_tools", "text_signature", "truncated")) {
-    expect_chunk_invariant(api, google_normaliser, case)
-  }
-})
-
 test_that("thought signatures stay on the part they arrived on (09 section 2.1)", {
   msg = replay_case(api, google_normaliser, "thought_tools")$message
   expect_identical(msg$content[[1L]]$signature, "CiQBjz1rX3NpZ1RoaW5r")
@@ -448,16 +438,6 @@ test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", 
   expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
   expect_identical(b2, google_build(model, ctx_fixture(turn2), list())$body)
   expect_true(grepl("\"thoughtSignature\":\"Q2lnRmNTaWc=\"", b2, fixed = TRUE))
-})
-
-test_that("builtin:google registers the adapter; check_adapter() and gptr_check() pass", {
-  a = adapter_get(api)
-  expect_identical(a$capabilities$tool_shape, "gemini")
-  expect_identical(a$capabilities$cache, "gemini")
-  res = check_adapter(a, fixtures = sse_dir(api))
-  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
-  expect_true("adapter.thought_tools.roundtrip" %in% res$check)
-  expect_true(all(gptr_check(a)$ok))
 })
 
 test_that("end to end on the mock server: a Gemini stream (skip on CRAN)", {

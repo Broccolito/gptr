@@ -229,7 +229,7 @@ test_that("plan-cli rows keep the CLI's own cost estimate", {
   expect_equal(row$route, "plan-cli")
 })
 
-test_that("child usage rolls up to the parent session (INFRA-20)", {
+test_that("child usage rows record the parent session and the route (INFRA-20)", {
   local_priced_provider()
   t0 = as.POSIXct("2026-09-30 12:00:00", tz = "UTC")
   row = function(input, output, session, agent, parent_id) {
@@ -242,18 +242,7 @@ test_that("child usage rolls up to the parent session (INFRA-20)", {
                row(100, 10, "s0000000004", "helper", "s0000000003"),
                row(300, 30, "s0000000009", "main", NA_character_))
   expect_true("route" %in% names(rows))
-  up = usage_rollup(rows)
-  expect_named(up, c("group", "requests", "input", "output", "cache_read", "cache_write",
-                     "cost"))
-  expect_equal(up$group, c("s0000000001", "s0000000009"))
-  expect_equal(up$requests, c(4L, 1L))
-  expect_equal(up$input, c(2000, 300))
-  expect_equal(up$cache_write, c(40, 10))
-  tree = rows[rows$session != "s0000000009", ]
-  expect_equal(up$cost[[1]], sum(tree$cost))
-  expect_equal(sum(tapply(tree$cost, tree$agent, sum)), up$cost[[1]])
-  expect_equal(sum(up$cost), sum(rows$cost))
-  expect_equal(nrow(usage_rollup(usage_empty())), 0L)
+  expect_identical(rows$parent_id, c(NA, "s0000000001", "s0000000001", "s0000000003", NA))
 })
 
 test_that("the process System 1 log is append-only", {
@@ -321,65 +310,6 @@ test_that("plan CLI missing cost is unknown while supplied zero remains known", 
   estimated = build(usage_new(input = 100, output = 5, estimated = TRUE))
   expect_true(estimated$estimated)
   expect_true(is.na(estimated$cost))
-})
-
-test_that("unknown token or charge components propagate through root rollups", {
-  local_priced_provider()
-  make = function(session, parent, input, output) {
-    usage_row(usage_msg(usage_new(input = input, output = output)), session, "main", parent,
-               Sys.time(), 1, 1)
-  }
-  rows = rbind(make("child", "root", NA_real_, 3),
-               make("root", NA_character_, 10, 4),
-               make("known", NA_character_, 20, 5))
-  up = usage_rollup(rows)
-  expect_identical(up$group, c("root", "known"))
-  expect_identical(up$requests, c(2L, 1L))
-  expect_true(is.na(up$input[1]))
-  expect_true(is.na(up$cost[1]))
-  expect_equal(up$output, c(7, 5))
-  expect_equal(up$input[2], 20)
-  rows$cache_write_1h[1] = NA_real_
-  expect_true(is.na(usage_rollup(rows)$cache_write[1]))
-  rows$session[1:2] = NA_character_
-  rows$parent_id[1:2] = NA_character_
-  expect_identical(usage_rollup(rows)$group, c(NA_character_, "known"))
-})
-
-test_that("usage rollup rejects inconsistent or cyclic session ancestry", {
-  local_priced_provider()
-  row = usage_row(usage_msg(usage_new(input = 1)), "a", "main", "b", Sys.time(), 1, 1)
-  other = row
-  other$session = "b"
-  other$parent_id = "a"
-  expect_error(usage_rollup(rbind(row, other)), class = "gptr_error_invalid_argument")
-  other$session = "a"
-  other$parent_id = "c"
-  expect_error(usage_rollup(rbind(row, other)), class = "gptr_error_invalid_argument")
-  row$parent_id = "a"
-  expect_error(usage_rollup(row), class = "gptr_error_invalid_argument")
-})
-
-test_that("a row without a recorded parent still rolls up with its session's other rows", {
-  # contract 4.3: parent_id is the parent session id or NA; P13's System 1 rows carry the
-  # calling session with parent_id NA next to that session's own rows with their parent
-  local_priced_provider()
-  make = function(session, parent, input) {
-    usage_row(usage_msg(usage_new(input = input, output = 1)), session, "main", parent,
-              Sys.time(), 1, 1)
-  }
-  rows = rbind(make("child", "root", 10), make("root", NA_character_, 20),
-               make("child", NA_character_, 30))
-  up = usage_rollup(rows)
-  expect_identical(up$group, "root")
-  expect_identical(up$requests, 3L)
-  expect_equal(up$input, 60)
-  expect_equal(up$cost, sum(rows$cost))
-  # only an NA parent: the session is its own root
-  expect_identical(usage_rollup(rows[3, ])$group, "child")
-  # two different recorded parents are still refused
-  expect_error(usage_rollup(rbind(rows, make("child", "other", 1))),
-               class = "gptr_error_invalid_argument")
 })
 
 test_that("usage log validates rows before mutation and returns independent copies", {

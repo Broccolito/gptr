@@ -60,24 +60,6 @@ responses_part_text = function(x) {
   responses_str(x[["refusal"]])
 }
 
-#' Record a Responses usage object (08 section 3.3; Pi openai-responses-shared.ts 561-577)
-#' `input_tokens` includes cache reads and writes; reasoning is part of `output_tokens`. Absent
-#' field 0, null or invalid NA (IC-74); `"usage": null` is no report (D-022, D-027).
-#' @noRd
-responses_usage = function(st, u) {
-  if (!is.list(u)) return(invisible(NULL))
-  details = u[["input_tokens_details"]]
-  cached = completions_first(completions_count(details, "cached_tokens"))
-  cwrite = completions_first(completions_count(details, "cache_write_tokens"))
-  input = completions_first(completions_count(u, "input_tokens"))
-  reasoning = completions_count(u[["output_tokens_details"]], "reasoning_tokens")
-  st$usage = list(input = max(0, input - cached - cwrite),
-                  output = completions_first(completions_count(u, "output_tokens")),
-                  cache_read = cached, cache_write_5m = cwrite,
-                  reasoning = completions_first(reasoning))
-  invisible(NULL)
-}
-
 #' The openai-responses normaliser (04 section 8.1; 08 section 3.3)
 #' A reasoning item is a thinking block plus an opaque replay block; a message's id and `phase`
 #' are the text signature. Missing items and `encrypted_content` come from the final response.
@@ -171,7 +153,7 @@ responses_normaliser = function(model, opts) {
     if (!is.list(r)) r = list()
     rid = responses_str(r[["id"]])
     if (nzchar(rid)) st$response_id = rid
-    responses_usage(st, r[["usage"]])
+    adp_openai_usage(st, r[["usage"]], "input", "output")
     outs = r[["output"]]
     if (!is.list(outs)) outs = list()
     for (k in seq_along(outs)) {
@@ -203,8 +185,6 @@ responses_normaliser = function(model, opts) {
       st$error_message = paste0("Response ", status, ": ",
                                 if (nzchar(reason)) reason else "no reason given")
     }
-    has_tool = any(vapply(st$blocks, function(b) identical(b$type, "tool_call"), logical(1)))
-    if (identical(st$stop_reason, "stop") && has_tool) st$stop_reason = "tool_use"
     adp_done(st)
     TRUE
   }
@@ -273,7 +253,7 @@ responses_normaliser = function(model, opts) {
     } else if (type == "response.failed") {
       r = e[["response"]]
       if (!is.list(r)) r = list()
-      responses_usage(st, r[["usage"]])
+      adp_openai_usage(st, r[["usage"]], "input", "output")
       err = r[["error"]]
       if (!is.list(err)) err = list(message = err)
       return(stream_error(err[["code"]], err[["message"]], "unknown", "no message"))
@@ -352,7 +332,7 @@ responses_text_signature = function(signature) {
 #' `fc_` ids only for the same model; other models get plain text and call ids (Pi 296-306)
 #' @noRd
 responses_assistant = function(m, model) {
-  same = adp_same_model(m, model)
+  same = handoff_same_model(m, model)
   items = list()
   for (b in m$content) {
     type = b$type %||% ""
@@ -448,8 +428,7 @@ responses_build = function(model, context, opts) {
   params = context$params %||% list()
   plan = adp_cache_plan(context)
   anchors = plan$anchors %||% character()
-  compat = compat_flags(adp_provider_record(model, opts) %||% list(id = adp_chr(model$provider)),
-                        model)
+  compat = compat_flags(adp_provider_record(model, opts), model)
   explicit = isTRUE(compat$explicit_cache_mode)
   images = adp_images_ok(model)
   tools_on = !isFALSE(model[["tool_call"]])
@@ -504,7 +483,7 @@ responses_build = function(model, context, opts) {
   for (k in seq_along(msgs)) {
     m = msgs[[k]]
     role = m$role %||% ""
-    same = adp_same_model(m, model)
+    same = handoff_same_model(m, model)
     mark = mark_project && identical(k, anchor_at)
     key = paste("openai-responses", role, adp_msg_key(m), same, mark, images, add_tools,
                 sep = "|")

@@ -46,6 +46,7 @@ test_that("compat_flags() combines detection with the provider records of P05 (0
   expect_identical(groq$max_tokens_field, "max_completion_tokens")
   expect_false(groq$requires_tool_result_name)
   expect_true(compat_flags("openai", NULL)$explicit_cache_mode)
+  expect_identical(compat_flags(NULL, list(id = "m")), compat_defaults())
   expect_setequal(names(ds), names(compat_defaults()))
 })
 
@@ -116,16 +117,6 @@ test_that("completions_tool_id() keeps ids within each provider's rules", {
 })
 
 # ---- the normaliser (Task 4) -------------------------------------------------------------------
-
-test_that("completions fixtures give the golden events and final messages (INFRA-02)", {
-  expect_all_golden(api, completions_normaliser)
-})
-
-test_that("completions events do not depend on how the bytes are chunked (INFRA-23)", {
-  for (case in c("tools", "think_tags", "error_chunk")) {
-    expect_chunk_invariant(api, completions_normaliser, case)
-  }
-})
 
 test_that("a mid-stream error chunk and a truncated stream each give one error event", {
   for (case in c("error_chunk", "truncated")) {
@@ -571,16 +562,6 @@ test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", 
   expect_true(startsWith(b2, substr(b1, 1L, nchar(b1) - 2L)))
   expect_identical(b2, completions_build(model, ctx_fixture(completions_turn2(model)),
                                          list())$body)
-})
-
-test_that("builtin:openai-compat registers the adapter; check_adapter() and gptr_check() pass", {
-  a = adapter_get(api)
-  expect_identical(a$capabilities$tool_shape, "chat")
-  expect_identical(a$capabilities$cache, "openrouter")
-  expect_identical(a$capabilities$request_params, c("service_tier", "metadata", "user"))
-  res = check_adapter(a, fixtures = sse_dir(api))
-  expect_true(all(res$ok), label = paste(res$check[!res$ok], collapse = "; "))
-  expect_true(all(gptr_check(a)$ok))
 })
 
 test_that("end to end on the mock server: a Chat Completions stream (skip on CRAN)", {

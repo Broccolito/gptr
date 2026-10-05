@@ -90,14 +90,16 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   section comment and `_R_CHECK_LIMIT_CORES_` wording fixed; `## Task` heading kept (plan section 7).
 - Deviations: none. Open: none.
 
-## Task P05-S - Model layer duplication (2026-10-05)
-- S2, S3, S5-S8, S10 and the catalog-models.R is_string sites (R -158, tests -120; plan ~390).
+## Simplicity P05-S - Model layer duplication (2026-10-05)
+- S2, S3, S5-S8, S10 and the catalog-models.R is_string sites (R -161, tests -119; plan ~390).
   Bodies, headers and memo keys of 308 build snapshots byte-identical except D-140's Mistral ids.
-- Red: none (refactor). Green: `provider-|catalog-` PASS 3008 (3041 before; duplicates removed);
-  P12 gptr_check() 37/31/25/30 rows, 0 failed. Lint clean. Neighbours: `s1-`, `session-(store|
-  budget)`, `gptr-(config|capture|gateway)`, `prompt-(cache|sections|compact)`, `cli-common`,
-  `context-prefix`, `agent-run`, `lint-rules`, `arch-layers`, `doc-replay`, `ext-check` green.
-- Reviews: none yet.
+- Red: none (refactor). Green: `provider-|catalog-` PASS 3006 after r1 fixes (3041 before;
+  duplicates removed); P12 gptr_check() 37/31/25/30 rows, 0 failed. Lint clean. Neighbours: `s1-`,
+  `session-(store|budget)`, `gptr-(config|capture|gateway)`, `prompt-(cache|sections|compact)`,
+  `cli-common`, `context-prefix`, `agent-run`, `lint-rules`, `arch-layers`, `doc-replay`,
+  `ext-check` green.
+- Reviews: r1 4 findings (2 minor, 2 nits): dead `%||% list(id = ...)` compat_flags() fallback,
+  duplicate anthropic check_adapter() replay and log heading fixed; P12 rows left Open.
 - Deviations: D-140. Open: S9 leftovers unnamed in the package (none applied); P12 acceptance rows
   2, R1, R3 still name the per-adapter tests S3 merged (P12 plan outside lane core).
 

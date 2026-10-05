@@ -28,27 +28,25 @@ compat_snake = function(x) {
 }
 
 #' The compat record of a provider and model (04 section 7.12; report 09 section 3.3)
-#' Detected from the provider id and base URL like Pi's detectCompat(), then overridden per field
-#' by the record's `compat`; OpenRouter's cache_control reaches Anthropic and Google models only.
+#' Detected from the base URL and the `local` flag like Pi's detectCompat(), then overridden per
+#' field by the record's `compat` (provider_table() holds each built-in's flags); OpenRouter's
+#' cache_control reaches Anthropic and Google models only.
 #' @noRd
 compat_flags = function(provider, model) {
   rec = if (is.character(provider)) provider_get(provider) else provider
-  id = if (is.character(provider)) provider else rec[["id"]] %||% rec[["name"]] %||% ""
   base = tolower(rec[["base_url"]] %||% "")
   mid = tolower(model[["id"]] %||% "")
   out = compat_defaults()
   hosts = paste0("cerebras\\.ai|api\\.x\\.ai|together\\.(ai|xyz)|deepseek\\.com|api\\.z\\.ai|",
                  "moonshot|nvidia\\.com|chutes\\.ai")
-  nonstd = id %in% c("cerebras", "xai", "together", "deepseek", "zai", "moonshot", "nvidia",
-                     "chutes", "fireworks", "mistral") || grepl(hosts, base)
-  local = id %in% c("ollama", "lmstudio", "llamacpp", "vllm") || isTRUE(rec[["local"]])
-  openrouter = identical(id, "openrouter") || grepl("openrouter\\.ai", base)
-  if (nonstd || local) {
+  local = isTRUE(rec[["local"]])
+  openrouter = grepl("openrouter\\.ai", base)
+  if (grepl(hosts, base) || local) {
     out$supports_store = FALSE
     out$supports_developer_role = FALSE
   }
   if (local) {
-    out$supports_reasoning_effort = id %in% c("ollama", "vllm")
+    out$supports_reasoning_effort = FALSE
     out$max_tokens_field = "max_tokens"
   }
   if (openrouter) {
@@ -58,26 +56,6 @@ compat_flags = function(provider, model) {
     out$supports_developer_role = grepl("^(anthropic|openai)/", mid)
     out$cache_control_format = "anthropic"
   }
-  if (id == "deepseek") {
-    out$thinking_format = "deepseek"
-    out$requires_reasoning_content = TRUE
-    out$max_tokens_field = "max_tokens"
-  }
-  if (id == "mistral") {
-    out$tool_id = "alnum9"
-    out$thinking_in_content = TRUE
-  }
-  if (id == "together") {
-    out$thinking_format = "together"
-    out$max_tokens_field = "max_tokens"
-    out$think_tags = TRUE
-  }
-  if (id == "xai") out$supports_reasoning_effort = FALSE
-  if (id == "azure") {
-    out$auth_header = "api-key"
-    out$deployment_model = TRUE
-  }
-  if (id == "openai") out$explicit_cache_mode = TRUE
   over = rec[["compat"]]
   if (length(over) && !is.null(names(over))) {
     names(over) = compat_snake(names(over))
@@ -142,24 +120,11 @@ think_splitter = function() {
   list(push = push, flush = flush)
 }
 
-#' Chat Completions tool-call ids: `call|item` ids joined and capped at 40 characters with a
-#' hash suffix, Mistral's 9 alphanumeric characters, OpenAI's 40-character cap (Pi 1194-1218)
+#' Chat Completions tool-call ids: Mistral's 9 alphanumeric characters, else the hand-off rule
+#' (`call|item` joined, at most 40 characters; Pi 1194-1218)
 #' @noRd
 completions_tool_id = function(id, compat, provider = "") {
-  if (identical(compat$tool_id, "alnum9")) {
-    if (grepl("^[A-Za-z0-9]{9}$", id)) return(id)
-    return(substr(hash_sha256(id), 1L, 9L))
-  }
-  if (grepl("|", id, fixed = TRUE)) {
-    p = strsplit(id, "|", fixed = TRUE)[[1L]]
-    call = gsub("[^A-Za-z0-9_-]", "_", p[[1L]])
-    item = if (length(p) > 1L) gsub("[^A-Za-z0-9_-]", "_", p[[2L]]) else ""
-    combined = if (nzchar(item)) paste0(call, "_", item) else call
-    if (nchar(combined) <= 40L) return(combined)
-    return(paste0(substr(call, 1L, 31L), "_", substr(hash_sha256(id), 1L, 8L)))
-  }
-  if (identical(provider, "openai") && nchar(id) > 40L) return(substr(id, 1L, 40L))
-  id
+  if (identical(compat$tool_id, "alnum9")) id_alnum9(id, 0L) else id_completions(id, provider)
 }
 
 #' A Chat Completions error object -> class suffix, status and retryability (08 section 3.5)
@@ -168,12 +133,7 @@ completions_tool_id = function(id, compat, provider = "") {
 completions_error_info = function(err) {
   if (!is.list(err)) err = list(message = adp_chr(err))
   code = err[["code"]]
-  status = if (is.numeric(code) && length(code) == 1L && !is.na(code) && code >= 100 &&
-                 code <= 599 && code == round(code)) {
-    as.integer(code)
-  } else {
-    NA_integer_
-  }
+  status = adp_http_status(code)
   txt = tolower(paste(adp_chr(err[["type"]]), adp_chr(if (is.character(code)) code)))
   if (grepl("spend_limit|usage_limit|credit_balance|insufficient_quota", txt)) {
     return(list(class = "spend_cap", status = 429L, retry = FALSE))
@@ -194,43 +154,6 @@ completions_stop = function(reason) {
   if (!is.character(reason) || length(reason) != 1L || is.na(reason)) return("error")
   switch(reason, stop = , end = "stop", length = "length",
          tool_calls = , function_call = "tool_use", "error")
-}
-
-#' One count of a reported usage object: NULL when the provider left the field out, else the
-#' count, NA for a null or a value that is not a nonnegative number (IC-74)
-#' @noRd
-completions_count = function(x, key) {
-  if (!is.list(x) || !(key %in% names(x))) return(NULL)
-  adp_count(x[[key]])
-}
-
-#' The first known of several reported counts: NA when only unknown ones were reported, P05's
-#' legacy zero when none was (D-022)
-#' @noRd
-completions_first = function(...) {
-  vals = Filter(Negate(is.null), list(...))
-  if (!length(vals)) return(0)
-  known = Filter(Negate(is.na), vals)
-  if (length(known)) known[[1L]] else NA_real_
-}
-
-#' Record a Chat Completions usage object (Pi's parseChunkUsage, 09 section 2.3)
-#' Input = prompt - cache reads and writes; each report replaces the last; null stays NA (IC-74).
-#' @noRd
-completions_usage = function(st, u) {
-  if (!is.list(u)) return(invisible(NULL))
-  details = u[["prompt_tokens_details"]]
-  cached = completions_first(completions_count(details, "cached_tokens"),
-                             completions_count(u, "prompt_cache_hit_tokens"),
-                             completions_count(u, "cached_tokens"))
-  cwrite = completions_first(completions_count(details, "cache_write_tokens"))
-  prompt = completions_first(completions_count(u, "prompt_tokens"))
-  reasoning = completions_count(u[["completion_tokens_details"]], "reasoning_tokens")
-  st$usage = list(input = max(0, prompt - cached - cwrite),
-                  output = completions_first(completions_count(u, "completion_tokens")),
-                  cache_read = cached, cache_write_5m = cwrite,
-                  reasoning = completions_first(reasoning))
-  invisible(NULL)
 }
 
 #' An accumulator of OpenRouter `reasoning_details` fragments (09 section 2.3; Pi 665-676)
@@ -304,8 +227,7 @@ completions_details = function() {
 #' @noRd
 completions_normaliser = function(model, opts) {
   st = adp_state(model, opts)
-  compat = compat_flags(adp_provider_record(model, opts) %||% list(id = adp_chr(model$provider)),
-                        model)
+  compat = compat_flags(adp_provider_record(model, opts), model)
   cur = new.env(parent = emptyenv())
   cur$text = NULL
   cur$think = NULL
@@ -390,8 +312,7 @@ completions_normaliser = function(model, opts) {
     }
     if (!cur$finish) {
       if (isFALSE(compat$supports_finish_reason)) {
-        has_tool = any(vapply(st$blocks, function(b) identical(b$type, "tool_call"), logical(1)))
-        st$stop_reason = if (has_tool) "tool_use" else "stop"
+        st$stop_reason = "stop"
       } else {
         adp_error(st, "The stream ended without a finish_reason.", class = "network")
         return(TRUE)
@@ -409,8 +330,6 @@ completions_normaliser = function(model, opts) {
     if (identical(st$stop_reason, "error")) {
       st$error_message = paste0("Provider finish_reason: ", if (nzchar(raw)) raw else "unknown")
     }
-    has_tool = any(vapply(st$blocks, function(b) identical(b$type, "tool_call"), logical(1)))
-    if (identical(st$stop_reason, "stop") && has_tool) st$stop_reason = "tool_use"
   }
 
   push = function(ev) {
@@ -435,13 +354,11 @@ completions_normaliser = function(model, opts) {
     if (is.null(st$response_id) && nzchar(rid)) st$response_id = rid
     rmodel = adp_chr(ch[["model"]])
     if (nzchar(rmodel) && !identical(rmodel, model$id)) st$response_model = rmodel
-    if (!is.null(ch[["usage"]])) completions_usage(st, ch[["usage"]])
     choices = ch[["choices"]]
     choice = if (is.list(choices) && length(choices)) choices[[1L]] else NULL
+    adp_openai_usage(st, ch[["usage"]] %||% if (is.list(choice)) choice[["usage"]],
+                     "prompt", "completion", c("prompt_cache_hit_tokens", "cached_tokens"))
     if (!is.list(choice)) return(FALSE)
-    if (is.null(ch[["usage"]]) && !is.null(choice[["usage"]])) {
-      completions_usage(st, choice[["usage"]])
-    }
     d = choice[["delta"]]
     if (is.list(d)) {
       on_content(d[["content"]])
@@ -519,7 +436,7 @@ completions_user = function(m, model, mark_anchor, cc) {
 #' requires_thinking_as_text), reasoning replayed in the field it arrived in (Pi 1296-1396)
 #' @noRd
 completions_assistant = function(m, model, compat) {
-  same = adp_same_model(m, model)
+  same = handoff_same_model(m, model)
   texts = character()
   thinks = character()
   field = NULL
@@ -667,8 +584,7 @@ completions_thinking = function(head, model, params, compat) {
 #' @noRd
 completions_build = function(model, context, opts) {
   params = context$params %||% list()
-  compat = compat_flags(adp_provider_record(model, opts) %||% list(id = adp_chr(model$provider)),
-                        model)
+  compat = compat_flags(adp_provider_record(model, opts), model)
   ckey = hash_xxh128(compat)
   images = adp_images_ok(model)
   anchors = adp_cache_plan(context)$anchors %||% character()
@@ -725,15 +641,10 @@ completions_build = function(model, context, opts) {
     }
     elements = c(elements, json_encode(sys))
   }
-  n = length(msgs)
-  i = 1L
-  while (i <= n) {
-    m = msgs[[i]]
-    r = m$role %||% ""
+  for (run in adp_runs(msgs, "tool_result")) {
+    r = run$role
+    group = run$msgs
     if (r == "tool_result") {
-      j = i
-      while (j <= n && identical(msgs[[j]]$role, "tool_result")) j = j + 1L
-      group = msgs[i:(j - 1L)]
       key = paste(c("openai-completions", "results", model$provider, model$id, images, ckey,
                     vapply(group, adp_msg_key, "")), collapse = "|")
       el = adp_memo(opts, key, function() {
@@ -743,17 +654,16 @@ completions_build = function(model, context, opts) {
       elements = c(elements, el)
       # the returns instruction below is a user message too; a group that ends with its image
       # message already carries the bridge (completions_tool_results())
-      nxt = if (j <= n) msgs[[j]]$role %||% "" else if (!is.null(params$returns)) "user" else
-        "end"
+      nxt = run$after %||% (if (!is.null(params$returns)) "user" else "end")
       if (isTRUE(compat$requires_assistant_after_tool_result) && nxt %in% c("user", "operator") &&
             !completions_attaches(group, model)) {
         elements = c(elements, json_encode(completions_bridge()))
       }
-      i = j
       next
     }
-    same = adp_same_model(m, model)
-    mark = identical(i, anchor_at)
+    m = group[[1L]]
+    same = handoff_same_model(m, model)
+    mark = identical(run$at, anchor_at)
     key = paste("openai-completions", r, adp_msg_key(m), model$provider, model$id, same, mark,
                 cc, images, isTRUE(model$reasoning), ckey, sep = "|")
     el = adp_memo(opts, key, function() {
@@ -767,7 +677,6 @@ completions_build = function(model, context, opts) {
       if (is.null(x)) "" else json_encode(x)
     })
     if (nzchar(el)) elements = c(elements, el)
-    i = i + 1L
   }
   if (!is.null(params$returns)) {
     elements = c(elements, json_encode(list(role = "user",

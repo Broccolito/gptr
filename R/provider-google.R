@@ -56,13 +56,7 @@ google_budget = function(id, level) {
 google_error_info = function(err) {
   if (!is.list(err)) err = list()
   st = responses_str(err[["status"]])
-  code = err[["code"]]
-  code = if (is.numeric(code) && length(code) == 1L && !is.na(code) && code >= 100 &&
-               code <= 599 && code == round(code)) {
-    as.integer(code)
-  } else {
-    NA_integer_
-  }
+  code = adp_http_status(err[["code"]])
   if (st == "RESOURCE_EXHAUSTED" || identical(code, 429L)) {
     return(list(class = "rate_limit", status = 429L, retry = TRUE))
   }
@@ -81,10 +75,10 @@ google_error_info = function(err) {
 #' @noRd
 google_usage = function(st, u) {
   if (!is.list(u)) return(invisible(NULL))
-  cached = completions_first(completions_count(u, "cachedContentTokenCount"))
-  thoughts = completions_first(completions_count(u, "thoughtsTokenCount"))
-  prompt = completions_first(completions_count(u, "promptTokenCount"))
-  output = completions_first(completions_count(u, "candidatesTokenCount"))
+  cached = adp_first(adp_count_at(u, "cachedContentTokenCount"))
+  thoughts = adp_first(adp_count_at(u, "thoughtsTokenCount"))
+  prompt = adp_first(adp_count_at(u, "promptTokenCount"))
+  output = adp_first(adp_count_at(u, "candidatesTokenCount"))
   st$usage = list(input = prompt - cached, output = output + thoughts, cache_read = cached,
                   reasoning = thoughts)
   invisible(NULL)
@@ -153,14 +147,7 @@ google_normaliser = function(model, opts) {
     raw = adp_chr(fr)
     st$raw_stop = if (nzchar(raw)) raw
     reason = responses_str(fr)
-    has_tool = any(vapply(st$blocks, function(b) identical(b$type, "tool_call"), logical(1)))
-    st$stop_reason = if (reason == "STOP") {
-      if (has_tool) "tool_use" else "stop"
-    } else if (reason == "MAX_TOKENS") {
-      "length"
-    } else {
-      "error"
-    }
+    st$stop_reason = switch(reason, STOP = "stop", MAX_TOKENS = "length", "error")
     st$error_message = NULL
     if (identical(st$stop_reason, "error")) {
       detail = responses_str(detail)
@@ -281,7 +268,7 @@ google_user = function(m, images) {
 #' arrived on and are replayed only to the same model (09 section 2.1)
 #' @noRd
 google_assistant = function(m, model) {
-  same = adp_same_model(m, model)
+  same = handoff_same_model(m, model)
   needs_id = google_needs_id(model$id)
   parts = list()
   for (b in m$content) {
@@ -300,7 +287,7 @@ google_assistant = function(m, model) {
     } else if (type == "tool_call") {
       sig = if (same && google_valid_sig(b$thought_signature)) b$thought_signature else NULL
       fc = list(name = b$name, args = if (length(b$arguments)) b$arguments else json_obj())
-      if (needs_id) fc$id = adp_sanitize_id(b$id)
+      if (needs_id) fc$id = id_sanitize(b$id, 64L)
       p = c(list(functionCall = fc), if (!is.null(sig)) list(thoughtSignature = sig))
     }
     if (!is.null(p)) parts[[length(parts) + 1L]] = p
@@ -329,7 +316,7 @@ google_tool_results = function(group, model) {
     }
     fr = list(name = r$tool_name,
               response = if (isTRUE(r$is_error)) list(error = txt) else list(output = txt))
-    if (needs_id) fr$id = adp_sanitize_id(r$tool_call_id)
+    if (needs_id) fr$id = id_sanitize(r$tool_call_id, 64L)
     imgs = lapply(imgs, google_image, images = images)
     if (length(imgs) && v3) fr$parts = imgs
     if (length(imgs) && !v3) extra = c(extra, imgs)
@@ -415,25 +402,20 @@ google_build = function(model, context, opts) {
   }
 
   elements = character()
-  n = length(msgs)
-  i = 1L
-  while (i <= n) {
-    m = msgs[[i]]
-    r = m$role %||% ""
+  for (run in adp_runs(msgs, "tool_result")) {
+    r = run$role
+    group = run$msgs
     if (r == "tool_result") {
-      j = i
-      while (j <= n && identical(msgs[[j]]$role, "tool_result")) j = j + 1L
-      group = msgs[i:(j - 1L)]
       key = paste(c("google", "results", model$id, images, vapply(group, adp_msg_key, "")),
                   collapse = "|")
       el = adp_memo(opts, key, function() {
         paste(vapply(google_tool_results(group, model), json_encode, ""), collapse = ",")
       })
       elements = c(elements, el)
-      i = j
       next
     }
-    same = adp_same_model(m, model)
+    m = group[[1L]]
+    same = handoff_same_model(m, model)
     key = paste("google", r, adp_msg_key(m), same, model$id, images, sep = "|")
     el = adp_memo(opts, key, function() {
       x = NULL
@@ -446,7 +428,6 @@ google_build = function(model, context, opts) {
       if (is.null(x)) "" else json_encode(x)
     })
     if (nzchar(el)) elements = c(elements, el)
-    i = i + 1L
   }
   if (!is.null(params$returns)) {
     text = adp_returns_instruction(params$returns)

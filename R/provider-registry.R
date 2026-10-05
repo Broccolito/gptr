@@ -6,24 +6,15 @@
 on_load(ext_declare_builtin("fake", builtin_fake))
 on_load(ext_declare_builtin("providers", builtin_providers))
 
-#' Compat defaults shared by the loopback OpenAI-compatible servers (report 09 section 4.6)
-#' @noRd
-provider_local_compat = function() {
-  list(supports_store = FALSE, supports_developer_role = FALSE,
-       supports_reasoning_effort = FALSE, supports_strict_mode = FALSE,
-       max_tokens_field = "max_tokens", image_mode = "base64")
-}
-
 #' The built-in provider records of architecture section 8.1, as gptr_provider() arguments
 #' (`typesafe` is P13's builtin:system1; `claude-cli` and `codex` are P20's builtin:cli)
 #' @noRd
 provider_table = function() {
-  local = provider_local_compat()
   list(
     list(id = "anthropic", api = "anthropic-messages", base_url = "https://api.anthropic.com",
          auth = "ANTHROPIC_API_KEY"),
     list(id = "openai", api = "openai-responses", base_url = "https://api.openai.com/v1",
-         auth = "OPENAI_API_KEY"),
+         auth = "OPENAI_API_KEY", compat = list(explicit_cache_mode = TRUE)),
     list(id = "google", api = "google-generative-ai",
          base_url = "https://generativelanguage.googleapis.com/v1beta",
          auth = c("GEMINI_API_KEY", "GOOGLE_API_KEY")),
@@ -42,7 +33,8 @@ provider_table = function() {
                        supports_developer_role = FALSE)),
     list(id = "mistral", api = "openai-completions", base_url = "https://api.mistral.ai/v1",
          auth = "MISTRAL_API_KEY",
-         compat = list(tool_id = "alnum9", thinking_in_content = TRUE, supports_store = FALSE)),
+         compat = list(tool_id = "alnum9", thinking_in_content = TRUE, supports_store = FALSE,
+                       supports_developer_role = FALSE)),
     list(id = "together", api = "openai-completions", base_url = "https://api.together.ai/v1",
          auth = "TOGETHER_API_KEY",
          compat = list(thinking_format = "together", max_tokens_field = "max_tokens",
@@ -57,19 +49,19 @@ provider_table = function() {
          compat = list(supports_store = FALSE, supports_developer_role = FALSE,
                        image_mode = "base64")),
     list(id = "fireworks", api = "openai-completions",
-         base_url = "https://api.fireworks.ai/inference/v1", auth = "FIREWORKS_API_KEY"),
+         base_url = "https://api.fireworks.ai/inference/v1", auth = "FIREWORKS_API_KEY",
+         compat = list(supports_store = FALSE, supports_developer_role = FALSE)),
     list(id = "ollama", api = "openai-completions", base_url = "http://127.0.0.1:11434/v1",
          auth = NULL, local = TRUE, discover = provider_ollama_discoverer("ollama"),
-         compat = utils::modifyList(local, list(supports_reasoning_effort = TRUE,
-                                                supports_tool_choice = FALSE))),
+         compat = list(supports_reasoning_effort = TRUE, supports_tool_choice = FALSE)),
     list(id = "lmstudio", api = "openai-completions", base_url = "http://localhost:1234/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("lmstudio"), compat = local),
+         auth = NULL, local = TRUE, discover = provider_discoverer("lmstudio")),
     list(id = "llamacpp", api = "openai-completions", base_url = "http://127.0.0.1:8080/v1",
-         auth = NULL, local = TRUE, discover = provider_discoverer("llamacpp"), compat = local),
+         auth = NULL, local = TRUE, discover = provider_discoverer("llamacpp")),
     list(id = "vllm", api = "openai-completions", base_url = "http://localhost:8000/v1",
          auth = provider_optional_auth("vllm", "VLLM_API_KEY"), local = TRUE,
          discover = provider_discoverer("vllm"),
-         compat = utils::modifyList(local, list(supports_reasoning_effort = TRUE))),
+         compat = list(supports_reasoning_effort = TRUE)),
     list(id = "azure", api = "openai-completions", base_url = NULL, auth = "AZURE_OPENAI_API_KEY",
          compat = list(auth_header = "api-key", deployment_model = TRUE,
                        base_url_env = "AZURE_OPENAI_ENDPOINT",
@@ -113,7 +105,7 @@ provider_discoverer = function(id) {
     p = provider_get(id)
     url = if (is.null(p)) NULL else provider_base_url(p)
     if (is.null(url)) return(NULL)
-    res = tryCatch(catalog_http_get(paste0(url, "/models"), timeout = 1),
+    res = tryCatch(catalog_http_request(paste0(url, "/models"), timeout = 1),
                    gptr_error = function(e) NULL)
     if (is.null(res) || !identical(res$status, 200L)) return(NULL)
     body = tryCatch(json_decode(raw_to_utf8(res$body)), error = function(e) NULL)

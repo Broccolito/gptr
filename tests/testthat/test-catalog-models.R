@@ -446,7 +446,8 @@ test_that("catalog HTTP GET uses the reactor and preserves status headers and by
     },
     reactor_cancel = function(...) stop("completed request must not be cancelled")
   )
-  out = catalog_http_get("https://catalog.example/models", list(accept = "application/json"), 1)
+  out = catalog_http_request("https://catalog.example/models",
+                             headers = list(accept = "application/json"), timeout = 1)
   expect_identical(out$status, 200L)
   expect_identical(out$headers$etag, "fixture")
   expect_identical(out$body, charToRaw("firstsecond"))
@@ -480,12 +481,12 @@ test_that("catalog HTTP cancels only its own transfer on timeout, interrupt or o
       invisible(NULL)
     }
   )
-  expect_error(catalog_http_get("https://catalog.example", timeout = 1),
+  expect_error(catalog_http_request("https://catalog.example", timeout = 1),
                class = "gptr_error_network")
   expect_identical(cancelled, "catalog-owned")
   cancelled = character()
   local_mocked_bindings(reactor_pump = function(...) stop("interrupted pump"))
-  expect_error(catalog_http_get("https://catalog.example"), "interrupted pump")
+  expect_error(catalog_http_request("https://catalog.example"), "interrupted pump")
   expect_identical(cancelled, "catalog-owned")
   cancelled = character()
   local_mocked_bindings(
@@ -505,10 +506,11 @@ test_that("catalog HTTP cancels only its own transfer on timeout, interrupt or o
 
 test_that("catalog HTTP validates arguments before dispatch and handles transport failure", {
   local_mocked_bindings(reactor_http = function(...) stop("unexpected dispatch"))
-  expect_error(catalog_http_get("https://catalog.example", timeout = Inf),
+  expect_error(catalog_http_request("https://catalog.example", timeout = Inf),
                class = "gptr_error_invalid_argument")
-  expect_error(catalog_http_get("not-a-url"), class = "gptr_error_invalid_argument")
-  expect_error(catalog_http_get("ftp://catalog.example/x"), class = "gptr_error_invalid_argument")
+  expect_error(catalog_http_request("not-a-url"), class = "gptr_error_invalid_argument")
+  expect_error(catalog_http_request("ftp://catalog.example/x"),
+               class = "gptr_error_invalid_argument")
   local_mocked_bindings(
     reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL,
                             run = NULL, provider = NULL, retry = NULL) {
@@ -518,7 +520,8 @@ test_that("catalog HTTP validates arguments before dispatch and handles transpor
     },
     reactor_pump = function(until, timeout) until()
   )
-  err = expect_error(catalog_http_get("https://catalog.example"), class = "gptr_error_network")
+  err = expect_error(catalog_http_request("https://catalog.example"),
+                     class = "gptr_error_network")
   expect_identical(err$curl_code, 7L)
 })
 
@@ -535,7 +538,8 @@ test_that("catalog_http_request() runs on the real reactor against loopback fixt
   expect_identical(log$method, c("GET", "POST"))
   expect_identical(log$body[[2]], "{\"model\":\"clef\"}")
   missing = local_mock_server("json", status = 404L, body = "{\"error\":\"none\"}")
-  expect_identical(catalog_http_get(paste0(missing$url, "/api/tags"), timeout = 5)$status, 404L)
+  expect_identical(catalog_http_request(paste0(missing$url, "/api/tags"), timeout = 5)$status,
+                   404L)
   hold = local_mock_server("hold_headers")
   before = ls(reactor_get()$transfers)
   err = expect_error(catalog_http_request(hold$url, timeout = 1, attempts = 1L),
@@ -549,7 +553,7 @@ test_that("a loopback server's listed models join the catalog only on request", 
   local_catalog()
   local_mocked_bindings(
     check_running = function() FALSE,
-    catalog_http_get = function(url, headers = list(), timeout = 30) {
+    catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
       expect_equal(url, "http://localhost:1234/v1/models")
       expect_equal(timeout, 1)
       list(status = 200L, headers = list(),
@@ -636,7 +640,7 @@ test_that("an explicit refresh revalidates with the ETag and caches in R_user_di
   ))))
   seen = new.env()
   seen$headers = list()
-  local_mocked_bindings(catalog_http_get = function(url, headers = list(), timeout = 30) {
+  local_mocked_bindings(catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
     if (!identical(url, catalog_source_url)) return(list(status = 404L, headers = list(),
                                                          body = raw()))
     seen$headers[[length(seen$headers) + 1L]] = headers
@@ -651,7 +655,7 @@ test_that("an explicit refresh revalidates with the ETag and caches in R_user_di
   expect_equal(model_resolve("sonnet")$ref, "anthropic/claude-sonnet-6")
   expect_false(catalog_refresh())
   expect_equal(seen$headers[[2]][["if-none-match"]], "W/\"v1\"")
-  local_mocked_bindings(catalog_http_get = function(url, headers = list(), timeout = 30) {
+  local_mocked_bindings(catalog_http_request = function(url, headers = list(), timeout = 30, ...) {
     list(status = 503L, headers = list(), body = raw())
   })
   unlink(file.path(dir, "cache-models.etag"))

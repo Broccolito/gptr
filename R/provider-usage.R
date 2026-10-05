@@ -236,9 +236,9 @@ usage_cost = function(usage, model, when = Sys.Date()) {
   u
 }
 
-# ---- Usage rows, roll-up and the process System 1 log (P05 Task 9) ------------------------------
-# Contract sections 4.3, 5.12 and 7.5; architecture section 5.5 (INFRA-20); IC-74: an unknown
-# observation or an unknown price stays NA in the row and in every roll-up sum.
+# ---- Usage rows and the process System 1 log (P05 Task 9) ---------------------------------------
+# Contract sections 4.3 and 7.5; architecture section 5.5 (INFRA-20); IC-74: an unknown
+# observation or an unknown price stays NA in the row.
 
 #' Character columns of a usage row
 #' @noRd
@@ -399,54 +399,4 @@ usage_log = function() {
     the$s1_log = list(out)
   }
   the$s1_log[[1L]]
-}
-
-#' The root session of each distinct session in usage rows
-#' Two different recorded parents or cyclic ancestry are refused; a parent without rows is a root.
-#' @noRd
-usage_roots = function(session, parent_id) {
-  known = !is.na(session)
-  ids = unique(session[known])
-  parents = split(parent_id[known], factor(session[known], levels = ids))
-  parent = vapply(parents, function(p) {
-    p = unique(p[!is.na(p)])
-    if (length(p) > 1L) usage_invalid("rows$parent_id", "at most one parent_id per session")
-    if (length(p)) p else NA_character_
-  }, NA_character_, USE.NAMES = FALSE)
-  names(parent) = ids
-  vapply(ids, function(s) {
-    seen = s
-    repeat {
-      p = parent[[s]]
-      if (is.na(p)) return(s)
-      if (!(p %in% ids)) return(p)
-      if (p %in% seen) usage_invalid("rows$parent_id", "an acyclic session ancestry")
-      seen = c(seen, p)
-      s = p
-    }
-  }, NA_character_)
-}
-
-#' Roll usage rows up to their root sessions (INFRA-20; the `gptr_usage` view, 04 section 5.12)
-#' Rows without a session form the `NA` group; an unknown value makes its group's sum NA (IC-74).
-#' @noRd
-usage_rollup = function(rows) {
-  rows = usage_rows_check(rows %||% usage_empty(), "rows")
-  sums = c("input", "output", "cache_read", "cache_write", "cost")
-  if (!nrow(rows)) {
-    out = data.frame(group = character(), requests = integer(), stringsAsFactors = FALSE)
-    for (k in sums) out[[k]] = numeric()
-    return(out)
-  }
-  roots = usage_roots(rows$session, rows$parent_id)
-  root = unname(roots[match(rows$session, names(roots))])
-  groups = unique(root)
-  key = match(root, groups)
-  m = rowsum(cbind(input = rows$input, output = rows$output, cache_read = rows$cache_read,
-                   cache_write = rows$cache_write_5m + rows$cache_write_1h, cost = rows$cost),
-             key, reorder = FALSE)
-  out = data.frame(group = groups, requests = tabulate(key, length(groups)),
-                   stringsAsFactors = FALSE)
-  for (k in sums) out[[k]] = unname(m[, k])
-  out
 }
