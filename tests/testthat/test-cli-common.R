@@ -316,3 +316,133 @@ test_that("each route prints its one-time notice through gptr_inform()", {
   expect_match(seen$calls[[2]]$message, "19-38K", fixed = TRUE)
   expect_match(seen$calls[[2]]$message, "own shell inside its sandbox", fixed = TRUE)
 })
+
+# ---- status, plan status, model entries (Task 3) -------------------------------------------------
+
+test_that("status() never starts a process without check = TRUE", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_mocked_bindings(proc_run = function(...) stop("spawned a process"),
+                        proc_spawn = function(...) stop("spawned a process"))
+  withr::local_options(gptr.cli_path = list(codex = c(rscript_path(), "--vanilla", "x.R")))
+  st = pcli_status("codex", "codex", "cli-codex")()
+  expect_identical(st$status, "found")
+  expect_true(st$available)
+  expect_true(is.na(st$version))
+  expect_identical(st$path, normalizePath(rscript_path(), winslash = "/"))
+  withr::local_options(gptr.cli_path = NULL)
+  pcli_cache_clear()
+  local_mocked_bindings(pcli_on_path = function(cli) character(),
+                        pcli_known_paths = function(cli) character())
+  st = pcli_status("claude", "claude-cli", "cli-claude")(check = FALSE)
+  expect_identical(st$status, "not found")
+  expect_false(st$available)
+})
+
+test_that("status(check = TRUE) finds and versions a CLI", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_fake_cli_path("codex", "text")
+  st = pcli_status("codex", "codex", "cli-codex")(check = TRUE)
+  expect_identical(st$status, "ready")
+  expect_identical(st$version, "0.157.0")
+  expect_true(st$available)
+})
+
+test_that("CLI invocations always get full model ids", {
+  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) {
+    list(id = paste0(ref, "-9-9"))
+  })
+  expect_identical(pcli_model_id(list(id = "default", api = "cli-claude")), "sonnet-9-9")
+  # D-097: the catalog's newest GPT reaches codex only when the Codex route lists it
+  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
+  expect_identical(pcli_model_id(list(id = "claude-opus-5-5", api = "cli-claude")),
+                   "claude-opus-5-5")
+  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) stop("no catalog"))
+  expect_identical(pcli_default_model("cli-claude"), "claude-sonnet-5-5")
+  expect_identical(pcli_default_model("cli-codex"), "gpt-6-sol")
+})
+
+test_that("a rate_limit_event becomes the provider's plan status", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  info = list(status = "allowed", resetsAt = 1790749800, rateLimitType = "five_hour",
+              unifiedWindows = list(five_hour = list(utilization = 0.15),
+                                    seven_day = list(utilization = 0.34)))
+  pcli_plan_set("claude-cli", info)
+  local_mocked_bindings(pcli_on_path = function(cli) character(),
+                        pcli_known_paths = function(cli) character())
+  plan = pcli_status("claude", "claude-cli", "cli-claude")()$plan
+  expect_identical(plan$status, "allowed")
+  expect_identical(plan$type, "five_hour")
+  expect_equal(plan$five_hour, 0.15)
+  expect_equal(plan$seven_day, 0.34)
+})
+
+test_that("the plan routes list `default` and full ids; fake CLI records are offline", {
+  ids = vapply(pcli_models("claude"), function(m) m$id, "")
+  expect_identical(ids, c("default", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5"))
+  expect_identical(pcli_models("codex")[[1]]$id, "default")
+  p = pcli_fake_provider("codex")
+  expect_s3_class(p, "gptr_provider")
+  expect_identical(p$id, "fakecodex")
+  expect_identical(p$api, "cli-codex")
+  expect_identical(p$type, "cli")
+  expect_true(p$offline)
+  expect_identical(vapply(p$models, function(m) m$id, ""), c("gpt-6-sol", "default"))
+  expect_true("check" %in% names(formals(p$status)))
+})
+
+# ---- Task 3 review round 1 (D-097) --------------------------------------------------------------
+
+test_that("codex/default is always a model the Codex route lists", {
+  listed = setdiff(vapply(pcli_models("codex"), function(m) m$id, ""), "default")
+  # the shipped catalog's newest GPT (gpt-6.1-sol) is absent from the Codex catalog (08 2.C)
+  expect_true(pcli_default_model("cli-codex") %in% listed)
+  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) list(id = "gpt-6-luna"))
+  expect_identical(pcli_default_model("cli-codex"), "gpt-6-luna")
+  local_mocked_bindings(model_resolve = function(ref, strict = TRUE) list(id = "gpt-6.1-sol"))
+  expect_identical(pcli_default_model("cli-codex"), "gpt-6-sol")
+  expect_identical(pcli_model_id(list(id = "default", api = "cli-codex")), "gpt-6-sol")
+})
+
+test_that("status(check = TRUE) keeps a capability problem the probe finds", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_fake_cli_path("claude", "bare-default")
+  local_fake_cli_path("codex", "old")
+  status = pcli_status("claude", "claude-cli", "cli-claude")
+  st = status(check = TRUE)
+  expect_identical(st$status, "bare by default")
+  expect_false(st$available)
+  expect_identical(st$version, "2.1.261")
+  st = status()
+  expect_identical(st$status, "bare by default")
+  expect_false(st$available)
+  st = pcli_status("codex", "codex", "cli-codex")(check = TRUE)
+  expect_identical(st$status, "missing exec flags")
+  expect_false(st$available)
+  expect_identical(st$version, "0.100.0")
+})
+
+test_that("a malformed rate_limit_event leaves NA fields instead of an error", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  rec = pcli_plan_set("claude-cli", "oops")
+  expect_true(is.na(rec$status))
+  expect_true(is.na(rec$five_hour))
+  rec = pcli_plan_set("claude-cli", list(status = "allowed", unifiedWindows = list(
+    five_hour = 0.2, seven_day = list(utilization = 0.5))))
+  expect_identical(rec$status, "allowed")
+  expect_true(is.na(rec$five_hour))
+  expect_equal(rec$seven_day, 0.5)
+  rec = pcli_plan_set("claude-cli", list(status = list(1, 2), rateLimitType = c("a", "b"),
+                                         unifiedWindows = "x", resetsAt = "soon"))
+  expect_true(is.na(rec$status))
+  expect_true(is.na(rec$type))
+  expect_true(is.na(rec$resets_at))
+  expect_true(is.na(rec$seven_day))
+  expect_identical(pcli_cache$plan[["claude-cli"]], rec)
+})

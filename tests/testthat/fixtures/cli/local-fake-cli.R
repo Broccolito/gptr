@@ -69,3 +69,17 @@ expect_all_dead = function(pids) {
   while (alive() && Sys.time() < deadline) Sys.sleep(0.1)
   expect_false(alive())
 }
+
+# Point options(gptr.cli_path) at the fake CLI and register its offline provider record
+# ("fakeclaude" or "fakecodex", IC-45) for the calling test; `model` is the first model ref
+local_fake_cli = function(cli, case = "text", models = NULL, register = TRUE,
+                          .env = parent.frame()) {
+  fake = local_fake_cli_path(cli, case, .env = .env)
+  spec = pcli_fake_provider(cli, models = models)
+  if (register) {
+    off = gptr_register(spec)
+    withr::defer(off(), envir = .env)
+  }
+  c(fake, list(provider = spec, id = spec$id,
+               model = paste0(spec$id, "/", spec$models[[1L]]$id)))
+}

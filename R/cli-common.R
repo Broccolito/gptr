@@ -429,3 +429,135 @@ pcli_fake_command = function(cli = c("claude", "codex"), case = "text", fixtures
   c(rscript_path(), "--vanilla", script, "--fake-cli", cli, "--fake-case", case,
     "--fake-dir", dir, "--fake-log", log)
 }
+
+# ---- status, plan status, model entries, provider records (Task 3) ----------------------------
+
+#' Full model id behind `<cli provider>/default` (CLI invocations always get full ids, 03 8.4):
+#' the newest Sonnet for claude and the newest GPT for codex from the catalog
+#'
+#' For codex the catalog's GPT is used only when it is one of the full ids pcli_models("codex")
+#' lists: the Codex catalog lags the API's (08 2.C, verification row 44: gpt-6.1-sol is absent),
+#' so an unlisted id falls back to gpt-6-sol, the architecture 8.4 OpenAI default (D-097).
+#' @noRd
+pcli_default_model = function(api) {
+  codex = identical(api, "cli-codex")
+  m = tryCatch(model_resolve(if (codex) "gpt" else "sonnet", strict = FALSE),
+               error = function(e) NULL)
+  id = if (is.list(m)) m[["id"]] else NULL
+  ok = is.character(id) && length(id) == 1L && !is.na(id) && nzchar(id)
+  if (ok && codex) {
+    ok = id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
+  }
+  if (ok) return(id)
+  if (codex) "gpt-6-sol" else "claude-sonnet-5-5"
+}
+
+#' The model id passed to a CLI: `default` resolves to a full id (contract 11.10)
+#' @noRd
+pcli_model_id = function(model) {
+  id = model[["id"]] %||% "default"
+  if (identical(id, "default")) pcli_default_model(model[["api"]]) else id
+}
+
+#' Store the plan status of a claude `rate_limit_event` (07 2.14: nested in rate_limit_info)
+#'
+#' The event is informational: a field that is missing or not a single string or number reads
+#' as NA, never as an error that would end the turn (D-097).
+#' @noRd
+pcli_plan_set = function(provider, info) {
+  if (!is.list(info)) info = list()
+  chr = function(x) if (is.character(x) && length(x) == 1L && !is.na(x)) x else NA_character_
+  num = function(x) {
+    if (is.numeric(x) && length(x) == 1L && !is.na(x)) as.numeric(x) else NA_real_
+  }
+  w = info[["unifiedWindows"]]
+  if (!is.list(w)) w = list()
+  util = function(k) if (is.list(w[[k]])) num(w[[k]][["utilization"]]) else NA_real_
+  rec = list(status = chr(info[["status"]]), type = chr(info[["rateLimitType"]]),
+             resets_at = num(info[["resetsAt"]]), five_hour = util("five_hour"),
+             seven_day = util("seven_day"), time = Sys.time())
+  plan = pcli_cache$plan %||% list()
+  plan[[provider]] = rec
+  pcli_cache$plan = plan
+  invisible(rec)
+}
+
+#' The `status()` function of a CLI provider record (contract 7.20; P05 reads `status`,
+#' `version` and `available`)
+#'
+#' `check = FALSE` never starts a process (IC-65): it reports the cached discovery, and runs the
+#' file-system discovery of pcli_find() once when nothing is cached (the PATH scan replaces
+#' `Sys.which()`, which runs `which` on Unix). `check = TRUE` finds the CLI again and runs its
+#' `--version` and capability probes (contract 7.20; local runs, never a model request), so a
+#' problem such as "bare by default" or "missing exec flags" is reported again (D-097).
+#' @noRd
+pcli_status = function(cli, provider, api) {
+  force(cli)
+  force(provider)
+  force(api)
+  function(check = FALSE) {
+    if (isTRUE(check)) {
+      pcli_forget(cli)
+      path = tryCatch(pcli_find(cli), gptr_error = function(e) NULL)
+      if (!is.null(path)) {
+        pcli_version_forget(path)
+        tryCatch(pcli_probe(path), gptr_error = function(e) NULL)
+      }
+    } else if (is.null((pcli_cache$status %||% list())[[cli]])) {
+      tryCatch(pcli_find(cli), gptr_error = function(e) NULL)
+    }
+    cur = (pcli_cache$status %||% list())[[cli]]
+    path = cur$path %||% NA_character_
+    status = if (is.null(cur)) {
+      "not found"
+    } else if (!is.null(cur$error)) {
+      cur$error
+    } else if (is.na(path)) {
+      "not found"
+    } else if (is.null(cur$version)) {
+      "found"
+    } else {
+      "ready"
+    }
+    list(status = status, available = status %in% c("found", "ready"), path = path,
+         version = cur$version %||% NA_character_, default_model = pcli_default_model(api),
+         plan = (pcli_cache$plan %||% list())[[provider]])
+  }
+}
+
+#' A model entry of a CLI provider record (catalog shape, contract 4.9; no prices: plan usage)
+#' @noRd
+pcli_model_entry = function(id, name, input = "text", context = 200000, max_output = 64000) {
+  list(id = id, name = name, reasoning = TRUE, input = input, tool_call = TRUE,
+       context = context, max_output = max_output, status = "active")
+}
+
+#' The model entries of the built-in plan routes: `default` plus the full ids the CLIs accept
+#' (07 3.13, 08 2.C; 03 8.4)
+#' @noRd
+pcli_models = function(cli) {
+  if (identical(cli, "claude")) {
+    img = c("text", "image")
+    return(list(pcli_model_entry("default", "Claude plan default model (claude CLI)", img),
+                pcli_model_entry("claude-opus-5-5", "Claude Opus 5.5 (claude CLI)", img),
+                pcli_model_entry("claude-sonnet-5-5", "Claude Sonnet 5.5 (claude CLI)", img),
+                pcli_model_entry("claude-haiku-4-5", "Claude Haiku 4.5 (claude CLI)", img)))
+  }
+  list(pcli_model_entry("default", "ChatGPT plan default model (Codex CLI)", context = 272000),
+       pcli_model_entry("gpt-6-sol", "GPT-6 Sol (Codex CLI)", context = 272000),
+       pcli_model_entry("gpt-6-luna", "GPT-6 Luna (Codex CLI)", context = 272000))
+}
+
+#' The provider record of a fake CLI (contract 12.4, IC-45): `offline = TRUE`, so
+#' `GPTR_REPLAY=replay` (tests/testthat/setup.R) does not block it; like the real CLIs, it takes
+#' its command from options(gptr.cli_path)
+#' @noRd
+pcli_fake_provider = function(cli = c("claude", "codex"), id = NULL, models = NULL) {
+  cli = check_choice(cli, c("claude", "codex"), "cli")
+  id = id %||% paste0("fake", cli)
+  api = paste0("cli-", cli)
+  models = models %||% (if (identical(cli, "claude")) "claude-sonnet-5-5" else "gpt-6-sol")
+  entries = lapply(c(models, "default"), function(m) pcli_model_entry(m, paste(m, "(fake CLI)")))
+  gptr_provider(id, api = api, type = "cli", models = entries,
+                status = pcli_status(cli, id, api), offline = TRUE)
+}

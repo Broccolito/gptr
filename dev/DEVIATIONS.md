@@ -5622,3 +5622,41 @@ plan-literal source `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 78 ]`
 it); final `^cli-common$`
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]` (`task2-fix1-green.log`), so every later plan count
 for `test-cli-common.R` is 40 higher on macOS and Linux (17 from D-093, 23 from this entry).
+
+## D-097 - P20 status and model entries: codex/default is a model the Codex route lists, status(check = TRUE) runs the capability probe, and a malformed rate_limit_event reads as NA (2026-10-04)
+
+P20 Task 3's plan-literal `R/cli-common.R` and one plan test changed after review round 1:
+
+1. **codex/default resolves only to an id the Codex route lists** (contract 11.10: "resolve
+   through the CLI provider's `status()` to a full id before any invocation"; architecture 8.4:
+   "CLI invocations always receive full ids"). The plan's `pcli_default_model()` (its decision
+   11) passed the catalog's newest GPT straight through. With the shipped catalog the `gpt` alias
+   resolves to `gpt-6.1-sol`, which report 08 section 2.C found absent from a Pro account's Codex
+   catalog ("requires access"; verification row 44 confirmed for the bundled catalog) and which
+   `pcli_models("codex")` does not list. A ChatGPT-plan user with only codex installed would get
+   `codex exec -m gpt-6.1-sol` (and Task 11's live test, which uses `codex/default`, would hit
+   it). For codex the catalog id is now used only when it is one of the full ids of
+   `pcli_models("codex")`; otherwise the fixed fallback `gpt-6-sol` (also architecture 8.4's
+   OpenAI default) applies. claude keeps the plan's catalog passthrough (the claude CLI takes the
+   API's full ids). The plan test "CLI invocations always get full model ids" now expects
+   `gpt-6-sol` for a mocked catalog GPT `gpt-9-9` instead of `gpt-9-9`. When a live check
+   confirms a newer id on the Codex route, adding it to `pcli_models("codex")` lets the catalog
+   alias reach it again.
+2. **`status(check = TRUE)` runs the capability probe** (contract 7.20: the `--help` probe runs
+   "only on first use or `check = TRUE`"). The plan's branch forgot the cached version and probe
+   and re-ran only `pcli_version()`, which records the status without an error, so a recorded
+   "bare by default", "missing exec flags" or "help unreadable" became "ready" with
+   `available = TRUE` until the next use re-probed, and P05's `model_default()` could pick a CLI
+   that fails on its first turn. The branch now calls `pcli_probe()` (which runs
+   `pcli_version()` first); both are local runs, never a model request.
+3. **A malformed `rate_limit_event` reads as NA** instead of signalling "subscript out of
+   bounds": `pcli_plan_set()` treats an `info` or `unifiedWindows` value that is not a list as
+   empty, and a field that is not a single string or number as NA, so Task 6's informational
+   event never ends a turn.
+
+Validation: `progress/P20.md`, Task 3. Three tests added (+22 expectations) and one plan
+expectation changed. Red against the plan-literal source `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 128 ]`
+(`dev/.validation/P20/task3-fix1-red.log`); final `^cli-common$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 148 ]` (`task3-fix1-green.log`), so every later plan count
+for `test-cli-common.R` is 62 higher on macOS and Linux (17 from D-093, 23 from D-095, 22 from
+this entry).
