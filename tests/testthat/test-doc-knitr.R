@@ -281,3 +281,65 @@ test_that("knitr's generic dispatches to the lazily registered methods", {
                 meta = list(model = "m", date = "2026-10-05"))
   expect_identical(as.character(knitr::knit_print(x)), "`gptr_score: mean 1.5 (m, 2026-10-05)`\n")
 })
+
+# ---- knitr and Quarto through gptr() and the fake provider (05 P15 acceptance 2) ---------------
+
+test_that("knitr records an agent chunk through gptr() and replays it on the next knit", {
+  skip_if_not_installed("knitr")
+  # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
+  fixture = normalizePath(testthat::test_path("fixtures", "docs", "report.Rmd"))
+  root = local_project()
+  local_gptr_options(record = "auto", replay = "auto", model = "fake/fake-1", mode = "auto",
+                     unsafe_no_permissions = TRUE)
+  fake = local_fake_provider(list(
+    fake_tool("r", code = "n = nchar(\"count letters in this prompt\")"), fake_text("Counted.")))
+  rmd = file.path(root, "report.Rmd")
+  file.copy(fixture, rmd)
+  out = file.path(root, "report.md")
+  knitr::knit(rmd, output = out, envir = new.env(parent = globalenv()), quiet = TRUE)
+  expect_length(fake_requests(fake), 2L)
+  expect_match(doc_rmd_chunks(readLines(rmd))$label[3], "^gptr-[0-9a-f]{6}$")
+  md = readLines(out)
+  expect_true(any(grepl("Counted.", md, fixed = TRUE)))
+  expect_true("n = nchar(\"count letters in this prompt\")" %in% md)
+  md5 = tools::md5sum(rmd)
+  e = new.env(parent = globalenv())
+  knitr::knit(rmd, output = out, envir = e, quiet = TRUE)
+  expect_length(fake_requests(fake), 2L)
+  expect_identical(e$n, 28L)
+  expect_identical(tools::md5sum(rmd), md5)
+})
+
+test_that("quarto render records a #| label agent chunk and the next render replays it", {
+  skip_on_cran()
+  quarto = Sys.which("quarto")
+  skip_if(!nzchar(quarto), "quarto is not installed")
+  root = local_project()
+  qmd = file.path(root, "report.qmd")
+  writeLines(c(
+    "---", "title: \"Report\"", "format: md", "---", "", "```{r setup}", "#| include: false",
+    tracemem_loader(),
+    paste("options(gptr.model = \"fake/fake-1\", gptr.mode = \"auto\", gptr.record = \"auto\",",
+          "gptr.quiet = TRUE, gptr.unsafe_no_permissions = TRUE)"),
+    paste0("fake = gptr_fake_provider(list(list(tool = \"r\", input = list(code = \"n = 28L\")),",
+           " \"Counted.\"))"),
+    "invisible(gptr_register(fake))", "```", "", "```{r}", "#| label: ask",
+    "gptr(\"count letters in this prompt\")", "```", "",
+    "Requests: `r length(fake$log$requests)`"), qmd)
+  render = function(replay) {
+    processx::run(quarto, c("render", "report.qmd"), wd = root,
+                  env = c("current", GPTR_PROJECT_ROOT = root, GPTR_REPLAY = replay,
+                          QUARTO_R = R.home("bin"),
+                          R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
+                  error_on_status = FALSE, timeout = 600)
+  }
+  r1 = render("auto")
+  expect_identical(r1$status, 0L)
+  expect_true(any(grepl("^#\\| label: gptr-[0-9a-f]{6}$", readLines(qmd))))
+  expect_true(any(grepl("Requests: 2", readLines(file.path(root, "report.md")), fixed = TRUE)))
+  md5 = tools::md5sum(qmd)
+  r2 = render("replay")
+  expect_identical(r2$status, 0L)
+  expect_true(any(grepl("Requests: 0", readLines(file.path(root, "report.md")), fixed = TRUE)))
+  expect_identical(tools::md5sum(qmd), md5)
+})

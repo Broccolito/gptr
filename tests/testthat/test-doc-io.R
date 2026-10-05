@@ -1322,3 +1322,131 @@ test_that("a non-ASCII document name has its format in any locale (R >= 4.6)", {
   expect_null(doc_format_of(NULL))
   expect_null(doc_format_of(NA_character_))
 })
+
+# ---- Rscript runs end to end (05 P15 acceptance 2 and 6; IC-51) --------------------------------
+
+# A script run by `Rscript`: gptr loaded as P01's copy harness loads it (tracemem_loader(): the
+# installed package under R CMD check, else the source tree), an offline fake provider, consent
+# to record by option, then `body`
+doc_child_script = function(path, fake, body) {
+  writeLines(c(tracemem_loader(),
+               paste("options(gptr.model = \"fake/fake-1\", gptr.mode = \"auto\",",
+                     "gptr.record = \"auto\", gptr.quiet = TRUE, gptr.r_output_tokens = 200L,",
+                     "gptr.unsafe_no_permissions = TRUE)"),
+               fake, "invisible(gptr_register(fake))", body), path)
+  invisible(path)
+}
+
+# A child cannot see this process's gptr.project_root option: the project and the replay mode
+# go through GPTR_PROJECT_ROOT and GPTR_REPLAY
+doc_child_env = function(root, replay) {
+  c("current", GPTR_PROJECT_ROOT = root, GPTR_REPLAY = replay,
+    R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
+}
+
+doc_child_run = function(root, args, replay = "auto") {
+  processx::run(rscript_path(), c("--vanilla", args), wd = root,
+                env = doc_child_env(root, replay), error_on_status = FALSE, timeout = 300)
+}
+
+doc_two_steps = paste0("fake = gptr_fake_provider(list(",
+                       "list(tool = 'r', input = list(code = 'n1 = 1')), 'one.', ",
+                       "list(tool = 'r', input = list(code = 'n2 = n1 + 1')), 'two.'))")
+
+test_that("an Rscript run writes its blocks only at exit and the next run replays them", {
+  skip_on_cran()
+  root = local_project()
+  f = file.path(root, "job.R")
+  doc_child_script(f, doc_two_steps, c(
+    "path = sub('^--file=', '', grep('^--file=', commandArgs(FALSE), value = TRUE))",
+    "md5 = unname(tools::md5sum(path))",
+    "a = gptr('first step')",
+    "cat('UNCHANGED', identical(unname(tools::md5sum(path)), md5), '\\n')",
+    "b = gptr('second step')",
+    "cat('REQUESTS', length(fake$log$requests), 'N2', n2, '\\n')"))
+  res = doc_child_run(root, f)
+  expect_identical(res$status, 0L)
+  expect_match(res$stdout, "UNCHANGED TRUE", fixed = TRUE)
+  expect_match(res$stdout, "REQUESTS 4 N2 2", fixed = TRUE)
+  expect_length(doc_find_blocks(readLines(f))$id, 2L)
+  expect_null(doc_sidecar_read(f))
+  md5 = tools::md5sum(f)
+  again = doc_child_run(root, f, replay = "replay")
+  expect_identical(again$status, 0L)
+  expect_match(again$stdout, "REQUESTS 0 N2 2", fixed = TRUE)
+  expect_identical(tools::md5sum(f), md5)
+})
+
+test_that("SIGTERM leaves a sidecar that the next touch applies around user edits (IC-51)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  root = local_project()
+  f = file.path(root, "job.R")
+  doc_child_script(f, doc_two_steps, c("a = gptr('first step')", "b = gptr('second step')",
+                                       "cat('READY\\n')", "Sys.sleep(300)"))
+  before = readLines(f)
+  p = processx::process$new(rscript_path(), c("--vanilla", f), wd = root,
+                            env = doc_child_env(root, "auto"), stdout = "|", stderr = "|")
+  withr::defer(if (p$is_alive()) p$kill())
+  out = ""
+  deadline = Sys.time() + 240
+  while (!grepl("READY", out, fixed = TRUE) && p$is_alive() && Sys.time() < deadline) {
+    p$poll_io(1000)
+    out = paste0(out, p$read_output())
+  }
+  expect_match(out, "READY", fixed = TRUE)
+  p$signal(tools::SIGTERM)
+  p$wait(10000)
+  expect_identical(readLines(f), before)
+  rec = doc_sidecar_read(f)
+  expect_length(rec$upserts, 2L)
+  expect_false(pid_alive(rec$pid, rec$create_time))
+  writeLines(c("# my notes", before, "z = 0"), f)
+  gptr_blocks(f)
+  txt = readLines(f)
+  expect_identical(txt[1], "# my notes")
+  expect_identical(txt[length(txt)], "z = 0")
+  b = doc_find_blocks(txt)
+  expect_setequal(b$id, vapply(rec$upserts, function(u) u$block_id, ""))
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("gptr_return() and gptr$out() calls re-source cleanly under Rscript and source() (6)", {
+  skip_on_cran()
+  root = local_project()
+  f = file.path(root, "fit.R")
+  fake = r"---(fake = gptr_fake_provider(function(request) {
+  if (request$n == 1L) {
+    return(list(tool = "r", input = list(code = "cat(rep('line', 400), sep = '\n')",
+                                         record = FALSE)))
+  }
+  if (request$n == 2L) {
+    txt = paste(unlist(lapply(request$last_results[[1L]]$content, function(b) b$text)),
+                collapse = "\n")
+    id = regmatches(txt, regexec('gptr[$]out[(]"(o[0-9a-f]{6})"', txt))[[1L]][2L]
+    code = paste0("fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\ngptr$out(\"", id,
+                  "\", lines = 1)")
+    return(list(tool = "r", input = list(code = code)))
+  }
+  "Fitted."
+}))---"
+  doc_child_script(f, fake, c("res = gptr('Fit mpg on weight')",
+                              "stopifnot(inherits(res$value, 'lm'))",
+                              "cat('REQUESTS', length(fake$log$requests), '\\n')"))
+  rec = doc_child_run(root, f)
+  expect_identical(rec$status, 0L)
+  expect_match(rec$stdout, "REQUESTS 3", fixed = TRUE)
+  txt = readLines(f)
+  b = doc_find_blocks(txt)
+  body = doc_block_body(txt, b)
+  expect_identical(body[!startsWith(body, "#>")], "fit = lm(mpg ~ wt, data = mtcars)")
+  expect_match(txt[b$start], " value=fit", fixed = TRUE)
+  rs = doc_child_run(root, f, replay = "replay")
+  expect_identical(rs$status, 0L)
+  expect_match(rs$stdout, "REQUESTS 0", fixed = TRUE)
+  driver = file.path(root, "driver.R")
+  writeLines(sprintf("source('%s')", normalizePath(f, winslash = "/")), driver)
+  src = doc_child_run(root, driver, replay = "replay")
+  expect_identical(src$status, 0L)
+  expect_match(src$stdout, "REQUESTS 0", fixed = TRUE)
+})
