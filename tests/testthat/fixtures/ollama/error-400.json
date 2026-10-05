@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "response": {"error": "images must be base64-encoded image data, not URLs"}
+}

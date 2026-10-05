@@ -512,12 +512,14 @@ test_that("the request preflight runs before the call's values are read (IC-74)"
                   models = list(list(id = "clef-flash", type = "classifier",
                                      api = "ollama-system-one")))
   }
+  # a live call (the test process replays, and replay uses the frozen identity instead, IC-74)
+  live = list(replay = "auto")
   lp = clef("lclef", "http://127.0.0.1:11434")
   expect_true(s1_match(call_new(prompt = "Q?", ids = list(model = lp))))
-  expect_error(s1_call(s1_test_call("Q?", text = "a", model = lp)),
+  expect_error(s1_call(s1_test_call("Q?", text = "a", model = lp, args = live)),
                class = "gptr_error_not_available")
   remote = clef("rclef", "https://ollama.example.invalid")
-  expect_error(s1_call(s1_test_call("Q?", text = "a", model = remote)),
+  expect_error(s1_call(s1_test_call("Q?", text = "a", model = remote, args = live)),
                class = "gptr_error_untrusted")
 })
 

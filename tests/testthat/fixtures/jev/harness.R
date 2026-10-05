@@ -64,6 +64,29 @@ local_s1_adapter = function(.env = parent.frame()) {
   invisible(NULL)
 }
 
+# Register the ollama-system-one adapter (IC-74) for the calling test when builtin:system1 has
+# not (the native Ollama task runs before Task 9 registers the built-in)
+local_s1_ollama_adapter = function(.env = parent.frame()) {
+  if (!is.null(registry_get("adapter", "ollama-system-one"))) return(invisible(NULL))
+  off = gptr_register(gptr_adapter("ollama-system-one", transport = "http_json",
+                                   classify = list(build = s1_ollama_build,
+                                                   parse = s1_ollama_parse)))
+  withr::defer(off(), envir = .env)
+  invisible(NULL)
+}
+
+# One synthetic wire fixture of tests/testthat/fixtures/ollama/ (the documented shape of Ollama's
+# POST /v1/systemone, 07-local-ollama.md section 3) as a list
+ollama_fixture = function(name) {
+  path = testthat::test_path("fixtures", "ollama", paste0(name, ".json"))
+  json_decode(read_utf8(path)$text)
+}
+
+# A classifier-route call (s1_call()) against Ollama's Clef Flash, or another `model`
+ollama_call = function(prompt, ..., args = list(), model = "ollama/clef-flash") {
+  s1_call(s1_test_call(prompt, ..., model = model, args = args))
+}
+
 # Make every System 1 HTTP transfer fail the test: tests that must not reach the network
 local_no_network = function(.env = parent.frame()) {
   local_mocked_bindings(s1_http = function(spec, provider, on_done, on_fail) {

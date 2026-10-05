@@ -1,0 +1,4 @@
+{
+  "status": 404,
+  "response": {"error": "model \"clef\" not found, try pulling it first"}
+}

@@ -1,0 +1,15 @@
+{
+  "request": {
+    "model": "clef-flash",
+    "state": {"text": "A golden retriever puppy fetched the ball and wagged its tail."},
+    "questions": {
+      "answer": {"type": "noul", "instructions": "Does this text describe a dog? The input is in `text`."}
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "clef-flash",
+    "answers": {"answer": {"type": "noul", "noul": 0.9595}},
+    "usage": {"input_tokens": 41, "output_tokens": 1}
+  }
+}

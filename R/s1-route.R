@@ -433,7 +433,10 @@ s1_zip = function(parts) {
 # provider is a classifier); the target is preflighted before the call's values are read, a
 # state is built, a cache key is computed or a credential is looked up; egress follows P08's
 # effective-endpoint rule, never the `local` hint; images are checked against the model and keyed;
-# unknown usage and calibration stay NA, and the vector's meta carries the call's provenance.
+# unknown usage and calibration stay NA, and the vector's meta carries the call's provenance. A
+# native Ollama model named by reference is prepared on a live call (discovery only when its
+# evidence is missing or stale); under replay it is frozen instead: its answers and the model
+# identity recorded with them come from the cache's pins, with no discovery and no request.
 
 #' The configured System 1 setting when it opts into emulation ("emulate:<ref>"), else NULL
 #' @noRd
@@ -489,7 +492,14 @@ s1_target_of = function(rec, provider, ref) {
                "unknown_model", ref = ref, suggestions = character())
   }
   base = s1_base_url(provider)
-  endpoint = if (is.null(base)) paste0("offline:", provider[["id"]]) else s1_endpoint(base)
+  endpoint = if (is.null(base)) {
+    paste0("offline:", provider[["id"]])
+  } else if (s1_ollama_native(rec)) {
+    # Ollama's decision endpoint hangs off the server root, never a doubled /v1 (IC-74)
+    s1_ollama_endpoint(base) %||% base
+  } else {
+    s1_endpoint(base)
+  }
   list(ref = paste0(rec[["provider"]], "/", rec[["id"]]), model = rec, provider = provider,
        engine = s1_engine(rec), calibrated = NA, alias = rec[["id"]], endpoint = endpoint)
 }
@@ -523,7 +533,10 @@ s1_target = function(model) {
                 engine = "emulated:structured", calibrated = FALSE, alias = ref, endpoint = ref))
   }
   rec = s1_model(ref, strict = TRUE)
-  s1_target_of(rec, s1_provider(rec[["provider"]]), ref)
+  target = s1_target_of(rec, s1_provider(rec[["provider"]]), ref)
+  # a reference names a registered provider's model, which s1_ready() may prepare (IC-74)
+  target$by_ref = TRUE
+  target
 }
 
 #' The running run's frozen safety record (P06's `run$opts$safety`, IC-53), or NULL outside a run,
@@ -541,12 +554,25 @@ s1_safety = function() {
 #' refuses a decision-only model). The checked model, with the discovery evidence the preflight
 #' applies (digest, server version), replaces the resolved one, so it reaches the cache identity
 #' and the provenance; the safety record travels with the target to the request.
+#'
+#' A native Ollama model (IC-74, 07 sections 2.1 and 4): named by reference, a live call prepares
+#' it (P05's model_prepare(): discovery only when its evidence is missing or stale, refused before
+#' any request when the local-only policy forbids the endpoint, then the preflight); a provider
+#' spec is preflighted only; both are then checked by s1_ollama_ready(). Under replay (the call's
+#' `replay =`, else the process mode) the target is `frozen`: no discovery, no preflight and no
+#' request, and its answers and their identity come from what was recorded (s1_ollama_replay()).
 #' @noRd
-s1_ready = function(target, safety = s1_safety()) {
-  target$model = if (identical(target$engine, "emulated:structured")) {
-    s1_emu_ready(target$model, safety)
+s1_ready = function(target, safety = s1_safety(), replay = NULL) {
+  emulated = identical(target$engine, "emulated:structured")
+  native = !emulated && s1_ollama_native(target$model)
+  if (native && identical(replay_mode(replay), "replay")) {
+    target$frozen = TRUE
+  } else if (emulated) {
+    target$model = s1_emu_ready(target$model, safety)
+  } else if (native && isTRUE(target$by_ref)) {
+    target$model = s1_ollama_ready(s1_prepare(target$ref, safety = safety))
   } else {
-    s1_preflight(target$model, target$provider, safety = safety)
+    target$model = s1_ollama_ready(s1_preflight(target$model, target$provider, safety = safety))
   }
   target["safety"] = list(safety)
   target
@@ -572,6 +598,8 @@ s1_images = function(images, target) {
   if (!is.list(images) || is.object(images)) {
     arg_abort(images, ".opts$system1_images", "a list of image records list(data, mime)")
   }
+  # Ollama's endpoint: PNG, JPEG or WebP bytes within its image body limit, before any request
+  if (s1_ollama_native(target$model)) s1_ollama_images_check(images, target$model)
   unname(images)
 }
 
@@ -584,16 +612,24 @@ s1_images = function(images, target) {
 #' even as an unregistered spec. The call's own `replay =` decides, as for System 2 calls (P08's
 #' gateway_replay_guard()): in replay mode only offline providers may be called, so a cache miss
 #' signals gptr_error_not_recorded. The process option is set only for the guard and restored.
+#' The replay guard comes first (IC-74): under replay nothing leaves the machine, so a miss is
+#' not_recorded and never asks for an egress acknowledgement. Egress goes through the kernel SDK's
+#' egress_check(provider_id) (IC-33; contract 7.8, P13 a consumer), which judges the registered
+#' record of that id: for a call-level provider spec at another endpoint it can name the wrong
+#' origin, or exempt a spec that reuses a built-in loopback id at a LAN address. P08's
+#' record-level egress_require()/egress_state() are outside the SDK this layer may call (D-120
+#' item 14; a P08 forward note).
 #' @noRd
 s1_guards = function(target, replay = NULL) {
   p = target$provider
-  if (!isTRUE(p[["offline"]])) egress_check(target$model[["provider"]])
-  if (!identical(replay_mode(replay), "replay")) return(invisible(TRUE))
-  if (!identical(replay_mode(), "replay")) {
-    old = options(gptr.replay = "replay")
-    on.exit(options(old), add = TRUE)
+  if (identical(replay_mode(replay), "replay")) {
+    if (!identical(replay_mode(), "replay")) {
+      old = options(gptr.replay = "replay")
+      on.exit(options(old), add = TRUE)
+    }
+    replay_guard(p %||% target$model, "System 1 call")
   }
-  replay_guard(p %||% target$model, "System 1 call")
+  if (!isTRUE(p[["offline"]])) egress_check(target$model[["provider"]])
   invisible(TRUE)
 }
 
@@ -872,7 +908,9 @@ s1_cached_version = function(rec) {
 #'
 #' The keys carry the preflighted model's identity and the images (s1_cache_identity(), IC-74);
 #' a record that is not a valid answer to the question is a miss. The request gets the target's
-#' safety record and the images.
+#' safety record and the images. A native Ollama answer is also pinned with the identity that
+#' gave it, and a frozen (replayed) Ollama target reads its answers through those pins only
+#' (s1_ollama_replay()); `identity` is then the recorded identity, else NULL.
 #' @noRd
 s1_answers = function(states, q, target, session, started, live = FALSE, images = NULL,
                       replay = NULL) {
@@ -881,11 +919,20 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
   salt = s1_cache_salt()
   keys = s1_cache_keys(salt, target$endpoint, target$ref, q$wire, states,
                        s1_cache_identity(target$model, images))
+  native = s1_ollama_native(target$model) && !identical(target$engine, "emulated:structured")
+  pins = if (native) s1_ollama_pin_keys(salt, target, q$wire, states, images)
   answers = vector("list", n)
   conditions = vector("list", n)
   cached = rep(FALSE, n)
   version = NULL
-  if (!live) {
+  identity = NULL
+  if (isTRUE(target$frozen)) {
+    fz = s1_ollama_replay(states, q$wire, target, salt, images)
+    answers = fz$answers
+    cached = fz$cached
+    version = fz$version
+    identity = fz$identity
+  } else if (!live) {
     for (i in seq_len(n)) {
       rec = s1_cache_get(keys[i])
       a = if (is.null(rec)) NULL else s1_cache_answer(rec, q$wire)
@@ -916,11 +963,15 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
       s1_cache_put(keys[i], s1_cache_record(keys[i], got[["answer"]], res$model_version,
                                             target$alias, q$wire, states[[i]], salt,
                                             res$usages[[k]]))
+      if (native && !is.na(keys[i])) {
+        s1_cache_put(pins[i], s1_ollama_pin(pins[i], keys[i], target$model))
+      }
     }
     version = res$model_version %||% version
     s1_log_usage(target, res, session, started)
   }
-  list(answers = answers, conditions = conditions, cached = cached, version = version, res = res)
+  list(answers = answers, conditions = conditions, cached = cached, version = version, res = res,
+       identity = identity)
 }
 
 #' The System 1 core shared by the classifier route and ctx$decide(): images, question (with the
@@ -946,6 +997,8 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
   live = identical(replay_mode(replay), "live")
   got = s1_answers(states, q, target, session, started, live = live, images = images,
                    replay = replay)
+  # replayed native answers carry the identity frozen with them into the provenance (IC-74)
+  if (!is.null(got$identity)) target$model[names(got$identity)] = got$identity
   meta = s1_meta(prompt, target, got)
   out = s1_build(q, got$answers, zipped$names, a$threshold, meta)
   s1_failures(got$conditions, n)
@@ -961,10 +1014,11 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
 # ---- entry points -------------------------------------------------------------------------------
 
 #' The classifier route's run() (contract 7.13). No closure and no tryCatch() in this frame: it
-#' is the caller of s1_inputs(), which reads the user's values. The target is preflighted first.
+#' is the caller of s1_inputs(), which reads the user's values. The target is preflighted (or,
+#' replayed, frozen) first, under the call's own `replay =`.
 #' @noRd
 s1_call = function(call) {
-  target = s1_ready(s1_target(call$ids$model))
+  target = s1_ready(s1_target(call$ids$model), replay = call$args$replay)
   parts = s1_inputs(call)
   s1_run(call$prompt, parts, target, call$args, session = call$session, call = call)
 }

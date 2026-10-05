@@ -1,0 +1,23 @@
+{
+  "request": {
+    "model": "clef-flash",
+    "state": {"text": "A picture of one rectangle."},
+    "questions": {
+      "answer": {
+        "type": "choice",
+        "instructions": "Which colour is the rectangle in the image? The input is in `text`.",
+        "criteria": {"red": null, "blue": null}
+      }
+    },
+    "images": ["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="]
+  },
+  "status": 200,
+  "response": {
+    "model": "clef-flash",
+    "answers": {
+      "answer": {"type": "choice", "choice": "blue", "confidence": 0.81985,
+                 "probabilities": {"blue": 0.9728, "red": 0.0272}}
+    },
+    "usage": {"input_tokens": 310, "output_tokens": 1}
+  }
+}

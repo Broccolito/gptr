@@ -373,9 +373,10 @@ s1_legend = function(question, keys) {
 #' Returns a named double vector, all NA when the map is absent or empty (a gateway that re-ran
 #' the question elsewhere, report 04 section 2.9: unavailable, not zero), or a chr(1) problem
 #' when the keys are not exactly the options asked, a value is not a probability, or the values
-#' do not sum to 1 within the two-decimal rounding of every value.
+#' do not sum to 1 within the rounding of every value: `tol` is the largest rounding error of one
+#' value, TypeSafe's two decimals by default (Ollama's four decimals: s1_ollama_round_tol).
 #' @noRd
-s1_answer_probs = function(got, keys) {
+s1_answer_probs = function(got, keys, tol = s1_round_tol) {
   p = stats::setNames(rep(NA_real_, length(keys)), keys)
   if (is.null(got) || (is.list(got) && !length(got))) return(p)
   nm = names(got)
@@ -386,7 +387,7 @@ s1_answer_probs = function(got, keys) {
   if (!all(nm %in% keys)) return("System 1 returned probabilities for options that were not asked.")
   for (k in keys) p[[k]] = s1_unit(got[[k]])
   if (anyNA(p)) return("System 1 returned an invalid probability.")
-  if (abs(sum(p) - 1) > s1_round_tol * length(p) + 1e-9) {
+  if (abs(sum(p) - 1) > tol * length(p) + 1e-9) {
     return("System 1 returned probabilities that do not sum to 1.")
   }
   p
@@ -439,15 +440,16 @@ s1_parse_answer = function(answer, question, model_id = NA_character_) {
   s1_parse_score(answer[["score"]], p, keys, conf, s1_legend(question, keys), bad)
 }
 
-#' The choice of a choice answer, checked against the options and its own probabilities
+#' The choice of a choice answer, checked against the options and its own probabilities: within
+#' the rounding (`tol` per value, as s1_answer_probs()) of the most probable option
 #' @noRd
-s1_parse_choice = function(ch, p, keys, conf, bad) {
+s1_parse_choice = function(ch, p, keys, conf, bad, tol = s1_round_tol) {
   known = !anyNA(p)
   if (is.null(ch) && known) ch = keys[which.max(p)]
   if (!is.character(ch) || length(ch) != 1L || is.na(ch) || !(ch %in% keys)) {
     return(bad("System 1 returned an unknown choice."))
   }
-  if (known && p[[ch]] < max(p) - 2 * s1_round_tol - 1e-9) {
+  if (known && p[[ch]] < max(p) - 2 * tol - 1e-9) {
     return(bad("System 1 returned a choice that its probabilities do not support."))
   }
   list(type = "choice", choice = ch, probabilities = p, confidence = conf)
@@ -458,11 +460,13 @@ s1_parse_choice = function(ch, p, keys, conf, bad) {
 #'
 #' One expectation serves both cases: the expected level of the probabilities normalised to sum
 #' 1. A missing score becomes it, and a given score must lie within the probabilities' rounding
-#' of it, `s1_round_tol * (sum(levels) + 1) / min(1, sum(p))`. That bound holds for a score
-#' computed from the unrounded probabilities and rounded to two decimals, and a score filled in
-#' here passes its own check when the dispatch validates the canonical record again.
+#' of it, `tol * (sum(levels) + 1) / min(1, sum(p))`, where `tol` is the largest rounding error
+#' of one value (TypeSafe's two decimals by default; Ollama's four: s1_ollama_round_tol). That
+#' bound holds for a score computed from the unrounded probabilities and rounded like them, and
+#' a score filled in here passes its own check when the dispatch validates the canonical record
+#' again.
 #' @noRd
-s1_parse_score = function(given, p, keys, conf, legend, bad) {
+s1_parse_score = function(given, p, keys, conf, legend, bad, tol = s1_round_tol) {
   known = !anyNA(p) && sum(p) > 0
   lv = seq_along(keys) - 1
   expected = if (known) sum(lv * p) / sum(p) else NA_real_
@@ -470,8 +474,8 @@ s1_parse_score = function(given, p, keys, conf, legend, bad) {
     sc = expected
   } else {
     sc = s1_num(given)
-    tol = s1_round_tol * (sum(lv) + 1) / min(1, sum(p)) + 1e-9
-    if (!is.na(sc) && known && abs(sc - expected) > tol) {
+    slack = tol * (sum(lv) + 1) / min(1, sum(p)) + 1e-9
+    if (!is.na(sc) && known && abs(sc - expected) > slack) {
       return(bad("System 1 returned a score that its probabilities do not give."))
     }
   }
@@ -518,7 +522,10 @@ s1_parse_answers = function(answers, questions, model_id = NA_character_) {
 # inside a callback. IC-74 (07-local-ollama.md sections 2-5): the resolved model is preflighted
 # before an adapter, a credential or a state is touched; its own api picks the adapter; every
 # adapter returns canonical answers, which s1_dispatch() validates without a wire parser; unknown
-# usage and calibration stay NA.
+# usage and calibration stay NA. A model whose decision record sets `max_active` (Clef: 1), and
+# any native Ollama model without one (one request per server, 07 section 2), is also admitted
+# per server: the process-wide slot table (s1_slots()) holds at most that many requests in flight
+# to one origin across all calls, and a native Ollama request never looks up a key.
 
 #' One HTTP transfer on the reactor; `on_done(status, headers, body)` receives the whole body
 #'
@@ -609,40 +616,112 @@ s1_wait = function(seconds) {
   invisible(NULL)
 }
 
+#' The process-wide table of System 1 requests in flight per server (IC-74 per-server admission)
+#' @noRd
+s1_slots = function() {
+  if (is.null(the$s1_slots)) the$s1_slots = new.env(parent = emptyenv())
+  the$s1_slots
+}
+
+#' The System 1 requests in flight to a server (a canonical origin)
+#' @noRd
+s1_slot_used = function(key) {
+  v = get0(key, envir = s1_slots(), inherits = FALSE)
+  if (is.null(v)) 0L else v
+}
+
+#' Take (`by > 0`) or give back (`by < 0`) slots of a server; never below zero
+#' @noRd
+s1_slot_shift = function(key, by) {
+  env = s1_slots()
+  n = s1_slot_used(key) + as.integer(by)
+  if (n > 0L) {
+    assign(key, n, envir = env)
+  } else if (exists(key, envir = env, inherits = FALSE)) {
+    rm(list = key, envir = env)
+  }
+  invisible(max(n, 0L))
+}
+
+#' The requests a model's own server takes at once (07 section 2): the `max_active` of its
+#' decision record (a number >= 1; above the integer range it means "no own limit below the
+#' global cap"), else, for a native Ollama model, Ollama's default of one active request per
+#' server (s1_ollama_max_active), so only an explicit record raises it; NULL otherwise
+#' @noRd
+s1_own_active = function(model) {
+  d = model[["decision"]]
+  own = if (is.list(d)) d[["max_active"]] else NULL
+  if (is.numeric(own) && length(own) == 1L && !is.na(own) && own >= 1) {
+    return(as.integer(min(own, .Machine$integer.max)))
+  }
+  if (s1_ollama_native(model)) s1_ollama_max_active else NULL
+}
+
+#' The per-server gate of a request (07 section 2: local Clef concurrency defaults to one active
+#' request per server, the global System 1 cap stays an upper bound): `list(key, cap)` for a model
+#' with a per-server limit (s1_own_active(): its decision record's `max_active`, or one for any
+#' native Ollama model without it), keyed by the canonical origin of the provider's endpoint, so
+#' every call (and every provider record) that reaches that server shares the cap; NULL otherwise
+#' (TypeSafe's admission is P04's process-wide token bucket, IC-64)
+#' @noRd
+s1_gate = function(model, base_url) {
+  if (is.null(s1_own_active(model))) return(NULL)
+  if (!is.character(base_url) || length(base_url) != 1L || is.na(base_url)) return(NULL)
+  origin = url_origin(base_url)
+  if (is.na(origin)) return(NULL)
+  list(key = origin, cap = s1_active_cap(model))
+}
+
 #' One round: start the jobs with at most `max_active` in flight and pump until all reported
 #'
 #' `start(k, done)` starts job `k` and returns a reactor id (or NULL for a synchronous job);
 #' `done(outcome)` is called exactly once per job. An interrupt cancels what is still in flight.
+#' With a per-server `gate` (s1_gate()) a job starts only while the server has a free slot in the
+#' process-wide table; each job holds one from its start until its `done()`, and the slots of jobs
+#' that never reported (an interrupt, a start that failed) are given back on exit.
 #' @noRd
-s1_round = function(idx, start, max_active) {
+s1_round = function(idx, start, max_active, gate = NULL) {
   st = new.env(parent = emptyenv())
   st$out = vector("list", length(idx))
   st$next_k = 1L
   st$active = 0L
   st$done = 0L
   st$ids = character()
+  st$held = 0L
   n = length(idx)
+  free = function() is.null(gate) || s1_slot_used(gate$key) < gate$cap
   finish = function(k) {
     force(k)
     function(res) {
       st$out[[k]] = res
       st$active = st$active - 1L
       st$done = st$done + 1L
+      if (!is.null(gate) && st$held > 0L) {
+        st$held = st$held - 1L
+        s1_slot_shift(gate$key, -1L)
+      }
       invisible(NULL)
     }
   }
   launch = function() {
-    while (st$active < max_active && st$next_k <= n) {
+    while (st$active < max_active && st$next_k <= n && free()) {
       k = st$next_k
       st$next_k = k + 1L
       st$active = st$active + 1L
+      if (!is.null(gate)) {
+        st$held = st$held + 1L
+        s1_slot_shift(gate$key, 1L)
+      }
       # do.call() passes values: a lazy `idx[k]` or `finish(k)` would be forced after `k` moved on
       id = do.call(start, list(idx[k], finish(k)))
       if (is.character(id) && length(id) == 1L && !is.na(id)) st$ids = c(st$ids, id)
     }
     st$done >= n
   }
-  on.exit(if (st$done < n && length(st$ids)) reactor_cancel(st$ids), add = TRUE)
+  on.exit({
+    if (st$done < n && length(st$ids)) reactor_cancel(st$ids)
+    if (!is.null(gate) && st$held > 0L) s1_slot_shift(gate$key, -st$held)
+  }, add = TRUE)
   if (!launch()) s1_pump(launch)
   st$out
 }
@@ -651,14 +730,14 @@ s1_round = function(idx, start, max_active) {
 #'
 #' Before round r + 1 the client waits for the largest `retry-after` of round r (capped at 60 s)
 #' or else `min(0.5 * 2^(r - 1), 5)` seconds: the TypeSafe SDK schedule (report 04 section 2.6)
-#' without its random jitter, since gptr never touches the RNG (IC-61).
+#' without its random jitter, since gptr never touches the RNG (IC-61). `gate` is s1_round()'s.
 #' @noRd
-s1_drive = function(n, start, max_active, rounds) {
+s1_drive = function(n, start, max_active, rounds, gate = NULL) {
   results = vector("list", n)
   pending = seq_len(n)
   round = 1L
   while (length(pending)) {
-    got = s1_round(pending, start, max_active)
+    got = s1_round(pending, start, max_active, gate)
     again = integer()
     wait = 0
     for (k in seq_along(pending)) {
@@ -774,16 +853,13 @@ s1_check_probs = function(probs, keys) {
 }
 
 #' The requests one System 1 call may keep in flight: `gptr.s1_max_active`, lowered by the
-#' model's decision record (`max_active`; Clef: 1, 07 section 2); the global cap stays an upper
-#' bound
+#' model's own server limit (s1_own_active(): the decision record's `max_active`, and one for a
+#' native Ollama model without it; 07 section 2); the global cap stays an upper bound
 #' @noRd
 s1_active_cap = function(model) {
   cap = check_number(gptr_opt("s1_max_active"), "gptr.s1_max_active", min = 1, int = TRUE)
-  d = model[["decision"]]
-  own = if (is.list(d)) d[["max_active"]] else NULL
-  if (is.numeric(own) && length(own) == 1L && !is.na(own) && own >= 1) {
-    cap = min(cap, as.integer(own))
-  }
+  own = s1_own_active(model)
+  if (!is.null(own)) cap = min(cap, own)
   cap
 }
 
@@ -831,16 +907,17 @@ s1_provenance = function(model, values, engine) {
 #' canonical answers of state i by question id, or NULL when `conditions[[i]]` holds its failure.
 #' Unknown usage stays NA in the sums (IC-74, D-076); the sums also count the `usage` a failed
 #' outcome carries (a completed reply that was refused, s1_emu_outcome()); `calibrated` is the
-#' default unless the results state it (s1_calibration()).
+#' default unless the results state it (s1_calibration()). `gate` is the per-server admission of
+#' s1_gate(), NULL for none.
 #' @noRd
-s1_dispatch = function(model, states, questions, start_for, engine, calibrated) {
+s1_dispatch = function(model, states, questions, start_for, engine, calibrated, gate = NULL) {
   max_active = s1_active_cap(model)
   rounds = check_number(gptr_opt("s1_rounds"), "gptr.s1_rounds", min = 1, int = TRUE)
   n = length(states)
   keys = vapply(states, canonical_json, "")
   uniq = which(!duplicated(keys))
   map = match(keys, keys[uniq])
-  results = s1_drive(length(uniq), start_for(states[uniq]), max_active, rounds)
+  results = s1_drive(length(uniq), start_for(states[uniq]), max_active, rounds, gate)
   answers = vector("list", n)
   conditions = vector("list", n)
   usages = vector("list", n)
@@ -927,6 +1004,12 @@ s1_engine = function(model) {
 #' Both are read by exact name: a longer option such as `safety_snapshot` is not the safety record.
 #' `opts$images` (the call's `.opts$system1_images`, already checked against the model by the
 #' route, IC-74) reaches the adapter as its `images` option, for every state.
+#'
+#' IC-74 (07 sections 2-5): a native Ollama model (api `ollama-system-one`) is also checked by
+#' s1_ollama_ready(), never gets a credential looked up (none is ever sent to Ollama), and its
+#' requests pass the per-server gate (s1_gate()). A `gptr_error_s1_*` condition signalled by an
+#' adapter's `build` (a state whose request exceeds the endpoint's limits) fails that element
+#' alone; any other error of `build` ends the call.
 #' @return `list(answers = list per state, usage, model_version, request_ids, errors = df)` plus
 #'   `conditions`, `usages`, `engine`, `calibrated` (NA unless the adapter states it) and
 #'   `provenance`.
@@ -938,7 +1021,7 @@ s1_request = function(model, states, questions, opts = list()) {
                       model$id, "."), "unknown_model", ref = paste0(model$provider, "/", model$id),
                suggestions = character())
   }
-  model = s1_preflight(model, provider, safety = opts[["safety"]])
+  model = s1_ollama_ready(s1_preflight(model, provider, safety = opts[["safety"]]))
   api = model[["api"]]
   if (!is.character(api) || length(api) != 1L || is.na(api)) api = provider[["api"]]
   adapter = s1_adapter(api)
@@ -953,8 +1036,11 @@ s1_request = function(model, states, questions, opts = list()) {
   signal = new.env(parent = emptyenv())
   signal$aborted = FALSE
   signal$reason = NULL
-  aopts = list(credential = s1_credential(provider), base_url = s1_base_url(provider),
-               signal = signal, provider = provider, images = opts[["images"]])
+  keyless = identical(api, s1_ollama_api)
+  aopts = list(credential = if (!keyless) s1_credential(provider),
+               base_url = s1_base_url(provider), signal = signal, provider = provider,
+               images = opts[["images"]])
+  gate = if (is.function(run)) NULL else s1_gate(model, aopts$base_url)
   start_for = function(ustates) {
     if (is.function(run)) {
       return(function(j, done) {
@@ -966,7 +1052,12 @@ s1_request = function(model, states, questions, opts = list()) {
       })
     }
     function(j, done) {
-      spec = cl[["build"]](model, ustates[[j]], questions, aopts)
+      spec = tryCatch(cl[["build"]](model, ustates[[j]], questions, aopts),
+                      gptr_error_s1 = function(e) e)
+      if (inherits(spec, "condition")) {
+        done(s1_outcome(spec, model$id))
+        return(NULL)
+      }
       spec$request_id = id_new("q", 12L)
       spec$model = model$id
       spec$first_byte_timeout = spec[["first_byte_timeout"]] %||% 30
@@ -983,5 +1074,5 @@ s1_request = function(model, states, questions, opts = list()) {
               on_fail = function(cnd) done(s1_transport_outcome(cnd, model)))
     }
   }
-  s1_dispatch(model, states, questions, start_for, s1_engine(model), NA)
+  s1_dispatch(model, states, questions, start_for, s1_engine(model), NA, gate)
 }
