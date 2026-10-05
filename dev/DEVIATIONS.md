@@ -6825,9 +6825,9 @@ test file red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 337 ]` (`task6-fix3-red.log`), 
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 357 ]` (`task6-fix3-green.log`; the adaptation tests now add
 148).
 
-## D-106 - P20 cli-codex adapter: Codex's unreported cost and usage stay unknown, the turn cap is always a whole number, a late or aborted wall clock follows the claude adapter, no R condition escapes the normaliser, malformed events are read by their JSON types, the Windows sandbox probe caches answers and timeouts only, and the control-file check never fails an exec (2026-10-04)
+## D-106 - P20 cli-codex adapter: Codex's unreported cost and usage stay unknown, the turn cap is always a whole number, a late or aborted wall clock follows the claude adapter, no R condition escapes the normaliser, malformed events are read by their JSON types, the Windows sandbox probe caches answers and timeouts only, the control-file check never fails an exec, and every workspace-write exec is checked (2026-10-04)
 
-P20 Task 7's plan-literal `R/cli-codex.R` changed in six ways (item 6 also in one line of P20
+P20 Task 7's plan-literal `R/cli-codex.R` changed in eight ways (item 6 also in one line of P20
 Task 2's `pcli_version_forget()` in `R/cli-common.R`). The plan's thirteen tests, its test
 support (`stub_mcp_handle()`, `local_mcp_stub()`) and its five fixtures are verbatim
 (`codex-call1.jsonl` equals report 08 section 5.2):
@@ -6896,7 +6896,31 @@ support (`stub_mcp_handle()`, `local_mcp_stub()`) and its five fixtures are verb
    as `push()` is (`internal` terminal event, Codex stopped). When gptr stops an exec (turn cap,
    wall clock, an aborted run, an R error in `push()` or the wall clock) it stops Codex before it
    checks the control files and before the terminal event, so nothing Codex writes between the
-   check and the kill goes unreported and P06's done callback finds the child gone.
+   check and the kill goes unreported and P06's done callback finds the child gone. (Until review
+   round 2 the two R-error ends did not check the control files at all; see item 8.)
+8. **Every workspace-write exec is checked, also one that ends without the normaliser's own
+   end (review round 2; IC-54, IC-65).** The check ran only on the normaliser's own terminal
+   paths (`turn.completed`, `pcli_codex_error()`). P05 ends an exec of an aborted or settled run
+   without the normaliser (`stream_abort()`, `stream_detach()`), a stop of the child cancels the
+   exec's wall clock (`pcli_stop_child()`, as Task 9's `agent_end` hook will), and the
+   normaliser's own `internal` end (an R error in `push()`, the wall clock, `finish()` or
+   `fail()`) called `pcli_fail()` directly. The baseline then stayed in the adapter state and
+   the session's next `build()` replaced it, so Codex's edits became part of the new baseline
+   and were never reported; for `.Rprofile`, `Rprofile.site`, `Renviron.site` and `.git/hooks`
+   this warning is gptr's only notice. Now (a) `build()` first checks a baseline still set
+   (`pcli_codex_settle()`) and warns, before `start`, that Codex's earlier workspace-write turn
+   ended unchecked and which files changed since it started (by Codex or a later edit); (b) the
+   `internal` end checks the control files after the stop and warns after its terminal event,
+   and neither may signal there; (c) a check result is kept on the exec until it is reported
+   (`pcli_codex_report()`), so an R error between the check and the warning cannot lose it;
+   (d) the baseline records the project root it was hashed in (`codex_root`), and the check
+   hashes that root, so a session that moved to another project between execs does not get the
+   control files of both projects reported as changed. Residual: an aborted
+   exec of a session that runs no later codex exec is reported only by its own late wall clock
+   (up to `gptr.cli_turn_timeout`, while gptr pumps), and not at all once a stop of the child
+   has cancelled that clock; Task 9's `agent_end` and `session_shutdown` hooks can close this by
+   calling `pcli_codex_settle(state)` after `pcli_stop_child()`. The trust-gated files (settings,
+   `mcp.json`, extensions, agents) are covered in any case by P08's trust fingerprint.
 
 Not changed and recorded here (D-019 item 5): the prompt goes to Codex through P05's
 `write_all()`; a fresh thread's prompt carries gptr's instructions and the earlier conversation,
@@ -6904,16 +6928,19 @@ so it is not bounded and on Windows the write blocks until Codex has read it (Co
 the end before it starts the turn, so the expected effect is a short pause; not verified on
 Windows).
 
-Validation: `progress/P20.md`, Task 7. Twelve tests added (+118 expectations). Against the
+Validation: `progress/P20.md`, Task 7. Fifteen tests added (+155 expectations). Against the
 plan-literal source the plan's tests pass (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 71 ]`,
 `dev/.validation/P20/task7-plan-literal.log`) and the first seven added tests fail
 (`[ FAIL 22 | WARN 4 | SKIP 0 | PASS 95 ]`, `task7-adapt-red.log`); the five of review round 1
 (and the probe test's new timeout case) failed against the round-0 source
 (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 155 ]`, `task7-fix1-red.log`; the unreadable-file test
 `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 178 ]` with the round-0 `pcli_control_hash()`,
-`task7-fix1-red-unreadable.log`); final `^cli-codex$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 189 ]`
-(`task7-fix1-green.log`), so every later plan count for `test-cli-codex.R` is 118 higher on
-macOS and Linux (the two symbolic-link and permission tests skip where those are unavailable).
+`task7-fix1-red-unreadable.log`); the three of review round 2 failed against the round-1
+source (`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 194 ]`, `task7-fix2-red.log`; with the root of item
+8 (d) ignored `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 224 ]`, `task7-fix2-red-root.log`); final
+`^cli-codex$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 226 ]` (`task7-fix2-green.log`), so every later
+plan count for `test-cli-codex.R` is 155 higher on macOS and Linux (the two symbolic-link and
+permission tests skip where those are unavailable).
 
 ## D-107 - P15 writer: a block a document_write hook patched carries the sha of its body as written, a block the transcript fallback wrote is recorded under the transcript, a child without an answer is not cached in S2, and a backend no writer handles writes nothing (2026-10-04)
 
@@ -6980,7 +7007,7 @@ IC-74 test passes, coverage only); final `^doc-blocks$` `[ FAIL 0 | WARN 0 | SKI
 (`task9-fix1-green.log`), so every later plan count for `test-doc-blocks.R` is 43 higher than the
 plan's (on top of the earlier D-062 and D-068 additions).
 
-## D-108 - P08 gptr_config() and gptr_init(): a project scope never stores a relaxed local_only, protected settings are written only as whole objects, a malformed filter is refused before anything is written, identifier refusals name the setting, the scope is one string, and the templates and the .Rbuildignore line are written as LF lines (2026-10-04)
+## D-108 - P08 gptr_config() and gptr_init(): a project scope never stores a relaxed local_only, protected settings are written only as whole objects, a malformed filter is refused before anything is written, identifier refusals name the setting, the scope and choice settings are one string, the templates and the .Rbuildignore line are written as LF lines, and gptr_init() keeps the trust across its own settings.json write (2026-10-04)
 
 P08 Task 7's literal `gptr_config()`, `gptr_init()` and helpers (`R/gptr-config.R`) predate IC-74
 and the implemented Task 3-6 interfaces. Behaviours that differ from the plan literal:
@@ -7018,6 +7045,19 @@ and the implemented Task 3-6 interfaces. Behaviours that differ from the plan li
    endings is not copied byte for byte. `init_rbuildignore()` writes the lines themselves; the
    plan pasted a final newline into the text that `write_atomic()` ends with another one, leaving
    a blank last line in `.Rbuildignore`.
+7. **`gptr_init()`'s own `settings.json` write re-fingerprints (IC-52: "gptr's own writes
+   re-fingerprint"; review round 1).** The plan copied the trust-gated `.gptr/settings.json`
+   without carrying over the trust that held, so a non-interactive `gptr_init()` voided a
+   recorded trust (or a decision of this process) for a project that had no `settings.json` yet,
+   and the project's settings, extensions and MCP servers were then dropped with a notice.
+   `init_settings()` writes it under the file's short lock (IC-71) and hands the sha256 of the
+   bytes `template_copy()` wrote to `trust_carry()`, the step `settings_write()` already took
+   (now shared): a recorded trust gets the new fingerprint, an in-process decision keeps it in
+   memory, and a gated file changed beside the write (or a trust already voided) still lapses.
+8. **A `choice` setting takes one value.** The core `setting` validators used P01's
+   `check_choice()`, which reads the whole choice vector as its first element, so
+   `gptr_config(context = c("none", "names", "summary"))` stored `"none"`; they use Task 5's
+   `gateway_choice()` (as item 5 does for `.scope`).
 
 The Task 4 temporary skip (D-099 item 8) is removed: the egress hint test now evaluates the hint
 through `gptr_config()`.
@@ -7027,4 +7067,6 @@ Validation: `progress/P08.md`, Task 7. Red (no Task 7 code) `^gptr-config$`
 `could not find function`); against the plan-literal source
 `[ FAIL 42 | WARN 0 | SKIP 1 | PASS 410 ]` (`task7-red-adaptations-against-plan-literal.log`,
 every failure in the six adaptation tests); green `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 464 ]`
-(`task7-green.log`; the skip is P11's `gptr_permissions()` leg).
+(`task7-green.log`; the skip is P11's `gptr_permissions()` leg). Review round 1 (items 7-8):
+red `[ FAIL 19 | WARN 0 | SKIP 1 | PASS 475 ]` (`task7-fix1-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 494 ]` (`task7-fix1-green.log`).

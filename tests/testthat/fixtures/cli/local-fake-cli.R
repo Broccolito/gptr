@@ -176,3 +176,22 @@ feed_fixture = function(n, name) {
 
 # Push one object as a process line
 push_obj = function(n, obj) n$push(list(data = json_encode(obj), obj = obj))
+
+# A gptr_mcp_handle stand-in (04 5.11 fields) whose token lives in its Codex snippet
+stub_mcp_handle = function(port = 54321L, token = "tok-test-0123456789") {
+  h = new.env(parent = emptyenv())
+  h$url = paste0("http://127.0.0.1:", port, "/mcp")
+  h$port = port
+  h$token_env = "GPTR_MCP_TOKEN"
+  h$config = list(codex = list(env = c(GPTR_MCP_TOKEN = token)))
+  h$stop = function() invisible(NULL)
+  h
+}
+
+# Replace the mcp.serve_ensure service for the calling test with one returning `handle`
+# (a `service` registry record at user rank wins over P18's built-in, IC-34)
+local_mcp_stub = function(handle = stub_mcp_handle(), .env = parent.frame()) {
+  off = gptr_register(gptr_spec("service", "mcp.serve_ensure", fun = function(session) handle))
+  withr::defer(off(), envir = .env)
+  invisible(handle)
+}

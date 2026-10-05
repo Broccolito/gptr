@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"<UUID>"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo gptr-probe'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc 'echo gptr-probe'","aggregated_output":"gptr-probe\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"pong"}}
+{"type":"turn.completed","usage":{"input_tokens":38544,"cached_input_tokens":30208,"cache_write_input_tokens":0,"output_tokens":35,"reasoning_output_tokens":0}}

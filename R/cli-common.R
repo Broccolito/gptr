@@ -298,13 +298,14 @@ pcli_version = function(path) {
   hit
 }
 
-#' Drop the cached version and probe of one command (gptr_providers(check = TRUE) re-runs them)
+#' Drop the cached version and probe of one command (gptr_providers(check = TRUE) re-runs them),
+#' with the Windows sandbox answer pcli_codex_windows_ready() keeps next to the probe (D-106)
 #' @noRd
 pcli_version_forget = function(path) {
   key = pcli_cache_key(path)
   for (slot in c("version", "probe")) {
     cache = pcli_cache[[slot]] %||% list()
-    cache[[key]] = NULL
+    cache[c(key, paste("windows-sandbox", key))] = NULL
     assign(slot, cache, envir = pcli_cache)
   }
   invisible(NULL)

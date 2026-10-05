@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"$THREAD"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"mcp_tool_call","server":"gptr","tool":"r","arguments":{"code":"live_answer = sum(1:10); live_answer"},"result":null,"error":null,"status":"in_progress"}}
+{"fake":"mcp_call","tool":"r","arguments":{"code":"live_answer = sum(1:10); live_answer"}}
+{"type":"item.completed","item":{"id":"item_0","type":"mcp_tool_call","server":"gptr","tool":"r","arguments":{"code":"live_answer = sum(1:10); live_answer"},"result":{"content":[{"type":"text","text":"$TOOL_TEXT"}],"structured_content":null},"error":null,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"R said: $TOOL_TEXT"}}
+{"type":"turn.completed","usage":{"input_tokens":24763,"cached_input_tokens":24448,"cache_write_input_tokens":0,"output_tokens":122,"reasoning_output_tokens":0}}
