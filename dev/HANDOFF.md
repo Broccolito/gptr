@@ -61,8 +61,10 @@ Maintained by the coordinator; remove an item only when its owning task lands it
   conformance is CLOSED by FIX-6 `2d2d75a` (D-026); still open: `claude-haiku-4-5` has
   `tool_addition = TRUE` but `mid_system = FALSE`, so no tool-addition declarations are sent
   (P05/P12 decision). FIX-4 (`secret_late_check()` NA tolerance) gates every full-suite run.
-- **Waiting on P08 Task 5 (`call_new`/`call_value`)**: P09 Task 10-11, P13 Task 7+.
-  **Waiting on P11 Task 8 (`ui.get`, scripted UI)**: P14 (all), P18 Tasks 2, 4, 5.
+- **Unblock queue (2026-10-05):** P08 Tasks 10 (`gptr_return()`) and 12 (`export(gptr)` and the
+  gateway S3 methods) -> P10 Task 11 (the `r` tool, `builtin:r`), Task 12 and P10 acceptance ->
+  P15 Tasks 17-18 and the open P15 acceptance rows (`progress/P15.md`). P11 Task 8 (`ui.get`,
+  scripted UI) -> P14 (all), P18 Tasks 2, 4, 5. P09 and P13 are complete.
 - **R 4.6 `tools::file_ext()` (CI-5, D-111):** replace the remaining calls with P01's
   `path_ext()`/`path_sans_ext()`: `R/doc-io.R:63` (P15), `R/ext-specs.R:1330` (P02/P17; also use
   `fs_path()` for its `file.exists()`/`readBin()`), `R/gptr-gateway.R:774` (P08). Scheduled as
