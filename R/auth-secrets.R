@@ -369,6 +369,24 @@ secret_live_entries_set = function(fun) {
   invisible(NULL)
 }
 
+#' The known strings of a nested list: every character leaf at any depth, NA dropped
+#'
+#' Live entries hold NA wherever a value is unknown (IC-74: the usage and cost of an unpriced
+#' model or of an aborted or truncated stream), and may hold non-text leaves (numbers, flags,
+#' functions, environments). Only text can carry a secret, as in redact_tree(), so the late
+#' check scans the character leaves alone; a non-text leaf neither coerces nor hides its
+#' neighbours.
+#' @noRd
+secret_known_strings = function(x) {
+  if (is.character(x)) {
+    x = as.vector(unclass(x), "character")
+    return(x[!is.na(x)])
+  }
+  if (!is.list(x)) return(character())
+  out = unlist(lapply(unclass(x), secret_known_strings), use.names = FALSE)
+  if (is.null(out)) character() else out
+}
+
 #' Warn when a newly registered value already occurs in live sessions (IC-70, G6 section 4.7)
 #' @noRd
 secret_late_check = function(value, name) {
@@ -379,14 +397,14 @@ secret_late_check = function(value, name) {
   forms = secret_variants(value, secrets_opt("redact_min_chars"))
   counts = integer()
   for (id in names(live)) {
-    txt = unlist(live[[id]], use.names = FALSE)
-    if (!is.character(txt) || !length(txt)) next
+    txt = secret_known_strings(live[[id]])
+    if (!length(txt)) next
     n = 0L
     for (f in forms) {
       n = n + sum(vapply(gregexpr(f, txt, fixed = TRUE, useBytes = TRUE),
                          function(m) sum(m > 0L), 0L))
     }
-    if (n > 0L) counts[[id]] = n
+    if (isTRUE(n > 0L)) counts[[id]] = n
   }
   if (length(counts)) {
     gptr_warn(paste0(

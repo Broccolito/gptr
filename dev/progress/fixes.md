@@ -378,3 +378,104 @@ Files of this task:
 - `dev/DEVIATIONS.md` (the D-069 hunk only: the open item is closed)
 - `dev/progress/fixes.md`
 - `dev/progress/P06.md` (cross-reference line)
+
+## Task FIX-4 - Make secret_late_check() tolerate NA in live entries
+
+Owner: P03 (`R/auth-secrets.R`, the IC-70 late-registration check of Task 1). Found by P12's
+plan acceptance (`progress/P12.md`, "Cross-plan defect found, not fixed here"; reproduction
+`dev/.validation/P12/p12-diag-na.R`, `acceptance-diag-*.log`). Coordinator-scheduled. No new
+deviation entry: the only behavioural change is that unknown (NA) and non-text leaves of live
+entries are not scanned, which is what the coordinator's notes ask for.
+
+**Defect.** `secret_late_check()` scanned `unlist(live[[id]])` of every live session's entries.
+IC-74 (07 section 5, "Missing usage remains unknown") makes NA normal in those entries: the
+usage and cost of an unpriced model, or of an aborted or truncated stream (D-022). `unlist()`
+coerced the NA cost to `NA_character_`, `gregexpr()` returned NA for it, the count became NA and
+`if (n > 0L) counts[[id]] = n` failed with "missing value where TRUE/FALSE needed". After P12's
+INFRA-25 run tests `gptr_last()` holds such a session (scripted provider, no price), so every
+`secret_register()` of a value of redactable length threw, including P05's
+`provider_credential()` registering an environment key: 9 tests of `test-provider-registry.R`
+failed in every run where they follow P12's tests (`devtools::test()`, R CMD check, CI). A
+second gap of the same scan: a non-atomic leaf (a function, an environment) made `unlist()`
+return a list, so `!is.character(txt)` skipped the whole session and a genuine leak next to it
+went uncounted (scratch probe `taskFIX-4-probe-old-scan.log`).
+
+**Built.** A new internal `secret_known_strings(x)` returns the known strings of a nested list:
+every character leaf at any depth (classed character vectors included, class dropped), NA
+removed; it recurses into lists (data frames and classed lists through `unclass()`, so no
+`as.list()` dispatch) and ignores every other leaf (numbers, flags, functions, environments).
+`secret_late_check()` scans that instead of `unlist()`, skips a session with no known string,
+and records a count with `if (isTRUE(n > 0L))`. Matching itself is unchanged (every derived form,
+fixed, bytewise), so detection in text is as before. Scanning character leaves alone matches
+`redact_tree()`, which also treats only character leaves as text (a value held as a number is
+not text the redactor would replace either). Cost: on 5,000 typical
+message entries the walk takes about 0.13 s against 0.02 s for `unlist()`, next to about 0.46 s
+for the unchanged matching of five derived forms (scratch benchmark, not kept). `rapply()` was
+measured faster but drops classed character leaves and fails on pairlists, so the plain
+recursive walk was kept.
+
+**Audit** of `R/auth-secrets.R` and `R/auth-redact.R` for the same NA-unsafe `if` over scanned
+entry fields: no other instance. `redact()` blanks NA before matching and restores it;
+`redact_tree()` collects string leaves, compares with an explicit NA rule and its
+`structural_blank()` tests `is.na(v)`; `lits_present()` uses `grepl()`, which gives FALSE for
+NA; the `gptr_scrub()` scanners read file text (never NA) and test `is.na()` on decoded record
+fields; `secret_discover_env()` already guards with `%in% TRUE`. Confirmed by a scratch probe
+with NA usage, cost, text, flags and an NA name through `redact_tree()` (plain and structural),
+`redact()`, `gptr_redact()`, `lits_present()` and `structural_blank()`
+(`taskFIX-4-audit-probe.log`, isolated HOME).
+
+**Test** (written first; `tests/testthat/test-auth-secrets.R`, +1 test, 6 expectations):
+"unknown NA fields of live entries are ignored and a late leak is still counted". Four fake
+live sessions: an aborted assistant message whose usage holds `NA_integer_` tokens, an
+`NA_real_` cost list (input, output, cache_read, cache_write, total), an NA `estimated` flag,
+`NA_character_` response id, error message and text block, plus one text block with the value;
+a session with only an unknown-usage message; a custom entry whose data holds a function and an
+environment next to a note with the value; a custom entry with `data = NA`. Registering the
+value warns `secret_late` with `counts == c(sNA0000001 = 1L, sNA0000003 = 1L)` and no value in
+the message; a value no session holds registers without warning; a callback serving only
+unknown and empty sessions neither warns nor errors.
+
+**Red** (HEAD's `R/auth-secrets.R`):
+- `^auth-secrets$` (`taskFIX-4-red.log`): `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 296 ]`, the new test
+  erroring at its `expect_warning()` (line 187) with "missing value where TRUE/FALSE needed" from
+  `if (n > 0L) counts[[id]] = n` (`R/auth-secrets.R:389`), the defect itself.
+- Cross-file `^(provider-anthropic|provider-registry)$` (`taskFIX-4-red-cross.log`):
+  `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 992 ]`, the 9 P12 found (`test-provider-registry.R` lines
+  166, 191, 217, 242, 281, 295, 315, 333, 2182), same error.
+
+**Green.**
+- `^auth-secrets$` (`taskFIX-4-green.log`): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 302 ]` (296 + 6).
+- `^(provider-anthropic|provider-registry)$` (`taskFIX-4-green-cross.log`):
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1032 ]` (992 + the 40 expectations of the 9 tests).
+- `^auth-` (`taskFIX-4-auth.log`): `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 1068 ]`; the skip is
+  `test-auth-store.R:75` ("keyring is installed").
+- Neighbours `^(session-live|arch-layers|lint-rules)$` (`taskFIX-4-neighbours.log`; P06 installs
+  the callback): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 96 ]`.
+- Full unfiltered suite once (runner filter `.`, `taskFIX-4-full.log`):
+  `[ FAIL 3 | WARN 0 | SKIP 6 | PASS 16358 ]`. No failure in `test-provider-registry.R`. The 3
+  failures are `test-perm-classify.R:817`, `:1038` and `:1213` ("`!nq`: invalid argument type"
+  inside `risk_cmd_walk()`), in P11's uncommitted in-progress `R/perm-classify.R`, not touched
+  here. The 6 skips: keyring installed, D-054 (`eval-core`), P08 Task 7 (`gptr-config`), the
+  three live files without `GPTR_LIVE_TESTS=true`.
+
+**Lint** (`taskFIX-4-lint.log`): no lints in `R/auth-secrets.R` and
+`tests/testthat/test-auth-secrets.R`. Added lines are ASCII-only. The new function is `@noRd`,
+so `document` was not run; no `NAMESPACE` or `man/` change.
+
+**Adaptations.**
+- The coordinator's suggested `txt = txt[!is.na(txt)]` alone would have left the non-text-leaf
+  gap (a session skipped whole); the walk over character leaves closes both, as the notes'
+  "skip NA values (and non-character leaves)" asks.
+- The regression entries are built as literal R-shape lists (04 sections 4.3, 4.6) rather than
+  with P05's constructors, so the L0 test file stays free of upper-layer dependencies; the
+  cross-file filter exercises the real structure P06's `live_entries_all()` serves.
+
+Commit message: `fix(auth): late secret check ignores unknown NA fields of live entries`.
+
+Files of this task:
+
+- `R/auth-secrets.R`
+- `tests/testthat/test-auth-secrets.R`
+- `dev/progress/fixes.md`
+- `dev/progress/P03.md` (cross-reference section)
+- `dev/progress/P12.md` (cross-reference section)

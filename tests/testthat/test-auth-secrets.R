@@ -152,6 +152,51 @@ test_that("a value that live sessions already hold warns secret_late with counts
   expect_error(secret_live_entries_set("x"), class = "gptr_error_invalid_argument")
 })
 
+test_that("unknown NA fields of live entries are ignored and a late leak is still counted", {
+  vault_reset()
+  late = paste0("FAKE_late_registered_", "secret_na_77")
+  # IC-74 (07 section 5): an unpriced model or an aborted or truncated stream leaves usage and
+  # cost unknown, so a live assistant message holds NA numbers, NA flags and NA strings.
+  cost = list(input = NA_real_, output = NA_real_, cache_read = NA_real_,
+              cache_write = NA_real_, total = NA_real_)
+  usage = list(input = NA_integer_, output = NA_integer_, cache_read = 0, reasoning = NA_real_,
+               total = NA_real_, cost = cost, estimated = NA)
+  said = list(type = "text", text = paste("echo:", late))
+  leaked = list(type = "message", id = "e0000001", message = list(
+    role = "assistant", content = list(said, list(type = "text", text = NA_character_)),
+    api = "anthropic-messages", provider = "scripted", model = "scripted-1",
+    response_id = NA_character_, usage = usage, stop_reason = "aborted",
+    error_message = NA_character_, timestamp = 1.7e12
+  ))
+  unknown = list(type = "message", id = "e0000002", message = list(
+    role = "assistant", content = list(list(type = "text", text = "nothing to see")),
+    usage = usage, stop_reason = "stop", raw_stop_reason = NA_character_
+  ))
+  # Non-character leaves (a function, an environment) never hide the text next to them.
+  opaque = list(type = "custom", customType = "x.note", data = list(
+    hook = function() NULL, env = new.env(), note = paste0("saw ", late, " in a log")
+  ))
+  secret_live_entries_set(function() {
+    list(sNA0000001 = list(leaked, unknown), sNA0000002 = list(unknown),
+         sNA0000003 = list(opaque), sNA0000004 = list(list(type = "custom", data = NA)))
+  })
+  withr::defer({
+    secret_live_entries_set(NULL)
+    vault_reset()
+  })
+  w = expect_warning(secret_register(late, "LATE_NA_KEY", source = "session"),
+                     class = "gptr_warning_secret_late")
+  expect_identical(w$counts, c(sNA0000001 = 1L, sNA0000003 = 1L))
+  expect_false(grepl(late, conditionMessage(w), fixed = TRUE))
+  # A value that no live session holds: the NA fields alone neither warn nor error.
+  unseen = paste0("FAKE_unseen_", "secret_value_88")
+  expect_no_warning(secret_register(unseen, "UNSEEN_NA_KEY", source = "session"))
+  expect_identical(secret_lookup("UNSEEN_NA_KEY")$name, "UNSEEN_NA_KEY")
+  # Sessions holding only unknown entries, or none, are skipped without error.
+  secret_live_entries_set(function() list(sNA0000002 = list(unknown), sNA0000005 = list()))
+  expect_no_warning(secret_register(paste0("FAKE_third_", "secret_value_99"), "THIRD_NA_KEY"))
+})
+
 test_that("colliding short fingerprints retain every value and stable handle identity", {
   vault_reset()
   withr::defer(vault_reset())
