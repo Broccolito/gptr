@@ -72,6 +72,13 @@ Resume log (newest last):
   test assertions). P10 Tasks 8-10, 13 committed (Tasks 11-12 and acceptance wait for P08 Tasks
   10/12). P15 Tasks 4, 7-12 committed (13-19 running). P08 Tasks 1-8 committed (9-12 running).
   FIX-6 (classifier-adapter conformance, P12 IC-74 row) running.
+- 2026-10-05/06: **P08 complete locally** (Tasks 1-12, `ecd7009` .. `7d89173`; D-054 guard removed).
+  **All local M1 commands pass** on `718659d` + Task 12: full suite 22,133 assertions (FAIL 0,
+  14 expected skips), lint clean, `run.R --check` OK, R CMD check --as-cran 0 errors / 0 warnings
+  / 1 note, every exported example offline. M1 still needs the hosted matrix (CI-6 running) and
+  the milestone tag. FIX-6 `2d2d75a` closed the classifier-conformance item. P11 Task 2 committed
+  (`e8b2d19`) after the convergence decision; P11 Tasks 3-8 running. P15 Tasks 13-16, 19
+  committed (17-18 wait for P10 Task 11, now running). P17 Tasks 4, 6 committed, 8-12 running.
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
@@ -140,7 +147,7 @@ Resume log (newest last):
 | Milestone | Plans | Status | Evidence |
 |---|---|---|---|
 | M0 Foundation | P01–P04 | paused; acceptance pending | All P01 tasks passed focused checks; integrated acceptance underway |
-| M1 Offline session kernel | P05–P08 | in progress | P05 (`df47cbe`), P06 (`a535986`) and P07 (`698e495`) plan acceptance passed locally; P08 underway |
+| M1 Offline session kernel | P05–P08 | local gates passed; hosted pending | P05 `df47cbe`, P06 `a535986`, P07 `698e495`, P08 `7d89173` (M1 local exit check in `progress/P08.md`) |
 | M2 Live R agent and decisions | P09–P13 | in progress | P09 (`4ef76fa`), P12 (`3b26e32`), P13 (`1968f1c`) plan acceptance passed locally; P10/P11 in progress |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
