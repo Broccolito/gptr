@@ -1477,3 +1477,277 @@ test_that("doc.edit never edits the running script or the open notebook it is bo
   withr::local_options(jupyter.in_kernel = NULL)
   expect_null(doc_edit_service(nb, list(list(oldText = "a = 1", newText = "a = 2")), NULL))
 })
+
+test_that("gptr_doc() binds, shows and unbinds the document of this process", {
+  local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  f = file.path(getwd(), "analysis.R")
+  writeLines("library(gptr)", f)
+  expect_null(gptr_doc())
+  expect_invisible(gptr_doc(f))
+  expect_identical(gptr_doc(), list(path = path_norm(f), format = "r"))
+  expect_true(doc_consent(f, ask = FALSE))
+  prev = gptr_doc(FALSE)
+  expect_identical(prev$path, path_norm(f))
+  expect_null(gptr_doc())
+  expect_identical(gptr_doc(f, format = "transcript"), NULL)
+  expect_identical(gptr_doc()$format, "transcript")
+  expect_error(gptr_doc(file.path(getwd(), "notes.txt")), class = "gptr_error_invalid_argument")
+  expect_error(gptr_doc(file.path(getwd(), ".gptr", "settings.json")),
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_doc(file.path(getwd(), "missing", "a.R")),
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_doc(f, sync = NA), class = "gptr_error_invalid_argument")
+  run = new.env()
+  run$session = "s0123456789"
+  run$signal = new.env()
+  testthat::local_mocked_bindings(run_current = function() run)
+  expect_error(gptr_doc(f), class = "gptr_error_permission")
+  expect_identical(gptr_doc()$format, "transcript")
+})
+
+test_that("gptr_blocks() lists fresh, stale, user-edited and undone blocks", {
+  local_project()
+  f = file.path(getwd(), "a.R")
+  ok = "x = 1"
+  writeLines(c(
+    "gptr(\"one\")",
+    doc_render_block("aaaaaa", list(model = "m", date = "2026-09-29", prompt = prompt_hash("one"),
+                                    sha = doc_body_sha(ok), tokens = "10/2", cost = "0.01",
+                                    session = "s0123456789"), ok),
+    "gptr(\"two, edited prompt\")",
+    doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("two")), "y = 2"),
+    "gptr(\"three\")",
+    doc_render_block("cccccc", list(model = "m", prompt = prompt_hash("three"),
+                                    sha = doc_body_sha(ok)), "z = 3 # changed"),
+    "gptr(\"four\")",
+    doc_render_block("dddddd", list(model = "m", prompt = prompt_hash("four"),
+                                    status = "undone"), "#~ w = 4")), f)
+  b = gptr_blocks(f)
+  expect_s3_class(b, "gptr_blocks")
+  expect_s3_class(b, "gptr_listing")
+  expect_named(b, c("id", "lines", "prompt", "status", "model", "date", "tokens", "cost",
+                    "session"))
+  expect_identical(b$id, c("aaaaaa", "bbbbbb", "cccccc", "dddddd"))
+  expect_identical(b$status, c("fresh", "stale", "user-edited", "undone"))
+  expect_identical(b$lines[1], "2-4")
+  expect_identical(b$prompt[1], "one")
+  expect_identical(b$cost[1], 0.01)
+  expect_identical(b$tokens[1], "10/2")
+  expect_identical(b$session[1], "s0123456789")
+  expect_error(gptr_blocks(file.path(getwd(), "a.txt")), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_blocks() reads Rmd chunks and notebook cells", {
+  # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
+  rmd = normalizePath(testthat::test_path("fixtures", "docs", "report.expected.Rmd"))
+  floats = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  local_project()
+  b = gptr_blocks(rmd)
+  expect_identical(b$id, "3fdfa0")
+  expect_identical(b$status, "fresh")
+  expect_identical(b$prompt, "count letters in this prompt")
+  nb = file.path(getwd(), "a.ipynb")
+  text = doc_read(floats)$lines
+  ph = prompt_hash("summarise the mpg column")
+  site = list(path = nb, format = "ipynb", anchor = list(ph = ph, j = 1L, cell = 3L),
+              prompt_hash = ph, args_hash = NULL)
+  writeLines(doc_ipynb_upsert(text, site, structure("mean(x$mpg)", meta = nb_meta(
+    "7f3a21", list(model = "m", prompt = ph, sha = doc_body_sha("mean(x$mpg)")))), "7f3a21"), nb)
+  nbb = gptr_blocks(nb)
+  expect_identical(nbb$id, "7f3a21")
+  expect_identical(nbb$lines, "cell 4")
+  expect_identical(nbb$status, "fresh")
+})
+
+test_that("gptr_cache() lists, prunes and clears, and never removes sidecars", {
+  proj = local_project()
+  f = file.path(proj, "a.R")
+  writeLines(c("gptr(\"one\")", doc_render_block("aaaaaa", list(model = "m"), "x = 1")), f)
+  s2_put(s2_key("a.R", "aaaaaa", "", "p", ""), list(block = "aaaaaa", doc = "a.R", answer = "a"))
+  s2_put(s2_key("a.R", "gone00", "", "p", ""), list(block = "gone00", doc = "a.R", answer = "b"))
+  tmp = file.path(proj, ".gptr", "cache", "tmp")
+  writeLines("old", file.path(tmp, "gptr-output-o111111.txt"))
+  Sys.setFileTime(file.path(tmp, "gptr-output-o111111.txt"), Sys.time() - 30 * 86400)
+  writeLines("new", file.path(tmp, "gptr-output-o222222.txt"))
+  rec = doc_pending_new(path_norm(f), "pending", NULL)
+  rec$upserts = list(list(block_id = "bbbbbb", lines = "x", site = list(format = "r")))
+  doc_sidecar_write(rec)
+  info = gptr_cache()
+  expect_s3_class(info, "gptr_cache_info")
+  expect_named(info, c("kind", "entries", "bytes", "oldest", "path"))
+  expect_identical(info$kind, c("s1", "s2", "tmp", "sidecar"))
+  expect_identical(info$entries, c(0L, 2L, 2L, 1L))
+  expect_identical(gptr_cache("prune", "s2"), 1L)
+  expect_identical(gptr_cache("prune", "tmp"), 1L)
+  expect_identical(gptr_cache("clear", "tmp"), 1L)
+  expect_identical(gptr_cache()$entries, c(0L, 1L, 0L, 1L))
+  expect_identical(gptr_cache("clear"), 1L)
+  expect_true(file.exists(doc_sidecar_path(f)))
+  expect_error(gptr_cache("purge"), class = "gptr_error_invalid_argument")
+  testthat::local_mocked_bindings(run_current = function() {
+    run = new.env()
+    run$signal = new.env()
+    run
+  })
+  expect_error(gptr_cache("clear"), class = "gptr_error_permission")
+  expect_s3_class(gptr_cache(), "gptr_cache_info")
+})
+
+# ---- Task 14 additions (D-127): blocks owned through the format's own locator, documents bound
+# only in the format of their extension, a missing file, and a prune that keeps what it cannot
+# check ------------------------------------------------------------------------------------------
+
+test_that("gptr_blocks() gives each call of a pipeline its own block (contract 11.5)", {
+  local_project()
+  f = file.path(getwd(), "p.R")
+  writeLines(c(
+    "x = gptr(\"draft\") |> gptr(\"improve it\")",
+    doc_render_block("aaaaaa", list(model = "m", prompt = prompt_hash("draft")), "a = 1"),
+    doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("improve it"), call = "2",
+                                    args = "0123abcd"), "b = 2"),
+    "y = gptr(\"plan\\nthe steps\")",
+    doc_render_block("cccccc", list(model = "m", prompt = prompt_hash("plan\nthe steps")),
+                     "c = 3"),
+    "z = 1",
+    doc_render_block("dddddd", list(model = "m", prompt = prompt_hash("draft")), "d = 4")), f)
+  b = gptr_blocks(f)
+  expect_identical(b$id, c("aaaaaa", "bbbbbb", "cccccc", "dddddd"))
+  expect_identical(b$prompt, c("draft", "improve it", "plan the steps", NA))
+  expect_identical(b$status, c("fresh", "fresh", "fresh", "stale"))
+})
+
+test_that("gptr_blocks() gives the calls of one notebook cell their own agent cells", {
+  local_project()
+  code = function(id, src, meta = json_obj()) {
+    list(cell_type = "code", execution_count = NULL, id = id, metadata = meta,
+         outputs = list(), source = as.list(src))
+  }
+  agent = function(id, ph, body) {
+    code(paste0("gptr-", id), body,
+         list(gptr = list(id = id, model = "m", prompt = ph, sha = doc_body_sha(body))))
+  }
+  nb = list(cells = list(code("c1", c("gptr(\"one\")\n", "gptr(\"two\")")),
+                         agent("aaaaaa", prompt_hash("one"), "a = 1"),
+                         agent("bbbbbb", prompt_hash("two"), "b = 2"),
+                         code("c2", "x = 1"),
+                         agent("cccccc", prompt_hash("one"), "c = 3")),
+            metadata = json_obj(), nbformat = 4L, nbformat_minor = 5L)
+  f = file.path(getwd(), "two.ipynb")
+  writeLines(json_encode(nb, pretty = TRUE), f)
+  b = gptr_blocks(f)
+  expect_identical(b$id, c("aaaaaa", "bbbbbb", "cccccc"))
+  expect_identical(b$lines, c("cell 2", "cell 3", "cell 5"))
+  expect_identical(b$prompt, c("one", "two", NA))
+  expect_identical(b$status, c("fresh", "fresh", "stale"))
+})
+
+test_that("gptr_doc() binds documents only in their own format; gptr_blocks() needs the file", {
+  local_project()
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = NULL
+  f = file.path(getwd(), "a.R")
+  writeLines("x = 1", f)
+  q = file.path(getwd(), "r.qmd")
+  writeLines("Some text.", q)
+  dir.create(file.path(getwd(), "d.R"))
+  expect_error(gptr_doc(f, format = "ipynb"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_doc(q, format = "transcript"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_doc(file.path(getwd(), "notes.txt"), format = "r"),
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_doc(file.path(getwd(), "d.R")), class = "gptr_error_invalid_argument")
+  expect_null(gptr_doc())
+  expect_invisible(gptr_doc(q, format = "qmd"))
+  expect_identical(gptr_doc(), list(path = path_norm(q), format = "qmd"))
+  expect_error(gptr_blocks(file.path(getwd(), "missing.R")),
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_blocks(file.path(getwd(), "d.R")), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_cache(\"prune\") keeps answers it cannot check and reads spill_days safely", {
+  proj = local_project()
+  writeBin(as.raw(c(0x78, 0xff, 0x0a)), file.path(proj, "bad.R"))
+  s2_put(s2_key("bad.R", "aaaaaa", "", "p", ""), list(block = "aaaaaa", doc = "bad.R",
+                                                      answer = "a"))
+  s2_put(s2_key("gone.R", "bbbbbb", "", "p", ""), list(block = "bbbbbb", doc = "gone.R",
+                                                       answer = "b"))
+  junk = s2_path(s2_key("x.R", "cccccc"))
+  dir.create(dirname(junk), recursive = TRUE, showWarnings = FALSE)
+  writeLines("not json", junk)
+  expect_identical(gptr_cache("prune", "s2"), 2L)
+  info = gptr_cache()
+  expect_identical(info$entries, c(0L, 1L, 0L, 0L))
+  expect_s3_class(info$oldest, "POSIXct")
+  expect_identical(is.na(info$oldest), c(TRUE, FALSE, TRUE, TRUE))
+  old = file.path(proj, ".gptr", "cache", "tmp", "gptr-output-o333333.txt")
+  writeLines("old", old)
+  Sys.setFileTime(old, Sys.time() - 30 * 86400)
+  local({
+    local_gptr_options(spill_days = 60)
+    expect_identical(gptr_cache("prune", "tmp"), 0L)
+  })
+  local({
+    local_gptr_options(spill_days = "soon")
+    expect_identical(gptr_cache("prune", "tmp"), 1L)
+  })
+  # the refreshed catalog beyond the newest, in R_user_dir("gptr", "cache"), only with kind "all"
+  cat_dir = withr::local_tempdir()
+  testthat::local_mocked_bindings(gptr_user_dir = function(which = "config", create = FALSE) {
+    cat_dir
+  })
+  newest = file.path(cat_dir, "models.json")
+  older = file.path(cat_dir, "models-2026-09-01.json")
+  writeLines("{}", newest)
+  writeLines("{}", older)
+  writeLines("etag", file.path(cat_dir, "models.etag"))
+  Sys.setFileTime(older, Sys.time() - 86400)
+  expect_identical(gptr_cache("prune", "s1"), 0L)
+  expect_true(file.exists(older))
+  expect_identical(withVisible(gptr_cache("prune")), list(value = 1L, visible = FALSE))
+  expect_false(file.exists(older))
+  expect_true(all(file.exists(c(newest, file.path(cat_dir, "models.etag")))))
+  expect_identical(gptr_cache()$entries[2L], 1L)
+})
+
+test_that("gptr_cache(\"prune\") keeps the answers of queued blocks (IC-50, IC-51)", {
+  proj = local_project()
+  st = doc_state()
+  old = st$docs
+  withr::defer({
+    st$docs = old
+  })
+  f = file.path(proj, "a.R")
+  writeLines(c("gptr(\"one\")", doc_render_block("aaaaaa", list(model = "m"), "x = 1"),
+               "gptr(\"two\")"), f)
+  # a pending sidecar queues bbbbbb, whose answers doc_after_write() cached when it was queued
+  rec = doc_pending_new(path_norm(f), "pending", NULL)
+  rec$upserts = list(list(block_id = "bbbbbb", lines = "x", site = list(format = "r")))
+  doc_sidecar_write(rec)
+  for (part in c("", "n1")) {
+    s2_put(s2_key("a.R", "bbbbbb", part, "p", ""),
+           list(block = "bbbbbb", doc = "a.R", part = part, answer = "b"))
+  }
+  s2_put(s2_key("a.R", "gone00", "", "p", ""), list(block = "gone00", doc = "a.R", answer = "g"))
+  # this process's own deferred (Rscript) queue, for an existing script and a script not yet there
+  writeLines("gptr(\"three\")", file.path(proj, "b.R"))
+  queue = function(doc, id) {
+    st$docs[[path_key(doc_abs(doc))]] = list(
+      doc = doc_abs(doc), kind = "deferred",
+      upserts = list(list(block_id = id, lines = "x", site = list(format = "r"))))
+    s2_put(s2_key(doc, id, "", "p", ""), list(block = id, doc = doc, answer = id))
+  }
+  queue("b.R", "cccccc")
+  queue("new.R", "dddddd")
+  expect_identical(gptr_cache()$entries, c(0L, 5L, 0L, 1L))
+  expect_identical(gptr_cache("prune", "s2"), 1L)
+  expect_identical(gptr_cache()$entries, c(0L, 4L, 0L, 1L))
+  expect_true(file.exists(doc_sidecar_path(f)))
+  # once nothing queues them and no document holds them, their answers are pruned
+  unlink(doc_sidecar_path(f))
+  st$docs = old
+  expect_identical(gptr_cache("prune", "s2"), 4L)
+  expect_identical(gptr_cache()$entries, c(0L, 0L, 0L, 0L))
+})

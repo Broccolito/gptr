@@ -860,3 +860,370 @@ doc_console_append = function(lines, session = NULL) {
   }
   NULL
 }
+
+# ---- exports: gptr_doc(), gptr_blocks(), gptr_cache() (contract 6.4) ---------------------------
+
+#' Bind this R process to a history document
+#'
+#' `gptr_doc(path)` binds every `gptr()` call of this R process, at the console and in scripts,
+#' to a history document, and is your explicit consent that gptr writes agent blocks into it.
+#' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
+#' `gptr_doc()` shows it. `sync = TRUE` writes the blocks that were recorded while the document
+#' could not be written: a Jupyter notebook that was open, or the deferred writes of an `Rscript`
+#' run that was killed.
+#'
+#' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
+#'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.
+#' @param format `NULL` (from the file extension) or the format of that extension: `"r"`,
+#'   `"rmd"`, `"qmd"` or `"ipynb"`; `"transcript"` records console turns into an `.R` file as
+#'   one steered session.
+#' @param sync `TRUE` applies the pending blocks of the document now.
+#' @return With `path = NULL`, the binding `list(path, format)` or `NULL`, visibly. Otherwise the
+#'   previous binding, invisibly.
+#' @section Options:
+#' Options of history documents (`?gptr_options` collects every option):
+#' `gptr.record` (settings, `"ask"`): `"auto"` records into documents without asking, `"off"`
+#' never records; also the settings key `record`, which a project can only tighten.
+#' `gptr.replay` (settings, `"auto"`): the replay mode `"auto"`, `"replay"`, `"live"` or
+#' `"record"` (also the `GPTR_REPLAY` environment variable); a call's `replay =` argument wins.
+#' `gptr.doc_output_lines` (`12`): `#>` output lines recorded per execution.
+#' `gptr.doc_source_frames` (`TRUE`): `FALSE` stops gptr from reading `source()` frames to find
+#' calls in scripts sourced without srcrefs.
+#' `gptr.spill_days` (`7`): `gptr_cache("prune")` removes temporary files older than this.
+#' @export
+#' @examples
+#' f = tempfile(fileext = ".R"); writeLines("library(gptr)", f)
+#' gptr_doc(f)
+#' gptr_doc()
+#' gptr_doc(FALSE)
+gptr_doc = function(path = NULL, format = NULL, sync = FALSE) {
+  check_flag(sync, "sync")
+  if (is.null(path)) return(the$doc_binding)
+  old = the$doc_binding
+  doc_control_guard("gptr_doc")
+  if (isFALSE(path)) {
+    the$doc_binding = NULL
+    return(invisible(old))
+  }
+  check_string(path, "path")
+  full = path_norm(path)
+  fmt = doc_bind_format(full, format)
+  cls = path_class(c(path, full))
+  bad = cls[cls %in% c("control", "critical", "protected", "instructions", "url", "wildcard")]
+  if (length(bad)) {
+    gptr_abort(paste0("gptr_doc() cannot bind a ", bad[1L], " path."), "invalid_argument",
+               arg = "path", expected = "a document outside control and protected paths")
+  }
+  if (dir.exists(full) || !dir.exists(dirname(full))) {
+    gptr_abort("The document must be a file in an existing directory.", "invalid_argument",
+               arg = "path", expected = "a path in an existing directory")
+  }
+  the$doc_binding = list(path = full, format = fmt)
+  if (file.exists(full)) doc_recover(full)
+  if (sync) doc_sync(full)
+  invisible(old)
+}
+
+#' The format gptr_doc() binds a document in: that of its extension (`.R`, `.Rmd`, `.qmd`,
+#' `.ipynb`), or `format` when it is that format or `"transcript"` for an `.R` file (the only
+#' format a console transcript appends to; contract 11.5 ties every other format to its
+#' extension, so markers never go into a notebook's JSON or a chunk of the wrong syntax)
+#' @noRd
+doc_bind_format = function(full, format) {
+  ext = doc_format_of(full)
+  if (is.null(ext)) {
+    gptr_abort("gptr_doc() binds .R, .Rmd, .qmd or .ipynb documents.", "invalid_argument",
+               arg = "path", expected = "a .R, .Rmd, .qmd or .ipynb file")
+  }
+  if (is.null(format)) return(ext)
+  check_choice(format, c("r", "rmd", "qmd", "ipynb", "transcript"), "format")
+  if (identical(format, ext) || (identical(format, "transcript") && identical(ext, "r"))) {
+    return(format)
+  }
+  gptr_abort(paste0("format = \"", format, "\" does not fit a .", path_ext(full), " document."),
+             "invalid_argument", arg = "format",
+             expected = paste0("NULL or \"", ext, "\"",
+                               if (identical(ext, "r")) " or \"transcript\"" else ""))
+}
+
+#' List the agent blocks of a document
+#'
+#' Reads an `.R`, `.Rmd`, `.qmd` or `.ipynb` document and lists its gptr blocks with their
+#' status: `fresh` (the owning call's prompt matches), `stale` (the prompt changed, or no call
+#' owns the block), `user-edited` (the body no longer matches its `sha`) or `undone` (made inert
+#' by a rewind). Interpolated values are only known when the call runs, so they are not checked
+#' here. It reads the document; the only write is that blocks an `Rscript` run queued before it
+#' was killed are applied first (never over your edits).
+#'
+#' @param file Path of the document.
+#' @return A `gptr_blocks` data frame with columns `id`, `lines`, `prompt`, `status`, `model`,
+#'   `date`, `tokens`, `cost`, `session`.
+#' @export
+#' @examples
+#' f = tempfile(fileext = ".R")
+#' writeLines(c('gptr("add one")',
+#'              "# >>> gptr:7f3a21 model=fake/fake-1 date=2026-09-29 prompt=3b1c9a0e77d2",
+#'              "x = 1 + 1", "# <<< gptr:7f3a21"), f)
+#' gptr_blocks(f)
+gptr_blocks = function(file) {
+  check_string(file, "file")
+  path = path_norm(file)
+  fmt = doc_format_of(path)
+  if (is.null(fmt)) {
+    gptr_abort("gptr_blocks() reads .R, .Rmd, .qmd or .ipynb documents.", "invalid_argument",
+               arg = "file", expected = "a .R, .Rmd, .qmd or .ipynb file")
+  }
+  if (!file.exists(path) || dir.exists(path)) {
+    gptr_abort(paste0("Document not found: ", path), "invalid_argument", arg = "file",
+               expected = "an existing .R, .Rmd, .qmd or .ipynb file")
+  }
+  doc_recover(path)
+  text = doc_read(path)$lines
+  rows = if (identical(fmt, "ipynb")) doc_blocks_ipynb(text) else doc_blocks_text(text, fmt)
+  new_listing(doc_blocks_frame(rows), "gptr_blocks")
+}
+
+#' One row of a gptr_blocks listing; header fields are read by their exact key and kept only
+#' when they are one string or number
+#' @noRd
+doc_block_row = function(id, lines, prompt, status, h) {
+  val = function(key) {
+    v = if (is.list(h)) h[[key]] else NULL
+    ok = (is.character(v) || is.numeric(v)) && length(v) == 1L && !is.na(v)
+    if (ok) as_utf8(as.character(v)) else NA_character_
+  }
+  list(id = id, lines = lines,
+       prompt = if (is.na(prompt)) NA_character_ else substr(doc_one_line(prompt), 1L, 60L),
+       status = status, model = val("model"), date = val("date"), tokens = val("tokens"),
+       cost = suppressWarnings(as.numeric(val("cost"))), session = val("session"))
+}
+
+#' The gptr_blocks columns (04 section 5.12) of a list of doc_block_row() rows
+#' @noRd
+doc_blocks_frame = function(rows) {
+  col = function(key, type) vapply(rows, function(r) r[[key]], type, USE.NAMES = FALSE)
+  data.frame(id = col("id", ""), lines = col("lines", ""), prompt = col("prompt", ""),
+             status = col("status", ""), model = col("model", ""), date = col("date", ""),
+             tokens = col("tokens", ""), cost = col("cost", 0), session = col("session", ""),
+             stringsAsFactors = FALSE)
+}
+
+#' Rows of gptr_blocks() for R, Rmd and qmd texts. Each top-level call owns the block the
+#' format's own locator gives it (contract 11.5: the block of its run whose `prompt=` matches,
+#' else the one with its `call=` ordinal), so every step of a pipeline owns its own block; a block
+#' no call owns is stale. A computed prompt cannot be checked without running the call, so its
+#' block reads stale, and the args of a header are taken as they are.
+#' @noRd
+doc_blocks_text = function(text, fmt) {
+  blocks = doc_find_blocks(text)
+  if (!nrow(blocks)) return(list())
+  styled = fmt %in% c("rmd", "qmd")
+  calls = if (styled) doc_rmd_calls(text) else doc_calls(text, blocks)
+  owner = rep(NA_integer_, nrow(blocks))
+  for (k in which(is.na(calls$block) & !calls$nested)) {
+    t = calls[k, , drop = FALSE]
+    site = list(anchor = doc_anchor_of(calls, t), prompt_hash = t$ph, args_hash = NULL)
+    loc = if (styled) doc_rmd_locate(text, site) else doc_text_locate(text, site, calls)
+    i = match(loc$owned$id %||% NA_character_, blocks$id)
+    if (!is.na(i) && is.na(owner[i])) owner[i] = k
+  }
+  lapply(seq_len(nrow(blocks)), function(i) {
+    b = blocks[i, , drop = FALSE]
+    h = b$header[[1L]]
+    k = owner[i]
+    ph = if (is.na(k)) "" else calls$ph[k]
+    status = doc_block_status(h, doc_block_body(text, b), ph, h[["args"]])
+    doc_block_row(b$id, paste0(b$start, "-", b$end),
+                  if (is.na(k)) NA_character_ else calls$prompt[k], status, h)
+  })
+}
+
+#' Rows of gptr_blocks() for a notebook: the top-level calls of a calling cell own the run of
+#' agent cells right after it one to one, as the ipynb format's locator assigns them
+#' (doc_rmd_owner()); an agent cell no call owns is stale
+#' @noRd
+doc_blocks_ipynb = function(text) {
+  nb = nb_parse(text)
+  cells = nb[["cells"]]
+  ids = nb_cell_ids(nb)
+  agent = nb_is_agent(ids)
+  owned = rep(FALSE, length(cells))
+  prompt = rep(NA_character_, length(cells))
+  ph = rep("", length(cells))
+  for (i in seq_along(cells)) {
+    if (agent[i] || !identical(cells[[i]][["cell_type"]], "code")) next
+    run = integer()
+    k = i + 1L
+    while (k <= length(cells) && agent[k]) {
+      run = c(run, k)
+      k = k + 1L
+    }
+    if (!length(run)) next
+    calls = doc_calls(nb_cell_lines(cells[[i]]))
+    calls$chunk = rep(i, nrow(calls))
+    heads = data.frame(cell = run)
+    heads$header = lapply(cells[run], nb_cell_meta)
+    for (j in which(is.na(calls$block) & !calls$nested)) {
+      own = doc_rmd_owner(heads, calls, calls[j, , drop = FALSE], calls$ph[j])
+      if (is.null(own) || owned[run[own$index]]) next
+      at = run[own$index]
+      owned[at] = TRUE
+      prompt[at] = calls$prompt[j]
+      ph[at] = calls$ph[j]
+    }
+  }
+  lapply(which(agent), function(i) {
+    meta = nb_cell_meta(cells[[i]])
+    status = doc_block_status(meta, nb_cell_lines(cells[[i]]), ph[i], meta[["args"]])
+    doc_block_row(sub("^gptr-", "", ids[i]), paste0("cell ", i), prompt[i], status, meta)
+  })
+}
+
+#' Inspect, prune or clear gptr's caches
+#'
+#' `info` lists the System 1 answer cache, the System 2 answer cache used for replay, temporary
+#' spill files and unapplied document sidecars (deferred or pending blocks; they are never
+#' removed here: apply them with `gptr_doc(path, sync = TRUE)`). `prune` removes System 2 answers
+#' whose block is neither in its document nor queued for it in a sidecar, System 1 answers unused
+#' for 90 days, temporary files older than `getOption("gptr.spill_days", 7)` days and older
+#' refreshed model catalogs; `clear` removes a kind entirely.
+#'
+#' @param action `"info"`, `"prune"` or `"clear"`.
+#' @param kind `"all"`, `"s1"`, `"s2"` or `"tmp"`.
+#' @return `info`: a `gptr_cache_info` data frame with columns `kind`, `entries`, `bytes`,
+#'   `oldest`, `path`. `prune` and `clear`: the number of files removed, invisibly.
+#' @export
+#' @examples
+#' gptr_cache()
+#' gptr_cache("prune", "tmp")
+gptr_cache = function(action = c("info", "prune", "clear"), kind = c("all", "s1", "s2", "tmp")) {
+  action = check_choice(action, c("info", "prune", "clear"), "action")
+  kind = check_choice(kind, c("all", "s1", "s2", "tmp"), "kind")
+  kinds = if (identical(kind, "all")) c("s1", "s2", "tmp") else kind
+  if (identical(action, "info")) return(doc_cache_info(kinds))
+  doc_control_guard("gptr_cache")
+  prune = identical(action, "prune")
+  n = 0L
+  for (k in kinds) n = n + doc_cache_remove(k, prune = prune)
+  if (identical(kind, "all") && prune) n = n + doc_catalog_prune()
+  invisible(n)
+}
+
+#' Files of one cache kind under the workspace root (`sidecar`: the unapplied document sidecars,
+#' which are never removed, IC-51; the S1 cache's `salt` file is not an entry)
+#' @noRd
+doc_cache_files = function(kind) {
+  cache = file.path(doc_root(), "cache")
+  tmp = file.path(cache, "tmp")
+  sidecars = list.files(tmp, pattern = "^pending-.*[.]rds$", full.names = TRUE)
+  f = switch(kind,
+             s1 = list.files(file.path(cache, "s1"), pattern = "[.]json$", recursive = TRUE,
+                             full.names = TRUE),
+             s2 = list.files(file.path(cache, "s2"), pattern = "[.]json$", recursive = TRUE,
+                             full.names = TRUE),
+             tmp = setdiff(list.files(tmp, full.names = TRUE), sidecars),
+             sidecar = sidecars,
+             character())
+  f[file.exists(f) & !dir.exists(f)]
+}
+
+#' The gptr_cache_info listing (one row per kind plus the sidecars)
+#' @noRd
+doc_cache_info = function(kinds) {
+  cache = file.path(doc_root(), "cache")
+  rows = lapply(c(kinds, "sidecar"), function(k) {
+    f = doc_cache_files(k)
+    info = file.info(f, extra_cols = FALSE)
+    mtime = info$mtime[!is.na(info$mtime)]
+    data.frame(kind = k, entries = length(f), bytes = sum(info$size, na.rm = TRUE),
+               oldest = if (length(mtime)) min(mtime) else as.POSIXct(NA),
+               path = file.path(cache, if (identical(k, "sidecar")) "tmp" else k),
+               stringsAsFactors = FALSE)
+  })
+  new_listing(do.call(rbind, rows), "gptr_cache_info")
+}
+
+#' The age in days after which gptr_cache("prune") removes temporary files: `gptr.spill_days`
+#' when it is one non-negative number, else its default 7
+#' @noRd
+doc_spill_days = function() {
+  d = gptr_opt("spill_days")
+  if (is.numeric(d) && length(d) == 1L && !is.na(d) && d >= 0) as.numeric(d) else 7
+}
+
+#' Remove the files of a cache kind; `prune = TRUE` keeps what is still in use (S1 answers used
+#' within 90 days, S2 answers of existing blocks, temporary files younger than spill_days)
+#' @noRd
+doc_cache_remove = function(kind, prune = TRUE) {
+  f = doc_cache_files(kind)
+  if (!length(f)) return(0L)
+  if (prune) {
+    age = as.numeric(difftime(Sys.time(), file.info(f, extra_cols = FALSE)$mtime, units = "days"))
+    memo = new.env(parent = emptyenv())
+    keep = switch(kind,
+                  s1 = is.na(age) | age <= 90,
+                  tmp = is.na(age) | age <= doc_spill_days(),
+                  s2 = vapply(f, doc_s2_live, NA, memo = memo, USE.NAMES = FALSE),
+                  rep(TRUE, length(f)))
+    f = f[!keep]
+  }
+  as.integer(sum(suppressWarnings(file.remove(f))))
+}
+
+#' Does an S2 record still belong to a block of a document? A record that cannot be read, or that
+#' names no document and block, is dead. A block queued for its document is live: a deferred
+#' (Rscript, IC-51) or pending (Jupyter, IC-50) upsert reaches the file only at exit, at
+#' gptr_doc(path, sync = TRUE) or at recovery, and doc_after_write() cached its answers when it
+#' was queued. Otherwise the block must be in the existing document; a document that exists but
+#' cannot be read or parsed keeps its records (only an answer whose block is known to be gone is
+#' pruned). The ids of each document are read once per prune (`memo`).
+#' @noRd
+doc_s2_live = function(file, memo = new.env(parent = emptyenv())) {
+  rec = tryCatch(json_decode(read_utf8(file)$text), error = function(e) NULL)
+  one = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  doc = if (is.list(rec)) rec[["doc"]]
+  block = if (is.list(rec)) rec[["block"]]
+  if (!one(doc) || !one(block)) return(FALSE)
+  path = tryCatch(doc_abs(doc), error = function(e) NULL)
+  if (is.null(path) || dir.exists(path)) return(FALSE)
+  key = path_key(path)
+  known = get0(key, envir = memo, inherits = FALSE)
+  if (is.null(known)) {
+    known = doc_s2_known(path)
+    assign(key, known, envir = memo)
+  }
+  block %in% known$queued || (known$exists && (is.null(known$ids) || block %in% known$ids))
+}
+
+#' The block ids an S2 prune checks for one document: `queued`, those of its sidecar (a dead or
+#' live process's deferred or pending upserts) and of this process's own queue (a pending record
+#' keeps only what its sidecar still holds, doc_pending_reconcile()); `exists`; and `ids`, the
+#' blocks in the file, NULL when it cannot be read or parsed
+#' @noRd
+doc_s2_known = function(path) {
+  ids_of = function(r) {
+    tryCatch(as.character(unlist(lapply(r$upserts, function(u) u$block_id))),
+             error = function(e) character())
+  }
+  own = doc_state()$docs[[path_key(path)]]
+  if (identical(own$kind, "pending")) {
+    own = tryCatch(doc_pending_reconcile(own), error = function(e) own)
+  }
+  disk = tryCatch(doc_sidecar_read(path), error = function(e) NULL)
+  exists = file.exists(path)
+  ids = if (exists) {
+    tryCatch(doc_existing_ids(doc_format_of(path) %||% "r", doc_read(path)$lines),
+             error = function(e) NULL)
+  }
+  list(queued = unique(c(ids_of(disk), ids_of(own))), exists = exists, ids = ids)
+}
+
+#' Remove refreshed model catalogs other than the newest from the user cache directory
+#' @noRd
+doc_catalog_prune = function() {
+  dir = gptr_user_dir("cache")
+  f = list.files(dir, pattern = "^models.*[.]json$", full.names = TRUE)
+  if (length(f) < 2L) return(0L)
+  old = f[order(file.info(f, extra_cols = FALSE)$mtime, decreasing = TRUE)][-1L]
+  as.integer(sum(suppressWarnings(file.remove(old))))
+}
