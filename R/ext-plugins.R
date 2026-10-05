@@ -633,3 +633,195 @@ rdepends_missing = function(deps) {
   }
   out
 }
+
+# ---- plugin resolution (contract 7.17 and 11.12) ---------------------------------------------
+
+#' Read a JSON manifest; invalid JSON is a registry diagnostic and gives NULL
+#'
+#' So is valid JSON that is not an object (a string, a number, an array or `null`), so callers
+#' can always subset the result by name (D-088).
+#' @noRd
+plugin_manifest_read = function(file) {
+  bad = function(msg) {
+    registry_diagnostic("user", "plugin", "manifest", paste0(file, ": ", msg))
+    NULL
+  }
+  m = tryCatch(json_decode(read_utf8(file)$text), error = function(e) e)
+  if (inherits(m, "error")) return(bad(conditionMessage(m)))
+  if (!is.list(m) || is.null(names(m))) return(bad("the manifest is not a JSON object"))
+  m
+}
+
+#' The API requirement of a manifest (`{"gptr": {"api": ...}}` or `{"gptr": "..."}`), or NULL
+#' @noRd
+plugin_api_req = function(manifest) {
+  g = manifest[["gptr"]]
+  if (is.list(g)) g = g[["api"]]
+  if (is.character(g) && length(g) == 1L && !is.na(g) && nzchar(g)) g else NULL
+}
+
+#' A resolved plugin from a directory, or NULL when the directory is not a plugin
+#'
+#' `plugin.json` makes a gptr directory plugin; `.claude-plugin/plugin.json` (or an empty
+#' `.claude-plugin/`) a Claude bundle; a directory without a manifest counts when it has
+#' `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`.
+#' @noRd
+plugin_from_dir = function(path) {
+  gp = file.path(path, "plugin.json")
+  cp = file.path(path, ".claude-plugin", "plugin.json")
+  kind = NULL
+  man = list()
+  subdirs = c("skills", "prompts", "agents", "extensions", "commands")
+  has_dirs = any(dir.exists(file.path(path, subdirs)))
+  if (file.exists(gp)) {
+    kind = "directory"
+    man = plugin_manifest_read(gp) %||% list()
+  } else if (file.exists(cp)) {
+    kind = "claude-plugin"
+    man = plugin_manifest_read(cp) %||% list()
+  } else if (dir.exists(file.path(path, ".claude-plugin"))) {
+    kind = "claude-plugin"
+  } else if (has_dirs || file.exists(file.path(path, "mcp.json"))) {
+    kind = "directory"
+  }
+  if (is.null(kind)) return(NULL)
+  nm = man[["name"]]
+  if (!is.character(nm) || length(nm) != 1L || !nzchar(nm)) nm = basename(path)
+  version = man[["version"]]
+  list(kind = kind, name = as_utf8(nm), path = path_norm(path), manifest = man,
+       version = if (is.character(version)) version else NA_character_,
+       api = plugin_api_req(man) %||% NA_character_)
+}
+
+#' A resolved package plugin (`inst/gptr/` or `Config/gptr/plugin: true`), or NULL
+#'
+#' Reads the installed DESCRIPTION and `gptr/plugin.json`; never loads the namespace. The
+#' manifest's API requirement falls back to `Config/gptr/api`.
+#' @noRd
+plugin_from_package = function(pkg) {
+  path = find.package(pkg, quiet = TRUE)
+  if (!length(path)) return(NULL)
+  path = path[1L]
+  desc = tryCatch(read.dcf(file.path(path, "DESCRIPTION"),
+                           fields = c("Version", "Config/gptr/plugin", "Config/gptr/api")),
+                  error = function(e) NULL)
+  gdir = file.path(path, "gptr")
+  has_dir = dir.exists(gdir)
+  flag = !is.null(desc) && isTRUE(tolower(desc[1L, "Config/gptr/plugin"]) %in% c("true", "yes"))
+  if (!has_dir && !flag) return(NULL)
+  man = list()
+  if (has_dir && file.exists(file.path(gdir, "plugin.json"))) {
+    man = plugin_manifest_read(file.path(gdir, "plugin.json")) %||% list()
+  }
+  api = plugin_api_req(man)
+  if (is.null(api) && !is.null(desc) && !is.na(desc[1L, "Config/gptr/api"])) {
+    api = unname(desc[1L, "Config/gptr/api"])
+    man[["gptr"]] = list(api = api)
+  }
+  version = if (!is.null(desc)) unname(desc[1L, "Version"]) else NA_character_
+  list(kind = "package", name = pkg, path = path_norm(gdir), manifest = man,
+       version = version, api = api %||% NA_character_, package = pkg,
+       package_path = path_norm(path))
+}
+
+#' Claude Code plugins installed for the user: named chr of install paths (read-only; IC-63)
+#'
+#' Reads `~/.claude/plugins/installed_plugins.json` (version 2, report 16 section 3.8) under
+#' `user_home()`; for each plugin the most recently updated install path that exists. Entries
+#' that are not objects, and plugins whose value is not an array of entries, are skipped; a
+#' `lastUpdated` that is not one string sorts last (D-088).
+#' @noRd
+plugin_claude_installed = function() {
+  f = file.path(user_home(), ".claude", "plugins", "installed_plugins.json")
+  if (!file.exists(f)) return(character())
+  pl = plugin_manifest_read(f)[["plugins"]]
+  if (!is.list(pl) || is.null(names(pl))) return(character())
+  out = character()
+  for (key in names(pl)) {
+    entries = pl[[key]]
+    if (!is.list(entries) || !is.null(names(entries))) next
+    ok = vapply(entries, function(e) {
+      p = if (is.list(e)) e[["installPath"]]
+      is.character(p) && length(p) == 1L && isTRUE(dir.exists(p))
+    }, NA)
+    entries = entries[ok]
+    if (!length(entries)) next
+    when = vapply(entries, function(e) {
+      w = e[["lastUpdated"]]
+      if (is.character(w) && length(w) == 1L) w else ""
+    }, "")
+    e = entries[[order(when, decreasing = TRUE, method = "radix")[1L]]]
+    out[[sub("@.*$", "", key)]] = e[["installPath"]]
+  }
+  out
+}
+
+#' An installed Claude Code plugin as a resolved plugin of kind `claude-plugin`
+#'
+#' `name` is the plugin's installed key without `@<marketplace>`, `path` its install path. The
+#' directory is read with `plugin_from_dir()`. Its manifest's name is kept, but a Claude
+#' `plugin.json` is optional and an install path ends in a version or commit directory
+#' (`cache/<marketplace>/<plugin>/<version>/`, report 16 section 3.8), so without one name in the
+#' manifest the plugin is named `name`, never after that directory (D-088).
+#' @noRd
+plugin_from_claude_install = function(name, path) {
+  p = plugin_from_dir(path)
+  if (is.null(p)) {
+    p = list(kind = "claude-plugin", name = name, path = path_norm(path), manifest = list(),
+             version = NA_character_, api = NA_character_)
+  }
+  nm = p$manifest[["name"]]
+  if (!is.character(nm) || length(nm) != 1L || !nzchar(nm)) p$name = as_utf8(name)
+  p$kind = "claude-plugin"
+  p
+}
+
+#' Resolve a plugin name or path (contract 04 section 7.17)
+#'
+#' A path to a directory; else `.gptr/plugins/<name>/` of the project; else an installed
+#' package with `inst/gptr/` or `Config/gptr/plugin: true`; else an installed Claude Code plugin.
+#' Names match exactly, then after `res_norm()` (IC-42). A path is normalised with
+#' `path_norm()`, so `~` is `user_home()` (IC-63, D-088). Returns
+#' `list(kind = "package" | "directory" | "claude-plugin", name, path, manifest, version, api)`
+#' (packages add `package` and `package_path`) or signals `gptr_error_invalid_argument`.
+#' @noRd
+plugin_resolve = function(name) {
+  check_string(name, "name")
+  looks_path = grepl("[/\\\\]", name) || startsWith(name, ".") || startsWith(name, "~")
+  full = path_norm(name)
+  if (dir.exists(full)) {
+    p = plugin_from_dir(full)
+    if (!is.null(p)) return(p)
+  }
+  if (looks_path) {
+    gptr_abort(paste0("This path is not a plugin directory (no plugin.json, .claude-plugin/ ",
+                      "or resource directories)."), "invalid_argument", arg = "name",
+               expected = "a plugin directory")
+  }
+  ws = workspace_dir()
+  if (!is.null(ws)) {
+    dirs = list.dirs(file.path(ws, "plugins"), recursive = FALSE)
+    hit = res_match(name, basename(dirs), "plugin")
+    if (length(hit)) {
+      p = plugin_from_dir(dirs[basename(dirs) == hit][1L])
+      if (!is.null(p)) return(p)
+    }
+  }
+  p = plugin_from_package(name)
+  if (!is.null(p)) return(p)
+  if (!grepl("^[A-Za-z][A-Za-z0-9.]*$", name) || !length(find.package(name, quiet = TRUE))) {
+    pk = unique(basename(list.dirs(.libPaths(), recursive = FALSE)))
+    hit = res_match(name, pk, "plugin")
+    if (length(hit)) {
+      p = plugin_from_package(hit)
+      if (!is.null(p)) return(p)
+    }
+  }
+  cl = plugin_claude_installed()
+  hit = res_match(name, names(cl), "plugin")
+  if (length(hit)) return(plugin_from_claude_install(hit, cl[[hit]]))
+  gptr_abort(paste0("No plugin with this name was found: install a package with inst/gptr/, ",
+                    "or use a directory with plugin.json or .claude-plugin/, or ",
+                    ".gptr/plugins/<name>/."), "invalid_argument", arg = "name",
+             expected = "the name or path of a plugin")
+}

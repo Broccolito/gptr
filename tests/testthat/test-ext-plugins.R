@@ -370,3 +370,179 @@ test_that("frontmatter with more than 4 merge keys, tags and aliases never reach
     expect_identical(res$error, refused)
   }
 })
+
+# Task 9: plugin resolution.
+
+test_that("plugin_resolve finds a directory plugin by path and a project plugin by name", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"),
+             '{"name": "dirplug", "version": "0.2.0", "gptr": {"api": ">= 1.0, < 2"}}')
+  p = plugin_resolve(d)
+  expect_identical(p$kind, "directory")
+  expect_identical(p$name, "dirplug")
+  expect_identical(p$path, path_norm(d))
+  expect_identical(p$version, "0.2.0")
+  expect_identical(p$api, ">= 1.0, < 2")
+  files = list()
+  files[[".gptr/plugins/clinical-trials/skills/ct/SKILL.md"]] =
+    "---\nname: ct\ndescription: Trials.\n---\nx"
+  local_project(trust = TRUE, files = files)
+  q = plugin_resolve("clinical_trials")
+  expect_identical(q$name, "clinical-trials")
+  expect_identical(q$kind, "directory")
+})
+
+test_that("plugin_resolve finds Claude bundles by path and installed Claude plugins by name", {
+  b = withr::local_tempdir()
+  write_file(file.path(b, ".claude-plugin", "plugin.json"), '{"name": "deploy-tools"}')
+  expect_identical(plugin_resolve(b)$kind, "claude-plugin")
+  inst = file.path(user_home(), ".claude", "plugins", "installed_plugins.json")
+  entry = list(scope = "user", installPath = b, lastUpdated = "2026-09-01T00:00:00.000Z")
+  installed = list(version = 2L, plugins = list("deploy-tools@market" = list(entry)))
+  write_file(inst, json_encode(installed))
+  withr::defer(unlink(inst))
+  r = plugin_resolve("deploy_tools")
+  expect_identical(r$kind, "claude-plugin")
+  expect_identical(r$path, path_norm(b))
+})
+
+test_that("plugin_resolve rejects unknown names and ambiguous normalised names", {
+  expect_error(plugin_resolve("no-such-plugin-p17"), class = "gptr_error_invalid_argument")
+  expect_error(plugin_resolve("./no/such/dir"), class = "gptr_error_invalid_argument")
+  files = list()
+  files[[".gptr/plugins/my_plug/skills/a/SKILL.md"]] = "---\nname: a\ndescription: A.\n---\nx"
+  files[[".gptr/plugins/my.plug/skills/b/SKILL.md"]] = "---\nname: b\ndescription: B.\n---\nx"
+  local_project(trust = TRUE, files = files)
+  expect_error(plugin_resolve("my-plug"), class = "gptr_error_invalid_identifier")
+})
+
+test_that("plugin_from_package reads DESCRIPTION fields without loading the package", {
+  expect_null(plugin_from_package("stats"))
+  expect_null(plugin_from_package("no.such.pkg.p17"))
+})
+
+# Task 9 adaptations (D-088): behaviour the plan-literal code lacked.
+
+test_that("a plugin manifest that is not a JSON object is a diagnostic, never an error (D-088)", {
+  bodies = c(string = '"hello"', number = "42", array = "[1, 2]", null = "null", broken = "{")
+  for (k in names(bodies)) {
+    d = file.path(withr::local_tempdir(), paste0("p17-man-", k))
+    write_file(file.path(d, "plugin.json"), bodies[[k]])
+    p = plugin_from_dir(d)
+    expect_identical(p$kind, "directory")
+    expect_identical(p$name, paste0("p17-man-", k))
+    expect_identical(p$manifest, list())
+    msgs = gptr_registry(diagnostics = TRUE)$message
+    expect_true(any(grepl(paste0("p17-man-", k, "/plugin.json: "), msgs, fixed = TRUE)))
+  }
+  cb = file.path(withr::local_tempdir(), "p17-man-claude")
+  write_file(file.path(cb, ".claude-plugin", "plugin.json"), "true")
+  expect_identical(plugin_resolve(cb)$kind, "claude-plugin")
+  expect_null(plugin_manifest_read(file.path(cb, ".claude-plugin", "plugin.json")))
+  msgs = gptr_registry(diagnostics = TRUE)$message
+  expect_true(any(grepl("plugin.json: the manifest is not a JSON object", msgs, fixed = TRUE)))
+})
+
+test_that("installed Claude plugins use the newest existing path and skip bad entries (D-088)", {
+  old = withr::local_tempdir()
+  mid = withr::local_tempdir()
+  write_file(file.path(mid, ".claude-plugin", "plugin.json"), '{"name": "p17-ship"}')
+  gone = file.path(withr::local_tempdir(), "removed")
+  inst = file.path(user_home(), ".claude", "plugins", "installed_plugins.json")
+  withr::defer(unlink(inst))
+  ship = list(
+    list(scope = "user", installPath = old, lastUpdated = "2026-01-01T00:00:00.000Z"),
+    list(scope = "user", installPath = gone, lastUpdated = "2026-09-01T00:00:00.000Z"),
+    list(scope = "user", installPath = mid, lastUpdated = "2026-05-01T00:00:00.000Z"))
+  plugins = list("p17-ship@market" = ship,
+                 "p17-text@market" = "not a list of entries",
+                 "p17-object@market" = list(installPath = old, lastUpdated = "2026-01-01"),
+                 "p17-odd@market" = list("x", list(installPath = old, lastUpdated = list(1, 2))))
+  write_file(inst, json_encode(list(version = 2L, plugins = plugins)))
+  cl = plugin_claude_installed()
+  expect_identical(sort(names(cl)), c("p17-odd", "p17-ship"))
+  expect_identical(unname(cl["p17-ship"]), mid)
+  expect_identical(unname(cl["p17-odd"]), old)
+  r = plugin_resolve("p17_ship")
+  expect_identical(r$kind, "claude-plugin")
+  expect_identical(r$path, path_norm(mid))
+  expect_error(plugin_resolve("p17-object"), class = "gptr_error_invalid_argument")
+  write_file(inst, '"not an object"')
+  expect_identical(plugin_claude_installed(), character())
+  expect_error(plugin_resolve("p17-ship"), class = "gptr_error_invalid_argument")
+  write_file(inst, '{"version": 2, "plugins": ["a", "b"]}')
+  expect_identical(plugin_claude_installed(), character())
+})
+
+test_that("a ~ path is expanded with user_home(), never R's own expansion (IC-63, D-088)", {
+  alt = withr::local_tempdir()
+  write_file(file.path(alt, "p17-home-plugin", "plugin.json"), '{"name": "p17-home"}')
+  local_mocked_bindings(user_home = function() alt)
+  p = plugin_resolve("~/p17-home-plugin")
+  expect_identical(p$name, "p17-home")
+  expect_identical(p$path, path_norm(file.path(alt, "p17-home-plugin")))
+  expect_error(plugin_resolve("~/p17-no-such-plugin"), class = "gptr_error_invalid_argument")
+})
+
+test_that("a package plugin is read from its installed DESCRIPTION without loading it", {
+  lib = withr::local_tempdir()
+  write_file(file.path(lib, "p17fakeplug", "DESCRIPTION"),
+             c("Package: p17fakeplug", "Version: 0.3.1", "Config/gptr/plugin: true",
+               "Config/gptr/api: >= 1.0, < 2"))
+  write_file(file.path(lib, "p17.dirplug", "DESCRIPTION"),
+             c("Package: p17.dirplug", "Version: 1.2.0", "Config/gptr/api: >= 9"))
+  write_file(file.path(lib, "p17.dirplug", "gptr", "plugin.json"),
+             '{"name": "dirplug", "gptr": {"api": ">= 1.0"}}')
+  withr::local_libpaths(lib, action = "prefix")
+  p = plugin_resolve("p17fakeplug")
+  expect_identical(p$kind, "package")
+  expect_identical(p$name, "p17fakeplug")
+  expect_identical(p$version, "0.3.1")
+  expect_identical(p$api, ">= 1.0, < 2")
+  expect_identical(p$manifest$gptr$api, ">= 1.0, < 2")
+  expect_identical(p$package_path, path_norm(file.path(lib, "p17fakeplug")))
+  q = plugin_resolve("p17_dirplug")
+  expect_identical(q$kind, "package")
+  expect_identical(q$package, "p17.dirplug")
+  expect_identical(q$api, ">= 1.0")
+  expect_identical(q$path, path_norm(file.path(lib, "p17.dirplug", "gptr")))
+  expect_false(isNamespaceLoaded("p17fakeplug"))
+  expect_false(isNamespaceLoaded("p17.dirplug"))
+})
+
+test_that("an installed Claude plugin without a manifest name is named by its key (D-088)", {
+  cache = file.path(withr::local_tempdir(), "cache", "mk")
+  skill = "---\nname: s\ndescription: S.\n---\nx"
+  docs = file.path(cache, "doc-skills", "3b600518a637")
+  write_file(file.path(docs, ".claude-plugin", "marketplace.json"),
+             '{"name": "mk", "owner": {"name": "T"}, "plugins": []}')
+  write_file(file.path(docs, "skills", "s", "SKILL.md"), skill)
+  empty = file.path(cache, "p17-empty", "0a1b2c3d4e5f")
+  dir.create(file.path(empty, ".claude-plugin"), recursive = TRUE)
+  bare = file.path(cache, "p17-bare", "1.0.0")
+  write_file(file.path(bare, "skills", "s", "SKILL.md"), skill)
+  odd = file.path(cache, "p17-odd-name", "2.0.0")
+  write_file(file.path(odd, ".claude-plugin", "plugin.json"), '{"name": 42, "version": "2.0.0"}')
+  plain = file.path(cache, "p17-plain", "9.9.9")
+  dir.create(plain, recursive = TRUE)
+  named = file.path(cache, "p17-named", "abc123")
+  write_file(file.path(named, ".claude-plugin", "plugin.json"), '{"name": "p17-named-tools"}')
+  paths = c("doc-skills" = docs, "p17-empty" = empty, "p17-bare" = bare,
+            "p17-odd-name" = odd, "p17-plain" = plain, "p17-named" = named)
+  when = "2026-09-11T06:30:08.840Z"
+  entry = function(p) list(list(scope = "user", installPath = p, lastUpdated = when))
+  plugins = stats::setNames(lapply(paths, entry), paste0(names(paths), "@mk"))
+  inst = file.path(user_home(), ".claude", "plugins", "installed_plugins.json")
+  withr::defer(unlink(inst))
+  write_file(inst, json_encode(list(version = 2L, plugins = plugins)))
+  for (k in setdiff(names(paths), "p17-named")) {
+    r = plugin_resolve(k)
+    expect_identical(r$kind, "claude-plugin")
+    expect_identical(r$name, k)
+    expect_identical(r$path, path_norm(paths[[k]]))
+  }
+  expect_identical(plugin_resolve("doc_skills")$name, "doc-skills")
+  expect_identical(plugin_resolve("p17-empty")$manifest, list())
+  expect_identical(plugin_resolve("p17-odd-name")$version, "2.0.0")
+  expect_identical(plugin_resolve("p17-named")$name, "p17-named-tools")
+})

@@ -2919,14 +2919,29 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers: a command line is read as sh reads it (comments, heredocs, ANSI-C quotes, substitutions, cd), null devices and shell-word paths are followed, wrappers, eval and shell keywords never hide a command, program-running options and environment prefixes are dynamic, every write takes the path class of the file it writes, SQL is lexed in one pass per dialect, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, substitutions, cd, case), null devices and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords and literal text fed to a shell never hide a command, program-running options and environment values are read as command lines, every write and every guarded operand of an unmodelled program takes its path class, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
 interfaces and call texts; all 55 plan expectations pass unchanged, and so do the later P11 tasks'
 command, SQL and Python cases. The classifier is advisory (G5, 03 section 6.8), but a level-0 result
 runs without asking in every mode (plan mode included), so the plan-literal code had to be hardened
-where it returned level 0 or 1 for code that runs programs, deletes or writes guarded files:
+where it returned level 0 or 1 for code that runs programs, deletes or writes guarded files.
+
+**Fail-safe principle (review round 3).** The command classifier is a heuristic in front of the
+permission gate and cannot model every form of sh syntax. Where it does not fully model a
+construct it gives the most conservative class the construct allows, never a level below the worst
+reading sh can give the line: a path it cannot name is `unknown` (a write or delete of it is 3); a
+word it can only partly name (a glob, a brace expansion, a relative path from an unknown
+directory) takes the highest class of the guarded paths it can stand for; the guarded operands of
+a program it does not model are flagged as writes; and code it cannot read (a computed command or
+program word, a script file, a brace expansion too long to list, a quote or substitution that is
+not closed, nesting deeper than 25) is level 3 `dynamic`, the level 03 section 6.8.1 gives dynamic
+code (auto mode allows it; manual and edits ask). Level 4 is kept for what the classifier can see:
+a critical, protected or control target, or a command line it can read that is level 4. Where bash
+(macOS /bin/sh, Git Bash) and dash (Linux /bin/sh) read a line differently (brace expansion, a
+descriptor such as `10>`), both readings are classified and the higher counts. Items 1-10 are the
+rounds 0-2 behaviour; item 11 lists what round 3 added:
 1. **Shell syntax.** Substitutions are found by a scan that follows quotes, backslashes and
    nesting, and each is classified as a command line, recursively (the plan read one level with a
    regular expression: `echo $(rm -rf ~ $(true))` was 0), process substitutions `<(...)`/`>(...)`
@@ -3027,7 +3042,8 @@ where it returned level 0 or 1 for code that runs programs, deletes or writes gu
 7. **SQL** is lexed once, left to right (strings, quoted identifiers, dollar quotes, `--` and block
    comments; MySQL's executable `/*! */` stays code), with and without backslash escapes, and the
    higher result wins. The plan stripped comments before strings, so `SELECT '--'; DROP TABLE t` was
-   0, and a block comment over two lines made `SELECT 1` level 3. `EXPLAIN ANALYZE` of a write is 2.
+   0, and a block comment over two lines made `SELECT 1` level 3. An EXPLAIN takes the level of the
+   statement it explains (item 11).
    Statements are classified in one pass (20,000 statements, 800 KB: 8.3 s with one bind per
    statement for both lexings, 0.4 s after). Two MySQL lexings (with and without backslash
    escapes) read `#` as a comment, `--` as one only before white space or a control character,
@@ -3062,14 +3078,107 @@ where it returned level 0 or 1 for code that runs programs, deletes or writes gu
     when that names a known program (`r\m -rf ~` and `c\p settings.json .gptr/` were 3, now 4;
     `C:\Git\bin\git.exe status` stays 0). Substitutions, `-c`, `eval` and heredoc lines nested
     deeper than 25 levels are level 3 `dynamic`, not read.
-Known limits (advisory classifier, not a security boundary): scripts read by `sed -f`/`awk -f`,
-configuration read by `curl -K`, `wget -e`/`--config` or `git` from the repository, commands
-hidden by `eval` of computed strings beyond the rules above, Python reached through `getattr()`,
-and heredocs or here-strings read by a program other than a shell (an interpreter is 3 `process`
-anyway). A substitution in an unquoted heredoc that holds a comment is not read and is level 3
-`dynamic`. Shell syntax is read as sh (and PowerShell, for `#` comments) reads it; cmd.exe, gptr's
-last fallback on Windows without Git Bash or PowerShell, has no `'` quotes, no `#` comments and
-`^` escapes, which the classifier does not model.
+11. **Review round 3 (fail-safe).**
+    - *Operators and descriptors.* Operator tokens carry a byte typed text never holds, so a quoted
+      `'<;>'` or `'<|>'` is a word (`rm '<;>' -rf ~` was 3, now 4). A redirect's descriptor is part
+      of it: one digit in sh, any run of digits or a `{name}` in bash, also before `<<` and `<<<`
+      (`cp a.txt .gptr/settings.json 9>/dev/null`, `3>&1`, `10>/dev/null`, `{fd}>/dev/null`,
+      `3<<EOF` made the descriptor an operand and the destination a directory `9/`: 2, now 4).
+      `<>` (and `1<>`, `3<>`) writes its target at the target's path class (`cat <> .Rprofile` was
+      0); `<`, `<&N` and the file read are no operands (`cp a.txt .gptr/settings.json < in.txt` was
+      2); `>&N`, `>&N-` and `>&-` duplicate or close a descriptor (`echo x 2>&1-` was 2, now 0).
+    - *Brace expansion.* An unquoted `{a,b}` or `{a..b}` (`{1..9..2}`, zero-padded or not, nested
+      groups; `${` starts no group; each alternative once; empty words dropped) becomes its words
+      before the line is read (`{rm,-rf,~}`, `rm -rf {.gptr,x}`, `rm -rf .{a..h}ptr`,
+      `echo x > {.Rprofile,}` were 2 or 3, now 4). dash does not expand, so the unexpanded reading
+      is classified too. More than 1,024 words: each group is read as the glob `*`, plus a 3
+      `dynamic` row (`rm -rf .{a..z}{a..z}{a..z}{a..z}` is 4 through `.****`).
+    - *Globs.* `[` is a glob character. A glob takes the highest class of the paths it can name
+      (`risk_glob_paths()`): per glob component, the guarded names of its directory it can match
+      (the dot names `.gptr`, `.git`, `.Rprofile`, `.ssh`, ... only for a pattern that can match a
+      leading dot, `[.]` included, or with the line's dotglob, globdots or GLOBIGNORE; the control
+      files of `.gptr/`; `config` and `hooks` of `.git/`; for deletes, the next directory toward the
+      project root or the home directory, so `../*` names the project), and one ordinary name. A
+      pattern that matches every name (`*`, `?*`, `[!.]*`, `.*`) in a critical directory is critical.
+      Deletes (rm family, find start paths, mv sources), writes and chmod targets read globs this
+      way: `rm -rf .g*`, `.[g]ptr`, `[.]gptr`, `.??*`, `?*`, `[!.]*`, `~/.s*`, `*/.git`,
+      `find .g* -delete` and `mv .gp?r old` were 3, `echo x > .Rprofil[e]` and `cp x .git/c*` 2 or
+      3; all are 4. `rm -rf build/[a-z]*` and `rm -f *.l[o]g` stay 3.
+    - *mv sources.* A source outside the project or of class `unknown`, `wildcard` or `url` is the
+      delete rm would be: 3 `file_delete`, 4 for a wipe (`mv /etc/x .`, `mv $SRC out/x.csv`,
+      `mv *.csv data/` were 2).
+    - *Unknown working directory.* A relative word is also read from the project root and from its
+      `.gptr/`; a guarded class or a wipe found there wins over `unknown` (`cd $DIR && rm -rf .gptr`,
+      `cd $DIR && echo x > settings.json`, `cd .gp* && ...` and `cd ~- && rm -rf *` were 3, now 4).
+      A substitution before the line's first `cd` runs in the known directory
+      (`echo $(echo x > notes.txt); cd $DIR` was 3, now 2); one after it runs in an unknown
+      directory and in each directory a literal `cd` of the line names
+      (`(cd .gptr; echo $(cat > settings.json))` was 3, now 4).
+    - *case.* The `)` after a case pattern closes no subshell or substitution and pattern words are
+      data (`(cd .gptr; case x in a) ;; esac; echo x > settings.json)` was 2,
+      `cd .gptr; x=$(case a in a) cd ..;; esac); echo x > settings.json` 2,
+      `case $x in a) ls;; b|c) ls;; esac` 3; now 4, 4 and 0).
+    - *Literal text fed to a shell.* The operands of echo, printf and yes in a pipeline (as written
+      and with backslash escapes decoded) and its heredoc and here-string text are a command line
+      for a shell that reads its standard input (no `-c`, no script operand unless `-s`; also behind
+      sudo, env and other wrappers) and for `source`/`.`, and operands for xargs; the `pipe into`
+      row stays (`echo 'rm -rf ~' | sh`, `printf 'rm -rf ~\n' | bash`, `cat <<'EOF' | sh`,
+      `{ echo ls; echo 'rm -rf ~'; } | sh`, `echo ~ | xargs rm -rf`, `xargs rm -rf <<< '~'` were 3,
+      now 4; `cat x.sh | sh` and `echo 'rm -rf ~' | sh x.sh` stay 3). The literal text a
+      substitution writes is a command line when the line hands it to a shell, eval, source or `.`
+      (`eval "$(echo 'rm -rf ~')"`, `bash <(echo 'rm -rf ~')`: 4). ksh, mksh, ash, yash, csh and
+      tcsh are shells too.
+    - *Command lines carried by values.* The value of an injecting assignment (item 4), also one an
+      `export`, `declare`, `typeset`, `local` or `readonly` makes, and of a program-running
+      `git -c` key are classified as command lines (`PAGER='rm -rf ~' git log`,
+      `export PAGER='rm -rf ~'; git log`, `git -c core.fsmonitor='rm -rf ~' status`,
+      `git -c alias.st='!rm -rf ~' st` were 3 or 2, now 4), and so are an alias value, an unknown
+      program's operand or program word that reads as a command line (`trap 'rm -rf ~' EXIT`,
+      `watch '...'`, `sudo -s 'rm -rf ~'`), ssh's command words and the rest of a `cmd /c` or
+      PowerShell `-Command` line (read with sh's rules).
+    - *Programs gptr does not model.* An unknown program, a build tool, an interpreter and a table
+      program rated 2 or more (not `export`, `printenv`, `env`) may write any operand: each operand
+      and option value (`--out=F`, `-oF`, `key=F`) of class control, critical, protected or
+      instructions is flagged as that write (`rsync -a src/ .gptr/`, `rsync -a --delete empty/ ~`,
+      `pip install -t .gptr/extensions x`, `make -C .gptr`, `python3 x.py .gptr/settings.json`,
+      `r[m] -rf .gptr`, `$RM -rf ~` were 3, now 4). The project root and the home directory are
+      critical, so `pip install -e .` and `code .` are 4 too: an install cannot be told from a sync
+      that deletes. `rsync -a src/ backup/` and `pip install pandas` stay 3. Item 3's "every write
+      takes the path class of the file it writes" holds for the programs gptr models; for the
+      others only guarded operands are flagged.
+    - *find and fd.* `-name`/`-iname` narrow `-delete` and `-exec` when the expression has no
+      `-o`, `!`, `-not` or `,`: what is reached is the pattern in each start path plus the guarded
+      names the pattern can match at any depth (find's `*` matches dot names). `-type` and other
+      tests do not narrow (`find . -type f -delete` deletes the control files: 4). Unnarrowed
+      `-delete` and guarded start paths keep 4; `find . -name '*.log' -delete` was 4, now 3;
+      `find . -name settings.json -delete` is 4. Each command `-exec`, `-execdir`, `-ok` or
+      `-okdir` runs is classified with `{}` standing for what it reaches
+      (`find . -exec cp {} .gptr/ \;` was 3, now 4). fd's `-x`/`-X`/`--exec[-batch]` is found in
+      every spelling (`-HIx`, `-xrm`, `--exec=rm`; only a separate word was read) and its command
+      classified the same way, with fd's placeholders or an implicit `{}`, narrowed by a pattern
+      or `-e` (`fd -x rm` was 3, now 4 like `find . -exec rm {} +`; `fd -e log -x rm` 3).
+    - *gawk and rg.* gawk's `-l`, `--load` and `@load` load compiled extensions and rg's
+      `--hostname-bin` runs a program: 3 `dynamic`.
+    - *SQL.* An EXPLAIN takes the level of the statement it explains, its options (`ANALYZE`,
+      `(ANALYZE, BUFFERS)`, `VERBOSE`, `FORMAT=JSON`, `QUERY PLAN`, ...) removed; a bare table name
+      (MySQL's `EXPLAIN t`) is 0 (`EXPLAIN ANALYZE CREATE TABLE t AS SELECT 1`,
+      `... CREATE MATERIALIZED VIEW ...`, `... EXECUTE p`, `... DECLARE c CURSOR ...` were 0, now
+      2, 2, 3 and 3).
+    - *Python.* A module imported under another name (`import os as o`, `import sys, shutil as s`)
+      is scanned under its own name too; `os.posix_spawn[p]`, `os.fork`,
+      `from os|subprocess|shutil import *`, `getattr(os, ...)`, `sys.modules` and `__builtins__`
+      are flagged (all were 1, now 3).
+Known limits (advisory classifier, not a security boundary; each is level 3 or the level of what
+can be read, never 0): scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
+configuration read by `curl -K`, `wget -e`/`--config` or `git` from the repository, the values of
+variables and positional parameters (`$X`, `"$@"`: `unknown`), commands hidden by `eval` of
+computed strings beyond the rules above, Python reached through other indirections, SQL functions
+with side effects inside a SELECT, and heredocs or here-strings read by a program other than a
+shell, `source` or xargs (an interpreter is 3 `process` anyway). A substitution in an unquoted
+heredoc that holds a comment is not read and is level 3 `dynamic`. Shell syntax is read as bash
+and dash read it (and PowerShell, for `#` comments); cmd.exe, gptr's last fallback on Windows
+without Git Bash or PowerShell, has no `'` quotes, no `#` comments and `^` escapes, which the
+classifier does not model (a `cmd /c` line is read with sh's rules).
 
 Validation: `progress/P11.md`, Task 2. Six blocks were added to `test-perm-classify.R`
 (145 expectations); against the plan-literal Task 2 source the file gives
@@ -3081,7 +3190,10 @@ were added). Review round 2 added the comment, heredoc, `$'...'` and continuatio
 1, the git options, tilde prefixes and new write targets of items 3 and 5, the option parsing of
 item 6, the MySQL lexings of item 7 and `eval` and escaped program names in item 10, with six
 blocks (109 expectations); the first 103 fail 70 against the round-1 source
-(`task2-fix2-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 556 ]` in the
+(`task2-fix2-red.log`). Review round 3 added the fail-safe principle and item 11, with nine blocks
+(180 expectations) and four raised rows (`cd ~- && rm -rf *`, `fd -x rm`, the two `git -c` program rows: 3 to 4); the
+first 142 new expectations and the first changed row fail 94 against the round-2 source
+(`task2-fix3-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 736 ]` in the
 UTF-8 and the C locale.
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
@@ -4830,7 +4942,7 @@ Validation: `progress/P17.md`, Task 7. `^subagent-defs$`: red
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 31 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`; lint
 clean.
 
-## D-087 - P07 compaction runs: compaction events carry the contract 4.5 envelope; inside a run the checkpoint request uses the run's model and protected safety record; a request that cannot start, or an empty reply, still leaves a harness-state checkpoint; the continuation line keeps the user-message budget; malformed hook and compactor results are diagnostics, and the harness's details fields win; reason and focus are validated (2026-10-04)
+## D-087 - P07 compaction runs: compaction events carry the contract 4.5 envelope; inside a run the checkpoint request uses the run's model and protected safety record, and an overflow compaction of a router session asks the router; a request that cannot start, or an empty reply, still leaves a harness-state checkpoint; the continuation line keeps the user-message budget; malformed hook and compactor results are diagnostics, and the harness's details fields win; reason and focus are validated; the tool additions and section patches a compaction drops are announced again after it; an aborted run records no compaction; the usage of every checkpoint request is kept (2026-10-04)
 
 P07 Task 13 (`R/prompt-compact.R`). `compact_last()`, `compact_request_text()`,
 `compact_header()`, `compact_skills()`, `builtin_compaction()` and its `on_load()`, the
@@ -4845,14 +4957,25 @@ real P05/P06 interfaces, and each has a test.
    builds both events with `ev_new()` (`run` and `agent` of the session's current run, else NULL
    and "main"; `turn`).
 2. **The run's model and safety record (IC-69, IC-74).** P06's `run_compact_check()` routes a
-   router session for "compaction" (`run_route()`) before it calls `compact.run`, and P06's
-   `run_target()` resolves models that P05's `model_resolve()` cannot (a provider registered for
-   the session only). Inside a run, `compact_target()` therefore uses the run's resolved model
-   (for a router session, the model the router just gave), so the router is not asked twice.
-   Outside a run it asks `router.call` itself, as the plan did. The checkpoint request also
-   carries the run's protected safety record (`run$opts$safety`) to `provider_stream()`, so P05's
-   preflight checks the effective origin against the same local-only setting as the run's own
-   requests. The plan passed none, which P05 reads as local-only.
+   router session for "compaction" (`run_route()`) at a request boundary before it calls
+   `compact.run`, and P06's `run_target()` resolves models that P05's `model_resolve()` cannot (a
+   provider registered for the session only). Inside a run, once the run's model is resolved,
+   `compact_target()` therefore uses it, so for a `threshold` or `cold` compaction the router is
+   not asked twice. P06's recovery from an overflow error (`run_response_error()`) calls
+   `compact.run(s, "overflow")` without routing, and there `run$model` is the model whose request
+   just overflowed. So an `overflow` compaction of a router session asks `router.call` with
+   reason "compaction" itself, as the plan did on every path (contract 10.2 kind `router`: the
+   router is called at compaction), and falls back to the run's model when the router gives none
+   that resolves. After a silent overflow, which P06 routes at the boundary, this asks the router
+   a second time. Without a resolved run model (outside a run, or at a run's first request
+   boundary, where `run_compact_check()` runs before `run_target()`), a router session asks
+   `router.call` and any other session resolves its model through the catalog, as the plan did:
+   a provider registered for the session only is then not found, so `compact.should` is `FALSE`
+   at that first boundary and such sessions compact between tool rounds and on overflow. The
+   checkpoint request also carries the run's protected safety record (`run$opts$safety`) to
+   `provider_stream()`, so P05's preflight checks the effective origin against the same
+   local-only setting as the run's own requests. The plan passed none, which P05 reads as
+   local-only.
 3. **A request that cannot start (the plan: "an error reply is not retried and the checkpoint
    then carries the harness state alone").** `provider_stream()` signals a refusal (preflight,
    missing key, disabled provider) before anything starts. In the plan that error escaped the
@@ -4882,16 +5005,49 @@ real P05/P06 interfaces, and each has a test.
    block is deduplicated against the compaction. A dropped project block is hashed with Task 5's
    `context_text_hash()`, the stored-form hash its update check compares with; for text without
    secrets this equals the plan's `hash_sha256()`.
+10. **The operator state a compaction drops is announced again (review round 1).** Task 8 tells
+    the model of tools added mid-session (`tool_change`: declarations by value, or `gptr$` member
+    lines) and of section patches (`section_patch`) only through operator messages; the frozen
+    tool array and system prompt never change. With `keep_recent = 0` the compaction drops them
+    from the projection, while `prompt_tools_known()` still counts them, so the model lost the
+    tools for the rest of the session (adding them again announced nothing) and a patched section
+    silently reverted. The checkpoint request's `request_build()` also flushed a queued change
+    into the transcript just before the compaction dropped it. `compact_run()` now appends, right
+    after the compaction entry and for every compactor and hook result,
+    `compact_operator_state()` of the path as it stands after the compactor ran (flushed changes
+    included): one `tool_change` with every declaration sent by value (newest per name), one
+    with the newest member line per registry key, and the newest patch per section (a removal
+    stays a removal). An item whose newest message lies in the entries a result keeps
+    (`first_kept_entry_id`, a plugin's `keep_recent`) is still visible there and left out. Changes
+    still queued (a hook result sends no request) follow at the next request, after them. The entries are appended rather than queued so that they survive a save
+    and resume before the next request; a compaction runs at a request boundary, so nothing
+    else sits between it and them. `tokens_after` counts them. The plan re-announced nothing.
+11. **A malformed result state (review round 1).** A hook or plugin result whose `state` is not a
+    list was stored as the compaction's state, and every later compaction of the branch then
+    failed in `compact_state_merge()`. It is now a `malformed_state` diagnostic and replaced by
+    `extract_state()` of the path, and the merge ignores a stored state that is not a list.
+12. **An aborted run (review round 1).** The nested wait for the checkpoint reply now also ends
+    when the session's run is aborted or settles (another reactor callback: `run_abort()`, a
+    budget or timer stop, a hook's `ctx$abort()`); `compact_ask_once()`'s exit handler then
+    cancels the transfer, the request is not retried, and `compact_run()` records nothing. The
+    plan waited for the whole reply and appended a compaction for the aborted run.
+13. **Usage of every attempt (review round 1, contract 10.2 `usage`).** The compactor's `usage`
+    held only the final attempt's usage; a rejected first reply (a tool call, a `length` stop or
+    an empty reply) was billed but dropped. `compact_ask()` now returns the sum of every reply's
+    usage (`compact_usage_sum()`: a single record unchanged, several summed field by field, an
+    unknown count or cost makes the sum unknown, IC-74).
 
-Validation: `progress/P07.md`, Task 13. Ten tests (59 expectations) were added. On the plan
-literal 19 of them fail and the plan's 55 pass (`dev/.validation/P07/task13-plan-literal.log`).
-Final `^prompt-compact$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 202 ]`.
+Validation: `progress/P07.md`, Task 13. Sixteen tests (94 expectations) were added: ten (59) by
+the implementation, six (35) by review round 1. On the plan literal the first ten's 19 fail and
+the plan's 55 pass (`dev/.validation/P07/task13-plan-literal.log`); on the pre-review source the
+six review tests fail 19 (`task13-fix1-red-final.log`). Final `^prompt-compact$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 237 ]`.
 
-## D-088 - P17 plugin resolution: a manifest that is not a JSON object is a diagnostic, an installed Claude plugin uses its newest install path that exists and malformed entries are skipped, and a `~` path expands with `user_home()` (2026-10-04)
+## D-088 - P17 plugin resolution: a manifest that is not a JSON object is a diagnostic, an installed Claude plugin uses its newest install path that exists and malformed entries are skipped, a `~` path expands with `user_home()`, and an installed Claude plugin without a manifest name is named by its installed key (2026-10-04)
 
 P17 Task 9 (`R/ext-plugins.R`). `plugin_api_req()`, `plugin_from_dir()`,
 `plugin_from_package()` and the resolution order of `plugin_resolve()` are the plan's literal
-ones, and the plan's 4 tests (15 expectations) are appended byte for byte. Three places changed:
+ones, and the plan's 4 tests (15 expectations) are appended byte for byte. Four places changed:
 
 1. **A manifest that is not a JSON object is a diagnostic.** The plan's `plugin_manifest_read()`
    returned whatever `json_decode()` gave. A `plugin.json` holding valid JSON that is not an
@@ -4918,23 +5074,45 @@ ones, and the plan's 4 tests (15 expectations) are appended byte for byte. Three
    expands `~` to `R_USER` or `HOME`), and IC-63 says user paths never go through R's
    expansion. `plugin_resolve()` now tests `dir.exists(path_norm(name))`. Order, results and
    errors are otherwise unchanged.
+4. **An installed Claude plugin without a manifest name is named by its installed key**
+   (review round 1). The plan resolved an installed Claude plugin with
+   `plugin_from_dir(<installPath>)`, which names a plugin without a manifest name after
+   `basename(path)`; it used the key only when the directory was not a plugin at all. A Claude
+   `.claude-plugin/plugin.json` is optional (report 16 sections 2.15 and 3.8), and an install path
+   is `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`. So a bundle with only
+   `skills/`, an empty `.claude-plugin/`, a `.claude-plugin/` holding only `marketplace.json`, or
+   a manifest whose `name` is not one string, was named after its version or commit directory
+   (`3b600518a637`). Task 10 builds `source = plugin:<name>`, the plugin table entry and the
+   `/<plugin>:<cmd>` commands from that name. The new internal
+   `plugin_from_claude_install(name, path)` keeps the manifest's name when it is one non-empty
+   string and otherwise uses the installed key without `@<marketplace>`; `plugin_resolve()`'s
+   Claude step calls it, with the plan's fallback for a directory that is not a plugin. A path
+   given directly is still named by `plugin_from_dir()` (no key exists there). Task 11's
+   `plugin_candidates()` repeats the plan's Claude loop and should call the same helper.
 
-Four regression tests follow the plan's 4 (47 expectations) under
+Five regression tests follow the plan's 4 (66 expectations) under
 `# Task 9 adaptations (D-088)`: non-object manifests (item 1), installed Claude plugin entries
 (item 2), a `~` path with `user_home()` mocked away from `HOME` (item 3), and a package plugin read
 from a fake library through its `DESCRIPTION` only (`Config/gptr/plugin`, the `Config/gptr/api`
 fallback, the `inst/gptr/plugin.json` API winning over `Config/gptr/api`, a normalised name found
-by the library scan, and no namespace loaded). The last one covers plan-literal code; the plan's
-tests reached no package plugin. Against the plan-literal source the file gives
+by the library scan, and no namespace loaded), and installed Claude plugins without a manifest
+name (item 4: `skills/` only, an empty `.claude-plugin/`, `marketplace.json` only, a numeric
+`name`, not a plugin directory, and a manifest name that is kept). The package test covers
+plan-literal code; the plan's tests reached no package plugin. With the first four, against the
+plan-literal source the file gave
 `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 203 ]`: the plan's 15 pass and the first three regression
 tests stop with `subscript out of bounds` (twice) and the plan's "not a plugin directory" error.
 A probe (`dev/.validation/P17/task9-probe.log`) shows the other differences one by one: the
 plan-literal code keeps `[1, 2]` as the manifest, gives no diagnostic for `[1, 2]` or `null`, and
-gives no install path for a plugin whose newest install is gone. Every later P17 count for
-`test-ext-plugins.R` is 156 higher instead of 109 (IC-74): 82 -> 238 (this task), 133 -> 289,
-166 -> 322, 184 -> 340. Acceptance 1 rises by 47 on top of D-072, D-074, D-084 and D-086
-(679 -> 726), acceptance 3a becomes 340 and acceptance 4c 503.
+gives no install path for a plugin whose newest install is gone. The fifth test (19
+expectations) fails 5 against the round-1 source, whose Claude step was the plan's literal code
+(`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 252 ]`, `dev/.validation/P17/task9-fix1-red.log`): the
+names are `3b600518a637`, `0a1b2c3d4e5f`, `1.0.0` and `2.0.0`. Every later P17 count for
+`test-ext-plugins.R` is 175 higher instead of 109 (IC-74): 82 -> 257 (this task), 133 -> 308,
+166 -> 341, 184 -> 359. Acceptance 1 rises by 66 on top of D-072, D-074, D-084 and D-086
+(679 -> 745), acceptance 3a becomes 359 and acceptance 4c 522.
 
 Validation: `progress/P17.md`, Task 9. `^ext-plugins$`: red
-`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 176 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 238 ]`; lint
-clean.
+`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 176 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 238 ]`; after
+review round 1 (item 4) red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 252 ]`, green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 257 ]`; lint clean.
