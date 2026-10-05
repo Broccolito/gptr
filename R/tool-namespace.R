@@ -716,3 +716,414 @@ print.gptr_ns = function(x, ...) {
   ns_print_lines(c(title, shown$lines, more))
   invisible(x)
 }
+
+# ---- the plugin catalog (the `plugins` prompt section, IC-25) ------------------------------------
+
+ns_plugins_header = paste(
+  "Plugin functions are R functions called inside r. They return R values; assign and summarise",
+  "them before printing. gptr$search(\"words\") finds more and gptr$help(\"<ns>/<name>\") shows",
+  "a full schema."
+)
+
+#' Body of the `plugins` section: one signature line per plugin `r` member (contract section 7.10)
+#'
+#' Over the budget, descriptions are trimmed from the end of the name-sorted catalog (no usage
+#' history exists at freeze, so the least recently used are the last); names are always kept. A
+#' lazy plugin contributes the signatures its manifest declares, and the catalog never activates
+#' it (contract 10.8: activation never changes the cached prefix).
+#' @param session A `gptr_session` (its rank-0 tools count) or NULL.
+#' @param kinds Kinds of members to list; only `"plugin"` is catalogued here (MCP has its own
+#'   section).
+#' @param budget Estimated-token budget of the lines.
+#' @return chr(1), "" when there is no plugin member.
+#' @noRd
+ns_catalog = function(session, kinds = c("plugin"), budget = 1500L) {
+  check_strings(kinds, "kinds")
+  check_number(budget, "budget", min = 1)
+  if (!("plugin" %in% kinds)) return("")
+  sid = if (is.null(session)) NULL else session$id
+  ok = ns_plugin_namespaces(sid)
+  specs = registry_all("tool", session = sid)
+  keys = names(specs)
+  keys = keys[grepl("/", keys, fixed = TRUE) & sub("/.*$", "", keys) %in% ok]
+  lines = character()
+  for (k in sort(keys, method = "radix")) {
+    spec = specs[[k]]
+    if (!isTRUE(spec$lazy) && !identical(spec$exposure, "r")) next
+    line = ns_spec_line(spec, k)
+    if (!is.null(line)) lines = c(lines, line)
+  }
+  if (!length(lines)) return("")
+  i = length(lines)
+  while (i >= 1L && est_tokens(lines, "code") > budget) {
+    lines[i] = sub("  # .*$", "", lines[i])
+    i = i - 1L
+  }
+  paste(lines, collapse = "\n")
+}
+
+#' Text of the `plugins` section (T1, order 860) or NULL when no plugin member exists
+#' @noRd
+ns_plugins_section = function(ctx) {
+  s = if (is.null(ctx)) NULL else ctx$session
+  body = ns_catalog(s, budget = 1500L - ceiling(est_tokens(ns_plugins_header, "prose")))
+  if (!nzchar(body)) return(NULL)
+  paste(c(ns_plugins_header, body), collapse = "\n")
+}
+
+# ---- BM25 search (contract section 7.10; Pi's tool_search ranker, report 06 section 5.7) ---------
+
+bm25_stop_words = c("a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is",
+                    "it", "of", "on", "or", "that", "the", "this", "to", "with")
+
+#' Pi's naive singular stemming
+#' @noRd
+bm25_stem = function(term) {
+  n = nchar(term)
+  plural = n > 3 & endsWith(term, "s") & !endsWith(term, "ss")
+  ifelse(n > 4 & endsWith(term, "ies"), paste0(substr(term, 1, n - 3), "y"),
+         ifelse(n > 4 & grepl("(ches|shes|sses|xes|zes)$", term), substr(term, 1, n - 2),
+                ifelse(plural, substr(term, 1, n - 1), term)))
+}
+
+#' Search text as valid UTF-8 (IC-62): as_utf8(), then each invalid byte of a string that is still
+#' not valid UTF-8 becomes U+FFFD, as read() decodes such bytes (a plugin's document, a catalog
+#' text or a query need not be valid UTF-8, and PCRE refuses invalid input)
+#' @noRd
+search_utf8 = function(x) {
+  x = as_utf8(as.character(x))
+  bad = which(!is.na(x) & !validUTF8(x))
+  if (length(bad)) x[bad] = as_utf8(iconv(x[bad], "UTF-8", "UTF-8", sub = replacement_sub))
+  x
+}
+
+#' Pi's tokeniser: split camelCase, lower-case, split on non-alphanumerics, drop stop words, stem
+#' (on valid UTF-8 text, so no document or query makes the ranker fail)
+#' @noRd
+bm25_tokenize = function(text) {
+  text = search_utf8(text)
+  text = gsub("([a-z0-9])([A-Z])", "\\1 \\2", text, perl = TRUE)
+  text = gsub("([A-Z]+)([A-Z][a-z])", "\\1 \\2", text, perl = TRUE)
+  terms = strsplit(tolower(text), "[^a-z0-9]+", perl = TRUE)[[1L]]
+  terms = terms[nzchar(terms) & !terms %in% bm25_stop_words]
+  if (!length(terms)) character() else bm25_stem(terms)
+}
+
+#' Text of a JSON Schema for search: descriptions and property names, recursively (Pi schemaText())
+#' @noRd
+bm25_schema_text = function(schema) {
+  if (!is.list(schema) || is.null(names(schema))) return(character())
+  parts = character()
+  if (is.character(schema$description)) parts = c(parts, schema$description)
+  if (is.list(schema$properties)) {
+    for (n in names(schema$properties)) {
+      parts = c(parts, n, bm25_schema_text(schema$properties[[n]]))
+    }
+  }
+  parts = c(parts, bm25_schema_text(schema$items))
+  for (key in c("anyOf", "oneOf", "allOf")) {
+    if (is.list(schema[[key]])) for (v in schema[[key]]) parts = c(parts, bm25_schema_text(v))
+  }
+  parts
+}
+
+#' BM25 index of documents `data.frame(id, text)` (contract section 7.10)
+#' @noRd
+bm25_index = function(docs) {
+  if (!is.data.frame(docs) || !all(c("id", "text") %in% names(docs))) {
+    gptr_abort("`docs` must be a data frame with columns id and text.", "invalid_argument",
+               arg = "docs", expected = "a data frame with columns id and text")
+  }
+  tf = lapply(as.character(docs$text), function(t) table(bm25_tokenize(t)))
+  len = vapply(tf, function(x) as.numeric(sum(x)), numeric(1))
+  avg = if (length(len) && sum(len) > 0) sum(len) / length(len) else 1
+  list(ids = as.character(docs$id), tf = tf, len = len, avgdl = avg,
+       df = table(unlist(lapply(tf, names), use.names = FALSE)), n = nrow(docs))
+}
+
+bm25_k1 = 1.2
+bm25_b = 0.75
+
+#' Rank indexed documents for a query: k1 = 1.2, b = 0.75, idf = ln(1 + (N - f + 0.5) / (f + 0.5)),
+#' ties keep document order; data.frame(id, score) of at most `limit` rows with a positive score
+#' @noRd
+bm25_search = function(index, words, limit = 8L) {
+  check_string(words, "words", empty = TRUE)
+  limit = check_number(limit, "limit", min = 0, int = TRUE)
+  q = unique(bm25_tokenize(words))
+  empty = data.frame(id = character(), score = numeric(), stringsAsFactors = FALSE)
+  if (!length(q) || !index$n || limit <= 0) return(empty)
+  score = numeric(index$n)
+  norm = bm25_k1 * (1 - bm25_b + bm25_b * index$len / index$avgdl)
+  for (t in q) {
+    f = if (t %in% names(index$df)) as.numeric(index$df[[t]]) else 0
+    idf = log(1 + (index$n - f + 0.5) / (f + 0.5))
+    cnt = vapply(index$tf, function(x) if (t %in% names(x)) as.numeric(x[[t]]) else 0, numeric(1))
+    hit = cnt > 0
+    score[hit] = score[hit] + idf * (cnt[hit] * (bm25_k1 + 1)) / (cnt[hit] + norm[hit])
+  }
+  keep = which(score > 0)
+  if (!length(keep)) return(empty)
+  keep = utils::head(keep[order(-score[keep], keep)], limit)
+  data.frame(id = index$ids[keep], score = score[keep], stringsAsFactors = FALSE)
+}
+
+#' Pi's search document text of a tool: name, name with "_" as " ", description, schema text,
+#' namespace
+#' @noRd
+ns_search_text = function(spec) {
+  params = if (is.list(spec$parameters)) spec$parameters else list()
+  parts = c(spec$name, gsub("_", " ", spec$name, fixed = TRUE), spec$description %||% "",
+            bm25_schema_text(params), spec$namespace)
+  paste(parts[nzchar(trimws(parts))], collapse = " ")
+}
+
+#' Search text of a lazy plugin's placeholder: its name, the name with "_" as " ", the declared
+#' description and signature, and the namespace (the plugin is not activated, contract 10.8)
+#' @noRd
+ns_search_text_lazy = function(key, declaration) {
+  name = sub("^.*/", "", key)
+  parts = c(name, gsub("_", " ", name, fixed = TRUE),
+            as.character(declaration$description %||% ""),
+            as.character(declaration$signature %||% ""),
+            if (grepl("/", key, fixed = TRUE)) sub("/.*$", "", key))
+  paste(parts[nzchar(trimws(parts))], collapse = " ")
+}
+
+#' Documents of every non-hidden tool with a member form or a deferred exposure: the `members`
+#' search_source of builtin:tools (kinds `member`, `plugin`, `deferred`). Specs come from
+#' registry_all("tool"), so a lazy plugin is searched through its declarations, not activated. Only
+#' what ns_resolve() resolves is offered: un-namespaced specs that ns_member_ok() accepts, and
+#' namespaced ones whose namespace ns_plugin_namespaces() offers (not reserved, no member's name).
+#' @noRd
+ns_search_docs = function(ctx) {
+  s = if (is.null(ctx)) NULL else ctx$session
+  sid = if (is.null(s)) NULL else s$id
+  specs = registry_all("tool", session = sid)
+  offered = ns_plugin_namespaces(sid)
+  rows = lapply(names(specs), function(n) {
+    spec = specs[[n]]
+    if (is.null(spec)) return(NULL)
+    namespaced = grepl("/", n, fixed = TRUE)
+    if (namespaced && !(sub("/.*$", "", n) %in% offered)) return(NULL)
+    if (isTRUE(spec$lazy)) {
+      if (!namespaced || is.null(ns_spec_line(spec, n))) return(NULL)
+      return(data.frame(id = n, text = ns_search_text_lazy(n, spec$declaration), kind = "plugin",
+                        stringsAsFactors = FALSE))
+    }
+    if (identical(spec$exposure, "hidden")) return(NULL)
+    if (namespaced && !is.function(spec$fun) && !is.function(spec$execute)) return(NULL)
+    if (!namespaced && !ns_member_ok(spec)) return(NULL)
+    kind = if (identical(spec$exposure, "deferred")) {
+      "deferred"
+    } else if (namespaced) {
+      "plugin"
+    } else {
+      "member"
+    }
+    data.frame(id = n, text = ns_search_text(spec), kind = kind, stringsAsFactors = FALSE)
+  })
+  rows = Filter(Negate(is.null), rows)
+  if (!length(rows)) return(data.frame(id = character(), text = character(), kind = character()))
+  do.call(rbind, rows)
+}
+
+#' Documents of every `search_source` record (the `search.sources` service, IC-69)
+#'
+#' @param session A `gptr_session` or NULL; each source's `docs(ctx)` gets the session's ctx, or
+#'   the process ctx (ctx_default(NULL), `ctx$session` NULL) at the console, as every handler gets
+#'   a `gptr_ctx` (contract 10.6).
+#' @return data.frame(id, text, kind) of valid UTF-8 (search_utf8()); a failing source is skipped
+#'   with a registry diagnostic.
+#' @noRd
+search_sources = function(session = NULL) {
+  sid = if (is.null(session)) NULL else session$id
+  live = if (is.null(session)) NULL else session_live(session)
+  ctx = if (is.null(live) || is.null(live$ctx)) ctx_default(session) else live$ctx
+  out = lapply(registry_all("search_source", session = sid), function(r) {
+    d = tryCatch(r$docs(ctx), error = function(e) {
+      registry_diagnostic("builtin:tools", "search_source", "internal",
+                          paste0("search source ", r$name, " failed: ", conditionMessage(e)))
+      NULL
+    })
+    if (is.data.frame(d) && all(c("id", "text", "kind") %in% names(d)) && nrow(d)) {
+      data.frame(id = search_utf8(d$id), text = search_utf8(d$text), kind = search_utf8(d$kind),
+                 stringsAsFactors = FALSE)
+    }
+  })
+  out = Filter(Negate(is.null), out)
+  if (!length(out)) return(data.frame(id = character(), text = character(), kind = character()))
+  do.call(rbind, out)
+}
+
+#' Search documents of skills (P17 `skill.catalog`) and MCP tools (P18 `mcp.catalog`) parsed from
+#' their catalog texts (formats of architecture section 7.3); data.frame(id, text, kind, signature).
+#' A service that fails or answers anything but a string (`mcp.catalog` may answer NULL) adds no
+#' document; the text is made valid UTF-8 first (search_utf8()).
+#' @noRd
+ns_catalog_docs = function(session) {
+  rows = list()
+  catalog = function(service) {
+    txt = tryCatch(ext_service_get(service)(session, 1e6), error = function(e) "")
+    ok = is.character(txt) && length(txt) == 1L && !is.na(txt)
+    split_lines_count(if (ok) search_utf8(txt) else "")
+  }
+  if (ext_service_has("skill.catalog")) {
+    lines = catalog("skill.catalog")
+    lines = lines[startsWith(lines, "- ")]
+    if (length(lines)) {
+      rows[[length(rows) + 1L]] = data.frame(id = sub("^- ([^:]+):.*$", "\\1", lines),
+                                             text = lines, kind = "skill", signature = lines,
+                                             stringsAsFactors = FALSE)
+    }
+  }
+  if (ext_service_has("mcp.catalog")) {
+    lines = catalog("mcp.catalog")
+    server = ""
+    for (ln in lines) {
+      hdr = regmatches(ln, regexec("^(\\S+): [0-9]+ tools", ln))[[1L]]
+      if (length(hdr)) {
+        server = hdr[2L]
+        next
+      }
+      tool = regmatches(ln, regexec("^\\s+([A-Za-z0-9_.-]+)\\(", ln))[[1L]]
+      if (length(tool) && nzchar(server)) {
+        sig = paste0("gptr$mcp$", server, "$", trimws(ln))
+        rows[[length(rows) + 1L]] = data.frame(id = paste0(server, "/", tool[2L]),
+                                               text = paste(server, ln), kind = "mcp",
+                                               signature = sig, stringsAsFactors = FALSE)
+      }
+    }
+  }
+  if (!length(rows)) {
+    return(data.frame(id = character(), text = character(), kind = character(),
+                      signature = character()))
+  }
+  do.call(rbind, rows)
+}
+
+# ---- member functions (contract section 9.4) -----------------------------------------------------
+
+#' `gptr$search(words, limit = 8L)`: BM25 over members, plugin and deferred tools, `search_source`
+#' records, skills and MCP tools
+#'
+#' Documents are indexed by row, so two sources that use one id keep their own kind and signature;
+#' the signature of a `member`, `plugin` or `deferred` document is its tool's catalog line (a lazy
+#' plugin's from its declaration, without activating it), any other document's its id.
+#' @noRd
+member_search = function(words, limit = 8L) {
+  check_string(words, "words")
+  limit = check_number(limit, "limit", min = 1, int = TRUE)
+  s = ns_current_session()
+  docs = search_sources(s)
+  docs$signature = rep(NA_character_, nrow(docs))
+  docs = rbind(docs, ns_catalog_docs(s))
+  rows = data.frame(id = as.character(seq_len(nrow(docs))), text = docs$text,
+                    stringsAsFactors = FALSE)
+  hits = bm25_search(bm25_index(rows), words, limit)
+  m = as.integer(hits$id)
+  ids = docs$id[m]
+  kinds = docs$kind[m]
+  sig = docs$signature[m]
+  sid = if (is.null(s)) NULL else s$id
+  specs = registry_all("tool", session = sid)
+  for (i in which(is.na(sig))) {
+    spec = if (kinds[i] %in% c("member", "plugin", "deferred")) specs[[ids[i]]]
+    line = if (is.null(spec)) NULL else ns_spec_line(spec, ids[i])
+    sig[i] = line %||% ids[i]
+  }
+  data.frame(name = ids, kind = kinds, signature = sig, score = round(hits$score, 3),
+             stringsAsFactors = FALSE)
+}
+
+#' Help lines of a tool spec: signature, description and the arguments of its schema (listed when
+#' the schema's properties are the formals of `fun`, read through args() as member closures read
+#' them, so a primitive `fun` lists its arguments too)
+#' @noRd
+ns_tool_help = function(spec) {
+  params = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
+  props = params$properties %||% list()
+  req = as.character(unlist(params$required %||% list()))
+  same = !is.function(spec$fun) ||
+    setequal(names(props), setdiff(names(ns_fun_formals(spec$fun)), "..."))
+  args = if (same && length(props)) {
+    vapply(names(props), function(p) {
+      pr = props[[p]]
+      type = pr$type %||% if (!is.null(pr$enum)) "enum" else "any"
+      paste0("  ", p, " (", paste(unlist(type), collapse = "|"),
+             if (p %in% req) ", required" else "", ")",
+             if (is.character(pr$description)) paste0(": ", pr$description) else "",
+             if (!is.null(pr$enum)) paste0(" [", paste(unlist(pr$enum), collapse = ", "), "]"))
+    }, "", USE.NAMES = FALSE)
+  }
+  c(member_signature(spec), "", spec$description %||% "",
+    if (length(args)) c("", "Arguments:", args))
+}
+
+#' R help page as plain text: utils::help(), tools::Rd_db(), tools::Rd2txt() (no `:::`; report 20
+#' section 5.2)
+#' @noRd
+ns_r_help = function(topic, package = NULL) {
+  hf = tryCatch(if (is.null(package)) {
+    utils::help((topic), help_type = "text")
+  } else {
+    utils::help((topic), package = (package), help_type = "text")
+  }, error = function(e) character())
+  paths = as.character(hf)
+  if (!length(paths)) {
+    where = if (is.null(package)) "" else paste0(" in package '", package, "'")
+    return(paste0("No help found for '", topic, "'", where, "."))
+  }
+  path = paths[[1L]]
+  pkg = basename(dirname(dirname(path)))
+  rd = tools::Rd_db(pkg)[[paste0(basename(path), ".Rd")]]
+  if (is.null(rd)) {
+    return(paste0("Help page '", basename(path), "' not found in package '", pkg, "'."))
+  }
+  tf = tempfile(fileext = ".txt")
+  on.exit(unlink(tf), add = TRUE)
+  tools::Rd2txt(rd, out = tf, options = list(underline_titles = FALSE, width = 80L))
+  txt = readLines(tf, encoding = "UTF-8", warn = FALSE)
+  more = if (length(paths) > 1L) paste0(" (", length(paths), " matches; first shown)") else ""
+  c(paste0("[help: ", pkg, "::", topic, "]", more), as_utf8(txt))
+}
+
+#' The spec of a plugin function `"<ns>/<name>"` that ns_resolve() would resolve (its namespace is
+#' offered and it is not `hidden`, IC-37), or NULL; a first use, so a lazy plugin is activated
+#' @noRd
+ns_plugin_spec = function(key, sid = NULL) {
+  if (!(sub("/.*$", "", key) %in% ns_plugin_namespaces(sid))) return(NULL)
+  spec = registry_get("tool", key, session = sid)
+  if (is.null(spec) || identical(spec$exposure, "hidden")) return(NULL)
+  if (!is.function(spec$fun) && !is.function(spec$execute)) return(NULL)
+  spec
+}
+
+#' `gptr$help(name, package = NULL, budget = 800L)`: the schema of a member (`"grep"`), a plugin
+#' function (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`), else the R help page; budgeted.
+#' Only members that resolve are shown (a `hidden` one is callable by gptr code only, IC-37).
+#' @noRd
+member_help = function(name, package = NULL, budget = 800L) {
+  check_string(name, "name")
+  check_string(package, "package", null = TRUE)
+  check_number(budget, "budget", min = 20)
+  sid = ns_session_id()
+  lines = NULL
+  if (is.null(package)) {
+    spec = if (grepl("/", name, fixed = TRUE)) {
+      ns_plugin_spec(name, sid)
+    } else {
+      ns_member_spec(name, sid)
+    }
+    if (!is.null(spec)) lines = ns_tool_help(spec)
+    mcp = get0("mcp", envir = ns_providers, inherits = FALSE)
+    if (is.null(lines) && grepl("/", name, fixed = TRUE) && is.function(mcp)) {
+      m = tryCatch(mcp(c("mcp", strsplit(name, "/", fixed = TRUE)[[1L]])), error = function(e) NULL)
+      if (is.function(m) && is.list(attr(m, "spec"))) lines = ns_tool_help(attr(m, "spec"))
+    }
+  }
+  if (is.null(lines)) lines = ns_r_help(name, package)
+  shown = budget_head(lines, budget, "prose")
+  more = if (shown$omitted > 0L) paste0("[... ", shown$omitted, " more lines of help not shown]")
+  new_gptr_text(c(shown$lines, more))
+}

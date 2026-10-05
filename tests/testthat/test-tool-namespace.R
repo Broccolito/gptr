@@ -439,3 +439,310 @@ test_that("a plugin namespace registered before a member of that name is refused
   expect_identical(ns_resolve("mine2")(), "user")
   expect_error(ns_resolve(c("mine2", "t1")), class = "gptr_error_unknown_member")
 })
+
+test_that("ns_catalog() lists plugin r members and trims descriptions, never names, over budget", {
+  expect_identical(ns_catalog(NULL), "")
+  expect_null(ns_plugins_section(NULL))
+  for (i in 1:40) {
+    local_spec(gptr_tool(sprintf("tool%02d", i), paste("Does thing number", i,
+                                                       "with several words of text."),
+                         fun = function(x, y = 1) x, exposure = "r", namespace = "demo"),
+               source = "plugin:demo", rank = 5L)
+  }
+  local_spec(gptr_tool("hidden_one", "Hidden.", fun = function() 1, exposure = "hidden",
+                       namespace = "demo"),
+             source = "plugin:demo", rank = 5L)
+  full = strsplit(ns_catalog(NULL), "\n")[[1L]]
+  expect_identical(length(full), 40L)
+  expect_identical(full[1L], paste("gptr$demo$tool01(x: string, y?: string)",
+                                   " # Does thing number 1 with several words of text."))
+  small = strsplit(ns_catalog(NULL, budget = 800L), "\n")[[1L]]
+  expect_identical(length(small), 40L)
+  expect_identical(sub("\\(.*$", "", small), sub("\\(.*$", "", full))
+  expect_lte(est_tokens(small, "code"), 800)
+  expect_true(grepl("  # ", small[1L], fixed = TRUE))
+  expect_false(grepl("  # ", small[40L], fixed = TRUE))
+  tiny = strsplit(ns_catalog(NULL, budget = 10L), "\n")[[1L]]
+  expect_identical(length(tiny), 40L)
+  expect_false(any(grepl("  # ", tiny, fixed = TRUE)))
+  sec = ns_plugins_section(NULL)
+  expect_true(startsWith(sec, "Plugin functions are R functions called inside r."))
+  expect_identical(ns_catalog(NULL, kinds = "mcp"), "")
+})
+
+test_that("a lazy plugin is catalogued, completed and searched through its declarations", {
+  decl = list(signature = "search(condition: string)",
+              description = "Search recruiting clinical trials. Returns a data frame.")
+  id = registry_add(ext_placeholder("tool", "lazyns/search", "plugin:lazyns", declaration = decl),
+                    source = "plugin:lazyns", rank = 5L, state = "lazy")
+  withr::defer(registry_remove(id))
+  state = function() {
+    reg = gptr_registry("tool")
+    reg$state[reg$name == "lazyns/search"]
+  }
+  line = "gptr$lazyns$search(condition: string)  # Search recruiting clinical trials."
+  expect_identical(ns_catalog(NULL), line)
+  expect_true("lazyns" %in% ns_names(""))
+  node = ns_resolve("lazyns")
+  expect_identical(names(node), "search")
+  expect_identical(utils::capture.output(print(node))[2L], line)
+  if (is.null(registry_get("search_source", "members"))) {
+    local_spec(gptr_spec("search_source", "members", docs = ns_search_docs))
+  }
+  res = member_search("recruiting trials")
+  expect_identical(res$name[1L], "lazyns/search")
+  expect_identical(res$kind[1L], "plugin")
+  expect_identical(res$signature[1L], line)
+  expect_identical(state(), "lazy")
+})
+
+test_that("the BM25 port reproduces Pi's tokens, ranking and scores (report 06 section 5.7)", {
+  words = "getHTTPResponse parses XMLHttpRequest_bodies, the Queries & classes/boxes"
+  expect_identical(bm25_tokenize(words),
+                   c("get", "http", "response", "parse", "xml", "http", "request", "body", "query",
+                     "class", "box"))
+  doc = function(name, description, properties, ns = NULL, ns_desc = NULL) {
+    params = list(type = "object", properties = properties)
+    parts = c(name, gsub("_", " ", name, fixed = TRUE), description, bm25_schema_text(params),
+              ns, ns_desc)
+    paste(parts[nzchar(trimws(parts))], collapse = " ")
+  }
+  str_prop = function(description = NULL) list(type = "string", description = description)
+  gh = c("mcp__github", "GitHub repositories, issues and pull requests")
+  wh = c("mcp__warehouse", "SQL warehouse")
+  texts = c(
+    doc("mcp__github__search_issues", "Search issues and pull requests across repositories.",
+        list(query = str_prop("Search query using GitHub syntax"),
+             perPage = list(type = "integer")), gh[1], gh[2]),
+    doc("mcp__github__create_issue", "Open a new issue in a repository.",
+        list(title = str_prop(), body = str_prop(),
+             labels = list(type = "array", items = str_prop("Label names"))), gh[1], gh[2]),
+    doc("mcp__github__getPullRequestFiles", "List the files changed by a pull request.",
+        list(pullNumber = list(type = "integer")), gh[1], gh[2]),
+    doc("mcp__warehouse__run_query", "Run a read-only SQL query and return rows.",
+        list(sql = str_prop("The SQL statement"), limit = list(type = "integer")), wh[1], wh[2]),
+    doc("mcp__warehouse__list_tables", "List the tables of a schema with their columns.",
+        list(schema = list(anyOf = list(str_prop("Schema name"), list(type = "null")))),
+        wh[1], wh[2]),
+    doc("fetch_url", "Fetch a web page and convert it to markdown.", list(url = str_prop()))
+  )
+  ids = c("github__search_issues", "github__create_issue", "github__getPullRequestFiles",
+          "warehouse__run_query", "warehouse__list_tables", "fetch_url")
+  docs = data.frame(id = ids, text = texts, stringsAsFactors = FALSE)
+  idx = bm25_index(docs)
+  top = function(q) {
+    r = bm25_search(idx, q)
+    utils::head(data.frame(id = r$id, score = round(r$score, 4)), 2L)
+  }
+  expect_identical(top("search github issues"),
+                   data.frame(id = c("github__search_issues", "github__create_issue"),
+                              score = c(4.5635, 2.2182)))
+  expect_identical(top("sql tables"),
+                   data.frame(id = c("warehouse__list_tables", "warehouse__run_query"),
+                              score = c(3.565, 1.738)))
+  expect_identical(top("pull request files"),
+                   data.frame(id = c("github__getPullRequestFiles", "github__search_issues"),
+                              score = c(4.6575, 1.7275)))
+  expect_identical(nrow(bm25_search(idx, "the of and")), 0L)
+  expect_identical(top("markdown"), data.frame(id = "fetch_url", score = 1.997))
+  expect_identical(top("issue labels"),
+                   data.frame(id = c("github__create_issue", "github__search_issues"),
+                              score = c(3.211, 1.1028)))
+  expect_identical(top("queries"),
+                   data.frame(id = c("warehouse__run_query", "github__search_issues"),
+                              score = c(1.6129, 1.2831)))
+  expect_error(bm25_index(list()), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr$search() ranks members, plugin tools and search_source documents", {
+  local_spec(double_spec())
+  local_spec(gptr_tool("trial_lookup", "Look up clinical trials by indication.",
+                       fun = function(indication) 1,
+                       exposure = "r", namespace = "trials"), source = "plugin:trials", rank = 5L)
+  local_spec(gptr_tool("rare_thing", "Convert units of measurement.",
+                       execute = function(input, ctx) "x",
+                       exposure = "deferred"))
+  if (is.null(registry_get("search_source", "members"))) {
+    local_spec(gptr_spec("search_source", "members", docs = ns_search_docs))
+  }
+  local_spec(gptr_spec("search_source", "glossary", docs = function(ctx) {
+    data.frame(id = "glossary/cohort", text = "cohort definition of a clinical trial population",
+               kind = "glossary")
+  }))
+  res = member_search("clinical trials")
+  expect_named(res, c("name", "kind", "signature", "score"))
+  expect_identical(res$name[1], "trials/trial_lookup")
+  expect_identical(res$kind[1], "plugin")
+  expect_identical(res$signature[1], paste("gptr$trials$trial_lookup(indication: string)",
+                                           " # Look up clinical trials by indication."))
+  expect_true("glossary/cohort" %in% res$name)
+  expect_identical(res$kind[res$name == "glossary/cohort"], "glossary")
+  conv = member_search("convert units")
+  expect_identical(conv$kind[1], "deferred")
+  expect_identical(conv$signature[1], "gptr$rare_thing()  # Convert units of measurement.")
+  expect_identical(ns_resolve("rare_thing")(), "x")
+  expect_identical(member_search("double number")$kind[1], "member")
+  expect_identical(nrow(member_search("zzzz qqqq")), 0L)
+})
+
+test_that("gptr$help() shows a member's schema, else the R help page, within the budget", {
+  params = list(type = "object", required = I("indication"),
+                properties = list(indication = list(type = "string", description = "Disease"),
+                                  phase = list(enum = c("1", "2", "3"))))
+  description = "Look up clinical trials by indication. Returns a data frame."
+  local_spec(gptr_tool("trial_lookup", description, parameters = params,
+                       fun = function(indication, phase = NULL) 1, exposure = "r",
+                       namespace = "trials"),
+             source = "plugin:trials", rank = 5L)
+  h = member_help("trials/trial_lookup")
+  expect_s3_class(h, "gptr_text")
+  expect_identical(as.character(h), c(
+    paste("gptr$trials$trial_lookup(indication: string, phase?: any)",
+          " # Look up clinical trials by indication."),
+    "",
+    "Look up clinical trials by indication. Returns a data frame.",
+    "",
+    "Arguments:",
+    "  indication (string, required): Disease",
+    "  phase (enum) [1, 2, 3]"
+  ))
+  r = member_help("median", budget = 100L)
+  expect_identical(as.character(r)[1], "[help: stats::median]")
+  expect_lte(est_tokens(as.character(r), "prose"), 100 + 20)
+  expect_match(as.character(r)[length(r)], "more lines of help not shown")
+  expect_match(as.character(member_help("no_such_topic_xyz")),
+               "No help found for 'no_such_topic_xyz'", fixed = TRUE)
+})
+
+test_that("gptr$search() offers only what resolves; documents sharing an id keep their own kind", {
+  withr::defer(if (exists("taken9$", envir = ns_refused, inherits = FALSE)) {
+    rm("taken9$", envir = ns_refused)
+  })
+  if (is.null(registry_get("search_source", "members"))) {
+    local_spec(gptr_spec("search_source", "members", docs = ns_search_docs))
+  }
+  local_spec(gptr_tool("trial_lookup", "Look up clinical trials by indication.",
+                       fun = function(indication) 1, exposure = "r", namespace = "trials9"),
+             source = "plugin:trials9", rank = 5L)
+  local_spec(gptr_spec("search_source", "notes9", docs = function(ctx) {
+    data.frame(id = "trials9/trial_lookup", text = "clinical trials glossary note", kind = "note")
+  }))
+  res = member_search("clinical trials")
+  expect_identical(sort(res$kind[res$name == "trials9/trial_lookup"]), c("note", "plugin"))
+  expect_identical(res$signature[res$kind == "note"], "trials9/trial_lookup")
+  expect_identical(res$signature[res$kind == "plugin"],
+                   paste("gptr$trials9$trial_lookup(indication: string)",
+                         " # Look up clinical trials by indication."))
+  local_spec(gptr_tool("t1", "Frobnicate the widgets.", fun = function() "plugin", exposure = "r",
+                       namespace = "taken9"), source = "plugin:taken9", rank = 5L)
+  local_spec(gptr_tool("hush9", "Frobnicate the gadgets quietly.", fun = function() 1,
+                       exposure = "hidden", namespace = "trials9"),
+             source = "plugin:trials9", rank = 5L)
+  expect_identical(member_search("frobnicate")$name, "taken9/t1")
+  local_spec(gptr_tool("taken9", "A user member.", fun = function() "user", exposure = "r"))
+  expect_identical(nrow(member_search("frobnicate widgets gadgets")), 0L)
+  expect_error(ns_resolve(c("taken9", "t1")), class = "gptr_error_unknown_member")
+})
+
+test_that("search sources get a gptr_ctx; a failing source is skipped with a diagnostic", {
+  seen = new.env()
+  local_spec(gptr_spec("search_source", "ctx9", docs = function(ctx) {
+    seen$ctx = ctx
+    data.frame(id = "ctx9/doc", text = paste("ctxsentinel9 estimated tokens", ctx$tokens("abc")),
+               kind = "note")
+  }))
+  local_spec(gptr_spec("search_source", "broken9", docs = function(ctx) stop("boom")))
+  docs = search_sources(NULL)
+  expect_named(docs, c("id", "text", "kind"))
+  expect_true("ctx9/doc" %in% docs$id)
+  expect_s3_class(seen$ctx, "gptr_ctx")
+  expect_null(seen$ctx$session)
+  d = gptr_registry(diagnostics = TRUE)
+  expect_true("search source broken9 failed: boom" %in% d$message[d$event == "search_source"])
+  expect_identical(member_search("ctxsentinel9")$name, "ctx9/doc")
+})
+
+test_that("skills and MCP tools are searched from their catalog texts", {
+  local_service("skill.catalog", function(session, budget) {
+    paste(c("<skills>",
+            "Skills hold specialized instructions. Read SKILL.md with the read tool.",
+            paste("- high-performance-r: Fast data work in R: data.table, arrow, duckdb.",
+                  "[skill:high-performance-r/SKILL.md]"),
+            paste("- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards).",
+                  "[skill:shiny-bslib/SKILL.md]"),
+            "</skills>"), collapse = "\n")
+  })
+  local_service("mcp.catalog", function(session, budget) {
+    paste(c("<mcp>",
+            "MCP tools are R functions called inside r as gptr$mcp$<server>$<tool>(...).",
+            "github: 2 tools, 2 shown",
+            "  search_issues(query: string, perPage?: integer)  # Search issues and pull requests.",
+            "  create_issue(title: string, body?: string)  # Open a new issue in a repository.",
+            "</mcp>"), collapse = "\n")
+  })
+  skill = member_search("bslib cards")
+  expect_identical(skill$name[1L], "shiny-bslib")
+  expect_identical(skill$kind[1L], "skill")
+  expect_identical(skill$signature[1L], paste(
+    "- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards).",
+    "[skill:shiny-bslib/SKILL.md]"
+  ))
+  mcp = member_search("pull requests")
+  expect_identical(mcp$name[1L], "github/search_issues")
+  expect_identical(mcp$kind[1L], "mcp")
+  expect_identical(mcp$signature[1L], paste(
+    "gptr$mcp$github$search_issues(query: string, perPage?: integer)",
+    " # Search issues and pull requests."
+  ))
+  local_service("skill.catalog", function(session, budget) stop("no skills"))
+  local_service("mcp.catalog", function(session, budget) NULL)
+  expect_identical(nrow(member_search("bslib cards pull requests")), 0L)
+  local_service("skill.catalog", function(session, budget) character())
+  expect_identical(nrow(member_search("bslib cards")), 0L)
+})
+
+test_that("gptr$help() shows only members that resolve, a primitive's arguments, and no error", {
+  local_spec(gptr_tool("hush9", "Secret internals of the plugin.", fun = function(x) x,
+                       exposure = "hidden", namespace = "trials9"),
+             source = "plugin:trials9", rank = 5L)
+  local_spec(gptr_tool("shown9", "Shown member.", fun = function(x) x, exposure = "r",
+                       namespace = "trials9"),
+             source = "plugin:trials9", rank = 5L)
+  expect_identical(as.character(member_help("trials9/hush9")),
+                   "No help found for 'trials9/hush9'.")
+  expect_identical(as.character(member_help("trials9/shown9"))[1L],
+                   "gptr$trials9$shown9(x: string)  # Shown member.")
+  local_spec(gptr_tool("total9", "Sum numbers.", fun = sum, exposure = "r"))
+  expect_identical(utils::tail(as.character(member_help("total9")), 2L),
+                   c("Arguments:", "  na.rm (string)"))
+  expect_identical(as.character(member_help("median", package = "no.such.pkg")),
+                   "No help found for 'median' in package 'no.such.pkg'.")
+  expect_identical(as.character(member_help("median", package = "stats"))[1L],
+                   "[help: stats::median]")
+})
+
+test_that("gptr$search() indexes text that is not valid UTF-8 instead of failing", {
+  e9 = rawToChar(as.raw(0xe9))
+  bad = paste0("caf", e9)
+  local_spec(gptr_spec("search_source", "bytes9", docs = function(ctx) {
+    data.frame(id = paste0("bytes9/", bad), text = paste(bad, "bytesentinel9 note"),
+               kind = paste0("note", bad))
+  }))
+  res = member_search("bytesentinel9")
+  expect_identical(nrow(res), 1L)
+  expect_true(all(validUTF8(c(res$name, res$kind, res$signature))))
+  expect_true(startsWith(res$name, "bytes9/caf"))
+  expect_identical(nrow(member_search(paste(bad, "bytesentinel9"))), 1L)
+  expect_true(all(c("caf", "search") %in% bm25_tokenize(paste0(bad, "Search"))))
+  local_service("skill.catalog", function(session, budget) {
+    paste(c("<skills>",
+            paste0("- r", e9, "sum", e9, ": Write a CV in R. [skill:resume/SKILL.md]"),
+            paste("- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards).",
+                  "[skill:shiny-bslib/SKILL.md]"),
+            "</skills>"), collapse = "\n")
+  })
+  expect_identical(member_search("shiny apps")$name[1L], "shiny-bslib")
+  cv = member_search("cv")
+  expect_identical(cv$kind[1L], "skill")
+  expect_true(all(validUTF8(c(cv$name[1L], cv$signature[1L]))))
+})

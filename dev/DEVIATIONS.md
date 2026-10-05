@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2960,7 +2960,7 @@ readings of a parameter default (round 4), and every directory a `cd` can leave 
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
 item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
-what round 9 added and item 18 what round 10 added.
+what round 9 added, item 18 what round 10 added and item 19 what round 11 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3776,6 +3776,51 @@ below 1, and SQL keeps its keyword reading (Known limits).
     - *Changed rows:* none of the 1,946 round-9 expectations changed. The 508 lines of the
       round-5 to round-9 probes give the levels the round-9 source gives. The gate lowers the
       three lines named above.
+19. **Review round 11 (findings against the standard).** Both findings were reproduced with a
+    probe (`task2-fix11-probe-before.log`) and judged by (A)-(C); one blocker and one major were
+    accepted.
+    - *A glob in an option position was read as a literal operand (A).* The shell expands an
+      unquoted glob before the program reads its options, so a glob that can match a name
+      starting with `-` hands the program whatever option a file in the directory is named. The
+      gate read an unquoted `$X` in that position as a computed option, but not a glob, so 20
+      lines were 0: `git log *.R`, `git log [-]*`, `git diff *.R`, `git show *.R`,
+      `git grep foo *.R`, `find [-]*`, `find -*`, `find *.R`, `sed -n 1p *.txt`, `sort *.csv`,
+      and `[-]*` after tree, less, file, rg, jq, yq, awk and fd. In a scratch repository a file
+      named `--output=.Rprofile` made `git log [-]*` overwrite `.Rprofile`, and one named
+      `-delete` made `find [-]*` delete the directory. Planting such a name is a level-2
+      workspace write, which edits mode approves without asking. The tokens now carry each
+      word's glob pattern (`glob`, from risk_sh_tokens() through risk_sh_breaks() and
+      risk_sh_split(); quoted and escaped characters are literal, and risk_sh_brace() returns
+      each brace word's quote flags). `risk_glob_dash()` decides whether the pattern can match a
+      name starting with `-`: its first character is `-` (quoted or not), `*` or `?`, or a
+      bracket expression that matches `-` (`[-]`, `[!.]`, `[^a]`, `[+-.]`, `[[:punct:]]`; a
+      collating element gptr cannot read counts as a match). For a program outside
+      `risk_cmd_inert`, such a glob before a literal `--` is "an option the shell computes" (3
+      `dynamic`). In find's words it is that wherever it stands, since find reads every word
+      as a starting point or an expression. A glob in a wrapper's words (`nice -n x* ls`,
+      `timeout x* ls`, `env -u * ls`) may expand to several words and so change the command
+      that runs; it is "a wrapper option the shell computes", and a glob command name is "a
+      command name the shell computes". `[`/`test` read a glob that can match `-v` as the
+      arithmetic test (`[ * ]`), and printf a first word that can start with `-` as
+      `printf -v`. The guard rows stay 0: inert programs (`ls *.md`, `cat *.csv`,
+      `grep foo *.R`, `wc -l *.csv`, `head *.csv`), globs after `--` (`git log -- *.R`), globs
+      whose first character is a literal other than `-` (`git log R/*.R`, `./*.R`, `a[-]*`),
+      brackets that cannot match `-` (`[a-z]*`, `[.]*`, `[[:alpha:]]*`, `[!-]*`, `[]]*`),
+      quoted and escaped globs (`find . -name '*.R'`, `git log \*.R`), `[[ -f *.R ]]` and
+      here-strings (no pathname expansion there). Self-review raised the wrapper lines, which
+      were 0 in round 10.
+    - *uniq and xxd write a glob's second name (A).* Both take `[input [output]]`, and a glob
+      input may expand to two names, so `uniq *.txt` overwrote the second matching file at
+      level 0. A uniq or xxd input that holds a glob character is now also written, with the
+      glob's target class (risk_cmd_target_class(), as for the targets of tee and cp): 2 for
+      `uniq R/*.txt`, `xxd data/*.bin` and `uniq -c -- *.txt`, 4 `control` for `uniq .Rprof*`
+      and `xxd .gptr/*`. `uniq *.txt` and `xxd *.bin` are 3, since the gate also reads them.
+    - *Changed rows:* one assertion in an older block. `rm -rf ?*` gains the gate's `dynamic`
+      row (still 4), so its critical delete row is now selected by category before its path
+      class is compared. No old level changed. Among probe lines that are not test rows, programs
+      outside `risk_cmd_inert` with a leading glob go from 2 to 3, so edits mode now asks before
+      running them: `cp *.txt out/`, `touch *.txt`, `tee *.log`, `chmod +x *.sh`, `git add *.R`
+      and `git checkout *.R`. `cp R/*.R out/`, `cp -- *.txt out/` and `touch -- *.txt` stay 2.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
@@ -3818,7 +3863,11 @@ A SQL literal compared with a column is data (`WHERE p = '.env'` is 0), also whe
 then reads that column's value as a path. Python's writes to the environment are read through
 the names `environ`, `environb`, putenv and unsetenv: through another name bound to
 os.environ (`e = os.environ; e['GPTR_X'] = '1'`) they are 2 (the os.environ read), and a
-computed key next to literal ones in update() is not flagged.
+computed key next to literal ones in update() is not flagged. A glob whose first character is a
+literal other than `-` stays an operand, although it may expand to several words
+(`git log R/*.R`); none of those words can be an option. uniq and xxd read their operands
+without quote information, so a quoted glob operand (`uniq '*.txt'`) is read as a glob write
+(2).
 
 Validation: `progress/P11.md`, Task 2. Six blocks were added to `test-perm-classify.R`
 (145 expectations); against the plan-literal Task 2 source the file gives
@@ -3857,9 +3906,13 @@ Review round 10 added item 18 with five blocks (174 expectations) and no changed
 four blocks as first written (144 expectations) fail 110 against the round-9 source
 (`task2-fix10-red.log`). The final test file fails 128 against a copy of the source (taken
 before the argv change) with the round-10 call sites removed and round 9's gate line restored
-(`task2-fix10-red-final.log`).
-Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2120 ]` in the UTF-8 and the C locale
-(`task2-fix10-green.log`, `task2-fix10-green-C.log`).
+(`task2-fix10-red-final.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2120 ]` at the end of round
+10). Review round 11 added item 19 with one block and rows in one older block (170
+expectations), and one changed assertion. The final test file fails 125 against the round-10
+source (`task2-fix11-red-final.log`). The first red run, in the working tree before the source
+changed and before the self-review rows were added, failed 99 (`task2-fix11-red.log`).
+Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2290 ]` in the UTF-8 and the C locale
+(`task2-fix11-green.log`, `task2-fix11-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -7614,12 +7667,14 @@ against the plan-literal source `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 89 ]`
 missing, the classifier call ending as an internal error); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` (`task8-green.log`; the plan's 20 tests give its 74).
 
-## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone, and (review round 1) a session's own provider record decides egress (never the process-wide record of its id), a routed session honours the call's replay = and router:<name> must name a registered router (2026-10-05)
+## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone, and (review round 1) a session's own provider record decides egress (never the process-wide record of its id), a routed session honours the call's replay = and router:<name> must name a registered router, and (review round 2) a routed session honours .opts$context = "none" and a router's provider:<level> keeps its level (2026-10-05)
 
 P08 Task 9's plan-literal code (`gateway_run()`, the `builtin:gateway` routes, the guards and
 `router.call`) changed in seven ways. The plan's 30 tests are verbatim except one line (item 7).
 The first version of this entry landed in `e934f34` (P15's commit staged the whole file); items
-3, 4 and 6 and the review paragraph below are the review round 1 amendment.
+3, 4 and 6 and the review round 1 paragraph below are the review round 1 amendment, which landed
+in `b8cbb60` (P15's next commit staged the whole file again); the review round 2 sentences of
+items 3 and 6 and the review round 2 paragraph are the review round 2 amendment.
 
 1. **The built-in routes decline a decision-only model** (IC-74, 07-local-ollama.md section 2;
    D-113 item 2). `nested`, `continue` and `new` match only when `gateway_model_type()` of the
@@ -7646,7 +7701,11 @@ The first version of this entry landed in `e934f34` (P15's commit staged the who
    provider with `local = TRUE`, so a LAN or remote "local" server got automatic context without
    an acknowledgement; the first version of this item still let `egress_check()` recompute the
    exemption from the process-wide record of the id, so a call-level `lmstudio` (or `vllm`) spec
-   at a LAN or remote address was exempted by the built-in loopback record (review round 1).
+   at a LAN or remote address was exempted by the built-in loopback record (review round 1). A
+   routed session's check is skipped, as `gateway_guards()`'s is, when the run that asks sends no
+   automatic context (`gateway_run_context()`: the run's `context` option from the call's
+   `.opts$context`, else the `context` setting; IC-29, contract 7.8 `egress_check()`); the
+   plan's `router_guards()`, and this entry's first two versions, ignored it (review round 2).
 4. **The call's `replay =` overrides the process mode** (contract 3.1: `gptr.replay` is
    "overridden by the call's `replay =`"; IC-45 `replay_mode(arg)`). `gateway_replay_guard()`
    checks the replay mode with the call's argument: `replay = "auto"` lets a call run in a
@@ -7668,7 +7727,9 @@ The first version of this entry landed in `e934f34` (P15's commit staged the who
    `router.call`'s default-model fallback (review round 1); the plan split at the
    first `:` and produced `ollama/qwen3:1.7b:1.7b`. `gateway_model_record()` tries the whole
    reference, and `router_model()` reads a `:<suffix>` as a thinking level only when it is one
-   (as P05 and P06 do); the plan's version set `thinking` to the tag.
+   (as P05 and P06 do); the plan's version set `thinking` to the tag. A router answer that names
+   a provider alone with a level (`fake2:high`) keeps the level, as the plan's version did
+   (review round 2).
 7. **Test adaptations.** The plan's "a pending session collected without running releases its
    call record [R2]" calls `ev_drain()` after `gc()`: since FIX-1 (D-085) the finalizer defers
    `session_shutdown` to the next safe point, so the release hook runs there. D-092 item 7 is
@@ -7698,6 +7759,18 @@ refused" (9); the colon test expects `unknown_model` for an unregistered `router
 Red against the round-0 source `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 289 ]`
 (`task9-fix1-red-final-tests.log`; the LAN `lmstudio` call reached the mocked HTTP layer); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 308 ]` (`task9-fix1-green-gateway.log`).
+
+Review round 2 regression tests: "a routed session's egress check honours .opts$context =
+\"none\" (IC-29, 7.8)" (6: an unacknowledged non-local provider a router picks answers a call
+with `.opts = list(context = "none")` and the default model gets no request; outside such a run
+`router.call` still refuses it with `gptr_error_egress`), the colon test (+3: `router_model()`
+of `fake2:high` and `loc:low` keeps the level) and the safety-record test (+1: the tool relaxes
+the session layer before the child `gptr()`, and the child's record still has
+`ollama_local_only = TRUE`; the previous version passed against a re-snapshot mutation, this one
+fails it twice, `task9-fix2-red-inherit-mutation.log`). Red against the round-1 source
+`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 312 ]` (`task9-fix2-red.log`: the routed call answered
+"fallback answer" from the default model, and the two levels were `NULL`); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 318 ]` (`task9-fix2-green-gateway.log`).
 
 Validation: `progress/P08.md`, Task 9. Red `^gptr-gateway$` `[ FAIL 42 | WARN 0 | SKIP 0 |
 PASS 121 ]` (`dev/.validation/P08/task9-red.log`); against the plan-literal source
@@ -7916,3 +7989,192 @@ plan-literal source with the final test file `[ FAIL 15 | WARN 0 | SKIP 0 | PASS
 (`dev/.validation/P15/task11-fix1-adapt-red-plan-literal.log`); green `^doc-io$`
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 352 ]` (`task11-fix1-green.log`), so every later plan count for
 `test-doc-io.R` is 52 higher than the plan's (on top of the D-096 and D-109 additions).
+
+## D-118 - P10 plugin catalog, search and help: `gptr$search()` offers only what resolves and keeps each document's own kind, search sources get a `gptr_ctx`, a catalog service that answers no string adds nothing, and `gptr$help()` hides `hidden` members, lists a primitive's arguments and answers a missing package with text, and (review round 1) search text that is not valid UTF-8 no longer fails `gptr$search()` (2026-10-05)
+
+P10 Task 9's plan-literal `R/tool-namespace.R` (part 3) passes the plan's 5 blocks (47
+expectations; `dev/.validation/P10/task9-green0-plan-literal.log`). Probes against it
+(`dev/.validation/P10/task9-probe1.R`, `task9-probe1-plan-literal.log`; after the change
+`task9-probe1-after.log`) found seven defects. No signature, class, condition field, column or
+printed text of the plan changes; the BM25 port, the catalog and the R help pages are unchanged.
+1. **Two documents with one id.** `member_search()` mapped hits back to documents with
+   `match(id)`, so a `search_source` document whose id equals a tool key (or two sources sharing
+   an id) reported the first document's kind and signature for both rows (a `note` document came
+   back as `plugin` with the tool's signature). The index is now built over row numbers, so each
+   hit keeps its own `kind`, and only `member`, `plugin` and `deferred` documents take their
+   tool's catalog line as `signature` (any other document keeps its id).
+2. **Search sources got `NULL` for ctx at the console.** Contract 10.6 makes `ctx` the argument
+   of every handler (`ctx$session` is `NULL` for process-level dispatch), and IC-69 gives
+   `search_source` a `docs(ctx)`; a source that called `ctx$tokens()` or `ctx$get()` failed
+   ("attempt to apply non-function") and was skipped. `search_sources()` now passes the live
+   session's ctx, else `ctx_default(session)` (the process ctx when there is no session), as
+   D-116 item 2 does for execute-only members.
+3. **Unresolvable search results.** `ns_search_docs()` offered every namespaced tool, so a plugin
+   namespace refused because a member has its name (`ns_plugin_namespaces()`, IC-37) was still
+   found as `gptr$taken$t1()`, which `ns_resolve()` refuses. It now offers namespaced tools only in
+   namespaces `ns_plugin_namespaces()` offers and un-namespaced ones only when `ns_member_ok()`
+   accepts them (the plan's kinds are unchanged).
+4. **Help of a `hidden` member.** `member_help("<ns>/<name>")` read the spec with
+   `registry_get()` and showed the schema of a `hidden` plugin member (IC-37: callable by gptr code
+   only; `ns_resolve()` refuses it). The new `ns_plugin_spec()` applies `ns_resolve()`'s rule
+   (offered namespace, not hidden, a `fun` or an `execute`); otherwise the R help lookup answers.
+5. **A primitive `fun`.** `ns_tool_help()` compared the schema with `formals(fun)`, NULL for a
+   primitive, so `gptr$help("total")` for `fun = sum` listed no argument; it now reads
+   `ns_fun_formals()` (D-116 item 7).
+6. **Help in a package that is not installed.** `utils::help(topic, package = "nopkg")` signals
+   "there is no package called 'nopkg'", which `member_help()` let through; `ns_r_help()` now
+   answers "No help found for '<topic>' in package '<package>'.", as for a missing topic.
+7. **A catalog service that answers no string.** A `skill.catalog` or `mcp.catalog` service
+   (contract 7.0: `chr(1)`, `mcp.catalog` also NULL) that answered `character()` failed
+   `member_search()` with "argument is of length zero" (`split_lines_count()` of a zero-length
+   value); anything but one non-NA string now adds no document, as a failing or NULL-answering
+   service already did.
+8. **Text that is not valid UTF-8 (review round 1).** One `search_source` document, one line of a
+   `skill.catalog`/`mcp.catalog` text or a query with an invalid byte made the whole
+   `gptr$search()` fail with a base error ("input string 1 is invalid UTF-8" from
+   `bm25_tokenize()`'s PCRE `gsub()`; the catalog line also warned "unable to translate ... to a
+   wide string"), although the source itself had not failed; `as_utf8()` only marks such a string.
+   The new `search_utf8()` applies `as_utf8()` and then turns each invalid byte of a string that is
+   still not valid UTF-8 into U+FFFD (`iconv(sub = replacement_sub)`, the unmarked replacement
+   `read` uses, report 11 row 9). `search_sources()` applies it to `id`, `text` and `kind`,
+   `ns_catalog_docs()` to the catalog text, and `bm25_tokenize()` to its input (queries, and the
+   documents P18 indexes); valid text tokenizes as before.
+
+Validation: `progress/P10.md`, Task 9. Four added test blocks (25 expectations). Against the
+plan-literal source with the final test file `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 189 ]`
+(`task9-red-final-plan-literal.log`); green `^tool-namespace$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 201 ]` (`task9-green.log`). Review round 1 added a fifth block
+(8 expectations; item 8): red `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 201 ]`
+(`task9-fix1-red.log`), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 209 ]` (`task9-fix1-green.log`);
+probe `task9-fix1-probe.R` (`task9-fix1-probe-before.log`, `task9-fix1-probe-after.log`).
+
+## D-119 - P15 replay decisions and replaying fresh blocks: a stale block under replay is also not_recorded, an S2 record without a usable answer replays without one, the old block is skipped only in the gptr_source() frame of its own document (the knitr skip comes with Task 16), and malformed children entries are skipped (2026-10-05)
+
+P15 Task 12's plan-literal source (`R/doc-replay.R`: `doc_decide()`, `doc_skip_old()`,
+`doc_block_text()`, `doc_replay_doc()`, `doc_replay_header()`, `doc_replay_call()`,
+`doc_run_block_nested()`, `doc_replay_team()`) changed in four ways. The signatures are the
+plan's; one internal helper is new, `doc_s2_answer(rec)`.
+
+1. **A stale block under `replay` is also `not_recorded`** (contract 2.2: `stale_block` has the
+   parent `not_recorded`, as P06's `replay_unbound` does). The plan signalled the class
+   `stale_block` only, so a handler for `gptr_error_not_recorded` (the replay-mode refusal)
+   missed it. It is now `c("stale_block", "not_recorded")` with `document` and `block`.
+2. **An S2 record without a usable answer replays without one.** P06's
+   `session_replay_apply()` requires `text` to be NULL or one non-empty string, and
+   `s2_put()` stores a record without an answer as `""`. The plan passed `rec$answer` through,
+   so a fresh block or block-nested call whose cached record had an empty answer, or (in a
+   hand-edited or foreign cache file) a non-text one, failed with `gptr_error_invalid_argument`
+   instead of replaying. `doc_s2_answer()` turns such an answer into NULL (no `last_text`; a
+   reconstruction says the answer was not recorded); a team whose children gave no text passes
+   NULL rather than `""` as its own text.
+3. **`doc_skip_old()` marks only the innermost `gptr_source()` frame of the site's own
+   document** (the check `doc_driver()` and `doc_source_log()` make), and has no knitr branch
+   yet. The plan added the block to whichever frame was innermost, and its knitr branch calls
+   Task 16's `doc_knitr_skip()`, which does not exist yet: naming it fails the package lint
+   (`object_usage_linter`: no visible global function definition,
+   `dev/.validation/P15/task12-lint-plan-literal.log`), while stubs and suppressions are not
+   allowed (the D-107 item 4 precedent). **Task 16 adds `else if (identical(site$driver,
+   "knitr")) doc_knitr_skip(paste0("gptr-", id))` to `doc_skip_old()`.** `doc_decide()` still
+   answers `"regenerate"` for a knitr site as planned; nothing calls `doc_skip_old()` before
+   Task 13's route, and knitr chunks are skipped from Task 16 on.
+4. **Malformed `children=` entries are skipped**: an entry without both a name and a session id
+   (`":s2222222222"`, `"code:"`) is passed over like one of the wrong arity, since P06's
+   `session_replay_bind()` refuses an empty child name.
+
+IC-74 (07 section 6, P15 row: "replay invokes no provider"): a test replays a fan-out block with
+a local `ollama/qwen3:8b` child and a piped session while `catalog_discover()`,
+`catalog_ollama_discover()` and `http_handle()` are mocked to fail; the replayed sessions keep
+the local model tag, and the reconstructed answer is recorded with provider `ollama` and model
+`qwen3:8b`.
+
+Validation: `progress/P15.md`, Task 12. Seven tests added (39 expectations) after the plan's six
+(54, verbatim). Against the plan-literal source with the final test file
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 131 ]` (`task12-plan-literal.log`; items 1-4, one each); green
+`^doc-replay$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 145 ]` (`task12-green.log`).
+
+## D-120 - P13 native Ollama System One (IC-74, coordinator-added task 8b): the `ollama-system-one` adapter validates Ollama's own entropy confidence and refuses answers without probabilities or from another model, a model's decision record only lowers the adapter's limits, an oversized state fails alone while bad questions or images end the call before any request, Clef is admitted one request at a time per server across calls, no key is ever looked up for it, a live call prepares a referenced Ollama model, replay reads answers and the model identity frozen with them from cache pins without discovery or preflight, and the replay guard runs before the egress check (2026-10-05)
+
+P13 has no plan text for `R/s1-ollama.R`; `07-local-ollama.md` sections 2-6 are the
+specification (HANDOFF: "add it after P13 Task 8 and before Task 9"). Files: `R/s1-ollama.R`
+(new), `R/s1-client.R`, `R/s1-route.R`, `tests/testthat/test-s1-ollama.R` (new),
+`tests/testthat/test-live-ollama-s1.R` (new, gated), `tests/testthat/fixtures/ollama/` (new),
+`tests/testthat/fixtures/jev/harness.R`, one adapted assertion pair in
+`tests/testthat/test-s1-route.R`. The readings and choices that go beyond the specification's
+words:
+
+1. **Wire shape.** Taken from Ollama's published System One reference (report 04b's sources):
+   `{model, state, questions, images?}`; questions keyed by id; `criteria` an object for choices
+   (null descriptions) and an array for scores; answers keyed by id with `noul`, or `choice`,
+   `probabilities`, `confidence`, or `score`, `legend`, `probabilities`, `confidence`; `usage`
+   `{input_tokens, output_tokens}`; errors `{"error": "<text>"}` with 400, 404, 413 and 500. The
+   six fixtures under `fixtures/ollama/` are synthetic, in that shape. Only the opt-in live test
+   checks them against a real server.
+2. **Confidence.** A wire confidence must lie within 0.01 of `1 - H(p) / log(N)` computed from
+   the reported probabilities (zero probabilities add nothing). The 0.01 tolerance covers rounded
+   probabilities, and Jev's peak formula fails it on any distribution that is neither uniform
+   nor certain. A missing confidence is computed with that formula, never Jev's. Unlike
+   TypeSafe's gateways (report 04 section 2.9), a missing or empty probability map is a
+   malformed Ollama answer (`s1_response`), not "unknown". An answer whose `model` names another
+   model (after `:latest` normalisation) is refused. A score legend, when sent, must name exactly
+   the levels; the canonical legend is the request's descriptions.
+3. **Limits.** 64 questions, 26 options or levels, 64 KiB text bodies and 32 MiB image bodies are
+   the adapter's. A model's decision record (`max_questions`, `max_options`,
+   `max_request_bytes_*`) can lower them, never raise them. Question problems and image problems
+   are the call's (`gptr_error_invalid_argument`, raised before the first request). Images are
+   also checked before anything is sent: MIME type png/jpeg/webp, bytes that match it, and
+   base64 within the image limit. An empty state, or one whose exact body exceeds the limit,
+   fails that element alone: `build` signals `gptr_error_s1_validation`, and `s1_request()` now
+   records any `gptr_error_s1` from an adapter's `build` as that element's failure (NA plus the
+   `s1_errors` warning in a vector, the error itself in a scalar call). The loaded context is
+   not pre-estimated: Ollama refuses an overflow explicitly (report 04b), and that error is
+   passed on.
+4. **Unsupported weights.** `s1_ollama_ready()` refuses a decision model whose weights P05's
+   discovery reports in a format other than GGUF (`gptr_error_not_available`). Report 04b says
+   MLX or Safetensors variants are not served by `/v1/systemone`. A bare catalog name reads the
+   format of the discovered `:latest` entry with the same digest; an unknown format is left to
+   the server.
+5. **Per-server admission** (07 section 2, section 6 P13 row). Task 8 capped each call at the
+   decision record's `max_active`. Now a process-wide slot table keyed by the endpoint's
+   canonical origin also holds a call's requests until the server has a free slot. A request
+   keeps its slot from start to `done()`, and slots of requests that never report (an
+   interrupt, a start that failed) are given back on exit. This covers nested and concurrent
+   System 1 calls of the same process. TypeSafe has no such gate (P04's token bucket, IC-64).
+6. **No key.** For the `ollama-system-one` api, `s1_request()` never looks a credential up, and
+   `build` never sends one (07 section 3: "never attach a Jev/cloud credential").
+7. **Live preparation.** Task 8's `s1_ready()` only preflighted, so a fresh process needed an
+   explicit `model_prepare()` or `gptr_models(refresh = TRUE)` first. A native Ollama model named
+   by reference is now prepared on a live call through P05's `model_prepare()` (a contract 7.5
+   consumer for P13). It discovers only when evidence is missing or stale, and refuses a
+   forbidden endpoint before any request. A provider spec is still preflighted only.
+8. **Replay with the frozen identity** (07 section 4). Live keys carry the digest and server
+   version from P05's discovery, which offline replay cannot know. So every cached native
+   answer is also pinned: a record under a key without those two fields, holding the answer's
+   key and the identity (adapter, digest, server version, locality). Under replay (the call's
+   `replay =`, else the process mode) a native Ollama target is frozen: no discovery, no
+   preflight, no request. Answers come through the pins, and the frozen identity fills the
+   provenance. A pin without an identity, a pinned model digest that differs, an answer key
+   that the frozen identity and the local images do not reproduce, or states recorded under
+   different identities are refused with `gptr_error_not_recorded`. A missing pin is a miss,
+   which the replay guard refuses as before. Because the test process replays, Task 8's test
+   "the request preflight runs before the call's values are read" now passes
+   `replay = "auto"` for its two live calls.
+9. **Guard order.** `s1_guards()` runs the replay guard before `egress_check()`. Under replay
+   nothing leaves the machine, so a miss is `not_recorded` and never asks for an egress
+   acknowledgement (before, a remote endpoint's miss was `gptr_error_egress`).
+10. **Timeouts.** The first byte may take 120 s (a non-streaming decision arrives only after a
+    cold model load and the scoring pass); the idle timeout stays 30 s.
+11. **Registration.** Task 9's `builtin_system1()` does not exist yet. Until it does, the
+    adapter is registered by the harness's `local_s1_ollama_adapter()`, as Task 4-8 tests
+    register `typesafe-system-one`. Task 9 must register
+    `gptr_adapter("ollama-system-one", transport = "http_json", classify = list(build =
+    s1_ollama_build, parse = s1_ollama_parse))`.
+
+P01's fake classifier, `s1_typesafe_parse()` and emulation already return the canonical shape
+(Tasks 3, 6 and 8), so they needed no change.
+
+Validation: `progress/P13.md`, Task 8b. Red `^s1-ollama$` `[ FAIL 17 | WARN 0 | SKIP 0 |
+PASS 0 ]` (`dev/.validation/P13/task8b-red.log`); every failure is a missing `s1_ollama_*`
+function. Green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 243 ]` (`task8b-green-ollama.log`).
+Negative control with the confidence formula, the gate, the keyless headers and the frozen
+replay sabotaged: `[ FAIL 32 | WARN 0 | SKIP 0 | PASS 178 ]` (`task8b-negative.log`). With the
+egress-first guard order alone: `[ FAIL 1 | ... | PASS 238 ]` (`task8b-negative-guard.log`).
