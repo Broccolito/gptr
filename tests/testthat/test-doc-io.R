@@ -310,3 +310,711 @@ test_that("record and transcript updates keep other entries and hold a lock besi
   expect_identical(doc_project_get()$record, list(a.R = "auto", b.R = "off"))
   expect_true(dir.exists(lock))
 })
+
+# ---- Task 10: deferred Rscript writes, Jupyter pending blocks and sidecar recovery -------------
+
+# A located site for the first call with this prompt (as doc_locate() builds it)
+doc_io_site = function(path, prompt, backend = "file") {
+  fmt = doc_format_of(path)
+  text = doc_read(path)$lines
+  ph = prompt_hash(prompt)
+  if (identical(fmt, "ipynb")) {
+    anchor = list(ph = ph, th = NA_character_, j = 1L, block = NA_character_,
+                  cell = nb_find_call_cell(nb_parse(text), ph))
+  } else {
+    calls = doc_calls(text)
+    anchor = doc_anchor_of(calls, calls[which(calls$ph %in% ph)[1], ])
+  }
+  list(kind = "rscript", path = path_norm(path), format = fmt, backend = backend, anchor = anchor,
+       prompt_hash = ph, args_hash = NULL, template = prompt, top_level = TRUE)
+}
+
+# Forget this process's pending documents and held locks when the test ends
+local_doc_pending = function(.env = parent.frame()) {
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  }, envir = .env)
+  invisible(st)
+}
+
+test_that("deferred blocks wait in a sidecar and are written when the process exits", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines(c("library(gptr)", "gptr(\"count rows\")", "z = 1"), f)
+  site = doc_io_site(f, "count rows", backend = "deferred")
+  res = doc_upsert(site, structure("n = nrow(mtcars)", header = list(
+    model = "fake/fake-1", date = "2026-09-29", prompt = prompt_hash("count rows"))))
+  expect_identical(res$action, "insert")
+  expect_identical(res$backend, "deferred")
+  expect_identical(readLines(f), c("library(gptr)", "gptr(\"count rows\")", "z = 1"))
+  side = doc_sidecar_path(f)
+  expect_match(side, "[.]gptr/cache/tmp/pending-[0-9a-f]{40}[.]rds$")
+  rec = readRDS(side)
+  expect_identical(rec$pid, Sys.getpid())
+  expect_identical(rec$kind, "deferred")
+  expect_identical(rec$doc, path_norm(f))
+  expect_identical(rec$upserts[[1]]$block_id, res$block_id)
+  expect_true(isTRUE(st$finalizer))
+  expect_true(dir.exists(doc_lock_dir(f)))
+  doc_pending_flush_all()
+  expect_identical(readLines(f)[3:5], c(paste0("# >>> gptr:", res$block_id, " model=fake/fake-1 ",
+                                               "date=2026-09-29 prompt=",
+                                               prompt_hash("count rows"), " sha=",
+                                               doc_body_sha("n = nrow(mtcars)")),
+                                        "n = nrow(mtcars)", paste0("# <<< gptr:", res$block_id)))
+  expect_false(file.exists(side))
+  expect_false(dir.exists(doc_lock_dir(f)))
+})
+
+test_that("a dead process's sidecar is recovered without overwriting a user edit (IC-51)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  ph1 = prompt_hash("first")
+  writeLines(c("gptr(\"first\")", paste0("# >>> gptr:aaaaaa model=m prompt=", ph1, " sha=0000aaaa"),
+               "edited = TRUE", "# <<< gptr:aaaaaa", "gptr(\"second\")"), f)
+  s1 = doc_io_site(f, "first")
+  s2 = doc_io_site(f, "second")
+  rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
+  rec$pid = 999999999L
+  rec$upserts = list(
+    list(block_id = "aaaaaa", lines = doc_render_block("aaaaaa", list(model = "m", prompt = ph1),
+                                                       "x = 1"), site = s1),
+    list(block_id = "bbbbbb", lines = doc_render_block("bbbbbb", list(
+      model = "m", prompt = prompt_hash("second")), "y = 2"), site = s2))
+  doc_sidecar_write(rec)
+  expect_warning(expect_true(doc_recover(f)), class = "gptr_warning_doc_conflict")
+  txt = readLines(f)
+  expect_identical(txt[3], "edited = TRUE")
+  expect_identical(txt[6:8], c(paste0("# >>> gptr:bbbbbb model=m prompt=", prompt_hash("second")),
+                               "y = 2", "# <<< gptr:bbbbbb"))
+  left = doc_sidecar_read(f)
+  expect_identical(vapply(left$upserts, function(u) u$block_id, ""), "aaaaaa")
+  rec$pid = Sys.getpid()
+  doc_sidecar_write(rec)
+  expect_false(doc_recover(f))
+})
+
+test_that("a run of the same document under Rscript adopts a dead sidecar until exit", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
+  rec$pid = 999999999L
+  rec$upserts = list(list(block_id = "aaaaaa", lines = doc_render_block("aaaaaa", list(
+    model = "m", prompt = prompt_hash("first")), "x = 1"), site = doc_io_site(f, "first")))
+  doc_sidecar_write(rec)
+  expect_true(doc_recover(f, defer = TRUE))
+  expect_identical(readLines(f), c("gptr(\"first\")", "gptr(\"second\")"))
+  expect_identical(doc_sidecar_read(f)$pid, Sys.getpid())
+  res = doc_upsert(doc_io_site(f, "second", backend = "deferred"),
+                   structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
+  doc_pending_flush_all()
+  b = doc_find_blocks(readLines(f))
+  expect_identical(b$id, c("aaaaaa", res$block_id))
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("an open notebook is never written; its blocks wait for gptr_doc(sync = TRUE) (IC-50)", {
+  # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
+  src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  nb = file.path(getwd(), "analysis.ipynb")
+  expect_true(file.copy(src, nb))
+  bytes = readBin(nb, "raw", n = file.info(nb)$size)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  site = doc_io_site(nb, "summarise the mpg column", backend = "pending")
+  lines = doc_ipynb_render(list(id = "ignored", header = list(
+    model = "fake/fake-1", prompt = prompt_hash("summarise the mpg column")),
+    body = c("mean(x$mpg)", "## Decision: mean")), site)
+  res = NULL
+  out = cli::cli_fmt({
+    res = doc_upsert(site, structure(as.character(lines), header = list(
+      model = "fake/fake-1", prompt = prompt_hash("summarise the mpg column"))))
+  })
+  expect_identical(res$backend, "pending")
+  expect_identical(out, c("```r", "mean(x$mpg)", "## Decision: mean", "```"))
+  expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
+  expect_false(doc_recover(nb))
+  expect_error(doc_sync(nb), class = "gptr_error_invalid_argument")
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 1L)
+  cells = nb_parse(doc_read(nb)$lines)$cells
+  expect_identical(cells[[4]]$id, paste0("gptr-", res$block_id))
+  expect_identical(unlist(cells[[4]]$source), c("mean(x$mpg)\n", "## Decision: mean"))
+  expect_null(doc_sidecar_read(nb))
+})
+
+test_that("a deferred document locked by another live process records nothing", {
+  local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines("gptr(\"count rows\")", f)
+  dir = doc_lock_dir(f)
+  dir.create(dir, recursive = TRUE)
+  writeLines(doc_lock_stamp(), file.path(dir, "pid"))
+  withr::defer(unlink(dir, recursive = TRUE))
+  res = NULL
+  expect_message({
+    res = doc_upsert(doc_io_site(f, "count rows", backend = "deferred"),
+                     structure("n = 1", header = list()))
+  }, class = "gptr_message_notice")
+  expect_identical(res$action, "locked")
+  expect_null(doc_sidecar_read(f))
+})
+
+# ---- Task 10 adaptations (IC-50, IC-51; dev/DEVIATIONS.md D-109) --------------------------------
+
+# A dead process's deferred sidecar holding one block for the call with `prompt`
+doc_io_dead_sidecar = function(f, prompt, id = "aaaaaa", pid = 999999999L) {
+  rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
+  rec$pid = pid
+  rec$upserts = list(list(block_id = id, lines = doc_render_block(id, list(
+    model = "m", prompt = prompt_hash(prompt)), "x = 1"), site = doc_io_site(f, prompt)))
+  doc_sidecar_write(rec)
+  invisible(rec)
+}
+
+# A notebook with one code cell for each element of `sources` (nbformat 4.5)
+doc_io_nb_write = function(path, sources) {
+  cells = lapply(seq_along(sources), function(i) {
+    list(cell_type = "code", execution_count = NULL, id = paste0("c", i), metadata = json_obj(),
+         outputs = list(), source = list(sources[[i]]))
+  })
+  writeLines(json_encode(list(cells = cells, metadata = json_obj(), nbformat = 4L,
+                              nbformat_minor = 5L)), path)
+  invisible(path)
+}
+
+test_that("a sidecar of an earlier process that had this pid is a dead one (pid reuse, IC-51)", {
+  skip_if(is.na(doc_create_time()), "no process creation time on this platform")
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines(c("gptr(\"first\")", "z = 1"), f)
+  rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
+  expect_true(doc_sidecar_live(rec))
+  # the same pid, but a process that started an hour before this one (containers reuse pids)
+  rec = doc_io_dead_sidecar(f, "first", pid = Sys.getpid())
+  rec$create_time = rec$create_time - 3600
+  doc_sidecar_write(rec)
+  expect_false(doc_sidecar_live(rec))
+  expect_true(doc_recover(f))
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+  expect_null(doc_sidecar_read(f))
+  # a later Rscript run with that pid adopts such a sidecar in its first deferred upsert (this
+  # run's own upserts are queued before adopted ones, D-109 item 9)
+  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  rec = doc_io_dead_sidecar(f, "first", id = "cccccc", pid = Sys.getpid())
+  rec$create_time = rec$create_time - 3600
+  doc_sidecar_write(rec)
+  res = doc_upsert(doc_io_site(f, "second", backend = "deferred"),
+                   structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
+  expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""),
+                   c(res$block_id, "cccccc"))
+})
+
+test_that("the lock of a deferred run is released at exit even when no block was queued", {
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines("gptr(\"count rows\")", f)
+  site = doc_io_site(f, "count rows", backend = "deferred")
+  writeLines("x = 1", f)
+  ensured = 0L
+  testthat::local_mocked_bindings(doc_finalizer_ensure = function() {
+    ensured <<- ensured + 1L
+    invisible(NULL)
+  })
+  res = doc_upsert(site, structure("n = 1", header = list(prompt = prompt_hash("count rows"))))
+  expect_identical(res$action, "not-found")
+  expect_true(dir.exists(doc_lock_dir(f)))
+  expect_identical(ensured, 1L)
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("the script this Rscript process runs is never written before it exits (IC-51)", {
+  local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  before = c("gptr(\"first\")", "gptr(\"second\")")
+  writeLines(before, f)
+  doc_io_dead_sidecar(f, "first")
+  testthat::local_mocked_bindings(doc_command_args = function() {
+    c("/usr/lib/R/bin/exec/R", "--no-echo", "--no-restore", paste0("--file=", f))
+  })
+  # gptr_doc(), gptr_blocks() or the route touch the running script: the dead run's block is
+  # adopted and written at exit, with this run's own blocks
+  expect_true(doc_recover(f))
+  expect_identical(readLines(f), before)
+  expect_identical(doc_sidecar_read(f)$pid, Sys.getpid())
+  expect_true(dir.exists(doc_lock_dir(f)))
+  n = NULL
+  expect_message({
+    n = doc_sync(f)
+  }, class = "gptr_message_notice")
+  expect_identical(n, 0L)
+  res = doc_upsert(doc_io_site(f, "second", backend = "deferred"),
+                   structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
+  # also when the run lock alone says so (the command line names another file)
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  expect_message({
+    n = doc_sync(f)
+  }, class = "gptr_message_notice")
+  expect_identical(n, 0L)
+  expect_identical(readLines(f), before)
+  doc_pending_flush_all()
+  expect_identical(doc_find_blocks(readLines(f))$id, c("aaaaaa", res$block_id))
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("a pending notebook block another R process synced is not queued again (IC-50)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  nb = file.path(proj, "analysis.ipynb")
+  doc_io_nb_write(nb, c("a = gptr(\"one\")", "b = gptr(\"two\")"))
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  up = function(prompt, code) {
+    site = doc_io_site(nb, prompt, backend = "pending")
+    out = NULL
+    cli::cli_fmt({
+      out = doc_upsert(site, structure(code, header = list(model = "m",
+                                                           prompt = prompt_hash(prompt))))
+    })
+    out
+  }
+  r1 = up("one", "x = 1")
+  # gptr_doc(nb, sync = TRUE) in another R process applies the block and removes the sidecar
+  rec = doc_sidecar_read(nb)
+  doc_keep_conflicts(rec, doc_apply_upserts(rec))
+  expect_null(doc_sidecar_read(nb))
+  # the user then deletes the agent cell; this kernel queues the next call's block
+  nbj = nb_parse(doc_read(nb)$lines)
+  expect_identical(nbj$cells[[2]]$id, paste0("gptr-", r1$block_id))
+  nbj$cells[[2]] = NULL
+  writeLines(nb_serialize(nbj), nb)
+  r2 = up("two", "y = 2")
+  expect_identical(vapply(doc_sidecar_read(nb)$upserts, function(u) u$block_id, ""), r2$block_id)
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 1L)
+  ids = nb_cell_ids(nb_parse(doc_read(nb)$lines))
+  expect_identical(ids, c("c1", "c2", paste0("gptr-", r2$block_id)))
+})
+
+test_that("a kernel that cannot name its notebook never syncs the notebooks it may run (IC-50)", {
+  src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  nb = file.path(proj, "analysis.ipynb")
+  expect_true(file.copy(src, nb))
+  bytes = readBin(nb, "raw", n = file.info(nb)$size)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = NA)
+  ph = prompt_hash("summarise the mpg column")
+  site = doc_io_site(nb, "summarise the mpg column", backend = "pending")
+  cli::cli_fmt(doc_upsert(site, structure("mean(x$mpg)", header = list(model = "m", prompt = ph))))
+  expect_true(doc_notebook_attached(nb))
+  expect_error(doc_sync(nb), class = "gptr_error_invalid_argument")
+  withr::local_envvar(JPY_SESSION_NAME = file.path(proj, "renamed.ipynb"))
+  expect_error(doc_sync(nb), class = "gptr_error_invalid_argument")
+  expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
+  # a notebook outside the kernel's working directory with a dead kernel's blocks can be synced
+  dir.create(file.path(proj, "old"))
+  nb2 = file.path(proj, "old", "other.ipynb")
+  expect_true(file.copy(src, nb2))
+  expect_false(doc_notebook_attached(nb2))
+  site2 = doc_io_site(nb2, "summarise the mpg column", backend = "pending")
+  rec = doc_pending_new(path_norm(nb2), "pending", NULL)
+  rec$pid = 999999999L
+  rec$upserts = list(list(block_id = "dddddd", lines = doc_ipynb_render(list(
+    id = "dddddd", header = list(model = "m", prompt = ph), body = "x = 1"), site2), site = site2))
+  doc_sidecar_write(rec)
+  expect_identical(doc_sync(nb2), 1L)
+  expect_identical(nb_cell_ids(nb_parse(doc_read(nb2)$lines))[4], "gptr-dddddd")
+})
+
+test_that("a document path given relative to the working directory is kept absolute", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), file.path(proj, "job.R"))
+  doc_io_dead_sidecar(file.path(proj, "job.R"), "first")
+  expect_true(doc_recover("job.R", defer = TRUE))
+  dir.create(file.path(proj, "sub"))
+  withr::local_dir(file.path(proj, "sub"))
+  doc_pending_flush_all()
+  expect_identical(doc_find_blocks(readLines(file.path(proj, "job.R")))$id, "aaaaaa")
+  expect_false(file.exists(file.path(proj, "sub", "job.R")))
+  expect_null(doc_sidecar_read(file.path(proj, "job.R")))
+})
+
+test_that("a deferred block needs write consent and keeps a local model's tag (IC-45, IC-74)", {
+  local_project()
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines("gptr(\"count rows\")", f)
+  site = doc_io_site(f, "count rows", backend = "deferred")
+  hdr = list(model = "ollama/qwen3:8b", prompt = prompt_hash("count rows"))
+  local_gptr_options(record = "off")
+  expect_identical(doc_upsert(site, structure("n = 1", header = hdr))$action, "none")
+  expect_null(doc_sidecar_read(f))
+  expect_false(dir.exists(doc_lock_dir(f)))
+  local_gptr_options(record = "auto")
+  expect_identical(doc_upsert(site, structure("n = 1", header = hdr))$action, "insert")
+  queued = doc_sidecar_read(f)$upserts[[1]]$lines
+  expect_identical(doc_find_blocks(queued)$header[[1]]$model, "ollama/qwen3:8b")
+  doc_pending_flush_all()
+  expect_match(readLines(f)[2], " model=ollama/qwen3:8b prompt=", fixed = TRUE)
+})
+
+test_that("a sidecar is replaced whole, so a write cut short keeps the earlier upserts (IC-51)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(getwd(), "job.R")
+  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  r1 = doc_upsert(doc_io_site(f, "first", backend = "deferred"),
+                  structure("x = 1", header = list(model = "m", prompt = prompt_hash("first"))))
+  # the next flush of the sidecar stops halfway (the process is killed or the disk is full)
+  r2 = local({
+    half = function(path, bytes) {
+      writeBin(bytes[seq_len(length(bytes) %/% 2L)], path)
+      stop("cut short")
+    }
+    testthat::local_mocked_bindings(
+      write_bytes = half,
+      save_rds = function(object, file, compress = FALSE) {
+        half(file, serialize(object, NULL, ascii = FALSE, xdr = TRUE))
+      })
+    doc_upsert(doc_io_site(f, "second", backend = "deferred"),
+               structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
+  })
+  expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""), r1$block_id)
+  expect_identical(list.files(dirname(doc_sidecar_path(f)), pattern = "^[.]gptr-write-"),
+                   character())
+  # the upsert reported as failed is not queued in memory either, so the exit does not write it
+  expect_identical(r2$action, "failed")
+  expect_identical(vapply(doc_state()$docs[[path_key(f)]]$upserts, function(u) u$block_id, ""),
+                   r1$block_id)
+  doc_pending_flush_all()
+  expect_identical(doc_find_blocks(readLines(f))$id, r1$block_id)
+})
+
+# ---- Task 10 review round 1 (D-109 items 8-11) ------------------------------------------------
+
+# Put `rec` at the sidecar path of `f` as gptr writes it (mode 0600), whatever document it names
+doc_io_plant = function(f, rec) {
+  side = doc_sidecar_path(f)
+  dir.create(dirname(side), recursive = TRUE, showWarnings = FALSE)
+  write_atomic(side, serialize_leaf(rec))
+  invisible(side)
+}
+
+test_that("a sidecar is used only for the document it is named for (IC-51, IC-52)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(proj, "analysis.R")
+  before = c("gptr(\"first\")", "z = 1")
+  writeLines(before, f)
+  victim = file.path(withr::local_tempdir(), "victim.Rprofile")
+  good = doc_io_dead_sidecar(f, "first")
+  expect_false(is.null(doc_sidecar_read(f)))
+  set = function(rec, ...) {
+    ch = list(...)
+    for (nm in names(ch)) rec[[nm]] = ch[[nm]]
+    rec
+  }
+  up = good$upserts[[1]]
+  evil = up
+  evil$block_id = "eeeeee"
+  evil$lines = "system('echo pwned')"
+  evil$site$format = "transcript"
+  outside = up
+  outside$site$path = path_norm(victim)
+  bad_id = up
+  bad_id$block_id = "../../x"
+  bad_lines = up
+  bad_lines$lines = list("x = 1")
+  planted = list(
+    another_doc = set(good, doc = path_norm(victim), upserts = list(evil)),
+    another_doc_r = set(good, doc = path_norm(victim)),
+    transcript = set(good, upserts = list(evil)),
+    site_path = set(good, upserts = list(outside)),
+    block_id = set(good, upserts = list(bad_id)),
+    lines = set(good, upserts = list(bad_lines)),
+    kind = set(good, kind = "anything")
+  )
+  for (nm in names(planted)) {
+    doc_io_plant(f, planted[[nm]])
+    expect_null(doc_sidecar_read(f))
+    expect_false(doc_recover(f))
+    expect_identical(doc_sync(f), 0L)
+    expect_false(file.exists(victim))
+    expect_identical(readLines(f), before)
+  }
+  # this run's first deferred block does not adopt a planted record either
+  doc_io_plant(f, planted$another_doc)
+  res = doc_upsert(doc_io_site(f, "first", backend = "deferred"),
+                   structure("n = 1", header = list(model = "m", prompt = prompt_hash("first"))))
+  expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""),
+                   res$block_id)
+  doc_pending_flush_all()
+  expect_false(file.exists(victim))
+  expect_identical(doc_find_blocks(readLines(f))$id, res$block_id)
+})
+
+test_that("a sidecar that is not this user's private file is never read (IC-52)", {
+  skip_on_os("windows")
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(proj, "job.R")
+  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  doc_io_dead_sidecar(f, "first")
+  side = doc_sidecar_path(f)
+  expect_identical(format(file.info(side)$mode), "600")
+  expect_false(is.null(doc_sidecar_read(f)))
+  # a checked-out or copied file keeps the umask's group and other bits
+  Sys.chmod(side, "0644", use_umask = FALSE)
+  expect_null(doc_sidecar_read(f))
+  expect_false(doc_recover(f))
+  Sys.chmod(side, "0600", use_umask = FALSE)
+  local({
+    me = doc_euid()
+    testthat::local_mocked_bindings(doc_euid = function() me + 1)
+    expect_null(doc_sidecar_read(f))
+  })
+  expect_false(is.null(doc_sidecar_read(f)))
+  # this run's own sidecar replaces such a file and is private again
+  Sys.chmod(side, "0644", use_umask = FALSE)
+  res = doc_upsert(doc_io_site(f, "second", backend = "deferred"),
+                   structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
+  expect_identical(format(file.info(side)$mode), "600")
+  expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""),
+                   res$block_id)
+  # a kernel keeps its pending blocks when its sidecar cannot be read (it was not synced)
+  nb = file.path(proj, "analysis.ipynb")
+  doc_io_nb_write(nb, c("a = gptr(\"one\")", "b = gptr(\"two\")"))
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  up = function(prompt, code) {
+    out = NULL
+    cli::cli_fmt({
+      out = doc_upsert(doc_io_site(nb, prompt, backend = "pending"),
+                       structure(code, header = list(model = "m", prompt = prompt_hash(prompt))))
+    })
+    out
+  }
+  r1 = up("one", "x = 1")
+  Sys.chmod(doc_sidecar_path(nb), "0644", use_umask = FALSE)
+  r2 = up("two", "y = 2")
+  expect_identical(vapply(doc_sidecar_read(nb)$upserts, function(u) u$block_id, ""),
+                   c(r1$block_id, r2$block_id))
+})
+
+test_that("this run's block wins over a dead run's block for the same call (IC-51)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  st = local_doc_pending()
+  f = file.path(proj, "job.R")
+  script = c("gptr(\"first\")", "y = x + 1")
+  rerun = function() {
+    doc_upsert(doc_io_site(f, "first", backend = "deferred"),
+               structure("x = 100", header = list(model = "m", prompt = prompt_hash("first"))))
+  }
+  # the route recovers first (defer = TRUE), then the re-run records the same call again
+  writeLines(script, f)
+  doc_io_dead_sidecar(f, "first")
+  expect_true(doc_recover(f, defer = TRUE))
+  res = rerun()
+  expect_identical(res$action, "insert")
+  expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""),
+                   c(res$block_id, "aaaaaa"))
+  doc_pending_flush_all()
+  b = doc_find_blocks(readLines(f))
+  expect_identical(b$id, res$block_id)
+  expect_true("x = 100" %in% readLines(f))
+  expect_null(doc_sidecar_read(f))
+  # the first deferred block of the re-run adopts the dead sidecar itself
+  writeLines(script, f)
+  doc_io_dead_sidecar(f, "first")
+  res = rerun()
+  doc_pending_flush_all()
+  expect_identical(doc_find_blocks(readLines(f))$id, res$block_id)
+  # a re-run that is killed in turn: the run after it applies the newer run's block
+  writeLines(script, f)
+  doc_io_dead_sidecar(f, "first")
+  res = rerun()
+  rec = doc_sidecar_read(f)
+  rec$pid = 999999998L
+  doc_sidecar_write(rec)
+  st$docs = list()
+  doc_lock_release_all()
+  expect_true(doc_recover(f))
+  expect_identical(doc_find_blocks(readLines(f))$id, res$block_id)
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("a document's sidecar is found from any working directory (IC-51)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  # no project override: the working directory alone would decide the workspace root
+  withr::local_options(gptr.project_root = NULL)
+  withr::local_envvar(GPTR_PROJECT_ROOT = NA)
+  f = file.path(proj, "job.R")
+  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  side = doc_sidecar_path(f)
+  expect_identical(path_key(dirname(side)), path_key(file.path(proj, ".gptr", "cache", "tmp")))
+  r1 = doc_upsert(doc_io_site(f, "first", backend = "deferred"),
+                  structure("x = 1", header = list(model = "m", prompt = prompt_hash("first"))))
+  # the job leaves its project (or cron started it elsewhere): the same sidecar is kept
+  withr::local_dir(withr::local_tempdir())
+  expect_identical(doc_sidecar_path(f), side)
+  r2 = doc_upsert(doc_io_site(f, "second", backend = "deferred"),
+                  structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
+  expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""),
+                   c(r1$block_id, r2$block_id))
+  doc_pending_flush_all()
+  expect_identical(doc_find_blocks(readLines(f))$id, c(r1$block_id, r2$block_id))
+  expect_false(file.exists(side))
+  expect_identical(list.files(file.path(proj, ".gptr", "cache", "tmp"), pattern = "^pending-"),
+                   character())
+})
+
+# ---- Task 10 review round 2 (D-109 items 12-15) ------------------------------------------------
+
+test_that("a sync never writes the script of a run that is still alive (IC-51)", {
+  skip_if(is.na(doc_create_time()), "no process creation time on this platform")
+  proj = local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  local_doc_pending()
+  f = file.path(proj, "job.R")
+  before = c("gptr(\"first\")", "z = 1")
+  writeLines(before, f)
+  # an Rscript run of job.R that is still running and queued a block; cron started it from
+  # $HOME, so its run lock is in another workspace root and this project's lock is free
+  p = processx::process$new(rscript_path(), c("--vanilla", "-e", "Sys.sleep(60)"))
+  withr::defer(p$kill())
+  ct = tryCatch(as.numeric(ps::ps_create_time(ps::ps_handle(p$get_pid()))),
+                error = function(e) NA_real_)
+  skip_if(is.na(ct), "no creation time for a child process")
+  rec = doc_io_dead_sidecar(f, "first", pid = p$get_pid())
+  rec$create_time = ct
+  doc_sidecar_write(rec)
+  expect_true(doc_sidecar_live(doc_sidecar_read(f)))
+  expect_false(dir.exists(doc_lock_dir(f)))
+  expect_false(doc_recover(f))
+  n = NULL
+  expect_message({
+    n = doc_sync(f)
+  }, class = "gptr_message_notice")
+  expect_identical(n, 0L)
+  expect_identical(readLines(f), before)
+  expect_identical(doc_sidecar_read(f)$pid, p$get_pid())
+  # the run is killed before its exit writes the block: the next sync applies it
+  p$kill()
+  expect_false(doc_sidecar_live(rec))
+  expect_identical(doc_sync(f), 1L)
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("a notebook cell run again keeps only the block shown last (IC-50)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  nb = file.path(proj, "analysis.ipynb")
+  doc_io_nb_write(nb, c("a = gptr(\"one\")", "b = gptr(\"two\"); w = gptr(\"three\")"))
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  up = function(prompt, code) {
+    out = NULL
+    cli::cli_fmt({
+      out = doc_upsert(doc_io_site(nb, prompt, backend = "pending"),
+                       structure(code, header = list(model = "m", prompt = prompt_hash(prompt))))
+    })
+    out
+  }
+  r1 = up("one", "x = 1")
+  r2 = up("one", "x = 2")
+  expect_identical(c(r1$action, r2$action), c("insert", "insert"))
+  expect_false(identical(r1$block_id, r2$block_id))
+  r3 = up("two", "y = 2")
+  r4 = up("three", "v = 3")
+  expect_identical(vapply(doc_sidecar_read(nb)$upserts, function(u) u$block_id, ""),
+                   c(r2$block_id, r3$block_id, r4$block_id))
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 3L)
+  nbj = nb_parse(doc_read(nb)$lines)
+  # the calls of one cell keep their order: the agent cells read as the code that ran
+  expect_identical(nb_cell_ids(nbj), c("c1", paste0("gptr-", c(r2$block_id)), "c2",
+                                       paste0("gptr-", c(r3$block_id, r4$block_id))))
+  expect_identical(unlist(nbj$cells[[2]]$source), "x = 2")
+  expect_null(doc_sidecar_read(nb))
+})
+
+test_that("a sync counts only the blocks it writes (IC-50, IC-51)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  f = file.path(proj, "job.R")
+  ph = prompt_hash("first")
+  # the call already owns a fresh block, so the dead run's block for it is superseded
+  writeLines(c("gptr(\"first\")", doc_render_block("bbbbbb", list(
+    model = "m", prompt = ph, sha = doc_body_sha("x = 0")), "x = 0"), "gptr(\"second\")"), f)
+  rec = doc_io_dead_sidecar(f, "first")
+  rec$upserts[[2]] = list(block_id = "cccccc", lines = doc_render_block("cccccc", list(
+    model = "m", prompt = prompt_hash("second")), "y = 2"), site = doc_io_site(f, "second"))
+  doc_sidecar_write(rec)
+  expect_identical(doc_sync(f), 1L)
+  expect_identical(doc_find_blocks(readLines(f))$id, c("bbbbbb", "cccccc"))
+  expect_true("x = 0" %in% readLines(f))
+  expect_null(doc_sidecar_read(f))
+})
+
+test_that("a kernel keeps its notebook open after setwd() and opens no script (IC-50)", {
+  src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  local_doc_pending()
+  nb = file.path(proj, "analysis.ipynb")
+  expect_true(file.copy(src, nb))
+  bytes = readBin(nb, "raw", n = file.info(nb)$size)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = NA)
+  ph = prompt_hash("summarise the mpg column")
+  site = doc_io_site(nb, "summarise the mpg column", backend = "pending")
+  cli::cli_fmt(doc_upsert(site, structure("mean(x$mpg)", header = list(model = "m", prompt = ph))))
+  # a cell changes the working directory: the notebook this kernel recorded from is still open
+  dir.create(file.path(proj, "data"))
+  withr::local_dir(file.path(proj, "data"))
+  expect_true(doc_notebook_attached(nb))
+  expect_error(doc_sync(nb), class = "gptr_error_invalid_argument")
+  expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
+  # a dead Rscript run's sidecar for a script in the kernel's working directory is synced
+  f = file.path(proj, "data", "job.R")
+  writeLines("gptr(\"first\")", f)
+  expect_false(doc_notebook_attached(f))
+  doc_io_dead_sidecar(f, "first")
+  expect_identical(doc_sync(f), 1L)
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+})

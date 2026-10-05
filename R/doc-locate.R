@@ -176,13 +176,19 @@ doc_rscript_file = function(f) {
   NULL
 }
 
-#' Site of a call under `Rscript file.R` (writes are deferred to exit, IC-51)
+#' The script this R process runs as `Rscript file.R` (an absolute path), or NULL
 #' @noRd
-doc_site_rscript = function(call, ph, call0) {
+doc_rscript_running = function() {
   if (gptr_is_interactive()) return(NULL)
   fa = grep("^--file=", doc_command_args(), value = TRUE)
   if (!length(fa)) return(NULL)
-  f = doc_rscript_file(sub("^--file=", "", fa[1L]))
+  doc_rscript_file(sub("^--file=", "", fa[1L]))
+}
+
+#' Site of a call under `Rscript file.R` (writes are deferred to exit, IC-51)
+#' @noRd
+doc_site_rscript = function(call, ph, call0) {
+  f = doc_rscript_running()
   if (is.null(f)) return(NULL)
   list(kind = "rscript", path = f)
 }

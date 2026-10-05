@@ -7146,7 +7146,7 @@ every failure in the six adaptation tests); green `[ FAIL 0 | WARN 0 | SKIP 1 | 
 red `[ FAIL 19 | WARN 0 | SKIP 1 | PASS 475 ]` (`task7-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 494 ]` (`task7-fix1-green.log`).
 
-## D-109 - P15 deferred and pending writes: a sidecar of an earlier process with this pid is a dead one, a deferred run's lock is held together with its exit finalizer, the script this process runs under Rscript is never written before exit, a pending record forgets blocks another process synced, a kernel that cannot name its notebook treats the notebooks in its working directory as open, recovered paths are kept absolute, the sidecar is replaced whole, and (review round 1) a sidecar is read only as this user's private record for its own document, adopted upserts are applied after this run's own, the sidecar lives in the document's project, and an upsert whose sidecar write failed is not queued (2026-10-04)
+## D-109 - P15 deferred and pending writes: a sidecar of an earlier process with this pid is a dead one, a deferred run's lock is held together with its exit finalizer, the script this process runs under Rscript is never written before exit, a pending record forgets blocks another process synced, a kernel that cannot name its notebook treats the notebooks in its working directory as open, recovered paths are kept absolute, the sidecar is replaced whole, and (review round 1) a sidecar is read only as this user's private record for its own document, adopted upserts are applied after this run's own, the sidecar lives in the document's project, an upsert whose sidecar write failed is not queued, and (review round 2) a sync never writes a live run's script, a call's newest queued block is the one written, a kernel's notebook stays open after setwd() and only .ipynb files are notebooks (2026-10-04)
 
 P15 Task 10's plan-literal deferred-write code (`R/doc-io.R`: `doc_sidecar_write()`,
 `doc_sidecar_live()`, `doc_pending_add()`, `doc_recover()`, `doc_notebook_attached()`,
@@ -7264,6 +7264,39 @@ Review round 1 validation: four regression tests and three assertions in the ato
 test (+67 expectations). Old source: `[ FAIL 45 | WARN 0 | SKIP 0 | PASS 190 ]`
 (`dev/.validation/P15/task10-fix1-red.log`). Final `^doc-io$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 239 ]` (`task10-fix1-green.log`).
+
+Review round 2 (`progress/P15.md`, Task 10, Review round 2) added four more changes:
+
+12. **A sync never writes the script of a live run (IC-51: only "unapplied upserts of a dead
+    pid" are re-applied; report 14 section 2.1.2).** `doc_sync()` applied a deferred record from
+    disk whatever its owner, relying on `doc_lock()`. Since item 10 the sidecar follows the
+    document's project while `doc_lock_dir()` follows the working directory, so a live run
+    started elsewhere (cron from `$HOME`) holds its lock in another root and its script could be
+    rewritten while running. `doc_sync()` now refuses a `deferred` record whose owner is alive
+    (`doc_sidecar_live()`): a notice, and 0. Pending (Jupyter) records are still synced from
+    other sessions (IC-50).
+13. **A call's newest queued block is the one written (IC-50: the block shown last).** A notebook
+    cell run again queues a second `insert` with a new id, because the pending block is not in
+    the notebook. `doc_apply_upserts()` then inserted the oldest and superseded the newer one,
+    counting it as applied. `doc_upserts_drop_call()` drops this process's queued upserts for the
+    call that a new upsert's site locates (same statement or cell and same call position, found
+    only among upserts with the same anchored prompt hash) before that upsert is queued.
+    Adopted upserts keep item 9's order. The queue is not reordered newest first (the
+    reviewer's first suggestion), because that would write the blocks of several calls of one
+    statement or cell in reverse order. `doc_apply_upserts()` returns `list(applied, superseded,
+    conflicts)`, and `applied` holds only written blocks, so `doc_sync()` counts the blocks it
+    writes. This adds one element to the plan's `list(applied, conflicts)`.
+14. **A notebook a kernel queued pending blocks for stays open after `setwd()` (IC-50).** When
+    `JPY_SESSION_NAME` names no existing file, `doc_notebook_attached()` is also TRUE for a
+    notebook that this process holds a pending record for, not only for the notebooks of the
+    current working directory.
+15. **Only `.ipynb` files are notebooks.** Item 5's rule made every file of a kernel's working
+    directory "attached", `.R` scripts included, so a sync of a dead run's script from that
+    kernel aborted. `doc_notebook_attached()` is FALSE for other formats.
+
+Review round 2 validation: four regression tests (+29 expectations). Round 1 source:
+`[ FAIL 15 | WARN 0 | SKIP 0 | PASS 252 ]` (`dev/.validation/P15/task10-fix2-red.log`). Final
+`^doc-io$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 268 ]` (`task10-fix2-green.log`).
 
 Validation: `progress/P15.md`, Task 10. Eight tests added (+47 expectations; the plan's five are
 verbatim except the fixture path resolved before `local_project()`, the Task 4 trap). Against the
@@ -7501,3 +7534,123 @@ against the plan-literal source `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 89 ]`
 (`task8-red-adaptations-against-plan-literal.log`: the empty argument, `gateway_model_type()`
 missing, the classifier call ending as an internal error); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` (`task8-green.log`; the plan's 20 tests give its 74).
+
+## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone (2026-10-05)
+
+P08 Task 9's plan-literal code (`gateway_run()`, the `builtin:gateway` routes, the guards and
+`router.call`) changed in seven ways. The plan's 30 tests are verbatim except one line (item 7).
+
+1. **The built-in routes decline a decision-only model** (IC-74, 07-local-ollama.md section 2;
+   D-113 item 2). `nested`, `continue` and `new` match only when `gateway_model_type()` of the
+   call's model is not `"classifier"` (`route_conversational()`), so Clef, Clef Flash, `jev` or a
+   classifier spec reaches P13's `classifier` route (order 10) or the dispatcher's
+   `gptr_error_not_available`; the plan's `new` took every call with a prompt, and the session
+   then failed at its first request.
+2. **A root run's protected safety record carries `ollama_local_only`** (07 sections 2.1 and 5;
+   D-017 item 2; Task 1/3/5 obligations). `gateway_run_start()` passes `opts$safety =
+   gateway_run_safety()`: P06's `safety_snapshot()` plus `ollama_local_only =
+   settings_local_only("ollama")`, which only the user settings file and the session layer can
+   set to `FALSE` (D-094); options, project files, registered specs and `.opts` (refused, D-102)
+   cannot. Inside a run it passes nothing, so a child run inherits the outer run's frozen record
+   (P06's `run_new()`). A `.run = FALSE` session gets its record when it is started, not when it
+   is queued (the pending run options hold none); Task 10 starts pending runs through
+   `gateway_run_start()`. The plan never set the field, so every run read the strict default.
+3. **The guards follow the effective endpoint** (D-020 item 1, D-099; Task 4 obligation).
+   `gateway_guards()` and `router_guards()` skip `egress_check()` only when P08's
+   `egress_state(<provider record>)$exempt` (offline, or a loopback endpoint with Ollama's
+   local-only control in force) or `.opts$context = "none"`; the plan skipped it for any
+   provider with `local = TRUE`, so a LAN or remote "local" server got automatic context without
+   an acknowledgement.
+4. **The call's `replay =` overrides the process mode** (contract 3.1: `gptr.replay` is
+   "overridden by the call's `replay =`"; IC-45 `replay_mode(arg)`). `gateway_replay_guard()`
+   checks the replay mode with the call's argument: `replay = "auto"` lets a call run in a
+   replaying process (the hint `replay_guard()` itself gives), and `replay = "replay"` refuses an
+   unrecorded provider in a process that is not replaying. The plan ignored the argument.
+5. **`.opts$system1_images` is refused in a conversation** (07 section 4: images are never
+   silently dropped). The built-in routes signal `gptr_error_invalid_argument` (`arg =
+   ".opts$system1_images"`) before anything is created; `.opts$images` attaches images to a
+   conversation.
+6. **Colon model ids stay whole** (IC-74: Ollama tags such as `qwen3:1.7b`).
+   `gateway_model_ref()` resolves a reference whole through P05's pure `model_resolve()` (which
+   reads a trailing thinking level itself) and accepts `router:<name>`; the plan split at the
+   first `:` and produced `ollama/qwen3:1.7b:1.7b`. `gateway_model_record()` tries the whole
+   reference, and `router_model()` reads a `:<suffix>` as a thinking level only when it is one
+   (as P05 and P06 do); the plan's version set `thinking` to the tag.
+7. **Test adaptations.** The plan's "a pending session collected without running releases its
+   call record [R2]" calls `ev_drain()` after `gc()`: since FIX-1 (D-085) the finalizer defers
+   `session_shutdown` to the next safe point, so the release hook runs there. D-092 item 7 is
+   done: `local_trust_record()` (comment, definition and its one call) is deleted from
+   `tests/testthat/test-skill-discover.R`, which passes against P08's `trust.get` (128).
+
+Known gap, not P08's to fix (recorded for the coordinator): P06's `run_route()` catches every
+error of `router.call` and falls back to the default chat model, and `route_default()` checks
+neither egress nor replay. So a router whose choice `router.call` refuses (no acknowledgement, or
+replay mode) leads to a request to the default model without those checks; a scratch probe
+(`router:to_lan` choosing a LAN provider, default a non-offline fake) sent the request in replay
+mode without an acknowledgement. P06 should re-signal `gptr_error_egress` and
+`gptr_error_not_recorded` from `router.call` (or guard its fallback).
+
+Validation: `progress/P08.md`, Task 9. Red `^gptr-gateway$` `[ FAIL 42 | WARN 0 | SKIP 0 |
+PASS 121 ]` (`dev/.validation/P08/task9-red.log`); against the plan-literal source
+`[ FAIL 23 | WARN 0 | SKIP 0 | PASS 249 ]` (`task9-red-adaptations-against-plan-literal.log`,
+every failure in the adaptation tests or Task 8's IC-74 test); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 284 ]` (`task9-green.log`; the plan's 30 tests give 118,
+exactly its 192 - 74).
+
+## D-115 - P13 classifier route core: match and target follow the model's own type, the target is preflighted before the call's values are read, egress follows the effective endpoint and the call's replay = wins, images are checked, keyed and handed to the adapter, meta carries the call's provenance with calibration and usage unknown when unknown, and a cached record that does not answer the question is a miss (2026-10-05)
+
+P13 Task 8 (`R/s1-route.R`; two small changes in `R/s1-client.R`; `tests/testthat/test-s1-route.R`).
+IC-74 (07-local-ollama.md sections 2-5) and the forward notes of D-076, D-077, D-078 and D-080
+change the plan-literal code in these ways. The plan's 8 tests (55 expectations) are verbatim
+except one assertion (item 4).
+
+1. **Model-level type** (07 section 2). `s1_is_classifier()` reads the type of the resolved model
+   (P05's pure `model_resolve(strict = FALSE)`, as P08's `gateway_model_type()` routes), and only
+   a model without a type takes its provider's; `s1_target_of()` checks the model's type, not the
+   provider's. The plan used the provider's type for a spec or a provider id, so a chat-default
+   provider's classifier model (Clef on `ollama`) was refused and a classifier-typed provider's
+   chat model matched. A classifier reference whose provider is not registered is
+   `gptr_error_unknown_model` (the plan said "not a System 1 model").
+2. **Preflight first** (07 section 2.1; D-080 forward note). `s1_call()` and `s1_decide()` run
+   `s1_ready()` before the call's values are read or any state is built: P05's pure
+   `provider_preflight()` on the classifier's provider, or `s1_emu_ready()` for an emulation
+   target. The checked model (with its discovery evidence) feeds the question's decision limits
+   (`s1_question(decision =)`, D-077), the cache identity and the provenance. The running run's
+   frozen safety record (`run$opts$safety`) travels with the target to `s1_request(opts$safety)`;
+   outside a run it is NULL, P05's strict local-only default.
+3. **Guards** (D-099, D-114 items 3-4). Every provider that is not `offline` goes through P08's
+   `egress_check()`, which itself exempts loopback endpoints; the plan skipped any provider with
+   the `local` hint, so a "local" provider with a remote base URL got the user's data without an
+   acknowledgement. The call's `replay =` decides the replay guard, as P08's
+   `gateway_replay_guard()` does (`replay = "auto"` runs in a replaying process, `"replay"` refuses
+   a miss in one that is not); the plan read only the process mode (plan ambiguity 6).
+4. **Calibration unknown** (07 section 3; D-078 item 4). A native target's `calibrated` is NA, not
+   TRUE; a call's value is the adapter's statement, and next to cached elements it is combined
+   conservatively (`s1_calibration()`). The plan assertion `expect_true(attr(d, "meta")$calibrated)`
+   for P01's fake (which states NA) is `expect_identical(..., NA)`. Emulation stays FALSE.
+5. **Provenance in meta** (07 section 3). `meta` gains `provider`, `api`, `execution`
+   ("native"/"emulated"), `locality`, `model_digest`, `server_version` and
+   `calibration_provenance`, from `s1_request()`'s provenance, or from the target's model for a
+   call answered from the cache (`s1_meta()`).
+6. **Usage** (D-076). Unknown counts and cost stay NA in `meta$usage` and the System 1 log row
+   (the plan: `%||% 0`); a call answered entirely from the cache made no request, so its usage is
+   a known zero and no row is logged.
+7. **Cache validity** (D-080 item 5). A record that `s1_cache_answer()` rejects is a miss and is
+   asked again; the plan marked every record found as cached.
+8. **Images** (07 section 4; D-102, D-114 item 5). `.opts$system1_images` is refused with
+   `gptr_error_invalid_argument` unless the target is a native model whose decision record says
+   `images = TRUE` (emulation and Jev refuse them, never drop them); their ordered digests and
+   MIME types join the cache key (`s1_cache_identity()`), and `s1_request()` hands them to the
+   adapter as `opts$images` (encoding and size limits are the Ollama adapter's).
+9. **Small fixes.** `s1_engine()` gives "fake" for P01's `fake-classifier` api (its adapter always
+   reports "fake", contract 12.1), so a cached call names the same engine as a fresh one and the
+   plan's `s1_target()` assertion holds; `.opts$output = "factor"` applies to choices only (a
+   decision or score has no levels); an all-NA score summary says `mean NA`, not `mean NaN`;
+   `s1_decide()` refuses duplicated argument names, and its no-key message names a local decision
+   model as a third way.
+
+Validation: `progress/P13.md`, Task 8. Red `^s1-route$` `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 68 ]`
+(`dev/.validation/P13/task8-red.log`, every failure `could not find function`); against the
+plan-literal code `[ FAIL 22 | WARN 0 | SKIP 0 | PASS 157 ]` (`task8-negative-detail.log`); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 196 ]` (`task8-green.log`: 68 + the plan's 55 + 73 in eight
+IC-74/IC-47 tests).

@@ -330,3 +330,450 @@ doc_ide_console_focused = function() {
 doc_ide_backend = function() {
   switch(front_end(), positron = "positron", vscode = "vscode", "rstudio")
 }
+
+# ---- deferred Rscript writes, Jupyter pending blocks and their sidecars (IC-50, IC-51) ----------
+
+#' The sidecar of a document's deferred or pending upserts (contract 11.9):
+#' `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.rds`. `<root>` is the `.gptr/` of the
+#' document's own project, so every process finds the sidecar whatever its working directory (a
+#' job that leaves its project, or one cron starts elsewhere); doc_root() for a document outside
+#' a project with `.gptr/`.
+#' @noRd
+doc_sidecar_path = function(path) {
+  root = workspace_dir(dirname(path_norm(path))) %||% doc_root()
+  file.path(root, "cache", "tmp", paste0("pending-", cli::hash_sha1(path_key(path)), ".rds"))
+}
+
+#' The effective user id of this R process, or NA (mockable)
+#' @noRd
+doc_euid = function() {
+  tryCatch(as.numeric(ps::ps_uids()[["effective"]]), error = function(e) NA_real_)
+}
+
+#' May a sidecar file be deserialised? On Unix it must be this user's private file (mode 0600, as
+#' write_atomic() creates it). A file checked out or copied into the project tree keeps the
+#' umask's group and other bits and is never read: the project cannot plant a record (IC-52), and
+#' readRDS() of planted bytes can run code before R 4.4 (CVE-2024-27322). Windows has no such
+#' modes.
+#' @noRd
+doc_sidecar_trusted = function(f) {
+  if (is_windows()) return(TRUE)
+  info = file.info(f, extra_cols = TRUE)
+  if (is.na(info$size) || isTRUE(info$isdir)) return(FALSE)
+  me = doc_euid()
+  mine = is.na(me) || identical(as.numeric(info$uid), me)
+  mine && bitwAnd(as.integer(info$mode), strtoi("077", 8L)) == 0L
+}
+
+#' Is one upsert of a sidecar gptr's own for the document with key `key` and format `fmt`: a
+#' block id of the block grammar, character lines, and a site of that format naming no other file?
+#' @noRd
+doc_sidecar_upsert_ok = function(u, key, fmt) {
+  if (!is.list(u) || !is.list(u$site)) return(FALSE)
+  id = u$block_id
+  sp = u$site$path
+  is.character(id) && length(id) == 1L && !is.na(id) &&
+    grepl("^[0-9a-z]{6,16}\\z", id, perl = TRUE) && is.character(u$lines) &&
+    !anyNA(u$lines) && identical(u$site$format, fmt) &&
+    (is.null(sp) || (is.character(sp) && length(sp) == 1L && !is.na(sp) &&
+                       identical(path_key(sp), key)))
+}
+
+#' Is `rec` a sidecar record for the document `path`? Its `doc` is that document, its kind is
+#' deferred or pending, and every upsert is for that document in its own format, which a deferred
+#' (Rscript) or pending (Jupyter) site has: r or ipynb. A record that names another file or
+#' another format (the transcript format appends without locating a call) is ignored, so
+#' recovery writes only the document it was asked about (IC-51, IC-52).
+#' @noRd
+doc_sidecar_valid = function(rec, path) {
+  if (!is.list(rec) || !is.list(rec$upserts)) return(FALSE)
+  doc = rec$doc
+  if (!is.character(doc) || length(doc) != 1L || is.na(doc)) return(FALSE)
+  key = path_key(path)
+  fmt = doc_format_of(path)
+  identical(path_key(doc), key) && length(rec$kind) == 1L &&
+    isTRUE(rec$kind %in% c("deferred", "pending")) && isTRUE(fmt %in% c("r", "ipynb")) &&
+    all(vapply(rec$upserts, doc_sidecar_upsert_ok, NA, key = key, fmt = fmt))
+}
+
+#' Read a document's sidecar record, or NULL (none, not this user's private file, unreadable, or
+#' not a record for that document)
+#' @noRd
+doc_sidecar_read = function(path) {
+  f = doc_sidecar_path(path)
+  if (!file.exists(f) || !doc_sidecar_trusted(f)) return(NULL)
+  rec = tryCatch(readRDS(f), error = function(e) NULL)
+  if (isTRUE(tryCatch(doc_sidecar_valid(rec, path), error = function(e) FALSE))) rec else NULL
+}
+
+#' Write a sidecar record `list(doc, base_md5, upserts = list(list(block_id, lines, site)),
+#' session, pid, create_time, time, kind)` (IC-51), or remove the file when no upsert is left.
+#' The file is replaced whole by P01's write_atomic() with the bytes save_rds() would write
+#' (serialize_leaf(): uncompressed, `ascii = FALSE`, read by readRDS()), so a write cut short by
+#' SIGTERM or a full disk leaves the previous record readable (IC-51: at most one call is lost).
+#' A file there that doc_sidecar_trusted() rejects is removed first: write_atomic() would keep
+#' its mode, and this process's own record would then be rejected in turn.
+#' @noRd
+doc_sidecar_write = function(rec) {
+  f = doc_sidecar_path(rec$doc)
+  if (!length(rec$upserts)) {
+    if (file.exists(f)) unlink(f)
+    return(invisible(NULL))
+  }
+  dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
+  if (file.exists(f) && !doc_sidecar_trusted(f)) unlink(f)
+  write_atomic(f, serialize_leaf(rec))
+  invisible(f)
+}
+
+#' Merge upserts adopted from a dead process's sidecar after `ups`, marked `adopted`: this
+#' process's own upserts are queued, and applied, before them, so an adopted upsert for a call
+#' this run recorded again is the one superseded (IC-51: a re-run after a kill keeps the block of
+#' the code it ran). Their order is kept, so after a chain of killed runs the newest run's block
+#' is applied first. An adopted upsert of a block already queued is dropped.
+#' @noRd
+doc_upserts_adopt = function(ups, adopted) {
+  ids = vapply(ups, function(u) u$block_id, "")
+  adopted = Filter(function(u) !u$block_id %in% ids, adopted)
+  c(ups, lapply(adopted, function(u) {
+    u$adopted = TRUE
+    u
+  }))
+}
+
+#' Queue this process's upsert `u` after its own upserts and before the adopted ones, replacing a
+#' queued upsert of the same block
+#' @noRd
+doc_upserts_push = function(ups, u) {
+  ups = Filter(function(x) !identical(x$block_id, u$block_id), ups)
+  adopted = vapply(ups, function(x) isTRUE(x$adopted), NA)
+  c(ups[!adopted], list(u), ups[adopted])
+}
+
+#' Drop this process's queued upserts for the call that `site` locates in `text`, before the
+#' upsert of its newest block is queued (a notebook cell run again: IC-50, the block shown last is
+#' the one sync writes). doc_apply_upserts() would otherwise insert the oldest block and supersede
+#' the newer ones. The queue keeps the order the calls ran in, so the blocks of several calls of
+#' one statement or cell are written in that order. Two upserts are for the same call when they
+#' locate the same statement (or cell) and the same call in it; only queued upserts with the same
+#' anchored prompt hash are located. Upserts adopted from a dead process are kept: queued after
+#' this process's own, they are superseded when applied.
+#' @noRd
+doc_upserts_drop_call = function(ups, fmt, text, site) {
+  ph = site$anchor[["ph"]]
+  cand = vapply(ups, function(x) {
+    !isTRUE(x$adopted) && identical(x$site$anchor[["ph"]], ph)
+  }, NA)
+  if (!any(cand)) return(ups)
+  at = function(s) {
+    loc = tryCatch(fmt$locate(text, s), error = function(e) NULL)
+    if (is.null(loc$hit) || !isTRUE(loc$top_level) || !NROW(loc$hit) ||
+          anyNA(c(loc$hit$line1[1L], loc$hit$col1[1L]))) {
+      return(NULL)
+    }
+    list(stmt = loc$stmt, line = loc$hit$line1[1L], col = loc$hit$col1[1L])
+  }
+  me = at(site)
+  if (is.null(me)) return(ups)
+  cand[cand] = vapply(ups[cand], function(x) identical(at(x$site), me), NA)
+  ups[!cand]
+}
+
+#' Was a sidecar written by this process? Its pid and its process creation time are this
+#' process's (an earlier process that had the same pid, as in containers, is another process;
+#' without a creation time on either side the pid decides)
+#' @noRd
+doc_sidecar_mine = function(rec) {
+  if (!identical(suppressWarnings(as.integer(rec$pid)), Sys.getpid())) return(FALSE)
+  ct = suppressWarnings(as.numeric(rec$create_time))
+  me = doc_create_time()
+  length(ct) != 1L || is.na(ct) || is.na(me) || abs(ct - me) < 0.01
+}
+
+#' Does a sidecar belong to this process or to another live one (pid and creation time, P04's
+#' pid_alive())?
+#' @noRd
+doc_sidecar_live = function(rec) {
+  if (doc_sidecar_mine(rec)) return(TRUE)
+  pid = suppressWarnings(as.integer(rec$pid))
+  if (length(pid) != 1L || is.na(pid) || identical(pid, Sys.getpid())) return(FALSE)
+  isTRUE(tryCatch(pid_alive(pid, create_time = rec$create_time), error = function(e) FALSE))
+}
+
+#' A new pending record for a document
+#' @noRd
+doc_pending_new = function(path, kind, session_id = NULL) {
+  list(doc = path, base_md5 = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_,
+       upserts = list(), session = session_id, pid = Sys.getpid(),
+       create_time = doc_create_time(), time = Sys.time(), kind = kind)
+}
+
+#' Register the exit finalizer that applies deferred writes (report 14 section 2.1.2: it runs at
+#' normal exit, after an uncaught error and after quit(runLast = FALSE))
+#' @noRd
+doc_finalizer_ensure = function() {
+  st = doc_state()
+  if (!isTRUE(st$finalizer)) {
+    reg.finalizer(st, function(e) doc_pending_flush_all(), onexit = TRUE)
+    st$finalizer = TRUE
+  }
+  invisible(NULL)
+}
+
+#' A pending record of this process keeps only the upserts its sidecar still holds:
+#' gptr_doc(path, sync = TRUE) in another R process applied the others and removed them from the
+#' sidecar (IC-50), so queueing them again would bring back agent cells the user has since edited
+#' or deleted. A sidecar another process wrote in the meantime, or a file there that cannot be
+#' read as one, leaves the record as it is.
+#' @noRd
+doc_pending_reconcile = function(rec) {
+  disk = doc_sidecar_read(rec$doc)
+  if (is.null(disk) && file.exists(doc_sidecar_path(rec$doc))) return(rec)
+  if (!is.null(disk) && !doc_sidecar_mine(disk)) return(rec)
+  left = if (is.null(disk)) character() else vapply(disk$upserts, function(u) u$block_id, "")
+  rec$upserts = Filter(function(u) u$block_id %in% left, rec$upserts)
+  rec
+}
+
+#' Queue an upsert of a deferred (Rscript) or pending (Jupyter) document: the block is prepared
+#' against the current text, flushed to the sidecar and then kept in `the$doc_pending` (IC-51:
+#' SIGTERM loses at most the call that was running; an upsert whose sidecar write failed is
+#' reported as failed and is not written at exit either); a deferred document is locked until
+#' exit (the exit finalizer, which releases the lock, is registered with it) and a dead process's
+#' unapplied upserts are adopted, queued after this process's own; this process's earlier upsert
+#' for the same call is dropped (doc_upserts_drop_call()); a pending block is shown as a fenced
+#' code block in the cell output (IC-50)
+#' @noRd
+doc_pending_add = function(fmt, site, up, kind) {
+  st = doc_state()
+  path = site$path
+  key = path_key(path)
+  none = list(action = "locked", block_id = NULL, lines = NULL, backend = kind)
+  if (identical(kind, "deferred")) {
+    if (!doc_lock_hold(path)) {
+      gptr_inform(paste0("Another R process is recording into ", doc_rel(path),
+                         "; blocks of this run are not recorded."), "notice",
+                  .once = paste0("doc_locked:", key))
+      return(none)
+    }
+    doc_finalizer_ensure()
+  }
+  rec = st$docs[[key]]
+  if (!is.null(rec) && identical(rec$kind, "pending")) rec = doc_pending_reconcile(rec)
+  if (is.null(rec)) {
+    sid = if (is.null(up$session)) NULL else session_data(up$session)$id
+    rec = doc_pending_new(path, kind, sid)
+    old = doc_sidecar_read(path)
+    if (!is.null(old) && identical(old$kind, kind) && !doc_sidecar_live(old)) {
+      rec$upserts = doc_upserts_adopt(list(), old$upserts)
+    }
+  }
+  doc = doc_read_or_new(path)
+  taken = vapply(rec$upserts, function(u) u$block_id, "")
+  prep = doc_prepare(fmt, site, up, doc$lines, taken = taken)
+  if (!is.null(prep$skip)) {
+    return(list(action = prep$skip, block_id = prep$id, lines = NULL, backend = kind))
+  }
+  rec$upserts = doc_upserts_push(doc_upserts_drop_call(rec$upserts, fmt, doc$lines, site),
+                                 list(block_id = prep$id, lines = prep$rendered, site = site))
+  rec$time = Sys.time()
+  doc_sidecar_write(rec)
+  st$docs[[key]] = rec
+  if (identical(kind, "pending")) msg_verbatim(c("```r", as.character(prep$rendered), "```"))
+  list(action = prep$action, block_id = prep$id, lines = NULL, backend = kind, sha = prep$sha,
+       prompt = prep$prompt)
+}
+
+#' Apply queued upserts to the document under its lock, through the md5 check and re-locate
+#' path (three attempts): a user-edited block or a call that cannot be found is a conflict and
+#' is never overwritten; an upsert whose call already owns a fresh block is superseded (not
+#' written). Returns list(applied, superseded, conflicts) of block ids, `applied` being the
+#' blocks written, or NULL when another live process holds the lock.
+#' @noRd
+doc_apply_upserts = function(rec) {
+  path = rec$doc
+  ups = rec$upserts
+  ids = vapply(ups, function(u) u$block_id, "")
+  none = character()
+  if (!length(ups)) return(list(applied = none, superseded = none, conflicts = none))
+  fname = ups[[1L]]$site$format %||% doc_format_of(path)
+  fmt = doc_format_get(fname)
+  if (is.null(fmt)) return(list(applied = none, superseded = none, conflicts = ids))
+  lock = doc_lock(path)
+  if (is.null(lock)) return(NULL)
+  on.exit(doc_unlock(lock), add = TRUE)
+  for (attempt in 1:3) {
+    doc = doc_read_or_new(path)
+    text = doc$lines
+    applied = character()
+    superseded = character()
+    conflicts = character()
+    for (u in ups) {
+      status = doc_existing_status(fname, text, u$block_id)
+      if (identical(status, "user-edited")) {
+        conflicts = c(conflicts, u$block_id)
+        next
+      }
+      if (is.na(status)) {
+        loc = tryCatch(fmt$locate(text, u$site), error = function(e) NULL)
+        if (!is.null(loc$owned) && identical(loc$owned$status, "fresh")) {
+          superseded = c(superseded, u$block_id)
+          next
+        }
+      }
+      new = tryCatch(fmt$upsert(text, u$site, u$lines, u$block_id),
+                     gptr_error_doc_write = function(e) NULL)
+      if (is.null(new)) {
+        conflicts = c(conflicts, u$block_id)
+      } else {
+        text = new
+        applied = c(applied, u$block_id)
+      }
+    }
+    res = list(applied = applied, superseded = superseded, conflicts = conflicts)
+    if (identical(text, doc$lines)) return(res)
+    ok = tryCatch({
+      doc_write(doc, text)
+      TRUE
+    }, gptr_error_doc_write = function(e) {
+      if (identical(e$reason, "conflict")) FALSE else stop(e)
+    })
+    if (ok) return(res)
+  }
+  list(applied = none, superseded = none, conflicts = ids)
+}
+
+#' Keep only the conflicting upserts of a record in its sidecar (they are never pruned
+#' automatically, IC-51) and warn about them once per document and set of blocks
+#' @noRd
+doc_keep_conflicts = function(rec, res) {
+  rec$upserts = Filter(function(u) u$block_id %in% res$conflicts, rec$upserts)
+  doc_sidecar_write(rec)
+  if (length(res$conflicts)) {
+    gptr_warn(paste0("gptr did not overwrite ", doc_rel(rec$doc), ": block(s) ",
+                     paste(res$conflicts, collapse = ", "), " changed or their call was not ",
+                     "found. They stay in ", doc_rel(doc_sidecar_path(rec$doc)),
+                     "; see gptr_cache(\"info\")."), "doc_conflict",
+              .once = paste0("doc_conflict:", path_key(rec$doc), ":",
+                             paste(res$conflicts, collapse = ",")))
+  }
+  invisible(rec)
+}
+
+#' Apply this process's deferred writes and release its document locks (the exit finalizer)
+#' @noRd
+doc_pending_flush_all = function() {
+  st = doc_state()
+  for (key in names(st$docs)) {
+    rec = st$docs[[key]]
+    if (!identical(rec$kind, "deferred")) next
+    res = tryCatch(doc_apply_upserts(rec), error = function(e) NULL)
+    if (!is.null(res)) doc_keep_conflicts(rec, res)
+    st$docs[[key]] = NULL
+  }
+  doc_lock_release_all()
+  invisible(NULL)
+}
+
+#' Does this R process run `path` as its `Rscript` script? It holds the document's run lock (its
+#' deferred writes are queued), or `Rscript --file=` names it. Such a script is written only at
+#' exit: rewriting a script that Rscript is running corrupts the run (report 14 section 2.1.2).
+#' @noRd
+doc_script_running = function(path) {
+  key = path_key(path)
+  if (!is.null(doc_state()$held[[key]])) return(TRUE)
+  f = doc_rscript_running()
+  !is.null(f) && identical(path_key(f), key)
+}
+
+#' Recover the deferred upserts a dead process left in a document's sidecar (IC-51): applied
+#' now through the md5 and re-locate path, or, when this process runs the document under Rscript
+#' (`defer = TRUE`, or doc_script_running()), adopted into this process's deferred writes, after
+#' its own (doc_upserts_adopt()), and written at its exit. Pending notebook blocks are applied
+#' only by gptr_doc(path, sync = TRUE).
+#' @noRd
+doc_recover = function(path, defer = FALSE) {
+  path = path_norm(path)
+  rec = doc_sidecar_read(path)
+  if (is.null(rec) || !identical(rec$kind, "deferred") || doc_sidecar_live(rec)) {
+    return(invisible(FALSE))
+  }
+  if (defer || doc_script_running(path)) {
+    if (!doc_lock_hold(path)) return(invisible(FALSE))
+    doc_finalizer_ensure()
+    st = doc_state()
+    key = path_key(path)
+    own = st$docs[[key]] %||% doc_pending_new(path, "deferred", rec$session)
+    own$upserts = doc_upserts_adopt(own$upserts, rec$upserts)
+    doc_sidecar_write(own)
+    st$docs[[key]] = own
+    return(invisible(TRUE))
+  }
+  res = doc_apply_upserts(rec)
+  if (is.null(res)) return(invisible(FALSE))
+  doc_keep_conflicts(rec, res)
+  invisible(TRUE)
+}
+
+#' Is this notebook open in the Jupyter kernel of this process? (IC-50: never written then) The
+#' kernel runs the notebook `JPY_SESSION_NAME` names; when that names no existing file,
+#' doc_site_jupyter() finds the notebook by content among those in the working directory, so
+#' each of them may be the open one, and so is a notebook this kernel queued pending blocks for
+#' (a cell may have changed the working directory since). Only `.ipynb` files are notebooks.
+#' @noRd
+doc_notebook_attached = function(path) {
+  if (!isTRUE(getOption("jupyter.in_kernel")) || !identical(doc_format_of(path), "ipynb")) {
+    return(FALSE)
+  }
+  jpy = Sys.getenv("JPY_SESSION_NAME")
+  if (nzchar(jpy) && file.exists(jpy)) return(identical(path_key(jpy), path_key(path)))
+  identical(doc_state()$docs[[path_key(path)]]$kind, "pending") ||
+    identical(path_key(dirname(path_norm(path))), path_key(getwd()))
+}
+
+#' Apply the pending (Jupyter) and unapplied deferred upserts of a document now
+#' (`gptr_doc(path, sync = TRUE)`); returns the number of blocks written, invisibly. The script
+#' this process runs under Rscript is not written (its blocks wait for the exit), nor is the
+#' script of another live process's deferred record (IC-51 recovers only a dead pid's upserts:
+#' that run, whose run lock may be in another workspace root, writes them at its exit; a
+#' notice), nor the notebook this Jupyter kernel runs (an error).
+#' @noRd
+doc_sync = function(path) {
+  path = path_norm(path)
+  st = doc_state()
+  key = path_key(path)
+  if (doc_script_running(path)) {
+    doc_recover(path, defer = TRUE)
+    gptr_inform(paste0(doc_rel(path), " is the script this R process runs; its blocks are ",
+                       "written when the process exits."), "notice")
+    return(invisible(0L))
+  }
+  rec = st$docs[[key]]
+  if (!is.null(rec) && identical(rec$kind, "pending")) {
+    rec = doc_pending_reconcile(rec)
+    st$docs[[key]] = if (length(rec$upserts)) rec else NULL
+  }
+  rec = rec %||% doc_sidecar_read(path)
+  if (is.null(rec) || !length(rec$upserts)) return(invisible(0L))
+  if (identical(rec$kind, "deferred") && doc_sidecar_live(rec)) {
+    gptr_inform(paste0("An R process that is still running records into ", doc_rel(path),
+                       "; its blocks are written when it exits."), "notice")
+    return(invisible(0L))
+  }
+  if (doc_notebook_attached(path)) {
+    gptr_abort(c(paste0(doc_rel(path), " is the notebook this Jupyter kernel runs; gptr never ",
+                        "writes an open notebook."),
+                 paste0("Close it and run gptr_doc(\"", doc_rel(path), "\", sync = TRUE) from ",
+                        "another R session.")), "invalid_argument", arg = "sync",
+               expected = "a notebook that is not open in this kernel")
+  }
+  res = doc_apply_upserts(rec)
+  if (is.null(res)) {
+    gptr_inform(paste0("Another R process is writing ", doc_rel(path), "; nothing was synced."),
+                "notice")
+    return(invisible(0L))
+  }
+  doc_keep_conflicts(rec, res)
+  st$docs[[key]] = NULL
+  invisible(length(res$applied))
+}
