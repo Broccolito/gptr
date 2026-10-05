@@ -65,6 +65,7 @@ that flag for examples. CI now compares the complete R connection table before
 and after the suite through `dev/ci/check-connections.R`. A synthetic leaking
 connection is an explicit negative control. Ordinary R CMD check example
 checks remain enabled. The full wrapper must also pass after P01 integration.
+The connections job no longer sets the flag (only R CMD check reads it; CI-1b).
 
 The combined P02/P04 snapshot exposed processx's two intentional process-wide
 supervisor FIFOs. IC-60 already disables this supervisor under R CMD check.

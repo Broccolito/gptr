@@ -124,3 +124,13 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
 - Reviews: none yet.
 - Deviations: D-141. Open: check_number() not used where bounds differ (http_timeouts(),
   ratelimit_rate(), retry_backoff()).
+
+## Task CI-1b - Workflow status checks and load hook (2026-10-05)
+- Workflow -54 lines: one `grep '^Status:'` line per status step, unconditional copy-safety and bench
+  steps, dead `_R_CHECK_CONNECTIONS_LEFT_OPEN_` (only R CMD check reads it) and header narration gone;
+  YAML parses, job names unchanged. `.onLoad` already runs `on_load_run()`; R/zzz.R unchanged.
+- Red: none (refactor). Green: `zzz` PASS 94 (connections job asserted by its gate script, not the
+  flag). Lint clean. Neighbours: `aaa-state|lint-rules|arch-layers` green. Hosted run: coordinator.
+- Reviews: none yet.
+- Deviations: D-006 amended. Open: `.onLoad` still loads built-ins via its own `ns_fun()` + `tryCatch`
+  instead of an `on_load_run()` entry (needs test-zzz load-hook changes); TD-06 deferred.

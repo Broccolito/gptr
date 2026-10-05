@@ -1,10 +1,5 @@
-# gptr CI (P01; report 13 section 3.8, contract IC-59, IC-72, IC-73). The matrix mirrors CRAN:
-# macOS, Windows and Ubuntu release, devel and oldrel-1, oldrel-4 (proves R >= 4.2.0), a job
-# without Suggests, an LC_ALL=C job, the copy-safety suites, a connections-left-open run and the
-# token benchmark once dev/bench/tokens/run.R exists (P07).
-# Every job has a time limit, and each R CMD check job fails unless the check wrote its final
-# status line: rcmdcheck reports success when R CMD check aborts before checking anything.
-# The Windows release job first streams the offline tests file by file (diagnosis only).
+# CRAN's check matrix plus the contract's jobs (IC-59, IC-72, IC-73). rcmdcheck reports success
+# when R CMD check aborts early, so every check job also requires the log's Status line.
 on:
   push:
     branches: [main]
@@ -12,9 +7,7 @@ on:
 
 name: R-CMD-check.yaml
 
-# One check runs per ref at a time and only the newest push waits behind it (GitHub drops
-# older pending runs). Running checks are not cancelled: frequent pushes would otherwise
-# cancel every run before it finishes, leaving no completed hosted evidence.
+# Running checks finish (frequent pushes would otherwise cancel every run); the newest push waits.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -33,8 +26,7 @@ jobs:
           - {os: macos-latest, r: 'release'}
           # the file-by-file stream (at most 30 minutes) runs before the 45 of the check
           - {os: windows-latest, r: 'release', minutes: 75}
-          # Windows R before 4.5.0: file.info() has no owner columns, which
-          # _R_CHECK_THINGS_IN_OTHER_DIRS_ needs (R CMD check aborts at its start otherwise)
+          # Windows R < 4.5.0: file.info() lacks the owner columns this check variable needs
           - {os: windows-latest, r: 'oldrel-4', things-in-other-dirs: 'false'}
           # R-devel installs every dependency from source (about 65 minutes on a cold cache)
           - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
@@ -58,9 +50,7 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
-      # R CMD check prints the test output only after the tests end, so a hung Windows run named
-      # no file (CI Task CI-2). This streams the offline suite file by file and test by test
-      # first, within its own limit; it only diagnoses, and the R CMD check below is the gate.
+      # R CMD check prints test output only at the end; this names the file a hung run is in.
       - name: Offline tests file by file (Windows release diagnosis)
         if: runner.os == 'Windows' && matrix.config.r == 'release'
         timeout-minutes: 30
@@ -77,17 +67,7 @@ jobs:
           error-on: '"warning"'
       - name: Fail unless R CMD check wrote its status
         shell: bash
-        run: |
-          log=check/gptr.Rcheck/00check.log
-          if [ ! -f "$log" ]; then
-            echo "::error::R CMD check did not write $log"
-            exit 1
-          fi
-          if ! grep -q '^Status:' "$log"; then
-            echo "::error::$log has no Status line: R CMD check did not finish"
-            exit 1
-          fi
-          grep '^Status:' "$log"
+        run: grep '^Status:' check/gptr.Rcheck/00check.log
 
   no-suggests:
     runs-on: ubuntu-latest
@@ -113,18 +93,7 @@ jobs:
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
       - name: Fail unless R CMD check wrote its status
-        shell: bash
-        run: |
-          log=check/gptr.Rcheck/00check.log
-          if [ ! -f "$log" ]; then
-            echo "::error::R CMD check did not write $log"
-            exit 1
-          fi
-          if ! grep -q '^Status:' "$log"; then
-            echo "::error::$log has no Status line: R CMD check did not finish"
-            exit 1
-          fi
-          grep '^Status:' "$log"
+        run: grep '^Status:' check/gptr.Rcheck/00check.log
 
   c-locale:
     runs-on: ubuntu-latest
@@ -150,18 +119,7 @@ jobs:
           args: 'c("--no-manual", "--as-cran")'
           error-on: '"warning"'
       - name: Fail unless R CMD check wrote its status
-        shell: bash
-        run: |
-          log=check/gptr.Rcheck/00check.log
-          if [ ! -f "$log" ]; then
-            echo "::error::R CMD check did not write $log"
-            exit 1
-          fi
-          if ! grep -q '^Status:' "$log"; then
-            echo "::error::$log has no Status line: R CMD check did not finish"
-            exit 1
-          fi
-          grep '^Status:' "$log"
+        run: grep '^Status:' check/gptr.Rcheck/00check.log
 
   copy-safety:
     runs-on: ubuntu-latest
@@ -183,14 +141,9 @@ jobs:
         with:
           extra-packages: any::devtools
       - name: Copy-safety suites
-        shell: bash
         run: |
           Rscript --vanilla -e 'stopifnot(capabilities("profmem"))'
-          if ls tests/testthat/test-copy-*.R > /dev/null 2>&1; then
-            Rscript --vanilla -e 'devtools::test(filter = "copy", stop_on_failure = TRUE)'
-          else
-            echo "No test-copy-*.R suites yet (they arrive with P08 and later plans)."
-          fi
+          Rscript --vanilla -e 'devtools::test(filter = "copy", stop_on_failure = TRUE)'
 
   connections:
     runs-on: ubuntu-latest
@@ -198,7 +151,6 @@ jobs:
     timeout-minutes: 30
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      _R_CHECK_CONNECTIONS_LEFT_OPEN_: true
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-r@v2
@@ -226,11 +178,5 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rtiktoken any::pkgload
-      - name: Token ratchet (dev/bench/tokens/run.R, from P07)
-        shell: bash
-        run: |
-          if [ -f dev/bench/tokens/run.R ]; then
-            Rscript --vanilla dev/bench/tokens/run.R --check
-          else
-            echo "dev/bench/tokens/run.R does not exist yet (P07 adds it)."
-          fi
+      - name: Token ratchet
+        run: Rscript --vanilla dev/bench/tokens/run.R --check
