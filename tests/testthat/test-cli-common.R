@@ -161,3 +161,158 @@ test_that("the contract name cli_find() of 04 7.20 is pcli_find()", {
   expect_identical(names(formals(cli_find)), "cli")
   expect_identical(cli_find("claude"), pcli_find("claude"))
 })
+
+# ---- version and capability probes, notices (Task 2) -------------------------------------------
+
+test_that("pcli_bare_state() detects a -p that defaults to --bare and its opt-out", {
+  plain = pcli_bare_state("  --bare   Minimal mode: skip hooks, plugins and CLAUDE.md")
+  expect_false(plain$bare_default)
+  expect_null(plain$bare_optout)
+  future = pcli_bare_state("  --bare   Will become the default for -p in a future release")
+  expect_false(future$bare_default)
+  s = pcli_bare_state(paste0("  --bare   Minimal mode (the default with -p/--print)\n",
+                            "  --no-bare  Full mode"))
+  expect_true(s$bare_default)
+  expect_identical(s$bare_optout, "--no-bare")
+  s = pcli_bare_state("  --bare   Minimal mode (the default with -p/--print)")
+  expect_true(s$bare_default)
+  expect_null(s$bare_optout)
+})
+
+test_that("pcli_version() and pcli_probe() read the fake CLIs and cache per command", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_fake_cli_path("claude", "text")
+  local_fake_cli_path("codex", "text")
+  path = pcli_find("claude")
+  expect_identical(pcli_version(path), package_version("2.1.261"))
+  probe = pcli_probe(path)
+  expect_false(probe$bare_default)
+  expect_null(probe$bare_optout)
+  expect_identical(pcli_cache$status$claude$version, "2.1.261")
+  codex = pcli_probe(pcli_find("codex"))
+  expect_true(codex$resume)
+  expect_identical(codex$version, "0.157.0")
+  local_mocked_bindings(proc_run = function(...) stop("spawned a process"))
+  expect_identical(pcli_version(path), package_version("2.1.261"))
+  expect_identical(pcli_probe(path)$version, "2.1.261")
+})
+
+test_that("an old or bare-only claude and an old codex signal gptr_error_cli_version", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_fake_cli_path("claude", "old")
+  err = expect_error(pcli_version(pcli_find("claude")), class = "gptr_error_cli_version")
+  expect_identical(err$found, "1.9.0")
+  expect_identical(err$required, "2.0.0")
+  expect_identical(pcli_cache$status$claude$error, "outdated")
+  local_fake_cli_path("claude", "bare-default")
+  expect_error(pcli_probe(pcli_find("claude")), class = "gptr_error_cli_version")
+  local_fake_cli_path("claude", "bare-optout")
+  expect_identical(pcli_probe(pcli_find("claude"))$bare_optout, "--no-bare")
+  local_fake_cli_path("codex", "old")
+  err = expect_error(pcli_probe(pcli_find("codex")), class = "gptr_error_cli_version")
+  expect_match(err$required, "--ignore-user-config", fixed = TRUE)
+  local_fake_cli_path("codex", "noresume")
+  expect_false(pcli_probe(pcli_find("codex"))$resume)
+})
+
+# A proc_run() result for the mocked pcli_run() of the next tests
+probe_run = function(stdout = "", status = 0L, timed_out = FALSE, stderr = "") {
+  list(status = status, stdout = stdout, stderr = stderr, timed_out = timed_out, elapsed = 0)
+}
+
+# Replace pcli_run() for the calling test with a queue of results; the queue's `results` holds
+# those not yet used and `args` the arguments of each run
+local_probe_runs = function(results, .env = parent.frame()) {
+  queue = new.env()
+  queue$results = results
+  queue$args = list()
+  local_mocked_bindings(pcli_run = function(cmd, args, timeout = 30) {
+    queue$args[[length(queue$args) + 1L]] = args
+    res = queue$results[[1L]]
+    queue$results = queue$results[-1L]
+    res
+  }, .env = .env)
+  queue
+}
+
+test_that("a --version run that failed or timed out is unreadable and is not cached", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  path = structure("/no/such/dir/claude", cli = "claude")
+  queue = local_probe_runs(list(
+    probe_run(status = 1L, stderr = "error: this build requires glibc 2.28.0"),
+    probe_run("2.1.261 (Claude", status = NA_integer_, timed_out = TRUE),
+    probe_run("2.1.261 (Claude Code)")))
+  err = expect_error(pcli_version(path), class = "gptr_error_cli_version")
+  expect_true(is.na(err$found))
+  expect_match(conditionMessage(err), "`--version` exited with status 1", fixed = TRUE)
+  expect_identical(pcli_cache$status$claude$error, "version unreadable")
+  err = expect_error(pcli_version(path), class = "gptr_error_cli_version")
+  expect_match(conditionMessage(err), "`--version` timed out", fixed = TRUE)
+  expect_identical(pcli_version(path), package_version("2.1.261"))
+  expect_null(pcli_cache$status$claude$error)
+  expect_length(queue$results, 0L)
+})
+
+test_that("a help probe that failed or timed out is an error and is not cached", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  codex = structure("/no/such/dir/codex", cli = "codex")
+  help = paste("Usage: codex exec [OPTIONS] [PROMPT]", "Commands:",
+               "  resume  Resume a previous session", "Options:", "      --json",
+               "      --ignore-user-config", "      --skip-git-repo-check", sep = "\n")
+  queue = local_probe_runs(list(probe_run("codex-cli 0.157.0"),
+                                probe_run(status = NA_integer_, timed_out = TRUE),
+                                probe_run(help)))
+  err = expect_error(pcli_probe(codex), class = "gptr_error_cli_version")
+  expect_identical(err$found, "0.157.0")
+  expect_identical(err$required, "`codex exec --help` exiting with status 0")
+  expect_match(conditionMessage(err), "`codex exec --help` timed out", fixed = TRUE)
+  expect_false(grepl("lacks", conditionMessage(err), fixed = TRUE))
+  expect_identical(pcli_cache$status$codex$error, "help unreadable")
+  probe = pcli_probe(codex)
+  expect_identical(probe$missing, character())
+  expect_true(probe$resume)
+  expect_identical(queue$args, list("--version", c("exec", "--help"), c("exec", "--help")))
+  claude = structure("/no/such/dir/claude", cli = "claude")
+  queue = local_probe_runs(list(
+    probe_run("2.1.261 (Claude Code)"),
+    probe_run(status = 2L, stderr = "error: unknown option"),
+    probe_run(paste0("  --bare     Minimal mode (the default with -p/--print)\n",
+                     "  --no-bare  Full mode"))))
+  err = expect_error(pcli_probe(claude), class = "gptr_error_cli_version")
+  expect_match(conditionMessage(err), "`claude --help` exited with status 2", fixed = TRUE)
+  expect_identical(pcli_cache$status$claude$error, "help unreadable")
+  expect_identical(pcli_probe(claude)$bare_optout, "--no-bare")
+  expect_length(queue$results, 0L)
+})
+
+test_that("the contract names cli_version() and cli_probe() of 04 7.20 are the probes", {
+  expect_identical(names(formals(cli_version)), "path")
+  expect_identical(names(formals(cli_probe)), "path")
+  local_mocked_bindings(pcli_version = function(path) package_version("9.9.9"),
+                        pcli_probe = function(path) list(cli = "claude", version = "9.9.9"))
+  expect_identical(cli_version("claude"), package_version("9.9.9"))
+  expect_identical(cli_probe("claude")$version, "9.9.9")
+})
+
+test_that("each route prints its one-time notice through gptr_inform()", {
+  seen = new.env()
+  seen$calls = list()
+  local_mocked_bindings(gptr_inform = function(message, class, ..., .data = NULL, .once = NULL) {
+    seen$calls[[length(seen$calls) + 1L]] = list(message = message, class = class, once = .once)
+    invisible(NULL)
+  })
+  pcli_notice("claude")
+  pcli_notice("codex")
+  expect_identical(vapply(seen$calls, function(x) x$class, ""), c("notice", "notice"))
+  expect_identical(vapply(seen$calls, function(x) x$once, ""),
+                   c("cli_notice:claude", "cli_notice:codex"))
+  expect_match(seen$calls[[1]]$message, "experimental", fixed = TRUE)
+  expect_match(seen$calls[[2]]$message, "19-38K", fixed = TRUE)
+  expect_match(seen$calls[[2]]$message, "own shell inside its sandbox", fixed = TRUE)
+})

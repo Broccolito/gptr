@@ -5518,3 +5518,107 @@ test and changed one expectation (+3 expectations): red against the round-1 sour
 count for `test-cli-common.R` is 17 higher on macOS and Linux (Task 2 red
 `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 43 ]`, and so on); on Windows the execute-bit test skips, so
 counts there are 14 higher plus `SKIP 1`.
+
+## D-094 - P08 settings layers: project files and options() never relax providers.<id>.local_only, a project base URL needs trust and a one-time confirmation, dotted names merge at every level, user-scope settings come from the user file only, an explicit null in a file is a value, keys without a spec keep their option default, and the printed settings are redacted (2026-10-04)
+
+P08 Task 3's literal settings layers (`R/gptr-config.R`) predate IC-74 and leave out two contract
+rules. Behaviours that differ from the plan literal, which Task 4 (egress), Task 7
+(`gptr_config()`), Task 9 (the run's safety record, the activated `settings.get` service), P05
+and P07 consume:
+
+1. **Only human configuration relaxes `local_only` (IC-74; 07-local-ollama.md sections 2.1 and
+   5).** The plan merged `providers` like any object, so a trusted project, `options(gptr.providers
+   = ...)` or a dotted option `gptr.providers.ollama.local_only = FALSE` set the effective value to
+   `FALSE`. `settings_guard()` now decides what each layer contributes: in the user file and the
+   session layer (human) a `local_only` that is not `TRUE` or `FALSE` counts as `TRUE`; from a
+   project file (trusted or not) and from `options()`, every `local_only` other than `TRUE` is
+   dropped, so they can only tighten. An untrusted project contributes `local_only = TRUE` and
+   nothing else of `providers`. The new `settings_local_only(provider = "ollama")` returns the
+   protected value (`TRUE` unless the user file or the session layer set `FALSE` and nothing
+   above tightened it); Task 9 freezes it into `run$opts$safety$ollama_local_only`.
+2. **A project base URL needs trust and a one-time confirmation (contract 11.2 `providers` row;
+   architecture 6.5 "Origin binding"; P05's plan: "enforced by P08's layers").** The plan applied a
+   trusted project's `providers.<id>.base_url` at once, and P05's `provider_base_url()` binds the
+   provider's credential to the origin it returns. `settings_base_url_ok()` lets the URL through
+   only when the project's `trust.json` entry lists it under `base_url_confirmed` (contract
+   11.8's field), or the user confirms it when asked (`gptr_confirm()`, once per project, provider
+   and URL; recorded in `trust.json` when the trust is recorded, kept for the process when the
+   trust was decided in this process; a "no" holds for the process). Without someone to ask the
+   URL is not used, with one notice; the lower layer's URL stays. URLs in messages pass
+   `redact()`.
+3. **Dotted names merge at every level.** The plan resolved a dotted key inside its object and
+   then let the option and session entry of that exact name replace it, so
+   `gptr.providers.ollama` never reached `providers.ollama.local_only` and the dotted value
+   replaced an object instead of merging into it. `settings_resolve()` now merges the option, then
+   the session entry, of each dotted name from the object down to the key (less specific first,
+   objects merged key by key, contract 11.2), through `settings_guard()`; the source becomes that
+   layer only when its contribution reaches the key.
+4. **`scope = "user"` settings come from the user file only.** The plan returned early for the
+   literal key `egress`; the dotted read `egress.<id>` still took `gptr.egress.<id>` and the
+   session entry. Every setting whose spec has `scope = "user"` (the core `egress`, and plugin
+   settings that `gptr_config()` only writes at user scope, Task 7) is read from its default and
+   the user file only, including its dotted names.
+5. **An explicit null in a settings file is a value.** The plan's lookup treated a key present
+   with a JSON null as absent, so `"compact_at": null` in the user file kept the 200000 default
+   although contract 11.2 (and D-067) make a null `compact_at` disable the cap. A flat key present
+   in a file is now found with its value; `settings_write()` still removes a key patched with
+   `NULL`, so a null can only come from a file.
+6. **A key without a `setting` spec keeps its option default.** P01's `setting_get()` returns
+   `gptr_opt(key)` (the documented option default) while the service is hidden; with the plan's
+   layers an option-only key such as `max_turns` would have become `NULL` once Task 9 activates
+   `settings.get`. The default layer of such a key is `gptr_option_defaults[[key]]`.
+7. **The printed settings are redacted.** `print(<gptr_config>)` echoes configuration values,
+   which conventions section 5 says pass `redact()`: a provider `headers` value is redacted
+   before the 60-character cut (the plan's cut could show the first characters of a token).
+   Numbers print without scientific notation, and a value `json_encode()` cannot encode prints as
+   `<class>`.
+8. **A legacy `.gptr/settings.local.json` whose `permissions` is not an object is ignored**
+   instead of failing the read (`$` on an atomic value).
+
+Validation: `progress/P08.md`, Task 3. `^gptr-config$`: red `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 154 ]`
+(the plan's seven tests and eight adaptation tests, all on missing functions or the missing
+`settings.get` entry), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 238 ]` (plan 79, which is 178 after
+D-091 and D-092; the adaptation tests add 60). Against the plan-literal layers (plus the same
+`settings_local_only()` accessor) the adaptation tests fail 27 and the plan's seven tests pass
+(`dev/.validation/P08/task3-red-adaptations-against-plan-literal.log`:
+`[ FAIL 27 | WARN 0 | SKIP 0 | PASS 205 ]`). With the `settings.get` and `trust.get` services
+made visible in a scratch copy, `test-gptr-config.R` and the test files of the 13 R files that
+call `setting_get()` pass 4264 (`task3-probe-service-active.log`).
+
+## D-095 - P20 version and capability probes: a probe run that timed out or exited non-zero is an error and is never cached, and the fake CLI's NULL default is if_null() without a lint suppression (2026-10-04)
+
+P20 Task 2's plan-literal `R/cli-common.R` and `inst/gptr/fixtures/fake_cli.R` changed after
+review round 1:
+
+1. **A failed probe run is no probe** (contract 7.20: "a capability probe of `--help` (cached
+   per path and mtime)"). The plan's `pcli_probe()` never looked at the run's `timed_out` or
+   `status` and cached whatever `--help` / `exec --help` returned. A codex help run that timed
+   out (empty output) was cached with all three required flags "missing", so the route was
+   refused as "lacks --json, --ignore-user-config, --skip-git-repo-check" for the rest of the
+   process even after the CLI answered; a claude help run that failed was cached as
+   `bare_default = FALSE`, so the bare check passed by default. The plan's `pcli_version()`
+   checked `timed_out` but not the exit status, so a failing `--version` whose stderr named any
+   x.y.z number (for example "requires glibc 2.28.0") was cached as the CLI's version. Both
+   probes now use the new `pcli_run_failure(res)` ("timed out", "exited with status <n>",
+   "ended without an exit status", or `NULL` for status 0; the plan's Task 7
+   `pcli_codex_windows_ready()` applies the same check): `pcli_version()` treats such a run as
+   unreadable (status error "version unreadable", as before; the message now names the
+   failure), and `pcli_probe()` records the status error "help unreadable" and signals
+   `gptr_error_cli_version` with `found` = the version and `required` = "`<cli> <args>` exiting
+   with status 0". Neither caches the failed run, so the next use (or
+   `gptr_providers(check = TRUE)`) probes again. Every help text and version of the fake CLI
+   exits with status 0, so no plan test changes; a very old codex without an `exec` subcommand
+   (clap exits 2) now reads "`codex exec --help` exited with status 2" instead of naming the
+   three flags, with the same class and install hint.
+2. **The fake CLI's NULL default is `if_null(a, b)`** instead of the plan's infix `` `%||%` ``
+   with `# nolint: object_name_linter.` (plan finalize note F2, which mirrors `R/aaa-state.R`).
+   This lane adds no lint suppressions and lintr flags the infix name without one, so the
+   standalone script defines `if_null()` and its thirteen call sites use it. Behaviour is
+   unchanged; the script is not part of the namespace and no other plan calls its copy.
+
+Validation: `progress/P20.md`, Task 2. Two tests added (+23 expectations). Red against the
+plan-literal source `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 78 ]`
+(`dev/.validation/P20/task2-fix1-red.log`; the `err$required` expectation was added after
+it); final `^cli-common$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]` (`task2-fix1-green.log`), so every later plan count
+for `test-cli-common.R` is 40 higher on macOS and Linux (17 from D-093, 23 from this entry).
