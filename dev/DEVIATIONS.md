@@ -6100,13 +6100,27 @@ verbatim:
    `.Machine$integer.max` gave an R warning inside `build()` and the argv words `"NA"` or `"Inf"`,
    which are not numbers. A value that is not finite now adds no flag (no limit, as without a
    budget; P06's `budget_check()` stays authoritative between requests, plan ambiguity 2), and
-   `--max-turns` is `format(max(1, floor(turns)), scientific = FALSE)`, the same word as before
-   for every value below 2^31.
+   `--max-turns` is `max(1, floor(turns))` written as a plain number, the same word as before
+   for every value below 2^31. Review round 1 (finding 2): one helper, `pcli_claude_flags()`,
+   now keeps a value only when it is positive and finite, and `pcli_claude_args()`,
+   `pcli_claude_budgeted()` and `build()`'s `state$claude_flags` all use it. Before, `build()`
+   stored the raw `Inf` and `pcli_claude_budgeted()` only tested `!is.null`, so a child started
+   under `cli_budget = list(cost = Inf)` had no flag on its argv yet counted as budgeted: it was
+   restarted with `--resume` at every top-level call and Task 9's `agent_end` hook would retire
+   it after every run, instead of living across runs as an unbudgeted child does.
 2. **White-space-only text is dropped.** `pcli_claude_content()` kept every text or context
    block whose text was non-empty, so a block of blanks or newlines reached the CLI's Messages
    API request, which refuses white-space-only text blocks. It now keeps a text block only when
    `nzchar(trimws(text))`, as P12's `anthropic_user()` does; input without any block is still
    the single `(no new input)` block.
+3. **Budget words ignore the session's options** (review round 1, finding 1). The plan's
+   `format(max(0.01, round(cost, 4)))` follows `options(OutDec)` and `options(digits)`: under
+   `OutDec = ","` a budget of 2.5 became the argv word `"2,5"`, which the CLI cannot read as a
+   number, and under `digits = 2` a remaining 1234.5678 became `"1235"`, above the remaining
+   budget. Both flags are now written by `pcli_claude_number()`:
+   `format(x, scientific = FALSE, trim = TRUE, digits = 15, decimal.mark = ".", big.mark = "")`,
+   so the word is the value rounded to 4 decimals, whatever `OutDec`, `digits` or `scipen` say
+   (as `env_fmt_n()` in `env-snapshot.R` already fixes the decimal mark).
 
 Not changed and recorded here: the first user line of a fresh claude child carries the earlier
 conversation and the input's base64 images, so its size is not bounded; P05's transport writes it
@@ -6118,5 +6132,8 @@ effect is a pause of the R session during a large write, not a hang. Bounding th
 Validation: `progress/P20.md`, Task 5. Two tests added (+5 expectations). Against the
 plan-literal source `[ FAIL 4 | WARN 2 | SKIP 0 | PASS 39 ]`
 (`dev/.validation/P20/task5-plan-literal.log`; the two warnings are `as.integer()`'s NA
-coercions); final `^cli-claude$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 43 ]` (`task5-green.log`),
-so every later plan count for `test-cli-claude.R` is 5 higher.
+coercions); then `^cli-claude$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 43 ]` (`task5-green.log`).
+Review round 1 added two more tests (+9 expectations, items 1 and 3): red
+`[ FAIL 7 | WARN 0 | SKIP 0 | PASS 45 ]` (`task5-fix1-red.log`), final `^cli-claude$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 52 ]` (`task5-fix1-green.log`), so every later plan count
+for `test-cli-claude.R` is 14 higher.
