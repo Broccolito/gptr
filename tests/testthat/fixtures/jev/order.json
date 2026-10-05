@@ -1,0 +1,24 @@
+{
+  "request": {
+    "state": {"text": "A red car, neither good nor bad."},
+    "questions": {
+      "tone": {"type": "score", "instructions": "How positive is `text`?",
+               "criteria": ["Negative", "Neutral", "Positive"]},
+      "ok": {"type": "noul", "instructions": "Is `text` acceptable?"},
+      "kind": {"type": "choice", "instructions": "Which colour does `text` name?",
+               "criteria": {"red": null, "green": null, "blue": null}}
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "kind": {"type": "choice", "choice": "red", "confidence": 0.4,
+               "probabilities": {"blue": 0.1, "red": 0.6, "green": 0.3}},
+      "tone": {"type": "score", "score": 1.0, "confidence": 0.5,
+               "probabilities": {"2": 0.25, "0": 0.25, "1": 0.5}},
+      "ok": {"type": "noul", "noul": 0.3}
+    },
+    "usage": {"input_tokens": 120, "output_tokens": 30}
+  }
+}

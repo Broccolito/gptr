@@ -9911,8 +9911,8 @@ Validation: `progress/ci-hosted.md`, Task CI-6.
 - Rule: a classifier case is `{request: {state, questions}, status, headers?, response}` (12.4); a
   JSON string `response` is the body text; a case without a request (a recorded error) has no
   questions. The built-in adapters replay `fixtures/jev` and `fixtures/ollama` with their goldens;
-  other apis keep `fixtures/classifier/<api>`. Supersedes D-026 items 1-2 and its Fixtures line.
-- Rule: a usage or error golden that is malformed fails its row with the row's one message.
+  other apis keep `fixtures/classifier/<api>`. Supersedes D-026's FIX-6 items 1-2 (directory,
+  layout) and its Fixtures line.
 - Contract-visible: none (D-026's layout is not contract text; 12.4 unchanged).
 - Tests: test-provider-anthropic.R classifier blocks (fixture directory, test fixtures in the new
   shape). Evidence: progress/simplicity.md K-CLS.

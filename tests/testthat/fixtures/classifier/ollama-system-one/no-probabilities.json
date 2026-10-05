@@ -1,9 +1,0 @@
-{
-  "questions": {
-    "kind": {"type": "choice", "instructions": "Which animal does `text` describe?",
-             "criteria": {"dog": null, "cat": null}}
-  },
-  "status": 200,
-  "body": {"model": "clef-flash",
-           "answers": {"kind": {"type": "choice", "choice": "dog", "confidence": 0.5}}}
-}

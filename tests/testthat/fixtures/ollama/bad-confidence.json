@@ -1,10 +1,12 @@
 {
-  "questions": {
-    "answer": {"type": "choice", "instructions": "Which animal does `text` describe?",
-               "criteria": {"dog": null, "cat": null, "bird": null, "other": null}}
+  "request": {
+    "questions": {
+      "answer": {"type": "choice", "instructions": "Which animal does `text` describe?",
+                 "criteria": {"dog": null, "cat": null, "bird": null, "other": null}}
+    }
   },
   "status": 200,
-  "body": {
+  "response": {
     "model": "clef-flash",
     "answers": {
       "answer": {"type": "choice", "choice": "dog", "confidence": 0.2,

@@ -1,0 +1,15 @@
+{
+  "request": {
+    "state": {"text": "A cat slept on the mat."},
+    "questions": {
+      "kind": {"type": "choice", "instructions": "Which animal does `text` describe?",
+               "criteria": {"dog": null, "cat": null}}
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "typesafe/jev-1.13",
+    "answers": {"kind": {"type": "choice", "choice": "cat", "probabilities": {}}},
+    "usage": {"input_tokens": 90, "output_tokens": 4}
+  }
+}

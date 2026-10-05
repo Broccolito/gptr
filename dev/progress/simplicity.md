@@ -155,8 +155,20 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   gone; jev `error-422` and ollama `image` became cases (+3 goldens); golden messages simplified.
   R -36, fixtures -147 lines (plan ~220).
 - Red: FAIL 105 (`provider-anthropic`: old reader saw `.fixture` rows, default directory gone).
-  Green: `provider-anthropic|s1-` PASS 1985 (1983 + 2 new cases); gptr_check() typesafe/ollama
-  80/56 rows, 0 failed. Lint clean. Neighbours: `provider-|catalog-|ext-check|arch-layers|
-  lint-rules` green (mock-server stream timing flake once; re-run PASS 574).
-- Reviews: none yet.
+  Green: `provider-anthropic|s1-` PASS 1986 (1983 + 2 new cases + 1 review regression);
+  gptr_check() typesafe/ollama 80/56 rows, 0 failed. Lint clean. Neighbours:
+  `provider-|catalog-|ext-check|arch-layers|lint-rules` PASS 3285.
+- Reviews: r1 3 findings (0/0/2, 1 nit) fixed: a malformed `.answers.json` reported "no golden"
+  (regression test, red then green; message keyed on file.exists()); D-143 names D-026's FIX-6
+  items 1-2; D-143's padding bullet dropped.
 - Deviations: D-143. Open: none.
+
+## Task CI-1a - CI tooling tests (2026-10-05)
+- Connection-gate tests 9 -> 3 (pass, leak negative control, failures+leak; `library(testthat)`
+  and the existence guard gone); the runner's 23-name key list gone: `tests/testthat/setup.R` is the
+  one source (runner sets `GPTR_LIVE_TESTS=false`; load does nothing, C-29). -71 lines (plan ~69).
+- Red: none (refactor). Green: `test_file("dev/ci/test-check-connections.R")` PASS 6 (20 before);
+  `isolated-check.R test zzz` PASS 94, also with fake ANTHROPIC/TYPESAFE keys exported. Lint clean.
+  Neighbours: `zzz` (above) green.
+- Reviews: none yet.
+- Deviations: none. Open: `progress/tooling.md` still says the runner clears provider keys.

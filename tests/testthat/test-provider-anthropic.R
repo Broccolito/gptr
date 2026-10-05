@@ -998,9 +998,11 @@ test_that("check_adapter() replays .json fixtures of http_json adapters, not the
 
 # ---- conformance of classifier adapters (FIX-6; IC-74: 07 sections 3 and 6, P12 row) -----------
 
-# The classifier fixture directory of an api, and its cases (the wire files: not the golden
-# `<case>.answers.json` / `<case>.error.json` / `<case>.usage.json` files, not model.json)
-cls_dir = function(api) testthat::test_path("fixtures", "classifier", api)
+# The classifier fixture directory of an api (contract 12.4), and its cases (the wire files: not
+# the golden `<case>.answers.json` / `.error.json` / `.usage.json` files, not model.json)
+cls_dir = function(api) {
+  testthat::test_path("fixtures", switch(api, `typesafe-system-one` = "jev", "ollama"))
+}
 cls_cases = function(dir) {
   f = list.files(dir, pattern = "\\.json$")
   sub("\\.json$", "", f[!grepl("\\.(answers|error|usage)\\.json$", f) & f != "model.json"])
@@ -1049,7 +1051,7 @@ test_that("check_adapter() replays classifier wire fixtures through classify$par
 
 test_that("gptr_check() runs the classifier conformance of the built-in classifier adapters", {
   for (cls_api in c("typesafe-system-one", "ollama-system-one")) {
-    # the default directory: fixtures/classifier/<api> under testthat's working directory
+    # the default directory: fixtures/jev or fixtures/ollama under testthat's working directory
     res = gptr_check(adapter_get(cls_api))
     expect_true(all(c("spec.class", "spec.fields", "adapter.noul.canonical",
                       "adapter.score.golden_answers", "adapter.malformed.typed_error") %in%
@@ -1178,10 +1180,11 @@ test_that("a classifier golden or fixture that differs fails only its own case",
   path = file.path(dir, "error-404.error.json")
   write_utf8(path, "{\"class\": \"gptr_error_s1_auth\", \"status\": 404}")
   unlink(file.path(dir, "error-500.error.json"))
+  write_utf8(file.path(dir, "computed.answers.json"), "{\"answer\": ")
   write_utf8(file.path(dir, "broken.json"), "{\"questions\": ")
-  write_utf8(file.path(dir, "bare.json"), "{\"status\": 200, \"body\": {}}")
+  write_utf8(file.path(dir, "bare.json"), "{\"request\": {}, \"status\": 200, \"response\": {}}")
   write_utf8(file.path(dir, "nameless.json"),
-             "{\"questions\": {\"a\": {\"type\": \"noul\"}}, \"status\": \"ok\"}")
+             "{\"request\": {\"questions\": {\"a\": {\"type\": \"noul\"}}}, \"status\": \"ok\"}")
   res = check_adapter(adapter_get(cls_api), fixtures = dir)
   expect_false(of(res, "adapter.score.golden_answers"))
   expect_true(of(res, "adapter.score.canonical"))
@@ -1194,13 +1197,15 @@ test_that("a classifier golden or fixture that differs fails only its own case",
   expect_false(of(res, "adapter.error-500.golden_answers"))
   expect_match(res$message[res$check == "adapter.error-500.golden_answers"], "no golden",
                fixed = TRUE)
+  expect_match(res$message[res$check == "adapter.computed.golden_answers"],
+               "expected the answers of computed.answers.json", fixed = TRUE)
   for (case in c("broken", "bare", "nameless")) {
     expect_identical(cls_rows(res, case), paste0("adapter.", case, ".fixture"))
     expect_false(of(res, paste0("adapter.", case, ".fixture")))
   }
   expect_match(res$message[res$check == "adapter.bare.fixture"], "questions", fixed = TRUE)
   expect_match(res$message[res$check == "adapter.nameless.fixture"], "status", fixed = TRUE)
-  untouched = c("noul", "order", "computed", "malformed", "other-model", "bad-confidence")
+  untouched = c("noul", "order", "malformed", "other-model", "bad-confidence")
   expect_true(all(res$ok[sub("^adapter\\.(.*)\\.[a-z_]+$", "\\1", res$check) %in% untouched]))
 })
 
@@ -1286,8 +1291,8 @@ test_that("inprocess classifiers: P01's fake classifier answers fixture states c
                 criteria = list("Low", "Mid", "High"))
   )
   write_utf8(file.path(dir, "three.json"),
-             json_encode(list(state = list(text = "A puppy."), questions = questions),
-                         pretty = TRUE))
+             json_encode(list(request = list(state = list(text = "A puppy."),
+                                             questions = questions)), pretty = TRUE))
   write_utf8(file.path(dir, "three.answers.json"), json_encode(list(
     ok = list(type = "noul", prob = 0.75),
     kind = list(type = "choice", choice = "dog",
@@ -1297,7 +1302,8 @@ test_that("inprocess classifiers: P01's fake classifier answers fixture states c
                 legend = list(`0` = "Low", `1` = "Mid", `2` = "High"))
   ), pretty = TRUE))
   write_utf8(file.path(dir, "busy.json"),
-             json_encode(list(state = list(text = "busy"), questions = questions["ok"])))
+             json_encode(list(request = list(state = list(text = "busy"),
+                                             questions = questions["ok"]))))
   write_utf8(file.path(dir, "busy.error.json"),
              "{\"class\": \"gptr_error_s1_rate_limit\", \"status\": 429}")
   # option names out of request order: the fake re-keys them (07 section 3)
@@ -1363,7 +1369,7 @@ test_that("s1-emulate replays fixture states; its calibration notice fails no ca
   cases = c("a1", "a2", "a3")
   for (case in cases) {
     write_utf8(file.path(dir, paste0(case, ".json")),
-               json_encode(list(state = list(x = case), questions = q)))
+               json_encode(list(request = list(state = list(x = case), questions = q))))
     write_utf8(file.path(dir, paste0(case, ".answers.json")),
                "{\"answer\": {\"type\": \"noul\", \"prob\": 0.9}}")
   }

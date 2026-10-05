@@ -1,0 +1,5 @@
+{
+  "request": {"questions": {"answer": {"type": "noul", "instructions": "Does `text` describe a dog?"}}},
+  "status": 200,
+  "response": {"model": "clef", "answers": {"answer": {"type": "noul", "noul": 0.9}}}
+}

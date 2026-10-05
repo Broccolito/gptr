@@ -1,0 +1,14 @@
+{
+  "request": {
+    "questions": {
+      "kind": {"type": "choice", "instructions": "Which animal does `text` describe?",
+               "criteria": {"dog": null, "cat": null}}
+    }
+  },
+  "status": 200,
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {"kind": {"type": "choice", "choice": "dog",
+                         "probabilities": {"cat": 0.3, "dog": 0.5}}}
+  }
+}

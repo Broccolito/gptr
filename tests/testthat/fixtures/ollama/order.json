@@ -1,14 +1,16 @@
 {
-  "questions": {
-    "tone": {"type": "score", "instructions": "How positive is `text`?",
-             "criteria": ["Negative", "Neutral", "Positive"]},
-    "ok": {"type": "noul", "instructions": "Is `text` acceptable?"},
-    "kind": {"type": "choice", "instructions": "Which colour does `text` name?",
-             "criteria": {"red": null, "green": null, "blue": null}}
+  "request": {
+    "state": {"text": "A red car, neither good nor bad."},
+    "questions": {
+      "tone": {"type": "score", "instructions": "How positive is `text`?",
+               "criteria": ["Negative", "Neutral", "Positive"]},
+      "ok": {"type": "noul", "instructions": "Is `text` acceptable?"},
+      "kind": {"type": "choice", "instructions": "Which colour does `text` name?",
+               "criteria": {"red": null, "green": null, "blue": null}}
+    }
   },
-  "state": {"text": "A red car, neither good nor bad."},
   "status": 200,
-  "body": {
+  "response": {
     "model": "clef-flash:latest",
     "answers": {
       "kind": {"type": "choice", "choice": "red", "confidence": 0.1827,

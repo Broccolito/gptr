@@ -1,7 +1,7 @@
 {
-  "questions": {"answer": {"type": "noul", "instructions": "Does `text` describe a dog?"}},
+  "request": {"questions": {"answer": {"type": "noul", "instructions": "Does `text` describe a dog?"}}},
   "status": 200,
-  "body": {
+  "response": {
     "model": "jev-1.13.0",
     "answers": {"answer": {"type": "choice", "choice": "dog", "probabilities": {"dog": 1.0}}}
   }

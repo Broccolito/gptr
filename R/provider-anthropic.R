@@ -1414,15 +1414,11 @@ adp_check_tool_choice = function(adapter) {
   ok
 }
 
-#' The fixture directory of an api: `fixtures`, else fixtures/<kind>/<api> ("sse" or
-#' "classifier") under the test directory or the package sources
+#' The fixture directory: `fixtures`, else fixtures/<sub> under the test directory or the
+#' package sources
 #' @noRd
-adp_fixture_dir = function(api, fixtures = NULL, kind = "sse") {
-  cands = fixtures
-  if (is.null(cands)) {
-    cands = c(file.path("fixtures", kind, api),
-              file.path("tests", "testthat", "fixtures", kind, api))
-  }
+adp_fixture_dir = function(sub, fixtures = NULL) {
+  cands = fixtures %||% file.path(c("fixtures", file.path("tests", "testthat", "fixtures")), sub)
   for (d in cands) if (nzchar(d) && dir.exists(d)) return(normalizePath(d, winslash = "/"))
   NULL
 }
@@ -1444,21 +1440,23 @@ adp_same_golden = function(x, path) {
 }
 
 # ---- conformance of classifier adapters (IC-74: 07 sections 3 and 6, P12 row; FIX-6) -----------
-# `fixtures/classifier/<api>/`: `<case>.json` per exchange with its golden `<case>.answers.json`
-# or `<case>.error.json`, optionally `<case>.usage.json` (null = unreported, stays NA); `model.json`
-# overrides fields of the classifier fixture model.
+# Cases are contract 12.4 wire fixtures (`fixtures/jev`, `fixtures/ollama`; other apis
+# `fixtures/classifier/<api>`) with a golden `<case>.answers.json` or `<case>.error.json`,
+# optionally `<case>.usage.json` (null = unreported, stays NA); `model.json` overrides the model.
 
-#' One classifier fixture case: `list(questions, state, status, headers, body)`, or a chr(1)
-#' problem; a JSON string `body` is the body text byte for byte, other values compact JSON
+#' One case `{request, status, headers?, response}`: `list(questions, state, status, headers,
+#' body)` or a chr(1) problem; a JSON string `response` is the body text byte for byte
 #' @noRd
 adp_classifier_case = function(path) {
   x = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
   if (!is.list(x) || is.null(names(x))) return("the fixture is not a JSON object")
-  questions = x[["questions"]]
+  req = x[["request"]]
+  questions = if (is.list(req)) req[["questions"]]
   ids = names(questions)
-  if (!is.list(questions) || !length(questions) || is.null(ids) || anyNA(ids) ||
-        !all(nzchar(ids))) {
-    return("the fixture has no questions keyed by id")
+  # a recorded error may have no request (12.4); a request holds its questions
+  if (!is.null(req) && (!is.list(questions) || !length(questions) || is.null(ids) ||
+                          anyNA(ids) || !all(nzchar(ids)))) {
+    return("the fixture request has no questions keyed by id")
   }
   status = x[["status"]] %||% 200L
   if (!is.numeric(status) || length(status) != 1L || !is.finite(status)) {
@@ -1466,15 +1464,9 @@ adp_classifier_case = function(path) {
   }
   headers = x[["headers"]] %||% list()
   if (!is.list(headers)) return("the fixture headers are not an object")
-  body = x[["body"]]
-  text = if (is.null(body)) {
-    ""
-  } else if (is.character(body) && length(body) == 1L) {
-    body
-  } else {
-    json_encode(body)
-  }
-  list(questions = questions, state = x[["state"]], status = as.integer(status),
+  body = x[["response"]]
+  text = if (rlang::is_string(body)) body else if (is.null(body)) "" else json_encode(body)
+  list(questions = questions, state = req[["state"]], status = as.integer(status),
        headers = headers, body = text)
 }
 
@@ -1525,52 +1517,32 @@ adp_classifier_result_ok = function(res) {
     is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)
 }
 
-#' The usage row of an answered classifier case: `.golden_usage` against `<case>.usage.json`
-#' (null stays NA, IC-74); NULL without that file or for a failed case
+#' The usage row of an answered case: `.golden_usage` against `<case>.usage.json` (`{"input",
+#' "output"}`; null = unreported, stays NA, IC-74); NULL without that file or for a failed case
 #' @noRd
 adp_classifier_usage = function(dir, case, res) {
   path = file.path(dir, paste0(case, ".usage.json"))
   if (!file.exists(path) || inherits(res, "condition") || !is.list(res)) return(NULL)
-  check = paste0("adapter.", case, ".golden_usage")
   want = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
-  known = function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0
-  if (!is.list(want) || is.null(names(want)) || !all(c("input", "output") %in% names(want)) ||
-        !all(vapply(want[c("input", "output")], function(x) is.null(x) || known(x), NA))) {
-    return(list(check = check, ok = FALSE,
-                message = paste0(case, ".usage.json is not {\"input\": <count or null>, ",
-                                 "\"output\": <count or null>}")))
+  same = function(k) {
+    got = if (is.list(res[["usage"]])) res[["usage"]][[k]]
+    exp = want[[k]]
+    is.numeric(got) && length(got) == 1L &&
+      (if (is.null(exp)) is.na(got) else is.numeric(exp) && isTRUE(got == exp))
   }
-  u = res[["usage"]]
-  if (!is.list(u)) u = list()
-  same = function(got, exp) {
-    if (!is.numeric(got) || length(got) != 1L) return(FALSE)
-    if (is.null(exp)) return(is.na(got))
-    !is.na(got) && got == exp
-  }
-  ok = same(u[["input"]], want[["input"]]) && same(u[["output"]], want[["output"]])
-  shown = function(x) {
-    if (is.numeric(x) && length(x) == 1L) format(x) else paste0("a ", class(x)[1L])
-  }
-  list(check = check, ok = ok,
-       message = paste0("the usage differs from ", case, ".usage.json (an unreported count ",
-                        "stays NA, IC-74): input ", shown(u[["input"]]), ", output ",
-                        shown(u[["output"]])))
+  ok = is.list(want) && all(c("input", "output") %in% names(want)) && same("input") &&
+    same("output")
+  list(check = paste0("adapter.", case, ".golden_usage"), ok = ok,
+       message = paste0("the usage differs from ", case, ".usage.json (unreported stays NA)"))
 }
 
-#' Are the answers canonical? P13's s1_check_answers() must return them unchanged (07 section 3:
-#' asked types, question order, probabilities named in request order)
+#' Are the answers canonical? P13's s1_check_answers() must return them unchanged (07 section 3)
 #' @noRd
 adp_check_canonical = function(answers, questions, model_id) {
   checked = tryCatch(s1_check_answers(answers, questions, model_id), error = function(e) e)
-  if (inherits(checked, "condition")) {
-    return(list(ok = FALSE, message = conditionMessage(checked)))
-  }
-  if (!identical(checked, answers)) {
-    return(list(ok = FALSE, message = paste0(
-      "s1_check_answers() changes the answers: they are not canonical records in question ",
-      "order with probabilities in request order")))
-  }
-  list(ok = TRUE, message = "")
+  if (inherits(checked, "condition")) return(list(ok = FALSE, message = conditionMessage(checked)))
+  list(ok = identical(checked, answers),
+       message = "not canonical: question order, probabilities in request order (07 section 3)")
 }
 
 #' Classifier answers as JSON data for their golden file: named vectors (probabilities, legend)
@@ -1583,50 +1555,41 @@ adp_answers_json = function(x) {
   x
 }
 
-#' The golden row of a classifier case: `.typed_error` against `<case>.error.json`, else
-#' `.golden_answers` against `<case>.answers.json` (order included)
+#' The golden row of a case: `.typed_error` against `<case>.error.json` (`{"class", "status"}`),
+#' else `.golden_answers` against `<case>.answers.json` (order included)
 #' @noRd
 adp_classifier_golden = function(dir, case, res) {
   failed = inherits(res, "condition")
-  err = file.path(dir, paste0(case, ".error.json"))
-  if (file.exists(err)) {
-    check = paste0("adapter.", case, ".typed_error")
-    want = tryCatch(json_decode(read_utf8(err)$text), error = function(e) NULL)
-    cls = if (is.list(want)) want[["class"]] else NULL
-    status = if (is.list(want)) want[["status"]] else NULL
-    if (!is.character(cls) || length(cls) != 1L || is.na(cls)) {
-      return(list(check = check, ok = FALSE,
-                  message = paste0(case, ".error.json names no condition class")))
-    }
-    got = if (failed) {
-      paste0(class(res)[[1L]], " (status ", format(res[["status"]] %||% NA), ")")
-    } else {
-      "answers"
-    }
-    ok = failed && inherits(res, "gptr_error_s1") && inherits(res, cls) &&
-      (is.null(status) || identical(as.integer(res[["status"]]), as.integer(status)))
-    want_txt = paste0(cls, if (is.null(status)) "" else paste0(" (status ", status, ")"))
-    return(list(check = check, ok = ok,
-                message = paste0("expected ", want_txt, " from ", case, ".error.json, got ",
-                                 got)))
+  got = if (failed) {
+    paste0(class(res)[[1L]], " (status ", format(res[["status"]] %||% NA), "): ",
+           conditionMessage(res))
+  } else {
+    "answers"
   }
-  check = paste0("adapter.", case, ".golden_answers")
-  path = file.path(dir, paste0(case, ".answers.json"))
-  if (!file.exists(path)) {
-    return(list(check = check, ok = FALSE,
-                message = paste0("no golden ", case, ".answers.json or ", case, ".error.json")))
+  golden = function(ext) {
+    tryCatch(json_decode(read_utf8(file.path(dir, paste0(case, ext)))$text),
+             error = function(e) NULL)
   }
-  if (failed) {
-    return(list(check = check, ok = FALSE,
-                message = paste0("expected the answers of ", case, ".answers.json, got: ",
-                                 conditionMessage(res))))
+  if (file.exists(file.path(dir, paste0(case, ".error.json")))) {
+    want = golden(".error.json")
+    cls = if (is.list(want)) want[["class"]]
+    ok = failed && rlang::is_string(cls) && inherits(res, "gptr_error_s1") && inherits(res, cls) &&
+      (is.null(want[["status"]]) ||
+         identical(as.integer(res[["status"]]), as.integer(want[["status"]])))
+    return(list(check = paste0("adapter.", case, ".typed_error"), ok = ok,
+                message = paste0("expected the error of ", case, ".error.json, got ", got)))
   }
-  same = tryCatch({
-    want = json_decode(read_utf8(path)$text)
+  want = golden(".answers.json")
+  ok = !failed && !is.null(want) && tryCatch({
     identical(json_encode(adp_answers_json(res[["answers"]])), json_encode(want))
   }, error = function(e) FALSE)
-  list(check = check, ok = same,
-       message = paste0("the answers differ from ", case, ".answers.json (values or order)"))
+  message = if (!file.exists(file.path(dir, paste0(case, ".answers.json")))) {
+    paste0("no golden ", case, ".answers.json or ", case, ".error.json")
+  } else {
+    paste0("expected the answers of ", case, ".answers.json (values and order), got ",
+           if (failed) got else "other answers")
+  }
+  list(check = paste0("adapter.", case, ".golden_answers"), ok = ok, message = message)
 }
 
 #' Conformance of a classifier adapter (IC-74: 07 sections 3 and 6, P12 row; FIX-6)
@@ -1638,7 +1601,8 @@ adp_check_classifier = function(adapter, fixtures, add) {
   cls = adapter[["classify"]]
   wire = !identical(adapter[["transport"]], "inprocess")
   fun = cls[[if (wire) "parse" else "run"]]
-  dir = adp_fixture_dir(api, fixtures, "classifier")
+  dir = adp_fixture_dir(switch(api, `typesafe-system-one` = "jev", `ollama-system-one` = "ollama",
+                               file.path("classifier", api)), fixtures)
   files = if (is.null(dir)) character() else
     list.files(dir, pattern = "\\.json$", full.names = TRUE)
   files = files[!grepl("\\.(answers|error|usage)\\.json$", files) &
@@ -1744,7 +1708,7 @@ check_adapter = function(adapter, fixtures = NULL) {
                   })
     add("adapter.tool_choice", tc$ok, tc$message)
   }
-  dir = adp_fixture_dir(api, fixtures)
+  dir = adp_fixture_dir(file.path("sse", api), fixtures)
   ext = switch(transport, http_sse = "sse", http_ndjson = "ndjson", http_json = "json",
                process_jsonl = "jsonl")
   files = if (is.null(dir)) character() else
