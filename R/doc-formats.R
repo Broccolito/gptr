@@ -901,10 +901,12 @@ nb_has_cell_ids = function(nb) {
 }
 
 #' The ipynb format's locate(): the calling cell (found by content: the j-th code cell calling
-#' gptr() with the anchor's prompt hash, or its call0; IC-51), the located call in it and the
-#' agent cells after it. The calling cell's top-level calls share that run of agent cells and
-#' own them one to one (doc_rmd_owner()); a call that is nested (in a function, loop, ...) or
-#' inside a marker block owns none (contract 11.5).
+#' gptr() with the anchor's prompt hash, or its call0; IC-51), the located call in it (among the
+#' cell's rows with that prompt hash, the one that is the anchor's call0 itself: the steps of a
+#' pipeline that repeats a prompt, ambiguity 28) and the agent cells after it. The calling cell's
+#' top-level calls share that run of agent cells and own them one to one (doc_rmd_owner()); a
+#' call that is nested (in a function, loop, ...) or inside a marker block owns none (contract
+#' 11.5).
 #' @noRd
 doc_ipynb_locate = function(text, site) {
   nb = nb_parse(text)
@@ -920,7 +922,8 @@ doc_ipynb_locate = function(text, site) {
   cells = nb[["cells"]]
   calls = doc_calls(nb_cell_lines(cells[[cell]]))
   calls$chunk = rep(cell, nrow(calls))
-  hit = calls[doc_calls_have(calls, ph, call0)[1L], , drop = FALSE]
+  hit = doc_by_identity(calls[doc_calls_have(calls, ph, call0), , drop = FALSE], call0)
+  hit = hit[1L, , drop = FALSE]
   out$hit = hit
   out$stmt = c(cell, cell)
   if (isTRUE(hit$nested)) return(out)

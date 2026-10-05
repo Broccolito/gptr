@@ -6336,10 +6336,10 @@ Review round 1 (`.opts$safety` reserved, `dot_labels()` of an empty argument): r
 `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 171 ]` (`task5-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 178 ]` (`task5-fix1-green.log`).
 
-## D-103 - P15 locator: the steps of a pipeline that repeats a prompt are told apart by their call, a notebook call with a computed prompt is anchored by its call, the remembered transcript target is read through the IC-52 check, nobody is asked where to record when no target can be offered, a malformed context item or session never stops the console fallback, a call nested in a running document is no console turn, and a relative `Rscript --file=` is resolved from the launch directory (2026-10-04)
+## D-103 - P15 locator: the steps of a pipeline that repeats a prompt are told apart by their call (in notebooks too), a notebook call with a computed prompt is anchored by its call, the remembered transcript target is read through the IC-52 check, nobody is asked where to record when no target can be offered, a malformed context item or session never stops the console fallback, a call nested in a running document is no console turn, a relative `Rscript --file=` is resolved from the launch directory, a computed prompt whose value equals a literal prompt is located as its own call, and a script sourced with `chdir = TRUE` is found from the directory it was sourced from (2026-10-04)
 
-P15 Task 8's literal `R/doc-locate.R` (and its IDE queries in `R/doc-io.R`) is kept except for
-seven behaviours:
+P15 Task 8's literal `R/doc-locate.R` (and its IDE queries in `R/doc-io.R`, and one line of Task
+6's `doc_ipynb_locate()` in `R/doc-formats.R`) is kept except for nine behaviours:
 
 1. **Pipeline steps with the same prompt are located as themselves (contract 11.5; plan
    self-review ambiguity 28).** The plan anchored a call on the first row of its statement (or,
@@ -6355,6 +6355,16 @@ seven behaviours:
    still count 1, 2, ... as in the plan. The plan keyed it by the runtime prompt hash, so for
    `q = "a"; x = gptr(q); q = "b"; y = gptr(q)` each runtime value started its own counter and
    both executions were located at `x = gptr(q)` (review round 1).
+   Notebooks too (review round 4): the notebook anchor kept only the prompt hash and the cell's
+   ordinal, and `doc_ipynb_locate()` took the cell's first row with that hash. In a cell
+   `out = gptr("draft") |> gptr("improve it") |> gptr("improve it")` followed by its three agent
+   cells, step 3 was located as step 2: ordinal 2, owning step 2's `call=2` cell, so it replayed
+   step 2's answer or overwrote its cell. `doc_nb_anchor()` now always keeps the call (`call0`)
+   and `doc_ipynb_locate()` narrows the cell's rows with `doc_by_identity()`. The calling cell
+   itself is found as in a script (`doc_nb_cell()`): the first cell holding a candidate row, the
+   call itself first, so the step is no longer found in an earlier cell that calls
+   `gptr("improve it")` on its own. `nb_find_call_cell()` is unchanged: it uses the call only
+   when no row has the prompt hash.
 2. **A notebook call with a computed prompt is anchored by its call (contract 11.5, ambiguity
    27).** The plan stored the runtime prompt hash in the notebook anchor and dropped the call.
    The cell's row for `gptr(paste("dy", "n"))` has no prompt hash, so `doc_ipynb_locate()` never
@@ -6420,6 +6430,25 @@ seven behaviours:
    the fallback, as in the plan: on Windows, or when PWD is not absolute. The file must still
    exist and have the `r` format. R CMD check runs tests through `R CMD BATCH`, which passes
    `-f file`, not `--file=`, so it is unaffected.
+8. **A computed prompt whose value equals a literal prompt is located as its own call (contract
+   7.15: matched by content; review round 4).** Task 2's `doc_calls_have()` prefers the rows
+   with the runtime prompt hash and uses the call only when there are none. With
+   `q = "count rows"`, `a = gptr(q)`, `b = gptr("count rows")`, the call `gptr(q)` was therefore
+   located at `b`'s statement wherever no statement narrows the search: under `Rscript` (where
+   `b`'s own call then exhausted the counter and became a nested site, so it was never
+   recorded), in an IDE buffer with the cursor on `a`, in a knitr or Quarto chunk and in a
+   notebook. The same held inside one statement (`out = gptr(q) |> gptr("count rows")` under
+   `source()`). The locator now uses `doc_call_rows()`: when rows are the evaluated call itself
+   and none of the prompt-hash rows is, it takes those rows. A literal-prompt call is unchanged,
+   because its own rows are in both sets.
+9. **A script sourced with `chdir = TRUE` is found from the directory it was sourced from
+   (review round 4).** `source()` and `sys.source()` read the file and then change to its
+   directory, so a relative `ofile` or `file` no longer exists from there, and the plan's
+   `source()` frame finder skipped the frame. Without srcrefs such a call was not located (in an
+   interactive or `Rscript -e` session with a transcript target it became a top-level console
+   turn), and a file of the same relative name below the new directory was taken as the script.
+   Both functions keep the directory they were called from as `owd` in their frame;
+   `doc_frame_file()` resolves a relative path against it.
 
 Also, without a behaviour change: the site keeps `stmt`, `in_block`, `block` and `anchor` as
 named `NULL` fields (contract 7.15 lists them), where the plan's `site$x = NULL` dropped them.
@@ -6442,7 +6471,13 @@ Known limits, kept as planned: under `Rscript` the per-(file, call) counter cann
 `gptr()` call inside a top-level loop from a later top-level call with the same prompt. Under
 knitr and Quarto there is no file srcref and no counter, so two identical calls in one chunk
 (`a = gptr("x")` then `b = gptr("x")`) are both located as the first: the second owns, replays
-or replaces the first one's agent chunk.
+or replaces the first one's agent chunk. The same holds for two identical calls in notebook
+cells. The srcref finder searches the frames below the call: a script sourced without srcrefs
+from a statement that has srcrefs and holds a call with the same prompt
+(`x = c(source("helper.R", keep.source = FALSE)$value, gptr("count rows"))`, with
+`h = gptr("count rows")` in `helper.R`) has its call located at that statement
+(`task8-fix4-probe.log`). Stopping the search at a `source()` frame would mis-locate a promise
+forced inside the sourced script instead, so the plan's search is kept.
 
 Validation: `progress/P15.md`, Task 8. Red (no `R/doc-locate.R`) `^doc-locate$`
 `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 0 ]` (`dev/.validation/P15/task8-red.log`). Against the
@@ -6463,7 +6498,11 @@ with an absolute runner path, red was `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 137 ]` 
 (`task8-fix3-red-abs.log`) and `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 149 ]` with it, before item 7
 (`task8-fix3-red.log`). Green was `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 153 ]` with both an absolute
 and a relative runner path, and the same under `LC_ALL=C` (`task8-fix3-green-abs.log`,
-`task8-fix3-green.log`, `task8-fix3-green-clocale.log`). The plan expects 49.
+`task8-fix3-green.log`, `task8-fix3-green-clocale.log`). Review round 4 added five tests (+49
+expectations): red `[ FAIL 31 | WARN 0 | SKIP 0 | PASS 171 ]` (`task8-fix4-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 202 ]` with a relative and an absolute runner path, and the
+same under `LC_ALL=C` (`task8-fix4-green.log`, `task8-fix4-green-abs.log`,
+`task8-fix4-green-clocale.log`). The plan expects 49.
 
 ## D-104 - P20 cli-claude normaliser: unreported usage and cost stay unknown, no R condition escapes the normaliser and an error there stops the child, control answers are built before they are sent, a queued tools/call of an ended turn is refused, the wall clock of an aborted run ends the turn as aborted and stops the child, and a turn P05 ended without its normaliser never acts on the session's next turn (2026-10-04)
 
@@ -6570,7 +6609,13 @@ P08 Task 6's literal `R/gptr-capture.R` (identifier resolution, contract 6.1.3; 
    package code write `gptr::gptr_agent()`, and contract 6.1 names agents by their list names;
    the plan passed the list name only into calls headed `agent`, so the package form failed in
    P02's `spec_finish()` with `gptr_error_invalid_spec` ("field 'name' must be a non-empty
-   string"). A name the call gives itself (named or first positional) is still kept.
+   string"). A name the call gives itself is still kept (`agents_own_name()`): gptr_agent() has
+   no dots and `name` is its first formal, so R binds to it an argument named `name` or a prefix
+   of it, or else the first non-empty unnamed argument wherever it stands. The plan (and review
+   rounds 1-2) looked only at the first argument, so `lit = agent(description = "Lit", "stats")`
+   became `name = "lit"` with `"stats"` silently bound to `model`, `agent(nam = "x")` failed with
+   "unused argument", and `agent(, model = opus)` kept no name and failed in `spec_finish()`
+   (review round 3).
 2. **`mode` is exactly one of the four and is refused without its value** (contract 1.1: an
    `invalid_argument` message never includes the argument's value). The plan's message ended
    `not "<value>"`, and the value may come from a variable (`mode = !!x`). The plan also checked
@@ -6601,9 +6646,10 @@ P08 Task 6's literal `R/gptr-capture.R` (identifier resolution, contract 6.1.3; 
    the IC-71 list (P02's `kind_check_agent()` keeps its own, as L0 may not read L3); a test checks
    that P02 refuses every one of them as an agent name.
 6. **A function written inline in a mask, or made there by a factory, keeps the mask as its
-   scope, without its alias bindings (a narrow exception to rule R3, 03 section 6.4).** Contract 6.1 lets `extensions` take `function(gptr)` factories and
-   `tools` lists of `<spec:tool>`, and Task 8 sends these expressions to
-   `resolve_identifier()` (only symbols and `I()` are forced). A closure created while the alias
+   scope, without its alias bindings (a narrow exception to rule R3, 03 section 6.4).**
+   Contract 6.1 lets `extensions` take `function(gptr)` factories and `tools` lists of
+   `<spec:tool>`, and Task 8 sends these expressions to `resolve_identifier()` (only symbols
+   and `I()` are forced). A closure created while the alias
    mask (or the agents mask) is evaluated has the mask as its environment, so the plan's
    unconditional `parent.env(mask) = emptyenv()` left `extensions = function(gptr) {...}`,
    `extensions = c("audit", function(gptr) ...)`, `tools = list(gptr_tool(..., execute =
@@ -6619,18 +6665,32 @@ P08 Task 6's literal `R/gptr-capture.R` (identifier resolution, contract 6.1.3; 
    caller or a named environment (global, base, empty, namespaces, attached packages) through
    its bound values. An unforced promise, non-empty dots and an active binding count as
    reaching the mask, because base R cannot read a promise's environment and active bindings
-   are never called; the walk records visited environments by address (rule R2), and nesting
-   deeper than 64 or more than 100000 steps counts as reaching. Erring this way only leaves an
-   otherwise unreferenced mask attached until it is collected. A kept mask loses the bindings
-   it was given that still hold their value (the alias strings; `agent` in the agents mask), so
+   are never called. The one exception is the default of an unsupplied formal
+   (`ident_lazy_default()`: `make_ext = function(level = 1) function(gptr) level` called as
+   `make_ext()`, or a tool constructor `function(n = 3) gptr_tool(..., execute = function(input,
+   ctx) n)`). R evaluates that promise in the factory's own frame, which the walk covers, and
+   `missing()` recognises it without forcing anything: for an unforced binding `missing()` is
+   TRUE only for such a default or for an argument forwarded from a frame where it is missing
+   without a default, which fails when forced whether or not the mask is attached (R does not
+   pass a default's missingness on, so a forwarded default counts as supplied and keeps the
+   mask). The walk records visited environments by address (rule R2), and nesting deeper than
+   64 or more than 100000 steps counts as reaching. Erring this way is not free: a mask kept
+   although nothing reaches it still points at the caller's frame when that frame's function
+   returns, so R skips the frame's cleanup and the caller's arguments stay marked as shared;
+   their next in-place change copies them (IC-41, 03 section 6.4), and `gc()` does not undo
+   this. Review round 3 found this for every factory whose result held only lazy defaults
+   (`analyse = function(df) gptr("x", df, extensions = somepkg::panel())` called as
+   `analyse(big)`: the next in-place edit of `big` copied it); those masks are now detached.
+   A kept mask loses the bindings it was given that still hold their value (the alias
+   strings; `agent` in the agents mask), so
    the functions it scopes see the caller's variables as after direct evaluation (a user's `r`
    is no longer the string `"r"` inside an inline tool); names the expression assigned itself
    stay. A promise of the mask forced later therefore also reads an alias name from the caller.
    R3 detaches masks so that a garbage mask never pins the caller's frame; a function the user
    wrote inline, or a promise a factory holds, references that frame through R's own scoping,
-   exactly as direct evaluation would, and only for as long as the user's value lives. Every
+   exactly as direct evaluation would (with the same effect on the caller's arguments). Every
    other mask is still detached (tests for a plain result, a refused function, a function bound
-   outside the mask and a package function).
+   outside the mask, a package function, and factories whose results hold only lazy defaults).
 
 IC-74 adds no behaviour here: identifier resolution reads only catalog aliases and registry names
 and never discovers or prepares a model (07-local-ollama.md section 2.1); a test mocks P05's
@@ -6649,4 +6709,75 @@ regression checks one per test against the round-1 source `[ FAIL 14 | WARN 0 | 
 (`task6-fix2-red-granular.log`) and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 14 ]` with the fix
 (`task6-fix2-green-granular.log`); in the test file red `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 317 ]`
 (`task6-fix2-red.log`), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 342 ]`
-(`task6-fix2-green-1.log`; the adaptation tests now add 133).
+(`task6-fix2-green-1.log`; the adaptation tests now add 133). Review round 3 (items 1 and 6):
+the 11 regression checks one per test against the round-2 source
+`[ FAIL 7 | WARN 0 | SKIP 0 | PASS 4 ]` (`task6-fix3-red-granular.log`) and
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 11 ]` with the fix (`task6-fix3-green-granular.log`); in the
+test file red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 337 ]` (`task6-fix3-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 357 ]` (`task6-fix3-green.log`; the adaptation tests now add
+148).
+
+## D-106 - P20 cli-codex adapter: Codex's unreported cost and usage stay unknown, the turn cap is always a whole number, a late or aborted wall clock follows the claude adapter, no R condition escapes the normaliser, malformed events are read by their JSON types, and the Windows sandbox probe caches only answers (2026-10-04)
+
+P20 Task 7's plan-literal `R/cli-codex.R` changed in six ways (item 6 also in one line of P20
+Task 2's `pcli_version_forget()` in `R/cli-common.R`). The plan's thirteen tests, its test
+support (`stub_mcp_handle()`, `local_mcp_stub()`) and its five fixtures are verbatim
+(`codex-call1.jsonl` equals report 08 section 5.2):
+
+1. **Codex's cost is unknown and so are counts it does not report (IC-74; D-015 point 3).**
+   `pcli_codex_usage()` called `usage_new()` without `cost`, so every exec recorded the
+   constructor's legacy known zero cost, and `pcli_num()` turned an absent or malformed count
+   into a known 0 (a `"many"` became 0, and `-1` reached `usage_new()`, which aborts). Codex
+   reports no cost, so the cost is now `NULL` (unknown, `cost_unknown()`); a count that is not one
+   finite nonnegative number is `NA`; the uncached input (`input_tokens` minus cached and
+   cache-write tokens, 08 section 3.9) is `NA` when a part is unknown or the parts exceed the total
+   (the plan clamped it to a known 0); a reported cache-write count is all 5-minute writes with
+   `cache_write_1h = 0`, and without one both are unknown (as the claude CLI's bare
+   `cache_creation_input_tokens`, D-104 item 1); a `usage` that is not an object is unknown.
+   Reported zeros stay known zeros.
+2. **The turn cap is always a whole number of at least 1.** `max(1L, as.integer(par$turns))`
+   turned a remaining budget of `Inf` (which `pcli_params()` passes through) or one above the
+   integer range into `NA` with an R warning inside `build()`, and the normaliser's
+   `s$items > s$cap` then failed with an R error on the first tool step. A budget that is not
+   finite now counts as none (as the claude flags, D-101 item 1) and the cap falls back to
+   `gptr.max_turns`; a value above the integer range is `.Machine$integer.max`; a
+   `gptr.max_turns` that is not a positive number gives the default 50 (`Inf` means no
+   practical cap).
+3. **A late or aborted wall clock follows the claude adapter (D-104 items 4 and 6).**
+   `pcli_codex_timeout()` now returns at once when its exec is no longer the session's current
+   turn (`pcli_turn_current()`, as D-104 item 6 asked of this function): P05 can end an exec
+   without its normaliser and the session's next exec shares the adapter state, so the old
+   timer would have closed the new turn and stopped its child. In an aborted run the wall clock,
+   and a line that still reaches the normaliser, end the exec as `aborted` (the plan reported
+   `timeout`, or ended it without stopping the child) and stop the child
+   (`pcli_codex_abort()`): once the terminal event has finished P05's stream nothing else lets
+   go of it, and a `workspace-write` Codex would go on editing unsupervised.
+4. **No R condition escapes the normaliser (contract 8.1; as D-104 item 2).** `push()`,
+   `finish()` and `fail()` turn an R error into the exec's one terminal `error` event (class
+   `internal`); an error in `push()` also stops the exec, which may still be working.
+5. **Malformed events are read by their JSON types.** An `item` that is not an object, a
+   `changes` entry without a path string, an `error` given as a string (`turn.failed`) and a
+   non-string `type`, `status`, `thread_id`, `server`, `tool`, `command` or `query` made the
+   plan's normaliser fail with "subscript out of bounds" or let `switch()` pick an alternative
+   by position. They are now read only with the 08 section 3.9 types (`pcli_codex_chr()`,
+   `pcli_codex_why()`): anything else is ignored or unknown, and a `file_change` lists only the
+   paths it names.
+6. **The Windows sandbox probe caches only answers.** `pcli_codex_windows_ready()` cached a run
+   that could not start or timed out as "not ready" for the rest of the process, and
+   `gptr_providers(check = TRUE)` never probed again. As for the other probes (D-095 item 1), a
+   run without an exit status now counts as not ready for this exec only and is not cached, and
+   `pcli_version_forget()` drops the cached answer with the capability probe. The probe command
+   itself stays UNCERTAIN (plan self-review ambiguity 9; nothing ran on Windows).
+
+Not changed and recorded here (D-019 item 5): the prompt goes to Codex through P05's
+`write_all()`; a fresh thread's prompt carries gptr's instructions and the earlier conversation,
+so it is not bounded and on Windows the write blocks until Codex has read it (Codex reads stdin to
+the end before it starts the turn, so the expected effect is a short pause; not verified on
+Windows).
+
+Validation: `progress/P20.md`, Task 7. Seven tests added (+79 expectations). Against the
+plan-literal source the plan's tests pass (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 71 ]`,
+`dev/.validation/P20/task7-plan-literal.log`) and the added tests fail
+(`[ FAIL 22 | WARN 4 | SKIP 0 | PASS 95 ]`, `task7-adapt-red.log`); final `^cli-codex$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 150 ]` (`task7-green.log`), so every later plan count for
+`test-cli-codex.R` is 79 higher.

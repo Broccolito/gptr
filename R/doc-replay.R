@@ -51,9 +51,9 @@ doc_project_entry = function(pf, key, name) {
 }
 
 #' The remembered console transcript target of the user-level project file `pf` as an absolute
-#' path; NULL for none, `"off"`, or a target IC-52 does not allow: one outside the project root,
-#' without a document extension, or on a control, protected, critical or instructions path (the
-#' rule of P15 Task 8's doc_target_valid())
+#' path; NULL for none, `"off"`, or a target IC-52 does not allow (doc_target_valid(): one
+#' outside the project root, without a document extension, or on a control, protected, critical
+#' or instructions path)
 #' @noRd
 doc_remembered_target = function(pf = doc_project_get()) {
   target = doc_project_entry(pf, "transcript", "target")
@@ -62,13 +62,7 @@ doc_remembered_target = function(pf = doc_project_get()) {
     return(NULL)
   }
   full = tryCatch(doc_abs(target), error = function(e) NULL)
-  if (is.null(full) || is.null(doc_format_of(full))) return(NULL)
-  root = path_key(project_root())
-  if (!startsWith(path_key(full), paste0(sub("/$", "", root), "/"))) return(NULL)
-  cls = tryCatch(path_class(full), error = function(e) "unknown")
-  if (any(cls %in% c("control", "protected", "critical", "instructions", "url", "wildcard"))) {
-    return(NULL)
-  }
+  if (is.null(full) || !doc_target_valid(full)) return(NULL)
   full
 }
 

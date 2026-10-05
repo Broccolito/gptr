@@ -301,3 +301,32 @@ doc_project_remember = function(rel, answer) {
 doc_project_transcript = function(target) {
   doc_project_update("transcript", "target", target)
 }
+
+# ---- IDE queries (report 14 sections 2.1.4-2.1.6; rstudioapi is a Suggests package) ------------
+
+#' Is the rstudioapi document API usable (RStudio, Positron's shim, VS Code sess)?
+#' @noRd
+doc_ide_available = function() {
+  requireNamespace("rstudioapi", quietly = TRUE) &&
+    isTRUE(tryCatch(rstudioapi::isAvailable(), error = function(e) FALSE)) &&
+    isTRUE(tryCatch(rstudioapi::hasFun("getSourceEditorContext"), error = function(e) FALSE))
+}
+
+#' The active source editor context list(id, path, contents, selection), or NULL
+#' @noRd
+doc_ide_context = function() {
+  tryCatch(rstudioapi::getSourceEditorContext(), error = function(e) NULL)
+}
+
+#' Is the console the focused editor ("#console" in RStudio and Positron)?
+#' @noRd
+doc_ide_console_focused = function() {
+  identical(tryCatch(rstudioapi::documentId(allowConsole = TRUE), error = function(e) NULL),
+            "#console")
+}
+
+#' The IDE backend name of this front end
+#' @noRd
+doc_ide_backend = function() {
+  switch(front_end(), positron = "positron", vscode = "vscode", "rstudio")
+}
