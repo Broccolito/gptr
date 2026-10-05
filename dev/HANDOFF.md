@@ -29,6 +29,10 @@ deleted. **All work now happens directly on `main`, with periodic pushes.**
    `PROGRESS.md` at plan boundaries.
 5. Do not describe a whole plan, milestone, cross-platform gate or release as
    complete from component-level results.
+6. **Simplicity first** (conventions section 11) and the short record formats there apply to every
+   task, fix and review. The retrospective simplicity plan is `progress/simplicity-plan.md`
+   (work packages; stages 0, A, B freeze with the `peter()` rename, C lane-bound); the rename
+   inventory and its scripts are `progress/rename-inventory.md` and `progress/rename/`.
 
 ## Cross-plan obligations (later tasks MUST honour these)
 

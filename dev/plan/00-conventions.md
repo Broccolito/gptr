@@ -288,3 +288,26 @@ where the literal code is more complex than the contract requires:
   surface), and must not demand bespoke handling of exotic inputs that a simple conservative rule
   already covers.
 
+Record formats (from 2026-10-05). A progress-log section per task, at most about 8 lines:
+
+```
+## Task N - <title> (`<sha>`, YYYY-MM-DD)
+- Red: FAIL n (<cause>). Green: PASS m (plan p; +k for D-xxx). Lint clean. Neighbours: <filters> green.
+- Reviews: r1 <n> findings (<b/M/m>) -> D-xxx; r2 clean.
+- Deviations: D-xxx (or none). Open: <items or none>.
+```
+
+A deviation entry, at most about 12 lines, edited in place when superseded (never appended per
+review round):
+
+```
+## D-nnn - <plan> <title, at most 100 characters> (YYYY-MM-DD)
+- Rule: <final rule, one line each; cite the contract section or IC>.
+- Contract-visible: none | <exact change; contract section amended>.
+- Tests: <file: block names or count>. Evidence: progress/Pxx.md Task N.
+```
+
+Plan acceptance stays one table (row, command, actual, status). No "Built", "Precheck" or
+"Adaptations" narratives, no per-round counts, no `dev/.validation/` paths, no copies of
+deviation text.
+
