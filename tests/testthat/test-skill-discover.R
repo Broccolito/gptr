@@ -405,3 +405,56 @@ test_that("a SKILL.md with more than 4 merge keys, tags and aliases is skipped b
                                  "tags and aliases (more than 4 in all)"), msgs, fixed = TRUE)))
   }
 })
+
+# Task 3: the built-in high-performance-r skill and gptr's own manifest.
+
+hpr_line = paste0("- high-performance-r: Fast data work in R: data.table, arrow, duckdb, ",
+                  "collapse or qs2 when installed; large CSV/Parquet, grouping, sorting, ",
+                  "parallel work, single-cell objects. [skill:high-performance-r/SKILL.md]")
+
+hpr_files = function() {
+  list.files(system.file("gptr", "skills", "high-performance-r", package = "gptr"),
+             recursive = TRUE, full.names = TRUE)
+}
+
+test_that("the built-in high-performance-r skill parses with its catalog line", {
+  f = system.file("gptr", "skills", "high-performance-r", "SKILL.md", package = "gptr")
+  expect_true(nzchar(f))
+  s = skill_parse(f)
+  expect_identical(s[["name"]], "high-performance-r")
+  expect_identical(skill_line(s[["name"]], s[["description"]]), hpr_line)
+  pk = gptr_skills("packages")
+  expect_identical(pk$source[pk$name == "high-performance-r"], "builtin")
+})
+
+test_that("the shipped skill never recommends str() and states its cost (IC-67)", {
+  read_all = function(f) paste(readLines(f, encoding = "UTF-8"), collapse = "\n")
+  txt = vapply(hpr_files(), read_all, "")
+  expect_length(txt, 3L)
+  expect_false(any(grepl("(^|[^A-Za-z0-9_.])str\\(", txt)))
+  expect_true(any(grepl("sticky reference", txt, fixed = TRUE)))
+  expect_false(any(grepl("<\\-", txt)))
+  expect_true(all(vapply(txt, function(x) all(utf8ToInt(x) < 128L), NA)))
+})
+
+test_that("every R recipe in the skill parses", {
+  n = 0L
+  for (f in hpr_files()) {
+    lines = readLines(f, encoding = "UTF-8")
+    open = which(grepl("^[ ]*```r[ ]*$", lines))
+    close = which(grepl("^[ ]*```[ ]*$", lines))
+    for (o in open) {
+      e = close[close > o][1L]
+      expect_no_error(parse(text = lines[seq.int(o + 1L, e - 1L)], keep.source = FALSE))
+      n = n + 1L
+    }
+  }
+  expect_gte(n, 15L)
+})
+
+test_that("gptr's manifest declares its resource directories", {
+  m = json_decode(read_utf8(system.file("gptr", "plugin.json", package = "gptr"))$text)
+  expect_identical(m$name, "gptr")
+  expect_identical(c(m$skills, m$prompts, m$agents), c("skills", "prompts", "agents"))
+  expect_identical(m$gptr$api, ">= 1.0, < 2")
+})

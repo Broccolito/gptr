@@ -1,0 +1,8 @@
+{
+  "name": "gptr",
+  "description": "Built-in skills, prompt templates and agent definitions of gptr",
+  "gptr": {"api": ">= 1.0, < 2"},
+  "skills": "skills",
+  "prompts": "prompts",
+  "agents": "agents"
+}
