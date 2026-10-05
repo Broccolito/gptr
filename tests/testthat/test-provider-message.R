@@ -65,19 +65,6 @@ test_that("msg_text() joins text blocks and skips context and other blocks", {
   expect_identical(msg_text(msg_user(list(block_image(as.raw(1))))), "")
 })
 
-test_that("msg_validate() accepts constructor output and names the broken field", {
-  expect_invisible(msg_validate(msg_user("x")))
-  blocks = all_blocks()[c(1, 2, 4, 5)]
-  expect_invisible(msg_validate(msg_assistant(blocks, "fake", "fake", "fake-1")))
-  bad = msg_user("x")
-  bad$content[[1]]$text = NULL
-  cnd = tryCatch(msg_validate(bad), error = identity)
-  expect_s3_class(cnd, "gptr_error_internal")
-  expect_match(cnd$detail, "content[[1]]$text", fixed = TRUE)
-  wrong = msg_tool_result("c1", "r", list(block_opaque("p", "a", "m", "{}")))
-  expect_error(msg_validate(wrong), class = "gptr_error_internal")
-})
-
 test_that("JSON shapes use Pi names, gptr objects and omit NULL fields (section 4.8)", {
   a = msg_assistant(list(block_tool_call("c1", "r", list(code = "x"))), "anthropic-messages",
                     "anthropic", "claude-x", usage = usage_record(), stop_reason = "tool_use",
@@ -136,17 +123,6 @@ test_that("unknown JSON fields are kept under `extra` and written back", {
   expect_identical(msg_to_json(msg)$piOnly, list(k = 1L))
 })
 
-test_that("json_rename() applies the section 4.8 table in both directions", {
-  entry = list(type = "compaction", id = "a1b2c3d4", parent_id = "0f0f0f0f",
-               first_kept_entry_id = "9e9e9e9e", tokens_before = 1200, summary = "s")
-  j = json_rename(entry)
-  expect_identical(
-    names(j), c("type", "id", "parentId", "firstKeptEntryId", "tokensBefore", "summary")
-  )
-  expect_identical(json_rename(j, to = "r"), entry)
-  expect_identical(json_rename(list(1, 2)), list(1, 2))
-})
-
 test_that("unknown usage survives JSON round trips rather than becoming zero (IC-74)", {
   usage = usage_record()
   usage$input = NA_real_
@@ -168,35 +144,4 @@ test_that("unknown usage survives JSON round trips rather than becoming zero (IC
   legacy = usage_from_json(list(input = 12, output = 1, cacheWrite = 3))
   expect_identical(legacy$cache_write_5m, 3)
   expect_identical(legacy$cache_write_1h, 0)
-})
-
-test_that("msg_validate rejects malformed imported tool argument objects", {
-  msg = msg_assistant(block_tool_call("c1", "r", list(code = "1")), "fake", "fake", "m")
-  invalid = list(
-    NULL, list(), list("unnamed"), stats::setNames(list(1), ""),
-    stats::setNames(list(1), NA_character_), list(code = "1", code = "2"), 1
-  )
-  for (arguments in invalid) {
-    msg$content[[1]]$arguments = arguments
-    cnd = tryCatch(msg_validate(msg), error = identity)
-    expect_s3_class(cnd, "gptr_error_internal")
-    expect_identical(cnd$detail, "content[[1]]$arguments")
-  }
-  msg$content[[1]]$arguments = json_obj()
-  expect_invisible(msg_validate(msg))
-  msg$content[[1]]$arguments = list(code = "1", data = list(rows = list(1, 2)))
-  expect_invisible(msg_validate(msg))
-})
-
-test_that("msg_validate rejects missing or nonfinite real timestamps", {
-  msg = msg_user("x", timestamp = 0)
-  invalid = list(NA_real_, NaN, Inf, -Inf, 1 + 1i, NULL, numeric(), c(1, 2), "1")
-  for (timestamp in invalid) {
-    msg$timestamp = timestamp
-    cnd = tryCatch(msg_validate(msg), error = identity)
-    expect_s3_class(cnd, "gptr_error_internal")
-    expect_identical(cnd$detail, "timestamp")
-  }
-  msg$timestamp = 0L
-  expect_invisible(msg_validate(msg))
 })

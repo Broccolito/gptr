@@ -9773,88 +9773,18 @@ the filter check 2 failures, without the process-level check 2, without the plug
 
 Validation: `progress/P17.md`, Task 6.
 
-## D-134 - P17 agent discovery: agent_def.get syncs before every name lookup so the registry is never served stale, an untrusted project's agents rank after every other origin and never shadow a name equal after normalisation, an omitted untrusted project agent is gptr_error_untrusted, only Pi's own agent directories are flat, and directories are not agent files (2026-10-05)
-
-P17 Task 8 (`R/subagent-defs.R`). The plan's 6 tests, the export `gptr_agents()`, the service
-`agent_def.get`, `builtin:agents` and the internal signatures of 04 section 7.17 are unchanged.
-
-1. **`agent_def.get` never serves what an earlier sync saw** (IC-52; 04 section 6.2; the same
-   defect class as D-129). The plan synced only when the name was not registered, so a
-   registered agent was served as the last sync left it: after `gptr_trust(p, FALSE)` a project
-   agent kept its `model` and `tools` (`trusted = TRUE`), after a move to another project the
-   previous project's agent was still served, and an edited or deleted file kept its old
-   definition until the next session start. `agent_def_get(name)` now calls `agent_sync()`
-   first. The sync rewrites only the groups whose files, trust or registry generation changed
-   (`res_register()`), so it costs a walk of the agent directories and is otherwise a no-op;
-   `gptr_agent()` with a name is a rare, explicit call. The plan's "syncing once if the name is
-   not registered yet" is the special case of a missing name. A lookup cannot know the mode of
-   the session it serves (`agents =` is resolved before that call's `session_start`), so it
-   classifies conservatively (conventions section 11): `agent_lookup_mode()` syncs in `auto`
-   when the `mode` setting or the mode of the last top-level session started in the current
-   project is `auto` or `edits` (the `session_start` hook remembers it:
-   `agent_mode_remember()`, `res_state()$agents_mode = list(mode, project)`; child sessions
-   neither sync nor change it). With the setting alone (round 1) a lookup undid the omission of
-   a top-level `auto` session started through its `mode` argument: any `gptr_agent(<name>)`
-   registered the omitted agents again, so `registry_names("agent")` (the `agents =` identifier
-   pool) offered them and `gptr_agent(<their name>)` served them; the plan's miss-only sync had
-   the same hole for the omitted name. With the remembered mode alone (review 2) a `plan` or
-   `manual` session overrode a setting of `auto`. Open (maintainer's call): with the setting at
-   `manual` and no earlier session in the project, `gptr("...", mode = "auto", agents =
-   list(x = agent("<name>")))` still resolves an untrusted project agent. Closing it means
-   failing closed for every non-interactive lookup (`agent_sync("auto")`, which would also drop
-   both helpers) and inverts five of the tests below.
-2. **An untrusted project's agents never shadow an agent of another origin, whoever registered
-   it** (04 section 6.2). The plan excluded untrusted project files whose name equals a
-   discovered trusted file's, but registered the rest at rank 1, so they still beat an agent of
-   the same name registered at rank 3 by `gptr_register()` or a user extension. They now have
-   rank `agent_untrusted_rank` (7, after the built-ins' 6): the registry's own precedence makes
-   every other record of the name win. 04 section 10.1 gives rank 1 to *trusted* project
-   resources only and no rank to untrusted ones; trusted project agents keep rank 1.
-3. **The shadow rule compares names after `res_norm()`** (IC-42): an untrusted project's
-   `norm_y` was registered next to a user's `norm-y` and won `gptr_agent("norm_y")` by exact
-   match. It is now listed by `gptr_agents()` but not registered, and the lookup finds the
-   user's agent after normalisation. The rule covers every other origin, not only discovered
-   files (review 1): an agent that `gptr_register()`, an extension or a plugin registered
-   (`agent_foreign_names()`: an enabled process-level `agent` record whose id belongs to no
-   `agents:` group of the sync, as `template_foreign_commands()` of D-133). Before, an untrusted
-   `ext_x` next to a `gptr_register()`ed `ext-x` was registered, so `gptr_agent("ext_x")`
-   returned the project's agent and `gptr_agent("ext.x")` was `gptr_error_invalid_identifier`
-   (ambiguous); rank 7 helped only for the same exact name. The sync's own groups are left out
-   because their files are rediscovered, so a deleted user file or the project's own earlier
-   records hide nothing.
-4. **An omitted untrusted project agent is `gptr_error_untrusted`** (`what = "agent"`, `path`,
-   `origin = "project"`; 04 section 2.2), as `skill.body` does for skills (D-129). In a
-   non-interactive `auto` or `edits` context the sync omits it (IC-52) while `gptr_agents()`
-   lists it, and the plan's "No agent definition with this name was found; gptr_agents() lists
-   them" contradicted that listing. An unknown name stays `gptr_error_invalid_argument`.
-5. **Only Pi's own agent directories are flat.** The plan read every root whose path contained
-   `/.pi/` as flat, so a project anywhere under a directory named `.pi` lost its nested
-   `.gptr/agents`, `.claude/agents` and `.codex/agents` files. The flat roots are now the
-   project's `.pi/agents` and the user's `.pi/agent/agents`, by their own path.
-6. **Directories are not agent files.** `agent_files()` (Task 7) drops directories named
-   `*.md`, which a flat listing returned and the parser reported as unreadable (as D-133 item 5
-   for templates).
-
-Tests: six tests (30 expectations) under `# Task 8 adaptations (D-134)`; the last one pins the
-`session_start` hook's own mode and depth rules, which the plan already had. Against the
-plan-literal source `^subagent-defs$` gave `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 115 ]` (items 1-6;
-the hook test passes); mutants of the hook: the setting's mode instead of the session's 2
-failures, no depth check 1; untrusted rank for trusted projects too 2. Review 1 added two
-tests (11 expectations) under `# Task 8 review fixes (D-134)`: the `gptr_register()` case of
-item 3 (before the fix `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 136 ]`) and the IC-52 notice, once
-per project (mutants: the sync's own groups counted as foreign 3 failures, the notice removed
-1). Review 2 added one test (12 expectations) under `# Task 8 review 2 fix (D-134)`: a
-top-level `auto` session with the setting at `manual`, then lookups of an unrelated user agent
-and of the omitted one, a child session, `manual` and `edits` sessions and another project
-(before the fix `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 149 ]`; mutants: the lookup in the setting's
-mode 7 failures, the remembered mode not keyed by project 1, child sessions remembering their
-mode 1). Review 3 added two tests (4 expectations) under `# Task 8 review 3 fixes (D-134)`: the
-setting at `auto` and a top-level `plan` session, then a lookup of the untrusted agent is still
-`gptr_error_untrusted` (before the fix `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 158 ]`); and an
-interactive `auto` sync keeps the untrusted agent (IC-52's "non-interactive"; mutant without
-the `gptr_can_prompt()` check 1 failure).
-
-Validation: `progress/P17.md`, Task 8.
+## D-134 - P17 agent lookups sync and fail closed; untrusted project agents never shadow (2026-10-05)
+- Rule: `agent_def.get` syncs before every name lookup (no stale trust, project or file; as D-129),
+  as `auto`: a lookup cannot know its session's mode, so it fails closed (IC-52, conventions 11).
+- Rule: an untrusted project's agents rank 7 (`res_roots()`) and are not registered when their
+  `res_norm()` name equals a trusted or `res_foreign_names("agent")` agent's (04 6.2, IC-42).
+- Rule: only the project's `.pi/agents` and the user's `.pi/agent/agents` are flat; `agent_files()`
+  skips directories named `*.md`.
+- Contract-visible: rank 7 in `gptr_registry()` (04 section 10.1 lists 0/1/3/5/6); `agent_def.get`
+  signals `gptr_error_untrusted` (`what = "agent"`, `path`, `origin`) whenever nobody can answer,
+  in every mode (04 section 7.0, IC-52). Neither section is amended yet (open).
+- Tests: test-subagent-defs.R `# Task 8 adaptations (D-134)` (8 tests). Evidence: progress/P17.md
+  Task 8.
 
 ## D-135 - Maintainer decisions: the entry point is `peter()`; simplicity first (2026-10-05)
 
@@ -9924,3 +9854,15 @@ Validation: `progress/P10.md`, Task 11.
    already records it, so the warning is suppressed and no R condition leaves the exec (D-106).
 
 Validation: `progress/ci-hosted.md`, Task CI-6.
+
+## D-138 - P01 dead code: msg_validate(), locale_utf8() and its warning class, truncate_output(id_prefix =) go (2026-10-05)
+- Rule: one content-block predicate, `block_ok(b, types)` (provider-message.R), checks queue attachments
+  (queue_blocks_check()) and tool results (tool_result_check()); `msg_validate()` (no caller) goes.
+- Contract-visible: 04 section 4.2 drops `msg_validate(msg)`; section 2.2 drops the never-signalled
+  `locale` warning; section 7.1 drops `locale_utf8()`, `truncate_output(id_prefix =)` (no caller passed
+  it) and `spill_write()`'s default prefix (`spill_write(text, prefix)` writes `<prefix>.txt`; P22
+  already passes a full stem). P18's Interfaces and P22's Consumes lines follow.
+- Tests: test-provider-message.R: 3 msg_validate tests and the json_rename test removed;
+  test-utils-encoding.R: the locale_utf8 test and the emulated-R-4.2.3 pass removed;
+  test-utils-text.R: the spill_write id-append expectation dropped; test-session-object.R,
+  test-provider-fake.R: msg_validate oracles retargeted to block_ok. Evidence: progress/simplicity.md P01-D.

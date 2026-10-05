@@ -30,32 +30,18 @@ test_that("as_utf8() converts latin1, leaves ASCII and NA, keeps names", {
 })
 
 test_that("as_utf8() keeps bytes that are not UTF-8 in a UTF-8 locale, on every R version", {
-  # A UTF-8 native encoding has nothing to convert them from. enc2utf8() keeps them, marked
-  # UTF-8, on R 4.5 and later; R 4.2.3 turned them into "<ff>" text, so code holding a stray
-  # byte ran as other code instead of being refused (hosted oldrel-4, CI Task CI-4).
+  # A UTF-8 native encoding has nothing to convert them from; R 4.2.3's enc2utf8() turned them
+  # into "<ff>" text, so code holding a stray byte ran as other code (D-063).
   skip_if_not(isTRUE(l10n_info()[["UTF-8"]]), "the session's native encoding is not UTF-8")
   bad = rawToChar(as.raw(c(0x61, 0xff)))
   latin = "caf\xe9"
   Encoding(latin) = "latin1"
   x = c(k = bad, l = latin, m = "caf\xc3\xa9", n = "plain", o = NA)
-  # R 4.2.3's enc2utf8(): latin1 converted, other bytes read as UTF-8 with each invalid one as <xx>
-  # (explicit encodings: iconv(from = "") ignores the latin1 mark before R 4.3.0)
-  r423 = function(x) {
-    latin = Encoding(x) == "latin1"
-    x[latin] = iconv(x[latin], "latin1", "UTF-8")
-    x[!latin] = iconv(x[!latin], "UTF-8", "UTF-8", sub = "byte")
-    x
-  }
-  for (old_r in c(FALSE, TRUE)) {
-    if (old_r) local_mocked_bindings(native_to_utf8 = r423)
-    y = as_utf8(x)
-    expect_identical(charToRaw(y[["k"]]), as.raw(c(0x61, 0xff)))
-    expect_identical(unname(Encoding(y)), c("UTF-8", "UTF-8", "UTF-8", "unknown", "unknown"))
-    expect_identical(unname(y[2:5]), c("caf\u00e9", "caf\u00e9", "plain", NA))
-    expect_named(y, names(x))
-  }
-  # the R 4.2.3 conversion the second pass emulates
-  expect_identical(r423(c(bad, latin)), c("a<ff>", "caf\u00e9"))
+  y = as_utf8(x)
+  expect_identical(charToRaw(y[["k"]]), as.raw(c(0x61, 0xff)))
+  expect_identical(unname(Encoding(y)), c("UTF-8", "UTF-8", "UTF-8", "unknown", "unknown"))
+  expect_identical(unname(y[2:5]), c("caf\u00e9", "caf\u00e9", "plain", NA))
+  expect_named(y, names(x))
 })
 
 test_that("utf8_mark() marks valid UTF-8 only", {
@@ -99,11 +85,4 @@ test_that("read_utf8() and write_utf8() round-trip CRLF, BOM and missing final n
   expect_identical(info$text, "x = 1\ny = 2\n")
   expect_false(read_utf8(file.path(dir, "no_final.txt"))$final_newline)
   expect_error(read_utf8(file.path(dir, "missing.txt")), class = "gptr_error_invalid_argument")
-})
-
-test_that("locale_utf8() warns once in a non-UTF-8 session", {
-  rm(list = intersect("warning:locale", ls(the$once)), envir = the$once)
-  local_c_ctype()
-  expect_warning(expect_false(locale_utf8()), class = "gptr_warning_locale")
-  expect_no_warning(locale_utf8())
 })

@@ -78,14 +78,12 @@ test_that("a session's live record holds its own out store (IC-71)", {
   expect_error(out_put("x", session = new.env()), class = "gptr_error_invalid_argument")
 })
 
-test_that("spill_write() redacts and names files by prefix", {
+test_that("spill_write() redacts and names the file by its stem", {
   old = redactor_set(function(x, profile = "persist") gsub("sk-[a-z0-9]+", "[secret:KEY]", x))
   withr::defer(redactor_set(old))
-  path = spill_write(c("key sk-abc123", "second line"))
-  expect_match(basename(path), "^gptr-output-[0-9a-f]{6}\\.txt$")
+  path = spill_write(c("key sk-abc123", "second line"), prefix = "gptr-output-o123abc")
+  expect_identical(basename(path), "gptr-output-o123abc.txt")
   expect_identical(readLines(path, encoding = "UTF-8"), c("key [secret:KEY]", "second line"))
-  fixed = spill_write("x", prefix = "gptr-output-o123abc")
-  expect_identical(basename(fixed), "gptr-output-o123abc.txt")
 })
 
 test_that("clean_terminal() drops ANSI and OSC sequences, collapses progress and caps lines", {

@@ -39,13 +39,9 @@ as_utf8 = function(x) {
     invalid[] = FALSE
   }
   convert = which(!is.na(x) & (enc == "latin1" | invalid))
-  if (length(convert)) x[convert] = native_to_utf8(x[convert])
+  if (length(convert)) x[convert] = enc2utf8(x[convert])
   x
 }
-
-#' Convert strings from their declared or the native encoding to UTF-8 (gptr's one enc2utf8() call)
-#' @noRd
-native_to_utf8 = function(x) enc2utf8(x)
 
 #' Bytes for the operating system (argv, environment, working directory): UTF-8 without a mark
 #'
@@ -125,21 +121,4 @@ write_utf8 = function(path, text, eol = "\n", bom = FALSE, final_newline = TRUE)
   bytes = charToRaw(text)
   if (bom) bytes = c(as.raw(c(0xef, 0xbb, 0xbf)), bytes)
   write_atomic(path, bytes)
-}
-
-#' Is the session locale UTF-8? Warns once (class `locale`) when it is not
-#' @noRd
-locale_utf8 = function() {
-  ok = isTRUE(l10n_info()[["UTF-8"]])
-  if (!ok) {
-    gptr_warn(
-      paste(
-        "This R session does not use a UTF-8 locale. gptr marks its text as UTF-8 itself,",
-        "but non-ASCII characters may print incorrectly."
-      ),
-      "locale",
-      .once = "locale"
-    )
-  }
-  ok
 }

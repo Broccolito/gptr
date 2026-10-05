@@ -13,15 +13,13 @@ text_lines = function(text) {
 #' Keep the first `head` and last `1 - head` share of lines within a token budget
 #'
 #' When the text fits, it is returned unchanged. Otherwise the full text is stored in the out
-#' store (its id starts with `id_prefix`) and in a spill file, and the kept lines surround the
-#' notice `[... n lines omitted; all: gptr$out("<id>")]`.
+#' store and in a spill file, and the kept lines surround the notice
+#' `[... n lines omitted; all: gptr$out("<id>")]`.
 #' @noRd
-truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4,
-                           id_prefix = "o") {
+truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) {
   budget = check_number(budget_tokens, "budget_tokens", min = 1)
   class = check_choice(class, names(token_cpt), "class")
   head = check_number(head, "head", min = 0, max = 1)
-  check_string(id_prefix, "id_prefix")
   lines = text_lines(text)
   total = length(lines)
   costs = est_tokens_each(paste0(lines, "\n"), class)
@@ -31,7 +29,7 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4,
       total_lines = total, out_id = NULL, spill = NULL
     ))
   }
-  out_id = out_put_prefixed(lines, "stdout", list(class = class), NULL, id_prefix)
+  out_id = out_put(lines, "stdout", list(class = class))
   spill = spill_write(lines, prefix = paste0("gptr-output-", out_id))
   notice_cost = est_tokens_each(paste0(truncation_notice(total, out_id), "\n"), class)
   available = budget - notice_cost
@@ -108,16 +106,11 @@ out_store = function(session = NULL) {
 #' entry's stderr stream.
 #' @noRd
 out_put = function(text, stream = "stdout", meta = list(), session = NULL) {
-  out_put_prefixed(text, stream, meta, session, "o")
-}
-
-#' @noRd
-out_put_prefixed = function(text, stream, meta, session, prefix) {
   stream = check_choice(stream, c("stdout", "stderr"), "stream")
   check_list(meta, "meta")
   store = out_store(session)
   repeat {
-    id = id_new(prefix, 6L)
+    id = id_new("o", 6L)
     if (!exists(id, envir = store$items, inherits = FALSE)) break
   }
   streams = list()
@@ -171,15 +164,11 @@ out_get = function(id, stream = c("stdout", "stderr"), lines = NULL, session = N
   x
 }
 
-#' Write redacted text to a spill file under the workspace's cache/tmp; returns the path
-#'
-#' A `prefix` ending in "-" or "_" gets a fresh 6-hex id appended; any other prefix is used as
-#' the file name stem as is (truncate_output() passes "gptr-output-<out id>").
+#' Write redacted text to `<prefix>.txt` under the workspace's cache/tmp; returns the path
 #' @noRd
-spill_write = function(text, prefix = "gptr-output-") {
+spill_write = function(text, prefix) {
   check_string(prefix, "prefix")
-  stem = if (grepl("[-_]$", prefix)) paste0(prefix, id_new("", 6L)) else prefix
-  path = ws_path("cache", "tmp", paste0(stem, ".txt"))
+  path = ws_path("cache", "tmp", paste0(prefix, ".txt"))
   write_atomic(path, redact_hook(paste(text_lines(text), collapse = "\n"), profile = "persist"))
   path
 }

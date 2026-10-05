@@ -142,7 +142,7 @@ test_that("the done message matches the accumulated events", {
   expect_identical(lapply(partial$content, `[[`, "type"), list("text", "tool_call"))
   expect_identical(done$message$content[[2]]$arguments, list(code = "nrow(d)"))
   expect_identical(done$message$stop_reason, "tool_use")
-  expect_invisible(msg_validate(done$message))
+  expect_true(all(vapply(done$message$content, block_ok, NA, msg_block_types[["assistant"]])))
   expect_true(done$usage$input > 0 && done$usage$output > 0)
 })
 

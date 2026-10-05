@@ -551,11 +551,9 @@ test_that("session_enqueue() checks attachments before an item can enter the que
   expect_identical(relay$role, "operator")
   expect_identical(msg_text(relay),
                    "on mpg\nThe user sent this message while you were working: focus")
-  expect_silent(msg_validate(relay))
-  for (i in seq_along(q$steer)) {
-    expect_silent(msg_validate(queue_item_message(q$steer[[i]], "steer", relay = TRUE)))
-  }
-  expect_silent(msg_validate(queue_item_message(q$follow_up[[1L]], "follow_up")))
+  delivered = c(lapply(q$steer, queue_item_message, "steer", relay = TRUE),
+                list(queue_item_message(q$follow_up[[1L]], "follow_up")))
+  for (m in delivered) expect_true(all(vapply(m$content, block_ok, NA, msg_block_types[[m$role]])))
   expect_length(ev(s), 4L)
 })
 

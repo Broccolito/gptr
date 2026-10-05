@@ -269,7 +269,7 @@ names the intermediate class when there is one. Fields are in addition to `messa
 Warnings (`gptr_warning_<name>`): `rewind_partial` (P16; field `report`), `deprecated` (P02), `two_prompts` (P08;
 two unnamed string literals), `replay_downgraded` (P15; live/stale regeneration downgraded under `source()`),
 `doc_conflict` (P15; md5 conflict after three attempts), `s1_errors` (P13; failed elements in a vectorised call;
-field `errors`), `billing_env` (P03/P20; names of removed billing variables), `locale` (P01; non-UTF-8 session),
+field `errors`), `billing_env` (P03/P20; names of removed billing variables),
 `readline_limit` (P14), `plugin` (P02/P17; a plugin was disabled; field `diagnostic`), `cache_break` (P07; only
 when `options(gptr.check_prefix = "warn")`), `secret_late` (P03; a newly registered secret already occurs in live
 session entries; field `counts`).
@@ -474,7 +474,6 @@ msg_assistant(content, api, provider, model, usage = NULL, stop_reason = "stop",
 msg_tool_result(tool_call_id, tool_name, content, is_error = FALSE, details = NULL, usage = NULL,
                 timestamp = NULL)
 msg_operator(kind, text, tool_add = NULL, origin_text = NULL, timestamp = NULL)
-msg_validate(msg)                       # -> msg invisibly, or gptr_error_internal naming the field
 msg_to_json(msg)                        # -> named list in JSON shape (§4.8 mapping), not yet serialised
 msg_from_json(x)                        # inverse; unknown fields kept under `extra`
 msg_text(msg)                           # -> chr(1): concatenated text blocks (context blocks excluded)
@@ -2218,8 +2217,7 @@ hook itself lives in `aaa-state.R`, IC-32, IC-34).
 other unknown strings go through `enc2utf8()`; the only place `enc2utf8()` may be called), `utf8_mark(x)` (marks valid UTF-8 as UTF-8, leaves ASCII), `os_bytes(x)` (native bytes
 for argv/env/wd), `raw_to_utf8(x, fallback = "CP1252")` (-> chr(1)), `read_utf8(path)` -> `list(text = chr(1),
 eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, `write_utf8(path, text, eol =
-"\n", bom = FALSE, final_newline = TRUE)` (binary connection, atomic via `write_atomic()`), `locale_utf8()`
-(`lgl(1)`, warns `locale` once when FALSE). Consumers: P03, P04, P10, P15, P18.
+"\n", bom = FALSE, final_newline = TRUE)` (binary connection, atomic via `write_atomic()`). Consumers: P03, P04, P10, P15, P18.
 
 **`utils-paths.R`**
 
@@ -2243,10 +2241,10 @@ eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, 
 
 | Function | Contract | Consumers |
 |---|---|---|
-| `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")` | `list(text = chr(1), truncated = lgl(1), omitted = int(1), total_lines = int(1), out_id = chr(1) \| NULL, spill = chr(1) \| NULL)`; keeps the first 40% and last 60% of lines within the budget, inserts `[... n lines omitted; all: gptr$out(<id>)]`, stores the full text with `out_put()` and a spill file | P09, P10, P18, P22 |
+| `truncate_output(text, budget_tokens, class = "r_output", head = 0.4)` | `list(text = chr(1), truncated = lgl(1), omitted = int(1), total_lines = int(1), out_id = chr(1) \| NULL, spill = chr(1) \| NULL)`; keeps the first 40% and last 60% of lines within the budget, inserts `[... n lines omitted; all: gptr$out(<id>)]`, stores the full text with `out_put()` and a spill file | P09, P10, P18, P22 |
 | `out_put(text, stream = "stdout", meta = list(), session = NULL)` | chr(1) id `o` + 6 hex (RNG-free); kept in the session's store (the process store when `session` is `NULL`), the last `gptr.out_keep` entries (IC-71) | P09, P22 |
 | `out_get(id, stream = c("stdout", "stderr"), lines = NULL, session = NULL)` | chr (lines) from the session store, then the process store, then the spill file; `gptr_error_invalid_argument` when none has it | P10 (`gptr$out`) |
-| `spill_write(text, prefix = "gptr-output-")` | path under `ws_path("cache", "tmp")`; redacted with `persist` | P09, P22 |
+| `spill_write(text, prefix)` | path `<prefix>.txt` under `ws_path("cache", "tmp")`; redacted with `persist` | P09, P22 |
 | `clean_terminal(x)` | removes ANSI/OSC sequences, collapses `\r` progress, caps lines at 400 characters | P09, P22, P04 |
 | `new_listing(df, class, footer = NULL)` | the listing classes of §5.12 and their shared `print` method | P02, P05, P06, P11, P15-P18, P21, P23 |
 
