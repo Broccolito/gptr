@@ -142,3 +142,18 @@ test_that("values printed through the home's print methods leave the object in p
     label = "a print method in globalenv(): (big), identity(big)"
   )
 })
+
+test_that("the exported gptr_describe() leaves the object in place (R4)", {
+  expect_no_copy("big = runif(5e6)", "invisible(gptr_describe(big))", label = "gptr_describe")
+  expect_no_copy("L = list(a = runif(5e6), b = 1, c = list(d = 2))",
+                 "invisible(gptr_describe(L, budget = 600L))",
+                 edit = "L$a[1] = 0", object = "L$a", label = "gptr_describe(list)")
+})
+
+test_that("a data frame description adds no copy to R's own column-edit copy", {
+  setup = "D = data.frame(a = runif(5e6), b = 1L)"
+  base = expect_no_copy(setup, "invisible(NULL)", edit = "D$a[1] = 0", object = "D$a",
+                        allow = 1L, label = "data frame baseline")
+  expect_no_copy(setup, "invisible(gptr_describe(D, budget = 600L))", edit = "D$a[1] = 0",
+                 object = "D$a", allow = base, label = "gptr_describe(data.frame)")
+})
