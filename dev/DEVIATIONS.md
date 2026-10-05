@@ -7225,38 +7225,75 @@ plan-literal source the plan's tests pass and the added ones fail
 IC-74 test passes, coverage only); final `^doc-io$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 172 ]`
 (`task10-green.log`).
 
-## D-110 - P13 System 1 states: POSIXlt date-times give one state per element, row records read matrix, data-frame and POSIXlt columns by row, I() of a small list is sent as the list, and a piped session's state never exceeds gptr.s1_state_max (2026-10-04)
+## D-110 - P13 System 1 states: POSIXlt date-times give one state per element, row records read matrix, data-frame and POSIXlt columns by row, I() of a small list is sent as the list, classed elements are sent without their names, a piped session's state never exceeds gptr.s1_state_max, and no state is built through a container that points at the user's elements (2026-10-04)
 
 P13 Task 7 (`R/s1-route.R`, `tests/testthat/test-s1-route.R`, and `s1_test_call()` restored in
 `tests/testthat/fixtures/jev/harness.R` now that P08's `call_new()` exists, 24be22b). The rest of
-the plan's code is verbatim, and its 9 tests (48 expectations) are unchanged. Four points differ
-from the plan-literal code. Each follows the batch rule of architecture 4.1.5 or contract 3.1/7.13
-("at most `gptr.s1_state_max` characters").
+the plan's code is verbatim, and its 9 tests (48 expectations) are unchanged. Six points differ
+from the plan-literal code:
+
+- points 1-5 follow the batch rule of architecture 4.1.5, or contract 3.1/7.13 ("at most
+  `gptr.s1_state_max` characters");
+- point 6 is copy safety (architecture 6.4 R1, R4).
+
+Points 5 and 6 and the current forms of points 1-3 come from round 1 of the Task 7 review.
 
 1. **POSIXlt vectors.** A POSIXlt vector is a list underneath, so the plan's rule read it as a
    classed list. It became one state holding a list of formatted strings, while the same times
    as POSIXct gave one state per element. POSIXlt now counts as an atomic vector: one state per
-   element (`values[i]`), formatted like POSIXct.
-2. **Row records (`s1_cell()`).** The plan read every unclassed column with `.subset2(col, i)`.
-   That reads the wrong cell in three cases:
+   element, formatted like POSIXct. Its elements are read component by component
+   (`s1_lt_n()`, `s1_lt_take()`; point 6).
+2. **Row records (`s1_df_record()`, `s1_cell()`).** The plan read every unclassed column with
+   `.subset2(col, i)`. That reads the wrong cell in three cases:
    - a matrix column: element `i` in column-major order;
-   - a nested data frame: its column `i`;
+   - a nested data frame: its column `i`, so row 2 of a one-column nested data frame fails with
+     "subscript out of bounds";
    - a POSIXlt column: its component `i` (`sec`, `min`, ...).
 
-   A two-dimensional column now gives its row `i` (`col[i, , drop = TRUE]`), so a named row is
-   a JSON object. A POSIXlt column gives element `i`, like other classed vectors. List columns,
-   `I(list(...))` included, still use `.subset2()`.
+   Each case now reads row `i`:
+   - an atomic matrix column gives `col[i, , drop = TRUE]`, so a named row is a JSON object;
+   - a list-matrix column is read element by element (`s1_list_row()`);
+   - a nested data-frame column gives its own row record, so its inner names are kept even
+     with one column;
+   - a POSIXlt column gives element `i`, like other classed vectors.
+
+   List columns, `I(list(...))` included, still use `.subset2()`.
 3. **`I(list(...))`.** AsIs makes the list a classed object, so the plan sent its describer text.
-   `I(x)` only marks "exactly one state". A small `I()` list (at most 100 elements) is now sent
-   as the list, as `I()` of an atomic vector already was; a larger one is still described.
+   `I(x)` only marks "exactly one state". A list whose only class is AsIs is now walked in place
+   like a plain list (at most 100 elements and three levels), as `I()` of an atomic vector
+   already was. A larger one is still described.
 4. **The session state cap.** The plan cut only the answer. A long status reason or value name
    (the facts) could therefore make the state longer than `gptr.s1_state_max`. As a last step,
    the whole state is now cut to the cap and ends in `...`. The answer is still cut first, so
    the output is the plan's whenever the facts fit.
+5. **Names of classed elements.** The plan read a classed element with `values[i]`, which keeps
+   its name. So a named factor, Date or date-time vector sent each element as a one-key object
+   (`{"f": {"a": "x"}}`), while the same named character vector sent `{"f": "x"}`. The element's
+   name is now dropped (`s1_element()`). The names stay on the list of states, as the batch rule
+   says, so the model sees the same state, and the cache gets the same key, whatever the class.
+6. **No container that points at the user's elements.** R never lowers reference counts during
+   garbage collection (architecture 6.4). A temporary container that holds the user's elements
+   therefore makes the user's next in-place edit of an element copy it. Tracemem found such a
+   container in each of these:
+   - the first form of point 3 (a shallow copy without AsIs);
+   - `[.data.frame` on a nested data-frame column and `[` on a list-matrix column (the first
+     form of point 2);
+   - `length()`, `[` and `format()` of a POSIXlt, which all call `unclass()`. This covers the
+     first form of point 1 and the plan's own `format()` of a POSIXlt held in a list or `I()`.
 
-Evidence: with the plan-literal file swapped in, `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 55 ]`. Only
-five assertions fail, all in four of the new tests (`dev/.validation/P13/task7-negative.log`).
-The final run is `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 60 ]` (`task7-green.log`).
+   These values are now read with `.subset2()`. Base R copies the components of a named POSIXlt
+   on its next edit even without gptr, so tracemem cannot test that case.
+
+Evidence (`dev/.validation/P13/`):
+
+- Before the review, with the plan-literal file swapped in:
+  `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 55 ]` (`task7-negative.log`, 60 expectations).
+- After review round 1, the plan-literal file with the final tests:
+  `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 58 ]` (`task7-fix1-negative-plan.log`). The 10 failures
+  include the "subscript out of bounds" error and the POSIXlt copy row.
+- The pre-review file with the final tests: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 61 ]`
+  (`task7-fix1-negative.log`).
+- The final run: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 68 ]` (`task7-fix1-green.log`).
 
 ## D-112 - P09 builtin:workspace: the workspace baseline is kept in the session's live memo, shared by the block providers and the agent_end hook and never inside a plugin's persisted state; a prompt preview remembers nothing; a session without a home is labelled by the listed environment; P07's floor tests hide the skill_content block (2026-10-04)
 

@@ -1,8 +1,6 @@
 # Shared helpers of the P13 test files (plan P13), sourced at the top of each of them. P13 owns
 # no helper-*.R file; these build on P01's test helpers (local_project(), local_gptr_options()),
-# P02's registry and P13's own functions. The plan's s1_test_call() (P08's call_new()) is added
-# by the first task that uses it once P08 exists: the package lint (object_usage_linter) refuses
-# calls to functions that do not exist yet.
+# P02's registry, P08's call_new() and P13's own functions.
 
 # A temporary project and an empty System 1 memory cache for the calling test. `gptr = TRUE`
 # creates .gptr/, so answers go to the file cache under .gptr/cache/s1/.
@@ -27,6 +25,24 @@ local_once_reset = function(keys, kind = "message", .env = parent.frame()) {
   for (s in slots[had]) rm(list = s, envir = the$once)
   withr::defer(for (s in slots[had]) assign(s, TRUE, envir = the$once), envir = .env)
   invisible(NULL)
+}
+
+# A gptr_call record (P08's call_new()) for the classifier route: every named argument in `...`
+# becomes a context object read by name from a fresh environment, as gptr() records symbols
+s1_test_call = function(prompt, ..., model, args = list(), session = NULL) {
+  objs = list(...)
+  env = new.env(parent = globalenv())
+  items = list()
+  for (nm in names(objs)) {
+    assign(nm, objs[[nm]], envir = env)
+    items[[length(items) + 1L]] = list(label = nm, kind = "symbol", name = nm, slot = NULL,
+                                       facts = list(class = class(objs[[nm]])))
+  }
+  full = list(threshold = 0.5, choices = NULL, levels = NULL, min_confidence = NULL,
+              uncertain = NULL, replay = NULL, opts = list())
+  for (k in names(args)) full[k] = list(args[[k]])
+  call_new(prompt = prompt, session = session, context = items, envir = env,
+           ids = list(model = model), args = full)
 }
 
 # Provide a service for the calling test through the registry's `service` kind (IC-34), as P15
