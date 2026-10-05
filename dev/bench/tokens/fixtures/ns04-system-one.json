@@ -1,0 +1,63 @@
+{
+  "id": "ns04-system-one",
+  "north_star": 4,
+  "description": "res = gptr(\"Screen the abstracts for randomised controlled trials ...\", abstracts) at the console: the agent delegates the twenty judgements to System 1 inside one r call (is_rct = gptr(..., abstracts, model = jev)) and reports the table instead of judging each abstract itself; standard preset, manual mode, a human present, no bound document.",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": [
+    "benchmain/benchmain-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Screening: keep the System 1 probabilities with the decisions."
+  },
+  "objects": {
+    "abstracts": "stats::setNames(c('A randomised controlled trial of metformin in 240 adults.', 'A retrospective cohort of 12,000 statin users.', 'Participants were randomised to exercise or usual care.', 'A case report of a rare hepatic tumour.', 'A double-blind randomised trial of vitamin D.', 'A cross-sectional survey of sleep in nurses.', 'A cluster randomised trial of hand washing.', 'A systematic review of mindfulness programmes.', 'Patients were randomised to two surgical techniques.', 'A prospective cohort of smokers over 20 years.', 'A randomised crossover trial of two inhalers.', 'A qualitative interview study of caregivers.', 'A pragmatic randomised trial in 40 practices.', 'A case-control study of pesticide exposure.', 'An open-label randomised trial of early feeding.', 'A registry analysis of hip replacements.', 'A non-inferiority randomised trial of antibiotics.', 'An ecological study of air pollution.', 'A stepped-wedge randomised trial of a sepsis protocol.', 'A diagnostic accuracy study of an antigen test.'), sprintf('a%02d', 1:20))"
+  },
+  "facts": [
+    "abstracts"
+  ],
+  "turns": [
+    {
+      "prompt": "Screen the abstracts for randomised controlled trials and keep the probabilities.",
+      "source": "prompt",
+      "context": [
+        {
+          "label": "abstracts",
+          "class": "character"
+        }
+      ],
+      "steps": [
+        {
+          "text": "I will let System 1 judge all twenty abstracts in one vectorised call.",
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "is_rct = gptr(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)"
+              },
+              "result": "is_rct\nFALSE  TRUE \n   10    10 \n[1] 0.04 0.97\n[r] + is_rct <gptr_decision 20>\n[status: ok; 3 of 3 top-level expressions completed; 0.5s]",
+              "details": {
+                "code": "is_rct = gptr(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)",
+                "status": "ok",
+                "note": "System 1 screening; probabilities kept in attr(is_rct, \"prob\")"
+              }
+            }
+          ]
+        },
+        {
+          "text": "System 1 marks 10 of the 20 abstracts as randomised controlled trials; the decisions and their probabilities are in `is_rct` (see `gptr_prob(is_rct)`). Check the few with probabilities near 0.5 by hand.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}
