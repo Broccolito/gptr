@@ -517,21 +517,6 @@ gateway_session_by_id = function(id) {
   NULL
 }
 
-#' The factory in an extension file: its last expression must be function(gptr)
-#' @noRd
-gateway_extension_file = function(path) {
-  exprs = parse(file = path, keep.source = FALSE, encoding = "UTF-8")
-  env = new.env(parent = globalenv())
-  value = NULL
-  for (e in exprs) value = eval(e, env)
-  if (!is.function(value)) {
-    gptr_abort(paste0("The extension file ", path, " must end with a function(gptr) factory."),
-               "invalid_argument", arg = "extensions",
-               expected = "a file whose last expression is function(gptr)")
-  }
-  value
-}
-
 #' Registers one spec of a call at rank 0 for a session. A spec of the same kind and name that an
 #' earlier call registered for the session is removed first: P02 keeps the first of two records
 #' of equal rank (contract 10.1 "ties: the first registered"), so a continuation's newer spec
@@ -585,11 +570,14 @@ gateway_register = function(call, s) {
   for (ex in gateway_list(call$ids$extensions)) {
     if (is.function(ex)) {
       ext_load(ex, source = "session", rank = 0L, session = id)
-    } else if (is.character(ex) && file.exists(ex)) {
-      ext_load(gateway_extension_file(ex), source = "session", rank = 0L,
-               dir = dirname(path_norm(ex)), session = id)
     } else if (is.character(ex)) {
-      ext_service_get("plugin.enable")(ex, rank = 0L, session = id)
+      f = path_norm(ex)
+      if (file.exists(f)) {
+        ext_load(plugin_file_factory(f), source = "session", rank = 0L, dir = dirname(f),
+                 session = id)
+      } else {
+        ext_service_get("plugin.enable")(ex, rank = 0L, session = id)
+      }
     }
   }
   pl = as.character(unlist(Filter(is.character, gateway_list(call$ids$plugins))))

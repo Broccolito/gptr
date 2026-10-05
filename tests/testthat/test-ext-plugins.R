@@ -546,3 +546,277 @@ test_that("an installed Claude plugin without a manifest name is named by its ke
   expect_identical(plugin_resolve("p17-odd-name")$version, "2.0.0")
   expect_identical(plugin_resolve("p17-named")$name, "p17-named-tools")
 })
+
+# Task 10: enabling plugins: declarative resources, code, trust gating, session scope.
+
+claude_fixture = function(root) {
+  write_file(file.path(root, ".claude-plugin", "plugin.json"),
+             '{"name": "deploy-tools", "version": "1.2.0"}')
+  write_file(file.path(root, "skills", "deploy-check", "SKILL.md"),
+             c("---", "name: deploy-check", "description: Check a deployment before release.",
+               "---", "Run the checklist."))
+  write_file(file.path(root, "commands", "status.md"),
+             c("---", "description: Show the deployment status", "argument-hint: \"[env]\"",
+               "---", "Show the status of $ARGUMENTS."))
+  write_file(file.path(root, "agents", "deploy-reviewer.md"),
+             c("---", "name: deploy-reviewer", "description: Reviews deployments",
+               "tools: Read, Grep, Bash", "---", "Review the deployment."))
+  mcp = paste0('{"mcpServers": {"deploy-api": {"command": "node", ',
+               '"args": ["${CLAUDE_PLUGIN_ROOT}/server.js"]}}}')
+  write_file(file.path(root, ".mcp.json"), mcp)
+  write_file(file.path(root, "hooks", "hooks.json"), '{"hooks": {}}')
+  root
+}
+
+command_ext = function(name, value) {
+  paste0("function(gptr) gptr$register(gptr::gptr_command(\"", name,
+         "\", function(args, ctx) ", value, "))")
+}
+
+test_that("a .claude-plugin bundle contributes a skill, a command, an agent and an MCP entry", {
+  b = claude_fixture(withr::local_tempdir())
+  sid = "s00000000a7"
+  expect_true(plugin_enable(b, 0L, session = sid))
+  expect_false(is.null(registry_get("skill", "deploy-check", session = sid)))
+  cmd = registry_get("command", "deploy-tools:status", session = sid)
+  expect_identical(cmd$handler("prod", NULL), list(prompt = "Show the status of prod."))
+  # P14's console turns "/deploy-tools:status prod" into the command deploy-tools, "status prod"
+  disp = registry_get("command", "deploy-tools", session = sid)
+  expect_identical(disp$handler("status prod", NULL), list(prompt = "Show the status of prod."))
+  expect_false(is.null(registry_get("prompt_template", "deploy-tools:status", session = sid)))
+  expect_identical(registry_get("agent", "deploy-reviewer", session = sid)$tools,
+                   c("read", "grep", "r"))
+  srv = registry_get("mcp_server", "deploy-api", session = sid)
+  expect_identical(srv$command, "node")
+  expect_identical(srv$args, file.path(path_norm(b), "server.js"))
+  expect_identical(srv$source, "plugin:deploy-tools")
+  expect_null(registry_get("skill", "deploy-check"))
+  msgs = gptr_registry(diagnostics = TRUE)$message
+  expect_true(any(grepl("Claude plugin hooks are not imported", msgs, fixed = TRUE)))
+})
+
+test_that("plugin_mcp_specs reads .mcp.json and a manifest mcpServers path of Claude bundles", {
+  b = withr::local_tempdir()
+  write_file(file.path(b, ".mcp.json"), '{"mcpServers": {"one": {"command": "a"}}}')
+  write_file(file.path(b, "extra.json"), '{"two": {"url": "https://example.org/mcp"}}')
+  p = list(kind = "claude-plugin", name = "mcp-kit", path = path_norm(b),
+           manifest = list(name = "mcp-kit", mcpServers = "./extra.json"))
+  specs = plugin_mcp_specs(p)
+  nm = vapply(specs, function(s) s[["name"]], "")
+  expect_setequal(nm, c("one", "two"))
+  expect_identical(specs[[match("two", nm)]][["transport"]], "http")
+})
+
+test_that("project plugin code and resources are ignored until gptr_trust()", {
+  files = list()
+  files[[".gptr/plugins/localplug/plugin.json"]] = '{"name": "localplug"}'
+  files[[".gptr/plugins/localplug/extensions/hi.R"]] = command_ext("p17-hi-local", "\"hi\"")
+  files[[".gptr/plugins/localplug/skills/local-skill/SKILL.md"]] =
+    "---\nname: local-skill\ndescription: A local skill.\n---\nBody"
+  proj = local_project(trust = FALSE, files = files)
+  sid = "s00000000b7"
+  expect_false(plugin_enable("localplug", 0L, session = sid))
+  expect_null(registry_get("command", "p17-hi-local", session = sid))
+  expect_null(registry_get("skill", "local-skill", session = sid))
+  gptr_trust(proj, TRUE)
+  expect_true(plugin_enable("localplug", 0L, session = sid))
+  expect_identical(registry_get("command", "p17-hi-local", session = sid)$handler("", NULL), "hi")
+  expect_false(is.null(registry_get("skill", "local-skill", session = sid)))
+})
+
+test_that("an unmet API requirement disables the plugin with a diagnostic", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "future-plug", "gptr": {"api": ">= 2.0"}}')
+  write_file(file.path(d, "extensions", "f.R"), command_ext("p17-future", "NULL"))
+  sid = "s00000000c7"
+  expect_warning(plugin_enable(d, 0L, session = sid), class = "gptr_warning_plugin")
+  expect_null(registry_get("command", "p17-future", session = sid))
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_true(any(grepl("requires gptr extension API >= 2.0", diag$message, fixed = TRUE)))
+})
+
+test_that("missing rDepends disable a plugin", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"),
+             '{"name": "needs-pkg", "rDepends": ["notapkg.p17 (>= 1.0)"]}')
+  write_file(file.path(d, "skills", "np-skill", "SKILL.md"),
+             c("---", "name: np-skill", "description: Needs a package.", "---", "x"))
+  sid = "s00000000d7"
+  expect_warning(plugin_enable(d, 0L, session = sid), class = "gptr_warning_plugin")
+  expect_null(registry_get("skill", "np-skill", session = sid))
+})
+
+test_that("plugin_enable is idempotent and is the plugin.enable service", {
+  b = claude_fixture(withr::local_tempdir())
+  sid = "s00000000e7"
+  plugin_enable(b, 0L, session = sid)
+  n1 = length(registry_names("skill", session = sid))
+  ext_service_get("plugin.enable")(b, rank = 0L, session = sid)
+  expect_identical(length(registry_names("skill", session = sid)), n1)
+  hits = vapply(res_state()$plugins, function(e) {
+    identical(e$path, path_norm(b)) && identical(e$session, sid)
+  }, NA)
+  expect_identical(sum(hits), 1L)
+  pe = plugins_enabled(sid)
+  expect_true("deploy-tools" %in% pe$name)
+  expect_false("deploy-tools" %in% plugins_enabled()$name)
+  expect_true(plugin_enable("gptr", 0L, session = sid))
+})
+
+test_that("a plugin whose records were removed (its package unloaded) is enabled again", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "revive-plug"}')
+  write_file(file.path(d, "skills", "revive-skill", "SKILL.md"),
+             c("---", "name: revive-skill", "description: Comes back.", "---", "x"))
+  withr::defer(plugin_forget(d))
+  expect_true(plugin_enable(d, 3L))
+  key = path_key(d)
+  for (e in res_state()$plugins) {
+    if (identical(path_key(e$path), key)) for (id in e$ids) registry_remove(id)
+  }
+  expect_null(registry_get("skill", "revive-skill"))
+  expect_true(plugin_enable(d, 3L))
+  expect_false(is.null(registry_get("skill", "revive-skill")))
+})
+
+test_that("named extensions resolve from .gptr/extensions of a trusted project", {
+  files = list()
+  files[[".gptr/extensions/p17_named.R"]] = command_ext("p17-named", "\"named\"")
+  proj = local_project(trust = TRUE, files = files)
+  sid = "s00000000f6"
+  expect_true(plugin_enable("p17-named", 0L, session = sid))
+  expect_identical(registry_get("command", "p17-named", session = sid)$handler("", NULL), "named")
+})
+
+test_that("a plugin passed with plugins = is invisible to the next gptr() call (IC-69)", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "scoped-plug"}')
+  write_file(file.path(d, "skills", "scoped-skill", "SKILL.md"),
+             c("---", "name: scoped-skill", "description: Only for one session.", "---", "x"))
+  fake = local_fake_provider(list("ok"))
+  gptr("hello", plugins = d, model = fake, envir = new.env())
+  s2 = gptr("hello again", model = fake, envir = new.env())
+  reqs = fake_requests(fake)
+  expect_match(reqs[[1]]$system$t1, "scoped-skill", fixed = TRUE)
+  expect_false(grepl("scoped-skill", reqs[[2]]$system$t1, fixed = TRUE))
+  expect_null(registry_get("skill", "scoped-skill", session = s2$id))
+})
+
+test_that("after gptr_reload() declarative records are rebuilt once and code is not rerun", {
+  d = withr::local_tempdir()
+  count = file.path(d, "count")
+  write_file(file.path(d, "plugin.json"),
+             '{"name": "reload-plug", "extension": {"activation": "eager"}}')
+  ext = c("function(gptr) {",
+          paste0("  cat(\"x\", file = ", deparse(count), ", append = TRUE)"),
+          "  gptr$register(gptr::gptr_command(\"p17-reload-cmd\", function(args, ctx) \"r\"))",
+          "}")
+  write_file(file.path(d, "extensions", "r.R"), ext)
+  write_file(file.path(d, "skills", "reload-skill", "SKILL.md"),
+             c("---", "name: reload-skill", "description: Rebuilt after a reload.", "---", "x"))
+  withr::defer(plugin_forget(d))
+  expect_true(plugin_enable(d, 3L))
+  gptr_reload()
+  expect_true(plugin_enable(d, 3L))
+  expect_identical(readLines(count, warn = FALSE), "x")
+  reg = gptr_registry("skill")
+  expect_identical(sum(reg$name == "reload-skill"), 1L)
+  expect_identical(registry_get("command", "p17-reload-cmd")$handler("", NULL), "r")
+})
+
+test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trials (e2e)", {
+  withr::defer(res_prune("skills:", character()))
+  skill = function(name, desc, body) {
+    paste(c("---", paste0("name: ", name), paste0("description: ", desc), "---", body),
+          collapse = "\n")
+  }
+  manifest = paste0(
+    "{\"name\": \"clinical-trials\", \"extension\": {\"activation\": \"lazy\",",
+    " \"provides\": {\"tool\": [\"trials/search\"]},",
+    " \"declarations\": {\"trials/search\": {\"signature\": \"search(condition: string)\",",
+    " \"description\": \"Search trials for a condition\"}}}}"
+  )
+  factory = paste(
+    "function(gptr) gptr$register(gptr::gptr_tool(\"search\", namespace = \"trials\",",
+    "  description = \"Search trials for a condition.\",",
+    "  parameters = list(type = \"object\", required = I(\"condition\"),",
+    "                    properties = list(condition = list(type = \"string\"))),",
+    "  fun = function(condition) data.frame(condition = condition), exposure = \"r\"))",
+    sep = "\n"
+  )
+  files = list()
+  files[[".gptr/skills/single-cell/SKILL.md"]] =
+    skill("single-cell", "Single-cell work in R.", "Use Seurat v5 layers.")
+  files[[".gptr/skills/plotting/SKILL.md"]] =
+    skill("plotting", "Plots for reports.", "Use ggplot2 with theme_minimal().")
+  files[[".gptr/plugins/clinical-trials/plugin.json"]] = manifest
+  files[[".gptr/plugins/clinical-trials/extensions/trials.R"]] = factory
+  files[[".gptr/plugins/clinical-trials/skills/trial-appraisal/SKILL.md"]] =
+    skill("trial-appraisal", "Appraise clinical trials.", "Check the randomisation.")
+  files[[".gptr/plugins/clinical-trials/mcp.json"]] =
+    "{\"mcpServers\": {\"ctgov\": {\"command\": \"ctgov-mcp\", \"enabled\": false}}}"
+  local_project(trust = TRUE, files = files)
+  fake = local_fake_provider(list("Done."))
+  e = new.env()
+  e$pbmc = data.frame(cluster = 1:3)
+  e$indication = "asthma"
+  s1 = local(gptr("Annotate these clusters", pbmc, skills = c(single_cell, plotting),
+                  model = fake, envir = e), envir = e)
+  s2 = local(gptr("Find trials for this indication", indication, plugins = clinical_trials,
+                  model = fake, envir = e), envir = e)
+  reqs = fake_requests(fake)
+  expect_match(reqs[[1]]$system$t1,
+               "- single-cell: Single-cell work in R. [skill:single-cell/SKILL.md]", fixed = TRUE)
+  expect_match(reqs[[1]]$system$t1, "- plotting: Plots for reports.", fixed = TRUE)
+  first = paste(unlist(reqs[[1]]$messages[[1]]$content), collapse = "\n")
+  expect_match(first, "Use Seurat v5 layers.", fixed = TRUE)
+  expect_match(first, "Use ggplot2 with theme_minimal().", fixed = TRUE)
+  expect_match(reqs[[2]]$system$t1, "- trial-appraisal: Appraise clinical trials.", fixed = TRUE)
+  expect_match(reqs[[2]]$system$t1, "search(condition: string)", fixed = TRUE)
+  expect_false(is.null(registry_get("mcp_server", "ctgov", session = s2$id)))
+  expect_false(grepl("trial-appraisal", reqs[[1]]$system$t1, fixed = TRUE))
+})
+
+test_that("a ~ extension path is expanded with user_home() (IC-63)", {
+  alt = withr::local_tempdir()
+  write_file(file.path(alt, "p17_home.R"), command_ext("p17-home", "\"home\""))
+  write_file(file.path(alt, "p17_bad.R"), "x = 1")
+  local_mocked_bindings(user_home = function() alt)
+  ext = extension_resolve("~/p17_home.R")
+  expect_identical(ext$path, path_norm(file.path(alt, "p17_home.R")))
+  expect_identical(ext$scope, "user")
+  fake = local_fake_provider(list("ok"))
+  expect_error(gptr("hi", extensions = "~/p17_bad.R", model = fake, envir = new.env()),
+               "p17_bad.R", fixed = TRUE, class = "gptr_error_invalid_argument")
+})
+
+test_that("a malformed manifest disables the plugin before anything is registered", {
+  check = function(ext) {
+    d = withr::local_tempdir()
+    withr::defer(plugin_forget(d))
+    write_file(file.path(d, "plugin.json"), paste0('{"name": "bad-plug", "extension": ', ext, "}"))
+    write_file(file.path(d, "skills", "bad-skill", "SKILL.md"),
+               c("---", "name: bad-skill", "description: Never registered.", "---", "x"))
+    expect_warning(expect_false(plugin_enable(d, 3L)), class = "gptr_warning_plugin")
+    expect_false(plugin_enable(d, 3L))
+    expect_null(registry_get("skill", "bad-skill"))
+  }
+  check('"m1pkg::plugin"')
+  check('{"declarations": {"x": "x()"}}')
+  expect_identical(plugin_manifest_provides(list(extension = "m1pkg::plugin")), character())
+})
+
+test_that("an activated lazy plugin is lazy again when enabled after gptr_reload()", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"),
+             '{"name": "relazy-plug", "extension": {"provides": {"command": ["p17-relazy"]}}}')
+  write_file(file.path(d, "extensions", "z.R"), command_ext("p17-relazy", "\"z\""))
+  withr::defer(plugin_forget(d))
+  key = paste("directory", path_norm(d), 3L, "", sep = "|")
+  expect_true(plugin_enable(d, 3L))
+  expect_identical(registry_get("command", "p17-relazy")$handler("", NULL), "z")
+  expect_identical(res_state()$plugins[[key]]$code_state, "active")
+  gptr_reload()
+  expect_true(plugin_enable(d, 3L))
+  expect_identical(res_state()$plugins[[key]]$code_state, "lazy")
+})

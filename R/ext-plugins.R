@@ -9,9 +9,10 @@
 #'
 #' `handlers` (resource handlers of the L4 built-ins), `groups` (registry ids of synced
 #' resource groups), `parse` (parse cache keyed by file version), `plugins` (the plugin table),
-#' `loaded` (extension files loaded per version), `used` and `tick` (least-recently-used counters
-#' of the skill catalog), `sync_gen` (registry generation of the last plugins_sync()) and
-#' `discovered` (paths returned by `resources_discover` hooks). Configuration only: no run state.
+#' `loaded` (extension files loaded per path, rank and session), `used` and `tick`
+#' (least-recently-used counters of the skill catalog), `sync_gen` (registry generation of the
+#' last plugins_sync()) and `discovered` (paths returned by `resources_discover` hooks).
+#' Configuration only: no run state.
 #' @noRd
 res_state = function() {
   st = the$resources
@@ -881,3 +882,418 @@ plugin_resolve = function(name) {
                     ".gptr/plugins/<name>/."), "invalid_argument", arg = "name",
              expected = "the name or path of a plugin")
 }
+
+# ---- declarative resources of a plugin -------------------------------------------------------
+
+#' Replace `${CLAUDE_PLUGIN_ROOT}` and `${GPTR_PLUGIN_ROOT}` in a configuration tree (11.12)
+#' @noRd
+plugin_expand_root = function(x, root) {
+  if (is.list(x)) return(lapply(x, plugin_expand_root, root = root))
+  if (!is.character(x)) return(x)
+  x = gsub("${CLAUDE_PLUGIN_ROOT}", root, x, fixed = TRUE)
+  gsub("${GPTR_PLUGIN_ROOT}", root, x, fixed = TRUE)
+}
+
+#' `mcp_server` specs of a plugin (`mcp.json`, Claude's `.mcp.json`, manifest `mcpServers`)
+#'
+#' A manifest `mcpServers` is an inline object or a path to a JSON file: for gptr plugins the
+#' path replaces `mcp.json`, for Claude bundles it adds to `.mcp.json` (Claude's component
+#' keys). Plugin-root placeholders are expanded now; every other placeholder is left for the
+#' MCP client to expand at connect time (contract 04 section 11.7).
+#' @noRd
+plugin_mcp_specs = function(p) {
+  root = p$path
+  m = p$manifest
+  ref = if (is.character(m[["mcpServers"]])) m[["mcpServers"]] else character()
+  rel = unlist(lapply(ref, function(v) plugin_rel(root, v)), use.names = FALSE)
+  files = if (identical(p$kind, "claude-plugin")) {
+    c(file.path(root, ".mcp.json"), rel)
+  } else if (length(rel)) {
+    rel
+  } else {
+    file.path(root, "mcp.json")
+  }
+  servers = list()
+  for (f in files[file.exists(files)]) {
+    j = plugin_manifest_read(f)
+    s = if (is.list(j[["mcpServers"]])) j[["mcpServers"]] else j
+    if (is.list(s) && !is.null(names(s))) servers[names(s)] = s
+  }
+  inline = m[["mcpServers"]]
+  if (is.list(inline) && !is.null(names(inline))) servers[names(inline)] = inline
+  specs = list()
+  for (nm in names(servers)) {
+    e = servers[[nm]]
+    if (!is.list(e)) next
+    e = plugin_expand_root(e, root)
+    e = e[setdiff(names(e), c("kind", "name", "api_version"))]
+    if (!is.null(e[["args"]])) e[["args"]] = as.character(unlist(e[["args"]], use.names = FALSE))
+    e[["transport"]] = if (!is.null(e[["url"]])) "http" else "stdio"
+    e[["source"]] = paste0("plugin:", p$name)
+    s = res_spec("mcp_server", nm, e, diag_source = paste0("plugin:", p$name))
+    if (!is.null(s)) specs[[length(specs) + 1L]] = s
+  }
+  specs
+}
+
+#' Declarative specs of a plugin: skills, templates or Claude commands, agents, MCP servers
+#'
+#' Claude plugin hooks are not imported in gptr 1.0 (contract 11.12): a diagnostic says so.
+#' @noRd
+plugin_declarative_specs = function(p) {
+  specs = list()
+  for (type in c("skills", "prompts", "commands", "agents")) {
+    h = res_handler_get(type)
+    paths = plugin_type_paths(p, type)
+    if (is.null(h) || !length(paths)) next
+    specs = c(specs, h(unname(paths), p, names(paths)))
+  }
+  has_hooks = !is.null(p$manifest[["hooks"]]) ||
+    file.exists(file.path(p$path, "hooks", "hooks.json"))
+  if (identical(p$kind, "claude-plugin") && has_hooks) {
+    registry_diagnostic(paste0("plugin:", p$name), "plugin", "hooks",
+                        "Claude plugin hooks are not imported in gptr 1.0; they were ignored.")
+  }
+  c(specs, plugin_mcp_specs(p))
+}
+
+# ---- plugin code -----------------------------------------------------------------------------
+
+#' The factory held in an R file: its last expression must be `function(gptr)` (11.12)
+#' @noRd
+plugin_file_factory = function(path) {
+  exprs = parse(file = path, keep.source = FALSE, encoding = "UTF-8")
+  env = new.env(parent = globalenv())
+  value = NULL
+  for (e in exprs) value = eval(e, env)
+  if (!is.function(value)) {
+    gptr_abort(paste0("The extension file ", path, " must end with a function(gptr) factory."),
+               "invalid_argument", arg = "extensions",
+               expected = "a file whose last expression is function(gptr)")
+  }
+  value
+}
+
+#' A factory running the extension files of a directory in order (parsed only when it runs)
+#' @noRd
+plugin_dir_factory = function(files) {
+  force(files)
+  function(gptr) {
+    for (f in files) plugin_file_factory(f)(gptr)
+    invisible(NULL)
+  }
+}
+
+#' A factory calling the exported entry `pkg::fun` of a package plugin (no `:::`)
+#' @noRd
+plugin_entry_factory = function(pkg, fun) {
+  force(pkg)
+  force(fun)
+  function(gptr) getExportedValue(pkg, fun)(gptr)
+}
+
+#' `kind:name` entries of a manifest's `extension.provides`
+#' @noRd
+plugin_manifest_provides = function(manifest) {
+  ext = manifest[["extension"]]
+  pr = if (is.list(ext)) ext[["provides"]]
+  if (!is.list(pr) || is.null(names(pr))) return(character())
+  unlist(lapply(names(pr), function(k) paste0(k, ":", as.character(unlist(pr[[k]])))),
+         use.names = FALSE)
+}
+
+#' The code of a plugin: `list(factory, lazy)`, or NULL when it has none
+#'
+#' Packages: the manifest's `extension.entry` (`pkg::fun`); directories: `extensions/*.R`;
+#' Claude bundles carry no R code. Lazy unless `activation` is `"eager"` or nothing is provided.
+#' @noRd
+plugin_code = function(p) {
+  ext = p$manifest[["extension"]]
+  factory = NULL
+  if (identical(p$kind, "package")) {
+    entry = ext[["entry"]]
+    if (!is.character(entry) || length(entry) != 1L) return(NULL)
+    parts = strsplit(entry, "::", fixed = TRUE)[[1L]]
+    if (grepl(":::", entry, fixed = TRUE) || length(parts) != 2L) {
+      registry_diagnostic(paste0("plugin:", p$name), "plugin", "manifest",
+                          "extension.entry must be pkg::fun naming an exported function.")
+      return(NULL)
+    }
+    factory = plugin_entry_factory(parts[1L], parts[2L])
+  } else if (identical(p$kind, "directory")) {
+    files = list.files(file.path(p$path, "extensions"), pattern = "\\.[Rr]$", full.names = TRUE)
+    if (!length(files)) return(NULL)
+    factory = plugin_dir_factory(sort(files, method = "radix"))
+  } else {
+    return(NULL)
+  }
+  lazy = !identical(ext[["activation"]], "eager") &&
+    length(plugin_manifest_provides(p$manifest)) > 0L
+  list(factory = factory, lazy = lazy)
+}
+
+#' Wrap a factory so the plugin table records whether its code ran (`active`) or failed
+#' @noRd
+plugin_track_factory = function(key, factory) {
+  force(key)
+  force(factory)
+  mark = function(state) {
+    st = res_state()
+    e = st$plugins[[key]]
+    if (!is.null(e)) {
+      e$code_state = state
+      st$plugins[[key]] = e
+    }
+    invisible(NULL)
+  }
+  function(gptr) {
+    tryCatch(factory(gptr), error = function(err) {
+      mark("failed")
+      stop(err)
+    })
+    mark("active")
+    invisible(NULL)
+  }
+}
+
+# ---- enabling --------------------------------------------------------------------------------
+
+#' Store a plugin table entry
+#' @noRd
+plugin_entry_save = function(entry) {
+  st = res_state()
+  st$plugins[[entry$key]] = entry
+  invisible(entry)
+}
+
+#' Are the records of an enabled plugin table entry still registered?
+#'
+#' A package unload removes every record of its source (contract 10.8), so an active package
+#' plugin whose namespace is gone, or a missing declarative record, is enabled again.
+#' @noRd
+plugin_entry_alive = function(e) {
+  if (!isTRUE(e$enabled) || isTRUE(e$failed)) return(TRUE)
+  pkg = e$package
+  if (identical(e$code_state, "active") && is.character(pkg) && !isNamespaceLoaded(pkg)) {
+    return(FALSE)
+  }
+  length(registry_recs(registry_env(), e$ids)) == length(e$ids)
+}
+
+#' A named extension file: a path to an `.R` file, `.gptr/extensions/<name>.R` or the user's
+#' `extensions/<name>.R`; `list(path, name, scope)` or NULL
+#' @noRd
+extension_resolve = function(name) {
+  path = path_norm(name)
+  if (grepl("\\.[Rr]$", name) && file.exists(path)) {
+    return(list(path = path, name = sub("\\.[Rr]$", "", basename(path)),
+                scope = if (res_inside(path)) "project" else "user"))
+  }
+  places = list()
+  ws = workspace_dir()
+  if (!is.null(ws)) places$project = file.path(ws, "extensions")
+  places$user = file.path(gptr_user_dir("config"), "extensions")
+  for (scope in names(places)) {
+    files = list.files(places[[scope]], pattern = "\\.[Rr]$", full.names = TRUE)
+    if (!length(files)) next
+    base = sub("\\.[Rr]$", "", basename(files))
+    hit = res_match(name, base, "extension")
+    if (length(hit)) {
+      return(list(path = path_norm(files[base == hit][1L]), name = hit, scope = scope))
+    }
+  }
+  NULL
+}
+
+#' Load one extension file once per path, rank and session (a project one only when trusted)
+#'
+#' P02 keeps an eager factory's records across `gptr_reload()` and has no per-extension unload,
+#' so a second run would only add records that the first run's records shadow.
+#' @noRd
+extension_enable = function(ext, rank, session = NULL) {
+  if (identical(ext$scope, "project") && !trust_ok()) {
+    gptr_inform(paste0("Project extension ", ext$name,
+                       " was not loaded: the project is not trusted (see gptr_trust())."),
+                "notice", .once = paste0("ext-untrusted:", ext$path))
+    return(invisible(FALSE))
+  }
+  st = res_state()
+  key = paste("extension", ext$path, rank, session %||% "", sep = "|")
+  if (!is.null(st$loaded[[key]])) return(invisible(st$loaded[[key]]))
+  source = if (!is.null(session)) "session" else ext$scope
+  ok = ext_load(plugin_dir_factory(ext$path), source = source, rank = rank,
+                dir = dirname(ext$path), session = session)
+  st$loaded[[key]] = isTRUE(ok)
+  invisible(isTRUE(ok))
+}
+
+#' Enable a plugin or a named extension (service `plugin.enable`; contract 7.17)
+#'
+#' Declarative resources are registered now at `rank` (scoped to `session`, IC-69), code through
+#' `ext_load()`; a plugin of an untrusted project contributes nothing (IC-52). Idempotent per
+#' plugin, rank, session and registry generation; code is loaded once (P02 re-declares lazy
+#' factories on `gptr_reload()`). Returns `invisible(TRUE)` when enabled without failure.
+#' @noRd
+plugin_enable = function(name, rank, session = NULL) {
+  check_string(name, "name")
+  rank = check_number(rank, "rank", min = 0, max = 6, int = TRUE)
+  session = res_session_id(session)
+  # gptr's resources are the built-ins'; a pkgload source tree has no installed gptr/ to resolve
+  if (identical(res_norm(name), "gptr")) return(invisible(TRUE))
+  ext = extension_resolve(name)
+  if (!is.null(ext)) return(extension_enable(ext, rank, session))
+  p = plugin_resolve(name)
+  key = paste(p$kind, p$path, rank, session %||% "", sep = "|")
+  gen = registry_generation()
+  trusted = identical(p$kind, "package") || !res_inside(p$path) || trust_ok()
+  old = res_state()$plugins[[key]]
+  alive = is.null(old) || plugin_entry_alive(old)
+  if (!is.null(old) && alive && identical(old$gen, gen) && (isTRUE(old$trusted) || !trusted)) {
+    return(invisible(isTRUE(old$enabled) && !isTRUE(old$failed)))
+  }
+  if (!is.null(old)) for (id in old$ids) registry_remove(id)
+  code_loaded = !is.null(old) && isTRUE(old$code_loaded) && alive
+  entry = list(key = key, name = p$name, kind = p$kind, path = p$path, manifest = p$manifest,
+               package = p$package, package_path = p$package_path,
+               version = p$version %||% NA_character_,
+               api = p$api %||% NA_character_, rank = rank, session = session,
+               source = paste0("plugin:", p$name), gen = gen, trusted = trusted,
+               enabled = FALSE, failed = FALSE,
+               code_state = if (code_loaded) old$code_state else "none",
+               code_loaded = code_loaded, provides = character(), specs = list(),
+               ids = character(), tokens = 0)
+  if (!trusted) {
+    gptr_inform(paste0("Plugin ", p$name, " lives in a project that is not trusted; ",
+                       "its resources and code were not loaded (see gptr_trust())."),
+                "notice", .once = paste0("plugin-untrusted:", p$path))
+    plugin_entry_save(entry)
+    return(invisible(FALSE))
+  }
+  req = plugin_api_req(p$manifest)
+  miss = rdepends_missing(p$manifest[["rDepends"]])
+  problem = if (!plugin_api_ok(req)) {
+    paste0("Plugin ", p$name, " requires gptr extension API ", req, "; this gptr provides ",
+           as.character(gptr_api()$version), ".")
+  } else if (length(miss)) {
+    paste0("Plugin ", p$name, " needs R packages that are not installed: ",
+           paste(miss, collapse = ", "), ".")
+  }
+  if (is.null(problem)) {
+    # a malformed manifest fails closed before anything is registered (contract 10.8)
+    built = tryCatch({
+      specs = plugin_declarative_specs(p)
+      list(specs = specs, tokens = plugin_tokens(p, specs), code = plugin_code(p))
+    }, error = function(e) e)
+    if (inherits(built, "error")) {
+      problem = paste0("Plugin ", p$name, " could not be read: ", conditionMessage(built))
+    }
+  }
+  if (!is.null(problem)) {
+    entry$failed = TRUE
+    registry_diagnostic(entry$source, "load", "plugin", problem)
+    gptr_warn(problem, "plugin", diagnostic = problem, .once = paste0("plugin-problem:", key))
+    plugin_entry_save(entry)
+    return(invisible(FALSE))
+  }
+  for (s in built$specs) {
+    id = tryCatch(
+      registry_add(s, source = entry$source, rank = rank, session = session),
+      error = function(e) {
+        registry_diagnostic(entry$source, s[["kind"]], "invalid_spec",
+                            paste0(s[["name"]], ": ", conditionMessage(e)))
+        NULL
+      }
+    )
+    if (!is.null(id)) {
+      entry$ids = c(entry$ids, id)
+      entry$provides = c(entry$provides, paste0(s[["kind"]], ":", s[["name"]]))
+    }
+  }
+  entry$specs = built$specs
+  entry$tokens = built$tokens
+  entry$enabled = TRUE
+  code = built$code
+  if (!is.null(code)) {
+    entry$provides = unique(c(entry$provides, plugin_manifest_provides(p$manifest)))
+  }
+  # P02 re-declares an activated lazy plugin on gptr_reload(); a failed one stays failed
+  if (isTRUE(code$lazy) && !identical(entry$code_state, "failed")) entry$code_state = "lazy"
+  plugin_entry_save(entry)
+  if (!code_loaded && !is.null(code)) {
+    ok = isTRUE(ext_load(plugin_track_factory(key, code$factory), source = entry$source,
+                         rank = rank, dir = p$path, manifest = p$manifest, lazy = code$lazy,
+                         session = session))
+    entry = res_state()$plugins[[key]]
+    entry$failed = !ok
+    entry$code_loaded = ok
+    plugin_entry_save(entry)
+  }
+  invisible(!entry$failed)
+}
+
+#' Forget the plugin table entries of a path and remove their declarative records
+#'
+#' Code records loaded through `ext_load()` stay until their session ends, the package unloads
+#' or `gptr_reload()`; tests use this to leave no declarative records behind.
+#' @noRd
+plugin_forget = function(path) {
+  st = res_state()
+  key = path_key(path)
+  hit = names(st$plugins)[vapply(st$plugins, function(e) identical(path_key(e$path), key), NA)]
+  for (k in hit) {
+    for (id in st$plugins[[k]]$ids) registry_remove(id)
+    st$plugins[[k]] = NULL
+  }
+  invisible(length(hit) > 0L)
+}
+
+#' Estimated prompt cost of a plugin: its skill catalog lines and manifest declarations
+#' @noRd
+plugin_tokens = function(p, specs) {
+  skill_lines = unlist(lapply(specs, function(s) {
+    if (inherits(s, "gptr_skill")) paste0("- ", s[["name"]], ": ", s[["description"]]) else NULL
+  }))
+  decl = p$manifest[["extension"]][["declarations"]]
+  decl_lines = if (is.list(decl)) {
+    unlist(lapply(names(decl), function(k) {
+      paste0(decl[[k]][["signature"]] %||% k, "  # ", decl[[k]][["description"]] %||% "")
+    }))
+  } else {
+    character()
+  }
+  txt = c(skill_lines, decl_lines)
+  if (!length(txt)) return(0)
+  est_tokens(paste(txt, collapse = "\n"), "prose")
+}
+
+#' Plugins enabled for the process or for `session` (listings; worker specs of P19, IC-69)
+#'
+#' Returns `data.frame(name, kind, path, rank, session)`.
+#' @noRd
+plugins_enabled = function(session = NULL) {
+  sid = res_session_id(session)
+  es = Filter(function(e) {
+    isTRUE(e$enabled) && !isTRUE(e$failed) && (is.null(e$session) || identical(e$session, sid))
+  }, res_state()$plugins)
+  data.frame(name = vapply(es, function(e) e$name, ""),
+             kind = vapply(es, function(e) e$kind, ""),
+             path = vapply(es, function(e) e$path, ""),
+             rank = vapply(es, function(e) as.integer(e$rank), 0L),
+             session = vapply(es, function(e) e$session %||% NA_character_, ""),
+             stringsAsFactors = FALSE, row.names = NULL)
+}
+
+#' Forget the plugin table entries of an ended session (P02 already dropped its records)
+#' @noRd
+plugins_session_end = function(session) {
+  sid = res_session_id(session)
+  if (is.null(sid)) return(invisible(0L))
+  st = res_state()
+  hit = names(st$plugins)[vapply(st$plugins, function(e) identical(e$session, sid), NA)]
+  for (k in hit) st$plugins[[k]] = NULL
+  invisible(length(hit))
+}
+
+# Owned by builtin:skills (IC-34; contract 7.17 lists it with the skills, prompts and agents
+# built-ins): filtering `-builtin:skills` makes `gptr(plugins =)` signal not_available.
+on_load(ext_service_set("plugin.enable", plugin_enable, provided_by = "P17", builtin = "skills"))
