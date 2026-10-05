@@ -5,11 +5,10 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Current state
 
-**RESUMED 2026-10-03 by Claude Code (Opus 5.5)** on the maintainer's instruction,
-working directly on `main` (the implementation branch was fast-forwarded into
-`main`; PRs #3/#4 closed; other branches deleted). Read [HANDOFF.md](HANDOFF.md)
-for the takeover procedure. The current position is the newest commit on `main`
-plus the last task section of the newest `progress/Pxx.md` log.
+**PAUSED 2026-10-05 (~11:20 PDT) by the maintainer for a hand-off to another agent.** Read
+[HANDOFF.md](HANDOFF.md) first: it has the exact state (HEAD `967e735`, 195/307 tasks), the six
+interrupted tasks and their uncommitted files, the next steps, the open obligations, the
+orchestration method and the pitfalls. Work is on `main` (only branch), pushed.
 
 Resume log (newest last):
 
@@ -87,6 +86,9 @@ Resume log (newest last):
   acceptance `2823b07`). P11 paused after Task 2 for the classifier redesign (P11-B). Running:
   P15 Tasks 17-18, P17 Tasks 8-12, simplicity lanes S-s1, S-kernel, S-core; then the rename
   freeze (REN-1/2, DOC-1/2).
+- 2026-10-05: simplicity packages DEF-1 `624b997`, DEF-2 `510cf99`, P13-C `ad0eec6`, P06-C `e244f71`,
+  P01-D `bb31ba4` (D-138); P17 Task 8 `967e735`. **Paused** with P11 Task 3, P13-S, P07-C, P01-S,
+  P17 Task 10 and P15 Task 17 tests uncommitted (HANDOFF section 4).
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;

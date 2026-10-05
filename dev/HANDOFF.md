@@ -1,280 +1,285 @@
-# GPTR implementation handoff
+# GPTR 1.0 implementation - handoff
 
-**RESUMED on 2026-10-03 (evening PDT) by Claude Code (Opus 5.5) on the maintainer's
-explicit instruction**, after the pause recorded below. The maintainer also asked to
-consolidate everything onto `main`: the former `codex/gptr-1.0-implementation`
-branch was fast-forwarded into `main` (at `8e8d8e0`), draft PR #4 was closed as
-merged, PR #3 (legacy `get_response.R`) was closed, and the extra branches were
-deleted. **All work now happens directly on `main`, with periodic pushes.**
+**PAUSED by the maintainer on 2026-10-05 (~11:20 PDT) to hand the work to another agent.**
+All orchestration was stopped cleanly; no test, CI poll or workflow is running. HEAD = `967e735`
+(pushed to `origin/main`; only branch). Six tasks were interrupted mid-flight: their work is
+uncommitted in the working tree (section 4) and also saved as patches.
 
-## Start here (any agent taking over)
+This file is self-contained: read it top to bottom, then the documents in section 1.
 
-1. Read this file, `PROGRESS.md` (milestone ledger and current position),
-   `DEVIATIONS.md`, `CLAUDE.md`, `plan/00-index.md`, `plan/00-conventions.md`,
-   interface contract section 15 and `spec/07-local-ollama.md` (IC-74).
-   Contract > architecture > decomposition > literal plan examples.
-2. The current position is the newest commit on `main` plus the per-plan task logs
-   in `progress/Pxx.md`: every task appends its evidence section there before it
-   is committed (one commit per task, plan's conventional message). Run
-   `git log --oneline -15` and read the last task section of the newest log.
-3. Inspect `git status` before editing. Uncommitted files belong to the task in
-   flight (named in its progress section); never reset, clean or stash them away.
-4. Execution model since the resume (replaces the Astra/Luna lanes; see D-013):
-   one Claude subagent implements a task test-first (actual red, implement,
-   actual green, scoped lint, evidence), a separate Claude subagent independently
-   re-runs the tests and reviews the diff against plan and contract, a fixer
-   addresses blocker/major/minor findings (up to two rounds), then a committer
-   stages exactly the task's files. Orchestrated by the Workflow tool, one plan
-   (or plan slice) per workflow run; the coordinator updates this file and
-   `PROGRESS.md` at plan boundaries.
-5. Do not describe a whole plan, milestone, cross-platform gate or release as
-   complete from component-level results.
-6. **Simplicity first** (conventions section 11) and the short record formats there apply to every
-   task, fix and review. The retrospective simplicity plan is `progress/simplicity-plan.md`
-   (work packages; stages 0, A, B freeze with the `peter()` rename, C lane-bound); the rename
-   inventory and its scripts are `progress/rename-inventory.md` and `progress/rename/`.
+---
 
-## Cross-plan obligations (later tasks MUST honour these)
+## 0. One-paragraph summary
 
-Maintained by the coordinator; remove an item only when its owning task lands it.
+gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R
+session (pure R, CRAN-bound). The design (specs) and 25 implementation plans (307 tasks) are in
+`dev/`. **195 of 307 plan tasks are committed** (each test-first, independently reviewed), plus
+coordinator-added work (the IC-74 local Ollama System 1 adapter, follow-up fixes FIX-1..6, CI
+repair rounds CI-1..6, the first simplicity packages). P01-P10, P12 and P13 are complete locally
+(plan acceptance recorded). Two maintainer decisions now govern everything (D-135): the user-facing
+entry point is renamed **`peter()`** (not yet applied in code), and **simplicity first** (Occam's
+razor; conventions section 11) - a retrospective simplicity review produced an execution plan
+that is partly applied.
 
-- **Early lanes.** P12 (all 10 tasks), P09 (Tasks 1-9) and P10 (Tasks 1-7) were run
-  ahead of their declared dependencies, implementing only tasks whose real
-  dependencies existed. Deferred: P09 Tasks 10-11 and P10 Tasks 8-13 (after P07/P08),
-  P12 plan acceptance (after P07), **P15 Task 4** (needs P08's `settings_write("user_project",
-  ...)`; Tasks 1-3, 5, 6 are committed) and P15 Tasks 7-19. Early lanes also run for
-  P11 (Tasks 1-6), P17 (Tasks 1-3, 5, 7, 9) and P13 (Tasks 1-7); check each plan's progress
-  log for which tasks committed and which blocked.
-- **P13 IC-74 task (coordinator-added):** `07-local-ollama.md` section 6 makes P13 own
-  `R/s1-ollama.R` and its tests (native Clef/Clef Flash decisions, canonical answers,
-  images, cache/provenance, no key, per-server admission, calibration semantics). The plan
-  has no task for it: add it after P13 Task 8 (classifier route core) and before Task 9.
-- **P12:** two tests skip until P06's run engine (`session_run`) and P07's default
-  `cache_policy`/`request.build` exist; P12 plan acceptance must show them running.
-- **P09 Task 8 temporary guard:** the test "the gptr shim reaches gptr:: when gptr is
-  not visible from envir" skips while P08's `gptr_return()` is absent. **P08 Task 10
-  (session SDK verbs) must delete that guard** and see the test pass (see its D-entry).
-- **PCRE `$` anchors:** with `perl = TRUE`, `$` also matches before a final newline. P02's
-  validators were fixed to `\z` (D-074 item 8). `R/perm-classify.R:903`
-  (`grepl("^[ -~]*$", x, perl = TRUE)`, P11) still needs the same fix in the P11 lane.
-- **FIX lane** (`progress/fixes.md`): FIX-1 session finalizer race (deferred GC-time shutdown),
-  FIX-2 `gptr::` calls without `quote()`, FIX-3 `rebuild_frozen()` keeps `human`/`reinject`.
-  After FIX-1 lands, P07's `gc()` workaround in `p07_session()` (test-prompt-sections.R) can be
-  removed by the P07 owner.
-- **P12 open items** (`progress/P12.md`, plan acceptance `3b26e32`): classifier-adapter
-  conformance is CLOSED by FIX-6 `2d2d75a` (D-026); still open: `claude-haiku-4-5` has
-  `tool_addition = TRUE` but `mid_system = FALSE`, so no tool-addition declarations are sent
-  (P05/P12 decision). FIX-4 (`secret_late_check()` NA tolerance) gates every full-suite run.
-- **Unblock queue (2026-10-05):** P08 Tasks 10 (`gptr_return()`) and 12 (`export(gptr)` and the
-  gateway S3 methods) -> P10 Task 11 (the `r` tool, `builtin:r`), Task 12 and P10 acceptance ->
-  P15 Tasks 17-18 and the open P15 acceptance rows (`progress/P15.md`). P11 Task 8 (`ui.get`,
-  scripted UI) -> P14 (all), P18 Tasks 2, 4, 5. P09 and P13 are complete.
-- **R 4.6 `tools::file_ext()` (CI-5, D-111):** replace the remaining calls with P01's
-  `path_ext()`/`path_sans_ext()`: `R/doc-io.R:63` (P15), `R/ext-specs.R:1330` (P02/P17; also use
-  `fs_path()` for its `file.exists()`/`readBin()`), `R/gptr-gateway.R:774` (P08). Scheduled as
-  FIX-5 once the P15 and P08 lanes release those files. Also open: INFRA-23 CPU bound on hosted
-  Windows (P04 decision, CI-3/CI-5).
-- **`peter()` rename (D-135, maintainer-confirmed):** one coordinated work package once the active
-  lanes are quiet: `gptr()` -> `peter()`, `gptr$` -> `peter$` (same gateway object), `gptr::gptr` ->
-  `gptr::peter`; keep the package name, `gptr_*` exports, `gptr.*` options, `.gptr/`, `GPTR_*`,
-  condition classes. Update R/, tests, fixtures, prompts, token baselines (re-record), man/,
-  DESCRIPTION, README, inst/, specs and plans (not dev/research). `?peter` must carry the naming
-  rationale (Peter Wason; Peter Naur), as the README does. Inventory: simplicity-review workflow.
-- **Simplicity first (conventions section 11):** a retrospective simplicity review is producing
-  work packages; schedule them with the rename before resuming P14/P16/P18+.
-- **P11 classifier hardening (coordinator convergence decision, 2026-10-05):** after 15 review
-  rounds of P11 Task 2 (command/SQL/Python classifiers, far beyond the plan's scope), Task 2 is
-  committed after a final round fixing the round-15 findings; later classifier gaps found in
-  scoped reviews are recorded as minors in `progress/P11.md`. Follow-up (schedule before P24's
-  injection/secrets e2e suites): convert every level-0 program's option handling into an explicit
-  per-program option ALLOWLIST (any unrecognised option -> level 3, standard (B) of D-061), and
-  re-review against D-061 (A)-(C). The classifier is advisory, not a security boundary (03 6.8.1).
-- **D-019 item 5:** `write_all()` blocks on Windows (processx). P04-level decision needed
-  before P18/P19/P20/P22 send large stdin payloads to Windows children.
-- **Hosted CI open items** (`progress/ci-hosted.md`): INFRA-23 CPU 1.060 s once on hosted
-  Windows (non-gating stream); Windows `Rscript*` temp-file NOTE; macOS INFRA-01 gap
-  explanation if it recurs.
-- An untracked `AGENTS.md` (copy of `CLAUDE.md`) appeared in the repository root; it
-  belongs to the maintainer. Do not stage or delete it; it is not in `.Rbuildignore`
-  (a top-level file would add an R CMD check NOTE if it were committed).
+## 1. Read first (in order)
 
-## Pause record (historical, 2026-10-03 18:44 PDT)
+1. `CLAUDE.md` - non-negotiable rules (simplicity, `peter()` naming, R style `=`/`|>`, offline
+   tests, no R LLM packages, secrets hygiene, `Rscript --vanilla`).
+2. **This file.** Then `dev/PROGRESS.md` (milestone ledger, resume log) and `dev/DEVIATIONS.md`
+   (decisions D-001..D-138; D-135 = maintainer decisions; D-061 = classifier standard).
+3. `dev/plan/00-index.md` (execution order, milestone gates, live/optional tests) and
+   `dev/plan/00-conventions.md` (global constraints; **section 11 = simplicity and the short record
+   formats**, which win over any plan literal).
+4. Specs: `dev/spec/04-interface-contract.md` (section 15 IC-32..IC-73 wins over earlier sections),
+   `dev/spec/07-local-ollama.md` (IC-74: local Ollama, unknown-not-zero usage, local-only safety),
+   `dev/spec/03-architecture.md`, `dev/spec/05-plan-decomposition.md`. Authority when texts
+   disagree: contract (section 15, IC-74) > architecture > decomposition > plan literal code >
+   plan expected counts.
+5. The plan being implemented: `dev/plan/Pxx-*.md` (each task has steps, literal test/source code
+   and a commit message; each plan ends with "Plan acceptance" and "Self-review").
+6. Per-plan evidence: `dev/progress/Pxx.md` (+ lane files `P01-*.md`, `P03-*.md`, `P04-*.md`,
+   `P05-*.md`, `P06-loop.md`), `dev/progress/ci-hosted.md` (CI rounds), `dev/progress/fixes.md`
+   (FIX-1..6), `dev/progress/simplicity.md` (simplicity packages).
+7. **Simplicity execution plan:** `dev/progress/simplicity-plan.md` (44 work packages, stages, shared
+   decisions, defects, record formats). **Rename inventory and tools:** `dev/progress/rename-inventory.md`,
+   `dev/progress/rename/rename.py` (mechanical pass, 7 regex rules), `build_index_peter.py`, `tokdelta.R`.
+8. Orchestration scripts used so far: `dev/ci/orchestration/` (section 7).
 
-The maintainer paused the earlier Codex-driven implementation to transfer work.
-The sections below describe the state at that pause; items marked done in
-`PROGRESS.md` or the task logs since then supersede them.
+## 2. Maintainer decisions in force (D-135)
 
-## Git checkpoint and preservation
+- **Entry point `peter()`**: the package stays `gptr`; users call `peter(...)` in scripts and at the
+  console; its member namespace is `peter$...` (the same gateway object; formerly `gptr$`).
+  **Other exports keep the `gptr_` prefix** (`gptr_last()`, `gptr_usage()`, ...). Also keep
+  `gptr.*` options, `.gptr/`, `GPTR_*` env vars, `gptr_error_*` classes, file names `R/gptr-*.R`,
+  `gptr::` qualifiers (`gptr::gptr` -> `gptr::peter`). Extension factories keep `function(gptr)`
+  (package extension API). The agent persona in the system prompt is "Peter" and the P14 console
+  prompt is `peter> `. **Not yet applied in code** (REN-1/REN-2, section 6). The maintainer
+  confirmed both naming calls (namespace renamed; `gptr_` prefix kept).
+- **Why "Peter"** (must appear in `?peter` and the README, already in README/vision brief/D-135):
+  Peter Cathcart **Wason** (1924-2003), whose reasoning research with Jonathan Evans framed the
+  dual-process ("System 1"/"System 2") view gptr unifies; Peter **Naur** (1928-2016) of the
+  Backus-Naur form, in the spirit of recording sessions as readable, replayable R scripts, R
+  Markdown/Quarto files and Jupyter notebooks.
+- **Simplicity first**: smallest design meeting the contract and acceptance; no redundant code,
+  helpers, wrappers, options, comments, text or scripts; one conservative rule over many special
+  cases; reviewers treat unnecessary complexity as a defect and must not demand bespoke handling
+  of exotic inputs. Short record formats (conventions section 11) for progress logs and D-entries.
+- Contract-visible simplifications DEC-1..DEC-4 (simplicity plan section 8) are **not taken**.
+- **P11 classifier redesign (P11-B) is accepted** under D-061 standard (A)-(C) and architecture
+  6.8.1 ("advisory, not a security boundary"); its level changes (simplicity plan section 6, P11-B
+  gate) were reported to the maintainer - tell the maintainer again before landing B1-B3.
+- Earlier standing decisions: work directly on `main`, task-sized commits with the plan's
+  conventional message + `Co-Authored-By` line, periodic pushes; ask before pushing tags,
+  publishing releases, CRAN submission, paid/live runs.
 
-- Repository/worktree: `/Users/wgu/Desktop/gptr` (only one current worktree).
-- Branch: `codex/gptr-1.0-implementation`; original synchronized main base `17a95dd`.
-- Last implementation HEAD at pause:
-  **`17aad27eb2ae0722139c94504cce0ad5231c263f`**.
-  A following documentation-only commit saves this handoff and the paused ledger.
-- Last published branch checkpoint:
-  **`55ec31dc99f2d991b4b2d495320b76af25735bf6`**.
-  Later local implementation commits are not yet pushed.
-- Draft PR: <https://github.com/Broccolito/gptr/pull/4> (already attached to chat).
-- Main has not been updated with this unfinished rebuild. No release or milestone
-  tag has been created. Original branch/worktree reconciliation was completed
-  before the rebuild began.
-- Recovery copies are in ignored `dev/.validation/pause-2026-10-03/`:
-  `staged.patch`, `unstaged.patch`, `test-catalog-http.R`, and `manifest.json`
-  containing SHA-256 hashes of all seven unfinished files. They were captured
-  after agent shutdown and before handoff-only edits. Do not apply patches on
-  top of already-present changes without inspecting them.
+## 3. Status (2026-10-05)
 
-### Exact unfinished state
+| Plan | Done / tasks | Plan acceptance | Notes |
+|---|---|---|---|
+| P01 Foundation | 21/21 | local (progress/P01-acceptance.md) | hosted pending |
+| P02 Extension API | 11/11 | local (P02-acceptance.md) | hosted pending |
+| P03 Secrets | 11/11 | not separately recorded | covered by later full-suite + R CMD check runs |
+| P04 Reactor/process | 12/12 | not separately recorded | same; INFRA-01/23 timing flaky on hosted |
+| P05 Model layer | 12/12 | `df47cbe` | |
+| P06 Session kernel | 16/16 | `a535986` | |
+| P07 Prompt/context | 16/16 | `698e495` | token bench OK |
+| P08 Gateway/SDK | 12/12 | `7d89173` (Task 12) | **all local M1 commands pass** (full suite 22,133, R CMD check 0E/0W) |
+| P09 Evaluator | 11/11 | `4ef76fa` | |
+| P10 Tools | 13/13 | `2823b07` | `r` tool landed `ff3a558` |
+| P11 Permissions | **2/11** | - | Task 3 WIP uncommitted (section 4); redesign P11-B pending |
+| P12 Native adapters | 10/10 | `3b26e32` | |
+| P13 System 1 | 13/13 + IC-74 Task 8b | `1968f1c` | `R/s1-ollama.R` = coordinator-added Task 8b |
+| P14 Console | 0/8 | - | needs P11 Task 8 |
+| P15 Documents | 17/19 | partial (open rows) | Tasks 17-18 need FIX-7 (section 5) |
+| P16 Checkpoints | 0/8 | - | needs P11, P15 |
+| P17 Skills/plugins | 9/12 | - | Task 10 WIP uncommitted; 11-12 + acceptance remain |
+| P18 MCP/OAuth | 2/10 | - | Tasks 1, 3 done; 2, 4, 5 need P11 Task 8 |
+| P19 Sub-agents | 0/12 | - | needs P11, P14, P15, P17 |
+| P20 CLI providers | 7/11 | - | 8-11 need P18, P19 |
+| P21 Background | 0/7 | - | needs P06, P14 |
+| P22 Polyglot | 0/11 | - | needs P10, P11 |
+| P23 Artifacts | 0/12 | - | needs P10, P11, P14, P16 |
+| P24 Benchmarks/e2e | 0/13 | - | needs P01-P23 |
+| P25 Release | 0/15 | - | maintainer steps (section 9) |
+| **Total** | **195/307** | | 112 tasks remain |
 
-| Git state | Files | Meaning |
+Milestones: M0 (P01-P04) and M1 (P05-P08) pass every local gate; **hosted CI is not yet green**, so
+neither is closed or tagged. M2 (P09-P13) waits for P11. M3-M5 not started.
+
+**Hosted CI** (`.github/workflows/R-CMD-check.yaml`, runs on push to `main`, concurrency group with
+`cancel-in-progress: false`, so one run at a time per ref and only the newest push queues; a run
+takes 30-120 min). The last completed run still failed most R CMD check jobs (ubuntu
+release/devel/LC_ALL=C/no-Suggests, macOS, Windows oldrel-4, copy-safety, connections); ubuntu
+oldrel-1/oldrel-4 and the token bench passed. **CI-6 (`38db483`) fixed the then-known causes (R 4.6
+active-binding copies, Windows symlinks, a quadratic lint helper that timed out Windows) but no
+completed run has confirmed it yet** (run 37351073211 on `2823b07` was in progress). Remaining known
+flakes: INFRA-01/INFRA-23 timing on hosted Windows/macOS, `test-proc-supervise.R:89` on Linux.
+Fetch logs: `gh run view <run> --json jobs`; `gh api --allow-escape-sequences
+repos/Broccolito/gptr/actions/jobs/<job-id>/logs`. History and open items: `progress/ci-hosted.md`.
+
+## 4. Uncommitted work at the pause (exact)
+
+Recovery patches of each group (ignored dir): `dev/.validation/wip-2026-10-05/*.patch`
+(+ copies of the untracked P11 files). Do not `git checkout`/`reset` these without deciding first.
+
+| Interrupted task (lane) | Files | State and what to do |
 |---|---|---|
-| **Staged, uncommitted** | `R/catalog-models.R`, `tests/testthat/test-catalog-models.R`, `dev/progress/P05.md` | P05 Task 7 resolver/catalog merge; Luna 172 passes, scoped lint clean. Broad Astra review clear; final tiny `length(vars)` guard review receipt still to collect before commit. The authorized task commit had not started when paused. |
-| Unstaged | `R/http-reactor.R`, `tests/testthat/test-http-retry.R` | P04 Task 12 retry implementation and adversarial tests. Latest fixes have **no completed green run**, final lint/review pending. |
-| Unstaged | `tests/testthat/test-provider-usage.R` | P05 Task 9 tests only; existing Task 1 prefix preserved. Incorrect price-list fixtures were corrected to the actual data-frame contract, but the corrected red run has **not** occurred. Runtime usage-row implementation has not started. |
-| Untracked | `tests/testthat/test-catalog-http.R` | P05 Task 8 real HTTP callback tests only, **never run**; no corresponding implementation. Integrate into planned catalog test/source files on resume unless a reviewed architectural split is justified. |
+| **P11 Task 3** "R classifier, gptr_risk(), risk.classify" | `R/perm-classify.R` (+3,541), `tests/testthat/test-perm-classify.R` (+1,426), `tests/testthat/_snaps/perm-classify.md`, `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`, `NAMESPACE` (+3 gptr_risk lines), `dev/progress/P11.md` (+704) | Not review-clean after 5 rounds (endless R-classifier special cases). **Do not commit as is.** Plan: apply P11-A + P11-B1..B3 (allowlist redesign of the shell/SQL/Python classifier, simplicity plan) and redo Task 3's R classifier the same way (level 0 = known read-only calls from the plan's tables; computed calls >= 3), far smaller than the 3.5k-line WIP. Options: keep the WIP as reference and rewrite, or revert these files to HEAD and restart Task 3 from the plan under the allowlist standard (recommended; patch is saved). Also the P11 progress log section must be shortened to the section 11 format. |
+| **S-s1: simplicity P13-S** (System 1 one wire parser, IC-64 never-retry fix) | `R/s1-*.R`, `tests/testthat/test-s1-*.R`, `test-live-ollama-s1.R`, `fixtures/jev/harness.R`, `dev/progress/P13.md` | Implemented, review status unknown. Resume as "ALREADY IMPLEMENTED, UNCOMMITTED: review, fix, commit" (filters `s1-|provider-anthropic`, `copy-s1`). |
+| **S-kernel: simplicity P07-C** (prompt comment trim; may include part of P07-S) | `R/prompt-cache.R`, `prompt-compact.R`, `prompt-context.R`, `prompt-sections.R`, `prompt-text.R`, `dev/progress/simplicity.md` note | Resume review/commit (filters `prompt-|context-|bench`, `run.R --check`). Then P07-S, P08-C remain in that lane. |
+| **S-core: simplicity P01-S** (P01 duplication, fake-classifier choices defect, doubled-BOM defect) | `R/agent-run.R`, `R/session-object.R`, `R/session-store.R` (`drop_null` -> `compact`), `R/json-encode.R`, `R/json-schema.R`, `R/provider-events.R`, `R/provider-fake.R`, `R/utils-conditions.R`, `utils-encoding.R`, `utils-hash.R`, `utils-tokens.R`, `tests/testthat/test-provider-fake.R`, `test-utils-*.R` | Resume review/commit (filters `json-|utils-|provider-fake|provider-events|session-store`). Then P01-T, P03-S remain in that lane. |
+| **P17 Task 10** "Enabling plugins" | `R/ext-plugins.R` (+428), `tests/testthat/test-ext-plugins.R` (+230) | Implemented, review status unknown. Resume review/commit; then P17 Tasks 11, 12 and plan acceptance. |
+| **P15 Task 17 tests** | `tests/testthat/test-doc-replay.R` (+356) | Blocked only by **FIX-7** (section 5). After FIX-7, re-run Task 17 (no `R/doc-*.R` change needed), then Task 18 (draft tests: `dev/.validation/P15/task18-draft-tests.patch`) and complete P15 acceptance. |
 
-## Completed components and evidence boundaries
+Also untracked: `AGENTS.md` (the maintainer's copy of CLAUDE.md for Codex) - never stage or delete
+it; it is not in `.Rbuildignore`. `dev/DEVIATIONS.md` currently has no uncommitted hunks; the next
+free D-number is **D-139** (check with `grep -o '^## D-[0-9]*' dev/DEVIATIONS.md | sort -t- -k2 -n | tail -1`).
 
-The accepted-plan ledger remains **0/25** because hosted/integration plan gates
-are still open. This does not mean no implementation is complete:
+## 5. Next steps (in order)
 
-- **P01:** all 21 foundation tasks implemented/reviewed. Local integrated gates
-  passed; hosted Linux portability verification remains open.
-- **P02:** all 11 extension-system tasks committed through `e2a5f57`; focused
-  acceptance 1,406 assertions. Integrated snapshot evidence below.
-- **P03:** all 11 authentication/redaction tasks committed. Final scrubber
-  `dd58e45`: Luna 403 assertions, zero failures/test warnings/skips; lint and
-  Astra source review clear; export/Rd generated. Full all-auth acceptance after
-  the portability correction is still pending. Core evidence in `progress/P03.md`,
-  `progress/P03-scrub.md` and related P03 lane logs.
-- **P04:** Tasks 1–11 committed. Task 10 wire log `54cb63d`: 127 passes;
-  Task 11 HTTP transfers `e7581b6`: 276 passes, zero failures/warnings/skips,
-  clean scoped lint and Astra review, 81.4-second suite. Actual assertions verified
-  latency bounds, six streams within 2.475 seconds and slow-drip elapsed at least
-  55 seconds (the fixture streams for 60 seconds). Exact per-case times were not
-  emitted; do not invent them. Task 12 remains unfinished below.
-- **P05:** Task 1 usage/pricing `783c5b8` (138 passes); Task 2 provider records
-  `ad7eefb` (58); Task 3 origin-bound credentials `65c3525` (112); Task 4 transform
-  `e8997b7` (57); Task 5 projection `c7e34c4` (131); Task 6 catalog snapshot
-  `251be96` (76, including rebuilt artifact). Source review is clear within each
-  task's scope. Task 3 still references real-but-not-yet-implemented
-  `catalog_http_get` from Task 8, so do not claim full P05 lint/acceptance.
-  Task 7 is staged as above. Offline snapshot contains 10 models, 18 providers,
-  9 aliases; native Ollama decisions are descriptive, not verified availability.
-- **P06:** Task 1 pure agent-loop state machine committed `17aad27`:
-  missing-API red 21, final green 89, scoped lint clean, independent Astra review
-  clear. Task 2 is untouched pending actual P05 Task 9 usage interfaces.
-- **Linux portability:** `c8470f7` fixes actual ps 1.9.3 Linux absent-PID
-  `os_error` handling, preserving unknown/access-denied status and PID identity.
-  Corrected valid red 5 / pass 189; Luna final 333 passes, zero failures/warnings,
-  one expected keyring-installed skip; four-file lint and source review clear.
-  Initial errno fixtures were wrong because `ps::errno()` returns a data frame,
-  not a named map; those invalid reds are explicitly distinguished in
-  `progress/portability-linux.md`. **New hosted Linux proof is still required.**
+1. **Settle the six interrupted tasks** of section 4 (one at a time, or in parallel lanes on disjoint
+   files). Keep commits task-sized; stage only each task's files/hunks.
+2. **FIX-7 (P06 defect found by P15 Task 17):** `home_keep()` in `R/session-live.R` refuses any
+   environment on the call stack, including the target of `eval()` (`source(local = e)`, knitr
+   `envir = e`, `gptr_source(envir = e)`), so such sessions get no home: value-by-name replay and
+   fork overlays fail. One-line fix (verified on a scratch copy, patch
+   `dev/.validation/P15/task17-home-keep-probe.patch`):
+   `if (identical(sys.frame(k), env) && !is.primitive(sys.function(k))) return(FALSE)`.
+   Test first in `test-session-live.R`: `e = new.env(); eval(quote(test_session(home = e)), e)` keeps `e`;
+   `f = function() eval(quote(test_session(home = environment())), environment())` keeps NULL.
+   Then P15 Tasks 17, 18 and P15 acceptance (Quarto CLI is absent: its case skips).
+3. **Simplicity Stage A** (`progress/simplicity-plan.md` section 5/6): remaining packages that touch no
+   active work: P07-S, P08-C, P01-T, P03-S, P05-C, P05-S, K-CLS (after P05-S and P13-S), P08-S (after
+   P13-S, P01-S), LOCK, URL, CI-1a, TEST-H, P02-S, P04-S, P06-S1/S2, CI-1b, FIX5-LINT (the last
+   `tools::file_ext()` calls: `R/ext-specs.R:~1330`, `R/gptr-gateway.R:~796`; `R/doc-io.R` is
+   already fixed). Respect the shared-file chains in plan section 5.
+4. **Stage B freeze** (no lane running): **REN-1** (code/tests/fixtures/man/baselines rename, one
+   commit; follow `rename-inventory.md` steps; re-record token baselines with
+   `dev/bench/tokens/run.R` then `--update` then `--check`; `?peter` with the naming rationale;
+   DESCRIPTION text), **REN-2** (specs/plans/CLAUDE.md/HANDOFF), **DOC-1** (condense
+   `DEVIATIONS.md`, keep every D-id and contract-visible statement), **DOC-2** (condense progress
+   logs; merge lane files), **DOC-3** (README trim; keep the `peter()` and Ollama sections).
+5. **Stage C**: P11-A, P11-B1..B3 (tell the maintainer the level changes first), then P11 Tasks 3-11
+   (**Task 8 `ui.get` + scripted UI unblocks P14 and P18 Tasks 2/4/5**); P10-C/S, P09-C/S, P15-S, P17-S
+   (after P17 Task 12), P20-S (before P20 Task 8), P18-S (before P18 Task 2).
+6. **Remaining plans** in dependency order (index section 4), with parallel lanes where disjoint:
+   P17 Tasks 11-12 + acceptance; P11 rest + acceptance (closes M2 with P09-P13); then P14 and P18
+   (after P11 Task 8), P16 (P11, P15), P22 (P10, P11); then P19 (P11, P14, P15, P17), P21 (P06, P14),
+   P23 (P10, P11, P14, P16); P20 Tasks 8-11 (P12, P18, P19); P24 (all); P25 (release).
+7. **Hosted CI to green**, then close milestones M0/M1/M2 (gate commands in `00-index.md` section 5;
+   ask the maintainer before pushing tags).
 
-The `handoff_transform` roxygen link warning reported during scrubber docgen was
-fixed by documentation-only commit `e5b22cf`. Verify clean docgen at the next
-coherent gate; do not report that earlier warning as a current runtime failure.
+Throughput so far: ~3.4 tasks/hour with 4-6 lanes; estimate ~50-60 h of continuous work for the
+remaining tasks plus the rename and simplicity work, excluding maintainer-only steps.
 
-## Latest integrated and hosted checks
+## 6. Open obligations (later work must honour)
 
-- Immutable published `55ec31d`: **4,474 assertions, 0 failures, 0 test warnings,
-  1 expected keyring-installed skip**, complete before/after connection table
-  identical; local R CMD check **0 errors, 0 warnings, 0 notes** (86.6 seconds).
-- Earlier `e2a5f57` passed 4,348 assertions and R CMD check, but the standalone
-  connection gate detected processx supervisor FIFOs. The corrected gate scopes
-  IC-60 check-mode supervision and restores the caller's option; it still checks
-  the complete table and its deliberately leaked-file negative control passes.
-- Hosted run <https://github.com/Broccolito/gptr/actions/runs/37167848633> targets
-  **55ec31d**, not current local HEAD. Last observed still in progress. Completed
-  Ubuntu release and LC_ALL=C jobs both had **FAIL11/WARN0/SKIP4/PASS4443**:
-  stale credential locks, process cleanup/marker retention, orphan recovery.
-  Ubuntu oldrel-1 also failed; Windows oldrel-4 passed. Some devel/copy-safety
-  work was still running at last observation. No further polling was done after
-  pause. These failures precede the committed portability fix.
-- Raw logs/receipts: `dev/.validation/P02-acceptance/`, including `hosted/`,
-  `snapshot.json` and `final-snapshot.json`. Durable summary:
-  `progress/P02-acceptance.md` and `progress/P01-acceptance.md`.
-- Completed job logs can be fetched independently of run completion with
-  `gh api --allow-escape-sequences repos/Broccolito/gptr/actions/jobs/<id>/logs`.
-  `gh run view --log-failed` may refuse while another job is still running.
-- Old run `37165877166` at `eea1e36` has superseded installed-mock, Windows CRLF
-  and old-R negative-control issues fixed before 55ec31d. Never relabel that run
-  as validating later source.
+- **P11:** fix the PCRE `$` anchor at `R/perm-classify.R:~903` (use `\z`; with `perl = TRUE`, `$`
+  matches before a final newline - P02 validators already fixed, D-074 item 8). The per-program
+  option allowlist follow-up is discharged by P11-B.
+- **P12 open item:** `claude-haiku-4-5` has `tool_addition = TRUE` but `mid_system = FALSE`, so no
+  tool-addition declarations are sent (P05/P12 decision).
+- **D-019 item 5:** processx `write_all()` blocks on Windows; decide before P18/P19/P20/P22 send large
+  stdin payloads to Windows children.
+- **Hosted CI items** (`progress/ci-hosted.md`): INFRA-01/INFRA-23 timing on hosted runners (P04
+  decision, keep the D-011 rule: no silent loosening), Windows `Rscript*` temp-file NOTE, macOS
+  `com.apple.*` NOTE, `test-proc-supervise.R:89` flake.
+- **P15:** acceptance rows open until Tasks 17-18 (and FIX-7) land.
+- **P13 forward note:** a few roxygen link warnings in P13 `@noRd` comments.
+- **M0/M1 formal close:** record P03/P04 plan acceptance tables (local commands) when closing M0.
 
-## Task 12 interruption and required next checks
+## 7. How the work was orchestrated (reuse it)
 
-P04 Task 12 actual progression: initial **FAIL16/PASS214**, baseline **PASS236**,
-then adversarial **FAIL10/PASS246**. Root paused the follow-up green run during
-Retry-After. It was interrupted and exited without a final pass/fail count.
+The coordinator (main session) ran **lanes**: each lane is one run of a sequential workflow over a
+list of tasks of one plan (or one set of simplicity packages / fixes). Script:
+`dev/ci/orchestration/plan-tasks.workflow.js` (Claude Code Workflow tool; `args` below). Per task:
 
-Latest uncommitted corrections check ownership/attempt generation after callbacks,
-install retry timers before callbacks so cancellation can remove them, treat
-malformed commitment results as committed, validate retry hints/nonretryable
-classes, clear abandoned events and reset attempt bytes. They are **unverified**
-after that patch. Final source review and lint are also pending. `progress/P04.md`
-currently documents only through Task 11, so append Task 12 evidence on resume.
-First resume action for this lane: Luna focused `^http-retry$`, fix real failures
-with Astra, independent review, scoped lint, then separately commit Task 12.
+1. **Implementer** agent: reads the plan task (line range), contract sections, progress log;
+   writes tests (plan literal, adapted only for contract/IC-74/actual interfaces), runs the actual
+   **red**, implements, runs **green**, lints touched files, runs neighbour filters, appends the
+   progress note, adds a D-entry only for behavioural deviations; never commits. With `early: true`
+   it first prechecks that every cross-plan function exists and returns `blocked` without edits.
+2. **Independent reviewer**: re-runs the focused filters and lint itself, audits against plan and
+   contract (and simplicity), returns findings (blocker/major/minor/nit). Optional per-task
+   `reviewScope` narrows a convergence round.
+3. **Fixer** for blocker/major/minor findings; up to 5 review rounds; a lane stops on
+   `review-not-clear` (the coordinator then re-dispatches with the remaining findings as notes:
+   "ALREADY IMPLEMENTED, UNCOMMITTED: address these findings ...").
+4. **Committer**: stages exactly the task's files; for shared files (`dev/DEVIATIONS.md`,
+   `NAMESPACE`, progress logs) it stages only the task's hunks (build a filtered patch and
+   `git apply --cached`, or write a blob of the index version plus the hunk and
+   `git update-index --cacheinfo`); commits with the plan's subject + `Co-Authored-By`; pushes every
+   `pushEvery` commits.
 
-## Remaining sequence after explicit resume
+`args`: `{plan, planFile, contextRanges, log, pushEvery, early?, continueOnBlocked?, extraContext,
+tasks: [{id, title, range, notes, reviewScope?}]}`. Summarise a finished run with
+`python3 dev/ci/orchestration/wfsum.py <workflow-output.json>`. `simplicity-review.workflow.js` is
+the read-only review that produced the simplicity plan.
 
-1. Finish the tiny Task 7 guard review and commit its already-staged three files
-   without sweeping unrelated changes into that commit.
-2. Complete Task 12 checks/review/commit above.
-3. P05 Task 8: run the existing untracked callback tests as an actual red,
-   implement the real bounded reactor HTTP callback (no placeholder), then
-   explicit Ollama discovery/preflight. Complete the current forward reference
-   before the next full package checkpoint. The root-approved contract is in
-   `spec/07-local-ollama.md` section 2.1 and interface-contract section 7.5,
-   committed as `6c49e3d`. Pure resolution/default/listing must not discover;
-   private evidence must bind endpoint/path/model/digest/server/registry lifecycle.
-   Public `verified` fields cannot self-attest. Protected local-only FALSE must
-   originate in P08/P06 human configuration, never merged project/options data.
-4. P05 Task 9: rerun corrected fixtures first. Earlier FAIL10/PASS138 was a
-   fixture-shape failure, not missing-API proof. Implement usage rows/log/rollup
-   against the actual resolver, preserving unknown observations/prices as NA.
-   Canonical supplied CLI cost.total=0 is known; raw missing CLI cost is NA.
-   P20 adapters must not use legacy constructor zeros for unreported cost.
-5. P06 Task 2 may start once real `usage_empty()` and usage-row interfaces exist.
-   Preserve IC-74 unknowns instead of copying literal missing-token/cost zeros.
-   Restore deferred harness helpers `local_events`, `test_session`, `test_run`,
-   `run_text` from Task 1's plan at their first dependent Tasks 3–5. User steering
-   attachments need enqueue validation before destructive dequeue; operator
-   messages remain text-only. No Task 2 implementation is present now.
-6. Create an immutable **committed** coherent snapshot, regenerate docs with
-   pinned tooling, run all auth + HTTP/process + architecture/lint gates and
-   full package/connection checks. Publish an exact reviewed checkpoint for
-   new hosted Linux/Windows/macOS/R-version checks. Verify c8470f7 on Linux.
-   Only then close the corresponding plan/M0 gates and continue P06–P25.
+Validation commands (always the isolated runner; it isolates HOME/config/cache/credentials before
+package load):
 
-## Operational constraints for takeover
+```
+R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R test '<regex>'
+R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R lint [files]
+R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R document
+R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R check <outdir>
+R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R connections
+env -u TYPESAFE_API_KEY R_LIBS_USER=... Rscript --vanilla dev/bench/tokens/run.R --check
+```
 
-- Tests are offline; fake credentials and synthetic loopback fixtures only.
-  Do not source `.secrets/` for package checks. Live calls require scoped explicit
-  opt-in and the credential loader. No GPTR Ollama integration is validated yet;
-  older direct synthetic Ollama feasibility checks are separate evidence.
-- Use `R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla` and
-  `dev/ci/isolated-check.R` before package load. It isolates HOME/config/cache/data/
-  project and credential variables. Orphan sweeping otherwise precedes test setup.
-- Runtime R is 4.5.0, pinned roxygen2 7.3.3; testthat built-under-R-4.5.2 startup
-  warning is separate from test warnings. Local library and raw logs are ignored.
-- The runner actions are `test <filter>`, `lint [files ...]`, `document`,
-  `connections`, `check <output-directory>`. Check-mode connection supervision
-  differs intentionally from normal interactive supervision. Preserve real
-  child cleanup/orphan recovery tests.
-- Sandbox `Operation not permitted` for ps/owned processes is not a code failure:
-  scoped loopback/process checks need approved escalation. Never signal unrelated
-  processes. No test runner should inherit real home/cache marker locations.
-- Mac Studio M4 Max, 128 GiB. Last resource sample: healthy memory, no swap,
-  about 416 GiB free. Use useful lanes only; at most 2 internally parallel heavy
-  jobs, one GPU job by default. Reserve a quiet window only for explicit timing
-  gates; ordinary focused tests can use the two Luna lanes concurrently.
-- Git and generated documentation are serialized. Preserve task-sized commits.
-  `PYTHONDONTWRITEBYTECODE=1` or `python3 -B` avoids extractor pycache artifacts.
-- No `.codegraph/` index exists. Do not initialize one without user direction.
-- Local secret files were moved from Desktop to `.secrets/` with directory0700/
-  files0600, ignored by Git and R builds. Never print their values or commit them.
-- README and GitHub About already describe the rebuild and development status.
-  Old get_response/dataframe_to_text APIs were removed earlier. No finished
-  release, CRAN submission or end-to-end public harness is claimed.
+For full-package gates use a clean export (`git archive HEAD | tar -x -C <scratch>`) so other
+work-in-progress cannot contaminate the result. Raw logs go to the ignored `dev/.validation/<plan>/`.
+
+## 8. Pitfalls and lessons (read before running lanes)
+
+- **Concurrent lanes share one working tree.** Mid-edit files of one lane can break another lane's
+  package load (re-run; not your failure). Give every lane the list of other lanes' files and forbid
+  touching them. Several committers staged whole shared files and swept other lanes' D-entries into
+  their commits (harmless text, but stage hunks). D-numbers collide: take the next free number at
+  the moment of writing.
+- **NAMESPACE/man**: run `document` in a scratch copy when other lanes have roxygen edits, and copy
+  back only your lines.
+- **Review loops on heuristic code do not converge** (P11 Task 2 took 16 rounds and grew to 10k
+  lines). Use the D-061 standard (A) level 0 = known read-only allowlist, (B) anything not fully
+  modelled >= 3, (C) level 4 only for statically identifiable critical/control targets; use
+  `reviewScope` for convergence rounds; apply simplicity (proportionate hardening only).
+- **Never stub another plan's function.** Temporary test guards must be tracked and removed by the
+  owning task (D-054 was removed by P08 Task 10). Early lanes block cleanly without edits.
+- **R 4.6 differences**: `tools::file_ext()` calls `basename()` (fails on non-ASCII in C locale; use
+  P01 `path_ext()`), values returned by active bindings are immutable (copy-safety; use
+  `activeBindingFunction()`), R 4.2.3 `enc2utf8()` differs (emulated in tests).
+- **Windows**: CRLF child output, `core.autocrlf` (fixed by `.gitattributes` `* -text`), symlinks,
+  backslash homes, C-locale file names, `write_all()` blocking, `Rscript*` temp NOTE.
+- **GC finalizers** run at any allocation: FIX-1/D-085 defers GC-time `session_shutdown` to safe points.
+- **IC-74 unknown-not-zero**: missing usage/cost stays NA everywhere (D-008/D-015); code that scans
+  entries must be NA-safe (FIX-4).
+- **Timing tests** (INFRA-01/23) are explicit spec targets (D-011): never loosen silently; measure
+  the intended quantity.
+- **Machine**: macOS (M4 Max, 16 cores); R 4.5.0; dev library `dev/.library` (pinned roxygen2 7.3.3,
+  rtiktoken, chromote, duckdb, keyring...); load average reached 15-20 with 5-6 lanes - keep <= 4-5
+  lanes. The testthat "built under R 4.5.2" startup line is harmless.
+- **Never** read/print `.secrets/`; tests are offline (fake provider, mock servers, mocked
+  transports); never run live tests, the real `claude`/`codex` CLIs, or contact real Ollama/Jev.
+  (One P05 probe once made read-only loopback metadata requests to a local Ollama; recorded as
+  non-evidence.)
+- Session scratchpad paths in old logs (`/private/tmp/claude-501/...`) are gone after the session;
+  everything needed was copied into the repo (simplicity plan, rename tools, orchestration scripts,
+  WIP patches under `dev/.validation/`).
+
+## 9. Maintainer-only actions (ask first)
+
+Paid live calibration (P25 Task 14), live provider tests with keys (`GPTR_LIVE_TESTS=true`),
+win-builder, reverse dependencies and CRAN submission (P25 Task 15), pushing milestone tags,
+publishing releases. Installing packages into the user library is never done by a plan step.
+
+## 10. Key commits and evidence pointers
+
+- Resume on `main`: `7a70042` (P05 Task 7), `f5cf8ad` (P04 Task 12). Decisions: `2425843`, `e148fd2`,
+  `bd7bc50` (D-135); simplicity plan `d7650ba`.
+- Fixes: FIX-1 `a5af999`, FIX-2 `13ddf95`, FIX-3 `106434a`, FIX-4 `d34e1c2`, FIX-6 `2d2d75a`;
+  DEF-1 `624b997`, DEF-2 `510cf99`; P01-D `bb31ba4` (D-138); P06-C `e244f71`; P13-C `ad0eec6`.
+- CI rounds: CI-1 `118f78b`, CI-2 `90a43f5`, CI-3 `2246628`, CI-4 `9a3b3ad`, CI-5 `29b85f2`,
+  CI-6 `38db483`; concurrency `0398aee`.
+- The pre-2026-10-05 history of this file (pause record of the earlier Codex agents, Astra/Luna
+  lanes) is in git: `git show 6ab1d87:dev/HANDOFF.md`.
