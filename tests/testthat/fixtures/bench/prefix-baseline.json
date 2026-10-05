@@ -1,4 +1,31 @@
 {
+  "preset": {
+    "minimal": 1271,
+    "standard_core": 2360,
+    "standard_all": 2844,
+    "standard_interactive": 2987
+  },
+  "estimate": {
+    "minimal": 1638,
+    "standard_core": 2494,
+    "standard_all": 3000,
+    "standard_interactive": 3207
+  },
+  "estimator": "est_tokens() with the G2 constants of architecture 12.5: tool array as json, T0 and T1 as prose",
+  "sections": {
+    "preamble": 75,
+    "preamble_short": 40,
+    "tools_standard_ask": 100,
+    "tools_minimal": 83,
+    "rules_standard": 238,
+    "rules_readonly": 123,
+    "rules_minimal": 308,
+    "r_session": 455,
+    "r_performance": 127,
+    "r_performance_full": 404,
+    "modes": 84,
+    "context": 141
+  },
   "cases": {
     "minimal": {
       "preset": "minimal",
