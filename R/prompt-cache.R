@@ -408,3 +408,23 @@ prompt_register_guard = function(gptr) {
   })
   invisible(NULL)
 }
+
+# ---- the canonical request body -----------------------------------------------------------------
+
+#' The canonical request body: the elements joined in the Anthropic key order
+#'
+#' Everything constant within a session comes first and the growing message array last, so the
+#' body of a request without its closing `]}` (`open = TRUE`) is a byte prefix of the body of the
+#' next request to the same model (G4 section 5.4). Adapters assemble their wire bodies the
+#' same way; this body is what the prefix property tests and the token benchmark compare.
+#'
+#' @param elements Result of `prompt_request_elements()`.
+#' @param open `TRUE` to leave the message array open.
+#' @return `chr(1)` JSON text.
+#' @noRd
+prompt_request_body = function(elements, open = FALSE) {
+  m = elements[-(1:3)]
+  body = paste0("{\"tools\":", elements[["tools"]], ",\"system\":[", elements[["t0"]], ",",
+                elements[["t1"]], "],\"messages\":[", paste(m, collapse = ","))
+  if (open) body else paste0(body, "]}")
+}
