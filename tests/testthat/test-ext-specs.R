@@ -591,3 +591,32 @@ test_that("preformed result images obey the canonical block_image boundary", {
     expect_error(gptr_tool_result(images = list(value)), class = "gptr_error_invalid_argument")
   }
 })
+
+# P17 Task 2 review round 4 (D-074 item 8): PCRE's `$` also matches before a final newline, so
+# every name and version rule anchors at the very end of the string with `\z`.
+
+test_that("name and version rules refuse a trailing newline (PCRE $ matches before one)", {
+  local_registry()
+  specs = function(s) {
+    list(
+      list("provider", paste0("corp", s), api = "x"),
+      list("tool", paste0("look", s), description = "d", execute = function(input, ctx) "x"),
+      list("tool", "look", description = "d", execute = function(input, ctx) "x",
+           namespace = paste0("ns", s)),
+      list("skill", paste0("ok", s), description = "d"),
+      list("command", paste0("rows", s), handler = function(args, ctx) NULL),
+      list("setting", paste0("panel.size", s), default = 3L),
+      list("env_alias", paste0("JEV", s), aliases = "jev"),
+      list("kind", paste0("reviewer", s), validate = function(spec) spec),
+      list("model", "ollama/clef",
+           decision = list(types = "noul", server_min = paste0("0.35.1", s)))
+    )
+  }
+  for (args in specs("")) expect_s3_class(do.call(gptr_spec, args), "gptr_spec")
+  for (args in specs("\n")) {
+    expect_error(do.call(gptr_spec, args), class = "gptr_error_invalid_spec")
+  }
+  expect_error(kind_define("reviewer\n", validate = identity, source = "plugin:p"),
+               class = "gptr_error_invalid_argument")
+  expect_false("reviewer\n" %in% kind_names())
+})

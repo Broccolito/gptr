@@ -73,12 +73,13 @@ res_session_id = function(session) ext_session_id(session)
 #' @noRd
 fm_string_keys = c("name", "description", "version", "model", "tools", "argument-hint")
 
-#' YAML 1.1 scalar tags whose source text is kept for the string keys
+#' YAML 1.1 scalar tags, and R yaml's `.na` spellings, whose source text is kept for the
+#' string keys (so `name: .na.character` is never `NA`)
 #' @noRd
 fm_raw_tags = c("bool#yes", "bool#no", "int", "int#dec", "int#hex", "int#oct", "int#base60",
                 "float", "float#fix", "float#exp", "float#base60", "float#inf",
                 "float#neginf", "float#nan", "timestamp#iso8601", "timestamp#spaced",
-                "timestamp#ymd")
+                "timestamp#ymd", "str#na", "bool#na", "int#na", "float#na")
 
 #' Load YAML text without evaluating `!expr`; `raw = TRUE` keeps typed scalars as text
 #'
@@ -109,14 +110,103 @@ fm_repair = function(y) {
   paste(out, collapse = "\n")
 }
 
+#' Whether a parsed YAML value stays small once its aliases are expanded
+#'
+#' yaml shares an aliased node, so a short text (`&a0 [...]`, `&a1 [*a0, *a0, ...]`, ...) loads
+#' quickly but expands exponentially in `as.character()` or `unlist()`. Counts values (one per
+#' list, one per element of an atomic vector) and string bytes level by level, with vectorised
+#' steps, and stops as soon as either count passes its limit, so the cost is bounded by
+#' `max_values` whatever the aliasing (D-074).
+#' @noRd
+fm_size_ok = function(x, max_values, max_bytes) {
+  chr_bytes = function(s) sum(as.numeric(nchar(s, type = "bytes")), na.rm = TRUE)
+  level = list(x)
+  values = 0
+  bytes = 0
+  while (length(level)) {
+    is_list = vapply(level, is.list, NA)
+    atoms = level[!is_list]
+    values = values + sum(is_list) + sum(lengths(atoms))
+    chr = atoms[vapply(atoms, is.character, NA)]
+    bytes = bytes + sum(vapply(chr, chr_bytes, 0))
+    level = level[is_list]
+    if (values + sum(lengths(level)) > max_values || bytes > max_bytes) return(FALSE)
+    level = unlist(level, recursive = FALSE, use.names = FALSE)
+  }
+  TRUE
+}
+
+#' Why frontmatter YAML text is refused before yaml parses it, or NULL
+#'
+#' yaml's work grows faster than its input: with the square of the number of keys in a map (it
+#' checks each new key against the others), with the square of the nesting depth of flow
+#' collections (`[[[...]]]`) and of block entries opened on one line (`- - - x`), with the size
+#' of a map times the number of merges into it or above it, and with what an aliased collection
+#' used as a mapping key expands to (yaml turns the key into text, so a chain of aliases costs
+#' about ninefold per level). Frontmatter is a few kilobytes, so the text may hold at most
+#' 16,384 bytes, 1,000 `[` and `{` (a bound on the flow depth that quoted brackets cannot hide),
+#' 64 `-` or `?` entries in a row, and 4 references to the anchors it defines: every `*name`
+#' whose `name` is the name of an `&name` anywhere in the text (libyaml's names are
+#' `[0-9A-Za-z_-]+`), so no key syntax, merge spelling (`<<:`, `? <<`, a `!!merge` tag) or
+#' separator can hide a reference. yaml merges under a `<<` key, under a key with any tag that
+#' names merge (`!!merge`, `!merge`, `!<merge>`, percent-encoded spellings) and under an alias
+#' of an anchored merge key, so the text may also hold at most 4 merge keys, tags and references
+#' in all: every `<<`, every `!` that can start a tag (one that follows the start of the text,
+#' an ASCII character other than a letter, a digit or `!`, the line breaks U+0085, U+2028 and
+#' U+2029, or a byte order mark), and the references above. The patterns are ASCII, so bytes are
+#' matched (D-074).
+#' @noRd
+fm_text_problem = function(y) {
+  max_bytes = 16384L
+  max_brackets = 1000L
+  max_run = 64L
+  max_aliases = 4L
+  if (nchar(y, type = "bytes") > max_bytes) {
+    return(paste0("too large (more than ", max_bytes, " bytes)"))
+  }
+  b = charToRaw(y)
+  brackets = sum(b == as.raw(0x5BL) | b == as.raw(0x7BL))
+  run = paste0("([-?][ \t]+){", max_run + 1L, "}")
+  if (brackets > max_brackets || grepl(run, y, perl = TRUE, useBytes = TRUE)) {
+    return(paste0("too deeply nested (more than ", max_brackets, " '[' and '{', or more than ",
+                  max_run, " '-' and '?' entries in a row)"))
+  }
+  hits = function(pattern) {
+    at = gregexpr(pattern, y, perl = TRUE, useBytes = TRUE)[[1L]]
+    sum(at > 0L)
+  }
+  names_after = function(sigil) {
+    at = gregexpr(paste0(sigil, "[0-9A-Za-z_-]+"), y, perl = TRUE, useBytes = TRUE)
+    substring(regmatches(y, at)[[1L]], 2L)
+  }
+  anchors = names_after("&")
+  refs = if (length(anchors)) sum(names_after("\\*") %in% anchors) else 0L
+  if (refs > max_aliases) {
+    return(paste0("too many aliases (more than ", max_aliases, " references to anchors)"))
+  }
+  tag = "(?:^|[^0-9A-Za-z!\\x80-\\xFF]|\\xC2\\x85|\\xE2\\x80[\\xA8\\xA9]|\\xEF\\xBB\\xBF)!"
+  if (hits("<<") + hits(tag) + refs > max_aliases) {
+    return(paste0("too many merge keys, tags and aliases (more than ", max_aliases, " in all)"))
+  }
+  NULL
+}
+
 #' Parse frontmatter YAML leniently: `list(meta, repaired, error)`
 #'
 #' Strict yaml first, then once more after `fm_repair()`; never evaluates `!expr` tags. The
 #' values of `fm_string_keys` keep their source text, so `name: on` stays `"on"` and
-#' `version: 1.0` stays `"1.0"` (IC-71). A failure gives `meta = NULL` and the message.
+#' `version: 1.0` stays `"1.0"` (IC-71). A failure gives `meta = NULL` and the message. So
+#' does text that `fm_text_problem()` refuses before yaml runs, and YAML whose aliases expand to
+#' more than 10,000 values or 1,000,000 string bytes beyond the size of the text (an alias bomb;
+#' `fm_size_ok()`, D-074).
 #' @noRd
 fm_yaml = function(y) {
   if (!nzchar(trimws(y))) return(list(meta = list(), repaired = FALSE, error = NULL))
+  problem = fm_text_problem(y)
+  if (!is.null(problem)) {
+    return(list(meta = NULL, repaired = FALSE,
+                error = paste0("invalid YAML frontmatter: ", problem)))
+  }
   used = y
   typed = fm_load(used)
   repaired = FALSE
@@ -129,8 +219,13 @@ fm_yaml = function(y) {
     return(list(meta = NULL, repaired = FALSE,
                 error = paste0("invalid YAML frontmatter: ", conditionMessage(typed))))
   }
+  size = nchar(used, type = "bytes")
+  too_large = list(meta = NULL, repaired = FALSE,
+                   error = "invalid YAML frontmatter: too large once its aliases are expanded")
+  if (!fm_size_ok(typed, 1e4 + size, 1e6 + size)) return(too_large)
   meta = if (is.list(typed) && !is.null(names(typed))) typed else list()
   raw = fm_load(used, raw = TRUE)
+  if (!fm_size_ok(raw, 1e4 + size, 1e6 + size)) return(too_large)
   if (is.list(raw) && !is.null(names(raw))) {
     for (k in intersect(fm_string_keys, names(raw))) {
       v = raw[[k]]
@@ -165,9 +260,12 @@ frontmatter_parse = function(text) {
 }
 
 #' Read a Markdown file (UTF-8) and parse its frontmatter
+#'
+#' An unreadable file gives the error string "cannot read the file" and no warning (`file()`
+#' warns before it fails; frontmatter problems are diagnostics, contract 11.13; D-074).
 #' @noRd
 frontmatter_read = function(path) {
-  txt = tryCatch(read_utf8(path)$text, error = function(e) NULL)
+  txt = tryCatch(suppressWarnings(read_utf8(path)$text), error = function(e) NULL)
   if (is.null(txt)) {
     return(list(meta = NULL, body = NULL, repaired = FALSE, error = "cannot read the file",
                 has_frontmatter = FALSE))
@@ -175,10 +273,21 @@ frontmatter_read = function(path) {
   frontmatter_parse(txt)
 }
 
+#' Whether a frontmatter value is flat: NULL, an atomic vector, or a list of atomic scalars and
+#' NULLs
+#' @noRd
+fm_flat = function(x) {
+  if (is.null(x) || is.atomic(x)) return(TRUE)
+  is.list(x) && all(vapply(x, function(e) is.null(e) || (is.atomic(e) && length(e) <= 1L), NA))
+}
+
 #' A frontmatter list value (`"a, b"`, `"a b"` or `[a, b]`) as chr, or NULL when empty
+#'
+#' A value that is not flat (`fm_flat()`), such as a nested list, gives NULL: it is never
+#' flattened, so an aliased YAML structure is not expanded (D-074).
 #' @noRd
 fm_chr_list = function(x, split = "[,[:space:]]+") {
-  if (is.null(x)) return(NULL)
+  if (is.null(x) || !fm_flat(x)) return(NULL)
   v = if (is.character(x) && length(x) == 1L) {
     strsplit(x, split)[[1L]]
   } else {

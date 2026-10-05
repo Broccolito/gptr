@@ -3786,7 +3786,7 @@ green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 127 ]`. Item 5 (review round 2): red
 
 ## D-074 - P17 skills: an NA spelling in SKILL.md never stops discovery, string keys keep R yaml's .na spellings as text, a relative skills.paths entry is a trust-gated project root, a TEMPORARY test-side trust.get until P08 Task 2 (P08 Task 2 MUST remove it), YAML aliases never expand without bound, an unreadable file never warns, a ~name skills.paths entry is project content, a name must match to its last character (P02's name rules now anchor with \z), and frontmatter text that would make yaml slow is refused before yaml runs (2026-10-04)
 
-P17 Task 2 (`R/skill-discover.R`), review rounds 1 to 5. The plan-literal code changed in
+P17 Task 2 (`R/skill-discover.R`), review rounds 1 to 6. The plan-literal code changed in
 items 1, 2 and 4-9 (item 8 also changes P02's `R/ext-specs.R`), and the plan's test file gained
 a temporary helper (item 3). Exported signatures, return shapes and the plan's 8 tests are
 unchanged.
@@ -3896,7 +3896,7 @@ unchanged.
      IC-74's `decision.server_min`). The error messages still show the rule with `$`. No other
      P02 behaviour changes. `progress/P02.md` records it.
 9. **Frontmatter text that would make yaml slow is refused before yaml runs (contract 6.3 and
-   11.13, IC-52; review rounds 4 and 5; Task 1 code).** `yaml::yaml.load()` does work that grows
+   11.13, IC-52; review rounds 4 to 6; Task 1 code).** `yaml::yaml.load()` does work that grows
    faster than its input, and `fm_yaml()` parses twice (typed and raw) before round 3's
    `fm_size_ok()` can look at the result. Measured on this machine (two loads, as `fm_yaml()`
    did): 32,000 nested `[` in 64 KB took 6.3 s, 16,000 in 32 KB 1.6 s, 16,000 nested `- ` in
@@ -3906,8 +3906,11 @@ unchanged.
    (`R/ext-plugins.R`) checks the text first, and `fm_yaml()` returns `meta = NULL` with one of
    these error strings, so `skill_parse()` skips the skill with that diagnostic and lists its
    siblings:
-   - more than 32,768 bytes: `invalid YAML frontmatter: too large (more than 32768 bytes)`;
-     real frontmatter is a few kilobytes (a skill description is at most 1,024 characters);
+   - more than 16,384 bytes: `invalid YAML frontmatter: too large (more than 16384 bytes)`;
+     real frontmatter is a few kilobytes (a skill description is at most 1,024 characters).
+     Rounds 4 and 5 allowed 32,768 bytes; round 6 halved it because yaml checks each new map
+     key against the others, so a map's cost grows with the square of its size: the largest
+     plain map of 32 KB took 0.38 to 0.43 s through `fm_yaml()` and one of 16 KB takes 0.10 s;
    - more than 1,000 `[` and `{` characters in all (a bound on the flow depth that quoted
      brackets cannot hide), or more than 64 `-` or `?` block entries in a row: `invalid YAML
      frontmatter: too deeply nested (...)`;
@@ -3916,7 +3919,19 @@ unchanged.
      also written as `&name` somewhere in the text. libyaml's anchor names are `[0-9A-Za-z_-]+`,
      so both are read as that run. No position rule applies, so no key syntax, merge spelling or
      separator (such as U+2028) can hide one. Markdown such as `*args` or `**bold**` counts only
-     when it names an anchor. Text without anchors is not checked.
+     when it names an anchor;
+   - more than 4 merge keys, tags and references in all (round 6): `invalid YAML frontmatter:
+     too many merge keys, tags and aliases (more than 4 in all)`. R yaml merges a map under a
+     plain `<<` key, under a key with any tag that names merge (`!!merge`, `!merge`,
+     `!<merge>`, `!<tag:yaml.org,2002:merge>`, percent-encoded spellings, and `! <<`), and
+     under an alias of an anchored merge key (`k: &m <<`, then `{*m : {...}}`). A tag can only
+     start a node, so the count takes every `<<`, every `!` that follows the start of the text,
+     an ASCII character other than a letter, a digit or `!`, one of the line breaks U+0085,
+     U+2028 and U+2029, or a byte order mark (each probed: a `!` right after a letter, an anchor,
+     an alias or a closing quote is plain text or a YAML error), and the references of the
+     previous rule. So yaml merges at most 4 times. Prose such as `Wow! Use it! Really!!`
+     counts nothing; `(!)` counts one. A quoted `"<<"` does not merge but is still counted, and
+     a `%TAG` directive cannot occur, because its `---` line would end the frontmatter.
 
    Round 4 applied the alias limit only when a `<<:` merge key appeared on one line. Review round
    5 found two ways around that, both checked here first:
@@ -3931,29 +3946,56 @@ unchanged.
    Counting references by name catches all of these.
 
    The patterns are ASCII and matched on bytes, so text that is not valid UTF-8 neither warns
-   nor errors. After the change the four documents above are refused in at most 0.012 s, and
-   the largest accepted map (3,600 keys, 31 KB) parses in 0.11 s. Text that passes may still
+   nor errors. After round 4's change the four documents above were refused in at most 0.012 s,
+   and the largest map it accepted (3,600 keys, 31 KB) parsed in 0.11 s. Text that passes may still
    hold brackets inside quoted strings; only documents with more than 1,000 of them are
    refused. After round 5, each of the reviewer's reproductions is refused in at most 0.01 s (the
    chains of 5, 6 and 7 levels in all three key forms, and `? <<` and `!!merge` with 250 to 2,000
-   references). The costliest text still accepted is a 3,000-key map merged with 4 references:
-   0.28 s through `fm_yaml()`. For comparison, a literal 3,000-key merge with no alias takes
-   0.12 s and the plain map 0.06 s.
+   references).
 
-Regression tests lock items 1, 2 and 4-9: eleven appended to
-`tests/testthat/test-skill-discover.R`, five to `tests/testthat/test-ext-plugins.R` and one to
+   Round 5 also claimed that the costliest accepted text was a 3,000-key map merged with 4
+   references, at 0.28 s. Review round 6 disproved that: merges nested inside each other need no
+   alias at all. R yaml copies and checks the merged map at every level, so the cost grows with
+   the depth times the square of the map's size, and the result is one flat map that
+   `fm_size_ok()` accepts. Examples:
+   - `m: ` + 499 x `{<<: ` + a 6,100-key map, 32,563 bytes with 500 `{`, no `*` and no `- ` run,
+     took 116 s through `fm_yaml()`;
+   - a 15 KB SKILL.md of 200 levels and 3,000 keys and a 24 KB one of 120 block `<<:` lines
+     made `gptr_skills("project")` take 22.6 s with no diagnostic;
+   - the same merge with no `<<` at all, written with the merge tags above.
+   Round 6 added the merge rule and the 16,384-byte limit. Afterwards (`task2-fix6-probe.log`):
+   - the reviewer's documents are refused in at most 0.012 s;
+   - nested `<<` and nested `!!merge`, `!merge`, `!<merge>` and `!<tag:yaml.org,2002:merge>`
+     filling 16 KB, and an anchored `<<` aliased 4 times under 3 more `<<`, are each refused in
+     at most 0.002 s;
+   - the reviewer's end-to-end project is listed in 0.09 s (`task2-fix6-e2e.log`): only `good`,
+     with the 24 KB skill diagnosed as too large and the 15 KB one as too many merge keys.
+   The costliest texts still accepted fill 16 KB with a map merged 4 times, nested: 0.40 s
+   through `fm_yaml()`, or 0.59 s when the first parse fails and the repaired text is parsed
+   again (three loads). An anchored `<<` aliased 3 times takes 0.31 s, one `<<` over a sequence
+   of 30 to 900 maps at most 0.074 s, and the plain 16 KB map 0.10 s. The machine's load
+   average was about 7 during these runs.
+
+Regression tests lock items 1, 2 and 4-9: twelve appended to
+`tests/testthat/test-skill-discover.R`, six to `tests/testthat/test-ext-plugins.R` and one to
 `tests/testthat/test-ext-specs.R` (P02, 20 expectations). Round 5 also changed the fixtures of
 round 3's alias tests in both P17 files: their chains now exceed the limit of 4 references, so
-fixtures within the limit show `fm_size_ok()` still refusing the expansion. Every later P17 count
-for `test-skill-discover.R` is 57 higher (10 from round 1, 10 from round 2, 19 from round 3, 13
-from round 4, 5 from round 5): Task 3's red 36 -> 93, 64 -> 121, 99 -> 156, and Task 12's
-combined count 260 -> 317. Every later count for `test-ext-plugins.R` is 79 higher (D-072's 13,
-plus 6 from round 1, 10 from round 3, 17 from round 4 and 33 from round 5): 82 -> 161,
-133 -> 212, 166 -> 245, 184 -> 263. Acceptance 1 becomes 580, acceptance 2b 156, acceptance 3a
-263 and acceptance 4c 419 (IC-74). The round-4 test of a directory name ending in a newline skips
-on Windows and on a file system that refuses the name, like round 3's unreadable-file test.
+fixtures within the limit show `fm_size_ok()` still refusing the expansion. Round 6 changed
+three earlier fixtures without changing their counts:
+- round 4's accepted 30 KB note is now 15 KB, and its refused text is 20 KB, between the old
+  and new limits;
+- round 4's deep skill has 5,000 `[` (it would now be too large at 15,000);
+- round 5's Markdown document merges 2 references instead of 4 (merge keys now count with them).
+Every later P17 count for `test-skill-discover.R` is 64 higher (10 from round 1, 10 from round 2,
+19 from round 3, 13 from round 4, 5 from round 5, 7 from round 6): Task 3's red 36 -> 100,
+64 -> 128, 99 -> 163, and Task 12's combined count 260 -> 324. Every later count for
+`test-ext-plugins.R` is 109 higher (D-072's 13, plus 6 from round 1, 10 from round 3, 17 from
+round 4, 33 from round 5 and 30 from round 6): 82 -> 191, 133 -> 242, 166 -> 275, 184 -> 293.
+Acceptance 1 becomes 617, acceptance 2b 163, acceptance 3a 293 and acceptance 4c 456 (IC-74).
+The round-4 test of a directory name ending in a newline skips on Windows and on a file system
+that refuses the name, like round 3's unreadable-file test.
 
-Validation: `progress/P17.md`, Task 2, review rounds 1 to 5. Round 1 red: `^skill-discover$`
+Validation: `progress/P17.md`, Task 2, review rounds 1 to 6. Round 1 red: `^skill-discover$`
 `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 33 ]` (both new tests stop with the `NA` error), and
 `^ext-plugins$` `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 82 ]`. Green: `[ FAIL 0 | WARN 0 | SKIP 0 |
 PASS 43 ]` and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 86 ]`. With item 2 reverted, the
@@ -3990,6 +4032,16 @@ were skipped without the new diagnostic. Green: `[ FAIL 0 | WARN 0 | SKIP 0 | PA
   P07 lane's untracked `R/prompt-cache.R` no longer skips. The two files pass alone (968) and
   together with this task's files (1510).
 Lint clean.
+Round 6 (item 9's merge rule and 16,384-byte limit) red: `^(skill-discover|ext-plugins)$`
+`[ FAIL 17 | WARN 0 | SKIP 0 | PASS 243 ]`. The 20 KB text reached yaml, the eleven merge forms
+reached yaml, the 20 KB skill was listed, and the three merge skills were skipped without the new
+diagnostic. Without the tag count the test fails 9 times; without the references in the budget,
+2 times. Green: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 273 ]` (skill-discover 97, ext-plugins 176);
+ext-specs is unchanged at 306, and the three together give 579. The whole suite gave
+`[ FAIL 42 | WARN 0 | SKIP 5 | PASS 14073 ]`, and none of the 42 comes from this task:
+`test-zzz.R:301`; 24 in P13's untracked, in-progress `test-s1-emulate.R`; 7 in P07's
+in-progress `test-prompt-cache.R`; and the ten order-dependent `secret_late_check()` errors of
+round 5. Lint clean.
 
 ## D-075 - P07 tool additions: tools are declared by value only when the adapter and the model take them and the kernel can call them by name, hidden tools are never announced, before the first freeze only what the frozen array will not declare is announced, what the model already has is not declared again and cannot change, a member copy keeps every field, one failing spec is left out with a diagnostic (2026-10-04)
 
@@ -4429,3 +4481,150 @@ Validation: `progress/P07.md`, Task 10. Three tests (21 expectations) were added
 literal 9 of the first 13 fail (`dev/.validation/P07/task10-plan-literal.log`). Item 4's test
 was red with 4 of its 8 failing (`task10-fix1-red.log`). Final `^prompt-cache$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 73 ]`.
+
+## D-082 - P13 System 1 emulation: emulated answers are canonical records validated against the request, an all-zero distribution is refused, a reply that did not stop normally is a response error, the chat model is preflighted before any state is serialised, unreported usage stays NA, both entry points show the uncalibrated notice, an emulated request has no session id, a failed stream is classified by its cause, open requests are let go of on interrupt and a refused reply's usage counts (2026-10-04)
+
+P13 Task 6 (`R/s1-emulate.R`, `tests/testthat/test-s1-emulate.R`). These follow the plan:
+
+- the adapter's prompt and the `<document>` wrapper with `<`/`>` escaped;
+- the closed schema with the questions in the property descriptions (noul criteria included);
+- fence stripping, rescaling of a sum off by more than 1e-6, and TypeSafe's confidence formulas;
+- the request context of contract 8.1;
+- `s1_emulate(model, states, questions)` in the `s1_dispatch()` shape, with
+  `engine = "emulated:structured"` and `calibrated = FALSE`;
+- `s1_emulate_classify(model, state, questions, opts)`.
+
+The plan's 5 tests are kept, with 3 assertions changed and 1 added (item 1). Seven points differ,
+each required by IC-74 (07-local-ollama.md sections 2.1, 3 and 5) or by the forward notes of
+D-076 to D-080.
+
+1. **Canonical answers (07 section 3).** `s1_emu_wire()` decodes the reply once into the
+   canonical records every adapter returns:
+   - noul: `list(type = "noul", prob)`, where the plan had the wire field `noul`;
+   - choice and score: `probabilities` as a named double vector in request order, where the plan
+     had `as.list(p)`;
+   - score: also its `legend`.
+
+   Task 4's `s1_dispatch()` checks canonical records with `s1_check_answers()` and refuses
+   wire-shaped ones. The plan-literal shape therefore made every emulated element NA (negative
+   control in `progress/P13.md`). Plan assertions changed: the noul record, the probabilities as
+   a named vector, and `s1_emulate_classify()`'s answer read as `$prob`. One added: its `engine`.
+2. **Validation against the request (07 section 3).** These are refused with
+   `gptr_error_s1_response`:
+   - answers not keyed by question, or not exactly the questions asked;
+   - a choice or score that does not state one probability for exactly the allowed labels
+     (extra, missing or duplicated labels);
+   - a value that is not a finite number in [0, 1];
+   - a reply that is not a JSON object.
+
+   The plan ignored extra ids and labels and let jsonlite's decode error escape unclassed.
+3. **No invented distribution.** A choice or score whose stated probabilities are all 0 is
+   refused. The plan, like the adapter's `emu_rescale()`, replaced it with a uniform
+   distribution, a value the model never stated. Any other sum is still rescaled.
+4. **Stop reasons and failure classes.** A reply that ends with any stop reason other than
+   `stop` (`length`, `refusal`, ...) is `gptr_error_s1_response` and is never retried. Report 04
+   section 2.12: refusals and truncated output raise without corrective retries. The plan parsed
+   whatever text arrived. A failed or aborted stream is classified by the cause in its `error`
+   event (`s1_emu_failed()`, review round 1; the plan took the class from the status alone, so
+   every failure without a status became a retried `s1_connection`):
+   - a `timeout*` or `network` class is `s1_connection` (retried), as in Task 4's
+     `s1_transport_outcome()`;
+   - otherwise a known HTTP status gives `s1_status_class(status)`;
+   - an abort, a failure found locally (`invalid_argument`, `invalid_spec`, `internal`, an
+     adapter that could not build the request) or an event without a class is `s1_response`,
+     never retried;
+   - P04's never-retried classes (`redirect`, `spend_cap`, `retry_after`; contract 2.2, IC-64)
+     keep their status class but are not retried.
+
+   The event's class becomes the condition's `error_type`.
+5. **Preflight first (07 sections 2.1 and 5).** `s1_emu_ready(model, safety)` runs before the
+   notice, the schema, any state serialisation or request:
+   - it refuses a decision-only (classifier) model with `gptr_error_not_available`;
+   - it then runs P05's pure preflight (`s1_preflight()`) on the model's registered provider.
+
+   `provider_stream()` still preflights each request. This earlier check makes a refused route,
+   such as an Ollama chat model under the local-only policy, fail before any state is serialised.
+   `s1_emulate_classify()` reads `opts$safety` and `opts$signal` by exact name and passes them to
+   the stream. `s1_emulate()` keeps contract 7.13's signature, so it uses the local-only default.
+6. **Unknown usage stays NA (D-076).** Unreported token counts are NA (`s1_count()`), not
+   `%||% 0`, and message fields are read with `[[`.
+7. **The notice on both entry points (IC-19).** `s1_emulate_classify()` shows the same
+   once-per-process uncalibrated notice as `s1_emulate()`, so the `s1-emulate` adapter is never
+   silent either. The plan showed it only from `s1_emulate()`.
+
+Review round 1 added three more:
+
+8. **No session id.** The plan's context had `session_id = ""`. For HTTP adapters
+   `provider_stream()` copies it into the request spec, and P04's `reactor_http()` refuses an
+   empty id, so every emulated request to a real chat model ended as a local error before
+   anything was sent. An emulated request belongs to no session: the context keeps the field
+   with the value NULL (P04 then logs it under "nosession", and the OpenRouter session header is
+   left out).
+9. **Requests are let go of on interrupt (07 section 5).** For HTTP transports
+   `provider_stream()` also installs an abort-watch reactor task that ends only with the stream.
+   `s1_round()`'s interrupt cleanup cancels the transfer id alone, so the watch task stayed for
+   the rest of the process, holding the serialised state. The plan assumed the returned id was
+   enough to cancel. Each emulated request now gets its own signal (`s1_emu_signal()`, active
+   bindings that also read the caller's `opts$signal` but never write to it, since that signal
+   may be shared) and is listed until it reports. `s1_emulate()` and `s1_emulate_classify()`
+   abort the requests still open on exit (`s1_emu_release()`), so the next pump ends each stream
+   and its watch task.
+10. **A refused reply's usage counts (IC-74).** A reply that completed but was refused (a
+    `length` or `refusal` stop, a malformed body) was charged. Its failure outcome now carries
+    the reported `usage`, and Task 4's `s1_dispatch()` adds the usage of any failed outcome that
+    carries one (only emulation does). Not done: making the call's usage NA whenever a failed
+    request has no usage. A transport failure has no reply to report usage; a NA rule there
+    would change Task 4's documented sums for every adapter (a TypeSafe 529 would make every
+    call's tokens and cost unknown), and `s1_drive()` keeps only each element's last round, so it
+    could not be complete either. Forward note for Task 8: when it logs System 1 usage
+    (`s1_usage_log()`), it reads the call's sums, which now include refused emulated replies but
+    not earlier failed rounds or failed transfers.
+
+For Task 9: `s1_request()` hands the `s1-emulate` adapter's `classify$run` the classifier record
+it resolved, whose api is `s1-emulate`. `provider_stream()` refuses that api (no stream
+functions), and both it and `s1_emu_ready()` refuse a classifier type. Task 9 must give `run()`
+the chat model if that adapter is to answer through `s1_request()`. Task 8's `s1_answers()` calls
+`s1_emulate()` directly and is unaffected.
+
+Validation: `progress/P13.md`, Task 6. `^s1-emulate$`:
+
+- red `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 0 ]`, every failure a missing function or binding;
+- green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 88 ]`: the plan's tests 33 (its 32 plus 1), 55 in six
+  new tests;
+- with the plan-literal functions swapped in, 8 of 11 tests fail;
+- review round 1 (items 4 and 8 to 10): five new tests, two on P01's mock server. Red
+  `[ FAIL 24 | WARN 0 | SKIP 0 | PASS 118 ]` (0 requests reached the server, failures were
+  retried `s1_connection`, refused replies counted 0 tokens); with only item 8 fixed, the
+  interrupt test showed the leftover watch task. Final green
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 153 ]`; without `s1_emu_release()` the interrupt test fails.
+
+Lint is clean.
+
+## D-083 - P07 harness state: objects stay oldest first across reassignment and iterative compaction, so the checkpoint's object budget drops the oldest; snapshot rows without a class (unforced promises, active bindings) give no shape (2026-10-04)
+
+P07 Task 12 (`R/prompt-compact.R`). `compact_assigned_names()`, `compact_state_empty()`,
+`compact_user_messages()`, `compact_objects()`, `compact_checkpoint_body()`, the user, decision,
+file, skill and plan rules of `extract_state()` and the plan's 7 tests (28 expectations) are
+unchanged.
+
+1. **Objects stay oldest first (the plan's own rule: "`<r_objects>` ..., oldest dropped first
+   beyond 800 tokens").** `compact_objects()` drops lines from the front, so the object list must
+   run from the oldest assignment to the newest. The plan's code broke that twice:
+   `compact_state_merge()` put the previous checkpoint's objects after the new ones, and
+   `extract_state()` left an object assigned again at the place of its first assignment. After
+   one compaction the budget therefore dropped the newest objects first (test: old `p`, `q`,
+   then `r = 3; t = 4` and `q = 2; r = 5` gave the order `r`, `t`, `q`, `p` and a one-line budget
+   kept `p = 1`). New `compact_object_set()` moves a name to the end when it is assigned again;
+   the merge lays the previous state's objects first and the new ones over them. The order is
+   now `p`, `t`, `q`, `r`, and the budget keeps `r = 5`. An object assigned again still shows its
+   newest code.
+2. **Snapshot rows without a class give no shape (P09 `env_snapshot()`, contract 7.9).** P09
+   never forces a promise or calls an active binding, so those rows have `class` and `shape`
+   `NA`. The plan pasted them into `NA NA` and a real class with an `NA` shape into
+   `data.frame NA`. `compact_shapes()` now leaves out rows without a class (the object shows
+   `?`) and reads an `NA` shape as empty.
+
+Validation: `progress/P07.md`, Task 12. Three tests (13 expectations) were added, including a
+round trip of a compaction state through P06's session-file JSON shape. On the plan literal 4
+expectations of the added tests fail (`dev/.validation/P07/task12-plan-literal.log`); final
+`^prompt-compact$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 59 ]`.

@@ -11,6 +11,9 @@ ext_api_version = "1.0"
 
 # ---- validation helpers -----------------------------------------------------------------------
 
+# Name and version rules end with `\z`, not `$`: PCRE's `$` also matches before a final newline,
+# so `"ok\n"` would pass `^[a-z0-9][a-z0-9-]*$` (D-074 item 8).
+
 #' Signal gptr_error_invalid_spec for one field of a spec
 #' @noRd
 spec_abort = function(spec, field, problem) {
@@ -237,7 +240,7 @@ spec_ui_permission = function(select) {
 kind_check_provider = function(spec) {
   if (is.null(spec[["id"]])) spec$id = spec[["name"]]
   if (!identical(spec[["id"]], spec[["name"]])) spec_abort(spec, "id", "must equal the spec name")
-  if (!grepl("^[a-z0-9][a-z0-9-]*$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[a-z0-9][a-z0-9-]*\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "id", "must match ^[a-z0-9][a-z0-9-]*$")
   }
   for (i in seq_along(spec[["models"]])) {
@@ -356,7 +359,7 @@ spec_model_metadata = function(spec, model, prefix = "") {
   if (!is.null(decision[["server_min"]])) {
     version = decision[["server_min"]]
     field_check("decision.server_min", version, kind_field("chr1"))
-    if (!grepl("^[0-9]+(\\.[0-9]+)+([-+][A-Za-z0-9.-]+)?$", version, perl = TRUE)) {
+    if (!grepl("^[0-9]+(\\.[0-9]+)+([-+][A-Za-z0-9.-]+)?\\z", version, perl = TRUE)) {
       spec_abort(spec, paste0(prefix, "decision.server_min"), "must be a version string")
     }
   }
@@ -399,7 +402,7 @@ kind_check_router = function(spec) {
 #' Tools: name rule, execute or fun, schema from formals, generated execute or fun (contract 6.8)
 #' @noRd
 kind_check_tool = function(spec) {
-  if (!grepl("^[a-zA-Z0-9_-]{1,64}$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[a-zA-Z0-9_-]{1,64}\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "name", "must match ^[a-zA-Z0-9_-]{1,64}$")
   }
   fun = spec[["fun"]]
@@ -407,7 +410,7 @@ kind_check_tool = function(spec) {
     spec_abort(spec, "execute", "or `fun` is required")
   }
   ns = spec[["namespace"]]
-  if (!is.null(ns) && !grepl("^[A-Za-z][A-Za-z0-9_.]*$", ns, perl = TRUE)) {
+  if (!is.null(ns) && !grepl("^[A-Za-z][A-Za-z0-9_.]*\\z", ns, perl = TRUE)) {
     spec_abort(spec, "namespace", "must be an R-style name")
   }
   if (is.null(spec[["parameters"]])) {
@@ -457,7 +460,7 @@ kind_check_mcp_server = function(spec) {
 #' Skills (contract 11.13): the name is the directory name
 #' @noRd
 kind_check_skill = function(spec) {
-  if (!grepl("^[a-z0-9][a-z0-9-]*$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[a-z0-9][a-z0-9-]*\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "name", "must match ^[a-z0-9][a-z0-9-]*$")
   }
   if (nchar(spec[["description"]], type = "chars") > 1024L) {
@@ -468,7 +471,7 @@ kind_check_skill = function(spec) {
 
 #' @noRd
 kind_check_command = function(spec) {
-  if (!grepl("^[^/[:space:]][^[:space:]]*$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[^/[:space:]][^[:space:]]*\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "name", "must not start with '/' or contain spaces")
   }
   spec
@@ -518,7 +521,7 @@ kind_check_ui = function(spec) {
 #' Settings are dotted lower-case keys such as subagents.max_depth
 #' @noRd
 kind_check_setting = function(spec) {
-  if (!grepl("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "name", "must be a dotted lower-case key such as subagents.max_depth")
   }
   spec
@@ -537,7 +540,7 @@ kind_check_redaction_rule = function(spec) {
 
 #' @noRd
 kind_check_env_alias = function(spec) {
-  if (!grepl("^[A-Za-z_][A-Za-z0-9_]*$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[A-Za-z_][A-Za-z0-9_]*\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "name", "must be the canonical environment-variable name")
   }
   if (!length(spec[["aliases"]])) spec_abort(spec, "aliases", "must name at least one alias")
@@ -566,7 +569,7 @@ kind_check_agent = function(spec) {
 
 #' @noRd
 kind_check_kind = function(spec) {
-  if (!grepl("^[a-z][a-z0-9_]*$", spec[["name"]], perl = TRUE)) {
+  if (!grepl("^[a-z][a-z0-9_]*\\z", spec[["name"]], perl = TRUE)) {
     spec_abort(spec, "name", "must match ^[a-z][a-z0-9_]*$")
   }
   spec
@@ -803,7 +806,7 @@ kind_define = function(name, validate, resolve = c("first", "all"), fields = cha
   check_string(order_field, "order_field", null = TRUE)
   check_flag(experimental, "experimental")
   check_string(source, "source")
-  if (!grepl("^[a-z][a-z0-9_]*$", name, perl = TRUE)) {
+  if (!grepl("^[a-z][a-z0-9_]*\\z", name, perl = TRUE)) {
     gptr_abort("A kind name must match ^[a-z][a-z0-9_]*$.", "invalid_argument", arg = "name",
                expected = "a lower-case kind name")
   }

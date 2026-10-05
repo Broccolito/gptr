@@ -207,3 +207,166 @@ test_that("res_register skips the NULL of an invalid spec without a diagnostic (
   diag = gptr_registry(diagnostics = TRUE)
   expect_false(any(diag$source == "plugin:p17-null-spec"))
 })
+
+# Task 2 review round 1 (D-074): R yaml's NA spellings stay text in the string keys.
+
+test_that("frontmatter string keys keep R yaml's NA spellings as text (IC-71, D-074)", {
+  fm = frontmatter_parse(c("---", "name: .na.character", "description: .na", "version: .na.real",
+                           "model: .na.integer", "license: .na.character", "---", "Body"))
+  expect_null(fm$error)
+  expect_identical(fm$meta$name, ".na.character")
+  expect_identical(fm$meta$description, ".na")
+  expect_identical(fm$meta$version, ".na.real")
+  expect_identical(fm$meta$model, ".na.integer")
+  expect_identical(fm$meta$license, NA_character_)
+})
+
+# Task 2 review round 3 (D-074): YAML aliases never expand without bound.
+
+fm_alias_chain = function(levels) {
+  out = "x0: &a0 [a, b, c, d, e, f, g, h, i]"
+  for (i in seq_len(levels)) {
+    refs = paste(rep(sprintf("*a%d", i - 1L), 9L), collapse = ", ")
+    out = c(out, sprintf("x%d: &a%d [%s]", i, i, refs))
+  }
+  out
+}
+
+test_that("frontmatter whose YAML aliases expand too far is an error string (D-074)", {
+  small = frontmatter_parse(c("---", "name: x", "description: d", "base: &b [read, r]",
+                              "allowed-tools: *b", "also: *b", "---", "x"))
+  expect_null(small$error)
+  expect_identical(fm_chr_list(small$meta[["allowed-tools"]]), c("read", "r"))
+  bomb = frontmatter_parse(c("---", "name: bomb", "description: d", fm_alias_chain(7L),
+                             "metadata: *a7", "---", "x"))
+  expect_null(bomb$meta)
+  expect_match(bomb$error %||% "", "too many aliases", fixed = TRUE)
+  # Round 5: at most 4 references to anchors reach yaml, so a fixture within that cap shows
+  # fm_size_ok() still refusing what they expand to.
+  many = paste0("x0: &a0 [", paste(rep("a", 8000L), collapse = ","), "]")
+  wide = frontmatter_parse(c("---", "name: wide", "description: d", many,
+                             "x1: [*a0, *a0, *a0, *a0]", "---", "x"))
+  expect_null(wide$meta)
+  expect_match(wide$error %||% "", "too large once its aliases are expanded", fixed = TRUE)
+  long = strrep("y", 300000L)
+  expect_true(fm_size_ok(rep(list(long), 3L), 1e4, 1e6))
+  expect_false(fm_size_ok(rep(list(long), 4L), 1e4, 1e6))
+})
+
+test_that("fm_chr_list takes only flat values and never flattens nested lists (D-074)", {
+  expect_identical(fm_chr_list(list("read", 1L, NULL)), c("read", "1"))
+  expect_identical(fm_chr_list(c("a", "b")), c("a", "b"))
+  expect_null(fm_chr_list(list(list("a", "b"), "c")))
+  expect_null(fm_chr_list(list(c("a", "b"))))
+  nested = letters[1:9]
+  for (i in 1:6) nested = rep(list(nested), 9L)
+  expect_null(fm_chr_list(nested))
+})
+
+# Task 2 review round 4 (D-074 item 9): text that would make yaml slow never reaches yaml.
+
+test_that("frontmatter YAML that would make yaml slow is refused before yaml runs (D-074)", {
+  fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
+  ok = frontmatter_parse(fm(paste0("note: ", strrep("z", 15000L)), "tools: [read, r]",
+                            "metadata: {a: [1, [2, [3]]], b: {c: d}}", "base: &b {k: 1}",
+                            "merged: {<<: *b, j: 2}", "list:", "  - - a"))
+  expect_null(ok$error)
+  expect_identical(ok$meta$merged, list(k = 1L, j = 2L))
+  expect_identical(unlist(ok$meta$list), "a")
+  local_mocked_bindings(fm_load = function(...) stop("yaml must not run"))
+  # Round 6: the limit is 16,384 bytes, so a 20 KB text is refused too.
+  big = frontmatter_parse(fm(paste0("note: ", strrep("z", 20000L))))
+  expect_null(big$meta)
+  expect_identical(big$error, "invalid YAML frontmatter: too large (more than 16384 bytes)")
+  deep = list(paste0("x: ", strrep("[", 1001L), strrep("]", 1001L)),
+              paste0("x: ", strrep("{a: ", 1001L), "b", strrep("}", 1001L)),
+              paste0("x: ", strrep("[\"]\", ", 1001L), "z", strrep("]", 1001L)),
+              c("x:", paste0("  ", strrep("- ", 65L), "a")),
+              c("x:", paste0("  ", strrep("? ", 65L), "a")))
+  for (d in deep) {
+    res = frontmatter_parse(fm(d))
+    expect_null(res$meta)
+    expect_match(res$error %||% "", "invalid YAML frontmatter: too deeply nested", fixed = TRUE)
+  }
+  merges = frontmatter_parse(fm("base: &b {k: 1}", "m: {<<: [*b, *b, *b, *b, *b]}"))
+  expect_null(merges$meta)
+  expect_match(merges$error %||% "", "invalid YAML frontmatter: too many aliases", fixed = TRUE)
+})
+
+# Task 2 review round 5 (D-074 item 9): at most 4 references to anchors reach yaml, however the
+# key or merge is spelt.
+
+test_that("frontmatter with more than 4 references to its anchors never reaches yaml (D-074)", {
+  fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
+  four = c("a0: &a0 [a, b]", "a1: &a1 [*a0, *a0, *a0, *a0]")
+  ok = frontmatter_parse(fm(four))
+  expect_null(ok$error)
+  expect_identical(ok$meta$a1, rep(list(c("a", "b")), 4L))
+  # Round 6: merge keys and references count together (at most 4 in all), so 2 of each here.
+  merged = frontmatter_parse(fm("note: Use *args, *kwargs and **bold** text *freely*.",
+                                "base: &base {k: 1}", "m: {<<: *base, j: 2}",
+                                "mm:", "  ? <<", "  : *base"))
+  expect_null(merged$error)
+  expect_identical(merged$meta$m, list(k = 1L, j = 2L))
+  expect_identical(merged$meta$mm, list(k = 1L))
+  expect_identical(merged$meta$note, "Use *args, *kwargs and **bold** text *freely*.")
+  local_mocked_bindings(fm_load = function(...) simpleError("yaml ran"))
+  refused = "invalid YAML frontmatter: too many aliases (more than 4 references to anchors)"
+  b = "base: &b {k: 1}"
+  five = "[*b, *b, *b, *b, *b]"
+  bad = list(c(four, "m:", "  ? *a1", "  : 1"), c(four, "m:", "  *a1 : 1"),
+             c(four, "m: {*a1 : 1}"), c(four, "m: [*a1]"),
+             c(fm_alias_chain(7L), "m:", "  ? *a7", "  : 1"),
+             c(b, paste0("m: {<<: ", five, "}")), c(b, "m:", "  ? <<", paste0("  : ", five)),
+             c(b, paste0("m: {!!merge x: ", five, "}")),
+             c(b, paste0("m: {!<tag:yaml.org,2002:%6Derge> x: ", five, "}")),
+             c(b, "m: {<<: [*b,*b,*b,*b,*b]}"),
+             c(b, paste0("m: [*b, *b, *b, *b,", intToUtf8(0x2028L), "*b]")))
+  for (d in bad) {
+    res = frontmatter_parse(fm(d))
+    expect_null(res$meta)
+    expect_identical(res$error, refused)
+  }
+  latin = rawToChar(as.raw(c(0x61, 0x3a, 0x20, 0x26, 0x62, 0x20, 0xe9, 0x0a, 0x63, 0x3a, 0x20,
+                             0x2a, 0x62)))
+  expect_silent(expect_null(fm_text_problem(latin)))
+})
+
+# Task 2 review round 6 (D-074 item 9): yaml merges a map under a `<<` key, under any key tagged
+# merge (`!!merge`, `!merge`, `!<merge>`, ...) and under an alias of an anchored merge key, each
+# merge costing about the square of the merged map's size. At most 4 merge keys, tags and
+# references to anchors in all reach yaml.
+
+test_that("frontmatter with more than 4 merge keys, tags and aliases never reaches yaml (D-074)", {
+  fm = function(...) c("---", "name: x", "description: d", ..., "---", "Body")
+  ok = frontmatter_parse(fm("note: Wow! Use it! Really!! (yes!)", "a: !!str 1.0",
+                            "m: {<<: {k: 1}, j: 2}", "t: {!!merge x: {k: 2}}",
+                            "base: &b {k: 3}", "u: [*b]"))
+  expect_null(ok$error)
+  expect_identical(ok$meta$note, "Wow! Use it! Really!! (yes!)")
+  expect_identical(ok$meta$a, "1.0")
+  expect_identical(ok$meta$m, list(k = 1L, j = 2L))
+  expect_identical(ok$meta$t, list(k = 2L))
+  expect_identical(ok$meta$u, list(list(k = 3L)))
+  chain = frontmatter_parse(fm("chain:", "  <<:", "    <<: {k: 1}", "    j: 2", "  i: 3"))
+  expect_null(chain$error)
+  expect_identical(chain$meta$chain, list(k = 1L, j = 2L, i = 3L))
+  local_mocked_bindings(fm_load = function(...) simpleError("yaml ran"))
+  refused = "invalid YAML frontmatter: too many merge keys, tags and aliases (more than 4 in all)"
+  nest = function(open, n) paste0("m: ", strrep(open, n), "{a: 1}", strrep("}", n))
+  block = c("m:", vapply(1:4, function(i) paste0(strrep("  ", i), "<<:"), ""),
+            paste0(strrep("  ", 5L), "<<: {a: 1}"))
+  breaks = intToUtf8(c(0x2028L, 0x85L, 0x2029L, 0x2028L, 0x2028L), multiple = TRUE)
+  tops = paste0(breaks, "!!merge ", c("v", "w", "x", "z", "u"), ": {b: 1}", collapse = "")
+  bad = list(nest("{<<: ", 5L), block, nest("{!!merge x: ", 5L), nest("{!merge x: ", 5L),
+             nest("{!<merge> x: ", 5L), nest("{!<tag:yaml.org,2002:merge> x: ", 5L),
+             nest("{! <<: ", 3L), nest("{?!!merge x: ", 5L), paste0("a: 1", tops),
+             c("k: &m <<", "m: {*m : {*m : {*m : {*m : {a: 1}}}}}"),
+             c("base: &b {k: 1}", "m: {<<: *b, !!merge x: {j: 1}}",
+               "o: {<<: {i: 1}, !!merge x: {h: 1}}"))
+  for (d in bad) {
+    res = frontmatter_parse(fm(d))
+    expect_null(res$meta)
+    expect_identical(res$error, refused)
+  }
+})
