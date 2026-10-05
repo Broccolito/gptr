@@ -134,3 +134,29 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
 - Reviews: none yet.
 - Deviations: D-006 amended. Open: `.onLoad` still loads built-ins via its own `ns_fun()` + `tryCatch`
   instead of an `on_load_run()` entry (needs test-zzz load-hook changes); TD-06 deferred.
+
+## Simplicity P09-S - Eval and env duplication (2026-10-05)
+- F4 five forwarding `gptr_describe` methods gone (D-142); F7 rng tests 12 -> 9 blocks; F8 one
+  `eval_error()`, one plot-hook closure, `eval_session()` = `run$shell`, `describe_value()` as the
+  `describe` service, `dsc_leaf_col()` for vectors. R -77, tests -41 lines (plan ~110).
+- Red: FAIL 1 (NAMESPACE test: 5 forwarding methods registered). Green: `eval-|env-|copy-` PASS 912
+  after r1 fixes (925 before: -6 IC-71 loop rows, -7 merged rng expectations). Lint clean.
+  Neighbours: `tool-r$|tool-namespace|s1-route|gptr-gateway|ext-api|ext-builtins|ext-check|
+  prompt-context|arch-layers|lint-rules|agent-run` PASS 2340.
+- Reviews: r1 3 findings (1 minor, 2 nits): stale P09 row 6c titles logged Open; 6.6 paragraph
+  rewrapped; neighbour filter written as run.
+- Deviations: D-142. Open: env_snapshot()'s `previous` check kept (plan-literal test); P09
+  acceptance row 6c still names the two rng tests now merged into "rng_swap removes .Random.seed
+  again and keeps the kind when the user had none" (P09 plan outside lane evaltool).
+
+## Simplicity K-CLS - Classifier conformance: one fixture format (2026-10-05)
+- check_adapter() reads classifier cases in the 12.4 shape from `fixtures/jev`, `fixtures/ollama`;
+  the 19 classifier-only cases and all side files moved there; `fixtures/classifier/` (80 files)
+  gone; jev `error-422` and ollama `image` became cases (+3 goldens); golden messages simplified.
+  R -36, fixtures -147 lines (plan ~220).
+- Red: FAIL 105 (`provider-anthropic`: old reader saw `.fixture` rows, default directory gone).
+  Green: `provider-anthropic|s1-` PASS 1985 (1983 + 2 new cases); gptr_check() typesafe/ollama
+  80/56 rows, 0 failed. Lint clean. Neighbours: `provider-|catalog-|ext-check|arch-layers|
+  lint-rules` green (mock-server stream timing flake once; re-run PASS 574).
+- Reviews: none yet.
+- Deviations: D-143. Open: none.

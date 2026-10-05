@@ -9897,3 +9897,22 @@ Validation: `progress/ci-hosted.md`, Task CI-6.
   section 3, P04-S10). Confirmed absence, zombies and a creation-time mismatch read dead (IC-59).
 - Contract-visible: none (04 section 7.4 defines no unknown state).
 - Tests: test-proc-supervise.R OS-error block (+1 expectation). Evidence: progress/simplicity.md P04-S.
+
+## D-142 - P09 gptr_describe() forwarding methods removed; S3 inheritance reaches their targets (2026-10-05)
+- Rule: `factor`, `Date` and `POSIXct` dispatch to `gptr_describe.default`, `data.table` to
+  `gptr_describe.data.frame` and `glm` to `gptr_describe.lm` by S3 inheritance; the five methods
+  that only forwarded there are gone, so every description is unchanged.
+- Contract-visible: 04 section 6.6 lists 15 built-in methods (was 20) and names the dispatch;
+  NAMESPACE and `?gptr_describe` no longer register or document the five methods.
+- Tests: test-env-describe.R NAMESPACE block (15 methods); the 98-fact fixture covers the dispatch.
+  Evidence: progress/simplicity.md P09-S.
+
+## D-143 - P12/P13 classifier conformance reads the contract 12.4 wire fixtures (2026-10-05)
+- Rule: a classifier case is `{request: {state, questions}, status, headers?, response}` (12.4); a
+  JSON string `response` is the body text; a case without a request (a recorded error) has no
+  questions. The built-in adapters replay `fixtures/jev` and `fixtures/ollama` with their goldens;
+  other apis keep `fixtures/classifier/<api>`. Supersedes D-026 items 1-2 and its Fixtures line.
+- Rule: a usage or error golden that is malformed fails its row with the row's one message.
+- Contract-visible: none (D-026's layout is not contract text; 12.4 unchanged).
+- Tests: test-provider-anthropic.R classifier blocks (fixture directory, test fixtures in the new
+  shape). Evidence: progress/simplicity.md K-CLS.

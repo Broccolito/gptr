@@ -1,15 +1,3 @@
-test_that("rng_seeds derives a valid L'Ecuyer vector from a key without the RNG", {
-  env = globalenv()
-  before = get0(".Random.seed", envir = env, inherits = FALSE)
-  s = rng_seeds("s0123456789")
-  expect_type(s, "integer")
-  expect_length(s, 7L)
-  expect_equal(s[1], 10407L)
-  expect_identical(rng_seeds("s0123456789"), s)
-  expect_false(identical(rng_seeds("s0123456789:b"), s))
-  expect_identical(get0(".Random.seed", envir = env, inherits = FALSE), before)
-})
-
 test_that("rng_swap keeps the user's .Random.seed and advances the agent's stream", {
   withr::local_seed(42)
   env = globalenv()
@@ -26,42 +14,32 @@ test_that("rng_swap keeps the user's .Random.seed and advances the agent's strea
   expect_identical(stats::runif(1), withr::with_seed(42, stats::runif(1)))
 })
 
-test_that("rng_swap removes .Random.seed again when the user had none", {
-  env = globalenv()
-  saved = get0(".Random.seed", envir = env, inherits = FALSE)
-  withr::defer({
-    if (!is.null(saved)) env[[".Random.seed"]] = saved
-  })
-  if (!is.null(saved)) rm(list = ".Random.seed", envir = env)
-  st = new.env()
-  st$id = "s1"
-  x = rng_swap(st, stats::runif(1))
-  expect_false(exists(".Random.seed", envir = env, inherits = FALSE))
-  expect_true(is.numeric(x))
-  expect_equal(st$seed[1], 10407L)
-  expect_error(rng_swap(list(), 1), class = "gptr_error_invalid_argument")
-})
-
-test_that("rng_swap leaves R's generator kind as it found it when the user had no seed", {
+test_that("rng_swap removes .Random.seed again and keeps the kind when the user had none", {
   env = globalenv()
   withr::local_preserve_seed()
-  set.seed(42)
-  ref = stats::runif(1)
-  rm(list = ".Random.seed", envir = env)
-  st = new.env()
-  st$id = "s2"
-  rng_swap(st, stats::runif(1))
-  expect_false(exists(".Random.seed", envir = env, inherits = FALSE))
-  set.seed(42)
-  expect_identical(stats::runif(1), ref)
+  old = RNGkind()
+  withr::defer(RNGkind(old[1L], old[2L], old[3L]))
+  expect_error(rng_swap(list(), 1), class = "gptr_error_invalid_argument")
+  for (kind in c("Mersenne-Twister", "Knuth-TAOCP-2002")) {
+    RNGkind(kind)
+    set.seed(42)
+    ref = stats::runif(1)
+    rm(list = ".Random.seed", envir = env)
+    st = new.env()
+    st$id = "s2"
+    rng_swap(st, stats::runif(1))
+    expect_false(exists(".Random.seed", envir = env, inherits = FALSE))
+    expect_equal(st$seed[1], 10407L)
+    set.seed(42)
+    expect_identical(stats::runif(1), ref)
+  }
 })
 
-# Added beyond the plan's blocks (P09 Task 7 evidence in dev/progress/P09.md).
-
-test_that("rng_seeds matches IC-61's derivation word for word", {
+test_that("rng_seeds matches IC-61's derivation word for word without drawing a number", {
   # Reference vectors computed independently (Python hashlib): the first 24 bytes of
   # sha256(key) as six big-endian 32-bit words, three modulo m1 and three modulo m2, in
   # two's complement. Pinned so that reproducible streams (.opts$seed) stay stable.
+  before = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
   expect_identical(
     rng_seeds("s0123456789"),
     c(10407L, -146143283L, 119445096L, -844057359L, 1765153392L, 252959532L, -1668458951L)
@@ -74,6 +52,7 @@ test_that("rng_seeds matches IC-61's derivation word for word", {
   u = ifelse(is.na(s[-1L]), 2147483648, ifelse(s[-1L] < 0L, s[-1L] + 4294967296, s[-1L]))
   expect_true(all(u[1:3] < 4294967087))
   expect_true(all(u[4:6] < 4294944443))
+  expect_identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), before)
 })
 
 test_that("rng_seeds stores the word 2^31 as NA silently and never yields an all-zero group", {
@@ -132,25 +111,6 @@ test_that("rng_swap derives the stream from the id, or from 'gptr' without one, 
   expect_identical(rng_swap(st2, 1L), 1L)
   expect_identical(st2$seed, rng_seeds("3:worker"))
 })
-
-test_that("rng_swap keeps a non-default generator kind when the user had no seed", {
-  env = globalenv()
-  withr::local_preserve_seed()
-  old = RNGkind("Knuth-TAOCP-2002")
-  withr::defer(RNGkind(old[1L], old[2L], old[3L]))
-  set.seed(42)
-  ref = stats::runif(1)
-  rm(list = ".Random.seed", envir = env)
-  st = new.env()
-  st$id = "s3"
-  rng_swap(st, stats::runif(1))
-  expect_false(exists(".Random.seed", envir = env, inherits = FALSE))
-  expect_equal(st$seed[1], 10407L)
-  set.seed(42)
-  expect_identical(stats::runif(1), ref)
-})
-
-# Review round 1: the branch where the user had a seed.
 
 test_that("rng_swap leaves R's generator kind as it found it when the user had a seed", {
   # R keeps the kind internally; the restored vector alone left L'Ecuyer-CMRG in force, so a

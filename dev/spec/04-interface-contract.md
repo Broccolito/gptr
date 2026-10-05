@@ -1780,13 +1780,14 @@ the `@object` console mention). `budget`: `int(1)` >= 20, estimated tokens (`est
 Returns a character vector of lines, the first a header `<class> shape, size`, at most `budget` estimated
 tokens (the harness truncates longer method output). Methods MUST follow [R4][leaf]: no promise forcing, no I/O
 (no `dbListTables()`, no `collect()`), no `str()` on the object. Built-in methods: `default`, `data.frame`,
-`data.table`, `matrix`, `list`, `Date`, `POSIXct`, `factor`, `formula`, `lm`, `glm`, `environment`, `function`,
-`S4` (dispatch through `default` with `isS4()`), `dgCMatrix`, `ArrowTabular`, `Dataset`, `DBIConnection`,
-`Seurat`, `SingleCellExperiment`, `ggplot`. Level-based: a method may accept `level = 1:4` in `...` and return
-successively richer descriptions; the harness picks the richest that fits. Methods for classes of packages outside
-Suggests (`dgCMatrix`, `ArrowTabular`, `Dataset`, `Seurat`, `SingleCellExperiment`, `ggplot`) use only base generics,
-`methods::slot()`/`slotNames()`, `attr()` and `dim()` guarded by `isNamespaceLoaded()`, never `pkg::fun()`
-(IC-71). Packages add methods with delayed `S3method(gptr::gptr_describe, cls)`. Copy-safety: [R4].
+`matrix`, `list`, `formula`, `lm`, `environment`, `function`, `dgCMatrix`, `ArrowTabular`, `Dataset`,
+`DBIConnection`, `Seurat`, `SingleCellExperiment`, `ggplot`; `factor`, `Date`, `POSIXct` and `S4` (`isS4()`)
+dispatch through `default`, `data.table` through `data.frame` and `glm` through `lm` (D-142). Level-based: a method
+may accept `level = 1:4` in `...` and return successively richer descriptions; the harness picks the richest that
+fits. Methods for classes of packages outside Suggests (`dgCMatrix`, `ArrowTabular`, `Dataset`, `Seurat`,
+`SingleCellExperiment`, `ggplot`) use only base generics, `methods::slot()`/`slotNames()`, `attr()` and `dim()`
+guarded by `isNamespaceLoaded()`, never `pkg::fun()` (IC-71). Packages add methods with delayed
+`S3method(gptr::gptr_describe, cls)`. Copy-safety: [R4].
 
 ```r
 gptr_describe(mtcars, budget = 60)

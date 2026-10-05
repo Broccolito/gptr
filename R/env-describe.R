@@ -164,13 +164,6 @@ dsc_idx = function(n, max_n = 1e5) {
   if (n <= max_n) seq_len(n) else unique(round(seq(1, n, length.out = max_n)))
 }
 
-#' Sampled values plus the attributes needed to re-attach the class (a leaf)
-#' @noRd
-dsc_leaf_sample = function(x, idx) {
-  list(values = .subset(x, idx), levels = attr(x, "levels"), class = class(x),
-       tzone = attr(x, "tzone"), units = attr(x, "units"))
-}
-
 #' Column facts of a data frame (sampled rows, at most 60 columns) (a leaf)
 #' @noRd
 dsc_leaf_df = function(x, idx, max_cols = 60L) {
@@ -191,24 +184,15 @@ dsc_leaf_df_rows = function(x, k = 3L, max_cols = 12L) {
   list(names = attr(x, "names")[cols], cols = out, n = length(rows))
 }
 
-#' Facts of one data frame column: the values at `idx` of a vector, else (a list, matrix or
-#' data frame column, whose rows are not its elements) its class and shape only (a leaf)
+#' Facts of a vector or column: the values at `idx` and the attributes that re-attach the class,
+#' else (a list, matrix or data frame, whose rows are not its elements) class and shape (a leaf)
 #' @noRd
 dsc_leaf_col = function(col, idx) {
   if (is.atomic(col) && is.null(attr(col, "dim"))) {
     return(list(values = .subset(col, idx), levels = attr(col, "levels"), class = class(col),
-                tzone = attr(col, "tzone"), units = attr(col, "units"), shape = NULL))
+                tzone = attr(col, "tzone"), units = attr(col, "units")))
   }
-  d = attr(col, "dim")
-  shape = if (length(d)) {
-    paste(env_fmt_n(d), collapse = " x ")
-  } else if (inherits(col, "data.frame")) {
-    paste(env_fmt_n(.row_names_info(col, 2L)), "x", env_fmt_n(length(col)))
-  } else {
-    paste("length", env_fmt_n(length(col)))
-  }
-  list(values = NULL, levels = NULL, class = class(col), tzone = NULL, units = NULL,
-       shape = shape)
+  list(class = class(col), shape = env_shape(col))
 }
 
 #' Top-left corner and dimnames samples of a matrix (a leaf)
@@ -508,28 +492,10 @@ gptr_describe.default = function(x, budget = 150L, ..., level = NULL) {
   if (f$env) return(dsc_describe_env(x, f, budget, level))
   if (f$atomic && !length(f$dim)) {
     idx = dsc_idx(f$length)
-    s = dsc_leaf_sample(x, idx)
+    s = dsc_leaf_col(x, idx)
     return(dsc_pick(dsc_fmt_atomic(f, s, length(idx)), budget, level))
   }
   dsc_pick(list(dsc_header(f), c(dsc_header(f), paste("  typeof", f$type))), budget, level)
-}
-
-#' @rdname gptr_describe
-#' @export
-gptr_describe.factor = function(x, budget = 150L, ..., level = NULL) {
-  gptr_describe.default(x, budget = budget, level = level)
-}
-
-#' @rdname gptr_describe
-#' @export
-gptr_describe.Date = function(x, budget = 150L, ..., level = NULL) {
-  gptr_describe.default(x, budget = budget, level = level)
-}
-
-#' @rdname gptr_describe
-#' @export
-gptr_describe.POSIXct = function(x, budget = 150L, ..., level = NULL) {
-  gptr_describe.default(x, budget = budget, level = level)
 }
 
 #' @rdname gptr_describe
@@ -540,12 +506,6 @@ gptr_describe.data.frame = function(x, budget = 150L, ..., level = NULL) {
   d = dsc_leaf_df(x, idx)
   rows = dsc_leaf_df_rows(x)
   dsc_pick(dsc_fmt_df(f, d, length(idx) < f$nrow, rows), budget, level)
-}
-
-#' @rdname gptr_describe
-#' @export
-gptr_describe.data.table = function(x, budget = 150L, ..., level = NULL) {
-  gptr_describe.data.frame(x, budget = budget, level = level)
 }
 
 #' @rdname gptr_describe
@@ -655,12 +615,6 @@ gptr_describe.lm = function(x, budget = 150L, ..., level = NULL) {
   coefs = paste0("  coef: ", paste(sprintf("%s=%s", names(cf), format(cf, digits = 4L)),
                                    collapse = ", "))
   dsc_pick(list(h, c(h, paste0("  ", fit)), c(h, paste0("  ", fit), coefs)), budget, level)
-}
-
-#' @rdname gptr_describe
-#' @export
-gptr_describe.glm = function(x, budget = 150L, ..., level = NULL) {
-  gptr_describe.lm(x, budget = budget, level = level)
 }
 
 #' S4 dispatch through the default method (isS4())

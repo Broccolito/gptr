@@ -3,18 +3,13 @@
 \name{gptr_describe}
 \alias{gptr_describe}
 \alias{gptr_describe.default}
-\alias{gptr_describe.factor}
-\alias{gptr_describe.Date}
-\alias{gptr_describe.POSIXct}
 \alias{gptr_describe.data.frame}
-\alias{gptr_describe.data.table}
 \alias{gptr_describe.matrix}
 \alias{gptr_describe.list}
 \alias{gptr_describe.environment}
 \alias{gptr_describe.function}
 \alias{gptr_describe.formula}
 \alias{gptr_describe.lm}
-\alias{gptr_describe.glm}
 \alias{gptr_describe.dgCMatrix}
 \alias{gptr_describe.Seurat}
 \alias{gptr_describe.SingleCellExperiment}
@@ -28,15 +23,7 @@ gptr_describe(x, budget = 150L, ...)
 
 \method{gptr_describe}{default}(x, budget = 150L, ..., level = NULL)
 
-\method{gptr_describe}{factor}(x, budget = 150L, ..., level = NULL)
-
-\method{gptr_describe}{Date}(x, budget = 150L, ..., level = NULL)
-
-\method{gptr_describe}{POSIXct}(x, budget = 150L, ..., level = NULL)
-
 \method{gptr_describe}{data.frame}(x, budget = 150L, ..., level = NULL)
-
-\method{gptr_describe}{data.table}(x, budget = 150L, ..., level = NULL)
 
 \method{gptr_describe}{matrix}(x, budget = 150L, ..., level = NULL)
 
@@ -49,8 +36,6 @@ gptr_describe(x, budget = 150L, ...)
 \method{gptr_describe}{formula}(x, budget = 150L, ..., level = NULL)
 
 \method{gptr_describe}{lm}(x, budget = 150L, ..., level = NULL)
-
-\method{gptr_describe}{glm}(x, budget = 150L, ..., level = NULL)
 
 \method{gptr_describe}{dgCMatrix}(x, budget = 150L, ..., level = NULL)
 

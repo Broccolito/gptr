@@ -39,14 +39,6 @@ eval_event_text = function(e) {
   character()
 }
 
-#' Model-facing lines of the evaluation events, in order
-#' @noRd
-eval_event_lines = function(res) {
-  out = character()
-  for (e in res$events) out = c(out, eval_event_text(e))
-  out
-}
-
 #' Plot notices, state-change lines and the status line appended after the events
 #' @noRd
 eval_tail_lines = function(res) {
@@ -131,7 +123,7 @@ format_eval_result = function(res, budget_tokens) {
   for (b in res$images) {
     image_tokens = image_tokens + est_image_tokens(b$width %||% 768L, b$height %||% 512L)
   }
-  lines = c(eval_event_lines(res), eval_tail_lines(res))
+  lines = c(unlist(lapply(res$events, eval_event_text)), eval_tail_lines(res))
   if (!length(lines)) lines = "[no output]"
   parts = strsplit(lines, "\n", fixed = TRUE)
   lines = unlist(lapply(parts, function(x) if (length(x)) x else ""))

@@ -137,6 +137,14 @@ eval_push = function(st, type, ...) {
   invisible()
 }
 
+#' Append an `error` event (04 section 5.8) at the current expression's line
+#' @noRd
+eval_error = function(st, message, class, call = NULL, timeout = FALSE,
+                      traceback = character()) {
+  eval_push(st, "error", message = message, call = call, class = class, line = st$line,
+            timeout = timeout, traceback = traceback)
+}
+
 #' Parse with source references under the file name "<gptr>", line ends as LF; an error object
 #' on failure, also for code that is not valid UTF-8 (gsub() and the parser would throw; D-055)
 #' @noRd
@@ -156,9 +164,7 @@ eval_run = function(st) {
   force(st)
   parsed = eval_parse(st$code)
   if (inherits(parsed, "error")) {
-    eval_push(st, "error", message = conditionMessage(parsed), call = NULL,
-              class = "parse_error", line = NA_integer_, timeout = FALSE,
-              traceback = character())
+    eval_error(st, conditionMessage(parsed), "parse_error")
     st$status = "parse_error"
     return(invisible(st))
   }
@@ -168,8 +174,7 @@ eval_run = function(st) {
   if (st$guard) {
     g = eval_guard(parsed)
     if (!is.null(g$reason)) {
-      eval_push(st, "error", message = g$reason, call = NULL, class = "gptr_blocked",
-                line = NA_integer_, timeout = FALSE, traceback = character())
+      eval_error(st, g$reason, "gptr_blocked")
       st$status = "blocked"
       return(invisible(st))
     }
@@ -210,18 +215,15 @@ eval_no_ask = function(...) {
   stop("askYesNo() is not available to the agent; use the ask tool.", call. = FALSE)
 }
 
-#' The plot hook; a closure that holds only `st`
+#' The plot hook, a closure that holds only `st`: enable the display list on new devices, capture
+#' the finished page
 #' @noRd
 eval_plot_hook = function(st) {
   force(st)
-  function(...) eval_on_plot_new(st)
-}
-
-#' Hook body: enable the display list on new devices, capture the finished page
-#' @noRd
-eval_on_plot_new = function(st) {
-  plot_enable_new(st$ps)
-  eval_capture_plot(st, FALSE)
+  function(...) {
+    plot_enable_new(st$ps)
+    eval_capture_plot(st, FALSE)
+  }
 }
 
 #' Capture a plot and record its event after the output printed before it
@@ -317,11 +319,8 @@ eval_one = function(st, expr, i, sref) {
   if (is.finite(st$deadline)) {
     remaining = st$deadline - eval_now()
     if (remaining <= 0) {
-      eval_push(st, "error",
-                message = sprintf("Timed out after %gs before expression %d of %d.",
-                                  st$timeout, i, st$n_total),
-                call = NULL, class = "gptr_timeout", line = st$line, timeout = TRUE,
-                traceback = character())
+      eval_error(st, sprintf("Timed out after %gs before expression %d of %d.", st$timeout, i,
+                             st$n_total), "gptr_timeout", timeout = TRUE)
       return("timeout")
     }
     setTimeLimit(elapsed = remaining, transient = TRUE)
@@ -443,9 +442,8 @@ eval_on_error = function(st, cnd) {
   } else {
     conditionMessage(cnd)
   }
-  eval_push(st, "error", message = msg, call = eval_call_text(conditionCall(cnd)),
-            class = class(cnd), line = st$line, timeout = to,
-            traceback = if (to) character() else tb)
+  eval_error(st, msg, class(cnd), eval_call_text(conditionCall(cnd)), to,
+             if (to) character() else tb)
   invokeRestart("gptr_stop", if (to) "timeout" else "error")
 }
 
@@ -453,8 +451,7 @@ eval_on_error = function(st, cnd) {
 #' @noRd
 eval_overflow = function(st, cnd) {
   eval_flush(st)
-  eval_push(st, "error", message = conditionMessage(cnd), call = NULL, class = class(cnd),
-            line = st$line, timeout = FALSE, traceback = character())
+  eval_error(st, conditionMessage(cnd), class(cnd))
   "error"
 }
 
@@ -636,24 +633,11 @@ eval_close = function(st) {
   invisible()
 }
 
-#' The session whose run is evaluating (the run's `shell` binding), or NULL
-#' 04 section 7.6 types `gptr_run$session` as an id; without a session the process out store is
-#' used and no context pressure is assumed.
+#' The session whose run is evaluating (P06's `run$shell`; `run$session` is an id), or NULL
+#' Without a session the process out store is used and no context pressure is assumed.
 #' @noRd
 eval_session = function() {
-  run = run_current()
-  if (!is.environment(run)) return(NULL)
-  s = get0("shell", envir = run, inherits = FALSE)
-  if (inherits(s, "gptr_session")) s else NULL
-}
-
-#' The out store of the running session (its live record), or NULL for the process store
-#' @noRd
-eval_out_target = function() {
-  s = eval_session()
-  if (is.null(s)) return(NULL)
-  live = session_live(s)
-  if (is.environment(live) && exists("out", envir = live, inherits = FALSE)) live else NULL
+  run_current()$shell
 }
 
 #' Render the captured plots; attach the first ones and store the rest in one out entry
@@ -685,9 +669,10 @@ eval_plots_done = function(st) {
   if (length(stored)) {
     idx = vapply(st$events[stored], function(e) e$index, 1L)
     paths = vapply(st$events[stored], function(e) e$path, "")
+    s = eval_session()
     id = out_put(sprintf("plot %d: %s", idx, paths), meta = list(
       kind = "plots", index = idx, path = paths, width = w, height = h
-    ), session = eval_out_target())
+    ), session = if (is.null(s)) NULL else session_live(s))
     for (j in stored) st$events[[j]]$out_id = id
   }
   invisible()

@@ -480,20 +480,13 @@ env_block_skills = function(ctx, budget) {
 }
 
 #' The `eval.r` service: eval_r() through the `evaluator` record named by the `evaluator`
-#' setting (default "r"; IC-69)
+#' setting (default "r"; IC-69); an unknown name falls back to the record `r`, then to eval_r()
 #' @noRd
 env_eval_service = function(code, envir, ...) {
-  name = setting_get("evaluator", default = "r") %||% "r"
-  ev = registry_get("evaluator", name)
-  if (is.null(ev)) ev = registry_get("evaluator", "r")
-  fun = if (is.null(ev) || !is.function(ev$eval)) eval_r else ev$eval
+  ev = registry_get("evaluator", setting_get("evaluator", default = "r")) %||%
+    registry_get("evaluator", "r")
+  fun = if (is.function(ev$eval)) ev$eval else eval_r
   fun(code, envir, ...)
-}
-
-#' The `describe` service: gptr_describe() within the budget (ctx$describe())
-#' @noRd
-env_describe_service = function(x, budget = 150L) {
-  describe_value(x, budget)
 }
 
 #' agent_end hook: remember the workspace, so the next `<workspace_changes>` shows only what the
@@ -539,5 +532,4 @@ builtin_workspace = function(gptr) {
 
 on_load(ext_declare_builtin("workspace", builtin_workspace))
 on_load(ext_service_set("eval.r", env_eval_service, provided_by = "P09", builtin = "workspace"))
-on_load(ext_service_set("describe", env_describe_service, provided_by = "P09",
-                        builtin = "workspace"))
+on_load(ext_service_set("describe", describe_value, provided_by = "P09", builtin = "workspace"))

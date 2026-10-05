@@ -390,15 +390,14 @@ test_that("an overrunning method whose forced levels are NA is cut, not replaced
   expect_lte(env_tokens(out), 60)
 })
 
-test_that("NAMESPACE exports gptr_describe() and registers its 20 methods", {
+test_that("NAMESPACE exports gptr_describe() and registers its 15 methods", {
   nsfile = testthat::test_path("..", "..", "NAMESPACE")
   skip_if_not(file.exists(nsfile), "the source NAMESPACE is not reachable from here")
   ns = readLines(nsfile, encoding = "UTF-8")
   expect_true("export(gptr_describe)" %in% ns)
-  classes = c("\"function\"", "ArrowTabular", "DBIConnection", "Dataset", "Date", "POSIXct",
-              "Seurat", "SingleCellExperiment", "data.frame", "data.table", "default",
-              "dgCMatrix", "environment", "factor", "formula", "ggplot", "glm", "list", "lm",
-              "matrix")
+  classes = c("\"function\"", "ArrowTabular", "DBIConnection", "Dataset", "Seurat",
+              "SingleCellExperiment", "data.frame", "default", "dgCMatrix", "environment",
+              "formula", "ggplot", "list", "lm", "matrix")
   registered = grep("^S3method\\(gptr_describe,", ns, value = TRUE)
   expect_setequal(sub("^S3method\\(gptr_describe,(.*)\\)$", "\\1", registered), classes)
 })
