@@ -1,18 +1,7 @@
-# System 1 answer cache (contract 7.13 and 11.9; IC-70; IC-74). One record per element: in memory
-# (`the$s1_cache`) before a workspace exists, then <workspace>/cache/s1/<first 2 hex>/<sha256>.json.
-# Records hold the salted input hash and the question hash, never the input or the question text.
-# Report 14 section 3.5 gave the first key shape; IC-70 added the per-project salt and schema 2.
-# The `cache_commit` setting (`{s1: true}` by default, C-31) decides whether the directory is
-# committed: with `s1: false` it gets a `.gitignore` holding `*`.
-#
-# IC-74 (07-local-ollama.md sections 2 and 4): a call's identity beyond its reference and endpoint
-# (the adapter api, the model digest, the server version and the ordered digests and MIME types of
-# its images) joins the key, so new weights under the same tag, another server or other images
-# never answer from the cache; a choice key keeps the request order of its options. An Ollama
-# model (native or an emulation target) without a digest has no immutable identity: its answers
-# get NA keys, which the cache never stores. A cached record becomes a canonical answer only
-# after the same validation as a fresh one (s1_check_answer()); unknown values (usage,
-# probabilities, confidence) are stored as JSON null, never as 0 or "NA".
+# System 1 answer cache (contract 7.13 and 11.9; IC-70; IC-74, D-080). One record per element: in
+# memory (`the$s1_cache`) before a workspace exists, then <workspace>/cache/s1/<2 hex>/<key>.json.
+# Records hold the salted input hash and the question hash, never the input or the question text;
+# unknown values are stored as JSON null, never as 0.
 
 s1_cache_schema = 2L
 
@@ -67,19 +56,10 @@ s1_cache_salt = function(ws = workspace_dir()) {
   salt
 }
 
-#' The identity of a System 1 call beyond its reference and endpoint (07-local-ollama.md sections
-#' 2 and 4; IC-74)
+#' The identity of a System 1 call beyond its reference and endpoint (IC-74, D-080)
 #'
-#' `model` is the resolved and preflighted model record: its api names the adapter, and P05's
-#' discovery evidence gives a native model its `digest` and `server_version`. `images` is the
-#' call's `.opts$system1_images`, a list of `list(data = <raw>, mime)` records applied to every
-#' state; only the SHA-256 of their bytes is kept, in list order (names are ignored), with their
-#' MIME types (full checks against the model's limits belong to the request). Absent fields are
-#' left out, so TypeSafe's Jev gives `list(adapter = "typesafe-system-one")` and its alias stays
-#' the key (contract 11.9). An Ollama model (api `ollama-system-one`, or provider `ollama`, such
-#' as an emulation target) without a digest has only a mutable tag that the next discovery may
-#' point at other weights: `mutable = TRUE`, and s1_cache_keys() gives its answers NA keys (07
-#' section 2: no durable reuse without an immutable identity).
+#' Adapter api, digest, server version and each image's SHA-256 and MIME type in order; an Ollama
+#' model without a digest is `mutable`, and s1_cache_keys() gives it NA keys (07 section 2).
 #' @noRd
 s1_cache_identity = function(model, images = NULL) {
   if (!is.list(model)) arg_abort(model, "model", "a resolved model record (a list)")
@@ -108,11 +88,8 @@ s1_cache_identity = function(model, images = NULL) {
 
 #' Cache keys of the states of one question (vectorised over states; contract 11.9, IC-74)
 #'
-#' Without `identity` the key is contract 11.9's `list(schema = 2L, salt, endpoint, model,
-#' question, type, criteria, input)`; a choice question adds its option names in request order
-#' (`options`; canonical JSON sorts the criteria by name), and a non-empty `identity`
-#' (s1_cache_identity()) joins as `identity`. A mutable identity gives NA keys: such answers are
-#' never cached.
+#' A choice key adds its option names in request order (canonical JSON sorts the criteria); a
+#' mutable identity gives NA keys, which are never cached.
 #' @noRd
 s1_cache_keys = function(salt, endpoint, model, question, states, identity = NULL) {
   check_string(salt, "salt", empty = TRUE)
@@ -230,10 +207,7 @@ s1_cache_record = function(key, answer, model_version, alias, question, state, s
 #' Rebuild the canonical answer of a cache record, or NULL (a miss) when the record does not hold
 #' a valid answer to `question`
 #'
-#' Probabilities are re-keyed into the question's request order and checked like a fresh answer
-#' (s1_check_answer()): a choice among the options that its probabilities support, a probability
-#' map over exactly the options, a fractional score that its probabilities give. A score's legend
-#' comes from the question. JSON null is NA (unknown).
+#' Checked like a fresh answer (s1_check_answer()); JSON null is NA (unknown).
 #' @noRd
 s1_cache_answer = function(record, question) {
   if (!is.list(record) || !is.list(question)) return(NULL)

@@ -1,20 +1,7 @@
 # Opt-in System 1 emulation through a chat model's structured output (contract 7.13, IC-19;
-# architecture 4.1.5 and 8.2). Used only for "emulate:<provider>/<id>" references while
-# gptr_config(system1 = "emulate:<ref>") is set (the target resolution of s1-route.R); answers are
-# marked uncalibrated and a once-per-process notice says so. The prompt and the schema follow
-# typesafe-ai/system-one-adapter-python 0.2.1 (MIT; _client.py:66-94, _schema.py:153-247) as
-# ported and verified in report 04 sections 3.8 and 5.3 (strategy A, probabilities mode); "<-"
-# became "=" and match.arg() was dropped. Requests go through gptr's own provider layer
-# (provider_stream() through s1_stream(), REQ-11).
-#
-# IC-74 (07-local-ollama.md sections 2.1, 3 and 5): the chat model is preflighted on its provider
-# before any state is serialised or sent (a decision-only model cannot be emulated, and an Ollama
-# chat model keeps the local-only policy). The stated probabilities are decoded here, exactly
-# once, into the canonical records every adapter returns: `list(type = "noul", prob)`, and choice
-# and score records whose probabilities are a named double vector in request order (a score with
-# its legend), validated against the request (answer ids, allowed labels, finite values in
-# [0, 1], a stated distribution). s1_dispatch() then checks them like any other adapter's.
-# Unreported usage stays NA; emulated answers stay uncalibrated.
+# architecture 4.1.5 and 8.2; IC-74, D-082): canonical answers, always uncalibrated. The prompt
+# and schema follow typesafe-ai/system-one-adapter-python 0.2.1 (MIT; _client.py:66-94,
+# _schema.py:153-247) as ported in report 04 sections 3.8 and 5.3 (probabilities mode).
 
 s1_emu_prompt = paste(
   "Evaluate every question using only the supplied document.",
@@ -139,9 +126,8 @@ s1_emu_bad = function(reason) {
 
 #' The model's reply as canonical answers by question id, in question order (IC-74)
 #'
-#' Fences are stripped and the JSON decoded; the `answers` object must answer exactly the
-#' questions asked (07 section 3: expected answer ids). Anything else signals
-#' gptr_error_s1_response.
+#' The `answers` object must answer exactly the questions asked (07 section 3); anything else
+#' signals gptr_error_s1_response.
 #' @noRd
 s1_emu_wire = function(text, questions) {
   obj = tryCatch(json_decode(s1_emu_strip(text)), error = function(e) e)
@@ -171,12 +157,8 @@ s1_emu_wire = function(text, questions) {
 
 #' One stated answer as a canonical record (IC-74)
 #'
-#' A noul answer is the stated probability. A choice or score answer must state one probability
-#' in [0, 1] for exactly the allowed labels; a distribution that misses a sum of 1 by more than
-#' 1e-6 is rescaled (the adapter's normalisation), and one that states no probability at all is
-#' refused rather than replaced by a uniform one. The choice is the most probable label (the first
-#' in request order on a tie); the score is the expected level, kept fractional, with the
-#' question's legend; the confidences use TypeSafe's formulas (report 04 section 4.8).
+#' A distribution off sum 1 by more than `s1_emu_sum_tol` is rescaled, one with no probability at
+#' all is refused (D-082); confidences use TypeSafe's formulas (report 04 section 4.8).
 #' @noRd
 s1_emu_answer = function(v, q, id) {
   type = q[["type"]]
@@ -238,12 +220,8 @@ s1_emu_final = c("redirect", "spend_cap", "retry_after")
 
 #' The outcome of a stream that failed or was aborted, from its `error` event `err`
 #'
-#' The System 1 class follows the cause: a timeout or network failure is a connection error and
-#' an HTTP status gives its own class (as s1_transport_outcome()); an abort, a failure found
-#' locally (the adapter or its request spec refused, an internal error) or one without a class
-#' is gptr_error_s1_response. Only transport failures are retried (408, 429, 5xx, network;
-#' contract 7.13), never an abort or a class of `s1_emu_final`. The event's class is the
-#' condition's `error_type`.
+#' The class follows the cause as in s1_transport_outcome(); an abort or a local failure is
+#' gptr_error_s1_response. Neither an abort nor a class of `s1_emu_final` is retried (IC-64).
 #' @noRd
 s1_emu_failed = function(msg, err, reason, model) {
   st = err[["status"]]
@@ -274,10 +252,8 @@ s1_emu_failed = function(msg, err, reason, model) {
 
 #' The outcome of one emulated request
 #'
-#' A failed or aborted stream is classified by s1_emu_failed(). A reply that did not stop
-#' normally (cut at the length limit, a refusal) or that is malformed is gptr_error_s1_response,
-#' never retried; such a failure still carries the reply's `usage`, since the provider charged
-#' for it (s1_dispatch() counts it). Unreported token counts stay NA (IC-74).
+#' A reply that did not stop normally or is malformed is gptr_error_s1_response, never retried,
+#' and still carries the reply's charged `usage` (D-082).
 #' @noRd
 s1_emu_outcome = function(msg, err, questions, model) {
   reason = if (is.list(msg)) msg[["stop_reason"]] else NULL
@@ -306,9 +282,8 @@ s1_emu_outcome = function(msg, err, questions, model) {
 
 #' The chat model of an emulation, checked before any state is serialised or sent (IC-74)
 #'
-#' A decision-only (classifier) model cannot hold the conversation emulation needs; any other
-#' model gets P05's pure request preflight on its registered provider, with the run's protected
-#' safety record (NULL keeps the local-only default). Returns the checked model.
+#' A decision-only model is refused; any other gets P05's preflight under the run's safety record
+#' (NULL keeps the local-only default).
 #' @noRd
 s1_emu_ready = function(model, safety = NULL) {
   if (!is.list(model)) arg_abort(model, "model", "a model record from model_resolve()")
@@ -335,9 +310,8 @@ s1_emu_notice = function(model) {
 
 #' The abort signal of one emulated request (contract 8.1 `signal`)
 #'
-#' Aborted when the emulation lets go of the request (s1_emu_release()) or while the caller's
-#' own signal `parent` is aborted. Both fields are active bindings that read the caller's signal
-#' and never write to it: that signal may be shared by other requests of the caller.
+#' Aborted when released (s1_emu_release()) or while the caller's `parent` signal is; it never
+#' writes to the caller's signal, which other requests may share.
 #' @noRd
 s1_emu_signal = function(parent = NULL) {
   own = new.env(parent = emptyenv())
@@ -373,10 +347,8 @@ s1_emu_jobs = function() {
 
 #' Let go of the requests still open when a call ends early (an interrupt or an error)
 #'
-#' s1_round() cancels their transfers, but provider_stream() also watches each HTTP stream with
-#' a reactor task that ends only with the stream; aborting the request's own signal ends the
-#' stream, and its watch task with it, at the next pump (07 section 5: cancellation must not
-#' strand owned requests). A request that already finished is not touched.
+#' Aborting each request's own signal ends its stream and the stream's watch task at the next
+#' pump (D-082; 07 section 5: cancellation must not strand owned requests).
 #' @noRd
 s1_emu_release = function(jobs, reason = "The System 1 emulation was interrupted.") {
   open = jobs$open
@@ -388,12 +360,11 @@ s1_emu_release = function(jobs, reason = "The System 1 emulation was interrupted
   invisible(length(open))
 }
 
-#' Jobs that send each state to the chat model through provider_stream() (the L1 wrapper
-#' s1_stream()); each job returns the transfer or task id, so an interrupt can cancel it
+#' Jobs that send each state to the chat model through s1_stream(); each job returns the transfer
+#' or task id, so an interrupt can cancel it
 #'
-#' `stream_opts` holds the protected `safety` record and the caller's abort `signal` (either may
-#' be NULL). Each request gets its own signal (s1_emu_signal(), linked to the caller's) and is
-#' listed in `jobs` until it reports, so the caller can let go of it (s1_emu_release()).
+#' Each request gets its own signal linked to `stream_opts$signal` and stays in `jobs` until it
+#' reports (s1_emu_release()).
 #' @noRd
 s1_emu_start = function(model, questions, stream_opts = list(), jobs = s1_emu_jobs()) {
   schema = s1_emu_schema(questions)
@@ -422,9 +393,8 @@ s1_emu_start = function(model, questions, stream_opts = list(), jobs = s1_emu_jo
 
 #' Emulated answers for states: one chat request per unique state, uncalibrated
 #'
-#' The s1_dispatch() shape with `engine = "emulated:structured"` and `calibrated = FALSE`.
-#' Requests still open when the call ends early are let go of (s1_emu_release()). `safety` is
-#' the run's protected safety record (s1_ready()), for the preflight and every request.
+#' The s1_dispatch() shape; `safety` is the run's protected safety record (s1_ready()), for the
+#' preflight and every request.
 #' @noRd
 s1_emulate = function(model, states, questions, safety = NULL) {
   model = s1_emu_ready(model, safety)
@@ -437,8 +407,7 @@ s1_emulate = function(model, states, questions, safety = NULL) {
 
 #' classify$run of the s1-emulate adapter: one state, canonical answers or a condition
 #'
-#' `opts` is the adapter options (contract 8.1); its `safety` and `signal` are read by exact
-#' name and handed to the stream (the caller's signal through the request's own, linked one).
+#' `opts$safety` and `opts$signal` (contract 8.1) are read by exact name and handed to the stream.
 #' @noRd
 s1_emulate_classify = function(model, state, questions, opts) {
   opts = if (is.list(opts)) opts else list()

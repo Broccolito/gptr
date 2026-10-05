@@ -1,22 +1,7 @@
-# System 1 client (contract 7.13, 8.1; IC-64, IC-68, IC-74): questions with the wire type `noul`,
-# the typesafe-system-one adapter and answer parsing. Wire facts are those of report 04a, measured
-# against the live API: the types are `noul`, `choice` and `score` ("bool" is rejected with HTTP
-# 400), a score's criteria are a JSON array, choice probabilities do not come in request order,
-# probabilities are rounded to two decimals, and errors are `detail.error_type`/`detail.message`.
-# Adapted from report 04 section 5.2 (s1_client.R): httr2 was replaced by gptr's reactor (report
-# 04 verification log item 14: req_perform_parallel() retries without bound) and "<-" became "=".
-#
-# IC-74 (07-local-ollama.md section 3): classify$parse(model, status, headers, body, questions)
-# receives the ordered questions and normalises the wire answers exactly once into canonical
-# records keyed by question id: `list(type = "noul", prob)`, `list(type = "choice", choice,
-# probabilities, confidence)` and `list(type = "score", score, probabilities, confidence,
-# legend)`, probabilities named in request order. Values are validated against the request
-# (finite values, bounds, answer ids, option names, probability sums, score reconstruction); a
-# score stays the fractional expected level. Unreported usage stays unknown (NA). The canonical
-# records, their primitives (s1_types, s1_round_tol, s1_condition(), s1_num(), s1_unit(),
-# s1_option_keys(), s1_answer_probs(), s1_parse_choice(), s1_parse_score()) and the common
-# validator s1_check_answers() are in s1-types.R (L1), where P12's check_adapter() checks
-# classifier adapters with them too (FIX-6).
+# System 1 client (contract 7.13, 8.1; IC-64, IC-68, IC-74): wire questions, the
+# typesafe-system-one adapter and the bounded concurrent request driver. Wire facts are report
+# 04a's: types `noul`, `choice` and `score`; score criteria are an array; choice probabilities come
+# in any order, rounded to two decimals; errors are `detail.error_type`/`detail.message`.
 
 s1_max_choices = 255L
 s1_max_levels = 10L
@@ -36,11 +21,8 @@ s1_input_sentence = function(labels) {
 
 #' Build the wire question (id "answer") from the prompt and the answer shape
 #'
-#' Returns `list(id, type, wire, options, factor)`: `wire` is the question object of report 04a,
-#' `options` the choice labels or level descriptions in request order, `factor` TRUE when
-#' `choices` was a factor. `decision` is the resolved model's decision record (07-local-ollama.md
-#' section 2): its `types` restrict the question type and its `max_options` caps choice options
-#' and score levels in place of TypeSafe's documented 255 options and 10 levels (IC-74).
+#' Returns `list(id, type, wire, options, factor)`. The model's `decision` record restricts the
+#' types and caps options and levels in place of TypeSafe's 255 and 10 (IC-74, 07 section 2).
 #' @noRd
 s1_question = function(prompt, labels = character(), choices = NULL, levels = NULL,
                        decision = NULL) {
@@ -116,8 +98,7 @@ s1_question_choice = function(instructions, choices, max_options) {
        options = opts, factor = is_factor)
 }
 
-#' A score question: 2 to `max_levels` level descriptions, low to high (0-based levels on the
-#' wire)
+#' A score question: 2 to `max_levels` level descriptions, low to high (0-based on the wire)
 #' @noRd
 s1_question_score = function(instructions, levels, max_levels) {
   lv = as.character(levels)
@@ -160,8 +141,7 @@ s1_delay = function(x) {
 
 #' A message or type field of an error body as one string, NULL when absent
 #'
-#' Strings are joined; any other JSON value is shown as compact JSON. The text is the service's
-#' (untrusted): gptr_condition() pastes and redacts it, never interpolates it.
+#' The text is untrusted: gptr_condition() pastes and redacts it, never interpolates it.
 #' @noRd
 s1_text = function(x) {
   if (is.null(x)) return(NULL)
@@ -179,9 +159,7 @@ s1_error_item = function(e) {
   paste0(paste(loc, collapse = "."), ": ", msg)
 }
 
-#' An error body in any of the shapes of report 04 section 3.6 as a System 1 condition:
-#' `{"detail": {"error_type", "message"}}`, `{"detail": [{"loc", "msg"}]}` (422),
-#' `{"message", "error_type"}` (Vercel) and `{"error": {"message", "type"}}` (OpenAI-style)
+#' An error body in any of the shapes of report 04 section 3.6 as a System 1 condition
 #' @noRd
 s1_http_error = function(status, obj, request_id, model_id, retry_after = NULL) {
   msg = NULL
@@ -227,8 +205,7 @@ s1_header = function(headers, name) {
   if (is.na(k)) NA_character_ else as.character(headers[[k]])[1L]
 }
 
-#' A token count the service reported, NA unless it is a nonnegative finite number (IC-74: missing
-#' usage remains unknown)
+#' A reported token count, NA unless it is a nonnegative finite number (IC-74)
 #' @noRd
 s1_count = function(x) {
   n = s1_num(x)
@@ -261,10 +238,8 @@ s1_typesafe_build = function(model, state, questions, opts) {
 
 #' classify$parse of typesafe-system-one: one whole JSON body (contract 8.1, IC-74)
 #'
-#' `questions` are the ordered wire questions of the request, by id. Returns
-#' `list(answers, usage = list(input, output), model_version, request_id)` with canonical answers
-#' (s1_parse_answers()), or an unsignalled `gptr_error_s1_*` condition: an error body by its
-#' status, a malformed 200 body as `s1_response` carrying the status and request id.
+#' Returns `list(answers, usage, model_version, request_id)` with canonical answers, or an
+#' unsignalled `gptr_error_s1_*` condition carrying the status and request id.
 #' @noRd
 s1_typesafe_parse = function(model, status, headers, body, questions) {
   rid = s1_header(headers, "x-typesafe-request-id")
@@ -329,14 +304,8 @@ s1_legend = function(question, keys) {
 
 #' One wire answer as a canonical answer, probabilities re-keyed by option name (IC-74)
 #'
-#' Canonical answers are `list(type = "noul", prob)`, `list(type = "choice", choice,
-#' probabilities, confidence)` or `list(type = "score", score, probabilities, confidence,
-#' legend)`; `probabilities` is a named double vector in request order. The service's confidence
-#' is kept and recomputed with TypeSafe's formulas only when it is absent (report 04
-#' verification log item 5). An empty probability map is missing, not zero: probabilities and
-#' confidence are NA. A missing choice is the most probable option (the first in request order
-#' on a tie); a missing score is the expected level, kept fractional. Malformed or inconsistent
-#' answers are unsignalled `gptr_error_s1_response` conditions, never values.
+#' The service's confidence is kept, recomputed only when absent; an empty probability map is
+#' unknown (NA), not zero. Problems are unsignalled `gptr_error_s1_response` conditions.
 #' @noRd
 s1_parse_answer = function(answer, question, model_id = NA_character_) {
   bad = function(msg) s1_condition("s1_response", msg, model = model_id)
@@ -374,10 +343,8 @@ s1_parse_answer = function(answer, question, model_id = NA_character_) {
   s1_parse_score(answer[["score"]], p, keys, conf, s1_legend(question, keys), bad)
 }
 
-#' All answers of one response by question id, or the condition of the first problem
-#'
-#' Every question must be answered and nothing else (07 section 3: expected answer ids); the
-#' result follows the order of `questions`.
+#' All answers of one response, exactly the questions asked in their order (07 section 3), or the
+#' condition of the first problem
 #' @noRd
 s1_parse_answers = function(answers, questions, model_id = NA_character_) {
   bad = function(msg) s1_condition("s1_response", msg, model = model_id)
@@ -406,24 +373,14 @@ s1_parse_answers = function(answers, questions, model_id = NA_character_) {
 }
 
 # ---- concurrent requests on the reactor ---------------------------------------------------------
-# Report 04's verification log (item 14) is why this is not httr2: req_perform_parallel() retries
-# 429/503 without bound and ignores max_tries. The client keeps at most `gptr.s1_max_active` jobs
-# in flight (a model's decision record may lower it, IC-74), runs at most `gptr.s1_rounds` rounds
-# and resubmits only retryable failures; the wait between rounds is a reactor timer, never a sleep
-# inside a callback. IC-74 (07-local-ollama.md sections 2-5): the resolved model is preflighted
-# before an adapter, a credential or a state is touched; its own api picks the adapter; every
-# adapter returns canonical answers, which s1_dispatch() validates without a wire parser; unknown
-# usage and calibration stay NA. A model whose decision record sets `max_active` (Clef: 1), and
-# any native Ollama model without one (one request per server, 07 section 2), is also admitted
-# per server: the process-wide slot table (s1_slots()) holds at most that many requests in flight
-# to one origin across all calls, and a native Ollama request never looks up a key.
+# At most `gptr.s1_max_active` jobs in flight and `gptr.s1_rounds` rounds that resubmit only
+# retryable failures; waits are reactor timers, never a sleep inside a callback. A model with a
+# per-server limit is also admitted per origin across calls (s1_slots(); IC-74, 07 section 2).
 
 #' One HTTP transfer on the reactor; `on_done(status, headers, body)` receives the whole body
 #'
-#' The reactor's own retries are off (`max_attempts = 1`): System 1 retries in bounded rounds that
-#' resubmit only the failed elements (s1_drive()). Admission follows the global `gptr.max_active`
-#' and the provider's token bucket, which holds the provider record's static `rate` (IC-64), so
-#' System 1 admission is process-wide.
+#' The reactor's own retries are off (s1_drive() retries in rounds); admission follows
+#' `gptr.max_active` and the provider's token bucket (IC-64).
 #' @noRd
 s1_http = function(spec, provider, on_done, on_fail) {
   buf = new.env(parent = emptyenv())
@@ -458,9 +415,8 @@ s1_outcome = function(res, model_id = NA_character_) {
 
 #' The outcome of a transport failure (a classed, unsignalled condition from the reactor)
 #'
-#' The reactor hands a non-2xx response to `on_fail()` as a condition classified from its status
-#' and body (contract 8.2), so the System 1 class follows the status; timeouts and network
-#' failures without a status are connection errors; a refused redirect is never retried (IC-64).
+#' The class follows the status (contract 8.2), timeouts and network failures are connection
+#' errors, and a refused redirect is never retried (IC-64).
 #' @noRd
 s1_transport_outcome = function(cnd, model) {
   st = cnd[["status"]]
@@ -481,9 +437,8 @@ s1_transport_outcome = function(cnd, model) {
 
 #' Pump the reactor until `until()` holds
 #'
-#' A nested pump (System 1 called from a router, a hook or model code while another pump runs)
-#' passes no run ids, so it waits for its own transfers and timers and never starts a FIFO tool
-#' of another run (contract 8.2, IC-57).
+#' A nested pump passes no run ids, so it never starts another run's FIFO tool (contract 8.2,
+#' IC-57).
 #' @noRd
 s1_pump = function(until) {
   if (reactor_depth() > 0L) {
@@ -534,10 +489,8 @@ s1_slot_shift = function(key, by) {
   invisible(max(n, 0L))
 }
 
-#' The requests a model's own server takes at once (07 section 2): the `max_active` of its
-#' decision record (a number >= 1; above the integer range it means "no own limit below the
-#' global cap"), else, for a native Ollama model, Ollama's default of one active request per
-#' server (s1_ollama_max_active), so only an explicit record raises it; NULL otherwise
+#' The requests a model's own server takes at once (07 section 2): its decision record's
+#' `max_active`, else one for a native Ollama model (s1_ollama_max_active), else NULL
 #' @noRd
 s1_own_active = function(model) {
   d = model[["decision"]]
@@ -548,12 +501,8 @@ s1_own_active = function(model) {
   if (s1_ollama_native(model)) s1_ollama_max_active else NULL
 }
 
-#' The per-server gate of a request (07 section 2: local Clef concurrency defaults to one active
-#' request per server, the global System 1 cap stays an upper bound): `list(key, cap)` for a model
-#' with a per-server limit (s1_own_active(): its decision record's `max_active`, or one for any
-#' native Ollama model without it), keyed by the canonical origin of the provider's endpoint, so
-#' every call (and every provider record) that reaches that server shares the cap; NULL otherwise
-#' (TypeSafe's admission is P04's process-wide token bucket, IC-64)
+#' The per-server gate of a request (07 section 2): `list(key, cap)` keyed by the endpoint's
+#' canonical origin, so every call to that server shares the cap; NULL without s1_own_active()
 #' @noRd
 s1_gate = function(model, base_url) {
   if (is.null(s1_own_active(model))) return(NULL)
@@ -565,11 +514,8 @@ s1_gate = function(model, base_url) {
 
 #' One round: start the jobs with at most `max_active` in flight and pump until all reported
 #'
-#' `start(k, done)` starts job `k` and returns a reactor id (or NULL for a synchronous job);
-#' `done(outcome)` is called exactly once per job. An interrupt cancels what is still in flight.
-#' With a per-server `gate` (s1_gate()) a job starts only while the server has a free slot in the
-#' process-wide table; each job holds one from its start until its `done()`, and the slots of jobs
-#' that never reported (an interrupt, a start that failed) are given back on exit.
+#' `start(k, done)` returns a reactor id or NULL and calls `done(outcome)` once; a job holds its
+#' `gate` slot until then, and on exit unreported jobs are cancelled and their slots given back.
 #' @noRd
 s1_round = function(idx, start, max_active, gate = NULL) {
   st = new.env(parent = emptyenv())
@@ -619,9 +565,8 @@ s1_round = function(idx, start, max_active, gate = NULL) {
 
 #' Bounded rounds: resubmit only retryable failures, waiting the largest requested delay
 #'
-#' Before round r + 1 the client waits for the largest `retry-after` of round r (capped at 60 s)
-#' or else `min(0.5 * 2^(r - 1), 5)` seconds: the TypeSafe SDK schedule (report 04 section 2.6)
-#' without its random jitter, since gptr never touches the RNG (IC-61). `gate` is s1_round()'s.
+#' Else `min(0.5 * 2^(r - 1), 5)` s, the TypeSafe SDK schedule without its jitter: gptr never
+#' touches the RNG (IC-61).
 #' @noRd
 s1_drive = function(n, start, max_active, rounds, gate = NULL) {
   results = vector("list", n)
@@ -657,11 +602,10 @@ s1_errors_df = function(conditions) {
              message = vapply(conditions[bad], conditionMessage, ""), stringsAsFactors = FALSE)
 }
 
-# ---- admission and provenance (IC-74; s1_check_answers() is in s1-types.R) ---------------------
+# ---- admission and provenance (IC-74) ----------------------------------------------------------
 
-#' The requests one System 1 call may keep in flight: `gptr.s1_max_active`, lowered by the
-#' model's own server limit (s1_own_active(): the decision record's `max_active`, and one for a
-#' native Ollama model without it; 07 section 2); the global cap stays an upper bound
+#' The requests one System 1 call may keep in flight: `gptr.s1_max_active`, lowered by
+#' s1_own_active()
 #' @noRd
 s1_active_cap = function(model) {
   cap = check_number(gptr_opt("s1_max_active"), "gptr.s1_max_active", min = 1, int = TRUE)
@@ -670,9 +614,8 @@ s1_active_cap = function(model) {
   cap
 }
 
-#' The calibration of a call: the results' statements (absent ones take `default`) combined
-#' conservatively, TRUE only when every result is calibrated, FALSE when any is explicitly
-#' uncalibrated (emulation), NA otherwise (07 section 3; s1_meta_combine())
+#' The calibration of a call: the results' statements (absent ones take `default`) combined by
+#' s1_meta_combine() (07 section 3)
 #' @noRd
 s1_calibration = function(default, stated) {
   if (!length(stated)) return(default)
@@ -680,11 +623,8 @@ s1_calibration = function(default, stated) {
   s1_meta_combine(metas)[["calibrated"]] %||% default
 }
 
-#' The provenance of a call (07 section 3): provider id, adapter api, execution kind, locality,
-#' model digest, server version and calibration provenance
-#'
-#' The checked model's fields (P05's discovery evidence, applied by the preflight) come before
-#' what an adapter result reports; locality is "unknown" unless one of them establishes it.
+#' The provenance of a call (07 section 3): the checked model's fields come before what an
+#' adapter result reports, and locality is "unknown" unless one of them establishes it
 #' @noRd
 s1_provenance = function(model, values, engine) {
   chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
@@ -709,13 +649,8 @@ s1_provenance = function(model, values, engine) {
 
 #' Deduplicate states, run one job per unique state and shape the result
 #'
-#' Returns `list(answers, conditions, errors, usages, usage = list(input, output, cost),
-#' model_version, request_ids, engine, calibrated, provenance)`; `answers[[i]]` holds the
-#' canonical answers of state i by question id, or NULL when `conditions[[i]]` holds its failure.
-#' Unknown usage stays NA in the sums (IC-74, D-076); the sums also count the `usage` a failed
-#' outcome carries (a completed reply that was refused, s1_emu_outcome()); `calibrated` is the
-#' default unless the results state it (s1_calibration()). `gate` is the per-server admission of
-#' s1_gate(), NULL for none.
+#' `answers[[i]]` holds state i's canonical answers, or NULL when `conditions[[i]]` holds its
+#' failure. Unknown usage stays NA (IC-74, D-076).
 #' @noRd
 s1_dispatch = function(model, states, questions, start_for, engine, calibrated, gate = NULL) {
   max_active = s1_active_cap(model)
@@ -736,8 +671,7 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated, 
   for (j in seq_along(results)) {
     r = results[[j]]
     if (!isTRUE(r$ok)) {
-      # a reply that completed but was refused (a cut or malformed emulated answer) was charged:
-      # its outcome carries the usage the provider reported, which counts like any other
+      # a completed but refused reply was still charged (D-082)
       fu = r[["usage"]]
       if (is.list(fu)) {
         input = input + s1_count(fu[["input"]])
@@ -787,11 +721,8 @@ s1_request_id = function(value) {
   if (is.character(rid) && length(rid) == 1L && !is.na(rid) && nzchar(rid)) rid else NA_character_
 }
 
-#' The meta$engine of a classifier model: its provider id (contract 5.2 as amended by IC-74; the
-#' built-in providers give "typesafe" and "ollama"), or "emulated:structured" for the s1-emulate
-#' adapter. An adapter result may name its own engine; P01's fake classifier always reports
-#' "fake" (contract 12.1), so its api gives "fake" here too and a call answered from the cache
-#' names the same engine as a fresh one.
+#' The meta$engine of a classifier model: its provider id (contract 5.2, IC-74),
+#' "emulated:structured" for s1-emulate and "fake" for P01's fake classifier (contract 12.1)
 #' @noRd
 s1_engine = function(model) {
   api = model[["api"]]
@@ -800,26 +731,10 @@ s1_engine = function(model) {
   model[["provider"]] %||% NA_character_
 }
 
-#' Send states to a classifier model (contract 7.13; IC-74)
+#' Send states to a classifier model (contract 7.13; IC-74): s1_dispatch()'s result
 #'
-#' Preflights the resolved model before anything else (07 section 2.1; `opts$safety` is the run's
-#' frozen safety record from P08/P06, never built from settings or call options; NULL keeps the
-#' local-only default), picks the adapter from the model's own api, deduplicates states, keeps at
-#' most `gptr.s1_max_active` requests in flight (or fewer, by the model's decision record) and
-#' runs at most `gptr.s1_rounds` rounds that resubmit only failures (408, 429, 5xx, network;
-#' `retry-after` capped at 60 s). `opts$provider` is the provider spec, for `model = <spec>`.
-#' Both are read by exact name: a longer option such as `safety_snapshot` is not the safety record.
-#' `opts$images` (the call's `.opts$system1_images`, already checked against the model by the
-#' route, IC-74) reaches the adapter as its `images` option, for every state.
-#'
-#' IC-74 (07 sections 2-5): a native Ollama model (api `ollama-system-one`) is also checked by
-#' s1_ollama_ready(), never gets a credential looked up (none is ever sent to Ollama), and its
-#' requests pass the per-server gate (s1_gate()). A `gptr_error_s1_*` condition signalled by an
-#' adapter's `build` (a state whose request exceeds the endpoint's limits) fails that element
-#' alone; any other error of `build` ends the call.
-#' @return `list(answers = list per state, usage, model_version, request_ids, errors = df)` plus
-#'   `conditions`, `usages`, `engine`, `calibrated` (NA unless the adapter states it) and
-#'   `provenance`.
+#' The model is preflighted first, under `opts$safety`, the run's frozen safety record (NULL:
+#' local-only); a `gptr_error_s1_*` from an adapter's `build` fails that state alone.
 #' @noRd
 s1_request = function(model, states, questions, opts = list()) {
   provider = opts[["provider"]] %||% s1_provider(model$provider)
@@ -898,19 +813,16 @@ s1_section_body = paste0(
   "open-ended reasoning, writing and code for yourself."
 )
 
-#' The system1 section (T0, order 650, budget 150; contract 9.3, IC-68): shown only when a System
-#' 1 is usable, that is when model_default("system1") is non-NULL (a configured System 1 model or
-#' emulation, a TypeSafe key, or a verified local native classifier, which needs no key: IC-74,
-#' 07-local-ollama.md section 5)
+#' The system1 section (T0, order 650, budget 150; contract 9.3, IC-68), shown only when
+#' model_default("system1") finds a usable System 1 (IC-74)
 #' @noRd
 s1_section_text = function(ctx) {
   if (is.null(s1_default_ref())) return(NULL)
   s1_section_body
 }
 
-#' A Jev model entry for a provider record (report 04 section 2.5: $0.042 per million input
-#' tokens, output free; 64k context direct, 32k through gateways). Prices are a data frame, the
-#' shape P02 validates for model records (catalog JSON lists become one in P05's resolver).
+#' A Jev model entry for a provider record (report 04 section 2.5); prices are a data frame, the
+#' shape P02 validates for model records
 #' @noRd
 s1_jev_model = function(id, name, context = 64000) {
   list(id = id, name = name, family = "jev", type = "classifier", release_date = "2026-09-15",
@@ -922,8 +834,7 @@ s1_jev_model = function(id, name, context = 64000) {
 }
 
 #' The provider records: `typesafe` (architecture 8.2; static rate of IC-64) and the gateway hosts
-#' that serve the same protocol (report 04 sections 2.9 and 4.4; Cloudflare needs its own envelope
-#' and an account id and is left for later, as the report recommends)
+#' that serve the same protocol (report 04 sections 2.9 and 4.4)
 #' @noRd
 s1_provider_records = function() {
   list(
@@ -944,10 +855,8 @@ s1_provider_records = function() {
   )
 }
 
-#' builtin:system1 (contract 7.13, 10.3): the adapters typesafe-system-one, ollama-system-one
-#' (IC-74: native Ollama decision models, 07-local-ollama.md section 3; P05's built-in `ollama`
-#' record serves them) and s1-emulate, the provider records, the classifier route (order 10) and
-#' the system1 prompt section; the s1.decide service is declared below and owned by this built-in
+#' builtin:system1 (contract 7.13, 10.3; IC-74): the three classifier adapters, the provider
+#' records, the classifier route (order 10) and the system1 prompt section
 #' @noRd
 builtin_system1 = function(gptr) {
   gptr$register(gptr_adapter("typesafe-system-one", transport = "http_json",

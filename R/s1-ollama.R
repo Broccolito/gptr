@@ -1,26 +1,7 @@
-# Native Ollama System One decisions (IC-74; 07-local-ollama.md sections 2-6; research report
-# 04b): the `ollama-system-one` classifier adapter, a non-streaming `http_json` adapter for
-# Ollama's `POST /v1/systemone` (Clef, Clef Flash; Ollama 0.35.1 or later). Layer L4 of the s1
-# area: the model layer is reached through s1-types.R's wrappers only.
-#
-# The request is `{model, state, questions, images?}`: the state is text, a JSON object or an
-# array; 1 to 64 named questions of the types `noul`, `choice` (2 to 26 options) and `score` (2 to
-# 26 levels); images are raw base64 PNG, JPEG or WebP strings (never URLs or data URLs), the same
-# for every state of a call. Text bodies are limited to 64 KiB and image-bearing bodies to 32 MiB,
-# and a model's decision record may only lower these limits. No key is ever sent: the loopback
-# server needs none, and a TypeSafe or other cloud credential never travels to Ollama. The
-# response `{model, answers, usage}` is normalised exactly once into the canonical records of 07
-# section 3 (s1_check_answer()'s shape), validated against the request: answer ids, types,
-# option names, probability bounds and sums, Ollama's own confidence `1 - H(p) / log(N)` (zero
-# probabilities add no entropy; Jev's formulas never apply), choices their probabilities support
-# and fractional scores their probabilities give (sums, choices and scores at Ollama's
-# four-decimal rounding). Errors are `{"error": "..."}` bodies. A native model is admitted one
-# request at a time per server unless its decision record sets its own `max_active` (s1_gate()).
-#
-# The identity of a native answer is the model digest and server version that P05's discovery
-# established. Live cache keys carry it (s1_cache_identity()); next to each cached answer a pin
-# records that identity under a key without it, so offline replay finds the answer, and the
-# identity frozen with it, without discovery, /api/show or any request (07 section 4).
+# Native Ollama System One decisions (IC-74; 07-local-ollama.md sections 2-6; report 04b; D-120):
+# the `ollama-system-one` http_json adapter for Ollama's `POST /v1/systemone` (Clef, Clef Flash;
+# Ollama 0.35.1 or later). No key is ever sent to Ollama. Native answers are pinned with the
+# identity that gave them, so offline replay needs no discovery (07 section 4).
 
 s1_ollama_api = "ollama-system-one"
 
@@ -37,14 +18,11 @@ s1_ollama_mimes = c("image/png", "image/jpeg", "image/webp")
 # `max_active` (07 section 2: local Clef concurrency defaults to one active request per server)
 s1_ollama_max_active = 1L
 
-# Half a unit of the fourth decimal: Ollama rounds probabilities and scores to four decimals, so
-# each value is off by at most this much; probability sums, the support of a choice and the
-# reconstruction of a score are checked at this rounding (TypeSafe's is s1_round_tol)
+# Half a unit of Ollama's four-decimal rounding, the tolerance of its sums, choices and scores
 s1_ollama_round_tol = 5e-5
 
-# Slack between a wire confidence and the entropy confidence of the reported probabilities: the
-# probabilities come rounded, and Jev's peak formula differs by far more on any distribution
-# that is not uniform or certain
+# Slack between a wire confidence and the entropy confidence of the rounded probabilities (Jev's
+# peak formula differs by far more)
 s1_ollama_conf_tol = 0.01
 
 # Seconds to the first byte of an answer: a non-streaming decision arrives whole, after the model
@@ -57,10 +35,8 @@ s1_ollama_first_byte = 120
 #' @noRd
 s1_ollama_native = function(model) is.list(model) && identical(model[["api"]], s1_ollama_api)
 
-#' The decision endpoint of a configured Ollama base URL: `<origin><root>/v1/systemone`, where the
-#' root is the base path without trailing slashes and without a final `/v1` (as P05's discovery
-#' reads `/api/...` from the same root), so `/v1` is never doubled; query and fragment are
-#' dropped. NULL when the base is not one HTTP(S) URL.
+#' The decision endpoint `<origin><root>/v1/systemone` of an Ollama base URL (a final `/v1` of the
+#' root is never doubled); NULL when the base is not one HTTP(S) URL
 #' @noRd
 s1_ollama_endpoint = function(base_url) {
   if (!is.character(base_url) || length(base_url) != 1L || is.na(base_url)) return(NULL)
@@ -72,8 +48,7 @@ s1_ollama_endpoint = function(base_url) {
   paste0(origin, sub("/v1$", "", path), "/v1/systemone")
 }
 
-#' A limit of the adapter, lowered by the model's decision record (07 section 2: typed metadata),
-#' never raised
+#' A limit of the adapter, lowered (never raised) by the model's decision record (07 section 2)
 #' @noRd
 s1_ollama_limit = function(model, field, adapter) {
   d = if (is.list(model)) model[["decision"]] else NULL
@@ -92,9 +67,8 @@ s1_ollama_body_limit = function(model, images) {
   }
 }
 
-#' The weight format P05's discovery reported for a model: its own `format`, else that of the
-#' discovered entry of its tag when that entry has the same digest (a bare catalog name such as
-#' `clef-flash` stands for `clef-flash:latest`); NULL when unknown. A pure catalog read.
+#' The weight format P05's discovery reported for a model (its own, else its tag's entry with the
+#' same digest), NULL when unknown; a pure catalog read
 #' @noRd
 s1_ollama_format = function(model) {
   chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
@@ -110,10 +84,8 @@ s1_ollama_format = function(model) {
   NULL
 }
 
-#' A checked native model the decision endpoint can serve (after P05's preflight or preparation):
-#' weights that P05's discovery reports in a format other than GGUF are refused, since MLX or
-#' Safetensors variants are not served by `/v1/systemone` (report 04b); an unknown format is left
-#' to the server. Returns the model.
+#' A checked native model the decision endpoint can serve: weights reported in a format other than
+#' GGUF are refused (report 04b); an unknown format is left to the server
 #' @noRd
 s1_ollama_ready = function(model) {
   if (!s1_ollama_native(model)) return(model)
@@ -143,10 +115,8 @@ s1_ollama_sniff = function(data) {
   NA_character_
 }
 
-#' Check the call's images against the adapter and the model before any encoding (07 section 4):
-#' a list of `list(data = <raw bytes>, mime)` records whose MIME type the endpoint takes and whose
-#' bytes are that format; a model whose decision record (P05's evidence) shows no vision takes
-#' none, and their base64 must fit the image body limit. Returns the base64 length, invisibly.
+#' Check the call's images against the adapter and the model before any encoding (07 section 4);
+#' returns their base64 length, invisibly
 #' @noRd
 s1_ollama_images_check = function(images, model) {
   expected = paste0("a list of image records list(data = <raw bytes>, mime = ",
@@ -193,9 +163,8 @@ s1_ollama_images_check = function(images, model) {
   invisible(total)
 }
 
-#' The questions of a request checked against the adapter and the model: 1 to 64 named questions
-#' (or the model's lower limit), each a known type the model answers, with 2 to 26 options or
-#' levels (or the model's lower limit)
+#' The questions of a request checked against the adapter's limits, lowered by the model's: 1 to
+#' 64 named questions of types the model answers, with 2 to 26 options or levels
 #' @noRd
 s1_ollama_questions_check = function(questions, model) {
   bad = function(msg) {
@@ -238,11 +207,8 @@ s1_ollama_state_ok = function(state) {
 
 #' classify$build of ollama-system-one: the request spec of one state (contract 8.1, IC-74)
 #'
-#' `opts$base_url` is the provider's configured base URL and `opts$images` the call's images (the
-#' same for every state). `opts$credential` is ignored: no key is ever attached to an Ollama
-#' request. Question and image problems are the call's (gptr_error_invalid_argument, raised before
-#' the first request); an empty state, or one whose body exceeds the endpoint's limit, fails that
-#' element alone (gptr_error_s1_validation, which s1_request() records as the element's failure).
+#' `opts$credential` is ignored. Question and image problems end the call; an empty or oversized
+#' state fails alone (gptr_error_s1_validation, D-120).
 #' @noRd
 s1_ollama_build = function(model, state, questions, opts) {
   url = s1_ollama_endpoint(opts[["base_url"]])
@@ -305,12 +271,8 @@ s1_ollama_confidence = function(p) {
 
 #' One wire answer as a canonical record (07 section 3), or an unsignalled gptr_error_s1_response
 #'
-#' Probabilities are required and re-keyed into request order; their sum, the support of a
-#' choice and the reconstruction of a score are checked at Ollama's four-decimal rounding
-#' (s1_ollama_round_tol, never TypeSafe's two decimals); the wire confidence is kept when it
-#' matches the entropy confidence of the probabilities (within s1_ollama_conf_tol) and computed
-#' with that formula when absent; a score's legend, when sent, must name exactly its levels (the
-#' canonical legend is the request's level descriptions).
+#' Probabilities are required and checked at Ollama's rounding; a wire confidence must match the
+#' entropy confidence within s1_ollama_conf_tol (D-120).
 #' @noRd
 s1_ollama_answer = function(answer, question, model_id) {
   bad = function(msg) s1_condition("s1_response", msg, model = model_id)
@@ -388,13 +350,8 @@ s1_ollama_answers = function(answers, questions, model_id) {
 
 #' classify$parse of ollama-system-one: one whole JSON body (contract 8.1, IC-74)
 #'
-#' `questions` are the ordered wire questions of the request. Returns `list(answers, usage =
-#' list(input, output), model_version, request_id)` with canonical answers, or an unsignalled
-#' `gptr_error_s1_*` condition: an error body (`{"error": "..."}`) by its status (P04's reactor
-#' sends a non-2xx answer to on_fail() instead, s1_transport_outcome()), and a malformed or
-#' inconsistent 200 body, or one answered by another model, as `s1_response`. The model version is
-#' the model name the server reports; its identity is the digest in the call's provenance.
-#' Unreported usage stays unknown (NA).
+#' Returns `list(answers, usage, model_version, request_id)`, or an unsignalled `gptr_error_s1_*`
+#' condition; an answer from another model is `s1_response`.
 #' @noRd
 s1_ollama_parse = function(model, status, headers, body, questions) {
   model_id = model[["id"]] %||% NA_character_
@@ -431,9 +388,8 @@ s1_ollama_parse = function(model, status, headers, body, questions) {
 
 # ---- replay with the frozen identity ------------------------------------------------------------
 
-#' The pin keys of the states of one question: the cache keys of s1_cache_keys() whose identity
-#' keeps the adapter and the images but not the digest or the server version, which only P05's
-#' discovery knows, so replay can find them without discovery
+#' The pin keys of the states of one question: cache keys whose identity drops the digest and the
+#' server version (which only discovery knows), so replay finds them without discovery
 #' @noRd
 s1_ollama_pin_keys = function(salt, target, wire, states, images = NULL) {
   id = s1_cache_identity(target$model, images)
@@ -483,12 +439,8 @@ s1_ollama_frozen = function(pin, target) {
        locality = id[["locality"]])
 }
 
-#' Offline replay of a native Ollama target (07 section 4): the answers recorded for these states,
-#' this question and these images, with the identity frozen with them; no discovery, no preflight,
-#' no request. A state without a pin or a record is a miss (the caller's replay guard refuses it);
-#' a pin without its identity, a pinned digest it does not match, a record under another key or
-#' answers recorded under different identities are refused. Returns `list(answers, cached,
-#' version, identity)`.
+#' Offline replay of a native Ollama target (07 section 4): `list(answers, cached, version,
+#' identity)` from the pins, with no discovery or request; a state without a pin is a miss
 #' @noRd
 s1_ollama_replay = function(states, wire, target, salt, images = NULL) {
   n = length(states)

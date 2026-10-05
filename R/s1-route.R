@@ -1,19 +1,8 @@
-# The classifier route (order 10): states by the batch rule, as_state(), the question, the cache,
-# requests for the misses, thresholds, abstention and escalation, the gptr.decision entry, the
-# decision event and the one-line document summary (contract 6.1.1, 7.13; architecture 4.1.5;
-# IC-47, IC-66, IC-71).
-#
-# Copy safety (architecture 6.4, rules R1-R4): the functions that hold a user value (s1_inputs(),
-# s1_part(), s1_states_at(), s1_df_record(), s1_list_row(), s1_cell(), s1_element(), s1_lt_n(),
-# s1_lt_take(), the as_state() methods, s1_small(), s1_atomic_json(), s1_describe()) and their
-# caller s1_call() walk values with while loops over leaves (.subset2()), never assign to a
-# formal, create no closure and call no tryCatch(), lapply() or vapply() with a function made in
-# their frame: a closure keeps its frame alive, the frame keeps the forced promise, and the user's
-# next in-place edit then copies the object (checked with tracemem while writing this plan). Nor
-# do they build a container that points at a user's elements (a shallow copy, `[` of a list
-# matrix or a data frame, or the unclass() inside length(), `[` and format() of a POSIXlt): R
-# never lowers the elements' reference counts when that container is collected. Values leave
-# these frames only as new JSON-able objects.
+# The classifier route (order 10): states by the batch rule, the question, the cache, requests for
+# the misses, abstention, escalation and the records (contract 6.1.1, 7.13; architecture 4.1.5).
+# Copy safety (architecture 6.4, D-110): the functions that hold a user value walk it with while
+# loops over .subset2() leaves, never assign to a formal, make no closure, tryCatch() or apply
+# function in their frame and build no container that points at the user's elements.
 
 s1_state_chars = 100000L
 s1_atomic_max = 1000L
@@ -54,9 +43,8 @@ s1_lt_n = function(x) {
   n
 }
 
-#' Elements `idx` of a POSIXlt vector as a new, unnamed POSIXlt, read component by component.
-#' length(), `[` and format() of a POSIXlt go through unclass(), whose shallow copy points at the
-#' user's components, so the user's next in-place edit of a component would copy it.
+#' Elements `idx` of a POSIXlt vector as a new, unnamed POSIXlt, read component by component
+#' (length(), `[` and format() of a POSIXlt make an unclass() copy pointing at its components)
 #' @noRd
 s1_lt_take = function(x, idx) {
   parts = attr(x, "names")
@@ -153,10 +141,8 @@ s1_describe = function(x, name = NULL, envir = NULL) {
   paste(lines, collapse = "\n")
 }
 
-#' One cell of a data frame as a new object (never the column itself): row i of an atomic matrix
-#' column, element i of a list column, an element keeping its class for classed vectors (factors,
-#' dates, POSIXlt date-times, which are lists). s1_df_record() reads nested data-frame and
-#' list-matrix columns itself.
+#' One cell of a data frame as a new object, never the column itself (s1_df_record() reads
+#' nested data-frame and list-matrix columns itself)
 #' @noRd
 s1_cell = function(df, j, i) {
   col = .subset2(df, j)
@@ -210,10 +196,8 @@ s1_df_record = function(df, i) {
 
 #' Internal S3 generic: an R value as System 1 state (contract 7.13)
 #'
-#' `default`: small atomic values and small plain lists as their values, anything else as its
-#' describer text; `data.frame`: one record (one row), a list of up to 50 row records, or the
-#' describer text; `gptr_session`: the last answer, at most `gptr.s1_state_max` characters, with
-#' status and value facts. `name` and `envir` (through `...`) say where a symbol's value is bound.
+#' Small values as themselves, else the describer text; a data frame as one or up to 50 row
+#' records; a session as its last answer within `gptr.s1_state_max` characters.
 #' @noRd
 as_state = function(x, label, ...) UseMethod("as_state")
 
@@ -292,12 +276,8 @@ s1_check_cap = function(n) {
 
 #' The batch rule (architecture 4.1.5): values -> list of states, each `list(<label> = state)`
 #'
-#' An atomic vector gives one state per element (names kept on the list of states, not on the
-#' element's value, whatever its class), an unnamed list one per element, a
-#' data frame one per row (the result carries `attr(, "split") = TRUE` when it has several rows),
-#' a named list one state, `I(x)` exactly one state. POSIXlt date-times (lists underneath) count
-#' as atomic vectors. Matrices, arrays, environments, functions, S4 objects, other classed lists
-#' and sessions give one state.
+#' One state per element of an atomic vector (POSIXlt too) or unnamed list, per row of a data
+#' frame (`attr(, "split")` when several); one state for anything else, `I(x)` included (D-110).
 #' @noRd
 s1_states = function(values, label, labels = NULL) s1_states_at(values, label, labels)
 
@@ -362,8 +342,7 @@ s1_key_name = function(label) {
 }
 
 #' The inputs of a gateway call: the context objects (symbols read by name from the call's
-#' environment, other values from its `values` slots; contract 7.8 call_value()) and the piped
-#' session, last
+#' environment, other values through call_value()) and the piped session, last
 #' @noRd
 s1_inputs = function(call) {
   items = call$context
@@ -428,15 +407,8 @@ s1_zip = function(parts) {
 }
 
 # ---- models -----------------------------------------------------------------------------------
-# IC-74 (07-local-ollama.md sections 2, 2.1, 3 and 5): the route matches and dispatches by the
-# model's own resolved type, never its provider's default (Clef on the chat-serving `ollama`
-# provider is a classifier); the target is preflighted before the call's values are read, a
-# state is built, a cache key is computed or a credential is looked up; egress follows P08's
-# effective-endpoint rule, never the `local` hint; images are checked against the model and keyed;
-# unknown usage and calibration stay NA, and the vector's meta carries the call's provenance. A
-# native Ollama model named by reference is prepared on a live call (discovery only when its
-# evidence is missing or stale); under replay it is frozen instead: its answers and the model
-# identity recorded with them come from the cache's pins, with no discovery and no request.
+# Match and dispatch follow the model's own resolved type, and the target is preflighted before
+# any value is read (IC-74, D-115); a replayed native Ollama target is frozen (D-120).
 
 #' The configured System 1 setting when it opts into emulation ("emulate:<ref>"), else NULL
 #' @noRd
@@ -446,11 +418,7 @@ s1_emulation_setting = function() {
 }
 
 #' Is `model` (a reference, a provider id or a provider spec) a classifier, or an emulation
-#' reference? Never signals.
-#'
-#' The model's own resolved type decides (IC-74, 07 section 2), as P08's gateway_model_type()
-#' routes: a provider id or spec stands for its first model, and only a model without a type
-#' takes its provider's. P05's model_resolve() never discovers or contacts a provider.
+#' reference? Never signals; the model's own resolved type decides (IC-74, 07 section 2).
 #' @noRd
 s1_is_classifier = function(model) {
   ref = is.character(model) && length(model) == 1L && !is.na(model) && nzchar(model)
@@ -476,10 +444,8 @@ s1_match = function(call) !is.null(call$prompt) && s1_is_classifier(call$ids$mod
 
 #' The target of the classifier model record `rec` served by `provider`
 #'
-#' The model's own type must be `classifier` (IC-74; only a record without a type takes its
-#' provider's). `engine` is s1_engine()'s (the provider id; "fake" for P01's fake), and
 #' `calibrated` is NA: native decision probabilities are not calibrated without recorded evidence
-#' (07 section 3); an adapter that states its calibration decides for the answers it gives.
+#' (07 section 3).
 #' @noRd
 s1_target_of = function(rec, provider, ref) {
   type = rec[["type"]] %||% (if (is.list(provider)) provider[["type"]])
@@ -504,11 +470,9 @@ s1_target_of = function(rec, provider, ref) {
        engine = s1_engine(rec), calibrated = NA, alias = rec[["id"]], endpoint = endpoint)
 }
 
-#' What answers a System 1 call: a classifier model (a reference, a provider id or a provider
-#' spec) or opt-in emulation through a chat model (architecture 4.1.5, IC-19)
+#' What answers a System 1 call: a classifier model or opt-in emulation (architecture 4.1.5, IC-19)
 #'
-#' `jev` (the alias the system1 prompt section names) means the configured System 1 when the
-#' `system1` setting opts into emulation, so the agent's own calls follow the user's choice.
+#' `jev` means the configured System 1 when the `system1` setting opts into emulation.
 #' @noRd
 s1_target = function(model) {
   if (inherits(model, "gptr_provider")) {
@@ -539,28 +503,19 @@ s1_target = function(model) {
   target
 }
 
-#' The running run's frozen safety record (P06's `run$opts$safety`, IC-53), or NULL outside a run,
-#' which keeps P05's local-only default (07 section 2.1: never built from settings, model metadata
-#' or call options here)
+#' The running run's frozen safety record (IC-53), or NULL outside a run, which keeps P05's
+#' local-only default (07 section 2.1)
 #' @noRd
 s1_safety = function() {
   run = run_current()
   if (is.null(run)) NULL else run[["opts"]][["safety"]]
 }
 
-#' Preflight a target before the call's values are read, a state is built or serialised, a cache
-#' key is computed or a credential is looked up (07 section 2.1; IC-74): P05's pure check of the
-#' classifier on its provider, or for emulation of the chat model (s1_emu_ready(), which also
-#' refuses a decision-only model). The checked model, with the discovery evidence the preflight
-#' applies (digest, server version), replaces the resolved one, so it reaches the cache identity
-#' and the provenance; the safety record travels with the target to the request.
+#' Preflight a target before the call's values are read or a credential is looked up (07 section
+#' 2.1; IC-74): the checked model replaces the resolved one, and the safety record travels with it
 #'
-#' A native Ollama model (IC-74, 07 sections 2.1 and 4): named by reference, a live call prepares
-#' it (P05's model_prepare(): discovery only when its evidence is missing or stale, refused before
-#' any request when the local-only policy forbids the endpoint, then the preflight); a provider
-#' spec is preflighted only; both are then checked by s1_ollama_ready(). Under replay (the call's
-#' `replay =`, else the process mode) the target is `frozen`: no discovery, no preflight and no
-#' request, and its answers and their identity come from what was recorded (s1_ollama_replay()).
+#' A native Ollama model named by reference is prepared on a live call; under replay it is
+#' `frozen`: no discovery, preflight or request (D-120).
 #' @noRd
 s1_ready = function(target, safety = s1_safety(), replay = NULL) {
   emulated = identical(target$engine, "emulated:structured")
@@ -578,11 +533,8 @@ s1_ready = function(target, safety = s1_safety(), replay = NULL) {
   target
 }
 
-#' The call's System 1 images (`.opts$system1_images`; IC-74, 07 section 4) checked against the
-#' target: only a native model whose decision record says it takes images gets them, and any
-#' other target refuses them (they are never dropped for a text-only request). P08 checked their
-#' shape and MIME types; s1_cache_identity() refuses a malformed record; the adapter applies its
-#' own size limits when it encodes them. NULL when there are none.
+#' The call's System 1 images (IC-74, 07 section 4), or NULL: only a native model whose decision
+#' record takes images gets them, and any other target refuses them (never silently dropped)
 #' @noRd
 s1_images = function(images, target) {
   if (!length(images)) return(NULL)
@@ -606,19 +558,8 @@ s1_images = function(images, target) {
 #' The egress acknowledgement and the replay guard before any System 1 request (contract 7.8;
 #' IC-45, IC-47, IC-74)
 #'
-#' A System 1 state is always the user's data, so egress is checked whatever `.opts$context` says.
-#' P08's egress_check() itself exempts offline providers and local ones whose effective endpoint
-#' is a loopback address, never the `local` hint alone (D-099); an offline provider sends nothing,
-#' even as an unregistered spec. The call's own `replay =` decides, as for System 2 calls (P08's
-#' gateway_replay_guard()): in replay mode only offline providers may be called, so a cache miss
-#' signals gptr_error_not_recorded. The process option is set only for the guard and restored.
-#' The replay guard comes first (IC-74): under replay nothing leaves the machine, so a miss is
-#' not_recorded and never asks for an egress acknowledgement. Egress goes through the kernel SDK's
-#' egress_check(provider_id) (IC-33; contract 7.8, P13 a consumer), which judges the registered
-#' record of that id: for a call-level provider spec at another endpoint it can name the wrong
-#' origin, or exempt a spec that reuses a built-in loopback id at a LAN address. P08's
-#' record-level egress_require()/egress_state() are outside the SDK this layer may call (D-120
-#' item 14; a P08 forward note).
+#' The call's own `replay =` guard runs first (a replayed miss is not_recorded); egress is checked
+#' whatever `.opts$context` says, on the id's registered record (D-120 item 14).
 #' @noRd
 s1_guards = function(target, replay = NULL) {
   p = target$provider
@@ -692,8 +633,7 @@ s1_check_args = function(q, args) {
 }
 
 #' One value returned by an uncertain() function, coerced to the result's type and checked
-#' against the question: a choice among the options, a score in [0, levels - 1] (fractional, as
-#' System 1 scores are), a decision that reads as TRUE or FALSE, or NA
+#' against the question (a score may be fractional), or NA
 #' @noRd
 s1_coerce_one = function(r, q) {
   v0 = if (inherits(r, "gptr_s1")) s1_bare(r) else r
@@ -718,13 +658,10 @@ s1_coerce_one = function(r, q) {
   unname(v)
 }
 
-#' Apply min_confidence and uncertain to the uncertain band (architecture 4.1.5): a decision is
-#' uncertain when abs(2 * p - 1) < min_confidence, a choice or a score when its confidence is
-#' below it. An answered element whose confidence is unknown (an empty probability map, IC-74)
-#' cannot show that it meets min_confidence, so it is inside any band above 0; a failed element
-#' is NA already and stays out. `uncertain` NULL or NA gives NA, TRUE/FALSE that value, "stop"
-#' the classed error gptr_error_s1_uncertain, and a function(state, answer) its return value
-#' (escalation)
+#' Apply min_confidence and uncertain to the uncertain band (architecture 4.1.5)
+#'
+#' An answer whose confidence is unknown is inside any band above 0 (IC-74, D-115); a failed
+#' element is NA already and stays out.
 #' @noRd
 s1_abstain = function(out, q, a, states) {
   mc = a$min_confidence
@@ -800,9 +737,8 @@ s1_failures = function(conditions, n) {
                    "see attr(x, \"meta\")$errors."), "s1_errors", errors = errors)
 }
 
-#' Write the one-line block of a statement through P15's doc.s1_block service when it is
-#' registered and no run executes model code (System 1 calls made by the agent are recorded by
-#' their r block; P15 decides whether the statement is top level)
+#' Write the one-line block of a statement through P15's doc.s1_block service, when registered and
+#' no run executes model code (the agent's calls are recorded by their r block)
 #' @noRd
 s1_doc_block = function(call, summary) {
   if (is.null(call) || !is.null(run_current()) || !ext_service_has("doc.s1_block")) {
@@ -835,10 +771,8 @@ s1_log_usage = function(target, res, session, started) {
 
 #' The gptr.decision entry (piped sessions), the decision event and the document summary
 #'
-#' The event carries the question type as `question_type`: every event's `type` field is the
-#' event name (contract 4.5), and ev_new() would let a payload field `type` overwrite it. The
-#' summary handed to doc.s1_block carries `meta` (model and date), from which P15 writes the
-#' block header (`model=`, `date=`; contract 11.5).
+#' The event names the question type `question_type`: a payload `type` would overwrite the event
+#' name (contract 4.5).
 #' @noRd
 s1_record = function(out, prompt, q, meta, session, call) {
   summary = s1_summary(out, meta)
@@ -857,15 +791,10 @@ s1_record = function(out, prompt, q, meta, session, call) {
   invisible(summary)
 }
 
-#' The vector's meta (contract 5.2 as amended by IC-74; 07 section 3): the plan's fields plus the
-#' call's provenance: `provider`, `api`, `execution` ("native" or "emulated"), `locality`
-#' ("local", "remote" or "unknown"), `model_digest`, `server_version` and
-#' `calibration_provenance`
+#' The vector's meta with the call's provenance (contract 5.2, IC-74; 07 section 3)
 #'
-#' A call answered entirely from the cache made no request: its usage is a known zero and its
-#' provenance and calibration are the target's. When requests were made, unknown usage stays NA,
-#' and cached elements next to fresh ones make the calibration claim conservative (TRUE only when
-#' both are calibrated).
+#' A call answered entirely from the cache has a known zero usage and the target's calibration;
+#' cached elements next to fresh ones make the calibration claim conservative.
 #' @noRd
 s1_meta = function(prompt, target, got) {
   res = got$res
@@ -906,11 +835,8 @@ s1_cached_version = function(rec) {
 #' Answers for the states: the cache first (skipped in live mode), then requests for the misses
 #' after the egress and replay guards; new answers are cached as they arrive
 #'
-#' The keys carry the preflighted model's identity and the images (s1_cache_identity(), IC-74);
-#' a record that is not a valid answer to the question is a miss. The request gets the target's
-#' safety record and the images. A native Ollama answer is also pinned with the identity that
-#' gave it, and a frozen (replayed) Ollama target reads its answers through those pins only
-#' (s1_ollama_replay()); `identity` is then the recorded identity, else NULL.
+#' A record that does not answer the question is a miss (D-115). A frozen Ollama target reads its
+#' answers through the pins only; `identity` is then the recorded identity (D-120).
 #' @noRd
 s1_answers = function(states, q, target, session, started, live = FALSE, images = NULL,
                       replay = NULL) {
@@ -974,9 +900,8 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
        identity = identity)
 }
 
-#' The System 1 core shared by the classifier route and ctx$decide(): images, question (with the
-#' model's decision limits), element cap, split notice, answers, result vector, failures,
-#' abstention, records. `target` comes from s1_ready().
+#' The System 1 core shared by the classifier route and ctx$decide(); `target` comes from
+#' s1_ready()
 #' @noRd
 s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
   started = Sys.time()
@@ -1014,8 +939,7 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
 # ---- entry points -------------------------------------------------------------------------------
 
 #' The classifier route's run() (contract 7.13). No closure and no tryCatch() in this frame: it
-#' is the caller of s1_inputs(), which reads the user's values. The target is preflighted (or,
-#' replayed, frozen) first, under the call's own `replay =`.
+#' is the caller of s1_inputs(), which reads the user's values (copy safety).
 #' @noRd
 s1_call = function(call) {
   target = s1_ready(s1_target(call$ids$model), replay = call$args$replay)
@@ -1024,9 +948,7 @@ s1_call = function(call) {
 }
 
 #' The s1.decide service behind ctx$decide(question, x, ...) (contract 7.0, 10.6): `x` is one
-#' input under the state key `input`; `...` takes choices, levels, threshold, min_confidence and
-#' uncertain; the model is the configured System 1 (model_default("system1"): the setting, the
-#' TypeSafe key or a verified local decision model, IC-74)
+#' input under the state key `input`; the model is model_default("system1") (IC-74)
 #' @noRd
 s1_decide = function(question, x, ...) {
   check_string(question, "question")

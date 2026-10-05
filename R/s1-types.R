@@ -1,16 +1,7 @@
-# System 1 typed vectors (contract 5.2 and 6.6, architecture 5.6): gptr_decision, gptr_choice and
-# gptr_score, their methods, gptr_prob() (IC-36) and the lazily registered vctrs methods.
-# Adapted from the verified prototype of report 04 section 5.1 (s1_types.R) with the fixes of its
-# verification log: the class vectors carry the base type the contract names, the options
-# attribute is `s1_levels` (an attribute named `levels` turns a column into a factor in rbind()),
-# `[<-` degrades to the bare vector for foreign values (ifelse(), replace(), rbind.data.frame()),
-# the accessors became gptr_prob(), "<-" became "=", and no function assigns to its formals
-# (copy-safety rule R3: a replaced promise keeps the caller's object referenced).
-# IC-74: `meta$engine` is any provider id (typesafe, ollama, ...) or "emulated:structured", and
-# `meta$calibrated` may be NA (unknown); print() then says "calibration unknown". Combining
-# answers (c(), `[<-`, vctrs) never claims more calibration than every part has. The canonical
-# System One records every classifier adapter returns, and their validator s1_check_answers(),
-# are at the end of this file (07 section 3; FIX-6).
+# System 1 typed vectors (contract 5.2 and 6.6, architecture 5.6), gptr_prob() (IC-36), the lazy
+# vctrs methods, the model-layer wrappers and the canonical System One records (07 section 3).
+# The options attribute is `s1_levels` (an attribute `levels` makes rbind() build a factor). No
+# function assigns to its formals (copy safety, architecture 6.4).
 
 #' Strip the System 1 classes and attributes, keeping the names
 #' @noRd
@@ -56,10 +47,8 @@ s1_cached = function(x) {
   if (!is.null(cached) && length(cached) == length(x)) cached else NULL
 }
 
-#' The call-level meta of answers combined from several calls: the first part's meta with a
-#' conservative `calibrated` (IC-74). It is TRUE only when every part is calibrated, FALSE when
-#' any part is explicitly uncalibrated (emulation) and NA (unknown) otherwise; it stays absent
-#' when no part states it. `cached` is the first part's; callers align it per element.
+#' Call-level meta of combined answers: the first part's, with `calibrated` TRUE only when every
+#' part is, FALSE when any part is FALSE, else NA, and absent when no part states it (IC-74)
 #' @noRd
 s1_meta_combine = function(metas) {
   out = metas[[1L]] %||% list()
@@ -158,10 +147,7 @@ s1_compatible = function(x, value) {
 }
 
 #' Copy the per-element attributes of rows `vrows` of `value` (NA for a bare value) into rows
-#' `target` (no NA in either)
-#'
-#' Answers of another call merge their calibration into the call-level meta (IC-74); a bare
-#' value is not a model answer and leaves it unchanged.
+#' `target` (no NA in either); a System 1 `value` merges its calibration into the meta (IC-74)
 #' @noRd
 s1_assign_attrs = function(res, target, vrows, value) {
   out = res
@@ -211,10 +197,7 @@ s1_fmt_num = function(p) {
   out
 }
 
-#' The dim footer of print(): model . calibration . date
-#'
-#' IC-74: `calibrated` is TRUE only with recorded calibration evidence, FALSE for emulation and
-#' NA (or absent) when unknown, which is said as "calibration unknown".
+#' The dim footer of print(): model . calibration . date (NA is "calibration unknown", IC-74)
 #' @noRd
 s1_footer = function(meta) {
   if (is.null(meta$model)) return(NULL)
@@ -255,9 +238,8 @@ s1_footer = function(meta) {
   vbare = if (inherits(value, "gptr_s1")) s1_bare(value) else value
   if (missing(i)) out[] = vbare else out[i] = vbare
   if (!keep) return(out)
-  # Which row of `value` lands in each position, by base R's own rules for the subscript
-  # (recycling, extension, names; NA subscripts assign nothing). The assignment above has
-  # already warned about a partial recycle.
+  # the row of `value` landing in each position, by base R's subscript rules (D-073); the
+  # assignment above already warned about a partial recycle
   from = rep(NA_integer_, n_old)
   names(from) = names(x)
   suppressWarnings(if (missing(i)) from[] = seq_along(value) else from[i] = seq_along(value))
@@ -302,8 +284,7 @@ c.gptr_s1 = function(...) {
   value = do.call(c, bare)
   if (!same) return(value)
   meta = s1_meta_combine(lapply(parts, attr, which = "meta", exact = TRUE))
-  # per-element `cached`, NA for the parts without it (as vctrs combines); absent when no
-  # part has it
+  # per-element `cached`: NA for parts without it (as vctrs), absent when no part has it
   cached = lapply(parts, s1_cached)
   meta$cached = if (all(vapply(cached, is.null, logical(1L)))) {
     NULL
@@ -406,8 +387,7 @@ s1_generic = function(frame) get(".Generic", envir = frame, inherits = FALSE)
 #' @method as.data.frame gptr_s1
 #' @export
 as.data.frame.gptr_s1 = function(x, ...) {
-  # the generic's `row.names` (by name, else the first unnamed argument, as R matches it) arrives
-  # in `...`; `optional` is not used
+  # `row.names` arrives in `...` (by name, else the first unnamed argument, as R matches it)
   dots = list(...)
   dn = names(dots) %||% character(length(dots))
   unnamed = which(!nzchar(dn))
@@ -526,13 +506,10 @@ gptr_prob = function(x, what = c("prob", "confidence", "probabilities")) {
 }
 
 # ---- vctrs methods (Suggests; registered lazily with s3_register(), contract 5.2) ----------------
-# Report 04 section 5.7 (prototype 2c): with a data-frame proxy, bind_rows(), filter(), arrange(),
-# joins, count() and distinct() keep aligned probabilities; equality uses the bare value only.
+# A data-frame proxy keeps probabilities aligned through dplyr verbs; equality uses the bare value.
 
-#' vctrs proxy: a data frame of the per-element fields
-#'
-#' Every proxy has the same columns, so parts with and without per-element `cached` combine;
-#' a missing `cached` is NA (unknown).
+#' vctrs proxy: a data frame of the per-element fields, with `cached` NA when unknown so that
+#' every part has the same columns
 #' @noRd
 s1_vec_proxy = function(x, ...) {
   df = data.frame(value = unname(s1_bare(x)), stringsAsFactors = FALSE)
@@ -628,15 +605,8 @@ s1_vctrs_register = function() {
 on_load(s1_vctrs_register())
 
 # ---- model-layer access for the System 1 area (layer L1) --------------------------------------
-# s1-types.R is the one L1 file of the s1 area (architecture 3.2). The L4 files s1-client.R,
-# s1-route.R, s1-cache.R, s1-emulate.R and s1-ollama.R may call L0, their own area, the declared
-# services and the kernel SDK (architecture 2.2 rule 3, IC-33; P01's test-arch-layers.R), so every
-# call they make into the provider registry, the catalog, the request preflight, usage accounting
-# and provider_stream() (the P05 functions of contract 7.5 whose consumer lists name P13) goes
-# through these wrappers. IC-74 (07-local-ollama.md sections 2, 2.1 and 5): a classifier is
-# dispatched by its resolved model-level type and api, never its provider's default; the pure
-# preflight runs before any state is serialised or a credential is looked up; a keyless loopback
-# server gets no credential; and unknown usage or an unknown price stays NA, never zero.
+# The L4 s1 files reach the provider registry, catalog, preflight, usage accounting and
+# provider_stream() only through these wrappers (architecture 2.2 rule 3, IC-33; IC-74, D-076).
 
 #' The provider record of a System 1 target: a provider spec passes through; else by id or alias
 #' @noRd
@@ -650,42 +620,34 @@ s1_provider = function(x) {
 #' @noRd
 s1_adapter = function(api) adapter_get(api)
 
-#' The origin-bound credential handle of a provider (NULL for offline and keyless providers such
-#' as a loopback Ollama server; gptr_error_no_key when a key is needed and none is found)
+#' The origin-bound credential handle of a provider (NULL for offline and keyless providers)
 #' @noRd
 s1_credential = function(provider) provider_credential(provider)
 
-#' The configured base URL of a provider (settings `providers.<id>.base_url` > the record),
-#' without a trailing `/`
+#' The configured base URL of a provider, without a trailing `/`
 #' @noRd
 s1_base_url = function(provider) provider_base_url(provider)
 
-#' A model record (contract 4.9) for a reference or a provider spec (its first model), with the
-#' model's own type and api (IC-74)
+#' A model record (contract 4.9) with the model's own type and api (IC-74)
 #' @noRd
 s1_model = function(ref, strict = TRUE) model_resolve(ref, strict = strict)
 
-#' The pure, no-I/O request preflight of a model on its provider (IC-74, contract 7.5): the
-#' checked model, or gptr_error_not_available / gptr_error_untrusted before anything is sent
+#' The pure, no-I/O request preflight of a model on its provider (IC-74, contract 7.5)
 #' @noRd
 s1_preflight = function(model, provider, safety = NULL) {
   provider_preflight(model, provider, safety = safety)
 }
 
-#' Explicit preparation of a selected model (IC-74, contract 7.5): discovery only for missing or
-#' stale Ollama evidence, then resolution and preflight; never used under replay
+#' Explicit preparation of a selected model (IC-74, contract 7.5); never used under replay
 #' @noRd
 s1_prepare = function(ref, safety = NULL) model_prepare(ref, safety = safety)
 
-#' The configured System 1 reference, or NULL when none is usable (contract 7.5): the setting,
-#' else the TypeSafe key, else a verified local native classifier, which needs no key (IC-74)
+#' The configured System 1 reference, or NULL when none is usable (contract 7.5, IC-74)
 #' @noRd
 s1_default_ref = function() model_default("system1")
 
-#' USD cost of System 1 usage `list(input, output)` under a model's dated prices (contract 7.5)
-#'
-#' A missing or NA token count and a missing price are unknown, so the cost is NA (IC-74,
-#' D-015); a declared zero rate is a known zero charge, with or without token counts.
+#' USD cost of System 1 usage `list(input, output)` under a model's dated prices (contract 7.5);
+#' an unknown count or price gives NA, a declared zero rate a known zero (IC-74, D-015)
 #' @noRd
 s1_cost = function(usage, model) {
   u = usage_new(input = usage[["input"]], output = usage[["output"]])
@@ -694,11 +656,8 @@ s1_cost = function(usage, model) {
 
 #' Append one row to the process System 1 accounting log (contract 4.3 and 7.5; agent "s1")
 #'
-#' `input` and `output` are token counts, NULL or NA when unknown (kept NA, IC-74). The row's
-#' cost comes from P05's usage_row() (the dated price of the resolved, preflighted model).
-#' `request_id` is the provider's request id; NULL, a scalar NA or "" (no id reported) gets a
-#' fresh one, and any other value that is not one non-empty string (several ids, a number) is
-#' refused by usage_row() with gptr_error_invalid_argument rather than silently replaced (D-015).
+#' Unknown token counts stay NA (IC-74). A NULL, NA or "" `request_id` gets a fresh id; any other
+#' value that is not one string is refused by usage_row() (D-015).
 #' @noRd
 s1_usage_log = function(model, route, input, output, request_id, session_id, started, seconds) {
   u = usage_cost(usage_new(input = input, output = output), model)
@@ -721,21 +680,16 @@ s1_stream = function(model, context, opts, emit, done) {
 }
 
 # ---- canonical System One records (IC-74; 07-local-ollama.md section 3) -------------------------
-# The canonical answer records every classifier adapter returns (typesafe-system-one's and
-# ollama-system-one's parse, P01's fake, s1-emulate) and the common validator s1_dispatch() runs on
-# them: the record types of the model-access layer (L1, architecture 2.1), so that P12's
-# check_adapter() (provider-anthropic.R, L1) checks classifier adapters with the same validator
-# without calling up into the s1 client (FIX-6). Moved unchanged from s1-client.R.
+# Every classifier adapter returns these records; they live at L1 so that P12's check_adapter()
+# uses the same validator (FIX-6).
 
 s1_types = c("noul", "choice", "score")
 
-# Half a unit of the two-decimal rounding of TypeSafe's probabilities (report 04a; report 04
-# section 2.4): the slack of one rounded probability
+# Half a unit of TypeSafe's two-decimal probability rounding (report 04a)
 s1_round_tol = 0.005
 
-#' An unsignalled System 1 condition: class `gptr_error_<sub>`, parent `gptr_error_s1`, fields
-#' `status`, `error_type`, `request_id`, `model` and `retry_after` (contract 2.2; report 04
-#' section 4.12)
+#' An unsignalled System 1 condition `gptr_error_<sub>` (parent `gptr_error_s1`) with status,
+#' error_type, request_id, model and retry_after (contract 2.2)
 #' @noRd
 s1_condition = function(sub, message, status = NA_integer_, error_type = NA_character_,
                         request_id = NA_character_, model = NA_character_, retry_after = NULL) {
@@ -775,11 +729,8 @@ s1_option_keys = function(question) {
 
 #' A probability map re-keyed into request order
 #'
-#' Returns a named double vector, all NA when the map is absent or empty (a gateway that re-ran
-#' the question elsewhere, report 04 section 2.9: unavailable, not zero), or a chr(1) problem
-#' when the keys are not exactly the options asked, a value is not a probability, or the values
-#' do not sum to 1 within the rounding of every value: `tol` is the largest rounding error of one
-#' value, TypeSafe's two decimals by default (Ollama's four decimals: s1_ollama_round_tol).
+#' All NA when the map is absent or empty (unavailable, not zero); a chr(1) problem unless it is
+#' keyed by exactly the options and sums to 1 within `tol` (one value's rounding) per value.
 #' @noRd
 s1_answer_probs = function(got, keys, tol = s1_round_tol) {
   p = stats::setNames(rep(NA_real_, length(keys)), keys)
@@ -813,16 +764,10 @@ s1_parse_choice = function(ch, p, keys, conf, bad, tol = s1_round_tol) {
   list(type = "choice", choice = ch, probabilities = p, confidence = conf)
 }
 
-#' The score of a score answer: within [0, levels - 1] and, when probabilities are known, their
-#' expected level within the rounding of the probabilities; never rounded to a level
+#' The score of a score answer, in [0, levels - 1] and never rounded to a level
 #'
-#' One expectation serves both cases: the expected level of the probabilities normalised to sum
-#' 1. A missing score becomes it, and a given score must lie within the probabilities' rounding
-#' of it, `tol * (sum(levels) + 1) / min(1, sum(p))`, where `tol` is the largest rounding error
-#' of one value (TypeSafe's two decimals by default; Ollama's four: s1_ollama_round_tol). That
-#' bound holds for a score computed from the unrounded probabilities and rounded like them, and
-#' a score filled in here passes its own check when the dispatch validates the canonical record
-#' again.
+#' A missing score becomes the expected level of the normalised probabilities; a given one must
+#' lie within their rounding of it, `tol * (sum(levels) + 1) / min(1, sum(p))`.
 #' @noRd
 s1_parse_score = function(given, p, keys, conf, legend, bad, tol = s1_round_tol) {
   known = !anyNA(p) && sum(p) > 0
@@ -843,10 +788,8 @@ s1_parse_score = function(given, p, keys, conf, legend, bad, tol = s1_round_tol)
 
 #' The canonical answers of one state checked against the questions asked (07 section 3)
 #'
-#' Every adapter returns canonical records (typesafe-system-one's parse, P01's fake, s1-emulate,
-#' ollama-system-one), so this common check never runs a wire parser again. It requires an answer
-#' for exactly the questions asked, in their types, and returns them in question order, or the
-#' unsignalled gptr_error_s1_response of the first problem.
+#' One answer per question, of its type, returned in question order; else the unsignalled
+#' gptr_error_s1_response of the first problem.
 #' @noRd
 s1_check_answers = function(answers, questions, model_id = NA_character_) {
   bad = function(msg) s1_condition("s1_response", msg, model = model_id)
@@ -868,11 +811,7 @@ s1_check_answers = function(answers, questions, model_id = NA_character_) {
 
 #' One canonical record checked against its question
 #'
-#' `prob` in [0, 1]; probabilities named by exactly the options (re-keyed into request order),
-#' each in [0, 1] and summing to 1 within the two-decimal rounding of report 04a, or all NA
-#' (unavailable); a confidence in [0, 1], or NA when unknown (never recomputed here: the formulas
-#' differ by provider); a choice among the options that its probabilities support; a fractional
-#' score in [0, levels - 1] that its probabilities give; a legend named by the levels.
+#' The confidence is NA when unknown and never recomputed here (the formula differs by provider).
 #' @noRd
 s1_check_answer = function(a, question, bad) {
   type = if (is.list(question)) question[["type"]] else NULL
