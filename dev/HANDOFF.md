@@ -57,6 +57,13 @@ Maintained by the coordinator; remove an item only when its owning task lands it
   FIX-2 `gptr::` calls without `quote()`, FIX-3 `rebuild_frozen()` keeps `human`/`reinject`.
   After FIX-1 lands, P07's `gc()` workaround in `p07_session()` (test-prompt-sections.R) can be
   removed by the P07 owner.
+- **P12 open items** (`progress/P12.md`, plan acceptance `3b26e32`): IC-74's "classifier
+  adapters receive conformance coverage" needs a classifier fixture layout and P13's canonical-
+  answer validator (schedule with P13's IC-74 `s1-ollama.R` task); `claude-haiku-4-5` has
+  `tool_addition = TRUE` but `mid_system = FALSE`, so no tool-addition declarations are sent
+  (P05/P12 decision). FIX-4 (`secret_late_check()` NA tolerance) gates every full-suite run.
+- **Waiting on P08 Task 5 (`call_new`/`call_value`)**: P09 Task 10-11, P13 Task 7+.
+  **Waiting on P11 Task 8 (`ui.get`, scripted UI)**: P14 (all), P18 Tasks 2, 4, 5.
 - **D-019 item 5:** `write_all()` blocks on Windows (processx). P04-level decision needed
   before P18/P19/P20/P22 send large stdin payloads to Windows children.
 - **Hosted CI open items** (`progress/ci-hosted.md`): INFRA-23 CPU 1.060 s once on hosted
