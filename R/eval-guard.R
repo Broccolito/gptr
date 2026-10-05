@@ -1,17 +1,7 @@
-# eval-guard.R -- static guard, interactive traps, assignment targets and the gptr:: shim (P09).
-#
-# Adapted from report 12 section 5.1 (`.gptr_guard_rules`, `gptr_called_functions()`) with the
-# fixes of its verification log (item 25: `g = q; g()` was not blocked) and IC-67: the symbols
-# q and quit are flagged in any position (a value, a FUN argument, match.fun(), get(),
-# do.call(), base::). A local binding never hides a blocked call: R skips non-function bindings
-# when it looks up a function, so `q = 1; q("no")` still calls base::q(); only a function the
-# code defines itself (`menu = function(...) ...`) or a formal or local variable of an enclosing
-# function shadows a blocked name, and `pkg::name` is always refused. Standard-input readers are
-# detected by argument, and a literal `[secret:NAME]` marker is refused with the Sys.getenv()
-# hint (architecture section 6.5; the redactor's marker grammar, so `[secret:auth:openai]` too).
-# match.fun() resolves a non-function value by name, so q or quit as the function argument of
-# sapply(), Map() and friends counts as a function name. The guard is advisory, not a sandbox:
-# eval(parse(text = ...)) evades it (P11's classifier and the permission gate handle risk).
+# Static guard, assignment targets and the gptr:: shim (P09; report 12 section 5.1, IC-67, D-037).
+# Advisory, not a sandbox: eval(parse(text = ...)) evades it (P11 and the permission gate judge
+# risk). R skips non-function bindings in call lookup, so `q = 1; q("no")` still quits: only a
+# function the code defines, or a formal or local of an enclosing function, shadows a blocked name.
 
 #' Functions that end, pause or hang the user's R session: never evaluated
 #' @noRd
@@ -235,15 +225,9 @@ eval_guard_walk = function(e, acc, scope = character()) {
   invisible()
 }
 
-#' Static guard over parsed code (04 section 7.9)
-#'
-#' A blocked name is refused when it is called (unless the code defines a function of that name
-#' or an enclosing function binds it), named through `pkg::` (always), passed as a string to
-#' do.call(), match.fun(), get() and friends (unless the code defines it), or, for q and quit,
-#' used as a value (unless the code assigns a variable of that name).
-#' @param exprs An expression vector (from parse()).
-#' @return list(blocked = chr, reason = chr(1) or NULL). `blocked` holds the refused function
-#'   names, `"stdin"` and `[secret:NAME]` markers; `reason` is the model-facing text.
+#' Static guard over parsed code (04 section 7.9): list(blocked, reason = model text or NULL)
+#' A blocked name is refused when called or passed by name (unless the code defines that function),
+#' always through `pkg::`, and for q and quit as a value (unless the code assigns it).
 #' @noRd
 eval_guard = function(exprs) {
   acc = new.env(parent = emptyenv())
@@ -355,11 +339,8 @@ eval_guard_targets_walk = function(e, acc, in_fun = FALSE) {
 }
 
 #' Static assignment targets of parsed code (the `assigned` field of gptr_eval_result)
-#'
-#' `=`, the left arrow, `<<-` (inside function bodies only `<<-`), `assign("name", ...)`,
-#' replacement calls (their root symbol), data.table `:=` and `set*()` calls, `for` variables.
-#' @param exprs An expression vector.
-#' @return Character vector of names, first occurrence order.
+#' Assignments (in function bodies only `<<-`), `assign("name")`, replacement roots, data.table
+#' `:=` and `set*()`, `for` variables; unique, in first occurrence order.
 #' @noRd
 eval_assign_targets = function(exprs) {
   acc = new.env(parent = emptyenv())
@@ -369,10 +350,7 @@ eval_assign_targets = function(exprs) {
 }
 
 #' The call `gptr::<name>`, built with call()
-#'
-#' R CMD check reads a literal `gptr::name` in the package code, quoted or not, as a use of an
-#' export and warns while P08's gptr() and gptr_return() are not exported ("Missing or unexported
-#' objects", CI Task CI-4). The built call is identical to the quoted one.
+#' R CMD check reads a literal `gptr::name`, even quoted, as a use of an export (CI-4).
 #' @noRd
 eval_guard_ns_call = function(name) call("::", as.symbol("gptr"), as.symbol(name))
 
@@ -409,15 +387,8 @@ eval_guard_shim_all = function(exprs, need_g, need_r) {
 }
 
 #' Reach gptr() and gptr_return() through gptr:: when they are not visible from `envir`
-#'
-#' Rewrites calls headed by `gptr`, `gptr$member(...)`, `gptr[["member"]](...)` and
-#' `gptr_return` to `gptr::` when the symbol is not visible from `envir` (for example a
-#' `new.env(parent = baseenv())` home, or a session where gptr is loaded but not attached).
-#' Binds nothing in `envir`; `exists()` never forces a promise. The caller records the code as
-#' the model sent it, so recorded code keeps the original text (04 section 7.9).
-#' @param exprs An expression vector (from parse()).
-#' @param envir The evaluation environment.
-#' @return The expression vector, rewritten where needed; attributes (srcref) are kept.
+#' Rewrites calls headed by `gptr`, `gptr$m`, `gptr[["m"]]` and `gptr_return`; binds nothing,
+#' forces no promise and keeps srcrefs; recorded code keeps the model's text (04 section 7.9).
 #' @noRd
 gptr_shim = function(exprs, envir) {
   need_g = !exists("gptr", envir = envir)

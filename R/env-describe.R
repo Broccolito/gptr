@@ -1,12 +1,7 @@
-# env-describe.R -- budgeted, level-based object descriptions (P09).
-#
-# Ported from report 12 section 5.2 (leaves, formatters) and G2 section 5.4 describe2()
-# (levels picked by the calibrated estimator, class "describe" = 2.39 characters per token),
-# with G2's gap fixes: Dates re-attached, dgCMatrix dims and nnz, formula text, nested names,
-# Seurat meta.data in the header (a design requirement, G2 fact-check 18).
-# Discipline (03 section 6.4 R4): dsc_leaf_*() bind the object and return fresh facts; dsc_fmt_*()
-# never see the object. Methods for classes of packages outside Suggests use attr(), .subset(),
-# .subset2() and methods::slotNames() only, never pkg::fun() (IC-71).
+# Budgeted, level-based object descriptions (P09; report 12 section 5.2, G2 section 5.4, D-043).
+# Levels are picked by the calibrated estimator (class "describe"). Copy safety (architecture 6.4
+# R4): dsc_leaf_*() bind the object and return fresh facts; dsc_fmt_*() never see it. Classes
+# outside Suggests are read with attr(), .subset(), .subset2() and slotNames() only (IC-71).
 
 #' Compact, budgeted description of an R object
 #'
@@ -72,12 +67,9 @@ dsc_cut_line = function(line, budget) {
   paste0(substr(line, 1L, keep), " ...")
 }
 
-#' The harness: describe a value within `budget`, trying levels 3, 2, 1 of methods that
-#' overrun it, then cutting lines (rule R4)
-#'
-#' A method result that is not lines (empty, NULL, NA or not atomic) is replaced by the default
-#' method's, so the first line is always a header (04 section 6.6). It is checked here rather than
-#' signalled: an error would unwind this frame, which holds `x` (see describe_boxed()).
+#' Describe a value within `budget`: levels 3, 2, 1 of an overrunning method, then cut lines (R4)
+#' A result that is not lines gives the default method's (04 section 6.6), checked rather than
+#' signalled: an error would unwind this frame, which holds `x` (D-043).
 #' @noRd
 describe_value = function(x, budget = 150L) {
   out = dsc_lines(gptr_describe(x, budget = budget))
@@ -101,13 +93,8 @@ dsc_lines = function(out) {
 }
 
 #' Describe a binding by name without forcing promises or calling active bindings
-#'
-#' A binding that holds R's missing argument (an unsupplied formal of a function-frame home, or
-#' empty dots) is `<missing>`, checked before get(): a get() that fails with the home on its
-#' frame leaves the home referenced, and the next edit of an object in it copies
-#' (test-copy-eval.R). A method that throws leaves the object referenced the same way: the error
-#' is caught, but the object's next in-place edit copies it once (describe_boxed(), D-043).
-#' @return Character lines; the first starts with `name: `.
+#' R's missing argument is `<missing>`, checked before get(): a failing get() leaves the home
+#' referenced (test-copy-eval.R). The first line starts with `name: `.
 #' @noRd
 describe_binding = function(name, envir, budget = 150L) {
   check_string(name, "name")
@@ -129,13 +116,9 @@ describe_binding = function(name, envir, budget = 150L) {
   d
 }
 
-#' tryCatch() lives in a frame that holds only the box, never `envir` (03 section 6.4 R2); a
-#' method that fails falls back to the default method (04 section 7.9 "errors caught")
-#'
-#' Known limit (D-043): a method that throws costs one copy of the described object. The error
-#' unwinds describe_value(), the generic and the method, whose bindings hold the object; R
-#' releases a frame's references only when it returns, so the user's next in-place edit copies
-#' once (test-copy-eval.R pins at most one). Methods that return normally cost none.
+#' tryCatch() in a frame that holds only the box, never `envir` (03 section 6.4 R2)
+#' A failing method falls back to the default (04 section 7.9) at the cost of one copy of the
+#' object: unwound frames release it only on return (D-043; test-copy-eval.R pins one).
 #' @noRd
 describe_boxed = function(box, budget) {
   force(box)
@@ -238,10 +221,7 @@ dsc_leaf_matrix = function(x) {
 }
 
 #' Names and shapes of a nested list, depth first, at most `max_lines` lines (a leaf)
-#'
-#' Iterative (a stack of index paths; each element is reached from `x` with .subset2()):
-#' a recursive walk passing elements to itself left the list referenced (verified with
-#' tracemem), so the object never leaves this frame.
+#' Iterative over index paths: a recursive walk left the list referenced (tracemem).
 #' @noRd
 dsc_leaf_walk = function(x, max_depth = 4L, max_lines = 40L) {
   lines = character()
@@ -320,9 +300,8 @@ dsc_leaf_env = function(x) {
   list(names = nms, act = act, lazy = lazy, fun = fun, label = environmentName(env))
 }
 
-#' Is binding i a function? (vapply() with a top-level function: no loop in the frame that
-#' binds the environment). .subset2() returns R's missing argument (an unsupplied formal of a
-#' function frame) as a value where get() throws.
+#' Is binding i a function? (a vapply() target: no loop in the frame binding the environment)
+#' .subset2() returns R's missing argument as a value where get() throws.
 #' @noRd
 dsc_env_is_fun = function(i, nms, envir, skip) {
   !skip[i] && is.function(.subset2(envir, nms[i]))

@@ -1,30 +1,11 @@
-# eval-core.R -- the hand-rolled evaluator eval_r() and the RNG swap rng_swap() (P09).
-#
-# Adapted from report 12 section 5.1 (gptr_eval2.R: anonymous-file sink, calling handlers,
-# per-expression time limits, trimmed tracebacks, plot hooks, harness options) with the fixes of
-# its verification log (items 3, 4, 9, 10, 25), the contract's amendments (04 section 7.9;
-# IC-61, IC-67) and the G3 fact-check fix for function-frame homes. Frame layout, verified with
-# fresh-process tracemem runs (test-copy-eval.R):
-#   eval_r()        binds `envir`; creates no closure, no tryCatch() and no loop; stores `envir`
-#                   in the state environment `st` and resets st$envir to NULL on exit (R2).
-#   eval_run(), eval_loop(), eval_loop_catch(), eval_one()
-#                   hold only `st`; eval_one() creates the calling handlers and the restart.
-#                   Every helper forces its arguments on entry (R3).
-#   eval_top(), eval_frame()
-#                   closure-free leaves that reach `envir` through st$envir; every withVisible()
-#                   result is cleared in place with res[1L] = list(NULL) (R8, IC-67).
-# The value of an evaluation is never kept. Known limit (R itself, not gptr): an error unwinds
-# the frames between the failing call and the restart without releasing what they reference, so
-# an object the failing code passed through a function (or a home frame the failing code forced)
-# copies once on its next in-place edit, exactly as after try() in user code.
+# The evaluator eval_r() and the agent RNG swap rng_swap() (P09; 04 section 7.9; IC-61, IC-67).
+# Copy safety (architecture 6.4, test-copy-eval.R): eval_r() binds `envir` (st$envir, reset on
+# exit); the frames around user code hold only `st` and force their arguments; withVisible()
+# results are cleared in place (R2, R3, R8). R limit: a passed object copies once after an error.
 
-#' L'Ecuyer-CMRG seed vector from a key (IC-61)
-#'
-#' 24 bytes of sha256(key): three 32-bit words reduced modulo m1 = 4294967087 and three modulo
-#' m2 = 4294944443, stored as R integers (two's complement) after the kind code 10407L. Uses no
-#' random number generator. The word 2^31 has no R integer other than NA_integer_ (its
-#' two's-complement bit pattern), so it is stored as NA without a coercion warning; R reads
-#' that NA back as the word 2^31.
+#' L'Ecuyer-CMRG seed vector from a key, drawing no random number (IC-61)
+#' Three words of sha256(key) modulo m1 and three modulo m2 after the kind code 10407L; the word
+#' 2^31 is stored as NA_integer_ (its bit pattern), which R reads back as 2^31 (D-052).
 #' @noRd
 rng_seeds = function(key) {
   h = hash_sha256(as.character(key)[[1L]])
@@ -38,26 +19,9 @@ rng_seeds = function(key) {
   c(10407L, as.integer(v))
 }
 
-#' Evaluate `expr` with an agent's L'Ecuyer stream in .Random.seed (a leaf)
-#'
-#' Saves the user's `.Random.seed` of the global environment (or its absence), assigns
-#' `state$seed` (derived with rng_seeds(state$id) when unset: `id` is the agent id, or
-#' `"<.opts$seed>:<agent label>"` for reproducible streams, IC-61), evaluates, keeps the
-#' advanced vector in `state$seed` and restores or removes the user's value. With
-#' with_seed_preserved() the only code that assigns .Random.seed. R also keeps its generator
-#' kind internally, and set.seed() keeps the kind in force: removing the variable alone would
-#' leave L'Ecuyer-CMRG in force, so the user's next `set.seed(42)` would draw other numbers.
-#' When the user had no seed, the kind code is therefore read before the swap and put back
-#' after it: `stats::rbinom(1L, 0L, 0.5)` makes R load (or initialise) and store its state
-#' without drawing a number (size 0 returns 0), and the variable it stores is removed again.
-#' When the user had a seed, restoring the vector alone leaves the agent's kind in force
-#' internally until R next reads the variable, so a user who then removed `.Random.seed` would
-#' get L'Ecuyer-CMRG from `set.seed()`. The same call makes R read the kind from the restored
-#' vector. It is silent and never fails, also for a vector R rejects (R checks that vector again
-#' at the user's next draw), and the vector is assigned again so it stays identical.
-#' @param state An environment: `seed` (the vector, or NULL) and `id`.
-#' @param expr The expression to evaluate (lazily, inside the swap).
-#' @return The value of `expr`.
+#' Evaluate `expr` with the agent's L'Ecuyer stream in .Random.seed, then restore the user's (IC-61)
+#' `state` holds `seed` (NULL: rng_seeds(id)) and `id`. R keeps the generator kind internally, so
+#' the user's kind is restored too: rbinom(1, 0, 0.5) makes R read it without a draw (D-052).
 #' @noRd
 rng_swap = function(state, expr) {
   check_env(state, "state")
@@ -89,8 +53,8 @@ rng_swap = function(state, expr) {
   expr
 }
 
-#' Top-level calls whose value is always invisible: evaluated without withVisible(). Calls whose
-#' query form prints at the console (options("digits"), library(), suppress*(x)) are not listed.
+#' Top-level calls whose value is always invisible (evaluated without withVisible())
+#' Not listed: calls whose query form prints (options("digits"), library(), suppress*(x)).
 #' @noRd
 eval_invisible_heads = c(
   "=", paste0("<", "-"), "<<-", "invisible", "for", "while", "repeat", "require", "print",
@@ -107,24 +71,9 @@ eval_now = function() {
   as.numeric(proc.time()[["elapsed"]])
 }
 
-#' Evaluate model-written R code in the live session
-#'
-#' The built-in `evaluator` record `r` (IC-69). Parses `code` with `srcfilecopy("<gptr>", ...)`,
-#' applies the static guard and the `gptr::` shim, evaluates the top-level expressions one by
-#' one in `envir` with output, message, warning and error capture, plot capture and a time
-#' limit, stops at the first error and returns a `gptr_eval_result` (04 section 5.8). Never
-#' keeps the value of an evaluation (R8). Copy-safety: rules R1, R2, R3 and R8.
-#' @param code R code: one string, possibly several expressions.
-#' @param envir The evaluation environment (the run's `run_eval_env()`).
-#' @param timeout Seconds, or NULL: none with a human present, else `gptr.r_timeout`.
-#' @param plots "auto", "capture" or "none" (see plot_begin()).
-#' @param tee Also show the output to the user (split sink).
-#' @param budget_tokens Output budget; image tokens count against it (IC-67).
-#' @param guard Apply eval_guard().
-#' @param rng NULL, or an environment with the agent's L'Ecuyer state (see rng_swap()).
-#' @param record Collect the printed output of each top-level expression (`outputs`).
-#' @param max_images Plots attached as images; the rest go to the out store (IC-67).
-#' @return A `gptr_eval_result`.
+#' Evaluate model-written R code in the live session (the `evaluator` record `r`, IC-69)
+#' Top-level expressions run one by one in `envir` with capture, plots and a time limit, stopping
+#' at the first error; returns a `gptr_eval_result` (04 section 5.8), never a value (R1-R3, R8).
 #' @noRd
 eval_r = function(code, envir, timeout = NULL, plots = c("auto", "capture", "none"),
                   tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"),
@@ -188,9 +137,8 @@ eval_push = function(st, type, ...) {
   invisible()
 }
 
-#' Parse with source references under the file name "<gptr>" (CR LF and CR line ends become LF);
-#' an error object on failure, also for code that is not valid UTF-8 after as_utf8() (gsub()
-#' and the parser would throw or warn on it)
+#' Parse with source references under the file name "<gptr>", line ends as LF; an error object
+#' on failure, also for code that is not valid UTF-8 (gsub() and the parser would throw; D-055)
 #' @noRd
 eval_parse = function(code) {
   if (!validUTF8(code)) {
@@ -410,11 +358,8 @@ eval_frame = function(expr, st) {
 }
 
 #' Evaluate one expression and print it like the console; returns the visibility only
-#'
-#' A symbol is printed by name (`print(<sym>)` evaluated in the environment), any other visible
-#' value by eval_print() with the print methods visible from the environment, assignments and
-#' other invisible heads never pass through withVisible(), and a withVisible() result is
-#' cleared in place before this frame returns (R8, IC-67).
+#' A symbol prints as `print(<sym>)` in the environment; invisible heads skip withVisible(), whose
+#' result is cleared in place before this frame returns (R8, IC-67).
 #' @noRd
 eval_top = function(expr, st) {
   if (is.symbol(expr)) {
@@ -434,16 +379,9 @@ eval_top = function(expr, st) {
   vis
 }
 
-#' Print a visible value: S4 objects through show(), others as R's console does
-#' (PrintValueEnv()). The console dispatches print() for objects and functions only; for those,
-#' `print(x)` is evaluated in a short-lived child of `envir`, so a print method defined in a
-#' home other than globalenv() (a function frame, an overlay) is used, as it is for a symbol.
-#' Other values print as in the plan: binding the empty symbol (an argument without a default,
-#' from formals() or alist()) to `x` would make `print(x)` fail, where the console prints a
-#' blank line. Before this frame returns, the binding `x` is removed and the child is
-#' detached from `envir`: a child left pointing at a function-frame home counts as a reference
-#' to the frame, and R then keeps the frame's arguments referenced after the function returns,
-#' so the user's next edit copies them (R2, R8).
+#' Print a visible value as the console does (S4 through show())
+#' Plain values print directly (the empty symbol cannot be bound); objects and functions as
+#' `print(x)` in a child of `envir`, detached on exit so no frame home stays referenced (D-055).
 #' @noRd
 eval_print = function(value, envir) {
   if (isS4(value)) {
@@ -491,10 +429,7 @@ eval_on_warning = function(st, cnd) {
 }
 
 #' Error handler: traceback first (as text), record, stop through gptr_stop
-#'
-#' An infinite recursion leaves a handler almost no stack (a tryCatch() inside it fails again
-#' with "evaluation nested too deeply"), so a stack overflow unwinds first and is recorded by
-#' eval_overflow() at the normal depth.
+#' A stack overflow leaves the handler no stack, so it unwinds first; eval_overflow() records it.
 #' @noRd
 eval_on_error = function(st, cnd) {
   if (inherits(cnd, "stackOverflowError")) invokeRestart("gptr_stop", cnd)
@@ -557,9 +492,7 @@ eval_is_timeout = function(st, cnd) {
 }
 
 #' Traceback lines of the current error: the user frames after eval_frame(), before the handler
-#'
-#' Returns text only, so no call object (which may carry values inlined by do.call()) is left in
-#' the handler frame that the restart unwinds.
+#' Text only, so no call object (values inlined by do.call()) stays in the unwound handler frame.
 #' @noRd
 eval_traceback = function() {
   calls = sys.calls()
@@ -640,10 +573,7 @@ eval_outputs_since = function(st, start) {
 }
 
 #' Final capture, restore the session, render the plots (normal and restart paths)
-#'
-#' The session state is taken before the plots are rendered: rendering is gptr's own work (it
-#' loads ragg, systemfonts and textshaping on the first plot of a process), not a change the
-#' evaluated code made.
+#' The session state is taken before rendering, whose package loads are gptr's own (D-055).
 #' @noRd
 eval_finish = function(st) {
   eval_capture_plot(st, TRUE)
@@ -655,11 +585,8 @@ eval_finish = function(st) {
 }
 
 #' Undo everything eval_open() did; idempotent, safe on every exit path
-#'
-#' The message sink is reset before the capture connection is closed: while output is
-#' captured, stdout() is that connection, so `sink(stdout(), type = "message")` in the code
-#' points messages at it, and R refuses to close a message sink. The close cannot throw, so
-#' the options and the plot device are always restored.
+#' The message sink is reset first: code's `sink(stdout(), type = "message")` points at the capture
+#' connection, which R would refuse to close (D-055).
 #' @noRd
 eval_restore = function(st) {
   if (isTRUE(st$restored)) return(invisible())
@@ -688,10 +615,8 @@ eval_restore = function(st) {
   invisible()
 }
 
-#' Point messages back to the sink in use before the evaluation: stderr (2), or the user's own
-#' connection while it is still open (else stderr). The code's connection is its own object and
-#' stays open. A capture connection reopened by eval_read_sink() after the code closed both it
-#' and the user's connection can hold the user's number; it is never pointed at.
+#' Point messages back to the sink in use before the evaluation: stderr, or the user's connection
+#' while it is open; never a reopened capture connection that took its number (D-055)
 #' @noRd
 eval_msg_sink_reset = function(n, con) {
   sink(type = "message")
@@ -711,11 +636,9 @@ eval_close = function(st) {
   invisible()
 }
 
-#' The session whose run is evaluating, or NULL
-#'
-#' 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK has no id-to-session
-#' accessor; the run's `shell` binding (the session object, when P06 provides it) is read
-#' defensively. Without it the process out store is used and no context pressure is assumed.
+#' The session whose run is evaluating (the run's `shell` binding), or NULL
+#' 04 section 7.6 types `gptr_run$session` as an id; without a session the process out store is
+#' used and no context pressure is assumed.
 #' @noRd
 eval_session = function() {
   run = run_current()
@@ -734,10 +657,8 @@ eval_out_target = function() {
 }
 
 #' Render the captured plots; attach the first ones and store the rest in one out entry
-#'
-#' At most `max_images` plots are attached, and fewer when their image tokens would take more
-#' than 60% of the output budget (IC-67); the paths of the others are kept in the session's out
-#' store for `gptr$plot(k)` (P10), one entry for the whole evaluation.
+#' At most `max_images`, fewer when image tokens would pass 60% of the budget (IC-67); the others'
+#' paths go to the session's out store for `gptr$plot(k)`.
 #' @noRd
 eval_plots_done = function(st) {
   if (is.null(st$ps) || !st$ps$n) return(invisible())
@@ -773,9 +694,7 @@ eval_plots_done = function(st) {
 }
 
 #' Object changes of an evaluation with their model-facing lines
-#'
-#' An added promise or active binding shows its kind (`+ p <promise>`), never its unforced
-#' class; names, classes and shapes go through env_text(), so the lines are valid UTF-8.
+#' An added promise or active binding shows its kind, never its class; lines are valid UTF-8.
 #' @noRd
 eval_objects = function(old, new, assigned) {
   d = env_diff(old, new, assigned)
@@ -804,9 +723,7 @@ eval_session_state = function() {
 }
 
 #' Differences of eval_session_state(): option and variable names (never values), the working
-#' directory, attached and loaded packages, devices. `TZDIR` appearing is not reported: R sets
-#' it itself the first time a time is formatted (macOS), whoever formats it (gptr's own ids
-#' too).
+#' directory, packages and devices; a new `TZDIR` is R's own (set when a time is first formatted)
 #' @noRd
 eval_state_diff = function(a, b) {
   on = union(names(a$options), names(b$options))

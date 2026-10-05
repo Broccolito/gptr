@@ -67,3 +67,25 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   `arch-layers|lint-rules|s1-client|session-store|agent-run` PASS 1242 green.
 - Reviews: none yet.
 - Deviations: none. Open: none.
+
+## Simplicity P07-S - Prompt duplication (2026-10-05)
+- F2-F9, F11-F14 (R -213, tests -34, run.R -35; plan ~296): entry_path() (an unknown leaf errors),
+  read_utf8(), one compact_fit() (800 random cases identical), P06's image helpers, one tool-change
+  walker, since-compaction/entry-block helpers, prompt_event(), bench_in_project(); P24's list follows.
+- Red: FAIL 1 (`prompt-sections`: unknown leaf gave an empty path). Green: `prompt-|context-|bench`
+  PASS 987 (less 29 str( expectations duplicated from test-prompt-text.R). Lint clean. `run.R --check`
+  OK, results and tokenized texts byte-identical. Neighbours: `arch-layers|lint-rules|gptr-gateway|
+  gptr-capture|copy-gateway|env-snapshot|provider-openai-responses|provider-google|ext-builtins` PASS
+  1406, `agent-|session-` PASS 2142 green. Cross-plan checks unchanged (warn 77).
+- Reviews: none yet.
+- Deviations: D-139. Open: F15's named test merges (review notes lost; only exact duplicates removed).
+
+## Task P09-C - Trim internal comment narration in eval and env files (2026-10-05)
+- Comments only in `R/eval-*.R`, `R/env-*.R`: internal blocks are a title plus at most two lines
+  citing IC/D ids, file headers 4 lines; non-comment parse tokens and exported roxygen
+  (`gptr_describe()`) unchanged. Comment lines 880 -> 606, files 3405 -> 3131 (-274; plan ~150).
+- Red: none (refactor). Green: `eval-|env-|copy-eval` PASS 892 (as at HEAD). Lint clean.
+  Neighbours: `arch-layers|lint-rules|tool-r|copy-tools|copy-gateway|gptr-gateway` PASS 597 green.
+- Reviews: r1 4 findings (2 minor, 2 nits): eval-core header copy-safety claim, duplicate workspace
+  section comment and `_R_CHECK_LIMIT_CORES_` wording fixed; `## Task` heading kept (plan section 7).
+- Deviations: none. Open: none.

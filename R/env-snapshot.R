@@ -1,12 +1,7 @@
-# env-snapshot.R -- copy-safe workspace snapshots, diffs and workspace lines (P09).
-#
-# Copy safety (architecture section 6.4, rules R1, R4, R6; report 12 section 2.C2 and its
-# verification log items 14-15): only the leaf functions below bind a user object. Leaves call
-# primitives and thin wrappers (typeof, inherits, attr, .subset, utils::object.size,
-# rlang::obj_address, fingerprint()) and return fresh facts. Loops live in frames that address
-# objects by name (get(name, envir) passed straight into a leaf). No closure, tryCatch() or list
-# ever holds a user object, and a function-frame home is held only in a box binding that is
-# reset on exit (verified with fresh-process tracemem runs, see test-copy-eval.R).
+# Copy-safe workspace snapshots, diffs and workspace lines (P09; architecture 6.4 R1, R4, R6).
+# Only the leaves bind a user object and return fresh facts; loops address objects by name, no
+# closure, tryCatch() or list holds one, and a function-frame home lives only in a box binding
+# reset on exit (fresh-process tracemem runs, test-copy-eval.R).
 
 #' Format a byte count for model-facing text ("3 KB", "1.2 MB", "5.1 GB")
 #' @noRd
@@ -43,7 +38,6 @@ env_tokens = function(lines, class = "describe") {
 }
 
 #' Is x a compact-looking integer sequence (ALTREP 1:n)? (a leaf)
-#'
 #' Reads three elements through .subset(), which never materialises a compact sequence.
 #' @noRd
 env_compact_seq = function(x) {
@@ -54,11 +48,8 @@ env_compact_seq = function(x) {
   !anyNA(e) && e[2L] - e[1L] == 1L && as.numeric(e[3L]) - e[1L] == n - 1
 }
 
-#' Facts of a Seurat object through attributes only (a leaf)
-#'
-#' SeuratObject is not in Suggests: attr(), .subset2() and primitives only, never
-#' SeuratObject:: (IC-71). Handles v5 Assay5 (a `features` LogMap) and v3 Assay (a `data`
-#' dgCMatrix).
+#' Facts of a Seurat object through attributes only (a leaf; not in Suggests, IC-71)
+#' Handles v5 Assay5 (a `features` LogMap) and v3 Assay (a `data` dgCMatrix).
 #' @noRd
 env_seurat_facts = function(x) {
   md = attr(x, "meta.data")
@@ -124,18 +115,17 @@ env_snap_bare = function(x) {
        fp = rlang::obj_address(x))
 }
 
-#' Does binding `name` of box$envir hold R's missing argument (an unsupplied formal without a
-#' default, or an empty `...`)? get() would throw on it; .subset2() returns it unevaluated, and
-#' a forced default (whose missing() is TRUE) is a value (a leaf; never called on a promise or an
-#' active binding)
+#' Does binding `name` of box$envir hold R's missing argument? (a leaf; D-040)
+#' .subset2() returns it unevaluated where get() throws; a forced default is a value. Never called
+#' on a promise or an active binding.
 #' @noRd
 env_snap_missing = function(box, name) {
   identical(.subset2(box$envir, name), quote(expr = ))
 }
 
-#' Facts of binding `name` of box$envir; a failing method gives env_snap_bare() facts and the
-#' missing argument the class `<missing>` (the tryCatch() frame holds only the box, never the
-#' environment: rule R3; checking first keeps get() from failing with the home on its frame)
+#' Facts of binding `name` of box$envir; a failing method gives env_snap_bare() facts
+#' The missing argument is class `<missing>`, checked first so get() never fails with the home on
+#' its frame; the tryCatch() frame holds only the box (R3).
 #' @noRd
 env_snap_facts = function(box, name) {
   force(box)
@@ -158,10 +148,8 @@ env_snap_size = function(x) {
 }
 
 #' Snapshot rows; `sizes = FALSE` skips object.size() (the evaluator needs no sizes)
-#'
-#' `envir` may be a function-frame home: it is held only in a box binding reset on exit, and the
-#' loop lives in env_snap_rows(), which never binds `envir` (a `for` loop in a frame binding a
-#' function frame left that frame referenced; verified with tracemem).
+#' `envir` is held only in a box binding reset on exit: a loop in a frame binding a function-frame
+#' home left it referenced (tracemem), so the loop is in env_snap_rows().
 #' @noRd
 env_snapshot_rows = function(envir, previous = NULL, sizes = TRUE) {
   box = new.env(parent = emptyenv())
@@ -173,16 +161,13 @@ env_snapshot_rows = function(envir, previous = NULL, sizes = TRUE) {
 }
 
 #' The snapshot loop; addresses objects by name through box$envir
-#'
-#' Fills plain vectors and builds the data frame once: a cell assignment into a data frame
-#' copies its column, which made the loop quadratic in the number of bindings.
+#' Fills vectors and builds the data frame once (cell assignment copied a column: quadratic).
 #' @noRd
 env_snap_rows = function(box, previous, sizes) {
   force(box)
   force(previous)
   force(sizes)
-  # ls(envir = ): a positional ls(envir) binds `name` and runs tryCatch() on it, which pins a
-  # function-frame home (verified with tracemem)
+  # Named `envir =`: a positional ls(envir) runs tryCatch() on it and pins a frame home (tracemem)
   nms = setdiff(ls(envir = box$envir, all.names = TRUE, sorted = TRUE),
                 c(".Random.seed", ".Last.value"))
   n = length(nms)
@@ -219,18 +204,9 @@ env_snap_rows = function(box, previous, sizes) {
              shape = shape, fp = fp, stringsAsFactors = FALSE)
 }
 
-#' Copy-safe snapshot of an environment (rule R4)
-#'
-#' One row per binding (`.Random.seed` and `.Last.value` excluded): `name`, `kind` (`value`,
-#' `promise`, `active`), `address`, `class` (first element), `bytes` (reused from `previous`
-#' when address, class and shape are unchanged: the address-keyed `object.size()` cache; `NA`
-#' for environments, functions, external pointers and compact sequences), `shape` and `fp`
-#' (`fingerprint()`). Never forces a promise or calls an active binding. A binding holding R's
-#' missing argument (an unsupplied formal of a function-frame home, or an empty `...`) is a
-#' `value` of class `<missing>` with shape `""` and no address, fingerprint or size.
-#' @param envir Environment to list.
-#' @param previous An earlier snapshot of the same environment, or NULL.
-#' @return A data frame.
+#' Copy-safe snapshot of an environment, forcing no promise and calling no active binding (R4)
+#' One row per binding: name, kind (value, promise, active), address, class, bytes (reused from
+#' `previous` while address, class and shape hold), shape, fp; missing arguments are `<missing>`.
 #' @noRd
 env_snapshot = function(envir, previous = NULL) {
   check_env(envir, "envir")
@@ -247,14 +223,9 @@ env_same = function(a, b) {
   (is.na(a) & is.na(b)) | (!is.na(a) & !is.na(b) & a == b)
 }
 
-#' Difference of two snapshots
-#'
-#' `modified`: kind, address or fingerprint changed, or a static assignment target in
-#' `assigned`. A promise that was forced (promise -> value) is not a modification.
-#' @param old,new Snapshots (env_snapshot()).
-#' @param assigned Static assignment targets of the evaluated code.
-#' @return list(added, modified, removed), each a character vector of the exact binding names
-#'   in radix (C-locale) order of their display text (env_text()).
+#' Difference of two snapshots: list(added, modified, removed) in radix order of display text
+#' `modified`: kind, address or fingerprint changed, or a static assignment target in `assigned`;
+#' a forced promise is not a modification.
 #' @noRd
 env_diff = function(old, new, assigned = character()) {
   both = intersect(new$name, old$name)
@@ -285,14 +256,9 @@ env_align = function(name, cls, shape, size) {
   sub("\\s+$", "", paste0(formatC(name, width = -w1), formatC(cls, width = -w2), tail))
 }
 
-#' Lines of the `<workspace>` block
-#'
-#' At most 12 lines `name  class  shape  size`, largest first, within `budget` estimated
-#' tokens, then `(+ n smaller objects: use ls())`. Promises and active bindings show as
-#' `<promise>` and `<active>`.
-#' @param snapshot An env_snapshot() data frame.
-#' @param budget Estimated tokens (at least 20).
-#' @return Character vector of lines.
+#' Lines of the `<workspace>` block within `budget` estimated tokens
+#' At most 12 lines `name  class  shape  size`, largest first, then `(+ n smaller objects: use
+#' ls())`; promises and active bindings show as `<promise>` and `<active>`.
 #' @noRd
 workspace_lines = function(snapshot, budget = 600L) {
   check_number(budget, "budget", min = 20)
@@ -318,14 +284,8 @@ workspace_lines = function(snapshot, budget = 600L) {
   c(lines, more(rest))
 }
 
-#' Lines of the `<workspace_changes>` block
-#'
-#' `+ name class shape size`, `~ name`, `- name`, `user ran: <expr>`, within `budget`.
-#' @param diff An env_diff() result.
-#' @param snapshot The newer snapshot (facts of added objects).
-#' @param user_ran Character vector of the user's top-level expressions (user_expr_log()).
-#' @param budget Estimated tokens (at least 20).
-#' @return Character vector (empty when nothing changed).
+#' Lines of the `<workspace_changes>` block within `budget` (empty when nothing changed)
+#' `+ name class shape size`, `~ name`, `- name`, `user ran: <expr>` (user_expr_log()).
 #' @noRd
 changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
   check_number(budget, "budget", min = 20)
@@ -342,9 +302,8 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
     if (length(user_ran)) paste("user ran:", env_text(user_ran))
   ))
   lines = gsub(" {2,}", " ", lines)
-  # Each line costs more than one estimated token (a two-character prefix and a newline at 2.39
-  # characters per token), so more than `budget` lines never fit: cut them before the loop below,
-  # which re-estimates the whole text per line (quadratic on a large diff); same result
+  # Each line costs over one token, so lines past `budget` never fit: cutting them first keeps the
+  # loop below, which re-estimates the whole text per line, from going quadratic (same result)
   cap = floor(budget) + 1L
   rest = max(0L, length(lines) - cap)
   if (rest) lines = lines[seq_len(cap)]
@@ -357,8 +316,6 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
 }
 
 # ---------------------------------------------------------------- builtin:workspace
-# Context blocks of architecture section 7.4-7.5 (IC-38), the `r_env` section, the `evaluator`
-# record `r` and the `eval.r` and `describe` services (IC-69, IC-34).
 
 #' The context mode of the call: "summary" (default), "names" or "none" (`.opts$context`)
 #' @noRd
@@ -378,14 +335,9 @@ env_home = function(ctx) {
   home %||% ctx$envir
 }
 
-#' Per-session workspace memory, an environment that is never persisted (snapshot addresses mean
-#' nothing in another process)
-#'
-#' For a live session it is kept in the live record's `memo` (D-112): `ctx$state()` is one state
-#' per extension source, and P07 calls block providers without a handler source while P02 calls
-#' the agent_end hook as `builtin:workspace`, so the two would see different states, and an
-#' environment in the shared state of sourceless callers would stop P06 from persisting it.
-#' Without a live session: inside `ctx$state()`, else a fresh environment (nothing is kept).
+#' Per-session workspace memory, never persisted (snapshot addresses are per process)
+#' Kept in the live record's `memo`, shared by the block providers and the agent_end hook (D-112);
+#' without a live session inside `ctx$state()`, else a fresh environment (nothing is kept).
 #' @noRd
 env_memory = function(ctx) {
   s = ctx$session
@@ -466,9 +418,7 @@ env_block_changes = function(ctx, budget) {
 }
 
 #' Description of context item i of the call; an error becomes a one-line note
-#'
-#' The tryCatch() frame holds the gptr_call, whose `envir` binding the gateway resets at
-#' settlement (architecture section 6.4 R2), never a user object.
+#' The tryCatch() frame holds the gptr_call, whose `envir` the gateway resets at settlement (R2).
 #' @noRd
 env_attached_one = function(call, i, budget, label, prefix, header_only) {
   force(call)
@@ -567,12 +517,8 @@ env_on_shutdown = function(event, ctx) {
 }
 
 #' The built-in `workspace` extension (architecture sections 7.4-7.5; 04 section 7.9)
-#'
-#' Context blocks `workspace` (first, order 500, 600 tokens), `workspace_changes` (turn, order
-#' 100, 300 tokens), `attached` (both, order 600) and `skill_content` (both, order 700) (IC-38);
-#' the T1 prompt section `r_env` (order 900, 450 tokens); the `evaluator` record `r` (IC-69);
-#' hooks on `agent_end` and `session_shutdown`. The services `eval.r` and `describe` are
-#' registered below, owned by this built-in (IC-34).
+#' Context blocks (IC-38), the T1 section `r_env`, the `evaluator` record `r` (IC-69) and two
+#' hooks; the `eval.r` and `describe` services below are owned by this built-in (IC-34).
 #' @noRd
 builtin_workspace = function(gptr) {
   gptr$register(gptr_context_block("workspace", env_block_workspace, placement = "first",

@@ -1,17 +1,7 @@
-# env-history.R -- the user's top-level expressions between agent turns (P09).
-#
-# A task callback (report 12 section 2.C5, exp_c19_taskcb.R: it sees each top-level expression
-# and does not copy the value it is handed) registered while a session with a kept home is live
-# and removed when the last such session shuts down or the package unloads. The callback never
-# touches `value` (no closure or tryCatch in its frame). The first entry after registration is
-# the registering gptr() call itself (verifier note), so calls of gptr() are filtered out.
-#
-# R removes a task callback that signals an error, after printing that error at the user's
-# prompt, so nothing the callback runs may throw on parser output (D-045): the call tree is
-# walked breadth-first (linear in its size, never recursive, into the defaults of function
-# formals too), an expression nested deeper than R evaluates is not deparsed (deparse() recurses
-# in C and overflows the C stack), an error from deparse() becomes a note, and the text is valid
-# UTF-8 before it is cut to 120 characters.
+# The user's top-level expressions between agent turns (P09; report 12 section 2.C5).
+# A task callback registered while a session with a kept home is live; it never touches `value`.
+# R drops a callback that throws, so nothing it runs may throw on parser output (D-045). gptr()
+# calls, the registering one included, are not logged.
 
 #' Process-level log of the user's top-level expressions (not run state: the user's own
 #' typing history, the last 20 entries)
@@ -37,13 +27,9 @@ user_log_gptr_head = function(head) {
     user_log_is_name(head[[2L]], "gptr") && user_log_is_name(head[[3L]], "gptr")
 }
 
-#' Classify an expression: "gptr" when it calls gptr() anywhere (the pipe is a call after
-#' parsing), "deep" when its calls nest more than 5,000 levels (R's default `expressions`
-#' limit), else "show". Breadth-first over the call tree: linear and never recursive. The
-#' children are joined without their argument names, which do.call(c, ...) would pass to c():
-#' a child named `recursive` or `use.names` would bind to c()'s formal and end the walk. The
-#' formals of a `function` call are a pairlist, not a call, so the defaults in a pairlist child
-#' join the same level: `function(x = gptr("p")) x` calls gptr(), and a deep default is "deep".
+#' Classify an expression: "gptr" (calls gptr() anywhere), "deep" (nests past 5,000 calls), "show"
+#' Breadth-first and linear; children are joined without names (a child named `recursive` would
+#' bind to c()'s formal) and `function` formals join the same level (D-045).
 #' @noRd
 user_log_scan = function(expr) {
   level = if (is.call(expr)) list(expr) else list()
@@ -63,21 +49,17 @@ user_log_scan = function(expr) {
   "show"
 }
 
-#' One log entry: the deparsed expression on one line, valid UTF-8 (IC-62), cut to 120
-#' characters. deparse() signals an error on some input the parser accepts: in a UTF-8 locale,
-#' a backtick name whose escaped bytes are not UTF-8; at its C stack check, a long chain of calls
-#' such as f(1)(1)...(1). Any error becomes a note. This frame holds only `expr`, never the
-#' callback's `value`.
+#' One log entry: the deparsed expression on one line, valid UTF-8 (IC-62), at most 120 characters
+#' deparse() errors on some parsed input (non-UTF-8 backtick names, long call chains) become a
+#' note; this frame holds only `expr`, never the callback's `value`.
 #' @noRd
 user_log_text = function(expr) {
   tryCatch(user_log_line(expr), error = function(e) "<expression that cannot be deparsed>")
 }
 
-#' The text of user_log_text(), which may signal an error. The deparsed lines are trimmed and
-#' joined with "; " between statements and a space where a break falls inside one statement:
-#' after `{`, before `}`, before `else`, and where deparse() leaves a trailing space. It leaves
-#' one at each break inside a statement: inside braces after `if (cond) ` (and so before the
-#' branch), and past `width.cutoff` after `, ` or a binary operator.
+#' The text of user_log_text(), which may signal an error
+#' Deparsed lines join with "; " between statements and a space inside one: after `{`, before `}`
+#' or `else`, and after the trailing space deparse() leaves at a break inside a statement.
 #' @noRd
 user_log_line = function(expr) {
   raw = deparse(expr, width.cutoff = 500L, nlines = 120L)
@@ -156,11 +138,8 @@ user_log_stop = function() {
 
 on_load(on_unload(user_log_stop))
 
-#' Top-level expressions the user evaluated since `since`
-#'
-#' @param since Epoch seconds (`as.numeric(Sys.time())`) or NULL for the whole log.
-#' @param n Most recent entries to return.
-#' @return Character vector, oldest first, each at most 120 characters.
+#' Top-level expressions the user evaluated since `since` (epoch seconds; NULL: the whole log)
+#' The last `n`, oldest first, each at most 120 characters.
 #' @noRd
 user_expr_log = function(since = NULL, n = 20L) {
   check_number(since, "since", null = TRUE)

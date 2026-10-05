@@ -1,12 +1,7 @@
-# eval-format.R -- the model-facing text of an evaluation (P09).
-#
-# The format of report 12 section 3.4 with the contract's notices (04 section 7.9, IC-67):
-# output, messages, warnings, the error with its trimmed traceback, `[plot N attached]`,
-# `[plots 4-50 not attached: gptr$plot(k)]`, state-change lines (`~ pbmc <Seurat> modified`,
-# `+ markers <data.frame 4,211 x 7>`), a status line, then head 40% / tail 60% truncation
-# through P01's truncate_output() with the `gptr$out(<id>)` notice (about 26 tokens, G5
-# fact-check 13). Image tokens count against the budget, and the budget is halved once the
-# session's context passes half the compaction threshold (G4 section 4.4.5).
+# The model-facing text of an evaluation (P09; report 12 section 3.4, 04 section 7.9, IC-67):
+# events, plot notices, object and state-change lines and a status line, cut head 40% / tail 60%
+# by truncate_output(). Image tokens count against the budget, which halves once the session
+# passes half the compaction threshold (G4 section 4.4.5).
 
 #' Cleaned lines of captured text (ANSI/OSC removed, carriage returns collapsed)
 #' @noRd
@@ -100,12 +95,8 @@ eval_tail_lines = function(res) {
 }
 
 #' Is the running session's context above half of the compaction threshold?
-#'
-#' Uses the session's own last request (input, cache and output tokens of its last usage row;
-#' the rows a child charges to its ancestors (IC-66) carry the child's session id and are
-#' skipped) and asks the `compact.should` service (P07) at twice that size. FALSE when there is
-#' no running session, no service, no request of the session, a last request whose token counts
-#' are all unknown (IC-74: unknown is never taken as zero), or when the service fails.
+#' Asks `compact.should` (P07) at twice the session's own last request (a child's rows, IC-66, are
+#' skipped); FALSE without evidence, all-unknown counts included (IC-74, D-058).
 #' @noRd
 eval_pressure = function(s = eval_session()) {
   if (is.null(s) || !ext_service_has("compact.should")) return(FALSE)
@@ -130,11 +121,7 @@ eval_budget = function(budget_tokens, pressure = eval_pressure()) {
 }
 
 #' Model text of an evaluation within the token budget (04 section 7.9)
-#'
-#' @param res A `gptr_eval_result` (04 section 5.8).
-#' @param budget_tokens Estimated tokens for the text and the images together.
-#' @return list(text = chr(1), images = list of image blocks, truncated = lgl(1),
-#'   out_id = chr(1) or NULL, spill = chr(1) or NULL).
+#' `budget_tokens` covers text and images; returns list(text, images, truncated, out_id, spill).
 #' @noRd
 format_eval_result = function(res, budget_tokens) {
   check_class(res, "gptr_eval_result", "res")

@@ -1,14 +1,7 @@
-# env-probe.R -- installed-package capability probe for the `<r_env>` section (P09).
-#
-# Adapted from report 19 section 5.12 (proto_caps.R) and its format spec (section 3.2):
-# find.package() plus Meta/package.rds, never loadNamespace()/requireNamespace()
-# (rlang::is_installed() loads namespaces, report 19 section 2.5). "Installed but NOT loadable"
-# is detected without loading: a Depends or Imports package that is not installed. LinkingTo is
-# not a load-time dependency (headers are read only when compiling), so it never makes a package
-# unloadable (D-047). A namespace that is already loaded is installed at its loaded version. The
-# out-of-process load probe of the prototype (29 s) is not run. Cores come from ps (Imports),
-# never from the parallel package; total RAM is shown, free RAM is left out because the section is
-# frozen into the cached system prompt (architecture section 7.3 example).
+# Installed-package capability probe for the `<r_env>` section (P09; report 19 sections 3.2, 5.12).
+# find.package() and Meta/package.rds, never loadNamespace() (rlang::is_installed() loads); a
+# package is "NOT loadable" when a Depends or Imports package is missing (LinkingTo never; D-047).
+# Cores come from ps; free RAM is left out: the section is frozen into the cached system prompt.
 
 #' Per-process cache of the rendered body
 #' @noRd
@@ -45,10 +38,8 @@ env_probe_deps = function(field) {
 }
 
 #' Path of the installed copy of `pkg` that loading would use, or character() when there is none
-#'
-#' The first find.package() hit, which is the copy loadNamespace() takes. A hit without
-#' `Meta/package.rds` (a directory holding only a DESCRIPTION, which library() and
-#' loadNamespace() refuse) is not an installed package.
+#' The first find.package() hit; one without `Meta/package.rds` is not installed (library() and
+#' loadNamespace() refuse it).
 #' @noRd
 env_probe_path = function(pkg, lib) {
   path = find.package(pkg, lib.loc = lib, quiet = TRUE)
@@ -60,11 +51,8 @@ env_probe_path = function(pkg, lib) {
 }
 
 #' Whether each package is installed (or loaded, when `lib` is NULL), looked up by name
-#'
-#' The rule of env_probe_packages() for the probed packages: one lookup per name, never by the
-#' basename of a returned path (a namespace loaded from a source tree lives in a directory that
-#' need not carry the package name and has no `Meta/package.rds`). `memo` (an environment) keeps
-#' the answers for the dependencies the probed packages share.
+#' Never by a path's basename (a source-tree namespace need not carry the name; D-047); the `memo`
+#' environment keeps the answers for shared dependencies.
 #' @noRd
 env_probe_found = function(pkgs, lib, memo) {
   vapply(pkgs, function(p) {
@@ -78,11 +66,8 @@ env_probe_found = function(pkgs, lib, memo) {
 }
 
 #' Installed version and missing Depends/Imports of each package, without loading any
-#'
-#' With `lib = NULL` a package whose namespace is loaded is installed at its loaded version, with
-#' nothing missing. Otherwise the copy in `lib` (default `.libPaths()`) that loading would use is
-#' read from its `Meta/package.rds`; a directory without that file is not an installed package
-#' (library() refuses it), so it counts as not installed, and as missing when it is a dependency.
+#' With `lib = NULL` a loaded namespace is installed at its loaded version, nothing missing; else
+#' the copy loading would use is read from its `Meta/package.rds` (D-047).
 #' @noRd
 env_probe_packages = function(reg, lib = NULL) {
   n = nrow(reg)
@@ -111,9 +96,7 @@ env_probe_packages = function(reg, lib = NULL) {
 }
 
 #' R version, platform, locale, cores, workers and RAM of this session
-#'
-#' Under R CMD check (P01's check_running(), or `_R_CHECK_LIMIT_CORES_` set to anything but
-#' "false", as R's parallel package reads it) the advertised workers are 2 (IC-60).
+#' 2 workers under R CMD check: check_running() or `_R_CHECK_LIMIT_CORES_` set, not "false" (IC-60).
 #' @noRd
 env_probe_session = function() {
   cores = tryCatch(ps::ps_cpu_count(logical = TRUE), error = function(e) NA_integer_)
@@ -166,9 +149,7 @@ env_probe_render = function(caps, sess) {
 }
 
 #' Body of the `<r_env>` prompt section, computed without loading namespaces
-#'
 #' Cached for the process (the section is frozen per session).
-#' @return chr(1).
 #' @noRd
 r_env_probe = function() {
   if (is.null(env_probe_cache$text)) {

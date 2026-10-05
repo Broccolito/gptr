@@ -1,14 +1,7 @@
-# eval-plots.R -- plot capture during an evaluation and replay to PNG (P09).
-#
-# Adapted from report 12 section 5.1 (device-following capture; evaluate 1.0.5's visual-change
-# and display-list prefix heuristics; replay to PNG) with the IC-67 amendments: when no device
-# is open and no human can see one, plots go to pdf(NULL) with the display list enabled (no
-# Rplots.pdf in getwd(); no screen device under _R_CHECK_SCREEN_DEVICE_=stop) and the prior
-# device is restored; PNGs are 768x512 at res 120 (532 Anthropic tokens, G2 (g)), through ragg
-# when installed. While no human can see a device, the `device` option opens pdf(NULL) as well,
-# so a default device the code opens after closing one is offscreen too (D-049). Recorded plots
-# are held only until they are rendered: events carry PNG paths, never recorded plots (04
-# section 5.8).
+# Plot capture during an evaluation and replay to PNG (P09; report 12 section 5.1, IC-67, D-049).
+# With no device open and no human to see one, plots and the `device` option go to pdf(NULL) (no
+# Rplots.pdf); the prior device is restored. PNGs are 768x512 at res 120 (532 Anthropic tokens);
+# events carry PNG paths, never recorded plots (04 section 5.8).
 
 #' Open a PNG device of `width` x `height` pixels; TRUE when one was opened
 #' @noRd
@@ -58,15 +51,9 @@ plot_file = function() {
   ws_path("cache", "tmp", paste0("gptr-plot-", id_new("", 12L), ".png"))
 }
 
-#' Render a recorded plot to a PNG image block
-#'
-#' Used by the evaluator and by `gptr$plot()` (P10) and `.opts$images` (P08, IC-44). The PNG is
-#' an intermediate: it is removed once the block holds its bytes, and when the replay fails (the
-#' error is not caught).
-#' @param recorded A `recordedplot` (grDevices::recordPlot()).
-#' @param width,height Pixels (defaults `gptr.plot_width`, `gptr.plot_height`).
-#' @param res Resolution in pixels per inch (default `gptr.plot_res`).
-#' @return An image block (04 section 4.1), or NULL when no PNG device is available.
+#' Render a recorded plot to a PNG image block (04 section 4.1), or NULL without a PNG device
+#' Also used by `gptr$plot()` (P10) and `.opts$images` (P08, IC-44); the PNG is always removed and
+#' a replay error is not caught (D-049).
 #' @noRd
 plot_png = function(recorded, width = gptr_opt("plot_width"), height = gptr_opt("plot_height"),
                     res = gptr_opt("plot_res")) {
@@ -103,10 +90,7 @@ plot_is_prefix = function(x, y) {
 }
 
 #' Open an offscreen device: pdf(NULL) at the PNG's aspect ratio, display list enabled
-#'
-#' Its number joins `ps$our_devs` (closed by plot_close()). A device number R reuses after the
-#' code closed a device starts as a new page: nothing captured on the old device is extended.
-#' @return The device number.
+#' Returns its number, which joins `ps$our_devs`; a number R reuses starts a new page (D-049).
 #' @noRd
 plot_open_offscreen = function(ps) {
   grDevices::pdf(file = NULL, width = ps$inches[[1L]], height = ps$inches[[2L]])
@@ -120,12 +104,8 @@ plot_open_offscreen = function(ps) {
 }
 
 #' The `device` option while no human can see a device (or in "capture" mode)
-#'
-#' R opens the `device` option when code draws with no device open (`plot()`, `par()`, grid)
-#' or calls `dev.new()`. After the code closed the offscreen or the user's device, that is
-#' another offscreen device instead of R's default (Rplots.pdf in getwd() under Rscript), so
-#' the IC-67 rule holds for the whole evaluation and later plots are still recorded. The
-#' closure holds only the plot state.
+#' A device R opens after the code closed one is offscreen too, not Rplots.pdf, so IC-67 holds for
+#' the whole evaluation (D-049); the closure holds only the plot state.
 #' @noRd
 plot_device_option = function(ps) {
   force(ps)
@@ -133,12 +113,8 @@ plot_device_option = function(ps) {
 }
 
 #' Start plot capture for an evaluation; returns the plot state environment
-#'
-#' `mode`: "auto" draws on the user's device when one is open or a human is present, else on
-#' pdf(NULL); "capture" always draws on pdf(NULL); "none" records nothing (pdf(NULL) is still
-#' opened when no device is open and no human is present, so no Rplots.pdf is written). In
-#' "capture" mode, and in every mode when no human is present, the `device` option opens
-#' pdf(NULL) too until plot_close() restores it (plot_device_option()).
+#' `mode` "auto": the user's device when one is open or a human is present, else pdf(NULL);
+#' "capture": pdf(NULL); "none": nothing recorded (pdf(NULL) still keeps Rplots.pdf away).
 #' @noRd
 plot_begin = function(mode, human, width = gptr_opt("plot_width"),
                       height = gptr_opt("plot_height"), res = gptr_opt("plot_res")) {
@@ -180,13 +156,8 @@ plot_enable_new = function(ps) {
 }
 
 #' Record the current page when it is complete and new; TRUE when a new plot was captured
-#'
-#' Low-level additions to a page this evaluation already captured (`abline()`, `lines()`,
-#' `points()` in later top-level expressions) replace that plot's recording instead of adding
-#' one, as knitr's `fig.keep = "high"` does: the model sees the finished page once, not each
-#' intermediate state (each image costs 532 tokens and at most `max_images` are attached).
-#' In "capture" mode the user's devices open at plot_begin() are skipped, but not an offscreen
-#' device of `ps$our_devs` that R opened at the number of one the code closed (D-049).
+#' Additions to a captured page replace its recording (knitr's `fig.keep = "high"`); "capture"
+#' mode skips the user's devices, not an offscreen one R opened at a reused number (D-049).
 #' @noRd
 plot_capture = function(ps, incomplete = FALSE) {
   if (!ps$record) return(FALSE)
@@ -213,9 +184,7 @@ plot_capture = function(ps, incomplete = FALSE) {
 }
 
 #' Close the private devices, restore the `device` option and the prior device; idempotent
-#'
-#' Capture ends here, so the last display lists are dropped too (the recordings stay until
-#' plot_render_all()).
+#' Capture ends here: the display lists go, the recordings stay until plot_render_all().
 #' @noRd
 plot_close = function(ps) {
   if (is.null(ps) || isTRUE(ps$closed)) return(invisible())
@@ -232,10 +201,7 @@ plot_close = function(ps) {
 }
 
 #' Render the captured plots (at most `max_render`) to PNG files and drop the recordings
-#'
-#' A PNG whose replay failed is removed.
-#' @return Character vector of PNG paths (NA where rendering failed), one per captured plot up
-#'   to `max_render`.
+#' One path per plot; NA, with the file removed, where the replay failed.
 #' @noRd
 plot_render_all = function(ps, max_render = 50L, width = gptr_opt("plot_width"),
                            height = gptr_opt("plot_height"), res = gptr_opt("plot_res")) {
