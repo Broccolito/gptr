@@ -1011,14 +1011,11 @@ nb_inert_text = function(text, ids, inert = TRUE) {
     k = match(paste0("gptr-", id), cids)
     if (is.na(k)) next
     cell = nb[["cells"]][[k]]
-    meta = nb_cell_meta(cell)
-    if (identical(meta[["status"]], "undone") == isTRUE(inert)) next
-    src = nb_cell_lines(cell)
-    src = if (inert) doc_ipynb_inert(src) else sub("^#~ ", "", src)
-    meta[["status"]] = if (inert) "undone" else NULL
-    meta = meta[order(names(meta), method = "radix")]
-    cell = nb_put(cell, "metadata", nb_put(cell[["metadata"]], "gptr", meta))
-    cell[["source"]] = nb_source_split(src)
+    old = structure(nb_cell_lines(cell), meta = nb_cell_meta(cell))
+    src = doc_inert_block_lines(old, "ipynb", inert)
+    if (identical(src, old)) next
+    cell = nb_put(cell, "metadata", nb_put(cell[["metadata"]], "gptr", attr(src, "meta")))
+    cell[["source"]] = nb_source_split(as.character(src))
     nb[["cells"]][[k]] = cell
     changed = TRUE
   }
@@ -1084,3 +1081,139 @@ doc_inert_text = function(lines, fmt, ids, inert = TRUE, transcript = FALSE) {
   }
   lines
 }
+
+# ---- inert blocks on disk (G7 section 3.8) -------------------------------------------------------
+
+#' One block's lines made inert or live again (G7 section 3.8), in the form a format's upsert()
+#' takes: a marker block through doc_inert_marker_lines(); a notebook cell's source (its
+#' `metadata.gptr` as attribute `meta`) gets or loses its `#~ ` prefixes and the meta its status
+#' "undone". Lines already in the requested state are returned unchanged.
+#' @noRd
+doc_inert_block_lines = function(lines, fmt, inert = TRUE) {
+  if (!identical(fmt, "ipynb")) {
+    new = doc_inert_marker_lines(as.character(lines), inert)
+    return(if (identical(new, as.character(lines))) lines else new)
+  }
+  meta = attr(lines, "meta", exact = TRUE)
+  if (!is.list(meta)) meta = list()
+  if (identical(meta[["status"]], "undone") == isTRUE(inert)) return(lines)
+  src = as.character(lines)
+  src = if (inert) doc_ipynb_inert(src) else sub("^#~ ", "", src)
+  meta[["status"]] = if (inert) "undone" else NULL
+  structure(src, meta = meta[order(names(meta), method = "radix")])
+}
+
+#' The lines of block `id` as a document's text holds it, in the form its format's upsert()
+#' takes: a marker block without its indentation, or a notebook cell's source with its
+#' `metadata.gptr` as attribute `meta`; NULL when the text holds no such block
+#' @noRd
+doc_disk_block_lines = function(fmt, text, id) {
+  if (identical(fmt, "ipynb")) {
+    nb = nb_parse(text)
+    k = match(paste0("gptr-", id), nb_cell_ids(nb))
+    if (is.na(k)) return(NULL)
+    cell = nb[["cells"]][[k]]
+    return(structure(nb_cell_lines(cell), meta = nb_cell_meta(cell)))
+  }
+  b = doc_find_blocks(text)
+  k = which(b$id == id)
+  if (!length(k)) return(NULL)
+  seg = text[b$start[k[1L]]:b$end[k[1L]]]
+  ind = b$indent[k[1L]]
+  if (nzchar(ind)) seg = ifelse(startsWith(seg, ind), substring(seg, nchar(ind) + 1L), seg)
+  seg
+}
+
+#' Make blocks of a document inert (undone) or live again, under write consent, the document
+#' lock, the `document_write` event (kind "inert") and the md5 check; TRUE when written.
+#' `transcript` (NULL: a file under .gptr/transcripts/) also makes the owning `s_<hex>` statement
+#' of a console turn inert, wherever the transcript lives (an IDE's active document). A notebook
+#' open in this Jupyter kernel (IC-50) and the script this process runs under Rscript (D-109)
+#' are never written: their blocks change in this process's queue (doc_pending_inert()), which
+#' gptr_doc(path, sync = TRUE) or the exit writes; TRUE when the queue changed.
+#' @noRd
+doc_set_inert = function(path, ids, inert = TRUE, session = NULL, transcript = NULL) {
+  if (!file.exists(path) || !length(ids) || !doc_consent(path, ask = FALSE)) {
+    return(invisible(FALSE))
+  }
+  fmt = doc_format_of(path)
+  if (is.null(fmt)) return(invisible(FALSE))
+  kind = doc_queue_kind(path)
+  if (!is.null(kind)) {
+    return(invisible(doc_pending_inert(path_norm(path), fmt, ids, inert, kind, session)))
+  }
+  transcript = transcript %||% startsWith(doc_rel(path), ".gptr/transcripts/")
+  lock = doc_lock(path)
+  if (is.null(lock)) return(invisible(FALSE))
+  on.exit(doc_unlock(lock), add = TRUE)
+  for (attempt in 1:3) {
+    doc = doc_read(path)
+    new = doc_inert_text(doc$lines, fmt, ids, inert, transcript)
+    if (identical(new, doc$lines)) return(invisible(FALSE))
+    ev = doc_event(path, fmt, "inert", paste(ids, collapse = ","), new, session)
+    if (isTRUE(ev$block)) return(invisible(FALSE))
+    ok = tryCatch({
+      doc_write(doc, ev$lines %||% new)
+      TRUE
+    }, gptr_error_doc_write = function(e) {
+      if (identical(e$reason, "conflict")) FALSE else stop(e)
+    })
+    if (ok) return(invisible(TRUE))
+  }
+  invisible(FALSE)
+}
+
+# ---- builtin:documents (contract 7.15, 10.3; IC-34, IC-68) -------------------------------------
+
+#' The `documents` prompt section text (architecture 7.3, byte for byte; P07 replaces `{s1}`)
+#' @noRd
+doc_section_body = paste(c(
+  paste0("Code from successful r calls is written into the user's document (named in ",
+         "<environment>) in a block below the gptr() call that asked for it, so the document ",
+         "re-runs from top to bottom. Therefore:"),
+  paste0("- Make recorded code the clean final version: named objects, no exploratory prints. ",
+         "Pass record = false for throwaway checks (head(), summaries, tests)."),
+  paste0("- Record key modelling decisions with note (one line, written as \"## Decision: ...\"); ",
+         "key printed outputs are added as #> comments automatically."),
+  paste0("- To change code you wrote earlier, edit that block in the document instead of ",
+         "appending a second version."),
+  paste0("- In the document, prompts are quoted strings in gptr(\"...\"), and System 1 decisions ",
+         "are gptr(..., model = {s1}) inside if, for or while. Add such calls only when the user ",
+         "asks for an agent step in the script.")
+), collapse = "\n")
+
+#' The `documents` section (contract 9.3: T0, order 500, budget 250): only when a history
+#' document is bound (`ctx$input$document`, from the doc.site service)
+#' @noRd
+doc_section_text = function(ctx) {
+  if (is.null(ctx$input$document)) return(NULL)
+  doc_section_body
+}
+
+#' builtin:documents: the five doc formats, the route `document` (order 50), the `documents`
+#' prompt section, the agent_end and session_tree hooks and the handlers of P14's
+#' console:command and console:direct channels; the doc.* services are registered below with
+#' `builtin = "documents"`, so filtering the built-in removes them too
+#' @noRd
+builtin_documents = function(gptr) {
+  for (spec in doc_formats_builtin()) gptr$register(spec)
+  gptr$register(gptr_spec("route", "document", order = 50, match = doc_route_match,
+                          run = doc_route_run,
+                          description = paste("a call located in a history document: replay",
+                                              "its fresh block or record its new one")))
+  gptr$register(gptr_prompt_section("documents", doc_section_text, tier = "T0", order = 500L,
+                                    budget = 250L))
+  gptr$on("agent_end", doc_on_agent_end)
+  gptr$on("session_tree", doc_on_session_tree)
+  gptr$on("console:command", doc_on_console_command)
+  gptr$on("console:direct", doc_on_console_direct)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("documents", builtin_documents))
+on_load(ext_service_set("doc.site", doc_site_service, provided_by = "P15", builtin = "documents"))
+on_load(ext_service_set("doc.edit", doc_edit_service, provided_by = "P15", builtin = "documents"))
+on_load(ext_service_set("doc.s1_block", doc_s1_block_service, provided_by = "P15",
+                        builtin = "documents"))
+on_load(ext_service_set("doc.replay", doc_replay_service, provided_by = "P15",
+                        builtin = "documents"))

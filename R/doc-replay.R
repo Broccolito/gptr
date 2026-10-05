@@ -362,3 +362,501 @@ doc_replay_team = function(call, site, mode) {
   assign("doc", NULL, envir = call)
   team
 }
+
+# ---- the `document` route (IC-45..IC-47) --------------------------------------------------------
+
+#' Could a console call be recorded at all? Not in replay mode and not under `record = "off"`;
+#' the route asks the transcript question only then (an answer that cannot take effect would
+#' still be remembered)
+#' @noRd
+doc_console_may_record = function(call) {
+  mode = tryCatch(replay_mode(call$args$replay), error = function(e) NA_character_)
+  if (!isTRUE(mode %in% c("auto", "live", "record"))) return(FALSE)
+  rec = tryCatch(setting_get("record", default = "ask"), error = function(e) "ask") %||% "ask"
+  !identical(rec, "off")
+}
+
+#' Recover a dead process's deferred writes for the document of a located call (IC-51: the next
+#' gptr() touching that document), as the route and doc.replay both do before they decide. A
+#' failing recovery is a diagnostic under `where`, so it never turns a replay into a live call. A
+#' recovery written to disk may hold this very call's block, so the call is then located again
+#' and that site is returned when `keep(site)` still holds: its recovered block is replayed
+#' (IC-45), not run live and recorded a second time. A deferred site's adopted upserts are written
+#' at exit, so it is returned unchanged, as is a console site.
+#' @noRd
+doc_touch = function(call, site, where, keep) {
+  deferred = identical(site$backend, "deferred")
+  got = tryCatch(doc_recover(site$path, defer = deferred), error = function(e) {
+    registry_diagnostic("builtin:documents", where, class(e)[1L], conditionMessage(e))
+    FALSE
+  })
+  if (!isTRUE(got) || deferred || isTRUE(site$console)) return(site)
+  again = tryCatch(doc_locate(call), error = function(e) NULL)
+  if (!is.null(again$path) && isTRUE(keep(again))) again else site
+}
+
+#' The route's match(): a call located in a document (top-level, or directly inside an agent
+#' block), or a console call with a transcript target (asked once per project when a human can
+#' answer and the call could be recorded); never a call made from model code. Recovers a dead
+#' process's deferred writes for that document first (doc_touch()) and keeps the site in
+#' `call$doc` for run().
+#' @noRd
+doc_route_match = function(call) {
+  if (!is.null(run_current())) return(FALSE)
+  site = doc_locate(call)
+  if (is.null(site) && gptr_can_prompt()) {
+    s = call$session
+    site = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
+                            template = call$template %||% call$prompt,
+                            context_labels = doc_context_labels(call$context),
+                            ask = doc_console_may_record(call))
+    if (!is.null(site)) assign("top_level", TRUE, envir = call)
+  }
+  if (is.null(site) || is.null(site$path)) return(FALSE)
+  if (!isTRUE(site$top_level) && is.null(site$in_block)) return(FALSE)
+  site = doc_touch(call, site, "route", function(s) {
+    isTRUE(s$top_level) || !is.null(s$in_block)
+  })
+  assign("doc", site, envir = call)
+  TRUE
+}
+
+#' Skip an undone block (G7 section 3.8 undone row): one notice, zero requests, logged "skipped"
+#' in the gptr_source() frame of its document
+#' @noRd
+doc_skip_undone = function(site) {
+  gptr_inform(paste0("Block ", site$block$id, " of ", doc_rel(site$path), " was undone by ",
+                     "/rewind; edit or delete the prompt, or run live to regenerate it."),
+              "notice")
+  doc_source_log(site$path, site$block$id, "skipped")
+  invisible(NULL)
+}
+
+#' The route's run(): replay a fresh block (no write consent needed), skip an undone one,
+#' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45)
+#' @noRd
+doc_route_run = function(call) {
+  site = call$doc
+  mode = replay_mode(call$args$replay)
+  keep = function(s) {
+    ok = !is.null(s) && !identical(mode, "replay") && doc_consent_possible(s$path)
+    assign("doc", if (ok) s else NULL, envir = call)
+    route_pass()
+  }
+  if (isTRUE(site$console)) return(keep(site))
+  if (!is.null(site$in_block)) return(doc_run_block_nested(call, site, mode))
+  if (is.null(site$block)) return(keep(site))
+  decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
+  if (identical(decision, "replay")) return(doc_replay_call(call, site, mode))
+  if (identical(decision, "skip")) {
+    doc_skip_undone(site)
+    assign("doc", NULL, envir = call)
+    return(invisible(call$session))
+  }
+  if (identical(decision, "regenerate")) {
+    site$regenerate = TRUE
+    site$block_id = site$block$id
+    doc_skip_old(site)
+    return(keep(site))
+  }
+  assign("doc", NULL, envir = call)
+  route_pass()
+}
+
+# ---- services (contract 7.0; owned by builtin:documents, IC-34) --------------------------------
+
+#' doc.site: the document a session records into (its replayed block's document, the site of
+#' its current run; without a session, as P10's gptr$edit() member calls it, the site of the
+#' innermost running call), else the process binding of gptr_doc() while its directory exists,
+#' as list(path, format), or NULL
+#' @noRd
+doc_site_service = function(session) {
+  if (!is.null(session)) {
+    d = session_data(session)
+    if (!is.null(d$doc$path)) return(list(path = d$doc$path, format = d$doc$format))
+    run = session_live(session)$run
+    site = if (is.null(run)) NULL else run$opts$doc
+    if (!is.null(site$path)) return(list(path = site$path, format = site$format))
+  } else {
+    run = run_current()
+    site = if (is.null(run)) NULL else run$opts$doc
+    if (!is.null(site$path)) return(list(path = site$path, format = site$format))
+  }
+  b = the$doc_binding
+  if (is.null(b$path) || !dir.exists(dirname(b$path))) return(NULL)
+  list(path = b$path, format = b$format)
+}
+
+#' Ids of the blocks whose lines an edit's old text touches (`oldText`, or `old_text` as P10's
+#' edit_normalize_args() also accepts)
+#' @noRd
+doc_edit_blocks = function(lines, blocks, edits) {
+  if (!nrow(blocks) || !is.list(edits)) return(character())
+  joined = paste(lines, collapse = "\n")
+  starts = cumsum(c(1L, nchar(lines) + 1L))
+  hit = character()
+  for (e in edits) {
+    old = if (is.list(e)) e[["oldText"]] %||% e[["old_text"]] else NULL
+    if (!is.character(old) || length(old) != 1L || is.na(old) || !nzchar(old)) next
+    pos = regexpr(as_utf8(old), joined, fixed = TRUE)
+    if (pos < 0L) next
+    first = findInterval(as.integer(pos), starts)
+    last = findInterval(as.integer(pos) + nchar(as_utf8(old)) - 1L, starts)
+    k = which(blocks$end >= first & blocks$start <= last)
+    hit = c(hit, blocks$id[k])
+  }
+  unique(hit)
+}
+
+#' Refresh `date` and `sha` of the blocks whose body an agent edit changed, so the edit is not
+#' later taken for a user edit
+#' @noRd
+doc_refresh_headers = function(lines, old_blocks, old_lines) {
+  blocks = doc_find_blocks(lines)
+  for (k in seq_len(nrow(blocks))) {
+    b = blocks[k, , drop = FALSE]
+    body = doc_block_body(lines, b)
+    o = which(old_blocks$id == b$id)
+    if (length(o) &&
+        identical(body, doc_block_body(old_lines, old_blocks[o[1L], , drop = FALSE]))) {
+      next
+    }
+    h = b$header[[1L]]
+    h$date = format(Sys.Date(), "%Y-%m-%d")
+    h$sha = doc_body_sha(body)
+    lines[b$start] = paste0(b$indent, "# >>> gptr:", b$id, " ", doc_format_kv(h))
+  }
+  lines
+}
+
+#' Ids of the blocks of a text that the user edited by hand
+#' @noRd
+doc_hand_edited = function(lines, blocks = doc_find_blocks(lines)) {
+  hand = vapply(seq_len(nrow(blocks)), function(k) {
+    b = blocks[k, , drop = FALSE]
+    identical(doc_block_status(b$header[[1L]], doc_block_body(lines, b)), "user-edited")
+  }, NA)
+  blocks$id[hand]
+}
+
+#' The body of a block by id (NULL when the text holds no such block)
+#' @noRd
+doc_body_of = function(lines, id) {
+  b = doc_find_blocks(lines)
+  k = which(b$id == id)
+  if (length(k)) doc_block_body(lines, b[k[1L], , drop = FALSE]) else NULL
+}
+
+#' The error result of an edit that would change a hand-edited block
+#' @noRd
+doc_edit_refused = function(path, id) {
+  gptr_tool_result(paste0("Block ", id, " of ", doc_rel(path), " was edited by hand; it was ",
+                          "left unchanged. Ask the user before rewriting it."),
+                   details = list(path = path, document = TRUE), is_error = TRUE)
+}
+
+#' The error result of an edit of a bound document this process must not write now: the script
+#' it runs under Rscript (D-109, report 14 section 2.1.2) or the notebook open in its Jupyter
+#' kernel (IC-50)
+#' @noRd
+doc_edit_queued = function(path, kind) {
+  why = if (identical(kind, "deferred")) {
+    paste0(doc_rel(path), " is the script this R process runs under Rscript; gptr writes it only ",
+           "when the run ends, so it cannot be edited now.")
+  } else {
+    paste0(doc_rel(path), " is the notebook open in this Jupyter kernel; gptr never writes an ",
+           "open notebook, so it cannot be edited now.")
+  }
+  gptr_tool_result(paste(why, "Leave the earlier block as it is."),
+                   details = list(path = path, document = TRUE), is_error = TRUE)
+}
+
+#' doc.edit: an `edit` of the session's bound document goes through the registered edit tool
+#' (the service answers NULL while that tool runs, so it is not re-entered), refuses to change
+#' a block the user edited by hand (before the edit when its old text names the block; after it,
+#' by restoring the text, when the tool matched loosely), and refreshes the headers of the blocks
+#' it changed; NULL for any other file (contract 7.0, 7.10) and for a bound notebook that is not
+#' open (the edit tool writes it). A bound script this process runs under Rscript or a bound
+#' notebook open in its Jupyter kernel is never edited: an error result, never NULL, which would
+#' let the edit tool write it (D-109, IC-50).
+#' @noRd
+doc_edit_service = function(path, edits, session) {
+  st = doc_state()
+  if (isTRUE(st$in_edit)) return(NULL)
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) return(NULL)
+  full = path_norm(path)
+  site = doc_site_service(session)
+  if (is.null(site) || !identical(path_key(site$path), path_key(full)) || !file.exists(full)) {
+    return(NULL)
+  }
+  kind = doc_queue_kind(full)
+  if (!is.null(kind)) return(doc_edit_queued(full, kind))
+  if (identical(site$format, "ipynb")) return(NULL)
+  spec = registry_get("tool", "edit")
+  if (is.null(spec) || !is.function(spec$execute)) return(NULL)
+  before = tryCatch(doc_read(full), error = function(e) NULL)
+  if (is.null(before)) return(NULL)
+  blocks = doc_find_blocks(before$lines)
+  mine = doc_hand_edited(before$lines, blocks)
+  hit = intersect(doc_edit_blocks(before$lines, blocks, edits), mine)
+  if (length(hit)) return(doc_edit_refused(full, hit[1L]))
+  st$in_edit = TRUE
+  on.exit({
+    st$in_edit = FALSE
+  }, add = TRUE)
+  ctx = if (is.null(session)) NULL else session_live(session)$ctx
+  res = spec$execute(list(path = path, edits = edits), ctx)
+  if (isTRUE(res$is_error)) return(res)
+  after = doc_read(full)
+  moved = mine[vapply(mine, function(id) {
+    !identical(doc_body_of(after$lines, id), doc_body_of(before$lines, id))
+  }, NA)]
+  if (length(moved)) {
+    doc_write(after, before$lines)
+    return(doc_edit_refused(full, moved[1L]))
+  }
+  new = doc_refresh_headers(after$lines, blocks, before$lines)
+  if (!identical(new, after$lines)) doc_write(after, new)
+  res
+}
+
+#' One-line summary of a System 1 vector (contract 11.5): `gptr_decision: 14 TRUE / 6 FALSE
+#' (jev-1.13.0, 2026-09-29)`, `gptr_choice: liver 8, lung 5, other 2 (...)`, `gptr_score: mean
+#' 1.4 (...)`
+#' @noRd
+doc_s1_summary = function(x) {
+  meta = attr(x, "meta") %||% list()
+  tail = paste0(" (", meta$model %||% "unknown", ", ", meta$date %||% format(Sys.Date()), ")")
+  v = unclass(x)
+  attributes(v) = NULL
+  if (inherits(x, "gptr_decision")) {
+    parts = c(paste(sum(v %in% TRUE), "TRUE"), paste(sum(v %in% FALSE), "FALSE"))
+    if (any(is.na(v))) parts = c(parts, paste(sum(is.na(v)), "NA"))
+    return(paste0("gptr_decision: ", paste(parts, collapse = " / "), tail))
+  }
+  if (inherits(x, "gptr_choice")) {
+    tab = table(as.character(v), useNA = "ifany")
+    ord = order(-as.integer(tab), names(tab), method = "radix")
+    items = paste(names(tab)[ord], as.integer(tab)[ord])
+    return(paste0("gptr_choice: ", paste(items, collapse = ", "), tail))
+  }
+  if (inherits(x, "gptr_score")) {
+    num = as.numeric(v)
+    m = if (all(is.na(num))) "NA" else format(signif(mean(num, na.rm = TRUE), 3L))
+    return(paste0("gptr_score: mean ", m, tail))
+  }
+  paste0(class(x)[1L], ": ", length(v), " values", tail)
+}
+
+#' doc.s1_block: the one-line block of a top-level System 1 call (contract 11.5), redacted with
+#' the persist profile (free-text choice levels reach it; IC-74); nothing in replay mode, for
+#' nested calls or for calls in no document
+#' @noRd
+doc_s1_block_service = function(call, summary) {
+  if (!is.null(run_current()) || identical(replay_mode(call$args$replay), "replay")) {
+    return(invisible(NULL))
+  }
+  site = tryCatch(doc_locate(call), error = function(e) NULL)
+  if (is.null(site) || !isTRUE(site$top_level) || is.null(site$stmt) || isTRUE(site$console)) {
+    return(invisible(NULL))
+  }
+  txt = if (inherits(summary, "gptr_s1")) doc_s1_summary(summary) else as.character(summary)[1L]
+  meta = attr(summary, "meta") %||% list()
+  header = list(model = meta$model %||% "unknown", date = meta$date %||% format(Sys.Date()),
+                prompt = site$prompt_hash, args = site$args_hash)
+  if (!is.null(site$block)) {
+    site$block_id = site$block$id
+    site$regenerate = TRUE
+  }
+  line = redact(paste0("#> ", doc_one_line(txt)), "persist")
+  tryCatch(doc_upsert(site, structure(line, header = header)),
+           error = function(e) {
+             registry_diagnostic("builtin:documents", "doc.s1_block", class(e)[1L],
+                                 conditionMessage(e))
+           })
+  invisible(NULL)
+}
+
+#' doc.replay: the replayed team or fan-out session of a fresh (or undone) block, else NULL with
+#' `call$doc` set when the statement may be recorded (IC-47; called by the team and fanout
+#' routes, which run before `document`, so the service recovers a dead process's deferred writes
+#' for the document first, as the route does: doc_touch(), IC-51). An undone block is skipped as
+#' the route skips one (the notice, zero requests, logged "skipped"); its zero-request replayed
+#' session is still returned, because NULL would make the team or fan-out route run the
+#' statement live.
+#' @noRd
+doc_replay_service = function(call) {
+  if (!is.null(run_current())) return(NULL)
+  top = function(s) {
+    !is.null(s) && !is.null(s$path) && isTRUE(s$top_level) && !is.null(s$stmt) &&
+      !isTRUE(s$console)
+  }
+  site = tryCatch(doc_locate(call), error = function(e) NULL)
+  if (!top(site)) return(NULL)
+  site = doc_touch(call, site, "doc.replay", top)
+  mode = replay_mode(call$args$replay)
+  if (is.null(site$block)) {
+    ok = !identical(mode, "replay") && doc_consent_possible(site$path)
+    assign("doc", if (ok) site else NULL, envir = call)
+    return(NULL)
+  }
+  decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
+  if (identical(decision, "replay")) return(doc_replay_team(call, site, mode))
+  if (identical(decision, "skip")) {
+    team = doc_replay_team(call, site, mode)
+    doc_skip_undone(site)
+    return(team)
+  }
+  if (identical(decision, "regenerate")) {
+    site$regenerate = TRUE
+    site$block_id = site$block$id
+    doc_skip_old(site)
+    assign("doc", if (doc_consent_possible(site$path)) site else NULL, envir = call)
+    return(NULL)
+  }
+  assign("doc", NULL, envir = call)
+  NULL
+}
+
+# ---- hooks --------------------------------------------------------------------------------------
+
+#' agent_end: write the block of a settled top-level run whose run options carry a document site
+#' (contract 7.15); only runs that ended `idle` are recorded
+#' @noRd
+doc_on_agent_end = function(event, ctx) {
+  site = event$doc
+  s = ctx$session
+  if (is.null(site) || is.null(site$path) || is.null(s)) return(NULL)
+  if (!identical(event$status %||% "idle", "idle")) return(NULL)
+  d = session_data(s)
+  if (isTRUE(site$console)) {
+    site$session_id = d$id
+    site$session_file = if (is.null(d$file)) NULL else doc_rel(d$file)
+  }
+  turn = if (d$kind %in% c("team", "fanout")) 1L else as.integer(event$turns %||% d$turns)
+  lines = doc_block_lines(s, turn, site, site$ordinal %||% 1L)
+  doc_upsert(site, lines, block_id = site$block_id)
+  NULL
+}
+
+#' Ancestors (inclusive) of an entry id in a list of entries
+#' @noRd
+doc_ancestors = function(ents, id) {
+  ids = vapply(ents, function(e) as.character(e$id %||% NA_character_), "")
+  parents = vapply(ents, function(e) as.character(e$parent_id %||% NA_character_), "")
+  out = character()
+  cur = id
+  while (length(cur) == 1L && !is.na(cur) && nzchar(cur) && !(cur %in% out)) {
+    k = match(cur, ids)
+    if (is.na(k)) break
+    out = c(out, cur)
+    cur = parents[k]
+  }
+  out
+}
+
+#' session_tree: the blocks of turns a rewind abandoned become inert, the blocks of turns a redo
+#' brings back become live again, and console transcripts get a `# /rewind` line (G7 3.8, 4.4).
+#' Only records that wrote a live block choose blocks: the hook's own `undone` entries sit under
+#' the rewind target (P16 appends there), so a later branch from that target holds them, and
+#' entering that branch must not revive the block its turn never wrote.
+#' The `gptr.doc_block` entries it appends keep the format the block was recorded with; their
+#' backend is `transcript` for a console transcript block, `deferred` or `pending` for the script
+#' this process runs under Rscript or the notebook open in its Jupyter kernel (doc_set_inert()
+#' changes their queued blocks, written at exit or by gptr_doc(path, sync = TRUE)), else `file`
+#' (doc_set_inert() writes the file itself).
+#' @noRd
+doc_on_session_tree = function(event, ctx) {
+  s = ctx$session
+  if (is.null(s)) return(NULL)
+  ents = session_data(s)$entries
+  from = doc_ancestors(ents, event$from)
+  to = doc_ancestors(ents, event$to)
+  recs = Filter(function(e) {
+    identical(e$type, "custom") && identical(e$custom_type, "gptr.doc_block") &&
+      is.list(e$data)
+  }, ents)
+  field = function(e, name) {
+    v = e$data[[name]]
+    if (is.character(v) && length(v) == 1L && !is.na(v)) v else ""
+  }
+  pick = function(ids) {
+    Filter(function(e) e$id %in% ids && !identical(field(e, "action"), "undone"), recs)
+  }
+  mark = function(chosen, inert) {
+    docs = unique(vapply(chosen, field, "", name = "doc"))
+    for (doc in docs[nzchar(docs)]) {
+      mine = Filter(function(e) identical(field(e, "doc"), doc), chosen)
+      blocks = unique(vapply(mine, field, "", name = "block"))
+      blocks = blocks[nzchar(blocks)]
+      tr = any(vapply(mine, function(e) identical(field(e, "backend"), "transcript"), NA))
+      fmt = field(mine[[1L]], "format")
+      if (!nzchar(fmt)) fmt = doc_format_of(doc) %||% "r"
+      path = doc_abs(doc)
+      backend = if (tr) "transcript" else doc_queue_kind(path) %||% "file"
+      if (length(blocks) &&
+          doc_set_inert(path, blocks, inert = inert, session = s,
+                        transcript = if (tr) TRUE else NULL)) {
+        for (b in blocks) {
+          session_append(s, list(type = "custom", custom_type = "gptr.doc_block", data = list(
+            doc = doc, format = fmt, block = b, action = if (inert) "undone" else "replace",
+            backend = backend)))
+        }
+      }
+    }
+  }
+  mark(pick(setdiff(from, to)), TRUE)
+  mark(pick(setdiff(to, from)), FALSE)
+  rep = as.character(event$report %||% character())
+  bad = sum(grepl("not restored|conflict", rep))
+  note = paste0("# /rewind: ", length(rep) - bad, " items restored or removed, ", bad,
+                " not restored (session log ", event$to %||% "start", ")")
+  tdocs = unique(vapply(Filter(function(e) identical(field(e, "backend"), "transcript"), recs),
+                        field, "", name = "doc"))
+  for (doc in tdocs[nzchar(tdocs)]) doc_transcript_append(doc_abs(doc), note, session = s)
+  NULL
+}
+
+#' console:direct (P14, after the line ran): a direct R line (`!expr`) of the console enters the
+#' transcript under `# direct R (no model)` with its printed output as `#>` lines (IC-49,
+#' contract 11.5 transcript row). A line whose `status` is not "ok" (an error, interrupt or
+#' timeout; no status is a line that ran) is kept inert (`#~ `, no output) under
+#' `# direct R (no model; <status>)`, so the transcript still re-sources as one session (IC-49)
+#' and an interrupted computation does not run again
+#' @noRd
+doc_on_console_direct = function(event, ctx) {
+  data = event$data %||% list()
+  code = as_utf8(paste(as.character(data$code %||% character()), collapse = "\n"))
+  if (!length(code) || !nzchar(trimws(code))) return(NULL)
+  code = strsplit(code, "\n", fixed = TRUE)[[1L]]
+  st = data$status
+  lines = if (is.null(st) || identical(st, "ok")) {
+    c("", "# direct R (no model)", code,
+      doc_output_lines(as.character(data$output %||% character())))
+  } else {
+    named = is.character(st) && length(st) == 1L && !is.na(st) &&
+      grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
+    c("", paste0("# direct R (no model; ", if (named) st else "failed", ")"), paste0("#~ ", code))
+  }
+  doc_console_append(lines, ctx$session)
+}
+
+#' console:command (P14): a slash command of the console enters the transcript as a comment
+#' (`# /model opus`, contract 11.5 transcript row)
+#' @noRd
+doc_on_console_command = function(event, ctx) {
+  txt = as_utf8(as.character(event$data$text %||% ""))
+  if (!length(txt) || is.na(txt[1L]) || !nzchar(trimws(txt[1L]))) return(NULL)
+  doc_console_append(paste0("# ", doc_one_line(txt[1L])), ctx$session)
+}
+
+#' Append console lines to the console transcript target (an .R transcript; the writer redacts
+#' them with the persist profile under write consent); always NULL (notify channels)
+#' @noRd
+doc_console_append = function(lines, session = NULL) {
+  target = doc_transcript_target(ask = FALSE)
+  if (!is.null(target) && identical(doc_format_of(target), "r")) {
+    doc_transcript_append(target, lines, session = session)
+  }
+  NULL
+}

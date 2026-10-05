@@ -2943,7 +2943,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, an inert program's option that reads a file it names is read as a glob, an attached `-f` value, GREP_OPTIONS or strings' `@FILE`, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2971,7 +2971,7 @@ readings of a parameter default (round 4), and every directory a `cd` can leave 
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
 item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
 what round 9 added, item 18 what round 10 added, item 19 what round 11 added, item 20 what
-round 12 added and item 21 what round 13 added.
+round 12 added, item 21 what round 13 added and item 22 what round 14 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3471,7 +3471,9 @@ below 1, and SQL keeps its keyword reading (Known limits).
       `find "$d"`, `git log $RANGE`, `curl "$URL"`); a long option's value after `=` is not one.
       `risk_cmd_inert` lists the read-only programs none of whose options writes, runs code or
       changes state (cat, head, tail, ls, grep, wc, diff, du, echo, cd, ...; ps and jq until
-      round 9, item 17), so a plain
+      round 9, item 17; the globs, attached values and environment of the options of wc, du,
+      grep, diff and strings that read a file they name are read since round 14, item 22), so
+      a plain
       parameter there stays 0 as (A) allows (`cat "$f"`, `wc -l "$f"`, `grep -n "$p" f.txt`,
       `ls "$DIR"`). The tokeniser gives each word attribute `expand` (0 nothing expanded, 1 a `$`
       or backtick inside double quotes, 2 one outside quotes), `risk_sh_split()` carries it, and
@@ -3943,11 +3945,63 @@ below 1, and SQL keeps its keyword reading (Known limits).
       as the column count and writes nothing, 4 to 0), `xxd --cols 16 a.bin` (2 to 0),
       `yq -r=false '.a' x.yaml` (3 to 0) and `yq -Pi=false '.a' x.yaml` (3 to 2, `-i=false` is
       still read as -i). Raised outside the tests: a yq flag gptr does not list is 3.
+22. **Review round 14 (findings against the standard).** The finding was reproduced with a probe
+    (`task2-fix14-probe-before.log`: each of the reviewer's lines was 0) and on fake data in the
+    scratchpad (a planted name `--files0-from=fake.env` made GNU coreutils' `gwc -l -*` and
+    `gdu -sh -*` print the fake secret in their errors, and `-ffake.env` made the macOS grep's
+    `grep -n zzz -* b.txt` match with its lines as patterns), judged by (A)-(C) and accepted as a
+    blocker.
+    - *A glob that can expand to a file-reading option of an inert program (A).* Round 11 read a
+      glob that can match a name starting with `-` as a computed option only outside
+      `risk_cmd_inert`. But wc and du (`--files0-from`), grep, egrep and fgrep (`-f`, `--file`)
+      and diff (`--from-file`, `--to-file`) are inert programs with an option that reads a file
+      it names (3 `secret` for a secret file; wc's and du's since round 13), so `wc -l -*`,
+      `wc [-]*`, `du -sh -*`, `grep -n x -*`, `grep -*` and `diff -* a.txt` were 0, and
+      planting the name is a level-2 write. As item 17 did for ps and jq, the gate now reads
+      such a glob for them (`risk_cmd_inert_files`) as "an option the shell computes"
+      (3 `dynamic`) before a literal `--`: a glob whose first character is `-` (quoted, escaped or not) or `?`, or a bracket
+      expression that matches `-` (`risk_glob_dash()` with its new argument `wild = "?"`:
+      `wc '-'*`, `wc \-*`, `wc -l ?.txt`, `wc [!.]*`, `wc [[:punct:]]*`, `grep -n* x.txt`). A
+      `*`-led glob stays an operand (the guard rows `grep foo *.R`, `wc -l *.csv`; Known
+      limits), and so does a long option whose name and `=` are literal
+      (`grep -rn --include=*.R x .`, `diff -r --exclude=*.o a b`): each name it expands to is
+      that option, whose value gptr reads as before.
+    - *Self-review: the same options in literal forms and through the environment.* grep's and
+      rg's `-f` take the rest of their word, and gptr read only a separate `-f FILE`, so
+      `grep -f.Renviron x`, `grep -nf.Renviron x`, `grep -rnf.Renviron x .`, `fgrep -if.env x`
+      and `rg -nf.env x` were 0; `risk_cmd_read_ops()` now parses `-f` and `--file` as options
+      with a value for them (3 `secret`). The macOS grep (BSD grep 2.6.0-FreeBSD; checked here
+      with `GREP_OPTIONS=-ffake.env`) and GNU grep before 3.6 read options from GREP_OPTIONS, so
+      `GREP_OPTIONS=-f.Renviron grep x y.txt` was 0: grep, egrep and fgrep
+      (`risk_cmd_env_readers`) are no longer among the programs that read no options from the
+      environment (`risk_cmd_env_quiet`), and a variable outside `risk_env_inert_re` set on the
+      line before them is 3 (item 16's rule; GREP_COLOR, GREP_COLORS and the locale are in the
+      allowlist). GNU strings (binutils) reads options from an `@FILE` word anywhere on its line
+      and prints each word it cannot open, so `strings @.Renviron` was 0: the file of `@FILE`
+      is now read with its contents (3 `secret`), and a glob that can match a name starting with
+      `@` (`strings @*`, `strings [@]*`, `strings ?x.bin`, also after `--`) is a computed
+      option. The macOS (cctools) strings reads no `@FILE`; the reading is the one that reads
+      more.
+    - *Changed rows:* none in older blocks. The 852 lines of the round-5 to round-13 probes give
+      the same levels; two gain a `dynamic` row at their level 3 (`X=.env*; grep $X x.txt`,
+      `X=.env*; grep foo $X`: an upper-case variable set before grep). Of this round's 121 other
+      probe lines, 39 are higher and none lower. Raised outside the tests: a variable outside the
+      allowlist set on the line before grep (`FOO=1 grep x f.txt`, `PAT=x; grep "$PAT" f.txt`,
+      `export X=1; grep x f.txt`), and after wc, du, grep, diff or strings a glob led by `?` or
+      by a bracket that matches `-` (`wc -l ?.txt`, `wc -l [!.]*`, 0 or 2 before) are 3.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
 program in `risk_cmd_inert` (whose options only read), so `cat "$f"` or `ls $DIR` stays 0
-whatever the variable names (a read of a computed path reads at its `unknown` class, 0). pkill
+whatever the variable names (a read of a computed path reads at its `unknown` class, 0), and so
+do `wc -l "$f"` and `grep -n "$p" f.txt` when the variable holds an option that reads a file
+(`--files0-from=.env`, `-f.env`), the same computed read through an option. For wc, du, grep,
+egrep, fgrep, diff and strings a `*`-led glob is still read as operands (`grep foo *.R`,
+`wc -l *.csv`, `strings *.bin`), although a planted name such as `--files0-from=x.csv`,
+`-fx.R` or `@x.bin` would be read as that option: the file it names then ends in the glob's
+suffix and sits in the directory the glob reads, and a bare `*` reads at the class of the
+guarded names it can match (2 for wc and du, 3 for grep), not at a secret read's 3 for a
+planted `--files0-from=.env`. pkill
 and killall patterns are matched against a fixed list of R's process names and command lines.
 A directory the shell computes gives a word only the classes P01 gives by name in any
 directory: never critical (`rm -rf "$D/.."` is 3), nor a class P01 gives in one directory only
@@ -4050,7 +4104,13 @@ round 12. Review round 13 added item 21 with one block (207 expectations) and no
 The final test file fails 151 against the round-12 source (`task2-fix13-red-final.log`); the
 block as first written failed 146 in the working tree (`task2-fix13-red.log`). Final
 `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2669 ]` in the UTF-8 and the C locale
-(`task2-fix13-green.log`, `task2-fix13-green-C.log`).
+(`task2-fix13-green.log`, `task2-fix13-green-C.log`) at the end of round 13. Review round 14
+added item 22 with one block (116 expectations) and no changed old row. The final test file
+fails 75 against the round-13 source (`task2-fix14-red-final.log`: 74 failures and the
+`risk_glob_dash(wild = )` error, which ends its block); the block as first written failed 73 in
+the working tree (`task2-fix14-red.log`). Final `^perm-classify$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2785 ]` in the UTF-8 and the C locale
+(`task2-fix14-green.log`, `task2-fix14-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -8516,7 +8576,7 @@ an envelope in `newText` rated 2 while `.gptr/mcp.json` is written) and after
 `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 385 ]` (`task10-fix1-red.log`). Final `^tool-namespace$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 398 ]` (`task10-fix1-green.log`).
 
-## D-122 - P15 builtin:documents: a console call located after the transcript question is top level, a failing sidecar recovery never disables the route, doc.edit protects a hand-edited block also against a loose match and `old_text`, an open notebook or the running Rscript script is never made inert, rewind entries keep the recorded format, an all-NA score summary reads "mean NA", document formats are read without tools::file_ext(), a failed direct R line is recorded inert, the transcript question is asked only when the call could be recorded, an undone team block gets the undone notice, a call whose block a dead sidecar held is replayed after the recovery, and System 1 one-line blocks are redacted (2026-10-05)
+## D-122 - P15 builtin:documents: a console call located after the transcript question is top level, a failing sidecar recovery never disables the route, doc.edit protects a hand-edited block also against a loose match and `old_text`, an open notebook or the running Rscript script is never made inert, rewind entries keep the recorded format, an all-NA score summary reads "mean NA", document formats are read without tools::file_ext(), a failed direct R line is recorded inert, the transcript question is asked only when the call could be recorded, an undone team block gets the undone notice, a call whose block a dead sidecar held is replayed after the recovery, System 1 one-line blocks are redacted, a rewind's own undone entries never revive a block, doc.replay recovers a dead sidecar first, a rewind changes the queued blocks of the running script or the open notebook, and doc.edit never edits either (2026-10-05)
 
 P15 Task 13 registers `builtin:documents` (the five formats, the route `document` at order 50,
 the `documents` section, the `agent_end`, `session_tree`, `console:command` and `console:direct`
@@ -8544,7 +8604,8 @@ shape or section text changes.
 4. **An open notebook and the running script are never made inert.** IC-50: gptr never writes the
    notebook open in this Jupyter kernel; D-109: the script this process runs under Rscript is
    written only at its exit. `doc_set_inert()` (the `session_tree` hook) wrote both. It now
-   writes neither, returns `FALSE` and prints one notice.
+   writes neither, returns `FALSE` and prints one notice. Review round 4 (item 15) replaced the
+   notice: their blocks are now made inert in this process's queue.
 5. **Rewind entries keep the recorded format.** The plan wrote `doc_format_of(doc)` into the
    `gptr.doc_block` entries it appends, so a console transcript block (recorded with `format =
    "transcript"`) was logged as `"r"` when undone or revived. The entry now repeats the format the
@@ -8591,6 +8652,54 @@ shape or section text changes.
    "redacted, consented workflow records"). `doc.s1_block` wrote the summary as given, and
    `doc_upsert()` does not redact; a free-text `gptr_choice` level shaped like a token reached the
    document verbatim. The `#> ` line is now `redact(..., "persist")`ed before it is written.
+13. **A rewind's own `undone` entries never revive a block** (review round 3; G7 sections 3.8
+   and 4.4; 04 section 7.15 "a `session_tree` hook that makes undone blocks inert"). The plan's
+   `doc_on_session_tree()` chose blocks from every `gptr.doc_block` record between `from` and
+   `to`, its own `undone` entries included. P16 appends the `gptr.rewind` entry under the rewind
+   target (P16 Task 7, `ckpt_append_at()`) before `session_tree`, so those entries sit under the
+   target and a new turn on the rewound branch descends from them. Moving back onto that branch
+   later then revived the block of the abandoned turn (rewind A -> R, new turn C, redo to A, back
+   to C left both blocks live). Only records that wrote a live block (`insert`, `replace`,
+   `stale-regenerate`) now choose the blocks to make inert or revive.
+14. **doc.replay recovers a dead process's deferred writes first** (review round 3; IC-51 "the
+   next `gptr()` ... touching that document ... re-applies unapplied upserts of a dead pid";
+   IC-47). P19's `team` and `fanout` routes (orders 15, 16) call `doc.replay` and handle the
+   statement before the `document` route (order 50) runs, so the recovery the route does
+   (item 11) was never reached for a team or fan-out statement; when the sidecar held that
+   statement's own block, `doc.replay` returned `NULL` and the team would run live and be
+   recorded twice. The route's recovery and re-location are now one helper, `doc_touch()`, which
+   `doc.replay` also runs once it has located a top-level statement (a failing recovery is a
+   diagnostic there too).
+15. **A rewind makes the queued blocks of the running script or the open notebook inert**
+   (review round 4; 04 section 7.15 "a `session_tree` hook that makes undone blocks inert"; G7
+   section 4.4 "In a first live run the call really restores, and it then marks the blocks";
+   IC-50, IC-51, D-109). Under Rscript a script's blocks wait in the deferred queue, and in a
+   Jupyter kernel a notebook's blocks wait as pending upserts. Item 4 stopped `doc_set_inert()`
+   from writing those files but left the queue as it was, so the exit finalizer or
+   `gptr_doc(path, sync = TRUE)` later wrote the abandoned turn's block as live code, and a later
+   `source()` ran it. `doc_set_inert()` now hands such a document to `doc_pending_inert()`
+   (`R/doc-io.R`): a queued upsert of the block gets the inert grammar (`status=undone`, `#~ `
+   lines; in a notebook `metadata.gptr.status` and `#~ ` source lines), a block that is only on
+   disk gets a queued mark (`mark = TRUE`, the block's own lines in the requested state) that
+   replaces it in place when the queue is applied, and the sidecar is written again. A redo
+   revives the queued block the same way. Each change passes `document_write` (kind `inert`),
+   as the file path does. `doc_apply_upserts()` drops a mark whose block is gone by then (no
+   conflict warning); a mark of a block the user edited by hand is a conflict, as for any
+   upsert (IC-51). The hook's `gptr.doc_block` entries record the backend `deferred` or
+   `pending` for such a document. The lock and adoption steps that `doc_pending_add()` ran before
+   queueing are now one helper, `doc_pending_open()`, which both use; `doc_queue_kind()` names
+   the queue of a document (`deferred`, `pending` or none).
+16. **doc.edit never edits the running script or the open notebook it is bound to** (review
+   round 4; D-109 and report 14 section 2.1.2; IC-50). Under Rscript `doc.site` gives the running
+   call's site, so an agent edit of an earlier block (the `documents` section asks for such edits)
+   rewrote the script that R was still reading. A bound notebook open in this Jupyter kernel was
+   answered `NULL`, so P10's edit tool wrote it. `doc_edit_service()` now returns an error tool
+   result for both, without running the edit tool, and leaves the file unchanged. It never
+   answers `NULL` there, because `NULL` lets the edit tool write the file. A bound notebook that
+   is not open is still answered `NULL`. A document that is not bound is still answered `NULL`
+   (04 section 7.0: "NULL: not a bound document"). Keeping P10's own `edit` and `write` tools
+   from writing an unbound running script or open notebook is P10's to decide (open follow-up
+   below).
 
 Open follow-up (P10, review round 2): the `doc.edit` contract is `function(path, edits, session)`
 (04 section 7.0), with no `replace_all`. P10's `edit_route_document()` (called by `member_edit()`
@@ -8599,6 +8708,13 @@ replace_all = TRUE)` reports "Found 2 occurrences ... must be unique" where the 
 other file replaces every occurrence. P10 should fold `replace_all` into each edit's `replaceAll`
 before calling `doc.edit` (`apply_edits()` honours the per-edit flag, and `doc.edit` passes
 `edits` to the edit tool unchanged, so its hand-edit protection covers every occurrence).
+
+Open follow-up (P10, review round 4): `doc.edit` answers only for the bound document (04
+section 7.0), so it keeps the edit tool away from the running script and the open notebook only
+when they are bound (item 16). With `record = "off"` or no write consent, the script that Rscript
+runs is not bound. P10's `edit` and `write` tools would then still rewrite it during the run,
+and the same holds for a notebook open in the Jupyter kernel. P10 could refuse such paths itself, for
+example with P15's `doc_queue_kind(path)`.
 
 Not behavioural: `doc_console_append()` leaves redaction to `doc_transcript_append()`, which
 already redacts with the persist profile (D-117 item 3); the `doc.replay` test gives itself its
@@ -8613,7 +8729,9 @@ keeps the model P13's `meta` names; the route replays with no provider call and 
 Validation: `progress/P15.md`, Task 13. `^doc-(formats|replay|io)$`
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 903 ]`, the same under `LC_ALL=C LANG=C`; after review round 1
 (items 8-10) `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 924 ]`; after review round 2 (items 11-12)
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 934 ]`.
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 934 ]`; after review round 3 (items 13-14)
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 948 ]`; after review round 4 (items 15-16)
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 982 ]`, the same under `LC_ALL=C LANG=C`.
 
 ## D-123 - P08 session SDK verbs: a verb that starts a run freezes its safety record then and re-checks egress and replay under it (a refusal keeps the pending call), one approved gptr_cancel() call covers every session it names, and export(gptr_return) is taken early for D-054 (2026-10-05)
 

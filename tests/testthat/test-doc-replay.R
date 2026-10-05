@@ -574,3 +574,906 @@ test_that("children entries without a name or a session id are skipped", {
   expect_identical(gptr_resume(block = "abc123"), team)
   expect_identical(session_data(team)$last_text, "### stats (fake/fake-1)\n")
 })
+
+# ---- Task 13: the document route, the doc.* services and the hooks (IC-45..IC-49) -------------
+
+# A session with recorded turns, built the way P06 records them: the turn counter moves first,
+# then the turn's entries are appended (user messages carry their turn number)
+doc_test_session = function(turns, mode = "auto", kind = "chat", home = new.env()) {
+  s = session_new("fake/fake-1", mode, home = home, kind = kind)
+  d = session_data(s)
+  for (entries in turns) {
+    d$turns = d$turns + 1L
+    for (e in entries) session_append(s, e)
+  }
+  s
+}
+
+# The entries of one turn: the prompt, one r call with its result, the final answer
+doc_test_turn = function(code, outputs = character(), prompt = "count rows",
+                         answer = "There are 32 rows.", id = "call_1") {
+  list(
+    list(type = "message", message = msg_user(prompt, source = "prompt")),
+    list(type = "message", message = msg_assistant(
+      list(block_tool_call(id, "r", list(code = code))), api = "fake", provider = "fake",
+      model = "fake-1", stop_reason = "tool_use")),
+    list(type = "message", message = msg_tool_result(
+      id, "r", "ok", details = list(code = code, status = "ok", outputs = outputs))),
+    list(type = "message", message = msg_assistant(answer, api = "fake", provider = "fake",
+                                                   model = "fake-1"))
+  )
+}
+
+# An environment whose gptr() builds the call record as P08 does and runs only the document
+# route: it returns the route's value, or list(pass = TRUE, doc = <call$doc>) when it passes
+doc_route_env = function(session = NULL) {
+  e = new.env()
+  e$gptr = function(prompt, ..., replay = NULL) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$interp = character()
+    call$context = list()
+    call$session = session
+    call$envir = parent.frame()
+    call$args = list(replay = replay)
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    call$doc = NULL
+    if (!doc_route_match(call)) return(list(pass = TRUE, matched = FALSE, doc = NULL))
+    res = doc_route_run(call)
+    if (inherits(res, "gptr_route_pass")) return(list(pass = TRUE, matched = TRUE, doc = call$doc))
+    res
+  }
+  e
+}
+
+test_that("the route replays a fresh block, passes a new call with its site, skips nested ones", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  f = file.path(getwd(), "analysis.R")
+  ph = prompt_hash("count rows")
+  writeLines(c("fresh = gptr(\"count rows\")",
+               paste0("# >>> gptr:abc123 model=fake/fake-1 prompt=", ph,
+                      " session=s0a1b2c3d4e turn=1"),
+               "n = 32", "# <<< gptr:abc123", "new = gptr(\"plot it\")",
+               "f = function() gptr(\"inside\")", "inner = f()"), f)
+  e = doc_route_env()
+  source(f, local = e, keep.source = TRUE)
+  expect_s3_class(e$fresh, "gptr_session")
+  expect_identical(session_data(e$fresh)$id, "s0a1b2c3d4e")
+  expect_identical(e$n, 32)
+  expect_true(e$new$pass)
+  expect_identical(e$new$doc$path, path_norm(f))
+  expect_identical(e$new$doc$prompt_hash, prompt_hash("plot it"))
+  expect_false(e$inner$matched)
+})
+
+test_that("without consent or under replay the route keeps no site; replay needs no consent", {
+  local_project()
+  local_gptr_options(record = "off", interactive = FALSE, replay = "auto")
+  f = file.path(getwd(), "analysis.R")
+  ph = prompt_hash("count rows")
+  writeLines(c("fresh = gptr(\"count rows\")",
+               paste0("# >>> gptr:abc123 model=fake/fake-1 prompt=", ph), "n = 32",
+               "# <<< gptr:abc123", "new = gptr(\"plot it\")"), f)
+  e = doc_route_env()
+  source(f, local = e, keep.source = TRUE)
+  expect_s3_class(e$fresh, "gptr_session")
+  expect_true(e$new$pass)
+  expect_null(e$new$doc)
+  local_gptr_options(record = "auto", replay = "replay")
+  e2 = doc_route_env()
+  source(f, local = e2, keep.source = TRUE)
+  expect_null(e2$new$doc)
+})
+
+test_that("a stale block regenerates under gptr_source() and errors under replay", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c("s = gptr(\"count rows again\")",
+               paste0("# >>> gptr:abc123 model=m prompt=", prompt_hash("count rows")),
+               "n = 32", "# <<< gptr:abc123"), f)
+  e = doc_route_env()
+  withr::with_options(list(gptr.replay = "replay"), {
+    expect_error(source(f, local = e, keep.source = TRUE), class = "gptr_error_stale_block")
+  })
+  depth = doc_source_push(f)
+  withr::defer(doc_source_pop(depth))
+  local_gptr_options(replay = "auto")
+  source(f, local = e, keep.source = TRUE)
+  expect_true(e$s$pass)
+  expect_true(e$s$doc$regenerate)
+  expect_identical(e$s$doc$block_id, "abc123")
+  expect_identical(doc_state()$sources[[depth]]$skip, "abc123")
+})
+
+test_that("calls made from model code never match the route", {
+  local_project()
+  f = file.path(getwd(), "analysis.R")
+  writeLines("x = gptr(\"count rows\")", f)
+  testthat::local_mocked_bindings(run_current = function() new.env())
+  e = doc_route_env()
+  source(f, local = e, keep.source = TRUE)
+  expect_false(e$x$matched)
+})
+
+test_that("agent_end writes the block of an idle run with a document site", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)", outputs = "[1] 32")))
+  calls = doc_calls(readLines(f))
+  site = list(kind = "srcref", path = path_norm(f), format = "r", backend = "file",
+              anchor = doc_anchor_of(calls, calls[1, ]), prompt_hash = prompt_hash("count rows"),
+              args_hash = NULL, template = "count rows", ordinal = 1L)
+  doc_on_agent_end(list(status = "error", doc = site, turns = 1L), list(session = s))
+  expect_identical(readLines(f), "gptr(\"count rows\")")
+  doc_on_agent_end(list(status = "idle", doc = site, turns = 1L), list(session = s))
+  txt = readLines(f)
+  expect_identical(txt[3:4], c("n = nrow(mtcars)", "#> [1] 32"))
+  expect_match(txt[2], paste0("session=", session_data(s)$id, " turn=1"), fixed = TRUE)
+  doc_on_agent_end(list(status = "idle", doc = NULL, turns = 1L), list(session = s))
+  expect_identical(readLines(f), txt)
+})
+
+test_that("console turns become one steered session in the transcript (IC-49)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  s = doc_test_session(list(doc_test_turn("fit = lm(mpg ~ wt, data = mtcars)", prompt = "fit"),
+                            doc_test_turn("p = predict(fit)", prompt = "predict")))
+  for (k in 1:2) {
+    site = doc_console_site(session_id = session_data(s)$id,
+                            template = c("fit", "predict")[k])
+    doc_on_agent_end(list(status = "idle", doc = site, turns = k), list(session = s))
+  }
+  tr = readLines(file.path(proj, ".gptr", "transcripts", "t.R"))
+  hex = substr(sub("^s", "", session_data(s)$id), 1, 6)
+  expect_true(paste0("s_", hex, " = gptr(\"fit\")") %in% tr)
+  expect_true(paste0("s_", hex, " |> gptr(\"predict\")") %in% tr)
+  expect_identical(sum(grepl("^# >>> gptr:", tr)), 2L)
+})
+
+test_that("doc.site answers the session's run site, else the gptr_doc() binding", {
+  local_project()
+  expect_null(doc_site_service(NULL))
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  bound = file.path(getwd(), "a.R")
+  the$doc_binding = list(path = bound, format = "r")
+  expect_identical(doc_site_service(NULL), list(path = bound, format = "r"))
+  the$doc_binding = list(path = file.path(getwd(), "gone", "a.R"), format = "r")
+  expect_null(doc_site_service(NULL))
+  run = new.env()
+  run$opts = list(doc = list(path = "/p/b.Rmd", format = "rmd"))
+  testthat::local_mocked_bindings(session_live = function(s) list(run = run))
+  s = doc_test_session(list())
+  expect_identical(doc_site_service(s), list(path = "/p/b.Rmd", format = "rmd"))
+  # P10's gptr$edit() member passes no session: the running call's site answers
+  outer = new.env()
+  outer$opts = list(doc = list(path = "/p/c.R", format = "r"))
+  testthat::local_mocked_bindings(run_current = function() outer)
+  expect_identical(doc_site_service(NULL), list(path = "/p/c.R", format = "r"))
+})
+
+test_that("doc.edit goes through the edit tool, refreshes headers and protects hand edits", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  body = "x = 1"
+  h = list(model = "m", date = "2020-01-01", prompt = "p", sha = doc_body_sha(body))
+  writeLines(c("gptr(\"p\")", doc_render_block("abc123", h, body), "y = 2"), f)
+  old = the$doc_binding
+  withr::defer(assign("doc_binding", old, envir = the))
+  the$doc_binding = list(path = path_norm(f), format = "r")
+  hits = new.env()
+  hits$seen = character()
+  edit_exec = function(input, ctx) {
+    hits$seen = c(hits$seen, "execute")
+    inner = doc_edit_service(input$path, input$edits, NULL)
+    if (!is.null(inner)) return(inner)
+    txt = readLines(input$path)
+    for (e in input$edits) txt = sub(e$oldText, e$newText, txt, fixed = TRUE)
+    writeLines(txt, input$path)
+    gptr_tool_result("Successfully replaced text.")
+  }
+  off = gptr_register(gptr_spec("tool", "edit", description = "A test edit tool",
+                                execute = edit_exec))
+  withr::defer(off())
+  expect_null(doc_edit_service(file.path(getwd(), "other.R"), list(), NULL))
+  res = doc_edit_service(f, list(list(oldText = "x = 1", newText = "x = 2")), NULL)
+  expect_false(res$is_error)
+  expect_identical(hits$seen, "execute")
+  b = doc_find_blocks(readLines(f))
+  expect_identical(b$header[[1]]$sha, doc_body_sha("x = 2"))
+  expect_identical(b$header[[1]]$date, format(Sys.Date(), "%Y-%m-%d"))
+  txt = readLines(f)
+  txt[3] = "x = 99 # mine"
+  writeLines(txt, f)
+  res2 = doc_edit_service(f, list(list(oldText = "x = 99", newText = "x = 3")), NULL)
+  expect_true(res2$is_error)
+  expect_identical(readLines(f)[3], "x = 99 # mine")
+})
+
+test_that("doc.s1_block writes one #> line below a top-level System 1 call, idempotently", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("is_rct = gptr(\"Is this an RCT?\", abstracts, model = jev)", "table(is_rct)"), f)
+  x = structure(c(TRUE, FALSE, TRUE), class = c("gptr_decision", "gptr_s1", "logical"),
+                meta = list(model = "jev-1.13.0", date = "2026-09-29"))
+  e = new.env()
+  e$gptr = function(prompt, ...) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$args = list(replay = NULL)
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    doc_s1_block_service(call, x)
+    x
+  }
+  source(f, local = e, keep.source = TRUE)
+  txt = readLines(f)
+  expect_identical(txt[3], "#> gptr_decision: 2 TRUE / 1 FALSE (jev-1.13.0, 2026-09-29)")
+  expect_match(txt[2], "model=jev-1.13.0 date=2026-09-29", fixed = TRUE)
+  source(f, local = e, keep.source = TRUE)
+  expect_identical(readLines(f), txt)
+  expect_identical(doc_s1_summary(structure(c("liver", "lung", "liver"),
+                                            class = c("gptr_choice", "gptr_s1", "character"),
+                                            meta = list(model = "jev", date = "2026-09-29"))),
+                   "gptr_choice: liver 2, lung 1 (jev, 2026-09-29)")
+})
+
+test_that("doc.replay returns the replayed team of a fresh block and NULL otherwise (IC-47)", {
+  local_project()
+  local_replay_table()
+  local_gptr_options(record = "auto", replay = "auto")
+  f = file.path(getwd(), "a.R")
+  ph = prompt_hash("Review")
+  writeLines(c("reviews = gptr(\"Review\")", paste0("# >>> gptr:abc123 model=m prompt=", ph,
+                                                    " session=s7777777777 turn=1 kind=team",
+                                                    " children=\"code:s2222222222\""),
+               "## Agent code (openai/gpt-5.5): Two bugs.", "# <<< gptr:abc123",
+               "again = gptr(\"Review two\")"), f)
+  s2_put(s2_key("a.R", "abc123", "code", ph, ""),
+         list(block = "abc123", doc = "a.R", part = "code", model = "openai/gpt-5.5",
+              answer = "Two bugs.", session = "s2222222222", turn = 1L))
+  e = new.env()
+  e$gptr = function(prompt, ...) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$args = list(replay = NULL)
+    call$envir = parent.frame()
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    call$doc = NULL
+    list(out = doc_replay_service(call), doc = call$doc)
+  }
+  source(f, local = e, keep.source = TRUE)
+  expect_identical(session_data(e$reviews$out)$id, "s7777777777")
+  expect_identical(session_data(gptr_resume(block = "abc123", child = "code"))$last_text,
+                   "Two bugs.")
+  expect_null(e$again$out)
+  expect_identical(e$again$doc$prompt_hash, prompt_hash("Review two"))
+})
+
+test_that("a rewind makes abandoned blocks inert and notes it in the console transcript", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(proj, "a.R")
+  body = "x = 1"
+  seg = doc_render_block("abc123", list(model = "m", prompt = "p", sha = doc_body_sha(body)), body)
+  writeLines(c("gptr(\"p\")", seg), f)
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  dir.create(dirname(t), recursive = TRUE)
+  writeLines("library(gptr)", t)
+  s = doc_test_session(list(doc_test_turn("x = 1", prompt = "p")))
+  root = session_data(s)$leaf
+  session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
+                         data = list(doc = "a.R", format = "r", block = "abc123", action = "insert",
+                                     backend = "file")))
+  session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
+                         data = list(doc = ".gptr/transcripts/t.R", format = "transcript",
+                                     block = "def456", action = "insert",
+                                     backend = "transcript")))
+  from = session_data(s)$leaf
+  doc_on_session_tree(list(from = from, to = root, report = c("restored x", "y not restored")),
+                      list(session = s))
+  expect_identical(readLines(f)[3], "#~ x = 1")
+  expect_identical(utils::tail(readLines(t), 1),
+                   paste0("# /rewind: 1 items restored or removed, 1 not restored (session log ",
+                          root, ")"))
+  ents = session_data(s)$entries
+  expect_identical(ents[[length(ents)]]$data$action, "undone")
+})
+
+test_that("direct R lines and slash commands of the console enter the transcript", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  # the payloads of P14's console:direct and console:command channels
+  expect_null(doc_on_console_direct(list(data = list(
+    code = "summary(fit)$r.squared", output = "[1] 0.7528", status = "ok", noted = TRUE)),
+    list(session = NULL)))
+  expect_null(doc_on_console_command(list(data = list(text = "/model opus")),
+                                     list(session = NULL)))
+  doc_on_console_command(list(data = list(text = "  ")), list(session = NULL))
+  doc_on_console_direct(list(data = list(code = "", output = character())), list(session = NULL))
+  expect_identical(readLines(file.path(proj, ".gptr", "transcripts", "t.R")),
+                   c("", "# direct R (no model)", "summary(fit)$r.squared", "#> [1] 0.7528",
+                     "# /model opus"))
+})
+
+# ---- Task 13 adaptations (dev/DEVIATIONS.md D-122) ----------------------------------------------
+
+# A call record of a console call (no srcref, no source() frame)
+doc_console_call = function(prompt = "fit a model") {
+  call = new.env(parent = emptyenv())
+  call$template = prompt
+  call$prompt = prompt
+  call$interp = character()
+  call$context = list(list(kind = "symbol", name = "mtcars"))
+  call$session = NULL
+  call$envir = new.env()
+  call$args = list(replay = NULL)
+  call$sys_call = call("gptr", prompt, quote(mtcars))
+  call$nframe = 0L
+  call$doc = NULL
+  call
+}
+
+test_that("a console call asks once where to record and keeps the transcript site", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto", interactive = TRUE)
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  asked = new.env()
+  asked$n = 0L
+  testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
+    asked$n = asked$n + 1L
+    "y"
+  })
+  call = doc_console_call()
+  expect_true(doc_route_match(call))
+  expect_true(call$top_level)
+  expect_true(call$doc$console)
+  expect_identical(call$doc$context_labels, "mtcars")
+  expect_s3_class(doc_route_run(call), "gptr_route_pass")
+  expect_identical(call$doc$format, "transcript")
+  expect_match(call$doc$path, "/[.]gptr/transcripts/gptr-session-[0-9]{8}-[0-9]{6}[.]R$")
+  again = doc_console_call("predict")
+  expect_true(doc_route_match(again))
+  expect_identical(again$doc$path, call$doc$path)
+  expect_identical(asked$n, 1L)
+})
+
+test_that("a failing sidecar recovery never turns a replay into a live call", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c("fresh = gptr(\"count rows\")",
+               paste0("# >>> gptr:abc123 model=fake/fake-1 prompt=", prompt_hash("count rows"),
+                      " session=s0a1b2c3d4e turn=1"),
+               "n = 32", "# <<< gptr:abc123"), f)
+  testthat::local_mocked_bindings(doc_recover = function(path, defer = FALSE) {
+    stop("the sidecar could not be read")
+  })
+  e = doc_route_env()
+  source(f, local = e, keep.source = TRUE)
+  expect_s3_class(e$fresh, "gptr_session")
+  expect_identical(session_data(e$fresh)$id, "s0a1b2c3d4e")
+})
+
+test_that("doc.edit never changes a hand-edited block, also through a loose match or old_text", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  body = "x = 1"
+  h = list(model = "m", date = "2020-01-01", prompt = "p", sha = doc_body_sha(body))
+  writeLines(c("gptr(\"p\")", doc_render_block("abc123", h, body), "y = 2"), f)
+  txt = readLines(f)
+  txt[3] = "x = 99 # mine"
+  writeLines(txt, f)
+  local_doc_binding(f)
+  hits = new.env()
+  hits$n = 0L
+  # an edit tool that matches loosely (as P10's fuzzy matching may): every "x = " line changes
+  loose = function(input, ctx) {
+    hits$n = hits$n + 1L
+    inner = doc_edit_service(input$path, input$edits, NULL)
+    if (!is.null(inner)) return(inner)
+    writeLines(sub("^x = .*$", "x = 3", readLines(input$path)), input$path)
+    gptr_tool_result("Successfully replaced text.")
+  }
+  off = gptr_register(gptr_spec("tool", "edit", description = "A loose test edit tool",
+                                execute = loose))
+  withr::defer(off())
+  res = doc_edit_service(f, list(list(oldText = "x  =  99", newText = "x = 3")), NULL)
+  expect_true(res$is_error)
+  expect_true(res$details$document)
+  expect_identical(hits$n, 1L)
+  expect_identical(readLines(f), txt)
+  # P10's edit_normalize_args() also accepts old_text: refused before the tool runs
+  res2 = doc_edit_service(f, list(list(old_text = "x = 99", new_text = "x = 3")), NULL)
+  expect_true(res2$is_error)
+  expect_identical(hits$n, 1L)
+  expect_identical(readLines(f), txt)
+})
+
+test_that("a rewind and a redo of a console turn keep the transcript format of its block", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  dir.create(dirname(t), recursive = TRUE)
+  body = "fit = 1"
+  seg = doc_render_block("def456", list(model = "m", prompt = "p", sha = doc_body_sha(body)),
+                         body)
+  live = c("library(gptr)", "", "s_ab12cd = gptr(\"p\")", seg)
+  writeLines(live, t)
+  s = doc_test_session(list(doc_test_turn("fit = 1", prompt = "p")))
+  root = session_data(s)$leaf
+  session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
+                         data = list(doc = ".gptr/transcripts/t.R", format = "transcript",
+                                     block = "def456", action = "insert",
+                                     backend = "transcript")))
+  from = session_data(s)$leaf
+  note = function(to) {
+    paste0("# /rewind: 0 items restored or removed, 0 not restored (session log ", to, ")")
+  }
+  doc_on_session_tree(list(from = from, to = root, report = character()), list(session = s))
+  tr = readLines(t)
+  expect_identical(tr[3], "#~ s_ab12cd = gptr(\"p\")")
+  expect_identical(tr[5], "#~ fit = 1")
+  expect_identical(utils::tail(tr, 1), note(root))
+  last = function() {
+    ents = session_data(s)$entries
+    ents[[length(ents)]]$data[c("doc", "format", "block", "action", "backend")]
+  }
+  expect_identical(last(), list(doc = ".gptr/transcripts/t.R", format = "transcript",
+                                block = "def456", action = "undone", backend = "transcript"))
+  doc_on_session_tree(list(from = root, to = from, report = character()), list(session = s))
+  expect_identical(readLines(t), c(live, note(root), note(from)))
+  expect_identical(last()$action, "replace")
+  expect_identical(last()$format, "transcript")
+})
+
+test_that("a score summary gives its mean, or NA when every element is NA", {
+  sc = function(v) {
+    structure(v, class = c("gptr_score", "gptr_s1", "numeric"),
+              meta = list(model = "jev", date = "2026-09-29"))
+  }
+  expect_identical(doc_s1_summary(sc(c(1, 2, 1.2))), "gptr_score: mean 1.4 (jev, 2026-09-29)")
+  expect_identical(doc_s1_summary(sc(c(NA_real_, NA_real_))),
+                   "gptr_score: mean NA (jev, 2026-09-29)")
+})
+
+# ---- Task 13 review round 1 (dev/DEVIATIONS.md D-122 items 8-10) -------------------------------
+
+test_that("a direct R line that failed or was interrupted is inert, so the transcript re-sources", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  doc_project_transcript(".gptr/transcripts/t.R")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  direct = function(data) doc_on_console_direct(list(data = data), list(session = NULL))
+  # P14's payload: status "ok", "error", "interrupt" or "timeout"
+  expect_null(direct(list(code = "summary(fti)", output = character(), status = "error",
+                          noted = TRUE)))
+  direct(list(code = "x_before = 1\nSys.sleep(1e6)", output = "partial", status = "interrupt",
+              noted = FALSE))
+  direct(list(code = "x_after = 2\nx_after", output = "[1] 2", status = "ok", noted = TRUE))
+  # a payload without a status (an older front end) is a line that ran
+  direct(list(code = "y_old = 3", output = character()))
+  expect_identical(readLines(t),
+                   c("", "# direct R (no model; error)", "#~ summary(fti)",
+                     "", "# direct R (no model; interrupt)", "#~ x_before = 1",
+                     "#~ Sys.sleep(1e6)",
+                     "", "# direct R (no model)", "x_after = 2", "x_after", "#> [1] 2",
+                     "", "# direct R (no model)", "y_old = 3"))
+  e = new.env()
+  expect_no_error(source(t, local = e))
+  expect_identical(e$x_after, 2)
+  expect_identical(e$y_old, 3)
+  expect_false(exists("x_before", envir = e, inherits = FALSE))
+})
+
+test_that("a console call asks nothing when it cannot be recorded (record off, replay mode)", {
+  local_project()
+  testthat::local_mocked_bindings(doc_command_args = function() "R")
+  asked = new.env()
+  asked$n = 0L
+  testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
+    asked$n = asked$n + 1L
+    "y"
+  })
+  local_gptr_options(record = "off", replay = "auto", interactive = TRUE)
+  call = doc_console_call()
+  expect_false(doc_route_match(call))
+  expect_null(call$doc)
+  local_gptr_options(record = "auto", replay = "replay")
+  expect_false(doc_route_match(doc_console_call()))
+  local_gptr_options(replay = "auto")
+  call = doc_console_call()
+  call$args = list(replay = "replay")
+  expect_false(doc_route_match(call))
+  expect_identical(asked$n, 0L)
+  expect_null(doc_project_entry(doc_project_get(), "transcript", "target"))
+  # the question was not used up: asked once recording is possible
+  call = doc_console_call()
+  expect_true(doc_route_match(call))
+  expect_true(call$doc$console)
+  expect_identical(asked$n, 1L)
+})
+
+test_that("an undone team block gives the undone notice and is logged as skipped (G7 3.8)", {
+  local_project()
+  local_replay_table()
+  local_gptr_options(record = "auto", replay = "auto", quiet = FALSE)
+  f = file.path(getwd(), "a.R")
+  ph = prompt_hash("Review")
+  live = c("reviews = gptr(\"Review\")",
+           paste0("# >>> gptr:abc123 model=m prompt=", ph, " session=s7777777777 turn=1",
+                  " kind=team children=\"code:s2222222222\" status=undone"),
+           "## Agent code (openai/gpt-5.5): Two bugs.", "# <<< gptr:abc123")
+  writeLines(doc_inert_text(live, "r", "abc123"), f)
+  e = new.env()
+  e$gptr = function(prompt, ...) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$args = list(replay = NULL)
+    call$envir = parent.frame()
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    call$doc = NULL
+    doc_replay_service(call)
+  }
+  depth = doc_source_push(f)
+  withr::defer(doc_source_pop(depth))
+  for (mode in c("auto", "replay")) {
+    local_gptr_options(replay = mode)
+    expect_message(source(f, local = e, keep.source = TRUE), "undone by /rewind",
+                   class = "gptr_message_notice")
+    # zero requests: the team is not run live, and nothing is recorded for it
+    expect_s3_class(e$reviews, "gptr_session")
+    expect_identical(doc_state()$sources[[depth]]$log[["abc123"]], "skipped")
+  }
+})
+
+# ---- Task 13 review round 2 (dev/DEVIATIONS.md D-122 items 11-12) -------------------------------
+
+test_that("a dead sidecar's block for the calling statement is replayed, not run again (IC-51)", {
+  local_project()
+  local_replay_table()
+  local_gptr_options(record = "auto", replay = "auto")
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  f = file.path(getwd(), "analysis.R")
+  writeLines(c("fresh = gptr(\"count rows\")", "z = 1"), f)
+  ph = prompt_hash("count rows")
+  calls = doc_calls(readLines(f))
+  site = list(kind = "rscript", path = path_norm(f), format = "r", backend = "file",
+              anchor = doc_anchor_of(calls, calls[1, ]), prompt_hash = ph, args_hash = NULL,
+              template = "count rows", top_level = TRUE)
+  # a dead process's sidecar holding this call's block (a session id no earlier test made live)
+  rec = doc_pending_new(path_norm(f), "deferred", "s5e4d3c2b1a")
+  rec$pid = 999999999L
+  rec$upserts = list(list(block_id = "aaaaaa", site = site, lines = doc_render_block(
+    "aaaaaa", list(model = "fake/fake-1", prompt = ph, session = "s5e4d3c2b1a", turn = 1L),
+    "n = 32")))
+  doc_sidecar_write(rec)
+  e = doc_route_env()
+  source(f, local = e, keep.source = TRUE)
+  # the recovered block is this call's own: replayed (zero requests), never passed to run live
+  expect_s3_class(e$fresh, "gptr_session")
+  expect_identical(session_data(e$fresh)$id, "s5e4d3c2b1a")
+  expect_null(doc_sidecar_read(f))
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+  e2 = doc_route_env()
+  source(f, local = e2, keep.source = TRUE)
+  expect_s3_class(e2$fresh, "gptr_session")
+  expect_identical(e2$n, 32)
+  expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
+})
+
+test_that("a System 1 one-line block is redacted before it is written (IC-74)", {
+  local_project()
+  local_gptr_options(record = "auto", replay = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("kind = gptr(\"Which key is this?\", notes, model = jev)", f)
+  tok = paste0("ghp_", substr(strrep("a1B2c3D4e5", 4L), 1L, 36L))
+  x = structure(c(tok, "lung", tok), class = c("gptr_choice", "gptr_s1", "character"),
+                meta = list(model = "jev-1.13.0", date = "2026-09-29"))
+  e = new.env()
+  e$gptr = function(prompt, ...) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$args = list(replay = NULL)
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    doc_s1_block_service(call, x)
+    x
+  }
+  source(f, local = e, keep.source = TRUE)
+  txt = readLines(f)
+  expect_identical(txt[3], paste0("#> gptr_choice: [secret:github-token] 2, lung 1 ",
+                                   "(jev-1.13.0, 2026-09-29)"))
+  expect_false(any(grepl(tok, txt, fixed = TRUE)))
+  source(f, local = e, keep.source = TRUE)
+  expect_identical(readLines(f), txt)
+})
+
+# ---- Task 13 review round 3 (dev/DEVIATIONS.md D-122 items 13-14) -------------------------------
+
+test_that("a rewound turn's block stays inert after a new turn on the rewound branch (G7 3.8)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(proj, "a.R")
+  blk = function(id, body) {
+    doc_render_block(id, list(model = "m", prompt = "p", sha = doc_body_sha(body)), body)
+  }
+  writeLines(c("gptr(\"p\")", blk("abc123", "x = 1"), "gptr(\"q\")", blk("def456", "y = 2")), f)
+  s = doc_test_session(list(doc_test_turn("x = 0", prompt = "o")))
+  d = session_data(s)
+  rec = function(block) {
+    list(type = "custom", custom_type = "gptr.doc_block",
+         data = list(doc = "a.R", format = "r", block = block, action = "insert",
+                     backend = "file"))
+  }
+  # as P16 moves the tree: the gptr.rewind entry is appended under the target, then session_tree
+  tree = function(to) {
+    from = d$leaf
+    d$leaf = to
+    session_append(s, list(type = "custom", custom_type = "gptr.rewind",
+                           data = list(from = from, to = to)))
+    doc_on_session_tree(list(from = from, to = to, report = character()), list(session = s))
+  }
+  status = function() {
+    b = doc_find_blocks(readLines(f))
+    stats::setNames(vapply(b$header, function(h) h$status %||% "live", ""), b$id)
+  }
+  r = d$leaf
+  session_append(s, rec("abc123"))
+  a = d$leaf
+  tree(r)
+  expect_identical(status(), c(abc123 = "undone", def456 = "live"))
+  # a new turn on the rewound branch records def456 below the rewind's own "undone" entry
+  session_append(s, rec("def456"))
+  c_leaf = d$leaf
+  tree(a)
+  expect_identical(status(), c(abc123 = "live", def456 = "undone"))
+  tree(c_leaf)
+  expect_identical(status(), c(abc123 = "undone", def456 = "live"))
+  expect_true("#~ x = 1" %in% readLines(f))
+  tree(a)
+  expect_identical(status(), c(abc123 = "live", def456 = "undone"))
+})
+
+test_that("doc.replay recovers a dead sidecar's team block for its statement first (IC-51)", {
+  local_project()
+  local_replay_table()
+  local_gptr_options(record = "auto", replay = "auto")
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  f = file.path(getwd(), "a.R")
+  writeLines(c("reviews = gptr(\"Review\")", "z = 1"), f)
+  ph = prompt_hash("Review")
+  calls = doc_calls(readLines(f))
+  site = list(kind = "rscript", path = path_norm(f), format = "r", backend = "file",
+              anchor = doc_anchor_of(calls, calls[1, ]), prompt_hash = ph, args_hash = NULL,
+              template = "Review", top_level = TRUE)
+  # a dead process's sidecar holding this team statement's block (ids no earlier test made live)
+  rec = doc_pending_new(path_norm(f), "deferred", "s6e5d4c3b2a")
+  rec$pid = 999999999L
+  rec$upserts = list(list(block_id = "abc123", site = site, lines = doc_render_block(
+    "abc123", list(model = "m", prompt = ph, session = "s6e5d4c3b2a", turn = 1L, kind = "team",
+                   children = "code:s2b3c4d5e6f"),
+    "## Agent code (openai/gpt-5.5): Two bugs.")))
+  doc_sidecar_write(rec)
+  s2_put(s2_key("a.R", "abc123", "code", ph, ""),
+         list(block = "abc123", doc = "a.R", part = "code", model = "openai/gpt-5.5",
+              answer = "Two bugs.", session = "s2b3c4d5e6f", turn = 1L))
+  e = new.env()
+  e$gptr = function(prompt, ...) {
+    call = new.env(parent = emptyenv())
+    call$template = prompt
+    call$prompt = prompt
+    call$args = list(replay = NULL)
+    call$envir = parent.frame()
+    call$sys_call = sys.call()
+    call$nframe = sys.nframe()
+    call$doc = NULL
+    list(out = doc_replay_service(call), doc = call$doc)
+  }
+  source(f, local = e, keep.source = TRUE)
+  # the team route gets the replayed team (zero requests), not NULL (which would run it live)
+  expect_s3_class(e$reviews$out, "gptr_session")
+  expect_identical(session_data(e$reviews$out)$id, "s6e5d4c3b2a")
+  expect_null(e$reviews$doc)
+  expect_null(doc_sidecar_read(f))
+  expect_identical(doc_find_blocks(readLines(f))$id, "abc123")
+  expect_identical(session_data(gptr_resume(block = "abc123", child = "code"))$last_text,
+                   "Two bugs.")
+  # a recovery that fails is a diagnostic: the fresh block still replays
+  testthat::local_mocked_bindings(doc_recover = function(path, defer = FALSE) {
+    stop("the sidecar could not be read")
+  })
+  e2 = new.env()
+  e2$gptr = e$gptr
+  expect_no_error(source(f, local = e2, keep.source = TRUE))
+  expect_identical(session_data(e2$reviews$out)$id, "s6e5d4c3b2a")
+  expect_identical(doc_find_blocks(readLines(f))$id, "abc123")
+})
+
+# ---- Task 13 review round 4 (dev/DEVIATIONS.md D-122 items 15-16) -------------------------------
+
+# A located site of the first call with this prompt in a script or notebook whose writes this
+# process queues (`backend`: deferred under Rscript, pending in a Jupyter kernel)
+doc_queue_site = function(path, prompt, backend) {
+  text = doc_read(path)$lines
+  ph = prompt_hash(prompt)
+  anchor = if (identical(doc_format_of(path), "ipynb")) {
+    list(ph = ph, th = NA_character_, j = 1L, block = NA_character_,
+         cell = nb_find_call_cell(nb_parse(text), ph))
+  } else {
+    calls = doc_calls(text)
+    doc_anchor_of(calls, calls[which(calls$ph %in% ph)[1], ])
+  }
+  list(kind = "rscript", path = path_norm(path), format = doc_format_of(path), backend = backend,
+       anchor = anchor, prompt_hash = ph, args_hash = NULL, template = prompt, ordinal = 1L,
+       top_level = TRUE)
+}
+
+# A session whose second turn recorded `code` for `prompt` through `site` (queued, not written):
+# the session, the entry before that turn (`root`) and the turn's leaf (`leaf`)
+doc_queue_turn = function(site, code, prompt) {
+  s = doc_test_session(list(doc_test_turn("x = 0", prompt = "o")))
+  d = session_data(s)
+  root = d$leaf
+  d$turns = d$turns + 1L
+  for (e in doc_test_turn(code, prompt = prompt, id = "call_2")) session_append(s, e)
+  cli::cli_fmt(doc_on_agent_end(list(status = "idle", doc = site, turns = d$turns),
+                                list(session = s)))
+  list(s = s, root = root, leaf = d$leaf)
+}
+
+test_that("a rewind under Rscript makes the queued block undone and the exit writes it (G7 4.4)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  f = file.path(getwd(), "a.R")
+  src = c("s = gptr(\"count rows\")", "z = 1")
+  writeLines(src, f)
+  testthat::local_mocked_bindings(doc_rscript_running = function() path_norm(f))
+  q = doc_queue_turn(doc_queue_site(f, "count rows", "deferred"), "n = nrow(mtcars)",
+                     "count rows")
+  queued = function() as.character(doc_sidecar_read(f)$upserts[[1]]$lines)
+  last = function() {
+    ents = session_data(q$s)$entries
+    ents[[length(ents)]]$data[c("action", "backend")]
+  }
+  tree = function(from, to) {
+    doc_on_session_tree(list(from = from, to = to, report = character()), list(session = q$s))
+  }
+  expect_true("n = nrow(mtcars)" %in% queued())
+  tree(q$leaf, q$root)
+  # the running script is not written now; the queued block is undone
+  expect_identical(readLines(f), src)
+  expect_true("#~ n = nrow(mtcars)" %in% queued())
+  expect_identical(last(), list(action = "undone", backend = "deferred"))
+  # a redo revives the queued block, a second rewind makes it inert again
+  tree(q$root, q$leaf)
+  expect_true("n = nrow(mtcars)" %in% queued())
+  expect_identical(last(), list(action = "replace", backend = "deferred"))
+  tree(q$leaf, q$root)
+  expect_identical(readLines(f), src)
+  # the exit finalizer writes the undone block, so a later source() skips the abandoned code
+  doc_pending_flush_all()
+  txt = readLines(f)
+  expect_identical(doc_find_blocks(txt)$header[[1]]$status, "undone")
+  expect_true("#~ n = nrow(mtcars)" %in% txt)
+  e = new.env()
+  e$gptr = function(...) NULL
+  source(f, local = e)
+  expect_false(exists("n", envir = e, inherits = FALSE))
+})
+
+test_that("a rewind in a Jupyter kernel makes the pending block undone; sync writes it (IC-50)", {
+  src = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
+  local_project()
+  local_gptr_options(record = "auto")
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  nb = file.path(getwd(), "x.ipynb")
+  expect_true(file.copy(src, nb))
+  bytes = readBin(nb, "raw", n = file.info(nb)$size)
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  q = doc_queue_turn(doc_queue_site(nb, "summarise the mpg column", "pending"),
+                     "m = mean(mtcars$mpg)", "summarise the mpg column")
+  doc_on_session_tree(list(from = q$leaf, to = q$root, report = character()),
+                      list(session = q$s))
+  expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
+  ents = session_data(q$s)$entries
+  expect_identical(ents[[length(ents)]]$data[c("action", "backend")],
+                   list(action = "undone", backend = "pending"))
+  # gptr_doc(sync = TRUE) once the notebook is closed writes the agent cell undone
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_identical(doc_sync(nb), 1L)
+  cell = nb_parse(doc_read(nb)$lines)$cells[[4]]
+  expect_identical(nb_cell_meta(cell)$status, "undone")
+  expect_true("#~ m = mean(mtcars$mpg)" %in% nb_cell_lines(cell))
+  expect_false("m = mean(mtcars$mpg)" %in% nb_cell_lines(cell))
+})
+
+test_that("doc.edit never edits the running script or the open notebook it is bound to", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  body = "x = 1"
+  h = list(model = "m", date = "2020-01-01", prompt = "p", sha = doc_body_sha(body))
+  writeLines(c("gptr(\"p\")", doc_render_block("abc123", h, body), "y = 2"), f)
+  raw_of = function(p) readBin(p, "raw", n = file.info(p)$size)
+  bytes = raw_of(f)
+  hits = new.env()
+  hits$n = 0L
+  edit_exec = function(input, ctx) {
+    hits$n = hits$n + 1L
+    inner = doc_edit_service(input$path, input$edits, NULL)
+    if (!is.null(inner)) return(inner)
+    txt = readLines(input$path)
+    for (e in input$edits) txt = sub(e$oldText, e$newText, txt, fixed = TRUE)
+    writeLines(txt, input$path)
+    gptr_tool_result("Successfully replaced text.")
+  }
+  off = gptr_register(gptr_spec("tool", "edit", description = "A test edit tool",
+                                execute = edit_exec))
+  withr::defer(off())
+  # under Rscript the running call's site binds the script this process runs (D-109)
+  run = new.env()
+  run$opts = list(doc = list(path = path_norm(f), format = "r", backend = "deferred"))
+  testthat::local_mocked_bindings(run_current = function() run,
+                                  doc_rscript_running = function() path_norm(f))
+  res = doc_edit_service(f, list(list(oldText = "x = 1", newText = "x = 2")), NULL)
+  expect_true(res$is_error)
+  expect_match(res$content[[1]]$text, "Rscript", fixed = TRUE)
+  expect_identical(hits$n, 0L)
+  expect_identical(raw_of(f), bytes)
+  # the notebook open in this Jupyter kernel (IC-50)
+  nb = file.path(getwd(), "x.ipynb")
+  writeLines(c("{", " \"cells\": [", "  {", "   \"cell_type\": \"code\",",
+               "   \"execution_count\": null,", "   \"id\": \"c1\",", "   \"metadata\": {},",
+               "   \"outputs\": [],", "   \"source\": [\"a = 1\"]", "  }", " ],",
+               " \"metadata\": {},", " \"nbformat\": 4,", " \"nbformat_minor\": 5", "}"), nb)
+  nbytes = raw_of(nb)
+  run$opts = list(doc = list(path = path_norm(nb), format = "ipynb", backend = "pending"))
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  res2 = doc_edit_service(nb, list(list(oldText = "a = 1", newText = "a = 2")), NULL)
+  expect_true(res2$is_error)
+  expect_match(res2$content[[1]]$text, "Jupyter", fixed = TRUE)
+  expect_identical(hits$n, 0L)
+  expect_identical(raw_of(nb), nbytes)
+  # a closed notebook is the edit tool's to write: doc.edit answers NULL
+  withr::local_options(jupyter.in_kernel = NULL)
+  expect_null(doc_edit_service(nb, list(list(oldText = "a = 1", newText = "a = 2")), NULL))
+})

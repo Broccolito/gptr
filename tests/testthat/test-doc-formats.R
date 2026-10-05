@@ -736,3 +736,115 @@ test_that("metadata.gptr is read by its exact name and added in sorted key order
   t2 = doc_ipynb_upsert(t, site, nb_test_block("7f3a21", site, "a = 2"), "7f3a21")
   expect_identical(names(nb_parse(t2)$cells[[4]]$metadata), c("gptr", "gptr_note", "scrolled"))
 })
+
+# ---- Task 13: builtin:documents, the documents section and inert blocks on disk ---------------
+
+test_that("builtin:documents registers the formats, the route, the section and the services", {
+  for (nm in c("r", "rmd", "qmd", "ipynb", "transcript")) {
+    expect_s3_class(registry_get("doc_format", nm), "gptr_doc_format")
+  }
+  route = registry_get("route", "document")
+  expect_identical(route$order, 50)
+  expect_true(is.function(route$match) && is.function(route$run))
+  sec = registry_get("prompt_section", "documents")
+  expect_identical(sec$tier, "T0")
+  expect_identical(sec$order, 500L)
+  expect_identical(sec$budget, 250L)
+  for (svc in c("doc.site", "doc.edit", "doc.s1_block", "doc.replay")) {
+    expect_true(ext_service_has(svc))
+  }
+})
+
+test_that("the documents section is the text of architecture 7.3 and needs a bound document", {
+  expect_null(doc_section_text(list(input = list(document = NULL))))
+  txt = doc_section_text(list(input = list(document = list(path = "a.R", format = "r"))))
+  expect_identical(txt, paste0(
+    "Code from successful r calls is written into the user's document (named in <environment>) ",
+    "in a block below the gptr() call that asked for it, so the document re-runs from top to ",
+    "bottom. Therefore:\n- Make recorded code the clean final version: named objects, no ",
+    "exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).\n",
+    "- Record key modelling decisions with note (one line, written as \"## Decision: ...\"); key ",
+    "printed outputs are added as #> comments automatically.\n- To change code you wrote earlier, ",
+    "edit that block in the document instead of appending a second version.\n- In the document, ",
+    "prompts are quoted strings in gptr(\"...\"), and System 1 decisions are gptr(..., model = ",
+    "{s1}) inside if, for or while. Add such calls only when the user asks for an agent step in ",
+    "the script."))
+})
+
+test_that("blocks are made inert on disk and revived, through the document_write event", {
+  local_project()
+  f = file.path(getwd(), "a.R")
+  body = "x = 1"
+  seg = doc_render_block("abc123", list(model = "m", prompt = "p", sha = doc_body_sha(body)), body)
+  writeLines(c("gptr(\"p\")", seg), f)
+  local_gptr_options(record = "off")
+  expect_false(doc_set_inert(f, "abc123"))
+  local_gptr_options(record = "auto")
+  hits = new.env()
+  hits$kinds = character()
+  off = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    hits$kinds = c(hits$kinds, event$kind)
+    NULL
+  }))
+  expect_true(doc_set_inert(f, "abc123"))
+  expect_identical(readLines(f)[3], "#~ x = 1")
+  expect_match(readLines(f)[2], "status=undone")
+  expect_true(doc_set_inert(f, "abc123", inert = FALSE))
+  expect_identical(readLines(f), c("gptr(\"p\")", seg))
+  off()
+  expect_identical(hits$kinds, c("inert", "inert"))
+  # a console transcript kept in an ordinary .R file: its s_<hex> statement goes inert too
+  g = file.path(getwd(), "console.R")
+  writeLines(c("s_ab12cd = gptr(\"p\")", seg), g)
+  expect_true(doc_set_inert(g, "abc123", transcript = TRUE))
+  expect_identical(readLines(g)[1], "#~ s_ab12cd = gptr(\"p\")")
+})
+
+# ---- Task 13 adaptations (dev/DEVIATIONS.md D-122) ----------------------------------------------
+
+test_that("an open notebook and the running script are never written; inert marks are queued", {
+  site = nb_test_site("summarise the mpg column")
+  text = doc_ipynb_upsert(doc_fixture_lines("floats.ipynb"), site,
+                          nb_test_block("7f3a21", site, "a = 1"), "7f3a21")
+  proj = local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  st = doc_state()
+  withr::defer({
+    st$docs = list()
+    doc_lock_release_all()
+  })
+  nb = file.path(proj, "x.ipynb")
+  write_atomic(nb, text)
+  bytes = readBin(nb, "raw", file.size(nb))
+  withr::local_options(jupyter.in_kernel = TRUE)
+  withr::local_envvar(JPY_SESSION_NAME = nb)
+  # IC-50: the open notebook keeps its bytes; the undone cell waits as a pending upsert
+  expect_true(doc_set_inert(nb, "7f3a21"))
+  expect_identical(readBin(nb, "raw", file.size(nb)), bytes)
+  expect_identical(doc_sidecar_read(nb)$upserts[[1]]$block_id, "7f3a21")
+  expect_false(doc_set_inert(nb, "7f3a21"))
+  withr::local_options(jupyter.in_kernel = FALSE)
+  expect_identical(doc_sync(nb), 1L)
+  cell = nb_parse(readLines(nb, encoding = "UTF-8"))$cells[[4]]
+  expect_identical(nb_cell_meta(cell)$status, "undone")
+  expect_identical(nb_cell_lines(cell), "#~ a = 1")
+  expect_null(doc_sidecar_read(nb))
+  # D-109: the script this process runs under Rscript is written only at its exit
+  f = file.path(proj, "a.R")
+  body = "x = 1"
+  seg = doc_render_block("abc123", list(model = "m", prompt = "p", sha = doc_body_sha(body)), body)
+  live = c("gptr(\"p\")", seg, "z = 2")
+  writeLines(live, f)
+  testthat::local_mocked_bindings(doc_rscript_running = function() path_norm(f))
+  expect_true(doc_set_inert(f, "abc123"))
+  expect_identical(readLines(f), live)
+  doc_pending_flush_all()
+  expect_match(readLines(f)[2], "status=undone", fixed = TRUE)
+  expect_identical(readLines(f)[3], "#~ x = 1")
+  # a queued mark whose block is gone by the exit is dropped, not kept as a conflict
+  expect_true(doc_set_inert(f, "abc123", inert = FALSE))
+  writeLines(c("gptr(\"p\")", "z = 2"), f)
+  expect_no_warning(doc_pending_flush_all())
+  expect_identical(readLines(f), c("gptr(\"p\")", "z = 2"))
+  expect_null(doc_sidecar_read(f))
+})

@@ -56,12 +56,13 @@ doc_abs = function(path) {
     path_norm(file.path(project_root(), path))
 }
 
-#' Format name from a file extension: "r", "rmd", "qmd", "ipynb" or NULL
+#' Format name from a file extension: "r", "rmd", "qmd", "ipynb" or NULL. The extension is read
+#' by P01's path_ext(), never tools::file_ext(): R >= 4.6's calls basename(), which stops on a
+#' non-ASCII name in a non-UTF-8 locale (CI-5, D-111; IC-62)
 #' @noRd
 doc_format_of = function(path) {
   if (is.null(path) || !length(path) || is.na(path[1L])) return(NULL)
-  switch(tolower(tools::file_ext(path[1L])), r = "r", rmd = "rmd", qmd = "qmd", ipynb = "ipynb",
-         NULL)
+  switch(tolower(path_ext(path[1L])), r = "r", rmd = "rmd", qmd = "qmd", ipynb = "ipynb", NULL)
 }
 
 #' The line ending of a text: CRLF when at least as many lines end in CRLF as in a bare LF, so a
@@ -535,6 +536,40 @@ doc_pending_reconcile = function(rec) {
   rec
 }
 
+#' Which queue holds this process's writes of a document: "deferred" for the script it runs
+#' under Rscript (written at exit, D-109), "pending" for the notebook open in its Jupyter kernel
+#' (written by gptr_doc(path, sync = TRUE), IC-50), else NULL (the document is written now)
+#' @noRd
+doc_queue_kind = function(path) {
+  if (doc_script_running(path)) return("deferred")
+  if (doc_notebook_attached(path)) return("pending")
+  NULL
+}
+
+#' This process's pending record of a deferred (Rscript) or pending (Jupyter) document, before an
+#' upsert is queued in it: a deferred document is locked until exit first (the exit finalizer,
+#' which releases the lock, is registered with it; NULL when another live process holds the
+#' lock), a pending record keeps only the upserts its sidecar still holds
+#' (doc_pending_reconcile()), and a new record adopts a dead process's unapplied upserts
+#' @noRd
+doc_pending_open = function(path, kind, session = NULL) {
+  if (identical(kind, "deferred")) {
+    if (!doc_lock_hold(path)) return(NULL)
+    doc_finalizer_ensure()
+  }
+  rec = doc_state()$docs[[path_key(path)]]
+  if (!is.null(rec) && identical(rec$kind, "pending")) rec = doc_pending_reconcile(rec)
+  if (is.null(rec)) {
+    sid = if (is.null(session)) NULL else session_data(session)$id
+    rec = doc_pending_new(path, kind, sid)
+    old = doc_sidecar_read(path)
+    if (!is.null(old) && identical(old$kind, kind) && !doc_sidecar_live(old)) {
+      rec$upserts = doc_upserts_adopt(list(), old$upserts)
+    }
+  }
+  rec
+}
+
 #' Queue an upsert of a deferred (Rscript) or pending (Jupyter) document: the block is prepared
 #' against the current text, flushed to the sidecar and then kept in `the$doc_pending` (IC-51:
 #' SIGTERM loses at most the call that was running; an upsert whose sidecar write failed is
@@ -549,24 +584,12 @@ doc_pending_add = function(fmt, site, up, kind) {
   path = site$path
   key = path_key(path)
   none = list(action = "locked", block_id = NULL, lines = NULL, backend = kind)
-  if (identical(kind, "deferred")) {
-    if (!doc_lock_hold(path)) {
-      gptr_inform(paste0("Another R process is recording into ", doc_rel(path),
-                         "; blocks of this run are not recorded."), "notice",
-                  .once = paste0("doc_locked:", key))
-      return(none)
-    }
-    doc_finalizer_ensure()
-  }
-  rec = st$docs[[key]]
-  if (!is.null(rec) && identical(rec$kind, "pending")) rec = doc_pending_reconcile(rec)
+  rec = doc_pending_open(path, kind, up$session)
   if (is.null(rec)) {
-    sid = if (is.null(up$session)) NULL else session_data(up$session)$id
-    rec = doc_pending_new(path, kind, sid)
-    old = doc_sidecar_read(path)
-    if (!is.null(old) && identical(old$kind, kind) && !doc_sidecar_live(old)) {
-      rec$upserts = doc_upserts_adopt(list(), old$upserts)
-    }
+    gptr_inform(paste0("Another R process is recording into ", doc_rel(path),
+                       "; blocks of this run are not recorded."), "notice",
+                .once = paste0("doc_locked:", key))
+    return(none)
   }
   doc = doc_read_or_new(path)
   taken = vapply(rec$upserts, function(u) u$block_id, "")
@@ -584,11 +607,63 @@ doc_pending_add = function(fmt, site, up, kind) {
        prompt = prep$prompt)
 }
 
+#' Make blocks of a queued document (`kind`: the script this process runs under Rscript, or the
+#' notebook open in its Jupyter kernel) inert or live again in this process's queue, never in the
+#' file (D-109, IC-50; G7 sections 3.8 and 4.4): a queued upsert of the block gets the inert
+#' grammar; a block only on disk gets a queued mark (`mark = TRUE`: the block's own lines in the
+#' requested state), applied at exit or by gptr_doc(path, sync = TRUE) like any upsert and
+#' dropped when the block is gone by then. Each changed block passes the `document_write` event
+#' (kind "inert"; a block is left as it is, patched lines are queued). TRUE when the queue
+#' changed; FALSE (a notice) when another live process holds the deferred document's lock.
+#' @noRd
+doc_pending_inert = function(path, fmt, ids, inert, kind, session = NULL) {
+  rec = doc_pending_open(path, kind, session)
+  if (is.null(rec)) {
+    gptr_inform(paste0("Another R process is recording into ", doc_rel(path), "; blocks of ",
+                       "this run were not marked ", if (inert) "undone" else "live", "."),
+                "notice")
+    return(FALSE)
+  }
+  text = tryCatch(doc_read(path)$lines, error = function(e) character())
+  changed = FALSE
+  for (id in unique(ids)) {
+    queued = vapply(rec$upserts, function(u) identical(u$block_id, id), NA)
+    k = if (any(queued)) which(queued)[1L] else NA_integer_
+    if (is.na(k)) {
+      disk = tryCatch(doc_disk_block_lines(fmt, text, id), error = function(e) NULL)
+      if (is.null(disk)) next
+      u = list(block_id = id, lines = disk, site = list(path = path, format = fmt, backend = kind),
+               mark = TRUE)
+    } else {
+      u = rec$upserts[[k]]
+    }
+    new = doc_inert_block_lines(u$lines, fmt, inert)
+    if (identical(new, u$lines)) next
+    ev = doc_event(path, fmt, "inert", id, new, session)
+    if (isTRUE(ev$block)) next
+    if (!is.null(ev$lines)) {
+      patched = as.character(ev$lines)
+      attributes(patched) = attributes(new)
+      new = patched
+    }
+    u$lines = new
+    if (is.na(k)) rec$upserts = doc_upserts_push(rec$upserts, u) else rec$upserts[[k]] = u
+    changed = TRUE
+  }
+  if (!changed) return(FALSE)
+  rec$time = Sys.time()
+  doc_sidecar_write(rec)
+  st = doc_state()
+  st$docs[[path_key(path)]] = rec
+  TRUE
+}
+
 #' Apply queued upserts to the document under its lock, through the md5 check and re-locate
 #' path (three attempts): a user-edited block or a call that cannot be found is a conflict and
 #' is never overwritten; an upsert whose call already owns a fresh block is superseded (not
-#' written). Returns list(applied, superseded, conflicts) of block ids, `applied` being the
-#' blocks written, or NULL when another live process holds the lock.
+#' written), and so is a rewind's mark (`mark = TRUE`, doc_pending_inert()) whose block is no
+#' longer in the document. Returns list(applied, superseded, conflicts) of block ids, `applied`
+#' being the blocks written, or NULL when another live process holds the lock.
 #' @noRd
 doc_apply_upserts = function(rec) {
   path = rec$doc
@@ -612,6 +687,10 @@ doc_apply_upserts = function(rec) {
       status = doc_existing_status(fname, text, u$block_id)
       if (identical(status, "user-edited")) {
         conflicts = c(conflicts, u$block_id)
+        next
+      }
+      if (is.na(status) && isTRUE(u$mark)) {
+        superseded = c(superseded, u$block_id)
         next
       }
       if (is.na(status)) {

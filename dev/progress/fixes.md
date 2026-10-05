@@ -479,3 +479,36 @@ Files of this task:
 - `dev/progress/fixes.md`
 - `dev/progress/P03.md` (cross-reference section)
 - `dev/progress/P12.md` (cross-reference section)
+
+## Task FIX-5 (P15 part) - doc_format_of() reads extensions with path_ext()
+
+Owner: P15 (`R/doc-io.R`). Done inside P15 Task 13 at the coordinator's request (the P15 lane
+released the file); the other two call sites of HANDOFF's FIX-5 item, `R/ext-specs.R` (P02/P17)
+and `R/gptr-gateway.R` (P08), are not touched here and stay open. Deviation: D-122 item 7
+(D-111 item 1 gives the rule).
+
+**Defect.** `doc_format_of()` called `tolower(tools::file_ext(path[1L]))`. R >= 4.6's
+`tools::file_ext()` tests the extension on `basename(x)`, which stops on a marked UTF-8 non-ASCII
+path in a non-UTF-8 locale ("unable to translate 'caf<U+00E9>.R' to native encoding"). Every
+caller (the locator, the writer, transcript targets, inert blocks) failed for such a document.
+
+**Built.** `doc_format_of()` reads the extension with P01's `path_ext()` (R 4.6's rule without
+`basename()`, every locale and every R). No other line of `R/doc-io.R` changed.
+
+**Test** (written first; `tests/testthat/test-doc-io.R`, +1 test, 9 expectations): "a non-ASCII
+document name has its format in any locale (R >= 4.6)" runs under `local_name_locale()` (C locale
+on macOS and Linux) and `local_r46_file_ext()` (R 4.6.1's `tools` bodies on any R): `.R`, `.Rmd`
+under a non-ASCII directory, upper-case `.QMD`, `.ipynb`; `.txt`, no extension, `".R"` (no
+extension under R 4.6's rule), `NULL` and `NA` give `NULL`. All literals are `\u` escapes.
+
+**Red** (`R/doc-io.R` of `HEAD`): `^doc-io$` `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 352 ]`, the new
+test erroring with "unable to translate 'caf<U+00E9>.R' to native encoding" in `basename(x)`
+(`dev/.validation/P15/task13-fix5-red.log`).
+
+**Green**: `^doc-io$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 361 ]` (`task13-fix5-green.log`); in
+`^doc-(formats|replay|io)$` with Task 13, `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 903 ]` in the default
+and the C locale (`task13-green.log`, `task13-green-clocale.log`). Lint of `R/doc-io.R` and
+`tests/testthat/test-doc-io.R`: no lints (`task13-lint.log`).
+
+To be committed with P15 Task 13 (`feat(doc): register builtin:documents with the document
+route, section, hooks and services`).
