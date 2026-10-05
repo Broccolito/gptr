@@ -7146,7 +7146,7 @@ every failure in the six adaptation tests); green `[ FAIL 0 | WARN 0 | SKIP 1 | 
 red `[ FAIL 19 | WARN 0 | SKIP 1 | PASS 475 ]` (`task7-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 494 ]` (`task7-fix1-green.log`).
 
-## D-109 - P15 deferred and pending writes: a sidecar of an earlier process with this pid is a dead one, a deferred run's lock is held together with its exit finalizer, the script this process runs under Rscript is never written before exit, a pending record forgets blocks another process synced, a kernel that cannot name its notebook treats the notebooks in its working directory as open, recovered paths are kept absolute, and the sidecar is replaced whole (2026-10-04)
+## D-109 - P15 deferred and pending writes: a sidecar of an earlier process with this pid is a dead one, a deferred run's lock is held together with its exit finalizer, the script this process runs under Rscript is never written before exit, a pending record forgets blocks another process synced, a kernel that cannot name its notebook treats the notebooks in its working directory as open, recovered paths are kept absolute, the sidecar is replaced whole, and (review round 1) a sidecar is read only as this user's private record for its own document, adopted upserts are applied after this run's own, the sidecar lives in the document's project, and an upsert whose sidecar write failed is not queued (2026-10-04)
 
 P15 Task 10's plan-literal deferred-write code (`R/doc-io.R`: `doc_sidecar_write()`,
 `doc_sidecar_live()`, `doc_pending_add()`, `doc_recover()`, `doc_notebook_attached()`,
@@ -7217,6 +7217,53 @@ running the same notebook overwrite each other's pending sidecar.
 IC-74 (07 section 6, P15 row): consent is checked before anything is queued (no sidecar, no
 lock without it) and a local model's tag (`ollama/qwen3:8b`) survives the sidecar into the
 written header (new coverage test); nothing here calls a provider.
+
+Review round 1 (`progress/P15.md`, Task 10, Review round 1) added four more changes:
+
+8. **A sidecar is read only as this user's private record for its own document (IC-51: the
+   recovery writes "that document"; IC-52: the project cannot plant settings).** The sidecar
+   lives in the project tree, and the plan applied whatever `doc` and `site$format` the file
+   named. A planted record for `analysis.R` could therefore create or append to any file outside
+   the project (for example `~/.Rprofile`, through the append-only `transcript` format) on the
+   next `gptr()`, `gptr_blocks()` or `gptr_doc()` that touched `analysis.R`, with no write
+   consent. `doc_sidecar_read(path)` now returns NULL unless:
+   - on Unix, the file belongs to the effective uid and has no group or other mode bits
+     (`doc_sidecar_trusted()`; `write_atomic()` creates sidecars 0600, and a checked-out file
+     keeps the umask's bits). A rejected file is never passed to `readRDS()`, which can run code
+     before R 4.4 (CVE-2024-27322; DESCRIPTION allows R 4.2);
+   - `path_key(rec$doc)` is the document's;
+   - the kind is `deferred` or `pending`;
+   - every upsert has a block id of the block grammar, character lines, `site$format` equal to
+     the document's own `r` or `ipynb` format, and no `site$path` naming another file
+     (`doc_sidecar_valid()`, `doc_sidecar_upsert_ok()`).
+
+   `doc_sidecar_write()` removes a rejected file before writing, because `write_atomic()` keeps
+   the mode of the file it replaces. A pending record whose sidecar exists but cannot be read is
+   kept as it is (`doc_pending_reconcile()`). Recovery does not ask for consent again: the
+   upserts were consented to when they were queued. On a Unix file system that ignores modes, no
+   sidecar is trusted, so a killed run's blocks are not recovered there.
+9. **This run's upserts are applied before adopted ones (IC-51).** The plan queued a dead run's
+   upserts before this run's own. `doc_apply_upserts()` treats an upsert whose call already owns
+   a fresh block as superseded, so a script re-run after a kill had its re-recorded block for the
+   same call silently dropped at exit (reported as `insert` and logged, but never written), and
+   the dead run's older code was kept. `doc_upserts_adopt()` marks adopted upserts and appends
+   them. `doc_upserts_push()` queues an own upsert before the adopted ones. The stored order is
+   newest process first, so after a chain of killed runs the newest run's block wins.
+10. **The sidecar lives in the document's own project.** `doc_sidecar_path()` used the working
+    directory's workspace root, so a job that `setwd()`s out of its project (or that cron starts
+    from `$HOME`) wrote its sidecar to `tempdir()`, where no later process finds it after a
+    SIGTERM. It now uses `workspace_dir(dirname(path)) %||% doc_root()`. Task 4's
+    `doc_lock_dir()` still follows the working directory (a follow-up; not changed here).
+11. **An upsert whose sidecar write failed is not queued.** `doc_pending_add()` and
+    `doc_recover(defer = TRUE)` now write the sidecar before they store the record in memory.
+    `doc_upsert()` reports such an upsert as `failed`, possibly with a transcript fallback, and
+    the exit no longer writes it anyway. `doc_recover(defer = TRUE)` also registers the
+    finalizer as soon as it holds the lock (item 2's rule).
+
+Review round 1 validation: four regression tests and three assertions in the atomic-sidecar
+test (+67 expectations). Old source: `[ FAIL 45 | WARN 0 | SKIP 0 | PASS 190 ]`
+(`dev/.validation/P15/task10-fix1-red.log`). Final `^doc-io$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 239 ]` (`task10-fix1-green.log`).
 
 Validation: `progress/P15.md`, Task 10. Eight tests added (+47 expectations; the plan's five are
 verbatim except the fixture path resolved before `local_project()`, the Task 4 trap). Against the
@@ -7365,13 +7412,18 @@ connections job. CI Task CI-5 fixes them. Four of its changes go beyond a single
    way (no hosted test covered it; reproduced with the R 4.6 bodies). The helpers keep R 4.6's
    rule without translating: the extension is the alphanumeric run after the last dot of the
    last component, with at least one character that is not a dot before that dot; "/" and "\\"
-   separate components. Two differences from `tools`: the alphanumeric class is ASCII in every
-   locale (R's TRE class also counts letters such as U+00E9 in a UTF-8 locale), and on R 4.5 and
-   earlier the rule is R 4.6's, not the older one (`tools::file_ext(".Rprofile")` was
-   `"Rprofile"` there, `path_ext()` gives `""`, as R 4.6 does). The relevance classes of IC-71
-   and the read tool's estimator classes change only for such names. `R/doc-io.R:63` (P15, in
-   flight) and `R/ext-specs.R:1330` (P17) still call `tools::file_ext()`; see the open items of
-   `progress/ci-hosted.md`, Task CI-5.
+   separate components. Four differences from `tools`, all deliberate: the alphanumeric class is
+   ASCII in every locale (R's TRE class also counts letters such as U+00E9 in a UTF-8 locale); on
+   R 4.5 and earlier the rule is R 4.6's, not the older one (`tools::file_ext(".Rprofile")` was
+   `"Rprofile"` there, `path_ext()` gives `""`, as R 4.6 does); "\\" separates components on
+   every OS, as in `path_norm()`, so `"dir\\.env"` has no extension on macOS and Linux either
+   (`tools`, whose `basename()` splits only at "/" there, gives `"env"`); and a path that ends in
+   a separator has no extension (`tools::file_ext("trail.R/")` returns the whole `"trail.R/"`,
+   because `basename()` drops the trailing separator but the extension is cut from the full
+   path; both sans-extension functions return such a path unchanged). The test pins both cases.
+   The relevance classes of IC-71 and the read tool's estimator classes change only for such
+   names. `R/doc-io.R:63` (P15, in flight) and `R/ext-specs.R:1330` (P17) still call
+   `tools::file_ext()`; see the open items of `progress/ci-hosted.md`, Task CI-5.
 2. **`path_norm()` expands `~` before it turns backslashes into slashes** (`R/utils-paths.R`,
    P01; IC-63). It converted first, so a home with backslashes stayed in the result, and on
    Windows a home of the form `C:\...` was not absolute and was joined to the working directory.

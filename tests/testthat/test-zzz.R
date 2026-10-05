@@ -300,3 +300,16 @@ test_that("every gptr:: call in the package code names an export of NAMESPACE (R
   for (name in ls(ns, all.names = TRUE)) gptr_ns_calls(get(name, envir = ns), acc)
   expect_identical(setdiff(unique(acc$names), exports), character())
 })
+
+# CI-5: the Windows runners check out with core.autocrlf=true, which turned the LF of every text
+# file into CRLF. Document fixtures stopped parsing and round-tripping (test-doc-formats.R) and
+# the shipped risk tables held CR bytes (test-perm-classify.R:19). Every file is checked out byte
+# for byte on every OS; a fixture that holds CRLF on purpose keeps it.
+test_that(".gitattributes turns off line-end conversion for every file (CI-5)", {
+  skip_if(is.null(source_file("DESCRIPTION")), "not running from the source tree")
+  attrs = source_file(".gitattributes")
+  expect_false(is.null(attrs))
+  rules = if (is.null(attrs)) character() else readLines(attrs, encoding = "UTF-8", warn = FALSE)
+  rules = trimws(rules[!grepl("^\\s*(#|$)", rules)])
+  expect_identical(rules, "* -text")
+})

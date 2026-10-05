@@ -691,7 +691,7 @@ read_text_window = function(abs, offset = 1L, n = NULL, big = read_big_file,
 #' Estimator class of a file by its extension
 #' @noRd
 read_token_class = function(path) {
-  ext = tolower(tools::file_ext(path))
+  ext = tolower(path_ext(path))
   code = c("r", "rmd", "qmd", "py", "js", "ts", "c", "cpp", "h", "java", "sql", "sh", "jl", "rs",
            "go")
   if (ext %in% code) return("code")
@@ -837,7 +837,7 @@ read_notices = function(rc) {
 #' Binary-file notice with a loading hint (report 11 section 3.3)
 #' @noRd
 read_binary_text = function(path, abs, size) {
-  ext = tolower(tools::file_ext(abs))
+  ext = tolower(path_ext(abs))
   hint = if (ext %in% names(binary_hints)) binary_hints[[ext]] else "readBin()"
   paste0("[Binary file: ", path, " (", format_size(size), "). Not shown as text. ",
          "Load it with the r tool, e.g. ", hint, ".]")

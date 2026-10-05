@@ -118,6 +118,52 @@ test_that("path_norm() resolves symlinked ancestors, '..' and '~' for missing pa
   expect_identical(path_norm("rel.R"), file.path(dir, "rel.R"))
 })
 
+# CI-5 (D-111): path_norm() promises forward slashes whatever user_home() returns. The Windows
+# tests mock user_home() with withr::local_tempdir(), whose path has backslashes there, and "~/x"
+# became a relative path under the working directory (hosted test-ext-plugins.R:481 and
+# test-skill-discover.R:295-297).
+test_that("path_norm() expands '~' before it turns backslashes into slashes (CI-5)", {
+  home = path_norm(withr::local_tempdir())
+  dir.create(file.path(home, "sub"))
+  local_mocked_bindings(user_home = function() gsub("/", "\\", home, fixed = TRUE))
+  expect_identical(path_norm("~/sub"), file.path(home, "sub"))
+  expect_identical(path_norm("~\\sub\\x.R"), file.path(home, "sub", "x.R"))
+  expect_identical(path_norm("~"), home)
+  expect_identical(path_norm(c("~/a", "~b/c")), c(file.path(home, "a"), path_norm("~b/c")))
+  expect_false(any(grepl("\\", path_norm(c("~", "~/sub", "~/no/such")), fixed = TRUE)))
+})
+
+# CI-5 (D-111): R >= 4.6's tools::file_ext() and tools::file_path_sans_ext() call basename(),
+# which stops on a marked UTF-8 non-ASCII path in a non-UTF-8 locale. path_ext() and
+# path_sans_ext() keep R 4.6's rule (an alphanumeric extension after at least one character that
+# is not a dot) and never translate the path, in every locale and on every R.
+test_that("path_ext() and path_sans_ext() follow R 4.6's rule without basename() (CI-5)", {
+  p = c("a/report.Rmd", "C:\\dir\\x.tar.gz", "noext", ".Rprofile", "dir.d/.env", "dir\\.env",
+        "a/b.c/file", "x.", "..R", "a.b-c", "trail.R/", "caf\u00e9.R", "d\u00e9/caf\u00e9",
+        "x.\u00e9", NA)
+  ext = c("Rmd", "gz", "", "", "", "", "", "", "", "", "", "R", "", "", "")
+  sans = c("a/report", "C:\\dir\\x.tar", "noext", ".Rprofile", "dir.d/.env", "dir\\.env",
+           "a/b.c/file", "x.", "..R", "a.b-c", "trail.R/", "caf\u00e9", "d\u00e9/caf\u00e9",
+           "x.\u00e9", NA)
+  expect_identical(path_ext(p), ext)
+  expect_identical(path_sans_ext(p), sans)
+  expect_identical(path_ext(character()), character())
+  expect_identical(path_sans_ext(character()), character())
+  # The same answers in a locale where basename() cannot translate the non-ASCII names
+  local_name_locale()
+  local_r46_file_ext()
+  expect_identical(path_ext(p), ext)
+  expect_identical(path_sans_ext(p), sans)
+  expect_identical(Encoding(path_sans_ext("caf\u00e9.R")), "UTF-8")
+  # and R 4.6's own functions agree on the names basename() can take, except where D-111 item 1
+  # differs on purpose: "\\" separates components on every OS ("dir\\.env" has no extension;
+  # tools gives "env" on macOS and Linux) and a trailing separator leaves no extension
+  # (tools::file_ext("trail.R/") is "trail.R/")
+  ascii = !is.na(p) & !grepl("[^ -~]", p) & !grepl("\\\\|/$", p)
+  expect_identical(tools::file_ext(p[ascii]), ext[ascii])
+  expect_identical(tools::file_path_sans_ext(p[ascii]), sans[ascii])
+})
+
 test_that("path_key() lower-cases on Windows and macOS only (IC-51)", {
   local_mocked_bindings(is_windows = function() FALSE, is_macos = function() TRUE)
   expect_identical(path_key("/TMP/Foo"), tolower(path_norm("/TMP/Foo")))

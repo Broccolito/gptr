@@ -286,7 +286,16 @@ test_that("boundary: a kill counts as signalled only for the handles ps_kill() r
   handles = list(list(pid = 41L), list(pid = 42L))
   outcome = "partial"
   calls = 0L
-  local_mocked_bindings(ps_kill = function(p, ...) {
+  graces = numeric()
+  real_kill = ps::ps_kill
+  # the finalizers already pending (earlier tests' processes) run before the mock is in place
+  gc()
+  local_mocked_bindings(ps_kill = function(p, grace = 200) {
+    # a call for other handles (a processx finalizer, see below) goes to ps itself
+    if (!identical(p, handles)) {
+      graces <<- c(graces, grace)
+      return(real_kill(p, grace = grace))
+    }
     calls <<- calls + 1L
     switch(outcome,
       # ps's own shape when one handle of several fails: per-handle results on the condition
@@ -298,6 +307,18 @@ test_that("boundary: a kill counts as signalled only for the handles ps_kill() r
       invisible(c("killed", "dead")))
   }, .package = "ps")
   expect_identical(proc_kill_signalled(handles), handles[1])
+  # CI-5: processx's finalizer of a process started with cleanup_tree = TRUE calls ps_kill_tree(),
+  # which kills through ps_kill() on Windows, so a garbage collection during this test reached the
+  # mock (hosted Windows release: 4 calls). Any number of such finalizers can run at one
+  # collection, so the check looks for its own calls, not a count (like CI-2's ps_kill_tree
+  # control): on every OS one finalizer makes processx's call (ps_kill_tree()'s grace, 200) and
+  # one a sentinel call (grace 7).
+  invisible(lapply(c(200L, 7L), function(g) {
+    force(g)
+    reg.finalizer(new.env(), function(e) get("ps_kill", asNamespace("ps"))(list(), grace = g))
+  }))
+  gc()
+  expect_true(all(c(200, 7) %in% graces))
   outcome = "plain"
   expect_identical(proc_kill_signalled(handles), list())
   outcome = "ok"

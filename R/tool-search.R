@@ -382,7 +382,7 @@ grep_tool_text = function(m) {
 find_relevance = function(query, paths) {
   q = tolower(gsub("[*?]", "", query))
   base = tolower(search_basename(paths))
-  stem = tools::file_path_sans_ext(base)
+  stem = path_sans_ext(base)
   cls = rep(NA_integer_, length(paths))
   if (!nzchar(q)) return(rep(4L, length(paths)))
   cls[base == q | stem == q] = 1L

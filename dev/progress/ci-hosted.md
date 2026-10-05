@@ -805,3 +805,214 @@ Open items:
   test's 10 s poll (`disconnected` stays NA). Like the `http-retry:613` item, it reads the mock's
   log, and the two may share a cause. A P04 investigation is needed if either recurs.
 - Windows `Rscript*` temp detritus NOTE and INFRA-23 on hosted Windows: unchanged from CI-3.
+
+## Task CI-5 - Hosted regressions after the P07-P20 waves
+
+Hosted evidence (job logs fetched with `gh api .../actions/jobs/<id>/logs`): run 37262066260 on
+`0398aee` and run 37266727707 on `bdf7c18` (complete), and the completed jobs of run
+37269169488 on `01e13a5` (all but Windows release, still running when looked at once; not
+waited for). Ubuntu oldrel-4 (R 4.2.3) and oldrel-1 (R 4.5.3), copy-safety release and devel and
+the token benchmark passed in all three. Every R 4.6.1 and devel job, both Windows jobs and the
+connections job failed.
+
+| Failure | Where | Cause |
+|---|---|---|
+| `test-tool-search.R:223` "non-ASCII file and directory names are searched, found and listed in any locale": `basename(x)`: unable to translate 'caf<U+00E9>.r' to native encoding | Ubuntu release, devel, LC_ALL=C, no-Suggests, macOS and connections, all three runs; the only failure there (`bdf7c18` Ubuntu release `[ FAIL 1 \| WARN 0 \| SKIP 20 \| PASS 15583 ]`, `Status: 1 ERROR`) | R 4.6 changed `tools::file_path_sans_ext()` and `tools::file_ext()` to test the extension on `basename(x)` (read from `src/library/tools/R/utils.R` of the R 4.6 branch and trunk). `basename()` cannot translate a marked UTF-8 non-ASCII name in the test's C locale. `find_relevance()` (P10) still called `tools::file_path_sans_ext()` after D-057 item 1; on R 4.5 and earlier it is a plain `sub()`, so oldrel-1 passed |
+| `test-doc-formats.R` 15 failures (`:35`, `:36`, `:47`, `:54`, `:78`, `:108`, `:304`, `:365`, `:427`, `:429`, `:455`, `:516`, `:570`, `:666`, `:667`) and `test-perm-classify.R:19` (CR bytes in the shipped risk tables) | Windows release and oldrel-4, all three runs | the runner's git has `core.autocrlf=true`, so `actions/checkout` wrote every LF file with CRLF: the diffs show `"\r"` at the end of every fixture line and `0d 0a` where the serializer wrote `0a` |
+| `test-ext-plugins.R:481` "This path is not a plugin directory", `test-skill-discover.R:295-297` (the home skill is not found) | Windows release and oldrel-4, all three runs | both tests mock `user_home()` with `withr::local_tempdir()`, which has backslashes on Windows. `path_norm()` turned backslashes into slashes before it expanded `~`, so `~/x` became `C:\...\file/x`, which is not absolute, and was joined to the working directory |
+| `test-tool-search.R:219-229` ("No matches found", "(empty directory)") and warnings "unable to translate '.../d<U+00E9>' to native encoding" from `list.files()` | Windows release (6 failures, 1 warning) and oldrel-4 (2 failures, 4 warnings) | the test runs in the C locale. Windows R translates every path it hands the file system to the native encoding, which cannot hold a non-ASCII name in a C locale |
+| `test-proc-supervise.R:306` "a kill counts as signalled only for the handles ps_kill() reached": `calls` 4, not 3 | Windows release, `0398aee` only | on Windows `ps::ps_kill_tree()` kills through `ps::ps_kill()` (on Unix through `ps_send_signal()`), so processx's finalizer of an earlier test's process (`cleanup_tree = TRUE`) reached the test's `ps_kill` mock when a garbage collection ran. The CI-2 finalizer case, now for `ps_kill()` |
+| `test-http-sse.R:126` INFRA-23 CPU `1.020 >= 1.000` | Windows oldrel-4 R CMD check, `0398aee` only. It passed in R CMD check of Windows oldrel-4 on `bdf7c18` and `01e13a5` and of Windows release on `0398aee` and `bdf7c18`, and failed again only in the non-gating Windows release stream of `bdf7c18` | not fixed: see the open items |
+
+Totals on `bdf7c18`: Windows release `Status: 1 ERROR, 1 NOTE`, `[ FAIL 26 | WARN 1 | SKIP 49 |
+PASS 15410 ]`; Windows oldrel-4 `Status: 1 ERROR, 2 NOTEs`, `[ FAIL 22 | WARN 4 | SKIP 49 | PASS
+15414 ]`; macOS `Status: 1 ERROR, 1 NOTE`, `[ FAIL 1 | WARN 0 | SKIP 18 | PASS 15597 ]`. No job
+had a WARNING. The NOTEs do not gate (`error-on: "warning"`) and are not fixed here: macOS lists
+macOS service folders under `/var/folders/.../T` (`com.apple.proactiveeventtrackerd`,
+`com.apple.secureelementservice`), Windows the `Rscript*` temp detritus (CI-3 open item) and
+Windows oldrel-4 an installed size of 5.1 MB (R 4.8 MB). The Windows release diagnostic stream
+of `bdf7c18` ("files with failures: test-doc-formats.R, test-ext-plugins.R, test-http-sse.R,
+test-perm-classify.R, test-skill-discover.R, test-tool-search.R") matches R CMD check plus the
+INFRA-23 item.
+
+What was built:
+
+1. `R/utils-paths.R` (P01, D-111 item 1): `path_has_ext()`, `path_ext()` and `path_sans_ext()`
+   read a file extension by R 4.6's rule (an ASCII alphanumeric run after the last dot of the
+   last component, with a character that is not a dot before it; "/" and "\\" separate
+   components; PCRE with `\z`) and never call `basename()`. `find_relevance()`
+   (`R/tool-search.R`) and `read_token_class()` and `read_binary_text()` (`R/tool-read.R`) use
+   them instead of `tools::file_path_sans_ext()` and `tools::file_ext()`.
+2. `R/utils-paths.R` (P01, D-111 item 2): `path_norm_one()` expands `~` (also `~\`) before it
+   turns backslashes into slashes.
+3. `.gitattributes` (new, `* -text`, D-111 item 3): no line-end conversion on checkout or
+   check-in, whatever `core.autocrlf` says. R CMD build leaves it out of the tarball itself
+   (`tools:::.hidden_file_exclusions`, checked in the R 4.2 branch sources and on R 4.5.0), so
+   `.Rbuildignore` is unchanged. Three fixtures hold CRLF on purpose
+   (`fixtures/docs/crlf-bom.R`, `crlf-bom.expected.R`, `fixtures/sse/anthropic-messages/text.sse`)
+   and keep it; no file is renormalised.
+4. Tests. New `tests/testthat/helper-locale.R`: `local_name_locale()` (the C locale on macOS and
+   Linux; on Windows R's own locale, skipped if it is not UTF-8; D-111 item 4) and
+   `local_r46_file_ext()`, which installs R 4.6.1's `tools::file_ext()` and
+   `tools::file_path_sans_ext()` bodies in tools' namespace for the calling test
+   (`local_mocked_bindings(.package = "tools")`), so any R shows what R 4.6 does.
+   `test-tool-search.R`: the non-ASCII test uses both helpers. `test-tool-read.R`: new "a
+   non-ASCII file is read and classed by its extension in any locale (R >= 4.6)" (token class,
+   text, the printed `gptr_lines`, the binary hint). `test-utils-paths.R`: new "path_norm()
+   expands '~' before it turns backslashes into slashes (CI-5)" (a home with backslashes) and
+   "path_ext() and path_sans_ext() follow R 4.6's rule without basename() (CI-5)" (15 names
+   after review round 1, R 4.6's own functions agree on the 8 ASCII ones without a backslash or
+   a trailing "/", the same answers in the C locale under the R 4.6 emulation). `test-zzz.R`:
+   new ".gitattributes turns off line-end conversion for every file (CI-5)" (source tree only).
+   `test-proc-supervise.R`: the `ps_kill` mock hands calls for other handles to the real
+   `ps::ps_kill()` and records their grace. After review round 1, two synthetic finalizers make
+   Windows-shaped calls on every OS (`ps_kill(list(), grace = 200)`, what `ps_kill_tree()` does
+   on Windows, and a sentinel with grace 7), and the check is
+   `expect_true(all(c(200, 7) %in% graces))`, not a count; a `gc()` before the mock is installed
+   runs the finalizers already pending against ps itself.
+
+Adaptations and deviations: no plan literal covers these corrections; they follow P01 Task 21's
+rule that the hosted jobs pass on every platform. D-111 records the four behavioural changes
+(the extension rule and its two differences from `tools`, `path_norm()`'s order, the attribute,
+and the Windows locale of the non-ASCII tests, which amends D-057's "in any locale"). D-110 was
+taken by the P13 lane while this task ran, so this entry is D-111; D-109, D-110, D-112 and D-113
+in `dev/DEVIATIONS.md` belong to other lanes: stage only the D-111 section. Owning plan logs got
+cross-reference notes: `progress/P01.md`, `P04.md`, `P10.md` and `P17.md`. No P15 or P11 file was
+touched: the `test-doc-formats.R` and `test-perm-classify.R` failures are fixed by
+`.gitattributes` alone. My new read test's first fixture ended in a newline, so the printed
+`gptr_lines` had a final empty line; that fixture mistake was corrected (no trailing newline)
+before the green run.
+
+Red (actual, `isolated-check.R`):
+
+- `^(utils-paths|tool-search|tool-read|zzz)$` with the new tests: `[ FAIL 10 | WARN 0 | SKIP 0 |
+  PASS 424 ]` (`task5-red.log`): `test-tool-search.R:228` with the hosted message ("unable to
+  translate 'caf<U+00E9>.r' to native encoding", via the R 4.6 emulation on R 4.5.0),
+  `test-tool-read.R:404` (`basename()` of the absolute `caf\u00e9.R` path),
+  `test-utils-paths.R:129-133` (`~/sub` became `/Users/.../tests/testthat/\private\var\...`),
+  `test-utils-paths.R:146` (`path_ext` not found), `test-zzz.R:311`, `:314` (no `.gitattributes`).
+- Windows checkout simulated on macOS: a `git -c core.autocrlf=true clone` of `HEAD` (`345cfab`)
+  in the scratchpad (`report.Rmd` began `- - - \r \n`; 18 of the 19 files under `fixtures/docs/`
+  and `inst/` were CRLF), `^(doc-formats|perm-classify)$`: `[ FAIL 16 | WARN 0 | SKIP 0 | PASS
+  296 ]`, the 15 hosted `test-doc-formats.R` lines and `test-perm-classify.R:19`
+  (`task5-red-winsim-autocrlf.log`).
+- Windows home simulated on macOS in the same clone: the two P17 mocks return their temporary
+  directory with backslashes, `^(ext-plugins|skill-discover)$`: `[ FAIL 4 | WARN 0 | SKIP 0 |
+  PASS 379 ]` at `test-ext-plugins.R:481` (the hosted "This path is not a plugin directory")
+  and `test-skill-discover.R:295-297` (`task5-red-winsim-home.log`).
+- `^proc-supervise$` with the synthetic finalizer and the old mock: `[ FAIL 1 | WARN 0 | SKIP 0 |
+  PASS 140 ]`, `calls` 4, not 3, the hosted message (`task5-red-proc-supervise.log`).
+- The Windows C-locale listing cannot be reproduced on macOS; its red evidence is the hosted
+  logs.
+
+Green (actual):
+
+- `^(utils-paths|tool-search|tool-read|zzz)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 449 ]`
+  (`task5-green.log`; 424 + 25: 5 + 9 in the two utils-paths tests, 4 in the read test, 2 in
+  zzz, and the 5 tool-search expectations from `:228` on that the error had skipped). The same
+  under `LC_ALL=C LANG=C`: `PASS 449` (`task5-green-clocale.log`).
+- The autocrlf clone after adding `.gitattributes` and checking every file out again (722 LF and
+  the 3 intentional CRLF files, as in the index; `git status` clean): `^(doc-formats|
+  perm-classify)$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 344 ]`
+  (`task5-green-winsim-gitattributes.log`).
+- The backslash-home clone with this task's `R/utils-paths.R`: `^(ext-plugins|skill-discover)$`
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 385 ]` (`task5-green-winsim-home.log`).
+- `^proc-supervise$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 141 ]` (140 + `foreign`)
+  (`task5-green-proc-supervise.log`; the check was replaced in review round 1, see below).
+- Neighbours `^(lint-rules|arch-layers|tool-|utils-|ext-plugins|skill-)` on the working tree:
+  `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2062 ]` (`task5-neighbours.log`).
+- R CMD check (`isolated-check.R check`) of a clean `git archive` export of `345cfab` plus this
+  task's files except the later `test-proc-supervise.R` change: `Status: 1 NOTE`, `0 errors | 0
+  warnings | 1 note`, tests `[ FAIL 0 | WARN 0 | SKIP 18 | PASS 16446 ]` in 365 s. The NOTE is
+  "checking for future file timestamps ... unable to verify current time" (no time server
+  from this sandbox). The 18 skips: the D-054 guard, 5 "dev/ is not available (built package)",
+  `gptr_permissions()` arrives with P11, the keyring skip, the 3 gated live tests, 5 "not running
+  from the source tree" (`test-zzz.R`, including the new `.gitattributes` test) and 2 "package
+  sources not found" (`task5-check.log`, `task5-check-00check.log`, `task5-check-testthat.Rout`).
+- Final, working tree: `^(proc-|utils-paths$|tool-search$|tool-read$|zzz$)` `[ FAIL 0 | WARN 0 |
+  SKIP 0 | PASS 745 ]` (`task5-green-final.log`).
+
+Lint: `isolated-check.R lint` on `R/utils-paths.R`, `R/tool-search.R`, `R/tool-read.R`,
+`test-utils-paths.R`, `test-tool-search.R`, `test-tool-read.R`, `test-zzz.R`,
+`test-proc-supervise.R` and `helper-locale.R` found no lints (`task5-lint.log`). All touched
+files and the D-111 section are ASCII-only. Roxygen changed only in `@noRd` blocks, so there was
+no `document` run.
+
+Logs: `dev/.validation/CI/task5-*.log`. The hosted job logs are not in the repository; refetch
+them by job id: run 37266727707: 111626546672 (Ubuntu release), 111626546725 (devel),
+111626546690 (LC_ALL=C), 111626546440 (no-Suggests), 111626546648 (macOS), 111626546557 (Windows
+release), 111626546795 (Windows oldrel-4), 111626546653 (connections); run 37262066260:
+111619207298, 111619207220, 111619207211, 111619207170, 111619207310, 111619207438,
+111619207275, 111619207073; run 37269169488: 111635051889, 111635051933, 111635051892,
+111635051958, 111635051905, 111635051951, 111635051616.
+
+### Review round 1 (2026-10-04)
+
+The independent review reran the focused filters, the neighbours, the autocrlf and backslash-home
+simulations and lint, all green, and found the Windows release job 111635051971 of run
+37269169488 (finished after the implementation) covered by the recorded root causes
+(doc-formats x15, perm-classify:19, ext-plugins:481, skill-discover:295-297,
+tool-search:219-229). Findings and what changed:
+
+1. Blocker, accepted: `test-proc-supervise.R`'s new `expect_identical(foreign, 1L)` assumed
+   exactly one foreign `ps_kill()` call. On Windows every pending processx finalizer
+   (`cleanup_tree = TRUE`) also reaches the mock through `ps_kill_tree()`, and the test's own
+   `gc()` runs them all inside the mock window, so the check failed in the very case it was
+   meant to fix. Fix (test only, no product change): the mock records the grace of each foreign
+   call; two synthetic finalizers make Windows-shaped calls on every OS (processx's, grace 200,
+   and a sentinel, grace 7); the check is `expect_true(all(c(200, 7) %in% graces))`, which
+   tolerates any number of real finalizers, as CI-2's `ps_kill_tree` control does with `%in%`;
+   and a `gc()` before the mock is installed runs the finalizers already pending against ps
+   itself. `expect_identical(calls, 3L)` stays exact: foreign calls never count there.
+   - Red, Windows emulated: a scratch copy of the tree in which this test also mocks
+     `ps::ps_kill_tree()` with its Windows branch (`ps_find_tree()`, then `ps_kill(procs, grace
+     = grace)`), with the implementer's test, `^proc-`: `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 295 ]`,
+     `foreign` 2, not 1 (one real processx finalizer plus the synthetic call;
+     `task5-fix1-red-winemu-old.log`).
+   - Red, every OS: the new test with the two finalizers and an exact count of foreign calls
+     (`expect_identical(length(graces), 1L)`), `^proc-supervise$`: `[ FAIL 1 | WARN 0 | SKIP 0 |
+     PASS 140 ]`, 2, not 1 (`task5-fix1-red-proc-supervise.log`).
+   - Green: `^proc-supervise$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 141 ]`
+     (`task5-fix1-green-proc-supervise.log`). Windows emulated, `^proc-`: `[ FAIL 0 | WARN 0 |
+     SKIP 0 | PASS 296 ]`, graces 7 and 200 (`task5-fix1-green-winemu.log`); and with the early
+     `gc()` removed too, so the real finalizers reach the mock: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS
+     296 ]`, graces 7, 200, 200, 200, 200 (three real finalizers;
+     `task5-fix1-green-winemu-nopregc.log`).
+2. Nit, accepted: D-111 item 1 listed two differences from R 4.6's `tools::file_ext()` and
+   `tools::file_path_sans_ext()`; there are four, all deliberate. Checked against R 4.6.1's bodies
+   (`r46_file_ext()`): `"dir\\.env"` gives `"env"` there on macOS and Linux, where `basename()`
+   does not split at a backslash, and `""` from `path_ext()`, which treats "\\" as a separator on
+   every OS, like `path_norm()`; `tools::file_ext("trail.R/")` returns the whole `"trail.R/"`
+   (`basename()` drops the trailing "/", but the extension is cut from the full path), and
+   `path_ext()` gives `""`; the sans-extension functions agree on both. D-111 item 1 now lists
+   all four, and `test-utils-paths.R` pins `"dir\\.env"` too (15 names; same expectation count)
+   with a comment naming both deliberate differences.
+
+Final green after round 1: `^(proc-|utils-paths$|tool-search$|tool-read$|zzz$)` `[ FAIL 0 | WARN 0
+| SKIP 0 | PASS 745 ]` (`task5-fix1-green-final.log`); `^(utils-paths|tool-search|tool-read)$`
+under `LC_ALL=C LANG=C`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 358 ]`
+(`task5-fix1-green-clocale.log`). Lint of `test-proc-supervise.R` and `test-utils-paths.R`: no
+lints (`task5-fix1-lint.log`); both files and the D-111 section are ASCII-only. No roxygen
+changed, so no `document` run.
+
+To be confirmed by the hosted run of the pushed commit:
+
+- every R 4.6.1 and devel job and the connections job pass `test-tool-search.R`;
+- both Windows jobs check fixtures out with LF and pass `test-doc-formats.R`,
+  `test-perm-classify.R`, `test-ext-plugins.R`, `test-skill-discover.R`, `test-tool-search.R`
+  (now in R's UTF-8 locale) and `test-proc-supervise.R`.
+
+Open items:
+
+- INFRA-23 on hosted Windows (CI-3) now failed once in a gating R CMD check: Windows oldrel-4 on
+  `0398aee`, 1.020 s of CPU for the 20,000 deltas. It passed in four other Windows R CMD checks
+  of these runs. The P04 decision of CI-3 (optimise the SSE split and decode path, or say how
+  INFRA-23 is measured on slow hosted runners) is still needed; until then this test can fail
+  either Windows job.
+- Same root cause as item 1, outside this task's files: `R/doc-io.R:63` (P15, uncommitted work
+  in flight) picks the document format with `tools::file_ext(path[1L])`, so on R >= 4.6 a
+  non-ASCII document path in a non-UTF-8 locale stops there. Fix for the P15 lane: use P01's
+  `path_ext()`. `R/ext-specs.R:1330` (P17) reads an image's extension the same way, and its
+  `file.exists()` and `readBin()` also need `fs_path()` for such a path (`file.exists()` warns
+  "unable to translate" in a C locale, checked on R 4.5.0); recorded in `progress/P17.md`.
+- Windows `Rscript*` temp detritus NOTE: unchanged from CI-3.

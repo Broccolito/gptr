@@ -138,10 +138,12 @@ is_abs_path = function(path) {
 #' ancestor (macOS /var -> /private/var), "." and ".." removed from the rest
 #' @noRd
 path_norm_one = function(path) {
-  path = gsub("\\", "/", path, fixed = TRUE)
-  if (identical(path, "~") || startsWith(path, "~/")) {
+  # "~" is expanded before backslashes become slashes, so the result has forward slashes whatever
+  # user_home() returns (CI-5, D-111)
+  if (identical(path, "~") || grepl("^~[/\\\\]", path)) {
     path = paste0(user_home(), substring(path, 2L))
   }
+  path = gsub("\\", "/", path, fixed = TRUE)
   if (!is_abs_path(path)) path = file.path(getwd(), path)
   rest = character()
   current = path
@@ -164,6 +166,36 @@ path_norm_one = function(path) {
     out = substr(out, 1L, nchar(out) - 1L)
   }
   out
+}
+
+#' Does the last component of each path end in an extension? (R 4.6's rule, without basename())
+#'
+#' The extension is the ASCII alphanumeric run after the last dot, with at least one character
+#' that is not a dot before that dot, so ".Rprofile" and "x." have none. "/" and "\\" separate
+#' components. base R's `basename()` translates to the native encoding and stops on a marked
+#' UTF-8 non-ASCII path in a non-UTF-8 locale; R >= 4.6's `tools::file_ext()` and
+#' `tools::file_path_sans_ext()` call it (CI-5, D-111; IC-62).
+#' @noRd
+path_has_ext = function(path) {
+  last = sub("(?s)^.*[/\\\\]", "", path, perl = TRUE)
+  grepl("(?s)^(.*[^.].*)[.][[:alnum:]]+\\z", last, perl = TRUE)
+}
+
+#' File extensions without the dot ("" for none), in every locale (see `path_has_ext()`)
+#' @noRd
+path_ext = function(path) {
+  out = rep("", length(path))
+  has = path_has_ext(path)
+  out[has] = sub("(?s)^.*[.]([[:alnum:]]+)\\z", "\\1", path[has], perl = TRUE)
+  out
+}
+
+#' Paths without their extension, in every locale (see `path_has_ext()`)
+#' @noRd
+path_sans_ext = function(path) {
+  has = path_has_ext(path)
+  path[has] = sub("[.][[:alnum:]]+\\z", "", path[has], perl = TRUE)
+  path
 }
 
 #' Normalised absolute paths (vectorised)
