@@ -1076,3 +1076,86 @@ s1_request = function(model, states, questions, opts = list()) {
   }
   s1_dispatch(model, states, questions, start_for, s1_engine(model), NA, gate)
 }
+
+# ---- builtin:system1 ----------------------------------------------------------------------------
+
+#' The body of the system1 prompt section, architecture 7.3 verbatim; P07 wraps it in <system1>
+#' tags and replaces {s1} with the configured alias (contract 9.3)
+#' @noRd
+s1_section_body = paste0(
+  "For fast typed judgements call a System 1 model from R instead of reasoning over each item ",
+  "yourself: gptr(\"Is this abstract about a randomised trial?\", abstracts, model = {s1}) ",
+  "returns a logical vector with attr(, \"prob\"); with choices = c(\"a\", \"b\", \"c\") it ",
+  "returns one choice per input. Calls are vectorised, so pass all items at once. Use them ",
+  "inside if, for and while, and check items with probabilities near 0.5 yourself. Keep ",
+  "open-ended reasoning, writing and code for yourself."
+)
+
+#' The system1 section (T0, order 650, budget 150; contract 9.3, IC-68): shown only when a System
+#' 1 is usable, that is when model_default("system1") is non-NULL (a configured System 1 model or
+#' emulation, a TypeSafe key, or a verified local native classifier, which needs no key: IC-74,
+#' 07-local-ollama.md section 5)
+#' @noRd
+s1_section_text = function(ctx) {
+  if (is.null(s1_default_ref())) return(NULL)
+  s1_section_body
+}
+
+#' A Jev model entry for a provider record (report 04 section 2.5: $0.042 per million input
+#' tokens, output free; 64k context direct, 32k through gateways). Prices are a data frame, the
+#' shape P02 validates for model records (catalog JSON lists become one in P05's resolver).
+#' @noRd
+s1_jev_model = function(id, name, context = 64000) {
+  list(id = id, name = name, family = "jev", type = "classifier", release_date = "2026-09-15",
+       context = context, max_output = 0, reasoning = FALSE, thinking_levels = "off",
+       input = "text", tool_call = FALSE, structured_output = TRUE,
+       prices = data.frame(from = as.Date("2026-09-15"), tier = "default", input = 0.042,
+                           output = 0, cache_read = 0, stringsAsFactors = FALSE),
+       status = "active")
+}
+
+#' The provider records: `typesafe` (architecture 8.2; static rate of IC-64) and the gateway hosts
+#' that serve the same protocol (report 04 sections 2.9 and 4.4; Cloudflare needs its own envelope
+#' and an account id and is left for later, as the report recommends)
+#' @noRd
+s1_provider_records = function() {
+  list(
+    gptr_provider("typesafe", api = "typesafe-system-one", base_url = "https://api.typesafe.ai/v1/",
+                  auth = "TYPESAFE_API_KEY", type = "classifier",
+                  rate = list(requests_per_s = 40, tokens_per_s = 1e5),
+                  models = list(s1_jev_model("jev-latest", "Jev"),
+                                s1_jev_model("jev-preview", "Jev (preview)"),
+                                s1_jev_model("jev-1.13.0", "Jev 1.13"))),
+    gptr_provider("openrouter-jev", api = "typesafe-system-one",
+                  base_url = "https://openrouter.ai/api/v1/", auth = "OPENROUTER_API_KEY",
+                  type = "classifier",
+                  models = list(s1_jev_model("typesafe/jev-1.13", "Jev 1.13 (OpenRouter)", 32000))),
+    gptr_provider("vercel-jev", api = "typesafe-system-one",
+                  base_url = "https://ai-gateway.vercel.sh/typesafe/v1/",
+                  auth = "AI_GATEWAY_API_KEY", type = "classifier",
+                  models = list(s1_jev_model("typesafe-ai/jev", "Jev (Vercel AI Gateway)", 32000)))
+  )
+}
+
+#' builtin:system1 (contract 7.13, 10.3): the adapters typesafe-system-one, ollama-system-one
+#' (IC-74: native Ollama decision models, 07-local-ollama.md section 3; P05's built-in `ollama`
+#' record serves them) and s1-emulate, the provider records, the classifier route (order 10) and
+#' the system1 prompt section; the s1.decide service is declared below and owned by this built-in
+#' @noRd
+builtin_system1 = function(gptr) {
+  gptr$register(gptr_adapter("typesafe-system-one", transport = "http_json",
+                             classify = list(build = s1_typesafe_build, parse = s1_typesafe_parse)))
+  gptr$register(gptr_adapter(s1_ollama_api, transport = "http_json",
+                             classify = list(build = s1_ollama_build, parse = s1_ollama_parse)))
+  gptr$register(gptr_adapter("s1-emulate", transport = "inprocess",
+                             classify = list(run = s1_emulate_classify)))
+  for (p in s1_provider_records()) gptr$register(p)
+  gptr$register(gptr_spec("route", "classifier", order = 10, match = s1_match, run = s1_call,
+                          description = "System 1 models return typed vectors"))
+  gptr$register(gptr_prompt_section("system1", s1_section_text, tier = "T0", order = 650L,
+                                    budget = 150L))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("system1", builtin_system1))
+on_load(ext_service_set("s1.decide", s1_decide, provided_by = "P13", builtin = "system1"))

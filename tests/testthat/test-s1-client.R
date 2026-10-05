@@ -759,3 +759,323 @@ test_that("a System 1 call inside a pump never runs another run's FIFO tool (IC-
   expect_length(seen$res$answers, 3L)
   expect_null(seen$res$errors)
 })
+
+# ---- Task 9: builtin:system1 and gptr() end to end (NS-4, NS-5) --------------------------------
+# INFRA-18's acceptance tests (architecture 6.18) are in test-s1-route.R, the file P24's INFRA
+# suite runs.
+
+abstracts20 = function() {
+  x = c(
+    "A randomised controlled trial of metformin in 240 adults.",
+    "A retrospective cohort of 12,000 statin users.",
+    "Participants were randomised to exercise or usual care.",
+    "A case report of a rare hepatic tumour.",
+    "A double-blind randomised trial of vitamin D.",
+    "A cross-sectional survey of sleep in nurses.",
+    "A cluster randomised trial of hand washing.",
+    "A systematic review of mindfulness programmes.",
+    "Patients were randomised to two surgical techniques.",
+    "A prospective cohort of smokers over 20 years.",
+    "A randomised crossover trial of two inhalers.",
+    "A qualitative interview study of caregivers.",
+    "A pragmatic randomised trial in 40 practices.",
+    "A case-control study of pesticide exposure.",
+    "An open-label randomised trial of early feeding.",
+    "A registry analysis of hip replacements.",
+    "A non-inferiority randomised trial of antibiotics.",
+    "An ecological study of air pollution.",
+    "A stepped-wedge randomised trial of a sepsis protocol.",
+    "A diagnostic accuracy study of an antigen test."
+  )
+  names(x) = sprintf("a%02d", seq_along(x))
+  x
+}
+
+rct_judge = function(name = "judge", .env = parent.frame()) {
+  local_fake_provider(function(state, question) {
+    text = paste(unlist(state), collapse = " ")
+    if (grepl("randomised", text, fixed = TRUE)) 0.93 else 0.07
+  }, name = name, type = "classifier", .env = .env)
+}
+
+test_that("builtin:system1 registers the providers, adapters, route, section and service", {
+  tp = registry_get("provider", "typesafe")
+  expect_identical(tp$api, "typesafe-system-one")
+  expect_identical(tp$base_url, "https://api.typesafe.ai/v1/")
+  expect_identical(tp$auth, "TYPESAFE_API_KEY")
+  expect_identical(tp$type, "classifier")
+  expect_identical(tp$rate, list(requests_per_s = 40, tokens_per_s = 1e5))
+  expect_true("jev-latest" %in% vapply(tp$models, function(m) m$id, ""))
+  expect_identical(ratelimit_static("typesafe"), list(requests_per_s = 40, tokens_per_s = 1e5))
+  expect_identical(registry_get("provider", "openrouter-jev")$api, "typesafe-system-one")
+  expect_identical(registry_get("adapter", "typesafe-system-one")$transport, "http_json")
+  expect_true(is.function(registry_get("adapter", "s1-emulate")$classify$run))
+  # IC-74 (07-local-ollama.md section 3; D-120 item 11): the native Ollama decision adapter
+  ol = registry_get("adapter", "ollama-system-one")
+  expect_identical(ol$transport, "http_json")
+  expect_true(is.function(ol$classify$build) && is.function(ol$classify$parse))
+  routes = Filter(function(r) identical(r$name, "classifier"), registry_all("route"))
+  expect_length(routes, 1L)
+  expect_identical(routes[[1]]$order, 10)
+  sec = registry_get("prompt_section", "system1")
+  expect_identical(sec$tier, "T0")
+  expect_identical(sec$order, 650L)
+  expect_identical(sec$budget, 150L)
+  expect_true(ext_service_has("s1.decide"))
+  jev = model_resolve("jev")
+  expect_identical(jev$provider, "typesafe")
+  expect_identical(jev$type, "classifier")
+})
+
+test_that("the system1 section is architecture 7.3 verbatim and shown only when usable", {
+  pb = json_decode(read_utf8(testthat::test_path("fixtures", "bench",
+                                                 "prefix-baseline.json"))$text)
+  st = Filter(function(x) identical(x$name, "system1"), pb$standins$sections)[[1]]
+  expect_identical(s1_section_body, st$text)
+  expect_false(grepl("[^ -~]", s1_section_body))
+  local_mocked_bindings(model_key_present = function(id, vars) FALSE)
+  local_gptr_options(system1 = NULL)
+  expect_null(s1_section_text(NULL))
+  local_gptr_options(system1 = "judge/judge-s1")
+  expect_identical(s1_section_text(NULL), s1_section_body)
+  # IC-74 (07 section 5): a verified local native classifier makes System 1 usable without a
+  # TypeSafe key, so the section does not depend on the key alone
+  local_gptr_options(system1 = NULL)
+  local_mocked_bindings(catalog_local_classifier = function() "ollama/clef-flash")
+  expect_identical(s1_section_text(NULL), s1_section_body)
+})
+
+test_that("NS-4: if (gptr(..., model = judge)) works and creates no session", {
+  s1_fresh()
+  judge = rct_judge()
+  abstract = abstracts20()[["a01"]]
+  before = length(live_all())
+  included = character()
+  if (gptr("Is this abstract about a randomised controlled trial?", abstract, model = judge)) {
+    included = c(included, "a01")
+  }
+  expect_identical(included, "a01")
+  expect_identical(length(live_all()), before)
+  req = fake_requests(judge)[[1]]
+  expect_identical(req$state, list(abstract = abstract))
+  expect_identical(req$question$type, "noul")
+  expect_match(req$question$instructions, "The input is in `abstract`.", fixed = TRUE)
+})
+
+test_that("NS-4: a vector gives a named decision vector; repeats come from the cache", {
+  s1_fresh()
+  judge = rct_judge()
+  abstracts = abstracts20()
+  is_rct = gptr("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
+  expect_identical(class(is_rct), c("gptr_decision", "gptr_s1", "logical"))
+  expect_identical(names(is_rct), names(abstracts))
+  expect_identical(sum(is_rct), 10L)
+  expect_identical(as.vector(table(is_rct)), c(10L, 10L))
+  expect_identical(unname(attr(is_rct, "prob")[1:2]), c(0.93, 0.07))
+  expect_identical(attr(is_rct, "meta")$model, "judge-s1-1.0")
+  expect_length(fake_requests(judge), 20L)
+  again = gptr("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
+  expect_length(fake_requests(judge), 20L)
+  expect_true(all(attr(again, "meta")$cached))
+  expect_identical(as.logical(again), as.logical(is_rct))
+})
+
+test_that("levels give a gptr_score of expected 0-based levels", {
+  s1_fresh()
+  local_fake_provider(list(c(0, 0.02, 0.98)), name = "rater", type = "classifier")
+  mood = gptr("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
+              levels = c("negative", "neutral", "positive"))
+  expect_identical(class(mood), c("gptr_score", "gptr_s1", "numeric"))
+  expect_equal(as.double(mood), c(r1 = 1.98))
+  expect_identical(attr(mood, "s1_levels"), c("negative", "neutral", "positive"))
+})
+
+test_that("NS-4: a data frame split into rows prints the once-per-session s1_split message", {
+  s1_fresh()
+  local_gptr_options(quiet = FALSE)
+  local_once_reset("s1_split")
+  local_fake_provider(list(0.9), name = "rows", type = "classifier")
+  diagnostics = data.frame(check = c("normality", "variance"), ok = c(TRUE, TRUE))
+  msg = expect_message(gptr("Is the residual plot acceptable?", diagnostics,
+                            model = "rows/rows-s1"),
+                       class = "gptr_message_s1_split")
+  expect_match(conditionMessage(msg), "I(diagnostics)", fixed = TRUE)
+  expect_no_message(gptr("Is the residual plot acceptable?", diagnostics, model = "rows/rows-s1"))
+  n = 0L
+  while (gptr("Is the residual plot acceptable?", I(diagnostics), model = "rows/rows-s1")) {
+    n = n + 1L
+    if (n == 2L) break
+  }
+  expect_identical(n, 2L)
+})
+
+test_that("a piped session gives one state: no turn, a gptr.decision entry, at most 2,000 chars", {
+  s1_fresh()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  local_fake_provider(list(strrep("The fit converged and the residuals look fine. ", 100)))
+  judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
+  s = gptr("Fit the model", model = "fake/fake-1", envir = new.env())
+  turns = s$turns
+  done = s |> gptr("done?", model = judge)
+  expect_s3_class(done, "gptr_decision")
+  expect_true(done)
+  expect_identical(s$turns, turns)
+  entries = session_data(s)$entries
+  last = entries[[length(entries)]]
+  expect_identical(last$type, "custom")
+  expect_identical(last$custom_type, "gptr.decision")
+  expect_identical(last$data$question, "done?")
+  expect_identical(last$data$type, "noul")
+  expect_identical(last$data$n, 1L)
+  state = fake_requests(judge)[[1]]$state$session
+  expect_lte(nchar(state), 2000L)
+  expect_match(state, "^Answer: The fit converged")
+})
+
+test_that("System 1 emits a decision event and writes one summary line at top level", {
+  s1_fresh()
+  local_fake_provider(list(0.9, 0.1), name = "judge", type = "classifier")
+  events = new.env()
+  events$list = list()
+  off = gptr_register(gptr_hook("decision", function(event, ctx) {
+    events$list[[length(events$list) + 1L]] = event
+    NULL
+  }))
+  withr::defer(off())
+  lines = new.env()
+  lines$summary = character()
+  s1_local_service("doc.s1_block", function(call, summary) {
+    lines$summary = c(lines$summary, summary)
+    invisible(NULL)
+  })
+  d = gptr("Q?", c(a = "x", b = "y"), model = "judge/judge-s1")
+  expect_length(events$list, 1L)
+  expect_identical(events$list[[1]]$n, 2L)
+  # `type` stays the event name (contract 4.5); the question type travels as question_type
+  expect_identical(events$list[[1]]$type, "decision")
+  expect_identical(events$list[[1]]$question_type, "noul")
+  expect_identical(lines$summary,
+                   paste0("gptr_decision: 1 TRUE / 1 FALSE (judge-s1-1.0, ", Sys.Date(), ")"))
+})
+
+test_that("failures: a scalar call signals, a vector gives NA and one s1_errors warning", {
+  s1_fresh()
+  # the state key is the context label (`one`, or `input` for the call c(...)), so read the value
+  local_fake_provider(function(state, question) {
+    bad = identical(unlist(state, use.names = FALSE)[1L], "bad")
+    if (bad) list(error = "overloaded", status = 529L) else 0.8
+  }, name = "flaky", type = "classifier")
+  local_gptr_options(s1_rounds = 1L)
+  one = "bad"
+  expect_error(gptr("Q?", one, model = "flaky/flaky-s1"), class = "gptr_error_s1_overloaded")
+  seen = new.env()
+  out = withCallingHandlers(
+    gptr("Q?", c("ok", "bad"), model = "flaky/flaky-s1"),
+    gptr_warning_s1_errors = function(w) {
+      seen$w = w
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_s3_class(seen$w, "gptr_warning_s1_errors")
+  expect_identical(seen$w$errors$class, "gptr_error_s1_overloaded")
+  expect_identical(as.logical(out), c(TRUE, NA))
+  expect_identical(attr(out, "meta")$errors$index, 2L)
+})
+
+test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
+  s1_fresh()
+  local_fake_provider(list(0.5), name = "judge", type = "classifier")
+  local_gptr_options(s1_max_elements = 5L)
+  err = expect_error(gptr("Q?", as.character(1:6), model = "judge/judge-s1"),
+                     class = "gptr_error_invalid_argument")
+  expect_match(conditionMessage(err), "chunks", fixed = TRUE)
+})
+
+test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
+  s1_fresh()
+  spec = gptr_fake_provider(list(0.9), name = "remote", type = "classifier")
+  spec$offline = FALSE
+  spec$local = TRUE
+  # a `local` hint alone is not exempt from the egress acknowledgement (D-099): the provider
+  # names a loopback endpoint, as a local server would
+  spec$base_url = "http://127.0.0.1:9/v1"
+  off = gptr_register(spec)
+  withr::defer(off())
+  # the process mode is the gptr.replay option (setup.R sets it, and it wins over GPTR_REPLAY)
+  local_gptr_options(replay = "live")
+  gptr("Q?", c(a = "x"), model = "remote/remote-s1")
+  local_gptr_options(replay = "replay")
+  again = gptr("Q?", c(a = "x"), model = "remote/remote-s1")
+  expect_true(all(attr(again, "meta")$cached))
+  expect_error(gptr("Q?", c(b = "new"), model = "remote/remote-s1"),
+               class = "gptr_error_not_recorded")
+})
+
+test_that("jev without a key fails cleanly: egress first, then no_key; nothing is sent", {
+  s1_fresh()
+  local_no_network()
+  withr::local_envvar(TYPESAFE_API_KEY = "", GPTR_REPLAY = "live",
+                      R_USER_CONFIG_DIR = withr::local_tempdir())
+  # the process mode is the gptr.replay option (setup.R), which wins over GPTR_REPLAY
+  local_gptr_options(replay = "live")
+  local_mocked_bindings(secret_lookup = function(name) NULL)
+  ticket = "The printer is on fire."
+  expect_error(gptr("Is it urgent?", ticket, model = jev), class = "gptr_error_egress")
+  gptr_config(egress = list(typesafe = "ack"), .scope = "user")
+  expect_error(gptr("Is it urgent?", ticket, model = jev), class = "gptr_error_no_key")
+})
+
+test_that("the gptr_prob() example runs", {
+  s1_fresh()
+  judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
+  d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
+  expect_identical(gptr_prob(d), c(a = 0.9, b = 0.2))
+  expect_identical(as.logical(d), c(a = TRUE, b = FALSE))
+})
+
+test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model", {
+  s1_fresh()
+  local_fake_provider(function(state, question) {
+    if (grepl("subtle", state$task, fixed = TRUE)) 0.9 else 0.1
+  }, name = "hardness", type = "classifier")
+  strong_fake = local_fake_provider(list("strong answer"), name = "fstrong")
+  cheap_fake = local_fake_provider(list("cheap answer"), name = "fcheap")
+  strong = "fstrong/fstrong-1"
+  cheap = "fcheap/fcheap-1"
+  tasks = c("Fix the subtle race in the cache.", "Rename a variable.")
+  answers = character()
+  for (task in tasks) {
+    hard = gptr("Is this task subtle enough to need the strongest model?", task,
+                model = "hardness/hardness-s1")
+    res = gptr(task, model = if (hard) strong else cheap, mode = auto, envir = new.env())
+    answers = c(answers, res$text)
+  }
+  expect_identical(answers, c("strong answer", "cheap answer"))
+  expect_length(fake_requests(strong_fake), 1L)
+  expect_length(fake_requests(cheap_fake), 1L)
+})
+
+test_that("a provider's static rate of 40 requests per second caps System 1 admission (IC-64)", {
+  # the server starts before s1_fresh() moves the working directory into a temporary project
+  srv = local_mock_server("systemone")
+  s1_fresh()
+  spec = gptr_provider("ratetest", api = "typesafe-system-one", base_url = srv$url,
+                       type = "classifier", local = TRUE, offline = TRUE,
+                       rate = list(requests_per_s = 40, tokens_per_s = 1e5),
+                       models = list(list(id = "ratetest-s1", type = "classifier")))
+  off = gptr_register(spec)
+  withr::defer(off())
+  withr::defer(ratelimit_set("ratetest", NULL))
+  d = gptr("Is it fine?", paste("abstract", 1:100), model = "ratetest/ratetest-s1")
+  expect_length(d, 100L)
+  log = srv$log()
+  expect_identical(nrow(log), 100L)
+  t = sort(as.numeric(log$time))
+  k = seq_along(t)
+  # P04's token bucket holds 40 and refills 40 per second (ambiguity 18): after the first 40,
+  # request k starts no earlier than (k - 40) / 40 seconds after the first, so the sustained rate
+  # never exceeds 40 per second (0.25 s allowance for clock and logging jitter; a slower machine
+  # only makes the requests later, so the bound cannot fail from slowness)
+  expect_true(all(t - t[1] >= (k - 40) / 40 - 0.25))
+  expect_gte(t[100] - t[1], 1.25)
+})

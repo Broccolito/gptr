@@ -703,3 +703,137 @@ test_that("a value from an uncertain() function must be a value of the question"
   expect_error(s1_abstain(d, q, esc(q, "maybe"), list(list())),
                class = "gptr_error_invalid_argument")
 })
+
+# ---- Task 9: INFRA-18 acceptance through gptr() (architecture 6.18; P24's INFRA suite) ----------
+
+test_that("INFRA-18: against a mocked /systemone: if (gptr(\"q\", x, model = jev)) works", {
+  # the server starts before s1_fresh() moves the working directory into a temporary project
+  srv = local_mock_server("systemone", answers = function(body) {
+    p = if (grepl("puppy", unlist(body$state), fixed = TRUE)) 0.97 else 0.04
+    list(answer = list(type = "noul", noul = p))
+  })
+  s1_fresh()
+  # A user-rank `typesafe` record shadows the built-in one (overrides are per record, IC-69), so
+  # `jev` still resolves to typesafe/jev-latest while its requests reach the local mock; the
+  # record is local and offline: no key, no egress acknowledgement, allowed under replay
+  off = gptr_register(gptr_provider("typesafe", api = "typesafe-system-one", base_url = srv$url,
+                                    type = "classifier", local = TRUE, offline = TRUE,
+                                    rate = list(requests_per_s = 40, tokens_per_s = 1e5),
+                                    models = list(list(id = "jev-latest", type = "classifier"))))
+  withr::defer(off())
+  x = "A puppy fetched the ball."
+  hit = FALSE
+  if (gptr("Does the text describe a dog?", x, model = jev)) hit = TRUE
+  expect_true(hit)
+  log = srv$log()
+  expect_identical(nrow(log), 1L)
+  body = json_decode(log$body[[1L]])
+  expect_identical(body$model, "jev-latest")
+  expect_identical(body$questions$answer$type, "noul")
+  expect_identical(body$state, list(x = x))
+})
+
+test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay within 8 active", {
+  # the server starts before s1_fresh() moves the working directory into a temporary project
+  srv = local_mock_server("systemone", answers = function(body) {
+    p = if (grepl("7", unlist(body$state), fixed = TRUE)) 0.1 else 0.9
+    list(answer = list(type = "noul", noul = p))
+  })
+  s1_fresh()
+  p = srv$provider
+  item = "item 1"
+  hit = FALSE
+  if (gptr("Is it fine?", item, model = p)) hit = TRUE
+  expect_true(hit)
+  x = paste("item", 1:100)
+  real = s1_http
+  seen = new.env(parent = emptyenv())
+  seen$active = 0L
+  seen$max = 0L
+  local_mocked_bindings(s1_http = function(spec, provider, on_done, on_fail) {
+    seen$active = seen$active + 1L
+    seen$max = max(seen$max, seen$active)
+    real(spec, provider,
+         on_done = function(status, headers, body) {
+           seen$active = seen$active - 1L
+           on_done(status, headers, body)
+         },
+         on_fail = function(cnd) {
+           seen$active = seen$active - 1L
+           on_fail(cnd)
+         })
+  })
+  d = gptr("Is it fine?", x, model = p)
+  expect_length(d, 100L)
+  expect_identical(sum(!d), sum(grepl("7", x, fixed = TRUE)))
+  expect_lte(seen$max, 8L)
+  expect_gt(seen$max, 1L)
+  n_before = nrow(srv$log())
+  d2 = gptr("Is it fine?", x, model = p)
+  expect_identical(nrow(srv$log()), n_before)
+  expect_true(all(attr(d2, "meta")$cached))
+})
+
+test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function follows the policy", {
+  s1_fresh()
+  local_fake_provider(function(state, question) {
+    switch(state$x, sure = 0.95, unsure = 0.55, no = 0.02)
+  }, name = "band", type = "classifier")
+  x = c("sure", "unsure", "no")
+  na = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6)
+  expect_identical(as.logical(na), c(TRUE, NA, FALSE))
+  expect_identical(attr(na, "prob"), c(0.95, 0.55, 0.02))
+  err = expect_error(gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6,
+                          uncertain = "stop"), class = "gptr_error_s1_uncertain")
+  expect_identical(err$prob, 0.55)
+  expect_identical(err$min_confidence, 0.6)
+  seen = new.env()
+  esc = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6,
+             uncertain = function(state, answer) {
+               seen$state = state
+               seen$p = gptr_prob(answer)
+               FALSE
+             })
+  expect_identical(as.logical(esc), c(TRUE, FALSE, FALSE))
+  expect_identical(seen$state, list(x = "unsure"))
+  expect_identical(unname(seen$p), 0.55)
+  yes = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6, uncertain = TRUE)
+  expect_identical(as.logical(yes), c(TRUE, TRUE, FALSE))
+})
+
+test_that("INFRA-18: choices give a classed character with a plain ==; a factor stays a factor", {
+  # Undescribed choices go on the wire as {"liver": null, ...} (report 04a), which P01's fake
+  # classifier refuses ("need at least two text criteria"; D-077), and a factor's options never
+  # carry descriptions, so this test asks the mocked /systemone through the TypeSafe adapter. The
+  # server starts before s1_fresh() moves the working directory into a temporary project.
+  srv = local_mock_server("systemone", answers = function(body) {
+    p = if (grepl("liver", body$state$x, fixed = TRUE)) {
+      list(liver = 0.8, lung = 0.1, other = 0.1)
+    } else {
+      list(liver = 0.1, lung = 0.2, other = 0.7)
+    }
+    list(answer = list(type = "choice", choice = names(p)[which.max(unlist(p))],
+                       probabilities = p))
+  })
+  s1_fresh()
+  tissue_model = srv$provider
+  x = c(s1 = "hepatocytes from the liver", s2 = "a blood sample")
+  tissue = gptr("Which tissue?", x, model = tissue_model,
+                choices = c("liver", "lung", "other"))
+  expect_identical(class(tissue), c("gptr_choice", "gptr_s1", "character"))
+  eq = tissue == "liver"
+  expect_identical(eq, c(s1 = TRUE, s2 = FALSE))
+  expect_false(is.object(eq))
+  f = gptr("Which tissue?", x, model = tissue_model,
+           choices = factor(c("liver", "lung", "other")))
+  expect_s3_class(f, "factor")
+  expect_identical(levels(f), c("liver", "lung", "other"))
+  expect_identical(as.character(f), c("liver", "other"))
+  o = gptr("Which tissue?", x, model = tissue_model, choices = c("liver", "lung", "other"),
+           .opts = list(output = "factor"))
+  expect_s3_class(o, "factor")
+  n = nrow(srv$log())
+  expect_error(gptr("Which tissue?", x, model = tissue_model, choices = c("TRUE", "maybe")),
+               class = "gptr_error_s1_labels")
+  expect_identical(nrow(srv$log()), n)
+})
