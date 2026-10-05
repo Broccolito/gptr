@@ -94,7 +94,7 @@ shell_resolve_os = function(cmd, windows, which, getenv, exists) {
 #' @noRd
 shell_resolve = function(cmd) {
   check_string(cmd, "cmd")
-  shell_resolve_os(cmd, windows = proc_is_windows(), which = function(x) unname(Sys.which(x)),
+  shell_resolve_os(cmd, windows = is_windows(), which = function(x) unname(Sys.which(x)),
                    getenv = function(x) Sys.getenv(x), exists = file.exists)
 }
 
@@ -125,10 +125,6 @@ proc_spawn = function(command, args = character(), env = NULL, wd = NULL, stdin 
     env_vec = c("current", stats::setNames("YES", marker))
   } else {
     check_strings(env, "env")
-    if (is.null(names(env))) {
-      gptr_abort("`env` must be a named character vector.", "invalid_argument", arg = "env",
-                 expected = "a named character vector (child_env())")
-    }
     child_env_names(names(env), "env")
     env_vec = c(stats::setNames(os_bytes(env), names(env)), stats::setNames("YES", marker))
   }
@@ -334,7 +330,8 @@ write_all = function(p, data) {
                "invalid_argument", arg = "p", expected = "a process started with stdin = \"|\"")
   }
   if (!is.raw(data)) check_strings(data, "data")
-  limit = stdin_timeout()
+  limit = as.numeric(check_number(gptr_opt("stdin_timeout"), "gptr.stdin_timeout", min = 0,
+                                  max = .Machine$double.xmax))
   bytes = if (is.raw(data)) data else charToRaw(as_utf8(paste(data, collapse = "")))
   if (!length(bytes)) return(invisible(p))
   r = reactor_get()
@@ -383,17 +380,4 @@ write_close = function(p) {
     b$close = TRUE
   }
   invisible(p)
-}
-
-
-#' Validate the no-progress deadline before adding work to the reactor
-#' @noRd
-stdin_timeout = function() {
-  limit = gptr_opt("stdin_timeout") %||% 60
-  if (!is.numeric(limit) || is.complex(limit) || length(limit) != 1L ||
-      !is.finite(limit) || limit < 0) {
-    gptr_abort("`gptr.stdin_timeout` must be a finite nonnegative number.", "invalid_argument",
-               arg = "gptr.stdin_timeout", expected = "finite nonnegative seconds")
-  }
-  as.numeric(limit)
 }

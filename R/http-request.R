@@ -88,9 +88,9 @@ http_headers = function(headers, origin) {
 #' @noRd
 http_timeouts = function(spec) {
   check_list(spec, "spec", named = TRUE)
-  connect = spec[["connect_timeout"]] %||% gptr_opt("connect_timeout") %||% 20
-  first_byte = spec[["first_byte_timeout"]] %||% gptr_opt("first_byte_timeout") %||% 120
-  idle = spec[["idle_timeout"]] %||% gptr_opt("idle_timeout") %||% 90
+  connect = spec[["connect_timeout"]] %||% gptr_opt("connect_timeout")
+  first_byte = spec[["first_byte_timeout"]] %||% gptr_opt("first_byte_timeout")
+  idle = spec[["idle_timeout"]] %||% gptr_opt("idle_timeout")
   out = list(connect = connect, first_byte = first_byte, idle = idle)
   for (name in names(out)) {
     value = out[[name]]
@@ -139,9 +139,7 @@ http_handle = function(spec) {
   check_list(spec, "spec", named = TRUE)
   url = spec[["url"]]
   origin = url_origin(url)
-  if (is.na(origin) || !http_url_parts(url)$scheme %in% c("http", "https")) {
-    arg_abort(url, "url", "an absolute HTTP or HTTPS URL")
-  }
+  if (!grepl("^https?://", origin)) arg_abort(url, "url", "an absolute HTTP or HTTPS URL")
   method = spec[["method"]] %||% (if (is.null(spec[["body"]])) "GET" else "POST")
   check_string(method, "method")
   method = toupper(method)

@@ -28,7 +28,7 @@ wait_until = function(cond, seconds = 5) {
 # The bytes an R child's "\n" reaches the pipe as: R's stdout is a text-mode stream on Windows,
 # which writes "\n" as CRLF (hosted Windows: `cat("...\n")` arrived as "...\r\n")
 child_eol = function() {
-  if (proc_is_windows()) as.raw(c(0x0d, 0x0a)) else as.raw(0x0a)
+  if (is_windows()) as.raw(c(0x0d, 0x0a)) else as.raw(0x0a)
 }
 
 # R code for a child that writes `bytes` with no line end of its own. Bytes, not escapes: an -e
@@ -40,7 +40,7 @@ cat_raw_code = function(bytes) {
 
 # The bytes for a child to write so that one CRLF reaches the pipe on every OS (on Windows an
 # explicit CRLF would arrive as "\r\r\n")
-crlf_bytes = function() if (proc_is_windows()) as.raw(0x0a) else as.raw(c(0x0d, 0x0a))
+crlf_bytes = function() if (is_windows()) as.raw(0x0a) else as.raw(c(0x0d, 0x0a))
 
 # The pids that carry a tree marker, and whether they are `pid` and its descendants only. On
 # Windows Rscript.exe runs Rterm.exe as its child, which inherits the marker, so the tree of one
@@ -439,7 +439,7 @@ test_that("proc_run echo fails closed when streaming redaction exceeds its bound
 # timeout can bound (hosted Windows: "checking tests" hung for over an hour after this file's
 # last pre-stdin test). The stdin tests that need a non-blocking write skip on Windows.
 skip_if_blocking_stdin = function() {
-  skip_if(proc_is_windows(), "D-019: processx writes child stdin with a blocking call on Windows")
+  skip_if(is_windows(), "D-019: processx writes child stdin with a blocking call on Windows")
 }
 
 count_stdin_code = paste0("con = file('stdin', 'rb'); n = 0; repeat { b = readBin(con, 'raw', ",

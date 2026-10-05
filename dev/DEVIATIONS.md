@@ -9875,3 +9875,11 @@ Validation: `progress/ci-hosted.md`, Task CI-6.
   `builtin:workspace` is replaced or disabled without an `attached` block: no attached rendering.
 - Tests: test-prompt-cache.R (1) and test-prompt-context.R (2) always-skipped stub tests removed.
   Evidence: progress/simplicity.md P07-S.
+
+## D-141 - P04 pid_alive() reads an unreadable process as alive (2026-10-05)
+- Rule: `pid_alive(pid, create_time)` is a valid pid and `!isFALSE(proc_identity(pid,
+  create_time)$alive)`: an OS error other than confirmed absence, or an unreadable creation time,
+  now reads alive (was dead), so session, document and settings locks stay held (simplicity plan
+  section 3, P04-S10). Confirmed absence, zombies and a creation-time mismatch read dead (IC-59).
+- Contract-visible: none (04 section 7.4 defines no unknown state).
+- Tests: test-proc-supervise.R OS-error block (+1 expectation). Evidence: progress/simplicity.md P04-S.

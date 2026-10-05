@@ -84,18 +84,33 @@ sse_one = function(data_line, event_line = NULL) {
   list(list(event = e, data = d, id = NULL, retry = NULL))
 }
 
-#' Parse a block of complete SSE events (normalised bytes ending in a blank line)
-#'
-#' Two fast paths cover what providers send: a block holding exactly one event (`data:`, or
-#' `event:` then `data:`), and blocks whose lines are only `event:` and `data:` with at most one
-#' of each per event. Anything else (comments, `id`, `retry`, several `data:` or `event:` lines,
-#' fields without a colon) takes the general path of the SSE specification.
+#' Split stream bytes into lines; a NUL byte is refused (R strings cannot hold it; D-007)
 #' @noRd
-sse_parse_block = function(b) {
+stream_lines = function(b) {
   if (length(grepRaw(as.raw(0L), b, fixed = TRUE))) {
     gptr_abort("Stream contains a NUL byte that R strings cannot represent.", "provider")
   }
-  l = strsplit(rawToChar(b), "\n", fixed = TRUE, useBytes = TRUE)[[1L]]
+  strsplit(rawToChar(b), "\n", fixed = TRUE, useBytes = TRUE)[[1L]]
+}
+
+#' Strip a leading BOM once per stream; NULL while a short prefix may still become one
+#' @noRd
+stream_strip_bom = function(st, b, final) {
+  if (st$bom_checked) return(b)
+  bom = as.raw(c(0xef, 0xbb, 0xbf))
+  if (!final && length(b) < 3L && identical(b, bom[seq_along(b)])) return(NULL)
+  st$bom_checked = TRUE
+  if (length(b) >= 3L && identical(b[1:3], bom)) b = b[-(1:3)]
+  b
+}
+
+#' Parse a block of complete SSE events (normalised bytes ending in a blank line)
+#'
+#' A fast path covers what providers send most: a block holding exactly one event (`data:`, or
+#' `event:` then `data:`). Anything else takes the general path of the SSE specification.
+#' @noRd
+sse_parse_block = function(b) {
+  l = stream_lines(b)
   n = length(l)
   if (!n) return(list())
   Encoding(l) = "bytes"
@@ -104,41 +119,19 @@ sse_parse_block = function(b) {
     return(sse_one(l[2L], l[1L]))
   }
   blank = !nzchar(l)
-  isd = startsWith(l, "data:")
-  ise = startsWith(l, "event:")
   g = cumsum(blank)
-  if (all(blank | isd | ise)) {
-    gd = g[isd]
-    ge = g[ise]
-    if (!anyDuplicated(gd) && !anyDuplicated(ge)) {
-      if (!length(gd)) return(list())
-      data = sse_field_value(l[isd], 6L)
-      ev = rep(NA_character_, length(gd))
-      if (length(ge)) {
-        m = match(ge, gd)
-        ok = !is.na(m)
-        ev[m[ok]] = sse_field_value(l[ise], 7L)[ok]
-      }
-      Encoding(data) = "UTF-8"
-      Encoding(ev) = "UTF-8"
-      na = rep(NA_character_, length(gd))
-      return(sse_events(data, ev, na, na))
-    }
-  }
   keep = !blank & !startsWith(l, ":")
   if (!any(keep)) return(list())
   l = l[keep]
   g = g[keep]
   colon = regexpr(":", l, fixed = TRUE, useBytes = TRUE)
   field = substr(l, 1L, colon - 1L)
-  value = substr(l, colon + 1L, 1e8L)
+  value = sse_field_value(l, colon + 1L)
   nc = colon < 0L
   if (any(nc)) {
     field[nc] = l[nc]
     value[nc] = ""
   }
-  sp = startsWith(value, " ")
-  if (any(sp)) value[sp] = substr(value[sp], 2L, 1e8L)
   isd = field == "data"
   if (!any(isd)) return(list())
   gd = g[isd]
@@ -169,27 +162,16 @@ sse_splitter = function() {
   st = new.env(parent = emptyenv())
   st$buf = raw(0)
   st$bom_checked = FALSE
-  bom = as.raw(c(0xef, 0xbb, 0xbf))
   nn = as.raw(c(10L, 10L))
   cr = as.raw(13L)
-
-  strip_bom = function(b, final) {
-    if (st$bom_checked) return(b)
-    if (!final && length(b) < 3L && identical(b, bom[seq_along(b)])) return(NULL)
-    st$bom_checked = TRUE
-    if (length(b) >= 3L && identical(b[1:3], bom)) b = b[-(1:3)]
-    b
-  }
 
   push = function(chunk) {
     if (!length(chunk)) return(list())
     b = if (length(st$buf)) c(st$buf, chunk) else chunk
-    if (!st$bom_checked) {
-      b = strip_bom(b, final = FALSE)
-      if (is.null(b)) {
-        st$buf = c(st$buf, chunk)
-        return(list())
-      }
+    b = stream_strip_bom(st, b, final = FALSE)
+    if (is.null(b)) {
+      st$buf = c(st$buf, chunk)
+      return(list())
     }
     hold = raw(0)
     if (length(grepRaw(cr, b, fixed = TRUE))) {
@@ -211,7 +193,7 @@ sse_splitter = function() {
   flush = function() {
     b = st$buf
     st$buf = raw(0)
-    b = strip_bom(b, final = TRUE)
+    b = stream_strip_bom(st, b, final = TRUE)
     if (!length(b)) return(NULL)
     b = sse_normalise_eol(b, final = TRUE)$b
     if (!length(b)) return(NULL)
@@ -245,33 +227,19 @@ ndjson_splitter = function() {
   st = new.env(parent = emptyenv())
   st$buf = raw(0)
   st$bom_checked = FALSE
-  bom = as.raw(c(0xef, 0xbb, 0xbf))
   lf = as.raw(10L)
 
   to_lines = function(b) {
-    if (length(grepRaw(as.raw(0L), b, fixed = TRUE))) {
-      gptr_abort("Stream contains a NUL byte that R strings cannot represent.", "provider")
-    }
-    if (!length(b)) return(character())
-    l = strsplit(rawToChar(b), "\n", fixed = TRUE, useBytes = TRUE)[[1L]]
-    l = ndjson_strip_cr(l)
+    l = ndjson_strip_cr(stream_lines(b))
     l = l[nzchar(l)]
     Encoding(l) = "UTF-8"
     l
   }
 
-  strip_bom = function(b, final) {
-    if (st$bom_checked) return(b)
-    if (!final && length(b) < 3L && identical(b, bom[seq_along(b)])) return(NULL)
-    st$bom_checked = TRUE
-    if (length(b) >= 3L && identical(b[1:3], bom)) b = b[-(1:3)]
-    b
-  }
-
   push = function(chunk) {
     if (!length(chunk)) return(character())
     b = if (length(st$buf)) c(st$buf, chunk) else chunk
-    b = strip_bom(b, final = FALSE)
+    b = stream_strip_bom(st, b, final = FALSE)
     if (is.null(b)) {
       st$buf = c(st$buf, chunk)
       return(character())
@@ -288,7 +256,7 @@ ndjson_splitter = function() {
   }
 
   flush = function() {
-    b = strip_bom(st$buf, final = TRUE)
+    b = stream_strip_bom(st, st$buf, final = TRUE)
     st$buf = raw(0)
     if (!length(b)) return(character())
     to_lines(b)

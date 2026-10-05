@@ -3,7 +3,6 @@ test_that("reactor_get() creates one gptr_reactor per process", {
   expect_s3_class(r, "gptr_reactor")
   expect_identical(reactor_get(), r)
   expect_identical(reactor_depth(), 0L)
-  expect_null(reactor_tool_run())
   expect_type(reactor_now(), "double")
   id = reactor_timer(reactor_now() + 60, function() NULL)
   expect_match(id, "^t[0-9]+$")
@@ -90,7 +89,6 @@ test_that("a nested pump inside a FIFO tool never runs a sibling's tool nor late
   })
   reactor_enqueue_tool("u-a", function() {
     st$log = c(st$log, "a-start")
-    st$inner = reactor_tool_run()
     st$nested = FALSE
     reactor_timer(reactor_now() + 0.3, function() st$nested = TRUE)
     reactor_pump(until = function() st$nested, timeout = 5)
@@ -99,8 +97,6 @@ test_that("a nested pump inside a FIFO tool never runs a sibling's tool nor late
   reactor_enqueue_tool("u-b", function() st$log = c(st$log, "b"))
   expect_true(reactor_pump(until = function() "b" %in% st$log, timeout = 10))
   expect_identical(st$log, c("a-start", "a-end", "b"))
-  expect_identical(st$inner, "u-a")
-  expect_null(reactor_tool_run())
   expect_gt(length(st$later), 0L)
   expect_true(all(st$later == 1L))
 })
@@ -166,7 +162,6 @@ test_that("failing timers, tasks and tools become diagnostics and the pump conti
   expect_true(reactor_pump(until = function() st$ok, timeout = 5))
   expect_setequal(st$diag, c("reactor timer boom timer", "reactor task boom task",
                              "reactor tool boom tool"))
-  expect_null(reactor_tool_run())
 })
 
 test_that("an error in a later callback becomes a diagnostic, not a pump failure", {
@@ -268,7 +263,6 @@ test_that("interrupts unwind callback marks and pump stacks without diagnostics"
   reactor_enqueue_tool("u-interrupt", interrupt)
   caught = tryCatch(reactor_pump(timeout = 5), interrupt = identity)
   expect_s3_class(caught, "interrupt")
-  expect_null(reactor_tool_run())
   expect_identical(reactor_depth(), 0L)
   expect_length(r$allow_stack, 0L)
 })
@@ -295,7 +289,7 @@ test_that("reactor_proc() decodes the pipe path byte-exact under LC_ALL=C", {
   bytes = as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9, 0x20, 0xe6, 0x97, 0xa5, 0xe6, 0x9c, 0xac))
   # the line ends with one CRLF on the pipe on every OS: R's text-mode stdout on Windows writes
   # "\n" as CRLF, so an explicit 0x0d 0x0a would arrive there as "\r\r\n" (hosted Windows)
-  eol = if (proc_is_windows()) ", 0x0a" else ", 0x0d, 0x0a"
+  eol = if (is_windows()) ", 0x0a" else ", 0x0d, 0x0a"
   code = paste0("cat(rawToChar(as.raw(c(", paste0("0x", as.character(bytes), collapse = ", "),
                 eol, "))))")
   p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))

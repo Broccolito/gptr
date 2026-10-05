@@ -167,10 +167,7 @@ retry_body_error = function(body) {
 #' @noRd
 retry_classify = function(status, headers, body = NULL, curl_error = NULL) {
   headers = retry_headers(headers)
-  max_delay = gptr_opt("max_retry_delay") %||% 60
-  if (!is.numeric(max_delay) || length(max_delay) != 1L || !is.finite(max_delay) || max_delay < 0) {
-    arg_abort(max_delay, "gptr.max_retry_delay", "a finite nonnegative number")
-  }
+  max_delay = retry_max_delay()
   res = function(retry, class, message, delay = NULL, retry_after = NULL) {
     list(retry = retry, delay = delay, class = class, retry_after = retry_after,
          message = substr(redact(as_utf8(message), "persist"), 1L, 500L))
@@ -236,10 +233,11 @@ retry_backoff = function(attempt) {
   (0.5 * 2^(min(attempt, 5) - 1)) * (1 - 0.25 * frac)
 }
 
-#' A classed, unsignalled transport condition built by gptr_abort()
+#' The validated `gptr.max_retry_delay` option (seconds)
 #' @noRd
-transport_error = function(message, class, ...) {
-  tryCatch(gptr_abort(message, class, ...), gptr_error = function(e) e)
+retry_max_delay = function() {
+  check_number(gptr_opt("max_retry_delay"), "gptr.max_retry_delay", min = 0,
+               max = .Machine$double.xmax)
 }
 
 # ---- per-provider rate limiter (INFRA-21, IC-64) -------------------------------------------
@@ -276,26 +274,32 @@ ratelimit_deadline = function(now, delay) {
 }
 
 #' The limiter state of one provider, created on first use
+#'
+#' `tok_reset` holds the reset deadline of each exhausted token window, named by window.
 #' @noRd
 ratelimit_get = function(provider) {
-  check_string(provider, "provider", null = TRUE)
+  check_string(provider, "provider")
   lim = reactor_get()$limits
-  key = if (is.null(provider)) "anonymous" else paste0("provider:", provider)
-  st = lim[[key]]
+  st = lim[[provider]]
   if (!is.null(st)) return(st)
   st = new.env(parent = emptyenv())
   st$req_remaining = NA_real_
   st$req_reset = NA_real_
-  st$tok_remaining = NA_real_
-  st$tok_reset = NA_real_
-  st$token_windows = list()
+  st$tok_reset = numeric()
   st$retry_at = NA_real_
-  st$rate = if (is.null(provider)) NULL else ratelimit_static(provider)
-  rps = st$rate$requests_per_s
+  ratelimit_bucket(st, ratelimit_static(provider))
+  assign(provider, st, envir = lim)
+  st
+}
+
+#' Install a static rate with a full bucket
+#' @noRd
+ratelimit_bucket = function(st, rate) {
+  st$rate = rate
+  rps = rate$requests_per_s
   st$bucket = if (is.null(rps)) NA_real_ else max(1, rps)
   st$bucket_at = reactor_now()
-  assign(key, st, envir = lim)
-  st
+  invisible(st)
 }
 
 #' The static rate of a provider record (IC-64), or NULL
@@ -312,12 +316,7 @@ ratelimit_static = function(provider) {
 ratelimit_set = function(provider, rate) {
   check_string(provider, "provider")
   rate = ratelimit_rate(rate)
-  st = ratelimit_get(provider)
-  st$rate = rate
-  rps = rate$requests_per_s
-  st$bucket = if (is.null(rps)) NA_real_ else max(1, rps)
-  st$bucket_at = reactor_now()
-  invisible(st)
+  ratelimit_bucket(ratelimit_get(provider), rate)
 }
 
 #' Seconds from now until a reset given as RFC 3339, a duration or seconds
@@ -341,13 +340,7 @@ ratelimit_update = function(provider, headers) {
   h = retry_headers(headers)
   if (!length(h)) return(invisible(NULL))
   ra = retry_after_seconds(h)
-  if (!is.null(ra) && ra > 0) {
-    cap = gptr_opt("max_retry_delay") %||% 60
-    if (!is.numeric(cap) || length(cap) != 1L || !is.finite(cap) || cap < 0) {
-      arg_abort(cap, "gptr.max_retry_delay", "a finite nonnegative number")
-    }
-    ra = min(ra, cap)
-  }
+  if (!is.null(ra) && ra > 0) ra = min(ra, retry_max_delay())
   st = ratelimit_get(provider)
   now = reactor_now()
   num = function(name) {
@@ -368,21 +361,16 @@ ratelimit_update = function(provider, headers) {
     st$req_reset = ratelimit_deadline(now, if (is.na(req_rst)) 60 else req_rst)
   }
   for (key in c("tokens", "input-tokens", "output-tokens", "x-tokens")) {
-    remaining_header = if (key == "x-tokens") {
-      "x-ratelimit-remaining-tokens"
+    hdr = if (key == "x-tokens") {
+      c("x-ratelimit-remaining-tokens", "x-ratelimit-reset-tokens")
     } else {
-      paste0("anthropic-ratelimit-", key, "-remaining")
+      paste0("anthropic-ratelimit-", key, c("-remaining", "-reset"))
     }
-    reset_header = if (key == "x-tokens") {
-      "x-ratelimit-reset-tokens"
-    } else {
-      paste0("anthropic-ratelimit-", key, "-reset")
-    }
-    remaining = num(remaining_header)
+    remaining = num(hdr[1L])
     if (is.na(remaining)) next
-    wait = reset(reset_header)
-    st$token_windows[[key]] = list(remaining = remaining,
-      reset = ratelimit_deadline(now, if (is.na(wait)) 60 else wait))
+    wait = reset(hdr[2L])
+    st$tok_reset[[key]] = if (remaining > 0) NA_real_ else
+      ratelimit_deadline(now, if (is.na(wait)) 60 else wait)
   }
   if (!is.null(ra) && ra > 0) {
     st$retry_at = max(st$retry_at, ratelimit_deadline(now, ra), na.rm = TRUE)
@@ -404,7 +392,7 @@ ratelimit_refill = function(st, now) {
   invisible(st)
 }
 
-#' Expire each observed window independently and refresh summary fields
+#' Expire each observed window independently and refill the bucket
 #' @noRd
 ratelimit_refresh = function(st, now) {
   if (!is.na(st$req_reset) && now >= st$req_reset) {
@@ -412,34 +400,20 @@ ratelimit_refresh = function(st, now) {
     st$req_reset = NA_real_
   }
   if (!is.na(st$retry_at) && now >= st$retry_at) st$retry_at = NA_real_
-  for (key in names(st$token_windows)) {
-    if (now >= st$token_windows[[key]]$reset) st$token_windows[[key]] = NULL
-  }
-  windows = st$token_windows
-  st$tok_remaining = if (length(windows)) {
-    min(vapply(windows, function(x) x$remaining, 0))
-  } else {
-    NA_real_
-  }
-  blocked = Filter(function(x) x$remaining <= 0, windows)
-  st$tok_reset = if (length(blocked)) {
-    max(vapply(blocked, function(x) x$reset, 0))
-  } else {
-    NA_real_
-  }
+  st$tok_reset = st$tok_reset[which(st$tok_reset > now)]
   ratelimit_refill(st, now)
   invisible(st)
 }
 
 #' May a new request start? Consume one request unit only on admission; never wait.
-#' @return lgl(1)
+#' @return lgl(1); always TRUE for a request without a provider
 #' @noRd
 ratelimit_admit = function(provider) {
+  if (is.null(provider)) return(TRUE)
   st = ratelimit_get(provider)
   ratelimit_refresh(st, reactor_now())
-  if (!is.na(st$retry_at)) return(FALSE)
+  if (!is.na(st$retry_at) || length(st$tok_reset)) return(FALSE)
   if (!is.na(st$req_remaining) && st$req_remaining < 1) return(FALSE)
-  if (!is.na(st$tok_remaining) && st$tok_remaining <= 0) return(FALSE)
   if (!is.na(st$bucket)) {
     if (st$bucket < 1) return(FALSE)
     st$bucket = st$bucket - 1
@@ -451,6 +425,7 @@ ratelimit_admit = function(provider) {
 #' The earliest time every currently blocking admission constraint can clear
 #' @noRd
 ratelimit_next = function(provider) {
+  if (is.null(provider)) return(Inf)
   st = ratelimit_get(provider)
   now = reactor_now()
   ratelimit_refresh(st, now)
@@ -459,9 +434,7 @@ ratelimit_next = function(provider) {
   if (!is.na(st$req_remaining) && st$req_remaining < 1 && !is.na(st$req_reset)) {
     waits = c(waits, st$req_reset)
   }
-  if (!is.na(st$tok_remaining) && st$tok_remaining <= 0 && !is.na(st$tok_reset)) {
-    waits = c(waits, st$tok_reset)
-  }
+  waits = c(waits, st$tok_reset)
   rps = st$rate$requests_per_s
   if (!is.null(rps) && !is.na(st$bucket) && st$bucket < 1) {
     waits = c(waits, ratelimit_deadline(now, (1 - st$bucket) / rps))

@@ -111,15 +111,6 @@ test_that("backoff is 0.5 s * 2^(attempt - 1), capped at 8 s, and RNG-free", {
   expect_gte(d[8], 6)
 })
 
-test_that("transport_error() builds an unsignalled classed condition", {
-  cnd = transport_error("HTTP 429", c("rate_limit", "provider"), provider = "anthropic",
-                        retry_after = 2)
-  expect_identical(class(cnd), c("gptr_error_rate_limit", "gptr_error_provider", "gptr_error",
-                                 "error", "condition"))
-  expect_identical(cnd$retry_after, 2)
-  expect_identical(cnd$provider, "anthropic")
-})
-
 test_that("RFC 3339 and duration resets parse without the locale", {
   expect_identical(parse_rfc3339("2015-10-21T07:28:00Z"), 1445412480)
   expect_identical(parse_rfc3339("2015-10-21T09:28:00+02:00"), 1445412480)
@@ -332,17 +323,15 @@ test_that("malformed headers cannot poison known budgets or create infinite dead
   expect_equal(st$bucket, 1e308)
 })
 
-test_that("a provider named like the anonymous marker has its own static bucket", {
+test_that("a request without a provider is never rate limited", {
   local_mocked_bindings(registry_get = function(kind, name, session = NULL) {
     if (identical(name, "(none)")) list(rate = list(requests_per_s = 0.5))
   })
-  named = ratelimit_get("(none)")
-  anonymous = ratelimit_get(NULL)
-  expect_false(identical(named, anonymous))
-  expect_equal(named$rate$requests_per_s, 0.5)
+  expect_equal(ratelimit_get("(none)")$rate$requests_per_s, 0.5)
   expect_true(ratelimit_admit("(none)"))
   expect_false(ratelimit_admit("(none)"))
   expect_true(ratelimit_admit(NULL))
+  expect_identical(ratelimit_next(NULL), Inf)
 })
 
 retry_spec = function(srv, ...) {

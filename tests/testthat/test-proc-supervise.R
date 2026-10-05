@@ -159,13 +159,10 @@ write_proc_fixture = function(rec, marker = rec$marker) {
 test_that("boundary: malformed marker records never reach process operations", {
   local_proc_state()
   calls = character()
-  local_mocked_bindings(
-    proc_tree = function(marker) {
-      calls <<- c(calls, marker)
-      list()
-    },
-    pid_alive = function(...) FALSE, .package = "gptr"
-  )
+  local_mocked_bindings(proc_tree = function(marker) {
+    calls <<- c(calls, marker)
+    list()
+  }, .package = "gptr")
   marker = paste0("GPTR_PROC_", strrep("a", 16L))
   good = list(marker = marker, pid = 42L, create_time = 10,
               parent_pid = 43L, parent_create = 11)
@@ -219,10 +216,7 @@ test_that("boundary: orphan cleanup signals through the recorded process identit
     },
     .package = "ps"
   )
-  local_mocked_bindings(
-    pid_alive = function(pid, create_time = NULL) pid == 42L && !killed,
-    proc_tree = function(marker) list(), .package = "gptr"
-  )
+  local_mocked_bindings(proc_tree = function(marker) list(), .package = "gptr")
   marker = proc_marker_new()
   path = write_proc_fixture(list(marker = marker, pid = 42L, create_time = 10,
                                  parent_pid = 43L, parent_create = 11))
@@ -242,10 +236,8 @@ test_that("boundary: failed orphan cleanup retains the recovery marker", {
     ps_kill_tree = function(marker) stop("synthetic access failure"),
     .package = "ps"
   )
-  local_mocked_bindings(
-    pid_alive = function(pid, create_time = NULL) pid == 42L,
-    proc_tree = function(marker) list(list(pid = 42L, time = 10)), .package = "gptr"
-  )
+  local_mocked_bindings(proc_tree = function(marker) list(list(pid = 42L, time = 10)),
+                        .package = "gptr")
   # a kill that failed signalled nothing, so nothing is waited for (every library(gptr) sweeps)
   waited = list()
   local_mocked_bindings(proc_wait_exit = function(handles, seconds = 2) {
@@ -453,6 +445,8 @@ test_that("boundary: OS errors need an independent process inventory before decl
                     character(), "2", c(2L, 3L), list(2L))) {
     expect_identical(proc_identity(42L, 10)$alive, NA)
   }
+  # an unreadable process is no proof of death: pid_alive() reads it alive (locks stay held)
+  expect_true(pid_alive(42L, 10))
   code = codes[["ENOENT"]]
   for (pids in list(integer(), c(Sys.getpid(), 42L), 43L, c(Sys.getpid(), NA_real_),
                     c(Sys.getpid(), Inf), c(Sys.getpid(), 1.5), c(Sys.getpid(), -1),

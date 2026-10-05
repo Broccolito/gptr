@@ -11,10 +11,6 @@
 #   SIP-protected binaries on macOS (their environment is unreadable), `$kill()` signals the
 #   whole process group, and on Windows `taskkill /F /T /PID` must run while the parent lives.
 
-#' Is this Windows?
-#' @noRd
-proc_is_windows = function() identical(.Platform$OS.type, "windows")
-
 #' The process and job tables (`the$jobs`, owned by P04; IC-12)
 #' @noRd
 jobs_env = function() {
@@ -34,7 +30,7 @@ jobs_env = function() {
 #' Valid process identity fields and marker names (fail closed before OS operations)
 #' @noRd
 proc_pid_valid = function(pid) {
-  is.numeric(pid) && !is.complex(pid) && length(pid) == 1L && is.finite(pid) && pid > 0 &&
+  is.numeric(pid) && length(pid) == 1L && is.finite(pid) && pid > 0 &&
     pid <= .Machine$integer.max && pid == floor(pid)
 }
 
@@ -46,8 +42,8 @@ proc_marker_valid = function(marker) {
 
 #' @noRd
 proc_time_valid = function(time) {
-  identical(time, "NA") || (is.numeric(time) && !is.complex(time) && length(time) == 1L &&
-    !is.nan(time) && (is.na(time) || (is.finite(time) && time > 0)))
+  identical(time, "NA") || (is.numeric(time) && length(time) == 1L && !is.nan(time) &&
+    (is.na(time) || (is.finite(time) && time > 0)))
 }
 
 #' @noRd
@@ -71,8 +67,7 @@ proc_error_absent = function(error, pid) {
   code = error$errno
   codes = ps::errno()
   absent = codes$value[codes$name %in% c("ENOENT", "ESRCH")]
-  if (!is.numeric(code) || is.complex(code) || length(code) != 1L || is.na(code) ||
-      !code %in% absent) return(FALSE)
+  if (!is.numeric(code) || length(code) != 1L || is.na(code) || !code %in% absent) return(FALSE)
   if (!proc_pid_valid(pid)) return(FALSE)
   pids = tryCatch(ps::ps_pids(), error = function(e) integer())
   is.numeric(pids) && all(vapply(pids, proc_pid_valid, logical(1))) &&
@@ -93,8 +88,8 @@ proc_handle_alive = function(handle) {
 #' Verify a recorded identity once, keeping the same handle for any later signal
 #'
 #' JSON timestamps can round by microseconds. Compare the saved value with the actual
-#' handle's creation time using the same 0.01-second tolerance as pid_alive(); never create
-#' a handle with a rounded timestamp, because ps compares handle identity exactly.
+#' handle's creation time with a 0.01-second tolerance; never create a handle with a rounded
+#' timestamp, because ps compares handle identity exactly.
 #' @noRd
 proc_identity = function(pid, create_time = NULL) {
   handle = tryCatch(ps::ps_handle(as.integer(pid)), error = identity)
@@ -126,27 +121,14 @@ proc_create_time = function(pid) {
 
 #' Is a process alive and, when `create_time` is given, the same process (pid reuse)?
 #'
-#' `ps::ps_is_running()` plus a creation-time comparison; zombies count as dead (IC-59). An
-#' unknown creation time (NULL, NA, or the string "NA" that a marker file holds when ps could
-#' not read it) is no evidence of pid reuse, so it is not compared: the orphan sweep must never
-#' take a live parent for a dead one.
+#' proc_identity(); zombies count as dead (IC-59). An unknown creation time (NULL, NA or the
+#' marker file's "NA") is not compared, and an unknown state reads alive: locks stay held.
 #' @param pid int(1)
-#' @param create_time num(1) seconds since the epoch (a POSIXct is accepted, as P06's lock
-#'   check passes one), or NULL.
+#' @param create_time num(1) seconds since the epoch (a POSIXct is accepted), or NULL.
 #' @return lgl(1)
 #' @noRd
 pid_alive = function(pid, create_time = NULL) {
-  if (!proc_pid_valid(pid)) return(FALSE)
-  h = tryCatch(ps::ps_handle(as.integer(pid)), error = function(e) NULL)
-  if (is.null(h)) return(FALSE)
-  if (!isTRUE(tryCatch(ps::ps_is_running(h), error = function(e) FALSE))) return(FALSE)
-  if (identical(tryCatch(ps::ps_status(h), error = function(e) NA_character_), "zombie")) {
-    return(FALSE)
-  }
-  want = if (is.null(create_time)) NA_real_ else suppressWarnings(as.numeric(create_time))
-  if (length(want) != 1L || is.na(want)) return(TRUE)
-  ct = tryCatch(as.numeric(ps::ps_create_time(h)), error = function(e) NA_real_)
-  isTRUE(abs(ct - want) < 0.01)
+  proc_pid_valid(pid) && !isFALSE(proc_identity(pid, create_time)$alive)
 }
 
 #' This R process: pid and creation time (cached)
@@ -174,16 +156,8 @@ proc_marker_new = function() paste0("GPTR_PROC_", id_new("", 16L))
 #' Record a spawned child in memory and as a marker file for the orphan sweep
 #' @noRd
 proc_mark = function(p, marker, command) {
-  if (!proc_marker_valid(marker)) {
-    gptr_abort("Invalid process marker.", "invalid_argument",
-               arg = "marker", expected = "tree marker")
-  }
   self = proc_self()
   pid = p$get_pid()
-  if (!proc_pid_valid(pid) || pid == self$pid) {
-    gptr_abort("Invalid child PID.", "invalid_argument",
-               arg = "pid", expected = "child process PID")
-  }
   rec = list(marker = marker, pid = pid, create_time = proc_create_time(pid),
              parent_pid = self$pid, parent_create = self$create_time,
              command = basename(command),
@@ -325,8 +299,6 @@ proc_kill_signalled = function(handles) {
 #' Clean one validated owned tree, retaining its recovery record until cleanup is confirmed
 #' @noRd
 proc_cleanup_record = function(rec) {
-  path = file.path(proc_dir(), paste0(rec$marker, ".json"))
-  if (!proc_record_valid(rec, path)) return(list(killed = 0L, complete = FALSE))
   tree = proc_tree(rec$marker)
   signalled = proc_kill_signalled(tree)
   killed = 0L
@@ -375,7 +347,7 @@ kill_all = function(p, grace = 2) {
   try(p$kill_tree(), silent = TRUE)
   rec = proc_record(pid, process = p)
   if (!is.null(rec)) suppressWarnings(try(ps::ps_kill_tree(rec$marker), silent = TRUE))
-  if (proc_is_windows() && isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
+  if (is_windows() && isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
     tk = file.path(Sys.getenv("SystemRoot", "C:/Windows"), "System32", "taskkill.exe")
     try({
       k = processx::process$new(tk, c("/F", "/T", "/PID", as.character(pid)), stdout = NULL,
@@ -426,8 +398,8 @@ job_add = function(kind, id, name, pid = NA, stop, status = function() "running"
   check_string(name, "name", empty = TRUE)
   check_function(stop, "stop")
   check_function(status, "status")
-  missing_pid = (is.numeric(pid) || is.logical(pid)) && !is.complex(pid) &&
-    length(pid) == 1L && is.na(pid) && !is.nan(pid)
+  missing_pid = (is.numeric(pid) || is.logical(pid)) && length(pid) == 1L && is.na(pid) &&
+    !is.nan(pid)
   if (!missing_pid && !proc_pid_valid(pid)) {
     arg_abort(pid, "pid", "one positive integer PID or NA")
   }

@@ -8,11 +8,11 @@
 # the live pipes, then curl::multi_run(timeout = 0). The curl multi interface also survives a
 # resumed interrupt in every phase of a request (report 02 section 4.3).
 #
-# Re-entrancy (IC-57): the reactor counts its pump depth and records which run's FIFO tool is
-# executing. A nested pump (a sub-agent, System 1 or MCP call made inside an `r` evaluation)
-# runs FIFO tools only of the runs named in its `allow_runs` (default: none whenever another
-# pump is on the stack), and later::run_now(0) runs only at depth 1 or when `allow_runs` holds
-# a run marked with reactor_served() (a CLI child served by gptr's MCP server).
+# Re-entrancy (IC-57): the reactor counts its pump depth. A nested pump (a sub-agent, System 1
+# or MCP call made inside an `r` evaluation) runs FIFO tools only of the runs named in its
+# `allow_runs` (default: none whenever another pump is on the stack), and later::run_now(0)
+# runs only at depth 1 or when `allow_runs` holds a run marked with reactor_served() (a CLI
+# child served by gptr's MCP server).
 
 #' The process reactor, created on first use
 #' @return the `gptr_reactor` environment
@@ -31,7 +31,6 @@ reactor_get = function() {
   r$tasks = new.env(parent = emptyenv())
   r$fifo = list()
   r$runs = new.env(parent = emptyenv())
-  r$tool_stack = character()
   r$depth = 0L
   r$allow_stack = list()
   r$served = character()
@@ -50,16 +49,6 @@ reactor_now = function() as.numeric(proc.time()[["elapsed"]])
 reactor_depth = function() {
   r = get0("reactor", envir = the, inherits = FALSE)
   if (is.null(r)) 0L else r$depth
-}
-
-#' The run whose FIFO tool is executing innermost on this call stack, or NULL
-#'
-#' P06 may build run_current() on it (IC-57).
-#' @noRd
-reactor_tool_run = function() {
-  r = get0("reactor", envir = the, inherits = FALSE)
-  if (is.null(r) || !length(r$tool_stack)) return(NULL)
-  r$tool_stack[length(r$tool_stack)]
 }
 
 #' The runs a server answering inside the current pump may serve (IC-57)
@@ -334,9 +323,8 @@ reactor_fifo_ready = function(r, allow_runs) {
 
 #' Run at most one FIFO tool whose run is allowed in this pump
 #'
-#' The item leaves the FIFO before it runs; its run id is on `tool_stack` while it executes.
-#' A tool that fails becomes a diagnostic (dispatchers turn failures into tool results
-#' themselves; this is the last line of defence).
+#' The item leaves the FIFO before it runs. A tool that fails becomes a diagnostic (dispatchers
+#' turn failures into tool results themselves; this is the last line of defence).
 #' @noRd
 reactor_run_fifo = function(r, allow_runs) {
   if (!length(r$fifo)) return(invisible(FALSE))
@@ -349,10 +337,6 @@ reactor_run_fifo = function(r, allow_runs) {
   if (!length(k)) return(invisible(FALSE))
   item = r$fifo[[k[1L]]]
   r$fifo = r$fifo[-k[1L]]
-  r$tool_stack = c(r$tool_stack, item$run)
-  on.exit({
-    r$tool_stack = r$tool_stack[-length(r$tool_stack)]
-  }, add = TRUE)
   reactor_call("tool", item$fn)
   invisible(TRUE)
 }
@@ -466,12 +450,9 @@ reactor_shutdown = function() {
   for (table in list(r$procs, r$timers, r$tasks)) rm(list = ls(table), envir = table)
   r$fifo = list()
   rm(list = "reactor", envir = the)
-  stopped = list()
-  for (p in c(children, pending)) {
+  for (p in unique(c(children, pending))) {
     reactor_stdin_drop(r, p, "The reactor stopped before stdin was delivered.")
-    if (any(vapply(stopped, identical, NA, p))) next
     try(kill_all(p, grace = 0), silent = TRUE)
-    stopped[[length(stopped) + 1L]] = p
   }
   invisible(NULL)
 }
@@ -603,7 +584,6 @@ reactor_drain_stdin = function(r) {
   }
   invisible(NULL)
 }
-
 
 #' Fail one owned stdin buffer without exposing its bytes or an arbitrary process error
 #' @noRd
@@ -797,7 +777,7 @@ reactor_http = function(spec, on_bytes, on_done, on_fail, on_headers = NULL, run
   for (name in c("model", "request_id", "session_id")) {
     check_string(spec[[name]], paste0("spec$", name), null = TRUE)
   }
-  attempts = retry[["max_attempts"]] %||% gptr_opt("max_attempts") %||% 4L
+  attempts = retry[["max_attempts"]] %||% gptr_opt("max_attempts")
   check_number(attempts, "max_attempts", min = 1, int = TRUE)
   check_function(retry[["committed"]], "retry$committed", null = TRUE)
   check_function(retry[["on_retry"]], "retry$on_retry", null = TRUE)
@@ -849,7 +829,7 @@ reactor_active = function(r) {
 #' @noRd
 reactor_admit = function(r) {
   if (!length(r$queue)) return(invisible(NULL))
-  max_active = as.integer(gptr_opt("max_active") %||% 8L)
+  max_active = gptr_opt("max_active")
   n = length(reactor_active(r))
   for (id in r$queue) {
     if (n >= max_active) break
@@ -903,9 +883,9 @@ reactor_start = function(r, tr) {
     TRUE
   }, error = function(e) e)
   if (inherits(added, "error")) {
-    reactor_abandon(r, tr, transport_error(paste0("The transfer could not start: ",
-                                                  conditionMessage(added)), "internal",
-                                           detail = conditionMessage(added)))
+    reactor_abandon(r, tr, gptr_condition(paste0("The transfer could not start: ",
+                                                 conditionMessage(added)), "internal",
+                                          fields = list(detail = conditionMessage(added))))
   }
   invisible(NULL)
 }
@@ -993,8 +973,8 @@ reactor_head_notify = function(r, tr) {
   if (!is.null(tr$on_headers)) {
     res = reactor_call("on_headers", tr$on_headers, tr$status, tr$headers)
     if (inherits(res, "error") && reactor_attempt_owned(r, tr, k)) {
-      cnd = transport_error(paste0("A headers callback failed: ", conditionMessage(res)),
-                            "internal", detail = conditionMessage(res))
+      cnd = gptr_condition(paste0("A headers callback failed: ", conditionMessage(res)),
+                           "internal", fields = list(detail = conditionMessage(res)))
       reactor_abandon(r, tr, cnd)
     }
   }
@@ -1017,8 +997,8 @@ reactor_on_data = function(r, tr, x) {
     tr$delivered = TRUE
     res = reactor_call("on_bytes", tr$on_bytes, x)
     if (inherits(res, "error") && reactor_attempt_owned(r, tr, k)) {
-      cnd = transport_error(paste0("A stream callback failed: ", conditionMessage(res)),
-                            "internal", detail = conditionMessage(res))
+      cnd = gptr_condition(paste0("A stream callback failed: ", conditionMessage(res)),
+                           "internal", fields = list(detail = conditionMessage(res)))
       reactor_abandon(r, tr, cnd)
     }
   } else {
@@ -1075,8 +1055,8 @@ reactor_check_transfers = function(r) {
     if (is.null(hit)) next
     msg = paste0("No ", if (hit$what == "first byte") "first response byte" else "stream data",
                  " for ", hit$seconds, " s (", url_for_log(tr$spec$url), ").")
-    cnd = transport_error(msg, hit$class, seconds = hit$seconds, what = hit$what,
-                          provider = tr$provider)
+    cnd = gptr_condition(msg, hit$class, fields = list(seconds = hit$seconds, what = hit$what,
+                                                       provider = tr$provider))
     reactor_abandon(r, tr, cnd)
   }
   invisible(NULL)
@@ -1191,7 +1171,7 @@ reactor_fail_final = function(r, tr, cl, status = NA_integer_, headers = list())
     fields$seconds = tr$timeouts[[what]]
     fields$what = c(idle = "idle stream", connect = "connect", first_byte = "first byte")[[what]]
   }
-  cnd = transport_error(cl$message, cl$class, .data = fields)
+  cnd = gptr_condition(cl$message, cl$class, fields = fields)
   reactor_fail_deliver(r, tr, cnd, status)
   FALSE
 }
@@ -1266,8 +1246,7 @@ reactor_retry = function(id, info) {
   check_list(info, "info", named = TRUE)
   ra = info[["retry_after"]]
   check_number(ra, "info$retry_after", min = 0, max = .Machine$double.xmax, null = TRUE)
-  max_delay = gptr_opt("max_retry_delay") %||% 60
-  check_number(max_delay, "gptr.max_retry_delay", min = 0, max = .Machine$double.xmax)
+  max_delay = retry_max_delay()
   classes = info[["class"]] %||% "overloaded"
   check_strings(classes, "info$class")
   if (!length(classes) || any(!nzchar(classes))) {
