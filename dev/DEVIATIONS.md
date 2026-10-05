@@ -6137,3 +6137,57 @@ Review round 1 added two more tests (+9 expectations, items 1 and 3): red
 `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 45 ]` (`task5-fix1-red.log`), final `^cli-claude$`
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 52 ]` (`task5-fix1-green.log`), so every later plan count
 for `test-cli-claude.R` is 14 higher.
+
+## D-102 - P08 capture and argument validation: .opts takes the System 1 image records of IC-74 and never the protected providers or egress settings or a run's safety record, choice-valued arguments take one string, described choices are unique by label, image paths may be a character vector, and call_value() refuses a bad index and a released value (2026-10-04)
+
+P08 Task 5's literal `R/gptr-capture.R` predates IC-74. Behaviours that differ from the plan
+literal, which Task 8 (`gptr()`), Task 9 (`gateway_run()`, `gateway_image_blocks()`) and P13's
+classifier route consume:
+
+1. **`.opts$system1_images` (IC-74, 07-local-ollama.md section 4: "P08 validates the option
+   shape").** A new core option: a list of records `list(data = <non-empty raw>, mime =
+   "image/png" | "image/jpeg" | "image/webp")`, each a plain list with exactly those two fields; a
+   path, a file name, base64 text or a classed object is `gptr_error_invalid_argument` (07: never
+   silently replace an image with its filename). One bare record is a list of one; names of the
+   list are dropped, so its order is the order of sending and hashing (P13's
+   `s1_cache_identity()` keeps list order). The model's and adapter's limits are P13's checks.
+2. **`.opts` never names a protected setting (IC-74, 07 sections 2.1 and 5: per-call options
+   cannot relax `local_only`; contract 11.2: `egress` from the user file only; D-094 item 9).**
+   `.opts$providers` and `.opts$egress` are refused even when a plugin registers `providers.*` or
+   `egress.*` setting specs (IC-44 would otherwise accept them as a namespace), so call data can
+   carry neither `providers$ollama$local_only` nor an acknowledgement. `.opts$safety` is refused
+   the same way (`gateway_opts_reserved()`, review round 1): `safety` is the name of a run's
+   frozen safety record (`run_new()`'s `run$opts$safety`, IC-53), which P05's `stream_safety()`
+   and P13's `s1_request()` read as `opts$safety`, so a plugin's `safety.*` settings cannot let
+   call data carry `safety$ollama_local_only` (07 section 2.1: never from per-call options).
+3. **Choice-valued arguments take one string.** P01's `check_choice()` returns the first choice
+   when it is given the whole vector (match.arg()'s missing-argument convention), so the plan
+   accepted `.opts$context = c("summary", "names", "none")` as `"summary"` and `replay =
+   c("auto", ...)` as `"auto"`. `gateway_choice()` requires a single string for `thinking` (from
+   P05's `catalog_thinking_levels`), `context`, `output`, `preset`, `backend`, `frontend` and
+   `replay`.
+4. **`choices` is unique by label, read as P13 reads it.** A character vector named in full gives
+   its labels by name (the values are descriptions, which may repeat, be empty or NA), otherwise
+   by value; at least two unique non-empty labels. The plan tested the values, refusing
+   `c(up = "", down = "")`. Logical-looking labels (`gptr_error_s1_labels`) and the option limits
+   of the model stay with P13 (`s1_question_choice()`), so P08 does not pre-empt P13's class.
+5. **`.opts$images`** accepts a character vector of paths (each one image) and refuses a
+   directory, which `file.exists()` alone let through to Task 9's `readBin()`.
+6. **`call_value(call, i)`** checks `call` and `i` (`gptr_error_invalid_argument` instead of R's
+   subscript error), and a value item read after `call_release()` is `gptr_error_internal`, as a
+   symbol item already was (the plan returned `NULL`, indistinguishable from a `NULL` value).
+7. **`dot_sites()` and `dot_labels()`** never bind an argument expression to a local, so these
+   two leaves read an empty argument (`gptr("x", , big)`) as a dot without a symbol, labelled
+   `..i`, rather than failing with `argument "e" is missing`. This does not make such a call
+   work end to end: Task 8's loop still forces that dot through `...elt(i)`, and refusing it with
+   `gptr_error_invalid_argument` is Task 8's. `interpolate_prompt()` accepts an empty template
+   (`gptr("")`).
+
+Validation: `progress/P08.md`, Task 5. Red (no source) `^gptr-capture$`
+`[ FAIL 22 | WARN 0 | SKIP 0 | PASS 0 ]` (`dev/.validation/P08/task5-red.log`); against the
+plan-literal source `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 123 ]`
+(`task5-red-adaptations-against-plan-literal.log`, every failure in the adaptation tests); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 174 ]` (`task5-green.log`; the plan's 12 tests give its 65).
+Review round 1 (`.opts$safety` reserved, `dot_labels()` of an empty argument): regression red
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 171 ]` (`task5-fix1-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 178 ]` (`task5-fix1-green.log`).
