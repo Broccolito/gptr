@@ -429,7 +429,7 @@ test_that("agent_retry_delay() keeps the second delay and refuses a bad attempt"
 test_that("the fallback freeze appends gptr.frozen and emits session_start (reason new)", {
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
-  local_without_builtin("tools")
+  local_without_builtin(c("tools", "r"))
   local_tool("read", function(input, ctx) "x",
              parameters = list(type = "object", properties = list(path = list(type = "string"))))
   ev = local_events("session_start")
@@ -543,7 +543,7 @@ test_that("a failing router falls back to the default model with a diagnostic", 
 test_that("the fallback request projects the transcript and carries the frozen tools", {
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
-  local_without_builtin("tools")
+  local_without_builtin(c("tools", "r"))
   local_fake_provider(list("x"))
   local_tool("read", function(input, ctx) "x")
   s = test_session()
@@ -747,6 +747,7 @@ test_that("router and ctx$set_model() thinking levels are clamped to the model's
 test_that("the fallback freeze evaluates function parameters and available() (04 section 9.1)", {
   local_without_services(c("prompt.freeze", "request.build", "prefix.guard", "context.first",
                            "context.turn"))
+  local_without_builtin("r")
   seen = new.env()
   local_tool("read", function(input, ctx) "x", parameters = function(ctx) {
     seen$ctx = ctx

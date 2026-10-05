@@ -382,7 +382,7 @@ test_that("budget_check() refuses an estimate that is not a nonnegative number",
 
 test_that("a token budget stops the run before the next request with status budget", {
   local_permissive()
-  local_without_builtin("tools")
+  local_without_builtin(c("tools", "r"))
   ev = local_events(c("budget_exceeded", "budget_near"))
   local_tool("noop", function(input, ctx) "ok")
   fake = local_fake_provider(list(c(fake_tool("noop"), list(usage = usage_new(input = 990,

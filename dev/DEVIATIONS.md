@@ -9555,6 +9555,144 @@ critical or control target) binds R code too. The classifier stays advisory (03 
    keeps the table's 3 as a floor (the file may change before it runs; plan max(1, content));
    `risk_norm()` reads a malformed level as 3, as P06's `call_risk()` does (plan 2). Two
    `@noRd` titles that roxygen read as links (`[leaf]`, `x[i]`) are reworded.
+9. **Review round 1.** (a) A write into the environment a call returns is `object_write` 2
+   also when the call has no arguments (`globalenv()$x = 1`, `parent.frame()[["x"]] = 1`; the
+   plan's loop stopped before reading the head), and so is a write through a name bound to such
+   a call (`e = globalenv(); e$x = 1`); `local(expr, envir)` with any environment but a
+   `new.env()`, and `with()` of an environment, run code where the code names and are 3
+   `dynamic`, as `evalq()` is, and their assignments are recorded (plan: `local()` was exempt
+   syntax, 0). (b) A function passed to `lapply()`, `sapply()`, `vapply()`, `Map()`, `mapply()`,
+   `Filter()`, `Find()`, `Position()`, `apply()`, `tapply()`, `outer()`, `sweep()`,
+   `forceAndCall()`, the parallel and future applies and purrr's map, walk, map2, pmap, keep and
+   detect families is read as the calls it makes: one per element of a literal vector it maps
+   over (at most 32), with the arguments it passes on (`MoreArgs`, `.l`), so
+   `Map(file, '~/.Rprofile', 'w')` is 4 `control` (plan 0); a function passed where gptr cannot
+   match the arguments keeps its row, now without the `cat()` exemption and with connections
+   read as writes of a computed path (2). A literal read of a file P03 treats as a secret is a
+   3 `secret` row from the walk too (P03's text scan does not follow higher-order calls).
+   (c) A namespace or environment the code computes is 3 `dynamic`: `getExportedValue()` and
+   `getFromNamespace()` take their package only from a string (a variable's name was read as a
+   package), the `get()` family with an `envir`, `pos` or `ns` gptr cannot name, and
+   `asNamespace()`, `getNamespace()`, `loadNamespace()`, `getNamespaceInfo()` and
+   `rlang::ns_env()` of a computed name. (d) A string constant assigned to a name is data: the
+   plan's eager alias row (`x = 'q'` was 4 `critical`) is kept for function values only.
+   (e) User S3 methods of operators and their group generics (`[.cls`, `$.cls`, `+.cls`,
+   `Ops.cls`, `Math.cls`, `Summary.cls`), of replacement functions (`[<-.cls`, `names<-.cls`,
+   the getters of a nested target) and user replacement functions (`tag<-`) are read through
+   their bodies. (f) A user function or method first met in quoted code (capped at 2) is read
+   again where the code calls it (it was read once per walk).
+10. **Review round 2.** (a) A path, destination or `args` argument is the one R binds to that
+   formal: the call is matched against the formals of the function a loaded namespace binds
+   (`write.csv()` against `write.table()`), so `writeLines(text = 'x', '.Rprofile')`,
+   `saveRDS(object = x, '.Rprofile')`, `file.copy(from = 'a', '.Rprofile')` are 4 `control` and
+   `system2(command = 'rm', '-rf ~')` is 4 (plan: the unnamed argument at the formal's position,
+   so a named earlier formal hid the path and `writeLines()` fell back to the console, 0). For
+   a package that is not loaded every unnamed argument a named one may have moved into the
+   place is read. (b) In a function or `local()` body, `<<-` is an `object_write` 2 (3 above
+   `gptr.protect_size`, with its size) unless an enclosing function of the code binds the name,
+   and a write into an environment (a getter's, a name bound to one, a user's environment, R6
+   or data.table object that no local name shadows) is reference mutation 2 (plan: every
+   assignment in a body was ignored, so `sapply(1:3, function(i) total <<- total + i)` was 0);
+   top-level `<<-` reports the size too, and a `for()` variable overwrites a binding as `=` does.
+   (c) `ave()`, `combn()` and `addmargins()` call the function they are given (function slots),
+   and a common column name (`q`, `source`, `rm`) passed as `FUN`, `.f`, `fun`, `func`, `.fn` or
+   `FUNC` of any call is read as a function unless the user's environment binds it to data.
+   (d) Literal quoted code that is evaluated is code: `eval()` of `bquote()` (outside `.()`) and
+   `substitute()` as of `quote()`, `eval` mapped over a literal list or `expression()`,
+   `source(exprs =)`, and `options(error =, warning.expression =)` (a quoted handler or a named
+   function: `options(error = q)` 4). `evalq()` is no longer read as an evaluator of its
+   argument's value (`evalq(quote(q()))` returns the call; the round-1 source read it as 4).
+   (e) IC-53 by any route: `environment()`, `rlang::fn_env()`, `get_env()` and `topenv()` of an
+   alias, `get()` or `match.fun()` of a gptr function or of a `gptr$` member, `trace()` of a gptr
+   function or `where` one is, `getAnywhere()`/`argsAnywhere()` of a name gptr's namespace binds,
+   `fixInNamespace(x, 'gptr')` and the namespace getters of `c('gptr')` are 4 `control`.
+   (f) Classification runs no S3 method of the user's objects (R4): member reads use
+   `attr(, "names")` and `.subset2()`, and `object.size()` is cached only for atomic vectors
+   without strings or attributes (a list or string vector edited in place keeps its address and
+   changed its cached size); a binding gptr cannot inspect is an overwrite of unknown size, not
+   absent. (g) The result of `Negate()`/`Vectorize()`/purrr's adverbs is called with the call's
+   arguments, after those `purrr::partial()` binds (`Negate(file.remove)('.gptr/settings.json')`
+   4), and `paste()` with a literal `sep` and `sprintf()` with only `%s` build literal paths.
+11. **Review round 3.** (a) IC-53 through a function value: `:::`, the namespace getters,
+   `getFromNamespace()`, `fixInNamespace()`, `environment()`, `rlang::fn_env()`, `get_env()`,
+   `topenv()`, `getAnywhere()`, `argsAnywhere()` and `trace()` (`risk_reach_funs`) called as a
+   value (an alias, `get()` or `match.fun()` of the name, a wrapper's result, a higher-order
+   function's slot) are read as their direct call, so `get(':::')('gptr', 'the')`,
+   `f = asNamespace; f('gptr')`, `lapply('gptr', asNamespace)` and
+   `lapply(list(gptr_risk), environment)` are 4 `control` (were 0-1). `:::` and `::` reached so
+   are no longer exempt syntax: read with arguments that are not literal (strings only when a
+   higher-order function passes them: `lapply(pk, `:::`, 'the')`) they are 3 `dynamic`. Passed
+   where gptr cannot see the arguments (`Reduce()`, `rapply()`, `do.call()` of a computed list),
+   such a function is 3 `dynamic`, or 4 `control` when the call that passes it names gptr (the
+   string or symbol, or a gptr function). A member named as a gptr function
+   (`as.environment('package:gptr')$gptr_risk`) is a gptr function. (b) `print()`,
+   `unclass()`, `noquote()`, `setNames()`, `as.vector()`, `I()`, `identity()`, `invisible()`,
+   `structure()` and the other functions of `risk_fn_same` return the function they are given:
+   `f = print(q); f()` is 4 `critical` and `f = print(gptr_config); f(mode = 'auto')` 4
+   `control` (were 1). A read-only call one of whose arguments is or holds a function reference
+   (a name bound to a function, a `function` literal, a call that can return any value) is no
+   plain value: calling its result is 3 `dynamic`. (c) `with()`, `within()` and `transform()`
+   of data that binds functions (a literal `list()`, also through `list2env()`, a name bound to
+   one, or a user's list or environment in `envir`, read without forcing or dispatch) run them as
+   functions the code computes, 3 `dynamic` (`with(list(f = q), f())` was 1);
+   `with(df, mean(a))` stays 0. (d) A function whose body, formals or environment the code
+   changes at any level of the target (`body(f)[[2]] = quote(q())`, `formals(f)$x = v`) is 3
+   when the code calls it (only `body(f) =` and `formals(f) =` were seen; the change stayed
+   quoted at 2). (e) `rm(list = objects())` and `rm(list = names(globalenv()))` clear the
+   workspace as `rm(list = ls())` does: 4 `critical` (were 2).
+12. **Review round 4.** (a) The function slots of purrr's other mappers and predicates
+   (`map_df()`, `map_vec()`, the `imap_*`, `map2_*` and `pmap_*` variants, `map_if()`/`modify_if()`
+   with their `.p` and `.else`, `map_at()`, `map_depth()`, `lmap()`, `every()`, `some()`,
+   `none()`, ...), of dplyr's `across()`, `if_any()` and `if_all()` (a literal `list()` of
+   functions in `.fns` is read function by function) and of base's `Tailcall()` are read like
+   `lapply()`'s, also for a common column name: `purrr::map_df(1, q)` and
+   `dplyr::filter(df, if_all(a, q))` are 4 `critical`, `across(a, gptr_config)` 4 `control`
+   (were 0). `across()` stays a data-masking call for its other arguments. (b) Readers that run
+   what they are given take its level, and their row applies too: `data.table::fread()`'s `cmd`,
+   and an `input` without a line end that holds a space and names no file, are shell lines
+   (`fread(cmd = 'rm -rf ~')` 4); an `input` or `cmd` the code computes is 3 `process`, as fread
+   may run it (so `lapply(files, fread)` is 3); yaml's readers with `eval.expr` that is not a
+   literal FALSE (absent: while the `yaml.eval.expr` option is TRUE, or the code sets it) are 3
+   `dynamic`, and the functions of a literal `handlers` list are read as passed functions (a
+   computed one is 3); DBI's `dbGetQuery()`, `dbSendQuery()`, their Arrow forms, `dbExecute()`
+   and `dbSendStatement()` read a literal statement with Task 2's SQL classifier (as `gptr$sql()`
+   does; `DROP TABLE` 3, `COPY ... TO '.Rprofile'` 4) and a computed one is 3 (were 0).
+   (c) `tempdir()` and `tempfile()` are read where they lead (the current session's temporary
+   directory; `tempfile()`'s `tmpdir`, `pattern` and `fileext`): `tempfile(tmpdir =
+   '.gptr/extensions')` and `file.path(tempdir(), '.Rprofile')` are control (4),
+   `file.path(tempdir())` is `tempdir()` (a recursive delete is 4), a `..` that leaves it is
+   `outside`, a part the code computes is `unknown` (the plan read every path that starts with
+   `tempdir()` or `tempfile()` as temp, level 1). (d) `with()` of a name the user's environment
+   binds to an environment (an R6 object; a promise or an active binding may hold one; read by a
+   leaf that forces nothing) runs its code there: 3 `dynamic`, a by-reference target, and its
+   assignments are not workspace objects (`with(cfg, token <- 'x')` was 1); a name bound to such
+   a name is one too. (e) An infix operator gptr cannot resolve is an unlisted call (1) like any
+   other (plan: exempt as syntax, 0); magrittr's `%<>%` and zeallot's (and future's)
+   `%<-%`/`%->%` bind their targets (`df %<>% head(2)` overwrites `df`, 2). (f) Base-package
+   functions without a table row get Task 3 rows (`risk_extra_rows`; the generator and its
+   checksum are unchanged): `dget()`, `methods::evalSource()` (read like `source()`),
+   `utils::Sweave()` and `Exec()` 3 `dynamic` (`Exec()` evaluates its expression: `Exec(quote(q()))`
+   4); `tools::Rcmd()`, `texi2dvi()`, `texi2pdf()` 3 `process`; `vi()`, `emacs()`, `pico()`,
+   `xedit()`, `xemacs()`, `file.show()`, `page()` 3 `interactive`; `sys.save.image()` a write of
+   its file, `Stangle()` 2; `serverSocket()`, `curlGetHeaders()`, `read.socket()`,
+   `write.socket()` 2 `network`; `registerS3method()`, `.S3method()`, `importIntoEnv()` and the
+   methods setters (`setMethod()`, `setGeneric()`, `setClass()`, `setRefClass()`, ...) 3
+   `dynamic`, and an S3 method registered for a `gptr*` class 4 `control` (IC-53). One
+   implementer row moved: `curlGetHeaders('https://example.org')` 1 to 2. (g) A literal secret
+   read the walk finds sets `secret` (it held P03's findings only). (h) A string constant the
+   code binds at top level (every binding of the name in the code a literal: strings, `c()`,
+   `file.path()`, `paste()`, `tempfile()`) is also read where the code passes the name as a path
+   or a command, in addition to the reading as a computed value, so a constant only adds levels:
+   `p = '~'; unlink(p, recursive = TRUE)` and `cmd = 'rm -rf ~'; system(cmd)` are 4 (were 3).
+   (i) `{`, `(`, `local()` and `evalq()` without an environment, `eval(quote(f))`, `if` and
+   `switch()` (the branch a literal condition or selector takes, or the one reference every
+   branch gives; a string there is data) pass on the function they return: `{q}()`,
+   `local(q)()`, `switch('a', a = q)()` are 4 (were 3). `rm(list = )` of `c()` holding `ls()`,
+   of a name bound to `ls()` or in a `for()` over `ls()` is 4 `critical` (was 2). (j) Commands
+   built with `paste()`, `paste0()` and `sprintf()` of literal parts are read as their text
+   (`system(paste('rm -rf', '~'))` 4, was 3; `system(paste('ls', '-la'))` 0, was 3);
+   `curl::curl_download()`'s `destfile`, `curl_fetch_disk()`'s and `httr2::req_perform()`'s
+   `path` and `httr::write_disk()` are writes of their path (`.Rprofile` 4).
 
 Known limits (advisory classifier): a function of a package outside the tables is level 1
 whatever it does (IC-54; `ps::ps_kill(ps::ps_handle())` stops R; a table row or a `risk_rule`
@@ -9562,8 +9700,14 @@ raises it); a computed function handed to a higher-order function outside `risk_
 not seen; a function stored with `list(unlink)` and called through an unknown higher-order
 function is not seen; S4 methods and package load hooks are not read; an anonymous function's
 formals are not bound to the arguments of its immediate call (`(\(f) f('~'))(unlink)` is 3,
-not 4); a path the code computes is `unknown` (a write 2, a delete 3), as a plain parameter
-is in D-061.
+not 4); a write to a path the code computes keeps the plan's level 2 and a delete of one is 3
+(D-061 rates a shell write to a word it cannot name 3; in R such a target is mostly a
+connection, whose path is read where it is opened, or a path variable, and the plan's case
+`con = file('out.txt', 'w'); writeLines('hi', con)` is 2), while a string constant the code
+binds is read where it is used (12 (h)); the data of `with()` that the code computes
+(`with(make_list(), f())`) binds names gptr cannot see, so a name called there that nothing else
+binds stays an unlisted call (1); string constants bound inside function bodies are not
+followed.
 
 Validation: `progress/P11.md`, Task 3.
 
@@ -9629,6 +9773,89 @@ the filter check 2 failures, without the process-level check 2, without the plug
 
 Validation: `progress/P17.md`, Task 6.
 
+## D-134 - P17 agent discovery: agent_def.get syncs before every name lookup so the registry is never served stale, an untrusted project's agents rank after every other origin and never shadow a name equal after normalisation, an omitted untrusted project agent is gptr_error_untrusted, only Pi's own agent directories are flat, and directories are not agent files (2026-10-05)
+
+P17 Task 8 (`R/subagent-defs.R`). The plan's 6 tests, the export `gptr_agents()`, the service
+`agent_def.get`, `builtin:agents` and the internal signatures of 04 section 7.17 are unchanged.
+
+1. **`agent_def.get` never serves what an earlier sync saw** (IC-52; 04 section 6.2; the same
+   defect class as D-129). The plan synced only when the name was not registered, so a
+   registered agent was served as the last sync left it: after `gptr_trust(p, FALSE)` a project
+   agent kept its `model` and `tools` (`trusted = TRUE`), after a move to another project the
+   previous project's agent was still served, and an edited or deleted file kept its old
+   definition until the next session start. `agent_def_get(name)` now calls `agent_sync()`
+   first. The sync rewrites only the groups whose files, trust or registry generation changed
+   (`res_register()`), so it costs a walk of the agent directories and is otherwise a no-op;
+   `gptr_agent()` with a name is a rare, explicit call. The plan's "syncing once if the name is
+   not registered yet" is the special case of a missing name. A lookup cannot know the mode of
+   the session it serves (`agents =` is resolved before that call's `session_start`), so it
+   classifies conservatively (conventions section 11): `agent_lookup_mode()` syncs in `auto`
+   when the `mode` setting or the mode of the last top-level session started in the current
+   project is `auto` or `edits` (the `session_start` hook remembers it:
+   `agent_mode_remember()`, `res_state()$agents_mode = list(mode, project)`; child sessions
+   neither sync nor change it). With the setting alone (round 1) a lookup undid the omission of
+   a top-level `auto` session started through its `mode` argument: any `gptr_agent(<name>)`
+   registered the omitted agents again, so `registry_names("agent")` (the `agents =` identifier
+   pool) offered them and `gptr_agent(<their name>)` served them; the plan's miss-only sync had
+   the same hole for the omitted name. With the remembered mode alone (review 2) a `plan` or
+   `manual` session overrode a setting of `auto`. Open (maintainer's call): with the setting at
+   `manual` and no earlier session in the project, `gptr("...", mode = "auto", agents =
+   list(x = agent("<name>")))` still resolves an untrusted project agent. Closing it means
+   failing closed for every non-interactive lookup (`agent_sync("auto")`, which would also drop
+   both helpers) and inverts five of the tests below.
+2. **An untrusted project's agents never shadow an agent of another origin, whoever registered
+   it** (04 section 6.2). The plan excluded untrusted project files whose name equals a
+   discovered trusted file's, but registered the rest at rank 1, so they still beat an agent of
+   the same name registered at rank 3 by `gptr_register()` or a user extension. They now have
+   rank `agent_untrusted_rank` (7, after the built-ins' 6): the registry's own precedence makes
+   every other record of the name win. 04 section 10.1 gives rank 1 to *trusted* project
+   resources only and no rank to untrusted ones; trusted project agents keep rank 1.
+3. **The shadow rule compares names after `res_norm()`** (IC-42): an untrusted project's
+   `norm_y` was registered next to a user's `norm-y` and won `gptr_agent("norm_y")` by exact
+   match. It is now listed by `gptr_agents()` but not registered, and the lookup finds the
+   user's agent after normalisation. The rule covers every other origin, not only discovered
+   files (review 1): an agent that `gptr_register()`, an extension or a plugin registered
+   (`agent_foreign_names()`: an enabled process-level `agent` record whose id belongs to no
+   `agents:` group of the sync, as `template_foreign_commands()` of D-133). Before, an untrusted
+   `ext_x` next to a `gptr_register()`ed `ext-x` was registered, so `gptr_agent("ext_x")`
+   returned the project's agent and `gptr_agent("ext.x")` was `gptr_error_invalid_identifier`
+   (ambiguous); rank 7 helped only for the same exact name. The sync's own groups are left out
+   because their files are rediscovered, so a deleted user file or the project's own earlier
+   records hide nothing.
+4. **An omitted untrusted project agent is `gptr_error_untrusted`** (`what = "agent"`, `path`,
+   `origin = "project"`; 04 section 2.2), as `skill.body` does for skills (D-129). In a
+   non-interactive `auto` or `edits` context the sync omits it (IC-52) while `gptr_agents()`
+   lists it, and the plan's "No agent definition with this name was found; gptr_agents() lists
+   them" contradicted that listing. An unknown name stays `gptr_error_invalid_argument`.
+5. **Only Pi's own agent directories are flat.** The plan read every root whose path contained
+   `/.pi/` as flat, so a project anywhere under a directory named `.pi` lost its nested
+   `.gptr/agents`, `.claude/agents` and `.codex/agents` files. The flat roots are now the
+   project's `.pi/agents` and the user's `.pi/agent/agents`, by their own path.
+6. **Directories are not agent files.** `agent_files()` (Task 7) drops directories named
+   `*.md`, which a flat listing returned and the parser reported as unreadable (as D-133 item 5
+   for templates).
+
+Tests: six tests (30 expectations) under `# Task 8 adaptations (D-134)`; the last one pins the
+`session_start` hook's own mode and depth rules, which the plan already had. Against the
+plan-literal source `^subagent-defs$` gave `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 115 ]` (items 1-6;
+the hook test passes); mutants of the hook: the setting's mode instead of the session's 2
+failures, no depth check 1; untrusted rank for trusted projects too 2. Review 1 added two
+tests (11 expectations) under `# Task 8 review fixes (D-134)`: the `gptr_register()` case of
+item 3 (before the fix `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 136 ]`) and the IC-52 notice, once
+per project (mutants: the sync's own groups counted as foreign 3 failures, the notice removed
+1). Review 2 added one test (12 expectations) under `# Task 8 review 2 fix (D-134)`: a
+top-level `auto` session with the setting at `manual`, then lookups of an unrelated user agent
+and of the omitted one, a child session, `manual` and `edits` sessions and another project
+(before the fix `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 149 ]`; mutants: the lookup in the setting's
+mode 7 failures, the remembered mode not keyed by project 1, child sessions remembering their
+mode 1). Review 3 added two tests (4 expectations) under `# Task 8 review 3 fixes (D-134)`: the
+setting at `auto` and a top-level `plan` session, then a lookup of the untrusted agent is still
+`gptr_error_untrusted` (before the fix `[ FAIL 2 | WARN 0 | SKIP 0 | PASS 158 ]`); and an
+interactive `auto` sync keeps the untrusted agent (IC-52's "non-interactive"; mutant without
+the `gptr_can_prompt()` check 1 failure).
+
+Validation: `progress/P17.md`, Task 8.
+
 ## D-135 - Maintainer decisions: the entry point is `peter()`; simplicity first (2026-10-05)
 
 1. **Naming.** The maintainer renamed the main entry point. The package stays `gptr`; users call
@@ -9655,3 +9882,45 @@ Validation: `progress/P17.md`, Task 6.
    of `progress/simplicity-plan.md` are not taken; the contract stays. The P11 classifier redesign
    (P11-B, allowlist level 0, unmodelled constructs level 3) is accepted under D-061 and
    architecture 6.8.1; its level changes are listed in the plan and reported to the maintainer.
+
+## D-136 - P10 builtin:r: images that gptr$plot() and gptr$read() attach count against the `r` output budget, three P06 tests also drop builtin:r, and the `r` tool has no risk function of its own (2026-10-05)
+
+P10 Task 11 adds `R/tool-r.R` (the `r` tool, `builtin:r`) as the plan gives it, with three changes:
+
+1. **Image tokens (IC-67: "Image tokens count against `gptr.r_output_tokens`").** The plan's
+   `r_tool_result()` added the marker's images (from `gptr$plot()` and `gptr$read()`) after
+   `format_eval_result()` had sized the text, so only the evaluator's own plots reduced the text
+   budget. `r_tool_execute()` now adds the marker's images to the evaluation result before
+   formatting; P09's formatter subtracts every attached image's tokens. The result's images and
+   `details$plots` are unchanged.
+2. **P06 tests (outside P10's files; D-121 precedent, expectations unchanged).** Registering the
+   real `r` tool added `r` to the tool names of the two fallback-freeze tests and of "the fallback
+   freeze evaluates function parameters and available()" (`test-agent-run.R`), and its schema
+   pushed the first request of "a token budget stops the run ..." (`test-session-budget.R`) over
+   its 1,000-token budget. They now disable `builtin:r` too (`local_without_builtin(c("tools",
+   "r"))`, or `"r"`); the harness helper's comment names it.
+3. **No `r_tool_risk()` (conventions 11, no duplicated logic).** P06's `call_risk()` already
+   rates a call named `r` through the `risk.classify` service in `run_eval_env(run)` (what
+   `ctx$envir` resolves to in a run), and level 2 without it, so the plan's function only
+   shadowed that branch. `builtin:r` registers no `risk`; the risk test calls `call_risk()`.
+
+Validation: `progress/P10.md`, Task 11.
+
+## D-137 - CI-6 hosted portability: ctx's active members are read by calling their functions (R >= 4.6), and a dangling Codex control link is marked unreadable on Windows (2026-10-05)
+
+1. **ctx's active members (P02 `R/ext-api.R`, contract 10.6).** R 4.6.0 marks a value read
+   through an active binding as not mutable (NEWS 4.6.0; `getActiveValue()` in
+   `src/main/envir.c`, svn r89121). For an environment that sets its reference count to the
+   maximum for good, so a function-frame home read as `ctx$envir` is never cleaned up when its
+   function returns: a forced argument keeps the user's object shared and the next in-place edit
+   copies it (rule R2, IC-41). `$.gptr_ctx` and `[[.gptr_ctx` now call an active member's
+   function (`activeBindingFunction()`, base R >= 4.0.0). The members stay active bindings with
+   the same values. Read ctx members with `$` or `[[`: `get()`, `get0()`, `mget()` or
+   `as.list()` on a ctx go through the binding and pin the frame on R >= 4.6.
+2. **Dangling control links on Windows (P20 `R/cli-codex.R`, D-106).** R reads no symbolic link
+   target on Windows (`Sys.readlink()` gives ""), so a control file that is a dangling link gets
+   the `unreadable:<size> <time>` marker there, not `link:<target>`, and a dangling link pointed
+   elsewhere is not detected on Windows. `file.info()` of such a link warns on Windows; the marker
+   already records it, so the warning is suppressed and no R condition leaves the exec (D-106).
+
+Validation: `progress/ci-hosted.md`, Task CI-6.
