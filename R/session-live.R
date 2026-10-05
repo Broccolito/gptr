@@ -1,20 +1,13 @@
-# session-live.R -- the live-session registry, homes, locks, split-brain rules and gptr_last()
-# (P06, layer L3).
-#
-# Live resources (the kept home, the active run, the store handle, ctx, caches) are held in
-# `the$live[[id]] = rlang::new_weakref(key = <shell>, value = <live>)`: an unreferenced, settled
-# session is collected and its finalizer removes the entry and the file lock (G3 findings 2 and
-# 10, verified); its session_shutdown is deferred to the next safe point (D-085). `the$last` holds
-# the most recent session strongly (IC-71): a shell holds no frames or user objects, so this is
-# copy-safe (rule R10). Locks are `<file>.lock/pid` holding the pid and the process creation
-# time, checked with P04's `pid_alive()` (IC-59).
+# session-live.R -- the live registry, homes, locks, split-brain rules, gptr_last() (P06, L3).
+# `the$live[[id]]` is a weak reference keyed on the shell: a collected session's finalizer drops
+# its entry and lock (G3) and defers its session_shutdown (D-085). `the$last` holds the latest
+# session strongly (IC-71; copy-safe, rule R10). Locks are `<file>.lock/pid` (IC-59).
 
 on_load({
   the$live = new.env(parent = emptyenv())
   the$last = NULL
   the$replay_blocks = new.env(parent = emptyenv())
-  # registered at load, so at process exit it runs after every session's own exit finalizer (R
-  # runs exit finalizers newest first) and dispatches the shutdowns they deferred (D-085)
+  # registered first, so at exit it runs after every session's exit finalizer (D-085)
   reg.finalizer(the$live, live_exit, onexit = TRUE)
 })
 on_load(on_unload(live_unload))
@@ -33,27 +26,23 @@ live_new = function(s, home) {
   live$adapter = new.env(parent = emptyenv())
   live$background = NULL
   live$lock = NULL
-  # the session's gptr$out() store (IC-71): NULL until P01's out_store(live) creates it on the
-  # first out_put(..., session = live); P01 accepts NULL or a gptr_out_store, never a bare env
+  # the session's gptr$out() store (IC-71): NULL until P01's out_store(live) creates it
   live$out = NULL
   live$mcp_token = NULL
   live$ext = new.env(parent = emptyenv())
-  # a collected shell with this id (a resumed or attached session) may still have its shutdown
-  # queued: dispatch it now, before this shell is registered, so it never reaches this one (D-085)
+  # dispatch a collected shell's queued shutdown before this id is registered again (D-085)
   ev_drain(session = d$id)
   assign(d$id, rlang::new_weakref(key = s, value = live), envir = the$live)
   reg.finalizer(s, session_finalizer, onexit = TRUE)
-  # the session's gptr_ctx (P02's ctx_new() reads the id through the `$id` accessor of the shell);
-  # it is held by the weak registry's value only, so it does not keep the shell alive
+  # held only by the weak registry's value, so the ctx does not keep the shell alive
   live$ctx = ctx_new(s)
   # the IC-70 late-registration scan reads live sessions through this callback (P03)
   secret_live_entries_set(live_entries_all)
   live
 }
 
-#' Undo the live registration of a fresh shell whose construction failed (store_rebuild() could
-#' not open its store): the id is free again and the finalizer will neither release a lock nor
-#' notify `session_shutdown` for it
+#' Undo the live registration of a shell whose construction failed: the id is free again and the
+#' finalizer neither releases a lock nor notifies `session_shutdown`
 #' @noRd
 live_forget = function(s) {
   d = session_data(s)
@@ -100,11 +89,8 @@ live_all = function() {
   out
 }
 
-#' The in-memory entries of the live sessions, named by id: the callback P03's secret_register()
-#' scans for a newly registered value (IC-70, warning `secret_late`). P03's auth-secrets.R is L0
-#' and may not read `the$live`, so the session layer installs it (03 section 2.2: callbacks
-#' registered by upper layers); live_new() installs it again, so that a test that cleared P03's
-#' slot cannot leave the scan inert for later sessions.
+#' The in-memory entries of the live sessions: the callback of P03's late-secret scan (IC-70),
+#' installed by this layer because P03 is L0 (03 section 2.2); live_new() reinstalls it
 #' @noRd
 live_entries_all = function() {
   lapply(live_all(), function(s) session_data(s)$entries %||% list())
@@ -165,14 +151,8 @@ home_label = function(env) {
 }
 
 #' Finalizer of a shell: drop the live entry, release the lock, defer `session_shutdown` (nothing
-#' for a shell whose registration was undone by live_forget())
-#'
-#' R runs it at whatever allocation triggers the collection, possibly inside a loop over registry,
-#' event or live state, so it touches no state such a loop reads by a snapshot: removing one live
-#' entry is safe (every reader of `the$live` uses get0()), the lock is a file only this dead shell
-#' holds, and the notification is queued with P02's ev_defer(). The next safe point (ev_drain():
-#' a registry lookup or dispatch, session creation, unload, exit) dispatches it with reason "gc",
-#' and P02 then drops the session's rank-0 records after its handlers ran (IC-69, D-085).
+#' after live_forget()); safe inside any loop: every reader of `the$live` uses get0(), and the
+#' event is only queued (ev_defer()) for dispatch with reason "gc" at a safe point (IC-69, D-085)
 #' @noRd
 session_finalizer = function(s) {
   d = tryCatch(session_data(s), error = function(e) NULL)
@@ -192,9 +172,8 @@ session_finalizer = function(s) {
   invisible(NULL)
 }
 
-#' At unload: dispatch the deferred shutdowns of collected sessions, then release every live
-#' session's lock and notify `session_shutdown` (reason unload); the drain is forced, since
-#' nothing runs after the unload (D-085)
+#' At unload: dispatch deferred shutdowns, then release every live session's lock and notify
+#' `session_shutdown` (reason unload); the drains are forced (D-085)
 #' @noRd
 live_unload = function() {
   tryCatch(ev_drain(force = TRUE), error = function(e) NULL)
@@ -221,13 +200,9 @@ live_exit = function(e) {
   invisible(NULL)
 }
 
-#' Attach a detached copy (saveRDS, a knitr cache, callr) so that it can continue
-#'
-#' A same-process duplicate of a live original is `gptr_error_split_brain` (`busy` when the
-#' original is running), after one `gc()` re-check; a copy whose file is locked by another live
-#' process is `split_brain`; otherwise the copy continues from its own leaf and new entries form a
-#' sibling branch in the same file (G3 finding 14).
-#' @return The live record.
+#' Attach a detached copy (saveRDS, a knitr cache, callr) so that it can continue; returns the
+#' live record. A live duplicate here (after one gc()) or another live process's lock is split
+#' brain (`busy` when running); else new entries form a sibling branch (G3 finding 14).
 #' @noRd
 session_attach = function(s, home = NULL) {
   live = session_live(s)
@@ -275,8 +250,7 @@ session_attach = function(s, home = NULL) {
 #' @noRd
 lock_path = function(file) paste0(file, ".lock")
 
-#' The creation time of this R process (seconds since the epoch). Not named proc_create_time(),
-#' which is P04's `proc_create_time(pid)` in proc-supervise.R.
+#' The creation time of this R process (epoch seconds); proc_create_time(pid) is P04's
 #' @noRd
 lock_self_created = function() as.numeric(ps::ps_create_time(ps::ps_handle()))
 

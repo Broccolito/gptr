@@ -1,26 +1,13 @@
 # agent-dispatch.R -- the tool dispatcher and the permission kernel (P06, layer L2).
-#
-# lookup -> validate -> tool_call hooks -> perm_check() -> checkpointers' before -> execute ->
-# checkpointers' after -> tool_result hooks; never throws (INFRA-10); results and tool-result
-# messages in source order. Adapted from report 02 section 5.1 (`run_tool_call()`,
-# `execute_tool_calls()`) with gptr's texts and G3's interrupt rule: an interrupted call is recorded
-# with on.exit(), never with an exiting tryCatch(interrupt =), which would pre-empt the pause menu.
-# `perm_check()` is the permission combination of IC-04 and IC-53: policies (deny > ask_human > ask
-# > modify > allow; a throwing policy denies; no active `mode` policy means ask, fail closed), then
-# `permission_request` hooks for `ask`, then the UI, then the non-interactive stop.
+# Per call: lookup, validate, tool_call hooks, perm_check(), checkpointers, execute, tool_result
+# hooks; never throws (INFRA-10). An interrupted call is recorded with on.exit(), never an exiting
+# tryCatch(interrupt =), which would pre-empt the pause menu (G3).
 
 perm_decisions = c("allow", "modify", "ask", "ask_human", "deny")
 
 #' Execute a turn's tool calls in source order
-#'
-#' A `length` or `refusal` stop of the assistant message (`run$message`) fails every call unrun.
-#' After an abort or a blocked gate the remaining calls are skipped (their calls are closed by the
-#' projection of P05).
-#' @param calls Call records (04 section 4.4).
-#' @return `list(results = list(<gptr_tool_result>), terminate = lgl(1), messages = list(<msg>))`:
-#'   the contract's two fields plus the tool-result messages appended to the transcript. The run
-#'   engine hands `messages` (never `results`, whose `value` may be a user object, rule R1) to the
-#'   loop and to `turn_end`.
+#' A `length`/`refusal` stop fails every call unrun; an abort or a blocked gate skips the rest.
+#' @return `list(results, terminate, messages)`; the loop gets `messages`, never `results` (R1).
 #' @noRd
 dispatch_tools = function(run, calls) {
   stop_reason = run$message$stop_reason %||% "stop"
@@ -44,16 +31,8 @@ dispatch_tools = function(run, calls) {
 }
 
 #' One call between its tool_execution_start and tool_execution_end; its message is recorded once
-#'
-#' An interrupt anywhere in the call (a policy, a classifier, a hook, the permission prompt, where
-#' Ctrl-C aborts the run (03 section 6.8.3), a checkpointer, the tool, the tool_result hooks) is
-#' never handled here: it unwinds through on.exit(), which records the call's error result and its
-#' tool_execution_end (tool_interrupted(); INFRA-10), and then continues to the run's interrupt
-#' policy (G3: never an exiting tryCatch(interrupt =), which would pre-empt the pause menu). The
-#' calling `error` handler only notes an error that escapes the call (a failing store): that error
-#' ends the run (04 section 10.2 row 37) and nothing is recorded a second time. The one-shot
-#' control tokens of an approval (IC-53 item 3) end with the call.
-#' @return `list(result, message)`.
+#' An interrupt unwinds through on.exit() (tool_interrupted(), INFRA-10) to the run's policy; an
+#' error escaping the call (a failing store) ends the run (04 section 10.2 row 37).
 #' @noRd
 dispatch_call = function(run, call, stop_reason) {
   st = new.env(parent = emptyenv())
@@ -85,13 +64,8 @@ dispatch_unwound = function(run, call, st) {
   invisible(NULL)
 }
 
-#' One call through the pipeline; returns a gptr_tool_result and never throws an R error
-#'
-#' The steps guard every failure they expect (hooks, policies, classifiers, checkpointers, the
-#' tool). Anything else that fails inside the pipeline (a broken kernel invariant, a failing
-#' service) becomes an error result too, so the call still gets its tool-result message and its
-#' tool_execution_end (04 section 7.6 "never throws"). An interrupt is not an error and keeps
-#' unwinding (dispatch_call() records it).
+#' One call through the pipeline; any error becomes an error result (04 section 7.6 "never
+#' throws"); an interrupt keeps unwinding (dispatch_call() records it)
 #' @noRd
 dispatch_one = function(run, call, st = NULL) {
   tryCatch(dispatch_steps(run, call, st), error = function(e) {
@@ -100,12 +74,7 @@ dispatch_one = function(run, call, st = NULL) {
 }
 
 #' The pipeline of one call: lookup, validation, tool_call hooks, perm_check(), checkpointers,
-#' execution, tool_result hooks
-#'
-#' A run aborted while the call is prepared (a `tool_call` or `permission_request` hook calling
-#' `ctx$abort()`, or an abort from elsewhere during the permission prompt) ends the call unrun:
-#' the permission check and the tool are skipped, so a guard that aborts on a call stops its side
-#' effects, and the call still gets its error result.
+#' execution, tool_result hooks; a run aborted while the call is prepared ends it unrun
 #' @noRd
 dispatch_steps = function(run, call, st = NULL) {
   ctx = run_ctx(run)
@@ -146,13 +115,8 @@ dispatch_aborted_result = function(run) {
 }
 
 #' Execute a tool; the frame marks the running tool for run_current() (`.gptr_tool_run`)
-#'
-#' The one-shot tokens that a human approval of an `ask_human` call granted for gptr's control
-#' exports (`run$signal$control`, IC-53 item 3) live only while this call executes; they are
-#' cleared when it ends. Errors (including warnings under `warn = 2` and time limits) become
-#' error results. `st$exec_t0` marks the start of execute(): an interrupt from then on is recorded
-#' by dispatch_call() as "Interrupted after <s> s; side effects may have occurred.", and the
-#' decision is left to the run's interrupt policy.
+#' The control tokens of an approval (IC-53 item 3) are cleared when the call ends; `st$exec_t0`
+#' marks the start of execute() for tool_interrupted().
 #' @noRd
 tool_execute_frame = function(run, call, ctx, st = NULL) {
   .gptr_tool_run = run
@@ -166,10 +130,8 @@ tool_execute_frame = function(run, call, ctx, st = NULL) {
   tool_run(call$tool, call$input, ctx, call$name)
 }
 
-#' Call a tool's execute(): its normalised, well-formed result, or an error result
-#'
-#' Errors (including warnings under `warn = 2` and time limits) become error results; so does a
-#' malformed result (tool_result_check()).
+#' Call a tool's execute(): its normalised, well-formed result, or an error result (errors,
+#' warnings under `warn = 2`, time limits, a malformed result)
 #' @noRd
 tool_run = function(tool, input, ctx, name) {
   tryCatch(tool_result_check(as_tool_result(tool$execute(input, ctx)), name),
@@ -177,20 +139,10 @@ tool_run = function(tool, input, ctx, name) {
 }
 
 #' A tool result with fields of the types tool_result_message() records, or gptr_error_tool
-#'
-#' `as_tool_result()` (P02) returns a `gptr_tool_result` unchanged, so a result built by hand can
-#' carry fields of the wrong type: `content` must be a list of the block types of a tool-result
-#' message (text, image) with their string fields (P01's `msg_block_types`, `msg_block_fields`),
-#' `details` `NULL` or a named list, `usage` `NULL` or a list, `is_error` and `terminate` `NULL` or
-#' one logical. Names of the content list carry no meaning and are dropped (P02's
-#' `gptr_tool_result()` keeps those of a named `images` list), so the transcript holds an array.
+#' `as_tool_result()` returns a hand-built result unchanged, so its types are checked here; content
+#' names are dropped so the transcript holds an array.
 #' @noRd
 tool_result_check = function(res, name) {
-  one_string = function(x) is.character(x) && length(x) == 1L && !is.na(x)
-  block_ok = function(b) {
-    is.list(b) && one_string(b[["type"]]) && b[["type"]] %in% msg_block_types[["tool_result"]] &&
-      all(vapply(msg_block_fields[[b[["type"]]]], function(f) one_string(b[[f]]), NA))
-  }
   flag_ok = function(x) is.null(x) || (is.logical(x) && length(x) == 1L)
   list_ok = function(x) is.null(x) || (is.list(x) && !is.data.frame(x))
   details_ok = function(x) {
@@ -199,7 +151,8 @@ tool_result_check = function(res, name) {
     !length(x) || (!is.null(names(x)) && !anyNA(names(x)) && all(nzchar(names(x))))
   }
   content = res[["content"]]
-  ok = is.list(content) && !is.data.frame(content) && all(vapply(content, block_ok, NA)) &&
+  ok = is.list(content) && !is.data.frame(content) &&
+    all(vapply(content, block_ok, NA, msg_block_types[["tool_result"]])) &&
     details_ok(res[["details"]]) && list_ok(res[["usage"]]) && flag_ok(res[["is_error"]]) &&
     flag_ok(res[["terminate"]])
   if (!ok) {
@@ -213,10 +166,6 @@ tool_result_check = function(res, name) {
 }
 
 #' Record the truthful result of an interrupted call (then the interrupt continues to unwind)
-#'
-#' Once execute() has started (`st$exec_t0`): "Interrupted after <s> s; side effects may have
-#' occurred."; before (a policy, a hook, the permission prompt, a checkpointer's `before`): the
-#' tool never ran.
 #' @noRd
 tool_interrupted = function(run, call, st) {
   res = if (is.null(st$exec_t0)) {
@@ -231,11 +180,7 @@ tool_interrupted = function(run, call, st) {
 }
 
 #' The tool-result message of a result, or the error result of a result the store cannot write
-#'
-#' The message is built and encoded as the store encodes it (P01's `msg_to_json()` and
-#' `json_encode()`), so that a value the transcript cannot hold (an environment or a function in
-#' `details`, from the tool or from a tool_result hook's patch) becomes an error result of this
-#' call instead of a store failure that ends the run.
+#' (encoded as the store encodes it), so an unencodable `details` fails the call, not the run
 #' @return `list(result, message)`.
 #' @noRd
 dispatch_record = function(res, call) {
@@ -251,10 +196,7 @@ dispatch_record = function(res, call) {
 }
 
 #' Append the tool-result message and emit tool_execution_end, message_start and message_end
-#'
-#' The append and the `recorded` mark run inside suspendInterrupts(), so an interrupt never lands
-#' between them: after an interrupt the call is either recorded or still to be recorded.
-#' @return The tool-result message, invisibly.
+#' The append and the `recorded` mark are one uninterruptible step (suspendInterrupts()).
 #' @noRd
 dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, call)) {
   suspendInterrupts({
@@ -316,9 +258,7 @@ tool_lookup = function(name, session_id = NULL) {
 }
 
 #' A tool whose `parameters` is a function gets the schema frozen for the session (IC-68)
-#'
-#' The schemas are parsed once per frozen tool array: the memo is keyed on the array's JSON text,
-#' so a call before the first freeze (no array yet) or a refreeze never leaves a stale schema.
+#' The memo is keyed on the frozen array's JSON text, so a refreeze never leaves a stale schema.
 #' @noRd
 tool_frozen = function(run, tool) {
   if (!is.function(tool$parameters)) return(tool)
@@ -364,10 +304,8 @@ tool_schema = function(tool) {
   list(type = "object", properties = props, required = I(req))
 }
 
-#' The tool-result message of a result (04 section 4.4)
-#'
-#' Text is redacted with the `context` profile and truncated to the tool's output budget; details
-#' carry `value_ref` (class and size), never the value.
+#' The tool-result message of a result (04 section 4.4): text redacted (`context`) and truncated
+#' to the tool's output budget; details carry `value_ref`, never the value
 #' @noRd
 tool_result_message = function(result, call) {
   budget = call$tool$output_tokens %||% gptr_opt("r_output_tokens")
@@ -440,18 +378,14 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 # ---------------------------------------------------------------------------- nested calls
 
 #' Nested `gptr$...` calls made while an `r` evaluation runs (04 section 7.6)
-#'
-#' A function the outer call's static analysis listed at a level no higher than the level approved
-#' for the outer call runs without a second prompt; otherwise the call passes perm_check(). The
-#' call is recorded in the outer result's `details$nested` (at most 20). Returns the tool's value,
-#' or signals `gptr_error_tool` inside the model's code. Outside a run the member simply runs.
+#' A member listed by the outer call's analysis at or below its approved level runs without a
+#' second prompt; others pass perm_check(). Recorded in `details$nested` (at most 20).
 #' @noRd
 dispatch_nested = function(name, input, ctx) {
   check_string(name, "name")
   sid = run_ctx_sid(ctx)
   tool = tryCatch(registry_get("tool", name, session = sid), error = function(e) NULL)
-  # an `r` member declared with `fun` only has no `execute` (04 section 6.8): run its `fun`
-  # through P02's generated execute (printed value within output_tokens, `value` kept)
+  # a `fun`-only `r` member has no `execute` (04 section 6.8): use P02's generated one
   if (!is.null(tool) && !is.function(tool$execute) && is.function(tool$fun)) {
     tool$execute = spec_tool_execute(tool$fun, tool[["output_tokens"]])
   }
@@ -504,10 +438,7 @@ nested_next_id = function(run, outer_id) {
 }
 
 #' Execute a nested call between its tool_execution_start and tool_execution_end
-#'
-#' An interrupt unwinds through on.exit(), which still emits the call's tool_execution_end (as an
-#' error) before the outer call records its own end, so start and end events stay paired
-#' (INFRA-10) and P02's record of executing tools (the IC-53 control guard) is cleared.
+#' on.exit() emits the end on an interrupt too, so the events stay paired (INFRA-10).
 #' @noRd
 nested_execute = function(run, call, ctx) {
   t0 = reactor_now()
@@ -568,12 +499,9 @@ nested_record = function(run, outer_id, name, res, level) {
 
 # ---------------------------------------------------------------------------- permissions
 
-#' The permission combination (IC-04, IC-53)
-#'
-#' The risk is always recomputed from the call's raw input (a forwarded worker request is
-#' re-classified by the parent). Reads only the run's safety snapshot.
-#' @return `list(decision = "allow" | "deny" | "ask" | "ask_human" | "modify", reason, input,
-#'   risk, rule)`; the dispatcher executes only "allow".
+#' The permission combination (IC-04, IC-53): policies, `permission_request` hooks (`ask`), the
+#' UI, the non-interactive stop; the risk is recomputed from the raw input
+#' @return `list(decision, reason, input, risk, rule, how)`; the dispatcher executes only "allow".
 #' @noRd
 perm_check = function(call, run) {
   ctx = run_ctx(run)
@@ -618,14 +546,9 @@ perm_reason = function(x) {
 #' @noRd
 perm_rank = function(decision) match(decision, perm_decisions)
 
-#' Combine every policy's opinion: deny > ask_human > ask > modify > allow; a throwing policy
-#' denies; no active `mode` policy means ask (fail closed)
-#'
-#' `NULL` and a list without `decision` are no opinion. A malformed answer denies like a throwing
-#' policy (04 section 10.2 row 12): an answer that is not a list, a decision that is not one known
-#' string, and any other answer that fails P02's rule for policy answers (`ext_policy_ok()`: a
-#' named list, `reason` one string or `NULL`, and for `modify` an `input` that is a named list,
-#' the input the tool would run with).
+#' Combine every policy's opinion: deny > ask_human > ask > modify > allow; no active `mode`
+#' policy means ask (fail closed). NULL or no `decision` is no opinion; a throwing policy or a
+#' malformed answer (`ext_policy_ok()`) denies (04 section 10.2 row 12).
 #' @noRd
 perm_policies = function(call, ctx, run, risk) {
   specs = registry_all("policy", session = run$session)
@@ -680,15 +603,13 @@ perm_ask = function(call, run, out, risk) {
   }
   ui = if (isTRUE(snap$can_prompt)) run_ui(run) else NULL
   if (!is.null(ui) && isTRUE(tryCatch(ui$has_ui(), error = function(e) FALSE))) {
-    # a failing dialog, or an answer that is not a list, is not an approval (04 section 10.2
-    # row 22); feedback the model sees must be text
+    # a failing dialog or a non-list answer is no approval (04 section 10.2 row 22)
     ans = tryCatch(ui$permission(req), error = function(e) NULL)
     if (!is.list(ans) || is.data.frame(ans)) ans = list(decision = "deny", feedback = NULL)
     fb = ans[["feedback"]]
     if (!(is.character(fb) && length(fb) == 1L && !is.na(fb) && nzchar(fb))) ans$feedback = NULL
     if (identical(ans[["decision"]], "allow")) {
-      # a `remember` answer is stored by P11's builtin:permissions (channel permissions:remember,
-      # never for level 4, control or ask_human), not here
+      # a `remember` answer is stored by P11's builtin:permissions, not here
       if (identical(tier, "ask_human")) perm_grant_control(run, risk)
       return(perm_result("allow", "approved by the user", call$input, risk, "user"))
     }
@@ -739,11 +660,8 @@ perm_ask_questions = function(input) {
 }
 
 #' Grant the one-shot tokens of an approved `ask_human` call (IC-53 item 3)
-#'
-#' One token per control export the call's risk record flags (category `control`), appended to
-#' `run$signal$control` (the slot P08's `control_check()` and P06's `session_control_check()`
-#' consume) and recorded with P02's `ext_control_grant()` for P02's own guard. The tokens are
-#' cleared when the call ends (`tool_execute_frame()`).
+#' One per flagged `control` export, in `run$signal$control` and P02's `ext_control_grant()`;
+#' cleared when the call ends (tool_execute_frame()).
 #' @noRd
 perm_grant_control = function(run, risk) {
   fl = risk$flagged
@@ -797,10 +715,7 @@ perm_denial_text = function(dec) {
 
 #' Classify a call: the tool's `risk` function, the `risk.classify` service for `r` code (P11),
 #' else level 0 for read-only tools and 2 otherwise
-#'
-#' An error in a classifier, or a record without one `level` from 0 to 4 (the IC-54 levels), gives
-#' level 3: a policy reads `call$risk$level` and the dispatcher the approved level, so a malformed
-#' record must neither break the gate nor lower it.
+#' A failing classifier or a record without one IC-54 level (0-4) gives 3: never a lower gate.
 #' @noRd
 call_risk = function(call, ctx, run) {
   tool = call$tool

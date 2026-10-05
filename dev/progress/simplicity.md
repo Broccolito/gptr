@@ -11,3 +11,30 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   `session-live|gptr-gateway` green.
 - Reviews: r1 1 finding (0/0/1: heading format) fixed.
 - Deviations: none (restores D-085). Open: none.
+
+## Simplicity P06-C - Trim internal comment narration in kernel files (uncommitted, 2026-10-05)
+- Comments only in `R/agent-*.R`, `R/session-*.R`: internal blocks are a title plus at most two
+  lines citing IC/D ids, file headers 4 lines; code parse tokens and exported roxygen unchanged.
+  Comment lines 1610 -> 1112, files 6216 -> 5718 (-498; plan ~250).
+- Red: none (refactor). Green: `agent-|session-` PASS 2070 at HEAD and at HEAD + P06-C. Lint
+  clean. Neighbours: `arch-layers|copy-gateway|gptr-gateway|gptr-sdk` green; full suite FAIL 0,
+  PASS 22242.
+- Reviews: r1 3 findings (0/0/2, 1 nit) fixed: session_finalizer() note keeps the get0()
+  invariant for `the$live` readers; this note's counts and Open item; commit subject.
+- Deviations: none. Open: none.
+
+## Simplicity P01-D - P01 dead code and the single content-block predicate (uncommitted, 2026-10-05)
+- `block_ok(b, types)` (provider-message.R) serves queue_blocks_check() and tool_result_check();
+  msg_validate(), json_field_map/json_rename(), locale_utf8(), native_to_utf8(), out_put_prefixed(),
+  the stop-reason helpers, truncate_output(id_prefix) and spill_write()'s id-append mode go.
+  R -137, tests -80 lines (plan ~211).
+- Red: FAIL 2 (`block_ok` not found in the retargeted test-session-object.R and test-provider-fake.R
+  oracles). Green: plan filter PASS 1000. Lint clean. Neighbours (lint-rules, arch-layers,
+  eval-format/core, ext-specs, agent-loop/run, session-store/live/budget, provider-*, copy-eval,
+  doc-io, tool-r) PASS 5041; full suite PASS 23691,
+  FAIL 1 (http-reactor timing under load 14; re-run PASS 208). Cross-plan checks: +1 warn (P01's
+  plan literal still names `gptr_warning_locale`; P01 is complete).
+- Reviews: r1 2 findings (0/0/1 + 1 nit): pending P22's Consumes line still named the default-prefix
+  `spill_write()` (decision 11) -> fixed; D-138 Tests bullet completed, internal enc2utf8 Rule line
+  dropped. Docs only (no regression test); plan filter PASS 1000, lint clean, cross-plan warn 77.
+- Deviations: D-138. Open: none.

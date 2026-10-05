@@ -1,17 +1,7 @@
 # session-budget.R -- usage rows, the token ledger, budgets and gptr_usage() (P06, layer L3).
-#
-# Usage rows (contract 04 section 4.3) live in the session's `.d$usage`; a row is added to the
-# session that made the request and to every ancestor, so a root's rows include its children's
-# and budgets are charged to the root (IC-66). gptr_usage() aggregates live sessions and the
-# process System 1 log; no usage lives in the package namespace (INFRA-15). IC-05 moved
-# gptr_usage() here from P05's provider-usage.R; the zero-row table `usage_empty()` and the rows
-# themselves (`usage_row()`) are P05's.
-#
-# IC-74 (07-local-ollama.md section 5): "Missing usage remains unknown". A token or cost value a
-# row does not carry is NA, never a known zero, and a sum over an unknown value is unknown; a
-# known zero (a zero metered local charge, a reported zero) stays zero. Budgets compare only the
-# known part (run_used(), D-025): an unknown value adds nothing known, so it cannot reach a limit,
-# and the `used` a budget reports is then a lower bound.
+# A row is added to the requesting session and every ancestor, so budgets charge the root (IC-66).
+# Missing usage stays unknown (IC-74): NA, never zero, and a sum over it is NA; budgets compare
+# only the known part (run_used(), D-025), so the `used` they report is then a lower bound.
 
 usage_columns = c("request_id", "session", "agent", "parent_id", "provider", "model", "route",
                   "input", "output", "cache_read", "cache_write_5m", "cache_write_1h", "reasoning",
@@ -21,14 +11,8 @@ usage_token_columns = c("input", "output", "cache_read", "cache_write_5m", "cach
                         "reasoning", "images", "cost")
 
 #' Conform usage rows (from P05's usage_row()) to the section 4.3 columns, types and order
-#'
-#' Every missing column, the token and cost columns included, is the typed NA of P05's
-#' `usage_empty()`: an absent observation is unknown (IC-74), never a known zero. A bare logical
-#' `NA` column becomes its typed NA; other values of the wrong type are refused rather than
-#' coerced, and known numbers and start times must be finite, numbers also nonnegative (P05's
-#' rule for usage rows). Numeric `started` values are epoch seconds. A list input must be named
-#' columns of equal length (a `NULL` element is an absent column), never nested values to flatten
-#' or scalars to recycle. Extra columns are dropped.
+#' A missing column is typed NA (unknown, IC-74); a wrong type, a non-finite or a negative number
+#' is refused, never coerced; extra columns are dropped.
 #' @noRd
 usage_conform = function(row) {
   if (!is.data.frame(row)) row = usage_conform_list(row)
@@ -99,9 +83,7 @@ usage_conform_column = function(x, proto, col) {
   as.numeric(x)
 }
 
-#' Totals of usage rows: requests, input, output, cache reads, cache writes and cost
-#'
-#' A sum over an unknown (`NA`) value is unknown (IC-74), as in P05's usage_rollup().
+#' Totals of usage rows; a sum over an unknown (`NA`) value is unknown (IC-74)
 #' @noRd
 usage_totals = function(u) {
   c(requests = nrow(u), input = sum(u$input), output = sum(u$output),
@@ -116,9 +98,8 @@ ledger_empty = function() {
              cached = logical(), stringsAsFactors = FALSE)
 }
 
-#' A short token count: 950, 1.2k, 3.4M; "unknown" when any count is unknown (IC-74)
-#'
-#' The unit follows the printed value, so 999.7 is "1.0k" and 999999 is "1.0M".
+#' A short token count: 950, 1.2k, 3.4M ("unknown" when any count is unknown, IC-74); the unit
+#' follows the printed value, so 999.7 is "1.0k"
 #' @noRd
 format_count = function(n) {
   n = sum(n)
@@ -140,11 +121,7 @@ format_cost = function(x) {
 # ---------------------------------------------------------------------------- rows and the ledger
 
 #' Add a usage row to the session and every live ancestor (root charging, IC-66)
-#'
-#' The rows are conformed first (an absent observation stays unknown, D-021). Every row needs its
-#' request id: the id is the key that de-duplicates a request recorded twice, so rows without one
-#' could not be told apart and are refused (`gptr_error_invalid_argument`, `arg =
-#' "row$request_id"`); P05's `usage_row()` always sets one.
+#' Rows are conformed (D-021); a row without its request id, the de-duplication key, is refused.
 #' @noRd
 usage_add = function(s, row) {
   row = usage_conform(row)
@@ -164,9 +141,8 @@ usage_add = function(s, row) {
   invisible(row)
 }
 
-#' The usage rows of a session and its children, one per request, as a `gptr_usage` listing
-#'
-#' Attribute `totals` (usage_totals()): a total over an unknown value is unknown (IC-74).
+#' The usage rows of a session and its children, one per request, as a `gptr_usage` listing with
+#' attribute `totals` (usage_totals())
 #' @noRd
 session_usage_rows = function(s) {
   u = session_data(s)$usage
@@ -178,9 +154,6 @@ session_usage_rows = function(s) {
 }
 
 #' Add the per-component token estimate of one request (the ledger of gptr_usage(detail = TRUE))
-#' @param components Named list or vector: component -> estimated tokens (`t0`, `t1`, `tools`,
-#'   `project`, `environment`, `workspace`, `attached`, `transcript`, `tool_results`, `images`,
-#'   `other`).
 #' @noRd
 ledger_add = function(s, request_id, components) {
   comp = unlist(components)
@@ -192,11 +165,8 @@ ledger_add = function(s, request_id, components) {
   invisible(rows)
 }
 
-#' Mark the leading components of a request as cached, up to the reported cache-read tokens
-#'
-#' An unknown cache read (`NA`: the provider reported no usage, IC-74) leaves the request's
-#' `cached` flags unknown (`NA`) rather than claiming that nothing was cached; a known zero
-#' leaves them `FALSE`.
+#' Mark the leading components of a request as cached, up to the reported cache-read tokens; an
+#' unknown cache read leaves the flags unknown (`NA`, IC-74)
 #' @noRd
 ledger_mark_cached = function(s, request_id, cache_read) {
   d = session_data(s)
@@ -216,9 +186,8 @@ ledger_mark_cached = function(s, request_id, cache_read) {
 
 # ---------------------------------------------------------------------------- budgets (IC-66)
 
-#' Budget limits of a new run: the call's budget over the settings default for a root run; for a
-#' nested run, or a child whose run option `root` names another session (IC-66), only the call's
-#' own share (the root's limits still apply through run_chain(): min(share, root remaining))
+#' Budget limits of a new run: the call's budget over the settings default for a root run, else
+#' only the call's own share (the root's limits still apply through run_chain(), IC-66)
 #' @noRd
 run_budget_limits = function(s, opts, outer) {
   own = as.list(opts$budget %||% list())
@@ -238,13 +207,9 @@ run_budget_root = function(s, opts) {
   session_by_id(rid)
 }
 
-#' The shared budget pool of a root that has no run of its own: the container of a top-level team
-#' or fan-out (P19 passes its id as `opts$root`). Created once, on the root's live record, with
-#' the per-call default merged with the call's budget; it is charged with the root's usage since
-#' its creation (usage_add() rolls every child's rows up to the root). P19 creates one container
-#' per top-level call, so one pool per container is one budget per top-level call (IC-66).
-#' @return An environment with the fields run_chain(), run_used() and budget_near() read (`id`,
-#'   `shell`, `budget`, `usage_start`, `near`), or NULL.
+#' The shared budget pool of a root without a run of its own (a team or fan-out container that
+#' P19 passes as `opts$root`), created once on its live record: one budget per top-level call
+#' (IC-66); NULL when there is none
 #' @noRd
 run_budget_pool = function(s, opts) {
   root = run_budget_root(s, opts)
@@ -300,11 +265,8 @@ run_chain = function(run) {
 }
 
 #' Tokens, cost and requests charged to a run's session since the run started (children included)
-#'
-#' The known part of the usage (IC-74, D-025): an unknown (`NA`) token count or cost adds nothing
-#' known, so it can neither reach a budget nor be claimed as zero; each column is summed on its
-#' own, so a row's known input still counts when its cache read is unknown. `tokens` and `cost`
-#' are therefore lower bounds when a row is unknown; `turns` counts every request.
+#' The known part, column by column (IC-74, D-025): `tokens` and `cost` are lower bounds when a
+#' row is unknown; `turns` counts every request.
 #' @noRd
 run_used = function(run) {
   u = session_data(run$shell)$usage
@@ -315,11 +277,8 @@ run_used = function(run) {
   list(tokens = sum(vapply(cols, known, numeric(1L))), cost = known("cost"), turns = nrow(u))
 }
 
-#' Check the budgets that apply to a session's current run
-#'
-#' Budgets compare the known usage of run_used() (IC-74, D-025): a request whose cost is unknown
-#' (an unpriced model) cannot reach the cost budget, and the token budget still applies to it.
-#' @param estimate Estimated input tokens of the next request (a nonnegative number).
+#' Check the budgets that apply to a session's current run against run_used() (IC-74, D-025)
+#' @param estimate Estimated input tokens of the next request.
 #' @return `NULL` or `list(kind, budget, used)`.
 #' @noRd
 budget_check = function(s, estimate = 0) {
@@ -409,9 +368,7 @@ gptr_usage = function(x = NULL, by = c("session", "agent", "model", "route"), de
   rows = rows[!duplicated(rows$request_id), , drop = FALSE]
   group = usage_group(rows, by)
   keys = unique(group)
-  # %in%, not ==, and unnamed results: a group may be NA (process-level System 1 rows have no
-  # session) and must still be counted; NA names would make data.frame() fail on its row names.
-  # sum() without na.rm: a group with an unknown value is unknown (IC-74)
+  # %in% and unnamed results: a group may be NA (System 1 rows); no na.rm: unknown stays unknown
   agg = function(col) {
     vapply(keys, function(k) sum(rows[[col]][group %in% k]), 1, USE.NAMES = FALSE)
   }

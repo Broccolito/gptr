@@ -1,26 +1,14 @@
 # agent-loop.R -- the pure agent-loop state machine (P06, layer L2).
-#
-# Pi's two nested loops (packages/agent/src/agent-loop.ts:102-321 at 1b347794, restated in
-# dev/research/02-pi-agent-loop-sessions.md section 2.2 and prototyped in section 5.1 as
-# `run_agent_loop()`), rewritten as a state machine so that the run engine (agent-run.R) can drive
-# it from reactor callbacks. The loop knows nothing about sessions, stores, providers or the
-# reactor: the engine asks `loop_next()` for the next action, performs it and reports the outcome
-# with `loop_response()` or `loop_results()`. gptr additions (report 02 section 4.11): a finite
-# `max_turns` that caps the model requests of one run, and `finish_turn()` decisions that end the
-# run (`blocked`, `aborted`, `budget`).
+# Pi's two nested loops (report 02 section 2.2) as a state machine the run engine drives from
+# reactor callbacks: loop_next() gives the next action, loop_response()/loop_results() report it.
+# gptr adds `max_turns` and finish_turn() decisions that end the run (report 02 section 4.11).
 
 queue_user_sources = c("pipe", "pause_menu", "repl", "api_user")
 queue_sources = c(queue_user_sources, "extension", "agent")
 
-#' Create a loop state machine
-#'
-#' @param max_turns Integer or NULL: the most model requests this run may make.
-#' @param steering,follow_up Functions of no argument returning a list of messages (at most one
-#'   queue item each, one-at-a-time delivery as in Pi).
-#' @param finish_turn Function of `list(message, results, turn)` returning `NULL` or
-#'   `list(action = "end", reason = chr(1))`.
-#' @param emit Function `(type, ...)` for the loop-owned events `turn_start` and `turn_end`.
-#' @return An environment of class `gptr_loop`.
+#' Create a loop state machine (class `gptr_loop`)
+#' `steering`/`follow_up` return at most one queued message each (Pi's one-at-a-time delivery);
+#' `finish_turn(turn)` returns NULL or `list(action = "end", reason)`.
 #' @noRd
 loop_new = function(max_turns = NULL, steering = function() list(), follow_up = function() list(),
                     finish_turn = function(turn) NULL, emit = function(type, ...) invisible(NULL)) {
@@ -50,10 +38,8 @@ loop_new = function(max_turns = NULL, steering = function() list(), follow_up = 
 }
 
 #' The next action of the loop
-#'
-#' @return One of `list(action = "request", messages)` (the queued messages to append before the
-#'   request), `list(action = "tools", calls, message, truncated)`, `list(action = "end", reason)`
-#'   or `list(action = "wait")` while a response or a tool batch is outstanding.
+#' @return `list(action = "request", messages)`, `"tools"` (`calls, message, truncated`), `"end"`
+#'   (`reason`) or `"wait"` while a response or a tool batch is outstanding.
 #' @noRd
 loop_next = function(lp) {
   if (isTRUE(lp$advancing)) return(list(action = "wait"))
@@ -101,8 +87,7 @@ loop_next = function(lp) {
       if (is.list(decision) && identical(decision$action, "end")) {
         return(loop_end(lp, decision$reason %||% "stop"))
       }
-      # Queue callbacks remove items. Never take input that the capped run cannot send.
-      # A completed text turn is still a normal stop; queued input remains for the next run.
+      # never dequeue input a capped run cannot send; it stays queued for the next run
       if (loop_at_limit(lp)) {
         return(loop_end(lp, if (lp$has_more) "max_turns" else "stop"))
       }
@@ -182,13 +167,8 @@ loop_expect_state = function(lp, expected) {
 }
 
 #' Turn one queue item into the message delivered to the model (IC-55)
-#'
-#' Steers from user sources become operator relays once the run has made a request (`relay =
-#' TRUE`); before that, and for follow-ups, they are ordinary user messages. Extension notes and
-#' agent reports are user-role data and never relays.
-#' @param item A queue item `list(text, blocks, source, t)` (optionally `name` for extension and
-#'   agent items).
-#' @param which `"steer"` or `"follow_up"`.
+#' A user-source steer is an operator relay once the run has made a request (`relay`); extension
+#' notes and agent reports are user-role data, never relays.
 #' @noRd
 queue_item_message = function(item, which, relay = FALSE) {
   check_list(item, "item", named = TRUE)

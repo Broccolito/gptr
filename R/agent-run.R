@@ -1,22 +1,11 @@
 # agent-run.R -- the run lifecycle on the reactor (P06, layer L3).
-#
-# A run drives the pure loop of agent-loop.R from reactor callbacks: `run_start()` registers the run
-# and one reactor task that asks the loop for its next action; requests go out through P05's
-# `provider_stream()` with the run's emit/done callbacks; tool batches run in the reactor's tool
-# FIFO (sequential tools) or directly (concurrent batches); steering is delivered after complete
-# tool results. Recovery follows report 02 sections 2.8-2.9 and 5.3 (`run_with_recovery()`) with
-# gptr's constants (C-33: at most 2 agent-level retries, 2 s then 4 s; one compact-and-retry on
-# overflow). The interrupt policy is the `console.interrupt_policy` service (P14) when registered,
-# else abort-only (report 02 section 4.8; G3 finding 5). No run state lives in the package
-# namespace (INFRA-15): the reactor holds active runs until they settle.
+# run_start() registers a run and one reactor task that drives the loop of agent-loop.R; requests
+# go through P05's provider_stream(), sequential tool batches through the reactor's tool FIFO.
+# Recovery: report 02 section 5.3 with C-33. No run state lives in the namespace (INFRA-15).
 
 #' A new run record (04 section 7.6 fields plus private fields)
-#'
-#' The safety options are snapshotted here for a root run and inherited by nested runs (IC-53);
-#' a nested run's mode is the stricter of the outer run's and the session's. The evaluation
-#' environment is the gateway's choice (`opts$call$envir`, IC-40) or the kept home; it is held only
-#' in the `home` binding, which is reset to NULL at settlement (rule R2).
-#' @return An environment of class `gptr_run`.
+#' Safety options are snapshotted for a root run and inherited by nested runs (IC-53); the
+#' evaluation environment is held only in `home`, reset at settlement (rule R2).
 #' @noRd
 run_new = function(s, opts, outer) {
   d = session_data(s)
@@ -30,8 +19,7 @@ run_new = function(s, opts, outer) {
   run$turn = 0L
   run$opts = opts
   run$opts$safety = opts$safety %||% (if (is.null(outer)) safety_snapshot() else outer$opts$safety)
-  # the run option `interactive = FALSE` (04 section 7.6: "a human can answer") means nobody can
-  # answer this run's gate (background runs, children without a human): asks stop or deny
+  # `interactive = FALSE` (04 section 7.6): nobody can answer this run's gate
   if (isFALSE(opts$interactive)) run$opts$safety$can_prompt = FALSE
   run$mode = if (is.null(outer)) d$mode else run_mode_tighter(outer$mode, d$mode)
   run$model = NULL
@@ -40,9 +28,7 @@ run_new = function(s, opts, outer) {
   run$signal = new.env(parent = emptyenv())
   run$signal$aborted = FALSE
   run$signal$reason = NULL
-  # IC-53 item 3: the one-shot approval tokens (names of control exports approved through an
-  # ask_human for the executing call), the slot P08's control_check() consumes; and the stored,
-  # unsignalled condition of the terminal status that P08's gateway_signal() reads
+  # IC-53 item 3 one-shot approval tokens; the stored condition P08's gateway_signal() reads
   run$signal$control = character()
   run$signal$condition = NULL
   run$started = Sys.time()
@@ -97,10 +83,8 @@ safety_snapshot = function() {
 run_mode_tighter = function(a, b) session_modes[min(match(c(a, b), session_modes))]
 
 #' The innermost run whose tool is executing on this call stack, or NULL
-#'
-#' A tool executes inside `tool_execute_frame()` (agent-dispatch.R), whose frame binds the marker
-#' `.gptr_tool_run`; the call stack is walked with `sys.frame(k)` (never `sys.frames()`, R3), so
-#' no package-global stack exists (INFRA-15).
+#' Finds tool_execute_frame()'s `.gptr_tool_run` with sys.frame(k), never sys.frames() (R3), so no
+#' package-global stack exists (INFRA-15).
 #' @noRd
 run_current = function() {
   k = sys.nframe()
@@ -149,9 +133,8 @@ run_ui = function(run) {
   tryCatch(ext_service_get("ui.get")(run$shell), error = function(e) NULL)
 }
 
-# The dispatcher (agent-dispatch.R) is layer L2: it may call L0, L1 records and its own `agent`
-# area, never the L3 session files (03 section 2.2; P01's test-arch-layers.R). It reaches the
-# session only through its run and the agent-area helpers below.
+# The L2 dispatcher reaches the session only through its run and the helpers below (03 section
+# 2.2; test-arch-layers.R).
 
 #' The data environment of a run's session
 #' @noRd
@@ -187,10 +170,8 @@ run_append_custom = function(run, type, data) {
 
 # ---------------------------------------------------------------------------- recovery
 
-# Error-text patterns: provider error-message facts collected by Pi (MIT licence;
-# packages/ai/src/utils/overflow.ts and retry.ts at commit 1b347794), transcribed in report 02
-# section 5.3 (`recovery.R`, with the verifier's fixes) and gptr's libcurl additions. Matched with
-# perl = TRUE and ignore.case = TRUE.
+# Provider error texts collected by Pi (MIT licence; packages/ai/src/utils/overflow.ts and
+# retry.ts at 1b347794) via report 02 section 5.3, plus libcurl texts; PCRE, case-insensitive.
 overflow_patterns = c(
   "prompt (?:is )?too long", "request_too_large", "input is too long for requested model",
   "exceeds the context window",
@@ -250,9 +231,8 @@ overflow_window = function(x) {
   if (is.finite(x) && x > 0) x else NA_real_
 }
 
-#' One token count of a usage record: 0 when the record leaves it out (P05's legacy zero of a
-#' reported usage), NA when it is unknown (an explicit null, as in P05's `usage_from_json()`) or
-#' not one nonnegative number (IC-74)
+#' One token count of a usage record: 0 when left out (P05's legacy zero), NA when unknown or not
+#' one nonnegative number (IC-74)
 #' @noRd
 overflow_count = function(usage, field) {
   if (!field %in% names(usage)) return(0)
@@ -262,15 +242,8 @@ overflow_count = function(usage, field) {
 }
 
 #' Is a response a context overflow? (report 02 section 5.3 `is_context_overflow()`)
-#'
-#' Three signals: the error record's class, the provider's error text (the 21 texts of report 02,
-#' the 413/no-body forms), and a silent overflow shown by the reported usage. Under IC-74 an
-#' unknown count is not zero: the known prompt counts are a lower bound, which proves an overflow
-#' only when it alone exceeds the window, and an estimated usage (`estimated = TRUE`, gptr's own
-#' guess) proves nothing. Malformed records give FALSE, never an error.
-#' @param message An assistant message (R shape).
-#' @param context_window The model's window in tokens, or NULL/NA.
-#' @param error The error record of the terminal `error` event, if any.
+#' Signals: the error class, the provider's error text, reported usage over the window; known
+#' counts are a lower bound and an estimate proves nothing (IC-74). Never an error.
 #' @noRd
 is_context_overflow = function(message, context_window = NULL, error = NULL) {
   if (identical(err_class(error), "context_overflow")) return(TRUE)
@@ -336,11 +309,8 @@ provider_classes = function(err) {
 }
 
 #' Is a failed request transient, to be retried at agent level?
-#'
-#' Never an overflow (compaction recovers it, Pi's `_isRetryableError()`), never a provider's
-#' definitive answer (auth, spend cap, a long retry-after, a redirect, billing, quota texts), and
-#' never one of gptr's own local failures (no credential, an unavailable or untrusted model, an
-#' invalid argument or spec, a missing package), whose message is gptr's text, not a provider's.
+#' Never an overflow (compaction recovers it), a provider's definitive answer, or one of gptr's
+#' own local failures, whose message is gptr's text, not a provider's.
 #' @noRd
 run_retryable = function(msg, err) {
   if (is_context_overflow(msg, NULL, err)) return(FALSE)
@@ -362,7 +332,6 @@ run_retryable = function(msg, err) {
 }
 
 #' Agent-level retry delays in seconds: 2 s, then 4 s (C-33)
-#' @param attempt The number of the retry (1 for the first).
 #' @noRd
 agent_retry_delay = function(attempt) {
   attempt = check_number(attempt, "attempt", min = 1, int = TRUE)
@@ -371,11 +340,8 @@ agent_retry_delay = function(attempt) {
 
 # ---------------------------------------------------------------------------- freeze and input
 
-#' Freeze the prompt at the first run
-#'
-#' Emits `session_start` (collect), then calls the `prompt.freeze` service (P07) or the documented
-#' fallback (empty T0/T1 and the core tools' JSON, 04 section 7.0); blocks returned by
-#' `session_start` handlers join the first user message.
+#' Freeze the prompt at the first run: `session_start` (collect), then `prompt.freeze` (P07) or
+#' freeze_fallback(); blocks the handlers return join the first user message
 #' @return The input messages, with the collected blocks inserted.
 #' @noRd
 run_freeze = function(run, input) {
@@ -384,8 +350,7 @@ run_freeze = function(run, input) {
   if (length(d$frozen)) return(input)
   collected = run_emit(run, "session_start", reason = session_start_reason(d))
   if (ext_service_has("prompt.freeze")) {
-    # the run options P07's prompt_compose() reads (`preset`, `tools`, `doc`, `system`, `call`),
-    # plus `start` (the merged session_start result), `interactive` and `refreeze` (IC-52)
+    # P07's prompt_compose() options plus `start`, `interactive` and `refreeze` (IC-52)
     fopts = run$opts
     fopts$start = collected
     fopts$interactive = fopts$interactive %||% isTRUE(fopts$safety$can_prompt)
@@ -411,10 +376,8 @@ session_start_reason = function(d) {
   "new"
 }
 
-#' The fallback freeze used before P07 is loaded: empty T0/T1 and the four core tools' JSON
-#'
-#' As at any freeze (04 section 9.1), a tool's `available(ctx)` decides whether it is offered and
-#' a `parameters` function is evaluated once, with the session's ctx (freeze_tool_decl()).
+#' The fallback freeze used before P07 is loaded: empty T0/T1 and the four core tools' JSON, each
+#' through freeze_tool_decl() as at any freeze (04 section 9.1)
 #' @noRd
 freeze_fallback = function(s) {
   d = session_data(s)
@@ -434,9 +397,8 @@ freeze_fallback = function(s) {
   invisible(fr)
 }
 
-#' The frozen declaration `{name, description, input_schema}` of a tool (Anthropic shape, 04
-#' section 9.1), or NULL when the tool is absent, its `available(ctx)` is not TRUE, or it has no
-#' object schema; a failing `available()` or `parameters()` leaves the tool out with a diagnostic
+#' The frozen declaration `{name, description, input_schema}` of a tool (04 section 9.1), or NULL
+#' (absent, not `available(ctx)`, no object schema; a failing callback adds a diagnostic)
 #' @noRd
 freeze_tool_decl = function(tool, ctx) {
   if (is.null(tool)) return(NULL)
@@ -489,12 +451,7 @@ input_insert_blocks = function(input, blocks) {
 
 #' The model record of the next request: a pending `ctx$set_model()` switch first, then the router
 #' (`router.call`, IC-69) for `router:` models, else the session's model
-#'
-#' The pending switch is applied as the idle `ctx$set_model()` applies it (kernel_model_switch()),
-#' so its `model_change` entry records the thinking level too.
-#' A decision-only (classifier) model is refused here, before any request is built, with the
-#' condition of provider_stream()'s refusal (IC-74, D-017). The session's thinking level is
-#' clamped to the model's levels, as P05's model_resolve() clamps a `:<level>` suffix.
+#' A decision-only model is refused before any request is built (IC-74, D-017).
 #' @noRd
 run_target = function(run) {
   s = run$shell
@@ -517,13 +474,9 @@ run_target = function(run) {
   run$model
 }
 
-#' Resolve a model reference for a session: P05's catalog first, else a provider registered at
-#' rank 0 for this session only (`model = <spec:provider>`, 04 section 6.1), which the catalog
-#' does not list; P05's model_resolve() accepts that spec (its first model), so the spec is
-#' narrowed to the declared model the reference names. A model id may hold a colon (an Ollama tag
-#' such as `qwen3:8b`, IC-74), so the whole id is tried first, and a `:<suffix>` counts as a
-#' thinking level only when it is one (P05's rule). Anything else is the strict, classed
-#' `gptr_error_unknown_model` of model_resolve().
+#' Resolve a model reference for a session: P05's catalog, else a provider spec registered for
+#' this session only (04 section 6.1), narrowed to the named model; an id may hold a colon (an
+#' Ollama tag, IC-74), so `:<suffix>` is a thinking level only when it is one
 #' @noRd
 run_model_resolve = function(ref, sid) {
   rec = model_resolve(ref, strict = FALSE)
@@ -560,15 +513,9 @@ session_model_resolve = function(pr, id) {
   model_resolve(pr)
 }
 
-#' Ask the session's router for the model (IC-69)
-#'
-#' A failing router or an unusable answer (no model, a model that does not resolve, or a
-#' decision-only model, which cannot hold a conversation, IC-74) falls back to the default chat
-#' model with a diagnostic, keeping the router's last state. A switch is a model other than the
-#' one of the branch's last `model_change` entry, so a new run on the same branch records none.
-#' Each switch appends `model_change` (reason `router`) and `gptr.router`, and emits `route`; a
-#' fallback is a switch only when it changes the model (IC-69, as P08's `router_fallback()`).
-#' @param reason `"turn"` or `"compaction"`.
+#' Ask the session's router for the model (IC-69); an unusable answer falls back to the default
+#' chat model with a diagnostic. Only a model other than the path's last `model_change` is a
+#' switch: it appends `model_change` and `gptr.router` and emits `route`.
 #' @noRd
 run_route = function(run, reason = "turn") {
   s = run$shell
@@ -717,10 +664,8 @@ frozen_tokens = function(fr) {
     est_tokens(fr$tools_json %||% "", "json")
 }
 
-#' Estimated tokens of a message's content (03 section 12.5): text, context and thinking blocks
-#' as prose, tool-call arguments as JSON and images by their size (the 1000 x 700 default of
-#' `gptr$plot()` when the block does not say); an image whose id is in `elided` counts as the text
-#' that replaces it (images_elide())
+#' Estimated tokens of a message's content (03 section 12.5): text as prose, tool-call arguments
+#' as JSON, images by size (1000 x 700 by default) or, when in `elided`, as their omission text
 #' @noRd
 msg_tokens_est = function(m, elided = character()) {
   total = 0
@@ -778,10 +723,8 @@ run_request_params = function(run, target, params) {
 }
 
 #' Older images projected as omitted when a request exceeds the model's image count or 32 MB (IC-67)
-#'
-#' Newly elided images are recorded by one appended `gptr.image_elision` entry (one stated cache
-#' break); images elided earlier on the path stay elided. An image is elided by its id, so every
-#' copy of it goes at once and the next request projects the same messages.
+#' Elision is by id, recorded once in a `gptr.image_elision` entry and kept on the path, so the next
+#' request projects the same messages.
 #' @noRd
 images_elide = function(s, messages, target) {
   info = images_scan(messages)
@@ -879,10 +822,8 @@ run_returns = function(run) {
   invisible(NULL)
 }
 
-#' Persist JSON-able per-plugin state (`ctx$state()`) as gptr.ext entries when it changed
-#'
-#' A state emptied after it was persisted is persisted as `{}`, so that a resume does not bring
-#' the old state back.
+#' Persist JSON-able per-plugin state (`ctx$state()`) as gptr.ext entries when it changed; an
+#' emptied state is persisted as `{}` so a resume does not bring the old one back
 #' @noRd
 plugin_state_persist = function(s) {
   live = session_live(s)
@@ -911,10 +852,7 @@ plugin_state_persist = function(s) {
 }
 
 #' Update the session's estimator multiplier from provider-reported usage (03 section 12.5)
-#'
-#' Only a reported prompt total updates it: gptr's own estimate (`estimated = TRUE`) and a usage
-#' with an unknown prompt count (IC-74) leave it unchanged; a count the usage leaves out is P05's
-#' legacy zero (overflow_count()).
+#' Only a reported prompt total updates it, never an estimate or an unknown count (IC-74).
 #' @noRd
 run_estimator_update = function(run, msg) {
   d = session_data(run$shell)
@@ -932,13 +870,7 @@ run_estimator_update = function(run, msg) {
 
 #' Context size projection (03 section 12.5): the last provider-reported total plus the
 #' multiplier times the estimate of what follows it
-#'
-#' The anchor is the newest of the latest compaction and the latest assistant message whose total
-#' the provider reported. After a compaction, the frozen prompt, its blocks, its kept tail and what
-#' follows are estimated (the projection of P05's `entry_compaction_cut()`). An unknown total
-#' (IC-74) or gptr's own estimate (`estimated = TRUE`) is no anchor; without one, the frozen
-#' prompt and the whole path are estimated. Errored and aborted replies are not counted, as the
-#' projection drops them, and images elided on the path count as their omission text (IC-67).
+#' The anchor is the newest compaction or reported total (an unknown one is none, IC-74).
 #' @noRd
 context_tokens = function(s) {
   d = session_data(s)
@@ -1016,16 +948,8 @@ context_idle = function(s) {
 
 # ---------------------------------------------------------------------------- starting and waiting
 
-#' Run a session to settlement
-#'
-#' Appends the input and runs `s` on the reactor under the interrupt policy (the
-#' `console.interrupt_policy` service of P14 when registered, else abort-only). Raises nothing
-#' itself: the gateway maps terminal statuses to conditions (04 section 6.1.2); an interrupt aborts
-#' the run, keeps the partial turn and is re-signalled. A run marked `opts$background` by P21 stops
-#' the foreground wait.
-#' @param input A message (`msg_user()`), a list of messages, or `NULL` (the queued items, else a
-#'   continuation from the leaf).
-#' @param opts Run options (04 section 7.6).
+#' Run a session to settlement under the interrupt policy (`console.interrupt_policy`, P14, else
+#' abort-only); raises nothing itself: the gateway maps statuses to conditions (04 section 6.1.2)
 #' @return `s`, invisibly.
 #' @noRd
 session_run = function(s, input, opts = list()) {
@@ -1039,10 +963,8 @@ session_run = function(s, input, opts = list()) {
   invisible(s)
 }
 
-#' Pump until the run settles or is sent to the background
-#'
-#' A pump nested in another reactor callback (a tool, a hook) runs only this run's FIFO tools, so
-#' it never runs another run's tool (IC-57); the outermost pump runs every run's tools.
+#' Pump until the run settles or is sent to the background; a nested pump runs only this run's
+#' FIFO tools (IC-57)
 #' @noRd
 run_wait_foreground = function(run) {
   allow = if (reactor_depth() == 0L) NULL else run$id
@@ -1068,11 +990,8 @@ run_resignal_interrupt = function() {
   invokeRestart("abort")
 }
 
-#' Start a run without blocking
-#'
-#' Attaches a detached copy first (split-brain rules), refuses a running session
-#' (`gptr_error_busy`), counts nested `gptr()` calls against `gptr.max_nested_calls` (IC-66),
-#' freezes the prompt at the first run, appends the input and registers the run with the reactor.
+#' Start a run without blocking: attach a detached copy, refuse a running session (`busy`), count
+#' nested gptr() calls (IC-66), freeze the prompt, append the input, register with the reactor
 #' @return A `gptr_run` held by the reactor until it settles.
 #' @noRd
 run_start = function(s, input, opts = list()) {
@@ -1097,8 +1016,7 @@ run_start = function(s, input, opts = list()) {
   d$budget = run$budget
   if (is.null(d$parent_id)) last_set(s)
   reactor_run_add(run)
-  # a failure before the run is wired (a freeze that refuses the model, a store error) settles
-  # the run with status error and re-signals, so the session never stays `running`
+  # a failure before the run is wired settles it with status error and re-signals
   started = tryCatch({
     input = run_freeze(run, input)
     run_emit(run, "agent_start")
@@ -1162,9 +1080,7 @@ run_wire = function(run) {
                       finish_turn = function(turn) run_finish_turn(run, turn),
                       emit = function(type, ...) run_emit(run, type, ...))
   run$task = reactor_task(function() run_drive(run), run = run)
-  # touch the lock now, then every 10 minutes (IC-59): a session whose runs are all shorter than
-  # 10 minutes still refreshes its lock at each run, so another process never takes an actively
-  # used session's lock for stale after 24 h
+  # touch the lock now and every 10 minutes, so an active session's lock never looks stale (IC-59)
   run_heartbeat(run)
   invisible(run)
 }
@@ -1189,9 +1105,8 @@ run_count_nested = function(outer, opts) {
   invisible(length(keys))
 }
 
-#' Pump the reactor until every run settled or `timeout` seconds passed
-#'
-#' As run_wait_foreground(), a nested pump runs only the FIFO tools of the awaited runs (IC-57).
+#' Pump the reactor until every run settled or `timeout` seconds passed; a nested pump runs only
+#' the awaited runs' FIFO tools (IC-57)
 #' @return `invisible(TRUE)` when all settled.
 #' @noRd
 run_wait = function(runs, timeout = Inf) {
@@ -1283,15 +1198,8 @@ run_begin_request = function(run, messages) {
 }
 
 #' Make one model request (also used for retries)
-#'
-#' provider_stream() (P05) refuses a decision-only model, a disabled provider, a request
-#' preflight that fails (IC-74: a local-only Ollama selection that cannot establish local
-#' execution, missing or stale discovery evidence) and a missing key before anything starts; that
-#' condition ends the run with status `error` (run_drive() and the retry timer hand it to
-#' run_fail()). The preflight reads the run's frozen safety snapshot (`run$opts$safety`), because
-#' the run is passed as `run`. A hook of the request's preparation (`model_select`,
-#' `before_request`, `request_params`) can abort the run (`ctx$abort()`); the request then stops
-#' at once, before it marks the run busy or starts a transfer that settlement no longer cancels.
+#' A provider_stream() refusal (the IC-74 preflight reads the run's safety snapshot) ends the run
+#' with status error; a preparation hook that aborts stops it before any transfer starts.
 #' @noRd
 run_request = function(run) {
   s = run$shell
@@ -1305,8 +1213,7 @@ run_request = function(run) {
   hit = budget_check(s, req$tokens_est)
   if (!is.null(hit) && !run_budget_extend(run, hit)) return(run_stop_budget(run, hit))
   if (ext_service_has("prefix.guard")) {
-    # gptr.check_prefix = "error" (04 section 3.1) stops the run: P07's guard signals
-    # gptr_error_internal and the run settles with status error; other failures are diagnostics
+    # gptr.check_prefix = "error" (04 section 3.1) ends the run; other failures are diagnostics
     tryCatch(ext_service_get("prefix.guard")(s, target, req$view), error = function(e) {
       if (inherits(e, "gptr_error_internal") && identical(gptr_opt("check_prefix"), "error")) {
         stop(e)
@@ -1331,9 +1238,7 @@ run_request = function(run) {
   run$busy = TRUE
   run$status = "requesting"
   run$turn = run$loop$turn
-  # IC-33: the run's gate, tool-result builder and MCP dispatcher are injected through `opts`
-  # (P05's provider_stream() reads opts$gate, opts$tool_result and opts$mcp_dispatch and falls
-  # back to a closed gate without them)
+  # IC-33: the run's gate, tool-result builder and MCP dispatcher reach the adapter via `opts`
   opts = list(signal = run$signal, state = live$adapter, memo = live$memo, run = run$id,
               session = d$id, gate = run$gate, tool_result = run$tool_result)
   if (ext_service_has("mcp.dispatch_local")) opts$mcp_dispatch = run$mcp_dispatch
@@ -1380,10 +1285,8 @@ run_on_event = function(run, ev) {
   invisible(NULL)
 }
 
-#' Emit what the streaming redactors still hold
-#'
-#' A redactor that failed closed at its holding limit (D-010) keeps failing: its held text is
-#' dropped with a diagnostic, never emitted, and the response is still recorded.
+#' Emit what the streaming redactors still hold; a redactor that failed closed (D-010) drops its
+#' held text with a diagnostic
 #' @noRd
 run_flush_deltas = function(run) {
   for (key in ls(run$rs)) {
@@ -1409,11 +1312,8 @@ run_on_done = function(run, msg) {
 }
 
 #' Account, append and hand the response to the loop (or to recovery when it failed)
-#'
-#' Usage (IC-74, 07-local-ollama.md section 5 "Missing usage remains unknown"): a usage the
-#' provider reported is recorded as reported, its unknown counts staying unknown (`NA`); only when
-#' the provider reported no token count at all is the row filled by the estimator and marked
-#' `estimated = TRUE` (04 section 4.3).
+#' Reported usage is kept as reported, unknown counts NA (IC-74); only a reply with no count at all
+#' is estimated (`estimated = TRUE`, 04 section 4.3).
 #' @noRd
 run_response = function(run, msg) {
   s = run$shell
@@ -1451,11 +1351,7 @@ run_response = function(run, msg) {
 }
 
 #' Did the provider report usage? TRUE when P05 accepts the record (usage_as()) and it holds at
-#' least one known positive token count (IC-74)
-#'
-#' A missing record, an all-unknown one (P05's `usage_as(NULL)`, which P12's normalisers give for
-#' a stream that reported nothing), only legacy zeros, or a record P05 refuses report nothing;
-#' a partial report is a report, and its unknown counts stay unknown.
+#' least one known positive token count; a partial report is a report (IC-74)
 #' @noRd
 run_usage_reported = function(usage) {
   if (!is.list(usage)) return(FALSE)
@@ -1549,8 +1445,7 @@ run_condition = function(run, msg, cls, message = NULL, ...) {
 # ---------------------------------------------------------------------------- compaction, budgets
 
 #' Threshold compaction at a request boundary (compact.should), or the pending compaction after a
-#' silent overflow; none before P07 registers the services. A router session is asked for the
-#' compaction model first (IC-69)
+#' silent overflow; a router session is asked for the compaction model first (IC-69)
 #' @noRd
 run_compact_check = function(run) {
   s = run$shell
@@ -1615,11 +1510,8 @@ run_stop_budget = function(run, hit) {
 # ---------------------------------------------------------------------------- tools
 
 #' Hand a turn's tool calls to the dispatcher: through the reactor's tool FIFO when any call is
-#' sequential (R-evaluating or file-writing tools), directly when every call is concurrent or the
-#' batch is truncated (nothing executes). The loop (and so `turn_end`) receives the tool-result
-#' messages, never the results' R values (rule R1). The FIFO item id is kept in `run$fifo` so that
-#' settlement cancels a job that has not started (it would otherwise hold the run, and the
-#' session, until the next pump).
+#' sequential, directly when all are concurrent or the batch is truncated; `run$fifo` lets
+#' settlement cancel a job that has not started
 #' @noRd
 run_tools = function(run, act) {
   calls = lapply(act$calls, function(b) call_record(run, b))
@@ -1693,13 +1585,8 @@ run_settle = function(run, reason) {
   invisible(NULL)
 }
 
-#' Apply a `ctx$set_model()` switch that no later request of the run took
-#'
-#' A switch requested inside a run waits for the next request boundary (IC-69, 04 section 10.6);
-#' when the run ends first (a call during its last reply, a `turn_end` hook, `max_turns`), the
-#' run's end is that boundary, so the switch is not lost. Whatever stopped the run, the switch is
-#' the plugin's choice for the session and applies. A failure (the provider went away since the
-#' call) is a registry diagnostic and never interrupts the settlement.
+#' Apply a `ctx$set_model()` switch that no later request of the run took: the run's end is its
+#' boundary (IC-69, 04 section 10.6); a failure is a diagnostic, never a failed settlement
 #' @noRd
 run_settle_model = function(run) {
   pm = run$pending_model
@@ -1714,14 +1601,9 @@ run_settle_model = function(run) {
   invisible(NULL)
 }
 
-#' Persist a settling run's outcome: the last text, the `returns` value and the plugin state
-#'
-#' These steps write to the store, which can fail (a full disk, a read-only file). The failure
-#' never interrupts the settlement, which would leave the session `running` and the run held by
-#' the reactor. A run without a terminal condition of its own (an `idle` run) settles with status
-#' `error` and the store's condition; a run that already ends `aborted` or with a condition keeps
-#' it, and the store failure is a registry diagnostic.
-#' @return The status to settle with.
+#' Persist a settling run's outcome (last text, `returns` value, plugin state); returns the status
+#' A store failure never interrupts settlement: an `idle` run settles `error` with its condition;
+#' an `aborted` run or one with a condition keeps it, and the failure is a diagnostic.
 #' @noRd
 run_settle_persist = function(run, status) {
   s = run$shell
@@ -1780,8 +1662,7 @@ run_abort = function(run, reason = "user") {
     msg = run_partial_message(run)
     msg$stop_reason = "aborted"
     msg$error_message = paste0("aborted (", reason, ")")
-    # a store failure here must not stop the abort (the session would stay `running`, and under
-    # the abort-only policy the store error would replace the re-signalled interrupt)
+    # a store failure must not stop the abort (the session would stay `running`)
     tryCatch(session_append(s, entry_message(msg)), error = function(e) {
       registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e))
     })
@@ -1793,11 +1674,8 @@ run_abort = function(run, reason = "user") {
   invisible(run)
 }
 
-#' The partial answer of an aborted request
-#'
-#' The accumulator's message once the stream's `start` event named the model; before it, P01's
-#' accumulator answers "unknown" for the api, provider and model, so an empty message of the run's
-#' model is built instead (as P05's stream_partial() does).
+#' The partial answer of an aborted request: the accumulator's message once the stream's `start`
+#' named the model, else an empty message of the run's model (as P05's stream_partial())
 #' @noRd
 run_partial_message = function(run) {
   msg = if (identical(run$status, "streaming")) {
@@ -1827,31 +1705,9 @@ run_heartbeat = function(run) {
 
 on_load(ext_service_set("ctx.kernel", ctx_kernel, provided_by = "P06"))
 
-#' The `ctx.kernel` service: the implementations of the `ctx` members marked P06 in contract
-#' section 10.6
-#'
-#' P02's `ctx_new()` is a thin shell whose members fetch this list at call time and call the
-#' member with the `ctx` first, then the member's own arguments, positionally (P02's
-#' `ctx_call()`); inside a handler P02 appends the handler's source (`"plugin:units"`) as the last
-#' argument of `send`, `append_entry` and `state`, which P06 receives as `extension` (`NULL`
-#' outside handlers; `ctx_ext_label()` accepts the bare name or a full source and gives
-#' `"units"`). The run a member acts on is `ctx_run()`: the run of the ctx's session whose tool is
-#' executing on the call stack, else the session's current run (`session_live(s)$run`).
-#'
-#' `send`, `set_model` and `append_entry` need the ctx of a session; a process-level ctx (P02's
-#' `ctx_new(NULL)`) gets `gptr_error_invalid_argument` (`arg = "ctx"`), and its other members read
-#' the process: no environment or state, the run id the ctx was created for (if any), the `mode`
-#' setting, the default chat model and the process usage. `set_model` refuses an unknown or
-#' decision-only model at once, also inside a run, and records the thinking level in the
-#' `model_change` entry; inside a run the switch applies at the run's next request, or when the
-#' run settles first (run_settle_model()). `append_entry` refuses data the store cannot encode and
-#' the reserved `gptr.` entry types (04 section 4.6), before anything is appended. `abort` inside
-#' the dispatcher (a tool, or a hook of a call) only raises the run's abort signal, so the call
-#' ends (a call whose `tool_call` or `permission_request` hook aborted is not executed), the
-#' remaining calls are skipped and the next step settles the run with the reason; elsewhere it
-#' aborts at once, and a request being prepared stops before its transfer starts.
-#' @return A named list of functions: `envir`, `run`, `mode`, `model`, `execute_tool`, `send`,
-#'   `set_model`, `append_entry`, `abort`, `aborted`, `update`, `usage`, `state`.
+#' The `ctx.kernel` service: the `ctx` members marked P06 in contract section 10.6
+#' P02's ctx_call() passes the ctx first and, inside handlers, the source as `extension`; members
+#' act on ctx_run(), and the session verbs refuse a process-level ctx (ctx_session()).
 #' @noRd
 ctx_kernel = function() {
   list(
@@ -1967,10 +1823,8 @@ ctx_kernel = function() {
     })
 }
 
-#' The session of a ctx, or NULL for a process-level ctx
-#'
-#' With `member` (the name of a session verb), a process-level ctx is refused with
-#' `gptr_error_invalid_argument` (`arg = "ctx"`).
+#' The session of a ctx, or NULL for a process-level ctx, which is refused when `member` names a
+#' session verb
 #' @noRd
 ctx_session = function(ctx, member = NULL) {
   s = ctx$session
@@ -1981,11 +1835,8 @@ ctx_session = function(ctx, member = NULL) {
              "invalid_argument", arg = "ctx", expected = "the ctx of a session")
 }
 
-#' The run a ctx member acts on, or NULL
-#'
-#' The run of the ctx's session whose tool is executing on this call stack (`run_current()`), even
-#' when it settled while the tool runs (an abort from elsewhere), so that a long tool polling
-#' `ctx$aborted()` sees the abort; otherwise the session's current run.
+#' The run a ctx member acts on: the session's run whose tool executes on this call stack (even
+#' settled, so `ctx$aborted()` sees an abort), else the session's current run, or NULL
 #' @noRd
 ctx_run = function(ctx) {
   s = ctx_session(ctx)
@@ -2004,9 +1855,8 @@ ctx_own_run_id = function(ctx) {
   if (is.character(id) && length(id) == 1L && !is.na(id) && nzchar(id)) id else NULL
 }
 
-#' The plugin label of a handler's extension source: `"plugin:units"` -> `"units"`,
-#' `"builtin:tools"` -> `"tools"`; `"plugin"` when no source (or an empty name) is known (P02
-#' passes nothing outside handlers)
+#' The plugin label of a handler's extension source (`"plugin:units"` -> `"units"`), or `"plugin"`
+#' when none is known
 #' @noRd
 ctx_ext_label = function(extension) {
   if (!is.character(extension) || !length(extension) || is.na(extension[[1L]])) return("plugin")
@@ -2025,12 +1875,8 @@ ctx_state_restorable = function(prior) {
 }
 
 #' The reference that switches a session to `ref` at thinking level `thinking`
-#'
-#' Resolution is pure (no discovery, no I/O; IC-74) and refuses at once what session_set_model()
-#' refuses: an unknown reference (`gptr_error_unknown_model`) and a decision-only model
-#' (`gptr_error_not_available`, D-017). A thinking level travels as the reference's `:<level>`
-#' suffix, which P05's resolver clamps to the model's levels, so the `model_change` entry records
-#' it; a router chooses each request's level itself, so its reference is kept as given.
+#' Pure resolution (IC-74) that refuses what session_set_model() refuses (D-017); the level
+#' travels as a `:<level>` suffix, except for a router, which chooses its own.
 #' @noRd
 kernel_model_ref = function(ref, thinking = NULL) {
   m = model_canonical(ref, strict = TRUE)

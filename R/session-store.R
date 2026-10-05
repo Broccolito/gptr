@@ -1,13 +1,7 @@
 # session-store.R -- the append-only Pi-v3 JSONL session store, resume and listing (P06, layer L3).
-#
-# One file per session tree: `<workspace root>/sessions/<YYYYmmddTHHMMSS>_<id>.jsonl`, a header
-# line (04 section 4.7) then entries (04 section 4.6). Every append opens the file with
-# `file(path, "ab")`, writes, flushes and closes it inside `suspendInterrupts()`, so no R
-# connection outlives a gptr call (IC-59). Opening an existing file whose last byte is not LF
-# first appends "\n" and a `gptr.recovered` entry; the reader skips unparsable lines with a
-# diagnostic and re-parents the children of missing ids. Adapted from report 02 section 5.2
-# (`session_store.R`) and G3's `gptr_session.R` store, converted to open-append-close and the
-# entry shapes of the contract.
+# One file per session tree, `<workspace>/sessions/<stamp>_<id>.jsonl`: a header (04 section 4.7),
+# then entries (4.6). Every append is open-append-close inside suspendInterrupts() (IC-59); a torn
+# last line gets "\n" and a `gptr.recovered` entry, and the reader skips unparsable lines.
 
 #' The store implementation selected by the `store` setting (default `jsonl`, IC-69)
 #' @noRd
@@ -30,10 +24,8 @@ store_ready = function(s) {
   invisible(TRUE)
 }
 
-#' Persist freshly appended entries (called by session_append())
-#'
-#' The file is created lazily: at the first entry of a session, or at the first own message of a
-#' fork. A detached copy (no live record) persists nothing until it is attached.
+#' Persist freshly appended entries (called by session_append()); the file is created lazily (a
+#' fork's at its first own message), and a detached copy persists nothing until attached
 #' @noRd
 store_persist = function(s, entries) {
   live = session_live(s)
@@ -147,11 +139,8 @@ store_recover = function(s, st) {
 }
 
 #' Size, last byte and last LF offset of a file
-#'
-#' `last_lf` is the byte offset just past the last LF (0 when the file has none), i.e. where a
-#' torn last line starts. A file that ends with LF costs one byte; otherwise the file is scanned
-#' backwards in 1 MiB windows until an LF or its start, so a torn line longer than one window is
-#' still recorded from its first byte (04 section 4.6, `gptr.recovered`).
+#' `last_lf` is the offset just past the last LF (0 when none), where a torn line starts; scanning
+#' back in 1 MiB windows records a long torn line from its first byte (04 section 4.6).
 #' @noRd
 file_tail_info = function(path, window = 1048576) {
   size = file.size(path)
@@ -294,13 +283,9 @@ builtin_store = function(gptr) {
 
 # ---------------------------------------------------------------------------- reading
 
-#' Read a session file: the header and the entries (R shape)
-#'
-#' Unparsable lines (a torn last line, a hand edit) are skipped with one diagnostic, and so is a
-#' line that parses but is not a readable entry (no string `type` or entry `id`, a message without
-#' a known role); an entry whose parent id is missing is re-parented to the nearest earlier valid
-#' entry (IC-59).
-#' @return `list(header, entries)`.
+#' Read a session file: `list(header, entries)` (R shape)
+#' Unparsable or unreadable lines are skipped with one diagnostic; an entry whose parent is
+#' missing is re-parented to the nearest earlier valid entry (IC-59).
 #' @noRd
 store_read = function(path) {
   lines = readLines(path, encoding = "UTF-8", warn = FALSE)
@@ -427,13 +412,8 @@ iso_ms = function(x) {
 # ---------------------------------------------------------------------------- rebuilding
 
 #' Rebuild a session from its file (resume)
-#'
-#' Leaf = the last entry; status `idle` when the tail is a final answer, else `interrupted`; a fork
-#' gets a fresh overlay `new.env(parent = home)` (IC-46); a file from another project or tracked by
-#' git is rebuilt with a freshly frozen prompt and its user turns marked `imported` (IC-52). The
-#' model, mode and frozen prompt come from the active path (root -> leaf), so a sibling branch
-#' never decides them. The recorded id is checked, and split brain refused, before anything is
-#' registered; an error or an interrupt after the session is created undoes its registration.
+#' Model, mode and frozen prompt come from the active path; a foreign file is refrozen and its
+#' user turns marked `imported` (IC-52); a fork gets a fresh overlay (IC-46). All or nothing.
 #' @noRd
 store_rebuild = function(path, home) {
   x = store_read(path)
@@ -445,8 +425,7 @@ store_rebuild = function(path, home) {
   }
   live_s = session_by_id(h$id)
   if (!is.null(live_s)) return(live_s)
-  # split brain is checked before anything is registered: a half-built live session would
-  # otherwise hold the recorded id, and the next gptr_resume() would return it unlocked
+  # refuse split brain before registering: a half-built session would hold the recorded id
   if (lock_held_elsewhere(path)) {
     holder = lock_holder(lock_path(path))
     gptr_abort(paste0("session ", h$id, " is attached in another R process (pid ", holder$pid,
@@ -474,9 +453,7 @@ store_rebuild = function(path, home) {
   s = session_new(rebuild_model(path_e) %||% "unknown/unknown", rebuild_mode(path_e),
                   home = if (keep_home) overlay_new(home, fork$id) else home,
                   kind = g$kind %||% "chat", opts = list(id = h$id))
-  # all or nothing: an error (a lock taken in between, an unwritable file, a malformed record) or
-  # an interrupt (Esc, Ctrl-C) before the rebuild completes is undone by on.exit(), never by an
-  # exiting tryCatch() (03 section 6.4), and the condition propagates unchanged
+  # on.exit() undoes a failed or interrupted rebuild, never an exiting tryCatch() (03 section 6.4)
   done = FALSE
   on.exit(if (!done) rebuild_undo(s, file, prev_last), add = TRUE)
   rebuild_fill(s, h, g, file, tree, path_e, foreign)
@@ -524,9 +501,8 @@ rebuild_fill = function(s, h, g, file, tree, path_e, foreign) {
   invisible(s)
 }
 
-#' The model of a rebuilt session: the last model of the given entries (store_rebuild() passes
-#' the active path, so a sibling branch never decides it). The `gptr.frozen` entry records the
-#' model of the first run, so a session stopped before its first answer keeps its model.
+#' The model of a rebuilt session: the last model the given entries (the active path) name,
+#' including the `gptr.frozen` model of a session stopped before its first answer
 #' @noRd
 rebuild_model = function(entries) {
   model = NULL
@@ -569,16 +545,9 @@ rebuild_status = function(path) {
   if (final) "idle" else "interrupted"
 }
 
-#' The frozen prompt of a rebuilt session, from the last gptr.frozen entry of the active path
-#' (NULL without one), as fork_frozen() and P07's restore read it
-#'
-#' The fields and their defaults are those P07's own restore (`prompt_frozen_restore()`) reads
-#' back: `preset`, `model`, `t0`, `t1`, `tools_json`, `tool_names`, `sections`, `human` (the
-#' audience the prompt was frozen for, else `gptr_can_prompt()`), `document` (NULL) and
-#' `reinject` (the re-injection budgets IC-71's floor check cut, read with P07's
-#' `prompt_reinject_read()`, else the full budgets). `human` and `reinject` are P07's extra keys
-#' of the entry (D-069), so a resumed or forked session renders for the frozen audience and keeps
-#' the cut.
+#' The frozen prompt of a rebuilt session from the last gptr.frozen entry of the active path, or
+#' NULL; fields and defaults as P07's prompt_frozen_restore() reads them, with `human` and
+#' `reinject` (D-069)
 #' @noRd
 rebuild_frozen = function(path) {
   for (e in rev(path)) {
@@ -611,15 +580,8 @@ rebuild_values = function(path) {
   out
 }
 
-#' The entries a session recorded itself
-#'
-#' A fork's file starts with the source path that store_fork() copied (ids kept, up to the
-#' header's `gptr.forkOf.entry`, written first by store_open()). Those requests are the source's:
-#' nothing live is shared with a fork, usage included (04 section 6.5), so they are not the
-#' fork's usage rows. Without a fork entry (not a fork, or a fork at turn 0) every entry is the
-#' session's own; a fork entry missing from the file (a skipped line) leaves the entries as they
-#' are.
-#' @param fork The header's `gptr.forkOf`, or NULL.
+#' The entries a session recorded itself: those after a fork's copied source path, whose requests
+#' are not the fork's usage (04 section 6.5); all entries without a fork entry in the file
 #' @noRd
 rebuild_own = function(entries, fork) {
   if (!is.list(fork) || !store_chr1(fork$entry)) return(entries)
@@ -627,12 +589,8 @@ rebuild_own = function(entries, fork) {
   if (is.na(at)) entries else entries[-seq_len(at)]
 }
 
-#' Usage rows of a rebuilt session, from its assistant messages
-#'
-#' The request ids are the recorded ones (`gptr.requestId`); P05's `usage_row()` gives a fresh id
-#' only to a message without one. It keeps an unrecorded count or cost unknown (`NA`, IC-74); a
-#' recorded estimate stays marked `estimated`. The start time is the entry's ISO time, else the
-#' message's epoch-ms time, else the epoch.
+#' Usage rows of a rebuilt session, from its assistant messages with their recorded request ids;
+#' an unrecorded count stays unknown (`NA`, IC-74) and a recorded estimate stays `estimated`
 #' @noRd
 rebuild_usage = function(entries, d) {
   rows = list(usage_empty())
@@ -707,8 +665,7 @@ gptr_sessions = function(project = TRUE) {
   dir = sessions_dir()
   files = if (dir.exists(dir)) list.files(dir, pattern = "[.]jsonl$",
                                           full.names = TRUE) else character()
-  # one damaged file (NUL bytes after a power loss, a file removed meanwhile) is left out, never
-  # an error for the whole listing
+  # a damaged or vanished file is left out, never an error for the whole listing
   rows = Filter(Negate(is.null), lapply(files, function(f) {
     tryCatch(session_file_summary(f), error = function(e) NULL)
   }))

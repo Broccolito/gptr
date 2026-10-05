@@ -1,11 +1,7 @@
 # session-object.R -- the S-8 session object (P06, layer L3).
-#
-# A session is a classed environment (the shell) whose only binding is `.d`, an unclassed
-# environment of serialisable fields (contract 04 section 5.1). Live resources sit in the weak
-# live registry of session-live.R. Adapted from the verified G3 prototype
-# (dev/research/G3-session-object-pipe-steering.md, `gptr_session.R`) with the corrections of its
-# verification log: no user frame is held in a list or closure, values that capture environments
-# are documented, and the store is open-append-close (IC-59).
+# A classed environment (the shell) whose only binding is `.d`, an environment of serialisable
+# fields (04 section 5.1); live resources sit in session-live.R. From the verified G3 prototype:
+# no user frame is held in a list or closure, and the store is open-append-close (IC-59).
 
 session_accessors = c("text", "value", "values", "usage", "cost", "history", "messages", "model",
                       "mode", "status", "reason", "id", "kind", "file", "turns", "envir",
@@ -13,21 +9,9 @@ session_accessors = c("text", "value", "values", "usage", "cost", "history", "me
 session_modes = c("plan", "manual", "edits", "auto")
 session_kinds = c("chat", "team", "fanout", "child", "replayed")
 
-#' Create a new idle session
-#'
-#' The prompt is frozen lazily at the first run (the `prompt.freeze` service) so that
-#' `session_start` handlers can contribute; the egress acknowledgement is not checked here.
-#' @param model chr(1): canonical `provider/id` (or `router:<name>`) of the next request.
-#' @param mode One of `plan`, `manual`, `edits`, `auto`.
-#' @param home The workspace environment or `NULL`; kept only when it is not a function frame (rule
-#'   R2).
-#' @param kind One of `chat`, `team`, `fanout`, `child`, `replayed`.
-#' @param parent A parent `gptr_session` (children), or `NULL`.
-#' @param preset chr(1) or `NULL` (the `preset` setting, default `"standard"`).
-#' @param opts Named list: `id` (adopt a recorded id; it must pass `check_session_id()`), `name`
-#'   (the name under the parent's
-#'   `children`), `thinking`, `max_turns`.
-#' @return A new idle `gptr_session`.
+#' Create a new idle session; the prompt is frozen lazily at the first run (`prompt.freeze`)
+#' `home` is kept only when it is not a function frame (rule R2); `opts`: `id` (an adopted id),
+#' `name` (under the parent's `children`), `thinking`, `max_turns`.
 #' @noRd
 session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL,
                        opts = list()) {
@@ -38,8 +22,7 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
   check_class(parent, "gptr_session", "parent", null = TRUE)
   check_string(preset, "preset", null = TRUE)
   check_list(opts, "opts")
-  # an adopted id (store_rebuild(), replay) comes from a file or a document: it is validated here,
-  # where every recorded id enters, before it names a registry entry or a session file
+  # an adopted id comes from a file or a document: validate it before it names anything
   if (!is.null(opts$id)) check_session_id(opts$id, "opts$id")
   # a safe point: the shutdowns of sessions that collection deferred are dispatched (D-085)
   ev_drain()
@@ -67,8 +50,7 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
   d$mode = mode
   d$preset = preset %||% setting_get("preset", default = "standard")
   d$rules = list(allow = character(), ask = character(), deny = character())
-  # NULL until the first run freezes the prompt: P07's prompt_freeze() freezes only when
-  # `.d$frozen` is NULL, and P06 tests `length(d$frozen)`
+  # NULL until the first run freezes the prompt (P07 freezes only when it is NULL)
   d$frozen = NULL
   d$entries = list()
   d$index = new.env(parent = emptyenv())
@@ -97,13 +79,11 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
   d$exports = character()
   d$last_rewind = NULL
   d$editor_text = NULL
-  # internal fields outside the section 5.1 list (see the plan's self-review): the unsignalled
-  # condition of the last terminal status, the token ledger and the estimator state
+  # internal fields outside the section 5.1 list
   d$condition = NULL
   d$ledger = ledger_empty()
   d$estimator = NULL
-  # TRUE for a foreign file rebuilt by store_rebuild() (IC-52): the next freeze passes
-  # `refreeze = TRUE` to prompt.freeze so that P07 ignores the file's gptr.frozen entry
+  # TRUE for a foreign file (IC-52): the next freeze ignores its gptr.frozen entry
   d$refreeze = FALSE
   live_new(s, home)
   if (!is.null(pd)) {
@@ -117,12 +97,8 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
 }
 
 #' Check an adopted session id: one string of 1-64 ASCII letters, digits and `-`
-#'
-#' The id names the session file `<stamp>_<id>.jsonl`, its lock directory and the `store_find()`
-#' pattern, so path separators, dots and regex characters are refused, and so is `_`, the
-#' separator between the stamp and the id. IC-20 ids (`s` + 10 hex) and the uuids of foreign Pi
-#' files pass.
-#' @return `x`, invisibly; otherwise `gptr_error_invalid_argument`.
+#' The id names a file `<stamp>_<id>.jsonl`, its lock and a store_find() pattern, so separators,
+#' dots, regex characters and `_` are refused; IC-20 ids and Pi uuids pass.
 #' @noRd
 check_session_id = function(x, arg) {
   check_string(x, arg)
@@ -132,18 +108,14 @@ check_session_id = function(x, arg) {
   invisible(x)
 }
 
-#' Can a value be a session id? One string of 1-64 ASCII letters, digits and `-` (the rule of
-#' check_session_id(), without signalling: store_rebuild() and store_find() test recorded and
-#' user-given ids with it)
+#' Can a value be a session id? The rule of check_session_id(), without signalling
 #' @noRd
 session_id_ok = function(x) {
   is.character(x) && length(x) == 1L && !is.na(x) && grepl("^[A-Za-z0-9-]{1,64}$", x)
 }
 
 #' Canonical model reference; lenient (an unknown model fails at the first request, not here)
-#'
-#' Pure resolution (no discovery, no I/O; IC-74). `type` is the resolved model type (`"chat"`,
-#' `"classifier"`, ...) or `NULL` when it is not known here (a router, an unresolved reference).
+#' Pure resolution (IC-74); `type` is NULL when not known here (a router, an unresolved reference).
 #' @noRd
 model_canonical = function(model, strict = FALSE) {
   if (startsWith(model, "router:")) return(list(ref = model, thinking = NULL, type = NULL))
@@ -169,10 +141,8 @@ iso_time = function(t = as.numeric(Sys.time())) {
 }
 
 #' Entry constructors (R shape, 04 section 4.6); id, parent and time are set by session_append()
-#'
-#' An operator message is a `custom_message` entry with `custom_type = "gptr.operator"`: P05's
-#' `project_messages()` projects exactly those entries as operator messages (steering relays,
-#' mode notes), so the field is required in memory as well as in the file.
+#' An operator message is a `gptr.operator` custom_message, which P05's project_messages()
+#' projects as an operator message.
 #' @noRd
 entry_message = function(msg) {
   if (identical(msg$role, "operator")) {
@@ -197,13 +167,9 @@ entry_model_change = function(ref, thinking = NULL, reason = "user") {
        gptr = drop_null(list(ref = ref, thinking = thinking, reason = reason)))
 }
 
-#' Append an entry to the transcript and the store
-#'
-#' The entry is redacted with the `persist` profile at ingress, gets an 8-hex id, the current leaf
-#' as parent and a timestamp, and becomes the leaf. Opening the store, the in-memory update and the
-#' file append run inside `suspendInterrupts()`.
-#' @param entry An entry in R shape (`entry_message()`, `entry_custom()`, ...).
-#' @return The entry id, invisibly.
+#' Append an entry to the transcript and the store; returns the entry id invisibly
+#' Redacted (`persist`) at ingress; opening the store, the in-memory update and the file append
+#' are one uninterruptible step.
 #' @noRd
 session_append = function(s, entry) {
   d = session_data(s)
@@ -424,10 +390,8 @@ session_text = function(s) {
   d$last_text
 }
 
-#' `$history`: one row per message on the active path
-#'
-#' An assistant message's `tokens` is its reported total (unknown, `NA`, when the provider
-#' reported none, IC-74); other messages are estimated.
+#' `$history`: one row per message on the active path; an assistant's `tokens` is its reported
+#' total (`NA` when unreported, IC-74), other messages are estimated
 #' @noRd
 session_history = function(s) {
   d = session_data(s)
@@ -474,9 +438,8 @@ print.gptr_session = function(x, ...) {
   invisible(x)
 }
 
-#' The footer line: status . model . turns . tokens . cost . id
-#'
-#' Unknown tokens and costs print as `unknown tokens` and `unknown cost` (IC-74, D-021).
+#' The footer line: status . model . turns . tokens . cost . id (unknown counts print as unknown,
+#' IC-74, D-021)
 #' @noRd
 session_footer = function(s) {
   d = session_data(s)
@@ -539,15 +502,8 @@ str.gptr_session = function(object, ...) {
 # ---------------------------------------------------------------------------- the value policy
 
 #' Designate a value of the session (the section 5.1 value policy of 03)
-#'
-#' A name bound in the kept home (or globalenv) below `gptr.value_copy_max` is deep-copied; a
-#' larger one is held by name and address only (no reference); anything else is boxed. Appends a
-#' `gptr.value` entry holding metadata, never the value (rule R1).
-#' @param label chr(1): the expression label (the name of an anonymous value).
-#' @param value The value.
-#' @param name chr(1) or `NULL`: the binding name when the value is bound.
-#' @param forced_home The environment where `name` is bound when it is not the kept home.
-#' @return `invisible(NULL)`.
+#' A name bound in the kept home (or globalenv) is deep-copied below `gptr.value_copy_max`, else
+#' held by name and address; anything else is boxed. The entry holds metadata only (rule R1).
 #' @noRd
 session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
   check_string(label, "label")
@@ -643,9 +599,8 @@ value_resolve = function(s, v, latest) {
   obj
 }
 
-#' The environment binding `name`: the home, then through fork overlays (environments with the
-#' `gptr_overlay` attribute) to the first non-overlay environment, then globalenv as the last
-#' resort (a `forced_home = globalenv()` binding); no other parent is searched (04 section 5.1)
+#' The environment binding `name`: the home, then through fork overlays to the first non-overlay
+#' environment, then globalenv as the last resort; no other parent is searched (04 section 5.1)
 #' @noRd
 binding_env = function(name, env) {
   while (!is.null(env)) {
@@ -673,11 +628,8 @@ session_values_df = function(s) {
 # ---------------------------------------------------------------------------- verbs
 
 #' Switch the session's model: resolve, append `model_change`, emit `model_select`
-#'
-#' Resolution is pure (no discovery, no I/O; IC-74): the request preflight runs at the next
-#' request, in `provider_stream()`. A decision-only (classifier) model answers typed System One
-#' questions and cannot hold a conversation, so it is refused before anything is recorded, with
-#' the condition of `provider_stream()`'s refusal (`gptr_error_not_available`, D-017).
+#' Pure resolution (IC-74; the preflight runs at the next request); a decision-only model is
+#' refused before anything is recorded (`gptr_error_not_available`, D-017).
 #' @noRd
 session_set_model = function(s, ref, reason = "user") {
   check_class(s, "gptr_session", "s")
@@ -695,11 +647,8 @@ session_set_model = function(s, ref, reason = "user") {
   invisible(s)
 }
 
-#' Switch the session's permission mode
-#'
-#' Appends `gptr.mode_change`. On an idle session the next user message carries the new `<mode>`
-#' block (P07's turn blocks); on a running session the run's mode changes at once and an operator
-#' message carrying the `<mode>` block is sent after the current tool results.
+#' Switch the session's permission mode (`gptr.mode_change`); a running run changes mode at once
+#' and gets an operator `<mode>` message after the current tool results
 #' @noRd
 session_set_mode = function(s, mode, source = "user") {
   check_class(s, "gptr_session", "s")
@@ -716,12 +665,8 @@ session_set_mode = function(s, mode, source = "user") {
   invisible(s)
 }
 
-#' Apply a session's new mode to its running run
-#'
-#' As at the run's start (`run_new()`): a nested run takes the stricter of its outer run's mode and
-#' the new one (IC-53 item 4), and the run evaluates `r` in a scratch overlay of its home exactly
-#' while its mode is `plan` (IC-15). When the run's mode changes, an operator `mode` message is
-#' queued for delivery after the current tool results.
+#' Apply a session's new mode to its running run, as run_new(): a nested run takes the stricter
+#' mode (IC-53 item 4) and `r` uses a scratch overlay exactly while in `plan` (IC-15)
 #' @noRd
 mode_apply_run = function(s, run, mode) {
   eff = if (is.null(run$outer)) mode else run_mode_tighter(run$outer$mode, mode)
@@ -738,12 +683,8 @@ mode_apply_run = function(s, run, mode) {
 }
 
 #' The `<mode>` block of a mode: the registered `mode` context block (P07), else a one-line notice
-#'
-#' The block's text is operator content, so only a record of rank 3 or more (user, plugin,
-#' built-in: the records that may hold operator authority, IC-52) may supply it; a session or
-#' project record named `mode` gives the notice. `provide()` sees only the session's ctx, so a
-#' body whose `attrs$name` names another mode (P07's provider describes the session's mode, which
-#' a nested run's effective mode may tighten, IC-53 item 4) also gives the notice.
+#' Only a record of rank 3 or more may supply operator text (IC-52), and only for this mode (a
+#' nested run's mode may be stricter, IC-53 item 4).
 #' @noRd
 mode_block_text = function(s, mode) {
   d = session_data(s)
@@ -775,15 +716,8 @@ mode_block_spec = function(sid) {
 }
 
 #' Enqueue a steer or a follow-up: the queue behind gptr_steer(), the pipe and ctx$send() (IC-55)
-#'
-#' Model code of the same session tree (an `r` evaluation of a run of the tree) cannot enqueue on
-#' a session of the tree: `gptr_error_permission`. The one exception is the first input of a
-#' session that has never run, queued as a follow-up (the prompt of a `.run = FALSE` call, P08
-#' ambiguity 5): no entries, no live run and an empty queue. A steer there would become an operator
-#' relay of model text at the session's first run (IC-55), so it is refused. The attachments are
-#' checked before the item enters the queue (`queue_blocks_check()`). The text and the attachments
-#' are redacted with the `context` profile at ingress.
-#' @return `s`, invisibly.
+#' Model code may not enqueue on its own session tree, except the first follow-up of a session
+#' that never ran (P08 ambiguity 5); text and blocks are redacted (`context`) at ingress.
 #' @noRd
 session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_user",
                            blocks = list()) {
@@ -812,14 +746,8 @@ session_enqueue = function(s, text, as = c("steer", "follow_up"), source = "api_
   invisible(s)
 }
 
-#' Check the attachments of a queue item before it enters the queue
-#'
-#' Every item is delivered as a user-role message, except a steer from a user source, which
-#' becomes an operator relay whose content is text only (04 section 4.2, IC-55). The loop takes
-#' items off the queue destructively (`queue_item_message()` runs after the dequeue), so a block it
-#' could not deliver is refused here, while the caller can still act on it: `blocks` is an unnamed
-#' list of complete user content blocks (text, image or context), text blocks only for a steer
-#' from a user source. Otherwise `gptr_error_invalid_argument` with `arg = "blocks"`.
+#' Check the attachments of a queue item before it enters the queue (the loop dequeues before it
+#' builds the message): complete user blocks, text only for a user-source steer (IC-55)
 #' @noRd
 queue_blocks_check = function(blocks, as, source) {
   check_list(blocks, "blocks")
@@ -832,12 +760,7 @@ queue_blocks_check = function(blocks, as, source) {
     "an unnamed list of text, image or context blocks"
   }
   if (!is.null(names(blocks))) arg_abort(blocks, "blocks", expected)
-  is_string = function(x) is.character(x) && length(x) == 1L && !is.na(x)
-  for (b in blocks) {
-    ok = is.list(b) && is_string(b[["type"]]) && b[["type"]] %in% types &&
-      all(vapply(msg_block_fields[[b[["type"]]]], function(f) is_string(b[[f]]), NA))
-    if (!ok) arg_abort(blocks, "blocks", expected)
-  }
+  for (b in blocks) if (!block_ok(b, types)) arg_abort(blocks, "blocks", expected)
   invisible(blocks)
 }
 
@@ -918,8 +841,7 @@ gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   f = session_new(d$model, d$mode, home = new_home, kind = "chat", preset = d$preset,
                   opts = list(id = id_new("s", 10L), thinking = d$thinking))
   fd = session_data(f)
-  # registered once the fork exists, so that its finalizer (session_shutdown) drops the copies
-  # even when a later step fails
+  # registered once the fork exists, so its finalizer drops the copies if a later step fails
   fork_copy_specs(d$id, fd$id)
   store_fork(s, cut$entry, f)
   # the last entry the fork copied: the cut itself unless it is a label, which store_fork() drops
@@ -998,13 +920,9 @@ fork_id_refuse = function(d, at) {
              expected = "an entry id of this session")
 }
 
-#' The frozen prompt a fork shares: the source's, when the copied path holds the `gptr.frozen`
-#' entry it came from (the last one on the source path); otherwise NULL, and the fork freezes at
-#' its first run, so its file starts with its own `gptr.frozen` (04 section 11.4) and a resume
-#' reads back the prompt its turns ran under. A cut that copies no such entry is `at = 0`, or
-#' `NULL` on a source with no closed boundary yet (still in, or failed in, its first turn).
-#' @param d The source's `.d`.
-#' @param fd The fork's `.d`, after store_fork().
+#' The frozen prompt a fork shares: the source's when the copied path holds its `gptr.frozen`
+#' entry, else NULL, so the fork freezes at its first run and its file starts with its own
+#' `gptr.frozen` (04 section 11.4)
 #' @noRd
 fork_frozen = function(d, fd) {
   if (!length(d$frozen)) return(NULL)
@@ -1017,12 +935,8 @@ fork_frozen = function(d, fd) {
   NULL
 }
 
-#' The value records a fork keeps: those of the turns it copies (`turn <= cut turn`), less those
-#' whose `gptr.value` entries are on the source path but not on the copied one (recorded after a
-#' cut inside a turn), so the fork's values are the ones its own entries record
-#' @param d The source's `.d`.
-#' @param path The fork's copied path.
-#' @param turn The cut's turn.
+#' The value records a fork keeps: those of the turns it copies, less those whose `gptr.value`
+#' entries the copied path lacks (recorded after a cut inside a turn)
 #' @noRd
 fork_values = function(d, path, turn) {
   vals = Filter(function(v) as.integer(v$turn) <= turn, d$values)
@@ -1042,15 +956,9 @@ fork_values = function(d, path, turn) {
   vals
 }
 
-#' Closed boundaries of a path: message positions where no tool call awaits its result
-#'
-#' A boundary extends over the entries that directly follow it and carry no message (a turn's
-#' `gptr.value`, a model or mode change made after the answer, a compaction), so a cut at the end
-#' of a turn keeps the entries that close the turn and the file of a fork records them. A label
-#' extends it too; store_fork() drops it, and the fork's `fork_of$entry` names the last entry it
-#' copied. Operator messages (`custom_message`) are relays for the next step and never extend a
-#' boundary.
-#' @return A data frame `index`, `turn`.
+#' Closed boundaries of a path (`index`, `turn`): message positions where no tool call awaits its
+#' result; a boundary extends over the non-message entries that directly follow it (never an
+#' operator message), so a cut at the end of a turn keeps the entries that close it
 #' @noRd
 fork_boundaries = function(path) {
   open = 0L
@@ -1082,12 +990,8 @@ fork_boundaries = function(path) {
   data.frame(index = idx, turn = trn)
 }
 
-#' Model code may not reach a session other than the running one through gptr's control exports
-#' (IC-53 item 3) unless the dispatcher approved exactly this call through an `ask_human`: a
-#' one-shot token named after the export in `run$signal$control` (granted by
-#' `perm_grant_control()`, the slot P08's `control_check()` also consumes; cleared when the call
-#' ends). Not named control_check(), which is P08's.
-#' @param what The export's name (the token it consumes).
+#' Model code may reach another session through gptr's control exports only with the one-shot
+#' token of an approved `ask_human` call (IC-53 item 3; perm_grant_control())
 #' @param s The target session, or NULL when unknown (always another session).
 #' @noRd
 session_control_check = function(what, s = NULL) {
@@ -1107,8 +1011,7 @@ session_control_check = function(what, s = NULL) {
              session = run$session)
 }
 
-# ---------------------------------------------------------------------------- the replay table
-# (IC-46)
+# ---------------------------------------------------------------------- the replay table (IC-46)
 
 #' Bind a replayed session to its document block id (gptr-created sessions only)
 #' @return `s`, invisibly.
@@ -1136,19 +1039,8 @@ replay_key = function(block, child = NULL) if (is.null(child)) block else paste0
 # ---------------------------------------------------------------------------- replay (IC-46)
 
 #' Advance a piped session in place for a fresh recorded block (IC-46)
-#'
-#' Appends a `gptr.replay` entry, adds the block to `seen` (a block already seen changes
-#' nothing), counts one turn, designates the header's `value=` name under the value policy and
-#' takes `last_text` from the cached answer. The same object is returned, so
-#' `identical(chain_result, first_result)` holds along a replayed pipe chain.
-#' @param s The piped `gptr_session`.
-#' @param block chr(1): the block id.
-#' @param header Named list: the parsed block header (04 section 11.5: `model`, `session`,
-#'   `turn`, `value`, `fork`, ...), plus `doc` (the document path) and `mode` (the replay mode of
-#'   P15) when the caller knows them. `session` must be a session id, `value` one name and
-#'   `model` a `provider/id` (replay_header_check()).
-#' @param text chr(1) or `NULL`: the cached answer text (the S2 cache of P15).
-#' @return `s`.
+#' Records the block (replay_mark()) and returns the same object, so a replayed pipe chain keeps
+#' `identical(chain_result, first_result)`.
 #' @noRd
 session_replay_apply = function(s, block, header, text = NULL) {
   check_class(s, "gptr_session", "s")
@@ -1160,19 +1052,8 @@ session_replay_apply = function(s, block, header, text = NULL) {
 }
 
 #' The session a fresh block replays into when no session is piped (IC-46)
-#'
-#' The live session holding the header's `session=` id when one exists in this process (advanced
-#' with `session_replay_apply()`); otherwise a `replayed` session that adopts the recorded id:
-#' rebuilt from its JSONL with the leaf moved back to the end of the recorded turn, or, without a
-#' file, reconstructed from the document (`history_source = "reconstructed"`).
-#' @param block chr(1): the block id.
-#' @param header Named list: the parsed block header (see `session_replay_apply()`).
-#' @param envir The environment the document is sourced into (the rebuilt session's home; a
-#'   rebuilt fork gets a fresh overlay of it).
-#' @param doc Named list from the document or `NULL` (IC-46 calls the function without it):
-#'   `path`, `format`, `template` (the prompt template), `code` (chr: the recorded code lines),
-#'   `output` (chr: the `#>` lines without their prefix), `text` (the cached answer or `NULL`).
-#' @return A live `gptr_session`.
+#' The live session of the header's id, else a `replayed` session adopting it: rebuilt from its
+#' JSONL (leaf at the recorded turn) or reconstructed from `doc` (replay_doc_check()).
 #' @noRd
 session_replay_new = function(block, header, envir, doc = NULL) {
   check_string(block, "block")
@@ -1184,9 +1065,7 @@ session_replay_new = function(block, header, envir, doc = NULL) {
   if (!is.null(live_s)) return(session_replay_apply(live_s, block, header, doc$text))
   path = if (is.null(id)) NULL else store_find(id)
   if (!is.null(path)) return(replay_adopt(replay_rebuild(path, header, envir), block, header, doc))
-  # all or nothing, as store_rebuild(): an error or an interrupt (Esc, Ctrl-C) after the session
-  # is created is undone by on.exit(), so the recorded id never holds a half-built session, in
-  # this process or, through its file, in a later one; the condition propagates unchanged
+  # all or nothing, as store_rebuild(): on.exit() undoes a failed or interrupted reconstruction
   prev_last = the$last
   s = replay_session_new(header, envir)
   done = FALSE
@@ -1214,9 +1093,7 @@ replay_adopt = function(s, block, header, doc) {
 }
 
 #' Check the header fields that name things before anything is looked up or recorded: `session`
-#' names a registry entry and a session file (the check_session_id() rule), `value` a binding,
-#' `model` the provider and model id a reconstruction records (04 section 11.5: `provider/id`;
-#' a name without `/` is kept as given, like model_canonical())
+#' (check_session_id()), `value` (one name) and `model` (`provider/id`, 04 section 11.5)
 #' @noRd
 replay_header_check = function(header) {
   check_list(header, "header")
@@ -1256,9 +1133,8 @@ replay_turn = function(x) {
   as.integer(n)
 }
 
-#' Record a replayed block on a session: `gptr.replay`, `seen`, the turn, the value, `last_text`
-#' @param advance `TRUE` counts one more turn (a piped session); `FALSE` keeps the turn of a
-#'   rebuilt or reconstructed transcript.
+#' Record a replayed block on a session: `gptr.replay`, `seen`, the turn (one more when
+#' `advance`), the value, `last_text`
 #' @noRd
 replay_mark = function(s, block, header, text, advance) {
   d = session_data(s)
@@ -1294,11 +1170,7 @@ replay_value = function(s, name) {
 }
 
 #' Rebuild a replayed session from its JSONL, the leaf moved back to the end of the recorded turn
-#'
-#' Every field that store_rebuild() derives from the active path is derived again from the cut
-#' path: the turn, the last answer, the values, the history source, and the model, mode and
-#' frozen prompt (as store_rebuild() reads them, so a model, mode or refreeze of a later turn
-#' never decides them).
+#' Every field store_rebuild() derives from the active path is derived again from the cut path.
 #' @noRd
 replay_rebuild = function(path, header, envir) {
   s = store_rebuild(path, envir)
@@ -1322,10 +1194,8 @@ replay_rebuild = function(path, header, envir) {
   s
 }
 
-#' The `replayed` session a reconstruction fills: the recorded id (a fresh one without it), the
-#' header model (`unknown/unknown` without it), and a fresh overlay of `envir` for a fork block
-#' (`fork=` header), like a fork rebuilt from its JSONL (IC-46), so its objects never land in the
-#' document's environment
+#' The `replayed` session a reconstruction fills: the recorded id and model, with a fresh overlay
+#' of `envir` for a fork block (IC-46), so its objects never land in the document's environment
 #' @noRd
 replay_session_new = function(header, envir) {
   fork = header$fork
@@ -1335,10 +1205,8 @@ replay_session_new = function(header, envir) {
               opts = list(id = header$session %||% id_new("s", 10L)))
 }
 
-#' Undo a reconstruction that did not complete (not interruptible itself): forget the live
-#' session, restore the last session, and release the lock and remove the file this call created,
-#' so that no later process rebuilds a half-built transcript from it (a file that already existed
-#' when the store opened is kept)
+#' Undo a reconstruction that did not complete (not interruptible): forget the session, restore
+#' the last one, release the lock and remove a file this call created
 #' @noRd
 replay_undo = function(s, prev_last) {
   suspendInterrupts({
@@ -1354,10 +1222,8 @@ replay_undo = function(s, prev_last) {
   invisible(NULL)
 }
 
-#' Reconstruct a replayed session's transcript from its document block: the template as the user
-#' message, the recorded code as the assistant's `r` call, the `#>` lines as its result, then the
-#' cached answer
-#' @param s The fresh session of replay_session_new().
+#' Reconstruct a replayed session's transcript from its document block: the template, the code as
+#' an `r` call, the `#>` lines as its result, then the cached answer
 #' @noRd
 replay_reconstruct = function(s, header, doc) {
   d = session_data(s)
@@ -1397,15 +1263,13 @@ replay_notice = function(s) {
   invisible(NULL)
 }
 
-#' The history source of a session rebuilt from its file (04 section 5.1): `reconstructed` when
-#' the path holds a reconstruction from a document (IC-46), so that the notice of a later live
-#' run is given in a later process too; otherwise `store`
+#' The history source of a rebuilt session (04 section 5.1): `reconstructed` when the path holds
+#' a document reconstruction (IC-46), so a later process gives the notice too; else `store`
 #' @noRd
 history_source_of = function(path) if (path_reconstructed(path)) "reconstructed" else "store"
 
-#' Does a path hold a transcript reconstructed from a document? Only replay_reconstruct() writes
-#' a user message with source `replay` (a foreign rebuild marks it `imported`) or an assistant
-#' message with api `replay`
+#' Does a path hold a transcript reconstructed from a document? Only replay_reconstruct() writes a
+#' user message with source `replay` or an assistant message with api `replay`
 #' @noRd
 path_reconstructed = function(path) {
   for (e in path) {
