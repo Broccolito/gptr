@@ -11,24 +11,6 @@ write_skill = function(root, dir, lines) {
   file.path(d, "SKILL.md")
 }
 
-# TEMPORARY (D-074). P08's trust.get service (IC-33) does not exist yet: until it does, answer
-# it for the calling test from the trust record local_project(trust = TRUE) writes; P08's own
-# service wins once it is registered. P08 Task 2 MUST delete this helper and its one call.
-local_trust_record = function(.env = parent.frame()) {
-  if (ext_service_has("trust.get")) return(invisible(NULL))
-  old = the$services[["trust.get"]]
-  withr::defer({
-    the$services[["trust.get"]] = old
-  }, envir = .env)
-  ext_service_set("trust.get", function(path = getwd()) {
-    file = file.path(gptr_user_dir("config"), "trust.json")
-    if (!file.exists(file)) return(FALSE)
-    record = json_decode(readLines(file, encoding = "UTF-8"))
-    isTRUE(record$projects[[path_key(path_norm(path))]]$trusted)
-  }, provided_by = "test")
-  invisible(NULL)
-}
-
 test_that("skill_parse builds a skill spec from SKILL.md", {
   root = withr::local_tempdir()
   md = skill_md("pdf-tools", "Extract text from PDF files.",
@@ -120,7 +102,6 @@ test_that("skill_walk skips dot-directories, node_modules and files inside a ski
 
 test_that("gptr_skills lists project and user skills; the project wins a name", {
   p = local_project(trust = TRUE)
-  local_trust_record()
   write_skill(file.path(p, ".gptr", "skills"), "shared", skill_md("shared", "Project version."))
   write_skill(file.path(p, ".claude", "skills"), "proj-only", skill_md("proj-only", "Project."))
   user_root = file.path(gptr_user_dir("config"), "skills")

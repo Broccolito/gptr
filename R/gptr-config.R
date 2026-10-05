@@ -1191,14 +1191,25 @@ egress_ollama = function(p) {
   catalog_ollama_provider(p) || identical(p[["api"]], "ollama-system-one")
 }
 
+#' The protected safety record an egress decision reads unless its caller passes one: that of
+#' the run executing on this call stack (run_current()), an empty record for a run that holds
+#' none (it fails closed: it cannot ask), NULL outside a run. A caller serving a run that is not
+#' on the stack (P08's router.call, which P06 calls between turns) passes that run's record, the
+#' one P05's preflight reads for the same request (07-local-ollama.md section 5)
+#' @noRd
+egress_safety = function() {
+  run = run_current()
+  if (is.null(run)) return(NULL)
+  run[["opts"]][["safety"]] %||% list()
+}
+
 #' Is local-only Ollama inference enforced for the next request? Only then does P05's preflight
 #' refuse a cloud model or a remote marker behind a loopback server before anything is sent. It
-#' is, unless the protected user/session control (settings_local_only()) or, inside a run, the
-#' run's frozen safety record relaxes it.
+#' is, unless the protected user/session control (settings_local_only()) or the frozen safety
+#' record of the run the request serves (`safety`, egress_safety()) relaxes it: an exemption
+#' needs both, so a request is never judged under the weaker of two snapshots.
 #' @noRd
-egress_local_only = function() {
-  run = run_current()
-  safety = if (is.null(run)) NULL else run[["opts"]][["safety"]]
+egress_local_only = function(safety = egress_safety()) {
   settings_local_only("ollama") && catalog_local_only(safety)
 }
 
@@ -1208,9 +1219,10 @@ egress_local_only = function() {
 #' endpoint (P05's catalog_endpoint(): settings > record > environment) is a loopback address,
 #' and for Ollama routes only while local-only inference is enforced (IC-74, D-020: the `local`
 #' hint and a loopback URL alone exempt neither a remote override nor a cloud model). Task 9's
-#' guards read the same answer for the session's own provider record.
+#' guards read the same answer for the session's own provider record, under the safety record
+#' (`safety`, egress_safety()) of the run the request serves.
 #' @noRd
-egress_state = function(p) {
+egress_state = function(p, safety = egress_safety()) {
   if (!is.list(p)) return(list(exempt = FALSE, origin = NULL, why = NULL))
   ep = catalog_endpoint(p)
   out = list(exempt = FALSE, origin = ep[["origin"]], why = NULL)
@@ -1221,7 +1233,7 @@ egress_state = function(p) {
       "It names no HTTP endpoint that shows it runs on this machine."
     } else if (!isTRUE(ep[["loopback"]])) {
       "Its endpoint is not a loopback address, so requests leave this machine."
-    } else if (egress_ollama(p) && !egress_local_only()) {
+    } else if (egress_ollama(p) && !egress_local_only(safety)) {
       paste0("Ollama's local-only inference is turned off, so a request through this server ",
              "may reach a cloud model.")
     }
@@ -1230,15 +1242,14 @@ egress_state = function(p) {
   out
 }
 
-#' Can the egress question be asked: someone can answer (IC-43) and, inside a run, the run's
-#' safety record (a list or an environment) says `can_prompt = TRUE`. Like P06's gate this fails
-#' closed: a background run, a child without a human, or a snapshot that does not say it can ask
-#' never asks (IC-53 item 6: the acknowledgement is an ask_human).
+#' Can the egress question be asked: someone can answer (IC-43) and, for a request of a run,
+#' that run's safety record (`safety`, a list or an environment; egress_safety()) says
+#' `can_prompt = TRUE`. Like P06's gate this fails closed: a background run, a child without a
+#' human, or a snapshot that does not say it can ask never asks (IC-53 item 6: the
+#' acknowledgement is an ask_human).
 #' @noRd
-egress_can_ask = function() {
-  run = run_current()
-  if (!is.null(run)) {
-    safety = run[["opts"]][["safety"]]
+egress_can_ask = function(safety = egress_safety()) {
+  if (!is.null(safety)) {
     ok = if (is.environment(safety)) {
       get0("can_prompt", envir = safety, inherits = FALSE)
     } else if (is.list(safety)) {
@@ -1289,19 +1300,31 @@ egress_check = function(provider_id) {
   check_string(provider_id, "provider_id")
   rec = provider_get(provider_id)
   pid = if (is.null(rec)) provider_id else rec[["id"]] %||% rec[["name"]] %||% provider_id
+  egress_require(pid, egress_state(rec))
+}
+
+#' egress_check() for a provider record the caller already holds: `st` is egress_state() of the
+#' record the request will use. Task 9's guards pass the session's own record (a rank-0 spec
+#' included), which can differ from the process-wide record of the same id that egress_check()
+#' reads: a call-level `lmstudio` spec at a LAN address is not the built-in loopback one, so the
+#' global record must never exempt it (IC-29, IC-74; D-099, D-114). `safety` is the record of
+#' the run the request serves (egress_safety()), so whether it may ask is that run's answer.
+#' @noRd
+egress_require = function(pid, st, safety = egress_safety()) {
   # the id is pasted into the hint the user is told to run, so it must be a plain provider id
-  if (!grepl("^[a-z0-9][a-z0-9-]*\\z", pid, perl = TRUE)) {
+  plain = is.character(pid) && length(pid) == 1L && !is.na(pid) &&
+    grepl("^[a-z0-9][a-z0-9-]*\\z", pid, perl = TRUE)
+  if (!plain) {
     gptr_abort("`provider_id` must be a provider id such as \"anthropic\".", "invalid_argument",
                arg = "provider_id", expected = "a provider id (^[a-z0-9][a-z0-9-]*$)")
   }
-  st = egress_state(rec)
-  if (st$exempt) return(invisible(TRUE))
+  if (isTRUE(st$exempt)) return(invisible(TRUE))
   acks = settings_get("egress")
   if (is.list(acks) && identical(acks[[pid]], "ack")) return(invisible(TRUE))
   # gptr_config() merges top-level keys only, so the hint keeps the acknowledgements already given
   how = paste0("gptr_config(egress = utils::modifyList(gptr_config()$egress, list(`", pid,
                "` = \"ack\")), .scope = \"user\")")
-  if (egress_can_ask() && isTRUE(gptr_confirm(egress_question(pid, st$origin)))) {
+  if (egress_can_ask(safety) && isTRUE(gptr_confirm(egress_question(pid, st$origin)))) {
     path = egress_record(pid)
     gptr_inform(paste0("Recorded that automatic context may go to ", pid, " (", path, ")."),
                 "egress_ack")
