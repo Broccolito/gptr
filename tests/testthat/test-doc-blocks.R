@@ -490,6 +490,40 @@ test_that("recorded code drops gptr_return() and record = FALSE members and rewr
   expect_identical(as.character(doc_code_clean(c("", "x = 1", ""))), "x = 1")
 })
 
+test_that("the scanner builds gptr::gptr and gptr::gptr_return without a literal gptr:: (FIX-2)", {
+  # R CMD check reads a literal `gptr::name` in package code, quoted or not, as a use of an export
+  # and warns while P08's gptr() and gptr_return() are unexported (CI Task CI-4). doc_drop_expr()
+  # compares with heads built by call(), which must stay identical to the quoted calls.
+  expect_identical(eval_guard_ns_call("gptr_return"), quote(gptr::gptr_return))
+  expect_identical(eval_guard_ns_call("gptr"), quote(gptr::gptr))
+  ns_refs = function(e) {
+    if (is.function(e)) return(c(ns_refs(formals(e)), ns_refs(body(e))))
+    if (!is.call(e) && !is.pairlist(e)) return(character())
+    out = character()
+    if (is.call(e) && identical(e[[1L]], as.name("::")) && identical(e[[2L]], as.name("gptr"))) {
+      out = as.character(e[[3L]])
+    }
+    for (i in seq_along(e)) {
+      el = e[[i]]
+      if (!missing(el)) out = c(out, ns_refs(el))
+    }
+    out
+  }
+  # negative control: the walker sees a quoted gptr:: call
+  expect_identical(ns_refs(function() quote(gptr::gptr_return)), "gptr_return")
+  expect_identical(ns_refs(doc_drop_expr), character())
+  # the namespace-qualified forms are dropped like the bare ones, and only those
+  expect_true(doc_drop_expr(quote(gptr::gptr_return(x))))
+  expect_true(doc_drop_expr(quote(gptr_return(x))))
+  expect_true(doc_drop_expr(quote(gptr::gptr$out("o1a2b3"))))
+  expect_true(doc_drop_expr(quote(gptr::gptr[["out"]]("o1a2b3"))))
+  expect_false(doc_drop_expr(quote(gptr::gptr$grep("mtcars"))))
+  expect_false(doc_drop_expr(quote(gptr::gptr("task"))))
+  expect_false(doc_drop_expr(quote(other::gptr_return(x))))
+  expect_false(doc_drop_expr(quote(other::gptr$out("o1a2b3"))))
+  expect_identical(as.character(doc_code_clean("gptr::gptr$out(\"o1a2b3\"); y = 1")), "y = 1")
+})
+
 test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 characters", {
   out = doc_output_lines(as.character(1:20), max_lines = 12L)
   expect_length(out, 13L)

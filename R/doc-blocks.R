@@ -721,17 +721,19 @@ doc_member_recorded = function(name) {
 }
 
 #' Should a top-level expression of recorded code be dropped: gptr_return() or a call of a
-#' `record = FALSE` gptr$ member (IC-48)
+#' `record = FALSE` gptr$ member (IC-48). The `gptr::` forms are built with eval_guard_ns_call(),
+#' not quoted: R CMD check reads a literal `gptr::name` as a use of an export (CI Task CI-4).
 #' @noRd
 doc_drop_expr = function(e) {
   if (!is.call(e)) return(FALSE)
   head = e[[1L]]
-  if (identical(head, quote(gptr_return)) || identical(head, quote(gptr::gptr_return))) {
+  if (identical(head, quote(gptr_return)) ||
+      identical(head, eval_guard_ns_call("gptr_return"))) {
     return(TRUE)
   }
   if (is.call(head) && length(head) == 3L &&
       (identical(head[[1L]], as.name("$")) || identical(head[[1L]], as.name("[["))) &&
-      (identical(head[[2L]], quote(gptr)) || identical(head[[2L]], quote(gptr::gptr)))) {
+      (identical(head[[2L]], quote(gptr)) || identical(head[[2L]], eval_guard_ns_call("gptr")))) {
     return(!doc_member_recorded(as.character(head[[3L]])))
   }
   FALSE

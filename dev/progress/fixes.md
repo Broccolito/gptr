@@ -198,3 +198,75 @@ Files of this task:
 - `dev/progress/fixes.md`
 - `dev/progress/P02.md` (cross-reference line)
 - `dev/progress/P06.md` (cross-reference line)
+
+## Task FIX-2 - Build gptr:: calls without quote() in the document scanner
+
+Owner: P15 (`R/doc-blocks.R`, Tasks 2-3 recorded-code cleaning). Coordinator-scheduled. No
+deviation entry: the behaviour is unchanged.
+
+**Defect.** `doc_drop_expr()` (P15's recorded-code cleaner, IC-48) compared expression heads
+with `quote(gptr::gptr_return)` and `quote(gptr::gptr)`, as the plan literal has it (P15 plan
+line 1401 and 1406). R CMD check's "checking dependencies in R code" reads every literal
+`gptr::name` in package code, quoted or not, as a use of an export. While P08's `gptr()` and
+`gptr_return()` are not exported, it warns "Missing or unexported objects: 'gptr::gptr'
+'gptr::gptr_return'". That WARNING fails every hosted check job (`error-on: "warning"`), and
+the P01-level test `test-zzz.R:301` ("every gptr:: call in the package code names an export of
+NAMESPACE") failed. CI Task CI-4 fixed the same pattern in `R/eval-guard.R`.
+
+**Built.** `doc_drop_expr()` now builds the two heads with P09's `eval_guard_ns_call()`
+(`call("::", as.symbol("gptr"), as.symbol(name))`). The built call is `identical()` to the
+quoted one, so what is dropped does not change. The layering rules allow the call:
+`R/doc-blocks.R` is L4 and `R/eval-guard.R` is a declared "L4 svc" file
+(`tests/testthat/helper-arch.R`, `arch_edge_ok()`); `^arch-layers$` is green. The function's
+roxygen note gives the reason.
+
+**Test** (written first; `tests/testthat/test-doc-blocks.R`, +1 test, 13 expectations): "the
+scanner builds gptr::gptr and gptr::gptr_return without a literal gptr:: (FIX-2)":
+
+- `eval_guard_ns_call("gptr_return")` and `eval_guard_ns_call("gptr")` are `identical()` to
+  `quote(gptr::gptr_return)` and `quote(gptr::gptr)`;
+- a local walker of function formals and bodies (the shape R CMD check reads) finds no
+  `gptr::` reference in `doc_drop_expr`, with a negative control on a quoted call;
+- behaviour: `gptr::gptr_return(x)`, `gptr_return(x)`, `gptr::gptr$out(...)` and
+  `gptr::gptr[["out"]](...)` are dropped; `gptr::gptr$grep(...)`, `gptr::gptr("task")`,
+  `other::gptr_return(x)` and `other::gptr$out(...)` are kept; `doc_code_clean()` drops
+  `gptr::gptr$out("o1a2b3")` from `gptr::gptr$out("o1a2b3"); y = 1` and keeps `y = 1`.
+
+**Red** (`task2-red.log`, `^(doc-blocks|zzz|eval-guard)$`, before the source change):
+`[ FAIL 2 | WARN 0 | SKIP 0 | PASS 478 ]`. The failures are the expected ones:
+`test-doc-blocks.R:514` (the walker finds `"gptr_return" "gptr"` in `doc_drop_expr`) and
+`test-zzz.R:301` (`"gptr_return" "gptr"` not exported).
+
+**R CMD check's own check** (`task2-check-deps.log`): `tools:::.check_packages_used()` on two
+temporary installs of a `git archive HEAD` export (R, DESCRIPTION, NAMESPACE, inst; scratch
+libraries, removed afterwards). HEAD as committed gives "Missing or unexported objects:
+'gptr::gptr' 'gptr::gptr_return'"; the same export with this task's `R/doc-blocks.R` gives
+nothing. The same function run on the source directory reports nothing on either version
+(`task2-packages-used.log`), so only the installed-package runs count as evidence.
+
+**Green.**
+
+- `^(doc-blocks|zzz|eval-guard)$` (`task2-green.log`): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 480 ]`
+  (478 + the 2 expectations that failed).
+- Neighbours, `^(doc-|arch-layers$|lint-rules$|eval-|env-history$)` (`task2-neighbours.log`):
+  `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 1046 ]`. The skip is P09 Task 8's known guard
+  (`test-eval-core.R:413`, "P08's gptr_return() is not implemented yet", D-054).
+- No other R file calls `doc_drop_expr()` or `doc_code_clean()`.
+
+**Lint** (`task2-lint.log`): no lints in `R/doc-blocks.R` and `tests/testthat/test-doc-blocks.R`.
+Both stay ASCII-only. No roxygen export changed, so `document` was not run; no `NAMESPACE` or
+`man/` change.
+
+**Adaptations.** The plan literal (`quote(gptr::...)`) is replaced by the helper call, as CI-4
+did for P09. The coordinator's alternative, an inline `as.call(list(...))`, was not needed
+because the helper is reachable under the layer rules. Once P08 exports `gptr()` and
+`gptr_return()`, a literal would pass R CMD check again; the helper stays correct either way.
+
+Commit message: `fix(doc): build gptr:: calls without quote() so R CMD check sees no missing export`.
+
+Files of this task:
+
+- `R/doc-blocks.R`
+- `tests/testthat/test-doc-blocks.R`
+- `dev/progress/fixes.md`
+- `dev/progress/P15.md` (cross-reference line)
