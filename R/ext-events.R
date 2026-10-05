@@ -572,7 +572,8 @@ ev_run_block_patch = function(hooks, ev, ctx, event, payload) {
 #' Returns NULL (notify), the merged list (collect), list(action, text) (transform),
 #' list(decision, reason, input) (tool_call), the first answer or NULL (first decision), the
 #' patched payload (patch) or list(block, reason, lines) (document_write). A session_shutdown
-#' removes the session's records after its handlers ran (IC-69).
+#' removes the session's records after its handlers ran (IC-69). Events deferred by GC-time
+#' finalizers are dispatched first, unless this dispatch runs under other registry work (D-085).
 #' @noRd
 ev_dispatch = function(event, payload, session = NULL, ctx = NULL) {
   check_string(event, "event")
@@ -580,10 +581,12 @@ ev_dispatch = function(event, payload, session = NULL, ctx = NULL) {
   if (is.null(sem)) ev_check_name(event)
   payload = payload %||% list()
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   sid = ext_session_id(session)
   ev_track(reg, event, payload)
   if (identical(event, "session_shutdown") && !is.null(sid)) {
-    on.exit(registry_session_drop(sid), add = TRUE)
+    on.exit(registry_session_drop(sid), add = TRUE, after = FALSE)
   }
   hooks = ev_hooks(reg, event, sid)
   if (!length(hooks)) return(ev_default(sem, payload))
@@ -598,6 +601,78 @@ ev_dispatch = function(event, payload, session = NULL, ctx = NULL) {
     ev_run_notify
   )
   run(hooks, ev_view(event, payload, sid), ctx, event, payload)
+}
+
+# ---- events deferred out of garbage collection (D-085) ------------------------------------------
+
+#' Queue an event for the next safe point instead of dispatching it now (D-085)
+#'
+#' P06's session finalizer runs at whatever allocation triggers a garbage collection, possibly in
+#' the middle of a loop over registry state; dispatching there would run arbitrary hooks and drop
+#' records under that loop. This only adds one binding to the current registry's `deferred`
+#' queue, under a key no queued event has (a finalizer that runs inside another ev_defer() call
+#' takes the next number), so no other code reads and rewrites the binding it adds; ev_drain()
+#' dispatches it. `session` is a session id (never the shell being finalized).
+#' @noRd
+ev_defer = function(event, payload, session = NULL) {
+  reg = registry_env()
+  item = list(event = event, payload = payload, session = ext_session_id(session))
+  repeat {
+    reg$deferred_seq = reg$deferred_seq + 1L
+    key = sprintf("d%012d", reg$deferred_seq)
+    if (!exists(key, envir = reg$deferred, inherits = FALSE)) break
+  }
+  assign(key, item, envir = reg$deferred)
+  invisible(TRUE)
+}
+
+#' Dispatch the deferred events, oldest first (D-085)
+#'
+#' A safe point: the registry entries that registry_enter() marks (ev_dispatch(), registry_get(),
+#' registry_all(), registry_names(), gptr_registry(), ext_load(), ext_activate(), ext_unload(),
+#' gptr_reload(), registry_session_drop()), session creation and attach, package unload and
+#' process exit call it. It does nothing while other registry work is in progress (so it never
+#' runs inside a loop over registry state) unless `force` is TRUE (unload, exit), and nothing
+#' while a drain runs: an event deferred by a handler during a drain is taken by the same drain,
+#' never dispatched nested. Each item is removed before its dispatch, so an interrupted drain
+#' never repeats one; a failing dispatch becomes a diagnostic.
+#'
+#' With `session` (an id), only that session's events are dispatched, at once: P06 calls this
+#' before it registers a new live shell under an id whose collected shell may still have its
+#' shutdown queued, so that shutdown never reaches (or drops the records of) the new shell.
+#' @return The number of events dispatched, invisibly.
+#' @noRd
+ev_drain = function(reg = registry_env(), force = FALSE, session = NULL) {
+  if (!length(reg$deferred)) return(invisible(0L))
+  if (!is.null(session)) return(invisible(ev_drain_keys(reg, session)))
+  if (isTRUE(reg$draining) || (reg$busy > 0L && !force)) return(invisible(0L))
+  reg$draining = TRUE
+  reg$busy = reg$busy + 1L
+  on.exit({
+    reg$busy = max(reg$busy - 1L, 0L)
+    reg$draining = FALSE
+  }, add = TRUE)
+  n = 0L
+  while (length(reg$deferred)) n = n + ev_drain_keys(reg)
+  invisible(n)
+}
+
+#' Dispatch the queued events present now (only those of `session` when it is an id); returns
+#' how many were dispatched
+#' @noRd
+ev_drain_keys = function(reg, session = NULL) {
+  n = 0L
+  for (key in ls(reg$deferred, sorted = TRUE)) {
+    item = get0(key, envir = reg$deferred, inherits = FALSE)
+    if (is.null(item) || (!is.null(session) && !identical(item$session, session))) next
+    rm(list = key, envir = reg$deferred)
+    n = n + 1L
+    tryCatch(ev_dispatch(item$event, item$payload, session = item$session),
+             error = function(e) {
+               registry_diagnostic("dispatch", item$event, class(e)[[1]], conditionMessage(e))
+             })
+  }
+  n
 }
 
 #' Register a hook record (contract 7.2); returns its id

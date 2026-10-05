@@ -206,6 +206,9 @@ ext_check_provided = function(info) {
 #' @noRd
 ext_run_factory = function(info) {
   reg = registry_env()
+  # registry work: a lookup the factory makes does not drain deferred events under it (D-085)
+  registry_enter(reg, drain = FALSE)
+  on.exit(registry_leave(reg), add = TRUE)
   generation = reg$generation
   info$status = "loading"
   on.exit({
@@ -292,6 +295,9 @@ ext_load = function(factory, source, rank, dir = NULL, manifest = NULL, lazy = F
     registry_diagnostic(source, "load", "filtered", paste0(source, " is disabled by a filter"))
     return(FALSE)
   }
+  reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   info = ext_info_new(source, dir, manifest)
   info$rank = rank
   info$session = sid
@@ -316,6 +322,8 @@ ext_load = function(factory, source, rank, dir = NULL, manifest = NULL, lazy = F
 ext_activate = function(source) {
   check_string(source, "source")
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   done = FALSE
   for (eid in ls(reg$exts)) {
     info = get0(eid, envir = reg$exts, inherits = FALSE)
@@ -345,6 +353,8 @@ ext_activate_record = function(rec) {
 ext_unload = function(source) {
   check_string(source, "source")
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   n = 0L
   for (id in ls(reg$recs)) {
     rec = get0(id, envir = reg$recs, inherits = FALSE)
@@ -354,8 +364,8 @@ ext_unload = function(source) {
     }
   }
   for (eid in ls(reg$exts)) {
-    info = get(eid, envir = reg$exts, inherits = FALSE)
-    if (identical(info$source, source)) {
+    info = get0(eid, envir = reg$exts, inherits = FALSE)
+    if (!is.null(info) && identical(info$source, source)) {
       info$status = "unloaded"
       info$ids = character()
       info$placeholders = character()
@@ -406,9 +416,12 @@ ext_watch_unload = function(pkg, source = paste0("plugin:", pkg)) {
 gptr_reload = function() {
   ext_control_guard("gptr_reload")
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   reg$generation = reg$generation + 1L
   for (eid in ls(reg$exts)) {
-    info = get(eid, envir = reg$exts, inherits = FALSE)
+    info = get0(eid, envir = reg$exts, inherits = FALSE)
+    if (is.null(info)) next
     redeclare = isTRUE(info$lazy_origin) && identical(info$status, "active") &&
       !isTRUE(info$unloaded)
     if (!redeclare) next

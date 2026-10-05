@@ -4707,6 +4707,72 @@ Validation: `progress/P17.md`, Task 5. `^skill-templates$`: red
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 93 ]` in a UTF-8
 locale and under `LC_ALL=C`; lint clean.
 
+## D-085 - FIX-1 GC-time session shutdown: the finalizer still releases the lock and leaves the live index at once, but its session_shutdown (hooks, record drop) waits for the next safe point; registry loops tolerate records removed under them (2026-10-04)
+
+Coordinator-scheduled follow-up FIX-1 (maintainer-requested), in P06's `R/session-live.R` and
+`R/session-object.R` and P02's `R/ext-registry.R`, `R/ext-events.R`, `R/ext-load.R` and
+`R/ext-check.R`. Plan literal (P06 Task 3 `session_finalizer()`; P02 Task 8 `ev_dispatch()`): the
+finalizer of a collected shell called `ev_dispatch("session_shutdown", reason = "gc")`, which
+ran every `session_shutdown` hook and, on exit, `registry_session_drop()`. R runs that finalizer
+at whatever point a collection happens, so hooks ran and records vanished in the middle of
+unrelated code: `registry_recs()` read an id snapshot and then `get()` each id, and failed with
+"object 'rNN' not found" (the flaky P07 tests, `progress/P07.md` Tasks 5-8; a forced `gc()` gave
+6 errors on clean HEAD). The same pattern was in `registry_session_drop()`, `ext_unload()`,
+`gptr_reload()`, `check_in_scratch()` and `check_factory()`.
+
+1. **The finalizer only does what is safe at any allocation.** It removes the shell's
+   `the$live` entry (every reader uses `get0()`, so a loop over the live index skips it),
+   releases the session file's lock (a file only the dead shell held; now inside `tryCatch()`)
+   and queues the notification with P02's new `ev_defer()`, which adds one uniquely keyed binding
+   to the registry's `deferred` environment. The lock release and the live-index removal stay
+   immediate on purpose: architecture 5.1 says the finalizer removes the entry and the lock,
+   P06's test "an unreferenced session is finalised and its lock removed" checks it right after
+   `gc()`, a deferred release could remove the lock of a new shell attached to the same file in
+   between, and a dead shell left in the index would be returned by `session_by_id()` and
+   `live_all()` (the coordinator's preferred design deferred the lock too; this keeps it at
+   once, which is sooner than "the next safe point").
+2. **The notification is dispatched at the next safe point**, by `ev_drain()`: at the start of
+   `ev_dispatch()`, `registry_get()`, `registry_all()`, `registry_names()`, `gptr_registry()`,
+   `ext_load()`, `ext_activate()`, `ext_unload()`, `gptr_reload()` and
+   `registry_session_drop()` (P02's new `registry_enter()`/`registry_leave()`), at the start of
+   `session_new()` and in `session_attach()` after its `gc()` re-check. It still carries reason
+   `"gc"`, the session id, `turn` and the time of collection, and the session's rank-0 records
+   are still dropped after its handlers ran (IC-69).
+3. **A drain never runs under registry work.** `registry_enter()` counts registry work in
+   progress (`reg$busy`); `ev_drain()` does nothing while the count is above zero, so no drain
+   runs inside a dispatch's hook loop, a factory run or any P02 loop, and nothing while a drain
+   runs (`reg$draining`): a session collected, or a shutdown deferred, by a handler during a
+   drain is taken by the same drain afterwards, never dispatched nested. Each item is removed
+   before its dispatch (an interrupted drain never repeats one) and a failing dispatch becomes a
+   diagnostic.
+4. **A reused id gets the old shutdown first.** `live_new()` calls `ev_drain(session = id)`
+   before it registers a shell under an id: the shutdown still queued for a collected shell with
+   that id (a resumed or attached session) is dispatched then, even under registry work, so it
+   never reaches the new shell's listeners nor drops the new shell's records. This is the one
+   drain that may run under registry work; the loops of item 6 tolerate it.
+5. **Unload and exit.** `live_unload()` drains (forced) before and after the `unload`
+   shutdowns of the live sessions. At process exit the session finalizers (`onexit = TRUE`) only
+   queue, so P06's `on_load()` registers an exit finalizer on `the$live` (`live_exit()`): it is
+   registered at load, R runs exit finalizers newest first, so it runs after every session's and
+   dispatches what they queued (forced). A re-run load that replaced `the$live` makes the old
+   one's finalizer do nothing.
+6. **Loops tolerate a record removed under them.** `registry_recs()` reads with
+   `mget(ifnotfound = list(NULL))` and drops the missing ids (unnamed list, as before);
+   `registry_session_drop()`, `ext_unload()`, `gptr_reload()`, `check_in_scratch()` (records
+   and kinds) and `check_factory()` use `get0()` and skip a missing entry.
+7. **State.** No new field of `the` (contract 7.0 unchanged): the queue and counters are fields
+   of the P02 registry environment (`deferred`, `deferred_seq`, `busy`, `draining`, set by
+   `registry_new()`). As before, a GC-time shutdown goes to the registry that is current when the
+   session is collected.
+
+Not changed: a direct `ev_dispatch("session_shutdown", ..., session = id)` (P02's tests, `/exit`,
+`live_unload()`) still dispatches and drops at once. An idle R session dispatches a collected
+session's shutdown at its next gptr call that reaches a safe point; P04's reactor pump is not one.
+P07's `gc()` workaround in `tests/testthat/test-prompt-sections.R` (and `test-prompt-cache.R`,
+`test-prompt-compact.R`) is no longer needed but is left to the P07 lane.
+
+Validation: `progress/fixes.md`, Task FIX-1.
+
 ## D-086 - P17 agent files: a sequence or a map where a scalar mode or turn limit belongs is dropped instead of throwing, a turn limit must be a positive whole number, `permissionMode` applies whenever `mode` is not a permission mode, and a `tools` value that gives no names is a diagnostic (2026-10-04)
 
 P17 Task 7 (`R/subagent-defs.R`). `tool_name_table`, `tool_name_map()`, `agent_mode()`,
@@ -4762,4 +4828,113 @@ row 1 rises by 46 on top of D-072, D-074 and D-084.
 Validation: `progress/P17.md`, Task 7. `^subagent-defs$`: red
 `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, plan-literal green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 31 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`; lint
+clean.
+
+## D-087 - P07 compaction runs: compaction events carry the contract 4.5 envelope; inside a run the checkpoint request uses the run's model and protected safety record; a request that cannot start, or an empty reply, still leaves a harness-state checkpoint; the continuation line keeps the user-message budget; malformed hook and compactor results are diagnostics, and the harness's details fields win; reason and focus are validated (2026-10-04)
+
+P07 Task 13 (`R/prompt-compact.R`). `compact_last()`, `compact_request_text()`,
+`compact_header()`, `compact_skills()`, `builtin_compaction()` and its `on_load()`, the
+threshold, 20% growth and cold rules, the cold-as-threshold memo and the plan's 13 tests (55
+expectations) are the plan's. The changes below come from contract 4.5 and 10.2, IC-74 and the
+real P05/P06 interfaces, and each has a test.
+
+1. **Envelope.** The plan dispatched `session_before_compact` and `session_compact` as bare
+   payload lists, so handlers saw only `type`, `session` and `ts`. Contract 4.5 (and 10.4,
+   "payload fields are in addition to type, session, run, agent, turn, ts") requires the whole
+   envelope; Task 11's review made the same correction to `cache_break`. New `compact_event()`
+   builds both events with `ev_new()` (`run` and `agent` of the session's current run, else NULL
+   and "main"; `turn`).
+2. **The run's model and safety record (IC-69, IC-74).** P06's `run_compact_check()` routes a
+   router session for "compaction" (`run_route()`) before it calls `compact.run`, and P06's
+   `run_target()` resolves models that P05's `model_resolve()` cannot (a provider registered for
+   the session only). Inside a run, `compact_target()` therefore uses the run's resolved model
+   (for a router session, the model the router just gave), so the router is not asked twice.
+   Outside a run it asks `router.call` itself, as the plan did. The checkpoint request also
+   carries the run's protected safety record (`run$opts$safety`) to `provider_stream()`, so P05's
+   preflight checks the effective origin against the same local-only setting as the run's own
+   requests. The plan passed none, which P05 reads as local-only.
+3. **A request that cannot start (the plan: "an error reply is not retried and the checkpoint
+   then carries the harness state alone").** `provider_stream()` signals a refusal (preflight,
+   missing key, disabled provider) before anything starts. In the plan that error escaped the
+   compactor, no fallback applied, and `compact_run()` failed with `gptr_error_internal`, so an
+   overflow could not be recovered. It is now a diagnostic and gives no reply, as an error reply
+   does; nothing is sent.
+4. **An empty reply is asked again once,** like a reply that calls a tool or stops on length. The
+   plan accepted it as an empty `<summary>`.
+5. **The continuation line keeps the user-message budget (architecture 12.2: 2,000).** The
+   plan's `Continue from the checkpoint. The latest request was: <text>` repeated the latest
+   request whole, so a 5,000-word prompt (6,893 tokens) rode in the new first message beside the
+   budgeted `<user_messages>`. It is now cut with Task 12's `compact_clip()` (line within 2,000
+   tokens; a request that fits is unchanged).
+6. **Results.** A `session_before_compact` result without content blocks is a diagnostic
+   (`malformed_result`) and the compactor runs; the plan aborted the whole compaction. A plugin
+   compactor's result without blocks counts as a failure and falls back to `checkpoint` (contract
+   10.2), as an error does. The harness's `reason`, `strategy` and `tokens_after` replace a
+   result's `details` fields of the same name; the plan concatenated the two lists, so a
+   result's own `reason` shadowed the harness's.
+7. **should.** A plugin's bare `TRUE` carries reason `"threshold"` (the service returns
+   `lgl(1)` with a reason), and an unknown token count or idle time (`NA`) is no evidence. The
+   plan reached `if (NA)` and fell back to `FALSE` through a diagnostic.
+8. **Arguments.** `compact_run()` refuses a `reason` other than the four of contract 10.4 and a
+   `focus` that is not a string (`gptr_error_invalid_argument`).
+9. Without a test of its own (the plan's tests cover the same output): the `<mode>` block comes
+   from the registered `mode` context block (P07's text when none renders), so a replaced mode
+   block is deduplicated against the compaction. A dropped project block is hashed with Task 5's
+   `context_text_hash()`, the stored-form hash its update check compares with; for text without
+   secrets this equals the plan's `hash_sha256()`.
+
+Validation: `progress/P07.md`, Task 13. Ten tests (59 expectations) were added. On the plan
+literal 19 of them fail and the plan's 55 pass (`dev/.validation/P07/task13-plan-literal.log`).
+Final `^prompt-compact$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 202 ]`.
+
+## D-088 - P17 plugin resolution: a manifest that is not a JSON object is a diagnostic, an installed Claude plugin uses its newest install path that exists and malformed entries are skipped, and a `~` path expands with `user_home()` (2026-10-04)
+
+P17 Task 9 (`R/ext-plugins.R`). `plugin_api_req()`, `plugin_from_dir()`,
+`plugin_from_package()` and the resolution order of `plugin_resolve()` are the plan's literal
+ones, and the plan's 4 tests (15 expectations) are appended byte for byte. Three places changed:
+
+1. **A manifest that is not a JSON object is a diagnostic.** The plan's `plugin_manifest_read()`
+   returned whatever `json_decode()` gave. A `plugin.json` holding valid JSON that is not an
+   object (`"hello"`, `42`, `true`) then made `man[["name"]]` in `plugin_from_dir()` stop with
+   `subscript out of bounds`, so `plugin_resolve()` threw a base R error. That breaks the plan's
+   rule ("an invalid manifest is a registry diagnostic, never an error") and contract 7.17's
+   result (`list(...)` or `gptr_error_invalid_argument`). An array (`[1, 2]`) became the
+   manifest, and `null` was dropped without a diagnostic. Now everything other than an object is
+   the `user`/`plugin`/`manifest` diagnostic "<file>: the manifest is not a JSON object" and gives
+   `NULL`, the same as invalid JSON.
+2. **Installed Claude plugins: the newest install path that exists, and no error from a bad
+   entry.** The plan's prose says "the most recently updated existing `installPath`", but its
+   code took the newest entry first and skipped the whole plugin when that path was gone. A
+   plugin whose newest install had been removed then vanished, although an older install was
+   still on disk. Entries whose path does not exist are now dropped first, and the newest of the
+   rest is used. The plan's code also subset every entry with `[[`. So a non-object entry, or a
+   plugin given as one object instead of report 16's array of entries, stopped every
+   `plugin_resolve()` that reached the Claude step with `subscript out of bounds`. The same
+   happened when the file was valid JSON but not an object. Such entries and plugins are now
+   skipped, and a `lastUpdated` that is not one string sorts last.
+3. **A `~` path expands with `user_home()` (IC-63).** The plan tested `dir.exists(name)` on the
+   raw name, which uses R's own tilde expansion, and then normalised it with `path_norm()`, which
+   uses `user_home()`. The two can differ (on Windows `user_home()` is `USERPROFILE` while R
+   expands `~` to `R_USER` or `HOME`), and IC-63 says user paths never go through R's
+   expansion. `plugin_resolve()` now tests `dir.exists(path_norm(name))`. Order, results and
+   errors are otherwise unchanged.
+
+Four regression tests follow the plan's 4 (47 expectations) under
+`# Task 9 adaptations (D-088)`: non-object manifests (item 1), installed Claude plugin entries
+(item 2), a `~` path with `user_home()` mocked away from `HOME` (item 3), and a package plugin read
+from a fake library through its `DESCRIPTION` only (`Config/gptr/plugin`, the `Config/gptr/api`
+fallback, the `inst/gptr/plugin.json` API winning over `Config/gptr/api`, a normalised name found
+by the library scan, and no namespace loaded). The last one covers plan-literal code; the plan's
+tests reached no package plugin. Against the plan-literal source the file gives
+`[ FAIL 3 | WARN 0 | SKIP 0 | PASS 203 ]`: the plan's 15 pass and the first three regression
+tests stop with `subscript out of bounds` (twice) and the plan's "not a plugin directory" error.
+A probe (`dev/.validation/P17/task9-probe.log`) shows the other differences one by one: the
+plan-literal code keeps `[1, 2]` as the manifest, gives no diagnostic for `[1, 2]` or `null`, and
+gives no install path for a plugin whose newest install is gone. Every later P17 count for
+`test-ext-plugins.R` is 156 higher instead of 109 (IC-74): 82 -> 238 (this task), 133 -> 289,
+166 -> 322, 184 -> 340. Acceptance 1 rises by 47 on top of D-072, D-074, D-084 and D-086
+(679 -> 726), acceptance 3a becomes 340 and acceptance 4c 503.
+
+Validation: `progress/P17.md`, Task 9. `^ext-plugins$`: red
+`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 176 ]`, green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 238 ]`; lint
 clean.

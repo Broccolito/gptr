@@ -92,16 +92,16 @@ check_in_scratch = function(fun) {
   scratch = registry_scratch()
   scratch$check_origin = live
   for (nm in ls(live$kinds)) {
-    d = get(nm, envir = live$kinds, inherits = FALSE)
+    d = get0(nm, envir = live$kinds, inherits = FALSE)
     fresh = is.null(get0(nm, envir = scratch$kinds, inherits = FALSE))
-    if (!identical(d$source, "builtin") && fresh) {
+    if (!is.null(d) && !identical(d$source, "builtin") && fresh) {
       assign(nm, d, envir = scratch$kinds)
     }
   }
   scratch$seq = live$seq
   for (id in ls(live$recs)) {
-    rec = get(id, envir = live$recs, inherits = FALSE)
-    keep = is.null(rec$session) && identical(rec$state, "active") &&
+    rec = get0(id, envir = live$recs, inherits = FALSE)
+    keep = !is.null(rec) && is.null(rec$session) && identical(rec$state, "active") &&
       !is.null(get0(rec$kind, envir = scratch$kinds, inherits = FALSE)) &&
       !registry_rec_filtered(rec, live)
     if (!keep) next
@@ -395,8 +395,8 @@ check_factory = function(factory, manifest = NULL, tokens = FALSE, adapter_check
     # Identify the outer transaction from the API it receives. Nested loads may share
     # its source string, but their registrations must not satisfy this factory's claims.
     for (eid in ls(reg$exts)) {
-      info = get(eid, envir = reg$exts, inherits = FALSE)
-      if (identical(info$api, gptr)) invocation$id = eid
+      info = get0(eid, envir = reg$exts, inherits = FALSE)
+      if (!is.null(info) && identical(info$api, gptr)) invocation$id = eid
     }
     factory(gptr)
   }

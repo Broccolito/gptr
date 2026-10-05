@@ -4,14 +4,18 @@
 # Live resources (the kept home, the active run, the store handle, ctx, caches) are held in
 # `the$live[[id]] = rlang::new_weakref(key = <shell>, value = <live>)`: an unreferenced, settled
 # session is collected and its finalizer removes the entry and the file lock (G3 findings 2 and
-# 10, verified). `the$last` holds the most recent session strongly (IC-71): a shell holds no frames
-# or user objects, so this is copy-safe (rule R10). Locks are `<file>.lock/pid` holding the pid
-# and the process creation time, checked with P04's `pid_alive()` (IC-59).
+# 10, verified); its session_shutdown is deferred to the next safe point (D-085). `the$last` holds
+# the most recent session strongly (IC-71): a shell holds no frames or user objects, so this is
+# copy-safe (rule R10). Locks are `<file>.lock/pid` holding the pid and the process creation
+# time, checked with P04's `pid_alive()` (IC-59).
 
 on_load({
   the$live = new.env(parent = emptyenv())
   the$last = NULL
   the$replay_blocks = new.env(parent = emptyenv())
+  # registered at load, so at process exit it runs after every session's own exit finalizer (R
+  # runs exit finalizers newest first) and dispatches the shutdowns they deferred (D-085)
+  reg.finalizer(the$live, live_exit, onexit = TRUE)
 })
 on_load(on_unload(live_unload))
 
@@ -34,6 +38,9 @@ live_new = function(s, home) {
   live$out = NULL
   live$mcp_token = NULL
   live$ext = new.env(parent = emptyenv())
+  # a collected shell with this id (a resumed or attached session) may still have its shutdown
+  # queued: dispatch it now, before this shell is registered, so it never reaches this one (D-085)
+  ev_drain(session = d$id)
   assign(d$id, rlang::new_weakref(key = s, value = live), envir = the$live)
   reg.finalizer(s, session_finalizer, onexit = TRUE)
   # the session's gptr_ctx (P02's ctx_new() reads the id through the `$id` accessor of the shell);
@@ -157,8 +164,15 @@ home_label = function(env) {
   "<environment>"
 }
 
-#' Finalizer of a shell: drop the registry entry, release the lock, notify `session_shutdown`
-#' (nothing for a shell whose registration was undone by live_forget())
+#' Finalizer of a shell: drop the live entry, release the lock, defer `session_shutdown` (nothing
+#' for a shell whose registration was undone by live_forget())
+#'
+#' R runs it at whatever allocation triggers the collection, possibly inside a loop over registry,
+#' event or live state, so it touches no state such a loop reads by a snapshot: removing one live
+#' entry is safe (every reader of `the$live` uses get0()), the lock is a file only this dead shell
+#' holds, and the notification is queued with P02's ev_defer(). The next safe point (ev_drain():
+#' a registry lookup or dispatch, session creation, unload, exit) dispatches it with reason "gc",
+#' and P02 then drops the session's rank-0 records after its handlers ran (IC-69, D-085).
 #' @noRd
 session_finalizer = function(s) {
   d = tryCatch(session_data(s), error = function(e) NULL)
@@ -168,20 +182,22 @@ session_finalizer = function(s) {
     k = rlang::wref_key(w)
     if (is.null(k) || identical(k, s)) rm(list = d$id, envir = the$live)
   }
-  if (!is.null(d$file)) lock_release(lock_path(d$file))
-  # dispatched with the session id (the shell is being finalised): P02's ev_dispatch() then drops
-  # the session's rank-0 registry records after the handlers ran (IC-69)
-  tryCatch(ev_dispatch("session_shutdown",
-                       ev_new("session_shutdown", session = d$id, run = NULL, agent = "main",
-                              turn = d$turns, reason = "gc"),
-                       session = d$id),
+  if (!is.null(d$file)) tryCatch(lock_release(lock_path(d$file)), error = function(e) NULL)
+  # queued with the session id, never the shell being finalised
+  tryCatch(ev_defer("session_shutdown",
+                    ev_new("session_shutdown", session = d$id, run = NULL, agent = "main",
+                           turn = d$turns, reason = "gc"),
+                    session = d$id),
            error = function(e) NULL)
   invisible(NULL)
 }
 
-#' At unload: release every live session's lock and notify `session_shutdown` (reason unload)
+#' At unload: dispatch the deferred shutdowns of collected sessions, then release every live
+#' session's lock and notify `session_shutdown` (reason unload); the drain is forced, since
+#' nothing runs after the unload (D-085)
 #' @noRd
 live_unload = function() {
+  tryCatch(ev_drain(force = TRUE), error = function(e) NULL)
   for (s in live_all()) {
     d = session_data(s)
     if (!is.null(d$file)) lock_release(lock_path(d$file))
@@ -192,6 +208,16 @@ live_unload = function() {
                          session = s, ctx = live$ctx),
              error = function(e) NULL)
   }
+  tryCatch(ev_drain(force = TRUE), error = function(e) NULL)
+  invisible(NULL)
+}
+
+#' Exit finalizer of the live index: dispatch the shutdowns that the sessions' exit finalizers
+#' deferred (D-085). Nothing when `e` is no longer the live index (a re-run load replaced it)
+#' @noRd
+live_exit = function(e) {
+  if (!identical(e, the$live)) return(invisible(NULL))
+  tryCatch(ev_drain(force = TRUE), error = function(e) NULL)
   invisible(NULL)
 }
 
@@ -212,6 +238,8 @@ session_attach = function(s, home = NULL) {
     invisible(gc())
     other = session_by_id(d$id)
   }
+  # a safe point: the shutdowns of sessions that collection deferred are dispatched (D-085)
+  ev_drain()
   if (!is.null(other) && !identical(other, s)) {
     if (identical(session_data(other)$status, "running")) {
       gptr_abort(paste0("session ", d$id, " is running in this R process"), "busy", session = d$id)

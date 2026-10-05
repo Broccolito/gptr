@@ -12,6 +12,9 @@
 #' `grants` holds one-shot approvals of control exports (IC-53); `builtins_loaded` names the
 #' built-ins already loaded into this registry and `watched` the packages whose unload is watched;
 #' `version` counts changes that can alter gptr_registry() and `listing` caches its full listing.
+#' `deferred` queues the events that GC-time session finalizers defer (ev_defer()), keyed by
+#' `deferred_seq`; `busy` counts the registry work in progress and `draining` marks a running
+#' ev_drain(), which only starts when no registry work is in progress (D-085).
 #' @noRd
 registry_new = function() {
   reg = new.env(parent = emptyenv())
@@ -39,8 +42,29 @@ registry_new = function() {
   reg$listing_key = NULL
   reg$current_ext = NULL
   reg$ctx0 = NULL
+  reg$deferred = new.env(parent = emptyenv())
+  reg$deferred_seq = 0L
+  reg$busy = 0L
+  reg$draining = FALSE
   class(reg) = "gptr_registry_env"
   reg
+}
+
+#' Begin registry work (a lookup, a dispatch, a factory run): first drain the deferred events when
+#' `drain` is TRUE and no other registry work is in progress, then count this work, so that no
+#' drain runs under it. Pair with `on.exit(registry_leave(reg), add = TRUE)` (D-085)
+#' @noRd
+registry_enter = function(reg, drain = TRUE) {
+  if (drain && length(reg$deferred)) ev_drain(reg)
+  reg$busy = reg$busy + 1L
+  invisible(reg)
+}
+
+#' End registry work begun by registry_enter()
+#' @noRd
+registry_leave = function(reg) {
+  reg$busy = max(reg$busy - 1L, 0L)
+  invisible(NULL)
 }
 
 #' Note a change that can alter gptr_registry() (records, filters, kinds); the cached listing
@@ -113,11 +137,13 @@ registry_index_drop = function(env, key, id) {
   invisible(NULL)
 }
 
-#' Records for a vector of ids
+#' Records for a vector of ids, skipping ids whose record is gone: callers pass a snapshot of an
+#' index, and a record may be removed between that snapshot and this read (D-085)
 #' @noRd
 registry_recs = function(reg, ids) {
   if (!length(ids)) return(list())
-  lapply(ids, function(id) get(id, envir = reg$recs, inherits = FALSE))
+  recs = mget(ids, envir = reg$recs, mode = "list", ifnotfound = list(NULL), inherits = FALSE)
+  unname(recs[!vapply(recs, is.null, NA)])
 }
 
 #' Order records by rank, then registration
@@ -323,6 +349,8 @@ registry_get = function(kind, name, session = NULL) {
   check_string(name, "name")
   sid = ext_session_id(session)
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   for (attempt in seq_len(10L)) {
     recs = registry_candidates(kind, name, sid, reg)
     if (!length(recs)) return(NULL)
@@ -339,9 +367,11 @@ registry_get = function(kind, name, session = NULL) {
 #' @noRd
 registry_all = function(kind, session = NULL) {
   check_string(kind, "kind")
-  k = kind_get(kind)
   sid = ext_session_id(session)
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
+  k = kind_get(kind)
   pick = function() {
     recs = registry_recs(reg, get0(kind, envir = reg$by_kind, inherits = FALSE))
     recs[vapply(recs, function(r) registry_visible(r, sid) && !registry_rec_filtered(r, reg),
@@ -380,6 +410,8 @@ registry_names = function(kind, session = NULL) {
   check_string(kind, "kind")
   sid = ext_session_id(session)
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   recs = registry_recs(reg, get0(kind, envir = reg$by_kind, inherits = FALSE))
   recs = recs[vapply(recs, function(r) registry_visible(r, sid) && !registry_rec_filtered(r, reg),
                      NA)]
@@ -424,13 +456,15 @@ registry_session_drop = function(sid) {
   if (is.null(sid)) return(invisible(NULL))
   check_string(sid, "session")
   reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   for (id in ls(reg$recs)) {
-    rec = get(id, envir = reg$recs, inherits = FALSE)
-    if (identical(rec$session, sid)) registry_remove(id)
+    rec = get0(id, envir = reg$recs, inherits = FALSE)
+    if (!is.null(rec) && identical(rec$session, sid)) registry_remove(id)
   }
   for (eid in ls(reg$exts)) {
-    info = get(eid, envir = reg$exts, inherits = FALSE)
-    if (identical(info$session, sid)) {
+    info = get0(eid, envir = reg$exts, inherits = FALSE)
+    if (!is.null(info) && identical(info$session, sid)) {
       info$status = "unloaded"
       ext_forget(info, reg)
     }
@@ -547,6 +581,8 @@ gptr_registry = function(kind = NULL, diagnostics = FALSE) {
   check_flag(diagnostics, "diagnostics")
   reg = registry_env()
   if (diagnostics) return(registry_diag_df(reg))
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
   key = list(reg$version, registry_protected_builtins())
   if (is.null(kind) && identical(reg$listing_key, key)) return(reg$listing)
   kinds = kind %||% kind_names()

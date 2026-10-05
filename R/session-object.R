@@ -41,6 +41,8 @@ session_new = function(model, mode, home = NULL, kind = "chat", parent = NULL, p
   # an adopted id (store_rebuild(), replay) comes from a file or a document: it is validated here,
   # where every recorded id enters, before it names a registry entry or a session file
   if (!is.null(opts$id)) check_session_id(opts$id, "opts$id")
+  # a safe point: the shutdowns of sessions that collection deferred are dispatched (D-085)
+  ev_drain()
   id = opts$id %||% id_new("s", 10L)
   if (!is.null(session_by_id(id))) {
     gptr_abort(paste0("session ", id, " is already live in this R process; use gptr_resume(\"",

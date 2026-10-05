@@ -211,6 +211,51 @@ test_that("registry_session_drop() removes only that session's records", {
   expect_false(is.null(registry_get("command", "theirs", session = "s2")))
 })
 
+test_that("registry_recs() skips ids whose record is gone (FIX-1)", {
+  reg = local_registry()
+  kept = registry_add(cmd("kept"), "user", 3L)
+  gone = registry_add(cmd("gone"), "user", 3L)
+  registry_remove(gone)
+  recs = registry_recs(reg, c(gone, kept, "r999"))
+  expect_length(recs, 1L)
+  expect_identical(recs[[1]]$id, kept)
+  expect_null(names(recs))
+  expect_identical(registry_recs(reg, character()), list())
+})
+
+test_that("a deferred session_shutdown waits for the next registry entry (FIX-1)", {
+  reg = local_registry()
+  log = new.env()
+  log$seen = character()
+  hook_add("session_shutdown", function(event, ctx) {
+    log$seen = c(log$seen, paste(event$session, event$reason))
+    # a shutdown deferred while the queue drains is taken by the same drain, never nested
+    if (identical(event$session, "s1")) {
+      ev_defer("session_shutdown", list(reason = "gc"), session = "s2")
+      log$nested = log$seen
+    }
+    NULL
+  })
+  registry_add(cmd("mine"), "session", 0L, session = "s1")
+  registry_add(cmd("theirs"), "session", 0L, session = "s2")
+  hook_add("turn_end", function(event, ctx) {
+    ev_defer("session_shutdown", list(reason = "gc"), session = "s1")
+    # registry work is in progress (this dispatch), so a lookup here does not drain
+    log$inner = registry_get("command", "mine", session = "s1")
+    NULL
+  })
+  ev_dispatch("turn_end", list())
+  expect_length(log$seen, 0L)
+  expect_false(is.null(log$inner))
+  expect_false(is.null(get0("command\rmine", envir = reg$by_key, inherits = FALSE)))
+  expect_length(registry_names("command"), 0L)
+  expect_identical(log$seen, c("s1 gc", "s2 gc"))
+  expect_identical(log$nested, "s1 gc")
+  expect_null(registry_get("command", "mine", session = "s1"))
+  expect_null(registry_get("command", "theirs", session = "s2"))
+  expect_length(ls(reg$deferred), 0L)
+})
+
 test_that("unregister closures do not mutate a replacement scratch registry", {
   reg = local_registry()
   off = gptr_register(cmd("original"))
