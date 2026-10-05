@@ -408,10 +408,6 @@ test_that("a plotting evaluation under Rscript leaves no Rplots.pdf in the worki
 })
 
 test_that("the gptr shim reaches gptr:: when gptr is not visible from envir", {
-  # TEMPORARY guard (D-054): P08 Task 10 ("The session SDK verbs") adds gptr_return() and MUST
-  # delete this skip; the body below is the plan's, verbatim.
-  skip_if_not(exists("gptr_return", envir = asNamespace("gptr"), inherits = FALSE),
-              "P08's gptr_return() is not implemented yet (D-054)")
   e = new.env(parent = baseenv())
   res = eval_r("r = gptr_return(5)", e)
   expect_equal(res$status, "ok")

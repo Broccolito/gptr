@@ -8515,15 +8515,24 @@ behavioural changes, each with its own test:
    and `.opts$context`; for a queued follow-up without a pending call, the settings and the
    process mode) and starts the run with `gateway_run_start(s, NULL, opts, cur, safety)`. The
    guards run before the pending options are taken, so a refusal leaves the session idle with its
-   pending call and held record in place for a later retry. Tests "a pending run freezes its
+   pending call and held record in place for a later retry. The check and the start are two
+   helpers (`sdk_check()`, `sdk_launch()`; `sdk_start()` runs both for `gptr_step()`), and
+   `gptr_wait()` checks every session of a list before it starts any, so a refusal for one
+   session starts none: otherwise the sessions started before the refused one would stay
+   `running` with nothing pumping them (review round 1). Tests "a pending run freezes its
    safety record when a verb starts it (07 section 5)" (5: relaxed by a human after queueing is
-   `FALSE` at start, tightened again is `TRUE`, options set in between never relax it) and
+   `FALSE` at start, tightened again is `TRUE`, options set in between never relax it, checked
+   with the session layer cleared so that only the options could relax it), and
    "starting a pending run re-checks egress and replay; a refusal keeps it pending" (11: an
    acknowledgement withdrawn after queueing is `gptr_error_egress` naming the provider, the
    process switched to replay is `gptr_error_not_recorded`, no request either time, the call
-   still pending, then one request once both allow it). Against the plan-literal source the
-   first fails 3 times (no `ollama_local_only` in the record) and the second 6 times (the
-   withdrawn acknowledgement was ignored and the live request was sent).
+   still pending, then one request once both allow it) and "gptr_wait() checks every session
+   before it starts any; a refusal starts none" (11: `gptr_wait(list(a, b))` refused for `b`'s
+   withdrawn acknowledgement leaves `a` idle, pending, without a run or a request; once
+   acknowledged again one wait settles both). Against the plan-literal source the first fails 3
+   times (no `ollama_local_only` in the record) and the second 6 times (the withdrawn
+   acknowledgement was ignored and the live request was sent); the third failed 4 times against
+   round 0's single-phase `sdk_start()` (`a` left `running`, its pending call taken).
 2. **One approved `gptr_cancel()` call consumes one token** (IC-53 item 3: "the dispatcher
    approved exactly that call ... a one-shot token on the run"). The plan's loop called
    `gateway_control_other()` per session, so cancelling two other sessions from model code needed
@@ -8548,7 +8557,8 @@ Coverage tests for plan behaviour without a plan test (pass against the plan-lit
 Validation: `progress/P08.md`, Task 10. Red (no source) `^gptr-sdk$`
 `[ FAIL 20 | WARN 0 | SKIP 0 | PASS 6 ]`; against the plan-literal source 9 failures and one
 error in the adaptation tests only (`task10-red-adaptations-against-plan-literal.log`); green
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 84 ]` (55 plan + 29 adaptation and coverage expectations).
+after review round 1 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 95 ]` (55 plan + 40 adaptation and
+coverage expectations; `task10-fix1-green-counts.log`).
 
 ## D-124 - P13 builtin:system1: the built-in also registers the ollama-system-one adapter (IC-74), the Jev provider records carry their prices as a data frame, and seven Task 9 tests follow the test process's replay option, D-099's egress rule, the mock server's working directory and P01's fake classifier, and (review round 1) P07's `{s1}` alias still names `jev` when only a local classifier makes System 1 usable (forward note) (2026-10-05)
 
