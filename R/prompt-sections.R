@@ -394,14 +394,13 @@ prompt_tool_always = function(sp) {
     is.function(sp$execute) && !(sp$name %in% prompt_core_tools)
 }
 
-#' Direct tools declared whatever the preset: other specs with exposure "direct" (IC-37)
+#' Direct tools declared whatever the preset: other specs with exposure "direct" (IC-37). A
+#' namespaced spec never is one, so its lazy placeholder is not activated (contract 10.8)
 #' @noRd
 prompt_tools_always = function(session_id) {
-  out = character()
-  for (nm in setdiff(registry_names("tool", session = session_id), prompt_core_tools)) {
-    if (prompt_tool_always(registry_get("tool", nm, session = session_id))) out = c(out, nm)
-  }
-  out
+  nms = setdiff(registry_names("tool", session = session_id), prompt_core_tools)
+  Filter(function(nm) prompt_tool_always(registry_get("tool", nm, session = session_id)),
+         nms[!grepl("/", nms, fixed = TRUE)])
 }
 
 #' Build the frozen tool array, `list(json, names)` (serialised once, Anthropic shape)

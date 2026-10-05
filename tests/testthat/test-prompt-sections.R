@@ -500,6 +500,31 @@ test_that("the tools.disable setting also leaves out plugin direct tools", {
                    c("read", "r", "edit", "write"))
 })
 
+test_that("prompt_tools_always() declares lazy direct tools; namespaced ones stay lazy (10.8)", {
+  s = p07_session()
+  sid = session_data(s)$id
+  runs = new.env()
+  runs$direct = 0L
+  runs$ns = 0L
+  lazy = function(name, tool) {
+    list(name = name, extension = list(activation = "lazy", provides = list(tool = list(tool))))
+  }
+  ext_load(function(gptr) {
+    runs$direct = runs$direct + 1L
+    gptr$register(gptr_tool("zz_lazy", "Lazy.", execute = function(input, ctx) "ok",
+                            exposure = "direct"))
+  }, "plugin:p07lazy", 5L, manifest = lazy("p07lazy", "zz_lazy"), lazy = TRUE, session = sid)
+  withr::defer(ext_unload("plugin:p07lazy"))
+  ext_load(function(gptr) {
+    runs$ns = runs$ns + 1L
+    gptr$register(gptr_tool("lazy", "Lazy member.", fun = function(x) x, exposure = "r",
+                            namespace = "zz"))
+  }, "plugin:p07ns", 5L, manifest = lazy("p07ns", "zz/lazy"), lazy = TRUE, session = sid)
+  withr::defer(ext_unload("plugin:p07ns"))
+  expect_true("zz_lazy" %in% prompt_tools_always(sid))
+  expect_identical(c(runs$direct, runs$ns), c(1L, 0L))
+})
+
 test_that("a tool whose available() or parameters() fails is left out with a diagnostic", {
   s = p07_session()
   sid = session_data(s)$id

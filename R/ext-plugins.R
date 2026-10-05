@@ -1294,6 +1294,83 @@ plugins_session_end = function(session) {
   invisible(length(hit))
 }
 
+# ---- listing ---------------------------------------------------------------------------------
+
+#' The `plugins` setting without filter entries (`+x`, `-x`)
+#' @noRd
+plugins_setting = function() {
+  pl = as.character(unlist(setting_get("plugins", default = list()), use.names = FALSE))
+  pl[grepl("^[^+-]", pl)]
+}
+
+#' Plugins that could be enabled, read without loading or running anything
+#'
+#' Attached packages with `gptr/`, the project's `.gptr/plugins/` directories, installed Claude
+#' Code plugins and, with `installed = TRUE`, every installed package with `gptr/` (one vectorised
+#' `dir.exists()` over the library directories); NULL for one that is not a plugin.
+#' @noRd
+plugin_candidates = function(installed = FALSE) {
+  pk = Filter(function(p) nzchar(system.file("gptr", package = p)), .packages())
+  if (installed) {
+    dirs = list.dirs(.libPaths(), recursive = FALSE)
+    pk = c(pk, basename(dirs[dir.exists(file.path(dirs, "gptr"))]))
+  }
+  ws = workspace_dir()
+  dirs = if (is.null(ws)) character() else list.dirs(file.path(ws, "plugins"), recursive = FALSE)
+  cl = plugin_claude_installed()
+  c(lapply(setdiff(unique(pk), "gptr"), plugin_from_package), lapply(dirs, plugin_from_dir),
+    Map(plugin_from_claude_install, names(cl), cl))
+}
+
+#' Plugins known to this session
+#'
+#' Lists the plugins gptr can see: plugins enabled through `gptr(plugins = )` or the `plugins`
+#' setting (a settings plugin not enabled yet shows as `lazy`), attached packages that ship
+#' `inst/gptr/`, the project's `.gptr/plugins/` directories and installed Claude Code plugins.
+#' With `installed = TRUE` it also scans every installed package for `inst/gptr/`. Nothing is
+#' loaded or run. A plugin enabled both for the process and for a live session is listed once.
+#'
+#' @param installed `TRUE` to scan every installed package as well.
+#' @return A `gptr_plugins` data frame with columns `name`, `version`, `api`, `kind`
+#'   (`package`, `directory`, `claude-plugin`), `enabled`, `state` (`lazy`, `active`,
+#'   `disabled`, `failed`), `provides`, `tokens` and `path`.
+#' @examples
+#' gptr_plugins(installed = TRUE)
+#' @export
+gptr_plugins = function(installed = FALSE) {
+  check_flag(installed, "installed")
+  es = res_state()$plugins
+  es = lapply(es[order(!vapply(es, function(e) is.null(e$session), NA))], function(e) {
+    e$state = if (e$failed || identical(e$code_state, "failed")) {
+      "failed"
+    } else if (!e$enabled) {
+      "disabled"
+    } else if (identical(e$code_state, "lazy")) {
+      "lazy"
+    } else {
+      "active"
+    }
+    e
+  })
+  known = function(ps, enabled) {
+    lapply(Filter(Negate(is.null), ps), function(p) {
+      c(p, list(enabled = enabled, state = if (enabled) "lazy" else "disabled",
+                provides = plugin_manifest_provides(p$manifest), tokens = NA_real_))
+    })
+  }
+  set = lapply(plugins_setting(), function(n) tryCatch(plugin_resolve(n), error = function(e) NULL))
+  rows = c(es, known(set, TRUE), known(plugin_candidates(installed), FALSE))
+  rows = rows[!duplicated(vapply(rows, function(r) r$path, ""))]
+  chr = function(f) vapply(rows, function(r) as.character(r[[f]] %||% NA)[1L], "")
+  df = data.frame(name = chr("name"), version = chr("version"), api = chr("api"),
+                  kind = chr("kind"), enabled = vapply(rows, function(r) r$enabled, NA),
+                  state = chr("state"),
+                  provides = vapply(rows, function(r) paste(r$provides, collapse = ", "), ""),
+                  tokens = vapply(rows, function(r) as.numeric(r$tokens), 0), path = chr("path"),
+                  stringsAsFactors = FALSE, row.names = NULL)
+  new_listing(df, "gptr_plugins")
+}
+
 # Owned by builtin:skills (IC-34; contract 7.17 lists it with the skills, prompts and agents
 # built-ins): filtering `-builtin:skills` makes `gptr(plugins =)` signal not_available.
 on_load(ext_service_set("plugin.enable", plugin_enable, provided_by = "P17", builtin = "skills"))

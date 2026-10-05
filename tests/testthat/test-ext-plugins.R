@@ -820,3 +820,197 @@ test_that("an activated lazy plugin is lazy again when enabled after gptr_reload
   expect_true(plugin_enable(d, 3L))
   expect_identical(res_state()$plugins[[key]]$code_state, "lazy")
 })
+
+# Task 11: listing, rollback, lazy activation and the toy plugin package (acceptance 3).
+
+toy_package = function(root) {
+  pkg = file.path(root, "gptrpanel")
+  desc = c(
+    "Package: gptrpanel",
+    "Title: Toy Plugin for the gptr Tests",
+    "Version: 0.1.0",
+    "Authors@R: person(\"Toy\", \"Author\", email = \"toy@example.org\",",
+    "    role = c(\"aut\", \"cre\"))",
+    "Description: A toy plugin package used by the gptr test suite.",
+    "License: MIT",
+    "Encoding: UTF-8",
+    "Suggests: gptr",
+    "Config/gptr/plugin: true",
+    "Config/gptr/api: >= 1.0, < 2"
+  )
+  write_file(file.path(pkg, "DESCRIPTION"), desc)
+  write_file(file.path(pkg, "NAMESPACE"), "export(panel_plugin)")
+  code = c(
+    "panel_plugin = function(gptr) {",
+    "  gptr$register(gptr::gptr_tool(",
+    "    name = \"search\", namespace = \"trials\",",
+    "    description = \"Search trials for a condition. Returns a data frame.\",",
+    "    parameters = list(type = \"object\", required = I(\"condition\"),",
+    "                      properties = list(condition = list(type = \"string\"))),",
+    "    fun = function(condition) data.frame(id = \"NCT001\", condition = condition),",
+    "    exposure = \"r\", annotations = list(read_only = TRUE)))",
+    "  invisible(NULL)",
+    "}"
+  )
+  write_file(file.path(pkg, "R", "plugin.R"), code)
+  manifest = c(
+    "{\"name\": \"gptrpanel\", \"version\": \"0.1.0\", \"gptr\": {\"api\": \">= 1.0, < 2\"},",
+    " \"skills\": \"skills\",",
+    " \"extension\": {\"entry\": \"gptrpanel::panel_plugin\", \"activation\": \"lazy\",",
+    "   \"provides\": {\"tool\": [\"trials/search\"]},",
+    "   \"declarations\": {\"trials/search\": {\"signature\": \"search(condition: string)\",",
+    "     \"description\": \"Search trials for a condition\"}}}}"
+  )
+  write_file(file.path(pkg, "inst", "gptr", "plugin.json"), manifest)
+  skill = c("---", "name: clinical-trials",
+            "description: Find and appraise clinical trials for an indication.", "---",
+            "Call gptr$trials$search(condition) inside r.")
+  write_file(file.path(pkg, "inst", "gptr", "skills", "clinical-trials", "SKILL.md"), skill)
+  pkg
+}
+
+local_toy_install = function(env = parent.frame()) {
+  skip_on_cran()
+  src = toy_package(withr::local_tempdir(.local_envir = env))
+  lib = withr::local_tempdir(.local_envir = env)
+  suppressMessages(utils::install.packages(src, lib = lib, repos = NULL, type = "source",
+                                           quiet = TRUE))
+  withr::local_libpaths(lib, action = "prefix", .local_envir = env)
+  withr::defer(if ("gptrpanel" %in% loadedNamespaces()) unloadNamespace("gptrpanel"),
+               envir = env)
+  lib
+}
+
+test_that("a failing factory rolls back and is reported in the diagnostics (acceptance 3)", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"),
+             '{"name": "badplug", "extension": {"activation": "eager"}}')
+  bad = c("function(gptr) {",
+          "  gptr$register(gptr::gptr_command(\"p17-bad-one\", function(args, ctx) NULL))",
+          "  stop(\"boom\")",
+          "}")
+  write_file(file.path(d, "extensions", "bad.R"), bad)
+  sid = "s00000000f7"
+  ok = suppressWarnings(plugin_enable(d, 0L, session = sid))
+  expect_false(ok)
+  expect_null(registry_get("command", "p17-bad-one", session = sid))
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_true(any(diag$source == "plugin:badplug" & grepl("boom", diag$message, fixed = TRUE)))
+  pl = gptr_plugins()
+  expect_identical(pl$state[pl$name == "badplug"], "failed")
+})
+
+test_that("a lazy directory plugin runs its extension files only on first use", {
+  d = withr::local_tempdir()
+  flag = file.path(d, "ran")
+  manifest = c("{\"name\": \"lazyplug\", \"extension\": {\"activation\": \"lazy\",",
+               "  \"provides\": {\"command\": [\"p17-lazy-cmd\"]}}}")
+  write_file(file.path(d, "plugin.json"), manifest)
+  lazy = c("function(gptr) {",
+           paste0("  file.create(", deparse(flag), ")"),
+           "  gptr$register(gptr::gptr_command(\"p17-lazy-cmd\", function(args, ctx) \"lazy ok\"))",
+           "}")
+  write_file(file.path(d, "extensions", "lazy.R"), lazy)
+  sid = "s00000000a8"
+  expect_true(plugin_enable(d, 0L, session = sid))
+  expect_false(file.exists(flag))
+  pl = gptr_plugins()
+  expect_identical(pl$state[pl$name == "lazyplug"], "lazy")
+  cmd = registry_get("command", "p17-lazy-cmd", session = sid)
+  expect_true(file.exists(flag))
+  expect_identical(cmd$handler("", NULL), "lazy ok")
+  pl = gptr_plugins()
+  expect_identical(pl$state[pl$name == "lazyplug"], "active")
+})
+
+test_that("gptr_plugins lists enabled plugins with the contract columns", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "listed-plug", "version": "0.3.0"}')
+  write_file(file.path(d, "skills", "listed-skill", "SKILL.md"),
+             c("---", "name: listed-skill", "description: Listed.", "---", "x"))
+  plugin_enable(d, 0L, session = "s00000000b9")
+  pl = gptr_plugins()
+  expect_s3_class(pl, "gptr_plugins")
+  expect_named(pl, c("name", "version", "api", "kind", "enabled", "state", "provides", "tokens",
+                     "path"))
+  row = pl[pl$name == "listed-plug", , drop = FALSE]
+  expect_true(row$enabled)
+  expect_identical(row$state, "active")
+  expect_identical(row$version, "0.3.0")
+  expect_identical(row$kind, "directory")
+  expect_match(row$provides, "skill:listed-skill", fixed = TRUE)
+  expect_gt(row$tokens, 0)
+  expect_error(gptr_plugins(installed = "yes"), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr_plugins lists settings plugins and candidates, and a plugin enabled twice once", {
+  files = list()
+  files[[".gptr/plugins/proj-plug/plugin.json"]] = '{"name": "proj-plug"}'
+  local_project(files = files)
+  b = withr::local_tempdir()
+  write_file(file.path(b, ".claude-plugin", "plugin.json"), '{"name": "claude-listed"}')
+  inst = file.path(user_home(), ".claude", "plugins", "installed_plugins.json")
+  entry = list(scope = "user", installPath = b, lastUpdated = "2026-09-01T00:00:00.000Z")
+  write_file(inst, json_encode(list(version = 2L, plugins = list("claude-listed@m" = list(entry)))))
+  withr::defer(unlink(inst))
+  s = withr::local_tempdir()
+  write_file(file.path(s, "plugin.json"), '{"name": "setting-plug"}')
+  local_gptr_options(plugins = list(s, "-setting-plug", "+x"))
+  expect_identical(plugins_setting(), s)
+  # lazy for the process, active in a session that used it: the process entry is listed
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"),
+             '{"name": "twice-plug", "extension": {"provides": {"command": ["p17-twice"]}}}')
+  write_file(file.path(d, "extensions", "t.R"), command_ext("p17-twice", "\"t\""))
+  withr::defer(ext_unload("plugin:twice-plug"))
+  withr::defer(plugin_forget(d))
+  expect_true(plugin_enable(d, 0L, session = "s00000000c1"))
+  registry_get("command", "p17-twice", session = "s00000000c1")
+  expect_true(plugin_enable(d, 3L))
+  pl = gptr_plugins()
+  row = function(n) {
+    r = pl[pl$name == n, , drop = FALSE]
+    list(kind = r$kind, enabled = r$enabled, state = r$state)
+  }
+  expect_identical(row("twice-plug"), list(kind = "directory", enabled = TRUE, state = "lazy"))
+  expect_identical(row("setting-plug"), list(kind = "directory", enabled = TRUE, state = "lazy"))
+  expect_identical(row("proj-plug"),
+                   list(kind = "directory", enabled = FALSE, state = "disabled"))
+  expect_identical(row("claude-listed"),
+                   list(kind = "claude-plugin", enabled = FALSE, state = "disabled"))
+})
+
+test_that("an installed toy plugin package is discovered, lazy and activated on use", {
+  local_toy_install()
+  pl = gptr_plugins(installed = TRUE)
+  row = pl[pl$name == "gptrpanel", , drop = FALSE]
+  expect_identical(row$kind, "package")
+  expect_identical(row$api, ">= 1.0, < 2")
+  expect_false(row$enabled)
+  expect_false("gptrpanel" %in% loadedNamespaces())
+  sid = "s00000000b8"
+  expect_true(plugin_enable("gptrpanel", 0L, session = sid))
+  expect_false("gptrpanel" %in% loadedNamespaces())
+  expect_false(is.null(registry_get("skill", "clinical-trials", session = sid)))
+  spec = registry_get("tool", "trials/search", session = sid)
+  expect_true("gptrpanel" %in% loadedNamespaces())
+  expect_identical(spec$fun("asthma")$condition, "asthma")
+})
+
+test_that("declarations reach the frozen prompt before activation; first use activates (e2e)", {
+  local_toy_install()
+  # no P11 mode policy yet: the IC-53 escape hatch, as in test-tool-r.R
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  fake = local_fake_provider(list("Two trials found."))
+  gptr("Find trials", plugins = "gptrpanel", model = fake, envir = new.env())
+  t1 = fake_requests(fake)[[1]]$system$t1
+  expect_match(t1, "search(condition: string)", fixed = TRUE)
+  expect_match(t1, "clinical-trials", fixed = TRUE)
+  expect_false("gptrpanel" %in% loadedNamespaces())
+  e = new.env()
+  script = list(fake_tool("r", code = "res = gptr$trials$search(\"asthma\")"), "Done.")
+  fake2 = local_fake_provider(script, name = "fake2")
+  gptr("Look up asthma trials", plugins = "gptrpanel", model = fake2, envir = e, mode = "auto")
+  expect_true("gptrpanel" %in% loadedNamespaces())
+  expect_identical(e$res$condition, "asthma")
+})
