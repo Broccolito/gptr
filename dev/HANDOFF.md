@@ -1,7 +1,7 @@
 # GPTR 1.0 implementation - handoff
 
 **PAUSED by the maintainer on 2026-10-05 (~11:20 PDT) to hand the work to another agent.**
-All orchestration was stopped cleanly; no test, CI poll or workflow is running. HEAD = `967e735`
+All orchestration was stopped cleanly; no test, CI poll or workflow is running. Last code commit `967e735`; this hand-off commit follows it
 (pushed to `origin/main`; only branch). Six tasks were interrupted mid-flight: their work is
 uncommitted in the working tree (section 4) and also saved as patches.
 
