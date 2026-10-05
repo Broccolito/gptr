@@ -163,12 +163,13 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   items 1-2; D-143's padding bullet dropped.
 - Deviations: D-143. Open: none.
 
-## Task CI-1a - CI tooling tests (2026-10-05)
+## Simplicity CI-1a - CI tooling tests (2026-10-05)
 - Connection-gate tests 9 -> 3 (pass, leak negative control, failures+leak; `library(testthat)`
   and the existence guard gone); the runner's 23-name key list gone: `tests/testthat/setup.R` is the
   one source (runner sets `GPTR_LIVE_TESTS=false`; load does nothing, C-29). -71 lines (plan ~69).
 - Red: none (refactor). Green: `test_file("dev/ci/test-check-connections.R")` PASS 6 (20 before);
   `isolated-check.R test zzz` PASS 94, also with fake ANTHROPIC/TYPESAFE keys exported. Lint clean.
-  Neighbours: `zzz` (above) green.
-- Reviews: none yet.
-- Deviations: none. Open: `progress/tooling.md` still says the runner clears provider keys.
+- Reviews: round 1 clear; minor (check-action examples now see exported keys; offline, read-only)
+  and nit (heading, redundant line) fixed in this log.
+- Deviations: none. Open: `progress/tooling.md:104` and `HANDOFF.md:219` still say the runner
+  clears credentials; keys are cleared by `setup.R` for tests only.

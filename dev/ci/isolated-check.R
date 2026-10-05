@@ -1,5 +1,6 @@
-# Local offline validation with user state isolated before package load.
-# Run from the repository root, with R_LIBS_USER pointing to the development library.
+# Local offline validation with user state isolated before package load; provider keys are
+# cleared by tests/testthat/setup.R. Run from the repository root, with R_LIBS_USER pointing
+# to the development library.
 # Usage: Rscript --vanilla dev/ci/isolated-check.R test <filter>
 #        Rscript --vanilla dev/ci/isolated-check.R lint [files ...]
 #        Rscript --vanilla dev/ci/isolated-check.R document
@@ -21,14 +22,6 @@
     GPTR_PROJECT_ROOT = paths[["project"]], GPTR_REPLAY = "replay",
     GPTR_LIVE_TESTS = "false", OMP_THREAD_LIMIT = "2"
   )
-  # Package load precedes testthat setup; keep offline validation free of credentials.
-  keys = c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
-           "OPENROUTER_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY",
-           "TOGETHER_API_KEY", "XAI_API_KEY", "CEREBRAS_API_KEY", "FIREWORKS_API_KEY",
-           "VLLM_API_KEY", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
-           "AWS_BEARER_TOKEN_BEDROCK", "TYPESAFE_API_KEY", "JEV_KEY", "JEV_API_KEY",
-           "TYPESAFE_KEY", "jev-key", "GITHUB_PAT", "GH_TOKEN")
-  withr::local_envvar(stats::setNames(rep("", length(keys)), keys))
   withr::local_options(gptr.project_root = paths[["project"]], gptr.replay = "replay",
                       gptr.interactive = FALSE)
   args = commandArgs(trailingOnly = TRUE)
