@@ -64,6 +64,11 @@ Maintained by the coordinator; remove an item only when its owning task lands it
   (P05/P12 decision). FIX-4 (`secret_late_check()` NA tolerance) gates every full-suite run.
 - **Waiting on P08 Task 5 (`call_new`/`call_value`)**: P09 Task 10-11, P13 Task 7+.
   **Waiting on P11 Task 8 (`ui.get`, scripted UI)**: P14 (all), P18 Tasks 2, 4, 5.
+- **R 4.6 `tools::file_ext()` (CI-5, D-111):** replace the remaining calls with P01's
+  `path_ext()`/`path_sans_ext()`: `R/doc-io.R:63` (P15), `R/ext-specs.R:1330` (P02/P17; also use
+  `fs_path()` for its `file.exists()`/`readBin()`), `R/gptr-gateway.R:774` (P08). Scheduled as
+  FIX-5 once the P15 and P08 lanes release those files. Also open: INFRA-23 CPU bound on hosted
+  Windows (P04 decision, CI-3/CI-5).
 - **D-019 item 5:** `write_all()` blocks on Windows (processx). P04-level decision needed
   before P18/P19/P20/P22 send large stdin payloads to Windows children.
 - **Hosted CI open items** (`progress/ci-hosted.md`): INFRA-23 CPU 1.060 s once on hosted
