@@ -4671,7 +4671,7 @@ round's starting code 18 fail (`task12-fix1-red.log`). Final `^prompt-compact$`
 P17 Task 5 (`R/skill-templates.R`). `template_re`, `template_substitute()`, `template_expand()`,
 `template_expand_input()`, the fixture of 67 Pi assertions and the plan's 4 tests (77
 expectations) are the plan's literal ones. Only `template_args_parse()` (Pi `parseCommandArgs()`)
-changed; its signature and its results on every input of ASCII whitespace, quotes and other
+changed; its signature and its results on every UTF-8 input of ASCII whitespace, quotes and other
 characters are unchanged (20,000 random inputs compared with the plan-literal function in a UTF-8
 and a C locale: 0 differences).
 
@@ -4688,12 +4688,21 @@ and a C locale: 0 differences).
    an argument's length: one 100,000-character argument (a pasted log after `/explain`) took 11 s
    alone and 22 s in the test. Each character is now tagged with the number of its argument and
    every argument is joined once (0.03 s).
+3. **Input is made UTF-8 before it is joined** (review round 1). The plan wrote
+   `as_utf8(paste(x, collapse = " "))`. In a locale that is neither UTF-8 nor latin1, `paste()`
+   first translates a latin1-marked string to the native encoding, so `caf\xe9` became the text
+   `caf<e9>` before `as_utf8()` saw it, and `template_expand("$1", l1)` gave other bytes than the
+   vector form `template_expand("$1", c(l1, "y"))`. The parser now calls
+   `paste(as_utf8(x), collapse = " ")`, the order `template_substitute()` already uses.
 
-Two regression tests appended to `tests/testthat/test-skill-templates.R` after the plan's 4 lock
-both items. They fail against the plan-literal code (`[ FAIL 9 | WARN 0 | SKIP 0 | PASS 81 ]`),
-so every later P17 count for this file is 13 higher (IC-74).
+Three regression tests appended to `tests/testthat/test-skill-templates.R` after the plan's 4 lock
+the three items. The first two fail against the plan-literal code
+(`[ FAIL 9 | WARN 0 | SKIP 0 | PASS 81 ]`; the time limit is 5 s, 00-conventions section 7, and
+the plan-literal parser takes 22 s), the third under `LC_CTYPE=C` with the plan's join order
+(`[ FAIL 2 | WARN 0 | SKIP 0 | PASS 91 ]`). Every later P17 count for this file is 16 higher
+(IC-74).
 
 Validation: `progress/P17.md`, Task 5. `^skill-templates$`: red
 `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, plan-literal green
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 90 ]` in a UTF-8
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 93 ]` in a UTF-8
 locale and under `LC_ALL=C`; lint clean.
