@@ -1,9 +1,10 @@
 # GPTR 1.0 implementation - handoff
 
-**PAUSED by the maintainer on 2026-10-05 (~11:20 PDT) to hand the work to another agent.**
-All orchestration was stopped cleanly; no test, CI poll or workflow is running. Last code commit `967e735`; this hand-off commit follows it
-(pushed to `origin/main`; only branch). Six tasks were interrupted mid-flight: their work is
-uncommitted in the working tree (section 4) and also saved as patches.
+**RESUMED 2026-10-05 (~12:30 PDT) by a new coordinator session** after the ~11:20 pause. Since
+then: hosted CI run 37351073211 on `2823b07` completed **green (all 13 jobs)**; the P11 Task 3 WIP
+was reverted to HEAD (patch kept, section 4); five lanes run from `dev/ci/orchestration/`:
+s1 (P13-S), prompt (P07-C, P07-S), core (P01-S, P05-C, P05-S, K-CLS), p17 (Tasks 10-12 +
+acceptance), p15 (FIX-7, Tasks 17-18 + acceptance). Next: the Stage B freeze (section 5 step 4).
 
 This file is self-contained: read it top to bottom, then the documents in section 1.
 
@@ -108,12 +109,10 @@ neither is closed or tagged. M2 (P09-P13) waits for P11. M3-M5 not started.
 
 **Hosted CI** (`.github/workflows/R-CMD-check.yaml`, runs on push to `main`, concurrency group with
 `cancel-in-progress: false`, so one run at a time per ref and only the newest push queues; a run
-takes 30-120 min). The last completed run still failed most R CMD check jobs (ubuntu
-release/devel/LC_ALL=C/no-Suggests, macOS, Windows oldrel-4, copy-safety, connections); ubuntu
-oldrel-1/oldrel-4 and the token bench passed. **CI-6 (`38db483`) fixed the then-known causes (R 4.6
-active-binding copies, Windows symlinks, a quadratic lint helper that timed out Windows) but no
-completed run has confirmed it yet** (run 37351073211 on `2823b07` was in progress). Remaining known
-flakes: INFRA-01/INFRA-23 timing on hosted Windows/macOS, `test-proc-supervise.R:89` on Linux.
+takes 30-120 min). **Run 37351073211 on `2823b07` passed all 13 jobs** (macOS, Windows release and
+oldrel-4, Ubuntu devel/release/oldrel-1/oldrel-4, no-Suggests, LC_ALL=C, copy-safety release/devel,
+connections, token bench), confirming CI-6 (`38db483`). Known flakes to watch: INFRA-01/INFRA-23
+timing on hosted Windows/macOS, `test-proc-supervise.R:89` on Linux.
 Fetch logs: `gh run view <run> --json jobs`; `gh api --allow-escape-sequences
 repos/Broccolito/gptr/actions/jobs/<job-id>/logs`. History and open items: `progress/ci-hosted.md`.
 
@@ -124,7 +123,7 @@ Recovery patches of each group (ignored dir): `dev/.validation/wip-2026-10-05/*.
 
 | Interrupted task (lane) | Files | State and what to do |
 |---|---|---|
-| **P11 Task 3** "R classifier, gptr_risk(), risk.classify" | `R/perm-classify.R` (+3,541), `tests/testthat/test-perm-classify.R` (+1,426), `tests/testthat/_snaps/perm-classify.md`, `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`, `NAMESPACE` (+3 gptr_risk lines), `dev/progress/P11.md` (+704) | Not review-clean after 5 rounds (endless R-classifier special cases). **Do not commit as is.** Plan: apply P11-A + P11-B1..B3 (allowlist redesign of the shell/SQL/Python classifier, simplicity plan) and redo Task 3's R classifier the same way (level 0 = known read-only calls from the plan's tables; computed calls >= 3), far smaller than the 3.5k-line WIP. Options: keep the WIP as reference and rewrite, or revert these files to HEAD and restart Task 3 from the plan under the allowlist standard (recommended; patch is saved). Also the P11 progress log section must be shortened to the section 11 format. |
+| **P11 Task 3** "R classifier, gptr_risk(), risk.classify" | `R/perm-classify.R` (+3,541), `tests/testthat/test-perm-classify.R` (+1,426), `tests/testthat/_snaps/perm-classify.md`, `man/gptr_risk.Rd`, `man/format.gptr_risk.Rd`, `NAMESPACE` (+3 gptr_risk lines), `dev/progress/P11.md` (+704) | **Reverted to HEAD on resume (2026-10-05)**; the patch and file copies stay in `dev/.validation/wip-2026-10-05/`. Not review-clean after 5 rounds (endless R-classifier special cases). Plan: apply P11-A + P11-B1..B3 (allowlist redesign of the shell/SQL/Python classifier, simplicity plan) and redo Task 3's R classifier the same way (level 0 = known read-only calls from the plan's tables; computed calls >= 3), far smaller than the 3.5k-line WIP. Options: keep the WIP as reference and rewrite, or revert these files to HEAD and restart Task 3 from the plan under the allowlist standard (recommended; patch is saved). Also the P11 progress log section must be shortened to the section 11 format. |
 | **S-s1: simplicity P13-S** (System 1 one wire parser, IC-64 never-retry fix) | `R/s1-*.R`, `tests/testthat/test-s1-*.R`, `test-live-ollama-s1.R`, `fixtures/jev/harness.R`, `dev/progress/P13.md` | Implemented, review status unknown. Resume as "ALREADY IMPLEMENTED, UNCOMMITTED: review, fix, commit" (filters `s1-|provider-anthropic`, `copy-s1`). |
 | **S-kernel: simplicity P07-C** (prompt comment trim; may include part of P07-S) | `R/prompt-cache.R`, `prompt-compact.R`, `prompt-context.R`, `prompt-sections.R`, `prompt-text.R`, `dev/progress/simplicity.md` note | Resume review/commit (filters `prompt-|context-|bench`, `run.R --check`). Then P07-S, P08-C remain in that lane. |
 | **S-core: simplicity P01-S** (P01 duplication, fake-classifier choices defect, doubled-BOM defect) | `R/agent-run.R`, `R/session-object.R`, `R/session-store.R` (`drop_null` -> `compact`), `R/json-encode.R`, `R/json-schema.R`, `R/provider-events.R`, `R/provider-fake.R`, `R/utils-conditions.R`, `utils-encoding.R`, `utils-hash.R`, `utils-tokens.R`, `tests/testthat/test-provider-fake.R`, `test-utils-*.R` | Resume review/commit (filters `json-|utils-|provider-fake|provider-events|session-store`). Then P01-T, P03-S remain in that lane. |
@@ -212,7 +211,8 @@ list of tasks of one plan (or one set of simplicity packages / fixes). Script:
    `pushEvery` commits.
 
 `args`: `{plan, planFile, contextRanges, log, pushEvery, early?, continueOnBlocked?, extraContext,
-tasks: [{id, title, range, notes, reviewScope?}]}`. Summarise a finished run with
+scratch?, tasks: [{id, title, range, notes, reviewScope?, planFile?, log?}]}` (a task's own `planFile`/`log`
+override the lane's, so one lane can mix a fix with plan tasks; scratch defaults to `dev/.validation/scratch`). Summarise a finished run with
 `python3 dev/ci/orchestration/wfsum.py <workflow-output.json>`. `simplicity-review.workflow.js` is
 the read-only review that produced the simplicity plan.
 

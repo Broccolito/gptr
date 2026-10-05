@@ -291,7 +291,7 @@ where the literal code is more complex than the contract requires:
 Record formats (from 2026-10-05). A progress-log section per task, at most about 8 lines:
 
 ```
-## Task N - <title> (`<sha>`, YYYY-MM-DD)
+## Task N - <title> (YYYY-MM-DD)
 - Red: FAIL n (<cause>). Green: PASS m (plan p; +k for D-xxx). Lint clean. Neighbours: <filters> green.
 - Reviews: r1 <n> findings (<b/M/m>) -> D-xxx; r2 clean.
 - Deviations: D-xxx (or none). Open: <items or none>.

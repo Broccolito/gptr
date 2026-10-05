@@ -12,7 +12,7 @@ export const meta = {
 
 const A = args
 const RUN = "R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R"
-const SCRATCH = "/private/tmp/claude-501/-Users-wgu-Desktop-gptr/0e1ce390-ccb6-46f4-bcb0-3e36676bd924/scratchpad"
+const SCRATCH = A.scratch || "/Users/wgu/Desktop/gptr/dev/.validation/scratch"
 
 const COMMON = `
 Repository: /Users/wgu/Desktop/gptr (git branch main; work directly on main; never create branches or worktrees).
@@ -100,9 +100,9 @@ Read before editing:
 - dev/HANDOFF.md, dev/PROGRESS.md, dev/DEVIATIONS.md (current state; earlier decisions)
 - dev/plan/00-conventions.md
 - ${A.planFile}: ${A.contextRanges}
-- ${A.planFile} lines ${t.range}: THIS task (authoritative steps, literal test and source code, commit message)
+- ${t.planFile || A.planFile} lines ${t.range}: THIS task (authoritative steps, literal test and source code, commit message)
 - The contract/architecture sections the task cites, plus dev/spec/07-local-ollama.md where the task touches providers, models, usage, decisions or locality.
-- ${A.log} (earlier tasks' decisions in this plan) and the plan's Self-review "Contract ambiguities" rows for this task.
+- ${t.log || A.log} (earlier tasks' decisions in this plan) and the plan's Self-review "Contract ambiguities" rows for this task.
 Task-specific notes from the coordinator: ${t.notes || 'none'}
 
 ${A.early ? `EARLY LANE PRECHECK (mandatory, before editing anything): this plan runs ahead of its declared dependencies. Read the task and list every function, service, hook, option or file from OTHER plans that its tests or source call. Grep R/ to confirm each exists (exact name). If any is missing and the task's tests cannot be satisfied without it (the plan's own skip guards for not-yet-available services count as satisfiable), return status 'blocked' immediately WITHOUT editing any file, naming the missing items. Never stub another plan's function.
@@ -114,7 +114,7 @@ ${A.early ? `EARLY LANE PRECHECK (mandatory, before editing anything): this plan
 5. GREEN: re-run until [ FAIL 0 | WARN 0 ]. Record the actual counts; explain any difference from the plan's expected count (historical; IC-74 may change them).
 6. Lint every R/test file you touched (zero lints). If roxygen/exports changed, run the document action and include NAMESPACE/man changes.
 7. Run the test filters of neighbouring areas your change could affect, to catch regressions; fix regressions you caused.
-8. Append a concise evidence section '## Task ${t.id} - ${t.title}' to ${A.log} (create the file with a short header if missing): what was built, adaptations/deviations with rationale, actual red/green counts, lint, log paths. Add a D-0xx entry to dev/DEVIATIONS.md (next free number) only for a meaningful behavioural deviation from plan/contract.
+8. Record evidence in ${t.log || A.log} as ONE section in the short format of dev/plan/00-conventions.md section 11 (at most ~8 lines: '## Task ${t.id} - ${t.title} (YYYY-MM-DD)', then '- Red: ... Green: ... Lint clean. Neighbours: ... green.', '- Reviews: ...', '- Deviations: D-nnn or none. Open: ... or none.'). No narrative, no per-round counts, no dev/.validation paths. Add a D-nnn entry (section 11 format, at most ~12 lines; take the next free number at the moment of writing: grep -o '^## D-[0-9]*' dev/DEVIATIONS.md | sort -t- -k2 -n | tail -1) only for a meaningful contract-visible or behavioural deviation.
 9. Do NOT commit, push, stash, reset or clean. Leave all changes in the working tree.
 If you cannot proceed without a maintainer decision, a missing tool/package, network access, paid/live calls or credentials, stop and return status 'blocked' with the exact need (do not fake it).
 Return the structured result; 'files' must list every path you created or modified (repo-relative).`
@@ -123,7 +123,7 @@ Return the structured result; 'files' must list every path you created or modifi
 function reviewPrompt(t, impl, round) {
   return `You are an INDEPENDENT REVIEWER (round ${round}) for gptr plan ${A.plan} Task ${t.id}: "${t.title}". You did not write this code. Do not edit repository files. Do not commit.
 ${COMMON}
-Read: ${A.planFile} lines ${t.range} (the task), the contract sections it cites (and dev/spec/07-local-ollama.md if relevant), dev/plan/00-conventions.md, and the implementer's evidence in ${A.log}.
+Read: ${t.planFile || A.planFile} lines ${t.range} (the task), the contract sections it cites (and dev/spec/07-local-ollama.md if relevant), dev/plan/00-conventions.md, and the implementer's evidence in ${t.log || A.log}.
 Implementer report: ${JSON.stringify(impl)}
 Coordinator notes for this task: ${t.notes || 'none'}
 ${t.reviewScope ? `REVIEW SCOPE (coordinator decision, binding): ${t.reviewScope}
@@ -140,12 +140,12 @@ Verdict 'clear' only if there are no blocker/major findings.`
 function fixPrompt(t, impl, review, round) {
   return `You are the FIXER (round ${round}) for gptr plan ${A.plan} Task ${t.id}: "${t.title}". An independent reviewer audited the uncommitted implementation. Address its findings.
 ${COMMON}
-Read: ${A.planFile} lines ${t.range}, the cited contract sections, ${A.log}.
+Read: ${t.planFile || A.planFile} lines ${t.range}, the cited contract sections, ${t.log || A.log}.
 Implementer report: ${JSON.stringify(impl)}
 Reviewer report: ${JSON.stringify(review)}
 
 For each blocker/major/minor finding: verify it against the plan and contract (the contract wins; the reviewer can be wrong). If real, fix it test-first where practical (add a regression test, see it fail, fix, see it pass). If not real, decline it with a precise reason. Nits: fix if trivial.
-Then re-run the focused filters and lint of touched files; ensure [ FAIL 0 | WARN 0 ] and zero lints; re-run document if roxygen changed. Update the Task ${t.id} section of ${A.log} with the review findings, what changed, regression red/green counts and the final green. Do NOT commit, push, stash, reset or clean.
+Then re-run the focused filters and lint of touched files; ensure [ FAIL 0 | WARN 0 ] and zero lints; re-run document if roxygen changed. Update the Task ${t.id} section of ${t.log || A.log} in the short section 11 format (one '- Reviews:' line summarising findings and outcome; refresh the Green line); no narrative. Do NOT commit, push, stash, reset or clean.
 Return the structured result; 'files' lists every path modified by you or the implementer for this task.`
 }
 

@@ -5,7 +5,7 @@ entry point for another agent. Read this file and `HANDOFF.md` before continuing
 
 ## Current state
 
-**PAUSED 2026-10-05 (~11:20 PDT) by the maintainer for a hand-off to another agent.** Read
+**RESUMED 2026-10-05 (~12:30 PDT) after the ~11:20 hand-off pause.** Read
 [HANDOFF.md](HANDOFF.md) first: it has the exact state (HEAD `967e735`, 195/307 tasks), the six
 interrupted tasks and their uncommitted files, the next steps, the open obligations, the
 orchestration method and the pitfalls. Work is on `main` (only branch), pushed.
@@ -89,6 +89,9 @@ Resume log (newest last):
 - 2026-10-05: simplicity packages DEF-1 `624b997`, DEF-2 `510cf99`, P13-C `ad0eec6`, P06-C `e244f71`,
   P01-D `bb31ba4` (D-138); P17 Task 8 `967e735`. **Paused** with P11 Task 3, P13-S, P07-C, P01-S,
   P17 Task 10 and P15 Task 17 tests uncommitted (HANDOFF section 4).
+- 2026-10-05 (resume): hosted CI green on `2823b07` (run 37351073211, 13/13 jobs). P11 Task 3 WIP
+  reverted (patch kept). Lanes: s1 (P13-S), prompt (P07-C, P07-S), core (P01-S, P05-C, P05-S, K-CLS),
+  p17 (Tasks 10-12, acceptance), p15 (FIX-7, Tasks 17-18, acceptance); then the Stage B freeze.
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
