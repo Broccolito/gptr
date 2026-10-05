@@ -829,8 +829,9 @@ s1_provenance = function(model, values, engine) {
 #' Returns `list(answers, conditions, errors, usages, usage = list(input, output, cost),
 #' model_version, request_ids, engine, calibrated, provenance)`; `answers[[i]]` holds the
 #' canonical answers of state i by question id, or NULL when `conditions[[i]]` holds its failure.
-#' Unknown usage stays NA in the sums (IC-74, D-076); `calibrated` is the default unless the
-#' results state it (s1_calibration()).
+#' Unknown usage stays NA in the sums (IC-74, D-076); the sums also count the `usage` a failed
+#' outcome carries (a completed reply that was refused, s1_emu_outcome()); `calibrated` is the
+#' default unless the results state it (s1_calibration()).
 #' @noRd
 s1_dispatch = function(model, states, questions, start_for, engine, calibrated) {
   max_active = s1_active_cap(model)
@@ -850,7 +851,16 @@ s1_dispatch = function(model, states, questions, start_for, engine, calibrated) 
   values = list()
   for (j in seq_along(results)) {
     r = results[[j]]
-    if (!isTRUE(r$ok)) next
+    if (!isTRUE(r$ok)) {
+      # a reply that completed but was refused (a cut or malformed emulated answer) was charged:
+      # its outcome carries the usage the provider reported, which counts like any other
+      fu = r[["usage"]]
+      if (is.list(fu)) {
+        input = input + s1_count(fu[["input"]])
+        output = output + s1_count(fu[["output"]])
+      }
+      next
+    }
     # result fields are read with [[ ]]: `$` would partially match a longer field name
     v = r$value
     values[[length(values) + 1L]] = v
