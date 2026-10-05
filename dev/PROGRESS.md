@@ -42,6 +42,14 @@ Resume log (newest last):
   (`97c3e02` .. `b40b4d1`; Task 8 carries the temporary D-054 guard that P08 Task 10 must
   remove), **P10 Tasks 1-7** (`47f4ed9` .. `a94716b`). P07 lane started; early lanes P11
   (Tasks 1-6) and P15 (Tasks 1-6) running.
+- 2026-10-04 (later): CI-4 `9a3b3ad` (clean-export R CMD check Status OK, 11,599 assertions).
+  **P07 Tasks 1-12** committed (`01124c4` .. `c431414`); Task 13 in a fix round, then 14-16 and
+  acceptance. Early lanes: P15 Tasks 1-3, 5-6 (Task 4 needs P08); P17 Tasks 1-3, 5, 7, 9; P13
+  Tasks 1-6 (Task 7 needs P08); P11 Task 1 (Task 2 in a fail-safe classifier round); P18 Task 1
+  (`5ba4276`); P14 fully waits for P11 Task 8 and P08. Maintainer-requested **FIX-1 session
+  finalizer race** `a5af999` (D-085: GC-time `session_shutdown` deferred to safe points; registry
+  loops tolerate removed records), FIX-2 `13ddf95`, FIX-3 `106434a` (`progress/fixes.md`).
+  **P08 lane started** (gateway/SDK; unblocks P14, P15 Task 4, P13 Task 7, P11 Task 6).
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
