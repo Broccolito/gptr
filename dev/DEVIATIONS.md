@@ -9648,3 +9648,10 @@ Validation: `progress/P17.md`, Task 6.
    programming languages, in the spirit of recording agent sessions as readable, replayable
    documents (R scripts, R Markdown/Quarto, Jupyter notebooks). The README and `?peter` say so.
    The maintainer confirmed both naming calls (namespace `peter$`, other exports keep `gptr_`).
+4. **Rename details (coordinator, 2026-10-05).** Extension factories keep their API object
+   `function(gptr)` (the package's extension API, not the agent). Labels naming the gateway object
+   say `peter`. The agent persona in the system prompt and the console prompt (P14) say Peter /
+   `peter> `, since the maintainer named the agent Peter. Contract-visible simplifications DEC-1..4
+   of `progress/simplicity-plan.md` are not taken; the contract stays. The P11 classifier redesign
+   (P11-B, allowlist level 0, unmodelled constructs level 3) is accepted under D-061 and
+   architecture 6.8.1; its level changes are listed in the plan and reported to the maintainer.
