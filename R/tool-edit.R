@@ -1,17 +1,7 @@
-# tool-edit.R -- the `edit` tool and `gptr$edit()` (P10): Pi's multi-edit semantics (every oldText
-# matched against the original, unique, non-overlapping; nothing written unless every edit
-# succeeds), the fuzzy fallback (NFKC with stringi, trailing whitespace, smart quotes, dashes,
-# special spaces) that rewrites only the touched lines, bytes outside the edited spans kept exactly
-# (mixed line endings, BOM, CP1252, UTF-16, stray invalid bytes), `replace_all`, and pasted `***
-# Begin Patch` envelopes (Codex format). Ported from dev/research/11-r-file-tools.md section 5.5
-# (proto/31-edit.R; section 2.4) and dev/research/01-pi-builtin-tools.md sections 2.5 and 3.4 (Pi's
-# algorithm and texts). One deliberate return to Pi over report 11: occurrences are counted in
-# fuzzy-normalised space (edit-diff.ts:247-251), so Pi's oracle case "hello world   \nhello world\n"
-# reports 2 occurrences. Pi's argument shim parses a JSON string with json_decode(), which never
-# reads a file or a URL that the string names. A patch hunk is a block of whole lines: a hunk that
-# only removes lines also removes their line ending, and a file named by two operations is refused.
-# Whether two patch paths are one file, and whether a move's old name is the entry it just wrote,
-# is asked of the file system, never decided by comparing spellings.
+# The `edit` tool and `gptr$edit()` (P10; research 11 section 5.5, research 01 sections 2.5, 3.4):
+# Pi's all-or-nothing multi-edit, the fuzzy fallback that rewrites only touched lines, other bytes
+# kept exactly, `replace_all`, and Codex `*** Begin Patch` envelopes. Occurrences are counted in
+# fuzzy space as in Pi; patch paths are compared by the file system, never by spelling.
 
 #' Pi normalizeForFuzzyMatch() applied line by line (the line structure is unchanged). Every class
 #' pattern starts with (*UTF) so it compiles on all-ASCII input (report 11 P5)
@@ -33,13 +23,9 @@ fuzzy_normalize = function(text) {
   utf8_mark(paste(fuzzy_normalize_lines(split_lines_js(text)), collapse = "\n"))
 }
 
-#' All non-overlapping occurrences (0-based byte offsets) of a fixed string, leftmost first;
-#' locale independent
-#'
-#' Through strsplit(), which is linear in the number of matches; gregexpr(fixed = TRUE) is
-#' quadratic in it (200,000 matches in a 5 MB text took 9 s). strsplit() drops the empty piece
-#' after a match at the very end, so the byte count tells whether there was one. An empty needle
-#' (an oldText of only whitespace after fuzzy normalisation) occurs nowhere.
+#' All non-overlapping occurrences (0-based byte offsets) of a fixed string, leftmost first
+#' strsplit() is linear in the matches (gregexpr(fixed = TRUE) is quadratic); the byte count
+#' detects a match at the very end. An empty needle occurs nowhere.
 #' @noRd
 fixed_positions = function(haystack, needle) {
   if (!nzchar(needle)) return(integer(0))
@@ -80,10 +66,8 @@ edit_error = function(single, multi, path, i, n) {
 }
 
 #' Apply edits to decoded text (a string without BOM; unmarked bytes when it is lossy UTF-8)
-#'
-#' @return `list(text, base_old, base_new, fuzzy, counts, eol_changed)`: `base_old`/`base_new` are
-#'   the LF views before and after (for the diff): CRLF read as LF, a lone CR kept in both, so the
-#'   diff shows only the lines the edits changed.
+#' Returns `list(text, base_old, base_new, fuzzy, counts, eol_changed)`; `base_old`/`base_new` are
+#' the LF views for the diff (CRLF read as LF, a lone CR kept in both).
 #' @noRd
 apply_edits = function(text, edits, path = "file", replace_all = FALSE) {
   n = length(edits)
@@ -244,11 +228,8 @@ edit_splice_fuzzy = function(body, fz_lines, has_cr, k, eol, starts, lens, repl)
 }
 
 #' Pi prepareEditArguments(): edits as a JSON string, a single object, a data frame or a list
-#'
-#' A JSON string is parsed with json_decode() (jsonlite::parse_json()): jsonlite::fromJSON() reads
-#' a string that is not valid JSON as a file name or a URL, so a model-supplied `edits` naming a
-#' local file or an http(s) URL would be read or fetched. Every present `oldText`/`newText` (or
-#' `old_text`/`new_text`) must be one string.
+#' json_decode(), never jsonlite::fromJSON(), which reads a non-JSON string as a file or URL; every
+#' present `oldText`/`newText` (or `old_text`/`new_text`) must be one string.
 #' @noRd
 edit_normalize_args = function(edits) {
   if (is.character(edits) && length(edits) == 1L && !patch_is_envelope(edits)) {
@@ -341,13 +322,8 @@ edit_reasons = function(cp) {
 }
 
 #' Edit a file: the `edit` tool (contract section 7.10)
-#'
-#' @param path File path as given (used in messages).
-#' @param edits A list of `list(oldText =, newText =)` (also `old_text`/`new_text`, per-edit
-#'   `replaceAll`), a JSON string, a single object, or a chr(1) `*** Begin Patch` envelope.
-#' @param replace_all Replace every occurrence of each oldText.
-#' @return `list(message, diff = chr (at most 400 tokens), fuzzy = lgl(1), details = list(path,
-#'   n_edits, fuzzy, diff (the full unified diff), document, deviated, reasons, encoding))`
+#' `edits`: a list of `list(oldText =, newText =)` (or snake case, per-edit `replaceAll`), a JSON
+#' string, one object or a `*** Begin Patch` envelope; `diff` is capped at 400 tokens.
 #' @noRd
 edit_file = function(path, edits, replace_all = FALSE) {
   check_string(path, "path")
@@ -389,10 +365,9 @@ patch_is_envelope = function(x) {
     grepl("^\\s*\\*\\*\\* Begin Patch", x, perl = TRUE)
 }
 
-#' The patch envelope carried by an edit's arguments, or NULL: `edits` itself (a string, or a list
-#' of one string), or the only edit's `newText` (or `oldText`) when the other text is empty, which
-#' is how a model pastes an envelope through the direct tool's schema. `edits` is first put through
-#' Pi's shim, so an envelope inside a JSON string, a single object or a data frame is found too.
+#' The patch envelope carried by an edit's arguments, or NULL
+#' `edits` itself, or the only edit's `newText` (or `oldText`) when the other text is empty; after
+#' Pi's shim, so an envelope in a JSON string, an object or a data frame is found too.
 #' @noRd
 edit_envelope_of = function(edits) {
   if (patch_is_envelope(edits)) return(if (is.list(edits)) edits[[1L]] else edits)
@@ -424,9 +399,8 @@ edit_nested_input = function(input) {
 }
 
 #' Parse a Codex-style patch envelope into file operations
-#'
-#' As in Codex, every line of an update hunk starts with " " (context), "-" (removed) or "+"
-#' (added), an empty line being empty context, and an `*** Update File` needs at least one hunk.
+#' As in Codex, update lines start with " ", "-" or "+" (an empty line is empty context), and an
+#' `*** Update File` needs at least one hunk.
 #' @noRd
 patch_parse = function(envelope) {
   lines = split_lines_count(normalize_lf(as_utf8(envelope)))
@@ -495,9 +469,8 @@ patch_paths = function(envelope) {
 }
 
 #' Does a block of whole lines occur in a text (the LF view or its fuzzy normalisation)?
-#'
-#' "after": somewhere it starts a line and is followed by a line ending; "before": it is the last
-#' line(s) of a text without a final newline, after a line ending; NA: neither.
+#' "after": it starts a line and a line ending follows; "before": it ends a text without a final
+#' newline, after a line ending; NA: neither.
 #' @noRd
 patch_line_end = function(hay, block) {
   if (length(fixed_positions(paste0("\n", hay), paste0("\n", block, "\n")))) return("after")
@@ -509,14 +482,8 @@ patch_line_end = function(hay, block) {
 }
 
 #' The edits of an `*** Update File` operation: one per `@@` hunk, its old and new lines joined
-#'
-#' A hunk is a block of whole lines. One that only removes lines (no context, nothing added) also
-#' removes a line ending, so no empty line is left where the lines were: the ending after them, or,
-#' when they end a file without a final newline, the ending before them. The LF view is searched
-#' first, then (unless the text is lossy UTF-8) its fuzzy normalisation, as apply_edits() does.
-#' Lines found at the end of the fuzzy view only are removed as the file has them (their trailing
-#' whitespace included): the ending plus the fuzzy text would also match exactly at the start of
-#' the last line and leave its trailing whitespace on the line before.
+#' A removal-only hunk also removes a line ending: the one after it, or the one before it at the end
+#' of a file without a final newline (then a fuzzy match takes the file's own last lines).
 #' @noRd
 patch_hunk_edits = function(op, text) {
   lf = gsub("\r\n", "\n", text, fixed = TRUE, useBytes = TRUE)
@@ -561,11 +528,9 @@ patch_remove = function(abs, path) {
   invisible(NULL)
 }
 
-#' The file a patch path names, as a key for finding two operations on one file: links followed,
-#' the existing part of the path resolved by the file system (normalizePath() follows directory
-#' links and, on macOS and Windows, returns the stored spelling), and on a case-insensitive file
-#' system the whole key folded, so that names not created yet compare too (Unicode case and NFC
-#' with stringi, ASCII case without it)
+#' The file a patch path names, as a key for finding two operations on one file
+#' Links followed and the existing part resolved by the file system; on a case-insensitive file
+#' system the key is folded (Unicode case and NFC with stringi, ASCII case without).
 #' @noRd
 patch_key = function(p, fold) {
   t = resolve_link_target(p)
@@ -581,12 +546,9 @@ patch_key = function(p, fold) {
   chartr(paste(LETTERS, collapse = ""), paste(letters, collapse = ""), k)
 }
 
-#' Finish a move once its new name holds `bytes`: remove the old name unless it is the entry just
-#' written, which the file system tells. An old name that is still a link is another entry (it is
-#' removed, never its target). An old name that now reads as `bytes` is the new name spelled with
-#' other letter case or Unicode normalisation on a file system that folds names, or reached
-#' through a directory link: it is renamed to the new spelling (a no-op when nothing differs), so
-#' a move never deletes the file it wrote.
+#' Finish a move once its new name holds `bytes`: remove the old name unless it is that entry
+#' An old name (not a link) that reads as `bytes` is the new name under folding or a directory
+#' link: it is renamed to the new spelling, so a move never deletes the file it wrote.
 #' @noRd
 patch_finish_move = function(old, new, bytes, path) {
   p = fs_path(old)
@@ -601,19 +563,9 @@ patch_finish_move = function(old, new, bytes, path) {
   patch_remove(old, path)
 }
 
-#' Apply a Codex-style patch envelope: `*** Add File`, `*** Update File` (with `*** Move to`), `***
-#' Delete File`, `@@` hunks (contract section 7.10)
-#'
-#' Every operation is computed first; nothing is written unless all succeed. Every operation is
-#' computed against the files as they were, so a file named by two operations (two updates, an
-#' update and a delete, a move onto another operation's file) is refused: the later write would
-#' drop the earlier change. Paths are compared by patch_key() (links followed, existing parts
-#' resolved by the file system, names folded on a case-insensitive file system); a move's old
-#' name is removed only when the file system shows it is not the new one (patch_finish_move()).
-#' @param envelope chr(1) text from `*** Begin Patch` to `*** End Patch`.
-#' @param root Directory that relative paths are resolved against.
-#' @return `list(files = chr (absolute paths written), message = chr(1), details = list(ops, files,
-#'   diff, fuzzy, reasons))`
+#' Apply a Codex-style patch envelope, relative paths against `root` (contract section 7.10)
+#' Every operation is computed against the files as they were and nothing is written unless all
+#' succeed, so a file named by two operations (patch_key()) is refused.
 #' @noRd
 patch_apply = function(envelope, root = project_root()) {
   check_string(envelope, "envelope")
@@ -696,9 +648,8 @@ patch_apply = function(envelope, root = project_root()) {
                       reasons = unique(reasons)))
 }
 
-#' An edit given as a patch envelope, in edit_file()'s return shape (paths relative to getwd()); a
-#' hunk matched through the fuzzy fallback, an EOL change or a re-encoding makes it deviate, as for
-#' edit_file(), so its result text carries the diff (at most 400 tokens)
+#' An edit given as a patch envelope, in edit_file()'s return shape (paths relative to getwd())
+#' A fuzzy hunk, an EOL change or a re-encoding makes it deviate, so its text carries the diff.
 #' @noRd
 edit_from_patch = function(envelope) {
   if (is.list(envelope)) envelope = envelope[[1L]]

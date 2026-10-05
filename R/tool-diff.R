@@ -1,19 +1,13 @@
-# tool-diff.R -- line diff in pure base R (P10): common prefix/suffix trim, patience anchors (lines
-# unique in both ranges, longest increasing subsequence), Myers O(ND) on the remaining gaps with the
-# cost capped at D = 256 (a gap beyond the cap is reported as replaced, still a valid edit script),
-# and unified-diff rendering with GNU conventions. Ported from dev/research/11-r-file-tools.md
-# section 5.5 (proto/30-diff.R; 150 random property tests and git-apply checks in its verification
-# log, row 32) with the cap of dev/research/21-rcpp-hot-paths.md section 2.3 (no diffobj, no
-# compiled code; contract section 7.10).
+# Line diff in pure base R (P10; research 11 section 5.5, contract 7.10): common prefix/suffix
+# trim, patience anchors (unique lines, longest increasing subsequence), Myers O(ND) on the gaps
+# capped at D = 256 (a gap beyond the cap is reported as replaced, still a valid edit script), and
+# GNU-style unified rendering.
 
 diff_max_d = 256L
 
 #' Indices of a longest strictly increasing subsequence of `x` (patience sort, O(n log n))
-#'
-#' The tails live in vectors of length n with a length counter: a value above the last tail is
-#' appended in O(1), any other finds its pile (the number of tails below it) by binary search.
-#' findInterval() is not used because it checks that `vec` is sorted on every call, which made a
-#' moved block in a long file quadratic.
+#' Piles are found by binary search: findInterval() re-checks sortedness on every call, which made
+#' a moved block in a long file quadratic.
 #' @noRd
 diff_lis = function(x) {
   n = length(x)
@@ -70,11 +64,8 @@ diff_snake = function(a, b, x, y) {
   len_max
 }
 
-#' Myers greedy forward pass over integer-coded lines; matched pairs `list(a, b)`, or NULL when the
-#' edit distance exceeds `max_d`
-#'
-#' `v` spans only the diagonals -D-1 .. D+1 and round d keeps only its window -d .. d of `v` for the
-#' backtrack, so memory is O(D^2), not O(D * (n + m)), however long the gap is.
+#' Myers greedy forward pass: matched pairs `list(a, b)`, or NULL when the distance exceeds `max_d`
+#' Round d keeps only its window -d .. d of `v` for the backtrack: memory O(D^2), not O(D(n + m)).
 #' @noRd
 diff_myers = function(a, b, max_d = diff_max_d) {
   n = length(a)
@@ -102,9 +93,7 @@ diff_myers = function(a, b, max_d = diff_max_d) {
 }
 
 #' Backtrack a finished Myers pass into matched index pairs (snakes recorded as ranges: linear time)
-#'
-#' `trace[[dd + 1]]` holds diagonals -dd .. dd of `v` as it was before round dd (diagonal k at
-#' position k + dd + 1).
+#' `trace[[dd + 1]]` holds diagonals -dd .. dd of `v` before round dd (diagonal k at k + dd + 1).
 #' @noRd
 diff_myers_back = function(trace, d, n, m) {
   ra = integer(0)
@@ -142,9 +131,7 @@ diff_myers_back = function(trace, d, n, m) {
 }
 
 #' Match vector: element i is the index of `b` matched to `a[i]` (0 = deleted); matches increase
-#'
-#' Ranges still to diff are kept on a stack of four integer vectors (`top` is its height), so
-#' pushing the gaps between anchors is vectorised and popping copies nothing.
+#' Ranges still to diff are a stack of four integer vectors (`top` its height): pops copy nothing.
 #' @noRd
 diff_match = function(a, b, max_d = diff_max_d) {
   u = unique(c(a, b))
@@ -241,11 +228,8 @@ diff_ops = function(a, b, max_d = diff_max_d) {
   data.frame(op = op[o], a = ia[o], b = ib[o], stringsAsFactors = FALSE)
 }
 
-#' Unified hunks (`@@ -a,b +c,d @@` and " ", "-", "+" lines) of an edit script
-#'
-#' Vectorised over the rows of all hunks at once (linear in the script, however many hunks). A hunk
-#' starts at the line after the lines of each side that precede it; an empty range names the line
-#' before it (GNU: `-5,0`). `context` is clamped to the script's length, so no index overflows.
+#' Unified hunks (`@@ -a,b +c,d @@` and " ", "-", "+" lines) of an edit script, vectorised
+#' An empty range names the line before it (GNU: `-5,0`); `context` is clamped to the script.
 #' @noRd
 diff_hunks = function(a, b, ops, context = 3L, a_final_nl = TRUE, b_final_nl = TRUE) {
   op = ops$op
@@ -288,10 +272,7 @@ diff_hunks = function(a, b, ops, context = 3L, a_final_nl = TRUE, b_final_nl = T
   utf8_mark(unname(out[o]))
 }
 
-#' Cut diff lines to a token budget, ending with a notice
-#'
-#' The notice always ends a cut diff, so a budget smaller than the notice itself (about 12 tokens)
-#' gives the notice alone.
+#' Cut diff lines to a token budget, ending with a notice (alone below about 12 tokens)
 #' @noRd
 diff_budget = function(lines, max_tokens) {
   if (!length(lines) || est_tokens(lines, "code") <= max_tokens) return(lines)
@@ -304,12 +285,8 @@ diff_budget = function(lines, max_tokens) {
   c(lines[seq_len(lo)], paste0("[diff truncated: ", length(lines) - lo, " more lines]"))
 }
 
-#' Unified diff of two line vectors (contract section 7.10)
-#'
-#' @param old,new Character vectors of lines (no line terminators).
-#' @param context Lines of context around each change.
-#' @param max_tokens Estimated-token cap of the result (`Inf`: no cap).
-#' @return Character vector of hunk lines without file headers, or `character()` when equal.
+#' Unified diff of two line vectors (contract section 7.10): hunk lines without file headers
+#' `character()` when equal; `max_tokens` caps the estimated tokens (`Inf`: no cap).
 #' @noRd
 diff_lines = function(old, new, context = 3L, max_tokens = 400L) {
   check_strings(old, "old")
@@ -335,9 +312,7 @@ diff_split = function(x) {
 }
 
 #' Full unified diff of two texts: `--- a/<path>`, `+++ b/<path>`, hunks and "\ No newline" markers
-#'
-#' A change of only the final newline is detected: lines are compared as integer codes, and a last
-#' line that lacks its newline gets the negated code, which no line with a newline can share.
+#' A last line without its newline gets its negated code, so a final-newline change is a change.
 #' @noRd
 diff_unified = function(path, old, new, context = 3L) {
   check_string(path, "path")

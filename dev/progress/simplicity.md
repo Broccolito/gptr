@@ -89,3 +89,36 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
 - Reviews: r1 4 findings (2 minor, 2 nits): eval-core header copy-safety claim, duplicate workspace
   section comment and `_R_CHECK_LIMIT_CORES_` wording fixed; `## Task` heading kept (plan section 7).
 - Deviations: none. Open: none.
+
+## Task P05-S - Model layer duplication (2026-10-05)
+- S2, S3, S5-S8, S10 and the catalog-models.R is_string sites (R -158, tests -120; plan ~390).
+  Bodies, headers and memo keys of 308 build snapshots byte-identical except D-140's Mistral ids.
+- Red: none (refactor). Green: `provider-|catalog-` PASS 3008 (3041 before; duplicates removed);
+  P12 gptr_check() 37/31/25/30 rows, 0 failed. Lint clean. Neighbours: `s1-`, `session-(store|
+  budget)`, `gptr-(config|capture|gateway)`, `prompt-(cache|sections|compact)`, `cli-common`,
+  `context-prefix`, `agent-run`, `lint-rules`, `arch-layers`, `doc-replay`, `ext-check` green.
+- Reviews: none yet.
+- Deviations: D-140. Open: S9 leftovers unnamed in the package (none applied); P12 acceptance rows
+  2, R1, R3 still name the per-adapter tests S3 merged (P12 plan outside lane core).
+
+## Simplicity P10-C - Trim internal comment narration in tool files (2026-10-05)
+- Comments only in `R/tool-*.R`: internal blocks are a title plus at most two lines citing
+  IC/D ids, file headers 4 lines; non-comment parse tokens and exported roxygen (print methods,
+  `gptr_ns` methods) unchanged. Comment lines 1076 -> 771, files 5404 -> 5099 (-305; plan ~150).
+- Red: none (refactor). Green: `tool-|copy-tools` PASS 1625 after r1 fixes. Lint clean.
+  Neighbours: `arch-layers|lint-rules|eval-|copy-eval|copy-gateway|gptr-gateway` PASS 862 green.
+- Reviews: r1 2 findings (1 minor, 1 nit) fixed: ns_member_flags() note restores P10's-own
+  identity and describe's local value; member_search() and walk_tree() titles one line.
+- Deviations: none. Open: none.
+
+## Simplicity P04-S - Transport duplication (2026-10-05)
+- One SSE general path, shared BOM/NUL helpers, one retry_max_delay(), pid_alive() via
+  proc_identity(); tool stack, transport_error(), proc_is_windows(), stdin_timeout(), anonymous and
+  per-window limiter state, generated-identity re-validation gone; URL parsed once. R -126, tests -23.
+- Red: FAIL 1 (`proc-supervise`: pid_alive() read an unreadable process as dead). Green: `http-|proc-`
+  PASS 990 (997 before: -9 removed-helper expectations, +2) incl. INFRA-05/06/21/23. Lint clean.
+  Neighbours: `provider-|catalog-|cli-|s1-|mcp-client|session-|agent-|doc-io|gptr-config|gptr-gateway|
+  arch-layers|lint-rules|zzz` green (provider-registry job-row timing flake once, re-run green).
+- Reviews: none yet.
+- Deviations: D-141. Open: check_number() not used where bounds differ (http_timeouts(),
+  ratelimit_rate(), retry_backoff()).

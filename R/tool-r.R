@@ -1,14 +1,7 @@
-# tool-r.R -- the `r` tool (P10): the frozen schema variants of IC-68 (`record` and `note` only with
-# a bound document, `timeout` only when no human can answer), evaluation through the `evaluator`
-# kind (P09's eval_r() by default, IC-69) in the run's evaluation environment (the plan-mode scratch
-# overlay, IC-15), the model text of format_eval_result() (P09) with the images attached by
-# gptr$plot() and gptr$read() counted against the same budget (IC-67), and the `details` record of
-# contract section 4.4. While the evaluation runs, the execute frame binds the r-call marker
-# (`gptr_r_call`, tool-namespace.R) through which member calls reach dispatch_nested() (the
-# nested-call gating hook) and gptr$plot() attaches images. Sources:
-# architecture sections 6.12 and 7.2; contract sections 4.4, 7.9, 9.2;
-# dev/research/14-script-as-harness-history.md section 4.1 (`record`, `note`); the measured variants
-# of dev/research/assets/design-review-resolution/prompt/tools.R.
+# The `r` tool (P10; architecture 6.12, 7.2; contract 4.4, 7.9, 9.2): IC-68 schema variants,
+# evaluation through the `evaluator` kind (IC-69) in the run's evaluation environment (IC-15), and
+# format_eval_result() text with gptr$plot() and gptr$read() images in one budget (IC-67). The
+# execute frame binds the r-call marker `gptr_r_call` through which member calls are gated.
 
 r_tool_description = paste(
   "Run R code in the user's live R session. Objects persist between calls and belong to the user.",
@@ -48,9 +41,8 @@ r_schema = function(document = FALSE, human = TRUE) {
   list(type = "object", required = I("code"), properties = props)
 }
 
-#' The r tool's `parameters`: a function evaluated once at freeze with `ctx$input` (P07; contract
-#' 10.2 row 14: `document` is non-NULL when a history document is bound, `human` whether someone can
-#' answer)
+#' The r tool's `parameters`, evaluated once at freeze with `ctx$input` (contract 10.2 row 14)
+#' `document` is non-NULL when a history document is bound, `human` whether someone can answer.
 #' @noRd
 r_tool_parameters = function(ctx) {
   input = if (is.null(ctx)) NULL else ctx$input
@@ -132,8 +124,7 @@ r_event_text = function(events, type) {
   as.character(unlist(lapply(ev, function(e) e$message %||% e$text), use.names = FALSE))
 }
 
-#' The r tool result of an evaluation: format_eval_result() text and images (the evaluator's and
-#' those gptr$plot() and gptr$read() attached), and the `details` record of contract section 4.4
+#' The r tool result: format_eval_result() text and images, and the contract 4.4 `details`
 #' (plus `plot_files`, the PNGs behind gptr$plot(which))
 #' @noRd
 r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
@@ -175,11 +166,8 @@ r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
 }
 
 #' The r tool's execute: evaluate `code` in the run's evaluation environment
-#'
-#' Copy-safety rules R2 and R3: this frame binds the evaluation environment (possibly a
-#' function-frame home) only while the call runs and resets the binding on exit; it creates no
-#' closure and uses no tryCatch(); the value of the evaluation is never kept (R8, P09). The r-call
-#' marker `gptr_r_call` holds the ctx and collectors only.
+#' Copy safety R2, R3, R8: the environment is bound only while the call runs, no closure or
+#' tryCatch(), the value is never kept; `gptr_r_call` holds the ctx and collectors only.
 #' @noRd
 r_tool_execute = function(input, ctx) {
   code = as_utf8(input$code)

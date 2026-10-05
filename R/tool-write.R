@@ -1,11 +1,7 @@
-# tool-write.R -- the `write` tool and `gptr$write()` (P10): an atomic replace through P01's
-# write_atomic() that keeps an existing file's line endings, byte-order mark, encoding and
-# permission bits and writes through symbolic links. Ported from dev/research/11-r-file-tools.md
-# section 5.5 (proto/20-write.R) and section 2.3: the text is encoded before any file is touched,
-# the temporary file lives in the target's directory, and a symlink is resolved first because
-# rename() would replace the link itself (verified on macOS). New files are written verbatim, as in
-# Pi (dev/research/01-pi-builtin-tools.md section 2.4), with the umask's default mode; an existing
-# file the process may not write is refused with EACCES, as Pi's writeFile() refuses it.
+# The `write` tool and `gptr$write()` (P10; research 11 section 5.5): an atomic replace that keeps
+# an existing file's line endings, BOM, encoding and mode bits. A symlink is resolved first because
+# rename() would replace the link; new files are written verbatim with the umask's mode, and an
+# existing file the process may not write is refused with EACCES, as in Pi.
 
 # Bytes of an existing file sampled for its encoding and dominant line ending
 write_sniff_bytes = 1024^2
@@ -15,9 +11,9 @@ write_sniff_bytes = 1024^2
 #' @noRd
 tool_path_dir = function(p) as_utf8(dirname(fs_path(p)))
 
-#' Kernel-style resolution of an absolute path that climbs with "..": its longest existing leading
-#' part is resolved physically (normalizePath() follows each link before applying ".."), the rest
-#' is left for lexical normalisation. The final component is never resolved here.
+#' Kernel-style resolution of an absolute path that climbs with ".."
+#' Its longest existing leading part is resolved physically, the rest left for lexical
+#' normalisation; the final component is never resolved here.
 #' @noRd
 tool_path_physical = function(q) {
   parts = strsplit(q, "/", fixed = TRUE)[[1L]]
@@ -32,10 +28,8 @@ tool_path_physical = function(q) {
   q
 }
 
-#' Follow a symlink chain to the file it names, at most `max_hops` links (a no-op on Windows, where
-#' Sys.readlink() returns ""). A link text with a ".." segment, relative or absolute, is resolved
-#' as the kernel does: its existing leading part physically, so a ".." after a symlinked directory
-#' (the link's own or one named in the text) climbs from that directory's real location.
+#' Follow a symlink chain to the file it names, at most `max_hops` links (a no-op on Windows)
+#' A ".." in a link text climbs from a symlinked directory's real location, as the kernel does.
 #' @noRd
 resolve_link_target = function(p, max_hops = 40L) {
   hops = 0L
@@ -53,9 +47,9 @@ resolve_link_target = function(p, max_hops = 40L) {
              "invalid_argument", arg = "path", expected = "a path without a symbolic-link loop")
 }
 
-#' Encoding, BOM and dominant line ending of an existing text file; NULL for a new file and
-#' `list(binary = TRUE)` (written verbatim) for a binary or unreadable one. `eol` is "asis" for a
-#' file without a line ending: there is no convention to keep.
+#' Encoding, BOM and dominant line ending of an existing text file; NULL for a new file
+#' `list(binary = TRUE)` (written verbatim) for a binary or unreadable one; `eol` is "asis" for a
+#' file without a line ending.
 #' @noRd
 write_conventions = function(path) {
   p = fs_path(path)
@@ -78,9 +72,9 @@ write_conventions = function(path) {
   list(binary = FALSE, encoding = if (d$lossy) "UTF-8" else d$encoding, bom = d$bom, eol = eol)
 }
 
-#' Write bytes atomically, creating parent directories; an existing target keeps its mode bits and
-#' a new one gets the umask's default (write_atomic() creates its files private, 0600, which suits
-#' gptr's own state but not a user's project file). Returns TRUE invisibly when the file existed.
+#' Write bytes atomically, creating parent directories; TRUE invisibly when the file existed
+#' An existing target keeps its mode bits, a new one gets the umask's default (write_atomic()'s
+#' 0600 suits gptr's own state, not a user's project file).
 #' @noRd
 write_bytes_keep_mode = function(target, bytes) {
   p = fs_path(target)
@@ -106,12 +100,8 @@ write_bytes_keep_mode = function(target, bytes) {
 }
 
 #' Write a file for the model or the user: the `write` tool (contract section 7.10)
-#'
-#' @param path File path (relative to the working directory or absolute).
-#' @param content The complete new content, chr(1).
-#' @return `list(bytes = num(1), created = lgl(1), details = list(path, bytes, created,
-#'   encoding, eol))`; `details$path` is the absolute path of the file written (the link target
-#'   for a symlink).
+#' Returns `list(bytes, created, details = list(path, bytes, created, encoding, eol))`;
+#' `details$path` is the absolute path written (the link target for a symlink).
 #' @noRd
 write_file = function(path, content) {
   check_string(path, "path")
@@ -125,7 +115,7 @@ write_file = function(path, content) {
   }
   abs = not_dir(resolve_tool_path(path))
   target = not_dir(resolve_link_target(abs))
-  # rename() would replace a read-only file silently; Pi's writeFile() and Task 6's edit refuse it
+  # rename() would replace a read-only file silently; Pi and the edit tool refuse it
   if (file.exists(fs_path(target)) && file.access(fs_path(target), 2L) != 0L) {
     gptr_abort(paste0("EACCES: permission denied, open '", abs, "'"), "invalid_argument",
                arg = "path", expected = "a writable file")

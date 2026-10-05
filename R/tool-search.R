@@ -1,12 +1,7 @@
-# tool-search.R -- `gptr$grep()`, `gptr$find()`, `gptr$ls()` and the direct `grep`, `find`, `ls`
-# tools of the extended preset (P10): batched readChar() reads, a whole-file prefilter (fixed bytes
-# or `(?m)` PCRE), per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit, radix sorting
-# (REQ-08: path, mtime, size, count, relevance), Pi's output texts and notices, and prints within
-# the member budget. Ported from dev/research/11-r-file-tools.md section 5.5 (proto/50-search.R;
-# identical (file, line) sets to ripgrep on 5 patterns, section 2.5) with
-# dev/research/21-rcpp-hot-paths.md section 2.1 (prefilter before splitting, never readLines() per
-# file) and dev/research/01-pi-builtin-tools.md sections 3.6-3.8 (Pi's texts). Report 11 section 7.1
-# risk 3: PCRE match-limit warnings are captured and reported.
+# `gptr$grep()`, `gptr$find()`, `gptr$ls()` and the direct `grep`, `find`, `ls` tools (P10; research
+# 11 section 5.5, research 21 section 2.1): batched readChar() reads, a whole-file prefilter,
+# per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit, radix sorting (REQ-08) and Pi's texts;
+# PCRE match-limit warnings are reported as incomplete results (report 11 section 7.1).
 
 grep_default_limit = 100L
 find_default_limit = 1000L
@@ -45,8 +40,7 @@ search_read_texts = function(files, sizes) {
 grep_prepare = function(pattern, fixed = FALSE, ignore_case = FALSE) {
   state = new.env(parent = emptyenv())
   state$incomplete = FALSE
-  # A PCRE call with its warnings muffled; `failed` says whether one was raised (a match or depth
-  # limit, for which R returns FALSE)
+  # A PCRE call with warnings muffled; `failed`: one was raised (a match or depth limit gives FALSE)
   pcre_run = function(expr_fun) {
     flag = new.env(parent = emptyenv())
     flag$failed = FALSE
@@ -88,15 +82,10 @@ grep_prepare = function(pattern, fixed = FALSE, ignore_case = FALSE) {
   ic = isTRUE(ignore_case)
   full = paste0(utf, rx)
   matcher = function(x) quiet(function() grepl(full, x, perl = TRUE, ignore.case = ic))
-  # The prefilter must keep every file the per-line matcher matches. A line edge has no neighbour
-  # per line but "\n" in the whole file, so the prefilter is off for subject anchors (\A \z \Z
-  # \G), verbs and alpha assertions anywhere (`(*COMMIT)`, `(*nla:`), negative lookaround,
-  # atomic groups, conditionals, option changes that set s or unset m (`(?s)`, `(?-m)`, `(?^)`),
-  # possessive quantifiers (`*+`, `++`, `?+`, `{n,m}+`, but not `\p{L}+`), text PCRE2 skips between
-  # a quantifier and its possessive `+` (`\Q`, `\E`, `(?#...)`, an `x` option's white space and
-  # comments: `a\s*(?#c)+$`) and backreferences (`\1`, `\g`, `\k`, `(?P=`: a capture made inside a
-  # positive lookaround is atomic, `(?=(\s*))\1`). Over-matching (inside \Q...\E) only costs speed.
-  # A fixed pattern is literal and keeps the prefilter.
+  # The prefilter must keep every file the per-line matcher matches, so it is off for constructs
+  # a "\n" beyond the line edge can change: subject anchors, verbs, negative lookaround, atomic
+  # groups, conditionals, (?s)/(?-m)/(?^), possessive quantifiers (and `\Q`, `\E`, `(?#`, `x` white
+  # space before their `+`) and backreferences. Over-matching only costs speed.
   unsafe = !isTRUE(fixed) &&
     grepl(paste0("\\\\[AzZG1-9gkQE]|\\(\\*|\\(\\?(<?!|>|\\(|#|P=|[a-zA-Z]*[-^sx])",
                  "|([*+?]|\\{[0-9,[:space:]]*\\})\\+"), rx)
@@ -105,9 +94,8 @@ grep_prepare = function(pattern, fixed = FALSE, ignore_case = FALSE) {
   } else {
     pre = paste0(utf, "(?m)", rx)
     whole = function(x) pcre_run(function() grepl(pre, x, perl = TRUE, ignore.case = ic))
-    # A PCRE limit on a whole file says nothing about its lines. After a failed batch each file is
-    # tried alone, and the files that hit the limit go to the per-line matcher, which records
-    # `incomplete` only for lines that hit it themselves
+    # A PCRE limit on a whole file says nothing about its lines: after a failed batch each file is
+    # tried alone, and those hitting the limit go to the per-line matcher
     function(x) {
       r = whole(x)
       if (!r$failed) return(r$value)
@@ -208,21 +196,9 @@ grep_candidates = function(root, glob = NULL, sort = "path") {
        skipped_big = sum(big), mtime = w$mtime)
 }
 
-#' Search file contents: the function behind `gptr$grep()` and the direct `grep` tool (contract
-#' 7.10)
-#'
-#' @param pattern PCRE pattern, or a literal string with `fixed = TRUE`.
-#' @param path Directory or file to search.
-#' @param glob Glob filter of file paths (comma-separated; `!glob` excludes).
-#' @param ignore_case,fixed Case-insensitive; literal pattern.
-#' @param context Lines shown before and after each match (merged blocks, `--` separators).
-#' @param limit Maximum matching lines (`content`) or files (`files`, `count`).
-#' @param output `"content"`, `"files"` or `"count"`.
-#' @param sort File order for `files` and `count`: `"path"`, `"count"` (most matches first) or
-#'   `"mtime"`.
-#' @return `gptr_matches` (`file`, `line`, `text`), `gptr_files` (`output = "files"`) or a data
-#'   frame `file`, `n` (`output = "count"`); attributes `truncated`, `limit`, `root`, `skipped_big`,
-#'   `binary_skipped`, `incomplete`.
+#' Search file contents: behind `gptr$grep()` and the direct `grep` tool (contract 7.10)
+#' Returns `gptr_matches` (`file`, `line`, `text`), `gptr_files` or a `file`, `n` data frame by
+#' `output`; attributes `truncated`, `limit`, `root`, `skipped_big`, `binary_skipped`, `incomplete`.
 #' @noRd
 search_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE,
                        context = 0L, limit = 100L, output = c("content", "files", "count"),
@@ -394,16 +370,9 @@ find_relevance = function(query, paths) {
   cls
 }
 
-#' Find files by glob: the function behind `gptr$find()` and the direct `find` tool (contract 7.10)
-#'
-#' @param pattern Glob (fd semantics, smart case) or, with `sort = "relevance"`, a name query.
-#' @param path Directory to search.
-#' @param sort `"path"`, `"mtime"` (newest first), `"size"` (largest first) or `"relevance"` (exact
-#'   basename > prefix > substring > subsequence, ties by path).
-#' @param type `"file"`, `"dir"` or `"any"`.
-#' @param limit Maximum rows.
-#' @return `gptr_files`: `path` (relative to the search root), `size`, `mtime`, `type`; attributes
-#'   `root`, `truncated`, `limit`.
+#' Find files by glob: behind `gptr$find()` and the direct `find` tool (contract 7.10)
+#' A glob has fd semantics (smart case); `sort = "relevance"` takes a name query instead. Returns
+#' `gptr_files` (`path` relative to the root, `size`, `mtime`, `type`).
 #' @noRd
 search_find = function(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"),
                        type = "file", limit = 1000L) {
@@ -459,15 +428,9 @@ find_tool_text = function(f) {
   with_notices(paste(tr$lines, collapse = "\n"), notes)
 }
 
-#' List a directory: the function behind `gptr$ls()` and the direct `ls` tool (contract 7.10)
-#'
-#' @param path Directory to list.
-#' @param sort `"name"` (case-insensitive, radix), `"mtime"` (newest first) or `"size"` (largest
-#'   first).
-#' @param long Print size and modification time.
-#' @return `gptr_files` of the entries (dot-files included; entries that cannot be stat-ed dropped,
-#'   as Pi; names that are not valid UTF-8 skipped and counted in the `invalid_names` attribute, as
-#'   the walker does).
+#' List a directory: behind `gptr$ls()` and the direct `ls` tool (contract 7.10)
+#' Dot-files included, entries that cannot be stat-ed dropped (Pi), names that are not valid UTF-8
+#' skipped and counted in attribute `invalid_names`, as the walker does.
 #' @noRd
 search_ls = function(path = ".", sort = c("name", "mtime", "size"), long = FALSE) {
   check_string(path, "path")

@@ -1,28 +1,15 @@
-# tool-namespace.R -- the `gptr$` namespace (P10): member printing within token budgets, the r-call
-# marker that tells a member it runs inside model code, member closures generated from tool specs,
-# member resolution (the `ns.resolve`, `ns.names` and `search.sources` services behind P08's gateway
-# methods, IC-36), `gptr_ns` nodes for plugin and MCP namespaces, the plugin catalog, BM25 search,
-# `gptr$help()`, `gptr$search()`, `gptr$describe()`, `gptr$plot()`, `gptr$out()`, the specs of
-# `read`, `edit`, `write`, `grep`, `find`, `ls` (one per capability, direct and member forms,
-# IC-37), their `<rules>` guidelines, the `<r_session>` fragments and `builtin:tools` (IC-68).
-# Sources: dev/research/G5-polyglot-glue-helpers.md (gateway-as-namespace pattern verified by the
-# `gwtoy` R CMD check; 1,500-token prints and 0.6 x the r budget inside r),
-# dev/research/G1-extensibility-sdk-surface.md sections 2.5 and 2.8 (one signature line per member;
-# closures built by replacing formals(), never by replacing the environment),
-# dev/research/06-pi-subagents-mcp-codemode.md section 5.7 (BM25 port, parity with Pi),
-# dev/research/20-harness-feature-survey.md section 5.2 (help text through tools::Rd2txt, no `:::`).
+# The `gptr$` namespace (P10; IC-36, IC-37, IC-68; research G5, G1 sections 2.5, 2.8, 06 section
+# 5.7): member prints within token budgets, the r-call marker, member closures built from tool specs
+# by replacing formals() (never the environment), resolution services, plugin and MCP `gptr_ns`
+# nodes, BM25 search, help, the file-tool specs, their `<rules>` and `builtin:tools`.
 
-#' Class of the marker that the `r` tool binds (as `gptr_r_call`) in its own frame while it
-#' evaluates
+#' Class of the marker the `r` tool binds (as `gptr_r_call`) in its frame while it evaluates
 #' @noRd
 r_call_class = "gptr_r_call"
 
-#' A new r-call marker: the session ctx plus collectors for images, bridge digests and artifact
-#' paths
-#'
-#' The `r` tool binds it as the local variable `gptr_r_call` of its execute frame, so it exists
-#' exactly for the dynamic extent of one evaluation and no package-level run state is kept
-#' (INFRA-15). It holds no user object and no user frame.
+#' A new r-call marker: the session ctx plus collectors for images, bridge digests and artifacts
+#' Bound only as the r tool's local `gptr_r_call`, so it lives for one evaluation and no package
+#' run state is kept (INFRA-15); it holds no user object or frame.
 #' @noRd
 r_call_new = function(ctx) {
   rc = new.env(parent = emptyenv())
@@ -37,11 +24,8 @@ r_call_new = function(ctx) {
 }
 
 #' The innermost r-call marker on the call stack, or NULL outside an `r` evaluation
-#'
-#' Walks the frames from the innermost outwards with sys.frame(k) (never sys.frames(), rule R3) and
-#' looks only for the binding `gptr_r_call` of class `gptr_r_call`; no promise is forced: a lazy
-#' or active binding of that name (a user formal, say) is skipped, since the `r` tool binds the
-#' marker as an ordinary local value.
+#' Walks sys.frame(k) outwards (never sys.frames(), R3) and forces no promise: a lazy or active
+#' `gptr_r_call` binding (a user formal, say) is skipped.
 #' @noRd
 ns_r_call = function() {
   k = sys.nframe() - 1L
@@ -58,9 +42,8 @@ ns_r_call = function() {
   NULL
 }
 
-#' Attach an image block to the result of the innermost running `r` call; FALSE when there is none
-#' or when gptr.r_max_images images are attached already (the refused ones are counted in
-#' `dropped`, which the r tool names in a notice; IC-67)
+#' Attach an image block to the innermost running `r` call; FALSE when none or at the
+#' gptr.r_max_images cap (refusals are counted in `dropped` for the r tool's notice; IC-67)
 #' @noRd
 r_call_attach_image = function(block) {
   rc = ns_r_call()
@@ -121,11 +104,9 @@ budget_head_tail = function(lines, budget, class = "r_output") {
        omitted = n - h - t)
 }
 
-#' Write lines of a member result to standard output as UTF-8 bytes (the evaluator's sink captures
-#' them); inside an `r` call their estimated tokens are added to the marker's `printed` count
-#'
-#' Plain writeLines(): the text is data, never a format string (rule C1), and cli output would go to
-#' stderr in non-interactive sessions, where the evaluator's sink does not see it.
+#' Write member result lines to stdout as UTF-8 bytes, counting their tokens in an `r` call
+#' Plain writeLines(): the text is data, never a format (C1), and cli output goes to stderr in
+#' non-interactive sessions, where the evaluator's sink does not see it.
 #' @noRd
 ns_print_lines = function(lines) {
   lines = as_utf8(as.character(lines))
@@ -172,9 +153,8 @@ ns_tool_name = function(spec) {
   if (is.null(spec$namespace)) spec$name else paste0(spec$namespace, "/", spec$name)
 }
 
-#' Formals of a member function as formals(args(fun)), so a primitive (fun = sum) has the formals
-#' args() gives it, as P02's kind_check_tool() reads them; `...` for a primitive args() knows
-#' nothing of
+#' Formals of a member function as formals(args(fun)), as P02's kind_check_tool() reads them
+#' A primitive gets the formals args() gives it, `...` when args() knows nothing of it.
 #' @noRd
 ns_fun_formals = function(fun) {
   a = args(fun)
@@ -208,9 +188,8 @@ ns_formals_schema = function(fun) {
        properties = if (length(props)) props else json_obj())
 }
 
-#' Formals from a JSON Schema: required properties first (no default), optional ones default NULL;
-#' `...` when the schema is not a list (a `function(ctx)` evaluated at freeze, contract 9.1), as in
-#' P02's generated `fun`
+#' Formals from a JSON Schema: required properties first, optional ones default NULL
+#' `...` when the schema is a `function(ctx)` evaluated at freeze (contract 9.1), as in P02's `fun`.
 #' @noRd
 ns_schema_formals = function(schema) {
   if (!is.list(schema)) return(as.pairlist(alist(... = )))
@@ -223,9 +202,8 @@ ns_schema_formals = function(schema) {
   as.pairlist(f)
 }
 
-#' One-line signature of a member: the spec's own `signature`; for namespaced (plugin) members the
-#' typed catalog line `gptr$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>`
-#' (contract section 9.3); otherwise the R formals `gptr$<name>(<formals>)  # <first sentence>`
+#' One-line signature of a member: the spec's `signature`, else (contract 9.3) the typed catalog
+#' line of a namespaced member or the R formals, each with `  # <first sentence>`
 #' @noRd
 member_signature = function(spec) {
   if (is.character(spec$signature) && length(spec$signature) == 1L) return(spec$signature)
@@ -246,8 +224,7 @@ member_signature = function(spec) {
 }
 
 #' Catalog line of a registered spec, or of a lazy plugin's placeholder from its manifest
-#' declaration without activating the plugin (contract section 10.8): `gptr$<ns>$<signature>  #
-#' <first sentence>`; NULL for a placeholder that declares no signature
+#' declaration without activating the plugin (contract 10.8); NULL when it declares no signature
 #' @noRd
 ns_spec_line = function(spec, key) {
   if (!isTRUE(spec$lazy)) return(member_signature(spec))
@@ -285,11 +262,8 @@ ns_required_formals = function(fmls) {
 }
 
 #' Signal a missing required argument of a member call
-#'
-#' The calls evaluated in the member's frame inline base::missing(), base::substitute() and
-#' base::list() (here and in ns_collect_input()): a symbol would be looked up in that frame first,
-#' so an argument named `missing` holding a function would be called (and any argument of that name
-#' forced).
+#' Calls evaluated in the member's frame inline base::missing(), base::substitute() and base::list()
+#' (also in ns_collect_input()), so an argument of that name is neither called nor forced.
 #' @noRd
 ns_check_required = function(frame, required, tool_name) {
   for (nm in required) {
@@ -302,10 +276,9 @@ ns_check_required = function(frame, required, tool_name) {
   invisible(NULL)
 }
 
-#' The input list of a nested member call for the gate: the supplied arguments only (the member's
-#' own defaults apply when its function runs), or, for `gate_only` members, short labels of the
-#' argument expressions, so no user object ever enters a list (a list that becomes garbage leaves
-#' the object's reference count raised; architecture section 6.4 rule R1)
+#' The input list of a nested member call for the gate: the supplied arguments only
+#' `gate_only` members give short labels of the argument expressions, so no user object enters a
+#' list (architecture 6.4 R1).
 #' @noRd
 ns_collect_input = function(frame, arg_names, gate_only = FALSE) {
   input = list()
@@ -345,11 +318,9 @@ ns_result_text = function(res) {
   paste(txt, collapse = "\n")
 }
 
-#' A member function for an execute-only spec (P02 normally generates `fun`; this is the fallback)
-#'
-#' As P02's generated `fun`, `exec` gets the process ctx (ctx_default(NULL), contract 10.6), and
-#' the body is a call of an inlined closure on the inlined base::environment(), so a schema
-#' property named `exec`, `arg_names` or `tool_name` cannot shadow the machinery.
+#' A member function for an execute-only spec (the fallback for P02's generated `fun`)
+#' `exec` gets ctx_default(NULL) (contract 10.6); the body calls an inlined closure on the inlined
+#' base::environment(), so no schema property can shadow the machinery.
 #' @noRd
 ns_generated_fun = function(fmls, exec, tool_name) {
   arg_names = names(fmls) %||% character()
@@ -367,9 +338,8 @@ ns_generated_fun = function(fmls, exec, tool_name) {
   f
 }
 
-#' `gptr$describe(x, budget = 150L)`: gptr_describe() of the object (P09), as printable text
-#'
-#' Copy-safety rule R4: `x` reaches only the describer's leaf functions; nothing keeps it.
+#' `gptr$describe(x, budget = 150L)`: gptr_describe() of the object as printable text
+#' Copy safety R4: `x` reaches only the describer's leaf functions; nothing keeps it.
 #' @noRd
 member_describe = function(x, budget = 150L) {
   budget = check_number(budget, "budget", min = 20, int = TRUE)
@@ -407,10 +377,9 @@ member_edit = function(path, edits, replace_all = FALSE) {
   new_gptr_patch(path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
 }
 
-#' Behaviour of built-in members: `write` and `plot` return invisibly; P10's own `describe` passes
-#' only labels of its arguments to the gate and computes its description locally (rule R1); P10's
-#' own `edit` sends a patch envelope to the gate as `patch` (the edit schema's `edits` is an array
-#' of objects)
+#' Behaviour of built-in members: `write` and `plot` return invisibly
+#' P10's own `describe` gates on argument labels and computes its value locally (R1); P10's own
+#' `edit` sends the gate a patch envelope as `patch`
 #' @noRd
 ns_member_flags = function(spec) {
   name = ns_tool_name(spec)
@@ -420,22 +389,9 @@ ns_member_flags = function(spec) {
        prepare = prepare)
 }
 
-#' A `gptr_member` closure for a tool spec (contract section 7.10)
-#'
-#' Formals come from the spec's `fun` (the R-callable form, whose defaults are the member's; through
-#' args(), so a primitive keeps its formals) or, for an execute-only spec, from its schema (required
-#' properties first, optional ones default NULL; `...` for a schema computed at freeze).
-#' Called while an `r` evaluation runs (model code), the call passes the gate through
-#' dispatch_nested() (P06), which records it in the outer result's `details$nested`; called by the
-#' user it runs the spec's `fun` directly. Arguments reach `fun` as promises through a call of
-#' symbols, never through a list. The member's own frame holds only its arguments: its body is a
-#' call of an inlined closure on the inlined base::environment(), so an argument named `frame`,
-#' `value`, `flags` or `environment` cannot shadow the machinery; `fun` is called through a symbol
-#' that names no argument (`member_fun`, dot-prefixed until it differs from every formal), bound in
-#' the closure's environment, so an argument named `member_fun` is neither called nor forced.
-#' @param spec A `gptr_tool` spec with a `fun` or an `execute`.
-#' @return A function of class `c("gptr_member", "function")` with attributes `tool`, `spec`,
-#'   `signature`.
+#' A `gptr_member` closure for a tool spec (7.10): inside `r` dispatch_nested() first, else `fun`
+#' Arguments reach `fun` as promises through a call of symbols, never a list; the body and the
+#' `member_fun` symbol (dot-prefixed past any formal) are built so no argument can shadow them.
 #' @noRd
 member_closure = function(spec) {
   check_class(spec, "gptr_tool", "spec")
@@ -497,11 +453,8 @@ ns_session_marker = function(session) {
 }
 
 #' The session a member call belongs to, or NULL at the console
-#'
-#' The innermost of two frame markers wins: the r-call marker of a running `r` evaluation (its
-#' ctx's session) and the session marker of a direct member tool. A sub-agent's direct `out`,
-#' `help` or `search`, executed while the parent's `r` evaluation is on the stack, thus uses the
-#' sub-agent's session. Like ns_r_call(), the walk forces no promise and calls no active binding.
+#' The innermost of the r-call marker and a direct member tool's session marker wins (a sub-agent's
+#' direct tool inside the parent's `r` uses its own session); forces no promise, as ns_r_call().
 #' @noRd
 ns_current_session = function() {
   k = sys.nframe() - 1L
@@ -537,9 +490,8 @@ ns_refuse = function(name, why) {
   invisible(NULL)
 }
 
-#' The member spec of an un-namespaced name, or NULL (IC-37: a spec with a `fun`, no namespace, not
-#' `hidden`; P02 refuses a plugin `r` member without a namespace at registration). Resolving a name
-#' is a first use: registry_get() activates a lazy plugin that provides it (contract 10.8)
+#' The member spec of an un-namespaced name, or NULL (IC-37)
+#' Resolving a name is a first use: registry_get() activates a lazy plugin providing it (10.8).
 #' @noRd
 ns_member_spec = function(name, sid = NULL) {
   if (grepl("/", name, fixed = TRUE)) return(NULL)
@@ -561,9 +513,8 @@ ns_member_names = function(sid = NULL) {
   keys[ok]
 }
 
-#' Registry keys "<namespace>/<name>" of the namespaced tools that are not `hidden` (IC-37: a hidden
-#' spec is callable by gptr code only, so resolution refuses it and no listing shows it), from
-#' registry_all("tool"), which leaves lazy placeholders unactivated
+#' Registry keys "<namespace>/<name>" of namespaced tools that are not `hidden` (IC-37)
+#' From registry_all("tool"), which leaves lazy placeholders unactivated.
 #' @noRd
 ns_plugin_keys = function(sid = NULL) {
   specs = registry_all("tool", session = sid)
@@ -588,9 +539,7 @@ ns_plugin_namespaces = function(sid = NULL, members = ns_member_names(sid)) {
 }
 
 #' Names completing `gptr$` (the `ns.names` service behind P08's `.DollarNames.gptr_gateway`)
-#'
-#' @param pattern A regular expression from the completion engine ("" for all).
-#' @return Sorted chr of member, provider and plugin-namespace names.
+#' Sorted member, provider and plugin-namespace names matching completion `pattern` ("" for all).
 #' @noRd
 ns_names = function(pattern) {
   sid = ns_session_id()
@@ -641,10 +590,7 @@ ns_unknown = function(path) {
 }
 
 #' Resolve `gptr$<a>` or `gptr$<a>$<b>...` (the `ns.resolve` service behind P08's `$.gptr_gateway`)
-#'
-#' No I/O and no connections: only registry lookups and closure construction.
-#' @param path chr: the member path, e.g. "grep" or c("demo", "summarise").
-#' @return A `gptr_member` closure or a `gptr_ns` node.
+#' Registry lookups and closure construction only, no I/O: a member closure or a `gptr_ns` node.
 #' @noRd
 ns_resolve = function(path) {
   check_strings(path, "path")
@@ -753,17 +699,9 @@ ns_plugins_header = paste(
   "a full schema."
 )
 
-#' Body of the `plugins` section: one signature line per plugin `r` member (contract section 7.10)
-#'
-#' Over the budget, descriptions are trimmed from the end of the name-sorted catalog (no usage
-#' history exists at freeze, so the least recently used are the last); names are always kept. A
-#' lazy plugin contributes the signatures its manifest declares, and the catalog never activates
-#' it (contract 10.8: activation never changes the cached prefix).
-#' @param session A `gptr_session` (its rank-0 tools count) or NULL.
-#' @param kinds Kinds of members to list; only `"plugin"` is catalogued here (MCP has its own
-#'   section).
-#' @param budget Estimated-token budget of the lines.
-#' @return chr(1), "" when there is no plugin member.
+#' Body of the `plugins` section: one signature line per plugin `r` member (contract 7.10)
+#' Over `budget`, descriptions are trimmed from the end of the name-sorted catalog, names kept; a
+#' lazy plugin contributes its declared signatures and is never activated (10.8). "" when none.
 #' @noRd
 ns_catalog = function(session, kinds = c("plugin"), budget = 1500L) {
   check_strings(kinds, "kinds")
@@ -814,9 +752,8 @@ bm25_stem = function(term) {
                 ifelse(plural, substr(term, 1, n - 1), term)))
 }
 
-#' Search text as valid UTF-8 (IC-62): as_utf8(), then each invalid byte of a string that is still
-#' not valid UTF-8 becomes U+FFFD, as read() decodes such bytes (a plugin's document, a catalog
-#' text or a query need not be valid UTF-8, and PCRE refuses invalid input)
+#' Search text as valid UTF-8 (IC-62): invalid bytes become U+FFFD, as read() decodes them
+#' (plugin documents, catalog texts and queries need not be valid UTF-8; PCRE refuses invalid input)
 #' @noRd
 search_utf8 = function(x) {
   x = as_utf8(as.character(x))
@@ -918,11 +855,9 @@ ns_search_text_lazy = function(key, declaration) {
   paste(parts[nzchar(trimws(parts))], collapse = " ")
 }
 
-#' Documents of every non-hidden tool with a member form or a deferred exposure: the `members`
-#' search_source of builtin:tools (kinds `member`, `plugin`, `deferred`). Specs come from
-#' registry_all("tool"), so a lazy plugin is searched through its declarations, not activated. Only
-#' what ns_resolve() resolves is offered: un-namespaced specs that ns_member_ok() accepts, and
-#' namespaced ones whose namespace ns_plugin_namespaces() offers (not reserved, no member's name).
+#' Documents of every non-hidden member, plugin or deferred tool: the `members` search_source
+#' Lazy plugins are searched through their declarations, not activated; only what ns_resolve()
+#' resolves is offered.
 #' @noRd
 ns_search_docs = function(ctx) {
   s = if (is.null(ctx)) NULL else ctx$session
@@ -957,12 +892,8 @@ ns_search_docs = function(ctx) {
 }
 
 #' Documents of every `search_source` record (the `search.sources` service, IC-69)
-#'
-#' @param session A `gptr_session` or NULL; each source's `docs(ctx)` gets the session's ctx, or
-#'   the process ctx (ctx_default(NULL), `ctx$session` NULL) at the console, as every handler gets
-#'   a `gptr_ctx` (contract 10.6).
-#' @return data.frame(id, text, kind) of valid UTF-8 (search_utf8()); a failing source is skipped
-#'   with a registry diagnostic.
+#' Each `docs(ctx)` gets the session's ctx or ctx_default() (contract 10.6); data.frame(id, text,
+#' kind) of valid UTF-8; a failing source is skipped with a registry diagnostic.
 #' @noRd
 search_sources = function(session = NULL) {
   sid = if (is.null(session)) NULL else session$id
@@ -984,10 +915,9 @@ search_sources = function(session = NULL) {
   do.call(rbind, out)
 }
 
-#' Search documents of skills (P17 `skill.catalog`) and MCP tools (P18 `mcp.catalog`) parsed from
-#' their catalog texts (formats of architecture section 7.3); data.frame(id, text, kind, signature).
-#' A service that fails or answers anything but a string (`mcp.catalog` may answer NULL) adds no
-#' document; the text is made valid UTF-8 first (search_utf8()).
+#' Search documents of skills and MCP tools parsed from their catalog texts (architecture 7.3)
+#' data.frame(id, text, kind, signature); a failing service or a non-string answer adds no
+#' document, and the text is made valid UTF-8 first.
 #' @noRd
 ns_catalog_docs = function(session) {
   rows = list()
@@ -1032,12 +962,9 @@ ns_catalog_docs = function(session) {
 
 # ---- member functions (contract section 9.4) -----------------------------------------------------
 
-#' `gptr$search(words, limit = 8L)`: BM25 over members, plugin and deferred tools, `search_source`
-#' records, skills and MCP tools
-#'
-#' Documents are indexed by row, so two sources that use one id keep their own kind and signature;
-#' the signature of a `member`, `plugin` or `deferred` document is its tool's catalog line (a lazy
-#' plugin's from its declaration, without activating it), any other document's its id.
+#' `gptr$search(words, limit = 8L)`: BM25 over members, tools, sources, skills and MCP tools
+#' Documents are indexed by row, so sources sharing an id keep their kind and signature; a tool's
+#' signature is its catalog line (a lazy plugin's declared one), any other document's its id.
 #' @noRd
 member_search = function(words, limit = 8L) {
   check_string(words, "words")
@@ -1064,9 +991,8 @@ member_search = function(words, limit = 8L) {
              stringsAsFactors = FALSE)
 }
 
-#' Help lines of a tool spec: signature, description and the arguments of its schema (listed when
-#' the schema's properties are the formals of `fun`, read through args() as member closures read
-#' them, so a primitive `fun` lists its arguments too)
+#' Help lines of a tool spec: signature, description and its schema arguments
+#' Arguments are listed when the schema's properties are `fun`'s formals (read through args()).
 #' @noRd
 ns_tool_help = function(spec) {
   params = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
@@ -1127,9 +1053,8 @@ ns_plugin_spec = function(key, sid = NULL) {
   spec
 }
 
-#' `gptr$help(name, package = NULL, budget = 800L)`: the schema of a member (`"grep"`), a plugin
-#' function (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`), else the R help page; budgeted.
-#' Only members that resolve are shown (a `hidden` one is callable by gptr code only, IC-37).
+#' `gptr$help(name, package = NULL, budget = 800L)`: the schema of a member, a plugin function
+#' (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`) that resolves (IC-37), else R help
 #' @noRd
 member_help = function(name, package = NULL, budget = 800L) {
   check_string(name, "name")
@@ -1173,9 +1098,8 @@ ns_last_plots = function(session) {
   none
 }
 
-#' `gptr$plot(which = NULL, width = 1000L, height = 700L)`: attach the current device's plot at that
-#' size, or plot `which` of the last `r` result (IC-67: the plots it listed as "not attached"), to
-#' the running `r` result; invisible NULL
+#' `gptr$plot(which = NULL, width = 1000L, height = 700L)`: attach the device's plot, or stored plot
+#' `which` of the last `r` result (IC-67), to the running `r` result; invisible NULL
 #' @noRd
 member_plot = function(which = NULL, width = 1000L, height = 700L) {
   which = check_number(which, "which", min = 1, int = TRUE, null = TRUE)
@@ -1333,9 +1257,8 @@ ns_value_text = function(value) {
   paste(as.character(value), collapse = "\n")
 }
 
-#' The direct form carries the window's `gptr_lines` as its value too (read once by read_file()),
-#' so `ctx$execute_tool("read", ...)` returns the R value outside an `r` evaluation as well
-#' (contract 10.6); the image travels as the result's image block only
+#' The direct `read` also carries the window's `gptr_lines` value, so `ctx$execute_tool("read")`
+#' returns it outside `r` too (contract 10.6); the image travels as the result's image block only
 #' @noRd
 tool_read_execute = function(input, ctx) {
   if (member_nested(ctx)) return(ns_value_result("read", do.call(member_read, as.list(input))))
@@ -1351,9 +1274,8 @@ tool_write_execute = function(input, ctx) {
                    value = wf$details$path)
 }
 
-#' The edits an `edit` call applies: `patch` (the envelope of a nested member call), else `edits`,
-#' else Pi's legacy top-level `oldText`/`newText`. The execute and the risk function both read them
-#' here, so the risk counts every file an envelope touches whichever field carries it.
+#' The edits an `edit` call applies: `patch` (a nested envelope), `edits`, or Pi's top-level
+#' `oldText`/`newText`; shared by the execute and the risk, so the risk sees every envelope file
 #' @noRd
 tool_edit_input_edits = function(input) {
   edits = input$patch %||% input$edits
@@ -1405,11 +1327,8 @@ tool_ls_execute = function(input, ctx) {
 }
 
 #' Execute of a member-only capability (help, search, out): call the member function with the input
-#'
-#' A direct call binds the session of its own ctx as `gptr_ns_session` in this frame, so the member
-#' (which finds its session through ns_current_session()) uses that session, not the session of an
-#' enclosing `r` evaluation: a sub-agent's direct `out` reads its own store, its `help` and `search`
-#' see its own session-scoped tools; a NULL ctx is process-level dispatch
+#' A direct call binds its ctx's session as `gptr_ns_session` here, so the member uses that session,
+#' not an enclosing `r` evaluation's (a sub-agent's own store and tools); NULL ctx: process level.
 #' @noRd
 member_execute = function(fun, name) {
   force(fun)
@@ -1426,9 +1345,8 @@ member_execute = function(fun, name) {
   }
 }
 
-#' `describe`: nested calls only record the gate (the member computes the value locally, rule R1);
-#' as a direct tool it describes the binding named `x` in the session's environment and returns
-#' the description lines as a `gptr_text` value as well
+#' `describe`: a nested call only records the gate (R1); a direct call describes the binding named
+#' `x` in the session's environment, its lines also the `gptr_text` value
 #' @noRd
 tool_describe_execute = function(input, ctx) {
   if (member_nested(ctx)) {
@@ -1444,8 +1362,7 @@ tool_describe_execute = function(input, ctx) {
   gptr_tool_result(paste(lines, collapse = "\n"), value = new_gptr_text(lines))
 }
 
-#' `plot` attaches to the running `r` result, so only a nested member call of that evaluation can
-#' run it; a direct call (a preset that declares `plot`, or a sub-agent's direct tool) gets an
+#' `plot` runs only as a nested member call of the running `r` evaluation; a direct call gets an
 #' error result instead of a claim that a plot was attached
 #' @noRd
 tool_plot_execute = function(input, ctx) {
@@ -1459,10 +1376,9 @@ tool_plot_execute = function(input, ctx) {
 
 # ---- risk (contract section 9.4; control and instructions path classes, IC-54) -------------------
 
-#' Level and category of one path. Reads: 0 in the project (the project root included) and for skill
-#' pseudo-paths, 1 outside, 2 for protected, critical and control paths; an `instructions` file
-#' (AGENTS.md, `.gptr/skills/`, ...) reads at 0 only inside the project, at 1 elsewhere. Writes: 2
-#' in the project or tempdir(), 3 outside, protected or instructions, 4 control or critical.
+#' Level and category of one path (IC-54). Reads: 0 in the project (root included) and skill
+#' paths, 1 outside (instructions files too), 2 protected, critical or control. Writes: 2 in the
+#' project or tempdir(), 3 outside, protected or instructions, 4 control or critical.
 #' @noRd
 tool_path_risk = function(path, write = FALSE) {
   if (!is.character(path) || length(path) != 1L || is.na(path)) {

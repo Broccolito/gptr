@@ -1,14 +1,7 @@
-# tool-read.R -- the `read` tool and `gptr$read()` (P10): Pi's read semantics without line numbers,
-# images by magic bytes, BOM/UTF-16/UTF-32/CP1252 decoding, line windows over a raw newline index
-# (files up to 16 MiB), a streaming chunked index above that and a cached sparse index above 20 MB,
-# the 2,000-line / 50 KB / gptr.read_max_tokens caps, and `skill:<name>/<path>` pseudo-paths
-# (IC-68). Ported from dev/research/11-r-file-tools.md section 5.5 (proto/00-core.R,
-# proto/10-read.R) and dev/research/21-rcpp-hot-paths.md section 2.2 (grepRaw newline index, sparse
-# index); Pi's texts from dev/research/01-pi-builtin-tools.md sections 2.3 and 3.2. Verification-log
-# fixes applied (report 11): base64 without jsonlite's 72-character line breaks (row 15), iconv(sub
-# =) only with an unmarked byte string (row 9), never iconv(sub = "Unicode") (row 8), no
-# deserialising previews of data files (a binary notice with a loading hint instead;
-# CVE-2024-27322).
+# The `read` tool and `gptr$read()` (P10; research 11 section 5.5, research 21 section 2.2): Pi's
+# read without line numbers, images by magic bytes, BOM/UTF-16/UTF-32/CP1252 decoding, line windows
+# over a raw newline index (sparse above 16 MiB), the 2,000-line/50 KB/token caps and `skill:` paths
+# (IC-68). Data files are never deserialised for a preview (CVE-2024-27322).
 
 tool_max_lines = 2000L
 tool_max_bytes = 51200L
@@ -36,9 +29,7 @@ binary_hints = c(rds = "readRDS()", rda = "load()", rdata = "load()", qs = "qs::
                  fst = "fst::read_fst()", pdf = "pdftools::pdf_text()",
                  zip = "utils::unzip(list = TRUE)", gz = "readLines(gzfile())")
 
-# Sparse line indexes of files above 20 MB keyed by path, size and mtime: numbers only, at most 8,
-# least recently used evicted first, an entry of an older version of a file dropped when it is
-# indexed again.
+# Sparse line indexes of files above 20 MB (read_line_index())
 read_index_cache = list2env(list(entries = list(), clock = 0), parent = emptyenv())
 
 #' Pi formatSize(): 512B, 50.0KB, 3.0MB
@@ -99,10 +90,9 @@ utf8_trim_partial = function(b) {
   if (n - i + 1L < need) b[seq_len(i - 1L)] else b
 }
 
-#' Decode bytes to one UTF-8 string without BOM
-#'
+#' Decode bytes to one UTF-8 string without BOM: `list(text, encoding, bom, lossy)`
 #' Order: BOM; valid UTF-8; CP1252 (then latin1) when invalid bytes dominate; else UTF-8 with U+FFFD
-#' (`lossy`). Returns `list(text, encoding, bom, lossy)`.
+#' (`lossy`; iconv(sub =) only on unmarked bytes, never "Unicode": report 11 rows 8-9).
 #' @noRd
 decode_raw = function(b, fallback = c("CP1252", "latin1")) {
   if (!length(b)) return(list(text = as_utf8(""), encoding = "UTF-8", bom = FALSE, lossy = FALSE))
@@ -208,8 +198,7 @@ truncate_lines_head = function(lines, max_lines = tool_max_lines, max_bytes = to
 }
 
 #' Image type from magic bytes (never the extension; Pi mime.ts); NA when not an accepted image
-#' (JPEG-LS and animated PNG are rejected; a BMP needs a plausible DIB header, report 01 section
-#' 2.3, so a text file that starts with "BM" stays text)
+#' JPEG-LS and animated PNG are rejected; a BMP needs a plausible DIB header (report 01, 2.3).
 #' @noRd
 detect_image_mime = function(b) {
   u32be = function(o) sum(as.numeric(as.integer(b[o + 0:3])) * 256^(3:0))
@@ -431,10 +420,8 @@ read_resolve = function(path) {
 }
 
 #' Decode a window of text and split it (JS semantics, the CR of CRLF removed)
-#'
-#' An 8-bit window that iconv() cannot convert (a CP1252 gap byte after the bytes the encoding was
-#' chosen from) is decoded as latin1. `lossy` is TRUE when the file was already known to be lossy or
-#' this window holds invalid UTF-8 (replaced with U+FFFD).
+#' An 8-bit window iconv() cannot convert (a CP1252 gap byte) is decoded as latin1; `lossy` also
+#' when this window holds invalid UTF-8 (replaced with U+FFFD).
 #' @noRd
 read_decode_lines = function(txt, encoding, lossy) {
   utf8 = identical(encoding, "UTF-8")
@@ -452,11 +439,8 @@ read_decode_lines = function(txt, encoding, lossy) {
 }
 
 #' Line window of a file up to 16 MiB: raw newline index, decode and split only the window
-#'
-#' The encoding is decided on the whole file with its byte-order mark, as decode_raw() decides it
-#' for write and edit. A NUL byte anywhere in a UTF-8 or 8-bit file makes it binary (ripgrep's
-#' rule, report 11 section 2.2): rawToChar() fails on an embedded NUL but silently drops trailing
-#' ones, so they are found with grepRaw() first.
+#' The encoding is decided on the whole file; any NUL in a UTF-8 or 8-bit file makes it binary
+#' (ripgrep), found with grepRaw() because rawToChar() silently drops trailing NULs.
 #' @noRd
 read_window_small = function(abs, offset, n) {
   b = read_raw(abs)
@@ -494,8 +478,7 @@ read_window_small = function(abs, offset, n) {
 }
 
 #' Sparse line index: 0-based byte offsets of lines 1, every + 1, 2 * every + 1, ... and the total
-#' line count (JS semantics), built in one streaming pass with grepRaw(all = TRUE) (report 21
-#' section 2.2)
+#' line count (JS semantics), in one streaming grepRaw() pass (report 21 section 2.2)
 #' @noRd
 read_line_index_build = function(abs, every = read_index_every, chunk = read_chunk) {
   con = file(fs_path(abs), "rb")
@@ -522,10 +505,8 @@ read_line_index_build = function(abs, every = read_index_every, chunk = read_chu
 }
 
 #' The sparse index of a file, cached per process for files above 20 MB (key: path, size, mtime)
-#'
-#' At most 8 entries; the least recently used is evicted first, and indexing a new version of a file
-#' drops the entry of its old version. The entries are a list compared by value (no environment
-#' symbol is made from a path, which a non-UTF-8 locale would have to translate).
+#' At most 8 entries, least recently used evicted, an old version's entry dropped; a list compared
+#' by value, since an environment symbol made from a path would need locale translation.
 #' @noRd
 read_line_index = function(abs, size, every = read_index_every) {
   mtime = as.numeric(file.mtime(fs_path(abs)))
@@ -556,12 +537,9 @@ read_line_index = function(abs, size, every = read_index_every) {
   idx
 }
 
-#' Stream the bytes of a line window: skip `skip` lines from byte `start`, then keep the bytes of
-#' `want` lines (the newline ending the last one excluded), at most `cap` bytes of them
-#'
-#' When the cap cuts the window inside its first line, the rest of that line is scanned (not kept)
-#' to measure it: `first_bytes` is its length without the newline and the CR before it (NA when the
-#' first line was not cut).
+#' Stream the bytes of a line window: skip `skip` lines from byte `start`, then keep `want` lines
+#' (without the last newline), at most `cap` bytes; a first line cut by the cap is scanned to
+#' measure it (`first_bytes`, without its line ending; NA when not cut).
 #' @noRd
 read_span = function(abs, start, skip, want, cap = Inf, chunk = 262144L) {
   con = file(fs_path(abs), "rb")
@@ -636,12 +614,8 @@ read_span = function(abs, start, skip, want, cap = Inf, chunk = 262144L) {
 }
 
 #' Line window of a file above 16 MiB through the sparse index (bounded memory)
-#'
-#' The encoding is decided on the first 64 KB (cut back to a character boundary); a NUL byte there
-#' or in the window makes the file binary, as any NUL does in the in-memory reader. At most `cap`
-#' bytes of the window are kept: the line cut there is kept in part (past the 50 KB cap when `cap`
-#' is `read_window_cap`, so the caller reports the truncation), and a first line longer than `cap`
-#' is measured by scanning (`first_bytes`).
+#' The encoding is decided on the first 64 KB; a NUL there or in the window makes it binary. At most
+#' `cap` bytes are kept; a first line longer than `cap` is measured by scanning (`first_bytes`).
 #' @noRd
 read_window_big = function(abs, offset, n, size, every = read_index_every, cap = Inf) {
   head = read_raw(abs, n = min(size, read_sniff_bytes))
@@ -677,9 +651,7 @@ read_window_big = function(abs, offset, n, size, every = read_index_every, cap =
 }
 
 #' Lines `offset .. offset + n - 1` of a text file with the total line count
-#'
-#' `cap` bounds the bytes the streaming reader keeps above `big` (see read_window_big()); the
-#' in-memory reader has the whole file already and ignores it.
+#' `cap` bounds the bytes kept by the streaming reader only (read_window_big()).
 #' @noRd
 read_text_window = function(abs, offset = 1L, n = NULL, big = read_big_file,
                             every = read_index_every, cap = Inf) {
@@ -852,13 +824,8 @@ read_text_body = function(rc) {
 }
 
 #' Read a file for the model: the `read` tool (contract section 7.10)
-#'
-#' @param path File path (relative to the working directory, absolute, or `skill:<name>/<path>`).
-#' @param offset,limit 1-based first line and number of lines (`NULL`: from line 1, up to the caps).
-#' @param budget_tokens Estimated-token cap of the text (`gptr.read_max_tokens`, 12,000).
-#' @return `list(text = chr(1), image = <image block> | NULL, details = list(path, offset, limit,
-#'   lines_total, truncated, image, encoding, eol), value = <gptr_lines>)`: `value` holds the
-#'   lines of the same window (read once), without the image block, which travels in `image`
+#' Returns `list(text, image, details = list(path, offset, limit, lines_total, truncated, image,
+#' encoding, eol), value)`; `value` is the same window's `gptr_lines` without the image block.
 #' @noRd
 read_file = function(path, offset = NULL, limit = NULL,
                      budget_tokens = gptr_opt("read_max_tokens")) {
@@ -878,9 +845,8 @@ read_file = function(path, offset = NULL, limit = NULL,
 }
 
 #' The value of `gptr$read()`: the window's lines as a `gptr_lines` vector (contract section 5.10)
-#'
-#' An image file gives its note line, and the image block travels in the attribute `image_block`
-#' until the member attaches it to the running `r` result.
+#' An image file gives its note line; its block travels in attribute `image_block` until the member
+#' attaches it to the running `r` result.
 #' @noRd
 read_lines_value = function(path, offset = NULL, limit = NULL) {
   read_lines_of(read_core(path, offset, limit, budget_tokens = Inf), path)

@@ -1,9 +1,7 @@
-# tool-walk.R -- tool path resolution, glob to PCRE, the .gitignore engine and the pruned walker
-# (P10; an L4 service that P11, P16 and P18 also use, contract section 7.10). Ported from
-# dev/research/11-r-file-tools.md section 5.5 (proto/01-paths.R, proto/40-walk.R; walker file set
-# equal to `git ls-files` on 14 rule kinds, section 2.6) with its verification log applied: Pi's
-# `**/` prefix rule for patterns containing "/" (row 5; proposal P-C C-29), path.expand() only for
-# "~", "~/" and "~\" (row 18), no probe file written to detect a case-insensitive file system.
+# Tool path resolution, glob to PCRE, the .gitignore engine and the pruned walker (P10; an L4
+# service P11, P16 and P18 use, contract 7.10; research 11 section 5.5): Pi's `**/` prefix for
+# patterns with "/", path.expand() only for "~", "~/" and "~\", and no probe file written to detect
+# a case-insensitive file system.
 
 walk_default_prune = c(".git/", "node_modules/", ".Rproj.user/", "renv/library/", "renv/staging/",
                        "renv/sandbox/", "packrat/lib*/", "packrat/src/", ".venv/", "__pycache__/",
@@ -100,22 +98,9 @@ glob_posix = c("alnum", "alpha", "blank", "cntrl", "digit", "graph", "lower", "p
 #' @noRd
 glob_punct = strsplit("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", "", fixed = TRUE)[[1L]]
 
-#' Translate the bracket expression opening at `ch[i]` (git's wildmatch rules)
-#'
-#' After an optional "!" or "^", a first "]" is literal; a backslash escapes the next character;
-#' `x-y` is a range unless the "-" comes first, last, or right after a range or a class (then it is
-#' literal, and `x-[` ends a range with "["); `[:name:]` is a character class; the first "]" left
-#' closes the expression. Every character is emitted escaped or inside a range, so the class always
-#' compiles (`[:digit:]` is the set of ":", "d", "i", "g", "t") and a negated class never matches
-#' "/". With `git = TRUE` (an ignore-file line) a non-negated class never matches "/" either, a
-#' reversed range keeps only its first character and an unknown class name makes the whole pattern
-#' match nothing, as in wildmatch; in a glob (`git = FALSE`) a reversed range or an unknown class
-#' name is an invalid_argument error (fd/globset rejects a reversed range). `fold = TRUE` is
-#' wildmatch's case folding for a case-insensitive file system, where the paths are lower-cased: a
-#' class character is compared as written (an ASCII capital never matches), a range also matches a
-#' lower-case letter whose capital it holds, and `[:upper:]` and `[:lower:]` match every letter.
-#' @return `list(end, re)`: the index of the closing "]" and the PCRE class (`re = NA`: the pattern
-#'   matches nothing), or NULL when the expression is not closed.
+#' Translate the bracket expression opening at `ch[i]` (git's wildmatch rules): `list(end, re)`
+#' NULL when unclosed; `re = NA` when wildmatch matches nothing (`git = TRUE`, unknown class), where
+#' a glob errors instead (also on a reversed range); `fold` folds case as wildmatch does.
 #' @noRd
 glob_class = function(ch, i, git = FALSE, fold = FALSE) {
   n = length(ch)
@@ -195,17 +180,9 @@ glob_class = function(ch, i, git = FALSE, fold = FALSE) {
   list(end = p, re = re)
 }
 
-#' Translate one glob into a PCRE body (no anchors)
-#'
-#' `*` and `?` never cross "/"; `**` as a whole segment crosses directories; `[abc]`, `[!a-z]`,
-#' `[^a]` and POSIX classes (glob_class()); `{a,b}` alternation only when balanced (an escaped brace
-#' does not count); a backslash escapes the next character; every other regex metacharacter is
-#' escaped (report 11 section 3.4). `git = TRUE` reads an ignore-file line (git's PATTERN FORMAT:
-#' no alternation, wildmatch's bracket rules) and returns NA when wildmatch would match nothing (an
-#' unclosed bracket expression, an unknown class name); in a glob an unclosed "[" is literal.
-#' `fold = TRUE` (with `git`; a case-insensitive file system, paths lower-cased) lower-cases the
-#' characters outside brackets and folds classes as wildmatch does (glob_class()); an escaped ASCII
-#' capital then never matches, so the pattern matches nothing.
+#' Translate one glob into a PCRE body (no anchors; report 11 section 3.4)
+#' `*`/`?` never cross "/", a whole-segment `**` does, `{a,b}` only when balanced; `git = TRUE`
+#' reads an ignore-file line (no braces) and returns NA where wildmatch matches nothing.
 #' @noRd
 glob_translate = function(glob, git = FALSE, fold = FALSE) {
   ch = strsplit(as_utf8(glob), "", fixed = TRUE)[[1L]]
@@ -304,22 +281,13 @@ glob_translate = function(glob, git = FALSE, fold = FALSE) {
   as_utf8(paste(out, collapse = ""))
 }
 
-#' Anchor a translated pattern to the whole path: "." also matches a newline and `\\z` is the end
-#' of the subject (`$` also matches before a final newline), as git and fd match a name holding a
-#' newline
+#' Anchor a translated pattern to the whole path (`(?s)` and `\\z`: a name may hold a newline)
 #' @noRd
 glob_anchor = function(body) paste0("(?s)^", body, "\\z")
 
-#' Glob to an anchored PCRE for "/"-separated paths relative to the search root (contract section
-#' 7.10)
-#'
-#' fd/Pi semantics: a pattern without "/" matches the basename at any depth; a pattern with "/" gets
-#' Pi's `**/` prefix (so `src/*.R` also matches `a/src/x.R`) unless it starts with `**/` or is `**`
-#' (Pi find.ts:201-214; report 11 verification log row 5); a leading "/" anchors at the root. A
-#' glob whose translation is not a valid PCRE (a reversed range, an unknown class name, a class
-#' that splits an alternation) is an invalid_argument error.
-#' @param glob A glob pattern, chr(1).
-#' @return chr(1), a PCRE to use with `perl = TRUE`.
+#' Glob to an anchored PCRE for "/"-separated paths relative to the search root (contract 7.10)
+#' A pattern without "/" matches the basename at any depth, one with "/" gets Pi's `**/` prefix
+#' (report 11 row 5), a leading "/" anchors at the root; an invalid translation is an error.
 #' @noRd
 glob_to_regex = function(glob) {
   check_string(glob, "glob")
@@ -449,20 +417,9 @@ fs_case_insensitive = function(dir) {
 #' @noRd
 walk_list_dir = function(dir) list.files(fs_path(dir), all.files = TRUE, no.. = TRUE)
 
-#' Breadth-first walk that prunes ignored directories before descending (report 11 walk_tree)
-#'
-#' One list.files() per directory and one vectorised dir.exists()/Sys.readlink() per level;
-#' symlinked directories are listed but never followed (a canonical-path guard on Windows, where
-#' Sys.readlink() returns ""). The prune list is evaluated on its own and always wins: a negation
-#' in an ignore file never re-includes a pruned entry (contract section 7.10: the walker skips
-#' `.git`, `node_modules`, ...). Its anchored entries (`renv/library/`) are relative to the walk
-#' root, with or without a git repository around it; ignore-file rules are relative to the git
-#' root. Ignore rules, the last match winning: `.git/info/exclude`, ignore files of ancestors up to
-#' the git root, then the ignore files found while walking (deeper files later, so they win;
-#' within one directory `.gitignore`, `.ignore`, then `.gptrignore`). An entry whose name is not
-#' valid UTF-8 is skipped (no UTF-8 path can name it) and counted in the `invalid_names` attribute.
-#' The walk stops after the level at which more than `max_rows` entries of kind `count` (`"file"`,
-#' `"dir"` or `"any"`) were kept, or at `max_entries` entries of any kind (the safety cap).
+#' Breadth-first walk (report 11 walk_tree); root-relative prunes beat ignore negations (7.10)
+#' Never follows links; stops after the level where rows of kind `count` exceed `max_rows`, or at
+#' `max_entries`. Git-root-relative ignore rules: .git/info/exclude, ancestors, then deeper files.
 #' @noRd
 walk_tree = function(root, hidden = TRUE, gitignore = TRUE, prune = walk_default_prune,
                      max_entries = walk_max_entries, max_rows = Inf, count = "any") {
@@ -572,20 +529,9 @@ walk_tree = function(root, hidden = TRUE, gitignore = TRUE, prune = walk_default
   out
 }
 
-#' Walk a directory tree (contract section 7.10)
-#'
-#' @param root Directory to walk.
-#' @param type `"file"`, `"dir"` or `"any"`.
-#' @param gitignore Honour `.gitignore`, `.ignore`, `.gptrignore` and `.git/info/exclude`.
-#' @param hidden Include dot-files and dot-directories.
-#' @param max Maximum number of rows of the requested `type` (directories do not use up a
-#'   `type = "file"` limit; `Inf`: the walker cap of 500,000 entries).
-#' @param prune Prune rules replacing the default list (`NULL`: `.git`, `node_modules`,
-#'   `renv/library`, `.venv`, `__pycache__`, ...).
-#' @return A data frame `path` (relative to `root`, "/"-separated), `size` (`NA` for directories),
-#'   `mtime`, `type` (`file`, `dir`, `link`), sorted case-insensitively by path (radix); attributes
-#'   `root` (the canonical root), `truncated` (`TRUE` when rows were left out) and `invalid_names`
-#'   (the number of entries skipped because their names are not valid UTF-8).
+#' Walk a directory tree (contract section 7.10): `path`, `size`, `mtime`, `type` sorted by path
+#' `max` counts rows of `type` only (`Inf`: the 500,000-entry cap); `prune` replaces the default
+#' list; attributes `root` (canonical), `truncated` and `invalid_names`.
 #' @noRd
 walk_files = function(root = ".", type = c("file", "dir", "any"), gitignore = TRUE, hidden = FALSE,
                       max = Inf, prune = NULL) {
