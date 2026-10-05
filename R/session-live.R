@@ -120,13 +120,14 @@ last_set = function(s) {
 #' @export
 gptr_last = function() the$last
 
-#' May a session keep this environment as its home? Not a function frame on the stack (rule R2)
+#' May a session keep this environment as its home? Not a function frame on the stack (rule R2);
+#' the target of eval() (source(local =), knitr) is on the stack only as a primitive's frame
 #' @noRd
 home_keep = function(env) {
   if (identical(env, globalenv())) return(TRUE)
   k = sys.nframe()
   while (k > 0L) {
-    if (identical(sys.frame(k), env)) return(FALSE)
+    if (identical(sys.frame(k), env) && !is.primitive(sys.function(k))) return(FALSE)
     k = k - 1L
   }
   TRUE
@@ -141,7 +142,7 @@ home_label = function(env) {
   if (!is.null(ov)) return(ov)
   k = sys.nframe()
   while (k > 0L) {
-    if (identical(sys.frame(k), env)) {
+    if (identical(sys.frame(k), env) && !is.primitive(sys.function(k))) {
       fn = sys.call(k)[[1L]]
       return(paste0("frame of ", paste(deparse(fn, nlines = 1L), collapse = ""), "()"))
     }

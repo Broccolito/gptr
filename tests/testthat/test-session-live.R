@@ -20,6 +20,17 @@ test_that("a function frame is never kept as the home (R2)", {
   expect_identical(session_data(g)$home_label, "globalenv")
 })
 
+test_that("an eval() target is kept as the home, a function frame under eval() is not (R2)", {
+  e = new.env()
+  s = eval(quote(test_session(home = e)), e)
+  expect_identical(session_home(s), e)
+  expect_identical(session_data(s)$home_label, "<environment>")
+  f = function() eval(quote(test_session(home = environment())), environment())
+  s = f()
+  expect_null(session_home(s))
+  expect_match(session_data(s)$home_label, "^frame of f")
+})
+
 test_that("gptr_last() holds the most recent session strongly and survives gc()", {
   s = test_session()
   id = session_data(s)$id

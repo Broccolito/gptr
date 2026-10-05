@@ -707,3 +707,13 @@ Logs: `dev/.validation/FIX/task6-*.log`. Files of this task:
   acceptance section at the end of that file belongs to the P13 lane)
 
 Commit subject: `test(provider): conformance coverage for classifier adapters`.
+
+## Task FIX-7 - home_keep() keeps environments that eval() puts on the call stack (2026-10-05)
+- Red: FAIL 1 (`session-live`: an eval() target got no home). Green: `session-live` PASS 82
+  (+1 test). Lint clean. Neighbours green: `session-|agent-` PASS 2142,
+  `doc-replay|env-snapshot|doc-blocks` PASS 1056 (P15 Task 17 tests now pass),
+  `copy-|gptr-gateway` PASS 391.
+- Reviews: round 1 clear; minor fixed test-first: home_label() skips primitive frames as
+  home_keep() does, so a kept eval() target is `<environment>`, not `frame of eval()`; nit
+  (line wrap) fixed.
+- Deviations: none (implements 03 section 5.1 `home`: never a function frame). Open: none.
