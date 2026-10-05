@@ -1,7 +1,8 @@
 # gptr-capture.R -- copy-safe base-R capture of gptr() calls (rules R2-R3; G3 section 3 "GATEWAY
 # CAPTURE RULES", verified by G3 t2b and t5 and its fact-check; IC-41), {identifier}
 # interpolation (contract 6.1.4), prompt selection, argument validation and the gptr_call record
-# (7.8, IC-13). Identifier resolution (6.1.3, IC-42) joins in Task 6. Plan P08, layer L6.
+# (7.8, IC-13), and identifier resolution (6.1.3, IC-42; the `identifier.resolve` service).
+# Plan P08, layer L6.
 #
 # Every helper that touches a user value is a leaf: it forces its arguments on entry, creates no
 # closure, handler or match.arg() while it holds the value, and returns primitives only.
@@ -590,3 +591,512 @@ call_value = function(call, i) {
   }
   get0(it$slot, envir = v, inherits = FALSE)
 }
+
+# ------------------------------------------------------------------ identifiers (6.1.3, IC-42)
+
+#' Aliases declared by registered provider records
+#' @noRd
+identifier_provider_aliases = function() {
+  out = character()
+  for (id in registry_names("provider")) {
+    out = c(out, as.character(registry_get("provider", id)$aliases))
+  }
+  out
+}
+
+#' Names of plugins that have registry records (sources `plugin:<name>`)
+#' @noRd
+identifier_plugin_names = function() {
+  src = unique(as.character(gptr_registry()$source))
+  sub("^plugin:", "", src[startsWith(src, "plugin:")])
+}
+
+#' Known identifiers for an argument (never empty or missing names, which no mask can bind).
+#' Deterministic: catalog aliases and registry names only, no discovery (IC-74, 07 section 2.1)
+#' @noRd
+identifier_pool = function(arg) {
+  out = switch(arg,
+    model = , small_model = , system1 = c(catalog_aliases(), registry_names("provider"),
+                                          registry_names("router"), registry_names("model"),
+                                          identifier_provider_aliases()),
+    mode = gateway_modes(),
+    preset = c(gateway_presets(), registry_names("preset")),
+    tools = c(registry_names("tool"), gateway_builtin_tools(), gateway_presets()),
+    skills = registry_names("skill"),
+    agents = registry_names("agent"),
+    plugins = , extensions = identifier_plugin_names(),
+    character())
+  out = as.character(out)
+  unique(out[!is.na(out) & nzchar(out)])
+}
+
+#' Canonical names matching `name` for `arg`: an exact name is itself; skills, plugins, extensions
+#' and agents otherwise compare after name_norm(), other kinds exactly (IC-42; the alias mask
+#' binds the same way, ident_mask_vals())
+#' @noRd
+identifier_match = function(name, arg) {
+  pool = identifier_pool(arg)
+  if (!length(pool)) return(character())
+  if (name %in% pool) return(name)
+  if (arg %in% c("skills", "agents", "plugins", "extensions")) {
+    return(unique(pool[name_norm(pool) == name_norm(name)]))
+  }
+  character()
+}
+
+#' `identifier_known(name, arg)`: TRUE when `name` is a known identifier for `arg` (contract 7.8)
+#' @noRd
+identifier_known = function(name, arg) length(identifier_match(name, arg)) > 0L
+
+#' A noun for messages
+#' @noRd
+ident_noun = function(arg) {
+  switch(arg, model = , small_model = , system1 = "model name", mode = "mode name",
+         preset = "preset name", tools = "tool name", skills = "skill name",
+         plugins = "plugin name", extensions = "extension name", agents = "agent name",
+         paste(arg, "name"))
+}
+
+#' One-line deparse of an identifier expression
+#' @noRd
+ident_label = function(expr) paste(deparse(expr, width.cutoff = 60L, nlines = 1L), collapse = "")
+
+#' Checks character identifiers (a mode is exactly one of the four, contract 6.1). Messages never
+#' repeat the value (contract 1.1)
+#' @noRd
+ident_check_chr = function(x, arg) {
+  if (anyNA(x) || any(!nzchar(x))) {
+    gptr_abort(paste0("`", arg, "` contains an empty or missing name."), "invalid_argument",
+               arg = arg, expected = "non-empty names")
+  }
+  if (identical(arg, "mode") && (length(x) != 1L || !(x %in% gateway_modes()))) {
+    gptr_abort("`mode` must be one of plan, manual, edits or auto.", "invalid_argument",
+               arg = "mode", expected = "plan, manual, edits or auto")
+  }
+  x
+}
+
+#' Which spec classes an argument accepts
+#' @noRd
+ident_spec_ok = function(spec, arg) {
+  switch(arg,
+    model = , small_model = , system1 = inherits(spec, c("gptr_provider", "gptr_router")),
+    tools = inherits(spec, "gptr_tool"),
+    agents = inherits(spec, "gptr_agent"),
+    extensions = TRUE,
+    FALSE)
+}
+
+#' Accepts a resolved value: character (identifiers), a spec of the right kind, a factory for
+#' `extensions`, or a list of those for `tools`/`extensions`; anything else is
+#' gptr_error_invalid_identifier naming its class [leaf]
+#' @noRd
+ident_accept = function(value, arg, label) {
+  if (inherits(value, "AsIs")) class(value) = setdiff(class(value), "AsIs")
+  if (is.null(value)) return(NULL)
+  if (is.character(value)) return(ident_check_chr(as_utf8(as.character(value)), arg))
+  if (inherits(value, "gptr_spec") && ident_spec_ok(value, arg)) return(value)
+  if (is.function(value) && identical(arg, "extensions")) return(value)
+  if (is.list(value) && !is.object(value) && arg %in% c("tools", "extensions")) {
+    return(ident_combine(lapply(value, ident_accept, arg = arg, label = label)))
+  }
+  gptr_abort(paste0("`", label, "` is a ", class(value)[1L], ", not a ", ident_noun(arg),
+                    ". Quote the name (\"", label, "\") or pass a character value."),
+             c("invalid_identifier", "invalid_argument"), arg = arg,
+             .data = list(class = class(value)[1L]))
+}
+
+#' Combines element-wise results: all character -> a character vector, else a list
+#' @noRd
+ident_combine = function(parts) {
+  parts = parts[!vapply(parts, is.null, NA)]
+  if (!length(parts)) return(NULL)
+  if (all(vapply(parts, is.character, NA))) return(unlist(parts, use.names = FALSE))
+  out = list()
+  for (p in parts) {
+    if (is.character(p)) {
+      out = c(out, as.list(p))
+    } else if (inherits(p, "gptr_spec") || is.function(p)) {
+      out = c(out, list(p))
+    } else {
+      out = c(out, p)
+    }
+  }
+  out
+}
+
+#' The once-per-session `alias_shadowed` message: a known identifier won over a character variable
+#' of the same name holding a different value
+#' @noRd
+ident_shadow_notice = function(nm, hit, arg, envir) {
+  if (!exists(nm, envir = envir, inherits = TRUE)) return(invisible(NULL))
+  v = get0(nm, envir = envir, inherits = TRUE)
+  if (is.character(v) && !identical(as.character(v), hit)) {
+    gptr_inform(paste0("`", nm, "` was read as the ", ident_noun(arg), " \"", hit, "\", not as ",
+                       "your variable of the same name; write !!", nm, " to use the variable."),
+                "alias_shadowed", .once = paste0("alias_shadowed:", arg, ":", nm))
+  }
+  invisible(NULL)
+}
+
+#' Echoes once a model name that looks like a decimal version (gpt5.1) and was taken literally
+#' @noRd
+ident_decimal_notice = function(nm, arg) {
+  if (arg %in% c("model", "small_model", "system1") && grepl("[0-9][.][0-9]", nm)) {
+    gptr_inform(paste0("The model name `", nm, "` was taken literally as \"", nm,
+                       "\"; documents record it quoted."), "notice",
+                .once = paste0("decimal:", nm))
+  }
+  invisible(NULL)
+}
+
+#' A symbol: known identifier > bound value > literal name
+#' @noRd
+ident_symbol = function(nm, arg, envir) {
+  hit = identifier_match(nm, arg)
+  if (length(hit) > 1L) {
+    gptr_abort(paste0("`", nm, "` matches several ", ident_noun(arg), "s (",
+                      paste(hit, collapse = ", "), "). Write the one you mean as a string."),
+               c("invalid_identifier", "invalid_argument"), arg = arg,
+               .data = list(class = "name", candidates = hit))
+  }
+  if (length(hit) == 1L) {
+    ident_shadow_notice(nm, hit, arg, envir)
+    return(hit)
+  }
+  if (exists(nm, envir = envir, inherits = TRUE)) {
+    return(ident_accept(get0(nm, envir = envir, inherits = TRUE), arg, nm))
+  }
+  ident_decimal_notice(nm, arg)
+  # a literal name is checked like a string (`mode = fast` is gptr_error_invalid_argument here,
+  # not later inside the kernel)
+  ident_check_chr(nm, arg)
+}
+
+#' Spends one step of a reachability walk (ident_holds_env()); TRUE once 100000 steps are spent,
+#' and the walk then counts as reaching the mask [leaf]
+#' @noRd
+ident_walk_spent = function(seen) {
+  n = get0(".n", envir = seen, inherits = FALSE, ifnotfound = 0L) + 1L
+  assign(".n", n, envir = seen)
+  n > 100000L
+}
+
+#' TRUE when the unforced binding `nm` of the frame `env` is the default of an unsupplied formal
+#' (`make_ext = function(level = 1) ...` called as `make_ext()`): R evaluates that promise in
+#' `env` itself, so it reaches only what the walk of `env` already covers. missing() answers
+#' without forcing anything. For an unforced binding it is TRUE for such a default and otherwise
+#' only for an argument forwarded from a frame where it is missing without a default, which fails
+#' when forced whether or not the mask is attached; R does not pass a default's missingness on,
+#' so a forwarded default (`(function(a = k) make_ext(a))()` in the mask) counts as supplied
+#' [leaf]
+#' @noRd
+ident_lazy_default = function(nm, env) {
+  isTRUE(eval(as.call(list(base::missing, as.name(nm))), env))
+}
+
+#' TRUE when environment `env` can reach the mask `target`. Walks `env` and its parents up to
+#' `stop` (the mask's own parent) or a named environment (the global, base and empty
+#' environments, namespaces, attached packages). An unforced promise counts as reaching the mask:
+#' base R cannot read a promise's environment, and a factory called in the mask holds its
+#' arguments as promises of the mask until they are forced (`tools = list(make_tool(con))`,
+#' D-105). The default of an unsupplied formal is the exception (ident_lazy_default(): it is
+#' evaluated in `env`, never forced here). Non-empty dots (promises too) and active bindings
+#' (never called here) count as reaching it; other bound values are walked by ident_holds_env().
+#' `seen` records the addresses of the environments visited (rule R2: address strings, not
+#' frames) [leaf]
+#' @noRd
+ident_env_reaches = function(env, target, stop, seen, depth) {
+  while (is.environment(env)) {
+    if (identical(env, target)) return(TRUE)
+    if (identical(env, stop) || nzchar(environmentName(env))) return(FALSE)
+    key = rlang::obj_address(env)
+    if (exists(key, envir = seen, inherits = FALSE)) return(FALSE)
+    assign(key, TRUE, envir = seen)
+    if (ident_walk_spent(seen)) return(TRUE)
+    nms = ls(env, all.names = TRUE, sorted = FALSE)
+    if (length(nms) && any(rlang::env_binding_are_active(env, nms))) return(TRUE)
+    lazy = if (length(nms)) rlang::env_binding_are_lazy(env, nms) else logical()
+    i = 1L
+    while (i <= length(nms)) {
+      nm = nms[i]
+      if (lazy[[i]]) {
+        # never read with .subset2(), which would force the promise
+        if (!ident_lazy_default(nm, env)) return(TRUE)
+      } else if (!identical(.subset2(env, nm), quote(expr = ))) {
+        # an unsupplied formal without a default, or empty dots, holds R's missing argument
+        if (identical(typeof(.subset2(env, nm)), "...")) return(TRUE)
+        if (ident_holds_env(.subset2(env, nm), target, stop, seen, depth + 1L)) return(TRUE)
+      }
+      i = i + 1L
+    }
+    env = parent.env(env)
+  }
+  FALSE
+}
+
+#' TRUE when a resolved value can reach the mask `target`: through the environment of a closure (a
+#' function written inline in the mask, `extensions = function(gptr) ...` or `tools =
+#' list(gptr_tool(execute = function(input, ctx) ...))`, contract 6.1, or one a factory called
+#' there made), an environment, a list element or an attribute (a formula's `.Environment`),
+#' walked as ident_env_reaches() says. Nesting deeper than 64 or a walk of more than 100000 steps
+#' counts as reaching it [leaf]
+#' @noRd
+ident_holds_env = function(x, target, stop, seen = NULL, depth = 0L) {
+  force(x)
+  s = if (is.null(seen)) new.env(parent = emptyenv()) else seen
+  if (depth > 64L || ident_walk_spent(s)) return(TRUE)
+  if (typeof(x) == "closure") return(ident_env_reaches(environment(x), target, stop, s, depth))
+  if (is.environment(x)) return(ident_env_reaches(x, target, stop, s, depth))
+  at = attributes(x)
+  at = at[setdiff(names(at), c("names", "class", "srcref", "srcfile", "wholeSrcref"))]
+  i = 1L
+  while (i <= length(at)) {
+    if (ident_holds_env(at[[i]], target, stop, s, depth + 1L)) return(TRUE)
+    i = i + 1L
+  }
+  if (typeof(x) != "list") return(FALSE)
+  i = 1L
+  while (i <= length(x)) {
+    if (ident_holds_env(.subset2(x, i), target, stop, s, depth + 1L)) return(TRUE)
+    i = i + 1L
+  }
+  FALSE
+}
+
+#' The alias mask's bindings for `arg`: each known identifier bound to itself and, for the kinds
+#' compared after name_norm(), the `_` and `.` spellings of a `-` name bound to that name when the
+#' spelling is not itself a known name and normalises to that one name only (IC-42: a spelling
+#' two names share stays unbound, as it is ambiguous bare)
+#' @noRd
+ident_mask_vals = function(arg) {
+  pool = identifier_pool(arg)
+  vals = stats::setNames(as.list(pool), pool)
+  if (!(arg %in% c("skills", "agents", "plugins", "extensions"))) return(vals)
+  alt = unique(c(gsub("-", "_", pool, fixed = TRUE), gsub("-", ".", pool, fixed = TRUE)))
+  norm = name_norm(pool)
+  for (s in alt[!(alt %in% pool)]) {
+    hit = pool[norm == name_norm(s)]
+    if (length(hit) == 1L) vals[[s]] = hit
+  }
+  vals
+}
+
+#' Removes from a kept mask the bindings it was given (`vals`) that still hold their value, so
+#' the functions it scopes see the caller's variables, as after direct evaluation; names the
+#' expression assigned itself stay (D-105)
+#' @noRd
+ident_mask_clear = function(mask, vals) {
+  nms = names(vals)[names(vals) %in% ls(mask, all.names = TRUE, sorted = FALSE)]
+  if (!length(nms)) return(invisible(NULL))
+  plain = !rlang::env_binding_are_lazy(mask, nms) & !rlang::env_binding_are_active(mask, nms)
+  for (nm in nms[plain]) {
+    if (identical(.subset2(mask, nm), vals[[nm]])) rm(list = nm, envir = mask)
+  }
+  invisible(NULL)
+}
+
+#' Evaluates a call in the alias mask (ident_mask_vals(); parent = the caller). The mask's parent
+#' is reset to emptyenv() afterwards (rule R3), on error too, unless the returned value can reach
+#' the mask (ident_holds_env(): a function written inline in it, or made there by a factory whose
+#' arguments may still be promises of the mask). Such a mask stays the scope of those functions,
+#' as direct evaluation would leave it, with its alias bindings removed (D-105)
+#' @noRd
+ident_mask = function(expr, arg, envir) {
+  vals = ident_mask_vals(arg)
+  mask = list2env(if (length(vals)) vals else json_obj(), parent = envir)
+  keep = FALSE
+  on.exit(if (!keep) `parent.env<-`(mask, emptyenv()), add = TRUE)
+  out = ident_accept(eval(expr, mask), arg, ident_label(expr))
+  keep = ident_holds_env(out, mask, envir)
+  if (keep) ident_mask_clear(mask, vals)
+  out
+}
+
+#' Checks an element-wise result as a whole: `mode` takes exactly one of the four (contract 6.1);
+#' an empty `c()` stays NULL (the settings default)
+#' @noRd
+ident_whole = function(x, arg) {
+  if (identical(arg, "mode") && !is.null(x)) return(ident_check_chr(x, arg))
+  x
+}
+
+#' Resolves an identifier expression by the table of contract 6.1.3 (the `identifier.resolve`
+#' service). Returns NULL, a character vector, a spec, or a list for `tools`/`extensions`.
+#' @noRd
+resolve_identifier = function(expr, arg, envir) {
+  if (is.null(expr)) return(NULL)
+  if (is.character(expr)) return(ident_check_chr(as_utf8(expr), arg))
+  if (is.symbol(expr)) return(ident_symbol(as.character(expr), arg, envir))
+  if (is.call(expr)) {
+    head = expr[[1L]]
+    if (identical(head, as.name("!")) && length(expr) == 2L && is.call(expr[[2L]]) &&
+        identical(expr[[2L]][[1L]], as.name("!")) && length(expr[[2L]]) == 2L) {
+      inner = expr[[2L]][[2L]]
+      return(ident_accept(eval(inner, envir), arg, ident_label(inner)))
+    }
+    if (identical(head, as.name("I")) && length(expr) == 2L) {
+      return(ident_accept(eval(expr[[2L]], envir), arg, ident_label(expr[[2L]])))
+    }
+    if (identical(head, as.name("c")) || identical(head, as.name("list"))) {
+      items = as.list(expr)[-1L]
+      parts = vector("list", length(items))
+      i = 1L
+      while (i <= length(items)) {
+        parts[i] = list(resolve_identifier(items[[i]], arg, envir))
+        i = i + 1L
+      }
+      return(ident_whole(ident_combine(parts), arg))
+    }
+    if ((identical(head, as.name("+")) || identical(head, as.name("-"))) && length(expr) == 2L) {
+      inner = resolve_identifier(expr[[2L]], arg, envir)
+      if (!is.character(inner) || length(inner) != 1L) {
+        gptr_abort(paste0("`", ident_label(expr), "` needs one name after ", as.character(head),
+                          "."), c("invalid_identifier", "invalid_argument"), arg = arg,
+                   .data = list(class = class(inner)[1L]))
+      }
+      return(ident_whole(paste0(as.character(head), inner), arg))
+    }
+    return(ident_mask(expr, arg, envir))
+  }
+  ident_accept(expr, arg, ident_label(expr))
+}
+
+#' TRUE when the gateway must force the formal's promise to resolve it: an unknown symbol bound
+#' where it is called, or an I() call (G3 t2b: forcing evaluates in the promise's own environment,
+#' which is correct for forwarded dots)
+#' @noRd
+ident_force_needed = function(expr, arg, envir) {
+  if (is.symbol(expr)) {
+    nm = as.character(expr)
+    if (!nzchar(nm) || identifier_known(nm, arg)) return(FALSE)
+    return(exists(nm, envir = envir, inherits = TRUE))
+  }
+  is.call(expr) && identical(expr[[1L]], as.name("I"))
+}
+
+#' Forces a formal's promise and accepts its value [leaf]
+#' @noRd
+ident_value = function(x, arg, expr) {
+  force(x)
+  label = if (is.call(expr) && identical(expr[[1L]], as.name("I"))) expr[[2L]] else expr
+  ident_accept(x, arg, ident_label(label))
+}
+
+#' Session accessor names that agent names may not take (IC-71): P06's own list, so the two
+#' cannot drift apart
+#' @noRd
+session_accessor_names = function() session_accessors
+
+#' Checks agent names: unique syntactic names that are not session accessors (contract 6.1, IC-71)
+#' @noRd
+agents_check_names = function(nms) {
+  if (is.null(nms) || anyNA(nms) || any(!nzchar(nms)) || anyDuplicated(nms) ||
+      any(make.names(nms) != nms)) {
+    gptr_abort("Agent names must be unique syntactic names, as in agents = list(stats = agent()).",
+               "invalid_argument", arg = "agents", expected = "unique syntactic names")
+  }
+  clash = intersect(nms, session_accessor_names())
+  if (length(clash)) {
+    gptr_abort(paste0("Agent names may not equal session accessors: ",
+                      paste(clash, collapse = ", "), "."), "invalid_argument", arg = "agents",
+               expected = "names other than session accessors")
+  }
+  invisible(nms)
+}
+
+#' TRUE for a call to `agent()`, `gptr_agent()` or `gptr::gptr_agent()` (package code and its
+#' documentation write the last form, IC-42)
+#' @noRd
+agents_is_definition = function(a) {
+  if (!is.call(a)) return(FALSE)
+  h = a[[1L]]
+  identical(h, as.name("agent")) || identical(h, as.name("gptr_agent")) ||
+    identical(h, quote(gptr::gptr_agent))
+}
+
+#' TRUE when an agent definition call names itself: gptr_agent() has no dots and `name` is its
+#' first formal, so R binds to it an argument named `name` or a prefix of it, or else the first
+#' unnamed one wherever it stands (`agent(description = "d", "stats")`); an empty argument
+#' (`agent(, model = opus)`) names nothing [leaf]
+#' @noRd
+agents_own_name = function(a) {
+  an = names(a)
+  if (is.null(an)) an = rep("", length(a))
+  k = 2L
+  while (k <= length(a)) {
+    if (nzchar(an[k]) && startsWith("name", an[k])) return(TRUE)
+    if (!nzchar(an[k]) && !identical(a[[k]], quote(expr = ))) return(TRUE)
+    k = k + 1L
+  }
+  FALSE
+}
+
+#' Gives every agent definition call of a literal `list(name = agent(...))` its list name when the
+#' call names none (agents_own_name()): gptr_agent() requires a name (P02 spec_finish), and
+#' contract 6.1 names agents by their list names (`agents = list(stats = agent(model = opus))`,
+#' 02 NS-6)
+#' @noRd
+agents_named_call = function(expr) {
+  nms = names(expr)
+  if (is.null(nms)) return(expr)
+  j = 2L
+  while (j <= length(expr)) {
+    a = expr[[j]]
+    if (nzchar(nms[j]) && agents_is_definition(a) && !agents_own_name(a)) {
+      a$name = nms[j]
+      expr[[j]] = a
+    }
+    j = j + 1L
+  }
+  expr
+}
+
+#' Evaluates `agents =` in a mask where `agent` is gptr_agent() and resolves each definition's
+#' captured `model` and `skills` expressions (IC-34, IC-71). A literal `list(...)` has its names
+#' checked first and passed into its agent definition calls. The mask is detached afterwards like
+#' the alias mask (rule R3), unless a definition can reach it (an inline tool's `execute`, or a
+#' tool a factory made there, ident_holds_env()); it then stays their scope without its `agent`
+#' binding (D-105).
+#' @noRd
+resolve_agents = function(expr, envir) {
+  if (is.null(expr)) return(NULL)
+  if (is.call(expr) && identical(expr[[1L]], as.name("list"))) {
+    n0 = names(expr)
+    agents_check_names(if (is.null(n0)) rep("", length(expr) - 1L) else n0[-1L])
+    expr = agents_named_call(expr)
+  }
+  mask = new.env(parent = envir)
+  assign("agent", gptr_agent, envir = mask)
+  keep = FALSE
+  on.exit(if (!keep) `parent.env<-`(mask, emptyenv()), add = TRUE)
+  val = eval(expr, mask)
+  if (is.null(val)) return(NULL)
+  if (!is.list(val) || inherits(val, "gptr_spec") || !length(val)) {
+    gptr_abort("`agents` must be a named list, as in agents = list(stats = agent(model = opus)).",
+               "invalid_argument", arg = "agents", expected = "a named list of agent definitions")
+  }
+  nms = names(val)
+  agents_check_names(nms)
+  out = vector("list", length(val))
+  i = 1L
+  while (i <= length(val)) {
+    sp = val[[i]]
+    if (!inherits(sp, "gptr_agent")) {
+      gptr_abort(paste0("agents$", nms[i], " is not an agent definition; use agent(...)."),
+                 "invalid_argument", arg = "agents", expected = "gptr_agent() definitions")
+    }
+    if (is.language(sp$model)) sp$model = resolve_identifier(sp$model, "model", envir)
+    if (is.language(sp$skills)) sp$skills = resolve_identifier(sp$skills, "skills", envir)
+    if (is.null(sp$name) || !nzchar(sp$name)) sp$name = nms[i]
+    out[[i]] = sp
+    i = i + 1L
+  }
+  names(out) = nms
+  keep = ident_holds_env(out, mask, envir)
+  if (keep) ident_mask_clear(mask, list(agent = gptr_agent))
+  out
+}
+
+on_load(ext_service_set("identifier.resolve", resolve_identifier, provided_by = "P08",
+                        builtin = "gateway"))

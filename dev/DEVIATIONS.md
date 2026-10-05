@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -3542,6 +3542,106 @@ below 1, and SQL keeps its keyword reading (Known limits).
       quotes, MySQL comments and acting pragmas); the four lines are 3 and
       `risk_cmd_prog("ls\n")` is `?`. P03's `scan_secret_path_re` (`auth-secrets.R`, another
       plan's file) keeps its `$`, which only makes a secret-file match more likely.
+16. **Review round 8 (findings against the standard).** Each finding was reproduced with a probe
+    and judged by (A)-(C); all nine were accepted.
+    - *Program paths.* `risk_cmd_prog()` keeps the last path component, so `./cat`, `bin/grep`,
+      `../cat`, `~/bin/cat` and `/tmp/x/ls` read as the table's programs (0), though each runs
+      whatever file is there (edits mode allows `cp /bin/sh ./cat` at 2). By
+      `risk_cmd_trusted_prog()`, only a bare name (found on PATH; a PATH assignment is 3) or an
+      absolute path with no `.` or `..` step and nothing the shell expands, outside the project,
+      the home directory and the temporary directories (`tempdir()` and its parent,
+      TMPDIR/TMP/TEMP, `/tmp`, `/var/tmp`, `/var/folders`, their `/private` forms, `/dev/shm`),
+      runs the program its name says: `/bin/ls -la`, `/usr/bin/git status` and
+      `C:\Git\bin\git.exe status` keep 0. Any other path is no wrapper and is read as an
+      unknown program (3 `process`, call "not modelled: a program run from a path gptr does not
+      know", with its guarded operands, command-line arguments and first later known program)
+      and also by its name, so the level only rises: `./cat -c 'rm -rf ~'` and `bin/rm -rf ~`
+      are 4, `build/ls`, `./time cat a.txt` and `env ./cat a.txt` 3; an argv is read the same.
+    - *sed is parsed.* `risk_sed_parse()` reads the options as GNU sed (options anywhere,
+      clusters, attached `-e`/`-f` values, unique long-option prefixes such as `--expr`,
+      `--fil`, `--in-pl`, `-i[SUFFIX]`, `-l N`) and BSD sed (`-i`/`-I` with a suffix word such as
+      `''` or `.bak`, `-l` without a value) read them; an unknown option or an ambiguous prefix
+      is 3. `risk_sed_script()` reads the script (the `-e` texts joined with newlines) command by
+      command: addresses (N, `first~step`, `$`, `/re/` and `\cREc` with I and M, `addr,+N`,
+      `addr,~N`, `!`), bracket expressions in regular expressions (read as one item, as current
+      GNU and BSD sed do; a second reading without them adds its effects when it parses), the
+      `s` and `y` delimiters with escapes, blanks before `s` flags, labels that end at the first
+      blank, `;` or `}` (GNU; BSD's label to the end of the line hides no command GNU reads), and
+      `a`/`i`/`c` text and `r`/`R`/`w`/`W`/`e` arguments to the end of the line. Only `=`, `d`,
+      `D`, `g`, `G`, `h`, `H`, `n`, `N`, `p`, `P`, `x`, `z`, `F`, `l`, `L`, `q`, `Q`, labels,
+      `b`, `t`, `T`, `v`, `{`, `}`, comments, `a`/`i`/`c` text, `y` and `s` with the flags `g`,
+      `p`, `i`, `I`, `m`, `M` and digits keep a line at 0; `w`, `W` and `s///w` write their file
+      (its class's level), `r` and `R` read, `e` and `s///e` are 3 `dynamic` and the command line
+      of `e CMD` is classified (`sed -n -e'1e rm -rf ~' f` 4). A command, address or delimiter
+      the reader cannot read is 3 ("not modelled: a sed script gptr cannot read"), keeping what
+      it read before (GNU sed opens `w` files while it reads the script). `sed -n` with
+      `'s/a;b/c/w .Rprofile'`, `'/a;b/w .Rprofile'`, `'\%a%w .Rprofile'`,
+      `'s/a/b/ w .Rprofile'`, `-e'w .Rprofile'`, `-ne'w .Rprofile'` or `--expr='w .Rprofile'` is
+      4; `-fprog.sed`, `-nfprog.sed` and `--fil=prog.sed` are 3.
+    - *awk is lexed.* `risk_awk_lex()` blanks string literals, regular expression literals and
+      comments (positions kept) before the program is searched. A `/` starts a regular
+      expression where an operand is expected (also after `print`, `printf`, `return`, `case`,
+      `do`, `else`, `in`, `exit` and the `)` of an `if`, `while`, `for` or `switch` condition)
+      and divides after an operand (`n++ / 1`); a string or regular expression that does not end
+      on its line, or one whose end depends on reading a bracket expression as one item (awks
+      differ), is 3 ("not modelled: an awk program gptr cannot read"). In the lexed text any `|`
+      but `||` (pipes, gawk's `|&`), `system` and `@` (indirect calls, `@include`, `@load`,
+      `@namespace`) are 3 `dynamic`. `risk_awk_files()` finds print and printf `>`/`>>` and
+      getline `<` at parenthesis depth 0 before `;`, a newline, `}` or `|`: a target made of
+      string literals (adjacent ones joined) takes its class, any other is a write gptr cannot
+      name (3). `awk 'BEGIN { print "rm -rf ~;" | "sh" }'`, `print "}" | "sh"`, gawk's
+      `@f("rm -rf ~")` and `@include "x.awk"` are 3; `awk '{print "a;b" > ".Rprofile"}' f` is 4.
+    - *Long options by prefix and option clusters.* `risk_long_hit()` reads a word as a long
+      option when it is any prefix of the name (git's parse-options and getopt_long() take a
+      unique prefix and stop with an error at an ambiguous one, so reading a prefix as every
+      option it may be misses nothing that runs); `risk_short_words()` gives the option
+      clusters. git grep's `--open-files-in-pager` (`--open=`, `--op=`) and `-O` in a cluster
+      are 3 and the pager's command line is classified (`git grep --open='rm -rf ~;' x` 4);
+      git branch's and tag's write options count by prefix or as a cluster letter
+      (`--edit-desc`, `--set-up=origin/x`, `--unset`, `-vd`: 2; `-vD` and `-d -f`, a forced
+      delete: 3); `git help --we`/`-aw` 3; `date --se=` (`-s`/`--set` take their value),
+      `hostname --fi=` or `-F` in a cluster, and `file --comp` read as their full forms.
+    - *git remote, config and stash by verb* (`risk_git_verb()`; the old test asked whether any
+      word looked like a read flag, so `git remote -v add evil URL` was 0). remote: no verb,
+      `-v`, `get-url`, and `show` with `-n` or no name read (0); `show NAME`, `update` and
+      `prune` contact the remote (2 `network`); every other verb writes (2). stash: `list` and
+      `show` read; anything else writes, and a stash with options and no verb is a push whose
+      pathspec after `--` is reset (`git stash -- .gptr/settings.json` 4, found in the
+      self-review: it was 2). config: the `list` and `get` verbs, the `--get*`, `--list` and `-l`
+      actions and a key alone read; the other verbs, the write actions (by prefix: `--ad`,
+      `--unset`; `-e`) and a key with a value write (`git config user.name show` 2, was 0).
+    - *External git subcommands.* A subcommand that is neither in `risk_git_builtins` (git's
+      built-in subcommands that write no more than the repository; difftool, mergetool,
+      credential, merge-index and send-email, which run configured tools or helpers, are left
+      out) nor a row of the table is an external `git-<name>` program or an alias, perhaps
+      `!cmd`: 3 `process` ("not modelled: an external git command or alias"). `git foo`,
+      `git st`, `git x-evil` and `git lfs pull` are 3; `git commit -am wip` keeps 2.
+    - *Environment variables are an allowlist.* `risk_env_inert_re` lists the names no program
+      reads options, code, a file to load or a command line from: `LC_*`, `LANG`, `LANGUAGE`,
+      `TZ`, `COLUMNS`, `LINES`, `TERM`, `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `FORCE_COLOR`,
+      `COLORTERM`, `LS_COLORS`, `LSCOLORS`, `GREP_COLOR`, `GREP_COLORS`, `TIME_STYLE`,
+      `QUOTING_STYLE`, `BLOCK_SIZE`, `BLOCKSIZE`, `POSIXLY_CORRECT`, `GIT_TERMINAL_PROMPT`,
+      `GIT_OPTIONAL_LOCKS`, `PYTHONUNBUFFERED`, `PYTHONDONTWRITEBYTECODE` and
+      `PYTHONIOENCODING`. A prefix assignment of another name (`risk_cmd_inject_re`'s names keep
+      their own handling) before a program outside `risk_cmd_inert` and `risk_env_quiet` (test,
+      export, printf and other builtins that read no options from the environment) is 3
+      `dynamic` ("not modelled: an environment variable the program may read options from":
+      `RIPGREP_CONFIG_PATH=evil.rc rg foo`, `GIT_TRACE=out.txt git status`). A line runs in a
+      shell of its own (03 section 6.7), so an export reaches only the later programs on it:
+      after an export of such a name, or after a plain, for, readonly, local, declare or typeset
+      assignment of such a name in upper case (the environment may export it already), every
+      later program outside those lists is 3 (`risk_cmd_env_set()`;
+      `export RIPGREP_CONFIG_PATH=evil.rc; rg foo` and `LESS=x; git log` are 3).
+      `x=1; git status`, `DIR=src; ls $DIR`, `LC_ALL=C git status`, `FOO=1 cat f.txt` and
+      `export X=~` keep their levels.
+    - *jq and yq code gptr does not read.* `yq --from-file`, `jq -f`/`--from-file`, `jq -L` and
+      `--library-path` (now options that take a value) and jq program text with
+      `import "..."` or `include "..."` are 3 (`jq '.import' a.json` stays 0).
+    - *Changed rows:* one, `export X=1; curl -o a.csv https://x.org/a.csv` 2 to 3 (`X` is no
+      known-inert name and curl reads options from its environment, through CURL_HOME's
+      `.curlrc`); the row's point, that the export's environment listing is no secret sent to
+      the network (not 4), holds. One new expectation of mine was wrong before green:
+      `sed -l 'w .x' f` is 2 (BSD sed reads `-l` without a value, so the script writes `.x`).
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
@@ -3568,7 +3668,11 @@ unknown directory that `source` adds. A substitution in an unquoted
 heredoc that holds a comment is not read and is level 3 `dynamic`. Shell syntax is read as bash
 and dash read it (and PowerShell, for `#` comments); cmd.exe, gptr's last fallback on Windows
 without Git Bash or PowerShell, has no `'` quotes, no `#` comments and `^` escapes, which the
-classifier does not model (a `cmd /c` line is read with sh's rules).
+classifier does not model (a `cmd /c` line is read with sh's rules). An upper-case variable a
+line sets without export counts for its later programs (item 16), a lower-case one does not (a
+convention: programs read options from upper-case names). sed and awk are read as GNU sed, BSD
+sed, gawk and the one-true-awk read them; where they differ (BSD's labels, bracket expressions
+in awk regular expressions) the reading that runs more commands is used or the line is 3.
 
 Validation: `progress/P11.md`, Task 2. Six blocks were added to `test-perm-classify.R`
 (145 expectations); against the plan-literal Task 2 source the file gives
@@ -3595,9 +3699,13 @@ eight blocks (291 expectations), eight expectations in two older blocks and thir
 rows (six by the gate, seven by the non-dot glob names, listed in item 15); the first seven new
 blocks fail 161 against the round-6 source (`task2-std-red.log`), the anchor and read-option
 blocks fail 22 against the intermediate source that had the gate and the static fixes but not
-those (`task2-std-red2.log`). Final `^perm-classify$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1549 ]` in the UTF-8 and the C locale
-(`task2-std-green.log`, `task2-std-green-C.log`).
+those (`task2-std-red2.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1549 ]` at the end of round 7).
+Review round 8 added item 16 with eight blocks (217 expectations) and one changed row; the eight
+blocks as first written (211 expectations) fail 102 against the round-7 source
+(`task2-fix8-red.log`), and the three implicit-stash rows of the self-review fail 2 before their
+fix (`task2-fix8-red-stash.log`). Final `^perm-classify$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1766 ]` in the UTF-8 and the C locale
+(`task2-fix8-green.log`, `task2-fix8-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 

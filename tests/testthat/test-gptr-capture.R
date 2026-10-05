@@ -362,3 +362,430 @@ test_that("per-call options never reach the protected settings or safety record 
   expect_error(gateway_opts(list(max_turns = 2L, safety = list())),
                class = "gptr_error_invalid_argument")
 })
+
+# ------------------------------------------------------------------ identifiers (Task 6)
+
+test_that("resolve_identifier() follows the table of contract 6.1.3", {
+  e = new.env()
+  e$m = "haiku"
+  e$hard = TRUE
+  e$mice = data.frame(a = 1)
+  expect_null(resolve_identifier(NULL, "model", e))
+  expect_identical(resolve_identifier("opus", "model", e), "opus")
+  expect_identical(resolve_identifier(quote(opus), "model", e), "opus")
+  expect_identical(resolve_identifier(quote(m), "model", e), "haiku")
+  bang = quote(!!m)
+  expect_identical(resolve_identifier(bang, "model", e), "haiku")
+  expect_identical(resolve_identifier(quote(I(m)), "model", e), "haiku")
+  expect_identical(resolve_identifier(quote(if (hard) opus else haiku), "model", e), "opus")
+  expect_identical(resolve_identifier(quote(gpt9), "model", e), "gpt9")
+  expect_identical(resolve_identifier(quote(c(+grep, -write)), "tools", e), c("+grep", "-write"))
+  expect_identical(resolve_identifier(quote(plan), "mode", e), "plan")
+  expect_error(resolve_identifier(quote(mice), "model", e), class = "gptr_error_invalid_identifier")
+  expect_error(resolve_identifier("fast", "mode", e), class = "gptr_error_invalid_argument")
+  expect_error(resolve_identifier(quote(fast), "mode", e), class = "gptr_error_invalid_argument")
+})
+
+test_that("an alias shadowed by a character variable wins, with a message (contract 6.1.3)", {
+  # the notice is once per process: forget an earlier one so the test can rerun in one process
+  key = "message:alias_shadowed:model:sonnet"
+  rm(list = intersect(key, names(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect(key, names(the$once)), envir = the$once))
+  e = new.env()
+  e$sonnet = "my-own-model"
+  local_gptr_options(quiet = FALSE)
+  expect_message(resolve_identifier(quote(sonnet), "model", e),
+                 class = "gptr_message_alias_shadowed")
+  expect_identical(suppressMessages(resolve_identifier(quote(sonnet), "model", e)), "sonnet")
+  bang = quote(!!sonnet)
+  expect_identical(resolve_identifier(bang, "model", e), "my-own-model")
+})
+
+test_that("skill names compare after name_norm() (IC-42)", {
+  d = withr::local_tempdir()
+  writeLines(c("---", "name: single-cell", "description: Single-cell analysis", "---"),
+             file.path(d, "SKILL.md"))
+  off = gptr_register(gptr_spec("skill", "single-cell", description = "Single-cell analysis",
+                                path = file.path(d, "SKILL.md"), dir = d, source = "user"))
+  withr::defer(off())
+  e = new.env()
+  expect_true(identifier_known("single_cell", "skills"))
+  expect_identical(resolve_identifier(quote(single_cell), "skills", e), "single-cell")
+  expect_identical(resolve_identifier(quote(c(single_cell, "other")), "skills", e),
+                   c("single-cell", "other"))
+})
+
+test_that("an ambiguous normalised match lists the candidates", {
+  local_mocked_bindings(identifier_pool = function(arg) c("single-cell", "single_cell"))
+  cnd = expect_error(resolve_identifier(quote(single.cell), "skills", new.env()),
+                     class = "gptr_error_invalid_identifier")
+  expect_identical(cnd$candidates, c("single-cell", "single_cell"))
+})
+
+test_that("agents take their list names; model and skills resolve as identifiers (IC-34, IC-71)", {
+  e = new.env()
+  # the north-star form: no name and no description inside agent() (02 NS-6)
+  a = resolve_agents(quote(list(stats = agent(model = opus, skills = statistics),
+                                lit = agent(description = "Literature", model = "haiku"))), e)
+  expect_s3_class(a$stats, "gptr_agent")
+  expect_identical(a$stats$name, "stats")
+  expect_identical(a$stats$model, "opus")
+  expect_identical(a$stats$skills, "statistics")
+  expect_identical(a$lit$name, "lit")
+  expect_identical(a$lit$model, "haiku")
+  expect_error(resolve_agents(quote(list(text = agent(description = "x"))), e),
+               class = "gptr_error_invalid_argument")
+  expect_error(resolve_agents(quote(list(agent(description = "x"))), e),
+               class = "gptr_error_invalid_argument")
+  expect_error(resolve_agents(quote(list(a = agent(model = opus), a = agent(model = haiku))), e),
+               class = "gptr_error_invalid_argument")
+})
+
+# The bootstrap entry (ext_service_get() serves it once builtin:gateway is loaded, Task 9)
+test_that("resolve_identifier() is registered as the identifier.resolve service", {
+  entry = the$services[["identifier.resolve"]]
+  expect_identical(entry$fun(quote(opus), "model", new.env()), "opus")
+})
+
+# ---- Task 6 adaptation tests (contract 1.1, 6.1, 6.1.3, IC-42, IC-71, IC-74, rule R3)
+
+test_that("agents written with gptr_agent() or gptr::gptr_agent() take their list names (IC-42)", {
+  e = new.env()
+  a = resolve_agents(quote(list(stats = gptr_agent(model = opus),
+                                lit = gptr::gptr_agent(description = "Literature",
+                                                       model = "haiku"),
+                                own = agent("named", model = haiku),
+                                own2 = agent(description = "d", "named2", model = haiku),
+                                own3 = agent(nam = "named3", description = "d"),
+                                blank = agent(, model = haiku))), e)
+  expect_identical(a$stats$name, "stats")
+  expect_identical(a$stats$model, "opus")
+  expect_identical(a$lit$name, "lit")
+  expect_identical(a$lit$model, "haiku")
+  # an explicit name is the definition's own: R binds any unnamed argument, or one named by a
+  # prefix of `name`, to gptr_agent()'s first formal `name`
+  expect_identical(a$own$name, "named")
+  expect_identical(a$own2$name, "named2")
+  expect_identical(a$own2$model, "haiku")
+  expect_identical(a$own3$name, "named3")
+  # ... while an empty argument names nothing
+  expect_identical(a$blank$name, "blank")
+  expect_identical(a$blank$model, "haiku")
+  expect_identical(names(a), c("stats", "lit", "own", "own2", "own3", "blank"))
+  expect_error(resolve_agents(quote(list(usage = gptr_agent(model = opus))), e),
+               class = "gptr_error_invalid_argument")
+  expect_error(resolve_agents(quote(list(`not syntactic` = agent(model = opus))), e),
+               class = "gptr_error_invalid_argument")
+  e$defs = list(x = gptr_agent(name = "x", description = "d"))
+  expect_identical(resolve_agents(quote(defs), e)$x$name, "x")
+  e$bad = list(x = 1)
+  expect_error(resolve_agents(quote(bad), e), class = "gptr_error_invalid_argument")
+  expect_null(resolve_agents(NULL, e))
+})
+
+test_that("session_accessor_names() is P06's accessor list and P02 refuses each name (IC-71)", {
+  nms = session_accessor_names()
+  expect_identical(nms, session_accessors)
+  expect_true(all(c("text", "value", "usage", "children", "editor_text") %in% nms))
+  for (nm in nms) {
+    expect_error(gptr_agent(name = nm, description = "d"), class = "gptr_error")
+  }
+})
+
+test_that("an invalid mode is refused without echoing its value (contract 1.1)", {
+  e = new.env()
+  e$x = "mode-from-a-variable"
+  bang = quote(!!x)
+  cnd = expect_error(resolve_identifier(bang, "mode", e), class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "mode")
+  expect_false(grepl("mode-from-a-variable", conditionMessage(cnd), fixed = TRUE))
+  expect_error(resolve_identifier(c("plan", ""), "tools", e), class = "gptr_error_invalid_argument")
+  expect_error(resolve_identifier(NA_character_, "model", e),
+               class = "gptr_error_invalid_argument")
+  cnd = expect_error(resolve_identifier(quote(+c(a, b)), "tools", e),
+                     class = "gptr_error_invalid_identifier")
+  expect_identical(cnd$arg, "tools")
+  # a mode is exactly one of the four (contract 6.1), however it is written
+  e$two = c("plan", "auto")
+  for (x in list(quote(c(plan, auto)), quote(character()), character(), quote(+plan),
+                 quote(list(plan, "auto")), quote(two))) {
+    cnd = expect_error(resolve_identifier(x, "mode", e), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, "mode")
+  }
+  expect_error(ident_value(e$two, "mode", quote(two)), class = "gptr_error_invalid_argument")
+  expect_null(resolve_identifier(quote(c()), "mode", e))
+  expect_identical(resolve_identifier(quote(c(auto)), "mode", e), "auto")
+})
+
+test_that("a decimal-looking model name is taken literally and echoed once (contract 6.1.3)", {
+  key = "message:decimal:gpt5.1"
+  rm(list = intersect(key, names(the$once)), envir = the$once)
+  withr::defer(rm(list = intersect(key, names(the$once)), envir = the$once))
+  local_gptr_options(quiet = FALSE)
+  e = new.env()
+  expect_message(resolve_identifier(quote(gpt5.1), "model", e), class = "gptr_message_notice")
+  expect_no_message(expect_identical(resolve_identifier(quote(gpt5.1), "model", e), "gpt5.1"))
+  # only model arguments echo it
+  expect_no_message(resolve_identifier(quote(v1.2), "skills", e))
+})
+
+test_that("bound values must be character or a spec of the right kind (contract 6.1.3)", {
+  e = new.env()
+  e$tl = gptr_tool("t_one", description = "Tool one", execute = function(input, ctx) "x",
+                   parameters = list(type = "object", properties = list()))
+  e$n = 3
+  e$fn = function() NULL
+  expect_identical(resolve_identifier(quote(tl), "tools", e), e$tl)
+  expect_identical(resolve_identifier(quote(c(tl, "-write")), "tools", e), list(e$tl, "-write"))
+  cnd = expect_error(resolve_identifier(quote(tl), "model", e),
+                     class = "gptr_error_invalid_identifier")
+  expect_identical(cnd$class, "gptr_tool")
+  cnd = expect_error(resolve_identifier(quote(n), "model", e),
+                     class = "gptr_error_invalid_identifier")
+  expect_identical(cnd$class, "numeric")
+  expect_identical(resolve_identifier(quote(fn), "extensions", e), e$fn)
+  expect_error(resolve_identifier(quote(fn), "skills", e), class = "gptr_error_invalid_identifier")
+})
+
+test_that("ident_force_needed() and ident_value() force unknown bound symbols and I() (G3 t2b)", {
+  e = new.env()
+  e$m = "haiku"
+  expect_true(ident_force_needed(quote(m), "model", e))
+  expect_false(ident_force_needed(quote(opus), "model", e))
+  expect_false(ident_force_needed(quote(unbound_name_zz), "model", e))
+  expect_true(ident_force_needed(quote(I(m)), "model", e))
+  expect_false(ident_force_needed(quote(c(m, opus)), "model", e))
+  expect_false(ident_force_needed("opus", "model", e))
+  expect_identical(ident_value("haiku", "model", quote(m)), "haiku")
+  expect_identical(ident_value(I("haiku"), "model", quote(I(m))), "haiku")
+  cnd = expect_error(ident_value(mtcars, "model", quote(I(cars))),
+                     class = "gptr_error_invalid_identifier")
+  expect_true(grepl("`cars` is a data.frame", conditionMessage(cnd), fixed = TRUE))
+  expect_identical(ident_label(quote(if (hard) opus else haiku)), "if (hard) opus else haiku")
+})
+
+test_that("the alias and agent masks are detached from the caller afterwards (rule R3)", {
+  e = new.env()
+  e$hard = FALSE
+  e$grab = function() {
+    e$mask = parent.frame()
+    "opus"
+  }
+  expect_identical(resolve_identifier(quote(grab()), "model", e), "opus")
+  expect_identical(parent.env(e$mask), emptyenv())
+  e$mask = NULL
+  e$grab_agent = function() {
+    e$mask = parent.frame()
+    gptr_agent(name = "b", description = "d")
+  }
+  a = resolve_agents(quote(list(a = agent(model = opus), b = grab_agent())), e)
+  expect_identical(names(a), c("a", "b"))
+  expect_identical(parent.env(e$mask), emptyenv())
+  # known identifiers are bound inside the mask; an exact name wins over a normalised spelling
+  expect_identical(resolve_identifier(quote(if (hard) opus else haiku), "model", e), "haiku")
+  local_mocked_bindings(identifier_pool = function(arg) c("single-cell", "single_cell"))
+  expect_identical(resolve_identifier(quote(if (TRUE) single_cell), "skills", e), "single_cell")
+  # ... bare as well: an exact name is no ambiguous normalised match (IC-42)
+  expect_identical(resolve_identifier(quote(single_cell), "skills", e), "single_cell")
+  # a spelling that normalises to two names is ambiguous bare and unbound in the mask
+  expect_error(resolve_identifier(quote(if (TRUE) single.cell), "skills", e),
+               "object 'single.cell' not found", fixed = TRUE)
+  local_mocked_bindings(identifier_pool = function(arg) c("single-cell", "single.cell"))
+  expect_error(resolve_identifier(quote(single_cell), "skills", e),
+               class = "gptr_error_invalid_identifier")
+  expect_error(resolve_identifier(quote(if (TRUE) single_cell), "skills", e),
+               "object 'single_cell' not found", fixed = TRUE)
+  expect_identical(resolve_identifier(quote(if (TRUE) single.cell), "skills", e), "single.cell")
+  # the `_` and `.` spellings of a `-` name are bound when they name one name (name_norm(), IC-42)
+  local_mocked_bindings(identifier_pool = function(arg) c("single-cell", "bulk"))
+  expect_identical(resolve_identifier(quote(if (TRUE) single.cell), "skills", e), "single-cell")
+  expect_identical(resolve_identifier(quote(if (TRUE) single_cell), "skills", e), "single-cell")
+  local_mocked_bindings(identifier_pool = function(arg) c("a-b_c", "a_b-c"))
+  expect_error(resolve_identifier(quote(if (TRUE) a_b_c), "skills", e), "a_b_c")
+  expect_error(resolve_identifier(quote(a.b_c), "skills", e),
+               class = "gptr_error_invalid_identifier")
+  expect_error(resolve_identifier(quote(if (TRUE) a.b_c), "skills", e),
+               "object 'a.b_c' not found", fixed = TRUE)
+  local_mocked_bindings(identifier_pool = function(arg) c("a-b.c", "a_b-c"))
+  expect_error(resolve_identifier(quote(a_b.c), "skills", e),
+               class = "gptr_error_invalid_identifier")
+  expect_error(resolve_identifier(quote(if (TRUE) a_b.c), "skills", e),
+               "object 'a_b.c' not found", fixed = TRUE)
+})
+
+test_that("a function written inline keeps its scope; the mask is detached otherwise (R3)", {
+  e = new.env()
+  e$k = 10
+  # contract 6.1: `extensions` accepts function(gptr) factories, `tools` lists of <spec:tool>
+  f = resolve_identifier(quote(function(gptr) {
+    nrow(mtcars) + k
+  }), "extensions", e)
+  expect_identical(f(NULL), 42)
+  expect_identical(parent.env(environment(f)), e)
+  v = resolve_identifier(quote(c("audit", function(gptr) nrow(mtcars) + k)), "extensions", e)
+  expect_identical(v[[1L]], "audit")
+  expect_identical(v[[2L]](NULL), 42)
+  tl = resolve_identifier(quote(list(gptr_tool("t_inline", description = "Inline tool",
+                                               execute = function(input, ctx) nrow(mtcars) + k,
+                                               parameters = list(type = "object",
+                                                                 properties = list())))),
+                          "tools", e)
+  expect_identical(tl[[1L]]$execute(list(), NULL), 42)
+  a = resolve_agents(quote(list(stats = agent(model = opus, tools = list(
+    gptr_tool("t_agent", description = "Agent tool", execute = function(input, ctx) k + 1,
+              parameters = list(type = "object", properties = list())))))), e)
+  expect_identical(a$stats$tools[[1L]]$execute(list(), NULL), 11)
+  # a factory made inside a local() scope of the mask keeps it as well
+  g = resolve_identifier(quote(local({
+    j = 2
+    function(gptr) j + k
+  })), "extensions", e)
+  expect_identical(g(NULL), 12)
+  # a value that holds no closure of the mask, or that is refused, leaves the mask detached
+  e$mask = NULL
+  expect_identical(resolve_identifier(quote({
+    assign("mask", environment(), envir = e)
+    "audit"
+  }), "extensions", e), "audit")
+  expect_identical(parent.env(e$mask), emptyenv())
+  e$mask = NULL
+  expect_error(resolve_identifier(quote({
+    assign("mask", environment(), envir = e)
+    function(gptr) 1
+  }), "model", e), class = "gptr_error_invalid_identifier")
+  expect_identical(parent.env(e$mask), emptyenv())
+  e$mask = NULL
+  e$fac = function(gptr) 1
+  expect_identical(resolve_identifier(quote({
+    assign("mask", environment(), envir = e)
+    fac
+  }), "extensions", e), e$fac)
+  expect_identical(parent.env(e$mask), emptyenv())
+})
+
+test_that("a factory's lazy argument keeps the mask; a kept mask binds no alias (D-105)", {
+  e = new.env()
+  e$k = 10
+  e$make_tool = function(v) {
+    gptr_tool("t_lazy", description = "Lazy tool", execute = function(input, ctx) v + 1,
+              parameters = list(type = "object", properties = list()))
+  }
+  e$make_ext = function(v) function(gptr) v * 2
+  # helper constructors with lazy arguments (contract 6.1: tools and extensions)
+  tl = resolve_identifier(quote(list(make_tool(k))), "tools", e)
+  expect_identical(tl[[1L]]$execute(list(), NULL), 11)
+  expect_identical(resolve_identifier(quote(make_ext(k)), "extensions", e)(NULL), 20)
+  v = resolve_identifier(quote(c("audit", make_ext(k))), "extensions", e)
+  expect_identical(v[[2L]](NULL), 20)
+  a = resolve_agents(quote(list(stats = agent(model = opus, tools = list(make_tool(k))))), e)
+  expect_identical(a$stats$tools[[1L]]$execute(list(), NULL), 11)
+  # arguments held in dots, and a forced argument that is a function written inline (a wrapper)
+  e$make_dots = function(...) function(gptr) sum(...)
+  expect_identical(resolve_identifier(quote(make_dots(k, 1)), "extensions", e)(NULL), 11)
+  e$wrap = function(f) {
+    force(f)
+    function(gptr) f(gptr) + 1
+  }
+  expect_identical(resolve_identifier(quote(wrap(function(gptr) k * 3)), "extensions", e)(NULL),
+                   31)
+  # a kept mask is a plain scope: the caller's variables are no longer shadowed by alias names
+  e$r = 5
+  tl = resolve_identifier(quote(list(gptr_tool("t_r", description = "Reads r",
+                                               execute = function(input, ctx) r + 1,
+                                               parameters = list(type = "object",
+                                                                 properties = list())))),
+                          "tools", e)
+  expect_identical(tl[[1L]]$execute(list(), NULL), 6)
+  scope = environment(tl[[1L]]$execute)
+  expect_identical(parent.env(scope), e)
+  expect_false(any(c("r", "read", "standard") %in% ls(scope, all.names = TRUE)))
+  # ... while a name the expression assigned itself stays
+  tl = resolve_identifier(quote({
+    read = 2
+    list(gptr_tool("t_read", description = "Reads read", execute = function(input, ctx) read + 1,
+                   parameters = list(type = "object", properties = list())))
+  }), "tools", e)
+  expect_identical(tl[[1L]]$execute(list(), NULL), 3)
+  e$agent = "mine"
+  a = resolve_agents(quote(list(stats = agent(model = opus, tools = list(
+    gptr_tool("t_ag", description = "Agent tool", execute = function(input, ctx) agent,
+              parameters = list(type = "object", properties = list())))))), e)
+  expect_identical(a$stats$tools[[1L]]$execute(list(), NULL), "mine")
+  # a package function holds no mask: the mask is detached
+  e$mask = NULL
+  expect_identical(resolve_identifier(quote({
+    assign("mask", environment(), envir = e)
+    base::identity
+  }), "extensions", e), base::identity)
+  expect_identical(parent.env(e$mask), emptyenv())
+})
+
+test_that("an unsupplied formal's default never keeps the mask (R3, D-105)", {
+  e = new.env()
+  e$k = 10
+  # R evaluates a default in the factory's own frame, never in the mask: the mask is detached
+  e$make_lvl = function(level = 2) {
+    assign("mask", parent.frame(), envir = e)
+    function(gptr) level * 10
+  }
+  e$make_t = function(n = 3) {
+    assign("mask", parent.frame(), envir = e)
+    gptr_tool("t_dflt", description = "Default tool", execute = function(input, ctx) n + 1,
+              parameters = list(type = "object", properties = list()))
+  }
+  e$mask = NULL
+  f = resolve_identifier(quote(make_lvl()), "extensions", e)
+  expect_identical(parent.env(e$mask), emptyenv())
+  expect_identical(f(NULL), 20)
+  e$mask = NULL
+  tl = resolve_identifier(quote(list(make_t())), "tools", e)
+  expect_identical(parent.env(e$mask), emptyenv())
+  expect_identical(tl[[1L]]$execute(list(), NULL), 4)
+  e$mask = NULL
+  a = resolve_agents(quote(list(stats = agent(model = opus, tools = list(make_t())))), e)
+  expect_identical(parent.env(e$mask), emptyenv())
+  expect_identical(a$stats$tools[[1L]]$execute(list(), NULL), 4)
+  # a default written as a symbol is evaluated in the factory's frame as well
+  e$lvl_default = 4
+  e$make_sym = function(level = lvl_default) {
+    assign("mask", parent.frame(), envir = e)
+    function(gptr) level + 1
+  }
+  environment(e$make_sym) = e
+  e$mask = NULL
+  expect_identical(resolve_identifier(quote(make_sym()), "extensions", e)(NULL), 5)
+  expect_identical(parent.env(e$mask), emptyenv())
+  # a supplied argument next to a default still keeps the mask
+  e$make_mix = function(v, level = 1) function(gptr) v + level
+  expect_identical(resolve_identifier(quote(make_mix(k)), "extensions", e)(NULL), 11)
+  # ... and so does a default forwarded from a function written inline: `v` is supplied (R does
+  # not pass a default's missingness on), and forcing it evaluates `k` in the inline frame
+  e$make_ext = function(v) function(gptr) v * 2
+  g = resolve_identifier(quote((function(a = k) make_ext(a))()), "extensions", e)
+  expect_identical(g(NULL), 20)
+})
+
+test_that("an empty or missing alias never enters the identifier pool", {
+  local_mocked_bindings(identifier_provider_aliases = function() c("", NA, "zz_alias"))
+  e = new.env()
+  expect_true(identifier_known("zz_alias", "model"))
+  expect_false(identifier_known("", "model"))
+  expect_false("NA" %in% identifier_pool("model"))
+  expect_identical(resolve_identifier(quote(if (TRUE) zz_alias), "model", e), "zz_alias")
+})
+
+test_that("identifier resolution never discovers or prepares a model (IC-74, 07 section 2.1)", {
+  local_mocked_bindings(
+    catalog_discover = function(...) stop("catalog_discover() must not run"),
+    catalog_ollama_discover = function(...) stop("catalog_ollama_discover() must not run"),
+    model_prepare = function(...) stop("model_prepare() must not run")
+  )
+  e = new.env()
+  e$hard = TRUE
+  expect_identical(resolve_identifier(quote(jev), "system1", e), "jev")
+  expect_identical(resolve_identifier(quote(if (hard) opus else haiku), "model", e), "opus")
+  expect_identical(resolve_identifier(quote(clef_flash), "system1", e), "clef_flash")
+  expect_identical(resolve_identifier("ollama/clef-flash", "system1", e), "ollama/clef-flash")
+  expect_true(identifier_known("sonnet", "model"))
+  expect_false(identifier_known("clef_flash", "system1"))
+})
