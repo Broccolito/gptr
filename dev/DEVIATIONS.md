@@ -4706,3 +4706,60 @@ Validation: `progress/P17.md`, Task 5. `^skill-templates$`: red
 `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, plan-literal green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 93 ]` in a UTF-8
 locale and under `LC_ALL=C`; lint clean.
+
+## D-086 - P17 agent files: a sequence or a map where a scalar mode or turn limit belongs is dropped instead of throwing, a turn limit must be a positive whole number, `permissionMode` applies whenever `mode` is not a permission mode, and a `tools` value that gives no names is a diagnostic (2026-10-04)
+
+P17 Task 7 (`R/subagent-defs.R`). `tool_name_table`, `tool_name_map()`, `agent_mode()`,
+`agent_parse_cached()`, `agent_untrust()`, `agent_files()` and the plan's 4 tests (31
+expectations) are the plan's literal ones; `agent_file_parse()` changed in four places and
+`agent_dir_specs()` reads the plugin name as `p[["name"]]` (the exact access the plan asks for
+frontmatter fields; same result for a resolved plugin).
+
+1. **No error from a sequence as `mode` or `permissionMode`.** The plan tested
+   `is.null(backend) && is.character(mode_raw) && mode_raw %in% c("inline", "worker", "cli")`.
+   For `mode: [inline, plan]` the last operand has length 2, and R (>= 4.3) stops with
+   `'length = 2' in coercion to 'logical(1)'`, so one malformed agent file threw out of
+   `agent_file_parse()` (and later out of discovery), against contract 11.13 ("failures are
+   diagnostics, never errors"). The test now requires a single string; such a value is dropped
+   like any other unknown mode (backend `auto`; the mode comes from `permissionMode` if that is
+   a permission mode, item 3, else `NULL`, so the child keeps its parent's mode, 04 section 6.1).
+2. **No error from a sequence or map as the turn limit, and only whole numbers.** The plan
+   coerced with `suppressWarnings(as.integer(m[["max_turns"]] %||% m[["maxTurns"]]))`, which throws
+   `'list' object cannot be coerced to type 'integer'` for `max_turns: {a: [1, 2]}` or
+   `maxTurns: [[1, 2]]`, and silently turned `2.7` into 2, `true` into 1 and `{a: 1}` into 1. The
+   new helper `agent_max_turns()` accepts one number or its text (`12`, `"12"`, `3.0`) that is a
+   whole number from 1 to `.Machine$integer.max`; anything else is `NULL` (the default limit),
+   never an error.
+3. **`permissionMode` applies whenever `mode` is not a permission mode** (Task 7 review). The
+   plan read `m[["mode"]] %||% m[["permissionMode"]]` and went back to `permissionMode` only when
+   `mode` was Pi's backend value and `backend` was absent. So `backend: worker`, `mode: inline`,
+   `permissionMode: plan` (and `mode: bogus` or `mode: [inline, plan]` next to
+   `permissionMode: plan`) lost the declared `plan` without a diagnostic, and the child ran at its
+   parent's looser mode. A Pi execution mode is never a permission mode, so the mode is now
+   `agent_mode(mode)` unless `mode` is Pi's backend value, falling back to
+   `agent_mode(permissionMode)`. gptr's own `mode` still wins when both are permission modes
+   (`mode: auto`, `permissionMode: plan` gives `auto`, as in the plan).
+4. **A `tools` value that gives no names is a diagnostic** (Task 7 review). A present `tools`
+   for which `fm_chr_list()` gives `NULL` (a nested sequence such as `[[Read, Grep]]`, `[]` or
+   `""`) was dropped silently, so the agent quietly got its preset's tools. It is still ignored
+   (`tools` stays `NULL`, as in the plan), now with the `builtin:agents` diagnostic
+   "tools must be a comma list or an array of names; ignored", like the plan's "unknown tools
+   ignored". How P19 scopes a child whose declared tools all map to nothing is left to P19.
+
+Seven regression tests follow the plan's 4 (46 expectations): four under
+`# Task 7 adaptations (D-086)` (27, including the Claude `permissionMode` mapping that the plan's
+tests reach only through `plan`) and three under `# Task 7 review fixes (D-086)` (19: items 3 and
+4, and that documentation files give no diagnostic, which the plan's Produces line states but its
+tests did not check). Against the plan-literal source the first four give
+`[ FAIL 9 | WARN 0 | SKIP 0 | PASS 43 ]` (the four `expect_no_error()` checks, the two errors
+that follow them, and `2.7`, `true` and `{a: 1}`); against the pre-review source the last three
+give `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 72 ]` (three lost `plan` modes, two missing `tools`
+diagnostics), and a mutant that diagnoses before the documentation early return fails the
+documentation test twice. Every later P17 count for this file is 46 higher (IC-74):
+subagent-defs 57 -> 103 (Task 8; Task 12's `skill|subagent-defs` 260 -> 306), and acceptance
+row 1 rises by 46 on top of D-072, D-074 and D-084.
+
+Validation: `progress/P17.md`, Task 7. `^subagent-defs$`: red
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, plan-literal green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 31 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`; lint
+clean.
