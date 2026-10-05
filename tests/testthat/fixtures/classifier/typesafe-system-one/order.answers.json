@@ -1,0 +1,8 @@
+{
+  "tone": {"type": "score", "score": 1.0,
+           "probabilities": {"0": 0.25, "1": 0.5, "2": 0.25}, "confidence": 0.5,
+           "legend": {"0": "Negative", "1": "Neutral", "2": "Positive"}},
+  "ok": {"type": "noul", "prob": 0.3},
+  "kind": {"type": "choice", "choice": "red",
+           "probabilities": {"red": 0.6, "green": 0.3, "blue": 0.1}, "confidence": 0.4}
+}

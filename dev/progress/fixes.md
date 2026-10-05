@@ -512,3 +512,198 @@ and the C locale (`task13-green.log`, `task13-green-clocale.log`). Lint of `R/do
 
 To be committed with P15 Task 13 (`feat(doc): register builtin:documents with the document
 route, section, hooks and services`).
+
+## Task FIX-6 - Conformance coverage for classifier adapters (IC-74 P12 row)
+
+Owners: P12 (`R/provider-anthropic.R`, `check_adapter()`; its test file) and P13 (`R/s1-client.R`,
+`R/s1-types.R`; the canonical-answer validator). Coordinator-scheduled; closes P12's open IC-74
+item (07-local-ollama.md section 6, P12 row: "classifier adapters receive conformance coverage";
+`progress/P12.md` plan acceptance, open item 1; D-026's open point). Deviation: D-026, closing
+section (items 1-5).
+
+**Choice: `check_adapter()`, not `gptr_check()`.** Contract 6.7 sends every adapter spec through
+`check_adapter()`, the `check.adapter` service of 7.12, so the classifier branch is there and
+`gptr_check()` (P02, unchanged) gets it through the service. `ext-check.R` is L0 and could not call
+the s1 area anyway.
+
+**Built.**
+- `R/provider-anthropic.R` (P12):
+  - an adapter with `classify` goes to the new `adp_check_classifier()` instead of the stream
+    suite. It replays each `fixtures/classifier/<api>/<case>.json` (or `fixtures`) once through
+    `classify$parse(model, status, headers, body, questions)`, or `classify$run(model, state,
+    questions, opts)` for an inprocess classifier;
+  - rows per case: `.no_condition`, `.result` (04 section 8.1 shapes), `.canonical`
+    (`s1_check_answers()` returns the answers unchanged), then `.golden_answers`
+    (order-sensitive, against `<case>.answers.json`) or `.typed_error` (class and status from
+    `<case>.error.json`); an unreadable case file gives `.fixture`;
+  - no cases: `adapter.fixtures` fails for a wire classifier; an inprocess classifier without a
+    fixture directory keeps `adapter.replay` ("nothing to replay");
+  - helpers `adp_classifier_case()`, `adp_check_classify()` (exiting error, warning and message
+    handlers, as `adp_check_replay()`), `adp_classifier_result_ok()`, `adp_check_canonical()`,
+    `adp_answers_json()`, `adp_classifier_golden()`;
+  - `adp_fixture_model()` gains `type = "chat"`, and `adp_fixture_dir()` gains `kind = "sse"`.
+    Existing callers are unchanged.
+- `R/s1-types.R` / `R/s1-client.R` (P13): the canonical-record validator and its primitives moved
+  unchanged to the end of `s1-types.R` (L1). They are `s1_types`, `s1_round_tol`,
+  `s1_condition()`, `s1_num()`, `s1_unit()`, `s1_option_keys()`, `s1_answer_probs()`,
+  `s1_parse_choice()`, `s1_parse_score()`, `s1_check_answers()`, `s1_check_answer()` and
+  `s1_check_probs()`. Only header comments changed besides. A parse-tree comparison of the two
+  files before and after: 119 definitions, all deparse identically
+  (`task6-move-check.log`).
+- Fixtures: `tests/testthat/fixtures/classifier/typesafe-system-one/` (18 cases) and
+  `.../ollama-system-one/` (13 cases), each with `model.json` and one golden per case:
+  - the Jev bodies come from P13's recorded `fixtures/jev/`; the Ollama bodies from P13's
+    synthetic `fixtures/ollama/`;
+  - success cases cover all three answer types, multi-question answers in another order than
+    the questions, shuffled probability keys, computed values (TypeSafe's confidence formulas;
+    Ollama's entropy confidence, golden digits computed independently in R), an unavailable
+    (gateway) probability map and ignored extra fields;
+  - error cases cover error bodies by status (400, 401, 404, 429, 500, 502), a malformed body,
+    missing answers, a wrong answer type, an unknown option, a bad sum, a missing answer, another
+    model and a confidence that the probabilities do not give.
+
+**Adaptations.**
+1. **Layering.** `provider-anthropic.R` is L1 and `s1-client.R` is L4. The negative control (scratch
+   copy, validator left in `s1-client.R`): `^arch-layers$` `[ FAIL 1 | WARN 0 | SKIP 0 | PASS 12 ]`,
+   "adp_check_canonical (provider-anthropic.R) -> s1_check_answers (s1-client.R)"
+   (`task6-negative-layers.log`). So the validator moved to L1, rather than adding a service
+   that contract 7.0's complete list (39) does not have.
+2. **Plan Task 3 test changed** (`test-provider-anthropic.R`, "check_adapter() reports missing
+   fixtures, skips inprocess adapters, asks classifiers"). The `classify`-only `http_json`
+   adapter without fixtures now gives `adapter.fixtures` = FALSE (and `gptr_check()` rows
+   `spec.class`, `spec.fields`, `adapter.fixtures` = TRUE, TRUE, FALSE). It used to give
+   `adapter.replay` = TRUE. IC-74 overrides the plan literal; this is a stronger check.
+3. **Fake classifier.** P01's fake is exercised through the registered `fake-classifier`
+   adapter with a temporary fixture directory. Its `model.json` names the provider of a live
+   `gptr_fake_provider(type = "classifier")`, which `fake_engine()` finds by name. No default
+   `fixtures/classifier/fake-classifier/` exists, because it would need a script.
+
+**Tests** (written first; `tests/testthat/test-provider-anthropic.R`): the adapted test above,
+plus five new tests:
+- "check_adapter() replays classifier wire fixtures through classify$parse (IC-74)": both
+  built-in adapters; every row passes, and each case has exactly its rows.
+- "gptr_check() runs the classifier conformance of the built-in classifier adapters": through
+  the service, from the default directory.
+- "check_adapter() fails classifier parsers that keep a wire shape or order, or signal":
+  - the wire answers handed on;
+  - the question order lost;
+  - probabilities in wire order;
+  - a parser that throws, warns, signals a message or signals its typed error (nothing reaches
+    the caller);
+  - untyped errors and a missing `model_version`.
+- "a classifier golden or fixture that differs fails only its own case".
+- "inprocess classifiers: P01's fake classifier answers fixture states canonically": golden
+  answers and a typed 429, one `run()` per case, a non-canonical `run()`, `s1-emulate` and the
+  fake without fixtures, and an empty fixture directory.
+
+**Red** (tests on the previous `check_adapter()`): `^provider-anthropic$`
+`[ FAIL 86 | WARN 0 | SKIP 0 | PASS 341 ]`, all failures and no errors (`task6-red.log`). Each
+failure is a missing classifier row: the old code gave `adapter.replay` for every classifier.
+
+**Green**: `^provider-anthropic$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 427 ]`, first run and final
+(`task6-green1.log`, `task6-green.log`), and the same under `LC_ALL=C` (`task6-green-lc-c.log`).
+P12 acceptance's count was 307. The 120 more are the five new tests and the adapted test (3
+assertions became 5). No golden needed a correction.
+
+**Neighbours.**
+- `^(s1-(types|client|cache|emulate|ollama|route)|provider-(anthropic|openai-responses|openai-completions|google|fake|registry)|ext-check|aaa-state|copy-s1|live-ollama-s1|live-jev)$`:
+  `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 3908 ]` (`task6-neighbours.log`; the skips are the four
+  live tests, `GPTR_LIVE_TESTS` false).
+- `^(arch-layers|lint-rules)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 18 ]` (`task6-arch.log`).
+
+**Lint.** No lints in `R/provider-anthropic.R`, `R/s1-types.R`, `R/s1-client.R` or
+`tests/testthat/test-provider-anthropic.R` (`task6-lint.log`). The R sources and fixtures are
+ASCII, and no R line exceeds 100 characters.
+
+**Document.** All touched roxygen is `@noRd`. On a scratch copy, the `document` action changed no
+`man/` or `NAMESPACE` entry of this task (`task6-document-scratch.log`): the only additions are
+P15's committed `gptr_blocks`, `gptr_cache` and `gptr_doc` exports. Its six "Could not resolve
+link" notes for `s1-types.R` ("[0, 1]" in titles) are the ones the moved roxygen already gave in
+`s1-client.R` (P12 acceptance counted them). The real tree's `NAMESPACE`/`man/` were not touched.
+
+**Review round 1** (verdict clear, two minor findings; both real, both fixed test-first).
+1. *s1-emulate's calibration notice failed conformance.* IC-19 makes s1-emulate's `classify$run`
+   give a `gptr_message_notice` (once per process; `test-s1-emulate.R`: "never silent"), and
+   contract 1.5 sends notices through `gptr_inform()`. The exiting `message` handler of
+   `adp_check_classify()` failed the first case for it, so the verdict depended on the
+   session's once state. The case's request was never sent, and the user's one notice was used
+   up by a check that never showed it. Fix (`R/provider-anthropic.R`):
+   - for an inprocess `run()` only, `adp_check_classify(notices = TRUE)` muffles a `gptr_message`
+     with a calling handler (through its `muffleMessage` restart) and records its text. The
+     passing `.no_condition` row notes it ("muffled notice: ...");
+   - a bare `message()`, a `gptr_message` without a muffle restart, a warning or an error still
+     fails the case through the exiting handlers, and a wire `parse()` stays fully silent;
+   - new `adp_once_restore()`: `adp_check_classifier()` clears the once slots (04 section 2.1)
+     that its replay set, because whatever the replay signalled was caught or muffled and never
+     shown.
+2. *Usage NA semantics were unchecked.* `.result` took any count, and its comment claimed "unknown
+   counts NA". Fix:
+   - an optional golden `<case>.usage.json` (`{"input", "output"}`, `null` for an unreported
+     count that must stay NA, IC-74) gives a new row `.golden_usage` after
+     `.golden_answers`, for answered cases (`adp_classifier_usage()`; a malformed usage golden
+     fails the row, and a failed case gets no usage row);
+   - every answered built-in case now has one: 8 typesafe and 5 ollama goldens from the wire
+     `usage` of each body (`computed` in both directories has none: `null`/`null`). One new
+     typesafe case, `usage-partial` (only `input_tokens` on the wire: `{"input": 77, "output":
+     null}`), checks the counts one by one;
+   - `.result` now also requires each count to be NA or one nonnegative, finite number, and the
+     comment says that `.golden_usage`, not `.result`, checks the NA semantics. The case-file
+     filters (`adp_check_classifier()` and the test helper `cls_cases()`) skip `.usage.json`.
+
+Tests (`test-provider-anthropic.R`):
+- the built-in fixture test now expects `.golden_usage` on every answered case: 5 rows per
+  answered case, 3 per failed case;
+- new test "classifier usage meets its golden: unreported counts stay NA (IC-74)": the
+  reviewer's zeroing wrapper fails exactly `computed` (and typesafe `usage-partial`); dropped or
+  swapped counts fail; -1, Inf and NA fail `.result`; malformed goldens fail; a usage golden on
+  an error case adds no row;
+- new test "s1-emulate replays fixture states; its calibration notice fails no case (IC-19)":
+  the reviewer's scenario through a fake chat provider `emu`. All 12 rows pass with no
+  condition escaping and 3 requests sent, the notice is noted on `a1`, and the once slot is
+  unset afterwards (a real `s1_emulate_classify()` still gives the notice). With the slot
+  already set the verdicts are identical. A bare `message()`, an unmuffleable `gptr_message`
+  and a warning from `run()` fail every case, and a `gptr_inform()` in a wire `parse()` fails.
+- Regression red, against the round-0 code: `^provider-anthropic$`
+  `[ FAIL 43 | WARN 0 | SKIP 0 | PASS 429 ]`, all failures and no errors
+  (`task6-fix1-red.log`). Among them, the emulate case `a1` failed `.no_condition` on the notice,
+  2 of 3 requests were sent, the once slot was left set, the next `s1_emulate_classify()` gave no
+  notice, and with the slot preset the verdicts differed (`a1` then passed all four rows). The remaining failures were the
+  missing `.golden_usage` rows, the `.usage.json` files read as cases (`.fixture`), and -1/Inf
+  accepted by `.result`.
+- Green: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 472 ]` (`task6-fix1-green1.log`). Adding the
+  unmuffleable-notice assertion gave the final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 475 ]`
+  (`task6-fix1-green.log`), the same under `LC_ALL=C` (`task6-fix1-green-lc-c.log`).
+- Neighbours (same filter as above): `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 3956 ]`
+  (`task6-fix1-neighbours.log`; 3908 + the 48 new provider-anthropic passes; the 4 skips are
+  the live tests). `^(arch-layers|lint-rules)$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 18 ]`
+  (`task6-fix1-arch.log`).
+- Lint: "No lints found." for `R/provider-anthropic.R` and
+  `tests/testthat/test-provider-anthropic.R` (`task6-fix1-lint.log`). ASCII-only, no line over
+  100 characters.
+- Document: the roxygen touched is `@noRd`. On a fresh scratch copy (without `.secrets/`), the
+  `document` action left `man/` and `NAMESPACE` identical to the working tree and gave no note
+  for `provider-anthropic.R` (`task6-fix1-document-scratch.log`).
+- `dev/DEVIATIONS.md`: D-026's closing section, items 2 and 3, now describes `<case>.usage.json`,
+  `.golden_usage`, the counts accepted by `.result` and the muffled notices of an inprocess
+  `run()`, and gives 19 typesafe cases. The cross-reference bullets in `progress/P12.md` and
+  `progress/P13.md` stay as they were (still accurate). Note for the committer: the P13 lane's
+  commit `1968f1c` ("docs(progress): record P13 plan acceptance") already contains the P13
+  "Cross-reference (FIX-6, ...)" bullet, so `progress/P13.md` has no FIX-6 hunk left to stage.
+
+Not changed: the stream path's `adp_check_replay()` (plan Task 3) still uses exiting handlers
+for every condition. Stream normalisers have no notice channel (04 section 8.1: no R
+condition after start), so the finding does not apply there.
+
+Logs: `dev/.validation/FIX/task6-*.log`. Files of this task:
+- `R/provider-anthropic.R`, `R/s1-types.R`, `R/s1-client.R`
+- `tests/testthat/test-provider-anthropic.R`
+- `tests/testthat/fixtures/classifier/` (new: two directories, 80 files; review round 1 added
+  13 `.usage.json` goldens and the typesafe `usage-partial` case with its answers and usage
+  goldens)
+- `dev/DEVIATIONS.md` (the D-026 title and closing section)
+- `dev/progress/fixes.md` (this section)
+- `dev/progress/P12.md` (cross-reference)
+- `dev/progress/P13.md` (cross-reference under Task 8b's forward notes only; the P13
+  acceptance section at the end of that file belongs to the P13 lane)
+
+Commit subject: `test(provider): conformance coverage for classifier adapters`.

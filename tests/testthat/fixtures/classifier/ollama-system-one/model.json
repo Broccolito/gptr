@@ -1,0 +1,2 @@
+{"ref": "ollama/clef-flash", "provider": "ollama", "id": "clef-flash", "name": "Clef Flash",
+ "family": "clef", "api": "ollama-system-one", "type": "classifier", "local": true}

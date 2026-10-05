@@ -1,0 +1,19 @@
+{
+  "questions": {
+    "answer": {
+      "type": "choice",
+      "instructions": "Which animal does the text describe? The input is in `text`.",
+      "criteria": {"dog": null, "cat": null, "bird": null, "other": null}
+    }
+  },
+  "state": {"text": "A golden retriever puppy fetched the ball and wagged its tail."},
+  "status": 200,
+  "body": {
+    "model": "clef-flash",
+    "answers": {
+      "answer": {"type": "choice", "choice": "dog", "confidence": 0.810923,
+                 "probabilities": {"other": 0.0, "bird": 0.0207, "dog": 0.9411, "cat": 0.0382}}
+    },
+    "usage": {"input_tokens": 52, "output_tokens": 1}
+  }
+}

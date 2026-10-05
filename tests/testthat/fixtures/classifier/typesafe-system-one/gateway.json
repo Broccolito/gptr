@@ -1,0 +1,13 @@
+{
+  "questions": {
+    "kind": {"type": "choice", "instructions": "Which animal does `text` describe?",
+             "criteria": {"dog": null, "cat": null}}
+  },
+  "state": {"text": "A cat slept on the mat."},
+  "status": 200,
+  "body": {
+    "model": "typesafe/jev-1.13",
+    "answers": {"kind": {"type": "choice", "choice": "cat", "probabilities": {}}},
+    "usage": {"input_tokens": 90, "output_tokens": 4}
+  }
+}

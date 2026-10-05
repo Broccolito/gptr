@@ -854,7 +854,7 @@ test_that("check_adapter() fails when events differ from the golden file", {
   expect_true(res$ok[res$check == "adapter.refusal.golden_events"])
 })
 
-test_that("check_adapter() reports missing fixtures and skips inprocess and classifier adapters", {
+test_that("check_adapter() reports missing fixtures, skips inprocess adapters, asks classifiers", {
   res = check_adapter(adapter_get(api), fixtures = withr::local_tempdir())
   expect_false(res$ok[res$check == "adapter.fixtures"])
   fake = check_adapter(adapter_get("fake"))
@@ -862,15 +862,19 @@ test_that("check_adapter() reports missing fixtures and skips inprocess and clas
   expect_true(fake$ok)
   # a classifier adapter (P13's typesafe-system-one shape): http_json with only `classify`,
   # whose parse has the contract's signature (04 section 8.1: model, status, headers, body,
-  # questions)
+  # questions). IC-74 (07 section 6, P12 row; FIX-6): its wire parse is replayed against
+  # classifier fixtures, never stream fixtures, so without any it fails like a stream adapter
   cls_parse = function(model, status, headers, body, questions) NULL
   cls = gptr_adapter("cls-fixture", transport = "http_json",
                      classify = list(build = function(model, state, questions, opts) NULL,
                                      parse = cls_parse))
   res = check_adapter(cls)
-  expect_identical(res$check, "adapter.replay")
-  expect_true(res$ok)
-  expect_true(all(gptr_check(cls)$ok))
+  expect_identical(res$check, "adapter.fixtures")
+  expect_false(res$ok)
+  expect_match(res$message, "no classifier fixtures found for cls-fixture", fixed = TRUE)
+  chk = gptr_check(cls)
+  expect_identical(chk$check, c("spec.class", "spec.fields", "adapter.fixtures"))
+  expect_identical(chk$ok, c(TRUE, TRUE, FALSE))
 })
 
 test_that("the check.adapter service makes gptr_check() replay the fixtures (acceptance 2)", {
@@ -960,4 +964,424 @@ test_that("check_adapter() replays .json fixtures of http_json adapters, not the
   res = check_adapter(wire, fixtures = dir)
   per_case = res$check[res$check != "adapter.tool_choice"]
   expect_identical(unique(sub("^adapter\\.(.*)\\.[a-z_]+$", "\\1", per_case)), "one")
+})
+
+# ---- conformance of classifier adapters (FIX-6; IC-74: 07 sections 3 and 6, P12 row) -----------
+
+# The classifier fixture directory of an api, and its cases (the wire files: not the golden
+# `<case>.answers.json` / `<case>.error.json` / `<case>.usage.json` files, not model.json)
+cls_dir = function(api) testthat::test_path("fixtures", "classifier", api)
+cls_cases = function(dir) {
+  f = list.files(dir, pattern = "\\.json$")
+  sub("\\.json$", "", f[!grepl("\\.(answers|error|usage)\\.json$", f) & f != "model.json"])
+}
+
+# The check names of one case of a check_adapter() result, in order
+cls_rows = function(res, case) res$check[startsWith(res$check, paste0("adapter.", case, "."))]
+
+test_that("check_adapter() replays classifier wire fixtures through classify$parse (IC-74)", {
+  for (cls_api in c("typesafe-system-one", "ollama-system-one")) {
+    dir = cls_dir(cls_api)
+    res = check_adapter(adapter_get(cls_api), fixtures = dir)
+    expect_s3_class(res, "gptr_check")
+    expect_identical(names(res), c("target", "check", "ok", "message"))
+    expect_true(all(res$target == paste0("adapter:", cls_api)))
+    expect_true(all(res$ok), label = paste(cls_api, paste(res$check[!res$ok], res$message[!res$ok],
+                                                          collapse = "; ")))
+    # nothing of the stream suite: no tool_choice probe, no chunkings, no round trip
+    expect_false(any(grepl("tool_choice|event_order|chunk_invariance|roundtrip", res$check)))
+    cases = cls_cases(dir)
+    answered = cases[file.exists(file.path(dir, paste0(cases, ".answers.json")))]
+    failed = cases[file.exists(file.path(dir, paste0(cases, ".error.json")))]
+    expect_setequal(c(answered, failed), cases)
+    # all three answer types, question order, shuffled probability keys, computed values and
+    # typed errors for error bodies and malformed or inconsistent answers (07 section 6)
+    expect_true(all(c("noul", "choice", "score", "order", "computed") %in% answered),
+                label = cls_api)
+    expect_true(all(c("error-400", "malformed", "unknown-option") %in% failed), label = cls_api)
+    # every answered case states its usage, unreported counts as null (IC-74; review round 1)
+    expect_true(all(file.exists(file.path(dir, paste0(answered, ".usage.json")))), label = cls_api)
+    expect_false(any(file.exists(file.path(dir, paste0(failed, ".usage.json")))), label = cls_api)
+    for (case in answered) {
+      expect_identical(cls_rows(res, case),
+                       paste0("adapter.", case, c(".no_condition", ".result", ".canonical",
+                                                  ".golden_answers", ".golden_usage")),
+                       label = case)
+    }
+    for (case in failed) {
+      expect_identical(cls_rows(res, case),
+                       paste0("adapter.", case, c(".no_condition", ".result", ".typed_error")),
+                       label = case)
+    }
+    expect_identical(nrow(res), 5L * length(answered) + 3L * length(failed))
+  }
+})
+
+test_that("gptr_check() runs the classifier conformance of the built-in classifier adapters", {
+  for (cls_api in c("typesafe-system-one", "ollama-system-one")) {
+    # the default directory: fixtures/classifier/<api> under testthat's working directory
+    res = gptr_check(adapter_get(cls_api))
+    expect_true(all(c("spec.class", "spec.fields", "adapter.noul.canonical",
+                      "adapter.score.golden_answers", "adapter.malformed.typed_error") %in%
+                      res$check), label = cls_api)
+    expect_true(all(res$ok), label = paste(cls_api, paste(res$check[!res$ok], collapse = "; ")))
+    expect_identical(check_adapter(adapter_get(cls_api))$check,
+                     check_adapter(adapter_get(cls_api), fixtures = cls_dir(cls_api))$check)
+  }
+})
+
+test_that("check_adapter() fails classifier parsers that keep a wire shape or order, or signal", {
+  cls_api = "typesafe-system-one"
+  dir = cls_dir(cls_api)
+  real = adapter_get(cls_api)
+  normalised = function(fun) {
+    function(model, status, headers, body, questions) {
+      res = s1_typesafe_parse(model, status, headers, body, questions)
+      if (inherits(res, "condition")) res else fun(res, body)
+    }
+  }
+  of = function(res, row) res$ok[res$check == row]
+  # a second output shape: the wire answers handed on as they came
+  wire = real
+  wire$classify$parse = normalised(function(res, body) {
+    res$answers = json_decode(body)$answers
+    res
+  })
+  res = check_adapter(wire, fixtures = dir)
+  expect_false(any(res$ok[grepl("\\.canonical$", res$check)]))
+  expect_false(any(res$ok[grepl("\\.golden_answers$", res$check)]))
+  expect_true(all(res$ok[grepl("\\.(no_condition|result|typed_error)$", res$check)]))
+  expect_match(res$message[res$check == "adapter.noul.canonical"], "invalid probability",
+               fixed = TRUE)
+  # the question order lost: only multi-question cases change
+  reversed = real
+  reversed$classify$parse = normalised(function(res, body) {
+    res$answers = rev(res$answers)
+    res
+  })
+  res = check_adapter(reversed, fixtures = dir)
+  expect_false(of(res, "adapter.order.canonical"))
+  expect_false(of(res, "adapter.order.golden_answers"))
+  expect_false(of(res, "adapter.multi.canonical"))
+  expect_true(of(res, "adapter.score.canonical"))
+  expect_match(res$message[res$check == "adapter.order.canonical"], "order", fixed = TRUE)
+  # the request order of the options lost: probabilities as listed on the wire
+  unkeyed = real
+  unkeyed$classify$parse = normalised(function(res, body) {
+    wire_answers = json_decode(body)$answers
+    for (id in names(res$answers)) {
+      p = res$answers[[id]]$probabilities
+      if (length(p) && !anyNA(p)) {
+        res$answers[[id]]$probabilities = p[names(wire_answers[[id]]$probabilities)]
+      }
+    }
+    res
+  })
+  res = check_adapter(unkeyed, fixtures = dir)
+  expect_false(of(res, "adapter.choice.canonical"))
+  expect_false(of(res, "adapter.choice.golden_answers"))
+  expect_false(of(res, "adapter.computed.canonical"))
+  expect_true(of(res, "adapter.noul.canonical"))
+  # a parser that throws, warns or signals its typed error: the case fails, nothing escapes
+  boom = real
+  boom$classify$parse = function(model, status, headers, body, questions) stop("boom")
+  res = expect_no_error(check_adapter(boom, fixtures = dir))
+  expect_true(all(grepl("\\.no_condition$", res$check)))
+  expect_identical(nrow(res), length(cls_cases(dir)))
+  expect_false(any(res$ok))
+  expect_match(res$message, "boom", fixed = TRUE)
+  noisy = real
+  noisy$classify$parse = function(model, status, headers, body, questions) {
+    warning("odd body")
+    s1_typesafe_parse(model, status, headers, body, questions)
+  }
+  res = expect_no_warning(check_adapter(noisy, fixtures = dir))
+  expect_false(any(res$ok))
+  chatty = real
+  chatty$classify$parse = function(model, status, headers, body, questions) {
+    signalCondition(simpleMessage("parsing\n"))
+    s1_typesafe_parse(model, status, headers, body, questions)
+  }
+  res = expect_no_condition(check_adapter(chatty, fixtures = dir))
+  expect_false(any(res$ok))
+  loud = real
+  loud$classify$parse = function(model, status, headers, body, questions) {
+    res = s1_typesafe_parse(model, status, headers, body, questions)
+    if (inherits(res, "condition")) stop(res)
+    res
+  }
+  res = expect_no_error(check_adapter(loud, fixtures = dir))
+  expect_false(of(res, "adapter.error-401.no_condition"))
+  expect_false(of(res, "adapter.malformed.no_condition"))
+  expect_true(of(res, "adapter.noul.golden_answers"))
+  # untyped failures and a result without its model version
+  vague = real
+  vague$classify$parse = function(model, status, headers, body, questions) {
+    res = s1_typesafe_parse(model, status, headers, body, questions)
+    if (inherits(res, "condition")) return(simpleError(conditionMessage(res)))
+    res$model_version = NULL
+    res
+  }
+  res = check_adapter(vague, fixtures = dir)
+  expect_false(of(res, "adapter.error-401.result"))
+  expect_false(of(res, "adapter.error-401.typed_error"))
+  expect_false("adapter.error-401.canonical" %in% res$check)
+  expect_false(of(res, "adapter.noul.result"))
+  expect_true(of(res, "adapter.noul.canonical"))
+  expect_true(of(res, "adapter.noul.golden_answers"))
+})
+
+test_that("a classifier golden or fixture that differs fails only its own case", {
+  cls_api = "ollama-system-one"
+  dir = withr::local_tempdir()
+  file.copy(list.files(cls_dir(cls_api), full.names = TRUE), dir)
+  of = function(res, row) res$ok[res$check == row]
+  path = file.path(dir, "score.answers.json")
+  golden = json_decode(read_utf8(path)$text)
+  golden$answer$score = 1.9
+  write_utf8(path, json_encode(golden, pretty = TRUE))
+  # the right values in another option order: the order is part of the canonical record
+  path = file.path(dir, "choice.answers.json")
+  golden = json_decode(read_utf8(path)$text)
+  golden$answer$probabilities = rev(golden$answer$probabilities)
+  write_utf8(path, json_encode(golden, pretty = TRUE))
+  path = file.path(dir, "error-404.error.json")
+  write_utf8(path, "{\"class\": \"gptr_error_s1_auth\", \"status\": 404}")
+  unlink(file.path(dir, "error-500.error.json"))
+  write_utf8(file.path(dir, "broken.json"), "{\"questions\": ")
+  write_utf8(file.path(dir, "bare.json"), "{\"status\": 200, \"body\": {}}")
+  write_utf8(file.path(dir, "nameless.json"),
+             "{\"questions\": {\"a\": {\"type\": \"noul\"}}, \"status\": \"ok\"}")
+  res = check_adapter(adapter_get(cls_api), fixtures = dir)
+  expect_false(of(res, "adapter.score.golden_answers"))
+  expect_true(of(res, "adapter.score.canonical"))
+  expect_match(res$message[res$check == "adapter.score.golden_answers"], "score.answers.json",
+               fixed = TRUE)
+  expect_false(of(res, "adapter.choice.golden_answers"))
+  expect_false(of(res, "adapter.error-404.typed_error"))
+  expect_match(res$message[res$check == "adapter.error-404.typed_error"],
+               "gptr_error_s1_validation", fixed = TRUE)
+  expect_false(of(res, "adapter.error-500.golden_answers"))
+  expect_match(res$message[res$check == "adapter.error-500.golden_answers"], "no golden",
+               fixed = TRUE)
+  for (case in c("broken", "bare", "nameless")) {
+    expect_identical(cls_rows(res, case), paste0("adapter.", case, ".fixture"))
+    expect_false(of(res, paste0("adapter.", case, ".fixture")))
+  }
+  expect_match(res$message[res$check == "adapter.bare.fixture"], "questions", fixed = TRUE)
+  expect_match(res$message[res$check == "adapter.nameless.fixture"], "status", fixed = TRUE)
+  untouched = c("noul", "order", "computed", "malformed", "other-model", "bad-confidence")
+  expect_true(all(res$ok[sub("^adapter\\.(.*)\\.[a-z_]+$", "\\1", res$check) %in% untouched]))
+})
+
+test_that("classifier usage meets its golden: unreported counts stay NA (IC-74)", {
+  # review round 1: `.result` takes any count, so `<case>.usage.json` states the usage
+  # (null: unreported, NA) and `.golden_usage` compares it
+  of = function(res, row) res$ok[res$check == row]
+  usage_rows = function(res) grepl("\\.golden_usage$", res$check)
+  with_usage = function(cls_api, fun) {
+    a = adapter_get(cls_api)
+    parse = a$classify$parse
+    a$classify$parse = function(model, status, headers, body, questions) {
+      res = parse(model, status, headers, body, questions)
+      if (inherits(res, "condition")) res else fun(res)
+    }
+    a
+  }
+  for (cls_api in c("typesafe-system-one", "ollama-system-one")) {
+    dir = cls_dir(cls_api)
+    # unreported usage counted as 0: the cases without (full) usage on the wire fail, only
+    # their usage row
+    zeroed = with_usage(cls_api, function(res) {
+      res$usage = lapply(res$usage, function(n) if (is.na(n)) 0 else n)
+      res
+    })
+    res = check_adapter(zeroed, fixtures = dir)
+    want = c("adapter.computed.golden_usage",
+             if (cls_api == "typesafe-system-one") "adapter.usage-partial.golden_usage")
+    expect_setequal(res$check[!res$ok], want)
+    expect_match(res$message[res$check == "adapter.computed.golden_usage"],
+                 "computed.usage.json", fixed = TRUE)
+    # reported usage dropped: every case with usage on the wire fails its usage row
+    dropped = with_usage(cls_api, function(res) {
+      res$usage = list(input = NA_real_, output = NA_real_)
+      res
+    })
+    res = check_adapter(dropped, fixtures = dir)
+    expect_false(of(res, "adapter.noul.golden_usage"))
+    expect_true(of(res, "adapter.computed.golden_usage"))
+    expect_true(all(res$ok[!usage_rows(res)]))
+  }
+  # the counts swapped; a negative or infinite count is no count at all (`.result`)
+  swapped = with_usage("typesafe-system-one", function(res) {
+    res$usage = list(input = res$usage$output, output = res$usage$input)
+    res
+  })
+  res = check_adapter(swapped, fixtures = cls_dir("typesafe-system-one"))
+  expect_false(of(res, "adapter.noul.golden_usage"))
+  expect_true(of(res, "adapter.computed.golden_usage"))
+  for (bad in list(-1, Inf, NA)) {
+    odd = with_usage("ollama-system-one", function(res) {
+      res$usage$input = bad
+      res
+    })
+    res = check_adapter(odd, fixtures = cls_dir("ollama-system-one"))
+    expect_false(of(res, "adapter.noul.result"), label = format(bad))
+  }
+  # a usage golden that is not one, or a usage golden of a failed case
+  dir = withr::local_tempdir()
+  file.copy(list.files(cls_dir("ollama-system-one"), full.names = TRUE), dir)
+  write_utf8(file.path(dir, "noul.usage.json"), "{\"input\": 41}")
+  write_utf8(file.path(dir, "score.usage.json"), "[41, 1]")
+  write_utf8(file.path(dir, "malformed.usage.json"), "{\"input\": null, \"output\": null}")
+  res = check_adapter(adapter_get("ollama-system-one"), fixtures = dir)
+  expect_setequal(res$check[!res$ok], c("adapter.noul.golden_usage",
+                                        "adapter.score.golden_usage"))
+  expect_match(res$message[res$check == "adapter.noul.golden_usage"], "noul.usage.json",
+               fixed = TRUE)
+  expect_false("adapter.malformed.golden_usage" %in% res$check)
+})
+
+test_that("inprocess classifiers: P01's fake classifier answers fixture states canonically", {
+  dir = withr::local_tempdir()
+  write_utf8(file.path(dir, "model.json"),
+             json_encode(list(ref = "conformance/conformance-s1", provider = "conformance",
+                              id = "conformance-s1", api = "fake-classifier",
+                              type = "classifier")))
+  questions = list(
+    ok = list(type = "noul", instructions = "Is `text` about a dog?"),
+    kind = list(type = "choice", instructions = "Which animal does `text` describe?",
+                criteria = list(dog = "A dog", cat = "A cat", bird = "A bird")),
+    tone = list(type = "score", instructions = "How lively is `text`?",
+                criteria = list("Low", "Mid", "High"))
+  )
+  write_utf8(file.path(dir, "three.json"),
+             json_encode(list(state = list(text = "A puppy."), questions = questions),
+                         pretty = TRUE))
+  write_utf8(file.path(dir, "three.answers.json"), json_encode(list(
+    ok = list(type = "noul", prob = 0.75),
+    kind = list(type = "choice", choice = "dog",
+                probabilities = list(dog = 0.7, cat = 0.2, bird = 0.1), confidence = 0.7),
+    tone = list(type = "score", score = 1.6,
+                probabilities = list(`0` = 0.1, `1` = 0.2, `2` = 0.7), confidence = 0.7,
+                legend = list(`0` = "Low", `1` = "Mid", `2` = "High"))
+  ), pretty = TRUE))
+  write_utf8(file.path(dir, "busy.json"),
+             json_encode(list(state = list(text = "busy"), questions = questions["ok"])))
+  write_utf8(file.path(dir, "busy.error.json"),
+             "{\"class\": \"gptr_error_s1_rate_limit\", \"status\": 429}")
+  # option names out of request order: the fake re-keys them (07 section 3)
+  script = function(state, question) {
+    if (identical(state$text, "busy")) return(list(error = "too many requests", status = 429L))
+    switch(question$type, noul = 0.75, choice = c(cat = 0.2, bird = 0.1, dog = 0.7),
+           score = c(0.1, 0.2, 0.7))
+  }
+  fake = gptr_fake_provider(script, name = "conformance", type = "classifier")
+  res = check_adapter(adapter_get("fake-classifier"), fixtures = dir)
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], res$message[!res$ok],
+                                         collapse = "; "))
+  expect_true(all(res$target == "adapter:fake-classifier"))
+  expect_identical(res$check,
+                   c(paste0("adapter.busy.", c("no_condition", "result", "typed_error")),
+                     paste0("adapter.three.", c("no_condition", "result", "canonical",
+                                                "golden_answers"))))
+  # one run() per case: three questions answered, then the refused one
+  expect_length(fake$log$requests, 4L)
+  # an inprocess classifier that hands on another shape fails the same checks
+  odd = adapter_get("fake-classifier")
+  odd$classify$run = function(model, state, questions, opts) {
+    list(answers = lapply(questions, function(q) list(type = q$type, noul = 0.5)),
+         usage = list(input = 1, output = 1), model_version = "odd-1")
+  }
+  res = check_adapter(odd, fixtures = dir)
+  expect_false(res$ok[res$check == "adapter.three.canonical"])
+  expect_false(res$ok[res$check == "adapter.busy.typed_error"])
+  # without fixtures an inprocess classifier has nothing to replay; asked for some, it fails
+  for (cls_api in c("fake-classifier", "s1-emulate")) {
+    res = check_adapter(adapter_get(cls_api))
+    expect_identical(res$check, "adapter.replay")
+    expect_true(res$ok)
+    expect_match(res$message, "nothing to replay", fixed = TRUE)
+  }
+  res = check_adapter(adapter_get("fake-classifier"), fixtures = withr::local_tempdir())
+  expect_identical(res$check, "adapter.fixtures")
+  expect_false(res$ok)
+})
+
+test_that("s1-emulate replays fixture states; its calibration notice fails no case (IC-19)", {
+  # review round 1: classify$run of s1-emulate says once per process that its answers are not
+  # calibrated (IC-19; test-s1-emulate.R), through gptr_inform(), the channel of notices (04
+  # section 1.5). Conformance records and muffles such a notice, whatever the session's once
+  # state, and leaves the once slot as it found it (the user never saw the notice)
+  local_gptr_options(quiet = FALSE)
+  slot = "message:s1_emulated"
+  once_set = function(on) {
+    if (on) {
+      assign(slot, TRUE, envir = the$once)
+    } else if (exists(slot, envir = the$once, inherits = FALSE)) {
+      rm(list = slot, envir = the$once)
+    }
+  }
+  had = isTRUE(the$once[[slot]])
+  withr::defer(once_set(had))
+  once_set(FALSE)
+  dir = withr::local_tempdir()
+  write_utf8(file.path(dir, "model.json"),
+             json_encode(list(ref = "emu/emu-1", provider = "emu", id = "emu-1", api = "fake",
+                              type = "chat")))
+  q = list(answer = list(type = "noul", instructions = "Is `x` positive?"))
+  cases = c("a1", "a2", "a3")
+  for (case in cases) {
+    write_utf8(file.path(dir, paste0(case, ".json")),
+               json_encode(list(state = list(x = case), questions = q)))
+    write_utf8(file.path(dir, paste0(case, ".answers.json")),
+               "{\"answer\": {\"type\": \"noul\", \"prob\": 0.9}}")
+  }
+  chat = local_fake_provider(function(request) list(json = list(answers = list(answer = 0.9))),
+                             name = "emu")
+  emu = adapter_get("s1-emulate")
+  rows = paste0("adapter.", rep(cases, each = 4L), ".",
+                c("no_condition", "result", "canonical", "golden_answers"))
+  res = expect_no_condition(check_adapter(emu, fixtures = dir))
+  expect_identical(res$check, rows)
+  expect_true(all(res$ok), label = paste(res$check[!res$ok], res$message[!res$ok],
+                                         collapse = "; "))
+  expect_length(fake_requests(chat), 3L)
+  # the notice is recorded on the case that raised it
+  expect_match(res$message[res$check == "adapter.a1.no_condition"], "not calibrated",
+               fixed = TRUE)
+  expect_identical(res$message[res$check == "adapter.a2.no_condition"], "")
+  # not used up: the user's first emulation still says it
+  expect_false(isTRUE(the$once[[slot]]))
+  expect_message(s1_emulate_classify(model_resolve("emu/emu-1"), list(x = "b"), q, list()),
+                 "not calibrated", class = "gptr_message_notice")
+  # the same verdicts when the notice was already shown in this process; the slot stays set
+  expect_true(isTRUE(the$once[[slot]]))
+  again = expect_no_condition(check_adapter(emu, fixtures = dir))
+  expect_identical(again$check, rows)
+  expect_identical(again$ok, res$ok)
+  expect_true(isTRUE(the$once[[slot]]))
+  # only gptr_inform() notices are muffled: a bare message(), a notice without a muffle restart
+  # or a warning from run() still fails its case, and a classifier parse() stays silent
+  once_set(FALSE)
+  unmuffled = function() signalCondition(gptr_condition("unmuffled", "notice", "message"))
+  for (say in list(function() message("working"), unmuffled, function() warning("odd state"))) {
+    loud = emu
+    loud$classify$run = function(model, state, questions, opts) {
+      say()
+      s1_emulate_classify(model, state, questions, opts)
+    }
+    res = expect_no_condition(check_adapter(loud, fixtures = dir))
+    nc = grepl("\\.no_condition$", res$check)
+    expect_identical(sum(nc), 3L)
+    expect_false(any(res$ok[nc]))
+  }
+  expect_false(isTRUE(the$once[[slot]]))
+  informed = adapter_get("typesafe-system-one")
+  informed$classify$parse = function(model, status, headers, body, questions) {
+    gptr_inform("parsing", "notice")
+    s1_typesafe_parse(model, status, headers, body, questions)
+  }
+  res = expect_no_condition(check_adapter(informed, fixtures = cls_dir("typesafe-system-one")))
+  expect_false(any(res$ok))
 })

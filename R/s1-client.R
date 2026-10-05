@@ -12,16 +12,15 @@
 # probabilities, confidence)` and `list(type = "score", score, probabilities, confidence,
 # legend)`, probabilities named in request order. Values are validated against the request
 # (finite values, bounds, answer ids, option names, probability sums, score reconstruction); a
-# score stays the fractional expected level. Unreported usage stays unknown (NA).
+# score stays the fractional expected level. Unreported usage stays unknown (NA). The canonical
+# records, their primitives (s1_types, s1_round_tol, s1_condition(), s1_num(), s1_unit(),
+# s1_option_keys(), s1_answer_probs(), s1_parse_choice(), s1_parse_score()) and the common
+# validator s1_check_answers() are in s1-types.R (L1), where P12's check_adapter() checks
+# classifier adapters with them too (FIX-6).
 
 s1_max_choices = 255L
 s1_max_levels = 10L
-s1_types = c("noul", "choice", "score")
 s1_logical_labels = c("TRUE", "true", "True", "T", "FALSE", "false", "False", "F")
-
-# Half a unit of the two-decimal rounding of TypeSafe's probabilities (report 04a; report 04
-# section 2.4): the slack of one rounded probability
-s1_round_tol = 0.005
 
 # ---- questions --------------------------------------------------------------------------------
 
@@ -134,18 +133,6 @@ s1_question_score = function(instructions, levels, max_levels) {
 
 # ---- conditions -------------------------------------------------------------------------------
 
-#' An unsignalled System 1 condition: class `gptr_error_<sub>`, parent `gptr_error_s1`, fields
-#' `status`, `error_type`, `request_id`, `model` and `retry_after` (contract 2.2; report 04
-#' section 4.12)
-#' @noRd
-s1_condition = function(sub, message, status = NA_integer_, error_type = NA_character_,
-                        request_id = NA_character_, model = NA_character_, retry_after = NULL) {
-  gptr_condition(message, c(sub, "s1"), "error",
-                 list(status = as.integer(status), error_type = as.character(error_type),
-                      request_id = as.character(request_id), model = as.character(model),
-                      retry_after = retry_after))
-}
-
 #' The System 1 condition class of an HTTP status (report 04 section 4.12; 400 from report 04a)
 #' @noRd
 s1_status_class = function(status) {
@@ -240,19 +227,6 @@ s1_header = function(headers, name) {
   if (is.na(k)) NA_character_ else as.character(headers[[k]])[1L]
 }
 
-#' A finite number or NA
-#' @noRd
-s1_num = function(x) {
-  if (is.numeric(x) && length(x) == 1L && is.finite(x)) as.double(x) else NA_real_
-}
-
-#' A finite number in [0, 1] (a probability or a confidence) or NA
-#' @noRd
-s1_unit = function(x) {
-  p = s1_num(x)
-  if (is.na(p) || p < 0 || p > 1) NA_real_ else p
-}
-
 #' A token count the service reported, NA unless it is a nonnegative finite number (IC-74: missing
 #' usage remains unknown)
 #' @noRd
@@ -343,21 +317,6 @@ s1_confidence_score = function(p) {
   max(0, 1 - sum(q * abs(lv - mode)) / mean(abs(lv - (n - 1) / 2)))
 }
 
-#' The option keys of a wire question in request order: choice names, or "0".."n-1" for score
-#' levels; NULL when the question has no valid options
-#' @noRd
-s1_option_keys = function(question) {
-  criteria = question[["criteria"]]
-  if (!is.list(criteria) && !is.character(criteria)) return(NULL)
-  if (identical(question[["type"]], "choice")) {
-    keys = names(criteria)
-    ok = length(keys) >= 2L && !anyNA(keys) && all(nzchar(keys)) && !anyDuplicated(keys)
-    return(if (ok) keys else NULL)
-  }
-  if (length(criteria) < 2L) return(NULL)
-  as.character(seq_along(criteria) - 1L)
-}
-
 #' The legend of a score question: its level descriptions named "0".."n-1" (07 section 3); a
 #' description given as a JSON object or array is shown as compact JSON
 #' @noRd
@@ -366,31 +325,6 @@ s1_legend = function(question, keys) {
     if (is.character(x) && length(x) == 1L && !is.na(x)) x else json_encode(x)
   }, "")
   stats::setNames(unname(vals), keys)
-}
-
-#' A probability map re-keyed into request order
-#'
-#' Returns a named double vector, all NA when the map is absent or empty (a gateway that re-ran
-#' the question elsewhere, report 04 section 2.9: unavailable, not zero), or a chr(1) problem
-#' when the keys are not exactly the options asked, a value is not a probability, or the values
-#' do not sum to 1 within the rounding of every value: `tol` is the largest rounding error of one
-#' value, TypeSafe's two decimals by default (Ollama's four decimals: s1_ollama_round_tol).
-#' @noRd
-s1_answer_probs = function(got, keys, tol = s1_round_tol) {
-  p = stats::setNames(rep(NA_real_, length(keys)), keys)
-  if (is.null(got) || (is.list(got) && !length(got))) return(p)
-  nm = names(got)
-  if (!is.list(got) || is.null(nm) || anyNA(nm) || anyDuplicated(nm)) {
-    return("System 1 returned probabilities that are not keyed by option.")
-  }
-  if (!all(keys %in% nm)) return("System 1 returned incomplete probabilities.")
-  if (!all(nm %in% keys)) return("System 1 returned probabilities for options that were not asked.")
-  for (k in keys) p[[k]] = s1_unit(got[[k]])
-  if (anyNA(p)) return("System 1 returned an invalid probability.")
-  if (abs(sum(p) - 1) > tol * length(p) + 1e-9) {
-    return("System 1 returned probabilities that do not sum to 1.")
-  }
-  p
 }
 
 #' One wire answer as a canonical answer, probabilities re-keyed by option name (IC-74)
@@ -438,49 +372,6 @@ s1_parse_answer = function(answer, question, model_id = NA_character_) {
   }
   if (identical(type, "choice")) return(s1_parse_choice(answer[["choice"]], p, keys, conf, bad))
   s1_parse_score(answer[["score"]], p, keys, conf, s1_legend(question, keys), bad)
-}
-
-#' The choice of a choice answer, checked against the options and its own probabilities: within
-#' the rounding (`tol` per value, as s1_answer_probs()) of the most probable option
-#' @noRd
-s1_parse_choice = function(ch, p, keys, conf, bad, tol = s1_round_tol) {
-  known = !anyNA(p)
-  if (is.null(ch) && known) ch = keys[which.max(p)]
-  if (!is.character(ch) || length(ch) != 1L || is.na(ch) || !(ch %in% keys)) {
-    return(bad("System 1 returned an unknown choice."))
-  }
-  if (known && p[[ch]] < max(p) - 2 * tol - 1e-9) {
-    return(bad("System 1 returned a choice that its probabilities do not support."))
-  }
-  list(type = "choice", choice = ch, probabilities = p, confidence = conf)
-}
-
-#' The score of a score answer: within [0, levels - 1] and, when probabilities are known, their
-#' expected level within the rounding of the probabilities; never rounded to a level
-#'
-#' One expectation serves both cases: the expected level of the probabilities normalised to sum
-#' 1. A missing score becomes it, and a given score must lie within the probabilities' rounding
-#' of it, `tol * (sum(levels) + 1) / min(1, sum(p))`, where `tol` is the largest rounding error
-#' of one value (TypeSafe's two decimals by default; Ollama's four: s1_ollama_round_tol). That
-#' bound holds for a score computed from the unrounded probabilities and rounded like them, and
-#' a score filled in here passes its own check when the dispatch validates the canonical record
-#' again.
-#' @noRd
-s1_parse_score = function(given, p, keys, conf, legend, bad, tol = s1_round_tol) {
-  known = !anyNA(p) && sum(p) > 0
-  lv = seq_along(keys) - 1
-  expected = if (known) sum(lv * p) / sum(p) else NA_real_
-  if (is.null(given)) {
-    sc = expected
-  } else {
-    sc = s1_num(given)
-    slack = tol * (sum(lv) + 1) / min(1, sum(p)) + 1e-9
-    if (!is.na(sc) && known && abs(sc - expected) > slack) {
-      return(bad("System 1 returned a score that its probabilities do not give."))
-    }
-  }
-  if (is.na(sc) || sc < 0 || sc > max(lv)) return(bad("System 1 returned an invalid score."))
-  list(type = "score", score = sc, probabilities = p, confidence = conf, legend = legend)
 }
 
 #' All answers of one response by question id, or the condition of the first problem
@@ -766,91 +657,7 @@ s1_errors_df = function(conditions) {
              message = vapply(conditions[bad], conditionMessage, ""), stringsAsFactors = FALSE)
 }
 
-# ---- canonical answers, admission and provenance (IC-74) ----------------------------------------
-
-#' The canonical answers of one state checked against the questions asked (07 section 3)
-#'
-#' Every adapter returns canonical records (typesafe-system-one's parse, P01's fake, s1-emulate,
-#' ollama-system-one), so this common check never runs a wire parser again. It requires an answer
-#' for exactly the questions asked, in their types, and returns them in question order, or the
-#' unsignalled gptr_error_s1_response of the first problem.
-#' @noRd
-s1_check_answers = function(answers, questions, model_id = NA_character_) {
-  bad = function(msg) s1_condition("s1_response", msg, model = model_id)
-  ids = names(questions)
-  got = names(answers)
-  if (!is.list(answers) || is.null(got) || anyNA(got) || anyDuplicated(got) ||
-        length(got) != length(ids) || !setequal(got, ids)) {
-    return(bad("System 1 returned answers that do not match the questions asked."))
-  }
-  out = vector("list", length(ids))
-  names(out) = ids
-  for (id in ids) {
-    a = s1_check_answer(answers[[id]], questions[[id]], bad)
-    if (inherits(a, "condition")) return(a)
-    out[[id]] = a
-  }
-  out
-}
-
-#' One canonical record checked against its question
-#'
-#' `prob` in [0, 1]; probabilities named by exactly the options (re-keyed into request order),
-#' each in [0, 1] and summing to 1 within the two-decimal rounding of report 04a, or all NA
-#' (unavailable); a confidence in [0, 1], or NA when unknown (never recomputed here: the formulas
-#' differ by provider); a choice among the options that its probabilities support; a fractional
-#' score in [0, levels - 1] that its probabilities give; a legend named by the levels.
-#' @noRd
-s1_check_answer = function(a, question, bad) {
-  type = if (is.list(question)) question[["type"]] else NULL
-  if (!is.character(type) || length(type) != 1L || is.na(type) || !(type %in% s1_types)) {
-    return(bad("System 1 was sent a question without a known type."))
-  }
-  if (!is.list(a) || !identical(a[["type"]], type)) {
-    return(bad(paste0("System 1 returned an answer that is not a canonical ", type, " record.")))
-  }
-  if (identical(type, "noul")) {
-    p = s1_unit(a[["prob"]])
-    if (is.na(p)) return(bad("System 1 returned an invalid probability."))
-    return(list(type = "noul", prob = p))
-  }
-  keys = s1_option_keys(question)
-  if (is.null(keys)) return(bad("System 1 was sent a question without valid options."))
-  p = s1_check_probs(a[["probabilities"]], keys)
-  if (is.character(p)) return(bad(p))
-  conf = a[["confidence"]]
-  if (is.null(conf) || (is.atomic(conf) && length(conf) == 1L && is.na(conf))) {
-    conf = NA_real_
-  } else {
-    conf = s1_unit(conf)
-    if (is.na(conf)) return(bad("System 1 returned an invalid confidence."))
-  }
-  if (identical(type, "choice")) {
-    if (is.null(a[["choice"]])) return(bad("System 1 returned a choice answer without a choice."))
-    return(s1_parse_choice(a[["choice"]], p, keys, conf, bad))
-  }
-  if (is.null(a[["score"]])) return(bad("System 1 returned a score answer without a score."))
-  legend = a[["legend"]]
-  ln = names(legend)
-  if (!is.character(legend) || anyNA(legend) || is.null(ln) || anyNA(ln) || anyDuplicated(ln) ||
-        length(ln) != length(keys) || !setequal(ln, keys)) {
-    return(bad("System 1 returned a score answer without a legend of its levels."))
-  }
-  s1_parse_score(a[["score"]], p, keys, conf, legend[keys], bad)
-}
-
-#' Canonical probabilities: a named double vector over exactly the options, in request order, or
-#' a chr(1) problem; all NA means unavailable (report 04 section 2.9)
-#' @noRd
-s1_check_probs = function(probs, keys) {
-  nm = names(probs)
-  if (!is.numeric(probs) || is.null(nm) || anyNA(nm) || anyDuplicated(nm) ||
-        length(nm) != length(keys) || !setequal(nm, keys)) {
-    return("System 1 returned probabilities that are not named by the options asked.")
-  }
-  if (all(is.na(probs))) return(stats::setNames(rep(NA_real_, length(keys)), keys))
-  s1_answer_probs(as.list(probs), keys)
-}
+# ---- admission and provenance (IC-74; s1_check_answers() is in s1-types.R) ---------------------
 
 #' The requests one System 1 call may keep in flight: `gptr.s1_max_active`, lowered by the
 #' model's own server limit (s1_own_active(): the decision record's `max_active`, and one for a

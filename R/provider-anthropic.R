@@ -1,6 +1,8 @@
 # The anthropic-messages adapter (P12) and the normaliser core shared by the four native
 # adapters (anthropic-messages, openai-responses, openai-completions, google-generative-ai),
-# plus check_adapter(), the check.adapter service behind gptr_check() for adapter specs.
+# plus check_adapter(), the check.adapter service behind gptr_check() for adapter specs (stream
+# fixtures; classifier adapters against classifier fixtures and P13's canonical-answer
+# validator, IC-74 07 section 6 P12 row, FIX-6).
 # Contract: dev/spec/04-interface-contract.md sections 4.1-4.5, 7.12, 8.1 and IC-69/IC-71.
 # The normaliser follows the verified prototypes of report 07 section 5.1 and report 03
 # section 5.3 (verification logs applied: tool names up to 128 characters, mid-conversation
@@ -517,11 +519,12 @@ adp_replay = function(adapter, model, bytes, sizes) {
   c(res, list(events = log$events))
 }
 
-#' The fixture model record (contract section 4.9 shape); `<dir>/model.json` overrides fields
+#' The fixture model record (contract section 4.9 shape) of a `chat` or `classifier` model;
+#' `<dir>/model.json` overrides fields
 #' @noRd
-adp_fixture_model = function(api, dir = NULL) {
+adp_fixture_model = function(api, dir = NULL, type = "chat") {
   m = list(ref = "fixture/fixture-1", provider = "fixture", id = "fixture-1",
-           name = "Fixture model", family = "fixture", api = api, type = "chat",
+           name = "Fixture model", family = "fixture", api = api, type = type,
            release_date = NA_character_, context = 200000, max_output = 8192, reasoning = TRUE,
            thinking_levels = c("off", "low", "medium", "high"), thinking = NULL,
            input = c("text", "image"), tool_call = TRUE, structured_output = TRUE,
@@ -1432,14 +1435,15 @@ adp_check_tool_choice = function(adapter) {
   ok
 }
 
-#' The fixture directory of an api: `fixtures`, else fixtures/sse/<api> under the test
-#' directory or the package sources
+#' The fixture directory of an api: `fixtures`, else fixtures/<kind>/<api> under the test
+#' directory or the package sources (`kind` "sse" for stream fixtures, "classifier" for
+#' classifier fixtures)
 #' @noRd
-adp_fixture_dir = function(api, fixtures = NULL) {
+adp_fixture_dir = function(api, fixtures = NULL, kind = "sse") {
   cands = fixtures
   if (is.null(cands)) {
-    cands = c(file.path("fixtures", "sse", api),
-              file.path("tests", "testthat", "fixtures", "sse", api))
+    cands = c(file.path("fixtures", kind, api),
+              file.path("tests", "testthat", "fixtures", kind, api))
   }
   for (d in cands) if (nzchar(d) && dir.exists(d)) return(normalizePath(d, winslash = "/"))
   NULL
@@ -1464,6 +1468,293 @@ adp_same_golden = function(x, path) {
   identical(canonical_json(json_decode(json_encode(x))), canonical_json(want))
 }
 
+# ---- conformance of classifier adapters (IC-74: 07 sections 3 and 6, P12 row; FIX-6) -----------
+# A classifier fixture directory (`fixtures/classifier/<api>/`) holds one `<case>.json` per
+# exchange and its golden: `<case>.answers.json` (the canonical answers by question id, in
+# question order, probabilities and legends as objects in request order, unknown values null)
+# or `<case>.error.json` (`{"class": "gptr_error_s1_<sub>", "status": <int>}`: a typed error).
+# An answered case may add `<case>.usage.json` (`{"input": <count>, "output": <count>}`, null for
+# a count the service did not report: it stays NA, IC-74). `model.json` overrides fields of the
+# classifier fixture model.
+
+#' One classifier fixture case: `list(questions, state, status, headers, body)`, or a chr(1)
+#' problem
+#'
+#' `<case>.json` holds the ordered wire `questions` (required), the `state` an inprocess `run()`
+#' gets, and the response a wire `parse()` gets: `status` (default 200), `headers` (an object)
+#' and `body` (a JSON string is the body text byte for byte, so malformed bodies can be written;
+#' any other JSON value is sent as its compact JSON; absent or null is the empty body).
+#' @noRd
+adp_classifier_case = function(path) {
+  x = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
+  if (!is.list(x) || is.null(names(x))) return("the fixture is not a JSON object")
+  questions = x[["questions"]]
+  ids = names(questions)
+  if (!is.list(questions) || !length(questions) || is.null(ids) || anyNA(ids) ||
+        !all(nzchar(ids))) {
+    return("the fixture has no questions keyed by id")
+  }
+  status = x[["status"]] %||% 200L
+  if (!is.numeric(status) || length(status) != 1L || !is.finite(status)) {
+    return("the fixture status is not one number")
+  }
+  headers = x[["headers"]] %||% list()
+  if (!is.list(headers)) return("the fixture headers are not an object")
+  body = x[["body"]]
+  text = if (is.null(body)) {
+    ""
+  } else if (is.character(body) && length(body) == 1L) {
+    body
+  } else {
+    json_encode(body)
+  }
+  list(questions = questions, state = x[["state"]], status = as.integer(status),
+       headers = headers, body = text)
+}
+
+#' One classifier call for conformance: `list(value, condition, notices)`
+#'
+#' The first condition the call signals ends it through exiting handlers, as adp_check_replay()
+#' ends a stream replay: a classifier parse returns its failures unsignalled (04 section 8.1).
+#' With `notices = TRUE` (an inprocess `run()`) a `gptr_message` notice that can be muffled is
+#' recorded in `notices` and muffled instead: notices go through gptr_inform() (04 section 1.5),
+#' and s1-emulate's run() must say that its answers are not calibrated (IC-19). A bare message,
+#' a warning or an error still ends the call.
+#' @noRd
+adp_check_classify = function(fun, args, notices = FALSE) {
+  heard = new.env(parent = emptyenv())
+  heard$text = character()
+  muffle = function(cnd) {
+    if (is.null(findRestart("muffleMessage"))) return(invisible(NULL))
+    heard$text = c(heard$text, trimws(conditionMessage(cnd)))
+    invokeRestart("muffleMessage")
+  }
+  call = function() {
+    if (!notices) return(do.call(fun, args))
+    withCallingHandlers(do.call(fun, args), gptr_message = muffle)
+  }
+  stopped = function(cnd) list(value = NULL, condition = cnd, notices = heard$text)
+  tryCatch({
+    value = call()
+    list(value = value, condition = NULL, notices = heard$text)
+  }, error = stopped, warning = stopped, message = stopped)
+}
+
+#' Clear the once slots (04 section 2.1 `.once`) that a conformance replay set: whatever it
+#' signalled was caught or muffled by the check and never shown, so the user still gets each
+#' such notice or warning once. `before` is the slot names before the replay.
+#' @noRd
+adp_once_restore = function(before) {
+  added = setdiff(ls(the$once, all.names = TRUE), before)
+  if (length(added)) rm(list = added, envir = the$once)
+  invisible(NULL)
+}
+
+#' Is a classifier result one of the two shapes of 04 section 8.1: `list(answers, usage =
+#' list(input, output), model_version = chr(1))` or an unsignalled `gptr_error_s1` condition?
+#' A count is one number, nonnegative and finite, or NA. Whether an unreported count is NA
+#' (IC-74) is the `.golden_usage` row (adp_classifier_usage()), not this one.
+#' @noRd
+adp_classifier_result_ok = function(res) {
+  if (inherits(res, "condition")) return(inherits(res, "gptr_error_s1"))
+  if (!is.list(res) || !is.list(res[["answers"]])) return(FALSE)
+  count = function(x) {
+    is.numeric(x) && length(x) == 1L && (is.na(x) || (is.finite(x) && x >= 0))
+  }
+  u = res[["usage"]]
+  v = res[["model_version"]]
+  is.list(u) && count(u[["input"]]) && count(u[["output"]]) &&
+    is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)
+}
+
+#' The usage row of an answered classifier case: `.golden_usage` against `<case>.usage.json`
+#' (`{"input": <count>, "output": <count>}`; null is a count the service did not report, which
+#' stays NA, IC-74); NULL without that file or for a failed case; `list(check, ok, message)`
+#' @noRd
+adp_classifier_usage = function(dir, case, res) {
+  path = file.path(dir, paste0(case, ".usage.json"))
+  if (!file.exists(path) || inherits(res, "condition") || !is.list(res)) return(NULL)
+  check = paste0("adapter.", case, ".golden_usage")
+  want = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
+  known = function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0
+  if (!is.list(want) || is.null(names(want)) || !all(c("input", "output") %in% names(want)) ||
+        !all(vapply(want[c("input", "output")], function(x) is.null(x) || known(x), NA))) {
+    return(list(check = check, ok = FALSE,
+                message = paste0(case, ".usage.json is not {\"input\": <count or null>, ",
+                                 "\"output\": <count or null>}")))
+  }
+  u = res[["usage"]]
+  if (!is.list(u)) u = list()
+  same = function(got, exp) {
+    if (!is.numeric(got) || length(got) != 1L) return(FALSE)
+    if (is.null(exp)) return(is.na(got))
+    !is.na(got) && got == exp
+  }
+  ok = same(u[["input"]], want[["input"]]) && same(u[["output"]], want[["output"]])
+  shown = function(x) {
+    if (is.numeric(x) && length(x) == 1L) format(x) else paste0("a ", class(x)[1L])
+  }
+  list(check = check, ok = ok,
+       message = paste0("the usage differs from ", case, ".usage.json (an unreported count ",
+                        "stays NA, IC-74): input ", shown(u[["input"]]), ", output ",
+                        shown(u[["output"]])))
+}
+
+#' Are the answers canonical? P13's s1_check_answers(), the validator s1_dispatch() runs on every
+#' adapter result, must return them unchanged: canonical records of the asked types (07 section
+#' 3), in question order, probabilities named in request order, valid values. A wire shape (a
+#' second output shape) or a lost order fails.
+#' @noRd
+adp_check_canonical = function(answers, questions, model_id) {
+  checked = tryCatch(s1_check_answers(answers, questions, model_id), error = function(e) e)
+  if (inherits(checked, "condition")) {
+    return(list(ok = FALSE, message = conditionMessage(checked)))
+  }
+  if (!identical(checked, answers)) {
+    return(list(ok = FALSE, message = paste0(
+      "s1_check_answers() changes the answers: they are not canonical records in question ",
+      "order with probabilities in request order")))
+  }
+  list(ok = TRUE, message = "")
+}
+
+#' Classifier answers as JSON data for their golden file: named vectors (probabilities, legend)
+#' become objects and NA becomes null; names and order are kept
+#' @noRd
+adp_answers_json = function(x) {
+  if (is.list(x)) return(lapply(x, adp_answers_json))
+  if (is.atomic(x) && !is.null(names(x))) return(lapply(as.list(x), adp_answers_json))
+  if (is.atomic(x) && length(x) == 1L && is.na(x)) return(NULL)
+  x
+}
+
+#' The golden row of a classifier case: `.typed_error` against `<case>.error.json`, else
+#' `.golden_answers` against `<case>.answers.json` (order included: the canonical records keep
+#' the question and request order); `list(check, ok, message)`
+#' @noRd
+adp_classifier_golden = function(dir, case, res) {
+  failed = inherits(res, "condition")
+  err = file.path(dir, paste0(case, ".error.json"))
+  if (file.exists(err)) {
+    check = paste0("adapter.", case, ".typed_error")
+    want = tryCatch(json_decode(read_utf8(err)$text), error = function(e) NULL)
+    cls = if (is.list(want)) want[["class"]] else NULL
+    status = if (is.list(want)) want[["status"]] else NULL
+    if (!is.character(cls) || length(cls) != 1L || is.na(cls)) {
+      return(list(check = check, ok = FALSE,
+                  message = paste0(case, ".error.json names no condition class")))
+    }
+    got = if (failed) {
+      paste0(class(res)[[1L]], " (status ", format(res[["status"]] %||% NA), ")")
+    } else {
+      "answers"
+    }
+    ok = failed && inherits(res, "gptr_error_s1") && inherits(res, cls) &&
+      (is.null(status) || identical(as.integer(res[["status"]]), as.integer(status)))
+    want_txt = paste0(cls, if (is.null(status)) "" else paste0(" (status ", status, ")"))
+    return(list(check = check, ok = ok,
+                message = paste0("expected ", want_txt, " from ", case, ".error.json, got ",
+                                 got)))
+  }
+  check = paste0("adapter.", case, ".golden_answers")
+  path = file.path(dir, paste0(case, ".answers.json"))
+  if (!file.exists(path)) {
+    return(list(check = check, ok = FALSE,
+                message = paste0("no golden ", case, ".answers.json or ", case, ".error.json")))
+  }
+  if (failed) {
+    return(list(check = check, ok = FALSE,
+                message = paste0("expected the answers of ", case, ".answers.json, got: ",
+                                 conditionMessage(res))))
+  }
+  same = tryCatch({
+    want = json_decode(read_utf8(path)$text)
+    identical(json_encode(adp_answers_json(res[["answers"]])), json_encode(want))
+  }, error = function(e) FALSE)
+  list(check = check, ok = same,
+       message = paste0("the answers differ from ", case, ".answers.json (values or order)"))
+}
+
+#' Conformance of a classifier adapter (IC-74: 07 sections 3 and 6, P12 row; FIX-6)
+#'
+#' Replays every case of `fixtures/classifier/<api>/` (or `fixtures`) once through
+#' `classify$parse(model, status, headers, body, questions)`, or `classify$run(model, state,
+#' questions, opts)` for an inprocess classifier, with the fixture model record (`model.json`
+#' over a classifier default). Per case: no R condition escapes (`.no_condition`; a run() may
+#' give gptr_inform() notices, which are muffled and noted on the row); the result is one of
+#' the shapes of 04 section 8.1 (`.result`); s1_check_answers() returns its answers unchanged
+#' (`.canonical`); it equals its golden (`.golden_answers` or `.typed_error`); and the usage of an
+#' answered case equals `<case>.usage.json` when there is one (`.golden_usage`). A case file that
+#' cannot be read gives `.fixture`. A wire classifier without cases fails `adapter.fixtures`, as
+#' a stream adapter does; an inprocess classifier has nothing to replay unless fixtures are
+#' found. Once slots the replay sets are cleared again (adp_once_restore()).
+#' @noRd
+adp_check_classifier = function(adapter, fixtures, add) {
+  api = adapter$api %||% adapter$name
+  cls = adapter[["classify"]]
+  wire = !identical(adapter[["transport"]], "inprocess")
+  fun = cls[[if (wire) "parse" else "run"]]
+  dir = adp_fixture_dir(api, fixtures, "classifier")
+  files = if (is.null(dir)) character() else
+    list.files(dir, pattern = "\\.json$", full.names = TRUE)
+  files = files[!grepl("\\.(answers|error|usage)\\.json$", files) &
+                  basename(files) != "model.json"]
+  if (!is.function(fun)) {
+    add("adapter.replay", FALSE, paste0("the classifier adapter has no classify$",
+                                        if (wire) "parse" else "run", " function"))
+    return(invisible(NULL))
+  }
+  if (!length(files) && !wire && is.null(fixtures)) {
+    add("adapter.replay", TRUE,
+        note = "nothing to replay: an inprocess classifier without classifier fixtures")
+    return(invisible(NULL))
+  }
+  if (!length(files)) {
+    add("adapter.fixtures", FALSE,
+        paste0("no classifier fixtures found for ", api, "; pass fixtures = <directory>"))
+    return(invisible(NULL))
+  }
+  model = adp_fixture_model(api, dir, type = "classifier")
+  shape = paste0("the result is neither list(answers, usage = list(input, output), ",
+                 "model_version) nor an unsignalled gptr_error_s1 condition (04 section 8.1)")
+  once = ls(the$once, all.names = TRUE)
+  on.exit(adp_once_restore(once), add = TRUE)
+  for (f in sort(files)) {
+    case = sub("\\.json$", "", basename(f))
+    fx = adp_classifier_case(f)
+    if (is.character(fx)) {
+      add(paste0("adapter.", case, ".fixture"), FALSE, fx)
+      next
+    }
+    args = if (wire) {
+      list(model, fx[["status"]], fx[["headers"]], fx[["body"]], fx[["questions"]])
+    } else {
+      list(model, fx[["state"]], fx[["questions"]], list())
+    }
+    r = adp_check_classify(fun, args, notices = !wire)
+    heard = if (length(r$notices)) {
+      paste0("muffled notice: ", paste(r$notices, collapse = " | "))
+    } else {
+      ""
+    }
+    add(paste0("adapter.", case, ".no_condition"), is.null(r$condition),
+        if (is.null(r$condition)) "" else conditionMessage(r$condition), note = heard)
+    if (!is.null(r$condition)) next
+    res = r$value
+    add(paste0("adapter.", case, ".result"), adp_classifier_result_ok(res), shape)
+    if (!inherits(res, "condition")) {
+      answers = if (is.list(res)) res[["answers"]] else NULL
+      chk = adp_check_canonical(answers, fx[["questions"]], model[["id"]])
+      add(paste0("adapter.", case, ".canonical"), chk$ok, chk$message)
+    }
+    g = adp_classifier_golden(dir, case, res)
+    add(g$check, g$ok, g$message)
+    u = adp_classifier_usage(dir, case, res)
+    if (!is.null(u)) add(u$check, u$ok, u$message)
+  }
+  invisible(NULL)
+}
+
 #' Conformance of an adapter (04 section 7.12; the check.adapter service of gptr_check())
 #'
 #' Replays every fixture (`<case>.sse`, or `.ndjson`, `.json`, `.jsonl` by transport) whole,
@@ -1471,11 +1762,13 @@ adp_same_golden = function(x, path) {
 #' the final message with `<case>.events.json` and `<case>.message.json`; checks one start
 #' first and one terminal event last and that no R condition escapes; checks the byte-identical
 #' re-serialisation of opaque data; and fails an adapter that sends a forced tool_choice while
-#' forced_tool_choice is FALSE (IC-71). An adapter without a stream normaliser (an `inprocess`
-#' generator, or a classifier whose `build`/`parse` live in `classify`) gives the one row
-#' `adapter.replay`.
+#' forced_tool_choice is FALSE (IC-71). An `inprocess` generator without a stream normaliser
+#' gives the one row `adapter.replay`. A classifier adapter (one with `classify`) is checked
+#' against classifier fixtures instead (adp_check_classifier(): canonical answers of 07 section
+#' 3 through P13's validator, golden answers, typed errors and usage; IC-74, FIX-6).
 #' @param adapter A `gptr_adapter` spec.
-#' @param fixtures A fixture directory, or NULL for fixtures/sse/<api>.
+#' @param fixtures A fixture directory, or NULL for fixtures/sse/<api> (fixtures/classifier/<api>
+#'   for a classifier adapter).
 #' @return A `gptr_check` data frame (`target`, `check`, `ok`, `message`).
 #' @noRd
 check_adapter = function(adapter, fixtures = NULL) {
@@ -1498,13 +1791,18 @@ check_adapter = function(adapter, fixtures = NULL) {
     class(df) = c("gptr_check", "data.frame")
     df
   }
+  # classifier adapters (build and parse, or run, live in `classify`; P13's typesafe-system-one
+  # and ollama-system-one, P01's fake-classifier): classifier fixtures, never stream fixtures
+  if (is.list(adapter[["classify"]])) {
+    adp_check_classifier(adapter, fixtures, add)
+    return(frame())
+  }
   transport = adapter$transport %||% ""
-  # nothing to replay: inprocess generators, and classifier adapters whose build and parse live
-  # in `classify` (P13's typesafe-system-one: transport http_json, no stream normaliser)
+  # nothing to replay: inprocess generators
   streams = transport %in% c("http_sse", "http_ndjson", "http_json", "process_jsonl")
   if (!streams || !is.function(adapter$parse)) {
     add("adapter.replay", TRUE,
-        note = "nothing to replay: no stream normaliser (inprocess or classifier adapter)")
+        note = "nothing to replay: no stream normaliser (an inprocess adapter)")
     return(frame())
   }
   if (is.function(adapter$build)) {

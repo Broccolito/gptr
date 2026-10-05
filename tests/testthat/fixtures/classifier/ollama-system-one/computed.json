@@ -1,0 +1,17 @@
+{
+  "questions": {
+    "kind": {"type": "choice", "instructions": "Which letter does `text` name?",
+             "criteria": {"a": null, "b": null}},
+    "tone": {"type": "score", "instructions": "How lively is `text`?",
+             "criteria": ["Low", "High"]}
+  },
+  "state": {"text": "Mostly the letter a, quite lively."},
+  "status": 200,
+  "body": {
+    "model": "clef-flash",
+    "answers": {
+      "kind": {"type": "choice", "probabilities": {"b": 0.25, "a": 0.75}},
+      "tone": {"type": "score", "score": 0.8, "probabilities": {"1": 0.8, "0": 0.2}}
+    }
+  }
+}

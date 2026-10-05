@@ -1,0 +1,5 @@
+{
+  "questions": {"answer": {"type": "noul", "instructions": "Does `text` describe a dog?"}},
+  "status": 502,
+  "body": "<html>Bad gateway</html>"
+}

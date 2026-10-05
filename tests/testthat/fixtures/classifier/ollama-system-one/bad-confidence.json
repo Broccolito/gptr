@@ -1,0 +1,14 @@
+{
+  "questions": {
+    "answer": {"type": "choice", "instructions": "Which animal does `text` describe?",
+               "criteria": {"dog": null, "cat": null, "bird": null, "other": null}}
+  },
+  "status": 200,
+  "body": {
+    "model": "clef-flash",
+    "answers": {
+      "answer": {"type": "choice", "choice": "dog", "confidence": 0.2,
+                 "probabilities": {"other": 0.0, "bird": 0.0207, "dog": 0.9411, "cat": 0.0382}}
+    }
+  }
+}

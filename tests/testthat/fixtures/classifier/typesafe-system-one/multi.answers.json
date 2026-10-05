@@ -1,0 +1,9 @@
+{
+  "is_dog": {"type": "noul", "prob": 0.99},
+  "animal": {"type": "choice", "choice": "dog",
+             "probabilities": {"dog": 1.0, "cat": 0.0, "bird": 0.0, "other": 0.0},
+             "confidence": 1.0},
+  "cuteness": {"type": "score", "score": 1.98,
+               "probabilities": {"0": 0.0, "1": 0.02, "2": 0.98}, "confidence": 0.97,
+               "legend": {"0": "Very negative", "1": "Neutral", "2": "Very positive"}}
+}

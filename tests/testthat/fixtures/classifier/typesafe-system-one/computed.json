@@ -1,0 +1,17 @@
+{
+  "questions": {
+    "kind": {"type": "choice", "instructions": "Which animal does `text` describe?",
+             "criteria": {"dog": null, "cat": null, "bird": null}},
+    "tone": {"type": "score", "instructions": "How lively is `text`?",
+             "criteria": ["Low", "Mid", "High"]}
+  },
+  "state": {"text": "A puppy chased its tail."},
+  "status": 200,
+  "body": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "kind": {"type": "choice", "probabilities": {"cat": 0.25, "bird": 0.05, "dog": 0.7}},
+      "tone": {"type": "score", "probabilities": {"2": 0.7, "0": 0.1, "1": 0.2}}
+    }
+  }
+}

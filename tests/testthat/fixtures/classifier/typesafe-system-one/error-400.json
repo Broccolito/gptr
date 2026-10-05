@@ -1,0 +1,6 @@
+{
+  "questions": {"answer": {"type": "noul", "instructions": "Does `text` describe a dog?"}},
+  "status": 400,
+  "headers": {"x-typesafe-request-id": "req_400"},
+  "body": {"detail": {"error_type": "api_usage_error", "message": "Invalid request."}}
+}

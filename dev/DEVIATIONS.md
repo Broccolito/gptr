@@ -676,7 +676,7 @@ behaviour now, which Task 10 (`run_request()`, `run_response()`, `run_budget_ext
 Validation: `progress/P06.md`, Task 5 (`test-session-budget.R`; the three added blocks failed 4
 times against the plan-literal source: three unclassed `if (NA)` errors and an `NA` token total).
 
-## D-026 - P12 conformance: no normaliser error, warning or message escapes, http_json goldens are not cases; classifier coverage open (2026-10-04)
+## D-026 - P12 conformance: no normaliser error, warning or message escapes, http_json goldens are not cases; classifier coverage open (2026-10-04), and (FIX-6) classifier adapters are replayed against classifier fixtures, golden canonical answers and P13's validator, which moves to s1-types.R (2026-10-05)
 
 P12 Task 3's plan-literal `check_adapter()` (the `check.adapter` service behind `gptr_check()`
 for adapter specs, `R/provider-anthropic.R`) was changed in three ways. P02's `gptr_check()` and
@@ -723,6 +723,67 @@ canonical `noul`/`choice`/`score` records of 07 section 3. Two things are missin
 The coordinator or maintainer must decide whether that coverage belongs in `check_adapter()` once
 P13 provides these, or in P13's own conformance tests. Until it has an owner, P12's plan
 acceptance should carry this point as open rather than record IC-74's P12 row as met.
+
+**Open point closed (FIX-6, 2026-10-05; `progress/fixes.md`).** The coordinator scheduled it as
+FIX-6. The coverage belongs in `check_adapter()`, not in a classifier branch of P02's
+`gptr_check()`: contract 6.7 sends an adapter spec to `check_adapter()` (the `check.adapter`
+service, 7.12), and `ext-check.R` is L0, which may not call the s1 area. Behaviour:
+
+1. **Classifier adapters get their own replay.** An adapter with `classify` no longer returns the
+   single `adapter.replay` row (plan Task 3 and its ambiguity 15). `check_adapter()` replays every
+   case of `fixtures/classifier/<api>/` (or `fixtures`), once, through
+   `classify$parse(model, status, headers, body, questions)`. An inprocess classifier goes
+   through `classify$run(model, state, questions, opts)` instead. The fixture model is
+   `adp_fixture_model(api, dir, type = "classifier")` with `model.json` over it.
+2. **Layout.** `<case>.json` holds `questions` (the ordered wire questions), `state`, `status`
+   (default 200), `headers` and `body`. A JSON string `body` is the body text byte for byte, so
+   malformed bodies can be written; any other JSON value is sent as its compact JSON. Each case
+   has one golden:
+   - `<case>.answers.json`: the canonical answers by question id, in question order;
+     probabilities and legends are objects in request order, and unknown values are `null`;
+   - `<case>.error.json`: `{"class", "status"}` of the expected typed error.
+
+   An answered case may also have `<case>.usage.json` (`{"input", "output"}`; `null` is a count
+   the service did not report, which must stay NA, IC-74). Every answered built-in case has
+   one.
+3. **Rows per case.**
+   - `.no_condition`: an error, warning or message signalled by the call fails the case.
+     Exiting handlers end the call, as `adp_check_replay()` does (item 1 of the first list), so
+     nothing reaches the caller. One exception (review round 1): an inprocess `run()` may give a
+     `gptr_message` notice. Contract 1.5 sends notices through `gptr_inform()`, and IC-19 has
+     `s1-emulate`'s `run()` say once per process that its answers are not calibrated. Such a
+     notice is muffled through its `muffleMessage` restart and noted on the passing row. Once
+     slots set during the replay are cleared again, so the check neither depends on nor uses up
+     the session's once state. A wire `parse()` stays fully silent.
+   - `.result`: `list(answers, usage = list(input, output), model_version = chr(1))` or an
+     unsignalled `gptr_error_s1` condition (04 section 8.1). Each count is NA or one
+     nonnegative, finite number.
+   - `.golden_usage`, when `<case>.usage.json` exists: the usage equals it, with an unreported
+     count NA.
+   - `.canonical`, for answers: P13's validator `s1_check_answers()` (what `s1_dispatch()` runs)
+     must return them unchanged. A second (wire) shape, a lost question order or probabilities
+     out of request order fail.
+   - `.golden_answers`, compared order-sensitively, or `.typed_error`, matching class and status.
+   - `.fixture`, instead of the others, for a case file that cannot be read.
+4. **Missing fixtures.** A wire classifier without cases fails `adapter.fixtures`, as a stream
+   adapter does. The plan's assertion that `gptr_check()` passes a `classify`-only `http_json`
+   adapter without fixtures was changed to expect that failure; IC-74 overrides the plan
+   literal. An inprocess classifier (P01's `fake-classifier`, `s1-emulate`) without a fixture
+   directory keeps `adapter.replay` ("nothing to replay"). Asked for fixtures that hold no case,
+   it fails `adapter.fixtures`.
+5. **The validator moved to L1.** `provider-anthropic.R` is L1, and an L1 file may not call
+   `s1-client.R` (L4); `test-arch-layers.R` flags `adp_check_canonical -> s1_check_answers`.
+   The canonical-record validator and its primitives therefore moved unchanged from
+   `s1-client.R` to the end of `s1-types.R` (L1, P13's model-access file). The moved objects:
+   `s1_types`, `s1_round_tol`, `s1_condition()`, `s1_num()`, `s1_unit()`, `s1_option_keys()`,
+   `s1_answer_probs()`, `s1_parse_choice()`, `s1_parse_score()`, `s1_check_answers()`,
+   `s1_check_answer()` and `s1_check_probs()`. The 119 definitions of the two files deparse
+   identically before and after. This takes no new service, so contract 7.0's complete list
+   (and P01's count of 39) is unchanged. Only comments changed besides the move.
+
+Fixtures: `tests/testthat/fixtures/classifier/typesafe-system-one/` (19 cases: recorded Jev
+bodies plus hand-written order, computed-value, gateway, partial-usage and malformed cases) and
+`.../ollama-system-one/` (13 synthetic cases). Validation: `progress/fixes.md`, Task FIX-6.
 
 Validation: `progress/P12.md`, Task 3. The three added tests failed 7 + 1 + 1 assertions against
 the plan-literal source (269 escaped test warnings in the first run). The `signalCondition()`
@@ -2943,7 +3004,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, an inert program's option that reads a file it names is read as a glob, an attached `-f` value, GREP_OPTIONS or strings' `@FILE`, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, an inert program's option that reads a file it names is read as a glob, an attached `-f` value, GREP_OPTIONS or strings' `@FILE`, a function Python imports from a module is read as that module's call, file's magic files, blame's revision lists, tree's intro and outro files and git's message and pathspec files are read with their contents and a long glob word costs linear time, text enters through as_utf8() (2026-10-05)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2971,7 +3032,8 @@ readings of a parameter default (round 4), and every directory a `cd` can leave 
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
 item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
 what round 9 added, item 18 what round 10 added, item 19 what round 11 added, item 20 what
-round 12 added, item 21 what round 13 added and item 22 what round 14 added.
+round 12 added, item 21 what round 13 added, item 22 what round 14 added and item 23 what
+round 15 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3989,6 +4051,68 @@ below 1, and SQL keeps its keyword reading (Known limits).
       allowlist set on the line before grep (`FOO=1 grep x f.txt`, `PAT=x; grep "$PAT" f.txt`,
       `export X=1; grep x f.txt`), and after wc, du, grep, diff or strings a glob led by `?` or
       by a bracket that matches `-` (`wc -l ?.txt`, `wc -l [!.]*`, 0 or 2 before) are 3.
+23. **Review round 15 (findings against the standard).** All three findings were reproduced with
+    a probe (`task2-fix15-probe-before.log`: every line the reviewer lists has the level the
+    reviewer gives), the file-reading options also on fake data in the scratchpad (file-5.41
+    `-m`, git 2.50.1 blame `-S`, `--ignore-revs-file`, `-c blame.ignoreRevsFile=` and
+    `--pathspec-from-file`, tree v2.3.2 `--hintro` and `--houtro` each printed the fake secret),
+    judged by (A)-(C) and accepted: a blocker, a major and a minor.
+    - *Python's from-imports (blocker, (iii)).* risk_python() read a module's functions by their
+      qualified name (`shutil.copy(`) or through `import M as N` only, so
+      `from shutil import copy; copy('a', '.Rprofile')`, `from os import rename;
+      rename('a', '.Rprofile')` and `from shutil import move; move('a', '.gptr/settings.json')`
+      were 1, a workspace write (`copy('a', 'b.txt')`) was 1,
+      `from subprocess import run; run('rm -rf ~', shell=True)`,
+      `from subprocess import call; call([...])` and `from os import system; system('rm -rf ~')`
+      were 3 where the qualified call is 4, and the rules' from-import alternatives (the rest of
+      the line) missed a parenthesised list over several lines (`from os import (`, `system,`,
+      `)` and `system('rm -rf ~')` on four lines: 1). `risk_py_from_calls()` reads each
+      `from M import` of os, posix (as os), shutil, subprocess, pty, asyncio, platform and signal
+      (a plain list, a parenthesised list over several lines with its comments, a list a
+      backslash continues, `name as alias`, and `*`, which binds the names of `risk_py_star`) and
+      writes every bare call of an imported name as the module's own call (`copy(` becomes
+      `shutil.copy(`, in one pass over the code's calls) in the copy of the code that the rules,
+      the environment-write reader and risk_py_commands() scan. The rules' from-import
+      alternatives (`risk_py_import_list`) accept the parenthesised and continued lists, `import(`
+      without a space and posix; each ends before the next `from`, so many imports on one line
+      cost linear time (5,000 `from os import x;` on one line took 16 to 19 s before, 0.09 s
+      now).
+    - *Self-review, same family:* `os.renames`, `os.lchmod`, `os.lchown`, `os.utime`,
+      `os.mkfifo`, `os.mknod`, `shutil.make_archive` and `shutil.chown` are writes
+      (`import os; os.renames('a', '.Rprofile')` was 1, now 4 `control`), and the command line or
+      argv of `pty.spawn` and `platform.popen` is read (`import pty; pty.spawn(['rm', '-rf', '~'])`
+      was 3, now 4).
+    - *Options that print a file they name (major, (i) and (iii)).* As round 13 did for name
+      lists and round 14 for grep's `-f`, these are read with their contents: file's magic files
+      (`-m`, `--magic-file`, a list `:` separates; libmagic prints each line it cannot parse),
+      the revision lists of git blame and annotate (`-S`, `--ignore-revs-file`, and
+      `git -c blame.ignoreRevsFile=F`, a key `risk_git_safe_key` allows; git prints
+      `bad graft data:` or `invalid object name:` with a line) and tree's `--hintro` and
+      `--houtro` (copied into its HTML). `file -m .Renviron x`, `git blame -S .Renviron x.R` and
+      `tree -H . --hintro=.Renviron` are 3 `secret` (were 0). A blame.ignoreRevsFile an
+      environment variable names (`--config-env`) is 3 `dynamic`. Self-review: git's write
+      subcommands read files the same way, and `risk_git_files_in()` now reads them: the
+      pathspec list of `--pathspec-from-file` (add, rm, checkout, reset, restore, commit, stash;
+      git prints `pathspec '<line>' did not match`), the message of `-F`/`--file` (commit, tag,
+      merge, notes; commit prints its first line) and commit's `-t`/`--template`; `-` is
+      standard input. `git commit -F .Renviron` and `git add --pathspec-from-file=.Renviron`
+      were 2, now 3 `secret`.
+    - *Long glob words (minor).* risk_glob_rx() scanned to the end of the pattern for each `[`
+      without its `]`, and risk_glob_match() rebuilt the expression on every call, so an
+      unquoted word of 1,000 `a*[` took 3.8 s and one of 2,000 11 s. The first `]` after each
+      position is now found once (the same expression for 20,000 random patterns), and the
+      expression is kept per pattern during a classification (`risk_memo("globrx", ...)`): a
+      word of 7,000 `a*[` (21 KB) takes under 0.5 s, and a test row bounds one of 3,000.
+    - *Changed rows:* none in older blocks. The 3,024 strings of the test file and of the
+      round-5 to round-14 probe logs, each read as a command line and as Python, give the same
+      level and top categories on the round-14 and round-15 sources but the 53 new rows, all
+      higher. Raised outside the tests: a bare call of a write or delete function imported from
+      these modules (`from shutil import copytree; copytree(a, b)` 2), the git write subcommands'
+      secret message and pathspec files, and the os and shutil writers above. Lowered: a word
+      after another `from` on the line no longer counts as imported from the first module
+      (`from os import path; from x import remove`, 3 before, is 1: `x.remove` is no os
+      function), and in a fuzz of 2,000 Python snippets three that the round-14 source read
+      through its alias copy glued to an `import` at the code's end (none valid Python).
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
@@ -4018,7 +4142,10 @@ environment, `read`, a function or a sourced file) and of positional parameters 
 other than echo, printf, a heredoc, find, fd, ls, dir, `git ls-files` or `rg --files` (`cat list
 | xargs rm` is 3), commands hidden by `eval` of computed strings beyond the rules above, Python
 reached through other indirections (an alias of `r`, a process call whose command is built at
-run time), heredocs or here-strings read by a program other than a shell, an interpreter,
+run time, a function bound by assignment, `cp = shutil.copy`, or imported from a module other than
+os, posix, shutil, subprocess, pty, asyncio, platform and signal; a name a from-import binds is
+read as the module's function wherever the code calls it, a string or comment included),
+heredocs or here-strings read by a program other than a shell, an interpreter,
 `source`, xargs, sftp or ftp, and, the one limit that can be 0, a SELECT that calls a
 user-defined function, a stored procedure's side effects or a server function gptr does not
 list (item 14 lists the code, signal and state functions it reads; the statement shows nothing
@@ -4110,7 +4237,13 @@ fails 75 against the round-13 source (`task2-fix14-red-final.log`: 74 failures a
 `risk_glob_dash(wild = )` error, which ends its block); the block as first written failed 73 in
 the working tree (`task2-fix14-red.log`). Final `^perm-classify$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2785 ]` in the UTF-8 and the C locale
-(`task2-fix14-green.log`, `task2-fix14-green-C.log`).
+(`task2-fix14-green.log`, `task2-fix14-green-C.log`) at the end of round 14. Review round 15
+added item 23 with one block (134 expectations) and no changed old row. The final test file fails
+107 against the round-14 source (`task2-fix15-red-final.log`); the block as first written failed
+108 in the working tree (`task2-fix15-red.log`: the 107 and one Python guard row that was wrong,
+`from subprocess import PIPE`, 3 by the process rule, replaced). Final `^perm-classify$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2919 ]` in the UTF-8 and the C locale
+(`task2-fix15-green.log`, `task2-fix15-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -8920,3 +9053,43 @@ Validation: `progress/P13.md`, Task 11. Red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 2
 compaction answer in `task11-compaction-probe.log`. Review round 1: red
 `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 278 ]` (`task11-fix1-red.log`), green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 289 ]` (`task11-fix1-green.log`).
+
+## D-127 - P15 gptr_doc(), gptr_blocks() and gptr_cache(): every call owns the block its format's locator gives it, a document is bound only in the format of its extension, a missing file is an invalid argument, and the prune keeps S2 answers it cannot check and reads spill_days safely (2026-10-05)
+
+P15 Task 14 (`R/doc-replay.R`; tests appended to `test-doc-replay.R`). The exports' signatures,
+the listings' columns, the control guard (IC-53), the sidecar rule (IC-51) and the plan's four
+test blocks are the plan's.
+
+1. **Block ownership in `gptr_blocks()` follows contract 11.5.** The plan gave every block of a
+   statement's run to the first top-level call that located it, and every notebook agent cell to
+   the first call of the nearest calling cell before it, even across cells without a call. The
+   second step of a pipeline and the second call of a notebook cell read `stale` with another
+   call's prompt; an agent cell after a cell with no call read `fresh`. Each top-level call now
+   owns the block that `doc_text_locate()`/`doc_rmd_locate()` (or, in a notebook,
+   `doc_rmd_owner()` over the calling cell's run, as `doc_ipynb_locate()`) gives it; a block no
+   call owns is `stale`. The `prompt` column is one line.
+2. **`gptr_doc()` binds a document only in the format of its extension.** The extension must be
+   `.R`, `.Rmd`, `.qmd` or `.ipynb` even when `format` is given, an explicit `format` must be that
+   format or `"transcript"` for an `.R` file, and a directory is refused (`invalid_argument`). The
+   plan accepted any file with an explicit format, so R markers could be written into a
+   notebook's JSON or a chunk of the wrong syntax into a qmd.
+3. **`gptr_blocks()` of a missing file or a directory is `invalid_argument`**, not
+   `gptr_error_doc_write` from the read.
+4. **The prune keeps what it cannot check.** An S2 answer of a document that exists but cannot be
+   read or parsed is kept (team and block-nested replays need it, IC-47). So is an answer of a
+   block queued for its document: in the document's sidecar (a deferred Rscript upsert, IC-51, or
+   a pending Jupyter one, IC-50) or in this process's own queue. Such a block reaches the file only
+   at exit, at `gptr_doc(path, sync = TRUE)` or at recovery, and its answers were cached when it
+   was queued; it was never deleted (contract 6.4 prunes "S2 entries of deleted blocks"). Only
+   answers of a block that is neither queued nor in its existing document are removed.
+   `gptr.spill_days` that is not one non-negative number falls back to 7 (the plan removed
+   nothing and warned).
+
+Validation: `progress/P15.md`, Task 14. Red `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 352 ]`
+(`task14-red.log`); against the plan literal the 4 addition blocks fail 16 expectations and the
+plan's 44 pass (`task14-adapt-red-plan-literal.log`); green `^doc-replay$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 424 ]` in the default and the C locale (`task14-green.log`,
+`task14-green-clocale.log`). Review round 1 (item 4, queued blocks): regression red
+`[ FAIL 3 | WARN 0 | SKIP 0 | PASS 427 ]` (`task14-fix1-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 430 ]` in the default and the C locale
+(`task14-fix1-green.log`, `task14-fix1-green-clocale.log`).

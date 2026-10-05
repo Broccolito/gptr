@@ -1,0 +1,8 @@
+{
+  "questions": {
+    "a": {"type": "noul", "instructions": "Does `text` describe a dog?"},
+    "b": {"type": "noul", "instructions": "Does `text` describe a cat?"}
+  },
+  "status": 200,
+  "body": {"model": "jev-1.13.0", "answers": {"a": {"type": "noul", "noul": 0.9}}}
+}

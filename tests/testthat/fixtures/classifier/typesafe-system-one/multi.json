@@ -1,0 +1,24 @@
+{
+  "questions": {
+    "is_dog": {"type": "noul", "instructions": "Does `text` describe a dog?",
+               "criteria": {"true": "The text describes a dog", "false": "The text does not describe a dog"}},
+    "animal": {"type": "choice", "instructions": "Which animal does `text` describe?",
+               "criteria": {"dog": "A dog", "cat": "A cat", "bird": "A bird", "other": "None of these"}},
+    "cuteness": {"type": "score", "instructions": "How positive is the sentiment of `text`?",
+                 "criteria": ["Very negative", "Neutral", "Very positive"]}
+  },
+  "state": {"text": "A golden retriever puppy fetched the ball and wagged its tail."},
+  "status": 200,
+  "body": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "is_dog": {"type": "noul", "noul": 0.99},
+      "animal": {"type": "choice", "choice": "dog", "confidence": 1.0,
+                 "probabilities": {"other": 0.0, "bird": 0.0, "dog": 1.0, "cat": 0.0}},
+      "cuteness": {"type": "score", "score": 1.98, "confidence": 0.97,
+                   "legend": {"0": "Very negative", "1": "Neutral", "2": "Very positive"},
+                   "probabilities": {"0": 0.0, "1": 0.02, "2": 0.98}}
+    },
+    "usage": {"input_tokens": 443, "output_tokens": 79}
+  }
+}

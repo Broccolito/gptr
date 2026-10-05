@@ -1,0 +1,23 @@
+{
+  "questions": {
+    "tone": {"type": "score", "instructions": "How positive is `text`?",
+             "criteria": ["Negative", "Neutral", "Positive"]},
+    "ok": {"type": "noul", "instructions": "Is `text` acceptable?"},
+    "kind": {"type": "choice", "instructions": "Which colour does `text` name?",
+             "criteria": {"red": null, "green": null, "blue": null}}
+  },
+  "state": {"text": "A red car, neither good nor bad."},
+  "status": 200,
+  "body": {
+    "model": "clef-flash:latest",
+    "answers": {
+      "kind": {"type": "choice", "choice": "red", "confidence": 0.1827,
+               "probabilities": {"blue": 0.1, "red": 0.6, "green": 0.3}},
+      "ok": {"type": "noul", "noul": 0.3},
+      "tone": {"type": "score", "score": 1.0, "confidence": 0.0536,
+               "legend": {"0": "Negative", "1": "Neutral", "2": "Positive"},
+               "probabilities": {"2": 0.25, "0": 0.25, "1": 0.5}}
+    },
+    "usage": {"input_tokens": 61, "output_tokens": 3}
+  }
+}

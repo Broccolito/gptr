@@ -1,0 +1,5 @@
+{
+  "positive": {"type": "noul", "prob": 0.98},
+  "genre": {"type": "choice", "choice": "fiction",
+            "probabilities": {"fiction": 1.0, "nonfiction": 0.0}, "confidence": 1.0}
+}

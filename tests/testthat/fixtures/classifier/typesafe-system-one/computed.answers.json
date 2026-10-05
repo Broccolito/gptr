@@ -1,0 +1,7 @@
+{
+  "kind": {"type": "choice", "choice": "dog",
+           "probabilities": {"dog": 0.7, "cat": 0.25, "bird": 0.05}, "confidence": 0.55},
+  "tone": {"type": "score", "score": 1.6,
+           "probabilities": {"0": 0.1, "1": 0.2, "2": 0.7}, "confidence": 0.4,
+           "legend": {"0": "Low", "1": "Mid", "2": "High"}}
+}

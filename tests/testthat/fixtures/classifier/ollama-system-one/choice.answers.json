@@ -1,0 +1,3 @@
+{"answer": {"type": "choice", "choice": "dog",
+            "probabilities": {"dog": 0.9411, "cat": 0.0382, "bird": 0.0207, "other": 0.0},
+            "confidence": 0.810923}}

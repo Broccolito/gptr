@@ -1,0 +1,6 @@
+{
+  "kind": {"type": "choice", "choice": "a", "probabilities": {"a": 0.75, "b": 0.25},
+           "confidence": 0.188721875540867},
+  "tone": {"type": "score", "score": 0.8, "probabilities": {"0": 0.2, "1": 0.8},
+           "confidence": 0.278071905112638, "legend": {"0": "Low", "1": "High"}}
+}
