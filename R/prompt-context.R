@@ -30,7 +30,7 @@ context_specs = function(s, placements) {
 #' into a list of list(text, attrs)
 #' @noRd
 context_items = function(res) {
-  if (is.null(res) || !length(res)) return(list())
+  if (!length(res)) return(list())
   if (is.character(res)) return(list(list(text = paste(res, collapse = "\n"), attrs = list())))
   if (is.list(res) && !is.null(res$text)) return(list(res))
   if (is.list(res) && is.null(names(res))) {
@@ -74,41 +74,19 @@ context_blocks_hash = function(blocks) {
   context_text_hash(vapply(blocks, function(b) b$text, ""))
 }
 
-#' One-line stand-ins for attached objects until an `attached` spec exists (P09 registers one)
-#' @noRd
-context_attached_stub = function(input) {
-  items = if (!is.null(input$call)) input$call$context else NULL
-  if (!length(items)) return(list())
-  lapply(items, function(it) {
-    cls = as.character(it$facts$class %||% "unknown")
-    block_context("attached", paste0(it$label, " <", cls[1], ">"), attrs = list(name = it$label))
-  })
-}
-
 #' Last emitted text hash per block name since the first message (or latest compaction): user
 #' context blocks, operator mode notes and operator `reminder` blocks (named by their leading tag)
 #' @noRd
 context_last_hashes = function(s) {
   if (is.null(s)) return(list())
-  path = prompt_path(s)
-  if (!length(path)) return(list())
-  is_cmp = vapply(path, function(e) identical(e$type, "compaction"), NA)
-  start = if (any(is_cmp)) max(which(is_cmp)) else 1L
   last = list()
-  record = function(last, blocks) {
-    ctxb = Filter(function(b) identical(b$type, "context"), blocks)
-    for (k in unique(vapply(ctxb, function(b) b$kind, ""))) {
-      last[[k]] = context_blocks_hash(Filter(function(b) identical(b$kind, k), ctxb))
+  for (e in prompt_since_compaction(prompt_path(s))) {
+    blocks = Filter(function(b) identical(b$type, "context"), prompt_entry_blocks(e))
+    for (k in unique(vapply(blocks, function(b) b$kind, ""))) {
+      last[[k]] = context_blocks_hash(Filter(function(b) identical(b$kind, k), blocks))
     }
-    last
-  }
-  for (e in path[start:length(path)]) {
     op = prompt_entry_operator(e)
-    if (identical(e$type, "compaction")) {
-      last = record(last, e$gptr$blocks %||% list())
-    } else if (identical(e$type, "message") && identical(e$message$role, "user")) {
-      last = record(last, e$message$content)
-    } else if (!is.null(op) && isTRUE(op$kind %in% c("mode", "reminder"))) {
+    if (!is.null(op) && isTRUE(op$kind %in% c("mode", "reminder"))) {
       txt = prompt_operator_text(op)
       tag = regmatches(txt, regexpr("^<[A-Za-z0-9_.-]+", txt))
       name = if (identical(op$kind, "mode")) "mode" else substring(tag, 2L)
@@ -118,7 +96,7 @@ context_last_hashes = function(s) {
   last
 }
 
-#' Render the blocks of `specs` in order (with the attached stand-in when needed)
+#' Render the blocks of `specs` in order
 #' Blocks of `authority = "operator"` specs (rank >= 3, IC-52) are queued as operator `reminder`
 #' messages instead; a preview or a call without a session drops them.
 #' @noRd
@@ -145,13 +123,6 @@ context_collect = function(s, specs, input, dedup) {
     if (dedup && identical(context_blocks_hash(out), last[[sp$name]])) next
     blocks = c(blocks, out)
     ord = c(ord, rep(as.numeric(sp$order %||% 650L), length(out)))
-  }
-  if (is.null(registry_get("context_block", "attached", session = sid))) {
-    stub = context_attached_stub(input)
-    if (length(stub) && !(dedup && identical(context_blocks_hash(stub), last[["attached"]]))) {
-      blocks = c(blocks, stub)
-      ord = c(ord, rep(600, length(stub)))
-    }
   }
   blocks[order(ord, seq_along(ord), method = "radix")]
 }
@@ -262,7 +233,6 @@ context_instruction_files = function(root = project_root(), cwd = getwd()) {
 #' (never executed; report 14 section 4.8)
 #' @noRd
 context_strip_vignette = function(text) {
-  text = prompt_strip_bom(text)
   text = sub("(?s)^---[ \t]*\n.*?\n---[ \t]*(\n|$)", "", text, perl = TRUE)
   text = gsub("(?s)<!--.*?-->", "", text, perl = TRUE)
   text = sub("^\\s+", "", text, perl = TRUE)
@@ -364,24 +334,14 @@ context_provide_project = function(ctx, budget) {
 #' message or latest compaction (with its `details$dropped`), then later update blocks
 #' @noRd
 context_sent_instructions = function(s) {
-  path = prompt_path(s)
-  if (!length(path)) return(list())
-  is_cmp = vapply(path, function(e) identical(e$type, "compaction"), NA)
-  start = if (any(is_cmp)) max(which(is_cmp)) else 1L
   seen = list()
   first_done = FALSE
-  for (e in path[start:length(path)]) {
-    blocks = NULL
-    if (identical(e$type, "compaction")) {
-      blocks = e$gptr$blocks
-      dropped = e$details$dropped %||% list()
-      for (label in names(dropped)) {
-        seen[[label]] = list(kind = "project_instructions", hash = as.character(dropped[[label]]))
-      }
+  for (e in prompt_since_compaction(prompt_path(s))) {
+    dropped = if (identical(e$type, "compaction")) e$details$dropped
+    for (label in names(dropped)) {
+      seen[[label]] = list(kind = "project_instructions", hash = as.character(dropped[[label]]))
     }
-    if (identical(e$type, "message") && identical(e$message$role, "user")) {
-      blocks = e$message$content
-    }
+    blocks = prompt_entry_blocks(e)
     for (b in blocks) {
       if (!identical(b$type, "context")) next
       first = identical(b$kind, "project_instructions") && !first_done
@@ -510,7 +470,7 @@ context_provide_plan = function(ctx, budget) {
   if (is.null(env) && !is.null(ctx$session)) env = session_home(ctx$session)
   if (!is.environment(env)) return(NULL)
   txt = ext_service_get("plan.pending")(rlang::obj_address(env), consume = !isTRUE(inp$preview))
-  if (is.null(txt) || !length(txt) || !nzchar(txt[1])) return(NULL)
+  if (!length(txt) || !nzchar(txt[1])) return(NULL)
   list(text = as.vector(txt)[1], attrs = list(from = attr(txt, "from") %||% "plan"))
 }
 

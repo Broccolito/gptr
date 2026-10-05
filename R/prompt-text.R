@@ -10,7 +10,7 @@ prompt_texts = function() prompt_text_table
 #' One prompt text by name; an unknown name is a `gptr_error_internal`
 #' @noRd
 prompt_text = function(name) {
-  ok = is.character(name) && length(name) == 1L && !is.na(name)
+  ok = rlang::is_string(name)
   x = if (ok) prompt_text_table[[name]]
   if (is.null(x)) {
     shown = if (ok) name else "<not a single string>"

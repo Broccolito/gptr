@@ -95,7 +95,7 @@ stops for the maintainer".
 
 **Interfaces:**
 - Consumes: `pkgload::load_all(path, export_all = TRUE, helpers = FALSE, attach_testthat = FALSE, quiet = TRUE)`; `rtiktoken::get_token_count(text, model)` (development tool; the encoder is rebuilt for every element, about 0.1 s each with rtiktoken 0.0.7, hence the disk memo); `rlang::hash()`; the class layout of `gptr_abort()` (04 §2.1).
-- Produces (development only; used by Tasks 2-8): `bench_root(start)`, `bench_args(args)` -> `list(check, update, only)`, `bench_require(pkg, why)` (condition class `bench_missing_tool`, field `package`), `bench_utf8(x)`, `bench_regression(message, fixture, metric, baseline, value, details)` (class `c("gptr_error_token_regression", "gptr_error", "error", "condition")`), `tok_count(x, encoding = "o200k_base")`, `bench_tok_save()`, `bench_isolate(keys = FALSE, replay = "replay")`, `bench_load_gptr(root, isolate = TRUE, keys = FALSE)`, `gptr_internal(name)`, `bench_read_csv(path)`, `bench_write_csv(df, path)`, `bench_run(fun)` -> exit status 0/1/2; `%||%` when base R lacks it (R < 4.4). Test helpers: `bench_repo_root()`, `bench_source_only(...)`, `skip_without_gptr_source()`, `bench_test_load_gptr()`. None of these names is one that P07's `run.R` defines (`bench_main`, `bench_case`, `bench_compare`, `bench_static`, `bench_check_static`, `bench_counter`, `bench_providers`, `bench_message_payload`, `bench_tolerance`, `bench_columns`).
+- Produces (development only; used by Tasks 2-8): `bench_root(start)`, `bench_args(args)` -> `list(check, update, only)`, `bench_require(pkg, why)` (condition class `bench_missing_tool`, field `package`), `bench_utf8(x)`, `bench_regression(message, fixture, metric, baseline, value, details)` (class `c("gptr_error_token_regression", "gptr_error", "error", "condition")`), `tok_count(x, encoding = "o200k_base")`, `bench_tok_save()`, `bench_isolate(keys = FALSE, replay = "replay")`, `bench_load_gptr(root, isolate = TRUE, keys = FALSE)`, `gptr_internal(name)`, `bench_read_csv(path)`, `bench_write_csv(df, path)`, `bench_run(fun)` -> exit status 0/1/2; `%||%` when base R lacks it (R < 4.4). Test helpers: `bench_repo_root()`, `bench_source_only(...)`, `skip_without_gptr_source()`, `bench_test_load_gptr()`. None of these names is one that P07's `run.R` defines (`bench_main`, `bench_case`, `bench_compare`, `bench_static`, `bench_in_project`, `bench_counter`, `bench_providers`, `bench_message_payload`, `bench_tolerance`, `bench_columns`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -228,7 +228,7 @@ Create `dev/bench/common.R`:
 # package code. House style: "=" for assignment, "|>" for pipes (S-9); ASCII only.
 # P07's dev/bench/tokens/run.R is self-contained and does not source this file; the names below
 # never reuse the names that run.R defines (bench_main, bench_case, bench_compare, bench_static,
-# bench_check_static, bench_counter, bench_providers, bench_message_payload, bench_tolerance,
+# bench_in_project, bench_counter, bench_providers, bench_message_payload, bench_tolerance,
 # bench_columns), so both can live in one R session.
 
 if (!exists("%||%", envir = baseenv())) {

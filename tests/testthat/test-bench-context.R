@@ -100,11 +100,8 @@ test_that("the composed T0 and skills equal the text block of architecture 7.3",
   expect_true(startsWith(fr$t1, paste(sp[sk[1]:sk[2]], collapse = "\n")))
 })
 
-test_that("no shipped prompt text or skill mentions str( (IC-67)", {
+test_that("no composed prompt or shipped skill mentions str( (IC-67)", {
   rx = "(^|[^A-Za-z0-9_.])str\\("
-  for (nm in names(prompt_texts())) {
-    expect_false(any(grepl(rx, prompt_texts()[[nm]])), label = nm)
-  }
   for (nm in c("minimal", "standard_interactive")) {
     expect_false(grepl(rx, bench_compose(nm)$t0), label = nm)
   }

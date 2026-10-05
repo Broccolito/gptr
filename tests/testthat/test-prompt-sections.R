@@ -97,9 +97,9 @@ test_that("prompt_path leaves sibling branches out and survives torn lines and c
   ids = vapply(d$entries, function(e) e$id, "")
   d$entries[[match(p, ids)]]$parent_id = q
   expect_identical(vapply(prompt_path(s), function(e) e$id, ""), c(p, q))
-  # an unknown leaf has no path
+  # an unknown leaf is an internal error, as in P05's entry_path()
   d$leaf = "no-such-id"
-  expect_length(prompt_path(s), 0L)
+  expect_error(prompt_path(s), class = "gptr_error_internal")
 })
 
 test_that("prompt_read_file normalises line ends, the BOM and trailing newlines", {

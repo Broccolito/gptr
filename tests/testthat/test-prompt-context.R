@@ -145,28 +145,6 @@ test_that("session_start blocks follow the registered blocks of the first messag
   expect_identical(k[(length(k) - 1L):length(k)], c("lab", "text"))
 })
 
-test_that("attached objects render as one line until an attached block exists", {
-  skip_if(!is.null(registry_get("context_block", "attached")), "P09 registers the attached block")
-  p07_project(list())
-  s = p07_session()
-  b = context_first_message(s, list(call = mtcars_call(), turn = 1L, prompt = "hi"))
-  att = Filter(function(x) identical(x$kind, "attached"), b)
-  expect_length(att, 1L)
-  expect_identical(att[[1]]$text, "<attached name=\"mtcars\">\nmtcars <data.frame>\n</attached>")
-})
-
-test_that("attached objects follow the workspace block in the first message (IC-38)", {
-  skip_if(!is.null(registry_get("context_block", "attached")), "P09 tests its attached block")
-  p07_project(list())
-  off = gptr_register(gptr_context_block("workspace", function(ctx, budget) "pbmc  Seurat  5.1 GB",
-                                         placement = "first", order = 500L))
-  withr::defer(off())
-  s = p07_session()
-  b = context_first_message(s, list(call = mtcars_call(), turn = 1L, prompt = "x"))
-  k = kinds(b)
-  expect_true(which(k == "attached") > which(k == "workspace"))
-})
-
 test_that("an untrusted project renders trusted=\"false\"; a trusted one does not (IC-52)", {
   p07_project(list("AGENTS.md" = "- rule"))
   s = p07_session("manual")

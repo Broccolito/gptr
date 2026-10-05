@@ -78,31 +78,25 @@ bench_environment_block = function(text) {
                      budget = 100L, order = 200L)
 }
 
+# A temporary project (working directory, `opts`, option gptr.project_root and the variable
+# GPTR_PROJECT_ROOT, which project_root() reads in that order) until the caller `env` returns
+bench_in_project = function(opts = list(), env = parent.frame()) {
+  proj = withr::local_tempdir("gptr-bench-", .local_envir = env)
+  withr::local_dir(proj, .local_envir = env)
+  withr::local_options(c(opts, list(gptr.project_root = proj)), .local_envir = env)
+  withr::local_envvar(GPTR_PROJECT_ROOT = proj, .local_envir = env)
+  proj
+}
+
 # Run one fixture; returns a one-row data frame of metrics
 bench_case = function(fx, standins, tok) {
-  proj = tempfile("gptr-bench-")
-  dir.create(file.path(proj, ".gptr"), recursive = TRUE)
+  proj = bench_in_project(list(gptr.interactive = isTRUE(fx$human), gptr.quiet = TRUE))
+  dir.create(file.path(proj, ".gptr"))
   for (f in names(fx$files)) {
     p = file.path(proj, f)
     dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
     writeLines(fx$files[[f]], p, useBytes = TRUE)
   }
-  old_wd = setwd(proj)
-  old_env = Sys.getenv("GPTR_PROJECT_ROOT", unset = NA)
-  # project_root() reads option gptr.project_root before GPTR_PROJECT_ROOT, so both are pinned
-  old_opt = options(gptr.interactive = isTRUE(fx$human), gptr.quiet = TRUE,
-                    gptr.project_root = proj)
-  on.exit({
-    setwd(old_wd)
-    options(old_opt)
-    if (is.na(old_env)) {
-      Sys.unsetenv("GPTR_PROJECT_ROOT")
-    } else {
-      Sys.setenv(GPTR_PROJECT_ROOT = old_env)
-    }
-    unlink(proj, recursive = TRUE)
-  }, add = TRUE)
-  Sys.setenv(GPTR_PROJECT_ROOT = proj)
   refs = unlist(fx$models)
   offs = bench_providers(refs)
   on.exit(for (off in offs) off(), add = TRUE)
@@ -195,22 +189,7 @@ bench_case = function(fx, standins, tok) {
 # composed with the stand-ins only (exclusive), as test-bench-context.R composes them, so the
 # committed `preset` totals of architecture 12.1 (IC-68) are re-measured on every run
 bench_static = function(pb, tok) {
-  proj = tempfile("gptr-bench-static-")
-  dir.create(proj)
-  old_wd = setwd(proj)
-  old_env = Sys.getenv("GPTR_PROJECT_ROOT", unset = NA)
-  old_opt = options(gptr.project_root = proj)
-  on.exit({
-    setwd(old_wd)
-    options(old_opt)
-    if (is.na(old_env)) {
-      Sys.unsetenv("GPTR_PROJECT_ROOT")
-    } else {
-      Sys.setenv(GPTR_PROJECT_ROOT = old_env)
-    }
-    unlink(proj, recursive = TRUE)
-  }, add = TRUE)
-  Sys.setenv(GPTR_PROJECT_ROOT = proj)
+  proj = bench_in_project()
   off = gptr_register(gptr_fake_provider(list("(bench)"), name = "benchstatic"))
   on.exit(off(), add = TRUE)
   out = numeric()
@@ -226,24 +205,8 @@ bench_static = function(pb, tok) {
   out
 }
 
-# Compare the static prefixes with the committed `preset` totals (the prefix gate, +2%)
-bench_check_static = function(static, pb) {
-  base = unlist(pb$preset)
-  for (nm in names(static)) {
-    b = if (nm %in% names(base)) base[[nm]] else NA_real_
-    if (is.na(b) || static[[nm]] > b * (1 + bench_tolerance[["prefix"]]) + 1e-9) {
-      gptr_abort(c("Token-efficiency regression:",
-                   sprintf("  prefix-baseline.json %s: prefix %s -> %s (tolerance +2%%)", nm,
-                           format(b, big.mark = ","), format(static[[nm]], big.mark = ","))),
-                 "token_regression",
-                 .data = list(fixture = paste0("prefix-baseline:", nm), metric = "prefix",
-                              baseline = b, value = static[[nm]]))
-    }
-  }
-  invisible(TRUE)
-}
-
-# Compare results with the baseline; signals gptr_error_token_regression listing every failure
+# Compare results with the baseline (the metrics `res` has); signals
+# gptr_error_token_regression listing every failure
 bench_compare = function(res, base) {
   bad = character()
   first = NULL
@@ -253,7 +216,7 @@ bench_compare = function(res, base) {
       bad = c(bad, paste0(res$case[i], ": no baseline row (run with --update ", res$case[i], ")"))
       next
     }
-    for (k in names(bench_tolerance)) {
+    for (k in intersect(names(bench_tolerance), names(res))) {
       limit = b[[k]] * (1 + bench_tolerance[[k]])
       if (res[[k]][i] > limit + 1e-9) {
         bad = c(bad, sprintf("%s: %s %s -> %s (tolerance %+.0f%%)", res$case[i], k,
@@ -264,7 +227,7 @@ bench_compare = function(res, base) {
         }
       }
     }
-    if (res$facts[i] < b$facts) {
+    if ("facts" %in% names(res) && res$facts[i] < b$facts) {
       bad = c(bad, sprintf("%s: facts %d -> %d (no loss allowed)", res$case[i], b$facts,
                            res$facts[i]))
       if (is.null(first)) {
@@ -326,7 +289,9 @@ bench_main = function(args = commandArgs(trailingOnly = TRUE)) {
   if ("--check" %in% args) {
     if (!file.exists(base_file)) stop("dev/bench/tokens/baseline.csv is missing.")
     base = utils::read.csv(base_file, stringsAsFactors = FALSE)
-    bench_check_static(static, pb)
+    # the static prefixes against the committed `preset` totals (the prefix gate)
+    pre = function(x) data.frame(case = paste0("prefix-baseline:", names(x)), prefix = unname(x))
+    bench_compare(pre(static), pre(unlist(pb$preset)))
     bench_compare(res, base)
     message("OK: ", length(static), " static prefixes and ", nrow(res),
             " golden transcripts within the baseline tolerances")

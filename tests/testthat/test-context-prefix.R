@@ -22,6 +22,15 @@ scn_ncompact = function(sc) {
   sum(vapply(prompt_path(sc$s), function(e) identical(e$type, "compaction"), NA))
 }
 
+# The canonical request body: the elements joined in the Anthropic key order; open (no closing
+# "]}") it is a byte prefix of the next request's body (G4 5.4)
+prompt_request_body = function(elements, open = FALSE) {
+  m = elements[-(1:3)]
+  body = paste0("{\"tools\":", elements[["tools"]], ",\"system\":[", elements[["t0"]], ",",
+                elements[["t1"]], "],\"messages\":[", paste(m, collapse = ","))
+  if (open) body else paste0(body, "]}")
+}
+
 scn_record = function(sc, kind, extra = NULL, guard = TRUE) {
   tg = scn_target(sc)
   req = request_build(sc$s, tg, extra = extra)

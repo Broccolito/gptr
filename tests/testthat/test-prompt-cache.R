@@ -95,24 +95,6 @@ test_that("queued operator messages are appended before the request is assembled
   expect_length(get0("prompt_pending", envir = session_live(s)$memo), 0L)
 })
 
-test_that("the first request of a call with mtcars shows <attached> after <workspace> (IC-38)", {
-  skip_if(!is.null(registry_get("context_block", "attached")), "P09 tests its attached block")
-  p07_project(list())
-  off = gptr_register(gptr_context_block("workspace", function(ctx, budget) "(0 objects)",
-                                         placement = "first", order = 500L))
-  withr::defer(off())
-  s = p07_session()
-  call = list(context = list(list(label = "mtcars", kind = "symbol", name = "mtcars",
-                                  facts = list(class = "data.frame"))), args = list(opts = list()))
-  p07_first_turn(s, "x", call)
-  req = request_build(s, model_resolve("fake/fake-1"))
-  first = req$context$messages[[1]]
-  k = vapply(first$content, function(b) b$kind %||% b$type, "")
-  expect_true(which(k == "attached") > which(k == "workspace"))
-  el = prompt_request_elements(req$context)
-  expect_match(el[["message 1"]], "<attached name=\\\"mtcars\\\">", fixed = TRUE)
-})
-
 test_that("the element view of a later request extends the earlier one", {
   s = p07_session()
   p07_first_turn(s)

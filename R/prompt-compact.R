@@ -9,9 +9,9 @@
 #' @noRd
 compact_threshold = function(window, max_output, r_cap = 4000) {
   cap = setting_get("compact_at")
-  cap = if (is.null(cap) || !length(cap) || is.na(cap[[1]])) Inf else as.numeric(cap[[1]])
-  if (is.null(window) || !length(window) || is.na(window)) return(cap)
-  mo = if (is.null(max_output) || !length(max_output) || is.na(max_output)) 0 else max_output
+  cap = if (!length(cap) || is.na(cap[[1]])) Inf else as.numeric(cap[[1]])
+  if (!length(window) || is.na(window)) return(cap)
+  mo = if (!length(max_output) || is.na(max_output)) 0 else max_output
   min(window - min(max(30000, 0.10 * window), 0.25 * window),
       window - max(16384, mo + 2 * r_cap), cap)
 }
@@ -100,14 +100,8 @@ compact_user_sources = c("prompt", "pipe", "steer", "follow_up", "repl", "parent
 #' call whose result is an error contributes nothing (one without a result counts).
 #' @noRd
 extract_state = function(entries) {
-  is_cmp = vapply(entries, function(e) identical(e$type, "compaction"), NA)
-  start = 1L
-  prev = NULL
-  if (any(is_cmp)) {
-    k = max(which(is_cmp))
-    prev = entries[[k]]$gptr$state
-    start = k + 1L
-  }
+  todo = prompt_since_compaction(entries)
+  prev = if (length(todo) && identical(todo[[1]]$type, "compaction")) todo[[1]]$gptr$state
   st = compact_state_empty()
   relay = "^The user sent this message while you were working: "
   plan_re = "(?s)<proposed_plan>.*</proposed_plan>"
@@ -118,7 +112,6 @@ extract_state = function(entries) {
   f_value = character()
   f_open = logical()
   f_ok = logical()
-  todo = if (start <= length(entries)) entries[start:length(entries)] else list()
   for (e in todo) {
     # steering relays: the session kernel's shape (P06) and the flat Pi shape
     op = prompt_entry_operator(e)
@@ -138,7 +131,7 @@ extract_state = function(entries) {
       for (b in m$content) {
         nm = b$attrs$name
         if (identical(b$type, "context") && identical(b$kind, "skill_content") &&
-            is.character(nm) && length(nm) == 1L) {
+            rlang::is_string(nm)) {
           f_id = c(f_id, NA_character_)
           f_what = c(f_what, "skills")
           f_value = c(f_value, nm)
@@ -150,9 +143,8 @@ extract_state = function(entries) {
       for (b in m$content) {
         if (identical(b$type, "tool_call")) {
           p = b$arguments$path
-          what = if (is.character(b$name) && length(b$name) == 1L) file_kinds[b$name] else NA
-          what = unname(what)
-          if (!is.na(what) && is.character(p) && length(p) == 1L && !is.na(p)) {
+          what = if (rlang::is_string(b$name)) unname(file_kinds[b$name]) else NA
+          if (!is.na(what) && rlang::is_string(p)) {
             if (identical(what, "read") && startsWith(p, "skill:")) {
               what = "skills"
               p = sub("^skill:([^/]+).*$", "\\1", p)
@@ -170,7 +162,7 @@ extract_state = function(entries) {
       }
     } else if (identical(m$role, "tool_result")) {
       id = m$tool_call_id
-      if (is.character(id) && length(id) == 1L) {
+      if (rlang::is_string(id)) {
         hit = which(f_open & !is.na(f_id) & f_id == id)
         f_open[hit] = FALSE
         f_ok[hit] = !isTRUE(m$is_error)
@@ -212,72 +204,47 @@ compact_clip = function(text, budget, prefix = "") {
   paste0(sub("\\s+$", "", substr(text, 1L, lo)), "\n", notice)
 }
 
-#' Estimated tokens of a list line plus its line feed (the sum bounds the joined list's estimate)
+#' A list of `texts` (each after its `prefix`) within a token budget, the oldest dropped first
+#' The newest (and the first, when `first`) stay, clipped by water-filling when they do not fit;
+#' a line counts the ones left out.
 #' @noRd
-compact_line_cost = function(x) prompt_est(x) + 1
-
-#' The user's messages within a token budget: the first and the newest, then the newest that fit
-#' (architecture 12.2). Ends that do not fit are clipped: one within half the budget stays whole
-#' and the other takes the rest, else each gets half.
-#' @noRd
-compact_user_messages = function(msgs, budget = 2000) {
-  n = length(msgs)
+compact_fit = function(texts, prefix, budget, what, first = FALSE) {
+  n = length(texts)
   if (!n) return("(none)")
-  lines = sprintf("%d. %s", seq_len(n), msgs)
+  prefix = rep_len(prefix, n)
+  lines = paste0(prefix, texts)
   if (prompt_est(lines) <= budget) return(paste(lines, collapse = "\n"))
-  omitted = function(k) sprintf("(%d earlier messages omitted)", k)
-  avail = budget - if (n > 2L) compact_line_cost(omitted(n - 2L)) else 0
-  ends = unique(c(1L, n))
-  need = vapply(lines[ends], compact_line_cost, 0, USE.NAMES = FALSE)
-  if (sum(need) > avail) {
-    half = avail / length(ends)
-    share = if (length(ends) == 1L) {
-      avail
-    } else if (need[1] <= half) {
-      c(need[1], avail - need[1])
-    } else if (need[2] <= half) {
-      c(avail - need[2], need[2])
-    } else {
-      c(half, half)
-    }
-    for (j in seq_along(ends)) {
-      prefix = sprintf("%d. ", ends[j])
-      lines[ends[j]] = paste0(prefix, compact_clip(msgs[ends[j]], share[j] - 1, prefix))
-    }
+  # a line and its line feed; the sum bounds the joined list's estimate
+  cost = function(x) prompt_est(x) + 1
+  ends = unique(c(if (first) 1L, n))
+  pins = length(ends)
+  omitted = function(k) sprintf("(%d earlier %s omitted)", k, what)
+  avail = budget - if (n > pins) cost(omitted(n - pins)) else 0
+  need = vapply(lines[ends], cost, 0, USE.NAMES = FALSE)
+  rest = avail
+  for (i in seq_len(pins)) {
+    j = order(need)[i]
+    share = min(need[j], rest / (pins - i + 1L))
+    e = ends[j]
+    if (share < need[j]) lines[e] = paste0(prefix[e], compact_clip(texts[e], share - 1, prefix[e]))
+    rest = rest - share
   }
-  used = sum(vapply(lines[ends], compact_line_cost, 0, USE.NAMES = FALSE))
+  used = sum(vapply(lines[ends], cost, 0))
   keep = n
-  while (keep > 2L && used + compact_line_cost(lines[keep - 1L]) <= avail) {
+  while (keep > pins && used + cost(lines[keep - 1L]) <= avail) {
     keep = keep - 1L
-    used = used + compact_line_cost(lines[keep])
+    used = used + cost(lines[keep])
   }
-  out = lines[unique(c(1L, keep:n))]
-  if (keep > 2L) out = append(out, omitted(keep - 2L), after = 1L)
+  out = lines[unique(c(if (first) 1L, keep:n))]
+  if (keep > pins) out = append(out, omitted(keep - pins), after = as.integer(first))
   paste(out, collapse = "\n")
 }
 
-#' The `note` decisions within a token budget: the newest that fit, the oldest dropped first
-#' The newest is always shown (clipped if needed); a leading line counts the dropped ones.
+#' The user's messages within a token budget: the first and the newest, then the newest that fit
+#' (architecture 12.2)
 #' @noRd
-compact_decisions = function(decisions, budget = 300) {
-  n = length(decisions)
-  if (!n) return("(none)")
-  lines = paste0("- ", decisions)
-  if (prompt_est(lines) <= budget) return(paste(lines, collapse = "\n"))
-  omitted = function(k) sprintf("(%d earlier decisions omitted)", k)
-  avail = budget - if (n > 1L) compact_line_cost(omitted(n - 1L)) else 0
-  if (compact_line_cost(lines[n]) > avail) {
-    lines[n] = paste0("- ", compact_clip(decisions[n], avail - 1, "- "))
-  }
-  used = compact_line_cost(lines[n])
-  keep = n
-  while (keep > 1L && used + compact_line_cost(lines[keep - 1L]) <= avail) {
-    keep = keep - 1L
-    used = used + compact_line_cost(lines[keep])
-  }
-  out = lines[keep:n]
-  if (keep > 1L) out = c(omitted(keep - 1L), out)
-  paste(out, collapse = "\n")
+compact_user_messages = function(msgs, budget = 2000) {
+  compact_fit(msgs, sprintf("%d. ", seq_along(msgs)), budget, "messages", first = TRUE)
 }
 
 #' Class and shape per object name from the session's last workspace snapshot (P09), if any
@@ -317,7 +284,7 @@ compact_checkpoint_body = function(summary, st, shapes = list()) {
          tag("summary", trimws(summary)), "\n\n",
          tag("user_messages", compact_user_messages(st$user)), "\n\n",
          tag("r_objects", compact_objects(st$objects, shapes)), "\n\n",
-         tag("decisions", compact_decisions(st$decisions)), "\n\n",
+         tag("decisions", compact_fit(st$decisions, "- ", 300, "decisions")), "\n\n",
          tag("files", files),
          if (length(st$skills)) {
            paste0("\n\n", tag("active_skills", paste(st$skills, collapse = ", ")))
@@ -333,10 +300,9 @@ compact_checkpoint_body = function(summary, st, shapes = list()) {
 #' @noRd
 compact_target = function(s, reason = NULL) {
   ref = session_data(s)$model
-  router = is.character(ref) && length(ref) == 1L && !is.na(ref) && startsWith(ref, "router:")
-  live = session_live(s)
-  run = if (is.null(live)) NULL else live$run
-  m = if (is.environment(run)) run$model else NULL
+  router = rlang::is_string(ref) && startsWith(ref, "router:")
+  run = session_live(s)$run
+  m = if (is.environment(run)) run$model
   have = is.list(m) && !is.null(m[["api"]]) && (router || identical(run$model_key, ref))
   if (router && (!have || identical(reason, "overflow"))) {
     rec = compact_route(s)
@@ -355,16 +321,7 @@ compact_route = function(s) {
   res = tryCatch(ext_service_get("router.call")(s, "compaction"), error = function(e) NULL)
   ref = if (is.list(res)) res[["model"]] else res
   if (is.list(ref) && !is.null(ref[["api"]])) return(ref)
-  if (!is.character(ref)) return(NULL)
   prompt_model(ref)
-}
-
-#' The session's current run (the live record's `run`), or NULL outside a run
-#' Read once when a compaction starts: P06's `run_settle()` clears it.
-#' @noRd
-compact_live_run = function(s) {
-  live = session_live(s)
-  if (is.null(live)) NULL else live$run
 }
 
 #' Is `run` (the run a compaction started under, or anything else) aborted or settled?
@@ -376,8 +333,7 @@ compact_run_halted = function(run) {
 #' The latest compaction entry on the active path, or NULL
 #' @noRd
 compact_last = function(s) {
-  for (e in rev(prompt_path(s))) if (identical(e$type, "compaction")) return(e)
-  NULL
+  Find(function(e) identical(e$type, "compaction"), prompt_path(s), right = TRUE)
 }
 
 #' The selected compactor spec (setting `compactor`, default "checkpoint")
@@ -385,9 +341,7 @@ compact_last = function(s) {
 compact_compactor = function(s) {
   sid = prompt_sid(s)
   name = setting_get("compactor", session = s, default = "checkpoint")
-  if (!is.character(name) || length(name) != 1L || is.na(name) || !nzchar(name)) {
-    name = "checkpoint"
-  }
+  if (!rlang::is_string(name) || !nzchar(name)) name = "checkpoint"
   sp = tryCatch(registry_get("compactor", name, session = sid), error = function(e) NULL)
   sp %||% registry_get("compactor", "checkpoint", session = sid) %||%
     list(name = "checkpoint", should = compact_checkpoint_should, compact = compact_checkpoint)
@@ -448,33 +402,20 @@ compact_checkpoint_should = function(session, ctx) {
 #' The <compaction_request> text with an optional focus line (G4 section 3.6)
 #' @noRd
 compact_request_text = function(focus = NULL) {
-  ok = length(focus) && !is.na(focus[1]) && nzchar(focus[1])
-  f = if (ok) paste0("\nFocus: ", focus[1]) else ""
+  f = if (rlang::is_string(focus) && nzchar(focus)) paste0("\nFocus: ", focus) else ""
   sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
-}
-
-#' An event of the session with the contract 4.5 envelope (current run, else NULL and "main")
-#' @noRd
-compact_event = function(s, type, ...) {
-  d = session_data(s)
-  live = session_live(s)
-  run = if (is.null(live)) NULL else live$run
-  ev_new(type, session = d$id, run = if (is.null(run)) NULL else run[["id"]],
-         agent = if (is.null(run)) "main" else run[["opts"]][["agent"]] %||% "main",
-         turn = d$turns, ...)
 }
 
 #' Send one checkpoint request in-conversation (a cache read); its reply or NULL
 #' Guarded, then the model's stored view is put back; the run's safety record goes along (IC-74);
 #' the nested pump runs no tool (IC-57) and ends on abort or settle, cancelling the transfer.
 #' @noRd
-compact_ask_once = function(s, target, text, run = compact_live_run(s)) {
-  d = session_data(s)
+compact_ask_once = function(s, target, text, run = session_live(s)$run) {
   live = session_live(s)
   req = request_build(s, target, extra = msg_user(text, source = "prompt"))
-  memo = prompt_memo(s)
+  memo = live$memo
   key = prompt_view_key(target)
-  prev = if (is.null(memo)) NULL else get0(key, envir = memo, inherits = FALSE)
+  prev = if (!is.null(memo)) get0(key, envir = memo, inherits = FALSE)
   restore = function() {
     if (is.null(memo)) return(invisible(NULL))
     if (!is.null(prev)) {
@@ -494,9 +435,9 @@ compact_ask_once = function(s, target, text, run = compact_live_run(s)) {
   signal = new.env(parent = emptyenv())
   signal$aborted = FALSE
   signal$reason = NULL
-  opts = list(signal = signal, state = live$adapter, memo = live$memo, session = d$id,
+  opts = list(signal = signal, state = live$adapter, memo = memo, session = prompt_sid(s),
               run = NULL)
-  safety = if (is.null(run)) NULL else run[["opts"]][["safety"]]
+  safety = run[["opts"]][["safety"]]
   if (!is.null(safety)) opts$safety = safety
   box$refused = FALSE
   id = tryCatch(provider_stream(target, context, opts, emit = function(ev) NULL,
@@ -514,8 +455,7 @@ compact_ask_once = function(s, target, text, run = compact_live_run(s)) {
                 })
   if (isTRUE(box$refused)) return(NULL)
   on.exit({
-    started = is.character(id) && length(id) == 1L && !is.na(id)
-    if (!isTRUE(box$done) && started) {
+    if (!isTRUE(box$done) && rlang::is_string(id)) {
       signal$aborted = TRUE
       reactor_cancel(id)
     }
@@ -528,7 +468,7 @@ compact_ask_once = function(s, target, text, run = compact_live_run(s)) {
 #' The checkpoint reply, `list(msg, usage)`: a tool call, a length stop or no text is asked
 #' again once, an error reply or a halted run is not; `usage` sums every reply received
 #' @noRd
-compact_ask = function(s, target, text, run = compact_live_run(s)) {
+compact_ask = function(s, target, text, run = session_live(s)$run) {
   usages = list()
   for (i in seq_len(2L)) {
     msg = compact_ask_once(s, target, text, run)
@@ -565,16 +505,10 @@ compact_usage_sum = function(usages) {
 #' @noRd
 compact_header = function(path) {
   kinds = c("project_instructions", "environment")
-  pick = function(blocks) {
-    Filter(function(b) identical(b$type, "context") && isTRUE(b$kind %in% kinds), blocks)
-  }
-  for (e in rev(path)) {
-    if (identical(e$type, "compaction")) return(pick(e$gptr$blocks %||% list()))
-  }
-  for (e in path) {
-    if (identical(e$type, "message") && identical(e$message$role, "user")) {
-      return(pick(e$message$content))
-    }
+  for (e in prompt_since_compaction(path)) {
+    blocks = prompt_entry_blocks(e)
+    if (is.null(blocks)) next
+    return(Filter(function(b) identical(b$type, "context") && isTRUE(b$kind %in% kinds), blocks))
   }
   list()
 }
@@ -584,12 +518,7 @@ compact_header = function(path) {
 compact_skills = function(path, budget_total = 10000, budget_each = 5000) {
   seen = list()
   for (e in path) {
-    blocks = NULL
-    if (identical(e$type, "compaction")) blocks = e$gptr$blocks
-    if (identical(e$type, "message") && identical(e$message$role, "user")) {
-      blocks = e$message$content
-    }
-    for (b in blocks) {
+    for (b in prompt_entry_blocks(e)) {
       if (identical(b$type, "context") && identical(b$kind, "skill_content")) {
         seen[[b$attrs$name %||% "skill"]] = b
       }
@@ -654,7 +583,7 @@ compact_checkpoint = function(session, ctx) {
   if (is.null(target)) {
     gptr_abort("Compaction needs a resolvable model.", "internal", detail = "no target")
   }
-  run0 = compact_live_run(session)
+  run0 = session_live(session)$run
   ask = compact_ask(session, target, compact_request_text(inp$focus), run0)
   if (compact_run_halted(run0)) return(NULL)
   reply = ask$msg
@@ -729,42 +658,25 @@ compact_patch_key = function(txt) {
 #' `keep` (the first kept entry) stay visible and are left out.
 #' @noRd
 compact_operator_state = function(path, keep = NA_integer_) {
-  decls = list()
-  lines = character()
+  ops = lapply(path, prompt_entry_operator)
+  tc = prompt_tool_changes(ops)
+  decls = tc$decls
+  lines = tc$lines
   patches = list()
-  at = list(decls = integer(), lines = integer(), patches = integer())
-  for (i in seq_along(path)) {
-    op = prompt_entry_operator(path[[i]])
-    if (is.null(op)) next
-    txt = prompt_operator_text(op)
-    if (identical(op$kind, "tool_change") && length(op$tool_add)) {
-      for (x in op$tool_add) {
-        nm = if (is.list(x)) x[["name"]] else NULL
-        if (is.character(nm) && length(nm) == 1L && !is.na(nm) && nzchar(nm)) {
-          decls[[nm]] = x
-          at$decls[[nm]] = i
-        }
-      }
-    } else if (identical(op$kind, "tool_change")) {
-      for (ln in strsplit(txt, "\n", fixed = TRUE)[[1L]]) {
-        key = prompt_member_key(ln)
-        if (!is.na(key)) {
-          lines[[key]] = ln
-          at$lines[[key]] = i
-        }
-      }
-    } else if (identical(op$kind, "section_patch")) {
-      key = compact_patch_key(txt)
-      if (is.na(key)) key = paste0("\r", length(patches) + 1L)
-      patches[[key]] = NULL
-      patches[[key]] = txt
-      at$patches[[key]] = i
-    }
+  at = integer()
+  for (i in seq_along(ops)) {
+    if (!identical(ops[[i]]$kind, "section_patch")) next
+    txt = prompt_operator_text(ops[[i]])
+    key = compact_patch_key(txt)
+    if (is.na(key)) key = paste0("\r", length(patches) + 1L)
+    patches[[key]] = NULL
+    patches[[key]] = txt
+    at[[key]] = i
   }
   if (!is.na(keep)) {
-    decls = decls[at$decls[names(decls)] < keep]
-    lines = lines[at$lines[names(lines)] < keep]
-    patches = patches[at$patches[names(patches)] < keep]
+    decls = decls[tc$at_decls[names(decls)] < keep]
+    lines = lines[tc$at_lines[names(lines)] < keep]
+    patches = patches[at[names(patches)] < keep]
   }
   out = list()
   if (length(decls)) {
@@ -797,7 +709,7 @@ compact_result_ok = function(res) {
 compact_run = function(s, reason, focus = NULL) {
   reason = check_choice(reason, c("threshold", "cold", "overflow", "manual"), "reason")
   check_string(focus, "focus", null = TRUE, empty = TRUE)
-  run0 = compact_live_run(s)
+  run0 = session_live(s)$run
   d = session_data(s)
   ctx = prompt_ctx(s)
   memo = prompt_memo(s)
@@ -814,7 +726,7 @@ compact_run = function(s, reason, focus = NULL) {
                                      d$id)$total
   }
   dec = ev_dispatch("session_before_compact",
-                    compact_event(s, "session_before_compact", reason = reason, tokens = tokens),
+                    prompt_event(s, "session_before_compact", reason = reason, tokens = tokens),
                     session = s, ctx = ctx)
   if (!is.list(dec)) dec = NULL
   if (isTRUE(dec$cancel)) return(invisible(s))
@@ -873,7 +785,7 @@ compact_run = function(s, reason, focus = NULL) {
   }
   ids = vapply(path, function(e) as.character(e$id %||% NA_character_), "")
   first = res$first_kept_entry_id
-  keep = if (is.character(first) && length(first) == 1L) match(first, ids) else NA_integer_
+  keep = if (rlang::is_string(first)) match(first, ids) else NA_integer_
   ops = compact_operator_state(path, keep)
   op_tokens = function(m) {
     prompt_est(msg_text(m), "prose", d$id) +
@@ -902,8 +814,8 @@ compact_run = function(s, reason, focus = NULL) {
                          gptr = list(blocks = res$blocks, state = state, n = n)))
   for (m in ops) session_append(s, prompt_operator_entry(m))
   ev_dispatch("session_compact",
-              compact_event(s, "session_compact", strategy = strategy, tokens_before = tokens,
-                            summary_tokens = prompt_est(summary, "prose", d$id)),
+              prompt_event(s, "session_compact", strategy = strategy, tokens_before = tokens,
+                           summary_tokens = prompt_est(summary, "prose", d$id)),
               session = s, ctx = ctx)
   invisible(s)
 }

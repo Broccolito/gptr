@@ -9866,3 +9866,12 @@ Validation: `progress/ci-hosted.md`, Task CI-6.
   test-utils-encoding.R: the locale_utf8 test and the emulated-R-4.2.3 pass removed;
   test-utils-text.R: the spill_write id-append expectation dropped; test-session-object.R,
   test-provider-fake.R: msg_validate oracles retargeted to block_ok. Evidence: progress/simplicity.md P01-D.
+
+## D-139 - P07 drops the expired one-line `attached` stand-in (2026-10-05)
+- Rule: attached objects render only through P09's `attached` context block (`builtin:workspace`);
+  P07's stand-in for "until P09 registers the attached block" (05 P07 scope and acceptance row 6) is
+  gone, since P09 has landed. Row 6 stays proven by test-env-snapshot.R (IC-38).
+- Contract-visible: none (05's transitional clause expired). Behaviour differs only when
+  `builtin:workspace` is replaced or disabled without an `attached` block: no attached rendering.
+- Tests: test-prompt-cache.R (1) and test-prompt-context.R (2) always-skipped stub tests removed.
+  Evidence: progress/simplicity.md P07-S.

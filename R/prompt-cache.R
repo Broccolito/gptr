@@ -3,17 +3,6 @@
 # once-serialised elements (tools, T0, T1, one per message), so each request extends the
 # previous one to the same model (G4 4.1 and 5.4; architecture 6.11).
 
-#' Is `x` one message record (rather than a list of messages)?
-#' @noRd
-prompt_is_message = function(x) is.list(x) && !is.null(x$role)
-
-#' Adapter capabilities of the target model's own `api` (IC-74), or an empty list
-#' @noRd
-prompt_target_caps = function(target) {
-  ad = tryCatch(adapter_get(target$api), error = function(e) NULL)
-  ad$capabilities %||% list()
-}
-
 #' The session's frozen prompt for a request, frozen now when the session has none
 #' A pending IC-52 refreeze composes afresh and is consumed, as P06's `run_freeze()` does.
 #' @noRd
@@ -26,39 +15,6 @@ prompt_request_frozen = function(s) {
   frozen
 }
 
-#' Image ids elided on the active path (the `gptr.image_elision` entries of P06, IC-67)
-#' @noRd
-prompt_elided_images = function(s) {
-  ids = character()
-  for (e in prompt_path(s)) {
-    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.image_elision")) {
-      ids = c(ids, as.character(unlist(e$data$images)))
-    }
-  }
-  unique(ids)
-}
-
-#' The projection with the images elided on the path replaced by their omission text (IC-67)
-#' Same id (8 hex of the data's sha256) and text as P06's `images_elide()`, so the request is
-#' hashed and estimated as P06 sends it.
-#' @noRd
-prompt_images_elided = function(messages, ids) {
-  if (!length(ids)) return(messages)
-  for (i in seq_along(messages)) {
-    content = messages[[i]][["content"]]
-    for (j in seq_along(content)) {
-      b = content[[j]]
-      if (!is.list(b) || !identical(b[["type"]], "image")) next
-      data = b[["data"]]
-      if (!is.character(data) || length(data) != 1L || is.na(data)) next
-      id = substr(hash_sha256(data), 1L, 8L)
-      if (!(id %in% ids)) next
-      messages[[i]]$content[[j]] = block_text(paste0("[image omitted: gptr$plot(\"", id, "\")]"))
-    }
-  }
-  messages
-}
-
 #' The adapter context for `target` (contract section 8.1); writes nothing but a needed freeze
 #' `params$returns` is the active run's `returns =` schema; `params$thinking` the target's level,
 #' else the session's clamped to the target's levels (IC-74, as P06's `run_target()`).
@@ -66,14 +22,16 @@ prompt_images_elided = function(messages, ids) {
 prompt_request_context = function(s, target, extra = NULL) {
   d = session_data(s)
   frozen = prompt_request_frozen(s)
-  msgs = prompt_images_elided(project_messages(d$entries, d$leaf, target),
-                              prompt_elided_images(s))
-  if (!is.null(extra)) msgs = c(msgs, if (prompt_is_message(extra)) list(extra) else extra)
+  msgs = project_messages(d$entries, d$leaf, target)
+  # images elided on the path go as P06 sends them, as their omission text (IC-67)
+  img = images_scan(msgs)
+  for (r in which(img$id %in% elided_image_ids(d))) {
+    msgs[[img$msg[r]]]$content[[img$block[r]]] = block_text(image_omitted_text(img$id[r]))
+  }
+  if (is.list(extra) && !is.null(extra$role)) extra = list(extra)
+  msgs = c(msgs, extra)
   tools = lapply(frozen$tool_names, function(n) registry_get("tool", n, session = d$id))
   mo = suppressWarnings(as.numeric(target[["max_output"]] %||% NA_real_))
-  live = session_live(s)
-  run = if (is.null(live)) NULL else live$run
-  returns = if (is.null(run)) NULL else run$opts$returns
   # exact match: `$` would read `thinking_levels` for a record without a `thinking` field
   thinking = target[["thinking"]]
   if (is.null(thinking) && !is.null(d$thinking)) {
@@ -86,7 +44,7 @@ prompt_request_context = function(s, target, extra = NULL) {
        cache_plan = NULL,
        params = list(max_tokens = if (length(mo) == 1L && is.finite(mo)) as.integer(mo) else 8192L,
                      thinking = thinking, effort = NULL, tool_choice = "auto",
-                     returns = returns, temperature = NULL),
+                     returns = session_live(s)$run$opts$returns, temperature = NULL),
        session_id = d$id, request_id = id_new("q", 12L))
 }
 
@@ -238,19 +196,18 @@ request_build = function(s, target, extra = NULL) {
   prompt_request_frozen(s)
   prompt_pending_flush(s)
   context = prompt_request_context(s, target, extra)
-  anchor = FALSE
-  if (length(context$messages)) {
-    for (b in context$messages[[1]]$content) if (isTRUE(b$anchor)) anchor = TRUE
-  }
+  first = if (length(context$messages)) context$messages[[1]]$content
   parts = list(t0 = context$system$t0, t1 = context$system$t1,
-               tools_json = as.character(context$tools_json), project = anchor,
+               tools_json = as.character(context$tools_json),
+               project = any(vapply(first, function(b) isTRUE(b$anchor), NA)),
                n = length(context$messages))
   policy = registry_get("cache_policy", target$api %||% "default", session = d$id) %||%
     registry_get("cache_policy", "default", session = d$id)
   context$cache_plan = if (is.null(policy)) {
     list(anchors = character(), tail_ttl = "5m", key = prompt_cache_key())
   } else {
-    policy$plan(parts, prompt_target_caps(target), s)
+    caps = tryCatch(adapter_get(target$api), error = function(e) NULL)$capabilities
+    policy$plan(parts, caps %||% list(), s)
   }
   el = prompt_request_elements(context)
   est = prompt_request_estimate(context, target$api, d$id)
@@ -260,13 +217,6 @@ request_build = function(s, target, extra = NULL) {
 
 on_load(ext_service_set("request.build", request_build, provided_by = "P07",
                         builtin = "prompt"))
-
-#' Register the gap cache policy (the `default` cache_policy)
-#' @noRd
-prompt_register_cache = function(gptr) {
-  gptr$register(gptr_spec("cache_policy", "default", plan = prompt_cache_plan_gap))
-  invisible(NULL)
-}
 
 # ---- the prefix guard (G4 section 4.3.5) --------------------------------------------------------
 
@@ -325,13 +275,9 @@ prefix_guard = function(s, target, view) {
   }
   provider = target[["provider"]]
   model = target[["id"]]
-  d = session_data(s)
-  entry = d$leaf %||% NA_character_
-  run = session_live(s)$run
-  ev = ev_new("cache_break", session = d$id, run = if (is.null(run)) NULL else run$id,
-              agent = if (is.null(run)) "main" else run$opts$agent %||% "main",
-              turn = d$turns, provider = provider, model = model, first_diff = first_diff,
-              entry = entry, culprit = culprit)
+  entry = session_data(s)$leaf %||% NA_character_
+  ev = prompt_event(s, "cache_break", provider = provider, model = model,
+                    first_diff = first_diff, entry = entry, culprit = culprit)
   ev_dispatch("cache_break", ev, session = s, ctx = prompt_ctx(s))
   session_append(s, list(type = "custom", custom_type = "gptr.cache_break",
                          data = list(provider = provider, model = model, firstDiff = first_diff,
@@ -344,26 +290,3 @@ prefix_guard = function(s, target, view) {
 }
 
 on_load(ext_service_set("prefix.guard", prefix_guard, provided_by = "P07", builtin = "prompt"))
-
-#' Register the rewind reset of the prefix guard (a `session_tree` hook)
-#' @noRd
-prompt_register_guard = function(gptr) {
-  gptr$on("session_tree", function(event, ctx) {
-    if (!is.null(ctx$session)) prefix_reset(ctx$session)
-    NULL
-  })
-  invisible(NULL)
-}
-
-# ---- the canonical request body -----------------------------------------------------------------
-
-#' The canonical request body: the elements joined in the Anthropic key order
-#' Open (`open = TRUE`, no closing `]}`) it is a byte prefix of the next request's body (G4 5.4);
-#' the prefix tests and the token benchmark compare it.
-#' @noRd
-prompt_request_body = function(elements, open = FALSE) {
-  m = elements[-(1:3)]
-  body = paste0("{\"tools\":", elements[["tools"]], ",\"system\":[", elements[["t0"]], ",",
-                elements[["t1"]], "],\"messages\":[", paste(m, collapse = ","))
-  if (open) body else paste0(body, "]}")
-}

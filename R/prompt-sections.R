@@ -38,8 +38,7 @@ on_load(ext_service_set("ctx.input", prompt_input_get, provided_by = "P07", buil
 #' @noRd
 prompt_ctx = function(s) {
   if (is.null(s)) return(ctx_new(NULL))
-  live = session_live(s)
-  if (!is.null(live) && !is.null(live$ctx)) live$ctx else ctx_new(s)
+  session_live(s)$ctx %||% ctx_new(s)
 }
 
 #' The session id, or NULL
@@ -49,42 +48,43 @@ prompt_sid = function(s) if (is.null(s)) NULL else session_data(s)$id
 #' The per-session in-memory environment (the live record's memo), or NULL for a detached copy
 #' P07's live-only state uses keys starting with "prompt_"; adapters use the others.
 #' @noRd
-prompt_memo = function(s) {
-  if (is.null(s)) return(NULL)
-  live = session_live(s)
-  if (is.null(live)) NULL else live$memo
-}
+prompt_memo = function(s) if (is.null(s)) NULL else session_live(s)$memo
 
-#' The active path of a session: its entries from the root to the leaf
-#' A missing parent (a torn line skipped at resume) continues with the previous entry in file
-#' order, as P05's project_messages() does.
+#' The active path of a session: its entries from the root to the leaf (P05's `entry_path()`)
 #' @noRd
 prompt_path = function(s) {
   d = session_data(s)
-  entries = d$entries
-  if (!length(entries) || is.null(d$leaf)) return(list())
-  ids = vapply(entries, function(e) as.character(e$id %||% NA_character_), "")
-  pos = match(d$leaf, ids)
-  seen = logical(length(entries))
-  chain = integer()
-  while (length(pos) == 1L && !is.na(pos) && !seen[pos]) {
-    seen[pos] = TRUE
-    chain = c(chain, pos)
-    parent = entries[[pos]]$parent_id
-    if (is.null(parent) || !length(parent) || is.na(parent[1])) break
-    nxt = match(parent[1], ids)
-    pos = if (is.na(nxt)) pos - 1L else nxt
-    if (pos < 1L) break
-  }
-  entries[rev(chain)]
+  entry_path(d$entries, d$leaf)
+}
+
+#' The entries of `path` from its latest compaction on (all of it without one)
+#' @noRd
+prompt_since_compaction = function(path) {
+  k = Position(function(e) identical(e$type, "compaction"), path, right = TRUE, nomatch = 1L)
+  path[seq_along(path) >= k]
+}
+
+#' The blocks of an entry: a compaction's, a user message's content, else NULL
+#' @noRd
+prompt_entry_blocks = function(e) {
+  if (identical(e$type, "compaction")) return(e$gptr$blocks %||% list())
+  if (identical(e$type, "message") && identical(e$message$role, "user")) e$message$content
+}
+
+#' An event of the session with the contract 4.5 envelope (current run, else NULL and "main")
+#' @noRd
+prompt_event = function(s, type, ...) {
+  d = session_data(s)
+  run = session_live(s)$run
+  ev_new(type, session = d$id, run = run[["id"]],
+         agent = run[["opts"]][["agent"]] %||% "main", turn = d$turns, ...)
 }
 
 #' Resolve a model reference to a record; NULL for routers and unknown models
 #' @noRd
 prompt_model = function(ref) {
-  if (is.null(ref) || !length(ref) || is.na(ref[1]) || !nzchar(ref[1])) return(NULL)
-  if (startsWith(ref[1], "router:")) return(NULL)
-  tryCatch(model_resolve(ref[1], strict = FALSE), error = function(e) NULL)
+  if (!rlang::is_string(ref) || !nzchar(ref) || startsWith(ref, "router:")) return(NULL)
+  tryCatch(model_resolve(ref, strict = FALSE), error = function(e) NULL)
 }
 
 #' Is the project trusted? (the trust.get service of P08; untrusted before it exists, IC-33)
@@ -114,28 +114,15 @@ prompt_estimator = function(session_id = NULL) {
 #' Estimated tokens of a text (lines joined with LF)
 #' @noRd
 prompt_est = function(x, class = "prose", session_id = NULL) {
-  if (is.null(x) || !length(x)) return(0)
+  if (!length(x)) return(0)
   x = paste(x, collapse = "\n")
   if (!nzchar(x)) return(0)
   as.numeric(prompt_estimator(session_id)(x, class))
 }
 
-#' Drop a leading UTF-8 byte-order mark (compared as bytes, so it works in any locale)
+#' Read a text file as one UTF-8 string (`read_utf8()`: LF, no BOM) without trailing newlines
 #' @noRd
-prompt_strip_bom = function(x) {
-  if (length(x) != 1L || is.na(x) || nchar(x, type = "bytes") < 3L) return(x)
-  b = charToRaw(x)
-  if (!identical(b[1:3], as.raw(c(0xef, 0xbb, 0xbf)))) return(x)
-  as_utf8(rawToChar(b[-(1:3)]))
-}
-
-#' Read a text file as one UTF-8 string with LF line ends, no BOM and no trailing newlines
-#' @noRd
-prompt_read_file = function(path) {
-  x = prompt_strip_bom(as_utf8(read_utf8(path)$text))
-  x = gsub("\r\n", "\n", x, fixed = TRUE)
-  sub("\n+$", "", x)
-}
+prompt_read_file = function(path) sub("\n+$", "", read_utf8(path)$text)
 
 #' Cut `text` at a line boundary to fit `budget` estimated tokens, `notice` appended
 #' @noRd
@@ -266,10 +253,10 @@ prompt_tool_order = function(names) {
 #' The user's `tools.presets` entry whose model glob matches `model`, or NULL
 #' @noRd
 preset_user_mapping = function(model, session = NULL) {
-  if (is.null(model) || !is.character(model) || !nzchar(model[1])) return(NULL)
+  if (!rlang::is_string(model) || !nzchar(model)) return(NULL)
   map = setting_get("tools", session = session)$presets
   for (g in names(map)) {
-    if (grepl(utils::glob2rx(g), model[1])) return(as.character(map[[g]])[1])
+    if (grepl(utils::glob2rx(g), model)) return(as.character(map[[g]])[1])
   }
   NULL
 }
@@ -327,13 +314,6 @@ preset_tools = function(preset, human, model = NULL, modifiers = character(), mo
 #' @noRd
 presets_shipped = c("google/gemini-3*" = "extended", "anthropic/claude-haiku-4-5*" = "extended")
 
-#' Provider prior of the token multiplier (architecture 12.5: OpenAI 1.00, Claude 1.35,
-#' Gemini 1.10; other providers 1.00)
-#' @noRd
-prompt_provider_prior = function(m) {
-  switch(m$provider %||% "", anthropic = 1.35, google = 1.10, 1.00)
-}
-
 #' Does the shipped `extended` default apply? (IC-73)
 #' Only for `presets_shipped` models whose `cache_min` exceeds the projected standard prefix, in a
 #' session expected to pass break-even (interactive, or a fan-out child).
@@ -342,10 +322,10 @@ preset_shipped_applies = function(model, mrec, static, human, kind) {
   if (is.null(model) || is.null(mrec)) return(FALSE)
   hit = any(vapply(names(presets_shipped), function(g) grepl(utils::glob2rx(g), model), NA))
   if (!hit) return(FALSE)
-  cache_min = as.numeric(mrec$cache_min %||% NA_real_)
-  if (!length(cache_min) || is.na(cache_min)) return(FALSE)
-  # an unknown (NA) or missing estimate is not zero (IC-74): the default does not apply
-  isTRUE(cache_min > static * prompt_provider_prior(mrec)) &&
+  # the provider prior of the token multiplier (architecture 12.5)
+  prior = switch(mrec$provider %||% "", anthropic = 1.35, google = 1.10, 1.00)
+  # an unknown (NA) or missing cache_min or estimate is not zero (IC-74): the default does not apply
+  isTRUE(as.numeric(mrec$cache_min %||% NA_real_) > static * prior) &&
     (isTRUE(human) || isTRUE(kind %in% c("fanout", "child")))
 }
 
@@ -479,7 +459,6 @@ prompt_section_text = function(sp, ctx, input) {
       NULL
     })
   }
-  if (is.null(txt) || !length(txt)) return(NULL)
   txt = paste(as_utf8(as.character(txt)), collapse = "\n")
   if (nzchar(txt)) txt else NULL
 }
@@ -509,9 +488,9 @@ prompt_section_wrap = function(name, txt) {
 #' @noRd
 prompt_s1_alias = function(session = NULL) {
   v = setting_get("system1", session = session)
-  unset = is.null(v) || !length(v) || !nzchar(v[1])
-  if (unset || startsWith(v[1], "typesafe/") || startsWith(v[1], "emulate:")) return("jev")
-  if (grepl("[/:]", v[1])) paste0("\"", v[1], "\"") else v[1]
+  unset = !rlang::is_string(v) || !nzchar(v)
+  if (unset || startsWith(v, "typesafe/") || startsWith(v, "emulate:")) return("jev")
+  if (grepl("[/:]", v)) paste0("\"", v, "\"") else v
 }
 
 #' Render every included section in `order`: data.frame `name`, `tier`, `order`, `text`
@@ -531,7 +510,7 @@ prompt_sections_render = function(ctx, input, session_id, overrides = list()) {
   }
   override_text = function(nm) {
     txt = overrides[[nm]]
-    if (is.null(txt) || !nzchar(trimws(paste(txt, collapse = "\n")))) NULL else txt
+    if (nzchar(trimws(paste(txt, collapse = "\n")))) txt
   }
   for (sp in specs[!is_frag]) {
     nm = sp$name
@@ -958,36 +937,45 @@ prompt_member_key = function(line) {
   if (nzchar(m[3L])) paste0(m[2L], "/", m[3L]) else m[2L]
 }
 
+#' The newest declaration per tool name and member line per key of the `tool_change` operator
+#' messages in `ops`, with each one's position in `ops` (`at_decls`, `at_lines`)
+#' @noRd
+prompt_tool_changes = function(ops) {
+  tc = list(decls = list(), lines = character(), at_decls = integer(), at_lines = integer())
+  for (i in seq_along(ops)) {
+    op = ops[[i]]
+    if (!identical(op$kind, "tool_change")) next
+    for (x in op$tool_add) {
+      nm = if (is.list(x)) x[["name"]]
+      if (rlang::is_string(nm) && nzchar(nm)) {
+        tc$decls[[nm]] = x
+        tc$at_decls[[nm]] = i
+      }
+    }
+    if (length(op$tool_add)) next
+    for (ln in strsplit(prompt_operator_text(op), "\n", fixed = TRUE)[[1L]]) {
+      key = prompt_member_key(ln)
+      if (!is.na(key)) {
+        tc$lines[[key]] = ln
+        tc$at_lines[[key]] = i
+      }
+    }
+  }
+  tc
+}
+
 #' What the model already has: `list(decls, lines)`, declaration JSON by tool name and the
 #' newest member line by key, from the frozen array and the path's and queue's `tool_change`
 #' messages, whose declarations count only when `added` (P12 adapters otherwise drop them)
 #' @noRd
 prompt_tools_known = function(s, frozen, added = TRUE) {
-  items = list()
-  if (!is.null(frozen)) {
-    items = tryCatch(json_decode(frozen$tools_json %||% "[]"), error = function(e) list())
-  }
   memo = prompt_memo(s)
-  queued = if (is.null(memo)) list() else get0("prompt_pending", envir = memo, inherits = FALSE)
-  lines = character()
-  for (op in c(lapply(prompt_path(s), prompt_entry_operator), queued %||% list())) {
-    if (!identical(op$kind, "tool_change")) next
-    if (length(op$tool_add)) {
-      if (isTRUE(added)) items = c(items, op$tool_add)
-      next
-    }
-    for (ln in strsplit(prompt_operator_text(op), "\n", fixed = TRUE)[[1L]]) {
-      key = prompt_member_key(ln)
-      if (!is.na(key)) lines[[key]] = ln
-    }
-  }
-  decls = character()
-  for (x in items) {
-    ok = is.list(x) && is.character(x$name) && length(x$name) == 1L && !is.na(x$name) &&
-      nzchar(x$name)
-    if (ok) decls[[x$name]] = prompt_decl_json(x)
-  }
-  list(decls = decls, lines = lines)
+  queued = if (!is.null(memo)) get0("prompt_pending", envir = memo, inherits = FALSE)
+  tc = prompt_tool_changes(c(lapply(prompt_path(s), prompt_entry_operator), queued))
+  arr = tryCatch(json_decode(frozen$tools_json %||% "[]"), error = function(e) list())
+  decls = prompt_tool_changes(list(list(kind = "tool_change", tool_add = arr)))$decls
+  if (isTRUE(added)) decls[names(tc$decls)] = tc$decls
+  list(decls = vapply(decls, prompt_decl_json, ""), lines = tc$lines)
 }
 
 #' Register a tool spec at rank 0 so that it is the record the session resolves
@@ -1238,8 +1226,12 @@ print.gptr_prompt_view = function(x, ...) {
 builtin_prompt = function(gptr) {
   prompt_register_presets(gptr)
   prompt_register_sections(gptr)
-  prompt_register_cache(gptr)
-  prompt_register_guard(gptr)
+  gptr$register(gptr_spec("cache_policy", "default", plan = prompt_cache_plan_gap))
+  # a rewind resets the prefix guard
+  gptr$on("session_tree", function(event, ctx) {
+    if (!is.null(ctx$session)) prefix_reset(ctx$session)
+    NULL
+  })
   invisible(NULL)
 }
 
