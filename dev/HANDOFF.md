@@ -70,6 +70,14 @@ Maintained by the coordinator; remove an item only when its owning task lands it
   `fs_path()` for its `file.exists()`/`readBin()`), `R/gptr-gateway.R:774` (P08). Scheduled as
   FIX-5 once the P15 and P08 lanes release those files. Also open: INFRA-23 CPU bound on hosted
   Windows (P04 decision, CI-3/CI-5).
+- **`peter()` rename (D-135, maintainer-confirmed):** one coordinated work package once the active
+  lanes are quiet: `gptr()` -> `peter()`, `gptr$` -> `peter$` (same gateway object), `gptr::gptr` ->
+  `gptr::peter`; keep the package name, `gptr_*` exports, `gptr.*` options, `.gptr/`, `GPTR_*`,
+  condition classes. Update R/, tests, fixtures, prompts, token baselines (re-record), man/,
+  DESCRIPTION, README, inst/, specs and plans (not dev/research). `?peter` must carry the naming
+  rationale (Peter Wason; Peter Naur), as the README does. Inventory: simplicity-review workflow.
+- **Simplicity first (conventions section 11):** a retrospective simplicity review is producing
+  work packages; schedule them with the rename before resuming P14/P16/P18+.
 - **P11 classifier hardening (coordinator convergence decision, 2026-10-05):** after 15 review
   rounds of P11 Task 2 (command/SQL/Python classifiers, far beyond the plan's scope), Task 2 is
   committed after a final round fixing the round-15 findings; later classifier gaps found in
