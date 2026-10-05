@@ -837,3 +837,247 @@ test_that("INFRA-18: choices give a classed character with a plain ==; a factor 
                class = "gptr_error_s1_labels")
   expect_identical(nrow(srv$log()), n)
 })
+
+# ---- Task 11: the jev-router example (IC-69) ----------------------------------------------------
+
+# The installed (or load_all()-shimmed) example; a missing file is an error, never source("")
+jev_router_path = function() {
+  path = system.file("gptr", "examples", "jev-router.R", package = "gptr")
+  if (!nzchar(path)) stop("inst/gptr/examples/jev-router.R is missing")
+  path
+}
+
+# The example loaded the documented way: sys.source() into a fresh environment
+jev_router_env = function() {
+  env = new.env(parent = globalenv())
+  sys.source(jev_router_path(), envir = env)
+  env
+}
+
+# The edit and write tools are P10's, which P13 does not depend on. The router only needs tool
+# results named "edit" or "write", so the tests register stub tools through the public extension
+# API (gptr_register() of gptr_tool() specs, removed when the test ends); "lookup" stands for any
+# tool that is not an edit.
+local_stub_tool = function(name, fails = FALSE, .env = parent.frame()) {
+  force(name)
+  force(fails)
+  off = gptr_register(gptr_tool(name, paste("Stub", name, "tool for the router tests."),
+                                parameters = list(type = "object", required = I("path"),
+                                                  properties = list(path = list(type = "string"))),
+                                execute = function(input, ctx) {
+                                  if (fails) stop(name, " failed")
+                                  gptr_tool_result(paste(name, "ok"))
+                                }))
+  withr::defer(off(), envir = .env)
+  invisible(name)
+}
+
+# The model ids of the assistant messages, the router phases and the model-change references
+dispatched = function(s) {
+  msgs = Filter(function(m) identical(m$role, "assistant"), s$messages)
+  vapply(msgs, function(m) m$model, "")
+}
+router_phases = function(s) {
+  es = Filter(function(e) identical(e$type, "custom") && identical(e$custom_type, "gptr.router"),
+              session_data(s)$entries)
+  vapply(es, function(e) e$data$state$phase %||% NA_character_, "")
+}
+model_changes = function(s) {
+  es = Filter(function(e) identical(e$type, "model_change"), session_data(s)$entries)
+  vapply(es, function(e) e$gptr$ref %||% paste0(e$provider, "/", e$model_id), "")
+}
+
+# Three chat fakes and a fake System 1 that rates the request as complex with probability
+# `complex`; returns the chat fakes
+local_router_models = function(strong, standard, implement, complex, .env = parent.frame()) {
+  local_gptr_options(unsafe_no_permissions = TRUE, system1 = "judge/judge-s1", .env = .env)
+  out = list(
+    strong = local_fake_provider(strong, name = "fstrong", .env = .env),
+    standard = local_fake_provider(standard, name = "fstd", .env = .env),
+    implement = local_fake_provider(implement, name = "fimpl", .env = .env)
+  )
+  local_fake_provider(function(state, question) c(standard = 1 - complex, complex = complex),
+                      name = "judge", type = "classifier", .env = .env)
+  out
+}
+
+router_spec = function() {
+  jev_router_env()$jev_router_spec(strong = "fstrong/fstrong-1", standard = "fstd/fstd-1",
+                                   implement = "fimpl/fimpl-1")
+}
+
+test_that("the example ends with a factory that registers the jev-auto router", {
+  path = jev_router_path()
+  expect_true(file.exists(path))
+  factory = source(path, local = new.env())$value
+  expect_true(is.function(factory))
+  expect_identical(names(formals(factory)), "gptr")
+  got = new.env()
+  factory(list(register = function(spec) {
+    got$spec = spec
+    invisible(function() invisible(TRUE))
+  }))
+  expect_s3_class(got$spec, "gptr_router")
+  expect_identical(got$spec$name, "jev-auto")
+  tokens = utils::getParseData(parse(path, keep.source = TRUE))$token
+  expect_false("LEFT_ASSIGN" %in% tokens)
+})
+
+test_that("the example loads with extensions = for that session only (IC-69)", {
+  s1_fresh()
+  local_gptr_options(unsafe_no_permissions = TRUE)
+  local_fake_provider(list("Hello."), name = "fhost")
+  s = gptr("Say hello.", model = "fhost/fhost-1", extensions = jev_router_path(),
+           envir = new.env())
+  expect_s3_class(registry_get("router", "jev-auto", session = session_data(s)$id), "gptr_router")
+  expect_null(registry_get("router", "jev-auto"))
+})
+
+test_that("a complex request plans on the strong model and switches once after the first edit", {
+  s1_fresh()
+  m = local_router_models(
+    strong = list(fake_tool("lookup", path = "a.R"), fake_tool("edit", path = "a.R")),
+    standard = list("standard reply"), implement = list("Done: the cache layer is refactored."),
+    complex = 0.8
+  )
+  local_stub_tool("lookup")
+  local_stub_tool("edit")
+  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  expect_identical(dispatched(s), c("fstrong-1", "fstrong-1", "fimpl-1"))
+  expect_identical(router_phases(s), c("planning", "implementation"))
+  # one routed session: the planning model chosen once, then exactly one model change, after the
+  # first successful edit (P06 records the first routed model too, as a model_change entry)
+  expect_identical(model_changes(s), c("fstrong/fstrong-1", "fimpl/fimpl-1"))
+  expect_identical(s$model, "router:jev-auto")
+  expect_identical(s$text, "Done: the cache layer is refactored.")
+  expect_length(fake_requests(m$strong), 2L)
+  expect_length(fake_requests(m$implement), 1L)
+  expect_length(fake_requests(m$standard), 0L)
+})
+
+test_that("an ordinary request plans on the standard model; a failed edit does not switch", {
+  s1_fresh()
+  m = local_router_models(
+    strong = list("strong reply"),
+    standard = list(fake_tool("edit", path = "a.R"), fake_tool("write", path = "a.R")),
+    implement = list("done"), complex = 0.2
+  )
+  local_stub_tool("edit", fails = TRUE)
+  local_stub_tool("write")
+  s = gptr("Add a verbose flag.", model = router_spec(), envir = new.env())
+  expect_identical(dispatched(s), c("fstd-1", "fstd-1", "fimpl-1"))
+  expect_identical(router_phases(s), c("planning", "implementation"))
+  expect_identical(model_changes(s), c("fstd/fstd-1", "fimpl/fimpl-1"))
+  expect_length(fake_requests(m$strong), 0L)
+})
+
+test_that("without a System 1 model the router plans on the standard model", {
+  s1_fresh()
+  m = local_router_models(strong = list("strong reply"), standard = list("standard reply"),
+                          implement = list("done"), complex = 0.9)
+  local_gptr_options(system1 = NULL)
+  local_mocked_bindings(model_key_present = function(id, vars) FALSE)
+  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  expect_identical(dispatched(s), "fstd-1")
+  expect_length(fake_requests(m$strong), 0L)
+})
+
+test_that("the route keeps its phase across a compaction and plans without System 1", {
+  spec = router_spec()
+  asked = new.env()
+  asked$n = 0L
+  ctx = list(decide = function(question, x, ...) {
+    asked$n = asked$n + 1L
+    stop("no System 1")
+  })
+  req = function(reason = "turn", state = NULL, previous = NULL) {
+    list(prompt = "Refactor the cache layer.", messages = list(), state = state,
+         previous = previous, reason = reason, session = NULL)
+  }
+  first = spec$route(req(), ctx)
+  expect_identical(first, list(model = "fstd/fstd-1",
+                               state = list(phase = "planning", model = "fstd/fstd-1")))
+  expect_identical(asked$n, 1L)
+  # P06 records a compaction's switch with the state the router returns, and the next turn reads
+  # the state of that last gptr.router entry: the phase must come back unchanged
+  comp = spec$route(req("compaction", state = first$state, previous = "fstd/fstd-1"), ctx)
+  expect_identical(comp, list(model = "fimpl/fimpl-1", state = first$state))
+  # a session already on a planning model keeps it without asking System 1 again
+  again = spec$route(req(previous = "fstrong/fstrong-1"), ctx)
+  expect_identical(again$model, "fstrong/fstrong-1")
+  expect_identical(asked$n, 1L)
+})
+
+# A bootstrap service replaced for one test (the compaction services of the next test)
+local_router_service = function(name, fun, .env = parent.frame()) {
+  old = the$services[[name]]
+  withr::defer({
+    the$services[[name]] = old
+  }, envir = .env)
+  ext_service_set(name, fun, provided_by = "test")
+  invisible(fun)
+}
+
+test_that("a compaction right after the first edit moves the router to implementation", {
+  s1_fresh()
+  m = local_router_models(
+    strong = list(fake_tool("edit", path = "a.R"), "strong reply"),
+    standard = list("standard reply"), implement = list("impl 1", "impl 2"), complex = 0.8
+  )
+  local_stub_tool("edit")
+  # compact at the second request boundary, the one right after the edit; compact.run keeps the
+  # messages, so the next turn still sees the edit
+  n = new.env()
+  n$k = 0L
+  local_router_service("compact.should", function(s, tokens, idle) {
+    n$k = n$k + 1L
+    n$k == 2L
+  })
+  local_router_service("compact.run", function(s, reason, focus = NULL) invisible(s))
+  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = gptr(s, "Now add the tests.")
+  expect_identical(n$k, 3L)
+  expect_identical(dispatched(s), c("fstrong-1", "fimpl-1", "fimpl-1"))
+  # the compaction's switch records the implementation phase, because P06 records the state of a
+  # turn only when the turn changes the model
+  expect_identical(router_phases(s), c("planning", "implementation"))
+  routed = Filter(function(e) identical(e$custom_type, "gptr.router"), session_data(s)$entries)
+  expect_identical(vapply(routed, function(e) e$data$reason, ""), c("turn", "compaction"))
+  expect_identical(model_changes(s), c("fstrong/fstrong-1", "fimpl/fimpl-1"))
+  expect_length(fake_requests(m$strong), 1L)
+  expect_length(fake_requests(m$implement), 2L)
+  # the route alone: a compaction request whose messages hold a successful edit after the last
+  # user message, and one whose edit failed
+  spec = router_spec()
+  planning = list(phase = "planning", model = "fstrong/fstrong-1")
+  comp = function(is_error) {
+    list(prompt = "Refactor the cache layer.", state = planning, previous = "fstrong/fstrong-1",
+         reason = "compaction", session = NULL,
+         messages = list(list(role = "user", content = "Refactor the cache layer."),
+                         list(role = "assistant", content = list()),
+                         list(role = "tool_result", tool_name = "edit", is_error = is_error)))
+  }
+  expect_identical(spec$route(comp(FALSE), list()),
+                   list(model = "fimpl/fimpl-1",
+                        state = list(phase = "implementation", model = "fimpl/fimpl-1")))
+  expect_identical(spec$route(comp(TRUE), list()), list(model = "fimpl/fimpl-1", state = planning))
+})
+
+test_that("a System 1 rating slower than 2 s still chooses the planner", {
+  s1_fresh()
+  m = local_router_models(strong = list("strong reply"), standard = list("standard reply"),
+                          implement = list("done"), complex = 0.9)
+  # a slow System 1 (a cold local model, retry rounds) and a default chat model to fall back to
+  local_gptr_options(system1 = "slow/slow-s1")
+  local_fake_provider(function(state, question) {
+    Sys.sleep(2.5)
+    c(standard = 0.1, complex = 0.9)
+  }, name = "slow", type = "classifier")
+  fdef = local_fake_provider(list("default reply"), name = "fdef")
+  local_gptr_options(model = "fdef/fdef-1")
+  expect_identical(router_spec()$timeout, 120)
+  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  expect_identical(dispatched(s), "fstrong-1")
+  expect_identical(router_phases(s), "planning")
+  expect_length(fake_requests(fdef), 0L)
+})

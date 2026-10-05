@@ -2943,7 +2943,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, gawk's and the one-true-awk's readings of awk -W, the list files sort, wc, du, file, find and tree read names from, xxd's and uniq's option words and yq's flags are read, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2970,8 +2970,8 @@ readings of a parameter default (round 4), and every directory a `cd` can leave 
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
 item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
-what round 9 added, item 18 what round 10 added, item 19 what round 11 added and item 20 what
-round 12 added.
+what round 9 added, item 18 what round 10 added, item 19 what round 11 added, item 20 what
+round 12 added and item 21 what round 13 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3882,6 +3882,67 @@ below 1, and SQL keeps its keyword reading (Known limits).
       give the same levels and categories. Among this round's probe lines, 55 are higher and one
       is lower (`uniq 'a*' x`, 3 to 2). Raised outside the tests: unquoted program text with a
       glob character (`sed -n s/a*/b/p x`, `jq .[0] x.json`, `jq .a? x.json`) is 3.
+21. **Review round 13 (findings against the standard).** All four findings were reproduced with
+    a probe (`task2-fix13-probe-before.log`: each of the reviewer's lines was at the level the
+    reviewer gives) and judged by (A)-(C); two blockers and two majors were accepted.
+    - *awk's `-W` options (A).* gawk reads `-W NAME[=VALUE]` and `-WNAME` as `--NAME` (getopt's
+      `W;`, with a unique prefix), and mawk's `-W exec FILE` reads the program from FILE; gptr
+      read `-W` as a plain flag, so `gawk -W source 'BEGIN{system("id")}'`, `gawk -W exec x.awk`,
+      `gawk -Wexec x.awk`, `gawk -W load ./x 'BEGIN{}'` and `awk -W exec x.awk` were 0, and
+      `gawk -W source 'BEGIN{print 1 > ".Rprofile"}'` was 0, not 4. risk_awk_w() now gives
+      gawk's reading (a value-taking long option takes the next word without `=`; option
+      letters before `W` stay; an option's value is no option, so `awk -F -W` sets FS), and
+      risk_awk_readings() adds the words as they are for `awk`, because the one-true-awk
+      (macOS) ignores `-W` and runs the next word: `awk -W 'assign=1;BEGIN{system("id")}'`
+      runs `id` there. The awk branch and risk_cmd_code_at() read both readings (code_at maps
+      the indices back), and a -W name gawk does not know or that begins several (mawk's
+      `interactive`, `sprintf=`, gawk's ambiguous `f`) is "an awk -W option gptr does not read"
+      (3). The awk option lists became the constants `risk_awk_values` and
+      `risk_awk_optional`. `gawk -W version`, `gawk -W lint '{print}' x` and
+      `gawk -W posix '{print $1}' x.txt` stay 0.
+    - *Files a list names (B; C for a secret list).* `sort --files0-from=F` sorts and prints the
+      files F names, and sort, wc, du, file (`-f`, `--files-from`), find (`-files0-from`) and
+      tree (`--fromfile`, `--fromtabfile`) print F's lines in their errors or listing (each was
+      run on a fake secret here). `sort --files0-from=list.txt` was 0, `sort --files0-from=.env`
+      0, and the wc, du, file and tree lines with `.env` 2 (a protected read without its
+      contents). sort's `--files0-from` (any prefix gptr reads, and `-` for standard input) is
+      now "files a list names, which gptr does not read" (3), and its value is read with its
+      contents; risk_cmd_name_lists() names the list files of wc, du, file and find, read with
+      their contents, and tree reads its operands with their contents under `--fromfile`. A
+      secret list is 3 `secret`; `wc --files0-from=list.txt`, `file -f list.txt` and
+      `find -files0-from list.txt` stay 0 (they print names and counts of the files listed).
+    - *xxd's and uniq's option words (C).* xxd strips one `-` from `--NAME`, matches options
+      by their first letter, and its -c, -g, -l, -n, -o, -s and -R take the next word when
+      nothing follows the letter or the rest begins the long name (`-cols`, `-group`, `-len`,
+      `-name`, `-offset`, `-seek`, `-skip`); options end at the first other word. gptr knew
+      only the exact words, so `xxd --cols 16 a.bin .Rprofile`, `xxd -skip 4 ...`,
+      `xxd -lenx 4 ...` and six more wrote `a.bin` at 2 instead of `.Rprofile` at 4.
+      risk_xxd_ops() now reads the operands as xxd does (checked against /usr/bin/xxd
+      2025-08-24). BSD uniq reads `+N` as -s N, GNU uniq as its input: every uniq and xxd
+      operand after the first is written, and the second operand after a `+N` is read, so
+      `uniq +3 a.txt .Rprofile` is 4 `control` and `uniq +3 a.txt` 2 (GNU writes `a.txt`).
+    - *yq's flags (A).* `-f`/`--front-matter`, the `--xml-*`, `--csv-separator`,
+      `--properties-separator`, `--shell-key-separator`, `--lua-prefix`, `--lua-suffix`,
+      `--ini-key-value-delimiters` and `--split-exp-file` take a value; gptr read them as
+      flags and their value as the expression, so `yq -f process 'load_str(".env")' x.md` and
+      `yq --csv-separator x 'load_str(".env")' x.csv` were 0. `risk_yq_values` and
+      `risk_yq_flags` now list every flag of yq v4's root command, used by the yq branch and by
+      risk_cmd_code_at(); risk_yq_words() drops a short flag's `=value` (`-r=false`), as pflag
+      reads it. Fail-safe additions: a flag outside both lists (a later yq's, python yq's) is
+      "a yq option gptr does not know" (3); a `-f` value other than `extract` or `process`
+      (python yq's program file) is "a yq program file"; `--split-exp-file` is "a yq split
+      expression file" with a 3 `file_write` to an unknown name; and
+      `--security-enable-system-operator` is "the yq system operator" (it lets the expression
+      run commands).
+    - *Self-review.* With `--expression`, every yq operand is a file, but gptr skipped the first:
+      `yq --expression .a .env` was 0 and `yq -i --expression '.a = 1' .gptr/settings.json` 2.
+      They are 3 `secret` and 4 `control`.
+    - *Changed rows:* none in older blocks. The 697 lines of the round-5 to round-12 probes give
+      the same levels and categories. Of this round's 159 probe lines, 79 are higher and 4 are
+      lower, each a false positive of round 12: `xxd -cols4 a.bin .Rprofile` (xxd takes `a.bin`
+      as the column count and writes nothing, 4 to 0), `xxd --cols 16 a.bin` (2 to 0),
+      `yq -r=false '.a' x.yaml` (3 to 0) and `yq -Pi=false '.a' x.yaml` (3 to 2, `-i=false` is
+      still read as -i). Raised outside the tests: a yq flag gptr does not list is 3.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
@@ -3919,7 +3980,10 @@ classifier does not model (a `cmd /c` line is read with sh's rules). An upper-ca
 line sets without export counts for its later programs (item 16), a lower-case one does not (a
 convention: programs read options from upper-case names). sed and awk are read as GNU sed, BSD
 sed, gawk and the one-true-awk read them; where they differ (BSD's labels, bracket expressions
-in awk regular expressions) the reading that runs more commands is used or the line is 3.
+in awk regular expressions, awk's `-W`) the reading that runs more commands is used or the line is
+3; a `-W` name mawk reads but gawk does not know is 3. yq is read as mikefarah yq v4 reads it
+(python yq's jq options are 3), and xxd as the 2025 xxd reads its options (an older xxd stops at
+`--cols` with a usage error; gptr reads the write).
 A SQL literal compared with a column is data (`WHERE p = '.env'` is 0), also when the query
 then reads that column's value as a path. Python's writes to the environment are read through
 the names `environ`, `environb`, putenv and unsetenv: through another name bound to
@@ -3981,7 +4045,12 @@ changed and before the self-review rows were added, failed 99 (`task2-fix11-red.
 against the round-11 source (`task2-fix12-red-final.log`: 117 failures and the `sed -e` error,
 which ends its block); the block as first written failed 117 in the working tree
 (`task2-fix12-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2462 ]` in
-the UTF-8 and the C locale (`task2-fix12-green.log`, `task2-fix12-green-C.log`).
+the UTF-8 and the C locale (`task2-fix12-green.log`, `task2-fix12-green-C.log`) at the end of
+round 12. Review round 13 added item 21 with one block (207 expectations) and no changed old row.
+The final test file fails 151 against the round-12 source (`task2-fix13-red-final.log`); the
+block as first written failed 146 in the working tree (`task2-fix13-red.log`). Final
+`^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2669 ]` in the UTF-8 and the C locale
+(`task2-fix13-green.log`, `task2-fix13-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -8447,7 +8516,7 @@ an envelope in `newText` rated 2 while `.gptr/mcp.json` is written) and after
 `[ FAIL 11 | WARN 0 | SKIP 0 | PASS 385 ]` (`task10-fix1-red.log`). Final `^tool-namespace$`:
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 398 ]` (`task10-fix1-green.log`).
 
-## D-122 - P15 builtin:documents: a console call located after the transcript question is top level, a failing sidecar recovery never disables the route, doc.edit protects a hand-edited block also against a loose match and `old_text`, an open notebook or the running Rscript script is never made inert, rewind entries keep the recorded format, an all-NA score summary reads "mean NA", and document formats are read without tools::file_ext() (2026-10-05)
+## D-122 - P15 builtin:documents: a console call located after the transcript question is top level, a failing sidecar recovery never disables the route, doc.edit protects a hand-edited block also against a loose match and `old_text`, an open notebook or the running Rscript script is never made inert, rewind entries keep the recorded format, an all-NA score summary reads "mean NA", document formats are read without tools::file_ext(), a failed direct R line is recorded inert, the transcript question is asked only when the call could be recorded, an undone team block gets the undone notice, a call whose block a dead sidecar held is replayed after the recovery, and System 1 one-line blocks are redacted (2026-10-05)
 
 P15 Task 13 registers `builtin:documents` (the five formats, the route `document` at order 50,
 the `documents` section, the `agent_end`, `session_tree`, `console:command` and `console:direct`
@@ -8488,17 +8557,63 @@ shape or section text changes.
    a non-ASCII document name in a non-UTF-8 locale. Every caller of `doc_format_of()` (the
    locator, the writer, transcript targets) is affected. R 4.6's rule is kept: `".R"` has no
    extension.
+8. **A direct R line that did not finish is recorded inert** (review round 1; IC-49, 03 section
+   6.9.3 "the transcript re-sources as one steered session"; 04 section 11.5 "Failed executions
+   ... are not recorded"). The plan's `doc_on_console_direct()` ignored the `status` of P14's
+   `console:direct` payload, so a line that failed (`!summary(fti)`) stopped `source()` of the
+   transcript there, and an interrupted or timed-out computation ran again in full. A line whose
+   `status` is not `"ok"` is now written as `# direct R (no model; <status>)` with its code as
+   `#~ ` lines and no `#>` output; a payload without `status` is a line that ran.
+9. **The transcript question is asked only when the call could be recorded** (review round 1;
+   IC-52). The route asked "Record this console session into ...?" under `record = "off"` and in
+   replay mode, where `run()` then drops the site; the answer was still remembered, so the one
+   question per project was spent on nothing. The route now asks only when the replay mode is
+   `auto`, `live` or `record` and `record` is not `"off"`; a remembered target still gives the
+   site without a question.
+10. **An undone team or fan-out block gets the undone notice** (review round 1; G7 section 3.8
+   undone row: "skip, zero tokens, one message"). `doc.replay` replayed it with no message and
+   logged it `replayed`. It now prints the route's notice ("Block ... was undone by /rewind; ...")
+   and logs `skipped` in the `gptr_source()` frame. The zero-request replayed session is still
+   returned: `doc.replay` answers a session or `NULL` (04 section 7.0), and `NULL` makes P19's
+   `team`/`fanout` route run the statement live, which the undone row forbids.
+11. **A call whose block a dead sidecar held is replayed after the recovery** (review round 2;
+   IC-51, IC-45). The route located the call first and recovered the dead process's sidecar
+   second (plan literal). Without a deferred backend (plain `source()`, knitr, an IDE run) the
+   recovery writes the blocks to disk, but the site found before that write had no block, so a
+   call whose own block was in the sidecar ran live, spent tokens and was recorded a second time
+   (two blocks for one statement; on the next `source()` both ran). When `doc_recover()` wrote
+   the document (it returned `TRUE`, the site is neither deferred nor a console site), the route
+   now locates the call again and keeps the new site when it is still top level or block-nested.
+   A deferred site is unchanged: its adopted upserts are written at exit (an `Rscript --file=`
+   site, the only finder that counts executions, is always deferred, so it is never located
+   twice).
+12. **System 1 one-line blocks are redacted** (review round 2; IC-74, 07 section 6, P15 row
+   "redacted, consented workflow records"). `doc.s1_block` wrote the summary as given, and
+   `doc_upsert()` does not redact; a free-text `gptr_choice` level shaped like a token reached the
+   document verbatim. The `#> ` line is now `redact(..., "persist")`ed before it is written.
+
+Open follow-up (P10, review round 2): the `doc.edit` contract is `function(path, edits, session)`
+(04 section 7.0), with no `replace_all`. P10's `edit_route_document()` (called by `member_edit()`
+and `tool_edit_execute()`) passes only `edits`, so `gptr$edit(<bound document>, edits,
+replace_all = TRUE)` reports "Found 2 occurrences ... must be unique" where the same call on any
+other file replaces every occurrence. P10 should fold `replace_all` into each edit's `replaceAll`
+before calling `doc.edit` (`apply_edits()` honours the per-edit flag, and `doc.edit` passes
+`edits` to the edit tool unchanged, so its hand-edit protection covers every occurrence).
 
 Not behavioural: `doc_console_append()` leaves redaction to `doc_transcript_append()`, which
 already redacts with the persist profile (D-117 item 3); the `doc.replay` test gives itself its
 own replay table (`local_replay_table()`, D-119 item 5's test isolation).
 
 IC-74 (07 section 6, P15 row): console lines, rewind notes and System 1 one-line blocks are
-written only under write consent and redacted; the one-line block's `model=` keeps the model
-P13's `meta` names; the route replays with no provider call and no discovery (Task 12).
+written only under write consent and redacted (the transcript writer redacts console lines and
+rewind notes; `doc.s1_block` redacts its line itself, item 12); the one-line block's `model=`
+keeps the model P13's `meta` names; the route replays with no provider call and no discovery
+(Task 12).
 
 Validation: `progress/P15.md`, Task 13. `^doc-(formats|replay|io)$`
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 903 ]`, the same under `LC_ALL=C LANG=C`.
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 903 ]`, the same under `LC_ALL=C LANG=C`; after review round 1
+(items 8-10) `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 924 ]`; after review round 2 (items 11-12)
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 934 ]`.
 
 ## D-123 - P08 session SDK verbs: a verb that starts a run freezes its safety record then and re-checks egress and replay under it (a refusal keeps the pending call), one approved gptr_cancel() call covers every session it names, and export(gptr_return) is taken early for D-054 (2026-10-05)
 
@@ -8640,3 +8755,50 @@ three columns). The bench logs are `task13-red.log` (before the fix: `facts 1`,
 `input_total 3092`), `task13-red2-runner-fixed.log` (the plan's error, `no baseline row`) and
 `task13-green.log` (`OK: 4 static prefixes and 3 golden transcripts within the baseline
 tolerances`).
+
+## D-126 - P13 Jev router example: a compaction keeps the router's phase (and starts the implementation after the first edit), the router allows 120 s per call, and the usage notes need no lint suppression (2026-10-05)
+
+P13 Task 11 (`inst/gptr/examples/jev-router.R`; tests appended to `test-s1-route.R`). The
+models, the System 1 question, its two options, the 16,000-character state, the 0.5 threshold,
+the edit/write switch, the factory and the plan's five tests are the plan's.
+
+1. **A compaction keeps the router's phase.** The plan's route answered every request whose
+   reason is not `"turn"` with the bare `implement` model. P06's `run_compact_check()` calls
+   `run_route(run, "compaction")`, which records the switch with the state the router returns,
+   and P08's `router_call()` reads the next turn's state from that last `gptr.router` entry. A
+   compaction during planning therefore erased the phase, and the next turn asked System 1 again
+   as if the session were new (report 04 section 4.9: classify once per session). The route
+   returns `list(model = implement, state = request$state)` instead, so the next turn returns to
+   the planner in the state. One added test (5 expectations) pins it. Review round 1: P06's
+   `run_route()` records a state only when the model changes, so a compaction at the request
+   boundary right after the first successful edit or write (state `planning`, now on
+   `implement`) left the turn's switch to the implementation phase unrecorded: the next user
+   turn went back to the planner (a third `model_change` and cache miss), and a compaction that
+   summarised the edit away sent the same turn back to the planner. The compaction's answer now
+   carries `list(phase = "implementation", model = implement)` when an edit has succeeded since
+   the last user message (the compaction request's messages are the pre-compaction projection,
+   so the edit is visible). One added test (9 expectations) runs that scenario end to end with
+   test-only `compact.should`/`compact.run` services and checks the route alone with a
+   successful and a failed edit.
+2. **No `nolint` block.** The plan's header comment held code-shaped usage lines inside
+   `# nolint start: commented_code_linter.`; the usage is written as prose with inline code
+   instead, and also names a prepared local decision model (IC-74) as a System 1 source.
+3. **120 s per router call** (review round 1). The plan's router used `gptr_router()`'s default
+   `timeout = 2`. A System 1 rating can take longer: `ctx$decide()` runs up to `gptr.s1_rounds`
+   (3) bounded rounds with retry-after waits, a remote request has a 30 s first-byte limit, and
+   a native Ollama decision 120 s (`s1_ollama_first_byte`, for a cold Clef load, IC-74). P08's
+   `router_invoke()` discards any answer slower than the timeout and falls back to the default
+   chat model with no state (an error when no default is set), so a slow rating ran the first
+   turn on an unrelated default model instead of the `standard` the header promises. IC-69
+   makes `timeout` the router's own (default 2, `ctx$decide()` allowed), and only the first
+   request of a session rates (every later one is plain code), so the example passes
+   `timeout = 120`, one System 1 request's longest wait; the header says that a slower call
+   falls back to the default chat model and the next request rates again. One added test (4
+   expectations) uses a fake System 1 that takes 2.5 s.
+
+Validation: `progress/P13.md`, Task 11. Red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 249 ]`
+(`task11-red.log`, every failure the missing example). Green `^s1-route$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 276 ]` (`task11-green.log`); the plan-literal versus shipped
+compaction answer in `task11-compaction-probe.log`. Review round 1: red
+`[ FAIL 11 | WARN 0 | SKIP 0 | PASS 278 ]` (`task11-fix1-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 289 ]` (`task11-fix1-green.log`).
