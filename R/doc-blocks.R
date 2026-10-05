@@ -1494,9 +1494,10 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
 #' consent first (IC-45; otherwise nothing is written), passes `document_write` (fail closed,
 #' patchable), md5 conflict checks with re-locate and retry. Each backend's writer has its own
 #' branch: `file` and `transcript` sites are written on disk here, `deferred` (Rscript) and
-#' `pending` (Jupyter) sites are queued by doc_pending_add() (IC-50, IC-51); a backend that no
-#' writer handles is refused (a diagnostic and the transcript fallback), never written to disk.
-#' Returns list(action, block_id, lines, backend) invisibly.
+#' `pending` (Jupyter) sites are queued by doc_pending_add() (IC-50, IC-51), `rstudio`,
+#' `positron` and `vscode` sites go through the editor buffer (doc_ide_upsert()); a backend that
+#' no writer handles is refused (a diagnostic and the transcript fallback), never written to
+#' disk. Returns list(action, block_id, lines, backend) invisibly.
 #' @noRd
 doc_upsert = function(site, block_lines, block_id = NULL) {
   none = list(action = "none", block_id = NULL, lines = NULL, backend = NULL)
@@ -1519,6 +1520,8 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
       doc_file_upsert(fmt, site, up)
     } else if (backend %in% c("pending", "deferred")) {
       doc_pending_add(fmt, site, up, backend)
+    } else if (backend %in% c("rstudio", "positron", "vscode")) {
+      doc_ide_upsert(fmt, site, up)
     } else {
       gptr_abort(paste0("No document writer handles the backend \"", backend, "\"."),
                  "doc_write", path = site$path, reason = "backend")

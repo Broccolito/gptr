@@ -777,3 +777,135 @@ doc_sync = function(path) {
   st$docs[[key]] = NULL
   invisible(length(res$applied))
 }
+
+# ---- the IDE backend (report 14 section 4.3: RStudio and VS Code by id, Positron's active
+# editor) and transcript appends ----------------------------------------------------------------
+
+#' The smallest line-range replacement turning buffer `old` into `new`, in rstudioapi
+#' coordinates: list(start = c(row, col), end = c(row, col), text) (report 14 section 4.3 range
+#' arithmetic; `Inf` columns clamp to the end of a line)
+#' @noRd
+doc_ide_edit_range = function(old, new) {
+  n_old = length(old)
+  n_new = length(new)
+  p = 0L
+  while (p < n_old && p < n_new && identical(old[p + 1L], new[p + 1L])) p = p + 1L
+  s = 0L
+  while (s < n_old - p && s < n_new - p && identical(old[n_old - s], new[n_new - s])) s = s + 1L
+  ins = if (n_new - s > p) new[(p + 1L):(n_new - s)] else character()
+  from = p + 1L
+  to = n_old - s
+  joined = paste(ins, collapse = "\n")
+  if (to >= from) {
+    if (to < n_old) {
+      return(list(start = c(from, 1), end = c(to + 1L, 1),
+                  text = if (length(ins)) paste0(joined, "\n") else ""))
+    }
+    if (length(ins) || from == 1L) {
+      return(list(start = c(from, 1), end = c(n_old, Inf), text = joined))
+    }
+    return(list(start = c(from - 1L, Inf), end = c(n_old, Inf), text = ""))
+  }
+  if (!length(ins)) return(list(start = c(1, 1), end = c(1, 1), text = ""))
+  if (n_old == 0L) return(list(start = c(1, 1), end = c(1, 1), text = joined))
+  if (p < n_old) return(list(start = c(from, 1), end = c(from, 1), text = paste0(joined, "\n")))
+  list(start = c(n_old, Inf), end = c(n_old, Inf), text = paste0("\n", joined))
+}
+
+#' Apply an edit range through rstudioapi (`id = NULL`: the active editor, Positron's only target)
+#' @noRd
+doc_ide_modify = function(edit, id) {
+  loc = rstudioapi::document_range(rstudioapi::document_position(edit$start[1L], edit$start[2L]),
+                                   rstudioapi::document_position(edit$end[1L], edit$end[2L]))
+  rstudioapi::modifyRange(loc, edit$text, id = id)
+  invisible(TRUE)
+}
+
+#' Save an IDE buffer when the API supports it
+#' @noRd
+doc_ide_save = function(id) {
+  if (isTRUE(tryCatch(rstudioapi::hasFun("documentSave"), error = function(e) FALSE))) {
+    tryCatch(rstudioapi::documentSave(id), error = function(e) NULL)
+  }
+  invisible(NULL)
+}
+
+#' Move the cursor past a written block, so the next Ctrl+Enter does not re-run code the agent
+#' already ran (report 14 section 4.3)
+#' @noRd
+doc_ide_cursor = function(row, id) {
+  if (isTRUE(tryCatch(rstudioapi::hasFun("setCursorPosition"), error = function(e) FALSE))) {
+    tryCatch(rstudioapi::setCursorPosition(rstudioapi::document_position(row, 1), id = id),
+             error = function(e) NULL)
+  }
+  invisible(NULL)
+}
+
+#' Is an editor buffer the document on disk? Ace (RStudio) and Monaco (Positron, VS Code) show a
+#' file's final newline as an empty last line, so for a file that ends with a newline its lines
+#' followed by "" are clean too; a buffer without that line is compared line for line
+#' @noRd
+doc_ide_clean = function(buffer, path) {
+  if (!file.exists(path)) return(FALSE)
+  disk = doc_read(path)
+  identical(buffer, disk$lines) || (isTRUE(disk$final_nl) && identical(buffer, c(disk$lines, "")))
+}
+
+#' Upsert through the editor buffer: RStudio and VS Code edit by document id and save a buffer
+#' that was clean; Positron edits only the active editor, so a clean buffer is written on disk
+#' (Positron reloads it) and the console context ("#console") is never edited
+#' @noRd
+doc_ide_upsert = function(fmt, site, up) {
+  backend = site$backend
+  ctx = doc_ide_context()
+  if (is.null(ctx) || identical(ctx$id, "#console") || !nzchar(ctx$path %||% "") ||
+      !identical(path_key(path_norm(ctx$path)), path_key(site$path))) {
+    gptr_inform(paste0("gptr could not reach ", doc_rel(site$path), " in the editor; save it and ",
+                       "run the call again to record its block."), "notice",
+                .once = paste0("doc_ide:", path_key(site$path)))
+    return(list(action = "none", block_id = NULL, lines = NULL, backend = backend))
+  }
+  buffer = as_utf8(as.character(ctx$contents))
+  clean = doc_ide_clean(buffer, site$path)
+  if (clean && identical(backend, "positron")) {
+    site$backend = "file"
+    return(doc_file_upsert(fmt, site, up))
+  }
+  prep = doc_prepare(fmt, site, up, buffer)
+  if (!is.null(prep$skip)) {
+    return(list(action = prep$skip, block_id = prep$id, lines = NULL, backend = backend))
+  }
+  new = fmt$upsert(buffer, site, prep$rendered, prep$id)
+  if (identical(new, buffer)) {
+    return(list(action = "unchanged", block_id = prep$id, lines = NULL, backend = backend))
+  }
+  id = if (identical(backend, "positron")) NULL else ctx$id
+  doc_ide_modify(doc_ide_edit_range(buffer, new), id)
+  if (clean) doc_ide_save(id)
+  rng = doc_block_range(site$format, new, prep$id)
+  if (length(rng)) doc_ide_cursor(rng[2L] + 1L, id)
+  list(action = prep$action, block_id = prep$id, lines = rng, backend = backend, sha = prep$sha,
+       prompt = prep$prompt)
+}
+
+#' Append lines to a console transcript (direct R lines, slash commands, rewind notes) under
+#' write consent, the `document_write` event (kind "transcript") and the document lock. Only an
+#' `.R` transcript takes raw lines (contract 11.5): a notebook would no longer be JSON and an
+#' R Markdown or Quarto document would read them as prose, so other paths are refused (FALSE).
+#' The lines are redacted with the persist profile before the event (IC-74).
+#' @noRd
+doc_transcript_append = function(path, lines, session = NULL) {
+  if (!identical(doc_format_of(path), "r")) return(invisible(FALSE))
+  if (!doc_consent(path, ask = FALSE)) return(invisible(FALSE))
+  lines = redact(as_utf8(as.character(lines)), "persist")
+  ev = doc_event(path, "r", "transcript", NULL, lines, session)
+  if (isTRUE(ev$block)) return(invisible(FALSE))
+  lines = ev$lines %||% lines
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  lock = doc_lock(path)
+  if (is.null(lock)) return(invisible(FALSE))
+  on.exit(doc_unlock(lock), add = TRUE)
+  doc = doc_read_or_new(path)
+  doc_write(doc, c(doc$lines, as.character(lines)))
+  invisible(TRUE)
+}

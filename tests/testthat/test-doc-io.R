@@ -1018,3 +1018,289 @@ test_that("a kernel keeps its notebook open after setwd() and opens no script (I
   expect_identical(doc_sync(f), 1L)
   expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
 })
+
+# ---- Task 11: the IDE backend and transcript appends --------------------------------------------
+
+# rstudioapi range semantics on a buffer (1-based rows and columns; Inf clamps to the line end,
+# a row past the end clamps to the end of the buffer): replace the range with `text`
+doc_apply_range = function(buffer, edit) {
+  txt = paste(buffer, collapse = "\n")
+  starts = cumsum(c(1L, nchar(buffer) + 1L))
+  offset = function(pos) {
+    row = min(pos[1L], max(1L, length(buffer)))
+    if (!length(buffer)) return(0L)
+    line_len = nchar(buffer[row])
+    col = if (is.infinite(pos[2L])) line_len + 1L else min(pos[2L], line_len + 1L)
+    if (pos[1L] > length(buffer)) col = line_len + 1L
+    as.integer(starts[row] + col - 2L)
+  }
+  a = offset(edit$start)
+  b = offset(edit$end)
+  out = paste0(substr(txt, 1L, a), edit$text, substring(txt, b + 1L))
+  parts = strsplit(paste0(out, "\001"), "\n", fixed = TRUE)[[1L]]
+  sub("\001$", "", parts)
+}
+
+# A fake editor holding one buffer; the rstudioapi wrappers of doc-io.R are mocked onto it
+local_fake_editor = function(path, contents, id = "doc1", .env = parent.frame()) {
+  ed = new.env()
+  ed$buffer = contents
+  ed$saved = character()
+  ed$cursor = NA_integer_
+  ed$ids = list()
+  testthat::local_mocked_bindings(
+    doc_ide_context = function() {
+      list(id = id, path = path, contents = ed$buffer, selection = list())
+    },
+    doc_ide_modify = function(edit, id) {
+      ed$ids = c(ed$ids, list(id))
+      ed$buffer = doc_apply_range(ed$buffer, edit)
+      invisible(TRUE)
+    },
+    doc_ide_save = function(id) {
+      ed$saved = c(ed$saved, if (is.null(id)) "<active>" else id)
+      writeLines(ed$buffer, path)
+      invisible(NULL)
+    },
+    doc_ide_cursor = function(row, id) {
+      ed$cursor = as.integer(row)
+      invisible(NULL)
+    },
+    .env = .env)
+  ed
+}
+
+doc_ide_site = function(path, prompt, backend) {
+  calls = doc_calls(readLines(path, encoding = "UTF-8"))
+  ph = prompt_hash(prompt)
+  list(kind = "ide", path = path_norm(path), format = "r", backend = backend,
+       anchor = doc_anchor_of(calls, calls[which(calls$ph %in% ph)[1], ]), prompt_hash = ph,
+       args_hash = NULL, template = prompt, top_level = TRUE)
+}
+
+test_that("the IDE range arithmetic reproduces every edit", {
+  cases = list(
+    list(c("a", "b", "c"), c("a", "X", "Y", "b", "c")),
+    list(c("a", "b", "c"), c("a", "b", "c", "X")),
+    list(c("a", "b", "c"), c("X", "a", "b", "c")),
+    list(c("a", "b", "c"), c("a", "c")),
+    list(c("a", "b", "c"), c("a", "b")),
+    list(c("a", "b", "c"), c("a", "Q", "c")),
+    list(c("a"), c("a", "b")),
+    list(character(), c("a", "b")),
+    list(c("a", "b"), c("a", "b")))
+  for (cs in cases) {
+    edit = doc_ide_edit_range(cs[[1]], cs[[2]])
+    expect_identical(doc_apply_range(cs[[1]], edit), cs[[2]])
+  }
+})
+
+test_that("RStudio buffers are edited by id, saved when clean, the cursor moved past the block", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("x = 1", "gptr(\"count rows\")", "z = 2"), f)
+  ed = local_fake_editor(path_norm(f), readLines(f))
+  res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"),
+                   structure("n = nrow(mtcars)", header = list(model = "m")))
+  expect_identical(res$action, "insert")
+  expect_identical(res$backend, "rstudio")
+  expect_identical(ed$buffer[3:5], c(paste0("# >>> gptr:", res$block_id, " model=m sha=",
+                                            doc_body_sha("n = nrow(mtcars)")),
+                                     "n = nrow(mtcars)", paste0("# <<< gptr:", res$block_id)))
+  expect_identical(ed$ids[[1]], "doc1")
+  expect_identical(ed$saved, "doc1")
+  expect_identical(ed$cursor, 6L)
+  expect_identical(readLines(f), ed$buffer)
+})
+
+test_that("Positron writes a clean buffer on disk and edits only the active editor", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  ed = local_fake_editor(path_norm(f), readLines(f), id = "")
+  res = doc_upsert(doc_ide_site(f, "count rows", "positron"),
+                   structure("n = 1", header = list(model = "m")))
+  expect_identical(res$backend, "file")
+  expect_length(ed$ids, 0L)
+  expect_identical(readLines(f)[3], "n = 1")
+  ed$buffer = c("# unsaved edit", readLines(f))
+  res2 = doc_upsert(utils::modifyList(doc_ide_site(f, "count rows", "positron"),
+                                      list(regenerate = TRUE)),
+                    structure("n = 2", header = list(model = "m")), block_id = res$block_id)
+  expect_identical(res2$backend, "positron")
+  expect_null(ed$ids[[1]])
+  expect_identical(ed$buffer[4], "n = 2")
+  expect_length(ed$saved, 0L)
+})
+
+test_that("a console-focused or foreign editor is never edited", {
+  local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  ed = local_fake_editor(path_norm(f), readLines(f), id = "#console")
+  res = NULL
+  expect_message({
+    res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"), structure("n = 1", header = list()))
+  }, class = "gptr_message_notice")
+  expect_identical(res$action, "none")
+  expect_length(ed$ids, 0L)
+  expect_identical(readLines(f), "gptr(\"count rows\")")
+})
+
+test_that("transcript appends need consent and pass the document_write event", {
+  proj = local_project()
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  local_gptr_options(record = "off")
+  expect_false(doc_transcript_append(t, "# /model opus"))
+  expect_false(file.exists(t))
+  local_gptr_options(record = "auto")
+  expect_true(doc_transcript_append(t, "# /model opus"))
+  off = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    if (identical(event$kind, "transcript")) list(lines = toupper(event$lines)) else NULL
+  }))
+  expect_true(doc_transcript_append(t, c("# direct R (no model)", "x = 1")))
+  off()
+  expect_identical(readLines(t), c("# /model opus", "# DIRECT R (NO MODEL)", "X = 1"))
+})
+
+# ---- Task 11 adaptations (dev/DEVIATIONS.md D-117) -----------------------------------------------
+
+test_that("a buffer that ends in the empty line after the final newline is clean in RStudio", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("x = 1", "gptr(\"count rows\")", "z = 2"), f)
+  # Ace (RStudio) and Monaco (Positron) show a file's final newline as an empty last line
+  ed = local_fake_editor(path_norm(f), c(readLines(f), ""))
+  res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"),
+                   structure("n = 1", header = list(model = "ollama/qwen3:8b")))
+  expect_identical(res$action, "insert")
+  expect_identical(ed$buffer, c("x = 1", "gptr(\"count rows\")",
+                                paste0("# >>> gptr:", res$block_id, " model=ollama/qwen3:8b sha=",
+                                       doc_body_sha("n = 1")),
+                                "n = 1", paste0("# <<< gptr:", res$block_id), "z = 2", ""))
+  expect_identical(ed$ids, list("doc1"))
+  expect_identical(ed$saved, "doc1")
+  expect_identical(ed$cursor, 6L)
+})
+
+test_that("a clean Positron buffer that ends in that empty line is written on disk", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  ed = local_fake_editor(path_norm(f), c(readLines(f), ""), id = "")
+  res = doc_upsert(doc_ide_site(f, "count rows", "positron"),
+                   structure("n = 1", header = list(model = "m")))
+  expect_identical(res$action, "insert")
+  expect_identical(res$backend, "file")
+  expect_length(ed$ids, 0L)
+  expect_identical(readLines(f)[c(1, 3, 5)], c("gptr(\"count rows\")", "n = 1", "z = 2"))
+})
+
+test_that("that empty line is an edit when the file on disk has no final newline", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  site = doc_ide_site(f, "count rows", "rstudio")
+  writeBin(charToRaw("gptr(\"count rows\")\nz = 2"), f)
+  ed = local_fake_editor(path_norm(f), c("gptr(\"count rows\")", "z = 2", ""))
+  res = doc_upsert(site, structure("n = 1", header = list(model = "m")))
+  expect_identical(res$action, "insert")
+  expect_identical(ed$ids, list("doc1"))
+  expect_length(ed$saved, 0L)
+  expect_identical(ed$buffer[c(3, 5, 6)], c("n = 1", "z = 2", ""))
+  expect_identical(readBin(f, "raw", n = 100L), charToRaw("gptr(\"count rows\")\nz = 2"))
+})
+
+test_that("transcript lines are appended only to an .R transcript", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  nb = file.path(proj, "notes.ipynb")
+  writeLines(c("{", " \"cells\": [],", " \"nbformat\": 4", "}"), nb)
+  rmd = file.path(proj, "notes.Rmd")
+  writeLines(c("# Notes", "", "Some text."), rmd)
+  for (p in c(nb, rmd)) {
+    bytes = readBin(p, "raw", n = file.info(p)$size)
+    expect_false(doc_transcript_append(p, c("# /model opus", "x = 1")))
+    expect_identical(readBin(p, "raw", n = file.info(p)$size), bytes)
+  }
+  for (p in file.path(proj, c("notes.qmd", "notes.txt", "notes"))) {
+    expect_false(doc_transcript_append(p, "# /model opus"))
+    expect_false(file.exists(p))
+  }
+  t = file.path(proj, ".gptr", "transcripts", "session.R")
+  expect_true(doc_transcript_append(t, "# /model opus"))
+  expect_identical(readLines(t), "# /model opus")
+})
+
+test_that("transcript lines are written and shown to hooks redacted (IC-74)", {
+  proj = local_project()
+  local_gptr_options(record = "auto")
+  t = file.path(proj, ".gptr", "transcripts", "t.R")
+  seen = new.env()
+  off = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    seen$lines = event$lines
+    NULL
+  }))
+  secret = "Authorization: Bearer FAKEtoken1234567890abcdef"
+  expect_true(doc_transcript_append(t, c("# direct R (no model)", paste0("h = \"", secret, "\""))))
+  off()
+  out = readLines(t, encoding = "UTF-8")
+  expect_length(out, 2L)
+  expect_identical(out[1], "# direct R (no model)")
+  expect_false(any(grepl("FAKEtoken", out, fixed = TRUE)))
+  expect_false(any(grepl("FAKEtoken", seen$lines, fixed = TRUE)))
+})
+
+test_that("an editor showing another file or an untitled buffer is never edited", {
+  local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  a = file.path(getwd(), "a.R")
+  b = file.path(getwd(), "b.R")
+  src = c("gptr(\"count rows\")", "z = 2")
+  writeLines(src, a)
+  writeLines(src, b)
+  ed = local_fake_editor(path_norm(b), readLines(b))
+  res = NULL
+  expect_message({
+    res = doc_upsert(doc_ide_site(a, "count rows", "rstudio"),
+                     structure("n = 1", header = list(model = "m")))
+  }, class = "gptr_message_notice")
+  expect_identical(res$action, "none")
+  expect_length(ed$ids, 0L)
+  expect_length(ed$saved, 0L)
+  expect_identical(ed$buffer, src)
+  expect_identical(readLines(a), src)
+  expect_identical(readLines(b), src)
+  cc = file.path(getwd(), "c.R")
+  writeLines(src, cc)
+  ed = local_fake_editor("", src)
+  expect_message({
+    res = doc_upsert(doc_ide_site(cc, "count rows", "vscode"),
+                     structure("n = 1", header = list(model = "m")))
+  }, class = "gptr_message_notice")
+  expect_identical(res$action, "none")
+  expect_length(ed$ids, 0L)
+  expect_identical(readLines(cc), src)
+})
+
+test_that("an editor buffer is never edited without write consent (IC-45, IC-74)", {
+  local_project()
+  local_gptr_options(record = "off")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  for (backend in c("rstudio", "positron", "vscode")) {
+    ed = local_fake_editor(path_norm(f), readLines(f))
+    res = doc_upsert(doc_ide_site(f, "count rows", backend),
+                     structure("n = 1", header = list(model = "ollama/qwen3:8b")))
+    expect_identical(res$action, "none")
+    expect_length(ed$ids, 0L)
+    expect_length(ed$saved, 0L)
+  }
+  expect_identical(readLines(f), c("gptr(\"count rows\")", "z = 2"))
+})

