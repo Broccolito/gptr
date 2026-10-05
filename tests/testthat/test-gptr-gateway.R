@@ -1243,3 +1243,20 @@ test_that("router:<name> names a registered router; an unknown one is refused", 
   s = s |> gptr("again", model = "router:pick4")
   expect_identical(c(s$model, s$text), c("router:pick4", "second"))
 })
+
+# Task 12: append
+
+test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {
+  nsfile = testthat::test_path("..", "..", "NAMESPACE")
+  skip_if_not(file.exists(nsfile), "the source NAMESPACE is not reachable from here")
+  ns = readLines(nsfile, encoding = "UTF-8")
+  exports = c("gptr", "gptr_init", "gptr_config", "gptr_trust", "gptr_step", "gptr_wait",
+              "gptr_steer", "gptr_cancel", "gptr_on", "gptr_return")
+  expect_true(all(paste0("export(", exports, ")") %in% ns))
+  methods = c("\"\\$\"", "\"\\$<-\"", "\"\\[\\[\"", "\"\\[\\[<-\"", "print",
+              "utils::\\.DollarNames")
+  for (m in methods) {
+    expect_true(any(grepl(paste0("^S3method\\(", m, ",gptr_gateway\\)$"), ns)), label = m)
+  }
+  expect_true("S3method(print,gptr_config)" %in% ns)
+})

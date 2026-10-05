@@ -8104,6 +8104,14 @@ against the plan-literal source `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 89 ]`
 missing, the classifier call ending as an internal error); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` (`task8-green.log`; the plan's 20 tests give its 74).
 
+**Item 3 closed (2026-10-05, P08 Task 12).** With Tasks 9 and 10 committed, Task 12 took the
+deferred lines from a `document` run on a `git archive` copy of `718659d`: `export(gptr)`, the
+six `S3method(..., gptr_gateway)` lines, `export()` of `gptr_step`, `gptr_wait`, `gptr_steer`,
+`gptr_cancel` and `gptr_on`, and their six Rd pages (`man/gptr.Rd` and five verb pages; no other
+plan's line). R CMD check of that copy plus these files runs every example offline, including
+the six `@examplesIf exists("gptr", mode = "function")` examples of P06 and P13: `0 errors | 0
+warnings | 1 note` (`progress/P08.md`, Task 12).
+
 ## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone, and (review round 1) a session's own provider record decides egress (never the process-wide record of its id), a routed session honours the call's replay = and router:<name> must name a registered router, and (review round 2) a routed session honours .opts$context = "none" and a router's provider:<level> keeps its level, and (review round 3) a router's choice is judged under the frozen safety record of the run it serves and a session's own provider named alone resolves on a continuation (2026-10-05)
 
 P08 Task 9's plan-literal code (`gateway_run()`, the `builtin:gateway` routes, the guards and
