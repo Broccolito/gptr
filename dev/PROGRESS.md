@@ -79,6 +79,14 @@ Resume log (newest last):
   the milestone tag. FIX-6 `2d2d75a` closed the classifier-conformance item. P11 Task 2 committed
   (`e8b2d19`) after the convergence decision; P11 Tasks 3-8 running. P15 Tasks 13-16, 19
   committed (17-18 wait for P10 Task 11, now running). P17 Tasks 4, 6 committed, 8-12 running.
+- 2026-10-05: maintainer decisions **D-135**: entry point `peter()` / `peter$` (package stays `gptr`;
+  named for Peter Wason and Peter Naur) and **simplicity first** (conventions section 11, short
+  record formats). Simplicity review: `progress/simplicity-plan.md` (~13,300 code/test lines and
+  ~33,000 record lines removable; 4 defects). CI-6 `38db483` (R 4.6 active-binding copies,
+  Windows links, quadratic lint helper). **P10 complete locally** (`ff3a558`, `987e707`,
+  acceptance `2823b07`). P11 paused after Task 2 for the classifier redesign (P11-B). Running:
+  P15 Tasks 17-18, P17 Tasks 8-12, simplicity lanes S-s1, S-kernel, S-core; then the rename
+  freeze (REN-1/2, DOC-1/2).
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;
@@ -148,7 +156,7 @@ Resume log (newest last):
 |---|---|---|---|
 | M0 Foundation | P01–P04 | paused; acceptance pending | All P01 tasks passed focused checks; integrated acceptance underway |
 | M1 Offline session kernel | P05–P08 | local gates passed; hosted pending | P05 `df47cbe`, P06 `a535986`, P07 `698e495`, P08 `7d89173` (M1 local exit check in `progress/P08.md`) |
-| M2 Live R agent and decisions | P09–P13 | in progress | P09 (`4ef76fa`), P12 (`3b26e32`), P13 (`1968f1c`) plan acceptance passed locally; P10/P11 in progress |
+| M2 Live R agent and decisions | P09–P13 | in progress | P09 `4ef76fa`, P10 `2823b07`, P12 `3b26e32`, P13 `1968f1c` accepted locally; P11 in progress |
 | M3 Interactive/reproducible workflows | P14–P17 | pending | — |
 | M4 Interoperability and agents | P18–P21 | pending | — |
 | M5 Applications, benchmarks, release | P22–P25 | pending | — |
