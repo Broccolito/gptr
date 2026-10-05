@@ -507,11 +507,20 @@ skill_child_session = function(ctx) {
   !is.null(s) && isTRUE(tryCatch(session_data(s)$depth > 0L, error = function(e) FALSE))
 }
 
-#' `session_start` hook of `builtin:skills`: sync the skills of a top-level session
+#' `session_start` hook of `builtin:skills`: enable settings plugins, then sync the skills of a
+#' top-level session
 #' @noRd
 skills_on_session_start = function(event, ctx) {
   if (skill_child_session(ctx)) return(NULL)
+  plugins_sync()
   skill_sync()
+  NULL
+}
+
+#' `session_shutdown` hook of `builtin:skills`: forget the plugins enabled for that session
+#' @noRd
+skills_on_session_shutdown = function(event, ctx) {
+  plugins_session_end(event$session)
   NULL
 }
 
@@ -521,6 +530,7 @@ builtin_skills = function(gptr) {
   gptr$register(gptr_prompt_section("skills", skills_section_text, tier = "T1",
                                     order = 820L, budget = 1500L))
   gptr$on("session_start", skills_on_session_start)
+  gptr$on("session_shutdown", skills_on_session_shutdown)
   invisible(NULL)
 }
 

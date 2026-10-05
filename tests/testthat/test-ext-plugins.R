@@ -1014,3 +1014,128 @@ test_that("declarations reach the frozen prompt before activation; first use act
   expect_true("gptrpanel" %in% loadedNamespaces())
   expect_identical(e$res$condition, "asthma")
 })
+
+# Task 12: settings plugins, extension directories, resources_discover, session start.
+
+test_that("settings plugins and user extension files are enabled by plugins_sync()", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "settings-plug", "version": "0.3.0"}')
+  write_file(file.path(d, "skills", "settings-skill", "SKILL.md"),
+             c("---", "name: settings-skill", "description: From a settings plugin.", "---", "x"))
+  withr::defer(plugin_forget(d))
+  local_gptr_options(plugins = d)
+  pl = gptr_plugins()
+  expect_identical(pl$state[pl$name == "settings-plug"], "lazy")
+  ext_dir = file.path(gptr_user_dir("config"), "extensions")
+  write_file(file.path(ext_dir, "p17-user-ext.R"),
+             command_ext("p17-user-ext", "\"from user ext\""))
+  withr::defer(unlink(file.path(ext_dir, "p17-user-ext.R")))
+  plugins_sync()
+  expect_false(is.null(registry_get("skill", "settings-skill")))
+  expect_identical(registry_get("command", "p17-user-ext")$handler("", NULL), "from user ext")
+  pl = gptr_plugins()
+  row = pl[pl$name == "settings-plug", , drop = FALSE]
+  expect_true(row$enabled)
+  expect_identical(row$state, "active")
+  expect_identical(row$version, "0.3.0")
+})
+
+test_that("a project's extension files load at rank 1 only when it is trusted", {
+  files = list()
+  files[[".gptr/extensions/p17-proj-ext.R"]] = command_ext("p17-proj-ext", "\"project\"")
+  local_project(trust = FALSE, files = files)
+  plugins_sync()
+  expect_null(registry_get("command", "p17-proj-ext"))
+  files = list()
+  files[[".gptr/extensions/p17-tp-ext.R"]] = command_ext("p17-tp-ext", "\"trusted\"")
+  local_project(trust = TRUE, files = files)
+  plugins_sync()
+  reg = gptr_registry("command")
+  expect_identical(as.list(reg[reg$name == "p17-tp-ext", c("source", "rank")]),
+                   list(source = "project", rank = 1L))
+})
+
+test_that("resources_discover adds skill paths at start-up and after gptr_reload()", {
+  root = withr::local_tempdir()
+  write_file(file.path(root, "disc-skill", "SKILL.md"),
+             c("---", "name: disc-skill", "description: Found through a hook.", "---", "x"))
+  seen = new.env()
+  seen$reasons = character()
+  hook = gptr_hook("resources_discover", function(event, ctx) {
+    seen$reasons = c(seen$reasons, event$reason)
+    list(skill_paths = root)
+  })
+  off = gptr_register(hook)
+  withr::defer(off())
+  st = res_state()
+  old = st$discovered
+  withr::defer({
+    st$discovered = old
+  })
+  st$sync_root = NULL
+  plugins_sync()
+  expect_true(path_norm(root) %in% st$discovered$skill_paths)
+  expect_true("disc-skill" %in% gptr_skills("packages")$name)
+  plugins_sync()
+  gptr_reload()
+  plugins_sync()
+  expect_identical(seen$reasons, c("startup", "reload"))
+  local_project()
+  plugins_sync()
+  expect_identical(seen$reasons, c("startup", "reload", "startup"))
+})
+
+test_that("the session_start hooks enable plugins before syncing", {
+  withr::defer(res_prune("skills:", character()))
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "hook-plug"}')
+  write_file(file.path(d, "prompts", "hook-tpl.md"), "Hooked $1.")
+  withr::defer(plugin_forget(d))
+  local_gptr_options(plugins = d)
+  prompts_on_session_start(list(type = "session_start"), list(session = NULL))
+  expect_identical(registry_get("command", "hook-tpl")$handler("x", NULL),
+                   list(prompt = "Hooked x."))
+})
+
+test_that("session start enables settings plugins and syncs skills (e2e)", {
+  withr::defer(res_prune("skills:", character()))
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "start-plug"}')
+  write_file(file.path(d, "skills", "start-skill", "SKILL.md"),
+             c("---", "name: start-skill", "description: Enabled at session start.", "---", "x"))
+  withr::defer(plugin_forget(d))
+  local_gptr_options(plugins = d)
+  p = local_project(trust = TRUE)
+  write_file(file.path(p, ".gptr", "skills", "hook-skill", "SKILL.md"),
+             c("---", "name: hook-skill", "description: Synced at session start.", "---", "x"))
+  fake = local_fake_provider(list("ok"))
+  gptr("hello", model = fake, envir = new.env())
+  t1 = fake_requests(fake)[[1]]$system$t1
+  expect_match(t1, "- start-skill: Enabled at session start.", fixed = TRUE)
+  expect_match(t1, "- hook-skill: Synced at session start.", fixed = TRUE)
+})
+
+test_that("a session's plugin entries are forgotten at session_shutdown", {
+  d = withr::local_tempdir()
+  write_file(file.path(d, "plugin.json"), '{"name": "ended-plug"}')
+  sid = "s00000000c9"
+  plugin_enable(d, 0L, session = sid)
+  expect_true("ended-plug" %in% gptr_plugins()$name)
+  expect_true("ended-plug" %in% plugins_enabled(sid)$name)
+  skills_on_session_shutdown(list(type = "session_shutdown", session = sid),
+                             list(session = NULL))
+  expect_false("ended-plug" %in% gptr_plugins()$name)
+  hooks = Filter(function(h) identical(h[["event"]], "session_shutdown"), registry_all("hook"))
+  expect_true(any(vapply(hooks, function(h) identical(h$handler, skills_on_session_shutdown),
+                         NA)))
+})
+
+test_that("filter entries are skipped and a failing settings plugin is a diagnostic", {
+  local_gptr_options(plugins = c("-builtin:mcp", "+plugin:x"))
+  expect_identical(plugins_setting(), character())
+  expect_silent(plugins_sync())
+  local_gptr_options(plugins = "p17-no-such-plugin")
+  expect_silent(plugins_sync())
+  diag = gptr_registry(diagnostics = TRUE)
+  expect_identical(diag$source[nrow(diag)], "user")
+})

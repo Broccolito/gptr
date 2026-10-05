@@ -10,8 +10,9 @@
 #' `handlers` (resource handlers of the L4 built-ins), `groups` (registry ids of synced
 #' resource groups), `parse` (parse cache keyed by file version), `plugins` (the plugin table),
 #' `loaded` (extension files loaded per path, rank and session), `used` and `tick`
-#' (least-recently-used counters of the skill catalog), `sync_gen` (registry generation of the
-#' last plugins_sync()) and `discovered` (paths returned by `resources_discover` hooks).
+#' (least-recently-used counters of the skill catalog), `sync_gen` and `sync_root` (registry
+#' generation and project root of the last plugins_sync()) and `discovered` (paths returned by
+#' `resources_discover` hooks).
 #' Configuration only: no run state.
 #' @noRd
 res_state = function() {
@@ -25,7 +26,6 @@ res_state = function() {
     st$loaded = list()
     st$used = list()
     st$tick = 0L
-    st$sync_gen = NA_integer_
     st$discovered = list(skill_paths = character(), prompt_paths = character(),
                          agent_paths = character())
     the$resources = st
@@ -1021,9 +1021,9 @@ plugin_code = function(p) {
     }
     factory = plugin_entry_factory(parts[1L], parts[2L])
   } else if (identical(p$kind, "directory")) {
-    files = list.files(file.path(p$path, "extensions"), pattern = "\\.[Rr]$", full.names = TRUE)
+    files = ext_files(file.path(p$path, "extensions"))
     if (!length(files)) return(NULL)
-    factory = plugin_dir_factory(sort(files, method = "radix"))
+    factory = plugin_dir_factory(files)
   } else {
     return(NULL)
   }
@@ -1094,7 +1094,7 @@ extension_resolve = function(name) {
   if (!is.null(ws)) places$project = file.path(ws, "extensions")
   places$user = file.path(gptr_user_dir("config"), "extensions")
   for (scope in names(places)) {
-    files = list.files(places[[scope]], pattern = "\\.[Rr]$", full.names = TRUE)
+    files = ext_files(places[[scope]])
     if (!length(files)) next
     base = sub("\\.[Rr]$", "", basename(files))
     hit = res_match(name, base, "extension")
@@ -1369,6 +1369,61 @@ gptr_plugins = function(installed = FALSE) {
                   tokens = vapply(rows, function(r) as.numeric(r$tokens), 0), path = chr("path"),
                   stringsAsFactors = FALSE, row.names = NULL)
   new_listing(df, "gptr_plugins")
+}
+
+# ---- process-level sync ----------------------------------------------------------------------
+
+#' Extension files (`*.R`) of a directory, in radix order
+#' @noRd
+ext_files = function(dir) {
+  sort(list.files(dir, pattern = "\\.[Rr]$", full.names = TRUE), method = "radix")
+}
+
+#' Enable settings plugins and extension directories; collect `resources_discover` paths
+#'
+#' Called first by the `session_start` hooks of `builtin:skills`, `builtin:prompts` and
+#' `builtin:agents` (top-level sessions). The `plugins` setting merges the user layer and a
+#' trusted project layer, which this L0 file cannot tell apart, so its plugins enable at the user
+#' rank 3; a trusted project's `.gptr/extensions/*.R` load at rank 1 and the user's
+#' `extensions/*.R` at rank 3 (contract 10.1). `resources_discover` is dispatched at the first
+#' sync in a project root (`startup`) and after `gptr_reload()` (`reload`). Idempotent; failures
+#' are diagnostics, never errors (10.8).
+#' @noRd
+plugins_sync = function() {
+  st = res_state()
+  gen = registry_generation()
+  root = project_root()
+  reason = if (!identical(st$sync_root, root)) "startup" else if (!identical(st$sync_gen, gen)) {
+    "reload"
+  }
+  st$sync_gen = gen
+  st$sync_root = root
+  for (n in plugins_setting()) {
+    tryCatch(plugin_enable(n, 3L), error = function(e) {
+      registry_diagnostic("user", "plugin", class(e)[1L], conditionMessage(e))
+    })
+  }
+  enable_dir = function(dir, scope, rank) {
+    for (f in ext_files(dir)) {
+      extension_enable(list(path = path_norm(f), name = sub("\\.[Rr]$", "", basename(f)),
+                            scope = scope), rank)
+    }
+  }
+  ws = workspace_dir()
+  if (!is.null(ws) && trust_ok()) enable_dir(file.path(ws, "extensions"), "project", 1L)
+  enable_dir(file.path(gptr_user_dir("config"), "extensions"), "user", 3L)
+  if (!is.null(reason)) {
+    got = ev_dispatch("resources_discover",
+                      ev_new("resources_discover", cwd = root, reason = reason))
+    paths = function(x) {
+      x = unlist(x, use.names = FALSE)
+      unique(path_norm(if (is.character(x)) x[!is.na(x) & nzchar(x)] else character()))
+    }
+    st$discovered = list(skill_paths = paths(got$skill_paths),
+                         prompt_paths = paths(got$prompt_paths),
+                         agent_paths = paths(got$agent_paths))
+  }
+  invisible(NULL)
 }
 
 # Owned by builtin:skills (IC-34; contract 7.17 lists it with the skills, prompts and agents

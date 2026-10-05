@@ -314,12 +314,14 @@ agent_def_get = function(name = NULL, file = NULL) {
   spec
 }
 
-#' `session_start` hook of `builtin:agents`: sync the agents of a top-level session in its mode
+#' `session_start` hook of `builtin:agents`: enable settings plugins, then sync the agents of a
+#' top-level session in its mode
 #' @noRd
 agents_on_session_start = function(event, ctx) {
   s = ctx$session
   d = if (is.null(s)) NULL else tryCatch(session_data(s), error = function(e) NULL)
   if (isTRUE(d$depth > 0L)) return(NULL)
+  plugins_sync()
   agent_sync(d$mode)
   NULL
 }

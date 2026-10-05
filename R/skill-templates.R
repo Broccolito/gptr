@@ -435,10 +435,12 @@ template_sync = function() {
   invisible(NULL)
 }
 
-#' `session_start` hook of `builtin:prompts` (top-level sessions only)
+#' `session_start` hook of `builtin:prompts`: enable settings plugins, then sync the templates
+#' of a top-level session
 #' @noRd
 prompts_on_session_start = function(event, ctx) {
   if (skill_child_session(ctx)) return(NULL)
+  plugins_sync()
   template_sync()
   NULL
 }
