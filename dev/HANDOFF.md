@@ -50,6 +50,13 @@ Maintained by the coordinator; remove an item only when its owning task lands it
 - **P09 Task 8 temporary guard:** the test "the gptr shim reaches gptr:: when gptr is
   not visible from envir" skips while P08's `gptr_return()` is absent. **P08 Task 10
   (session SDK verbs) must delete that guard** and see the test pass (see its D-entry).
+- **PCRE `$` anchors:** with `perl = TRUE`, `$` also matches before a final newline. P02's
+  validators were fixed to `\z` (D-074 item 8). `R/perm-classify.R:903`
+  (`grepl("^[ -~]*$", x, perl = TRUE)`, P11) still needs the same fix in the P11 lane.
+- **FIX lane** (`progress/fixes.md`): FIX-1 session finalizer race (deferred GC-time shutdown),
+  FIX-2 `gptr::` calls without `quote()`, FIX-3 `rebuild_frozen()` keeps `human`/`reinject`.
+  After FIX-1 lands, P07's `gc()` workaround in `p07_session()` (test-prompt-sections.R) can be
+  removed by the P07 owner.
 - **D-019 item 5:** `write_all()` blocks on Windows (processx). P04-level decision needed
   before P18/P19/P20/P22 send large stdin payloads to Windows children.
 - **Hosted CI open items** (`progress/ci-hosted.md`): INFRA-23 CPU 1.060 s once on hosted
