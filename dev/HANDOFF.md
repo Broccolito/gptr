@@ -57,9 +57,8 @@ Maintained by the coordinator; remove an item only when its owning task lands it
   FIX-2 `gptr::` calls without `quote()`, FIX-3 `rebuild_frozen()` keeps `human`/`reinject`.
   After FIX-1 lands, P07's `gc()` workaround in `p07_session()` (test-prompt-sections.R) can be
   removed by the P07 owner.
-- **P12 open items** (`progress/P12.md`, plan acceptance `3b26e32`): IC-74's "classifier
-  adapters receive conformance coverage" needs a classifier fixture layout and P13's canonical-
-  answer validator (schedule with P13's IC-74 `s1-ollama.R` task); `claude-haiku-4-5` has
+- **P12 open items** (`progress/P12.md`, plan acceptance `3b26e32`): classifier-adapter
+  conformance is CLOSED by FIX-6 `2d2d75a` (D-026); still open: `claude-haiku-4-5` has
   `tool_addition = TRUE` but `mid_system = FALSE`, so no tool-addition declarations are sent
   (P05/P12 decision). FIX-4 (`secret_late_check()` NA tolerance) gates every full-suite run.
 - **Waiting on P08 Task 5 (`call_new`/`call_value`)**: P09 Task 10-11, P13 Task 7+.
@@ -69,6 +68,13 @@ Maintained by the coordinator; remove an item only when its owning task lands it
   `fs_path()` for its `file.exists()`/`readBin()`), `R/gptr-gateway.R:774` (P08). Scheduled as
   FIX-5 once the P15 and P08 lanes release those files. Also open: INFRA-23 CPU bound on hosted
   Windows (P04 decision, CI-3/CI-5).
+- **P11 classifier hardening (coordinator convergence decision, 2026-10-05):** after 15 review
+  rounds of P11 Task 2 (command/SQL/Python classifiers, far beyond the plan's scope), Task 2 is
+  committed after a final round fixing the round-15 findings; later classifier gaps found in
+  scoped reviews are recorded as minors in `progress/P11.md`. Follow-up (schedule before P24's
+  injection/secrets e2e suites): convert every level-0 program's option handling into an explicit
+  per-program option ALLOWLIST (any unrecognised option -> level 3, standard (B) of D-061), and
+  re-review against D-061 (A)-(C). The classifier is advisory, not a security boundary (03 6.8.1).
 - **D-019 item 5:** `write_all()` blocks on Windows (processx). P04-level decision needed
   before P18/P19/P20/P22 send large stdin payloads to Windows children.
 - **Hosted CI open items** (`progress/ci-hosted.md`): INFRA-23 CPU 1.060 s once on hosted
