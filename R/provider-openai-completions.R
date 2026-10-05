@@ -1,15 +1,9 @@
-# The openai-completions adapter (P12): OpenAI-compatible Chat Completions for OpenRouter,
-# Groq, DeepSeek, Mistral, Together, xAI, Cerebras, Fireworks, the local servers (Ollama chat
-# models included, IC-74), Azure and Bedrock, driven by the compat record of report 09 section
-# 3.3 (Pi's OpenAICompletionsCompat and detectCompat(), openai-completions.ts:1585-1726) and a
-# streaming <think> splitter (09 section 4.6). The normaliser is adapted from the verified
-# prototypes of report 09 section 5.1 and report 03 section 5.3 (verification log rows 11-14
-# applied: cache_control only for OpenRouter, the finish-reason map, thinking as a text-part
-# array). Usage follows IC-74 (07-local-ollama.md section 5): usage the stream never reported,
-# or reported as null, stays unknown.
+# The openai-completions adapter (P12): OpenAI-compatible Chat Completions for hosted and local
+# servers (Ollama chat models included, IC-74), Azure and Bedrock, driven by the compat record of
+# report 09 section 3.3 (Pi's detectCompat()) and a streaming <think> splitter (09 section 4.6).
+# Unreported usage stays unknown (IC-74).
 
-#' The compat fields and their defaults (snake_case forms of Pi's OpenAICompletionsCompat;
-#' the names P05's provider records use)
+#' The compat fields and their defaults (snake_case forms of Pi's OpenAICompletionsCompat)
 #' @noRd
 compat_defaults = function() {
   list(supports_store = TRUE, supports_developer_role = TRUE,
@@ -34,15 +28,8 @@ compat_snake = function(x) {
 }
 
 #' The compat record of a provider and model (04 section 7.12; report 09 section 3.3)
-#'
-#' Field names, `max_tokens` vs `max_completion_tokens`, reasoning replay, tool-id rules and
-#' image and auth modes: detected from the provider id and base URL like Pi's detectCompat(),
-#' then overridden field by field by the provider record's `compat` (snake_case or Pi's
-#' camelCase names). OpenRouter forwards `cache_control` only to Anthropic and Google models
-#' (G4 sections 2.6 and 3.7), so other OpenRouter model ids get `cache_control_format = "none"`.
-#' @param provider A provider id (chr(1)) or a provider record.
-#' @param model A model record (04 section 4.9) or NULL.
-#' @return A named list with the fields of compat_defaults().
+#' Detected from the provider id and base URL like Pi's detectCompat(), then overridden per field
+#' by the record's `compat`; OpenRouter's cache_control reaches Anthropic and Google models only.
 #' @noRd
 compat_flags = function(provider, model) {
   rec = if (is.character(provider)) provider_get(provider) else provider
@@ -175,13 +162,8 @@ completions_tool_id = function(id, compat, provider = "") {
   id
 }
 
-#' A Chat Completions error object -> class suffix, status and retryability (08 section 3.5);
-#' an error given as a bare string is its message
-#'
-#' Only one whole number from 100 to 599 (an HTTP status, the range P04's `reactor_retry()`
-#' accepts) is read as a numeric code; any other number (a fraction, a value out of that range or
-#' of R's integer range, a vector) is never coerced, so no integer overflow can warn (04 section
-#' 8.1), and gives no status (as `google_error_info()`, D-034).
+#' A Chat Completions error object -> class suffix, status and retryability (08 section 3.5)
+#' A bare string is the message; only a whole code in 100..599 is read, never coerced (D-034).
 #' @noRd
 completions_error_info = function(err) {
   if (!is.list(err)) err = list(message = adp_chr(err))
@@ -232,10 +214,8 @@ completions_first = function(...) {
   if (length(known)) known[[1L]] else NA_real_
 }
 
-#' Record a Chat Completions usage object (Pi's parseChunkUsage, 09 section 2.3): the cache read
-#' from `prompt_tokens_details.cached_tokens`, DeepSeek's `prompt_cache_hit_tokens` or Kimi's
-#' `cached_tokens`; input is the prompt minus cache reads and writes. Each report replaces the
-#' last (the counts are totals, not deltas); a reported null stays unknown (IC-74)
+#' Record a Chat Completions usage object (Pi's parseChunkUsage, 09 section 2.3)
+#' Input = prompt - cache reads and writes; each report replaces the last; null stays NA (IC-74).
 #' @noRd
 completions_usage = function(st, u) {
   if (!is.list(u)) return(invisible(NULL))
@@ -253,15 +233,9 @@ completions_usage = function(st, u) {
   invisible(NULL)
 }
 
-#' An accumulator of OpenRouter `reasoning_details` fragments (report 09 section 2.3; Pi
-#' openai-completions.ts:665-676)
-#'
-#' The stream sends one fragment per reasoning delta. Consecutive `reasoning.text` or
-#' `reasoning.summary` fragments of the same type and `index` (and no conflicting `id`) are merged
-#' into one item: the text is collected in a linear buffer and joined once (04 section 8.1), and a
-#' later non-null field, such as the closing `signature`, is kept. Every other item, such as
-#' `reasoning.encrypted`, stays discrete and verbatim; a null item is dropped. `add(x)` takes one
-#' item; `items()` closes the open item and returns the list.
+#' An accumulator of OpenRouter `reasoning_details` fragments (09 section 2.3; Pi 665-676)
+#' Consecutive text/summary fragments of one type and `index` merge (linear buffer); other items
+#' stay verbatim, nulls drop. `add(x)` takes one item; `items()` closes and returns the list.
 #' @noRd
 completions_details = function() {
   st = new.env(parent = emptyenv())
@@ -326,13 +300,7 @@ completions_details = function() {
 }
 
 #' The openai-completions normaliser (04 section 8.1; Pi openai-completions.ts:553-700)
-#'
-#' The compat record comes from the provider record provider_stream() resolved (`opts$provider`,
-#' the session's own record first; D-023), so a session-scoped provider's compat applies.
-#' @param model A model record (contract section 4.9).
-#' @param opts The adapter options of contract section 8.1 (`emit`, `retry`, `signal`,
-#'   `provider`, `session`).
-#' @return A list of functions `push`, `finish`, `fail`, `message`.
+#' The compat record comes from `opts$provider`: a session-scoped provider's compat applies (D-023).
 #' @noRd
 completions_normaliser = function(model, opts) {
   st = adp_state(model, opts)
@@ -509,11 +477,7 @@ completions_normaliser = function(model, opts) {
 # ---- openai-completions: request body ---------------------------------------------------------
 
 #' Adapter capabilities of openai-completions (04 section 8.1; IC-69, IC-71)
-#'
-#' `cache = "openrouter"`: the default cache policy (P07) then anchors T0 and the project block;
-#' the markers are written only for providers whose compat record has
-#' `cache_control_format = "anthropic"` (OpenRouter's Anthropic and Google models) and ignored by
-#' every other OpenAI-compatible host (G4 section 3.7).
+#' `cache = "openrouter"`: markers are written only for `cache_control_format = "anthropic"`.
 #' @noRd
 completions_caps = function() {
   list(images_in_results = FALSE, tool_addition = FALSE, structured_output = FALSE,
@@ -618,11 +582,8 @@ completions_attaches = function(group, model) {
 }
 
 #' Chat Completions messages of a group of tool results; images follow as one user message
-#'
-#' A model without image input gets the omission note in the tool message, once per image, and
-#' no image message; "(see attached image)" leads a result without text only when its images
-#' are attached (D-023 item 4). With requires_assistant_after_tool_result the bridging assistant
-#' message precedes the image message (Pi 1443-1448).
+#' A text-only model gets the omission note once per image (D-023 item 4); a required bridging
+#' assistant message precedes the image message (Pi 1443-1448).
 #' @noRd
 completions_tool_results = function(group, model, compat) {
   out = list()
@@ -700,17 +661,9 @@ completions_thinking = function(head, model, params, compat) {
   head
 }
 
-#' build() of the openai-completions adapter (04 section 8.1; G4 section 3.7: model, stream,
-#' stream_options, tools, messages; OpenRouter session affinity and cache_control)
-#'
-#' The compat record and the provider headers come from the provider record provider_stream()
-#' resolved (`opts$provider`, the session's own record first; D-023, D-027), and the provider
-#' headers are merged by name. Tools go only to a model that calls tools (`tool_call`; IC-74,
-#' 07-local-ollama.md section 1), and `tool_choice` only with a tools array. Each element is
-#' serialised once per session through `opts$memo`, keyed by everything that reaches the wire
-#' (the compat record and the model's image input included). A `returns` instruction counts as
-#' a user message for the assistant a host requires after tool results, and that assistant
-#' precedes the image message of tool results instead of following it (Pi 1443-1448).
+#' build() of the openai-completions adapter (04 section 8.1; G4 section 3.7)
+#' Compat and headers come from `opts$provider` (D-023, D-027); tools only to a `tool_call` model
+#' (IC-74). Elements are memoised per session, keyed by everything that reaches the wire.
 #' @noRd
 completions_build = function(model, context, opts) {
   params = context$params %||% list()

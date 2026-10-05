@@ -57,3 +57,13 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   prompt-compact|session-live|session-budget|lint-rules|arch-layers` PASS 6857 green.
 - Reviews: none yet. Recovery check reverted an unlisted est_image_tokens() rewrite (worse `expected` text).
 - Deviations: none. Open: INFRA-18 choices test stays on the mock server (lane s1; optional).
+
+## Task P05-C - Trim internal comment narration in provider and catalog files (2026-10-05)
+- Comments only in `R/provider-*.R`, `R/catalog-models.R`: internal blocks are a title plus at most two
+  lines citing IC/D ids, file headers 4 lines; the D-018 kill rule, INFRA-23 take-out form and `[[`
+  notes kept. Non-comment parse tokens and exported roxygen unchanged. Comment lines 1718 -> 1213,
+  files 9152 -> 8647 (-505; plan ~300).
+- Red: none (refactor). Green: `provider-|catalog-` PASS 3041. Lint clean. Neighbours:
+  `arch-layers|lint-rules|s1-client|session-store|agent-run` PASS 1242 green.
+- Reviews: none yet.
+- Deviations: none. Open: none.

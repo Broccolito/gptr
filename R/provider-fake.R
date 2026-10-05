@@ -331,11 +331,8 @@ fake_plan = function(reply, request, model, context, engine) {
   list(steps = steps, hang = FALSE, request_id = request_id)
 }
 
-#' The `inprocess` stream function of the fake adapter (contract section 8.1)
-#'
-#' Returns a generator: each call returns `list(events, wait)` or NULL when the stream is over.
-#' The generator checks `opts$signal$aborted` before every step and then ends the stream with an
-#' `error` event of reason "aborted" carrying the partial message.
+#' The `inprocess` stream of the fake adapter (contract 8.1): a generator of `list(events, wait)`
+#' `opts$signal$aborted` is checked before every step and ends the stream with an "aborted" error.
 #' @noRd
 fake_stream = function(model, context, opts) {
   state = new.env(parent = emptyenv())
@@ -434,11 +431,8 @@ fake_classifier_stream = function(model, context, opts) {
   }
 }
 
-#' The classifier fake (contract section 8.1 `classify$run`, 12.1; IC-71 signature)
-#'
-#' Returns canonical IC-74 answers, usage and model metadata, or an unsignalled
-#' `gptr_error_s1_*` condition on failure. Synthetic probabilities carry no empirical
-#' calibration claim: `calibrated = NA`.
+#' The classifier fake (contract 8.1 `classify$run`, 12.1): canonical IC-74 answers or an
+#' unsignalled `gptr_error_s1_*` condition; synthetic probabilities report `calibrated = NA`.
 #' @noRd
 fake_classify = function(model, state, questions, opts) {
   engine = fake_engine(model, opts)
@@ -530,10 +524,7 @@ fake_s1_error = function(message, status, model, class = NULL) {
   ))
 }
 
-#' The `builtin:fake` factory: registers the `fake` and `fake-classifier` adapters
-#'
-#' Declared by P05 (`provider-registry.R`) with `ext_declare_builtin("fake", builtin_fake)`
-#' (contract IC-08). It uses only the API object it receives.
+#' The `builtin:fake` factory (IC-08): registers the `fake` and `fake-classifier` adapters
 #' @noRd
 builtin_fake = function(gptr) {
   gptr$register_adapter(

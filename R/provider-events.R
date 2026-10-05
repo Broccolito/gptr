@@ -18,14 +18,9 @@ ev_new = function(type, ...) {
   ev
 }
 
-#' An accumulator of INFRA-02 events
-#'
-#' Returns an environment with `push(ev)` and `message(stop_reason = "stop")`. Deltas are kept in
-#' per-block buffers that grow by doubling and are joined once, so `push()` is O(1) amortised and
-#' accumulation is linear (INFRA-23): `push()` takes the buffer list out of its environment and
-#' clears the binding before setting an element, so R modifies the list in place.
-#' `message()` returns the terminal event's message once a `done` or `error` event was pushed, and
-#' otherwise the partial message built from the buffers.
+#' An accumulator of INFRA-02 events: an environment with `push(ev)` and `message(stop_reason)`
+#' Per-block buffers grow by doubling and join once (linear, INFRA-23); `message()` is the
+#' terminal event's message after `done`/`error`, else the partial message.
 #' @noRd
 acc_new = function() {
   state = new.env(parent = emptyenv())
@@ -59,9 +54,7 @@ acc_new = function() {
       }
       if (endsWith(type, "_end")) buffer$block = ev$block
       if (endsWith(type, "_delta")) {
-        # Take the list out and clear its binding first: `buffer$parts[[i]] = x` on the list
-        # while it is still bound in the environment duplicates the whole list on every delta
-        # (20,000 deltas: 1.7 s instead of 0.01 s), making accumulation quadratic (INFRA-23)
+        # Take-out form: setting an element of a still-bound list copies it (quadratic, INFRA-23)
         parts = buffer$parts
         buffer$parts = NULL
         if (buffer$n == length(parts)) length(parts) = 2L * length(parts)

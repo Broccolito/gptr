@@ -1,13 +1,7 @@
 # Model catalog: snapshot, merge layers, aliases, the model resolver, explicit refresh and
-# gptr_models() (P05).
-# Contract: dev/spec/04-interface-contract.md sections 4.9, 6.2 (gptr_models()), 7.5 and 11.10;
-# architecture section 8.4; IC-67 (max_images), IC-71 (forced_tool_choice), IC-73 (cache_min).
-# The resolver is report 09 section 5.5's verified algorithm (match_pattern(), break_tie(),
-# norm_id(), resolve_alias(); verification log row 34: a tie goes to the single provider with a
-# credential first, then to the owner of models.dev's canonical_model_id) with Pi's last-colon
-# thinking rule (model-resolver.ts:204-257) and Pi's clamp (models.ts:1215-1249; report 03
-# section 3.4). Catalog strategy: 09 section 4.8 (snapshot built by a maintainer script,
-# refreshed only on explicit request with ETag into R_user_dir(); nothing at load).
+# gptr_models() (P05; contract 4.9, 6.2, 7.5, 11.10; architecture 8.4; IC-67, IC-71, IC-73). The
+# resolver is report 09 section 5.5's algorithm with Pi's last-colon thinking rule and clamp; the
+# snapshot comes from a maintainer script, refreshed only on explicit request (09 section 4.8).
 
 #' Thinking levels in order (Pi EXTENDED_THINKING_LEVELS)
 #' @noRd
@@ -52,10 +46,8 @@ catalog_price = function(tier, input, output, cache_read = NULL, cache_write_5m 
 }
 
 #' Complete entries for the models the specification names (the base of every snapshot)
-#'
-#' Values from reports 07 section 2.1, 03 section 2.10, 08 finding 10, 09 section 5.6 and G2
-#' section 2.4 (all verified 2026-09-29/30). models.dev entries replace these fields when the
-#' maintainer build downloads models.dev; `--offline` builds ship them alone.
+#' Values from reports 07 2.1, 03 2.10, 08 finding 10, 09 5.6 and G2 2.4 (verified 2026-09-29/30);
+#' models.dev replaces these fields in the maintainer build.
 #' @noRd
 catalog_seed = function() {
   claude = function(id, name, family, date, context, output, levels) {
@@ -102,15 +94,8 @@ catalog_seed = function() {
 }
 
 #' gptr's reviewed corrections, applied on top of every source (snapshot, cache, refresh)
-#'
-#' Prices and cache multipliers: 07 section 2.1 (Anthropic), 08 finding 10 (OpenAI, the 272K
-#' context tier: 2x input and cache, 1.5x output), G2 fact-check row 7 (Gemini 3.8 Flash
-#' promotional prices end 2026-12-31). cache_min: 07 section 2.7 and G4 (512 on Fable 5.1, Opus
-#' 5.5, Sonnet 5.5; 4,096 on Haiku 4.5 and Gemini 3.x; 1,024 on OpenAI). max_images: 07 section
-#' 2.8 (600 per request, 100 for 200K-context models). forced_tool_choice FALSE on Anthropic 5.x
-#' (IC-71). Thinking: Opus 5.5 and Fable 5.1 think always (no "off"); Sonnet 5.5 also accepts
-#' "off" (07 section 2.1 table: "adaptive (off = between_tools)"). Aliases: architecture section
-#' 8.4 and 04 section 11.10.
+#' Sources: 07 sections 2.1, 2.7, 2.8 (Anthropic), 08 finding 10 (OpenAI), G2 row 7 (Gemini), G4
+#' (cache_min), IC-71 (forced_tool_choice); aliases: architecture 8.4, 04 section 11.10.
 #' @noRd
 catalog_overrides = function() {
   claude5 = list(mid_system = TRUE, tool_addition = TRUE, images_in_results = TRUE,
@@ -244,9 +229,8 @@ catalog_prices_from = function(cost) {
   out
 }
 
-#' A catalog entry from one models.dev model (NULL when pruned)
-#'
-#' Pruning (09 section 4.8): tool-capable, text output, not deprecated.
+#' A catalog entry from one models.dev model; NULL unless tool-capable, text output and not
+#' deprecated (09 section 4.8)
 #' @noRd
 catalog_entry_modelsdev = function(m, provider) {
   if (!is.list(m) || is.null(m[["id"]])) return(NULL)
@@ -360,9 +344,7 @@ catalog_entry_merge = function(old, new) {
 }
 
 #' Merge a layer of entries into a named list of entries (keyed `provider/id`)
-#'
-#' With `patch_only = TRUE` (the overrides) an entry for an unknown ref is added only when it is
-#' complete (has a `name`), so a correction never creates a half-described model.
+#' `patch_only = TRUE` (the overrides) adds an unknown ref only when complete (has a `name`).
 #' @noRd
 catalog_merge_models = function(base, layer, patch_only = FALSE) {
   for (e in layer %||% list()) {
@@ -433,9 +415,7 @@ catalog_spec_models = function(p) {
 }
 
 #' Model entries registered as `model` specs (04 section 10.2 row 3; name `provider/id`)
-#'
-#' A spec's `name` is its registry key, so the display name comes from `label` (else the id);
-#' the spec bookkeeping fields are dropped.
+#' The display name comes from `label` (else the id); spec bookkeeping fields are dropped.
 #' @noRd
 catalog_model_specs = function() {
   specs = tryCatch(registry_all("model"), error = function(e) list())
@@ -555,10 +535,8 @@ catalog_key = function() {
 }
 
 #' The merged catalog (04 section 11.10), rebuilt only when a layer changed
-#'
-#' `the$catalog` also keeps the discovery layer (`discovered`) and the private discovery evidence
-#' of native Ollama discovery (`evidence`, read only by provider_preflight()); neither is part
-#' of the returned catalog.
+#' `the$catalog` also keeps the discovery layer and the private Ollama evidence (read only by
+#' provider_preflight()); neither is part of the returned catalog.
 #' @noRd
 catalog_get = function() {
   key = catalog_key()
@@ -609,8 +587,7 @@ model_alias_entry = function(target, ctg) {
 }
 
 #' Is a credential for these variables (or this provider's store entry) present?
-#'
-#' Checks only: the environment, the vault and the credential store; never registers a value.
+#' Checks the environment, the vault and the credential store; never registers a value.
 #' @noRd
 model_key_present = function(id, vars) {
   if (length(vars) && any(nzchar(Sys.getenv(vars, unset = "")))) return(TRUE)
@@ -630,9 +607,8 @@ model_provider_keyed = function(pid) {
   isTRUE(tryCatch(model_key_present(pid, vars), error = function(e) FALSE))
 }
 
-#' Pick one row among several candidates: the single provider with a credential, else the
-#' owner's own listing among the credentialed ones (among all when none has a credential), else
-#' ambiguous (report 09 break_tie(), verification log row 34)
+#' Pick one row among candidates: the single credentialed provider, else the owner's listing
+#' (among credentialed ones if any), else ambiguous (report 09 break_tie(), log row 34)
 #' @noRd
 model_pick = function(w, ctg, how) {
   idx = ctg$index
@@ -685,12 +661,8 @@ model_match_fuzzy = function(pat, ctg, sel) {
 }
 
 #' The model entry of a live fake provider (P01) that no registry record shows
-#'
-#' gptr(model = gptr_fake_provider(...)) registers the spec at rank 0 for its session only
-#' (04 section 10.1), and model_resolve() has no session argument, so P06 resolving the
-#' session's "fake/fake-1" would miss it. P01 keeps a weak index of live fake engines by name
-#' (`fake_engine()`); the record is P01's `fake_model_record()` without its `fake` engine field,
-#' so provider_stream() picks the session's own spec through `opts$provider`.
+#' A `model = <fake spec>` is registered for its session only (04 section 10.1) and
+#' model_resolve() has no session, so P01's weak index of live fakes supplies the record.
 #' @noRd
 model_fake_entry = function(pid, id) {
   engine = tryCatch(fake_engine(list(provider = pid)), error = function(e) NULL)
@@ -870,9 +842,7 @@ model_record = function(e, ctg, provider = NULL) {
 }
 
 #' Resolve a model reference to a model record (contract sections 4.9 and 7.5)
-#'
-#' `ref` is `provider/id[:thinking]`, an alias (dynamic by family and release date), a
-#' provider-less id, or a `gptr_provider` spec (its first model; used for `model = <spec>`).
+#' `ref`: `provider/id[:thinking]`, an alias, a provider-less id or a `gptr_provider` spec.
 #' @noRd
 model_resolve = function(ref, strict = TRUE) {
   check_flag(strict, "strict")
@@ -917,11 +887,8 @@ model_resolve = function(ref, strict = TRUE) {
 catalog_aliases = function() names(catalog_get()$aliases) %||% character()
 
 # ---- Defaults, the bounded catalog request, explicit refresh, local discovery, preflight ------
-# P05 Task 8 (04 sections 6.2, 7.5, 11.9 and 11.10; architecture section 8.4) with IC-74
-# (07-local-ollama.md sections 2 and 2.1): resolution, model_default() and ordinary listing never
-# discover; native Ollama discovery runs only on explicit request (gptr_models(refresh = TRUE,
-# provider = "ollama")) or explicit preparation (model_prepare()), never at load or under R CMD
-# check, and its validated results are the only source of the private evidence that
+# IC-74 (07-local-ollama.md sections 2, 2.1): only explicit requests discover (never at load or
+# under R CMD check); validated discovery is the only source of the private evidence
 # provider_preflight() accepts. Public model fields never attest anything.
 
 #' Seconds allowed for each request to a local server during discovery (report 09 section 4.6)
@@ -947,9 +914,7 @@ model_route_ready = function(id, vars) {
 }
 
 #' Is a subscription CLI provider registered and reported available by its status()?
-#'
-#' `status()` is called with `check = FALSE` when it has that formal, so it reads cached data
-#' only (IC-65); the field read is `available` (P20 contract, ambiguity 18).
+#' `status(check = FALSE)` reads cached data only (IC-65); the field read is `available`.
 #' @noRd
 model_cli_available = function(id) {
   p = provider_get(id)
@@ -960,9 +925,8 @@ model_cli_available = function(id) {
   isTRUE(s[["available"]])
 }
 
-#' The first native classifier with current local discovery evidence (no discovery, no I/O)
-#'
-#' A provider whose settings say `enabled: false` is skipped, as for every default route.
+#' The first native classifier with current local discovery evidence (no discovery, no I/O),
+#' skipping providers disabled in the settings
 #' @noRd
 catalog_local_classifier = function() {
   ev = the$catalog[["evidence"]] %||% list()
@@ -983,12 +947,8 @@ catalog_local_classifier = function() {
 }
 
 #' Default model reference for a role (contract section 7.5; architecture section 8.4)
-#'
-#' The setting (`model`, `small_model`, `system1`) wins; otherwise the first available route:
-#' an Anthropic key, then OpenAI, then Gemini, then a detected CLI. A provider whose settings say
-#' `enabled: false` is no route. For System 1: the TypeSafe key, else a native classifier whose
-#' current discovery evidence verifies local execution, decision capability and the server
-#' version (07-local-ollama.md section 5). Never discovers, registers or materialises a key.
+#' The setting wins, else the first enabled route (Anthropic, OpenAI, Gemini, CLI; System 1:
+#' TypeSafe, else an evidenced local classifier). Never discovers or materialises a key.
 #' @noRd
 model_default = function(role = c("chat", "small", "system1")) {
   role = check_choice(role, c("chat", "small", "system1"), "role")
@@ -1034,17 +994,9 @@ catalog_header = function(headers, name) {
   if (!length(h)) NULL else as.character(h[[1]])
 }
 
-#' One bounded request on the P04 reactor
-#'
-#' Queues one transfer with reactor_http() (which sets `followlocation = 0L`, IC-64) and pumps
-#' the reactor until it settles, for at most `timeout` seconds. Only this request's own transfer
-#' is cancelled, and only when it has not settled: on a pump timeout, an interrupt or error
-#' unwinding the pump, or a body above `max_bytes` (whose bytes are discarded). Returns
-#' `list(status, headers, body)` for any HTTP status: P04 delivers a non-2xx answer as its
-#' failure condition, whose `status` is kept (its body is P04's, for classification), so a 304
-#' arrives as the refused redirect (plan ambiguity 17). A failure without a status, a timeout
-#' and an oversized answer signal `gptr_error_network` (parent `gptr_error_provider`).
-#' @param attempts `NULL` for P04's retry default (`gptr.max_attempts`), else the attempts.
+#' One bounded request on the P04 reactor: `list(status, headers, body)` for any HTTP status
+#' Only its own unsettled transfer is cancelled (timeout, interrupt, oversized body); a failure
+#' without a status, a timeout or an oversized answer signals `gptr_error_network`.
 #' @noRd
 catalog_http_request = function(url, method = "GET", headers = list(), body = NULL,
                                 timeout = 30, attempts = NULL, max_bytes = 64 * 1024^2) {
@@ -1135,9 +1087,7 @@ catalog_http_get = function(url, headers = list(), timeout = 30) {
 }
 
 #' Refresh the catalog from models.dev with ETag revalidation (explicit request only)
-#'
-#' Writes `models.json` and `models.etag` into `R_user_dir("gptr", "cache")` (04 section 11.9);
-#' returns TRUE when a new catalog was written and FALSE on 304 Not Modified.
+#' Writes the user cache (04 section 11.9); TRUE for a new catalog, FALSE on 304 Not Modified.
 #' @noRd
 catalog_refresh = function() {
   gptr_user_dir("cache", create = TRUE)
@@ -1178,9 +1128,7 @@ catalog_refresh = function() {
 }
 
 #' Store discovered entries (and their private evidence) as a provider's discovery layer
-#'
-#' `replace = TRUE` (a full listing) replaces the provider's layer and evidence; otherwise the
-#' entries and evidence are merged by model.
+#' (`replace = TRUE`: a full listing replaces it; otherwise merged by model)
 #' @noRd
 catalog_discovered_set = function(pid, entries, evidence = list(), replace = TRUE) {
   st = the$catalog %||% list()
@@ -1203,10 +1151,8 @@ catalog_discovered_set = function(pid, entries, evidence = list(), replace = TRU
 }
 
 #' Ask a local provider for its models and add them as the discovery layer (explicit request)
-#'
-#' An Ollama provider gets P05's native discovery (catalog_ollama_discover()). Any other local
-#' provider's `discover()` contributes descriptive entries only: a listed name grants no tools,
-#' vision, reasoning or locality (IC-74), and creates no evidence. Returns the ids, invisibly.
+#' Ollama gets native discovery; any other `discover()` adds descriptive entries only, granting
+#' no capability or locality and no evidence (IC-74). Returns the ids, invisibly.
 #' @noRd
 catalog_discover = function(p, safety = NULL) {
   if (catalog_ollama_provider(p)) return(catalog_ollama_discover(p, safety))
@@ -1328,13 +1274,8 @@ catalog_ollama_decision = function(images) {
 }
 
 #' The catalog entry and the private evidence of one model a native Ollama server reports
-#'
-#' From /api/tags (name, digest, details, remote markers) and /api/show (capabilities,
-#' parameters, model_info, projector_info, remote markers). Capability booleans stay in
-#' `capabilities`; version, digest, limits and locality are typed fields. The effective context
-#' is the configured `num_ctx` bounded by the trained length, else unknown. Locality is `local`
-#' only for a loopback endpoint and a model without cloud selector or remote markers; local
-#' inference has a zero metered API price (not a zero compute cost).
+#' Context = configured `num_ctx` bounded by the trained length, else unknown; locality `local`
+#' only on a loopback endpoint without cloud selector or remote markers (zero metered price).
 #' @noRd
 catalog_ollama_describe = function(pid, tag, show, version, ep, lifecycle) {
   chr = function(x) if (catalog_chr1(x) && !grepl("[[:cntrl:]]", x)) x else NULL
@@ -1402,17 +1343,8 @@ catalog_unavailable_abort = function(ref, why, provided_by) {
 }
 
 #' Native Ollama discovery: /api/version, /api/tags and /api/show (07-local-ollama.md section 2)
-#'
-#' Explicit only: gptr_models(provider = "ollama", refresh = TRUE) lists every installed model
-#' (`only = NULL`); model_prepare() asks for its selected model (`only = <id>`). Never under
-#' R CMD check (no request, nothing changes). Under the local-only policy (the default) a
-#' non-loopback endpoint is refused before any request. Each request is bounded (1 s, one
-#' attempt, 8 MiB). No answer to /api/version or /api/tags means no server; a model that
-#' /api/show does not describe (an HTTP error, malformed JSON or a transport failure) is skipped,
-#' and when nothing is described after such a transport failure the network error names
-#' /api/show and the model. Validated answers become the discovery layer and the private evidence,
-#' bound to the endpoint's canonical origin and base path, the model tag and digest, the server
-#' version and the registry lifecycle. Returns the discovered ids, invisibly.
+#' Explicit only, never under R CMD check; under local-only a non-loopback endpoint is refused
+#' first. Bounded requests; an undescribed model is skipped. Returns the ids, invisibly.
 #' @noRd
 catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
   local_only = catalog_local_only(safety)
@@ -1521,12 +1453,8 @@ catalog_ollama_discover = function(p, safety = NULL, only = NULL) {
 }
 
 #' The local-only control of the protected safety record (07-local-ollama.md section 2.1)
-#'
-#' `safety` is the frozen P08/P06 safety record (a list or environment) or NULL. Only its
-#' `ollama_local_only` field is read; a missing record or field means TRUE. P05 never builds
-#' this record and never reads a setting for it: FALSE may come only from explicit human
-#' user/session configuration through P08/P06, never from merged provider settings, model
-#' metadata, project settings or per-call options.
+#' Reads only `ollama_local_only` (missing record or field = TRUE); FALSE comes only from human
+#' configuration through P08/P06, never from settings, model metadata or per-call options.
 #' @noRd
 catalog_local_only = function(safety) {
   if (is.null(safety)) return(TRUE)
@@ -1545,9 +1473,7 @@ catalog_local_only = function(safety) {
 }
 
 #' Why private evidence no longer describes the selected model on this endpoint, or NULL
-#'
-#' Binding: canonical origin and base path, the registry lifecycle, and the identity a model
-#' record carries (digest, server version), so a prepared model is never silently replaced.
+#' Bound to origin, base path, registry lifecycle and the record's digest and server version.
 #' @noRd
 catalog_evidence_stale = function(ev, model, p, ep) {
   pid = p[["id"]] %||% p[["name"]]
@@ -1575,20 +1501,9 @@ catalog_evidence_get = function(model, p) {
   the$catalog[["evidence"]][[key]]
 }
 
-#' Pure request preflight (07-local-ollama.md section 2.1; contract section 7.5)
-#'
-#' No I/O and no state change. Models of other routes are returned unchanged. An Ollama route
-#' (the `ollama` provider or the `ollama-system-one` api) needs current private evidence from
-#' P05 discovery for the selected model, bound to the provider's endpoint, base path, registry
-#' lifecycle and the record's identity. Under the local-only policy (default; only
-#' `safety$ollama_local_only = FALSE` relaxes it) a non-loopback endpoint, a cloud selector,
-#' remote markers or evidence without local execution are refused (`gptr_error_untrusted`).
-#' A classifier needs model-level `type = "classifier"` and `api = "ollama-system-one"`, the
-#' decision capability and the minimum server version; a chat model needs the completion
-#' capability and its provider's adapter (`gptr_error_not_available`). Returns the checked
-#' model: tools, reasoning, image input and context limited to the evidence, with the evidence's
-#' digest, server version and locality, and a zero metered price when the evidence establishes
-#' local execution (otherwise the catalog's own prices, unknown when it has none).
+#' Pure request preflight (07-local-ollama.md section 2.1; contract section 7.5); no I/O
+#' An Ollama route needs current bound evidence and local-only refuses remote execution
+#' (`gptr_error_untrusted`); the returned model is limited to (and priced by) the evidence.
 #' @noRd
 provider_preflight = function(model, provider, safety = NULL) {
   local_only = catalog_local_only(safety)
@@ -1702,12 +1617,8 @@ provider_preflight = function(model, provider, safety = NULL) {
 }
 
 #' Explicit selected-model preparation (07-local-ollama.md section 2.1; contract section 7.5)
-#'
-#' Resolves `ref`; for an Ollama route whose private evidence is missing or stale, runs native
-#' discovery for that model only (never under R CMD check; refused before any request when the
-#' local-only policy forbids the endpoint), resolves again and preflights. Other routes are
-#' resolved and preflighted without I/O. Offline replay must not call this function (P08's
-#' replay guard runs first): replay uses the identity frozen with the recorded result.
+#' An Ollama route with missing or stale evidence discovers that model only, then preflights.
+#' Offline replay must not call this (P08's replay guard runs first).
 #' @noRd
 model_prepare = function(ref, safety = NULL) {
   catalog_local_only(safety)

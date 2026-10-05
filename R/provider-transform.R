@@ -1,13 +1,7 @@
-# Projection of the transcript tree and the cross-provider hand-off transform (P05).
-# Contract: dev/spec/04-interface-contract.md section 7.5 (project_messages(),
-# handoff_transform()); architecture section 5.2; INFRA-04 and INFRA-08 (report 10a section 14).
-# Ported from Pi transformMessages() (packages/ai/src/api/transform-messages.ts:64-235; report 03
-# sections 2.9 and 3.5; R prototype transform_messages() in 03 section 5.5) and from report 02
-# section 5.3 project_for_provider() with the verifier's fix (a system/operator message that
-# lands between tool calls and their results is held back, 02 section 2.7). Tool-id rules:
-# anthropic-messages.ts:1215-1218, openai-completions.ts:1194-1218,
-# openai-responses-shared.ts:154-177, mistral-conversations.ts:237-267 (hash = the first hex
-# digits of SHA-256 instead of Pi's 53-bit string hash, as in report 03 section 4.3).
+# Projection of the transcript tree and the cross-provider hand-off transform (P05; contract
+# 7.5; architecture 5.2; INFRA-04, INFRA-08). Ported from Pi transformMessages() (report 03
+# sections 2.9, 3.5, 5.5) and report 02 section 5.3; tool-id rules follow Pi's adapters, hashing
+# with the first hex digits of SHA-256 (report 03 section 4.3).
 
 #' Placeholder texts for images a target model cannot read (Pi transform-messages.ts)
 #' @noRd
@@ -15,13 +9,8 @@ handoff_image_text = c(user = "(image omitted: model does not support images)",
                        tool = "(tool image omitted: model does not support images)")
 
 #' Cross-provider hand-off of already projected messages to `target` (a model record)
-#'
-#' Same model (provider, api and id equal): signatures, redacted thinking and opaque blocks of
-#' that model are kept; empty unsigned thinking is dropped. Otherwise thinking becomes plain text
-#' (dropped when the target or its adapter says `reasoning_replay = FALSE`), redacted thinking,
-#' opaque blocks of other models, text signatures and thought signatures are dropped, and tool
-#' ids are normalised to the target api's rules. Images become a placeholder when the target
-#' reads no images.
+#' Same model keeps signatures and opaque blocks; otherwise thinking becomes text (or drops),
+#' signatures and foreign opaque blocks drop and tool ids follow the target api's rules.
 #' @noRd
 handoff_transform = function(messages, target) {
   images = "image" %in% as.character(unlist(target[["input"]] %||% "text"))
@@ -88,10 +77,7 @@ handoff_unique_id = function(id, source, normalise, used) {
 }
 
 #' Does the target take foreign thinking as plain text (reasoning replay)?
-#'
-#' `reasoning_replay` is an adapter capability (04 section 8.1); a model record may override it.
-#' FALSE only when the model record or the registered adapter of the target api says FALSE
-#' explicitly; otherwise foreign thinking becomes text, as in Pi.
+#' FALSE only when the model record or its adapter says `reasoning_replay = FALSE` (04 8.1).
 #' @noRd
 handoff_thinking_as_text = function(target) {
   v = target[["capabilities"]][["reasoning_replay"]]
@@ -261,12 +247,8 @@ id_alnum9_normaliser = function() {
 }
 
 #' The model-context message list for `target` along the path root -> `leaf`
-#'
-#' Never edits `entries` (R lists are values). Steps: walk the path; the newest compaction
-#' entry replaces everything before its first kept entry; entries become messages; errored and
-#' aborted assistant messages are dropped; orphaned tool calls get one synthetic error result;
-#' operator messages that arrive while tool results are pending are held until the results are
-#' complete; results that match no pending call are dropped; then `handoff_transform()`.
+#' Walk the path, apply the newest compaction, drop failed turns, close orphaned calls, hold
+#' operator messages until pending results are complete, then `handoff_transform()`.
 #' @noRd
 project_messages = function(entries, leaf, target) {
   path = entry_compaction_cut(entry_path(entries, leaf))
@@ -336,9 +318,7 @@ entry_messages = function(e) {
     return(if (is.null(e[["message"]])) list() else list(e[["message"]]))
   }
   if (identical(type, "custom_message")) {
-    # P06 keeps a gptr.operator entry as list(type = "custom_message", message = <operator>);
-    # the flat form (custom_type, content, details) is accepted too. Other custom types are not
-    # model context.
+    # A gptr.operator entry, nested (P06) or flat; other custom types are not model context
     m = e[["message"]]
     if (is.list(m) && identical(m[["role"]], "operator")) return(list(m))
     ct = e[["custom_type"]] %||% e[["raw"]][["customType"]]
@@ -373,9 +353,7 @@ entry_compaction_message = function(e) {
 }
 
 #' The synthetic result of an orphaned tool call (INFRA-04 wording)
-#'
-#' A call left open by an aborted run (the next assistant message is `aborted`) says how long
-#' after the call the run was interrupted; any other orphan says "No result provided".
+#' After an aborted run it says when the run was interrupted, else "No result provided".
 #' @noRd
 orphan_result = function(call, owner, next_msg) {
   text = "No result provided"

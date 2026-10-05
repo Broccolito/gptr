@@ -1,11 +1,7 @@
-# Provider records as data, credentials, the provider_stream() glue and gptr_providers() (P05).
-# Contract: dev/spec/04-interface-contract.md sections 6.2 (gptr_providers()), 7.5, 8.1, 8.4 and
-# 10.2 row 1; architecture sections 8.1 and 6.5; IC-08 (builtin:fake declared here), IC-33
-# (opts$gate, opts$mcp_dispatch and opts$tool_result are injected, never looked up by an
-# adapter), IC-45 (offline), IC-64 (rate), IC-65 (check = FALSE spawns nothing).
-# Provider table: architecture section 8.1 and report 09 section 3.5 (base URLs, key variables);
-# compat flags are the snake_case form of Pi's OpenAICompletionsCompat (report 09 section 3.3,
-# section 4.6). Credential order: report 03 section 4.5 as amended by G6 section 4.5.
+# Provider records as data, credentials, the provider_stream() glue and gptr_providers() (P05;
+# contract 6.2, 7.5, 8.1, 8.4, 10.2; architecture 6.5, 8.1). IC-08 (builtin:fake declared here),
+# IC-33 (callbacks injected, never looked up), IC-45, IC-64, IC-65. Compat flags are Pi's
+# OpenAICompletionsCompat in snake_case (report 09 3.3); credential order per G6 section 4.5.
 
 on_load(ext_declare_builtin("fake", builtin_fake))
 on_load(ext_declare_builtin("providers", builtin_providers))
@@ -19,9 +15,7 @@ provider_local_compat = function() {
 }
 
 #' The built-in provider records of architecture section 8.1, as gptr_provider() arguments
-#'
-#' `typesafe` (section 8.2) is registered by P13's builtin:system1 (04 section 7.13) and the
-#' plan routes `claude-cli` and `codex` by P20's builtin:cli (04 section 7.20).
+#' (`typesafe` is P13's builtin:system1; `claude-cli` and `codex` are P20's builtin:cli)
 #' @noRd
 provider_table = function() {
   local = provider_local_compat()
@@ -96,9 +90,7 @@ provider_default_models = function() {
 }
 
 #' An `auth` function for an optional key (vLLM): a bound handle when the key exists, else NULL
-#'
-#' Its `gptr_optional_auth` attribute names the variables, so the listing can look them up
-#' without registering (provider_credential(register = FALSE)).
+#' Its `gptr_optional_auth` attribute names the variables for the read-only listing.
 #' @noRd
 provider_optional_auth = function(id, vars) {
   force(id)
@@ -112,9 +104,7 @@ provider_optional_auth = function(id, vars) {
 }
 
 #' A `discover` function for a loopback server: GET <base>/models with a 1 s timeout
-#'
-#' Runs only on request (gptr_models(refresh = TRUE, provider = <id>)), never at load and
-#' never under R CMD check (report 09 section 4.6).
+#' Runs only on request (gptr_models(refresh = TRUE)), never at load or under R CMD check.
 #' @noRd
 provider_discoverer = function(id) {
   force(id)
@@ -132,12 +122,9 @@ provider_discoverer = function(id) {
   }
 }
 
-#' The `discover` function of the Ollama record: P05's native discovery (07-local-ollama.md
-#' section 2; /api/version, /api/tags and /api/show of the record's own endpoint)
-#'
-#' Runs only on request, never at load and never under R CMD check; returns the listed ids.
-#' gptr_models(refresh = TRUE) and model_prepare() call catalog_ollama_discover() directly, so a
-#' replaced `discover` function can never supply the private evidence preflight accepts.
+#' The `discover` function of the Ollama record: native discovery (07 section 2), on request only
+#' gptr_models() and model_prepare() call catalog_ollama_discover() directly, so a replaced
+#' `discover` can never supply the private evidence preflight accepts.
 #' @noRd
 provider_ollama_discoverer = function(id) {
   force(id)
@@ -265,9 +252,7 @@ provider_origin = function(url) {
 }
 
 #' Is a handle usable for a provider origin (unbound, or bound to the same origin)?
-#'
-#' P03 stores bound origins in canonical form with the port (`https://api.anthropic.com:443`),
-#' so the bound origin passes provider_origin() before the comparison.
+#' P03 stores bound origins canonically with the port, so both pass provider_origin().
 #' @noRd
 credential_usable = function(h, origin) {
   origin = provider_origin(origin)
@@ -286,15 +271,9 @@ credential_usable = function(h, origin) {
   }, NA))
 }
 
-#' Bind a handle to the provider origin (contract section 7.5: "a handle bound to the provider's
-#' configured origin")
-#'
-#' An unbound handle (ambient discovery, a vault-only `.env` value, a credential-store record, an
-#' `auth` function's result) gets the provider origin in its own `origin` field, which P03's
-#' secret_value() checks before the origin of the vault entry (P03 plan, Task 1: "how P05 binds
-#' a looked-up handle"); the vault entry itself stays as it is for other consumers. A handle that
-#' is already bound is returned unchanged; provider_credential() never uses one that is bound to
-#' another origin. P05 never sees the value.
+#' Bind a handle to the provider origin (contract section 7.5)
+#' An unbound handle gets the origin in its own `origin` field (checked by P03's secret_value());
+#' a bound handle is returned unchanged. P05 never sees the value.
 #' @noRd
 credential_bind = function(h, origin) {
   if (is.null(origin) || !inherits(h, "gptr_secret") || !is.null(h[["origin"]])) return(h)
@@ -320,10 +299,8 @@ credential_from_store = function(rec, name, origin, register = TRUE) {
 }
 
 #' What credential_register() would yield, without registering or binding (the listing's view)
-#'
-#' NULL when the vault already holds the value under `name` bound to another origin (the
-#' registration would be refused); else a `gptr_credential_peek` record holding the name and
-#' P03's fingerprint (the first 6 hex of hash_sha256() of the UTF-8 value), never the value.
+#' NULL when the vault holds `name` bound to another origin; else a `gptr_credential_peek`
+#' record (name and P03 fingerprint), never the value.
 #' @noRd
 credential_peek = function(value, name, origin) {
   fp = substr(hash_sha256(as_utf8(value)), 1L, 6L)
@@ -347,22 +324,9 @@ credential_register = function(value, name, source, origin) {
   secret_register(value, name, source = source, origin = origin)
 }
 
-#' The credential handle of a provider (contract section 7.5)
-#'
-#' Order (architecture section 8): an explicit `auth` function > the vault (gptr_env(), ambient
-#' discovery) > the credential store (gptr_login(); keyring references are resolved by P03) >
-#' the provider's environment variables, registered at once and bound to the provider's origin.
-#' NULL for providers without auth; gptr_error_no_key otherwise. Never returns a value. The
-#' anthropic provider refuses a subscription OAuth token (`sk-ant-oat`, architecture section
-#' 8.1) found in its variable, and the vault handle holding the same token: gptr_error_no_key
-#' naming the token type when nothing else is found.
-#'
-#' `register = FALSE` is gptr_providers()'s read-only lookup: the same order and outcome, but an
-#' environment (or plain stored) value is neither registered nor bound to this provider's origin
-#' (a listing must not decide which provider may use a shared variable, and emits nothing);
-#' the step answers a `gptr_credential_peek` record (name and fingerprint) instead of a handle.
-#' The built-in optional-key function (vLLM) is looked up the same way; a plugin's `auth`
-#' function is called as usual.
+#' The credential handle of a provider (contract section 7.5; architecture section 8)
+#' Order: `auth` function > vault > credential store > environment (registered, origin-bound);
+#' never a value. `register = FALSE` (the listing) peeks without registering or binding.
 #' @noRd
 provider_credential = function(provider, register = TRUE) {
   if (is.null(provider)) return(NULL)
@@ -394,10 +358,8 @@ provider_credential = function(provider, register = TRUE) {
                problem = "auth() must return a gptr_secret handle or NULL")
   }
   vars = as.character(auth)
-  # Architecture section 8.1: the anthropic provider refuses Claude subscription OAuth tokens
-  # (sk-ant-oat...). Their fingerprints (P03: the first 6 hex of hash_sha256(value)) mark the
-  # vault handles that hold the same token (ambient discovery registers the environment's
-  # values); a token that exists only in the vault cannot be recognised here (ambiguity 8).
+  # Architecture 8.1: anthropic refuses subscription OAuth tokens (sk-ant-oat...); their P03
+  # fingerprints mark vault handles holding the same token (ambiguity 8)
   refused = character()
   if (identical(id, "anthropic")) {
     for (v in vars) {
@@ -440,10 +402,8 @@ provider_credential = function(provider, register = TRUE) {
 
 # ---- provider_stream(): the glue between the reactor and the adapters (04 sections 8.1, 8.4) ---
 
-#' A classed, unsignalled condition for stream failures (04 section 2.2, last paragraph)
-#'
-#' Built by P01's gptr_condition(), so the message passes the redaction hook like every other
-#' gptr condition (an adapter's error text may quote a request).
+#' A classed, unsignalled condition for stream failures (04 section 2.2), redacted like any
+#' gptr condition (an adapter's error text may quote a request)
 #' @noRd
 stream_condition = function(message, class, ...) {
   gptr_condition(message, class, "error", list(...))
@@ -490,9 +450,8 @@ stream_diagnostic = function(event, e) {
   invisible(NULL)
 }
 
-#' Fill the request id an adapter cannot know (04 section 4.5: the `start` event, the `error`
-#' event's `error` list and the assistant message carry it; P12's normalisers emit NULL because
-#' `parse(model, opts)` sees no request context); an id the adapter set is kept
+#' Fill the request id an adapter cannot know (04 section 4.5: start, error and the message
+#' carry it; P12's normalisers emit NULL); an id the adapter set is kept
 #' @noRd
 stream_request_id = function(st, ev, type) {
   rid = st$context[["request_id"]]
@@ -538,9 +497,7 @@ stream_finish = function(st, msg) {
 }
 
 #' The partial message known so far (normaliser, accumulator, or an empty message of the model)
-#'
-#' Before any `start` event the accumulator knows no api, provider or model (P01's acc_new()
-#' answers "unknown"), so the message is built from the model record instead.
+#' Before `start` the accumulator knows no model, so the model record is used.
 #' @noRd
 stream_partial = function(st) {
   msg = if (is.null(st$norm)) NULL else tryCatch(st$norm$message(), error = function(e) NULL)
@@ -581,12 +538,8 @@ stream_cancel = function(st) {
   invisible(NULL)
 }
 
-#' Forget and kill the child of a process_jsonl turn the glue ends itself (abort, a local
-#' failure, a settled run)
-#'
-#' The child is forgotten first, so its late output and exit reach no turn, and the session's
-#' next turn starts a new child instead of reusing one in an unknown protocol state. It is
-#' stopped with stream_process_kill(), which also removes its job row.
+#' Forget and kill the child of a process_jsonl turn the glue ends itself (D-018)
+#' Forgotten first: its late output and exit reach no turn, and the next turn starts a new child.
 #' @noRd
 stream_process_drop = function(st) {
   p = st$process
@@ -599,13 +552,8 @@ stream_process_drop = function(st) {
 }
 
 #' Stop a session child the glue lets go of, through P04's watcher; its job row goes too
-#'
-#' P04's reactor_cancel() of the child's watcher removes the watcher, drops the child's pending
-#' stdin and kills it with its tree (kill_all()); P04 then reports no exit, so nothing of the
-#' child reaches a turn. Never kill_all() under a living watcher: processx's kill closes the
-#' child's pipes, so the watcher would never see their end of stream, never report the exit (the
-#' job row would stay) and would poll the closed pipes in every later pump iteration. A child
-#' without a watcher (reactor_proc() failed, or the exit was reported) is killed directly.
+#' Never kill_all() under a living watcher: it would never see the closed pipes end (no exit,
+#' the job row stays). A child without a watcher is killed directly.
 #' @noRd
 stream_process_kill = function(p, watch, job) {
   n = 0L
@@ -616,11 +564,7 @@ stream_process_kill = function(p, watch, job) {
 }
 
 #' The `stop()` of a session child's job row (gptr_jobs(kill = TRUE), the unload cleanup)
-#'
-#' The child is forgotten and stopped (stream_process_kill()). P04 reports no exit for a
-#' cancelled watcher, so the exit reaches the turn that last used the child from the next pump
-#' iteration, as P04 reports an exit: an open turn ends through the normaliser's finish(), an
-#' aborted one as aborted (`route_exit`).
+#' A cancelled watcher reports no exit, so the exit reaches the child's last turn from a timer.
 #' @noRd
 stream_process_stop = function(state, p, watch, job) {
   current = identical(state$process, p)
@@ -652,9 +596,8 @@ stream_normaliser_fail = function(st, cnd) {
   invisible(NULL)
 }
 
-#' End the stream for a failure found locally while its transfer may still be live (an adapter
-#' normaliser or a splitter failed, a retry hint could not be handed to the reactor): the
-#' normaliser's terminal event, then the transfer is cancelled so it holds no reactor slot
+#' End the stream for a local failure while its transfer may be live: the normaliser's terminal
+#' event, then the transfer is cancelled so it holds no reactor slot
 #' @noRd
 stream_fail_live = function(st, cnd) {
   stream_normaliser_fail(st, cnd)
@@ -751,11 +694,8 @@ stream_watch = function(st) {
 }
 
 #' The retry callback normalisers call for a retryable failure seen inside the stream
-#'
-#' HTTP transfers go to P04's reactor_retry(): it re-sends the same spec on the same transfer
-#' after its backoff while nothing was committed (on_retry() reports retry_start/retry_end), and
-#' otherwise fails the transfer through on_fail(). Other transports, and a hint the reactor
-#' refuses without failing the transfer, end the stream at once (04 section 8.1, `retry(info)`).
+#' HTTP goes to P04's reactor_retry() (same spec after backoff while nothing was committed);
+#' other transports, or a refused hint, end the stream at once (04 section 8.1).
 #' @noRd
 stream_retry = function(st, info) {
   if (st$finished) return(invisible(FALSE))
@@ -784,10 +724,8 @@ stream_retry = function(st, info) {
   invisible(FALSE)
 }
 
-#' Write one JSON line to the stream's child (process_jsonl `opts$send`)
-#'
-#' Only the open turn's own child: a finished turn, or one whose child was dropped, writes
-#' nothing (the session may already run another child).
+#' Write one JSON line to the stream's child (process_jsonl `opts$send`); only the open turn's
+#' own child (the session may already run another)
 #' @noRd
 stream_send = function(st, obj) {
   if (st$finished) return(invisible(FALSE))
@@ -797,10 +735,8 @@ stream_send = function(st, obj) {
   invisible(TRUE)
 }
 
-#' The opts every adapter function receives (contract section 8.1)
-#'
-#' `gate`, `tool_result` and `mcp_dispatch` are the caller's (P06 passes the run's), else
-#' fail-closed defaults (IC-33).
+#' The opts every adapter function receives (contract section 8.1); `gate`, `tool_result` and
+#' `mcp_dispatch` are the caller's, else fail-closed defaults (IC-33)
 #' @noRd
 stream_opts = function(st, opts, session, run) {
   signal = opts[["signal"]] %||% (if (is.environment(run)) run[["signal"]] else NULL)
@@ -826,9 +762,8 @@ stream_opts = function(st, opts, session, run) {
   opts
 }
 
-#' The request spec of an HTTP adapter with the optional fields P04 reads (P04 plan, Task 11:
-#' `request_id`, `model`, `session_id` label the wire log and the conditions; the three timeouts
-#' override the options)
+#' The request spec of an HTTP adapter with the optional fields P04 reads (`request_id`, `model`,
+#' `session_id` label the wire log; the three timeouts override the options)
 #' @noRd
 stream_http_spec = function(st, spec) {
   if (!is.list(spec)) {
@@ -849,9 +784,7 @@ stream_http_spec = function(st, spec) {
 }
 
 #' A static-rate override of a provider: settings `providers.<id>.rate`, else the merged
-#' catalog's providers section (IC-64: "overridable by settings and catalog"); NULL when none
-#'
-#' A rate P04's limiter would refuse (ratelimit_rate()) is ignored.
+#' catalog's providers section (IC-64); NULL when none or when ratelimit_rate() refuses it
 #' @noRd
 provider_rate_override = function(id) {
   ok = function(r) {
@@ -878,10 +811,8 @@ stream_rate_sync = function(id) {
 }
 
 #' HTTP transports (http_sse, http_ndjson, http_json): one transfer for the whole request
-#'
-#' P04 calls on_headers() once per attempt with a 2xx head; a second call follows a re-send
-#' (a transport retry or reactor_retry()) and resets the normaliser and the splitter. A
-#' splitter failure (for example a NUL byte) ends the stream like a normaliser failure.
+#' A second on_headers() (a re-send) resets the normaliser and the splitter; a splitter failure
+#' ends the stream like a normaliser failure.
 #' @noRd
 stream_http = function(st, adapter) {
   st$transport = "http"
@@ -959,13 +890,8 @@ stream_http = function(st, adapter) {
 }
 
 #' One generator step of an inprocess adapter (IC-16, contract 8.1 `stream()`)
-#'
-#' The generator is called again once its `wait` has passed (the task itself runs every pump
-#' iteration, so an abort is seen at once). After an abort the generator gets two calls to end
-#' the stream itself (P01's fake does on the first); then the glue ends it as aborted. A run
-#' that settled lets go of the stream without `done` (INFRA-15), as stream_watch() does. A
-#' throwing generator, a malformed step and a NULL before the terminal event each end the
-#' stream with one `error` event.
+#' After an abort the generator gets two calls to end the stream itself; a settled run lets go
+#' (INFRA-15); a throwing or malformed step, or an early NULL, ends it with one `error` event.
 #' @noRd
 stream_inprocess_step = function(st, gen) {
   if (st$finished) return(FALSE)
@@ -1008,9 +934,7 @@ stream_inprocess_step = function(st, gen) {
 }
 
 #' The inprocess transport: a generator pumped by reactor_task() (04 sections 8.1, 8.4 step 4)
-#'
-#' Returns the task id. An unexpected error inside a step ends the stream instead of only
-#' removing the task, so `done` is still called exactly once.
+#' Returns the task id; an error inside a step ends the stream, so `done` is still called once.
 #' @noRd
 stream_inprocess = function(st, adapter) {
   st$transport = "inprocess"
@@ -1041,15 +965,8 @@ stream_process_spec_abort = function(st, field, problem) {
 }
 
 #' Start the child of a process_jsonl adapter and watch its stdout
-#'
-#' stdin is a pipe fed by write_all() (non-blocking, IC-60). Only the session's current child
-#' (`opts$state$process`) routes lines and its exit to the open turn, so the late output of a
-#' child that was replaced or killed reaches no turn. The child environment is the profile's
-#' (`child_env()` without `provider`: no key is added to a CLI child, IC-65). The child, its
-#' job row and its watcher are the turn's (`st$process`, `st$job`, `st$watch`) as soon as each
-#' exists, so a failure below stops the child and removes the row (stream_cancel()). The row's
-#' `stop()` is stream_process_stop(); the session keeps the child's watcher id in
-#' `opts$state$watch` next to `process` and `job`.
+#' Only the session's current child routes to the open turn; no key reaches the child (IC-65).
+#' The child, job row and watcher are the turn's as soon as each exists (stream_cancel()).
 #' @noRd
 stream_process_start = function(st, start) {
   state = st$opts$state
@@ -1086,21 +1003,9 @@ stream_process_start = function(st, start) {
   p
 }
 
-#' The process_jsonl transport (04 section 8.4 step 3)
-#'
-#' One supervised child per session, kept in `opts$state$process` and the job table (kind
-#' `cli`): `build()` returns `start` to start a child (a running one is forgotten and stopped
-#' first, stream_process_kill()) or NULL to reuse it. The turn's `send` objects are written as
-#' JSON lines, then, with `close_stdin`, stdin is closed once they are written (P04's
-#' write_close()). Child stdout lines are parsed and pushed as `list(data, obj)` (non-JSON lines
-#' are ignored); the child's exit ends the turn through the normaliser's finish(). The spec is
-#' checked before any child starts. Returns the id of the abort watch task.
-#'
-#' The caller may cancel that id (P06's run_abort() and run_settle() cancel the run's ids), so
-#' the turn does not depend on the watch: a line or the exit of its child first runs
-#' stream_over() (an aborted turn ends as aborted, a settled run's turn is let go), and the
-#' session's next turn lets go of a turn still open (`opts$state$stream_turn`). Both drop the
-#' child, so the next turn starts a new one and the old turn's late output reaches no turn.
+#' The process_jsonl transport (04 section 8.4 step 3): one supervised child per session
+#' `build()` returns `start` (a new child) or NULL (reuse); returns the abort watch task id. A
+#' line or exit runs stream_over() first, so the turn does not depend on that watch (D-018).
 #' @noRd
 stream_process = function(st, adapter) {
   st$transport = "process"
@@ -1173,14 +1078,8 @@ stream_driver = function(transport) {
 }
 
 #' The protected safety record for the request preflight (07-local-ollama.md section 2.1)
-#'
-#' The run's frozen option snapshot (`run$opts$safety`, contract section 7.6, IC-53) and the
-#' frozen record an internal caller passes as `opts$safety` (a caller that has no run object at
-#' hand). When a run is given, its snapshot is authoritative and a run without one counts as
-#' local-only, so `opts$safety` can only tighten it; the local-only policy holds unless every
-#' record present relaxes it, and a malformed record is refused (provider_preflight()'s reader).
-#' NULL when there is neither a run nor a record, which means local-only. P05 never builds this
-#' record from settings, model metadata or project data.
+#' Local-only holds unless every record present relaxes it: the run's frozen snapshot (a run
+#' without one is local-only) and `opts$safety`. NULL (local-only) without both.
 #' @noRd
 stream_safety = function(opts, run) {
   rs = NULL
@@ -1206,8 +1105,7 @@ stream_chat_model = function(model) {
 }
 
 #' The stream driver of a conversational adapter (IC-74), refused before anything starts when
-#' the adapter lacks the stream functions of its transport (a classifier-only adapter) or when
-#' provider_stream() has no driver for that transport
+#' the adapter lacks its transport's stream functions or no driver exists
 #' @noRd
 stream_conversational = function(model, adapter) {
   api = adapter[["api"]] %||% model[["api"]] %||% ""
@@ -1228,20 +1126,8 @@ stream_conversational = function(model, adapter) {
 }
 
 #' Start one model request on the reactor (contract sections 7.5 and 8.4)
-#'
-#' Refuses a decision-only model, then looks up the adapter and provider (session-scoped
-#' records first; the provider's settings applied) and runs the pure request preflight
-#' (provider_preflight(), IC-74) with the run's protected safety record, before any credential
-#' lookup or payload construction; the checked model is the one the adapter sees. Then fills
-#' `opts` (credential, base URL, provider, emit/retry/send, signal, state, memo, the injected
-#' gate, MCP dispatcher and tool-result builder, timeouts) and runs the adapter's transport.
-#' Every event reaches `emit`; `done(msg)` is called exactly once with the final assistant
-#' message; nothing is thrown after the function returns. A classifier model, a missing or
-#' classifier-only adapter, a disabled provider (gptr_error_not_available), a refused preflight
-#' (gptr_error_not_available, gptr_error_untrusted) or a missing key (gptr_error_no_key) is
-#' signalled before anything starts; an adapter that fails while building the request ends the
-#' stream with an `error` event instead. Returns the transfer id (HTTP transports), the task id
-#' (`inprocess`) or the abort watch task id (`process_jsonl`), or NA when nothing started.
+#' Refusals (model type, adapter, disabled provider, preflight IC-74, key) signal before anything
+#' starts; later failures end the stream with an `error` event, and `done(msg)` runs once.
 #' @noRd
 provider_stream = function(model, context, opts, emit, done, run = NULL) {
   opts = opts %||% list()
@@ -1297,10 +1183,7 @@ provider_status_text = function(x) {
 }
 
 #' One reachability probe: one GET of <base>/models without credentials, 2 s (IC-65)
-#'
-#' One attempt (P04's default retry policy would re-send it) with a small body bound: any HTTP
-#' status proves reachability (a 401 without a key included), so a status that arrives with an
-#' oversized answer counts too. Never under R CMD check.
+#' One attempt; any HTTP status proves reachability (a 401 included); never under R CMD check.
 #' @noRd
 provider_ping = function(p) {
   if (check_running()) return("not checked")
@@ -1316,9 +1199,7 @@ provider_ping = function(p) {
 }
 
 #' Does a provider speak HTTP (contract 6.2: only HTTP providers are probed)?
-#'
-#' Its adapter's transport (a registry lookup, no I/O); without a registered adapter, the wire
-#' apis whose built-in adapters P12 and P13 register (HTTP); any other api counts as not HTTP.
+#' Its adapter's transport, else whether its api is one of P12's and P13's built-in wire apis.
 #' @noRd
 provider_http = function(p) {
   api = p[["api"]]
@@ -1331,15 +1212,8 @@ provider_http = function(p) {
 }
 
 #' Status and version of a provider; `check = TRUE` adds a reachability probe
-#'
-#' `disabled` when the settings say `providers.<id>.enabled: false`; else the provider's own
-#' `status()` (called as `status(check = check)` when it has a `check` formal, else `status()`;
-#' its fields `status`, `version` and `available`, plan ambiguity 18); else from the transport
-#' and the credential lookup `h` (a handle, a peek record, NULL or the condition it signalled):
-#' `error` when the lookup failed other than with `gptr_error_no_key`, `no base url` or
-#' `invalid base url` for an HTTP provider (provider_http()), `no key`, else `ready`.
-#' `check = TRUE` replaces `ready` and `no key` of an HTTP provider with the probe's answer, so
-#' both modes agree on every other status.
+#' `disabled` by settings, else the provider's own `status()`, else from the transport and the
+#' credential lookup `h`; the probe replaces only `ready` and `no key` of an HTTP provider.
 #' @noRd
 provider_status = function(p, h, check) {
   if (isFALSE(p[["enabled"]])) return(list(status = "disabled", version = NA_character_))
@@ -1375,11 +1249,8 @@ provider_status = function(p, h, check) {
   list(status = status, version = NA_character_)
 }
 
-#' The default model reference shown for a provider
-#'
-#' The architecture section 8.4 default of a built-in provider, else its newest active model in
-#' the merged catalog (`idx`, its lookup index). IC-74: a decision-only (classifier) model is
-#' never a conversational provider's default, and a classifier provider shows only those.
+#' The default model reference shown for a provider: architecture 8.4, else its newest active
+#' catalog model; never a classifier for a conversational provider, or the reverse (IC-74)
 #' @noRd
 provider_default_model = function(p, idx) {
   id = p[["id"]] %||% p[["name"]]
@@ -1394,10 +1265,7 @@ provider_default_model = function(p, idx) {
 }
 
 #' Egress acknowledgement state of a provider (the acknowledgement itself is P08's)
-#'
-#' Offline providers need none; a local provider needs none only while its effective endpoint is
-#' a loopback address (IC-74: a remote Ollama endpoint needs the normal acknowledgement). Every
-#' other provider shows `ack` only when the user settings' `egress.<id>` says so.
+#' None needed offline or for a loopback local endpoint (IC-74); else `egress.<id>` decides.
 #' @noRd
 provider_egress = function(p) {
   if (isTRUE(p[["offline"]])) return("ack")
@@ -1407,9 +1275,8 @@ provider_egress = function(p) {
   if (identical(eg[[p[["id"]] %||% p[["name"]]]], "ack")) "ack" else "needed"
 }
 
-#' A provider for the listing: its effective record, or, when applying its settings failed
-#' (an invalid `providers.<id>.headers`), the registered record with the condition as `err`
-#' (NULL when the record disappeared on load)
+#' A provider for the listing: its effective record, else the registered record with the
+#' settings condition as `err` (NULL when the record disappeared)
 #' @noRd
 provider_listing_get = function(id) {
   tryCatch(list(p = provider_get(id), err = NULL), error = function(e) {
@@ -1418,9 +1285,7 @@ provider_listing_get = function(id) {
   })
 }
 
-#' One row of the provider listing (a named list of scalar strings)
-#'
-#' The credential lookup registers and binds nothing (provider_credential(register = FALSE)).
+#' One row of the provider listing (the credential lookup registers and binds nothing)
 #' @noRd
 provider_listing_row = function(id, p, err, check, reg, idx) {
   # a failing settings entry or `auth` function marks its own row, never the whole listing

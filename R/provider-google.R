@@ -1,11 +1,7 @@
-# The google-generative-ai adapter (P12): streamGenerateContent?alt=sse with the key in the
-# x-goog-api-key header (report 09 verification row 2: the header keeps the key out of URLs);
-# thought signatures kept on the exact part they arrived on and replayed only to the same model;
-# unknown finish reasons map to error with the raw value (report 09 sections 2.1-2.2, 3.1, 4.5
-# and verification rows 4-9). The normaliser is adapted from the verified Gemini accumulator of
-# report 09 section 5.1 and report 03 section 5.3. Usage follows IC-74 (07-local-ollama.md
-# section 5): usage the stream never reported, or reported as null, stays unknown. Stream fields
-# are read with `[[` (no `$` partial matching) and typed before use (04 sections 2.2, 4.2).
+# The google-generative-ai adapter (P12; report 09): streamGenerateContent?alt=sse, the key in
+# x-goog-api-key (never in URLs); thought signatures stay on their part, replayed to the same model
+# only. Unreported usage stays unknown (IC-74). Stream fields are read with `[[` (no `$` partial
+# matching) and typed before use (04 sections 2.2, 4.2).
 
 #' The Gemini major version of a model id, NA when unknown
 #' @noRd
@@ -55,11 +51,7 @@ google_budget = function(id, level) {
 }
 
 #' A Google error object -> class suffix, HTTP status and retryability (09 section 2.1)
-#'
-#' Only one string is read as a status and only one whole number from 100 to 599 (an HTTP
-#' status) as a code; anything else (a bare string error, a vector, a list, a fraction or a number
-#' outside that range) is never matched or coerced, so no integer overflow can warn (04 section
-#' 8.1), and gives a provider error unless the status names another class.
+#' Only a single string status and a whole code in 100..599 are read; nothing is coerced (04 8.1).
 #' @noRd
 google_error_info = function(err) {
   if (!is.list(err)) err = list()
@@ -84,12 +76,8 @@ google_error_info = function(err) {
 }
 
 #' Record a Gemini usageMetadata object (09 section 2.1; Pi google-generative-ai.ts:232-251)
-#'
-#' `promptTokenCount` includes the cached content and thoughts are billed as output, so input is
-#' the prompt minus the cache reads and output the candidates plus the thoughts. Each report
-#' replaces the last (the counts are totals). A field the provider left out keeps P05's legacy
-#' zero, a reported null or a value that is not a nonnegative number is unknown (NA, IC-74), and
-#' `"usageMetadata": null` is no report (D-022, D-027).
+#' Input = prompt - cache reads, output = candidates + thoughts; each report replaces the last.
+#' Absent field 0, null or invalid NA (IC-74); `"usageMetadata": null` is no report (D-022, D-027).
 #' @noRd
 google_usage = function(st, u) {
   if (!is.list(u)) return(invisible(NULL))
@@ -103,19 +91,8 @@ google_usage = function(st, u) {
 }
 
 #' The google-generative-ai normaliser (04 section 8.1; Pi google-generative-ai.ts:106-278)
-#'
-#' Parts with `thought: true` stream as thinking and other text parts as text; a thought
-#' signature stays on the block its part belongs to (the last non-empty one of a streamed block),
-#' so a signature on an empty text part attaches to the open text block or opens an empty one.
-#' Function calls arrive whole: the arguments are one delta and the block closes at once, with
-#' the call's own signature; a missing or repeated call id is generated as
-#' `<name>_<response id fragment>_<n>`, n the call's position or the next number whose id is not
-#' yet in the message. `STOP` is `stop` (`tool_use` with calls), `MAX_TOKENS` is `length`, every
-#' other finish reason, a blocked prompt or a stream without a finish reason ends in one `error`
-#' event; error chunks are retryable before any delta.
-#' @param model A model record (contract section 4.9).
-#' @param opts The adapter options of contract section 8.1 (`emit`, `retry`, `signal`).
-#' @return A list of functions `push`, `finish`, `fail`, `message`.
+#' A thought signature stays on its part's block; calls arrive whole. `STOP` -> stop/tool_use,
+#' `MAX_TOKENS` -> length; any other end (blocked prompt, no finish reason) is one `error` event.
 #' @noRd
 google_normaliser = function(model, opts) {
   st = adp_state(model, opts)
@@ -332,10 +309,9 @@ google_assistant = function(m, model) {
   list(role = "model", parts = parts)
 }
 
-#' The Gemini contents of a group of tool results: one user content of functionResponse parts;
-#' images inside functionResponse.parts on Gemini 3+, else a following user content. A model
-#' without image input gets the omission note in the result's output, once per image, and no
-#' image content (D-023 item 4, D-029.3)
+#' The Gemini contents of a group of tool results: one user content of functionResponse parts
+#' Images go in functionResponse.parts on Gemini 3+, else a following user content; a text-only
+#' model gets the omission note once per image (D-023 item 4, D-029.3).
 #' @noRd
 google_tool_results = function(group, model) {
   needs_id = google_needs_id(model$id)
@@ -394,14 +370,9 @@ google_generation = function(model, params) {
   gen
 }
 
-#' build() of the google-generative-ai adapter (04 section 8.1; G4 section 3.7:
-#' systemInstruction, tools, toolConfig, generationConfig, contents; implicit caching only)
-#'
-#' The provider headers come from the provider record provider_stream() resolved (`opts$provider`,
-#' the session's own record first) and are merged by name, so a record never repeats or
-#' replaces an adapter header or the key (D-023). Tools and toolConfig go only to a model that
-#' calls tools (`tool_call`; IC-74, 07-local-ollama.md section 1; D-029, D-032), and toolConfig
-#' only with a tools array.
+#' build() of the google-generative-ai adapter (04 section 8.1; G4 3.7; implicit caching only)
+#' Provider headers merge by name, never replacing an adapter header or the key (D-023); tools
+#' and toolConfig go only to a `tool_call` model (IC-74; D-029, D-032).
 #' @noRd
 google_build = function(model, context, opts) {
   params = context$params %||% list()

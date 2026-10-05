@@ -1,15 +1,7 @@
-# The anthropic-messages adapter (P12) and the normaliser core shared by the four native
-# adapters (anthropic-messages, openai-responses, openai-completions, google-generative-ai),
-# plus check_adapter(), the check.adapter service behind gptr_check() for adapter specs (stream
-# fixtures; classifier adapters against classifier fixtures and P13's canonical-answer
-# validator, IC-74 07 section 6 P12 row, FIX-6).
-# Contract: dev/spec/04-interface-contract.md sections 4.1-4.5, 7.12, 8.1 and IC-69/IC-71.
-# The normaliser follows the verified prototypes of report 07 section 5.1 and report 03
-# section 5.3 (verification logs applied: tool names up to 128 characters, mid-conversation
-# system messages only after a user turn and before an assistant turn or the end, no
-# ANTHROPIC_API_KEY and Bearer together, every string marked UTF-8 by the P01 constructors).
-# Request bodies follow G4 section 3.7 (key order, breakpoints) and section 5.4 (bodies are
-# concatenations of pieces serialised once per session through opts$memo).
+# The anthropic-messages adapter (P12), the normaliser core shared by the four native adapters,
+# and check_adapter(), the check.adapter service of gptr_check() (stream and classifier fixtures;
+# IC-74, FIX-6). Contract 04 sections 4.1-4.5, 7.12, 8.1, IC-69/IC-71. Request bodies follow G4
+# 3.7 (key order, breakpoints) and 5.4 (pieces serialised once per session through opts$memo).
 
 # ---- shared normaliser core -----------------------------------------------------------------
 
@@ -23,10 +15,7 @@ adp_buffer = function() {
 }
 
 #' Append one chunk to a buffer (the list doubles when full)
-#'
-#' The list is taken out of the environment and the binding cleared before the element is set:
-#' `b$v[[n]] = x` on an environment passed as an argument copies the whole list on every call
-#' (measured: 20,000 appends 1.7 s, quadratic), the take-out form 0.013 s (linear, INFRA-23).
+#' Take-out form: `b$v[[n]] = x` on a still-bound list copies it every call (quadratic, INFRA-23).
 #' @noRd
 adp_buffer_add = function(b, x) {
   n = b$n + 1L
@@ -222,9 +211,8 @@ adp_count = function(x) {
   if (ok) as.numeric(x) else NA_real_
 }
 
-#' Record one usage field reported by the provider, with cumulative-update semantics: a value
-#' replaces the earlier one; a null keeps the earlier value and is unknown (NA, IC-74) only when
-#' nothing was recorded before
+#' Record one reported usage field: a value replaces the earlier one; a null keeps it and is NA
+#' (IC-74) only when nothing was recorded before
 #' @noRd
 adp_usage_set = function(st, field, value) {
   if (!is.null(value)) {
@@ -236,12 +224,8 @@ adp_usage_set = function(st, field, value) {
 }
 
 #' The usage record of contract section 4.3 from the provider-reported numbers, with cost
-#'
-#' IC-74 (07-local-ollama.md section 5, "Missing usage remains unknown"; P05's usage rules):
-#' a stream that reported no usage at all has unknown counters, a reported value that is null or
-#' not a nonnegative number is unknown (NA), and a field the provider left out of a reported
-#' usage keeps P05's legacy zero. The cost comes only from the model's dated price evidence
-#' (`usage_cost()`), so an unpriced model's charge is unknown, never a constructor zero.
+#' No report, null or invalid is NA (IC-74); an absent field keeps the legacy zero. Cost comes
+#' only from dated price evidence (`usage_cost()`).
 #' @noRd
 adp_usage = function(st) {
   u = st$usage
@@ -330,10 +314,6 @@ adp_done = function(st) {
 
 #' A failure seen inside the stream: ask the transport to retry while no delta was committed
 #' (04 section 8.1, `retry(info)`), otherwise end the stream with the error event
-#'
-#' A transport that refuses the retry at once may call fail() from inside `retry()`; push()
-#' then reports the stream complete (TRUE), as section 8.1 requires once the terminal event
-#' was emitted.
 #' @noRd
 adp_stream_error = function(st, opts, message, class, status = NA_integer_, retry_after = NULL,
                             retryable = FALSE) {
@@ -354,8 +334,8 @@ adp_finish_pending = function(st) {
   adp_error(st, p$message, class = p$class, status = p$status, retry_after = p$retry_after)
 }
 
-#' The normaliser's fail(cnd): a transport failure becomes the one terminal error event. After
-#' a retry request the transport gave up on, the provider's own error text is reported
+#' The normaliser's fail(cnd): the one terminal error event (after a dropped retry request, the
+#' provider's own error text)
 #' @noRd
 adp_fail = function(st, cnd) {
   if (st$terminal) return(st$final)
@@ -379,9 +359,8 @@ adp_guard = function(st, f) {
   }
 }
 
-#' The normaliser list of contract section 8.1 (`push`, `finish`, `fail`, `message` and an
-#' optional `push_parsed`); no function of it signals an R condition (an error becomes the one
-#' terminal error event, and message() falls back to an empty error message)
+#' The normaliser list of contract section 8.1; no function of it signals an R condition (an
+#' error becomes the terminal error event; message() falls back to an empty error message)
 #' @noRd
 adp_normaliser = function(st, push, finish, push_parsed = NULL) {
   out = list(push = adp_guard(st, push),
@@ -575,15 +554,9 @@ anthropic_error_info = function(err) {
          list(class = "provider", status = NA_integer_, retry = FALSE))
 }
 
-#' Copy Anthropic usage fields into the normaliser state (message_start, message_delta).
-#'
+#' Copy Anthropic usage fields into the normaliser state (message_start, message_delta)
 #' `[[` only: `$` would let `cache_creation` match `cache_creation_input_tokens` (07 5.2).
-#' `message_delta` usage is cumulative and a null in it means "no update" (report 03 section
-#' 2.5.1; the SDK's MessageDeltaUsage), so every field goes through `adp_usage_set()`: a null
-#' keeps the earlier value and is unknown (NA, IC-74) only when nothing was reported before; an
-#' absent field is not set. The 5-minute/1-hour split comes from a `cache_creation` object; a
-#' bare `cache_creation_input_tokens` (the current `message_delta` shape, report 07 section
-#' 3.14) updates the total of that split (`anthropic_cache_total()`).
+#' `message_delta` usage is cumulative, a null means "no update" (report 03 section 2.5.1).
 #' @noRd
 anthropic_usage = function(st, u) {
   if (!is.list(u)) return(invisible(NULL))
@@ -611,12 +584,8 @@ anthropic_usage = function(st, u) {
 }
 
 #' A bare `cache_creation_input_tokens` total (no `cache_creation` object in the same usage)
-#'
-#' Before any split was reported every cache write counts as a 5-minute write (report 07 section
-#' 3.5). After a split (`st$cache_split`) the total updates it: a split that adds up to the total
-#' is kept; otherwise the known 1-hour writes are kept and the rest are 5-minute writes (or the
-#' known 5-minute writes are kept and the rest are 1-hour writes); an unknown total leaves the
-#' 5-minute writes unknown. A null total keeps the earlier values.
+#' Without an earlier split it is all 5-minute writes (report 07 section 3.5); a split that does
+#' not add up keeps its known 1-hour (else 5-minute) part and gives the rest to the other.
 #' @noRd
 anthropic_cache_total = function(st, value) {
   if (is.null(value)) {
@@ -643,14 +612,8 @@ anthropic_cache_total = function(st, value) {
   invisible(NULL)
 }
 
-#' The Anthropic SSE normaliser (contract sections 7.12 and 8.1)
-#'
-#' `push(ev)` takes decoded SSE events, `push_parsed(obj)` already-parsed stream-event objects
-#' (the `stream_event` lines of the claude CLI, P20); `finish()`, `fail(cnd)` and `message()`
-#' as in section 8.1. Adapted from the verified accumulator of report 07 section 5.1.
-#' @param model A model record (contract section 4.9).
-#' @param opts The adapter options of contract section 8.1 (`emit`, `retry`, `signal`).
-#' @return A list of functions `push`, `push_parsed`, `finish`, `fail`, `message`.
+#' The Anthropic SSE normaliser (contract sections 7.12 and 8.1; report 07 section 5.1)
+#' `push_parsed(obj)` takes already-parsed stream events (the claude CLI's `stream_event`, P20).
 #' @noRd
 anthropic_normaliser = function(model, opts) {
   st = adp_state(model, opts)
@@ -818,11 +781,8 @@ adp_header_secret = function(handle, prefix = "") {
 #' @noRd
 adp_url = function(base, path) paste0(sub("/+$", "", base), "/", sub("^/+", "", path))
 
-#' The provider record of the model (D-023): the one provider_stream() resolved (`opts$provider`:
-#' the session's rank-0 record first, settings applied; 04 section 10.1 scopes `model = <spec>`
-#' to its session) when it is the model's provider (its id, name or an alias), else the session's
-#' own record (`opts$session`), else the global one; NULL when there is none. Adapters pass the
-#' `opts` of build() or parse().
+#' The provider record of the model (D-023): `opts$provider` when it is the model's provider,
+#' else the session's own record (`opts$session`), else the global one; NULL when none
 #' @noRd
 adp_provider_record = function(model, opts = NULL) {
   id = model$provider %||% ""
@@ -835,8 +795,7 @@ adp_provider_record = function(model, opts = NULL) {
   provider_effective(scoped) %||% provider_get(id)
 }
 
-#' The non-secret headers of the model's provider record (for example OpenRouter attribution),
-#' from adp_provider_record(). Callers pass build()'s `opts`.
+#' The non-secret headers of the model's provider record (for example OpenRouter attribution)
 #' @noRd
 adp_provider_headers = function(model, opts = NULL) {
   h = adp_provider_record(model, opts)[["headers"]]
@@ -844,15 +803,8 @@ adp_provider_headers = function(model, opts = NULL) {
 }
 
 #' An adapter's own headers with a provider record's non-secret headers merged in (D-023)
-#'
-#' Names compare case-insensitively, so the spec never repeats a header (P04's http_headers()
-#' refuses one that does). The adapter's headers win: a provider header with the name of one the
-#' adapter set is dropped, so a record never changes the wire format (content-type, accept, the
-#' API version) or replaces the credential. Two exceptions: a header named in `lists` (a
-#' comma-separated token list such as anthropic-beta) gets the tokens of both sides, the
-#' adapter's first, each once; and while the adapter sends a credential, a provider header named
-#' in `auth` (the API's credential headers) is dropped, so two credentials are never sent. Any
-#' other provider header is added; of two with the same name in the record, the last is kept.
+#' Case-insensitive; the adapter's headers win except `lists` (tokens of both, adapter's first);
+#' an `auth` header is dropped while the adapter sends a credential.
 #' @noRd
 adp_merge_headers = function(base, extra, lists = character(), auth = character()) {
   base = as.list(base)
@@ -1068,11 +1020,8 @@ anthropic_assistant = function(m, model) {
   list(role = "assistant", content = parts)
 }
 
-#' One tool_result block: text first, images as native image blocks (acceptance 3);
-#' whitespace-only text blocks are left out, the rule anthropic_user() and anthropic_assistant()
-#' apply (the Messages API refuses text blocks without non-whitespace text). A result without
-#' text leads with "(see attached image)" only when an image block is attached; for a model
-#' without image input the omission note stands alone
+#' One tool_result block: text first, images as native image blocks (acceptance 3)
+#' Whitespace-only text blocks are left out (the Messages API refuses them).
 #' @noRd
 anthropic_tool_result = function(r, images) {
   content = list()
@@ -1094,11 +1043,8 @@ anthropic_tool_result = function(r, images) {
   out
 }
 
-#' A run of operator messages as ONE message: a mid-conversation system message (with
-#' tool_addition blocks when the model takes them) where the placement rule allows it, else user
-#' text (G4 section 2.3). Report 07 section 2.3: a system message must follow a user message and
-#' be last or followed by an assistant turn, so a run is never split into consecutive system
-#' messages
+#' A run of operator messages as ONE message: a mid-conversation system message where the
+#' placement rule allows it, else user text (G4 section 2.3; report 07 section 2.3)
 #' @noRd
 anthropic_operator = function(group, as_system, with_tools) {
   parts = list()
@@ -1116,12 +1062,8 @@ anthropic_operator = function(group, as_system, with_tools) {
   list(role = if (as_system) "system" else "user", content = parts)
 }
 
-#' The messages array elements (JSON text), each serialised once per session through opts$memo.
-#' Consecutive tool results become one user message; a run of operator messages becomes one
-#' message, a system message only when it follows a user turn and precedes an assistant turn or
-#' the end (`tail = TRUE`: a `returns` instruction follows the last element, so a trailing run is
-#' user text and the instruction can be the closing system message); the anchored project block
-#' carries BP2 only when the cache plan names `project`
+#' The messages array elements (JSON text), each serialised once per session through opts$memo
+#' `tail = TRUE`: a `returns` instruction follows, so a trailing operator run is user text.
 #' @noRd
 anthropic_elements = function(model, msgs, opts, anchors = "project", tail = FALSE) {
   out = character()
@@ -1221,10 +1163,7 @@ anthropic_tool_choice = function(tc, model, thinking, returns) {
 }
 
 #' build() of the anthropic-messages adapter (04 section 8.1): the request spec
-#'
-#' Body key order per G4 section 3.7: model, max_tokens, stream, cache_control (the automatic
-#' tail breakpoint), thinking, output_config, tool_choice, declared request params, tools,
-#' system (T0 with the 1 h BP1, T1), messages (the project block with the 1 h BP2).
+#' Body key order per G4 section 3.7; BP1 on T0 and BP2 on the project block are 1 h markers.
 #' @noRd
 anthropic_build = function(model, context, opts) {
   params = context$params %||% list()
@@ -1383,9 +1322,8 @@ adp_opaque_strings = function(msg) {
   list(quoted = quoted, verbatim = verbatim)
 }
 
-#' Byte-identical re-serialisation: the message and its JSON round trip (the session file)
-#' build the same body, with and without the memo, and every opaque string is on the wire
-#' verbatim
+#' Byte-identical re-serialisation: the message and its JSON round trip build the same body,
+#' with and without the memo, and every opaque string is on the wire verbatim
 #' @noRd
 adp_roundtrip = function(adapter, model, msg) {
   opts = list(base_url = "http://127.0.0.1:1", memo = NULL)
@@ -1417,9 +1355,7 @@ adp_body_forced = function(body) {
     identical(body$toolConfig$functionCallingConfig$mode, "ANY")
 }
 
-#' Does a list tool_choice stay off the wire while forced_tool_choice is FALSE? Checked with
-#' the model capability set to FALSE and, for adapters whose own capability is FALSE, with a
-#' model record that says nothing (IC-71)
+#' Does a list tool_choice stay off the wire while forced_tool_choice is FALSE? (IC-71)
 #' @noRd
 adp_check_tool_choice = function(adapter) {
   ctx = adp_check_context(NULL, tool_choice = list(type = "tool", name = "read"))
@@ -1435,9 +1371,8 @@ adp_check_tool_choice = function(adapter) {
   ok
 }
 
-#' The fixture directory of an api: `fixtures`, else fixtures/<kind>/<api> under the test
-#' directory or the package sources (`kind` "sse" for stream fixtures, "classifier" for
-#' classifier fixtures)
+#' The fixture directory of an api: `fixtures`, else fixtures/<kind>/<api> ("sse" or
+#' "classifier") under the test directory or the package sources
 #' @noRd
 adp_fixture_dir = function(api, fixtures = NULL, kind = "sse") {
   cands = fixtures
@@ -1449,11 +1384,8 @@ adp_fixture_dir = function(api, fixtures = NULL, kind = "sse") {
   NULL
 }
 
-#' adp_replay() for conformance: the first warning or message signalled while the normaliser
-#' runs ends the replay and becomes its condition, since normalisers signal no R condition at
-#' all (04 section 8.1); an error is already caught by adp_replay(). The handlers exit rather
-#' than muffle: a condition raised with signalCondition() has no muffle restart, and after a
-#' calling handler it would still reach the caller's handlers
+#' adp_replay() for conformance: the first warning or message ends the replay as its condition
+#' (04 section 8.1); exiting handlers, since signalCondition() offers no muffle restart.
 #' @noRd
 adp_check_replay = function(adapter, model, bytes, sizes) {
   stopped = function(cnd) list(message = NULL, condition = cnd, events = list())
@@ -1469,21 +1401,12 @@ adp_same_golden = function(x, path) {
 }
 
 # ---- conformance of classifier adapters (IC-74: 07 sections 3 and 6, P12 row; FIX-6) -----------
-# A classifier fixture directory (`fixtures/classifier/<api>/`) holds one `<case>.json` per
-# exchange and its golden: `<case>.answers.json` (the canonical answers by question id, in
-# question order, probabilities and legends as objects in request order, unknown values null)
-# or `<case>.error.json` (`{"class": "gptr_error_s1_<sub>", "status": <int>}`: a typed error).
-# An answered case may add `<case>.usage.json` (`{"input": <count>, "output": <count>}`, null for
-# a count the service did not report: it stays NA, IC-74). `model.json` overrides fields of the
-# classifier fixture model.
+# `fixtures/classifier/<api>/`: `<case>.json` per exchange with its golden `<case>.answers.json`
+# or `<case>.error.json`, optionally `<case>.usage.json` (null = unreported, stays NA); `model.json`
+# overrides fields of the classifier fixture model.
 
 #' One classifier fixture case: `list(questions, state, status, headers, body)`, or a chr(1)
-#' problem
-#'
-#' `<case>.json` holds the ordered wire `questions` (required), the `state` an inprocess `run()`
-#' gets, and the response a wire `parse()` gets: `status` (default 200), `headers` (an object)
-#' and `body` (a JSON string is the body text byte for byte, so malformed bodies can be written;
-#' any other JSON value is sent as its compact JSON; absent or null is the empty body).
+#' problem; a JSON string `body` is the body text byte for byte, other values compact JSON
 #' @noRd
 adp_classifier_case = function(path) {
   x = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
@@ -1513,13 +1436,8 @@ adp_classifier_case = function(path) {
 }
 
 #' One classifier call for conformance: `list(value, condition, notices)`
-#'
-#' The first condition the call signals ends it through exiting handlers, as adp_check_replay()
-#' ends a stream replay: a classifier parse returns its failures unsignalled (04 section 8.1).
-#' With `notices = TRUE` (an inprocess `run()`) a `gptr_message` notice that can be muffled is
-#' recorded in `notices` and muffled instead: notices go through gptr_inform() (04 section 1.5),
-#' and s1-emulate's run() must say that its answers are not calibrated (IC-19). A bare message,
-#' a warning or an error still ends the call.
+#' The first condition ends the call (04 section 8.1); with `notices = TRUE` a `gptr_message`
+#' notice that can be muffled is recorded and muffled instead (gptr_inform(), IC-19).
 #' @noRd
 adp_check_classify = function(fun, args, notices = FALSE) {
   heard = new.env(parent = emptyenv())
@@ -1540,9 +1458,8 @@ adp_check_classify = function(fun, args, notices = FALSE) {
   }, error = stopped, warning = stopped, message = stopped)
 }
 
-#' Clear the once slots (04 section 2.1 `.once`) that a conformance replay set: whatever it
-#' signalled was caught or muffled by the check and never shown, so the user still gets each
-#' such notice or warning once. `before` is the slot names before the replay.
+#' Clear the once slots (04 section 2.1 `.once`) a conformance replay set, since the check
+#' never showed them; `before` is the slot names before the replay
 #' @noRd
 adp_once_restore = function(before) {
   added = setdiff(ls(the$once, all.names = TRUE), before)
@@ -1552,8 +1469,6 @@ adp_once_restore = function(before) {
 
 #' Is a classifier result one of the two shapes of 04 section 8.1: `list(answers, usage =
 #' list(input, output), model_version = chr(1))` or an unsignalled `gptr_error_s1` condition?
-#' A count is one number, nonnegative and finite, or NA. Whether an unreported count is NA
-#' (IC-74) is the `.golden_usage` row (adp_classifier_usage()), not this one.
 #' @noRd
 adp_classifier_result_ok = function(res) {
   if (inherits(res, "condition")) return(inherits(res, "gptr_error_s1"))
@@ -1568,8 +1483,7 @@ adp_classifier_result_ok = function(res) {
 }
 
 #' The usage row of an answered classifier case: `.golden_usage` against `<case>.usage.json`
-#' (`{"input": <count>, "output": <count>}`; null is a count the service did not report, which
-#' stays NA, IC-74); NULL without that file or for a failed case; `list(check, ok, message)`
+#' (null stays NA, IC-74); NULL without that file or for a failed case
 #' @noRd
 adp_classifier_usage = function(dir, case, res) {
   path = file.path(dir, paste0(case, ".usage.json"))
@@ -1600,10 +1514,8 @@ adp_classifier_usage = function(dir, case, res) {
                         shown(u[["output"]])))
 }
 
-#' Are the answers canonical? P13's s1_check_answers(), the validator s1_dispatch() runs on every
-#' adapter result, must return them unchanged: canonical records of the asked types (07 section
-#' 3), in question order, probabilities named in request order, valid values. A wire shape (a
-#' second output shape) or a lost order fails.
+#' Are the answers canonical? P13's s1_check_answers() must return them unchanged (07 section 3:
+#' asked types, question order, probabilities named in request order)
 #' @noRd
 adp_check_canonical = function(answers, questions, model_id) {
   checked = tryCatch(s1_check_answers(answers, questions, model_id), error = function(e) e)
@@ -1629,8 +1541,7 @@ adp_answers_json = function(x) {
 }
 
 #' The golden row of a classifier case: `.typed_error` against `<case>.error.json`, else
-#' `.golden_answers` against `<case>.answers.json` (order included: the canonical records keep
-#' the question and request order); `list(check, ok, message)`
+#' `.golden_answers` against `<case>.answers.json` (order included)
 #' @noRd
 adp_classifier_golden = function(dir, case, res) {
   failed = inherits(res, "condition")
@@ -1676,18 +1587,8 @@ adp_classifier_golden = function(dir, case, res) {
 }
 
 #' Conformance of a classifier adapter (IC-74: 07 sections 3 and 6, P12 row; FIX-6)
-#'
-#' Replays every case of `fixtures/classifier/<api>/` (or `fixtures`) once through
-#' `classify$parse(model, status, headers, body, questions)`, or `classify$run(model, state,
-#' questions, opts)` for an inprocess classifier, with the fixture model record (`model.json`
-#' over a classifier default). Per case: no R condition escapes (`.no_condition`; a run() may
-#' give gptr_inform() notices, which are muffled and noted on the row); the result is one of
-#' the shapes of 04 section 8.1 (`.result`); s1_check_answers() returns its answers unchanged
-#' (`.canonical`); it equals its golden (`.golden_answers` or `.typed_error`); and the usage of an
-#' answered case equals `<case>.usage.json` when there is one (`.golden_usage`). A case file that
-#' cannot be read gives `.fixture`. A wire classifier without cases fails `adapter.fixtures`, as
-#' a stream adapter does; an inprocess classifier has nothing to replay unless fixtures are
-#' found. Once slots the replay sets are cleared again (adp_once_restore()).
+#' Each case through `classify$parse()` (or `run()`): rows `.no_condition`, `.result`,
+#' `.canonical`, `.golden_answers`/`.typed_error`, `.golden_usage`; unreadable case `.fixture`.
 #' @noRd
 adp_check_classifier = function(adapter, fixtures, add) {
   api = adapter$api %||% adapter$name
@@ -1756,20 +1657,8 @@ adp_check_classifier = function(adapter, fixtures, add) {
 }
 
 #' Conformance of an adapter (04 section 7.12; the check.adapter service of gptr_check())
-#'
-#' Replays every fixture (`<case>.sse`, or `.ndjson`, `.json`, `.jsonl` by transport) whole,
-#' byte by byte and in three deterministic pseudo-random chunkings; compares the events and
-#' the final message with `<case>.events.json` and `<case>.message.json`; checks one start
-#' first and one terminal event last and that no R condition escapes; checks the byte-identical
-#' re-serialisation of opaque data; and fails an adapter that sends a forced tool_choice while
-#' forced_tool_choice is FALSE (IC-71). An `inprocess` generator without a stream normaliser
-#' gives the one row `adapter.replay`. A classifier adapter (one with `classify`) is checked
-#' against classifier fixtures instead (adp_check_classifier(): canonical answers of 07 section
-#' 3 through P13's validator, golden answers, typed errors and usage; IC-74, FIX-6).
-#' @param adapter A `gptr_adapter` spec.
-#' @param fixtures A fixture directory, or NULL for fixtures/sse/<api> (fixtures/classifier/<api>
-#'   for a classifier adapter).
-#' @return A `gptr_check` data frame (`target`, `check`, `ok`, `message`).
+#' Replays every fixture whole, byte by byte and in three pseudo-random chunkings against its
+#' goldens; also opaque re-serialisation and forced tool_choice (IC-71). Returns a `gptr_check`.
 #' @noRd
 check_adapter = function(adapter, fixtures = NULL) {
   check_list(adapter, "adapter")
@@ -1791,8 +1680,7 @@ check_adapter = function(adapter, fixtures = NULL) {
     class(df) = c("gptr_check", "data.frame")
     df
   }
-  # classifier adapters (build and parse, or run, live in `classify`; P13's typesafe-system-one
-  # and ollama-system-one, P01's fake-classifier): classifier fixtures, never stream fixtures
+  # classifier adapters (`classify`) replay classifier fixtures, never stream fixtures
   if (is.list(adapter[["classify"]])) {
     adp_check_classifier(adapter, fixtures, add)
     return(frame())

@@ -1,11 +1,7 @@
-# The openai-responses adapter (P12): the stateless Responses API with store = false. Reasoning
-# items (with encrypted_content), message ids with `phase`, and `call_|fc_` ids are replayed
-# byte for byte to the same model only (report 08 sections 2.A, 3.1-3.3; verification log rows
-# 32 (backfill encrypted_content from response.completed), 37 (keep `phase`) and 40 (a unique
-# X-Client-Request-Id per request)). The normaliser is adapted from the verified prototypes of
-# report 08 section 5.7 and report 03 section 5.3. Usage follows IC-74 (07-local-ollama.md
-# section 5): usage the stream never reported, or reported as null, stays unknown. Stream fields
-# are read with `[[` (no `$` partial matching) and typed before use (04 sections 2.2, 4.2).
+# The openai-responses adapter (P12): the stateless Responses API (store = false). Reasoning items,
+# message ids with `phase` and `call_|fc_` ids replay byte for byte to the same model only (report
+# 08 sections 2.A, 3.1-3.3). Unreported usage stays unknown (IC-74). Stream fields are read with
+# `[[` (no `$` partial matching) and typed before use (04 sections 2.2, 4.2).
 
 #' A provider value that must be one string: the string, else "" (a number, list, vector or NA
 #' is never taken as text)
@@ -65,11 +61,8 @@ responses_part_text = function(x) {
 }
 
 #' Record a Responses usage object (08 section 3.3; Pi openai-responses-shared.ts 561-577)
-#'
-#' `input_tokens` includes the cached and cache-write tokens, so the uncached input is the rest;
-#' the reasoning tokens are part of `output_tokens`. A field the provider left out keeps P05's
-#' legacy zero, a reported null or a value that is not a nonnegative number is unknown (NA,
-#' IC-74), and `"usage": null` is no report (D-022, D-027).
+#' `input_tokens` includes cache reads and writes; reasoning is part of `output_tokens`. Absent
+#' field 0, null or invalid NA (IC-74); `"usage": null` is no report (D-022, D-027).
 #' @noRd
 responses_usage = function(st, u) {
   if (!is.list(u)) return(invisible(NULL))
@@ -86,16 +79,8 @@ responses_usage = function(st, u) {
 }
 
 #' The openai-responses normaliser (04 section 8.1; 08 section 3.3)
-#'
-#' A reasoning item opens two slots: a thinking block with the summary text, and an opaque
-#' block holding the reasoning item for replay. A message item's id and `phase` are kept as
-#' the text block's signature `{"v":1,"id":...,"phase":...}` (Pi's textSignature). Items are
-#' found by `item_id`, then by `output_index`; an item missing from `response.output_item.done`
-#' is finished from the terminal response, and a reasoning item's missing `encrypted_content`
-#' is backfilled from it (verification log row 32).
-#' @param model A model record (contract section 4.9).
-#' @param opts The adapter options of contract section 8.1 (`emit`, `retry`, `signal`).
-#' @return A list of functions `push`, `finish`, `fail`, `message`.
+#' A reasoning item is a thinking block plus an opaque replay block; a message's id and `phase`
+#' are the text signature. Missing items and `encrypted_content` come from the final response.
 #' @noRd
 responses_normaliser = function(model, opts) {
   st = adp_state(model, opts)
@@ -352,9 +337,8 @@ responses_user = function(m, mark_anchor, images) {
   list(list(role = "user", content = parts))
 }
 
-#' The message id and `phase` of a text signature `{"v":1,"id":...,"phase":...}` (the form the
-#' normaliser stores); NULL unless the id is one string. Fields are read with `[[`, so a key that
-#' only starts with `id` is never taken for it; a phase that is not one string is "" (left out)
+#' The message id and `phase` of a text signature `{"v":1,"id":...,"phase":...}`; NULL unless
+#' the id is one string, a phase that is not one string is ""
 #' @noRd
 responses_text_signature = function(signature) {
   sig = adp_json_try(responses_str(signature))
@@ -456,14 +440,9 @@ responses_tool_choice = function(tc, model, returns) {
   if (identical(tc$type, "any")) "required" else list(type = "function", name = tc$name)
 }
 
-#' build() of the openai-responses adapter (04 section 8.1; G4 section 3.7: model, store,
-#' stream, prompt_cache_key, prompt_cache_options, reasoning, tools, input)
-#'
-#' The compat record (its explicit cache mode) and the provider headers come from the provider
-#' record provider_stream() resolved (`opts$provider`, the session's own record first; D-023,
-#' D-027), and the provider headers are merged by name. Tools and operator tool additions go only
-#' to a model that calls tools (`tool_call`; IC-74, 07-local-ollama.md section 1), and
-#' `tool_choice` only with a tools array (D-029).
+#' build() of the openai-responses adapter (04 section 8.1; G4 section 3.7)
+#' Compat and headers come from `opts$provider` (D-023, D-027); tools and operator tool additions
+#' only to a `tool_call` model (IC-74), `tool_choice` only with a tools array (D-029).
 #' @noRd
 responses_build = function(model, context, opts) {
   params = context$params %||% list()

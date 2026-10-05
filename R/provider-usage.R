@@ -187,10 +187,8 @@ price_rates = function(row) {
 }
 
 #' The latest price set in force, selecting the highest exceeded prompt threshold
-#'
-#' Unknown prompt size selects a row only when every possible tier has identical
-#' effective rates and a base tier covers small prompts. Future rates are not
-#' evidence of the charge before their effective date.
+#' An unknown prompt size selects a row only when every tier's effective rates are identical;
+#' future rates never price an earlier request.
 #' @noRd
 price_select = function(prices, prompt_tokens, when = Sys.Date()) {
   when = price_date(when, "when")
@@ -215,8 +213,7 @@ price_select = function(prices, prompt_tokens, when = Sys.Date()) {
 #' Metered charge for one token component, retaining unknown measurements
 #' @noRd
 usage_charge = function(tokens, rate) {
-  # A declared zero rate proves zero metered API charge even without token usage.
-  # This does not estimate compute or energy cost, or infer pricing from a URL.
+  # A declared zero rate proves a zero metered charge even without token usage
   if (isTRUE(rate == 0) || isTRUE(tokens == 0)) return(0)
   usage_num(tokens / 1e6 * rate, arg = "cost")
 }
@@ -322,12 +319,7 @@ usage_rows_check = function(rows, arg) {
 }
 
 #' The cost a plan CLI reported itself (`total_cost_usd`, contract section 8.5)
-#'
-#' Read from the message's own usage record: a reported `cost$total` (zero included) is kept, a
-#' missing one is unknown (IC-74), and so is the cost of an estimated record, since `estimated`
-#' means the provider reported nothing (contract section 4.3). A canonical record from
-#' `usage_new()` always carries a total (the legacy zero when `cost` was omitted), so an adapter
-#' with no reported cost passes `cost = NULL`.
+#' A reported `cost$total` (zero included) is kept; missing, or an estimated record, is NA (IC-74).
 #' @noRd
 usage_reported_cost = function(usage) {
   if (is.list(usage) && isTRUE(usage[["estimated"]])) return(NA_real_)
@@ -337,17 +329,8 @@ usage_reported_cost = function(usage) {
 }
 
 #' One usage row (contract section 4.3) for an assistant message
-#'
-#' The model record is resolved from the message's provider and model and checked with the same
-#' pure, no-I/O request preflight (`provider_preflight()`), so a local model whose current
-#' discovery evidence establishes local execution is priced at its zero metered charge whichever
-#' catalog name (bare or tagged) reached it (07-local-ollama.md section 5); a record the
-#' preflight refuses (no current evidence, as in a rebuild) keeps its catalog prices. The cost is
-#' recomputed from the dated price tier in force on the request date (UTC), except on the
-#' `plan-cli` route, whose cost is the CLI's own estimate (`total_cost_usd`, 04 section 8.5).
-#' Unknown tokens, an unresolved model, a request before the first known price and a missing CLI
-#' estimate give `NA` (IC-74); `tier` is `NA` when no price tier applies. Scalar arguments are
-#' validated so that one call never recycles into several accounting rows.
+#' Priced from the dated tier in force (a preflight-local model at zero, 07 section 5; plan-cli
+#' at the CLI's estimate); anything unknown gives `NA` (IC-74).
 #' @noRd
 usage_row = function(msg, session, agent, parent_id, started, seconds, multiplier) {
   check_list(msg, "msg")
@@ -394,10 +377,7 @@ usage_row = function(msg, session, agent, parent_id, started, seconds, multiplie
              multiplier = multiplier, stringsAsFactors = FALSE)
 }
 
-#' Append usage rows to the process System 1 accounting log (append-only; `the$s1_log`)
-#'
-#' The rows are validated before the log changes; returns the number of rows appended,
-#' invisibly.
+#' Append validated usage rows to the process System 1 log (`the$s1_log`); returns the count
 #' @noRd
 usage_log_append = function(row) {
   row = usage_rows_check(row, "row")
@@ -408,10 +388,7 @@ usage_log_append = function(row) {
   invisible(nrow(row))
 }
 
-#' The process System 1 accounting log as one usage table
-#'
-#' Rows appended since the last read are bound once and kept bound, so repeated reads do not
-#' re-bind the whole log; the content and order of the log never change.
+#' The process System 1 accounting log as one usage table (new rows are bound once and kept)
 #' @noRd
 usage_log = function() {
   rows = the$s1_log
@@ -425,11 +402,7 @@ usage_log = function() {
 }
 
 #' The root session of each distinct session in usage rows
-#'
-#' A session's parent is the `parent_id` its rows record (an `NA` row records none, as in P13's
-#' System 1 rows of a child session; two different recorded parents are refused); a parent
-#' without rows of its own is a root, as is a session with no recorded parent. Cyclic ancestry
-#' is refused.
+#' Two different recorded parents or cyclic ancestry are refused; a parent without rows is a root.
 #' @noRd
 usage_roots = function(session, parent_id) {
   known = !is.na(session)
@@ -454,15 +427,8 @@ usage_roots = function(session, parent_id) {
   }, NA_character_)
 }
 
-#' Roll usage rows up to their root sessions (INFRA-20)
-#'
-#' Each row's session is followed through the `session -> parent_id` pairs of `rows` to its
-#' root (a parent without rows of its own is a root), so child sessions (team members, fan-out
-#' elements, nested calls) are charged to the session that started them. Rows without a session
-#' (process-level System 1 calls) form the `NA` group. Returns one row per root in order of first
-#' appearance, with the columns of the aggregated `gptr_usage` view (04 section 5.12): `group`,
-#' `requests`, `input`, `output`, `cache_read`, `cache_write`, `cost`. An unknown (`NA`) value
-#' makes its group's sum unknown (IC-74).
+#' Roll usage rows up to their root sessions (INFRA-20; the `gptr_usage` view, 04 section 5.12)
+#' Rows without a session form the `NA` group; an unknown value makes its group's sum NA (IC-74).
 #' @noRd
 usage_rollup = function(rows) {
   rows = usage_rows_check(rows %||% usage_empty(), "rows")
