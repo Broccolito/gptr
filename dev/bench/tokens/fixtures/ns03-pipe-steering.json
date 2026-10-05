@@ -1,0 +1,118 @@
+{
+  "id": "ns03-pipe-steering",
+  "north_star": 3,
+  "description": "gptr(\"Load the counts ...\") |> gptr(\"Now run a PCA ...\") |> gptr(\"Plot PC1 against PC2 ...\", model = opus): one session steered by the pipe, a model switch on the third prompt, one plot image.",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": [
+    "benchmain/benchmain-1",
+    "benchopus/benchopus-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Counts live in data/counts.csv (genes x samples); sample metadata in data/samples.csv."
+  },
+  "objects": {},
+  "facts": [],
+  "turns": [
+    {
+      "prompt": "Load the counts in data/counts.csv and normalise them",
+      "source": "prompt",
+      "context": [],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "counts = data.table::fread(\"data/counts.csv\")\nmat = as.matrix(counts[, -1])\nrownames(mat) = counts[[1]]\nnorm = log1p(t(t(mat) / colSums(mat)) * 1e6)\ndim(norm)"
+              },
+              "result": "[1] 18432    24\n[r] + counts <data.table 18,432 x 25>, + mat <matrix 18,432 x 24>, + norm <matrix 18,432 x 24>\n[status: ok; 5 of 5 top-level expressions completed; 1.2s]",
+              "details": {
+                "code": "counts = data.table::fread(\"data/counts.csv\")\nmat = as.matrix(counts[, -1])\nrownames(mat) = counts[[1]]\nnorm = log1p(t(t(mat) / colSums(mat)) * 1e6)\ndim(norm)",
+                "status": "ok",
+                "note": "log1p CPM normalisation"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Loaded 18,432 genes x 24 samples into `counts` and normalised them to log1p CPM in `norm`.",
+          "calls": []
+        }
+      ]
+    },
+    {
+      "prompt": "Now run a PCA and tell me how many components explain 80% of variance",
+      "source": "pipe",
+      "context": [],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_02",
+              "name": "r",
+              "input": {
+                "code": "pca = prcomp(t(norm[apply(norm, 1, var) > 0, ]), scale. = TRUE)\nve = cumsum(pca$sdev^2) / sum(pca$sdev^2)\nwhich(ve >= 0.8)[1]\nround(ve[1:6], 3)"
+              },
+              "result": "PC9 \n  9 \n[1] 0.312 0.468 0.571 0.642 0.694 0.737\n[r] + pca <prcomp>, + ve <numeric length 24>\n[status: ok; 4 of 4 top-level expressions completed; 2.8s]",
+              "details": {
+                "code": "pca = prcomp(t(norm[apply(norm, 1, var) > 0, ]), scale. = TRUE)\nve = cumsum(pca$sdev^2) / sum(pca$sdev^2)\nwhich(ve >= 0.8)[1]\nround(ve[1:6], 3)",
+                "status": "ok"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Nine components explain 80% of the variance (PC1 31.2%, PC2 15.6%). The PCA is in `pca`.",
+          "calls": []
+        }
+      ]
+    },
+    {
+      "prompt": "Plot PC1 against PC2 coloured by batch",
+      "source": "pipe",
+      "model": "benchopus/benchopus-1",
+      "context": [],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_03",
+              "name": "r",
+              "input": {
+                "code": "samples = data.table::fread(\"data/samples.csv\")\npc = data.frame(pca$x[, 1:2], batch = samples$batch[match(rownames(pca$x), samples$sample)])\np_pca = ggplot2::ggplot(pc, ggplot2::aes(PC1, PC2, colour = batch)) + ggplot2::geom_point(size = 2) + ggplot2::theme_minimal()\np_pca"
+              },
+              "result": "[plot 1 attached]\n[r] + samples <data.table 24 x 4>, + pc <data.frame 24 x 3>, + p_pca <gg>\n[status: ok; 4 of 4 top-level expressions completed; 0.9s]",
+              "images": [
+                [
+                  768,
+                  512
+                ]
+              ],
+              "details": {
+                "code": "samples = data.table::fread(\"data/samples.csv\")\npc = data.frame(pca$x[, 1:2], batch = samples$batch[match(rownames(pca$x), samples$sample)])\np_pca = ggplot2::ggplot(pc, ggplot2::aes(PC1, PC2, colour = batch)) + ggplot2::geom_point(size = 2) + ggplot2::theme_minimal()\np_pca",
+                "status": "ok"
+              }
+            }
+          ]
+        },
+        {
+          "text": "PC1 separates batch A from batches B and C, so batch explains the largest axis of variation; consider correcting for batch before clustering.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}

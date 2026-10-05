@@ -1,0 +1,3 @@
+"case","requests","prefix","input_total","output_total","image_tokens","catalog","facts","est_prefix","est_input_total"
+"ns02-mixed-model",2,2750,6088,140,0,542,1,2930,6410
+"ns03-pipe-steering",6,2750,19700,337,532,542,0,2930,20500

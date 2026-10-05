@@ -1,0 +1,66 @@
+{
+  "id": "ns02-mixed-model",
+  "north_star": 2,
+  "description": "res = gptr(\"Fit a mixed model ...\", mice) at the console: standard preset, manual mode, a human present, no bound document; one composed r call, then the answer.",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": [
+    "benchmain/benchmain-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Mixed models: lme4; report estimates with 95% confidence intervals."
+  },
+  "objects": {
+    "mice": "data.frame(mouse = rep(sprintf('m%02d', 1:12), each = 4), diet = rep(c('control', 'HF'), 24), weight = round(20 + (1:48) %% 7 + rep(c(0, 3), 24), 1))"
+  },
+  "facts": [
+    "mice",
+    "weight",
+    "diet",
+    "mouse"
+  ],
+  "turns": [
+    {
+      "prompt": "Fit a mixed model of weight on diet with a random intercept per mouse, and report the diet effect.",
+      "source": "prompt",
+      "context": [
+        {
+          "label": "mice",
+          "class": "data.frame"
+        }
+      ],
+      "steps": [
+        {
+          "text": "I will fit the model with lme4 and return it.",
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "fit = lme4::lmer(weight ~ diet + (1 | mouse), data = mice)\ngptr_return(fit)\nci = confint(fit, parm = \"beta_\", method = \"Wald\")\nround(cbind(estimate = lme4::fixef(fit), ci), 2)"
+              },
+              "result": "            estimate  2.5 % 97.5 %\n(Intercept)    21.84  20.97  22.71\ndietHF          3.12   2.21   4.03\n[r] + fit <lmerMod>, + ci <matrix 2 x 2>\n[status: ok; 4 of 4 top-level expressions completed; 0.4s]",
+              "details": {
+                "code": "fit = lme4::lmer(weight ~ diet + (1 | mouse), data = mice)\ngptr_return(fit)\nci = confint(fit, parm = \"beta_\", method = \"Wald\")\nround(cbind(estimate = lme4::fixef(fit), ci), 2)",
+                "status": "ok",
+                "note": "random intercept per mouse; Wald intervals"
+              }
+            }
+          ]
+        },
+        {
+          "text": "The high-fat diet raises weight by 3.12 g (95% CI 2.21 to 4.03) relative to the control diet, with a random intercept per mouse. The fitted model is returned as `res$value` (`fit`).",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}
