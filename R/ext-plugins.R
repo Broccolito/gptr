@@ -388,6 +388,27 @@ res_prune = function(prefix, keep) {
   invisible(stale)
 }
 
+#' Names of the process-level `kind` records that something other than P17's resources registered
+#'
+#' A console command, plugin code or `gptr_register()`: an enabled process-level record whose id
+#' belongs to no resource group and to no plugin entry's declarative records, so a removed or
+#' disabled record of P17 hides nothing (D-133, D-134).
+#' @noRd
+res_foreign_names = function(kind) {
+  reg = registry_env()
+  registry_enter(reg)
+  on.exit(registry_leave(reg), add = TRUE)
+  recs = registry_recs(reg, get0(kind, envir = reg$by_kind, inherits = FALSE))
+  if (!length(recs)) return(character())
+  st = res_state()
+  own = c(unlist(lapply(st$groups, function(g) g$ids), use.names = FALSE),
+          unlist(lapply(st$plugins, function(e) e$ids), use.names = FALSE))
+  keep = vapply(recs, function(r) {
+    is.null(r$session) && !(r$id %in% own) && !registry_rec_filtered(r, reg)
+  }, NA)
+  unique(vapply(recs[keep], function(r) r$name, ""))
+}
+
 #' Install a resource handler (called by the L4 built-ins from `on_load()`)
 #'
 #' `type` is `"skills"`, `"prompts"`, `"commands"` or `"agents"`; `fun` is
@@ -563,6 +584,41 @@ res_plugin_dirs = function(type) {
                       stringsAsFactors = FALSE))
   }
   do.call(rbind, out)
+}
+
+#' Resource roots of a type in precedence order (contract 04 section 10.1; IC-63)
+#'
+#' `proj` (nearest first), the existing `user` directories, gptr's own, attached packages,
+#' enabled plugins and `resources_discover` paths. An untrusted project's roots rank 7, after
+#' every origin, so they never shadow (04 section 6.2; D-134). `flat` directories are read
+#' without recursion. Returns `data.frame(dir, origin, rank, reg, label, trusted, recursive)`:
+#' `reg` is the registry source, `label` the listing source.
+#' @noRd
+res_roots = function(type, proj, user, flat = character()) {
+  trusted = trust_ok()
+  user = user[dir.exists(user)]
+  builtin = res_builtin_dir(type)
+  pk = res_attached_dirs(type)
+  pl = res_plugin_dirs(type)
+  disc = res_state()$discovered[[paste0(sub("s$", "", type), "_paths")]]
+  disc = disc[dir.exists(disc)]
+  n = c(length(proj), length(user), length(builtin), nrow(pk), nrow(pl), length(disc))
+  dirs = c(proj, user, builtin, pk$dir, pl$dir, disc)
+  data.frame(
+    dir = dirs,
+    origin = rep(c("project", "user", "builtin", "package", "plugin", "discovered"), n),
+    rank = c(rep(if (trusted) 1L else 7L, n[1L]), rep(3L, n[2L]), rep(6L, n[3L]),
+             rep(5L, n[4L]), as.integer(pl$rank), rep(5L, n[6L])),
+    reg = c(rep("project", n[1L]), rep("user", n[2L]), rep(paste0("builtin:", type), n[3L]),
+            res_prefix("plugin:", pk$pkg), res_prefix("plugin:", pl$name),
+            rep("plugin:discovered", n[6L])),
+    label = c(rep(if (trusted) "project" else "project (untrusted)", n[1L]),
+              rep("user", n[2L]), rep("builtin", n[3L]), res_prefix("package:", pk$pkg),
+              res_prefix("plugin:", pl$name), rep("discovered", n[6L])),
+    trusted = c(rep(trusted, n[1L]), rep(TRUE, sum(n[-1L]))),
+    recursive = !(dirs %in% flat),
+    stringsAsFactors = FALSE
+  )
 }
 
 # ---- versions --------------------------------------------------------------------------------
