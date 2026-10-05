@@ -1102,3 +1102,204 @@ print.gptr_config = function(x, ...) {
 }
 
 on_load(ext_service_set("settings.get", settings_get, provided_by = "P08", builtin = "gateway"))
+
+# ------------------------------------------------------------- replay (contract 7.8; IC-30, IC-45)
+
+#' The four replay modes
+#' @noRd
+replay_modes = function() c("auto", "replay", "live", "record")
+
+#' The replay mode: `arg` > gptr.replay > GPTR_REPLAY > settings > "auto"; "replay" is forced when
+#' R CMD check runs outside testthat (examples), unless `arg` is given (IC-45)
+#' @noRd
+replay_mode = function(arg = NULL) {
+  if (!is.null(arg)) {
+    mode = check_choice(arg, replay_modes(), "replay")
+    return(mode)
+  }
+  if (check_running() && !identical(Sys.getenv("TESTTHAT"), "true")) return("replay")
+  opt = getOption("gptr.replay")
+  if (!is.null(opt)) {
+    mode = check_choice(opt, replay_modes(), "gptr.replay")
+    return(mode)
+  }
+  env = Sys.getenv("GPTR_REPLAY", "")
+  if (nzchar(env)) {
+    mode = check_choice(env, replay_modes(), "GPTR_REPLAY")
+    return(mode)
+  }
+  set = settings_get("replay")
+  if (is.character(set) && length(set) == 1L && !is.na(set) && set %in% replay_modes()) {
+    return(set)
+  }
+  "auto"
+}
+
+#' The provider id of a model record, a provider spec or a model reference. A reference is
+#' resolved by model_resolve(strict = FALSE), which never discovers or contacts a provider
+#' (IC-74); an unknown one names the provider before its first `/`, or itself.
+#' @noRd
+replay_provider_id = function(model) {
+  if (inherits(model, "gptr_provider")) return(model[["id"]] %||% model[["name"]])
+  pid = if (is.list(model)) model[["provider"]]
+  if (is.character(pid) && length(pid) == 1L && !is.na(pid) && nzchar(pid)) return(pid)
+  if (is.character(model) && length(model) == 1L && !is.na(model) && nzchar(model)) {
+    m = model_resolve(model, strict = FALSE)
+    if (!is.null(m)) return(m[["provider"]])
+    slash = regexpr("/", model, fixed = TRUE)
+    return(if (slash > 1L) substr(model, 1L, slash - 1L) else model)
+  }
+  gptr_abort("replay_guard() needs a model record, a provider spec or a model reference.",
+             "invalid_argument", arg = "model", expected = "a model record or reference")
+}
+
+#' In replay mode, refuses a request to any provider whose record is not `offline = TRUE`
+#' (gptr_error_not_recorded); `invisible(TRUE)` otherwise. A local server is not offline. Nothing
+#' here discovers, prepares or contacts a provider (07-local-ollama.md sections 2.1 and 4).
+#' @noRd
+replay_guard = function(model, what = "model call") {
+  check_string(what, "what")
+  if (!identical(replay_mode(), "replay")) return(invisible(TRUE))
+  pid = replay_provider_id(model)
+  rec = if (inherits(model, "gptr_provider")) model else provider_get(pid)
+  if (isTRUE(rec[["offline"]])) return(invisible(TRUE))
+  gptr_abort(c(paste0("Replay mode: gptr may not make a ", what, " to ", pid,
+                      " because nothing is recorded for it."),
+               "Unset GPTR_REPLAY or pass replay = \"auto\" to call the model."),
+             "not_recorded", document = NA_character_, prompt = NA_character_)
+}
+
+# ------------------------------------------- egress (03 section 6.10; IC-29, IC-43, IC-53, IC-74)
+
+#' Does the local-only policy of IC-74 govern this provider's routes, as P05's
+#' catalog_ollama_route() decides for its models: the Ollama provider, or a provider of native
+#' Ollama decision models?
+#' @noRd
+egress_ollama = function(p) {
+  catalog_ollama_provider(p) || identical(p[["api"]], "ollama-system-one")
+}
+
+#' Is local-only Ollama inference enforced for the next request? Only then does P05's preflight
+#' refuse a cloud model or a remote marker behind a loopback server before anything is sent. It
+#' is, unless the protected user/session control (settings_local_only()) or, inside a run, the
+#' run's frozen safety record relaxes it.
+#' @noRd
+egress_local_only = function() {
+  run = run_current()
+  safety = if (is.null(run)) NULL else run[["opts"]][["safety"]]
+  settings_local_only("ollama") && catalog_local_only(safety)
+}
+
+#' Where automatic context sent to provider record `p` goes: `exempt` (no acknowledgement
+#' needed), the effective `origin` (NULL without an HTTP endpoint) and, for a local provider that
+#' is not exempt, `why`. Offline providers are exempt; a local one only when its effective
+#' endpoint (P05's catalog_endpoint(): settings > record > environment) is a loopback address,
+#' and for Ollama routes only while local-only inference is enforced (IC-74, D-020: the `local`
+#' hint and a loopback URL alone exempt neither a remote override nor a cloud model). Task 9's
+#' guards read the same answer for the session's own provider record.
+#' @noRd
+egress_state = function(p) {
+  if (!is.list(p)) return(list(exempt = FALSE, origin = NULL, why = NULL))
+  ep = catalog_endpoint(p)
+  out = list(exempt = FALSE, origin = ep[["origin"]], why = NULL)
+  if (isTRUE(p[["offline"]])) {
+    out$exempt = TRUE
+  } else if (isTRUE(p[["local"]])) {
+    out$why = if (is.null(ep)) {
+      "It names no HTTP endpoint that shows it runs on this machine."
+    } else if (!isTRUE(ep[["loopback"]])) {
+      "Its endpoint is not a loopback address, so requests leave this machine."
+    } else if (egress_ollama(p) && !egress_local_only()) {
+      paste0("Ollama's local-only inference is turned off, so a request through this server ",
+             "may reach a cloud model.")
+    }
+    out$exempt = is.null(out$why)
+  }
+  out
+}
+
+#' Can the egress question be asked: someone can answer (IC-43) and, inside a run, the run's
+#' safety record (a list or an environment) says `can_prompt = TRUE`. Like P06's gate this fails
+#' closed: a background run, a child without a human, or a snapshot that does not say it can ask
+#' never asks (IC-53 item 6: the acknowledgement is an ask_human).
+#' @noRd
+egress_can_ask = function() {
+  run = run_current()
+  if (!is.null(run)) {
+    safety = run[["opts"]][["safety"]]
+    ok = if (is.environment(safety)) {
+      get0("can_prompt", envir = safety, inherits = FALSE)
+    } else if (is.list(safety)) {
+      safety[["can_prompt"]]
+    }
+    if (!isTRUE(ok)) return(FALSE)
+  }
+  gptr_can_prompt()
+}
+
+#' The question shown before the first automatic context goes to a provider (gptr_confirm()
+#' appends the ` [y/N] ` hint itself); it names the effective endpoint when there is one
+#' @noRd
+egress_question = function(id, origin = NULL) {
+  to = if (is.null(origin)) id else paste0(id, " (", origin, ")")
+  paste0("gptr sends your prompts to ", to, " together with automatic context: the workspace ",
+         "listing (object names, classes and sizes), a description of the R environment, project ",
+         "instructions and descriptions of the objects you attach. Allow this for ", id,
+         " from now on?")
+}
+
+#' Records `egress.<id> = "ack"` in the user settings file: one read-modify-write under the
+#' file's short lock (IC-71), so an acknowledgement another process wrote meanwhile is kept and
+#' the file's other keys keep their JSON form; a file that is not a JSON object is never
+#' rewritten (settings_file_load()). Returns the file path, invisibly.
+#' @noRd
+egress_record = function(id) {
+  path = settings_path("user", create = TRUE)
+  lock = file_lock(path)
+  on.exit(file_unlock(lock), add = TRUE)
+  cur = settings_file_load(path)
+  acks = cur[["egress"]]
+  if (!is.list(acks) || (length(acks) && is.null(names(acks)))) acks = list()
+  acks[[id]] = "ack"
+  cur[["egress"]] = acks
+  settings_file_write(path, cur)
+  invisible(path)
+}
+
+#' `invisible(TRUE)` when automatic context may go to `provider_id`: acknowledged in the user
+#' settings (`egress`, read from the user file only), an offline provider, or a local one whose
+#' effective endpoint stays on this machine (egress_state()). With someone to ask it asks once
+#' (an ask_human, IC-53) and records the answer at user scope with an `egress_ack` message;
+#' otherwise gptr_error_egress (13 C-34). Acknowledgements are keyed by the provider's own id
+#' (an alias finds it). The `.opts$context = "none"` exemption is the gateway's (Task 9).
+#' @noRd
+egress_check = function(provider_id) {
+  check_string(provider_id, "provider_id")
+  rec = provider_get(provider_id)
+  pid = if (is.null(rec)) provider_id else rec[["id"]] %||% rec[["name"]] %||% provider_id
+  # the id is pasted into the hint the user is told to run, so it must be a plain provider id
+  if (!grepl("^[a-z0-9][a-z0-9-]*\\z", pid, perl = TRUE)) {
+    gptr_abort("`provider_id` must be a provider id such as \"anthropic\".", "invalid_argument",
+               arg = "provider_id", expected = "a provider id (^[a-z0-9][a-z0-9-]*$)")
+  }
+  st = egress_state(rec)
+  if (st$exempt) return(invisible(TRUE))
+  acks = settings_get("egress")
+  if (is.list(acks) && identical(acks[[pid]], "ack")) return(invisible(TRUE))
+  # gptr_config() merges top-level keys only, so the hint keeps the acknowledgements already given
+  how = paste0("gptr_config(egress = utils::modifyList(gptr_config()$egress, list(`", pid,
+               "` = \"ack\")), .scope = \"user\")")
+  if (egress_can_ask() && isTRUE(gptr_confirm(egress_question(pid, st$origin)))) {
+    path = egress_record(pid)
+    gptr_inform(paste0("Recorded that automatic context may go to ", pid, " (", path, ")."),
+                "egress_ack")
+    return(invisible(TRUE))
+  }
+  where = if (is.null(st$origin)) "" else paste0(" at ", st$origin)
+  gptr_abort(c(paste0("gptr has not been told that it may send session context to ", pid, where,
+                      "."),
+               st$why,
+               paste0("Acknowledge it once with ", how,
+                      ", or pass .opts = list(context = \"none\").")),
+             "egress", provider = pid, how_to_ack = how)
+}

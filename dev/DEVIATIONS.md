@@ -6006,8 +6006,10 @@ Task 9 (`gateway_guards()`, `router_guards()`), P13, P19 and P05's `gptr_provide
    (`settings_file_load()`), adds the one entry and writes it, keeping the other keys' JSON form;
    a file that is not a JSON object is never rewritten.
 5. **Nobody is asked inside a run that cannot ask (IC-43, IC-53).** Besides `gptr_can_prompt()`,
-   a run whose safety record says `can_prompt = FALSE` (a background run, a child without a
-   human) never asks; the call stops with `gptr_error_egress`.
+   inside a run the run's safety record (a list or an environment) must say `can_prompt = TRUE`;
+   like P06's gate (`run_budget_extend()`, `perm_ask()`) this fails closed, so a background run, a
+   child without a human, or a snapshot without `can_prompt` never asks, and the call stops with
+   `gptr_error_egress` (IC-53 item 6: the acknowledgement is an `ask_human`).
 6. **The question names the effective endpoint** (`<id> (<origin>)`) when the provider has one.
 7. **`replay_guard()` resolves a reference before splitting it.** The plan cut a reference at
    its first `:` (the thinking suffix) and then at `/`, so a provider-less colon id such as
@@ -6035,7 +6037,9 @@ Validation: `progress/P08.md`, Task 4. Red (no Task 4 code) `^gptr-config$`
 `[ FAIL 14 | WARN 0 | SKIP 1 | PASS 262 ]` (`dev/.validation/P08/task4-red.log`); against the
 plan-literal source `[ FAIL 14 | WARN 0 | SKIP 1 | PASS 302 ]`
 (`task4-red-adaptations-against-plan-literal.log`, every failure in the adaptation tests); green
-`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 337 ]` (`task4-green.log`).
+`[ FAIL 0 | WARN 0 | SKIP 1 | PASS 337 ]` (`task4-green.log`); after review round 1 (item 5 fails
+closed, an empty `provider` field is a bad `model`) `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 356 ]`
+(`task4-fix1-green.log`).
 
 ## D-100 - P15 write consent and S2: a document control refusal names the running tool, an S2 file that is not a JSON object is a miss, and a remembered transcript target grants consent only when it is well formed and a target IC-52 allows (2026-10-04)
 

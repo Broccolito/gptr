@@ -760,3 +760,281 @@ test_that("a layer whose providers the guard drops entirely contributes nothing"
   expect_identical(settings_resolve("providers.corp.enabled"),
                    list(value = TRUE, source = "option"))
 })
+
+# Task 4: replay mode, the replay guard and the egress acknowledgement.
+
+test_that("replay_mode() resolves argument, option, environment and default", {
+  local_gw()
+  withr::local_envvar(GPTR_REPLAY = NA, `_R_CHECK_PACKAGE_NAME_` = NA)
+  withr::local_options(gptr.replay = NULL)
+  expect_identical(replay_mode(), "auto")
+  expect_identical(replay_mode("live"), "live")
+  withr::local_envvar(GPTR_REPLAY = "replay")
+  expect_identical(replay_mode(), "replay")
+  withr::local_options(gptr.replay = "record")
+  expect_identical(replay_mode(), "record")
+  expect_error(replay_mode("never"), class = "gptr_error_invalid_argument")
+})
+
+test_that("replay is forced only when R CMD check runs outside testthat (IC-45)", {
+  local_gw()
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr", TESTTHAT = "true", GPTR_REPLAY = NA)
+  withr::local_options(gptr.replay = NULL)
+  expect_identical(replay_mode(), "auto")
+  withr::local_envvar(TESTTHAT = NA)
+  expect_identical(replay_mode(), "replay")
+  expect_identical(replay_mode("live"), "live")
+})
+
+test_that("replay_guard() refuses providers that call a remote model, in replay mode only", {
+  local_gw()
+  withr::local_envvar(GPTR_REPLAY = "replay", `_R_CHECK_PACKAGE_NAME_` = NA)
+  withr::local_options(gptr.replay = NULL)
+  expect_invisible(replay_guard(gptr_fake_provider(list("ok"))))
+  corp = gptr_provider("corp", api = "openai-completions", base_url = "https://llm.corp.example/v1",
+                       auth = "CORP_LLM_KEY",
+                       models = list(list(id = "corp-large", context = 128000)))
+  expect_error(replay_guard(corp), class = "gptr_error_not_recorded")
+  withr::local_envvar(GPTR_REPLAY = "auto")
+  expect_invisible(replay_guard(corp))
+})
+
+test_that("egress_check() passes local, offline and acknowledged providers", {
+  local_gw()
+  local_fake_provider(list("ok"))
+  expect_invisible(egress_check("fake"))
+  settings_write("user", list(egress = list(corp = "ack")))
+  expect_invisible(egress_check("corp"))
+})
+
+test_that("a first non-interactive use without an acknowledgement is gptr_error_egress", {
+  local_gw()
+  cnd = expect_error(egress_check("corp"), class = "gptr_error_egress")
+  expect_identical(cnd$provider, "corp")
+  expect_identical(cnd$how_to_ack,
+                   paste0("gptr_config(egress = utils::modifyList(gptr_config()$egress, ",
+                          "list(`corp` = \"ack\")), .scope = \"user\")"))
+  expect_length(parse(text = cnd$how_to_ack), 1L)
+})
+
+# The hint calls gptr_config(), which P08 Task 7 adds; Task 7 removes this skip.
+test_that("following the egress hint keeps the acknowledgements already given", {
+  skip_if_not(exists("gptr_config", envir = asNamespace("gptr"), inherits = FALSE),
+              "gptr_config() arrives with P08 Task 7")
+  local_gw()
+  cnd = expect_error(egress_check("corp"), class = "gptr_error_egress")
+  settings_write("user", list(egress = list(anthropic = "ack")))
+  eval(parse(text = cnd$how_to_ack))
+  expect_identical(settings_read("user")$egress, list(anthropic = "ack", corp = "ack"))
+})
+
+test_that("an interactive yes records the acknowledgement at user scope", {
+  local_gw()
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
+  expect_invisible(egress_check("corp"))
+  expect_identical(settings_read("user")$egress$corp, "ack")
+})
+
+test_that("egress_check() follows a local provider's effective endpoint (IC-74)", {
+  local_gw()
+  # the shipped loopback servers need no acknowledgement
+  expect_invisible(egress_check("ollama"))
+  expect_invisible(egress_check("lmstudio"))
+  expect_invisible(egress_check("llamacpp"))
+  # a configured remote endpoint does, whatever the provider's local hint says
+  local_gptr_options(providers = list(ollama = list(base_url = "https://ollama.example/v1"),
+                                      lmstudio = list(base_url = "http://192.168.1.20:1234/v1")))
+  cnd = expect_error(egress_check("ollama"), class = "gptr_error_egress")
+  expect_identical(cnd$provider, "ollama")
+  expect_match(conditionMessage(cnd), "https://ollama.example", fixed = TRUE)
+  expect_error(egress_check("lmstudio"), class = "gptr_error_egress")
+  expect_invisible(egress_check("llamacpp"))
+  # a local provider without an HTTP endpoint proves no locality either
+  off = gptr_register(gptr_provider("p08-inproc", api = "fake", local = TRUE))
+  withr::defer(off())
+  expect_error(egress_check("p08-inproc"), class = "gptr_error_egress")
+  settings_write("user", list(egress = list(ollama = "ack", `p08-inproc` = "ack")))
+  expect_invisible(egress_check("ollama"))
+  expect_invisible(egress_check("p08-inproc"))
+  expect_error(egress_check("lmstudio"), class = "gptr_error_egress")
+})
+
+test_that("a loopback Ollama needs the acknowledgement once local-only is relaxed (IC-74)", {
+  local_gw()
+  expect_invisible(egress_check("ollama"))
+  settings_write("user", list(providers = list(ollama = list(local_only = FALSE))))
+  cnd = expect_error(egress_check("ollama"), class = "gptr_error_egress")
+  expect_match(conditionMessage(cnd), "local-only", fixed = TRUE)
+  # other loopback servers are not governed by the Ollama policy
+  expect_invisible(egress_check("llamacpp"))
+  # so is a native decision provider registered under another id
+  off = gptr_register(gptr_provider("p08-clef", api = "ollama-system-one", type = "classifier",
+                                    base_url = "http://127.0.0.1:11435", local = TRUE))
+  withr::defer(off())
+  expect_error(egress_check("p08-clef"), class = "gptr_error_egress")
+  settings_write("user", list(providers = NULL))
+  expect_invisible(egress_check("ollama"))
+  expect_invisible(egress_check("p08-clef"))
+  settings_write("session", list(providers = list(ollama = list(local_only = FALSE))))
+  expect_error(egress_check("ollama"), class = "gptr_error_egress")
+  settings_write("session", list(providers = NULL))
+  # the frozen safety record of the running run counts too
+  run = fake_run()
+  run$opts = list(safety = list(ollama_local_only = FALSE))
+  local_mocked_bindings(run_current = function() run)
+  expect_error(egress_check("ollama"), class = "gptr_error_egress")
+  run$opts = list(safety = list(ollama_local_only = TRUE))
+  expect_invisible(egress_check("ollama"))
+  run$opts = list(safety = list(ollama_local_only = FALSE))
+  settings_write("user", list(egress = list(ollama = "ack")))
+  expect_invisible(egress_check("ollama"))
+})
+
+test_that("replay_guard() and egress_check() never discover or contact a provider (IC-74)", {
+  local_gw()
+  withr::local_envvar(GPTR_REPLAY = "replay", `_R_CHECK_PACKAGE_NAME_` = NA)
+  withr::local_options(gptr.replay = NULL)
+  local_mocked_bindings(
+    model_prepare = function(...) stop("model_prepare() ran"),
+    catalog_ollama_discover = function(...) stop("discovery ran"),
+    catalog_http_request = function(...) stop("a request was made")
+  )
+  cnd = expect_error(replay_guard("ollama/clef-flash", "System 1 call"),
+                     class = "gptr_error_not_recorded")
+  expect_match(conditionMessage(cnd), "System 1 call to ollama", fixed = TRUE)
+  expect_error(replay_guard(model_resolve("ollama/clef-flash")),
+               class = "gptr_error_not_recorded")
+  # a loopback server is local, not offline: replay refuses it as well
+  expect_error(replay_guard(provider_get("llamacpp")), class = "gptr_error_not_recorded")
+  expect_error(replay_guard("llamacpp/any-local-model"), class = "gptr_error_not_recorded")
+  expect_error(replay_guard("unknown-model-p08"), class = "gptr_error_not_recorded")
+  local_fake_provider(list("ok"))
+  expect_invisible(replay_guard("fake/fake-1"))
+  expect_invisible(replay_guard(model_resolve("fake/fake-1")))
+  expect_invisible(egress_check("ollama"))
+  expect_error(replay_guard(NULL), class = "gptr_error_invalid_argument")
+  # an empty provider field is a bad `model`, not a bad internal provider id
+  for (bad in list(list(provider = ""), list(provider = NA_character_))) {
+    cnd = expect_error(replay_guard(bad), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, "model")
+  }
+})
+
+test_that("acknowledgements are keyed by the provider's own id; the hint is plain code", {
+  local_gw()
+  off = gptr_register(gptr_provider("corp", api = "openai-completions",
+                                    base_url = "https://llm.corp.example/v1",
+                                    auth = "CORP_LLM_KEY", aliases = "corporate"))
+  withr::defer(off())
+  cnd = expect_error(egress_check("corporate"), class = "gptr_error_egress")
+  expect_identical(cnd$provider, "corp")
+  expect_match(cnd$how_to_ack, "list(`corp` = \"ack\")", fixed = TRUE)
+  settings_write("user", list(egress = list(corp = "ack")))
+  expect_invisible(egress_check("corporate"))
+  bad = expect_error(egress_check("x`)); stop(1); (`"), class = "gptr_error_invalid_argument")
+  expect_identical(bad$arg, "provider_id")
+  expect_error(egress_check(NA_character_), class = "gptr_error_invalid_argument")
+})
+
+test_that("the egress question names the endpoint and the context; a yes is announced", {
+  local_gw()
+  local_gptr_options(interactive = TRUE, quiet = FALSE)
+  local_gptr_options(providers = list(ollama = list(base_url = "https://ollama.example/v1")))
+  seen = new.env()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    seen$question = question
+    FALSE
+  })
+  expect_error(egress_check("ollama"), class = "gptr_error_egress")
+  expect_match(seen$question, "https://ollama.example", fixed = TRUE)
+  expect_match(seen$question, "workspace listing", fixed = TRUE)
+  expect_null(settings_read("user")$egress)
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
+  expect_message(egress_check("ollama"), class = "gptr_message_egress_ack")
+  expect_identical(settings_read("user")$egress$ollama, "ack")
+})
+
+test_that("recording an acknowledgement keeps the others and the file's other keys (IC-71)", {
+  local_gw()
+  settings_write("user", list(egress = list(anthropic = "ack"), plugins = "demo"))
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
+  expect_invisible(egress_check("corp"))
+  u = settings_read("user")
+  expect_identical(u$egress, list(anthropic = "ack", corp = "ack"))
+  expect_identical(u$plugins, "demo")
+  txt = paste(readLines(settings_path("user"), encoding = "UTF-8"), collapse = "\n")
+  expect_match(txt, "\"plugins\": [", fixed = TRUE)
+  expect_false(dir.exists(paste0(settings_path("user"), ".lock")))
+})
+
+test_that("egress_check() never asks inside a run nobody can answer (IC-43)", {
+  local_gw()
+  local_gptr_options(interactive = TRUE)
+  seen = new.env()
+  seen$asked = FALSE
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    seen$asked = TRUE
+    TRUE
+  })
+  run = fake_run()
+  run$opts = list(safety = list(can_prompt = FALSE))
+  local_mocked_bindings(run_current = function() run)
+  expect_error(egress_check("corp"), class = "gptr_error_egress")
+  expect_false(seen$asked)
+  expect_null(settings_read("user")$egress)
+})
+
+test_that("inside a run egress_check() asks only when the run's snapshot allows it (IC-53)", {
+  local_gw()
+  local_gptr_options(interactive = TRUE)
+  seen = new.env()
+  seen$asked = 0L
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    seen$asked = seen$asked + 1L
+    TRUE
+  })
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  # fail closed like P06's gate: a snapshot without can_prompt, or no snapshot, cannot ask
+  for (safety in list(list(ollama_local_only = TRUE), list(can_prompt = NULL), NULL,
+                      list(can_prompt = NA), list(can_prompt = "yes"))) {
+    run$opts = list(safety = safety)
+    expect_error(egress_check("corp"), class = "gptr_error_egress")
+  }
+  # a snapshot kept as an environment is read as well
+  env = new.env(parent = emptyenv())
+  env$can_prompt = FALSE
+  run$opts = list(safety = env)
+  expect_error(egress_check("corp"), class = "gptr_error_egress")
+  expect_identical(seen$asked, 0L)
+  expect_null(settings_read("user")$egress)
+  env$can_prompt = TRUE
+  expect_invisible(egress_check("corp"))
+  expect_identical(seen$asked, 1L)
+  settings_write("user", list(egress = NULL))
+  run$opts = list(safety = list(can_prompt = TRUE))
+  expect_invisible(egress_check("corp"))
+  expect_identical(seen$asked, 2L)
+  expect_identical(settings_read("user")$egress$corp, "ack")
+  # the snapshot never overrides the session's own answer (IC-43)
+  settings_write("user", list(egress = NULL))
+  local_gptr_options(interactive = FALSE)
+  expect_error(egress_check("corp"), class = "gptr_error_egress")
+  expect_identical(seen$asked, 2L)
+})
+
+test_that("an acknowledgement another process records meanwhile is kept (IC-71)", {
+  local_gw()
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
+  take_lock = file_lock
+  local_mocked_bindings(file_lock = function(path) {
+    # another R process acknowledges a provider just before this one takes the lock
+    writeLines("{\"egress\": {\"anthropic\": \"ack\"}}", path)
+    take_lock(path)
+  })
+  expect_invisible(egress_check("corp"))
+  expect_identical(settings_read("user")$egress, list(anthropic = "ack", corp = "ack"))
+})
