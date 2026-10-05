@@ -377,9 +377,9 @@ adp_guard = function(st, f) {
   }
 }
 
-#' The normaliser list of contract section 8.1 (push, finish, fail, message[, push_parsed]);
-#' no function of it signals an R condition (an error becomes the one terminal error event, and
-#' message() falls back to an empty error message)
+#' The normaliser list of contract section 8.1 (`push`, `finish`, `fail`, `message` and an
+#' optional `push_parsed`); no function of it signals an R condition (an error becomes the one
+#' terminal error event, and message() falls back to an empty error message)
 #' @noRd
 adp_normaliser = function(st, push, finish, push_parsed = NULL) {
   out = list(push = adp_guard(st, push),
@@ -909,7 +909,7 @@ adp_msg_key = function(msg) {
   hash_xxh128(msg[intersect(keep, names(msg))])
 }
 
-#' Tool-call ids restricted to [A-Za-z0-9_-] and a maximum length
+#' Tool-call ids restricted to `[A-Za-z0-9_-]` and a maximum length
 #' @noRd
 adp_sanitize_id = function(id, max = 64L) substr(gsub("[^A-Za-z0-9_-]", "_", id), 1L, max)
 

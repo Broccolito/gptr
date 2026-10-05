@@ -729,12 +729,12 @@ the plan-literal source (269 escaped test warnings in the first run). The `signa
 assertions of review round 1 failed 3 times against the muffling handlers, and 4 times with 216
 escaped test warnings against a `tryInvokeRestart()` variant.
 
-## D-027 - P12 Chat Completions normaliser: IC-74 usage, compat from the resolved provider record, typed finish reasons, merged reasoning_details (2026-10-04)
+## D-027 - P12 Chat Completions normaliser: IC-74 usage, compat from the resolved provider record, typed finish reasons, merged reasoning_details, whole-number HTTP codes (2026-10-04)
 
 P12 Task 4's plan-literal `completions_normaliser()` (`R/provider-openai-completions.R`, the
 `parse` of the `openai-completions` adapter that also serves Ollama chat models, IC-74) was
-changed in the six ways below, and two shared helpers in `R/provider-anthropic.R` changed with
-it. Task 5 (`completions_build()`), P06's usage rows and P24 consume them.
+changed in the seven ways below (item 7 from P12's plan acceptance), and two shared helpers in
+`R/provider-anthropic.R` changed with it. Task 5 (`completions_build()`), P06's usage rows and P24 consume them.
 
 1. **IC-74 usage** (07-local-ollama.md section 5: "Missing usage remains unknown"; D-022). The
    plan read every usage field with `%||% 0`, so a reported null became a known zero.
@@ -780,13 +780,27 @@ it. Task 5 (`completions_build()`), P06's usage rows and P24 consume them.
    later non-null field such as the closing `signature` is kept. `reasoning.encrypted` and other
    items stay discrete and verbatim; a null item is dropped. Same 20,000 deltas: one item, 129 KB,
    1.4 s. Task 5's `completions_assistant()` replays the merged array unchanged.
+7. **Only an HTTP status is read from a numeric error code** (04 section 8.1: "Normalisers never
+   signal R conditions after `start`"; D-034 point 3; P12 plan acceptance). The plan's
+   `as.integer(code)` warned "NAs introduced by coercion to integer range" for a code outside R's
+   integer range (`1e10`, `-1e10`, `Inf`), and that warning escaped `push()`, because
+   `adp_guard()` turns only errors into the terminal event. It also truncated a fraction (`429.5`
+   became a retried rate limit) and took any number as a status (`99`, or `600` as an overload
+   with status 600, which P04's `reactor_retry()` refuses). `completions_error_info()` now reads
+   a numeric code only when it is one whole number from 100 to 599, as `google_error_info()`
+   does. Any other number gives no status and is never coerced; the error type or code text
+   still classifies it (for example `server_error` is still an overload with status 503).
+   Task 8's review had recorded this as a follow-up.
 
 Validation: `progress/P12.md`, Task 4. Against the plan-literal source the added tests and the
 adapted goldens failed 10 assertions (2 golden messages with `"NA"`, 2 null usages read as zero,
 3 for the numeric finish reason, 3 for the session-scoped compat); the point 5 test failed 5 more
 (an `internal` error with "$ operator is invalid for atomic vectors" for the string error, empty
 object arguments, and an `internal` error for the bare thinking string). Point 6 failed 2
-assertions against the per-fragment list (the merged opaque JSON in two streams).
+assertions against the per-fragment list (the merged opaque JSON in two streams). Point 7
+(`progress/P12.md`, Plan acceptance): its test failed 7 assertions against the previous source,
+with one escaped test warning. Three codes warned, three were misread (`429.5`, `99`, `600`), and
+the `1e10` error chunk warned through `push()`.
 
 ## D-028 - P06 session verbs: no chat on decision models, enqueue checks attachments and model code, mode changes keep the run's invariants (2026-10-04)
 
@@ -5851,3 +5865,39 @@ expectation changed. Red against the plan-literal source `[ FAIL 11 | WARN 0 | S
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 148 ]` (`task3-fix1-green.log`), so every later plan count
 for `test-cli-common.R` is 62 higher on macOS and Linux (17 from D-093, 23 from D-095, 22 from
 this entry).
+
+## D-098 - P20 turn helpers: pcli_stop_child() stops a watched child through P05's stream_process_kill(), a turn without reported usage is unknown, and wire-log values are redacted before encoding (2026-10-04)
+
+P20 Task 4's plan-literal `R/cli-common.R` changed in three ways, which Tasks 5-10 consume:
+
+1. **`pcli_stop_child()` ends with `stream_process_kill(p, watch, job)`** (D-018 item 1, "For
+   P20"). The plan forgot the child, closed its stdin and called `kill_all(p, grace = 1)`
+   directly. A child of P05's `process_jsonl` transport has a P04 watcher and a `cli` job row
+   (`opts$state$watch`, `opts$state$job`), and `kill_all()` under the living watcher closes the
+   pipes the watcher polls: the watcher stays registered and the job row stays `running`. The
+   function now reads `state$watch` and `state$job` with the child (they belong to it) and,
+   after the interrupt, the wait and `write_close()`, calls P05's `stream_process_kill()`:
+   P04's `reactor_cancel()` of the watcher (interrupt, grace, `kill_all()` of the tree) and
+   `job_remove()`; a child without a watcher is killed directly with `kill_all(p)`. The kill's
+   grace is P04's default 2 s instead of the plan's 1 s; a claude or fake child whose stdin was
+   just closed exits at end of input well before it. The wait for the interrupt's
+   acknowledgement still tests the child itself (`!pcli_alive(p)`, D-018 item 4).
+2. **Unreported usage is unknown** (IC-74, 07-local-ollama.md section 5; D-015, D-022).
+   `pcli_message()` fell back to `usage_new()`, whose legacy zeros made a failed turn (no CLI
+   result, so no usage) a known zero-token, zero-cost request. It now falls back to P05's
+   `usage_as(NULL)` (every counter, the total and the cost `NA`), and `pcli_done()`'s `done`
+   event carries the message's usage record (contract 4.5 lists `usage` on `done`; the plan
+   emitted `NULL` when the caller passed none). Adapters still pass `cost = NULL` to
+   `usage_new()` when the CLI reported tokens but no cost (D-015 point 3).
+3. **Wire-log values are redacted before encoding**, as P04's `wire_log()` does
+   (`json_encode(redact(rec, "persist"))`). The plan redacted the encoded line, so a redaction
+   rule ending in `\S*` or `\S+` (a common form; a compact JSON line has no blank) ran on to the
+   end of the line and wrote invalid JSON.
+
+Validation: `progress/P20.md`, Task 4. Three tests added (+20 expectations); the plan's eight
+tests are verbatim. Against the plan-literal source `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 211 ]`
+(items 1-2; `dev/.validation/P20/task4-plan-literal.log`) and, for item 3,
+`[ FAIL 1 | WARN 0 | SKIP 0 | PASS 219 ]` (`task4-wire-red.log`); final `^cli-common$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 223 ]` (`task4-green.log`), so every later plan count for
+`test-cli-common.R` is 82 higher on macOS and Linux (17 from D-093, 23 from D-095, 22 from
+D-097, 20 from this entry).

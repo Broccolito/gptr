@@ -344,6 +344,25 @@ test_that("an error chunk before any delta is handed to the transport's retry (0
                    list(class = "provider", status = NA_integer_, retry = FALSE))
 })
 
+test_that("an error code that is not an HTTP status is never coerced (04 8.1, D-027)", {
+  # only one whole number from 100 to 599 is a status (google_error_info()'s rule, D-034): an
+  # integer overflow would warn, and normalisers signal no R condition after start
+  info = function(x) completions_error_info(x)[c("class", "status", "retry")]
+  provider = list(class = "provider", status = NA_integer_, retry = FALSE)
+  for (code in list(1e10, -1e10, Inf, NaN, 429.5, 99, 600, c(429, 500))) {
+    expect_identical(expect_no_warning(info(list(code = code))), provider,
+                     label = paste("code", paste(code, collapse = ",")))
+  }
+  expect_identical(info(list(code = 1e10, type = "server_error")),
+                   list(class = "overloaded", status = 503L, retry = TRUE))
+  expect_identical(info(list(code = 429L)), list(class = "rate_limit", status = 429L, retry = TRUE))
+  r = expect_no_warning(chat_run('{"error":{"code":1e10,"message":"Huge."}}'))
+  expect_identical(types_of(r$events), c("start", "error"))
+  expect_identical(r$events[[2L]]$error$class, "provider")
+  expect_null(r$events[[2L]]$error$status)
+  expect_identical(r$message$error_message, "Huge.")
+})
+
 test_that("OpenRouter reasoning_details become one opaque block, merged as Pi does (09 2.3)", {
   # consecutive reasoning.text / reasoning.summary fragments of one index are joined, the closing
   # signature kept; reasoning.encrypted stays discrete; a single object counts as one item

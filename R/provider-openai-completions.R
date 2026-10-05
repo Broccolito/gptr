@@ -177,11 +177,21 @@ completions_tool_id = function(id, compat, provider = "") {
 
 #' A Chat Completions error object -> class suffix, status and retryability (08 section 3.5);
 #' an error given as a bare string is its message
+#'
+#' Only one whole number from 100 to 599 (an HTTP status, the range P04's `reactor_retry()`
+#' accepts) is read as a numeric code; any other number (a fraction, a value out of that range or
+#' of R's integer range, a vector) is never coerced, so no integer overflow can warn (04 section
+#' 8.1), and gives no status (as `google_error_info()`, D-034).
 #' @noRd
 completions_error_info = function(err) {
   if (!is.list(err)) err = list(message = adp_chr(err))
   code = err[["code"]]
-  status = if (is.numeric(code) && length(code) == 1L) as.integer(code) else NA_integer_
+  status = if (is.numeric(code) && length(code) == 1L && !is.na(code) && code >= 100 &&
+                 code <= 599 && code == round(code)) {
+    as.integer(code)
+  } else {
+    NA_integer_
+  }
   txt = tolower(paste(adp_chr(err[["type"]]), adp_chr(if (is.character(code)) code)))
   if (grepl("spend_limit|usage_limit|credit_balance|insufficient_quota", txt)) {
     return(list(class = "spend_cap", status = 429L, retry = FALSE))
