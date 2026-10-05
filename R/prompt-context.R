@@ -1,16 +1,11 @@
 # Context blocks: project instructions, environment, mode and plan; the first user message and
-# the per-turn blocks (P07). Blocks are user-role data rendered once and never re-rendered; a
-# turn block whose text equals the last one emitted under the same name is skipped (IC-38).
-# Formats: architecture section 7.4 and G4 sections 3.5 and 4.2 (prototype: G4 section 5.1,
-# the ctx_* functions of prompt_lib.R).
+# the per-turn blocks (P07). Blocks are user-role data rendered once; a turn block equal to the
+# last one emitted under its name is skipped (IC-38). Formats: architecture 7.4, G4 3.5 and 4.2.
 
 # ---- rendering ----------------------------------------------------------------------------------
 
 #' The rendering input of context blocks (contract section 10.2 row 13, plus `mode`, `human`,
-#' `document` and `preview`, which P07's own providers read)
-#'
-#' `human` is the frozen audience; `input$human` sets it before `.d$frozen` exists (the freeze's
-#' floor check renders the project instructions for the audience it is freezing for).
+#' `document` and `preview`); `input$human` sets the audience before `.d$frozen` exists
 #' @noRd
 context_input = function(s, input, placement) {
   d = if (is.null(s)) NULL else session_data(s)
@@ -31,10 +26,8 @@ context_specs = function(s, placements) {
          prompt_specs("context_block", prompt_sid(s)))
 }
 
-#' Normalise a provide() result into a list of list(text, attrs)
-#'
-#' Accepts NULL, chr, list(text, attrs), or an unnamed list of those (several blocks of one
-#' kind: project_instructions renders one block per file).
+#' Normalise a provide() result (NULL, chr, list(text, attrs) or an unnamed list of those)
+#' into a list of list(text, attrs)
 #' @noRd
 context_items = function(res) {
   if (is.null(res) || !length(res)) return(list())
@@ -68,11 +61,8 @@ context_provide = function(sp, ctx, input, session_id) {
 }
 
 #' sha256 of block text in the form the transcript stores it
-#'
-#' P06's `session_append()` redacts every entry with the `persist` profile, so a block holding a
-#' secret-shaped string is stored (and sent) with a marker in its place. Hashing the redacted
-#' form makes a freshly rendered text and its stored copy compare equal (redaction is idempotent
-#' on stored text); without it such a block would be sent again every turn.
+#' The `persist`-redacted form (P06's `session_append()`) makes a fresh render equal its stored
+#' copy, so a block with a secret-shaped string is not re-sent every turn.
 #' @noRd
 context_text_hash = function(text) {
   hash_sha256(paste(redact(as.character(text), "persist"), collapse = "\n\n"))
@@ -95,10 +85,8 @@ context_attached_stub = function(input) {
   })
 }
 
-#' Last emitted text hash per block name: from the current first message (or the latest
-#' compaction) onward, over user-message context blocks, operator mode notes (written by the
-#' session kernel for a mid-run mode change) and operator-authority blocks (queued as
-#' `reminder` messages whose text starts with the block's tag)
+#' Last emitted text hash per block name since the first message (or latest compaction): user
+#' context blocks, operator mode notes and operator `reminder` blocks (named by their leading tag)
 #' @noRd
 context_last_hashes = function(s) {
   if (is.null(s)) return(list())
@@ -131,10 +119,8 @@ context_last_hashes = function(s) {
 }
 
 #' Render the blocks of `specs` in order (with the attached stand-in when needed)
-#'
-#' Blocks of specs with `authority = "operator"` are not user data: they are queued as operator
-#' `reminder` messages (rank >= 3 records only, IC-52; P02 validates the rank); a preview
-#' (`input$preview`, as `gptr_prompt()` renders it) or a call without a session drops them.
+#' Blocks of `authority = "operator"` specs (rank >= 3, IC-52) are queued as operator `reminder`
+#' messages instead; a preview or a call without a session drops them.
 #' @noRd
 context_collect = function(s, specs, input, dedup) {
   sid = prompt_sid(s)
@@ -183,13 +169,8 @@ context_start_blocks = function(input) {
   Filter(Negate(is.null), out)
 }
 
-#' The context blocks of a session's first user message (contract section 7.7)
-#'
-#' @param s A `<session>` (or `NULL` for a preview).
-#' @param input `list(call, turn = 1L, prompt, start, preview)`; `start` is the merged
-#'   `session_start` collect result (its `blocks` follow the registered blocks).
-#' @return A list of blocks in the order of architecture section 7.4; the last
-#'   project_instructions block carries `anchor = TRUE` (the second cache anchor).
+#' The context blocks of a session's first user message (contract 7.7; architecture 7.4 order)
+#' `input$start$blocks` follow; the last project_instructions block is the second cache anchor.
 #' @noRd
 context_first_message = function(s, input = list()) {
   inp = context_input(s, input, "first")
@@ -199,11 +180,7 @@ context_first_message = function(s, input = list()) {
   c(blocks, context_start_blocks(input))
 }
 
-#' The leading context blocks of a later user message (contract section 7.7)
-#'
-#' @param s A `<session>`.
-#' @param input `list(call, turn, prompt)`.
-#' @return A list of context blocks; a block equal to the last one of its name is skipped.
+#' The leading context blocks of a later user message, deduplicated by name (contract 7.7)
 #' @noRd
 context_turn_blocks = function(s, input = list()) {
   inp = context_input(s, input, "turn")
@@ -242,10 +219,8 @@ context_dirs = function(root, cwd) {
 }
 
 #' Project instruction files in load order (G4 section 4.2; architecture section 6.11)
-#'
-#' @return A list of `list(path, label, user)`: the user-level file (`user = TRUE`), then per
-#'   directory from the root to cwd the first of AGENTS.override.md, AGENTS.md, CLAUDE.md, plus
-#'   CLAUDE.local.md, then `.gptr/vignette.Rmd` last; duplicates (same `path_key()`) removed.
+#' The user-level file, then per directory root to cwd the first of AGENTS.override.md, AGENTS.md,
+#' CLAUDE.md plus CLAUDE.local.md, then `.gptr/vignette.Rmd`; deduplicated by `path_key()`.
 #' @noRd
 context_instruction_files = function(root = project_root(), cwd = getwd()) {
   cands = c("AGENTS.override.md", "AGENTS.md", "CLAUDE.md")
@@ -295,19 +270,8 @@ context_strip_vignette = function(text) {
 }
 
 #' Expand the `@<file>` lines of vignette.Rmd (the include hint of the gptr_init() template)
-#'
-#' A line holding only `@<path>` (relative to the project root) is replaced by that file's
-#' text. A file already loaded as an instruction file (the usual `@AGENTS.md`) or already
-#' included, a path outside the project root and a missing file drop the line, so nothing is
-#' sent twice (G4 section 4.2: deduplication by normalised path). So does a file the harness
-#' never reads into a prompt by itself (`context_file_guarded()`: control, critical, protected
-#' and secret-shaped paths), since a cloned project's vignette.Rmd could otherwise send the
-#' user's own `.env` or `.git/config` to the provider without any permission check.
-#'
-#' @param text The vignette text after `context_strip_vignette()`.
-#' @param root The project root.
-#' @param loaded `path_key()`s of the instruction files already loaded.
-#' @return `chr(1)`.
+#' A file already loaded (G4 4.2), outside the root, missing or guarded (a cloned project must not
+#' send the user's `.env` or `.git/config`, `context_file_guarded()`) drops the line.
 #' @noRd
 context_vignette_includes = function(text, root, loaded = character()) {
   lines = strsplit(text, "\n", fixed = TRUE)[[1]]
@@ -320,8 +284,7 @@ context_vignette_includes = function(text, root, loaded = character()) {
     }
     rel = substring(ln, 2L)
     p = file.path(root, rel)
-    # path_inside() compares normalised keys (".." and symlinks resolved); path_rel() gives an
-    # absolute path, never "..", for a path outside the root
+    # path_inside() compares normalised keys (".." and symlinks resolved)
     ok = !grepl("^(/|~|\\\\|[A-Za-z]:)", rel) && file.exists(p) && !dir.exists(p) &&
       path_inside(p, root) && !context_file_guarded(p, root, rel)
     if (!ok || path_key(p) %in% loaded) next
@@ -332,13 +295,8 @@ context_vignette_includes = function(text, root, loaded = character()) {
 }
 
 #' Is a project file one an `@<file>` include must not read?
-#'
-#' `path_class()` (which judges the path as written and its symlink target) gives `control`,
-#' `critical` or `protected` (IC-54: settings, `.git/config`, `.Renviron`, `.env`, `.secrets/`,
-#' ...), or the root-relative path, as written or resolved, has the shape P03's secret-file
-#' classifier guards (`scan_secret_path_re`: key files, `credentials.json`, `.pgpass`, ...).
-#' @param p The file's path; `root` the project root; `rel` the path as the line wrote it.
-#' @return `lgl(1)`.
+#' `path_class()` control, critical or protected (IC-54), or a relative path (as written or
+#' resolved) matching P03's `scan_secret_path_re`.
 #' @noRd
 context_file_guarded = function(p, root, rel = path_rel(p, root)) {
   if (path_class(p, root) %in% c("control", "critical", "protected")) return(TRUE)
@@ -355,12 +313,9 @@ context_cap_64k = function(text) {
   paste(c(lines[size <= 65536L - 64L], prompt_text("file_truncated")), collapse = "\n")
 }
 
-#' The instruction items (text and attrs per file)
-#'
-#' The user-level file is the user's own and always sent. Project files render
-#' `trusted="false"` in an untrusted project; a non-interactive `auto` or `edits` run in an
-#' untrusted project withholds them with a notice (IC-52), and the result then carries the
-#' attribute `withheld = TRUE`.
+#' The instruction items (text and attrs per file; the user-level file is always sent)
+#' An untrusted project's files render `trusted="false"`; a non-interactive `auto` or `edits` run
+#' withholds them with a notice (IC-52) and the result carries `withheld = TRUE`.
 #' @noRd
 context_instruction_items = function(inp, notify = TRUE) {
   root = project_root()
@@ -405,10 +360,8 @@ context_provide_project = function(ctx, budget) {
   unclass(out)
 }
 
-#' The instruction blocks the model last saw, per file label, as `list(kind, hash)` (sha256 of
-#' the rendered block as stored, `context_text_hash()`): the first message (or the latest
-#' compaction, including the project blocks its re-injection budget dropped, `details$dropped`),
-#' then any later project_instructions_update blocks
+#' The instruction blocks the model last saw, per file label, as `list(kind, hash)`: the first
+#' message or latest compaction (with its `details$dropped`), then later update blocks
 #' @noRd
 context_sent_instructions = function(s) {
   path = prompt_path(s)
@@ -521,11 +474,6 @@ context_provide_environment = function(ctx, budget) {
 # ---- mode and plan ------------------------------------------------------------------------------
 
 #' The body of a <mode> block (architecture section 7.4; contract section 9.3 suffixes)
-#'
-#' @param mode One of plan, manual, edits, auto.
-#' @param human `lgl(1)`: can someone answer questions and approvals?
-#' @param deny `lgl(1)`: `gptr.noninteractive_ask = "deny"`.
-#' @return `chr(1)`.
 #' @noRd
 context_mode_body = function(mode, human, deny = FALSE) {
   body = prompt_text(paste0("mode_", mode))
@@ -541,10 +489,8 @@ context_mode_body = function(mode, human, deny = FALSE) {
 }
 
 #' provide() of the mode block
-#'
-#' The session kernel (P06 `mode_block_text()`) calls this provider directly with the session's
-#' ctx and no rendering input when the mode changes during a run, so the mode and the audience
-#' fall back to the session's own data.
+#' P06's `mode_block_text()` calls it with no rendering input on a mid-run mode change, so mode
+#' and audience fall back to the session's data.
 #' @noRd
 context_provide_mode = function(ctx, budget) {
   inp = ctx$input
@@ -569,9 +515,6 @@ context_provide_plan = function(ctx, budget) {
 }
 
 #' The built-in `context` extension (contract section 10.3)
-#'
-#' @param gptr The extension API object.
-#' @return `NULL`, invisibly.
 #' @noRd
 builtin_context = function(gptr) {
   gptr$register(gptr_context_block("project_instructions", context_provide_project,

@@ -38,3 +38,12 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   `spill_write()` (decision 11) -> fixed; D-138 Tests bullet completed, internal enc2utf8 Rule line
   dropped. Docs only (no regression test); plan filter PASS 1000, lint clean, cross-plan warn 77.
 - Deviations: D-138. Open: none.
+
+## Task P07-C - Trim internal comment narration in prompt files (2026-10-05)
+- Comments only in `R/prompt-*.R`: internal blocks are a title plus at most two lines citing
+  IC/D ids, file headers 4 lines; non-comment parse tokens and exported roxygen (`gptr_prompt()`)
+  unchanged. Comment lines 999 -> 532, files 3755 -> 3288 (-467; plan ~200).
+- Red: none (refactor). Green: `prompt-|context-|bench` PASS 1016 (as at HEAD). Lint clean. Token
+  benchmark `--check` OK. Neighbours: `arch-layers|lint-rules|gptr-gateway|copy-gateway` green.
+- Reviews: none yet.
+- Deviations: none. Open: none.

@@ -1,27 +1,13 @@
-# Verbatim built-in prompt texts owned by P07: architecture sections 7.3-7.4 as amended by
-# IC-52, IC-67 and IC-68, contract section 9.3 (minimal variants, extended r_performance,
-# non-interactive suffixes), the G4 compaction prompt (G4 section 3.6) and the short notices P07
-# adds. Strings are ASCII and split into chunks so that no source line exceeds 100 characters;
-# tests/testthat/test-prompt-text.R compares every entry the specification fixes with it byte
-# for byte, and checks the notices P07 adds (which have no spec text) for ASCII and no str(.
-# r_performance_full is contract 9.3's extended text without the clause "str() makes the next
-# in-place edit of a large object copy it", because IC-67 forbids any shipped text mentioning
-# str( (recorded in plan P07's self-review). "{{fragments}}" in r_session marks where the
-# fragments of other built-ins are inserted (IC-68); "{focus}" in compaction_request is replaced
-# by compact_request_text().
+# Verbatim built-in prompt texts (architecture 7.3-7.4 with IC-52/67/68, contract 9.3, G4 3.6),
+# ASCII and chunked under 100 columns; test-prompt-text.R compares them byte for byte.
+# r_performance_full drops contract 9.3's str() clause (IC-67). "{{fragments}}" marks where other
+# built-ins' fragments go (IC-68); compact_request_text() fills "{focus}".
 
-#' Verbatim prompt texts
-#'
-#' @return A named list of character vectors: section bodies (without their tags), mode-block
-#'   bodies, non-interactive suffixes, the compaction request and the notices P07 writes.
+#' Verbatim prompt texts (a named list of chr)
 #' @noRd
 prompt_texts = function() prompt_text_table
 
-#' One prompt text by name
-#'
-#' @param name Name of an entry of `prompt_texts()` (one string).
-#' @return The text (`chr`); an unknown name, or one that is not a single string, is a
-#'   `gptr_error_internal`.
+#' One prompt text by name; an unknown name is a `gptr_error_internal`
 #' @noRd
 prompt_text = function(name) {
   ok = is.character(name) && length(name) == 1L && !is.na(name)
@@ -33,10 +19,7 @@ prompt_text = function(name) {
   x
 }
 
-#' Model-facing label of the front end (the Front end line of <environment>)
-#'
-#' @param fe Result of `front_end()`.
-#' @return `chr(1)`.
+#' Model-facing label of `front_end()` (the Front end line of <environment>)
 #' @noRd
 prompt_front_end_label = function(fe) {
   switch(

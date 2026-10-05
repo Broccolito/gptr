@@ -1,27 +1,18 @@
 # Section registry, presets, the frozen prompt, section patches and gptr_prompt() (P07).
-# Mechanism: Pi's named, independently replaceable sections (G4 section 5.1 prompt_lib.R,
-# adapted): the preamble is untagged, every other section is wrapped as <name>...</name> and
-# sections are joined by one blank line; T0 ends after <context>, T1 holds the machine and
-# project sections. The frozen blocks never change during a session; mid-session changes are
-# appended section patches (Pi's diffSystemPromptSections wording).
+# Pi's named, replaceable sections (G4 5.1): the preamble is untagged, the others <name>...</name>,
+# joined by a blank line; T0 ends after <context>, T1 holds the machine and project sections.
+# Frozen blocks never change in a session; mid-session changes are appended section patches.
 
 # ---- rendering input (ctx$input) ----------------------------------------------------------------
-# A transient stack: an entry lives only while a section, block, tool schema or compactor is
-# being rendered and is popped by on.exit(), so no run state outlives a call (INFRA-15).
+# A transient stack popped by on.exit(), so no run state outlives a call (INFRA-15).
 prompt_frames = new.env(parent = emptyenv())
 prompt_frames$stack = list()
 
 #' Evaluate `fun()` with `ctx$input` bound to `input`
-#'
-#' @param ctx A `gptr_ctx`.
-#' @param input The rendering input (a list).
-#' @param fun A zero-argument function.
-#' @return The value of `fun()`.
 #' @noRd
 with_prompt_input = function(ctx, input, fun) {
   n = length(prompt_frames$stack) + 1L
-  # The pop is registered before the push, so an interrupt between the two leaves no stale
-  # frame (popping to n - 1 changes nothing when the push never happened).
+  # pop registered before the push: an interrupt between the two leaves no stale frame
   on.exit({
     prompt_frames$stack = prompt_frames$stack[seq_len(n - 1L)]
   }, add = TRUE)
@@ -30,9 +21,6 @@ with_prompt_input = function(ctx, input, fun) {
 }
 
 #' The `ctx.input` service: the innermost rendering input of `ctx`, or NULL
-#'
-#' @param ctx A `gptr_ctx`.
-#' @return A list or `NULL`.
 #' @noRd
 prompt_input_get = function(ctx) {
   st = prompt_frames$stack
@@ -59,9 +47,7 @@ prompt_ctx = function(s) {
 prompt_sid = function(s) if (is.null(s)) NULL else session_data(s)$id
 
 #' The per-session in-memory environment (the live record's memo), or NULL for a detached copy
-#'
-#' P07 keeps its live-only state there under keys starting with "prompt_" (queued operator
-#' messages, the tail-TTL state, the prefix-guard views); adapters use the other keys.
+#' P07's live-only state uses keys starting with "prompt_"; adapters use the others.
 #' @noRd
 prompt_memo = function(s) {
   if (is.null(s)) return(NULL)
@@ -70,12 +56,8 @@ prompt_memo = function(s) {
 }
 
 #' The active path of a session: its entries from the root to the leaf
-#'
-#' A parent id that is missing (a torn line skipped at resume) continues with the previous
-#' entry in file order, as project_messages() does (P05).
-#'
-#' @param s A `<session>`.
-#' @return A list of entries (R shape).
+#' A missing parent (a torn line skipped at resume) continues with the previous entry in file
+#' order, as P05's project_messages() does.
 #' @noRd
 prompt_path = function(s) {
   d = session_data(s)
@@ -155,9 +137,7 @@ prompt_read_file = function(path) {
   sub("\n+$", "", x)
 }
 
-#' Cut `text` at a line boundary so that it fits `budget` estimated tokens
-#'
-#' @return `text` unchanged when it fits, else the kept lines followed by `notice`.
+#' Cut `text` at a line boundary to fit `budget` estimated tokens, `notice` appended
 #' @noRd
 prompt_truncate = function(text, budget, notice, class = "prose", session_id = NULL) {
   if (is.null(budget) || is.na(budget) || prompt_est(text, class, session_id) <= budget) {
@@ -176,15 +156,8 @@ prompt_truncate = function(text, budget, notice, class = "prose", session_id = N
   paste(c(keep, notice), collapse = "\n")
 }
 
-#' The winning spec of every name of an `all`-resolving kind, in `order`
-#'
-#' `registry_all()` may return several records of one name (a session override and the
-#' built-in); `registry_get()` names the winner (the lowest rank, IC-69), so a section or block
-#' is rendered once. Ties in `order` keep registration order.
-#'
-#' @param kind `"prompt_section"` or `"context_block"`.
-#' @param session_id A session id or `NULL`.
-#' @return A list of specs.
+#' The winning spec (`registry_get()`, lowest rank, IC-69) of every name of `kind`, in `order`
+#' Each name renders once; ties in `order` keep registration order.
 #' @noRd
 prompt_specs = function(kind, session_id = NULL) {
   all = registry_all(kind, session = session_id)
@@ -197,19 +170,14 @@ prompt_specs = function(kind, session_id = NULL) {
 }
 
 #' The custom_message entry that stores an operator message (contract section 4.6)
-#'
-#' The session kernel's in-memory shape (P06 `entry_message()`): the operator message rides in
-#' `message`. P06's store writes it as the Pi line `{customType, content, display, details}` and
-#' rebuilds the same shape at resume; P05's `project_messages()` projects it. (A flat entry
-#' without `message` would be written by P06's store as an empty line.)
+#' P06's `entry_message()` shape: the message rides in `message` (P06's store writes a flat
+#' entry as an empty line).
 #' @noRd
 prompt_operator_entry = function(msg) {
   list(type = "custom_message", custom_type = "gptr.operator", message = msg)
 }
 
-#' The operator message of a `gptr.operator` entry, or NULL for any other entry
-#'
-#' Reads the kernel shape (`message`) and the flat Pi shape (`content`, `details`).
+#' The operator message of a `gptr.operator` entry (kernel or flat Pi shape), or NULL
 #' @noRd
 prompt_entry_operator = function(e) {
   if (!identical(e$type, "custom_message")) return(NULL)
@@ -229,11 +197,8 @@ prompt_operator_text = function(op) {
 }
 
 #' Queue an operator message; request_build() appends it before the next request
-#'
-#' Harness facts that arrive between requests (tool additions, section patches, operator
-#' context blocks) must follow the latest user or tool-result message, so they wait in the
-#' session's memo until the next request is assembled (G4 section 5.4, tr_operator()). A
-#' detached copy (no memo) appends at once.
+#' It must follow the latest user or tool-result message (G4 5.4); a detached copy (no memo)
+#' appends at once.
 #' @noRd
 prompt_pending_add = function(s, msg) {
   memo = prompt_memo(s)
@@ -317,13 +282,9 @@ preset_name = function(preset, model = NULL, session = NULL) {
     setting_get("preset", session = session, default = "standard")
 }
 
-#' Call a preset's `tools` function the way P02's validator checks it (IC-69)
-#'
-#' `human` and `model` go by position (`spec_fn_accepts(tools, c("human", "model"))`). `mode` goes
-#' by name only to a formal named exactly `mode`; otherwise a function with `...` or a third
-#' formal gets it as the third positional argument (contract section 10.2
-#' `function(human, model, mode)`; P11 calls `tools(human, model, mode)`), and a two-argument
-#' function does not get it. A named `mode` would partially match a formal such as `model`.
+#' Call a preset's `tools` function the way P02's validator checks it (IC-69, contract 10.2)
+#' `mode` goes by name only to a formal named `mode` (by name it would partially match `model`),
+#' else third by position to a function with `...` or three formals.
 #' @noRd
 preset_call_tools = function(fun, human, model, mode) {
   fa = names(formals(base::args(fun)))
@@ -337,18 +298,9 @@ preset_call_tools = function(fun, human, model, mode) {
   do.call(fun, c(list(isTRUE(human), model), extra))
 }
 
-#' Direct tool names of a preset (contract section 7.7)
-#'
-#' @param preset Preset name, or `NULL` for the configured one (the user's `tools.presets`
-#'   mapping for `model`, else setting `preset`).
-#' @param human `lgl(1)`: can a human answer questions?
-#' @param model `chr(1)` model reference or `NULL`.
-#' @param modifiers `chr`: `+name` adds a tool, `-name` removes one (settings `tools.enable`
-#'   and `tools.disable` are applied the same way); empty and `NA` entries are skipped.
-#' @param mode Permission mode or `NULL`.
-#' @param session Session id (or `<session>`) or `NULL`: its rank-0 presets (IC-69 session
-#'   scope) and its settings apply. A trailing extension of the contract section 7.7 signature.
-#' @return `chr` of tool names in array order.
+#' Direct tool names of a preset in array order (contract section 7.7)
+#' `modifiers`: `+name` adds, `-name` removes (as settings `tools.enable`/`tools.disable`);
+#' `session` (a trailing extension) applies its rank-0 presets (IC-69) and settings.
 #' @noRd
 preset_tools = function(preset, human, model = NULL, modifiers = character(), mode = NULL,
                         session = NULL) {
@@ -383,13 +335,8 @@ prompt_provider_prior = function(m) {
 }
 
 #' Does the shipped `extended` default apply? (IC-73)
-#'
-#' Only for the models of `presets_shipped`, when the catalog's `cache_min` exceeds the projected
-#' standard prefix (estimate times the provider prior) and the session is expected to pass
-#' break-even: an interactive session or a fan-out child.
-#'
-#' @param model Model reference; `mrec` its record; `static` the estimated static prefix of the
-#'   standard composition; `human` lgl(1); `kind` the session kind.
+#' Only for `presets_shipped` models whose `cache_min` exceeds the projected standard prefix, in a
+#' session expected to pass break-even (interactive, or a fan-out child).
 #' @noRd
 preset_shipped_applies = function(model, mrec, static, human, kind) {
   if (is.null(model) || is.null(mrec)) return(FALSE)
@@ -403,13 +350,8 @@ preset_shipped_applies = function(model, mrec, static, human, kind) {
 }
 
 #' Register the four preset records (IC-69)
-#'
-#' Section predicates read the record, never its name: `sections` switches sections off,
-#' `preamble` picks the preamble variant and the extra field `variants` asks for the full
-#' `r_performance` text (validators accept unknown fields, contract section 10.2). The `tools`
-#' functions take `mode = NULL`: P02's validator requires a `preset` tools function to be callable
-#' as `f(human, model)` (IC-69), and `preset_call_tools()` passes `mode` to every function that
-#' can take it (contract section 10.2).
+#' Predicates read the record, never its name (`variants` is an extra field, contract 10.2);
+#' `tools` functions take `mode = NULL`, since P02 checks them as `f(human, model)`.
 #' @noRd
 prompt_register_presets = function(gptr) {
   minimal_off = c(r_session = FALSE, r_performance = FALSE, documents = FALSE,
@@ -482,14 +424,9 @@ prompt_tools_always = function(session_id) {
   out
 }
 
-#' Build the frozen tool array (serialised once, Anthropic shape)
-#'
-#' A tool that is not registered, whose `available(ctx)` is not `TRUE`, or whose `parameters`
-#' function fails or gives no object schema is left out (with a diagnostic, except for a plain
-#' `FALSE` from `available()`), as P06's fallback freeze leaves it out: one plugin's failing
-#' schema never stops the freeze (contract section 9.1).
-#'
-#' @return `list(json = chr(1), names = chr)`: the declared tools only.
+#' Build the frozen tool array, `list(json, names)` (serialised once, Anthropic shape)
+#' An unregistered or unavailable tool, or one without an object schema, is left out (with a
+#' diagnostic unless `available()` gave FALSE): one plugin never stops the freeze (contract 9.1).
 #' @noRd
 prompt_tool_array = function(names, ctx, input, session_id) {
   decls = list()
@@ -577,17 +514,9 @@ prompt_s1_alias = function(session = NULL) {
   if (grepl("[/:]", v[1])) paste0("\"", v[1], "\"") else v[1]
 }
 
-#' Render every included section in `order`
-#'
-#' An override replaces the text of a section or of an `r_session` fragment; `NULL` or blank
-#' text removes it, as a provider's empty text does. Overrides never change inclusion: one for a
-#' registered section or fragment that the preset record (or the parent's own override) leaves
-#' out is dropped, and only an unregistered name becomes a new T0 section (order 760). The Pi-rule
-#' core replacement (attribute `core`, from `prompt_system_overrides()`) is the user's whole
-#' prompt, so the `preamble` budget does not cut it; every other text keeps its section's budget.
-#'
-#' @param overrides Named list: a chr replaces the text, `NULL` removes it.
-#' @return data.frame `name`, `tier`, `order`, `text` (wrapped).
+#' Render every included section in `order`: data.frame `name`, `tier`, `order`, `text`
+#' Overrides replace text (NULL or blank removes) but never change inclusion; an unregistered name
+#' is a new T0 section (order 760). Only the `core` replacement skips its section's budget.
 #' @noRd
 prompt_sections_render = function(ctx, input, session_id, overrides = list()) {
   specs = prompt_specs("prompt_section", session_id)
@@ -654,13 +583,8 @@ prompt_sections_render = function(ctx, input, session_id, overrides = list()) {
 }
 
 #' Section overrides from session_start, SYSTEM.md and .opts$system (Pi's replacement rule)
-#'
-#' A SYSTEM.md (the trusted project's, else the user's) or a string `.opts$system` replaces
-#' `preamble` and removes `tools` and `rules`; a named `.opts$system` list or the
-#' `session_start` collect result (`start$sections`) overrides named sections (`NULL` removes).
-#' A blank replacement (an empty SYSTEM.md, `.opts$system = ""`) replaces nothing. The
-#' replacement carries the attribute `core`, so the `preamble` budget does not cut it (Pi applies
-#' none; contract section 9.3 gives it none).
+#' A non-blank SYSTEM.md (trusted project's, else the user's) or string `system` replaces
+#' `preamble` (attribute `core`, contract 9.3) and drops `tools` and `rules`.
 #' @noRd
 prompt_system_overrides = function(system, start, root, trusted) {
   ov = list()
@@ -709,10 +633,8 @@ prompt_static_tokens = function(frozen, session_id = NULL) {
 }
 
 #' Compose the frozen prompt for one preset (no side effects)
-#'
-#' The preset's tools come from `preset_tools()` with the session (its rank-0 presets and
-#' settings, IC-69); the plugin direct tools declared whatever the preset are dropped by a
-#' `-name` modifier and by the `tools.disable` setting, as preset tools are.
+#' Always-declared plugin tools are dropped by a `-name` modifier or `tools.disable`, as preset
+#' tools are.
 #' @noRd
 prompt_compose_preset = function(s, ctx, name, opts, model, mode, human, doc, root, trusted) {
   sid = prompt_sid(s)
@@ -741,19 +663,9 @@ prompt_compose_preset = function(s, ctx, name, opts, model, mode, human, doc, ro
        reinject = list(project = Inf, skills = 10000))
 }
 
-#' Compose what a session would freeze now (no side effects)
-#'
-#' The preset is the one named in `opts$preset`, else the session's own preset, else the user's
-#' `tools.presets` match for the model, else setting `preset`; the shipped `extended` default
-#' (IC-73) may replace a `standard` preset that none of the first three chose. P06's
-#' `session_new()` stores setting `preset` as the session's preset when its caller names none,
-#' so a session preset equal to the configured one counts as not chosen.
-#'
-#' @param s A `<session>` or `NULL` (a preview with the current settings).
-#' @param opts Run options: `preset`, `tools` (modifiers), `doc`, `interactive`, `system` (or
-#'   `call$args$opts$system`), `start` (the merged `session_start` collect result).
-#' @return The frozen list: `preset`, `model`, `t0`, `t1`, `tools_json`, `tool_names`,
-#'   `sections` (df `name`, `tier`, `hash`, `tokens`), `human`, `document`, `reinject`.
+#' Compose what a session would freeze now (no side effects; `s = NULL` previews)
+#' Preset: `opts$preset`, the session's own (unless equal to setting `preset`, which P06 stores),
+#' the `tools.presets` match, else the setting, whose `standard` may become IC-73's `extended`.
 #' @noRd
 prompt_compose = function(s, opts = list()) {
   d = if (is.null(s)) NULL else session_data(s)
@@ -876,9 +788,7 @@ prompt_register_sections = function(gptr) {
 # ---- the frozen prompt --------------------------------------------------------------------------
 
 #' The re-injection budgets the floor check cut, as the gptr.frozen entry records them, or NULL
-#'
-#' Only cut budgets (finite, non-negative numbers) are recorded: the full budgets (project `Inf`)
-#' have no JSON number and are what a restore falls back to.
+#' The full budgets (project `Inf`, no JSON number) are not recorded; a restore falls back to them.
 #' @noRd
 prompt_reinject_read = function(r) {
   ok = function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0
@@ -887,11 +797,8 @@ prompt_reinject_read = function(r) {
 }
 
 #' The gptr.frozen custom entry (contract section 4.6)
-#'
-#' `human` is an additional key (readers ignore unknown keys, contract section 11) so that a
-#' resumed session renders later mode blocks and schemas for the audience it was frozen for;
-#' `reinject` is another, present only when the floor check cut the re-injection budgets (IC-71),
-#' so that a restore keeps the cut.
+#' Extra keys (readers ignore them, contract 11): `human`, the frozen audience, and `reinject`,
+#' only when the floor check cut the budgets (IC-71).
 #' @noRd
 prompt_frozen_entry = function(frozen) {
   secs = frozen$sections
@@ -933,17 +840,8 @@ prompt_frozen_restore = function(s) {
 }
 
 #' The compaction floor check at freeze (IC-71)
-#'
-#' The context right after a compaction is at least the static prefix, the project
-#' instructions, the skill re-injection budget and the checkpoint (about 634 tokens). When that
-#' floor is not below the compaction threshold, the re-injection budgets are cut to 25% of the
-#' threshold; when it is still not below, the model is refused for this preset. An unknown
-#' window (a router, an unknown or undiscovered model) is not checked.
-#'
-#' @param frozen The composed frozen list.
-#' @param project_tokens Estimated tokens of the session's project instruction blocks.
-#' @param skills_budget Skill re-injection budget (10,000 when skill blocks exist, else 0).
-#' @return `frozen`, with `reinject` cut when needed; signals `gptr_error_invalid_argument`.
+#' A post-compaction floor (static prefix, project, skills, checkpoint ~634) not below the threshold
+#' cuts re-injection to 25% of it, then refuses the model; an unknown window is not checked.
 #' @noRd
 prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
   m = prompt_model(frozen$model)
@@ -973,17 +871,8 @@ prompt_floor_check = function(frozen, project_tokens, skills_budget = 0) {
 }
 
 #' Freeze a session's prompt once (contract section 7.7; the prompt.freeze service)
-#'
-#' Called by the session kernel (P06) at the first run, before the first user message is
-#' appended, so gptr.frozen is the session's first entry (contract section 11.4). The project
-#' instructions of the floor check are rendered for the audience being frozen (`human`), so the
-#' floor counts exactly what the first message will send (IC-52 withholds them from a
-#' non-interactive `auto` or `edits` run in an untrusted project).
-#'
-#' @param s A `<session>`.
-#' @param opts Run options (see `prompt_compose()`); `refreeze = TRUE` ignores an earlier
-#'   gptr.frozen entry (a resumed foreign file, IC-52).
-#' @return The frozen list, invisibly.
+#' P06 calls it before the first user message (contract 11.4); the floor check renders project
+#' instructions for the frozen audience (IC-52). `opts$refreeze` ignores an earlier entry.
 #' @noRd
 prompt_freeze = function(s, opts = list()) {
   d = session_data(s)
@@ -1012,13 +901,8 @@ on_load(ext_service_set("prompt.freeze", prompt_freeze, provided_by = "P07", bui
 # ---- mid-session additions ----------------------------------------------------------------------
 
 #' Does the session's current model take tool declarations mid-conversation?
-#'
-#' The adapter of the model's own `api` (resolved per model, IC-74) must declare `tool_addition`,
-#' and the model must not refuse it: its `capabilities$tool_addition` is not `FALSE` and it calls
-#' tools (`tool_call` is not `FALSE`). The adapters send an operator message's declarations under
-#' the same rule (P12: `adp_model_cap(model, "tool_addition", TRUE)`, and `tool_call` for the
-#' Responses api), so a tool announced by value is always declared. Routers and unresolved models
-#' get members.
+#' Its own adapter (IC-74) declares `tool_addition` and the model refuses neither it nor
+#' `tool_call`, the rule P12's adapters apply; routers and unresolved models get members.
 #' @noRd
 prompt_tool_addition = function(s) {
   m = prompt_model(session_data(s)$model)
@@ -1028,11 +912,8 @@ prompt_tool_addition = function(s) {
   isTRUE(ad$capabilities$tool_addition) && !isFALSE(cap)
 }
 
-#' A tool spec as a namespaced `r` member (`gptr$<namespace>$<name>()`, namespace `tools` when
-#' it has none)
-#'
-#' P02's tool validator generates the member's `fun` from `execute` (contract section 6.8,
-#' IC-37); every other field of the spec (for example `render`) is kept.
+#' A tool spec as a namespaced `r` member (`gptr$<namespace>$<name>()`, default `tools`)
+#' P02's validator generates `fun` from `execute` (IC-37); other fields are kept.
 #' @noRd
 prompt_member_spec = function(sp) {
   if (identical(sp$exposure, "r") && !is.null(sp$namespace)) return(sp)
@@ -1042,9 +923,7 @@ prompt_member_spec = function(sp) {
   do.call(gptr_spec, c(list(kind = "tool"), x[setdiff(names(x), "kind")]))
 }
 
-#' The prompt-section input of a session now (for tool schemas evaluated after the freeze)
-#'
-#' @param frozen The session's frozen list (`prompt_frozen_now()`), or `NULL` for `.d$frozen`.
+#' The prompt-section input of a session now (`frozen`, else `.d$frozen`)
 #' @noRd
 prompt_session_input = function(s, frozen = NULL) {
   d = session_data(s)
@@ -1057,10 +936,7 @@ prompt_session_input = function(s, frozen = NULL) {
 }
 
 #' The frozen prompt of the session's next request, or NULL when its next run composes one
-#'
-#' P06's `run_freeze()` composes only while `.d$frozen` is empty, after the `session_start`
-#' hooks ran, and `prompt_freeze()` restores the newest `gptr.frozen` entry unless an IC-52
-#' refreeze is pending.
+#' (an IC-52 refreeze is pending); else `.d$frozen` or the newest gptr.frozen entry
 #' @noRd
 prompt_frozen_now = function(s) {
   d = session_data(s)
@@ -1082,19 +958,9 @@ prompt_member_key = function(line) {
   if (nzchar(m[3L])) paste0(m[2L], "/", m[3L]) else m[2L]
 }
 
-#' What the model already has of the session's tools
-#'
-#' The declarations of the frozen tool array and of the `tool_change` messages on the active path
-#' and in the queue, and the newest member signature line announced for each key. The transcript
-#' is read, not the live state, so a resumed session counts its earlier additions. The
-#' declarations of the messages count only while the model takes tool additions (`added`): an
-#' adapter that does not drops them (P12), so after a switch to such a model the tools they
-#' declared are offered again as members.
-#'
-#' @param frozen The frozen list or `NULL` (before the freeze).
-#' @param added Count the declarations of `tool_change` messages (`prompt_tool_addition()`).
-#' @return `list(decls, lines)`: named chr (canonical declaration JSON by tool name) and named chr
-#'   (signature line by registry key).
+#' What the model already has: `list(decls, lines)`, declaration JSON by tool name and the
+#' newest member line by key, from the frozen array and the path's and queue's `tool_change`
+#' messages, whose declarations count only when `added` (P12 adapters otherwise drop them)
 #' @noRd
 prompt_tools_known = function(s, frozen, added = TRUE) {
   items = list()
@@ -1125,14 +991,8 @@ prompt_tools_known = function(s, frozen, added = TRUE) {
 }
 
 #' Register a tool spec at rank 0 so that it is the record the session resolves
-#'
-#' P02 resolves a tie at the same rank to the first registered record, so the session's earlier
-#' rank-0 `session` records of the key are removed once the new record is in. A spec that the
-#' winning record already holds at rank 0 for the session, whatever its source, is not registered
-#' again: for example P08's continuation enables `plugins =` at rank 0 for the session (P17,
-#' source `plugin:<name>`) and passes `registry_get()` of each new tool, which is the tool that
-#' runs. A different spec that still does not win (a rank-0 record of the session from another
-#' source, or a filter) is removed again and refused, and the earlier records stay.
+#' A spec the rank-0 winner already holds is not re-registered; the session's earlier own records
+#' go once the new one wins (P02: first registered wins a tie), else the new one is refused.
 #' @noRd
 prompt_session_register = function(sp, sid) {
   key = spec_key(sp)
@@ -1160,32 +1020,9 @@ prompt_session_register = function(sp, sid) {
   invisible(id)
 }
 
-#' Register one added spec at rank 0 for the session and say how the model learns of it
-#'
-#' Before the session's prompt is frozen (for example from a `session_start` hook through
-#' `ctx$add_tools()`), a spec the frozen tool array will declare whatever the preset
-#' (`prompt_tool_always()`) is registered and not announced, since a message would declare it
-#' twice; any other tool is announced as a member, as after the freeze without tool additions,
-#' because no message may declare a tool before the array is known. That includes namespaced `r`
-#' members: P10's `plugins` section lists them only under a preset that keeps the section (not
-#' `minimal`) and without a `session_start` or `.opts$system` override removing it, which the
-#' freeze decides later, and a line listed twice costs a few tokens once. After the freeze a tool is
-#' declared by value when the model takes tool additions and the kernel can find it by its name
-#' (no namespace, an `execute`, not hidden: P06's `tool_lookup()` resolves a call by the registry
-#' key). Otherwise it is a member: a spec with a `fun` and no namespace already is `gptr$<name>()`
-#' (IC-37; for example the built-in `edit` and `write` that plan mode adds when it switches to
-#' `auto`), any other becomes a namespaced member (`prompt_member_spec()`). A hidden tool
-#' (callable by gptr code only) and a spec of another kind are registered, not announced.
-#'
-#' What the model already has is not announced again (`known`, `prompt_tools_known()`): a tool
-#' whose name the model has by value (the frozen array or an earlier addition) is only registered
-#' when its declaration is unchanged (the implementation may change) and refused otherwise, as the
-#' declaration cannot change mid-conversation (IC-69); a member line already announced for its
-#' key is not repeated. The declaration and the signature line are built before the spec is
-#' registered, so a spec whose schema cannot be read is left out entirely.
-#'
-#' @return `list(decl)` (a declaration sent by value), `list(member)` (a signature line) or an
-#'   empty list.
+#' Register one added spec at rank 0: `list(decl)` (by value), `list(member)` or `list()`
+#' By value only after the freeze, if the model takes additions, for an unnamespaced, visible
+#' `execute` tool (IC-37); what the model has is not re-sent, a changed declaration is refused.
 #' @noRd
 prompt_add_one = function(sp, sid, frozen, direct, ctx, input, known) {
   if (!inherits(sp, "gptr_tool")) {
@@ -1229,21 +1066,8 @@ prompt_add_one = function(sp, sid, frozen, direct, ctx, input, known) {
 }
 
 #' Add tools to a running or idle session without touching the frozen array (IC-69)
-#'
-#' Registers `specs` at rank 0 for the session (the service `session.add_tools`). When the
-#' adapter declares `tool_addition` (`prompt_tool_addition()`), the tools are announced by an
-#' operator `tool_change` message that carries their declarations; otherwise they become `r`
-#' members announced by an operator note with one `schema_signature()` line each. The messages
-#' wait in the session's queue and are appended before the next request (`request_build()`).
-#' Before the first freeze only the tools the frozen array does not declare are announced, as
-#' members; what the model already has is not announced again, and a changed declaration of a
-#' name it has is refused (`prompt_add_one()`). A spec whose conversion, schema, signature line or
-#' registration fails is left out with a diagnostic, as at freeze (contract section 9.1), and the
-#' others are still announced.
-#'
-#' @param s A `<session>`.
-#' @param specs A spec or a list of specs.
-#' @return `s`, invisibly.
+#' The session.add_tools service: queued `tool_change` operator messages announce them by value or
+#' as `r` members; a failing spec is left out with a diagnostic (contract section 9.1).
 #' @noRd
 session_add_tools = function(s, specs) {
   if (inherits(specs, "gptr_spec")) specs = list(specs)
@@ -1295,14 +1119,7 @@ session_add_tools = function(s, specs) {
 on_load(ext_service_set("session.add_tools", session_add_tools, provided_by = "P07",
                         builtin = "prompt"))
 
-#' Queue a section patch for the model (Pi's wording; the frozen text never changes)
-#'
-#' Like tool changes, the patch waits for the next request (`request_build()` flushes the queue).
-#'
-#' @param s A `<session>`.
-#' @param name Section name.
-#' @param text New section body, or `NULL` when the section was removed.
-#' @return `s`, invisibly.
+#' Queue a section patch for the model (Pi's wording; `text = NULL`: removed)
 #' @noRd
 prompt_section_patch = function(s, name, text = NULL) {
   txt = if (is.null(text)) {
@@ -1369,8 +1186,7 @@ gptr_prompt = function(x = NULL, preset = NULL, tokens = TRUE) {
   if (!is.null(preset)) preset_record(preset, sid)
   frozen = NULL
   if (!is.null(x) && is.null(preset)) {
-    # what the next request sends: .d$frozen, else the gptr.frozen entry the next freeze
-    # restores (not stored here); NULL when a refreeze is pending (IC-52), so it composes
+    # what the next request sends; NULL when an IC-52 refreeze is pending, so it composes
     frozen = prompt_frozen_now(x)
   }
   if (is.null(frozen)) frozen = prompt_compose(x, list(preset = preset))
@@ -1418,9 +1234,6 @@ print.gptr_prompt_view = function(x, ...) {
 }
 
 #' The built-in `prompt` extension (contract sections 7.7 and 10.3)
-#'
-#' @param gptr The extension API object.
-#' @return `NULL`, invisibly.
 #' @noRd
 builtin_prompt = function(gptr) {
   prompt_register_presets(gptr)

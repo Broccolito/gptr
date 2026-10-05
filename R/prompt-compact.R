@@ -1,21 +1,11 @@
-# Compaction: the threshold and the cold rule, the in-conversation checkpoint request, harness
-# state extraction and the compaction entry (P07). Adapted from G4 section 5.5 (compaction.R):
-# the checkpoint prompt is G4 section 3.6 verbatim; the harness, not the model, writes the
-# user's messages, the objects with their creating code, decisions, files, skills and the plan.
-# keep_recent = 0: the compaction entry replaces everything before it.
+# Compaction: the threshold and cold rule, the in-conversation checkpoint request, harness state
+# extraction and the compaction entry (P07; G4 5.5, checkpoint prompt G4 3.6). The harness, not
+# the model, writes the user's messages, objects with their code, decisions, files, skills and
+# the plan. keep_recent = 0: the compaction entry replaces everything before it.
 
 #' Compaction threshold (contract section 7.7; architecture section 6.11)
-#'
-#' @param window Context window in tokens (`NA`: unknown).
-#' @param max_output Maximum output tokens of the model (`NA` counts as 0).
-#' @param r_cap The `r` result budget (`gptr.r_output_tokens`).
-#' @return `num(1)`: `min(window - min(max(30000, 0.10 * window), 0.25 * window), window -
-#'   max(16384, max_output + 2 * r_cap), compact_at)`, where `compact_at` is the setting
-#'   `compact_at` read through `setting_get()` (without P08's settings service: the option
-#'   `gptr.compact_at`, default 200000). Settings are process-wide (contract 5:
-#'   `gptr_config(.scope = "session")` is this R process), so no session is passed. A `null`
-#'   setting disables the cap (contract 3.1 and 11.2: `num|null`); R options cannot hold `NULL`,
-#'   so `Inf` or `NA` in the option disables it too. An unknown window gives the cap alone.
+#' The cap is setting `compact_at` (process-wide, contract 5: no session); null, `NA` or `Inf`
+#' disables it (contract 11.2). An unknown window gives the cap alone.
 #' @noRd
 compact_threshold = function(window, max_output, r_cap = 4000) {
   cap = setting_get("compact_at")
@@ -28,15 +18,8 @@ compact_threshold = function(window, max_output, r_cap = 4000) {
 
 # ---- harness state (G4 sections 4.4.2-4.4.3) ----------------------------------------------------
 
-#' Names assigned by top-level expressions and the code that assigned them
-#'
-#' Handles `=`, the left arrow, the super-assignment arrow, `->` (parsed as the left arrow),
-#' `assign("x", ...)`, replacement calls (`x$a = ...`, `names(x) = ...`) and data.table
-#' `x[, y := ...]` (G4 section 5.5).
-#'
-#' @param code `chr(1)` R code.
-#' @return Named list: object name -> the code as written (at most 100 characters), oldest
-#'   assignment first (a name assigned again takes the newest place and code).
+#' Names assigned by top-level expressions -> their code (at most 100 characters), oldest first
+#' Handles `=`, the arrows, `assign("x", ...)`, replacement calls and data.table `:=` (G4 5.5).
 #' @noRd
 compact_assigned_names = function(code) {
   exprs = tryCatch(parse(text = code, keep.source = TRUE), error = function(e) expression())
@@ -84,12 +67,8 @@ compact_object_set = function(objs, nm, code) {
   objs
 }
 
-#' Merge a previous checkpoint's state `b` under the newer state `a`
-#'
-#' Every list stays oldest first (`b`'s entries, then `a`'s), so the budgets of the checkpoint
-#' drop the oldest objects first; an object assigned again in `a` keeps `a`'s code. `b` may come
-#' from the session file (JSON arrays read back as lists, a single string unboxed); a `b` that is
-#' not a list (a malformed state written by a hook or plugin) is ignored.
+#' Merge a previous checkpoint's state `b` under the newer state `a`, every list oldest first
+#' `b` may come from the session file (JSON arrays as lists); a `b` that is not a list is ignored.
 #' @noRd
 compact_state_merge = function(a, b) {
   if (is.null(b) || !is.list(b)) return(a)
@@ -116,19 +95,9 @@ compact_state_merge = function(a, b) {
 compact_user_sources = c("prompt", "pipe", "steer", "follow_up", "repl", "parent", "replay",
                          "imported")
 
-#' Harness state for the checkpoint (contract section 7.7)
-#'
-#' Files and skills come from the assistant's `read`, `write` and `edit` calls (and from
-#' `skill_content` blocks), in transcript order; a call whose result (same `tool_call_id`) is an
-#' error (failed, denied, blocked or not executed) contributes nothing. A call without a result
-#' counts.
-#'
-#' @param entries Entries of the active path (R shape), root to leaf.
-#' @return `list(user, objects, decisions, read, modified, skills, plan)`: the user's messages
-#'   (prompts and steering, in order), objects assigned by successful `r` calls with their code
-#'   (oldest assignment first: an object assigned again moves to the end), `note` decisions,
-#'   files read and modified, active skills and the latest complete proposed plan, merged with
-#'   the state of the latest compaction entry (iterative compaction).
+#' Harness state for the checkpoint (contract 7.7), merged with the latest compaction's state
+#' Files and skills come from `read`/`write`/`edit` calls and `skill_content` blocks in order; a
+#' call whose result is an error contributes nothing (one without a result counts).
 #' @noRd
 extract_state = function(entries) {
   is_cmp = vapply(entries, function(e) identical(e$type, "compaction"), NA)
@@ -224,10 +193,8 @@ extract_state = function(entries) {
 }
 
 #' Cut one text to `budget` estimated tokens, the truncation notice included
-#'
-#' Keeps the head of the text. A single long line is cut by characters (`prompt_truncate()`
-#' keeps whole lines only, so it would drop a one-line text entirely). `prefix` (a list marker)
-#' is counted but not returned.
+#' Keeps the head, cut by characters (`prompt_truncate()` would drop a one-line text); `prefix` is
+#' counted, not returned.
 #' @noRd
 compact_clip = function(text, budget, prefix = "") {
   if (prompt_est(paste0(prefix, text)) <= budget) return(text)
@@ -245,18 +212,13 @@ compact_clip = function(text, budget, prefix = "") {
   paste0(sub("\\s+$", "", substr(text, 1L, lo)), "\n", notice)
 }
 
-#' Estimated tokens of a line of a list: its estimate plus its line feed
-#'
-#' The sum over lines bounds the estimate of the joined list (the estimate rounds up per text).
+#' Estimated tokens of a list line plus its line feed (the sum bounds the joined list's estimate)
 #' @noRd
 compact_line_cost = function(x) prompt_est(x) + 1
 
 #' The user's messages within a token budget: the first and the newest, then the newest that fit
-#'
-#' The whole list, line numbers and the omission line included, stays within `budget`
-#' (architecture 12.2: user messages 2,000). When the first and the newest message do not fit
-#' together, they are cut to shares of the budget (`compact_clip()`): a message within half the
-#' budget stays whole and the other takes the rest, else each gets half.
+#' (architecture 12.2). Ends that do not fit are clipped: one within half the budget stays whole
+#' and the other takes the rest, else each gets half.
 #' @noRd
 compact_user_messages = function(msgs, budget = 2000) {
   n = length(msgs)
@@ -295,9 +257,7 @@ compact_user_messages = function(msgs, budget = 2000) {
 }
 
 #' The `note` decisions within a token budget: the newest that fit, the oldest dropped first
-#'
-#' The newest decision is always shown, cut to the budget when it alone exceeds it; dropped
-#' decisions are counted in a leading line.
+#' The newest is always shown (clipped if needed); a leading line counts the dropped ones.
 #' @noRd
 compact_decisions = function(decisions, budget = 300) {
   n = length(decisions)
@@ -321,10 +281,7 @@ compact_decisions = function(decisions, budget = 300) {
 }
 
 #' Class and shape per object name from the session's last workspace snapshot (P09), if any
-#'
-#' P09's `env_snapshot()` never forces a promise or calls an active binding, so their rows have
-#' no class (`NA`): those objects are left out (shown as `?`). A missing shape (`NA`) shows the
-#' class alone.
+#' Rows without a class (unforced promises, active bindings) are left out (shown as `?`).
 #' @noRd
 compact_shapes = function(s) {
   snap = if (is.null(s)) NULL else session_data(s)$snapshot
@@ -371,19 +328,8 @@ compact_checkpoint_body = function(summary, st, shapes = list()) {
 # ---- trigger ------------------------------------------------------------------------------------
 
 #' The model record compaction runs against, or NULL when none resolves
-#'
-#' Inside a run, once P06's `run_target()` or `run_route()` has resolved the run's model, it is
-#' that model (a provider registered for the session only included). At a request boundary P06
-#' asks `router.call` with reason "compaction" before it calls compact.run (IC-69), so for
-#' `reason` "threshold" or "cold" the router is not asked twice. P06's recovery from an overflow
-#' error calls compact.run without routing, so an `"overflow"` compaction of a router session
-#' asks `router.call` here (the run's model when the router gives none that resolves); after a
-#' silent overflow, which P06 routes at the boundary, the router is asked a second time. Without
-#' a resolved run model (outside a run, or at a run's first request boundary) a router session
-#' asks `router.call` (reason "compaction") and any other session resolves its model reference
-#' through the catalog, which does not list a provider registered for the session only.
-#'
-#' @param reason `NULL` (the trigger) or the reason of compact.run.
+#' The run's resolved model (P06 routed at the boundary, IC-69); a router session asks
+#' `router.call` on `"overflow"` or without a run model; others resolve through the catalog.
 #' @noRd
 compact_target = function(s, reason = NULL) {
   ref = session_data(s)$model
@@ -414,10 +360,7 @@ compact_route = function(s) {
 }
 
 #' The session's current run (the live record's `run`), or NULL outside a run
-#'
-#' A compaction reads it once, when it starts: P06's `run_settle()` (after `run_abort()`, a budget
-#' or timer stop) clears the live record's `run`, so the run must be kept to tell later that it
-#' was aborted or settled meanwhile.
+#' Read once when a compaction starts: P06's `run_settle()` clears it.
 #' @noRd
 compact_live_run = function(s) {
   live = session_live(s)
@@ -450,18 +393,9 @@ compact_compactor = function(s) {
     list(name = "checkpoint", should = compact_checkpoint_should, compact = compact_checkpoint)
 }
 
-#' Should the session compact now? (the compact.should service)
-#'
-#' The selected compactor's `should(session, ctx)` decides, with `ctx$input` = `list(tokens,
-#' idle_s)`; an error is a diagnostic and `FALSE`. The session kernel calls compact.run(s,
-#' "threshold") for every `TRUE` (P06 `run_compact_check()`; contract 7.0 types the service as
-#' `lgl(1)`), so the reason is also remembered in the session memo for `compact_run()`.
-#'
-#' @param s A `<session>`.
-#' @param tokens Projected context tokens of the next request (`NA`: unknown).
-#' @param idle_s Seconds since the previous request (`NA`: unknown).
-#' @return `lgl(1)`; when `TRUE` it carries the attribute `reason` (`"threshold"` or `"cold"`; a
-#'   plugin's `TRUE` without a reason is a threshold compaction).
+#' Should the session compact now? (the compact.should service, `lgl(1)`, contract 7.0)
+#' The compactor's `should()` decides (an error: diagnostic, FALSE); TRUE's `reason` is also kept
+#' in the memo, as P06 calls compact.run(s, "threshold") for every TRUE.
 #' @noRd
 compact_should = function(s, tokens, idle_s) {
   comp = compact_compactor(s)
@@ -483,10 +417,7 @@ compact_should = function(s, tokens, idle_s) {
 
 #' The checkpoint compactor's trigger: the threshold (waiting for 20% growth of the window
 #' after a threshold compaction, IC-71) or the cold rule (idle beyond the tail TTL with at
-#' least `gptr.compact_cold_min` tokens)
-#'
-#' An unknown token count (`NA`) is no evidence for either rule (IC-74); an unknown idle time
-#' is no evidence for the cold rule.
+#' least `gptr.compact_cold_min` tokens); an unknown count or idle time is no evidence (IC-74)
 #' @noRd
 compact_checkpoint_should = function(session, ctx) {
   num = function(x) suppressWarnings(as.numeric(x %||% NA_real_))[1]
@@ -522,8 +453,7 @@ compact_request_text = function(focus = NULL) {
   sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
 }
 
-#' An event of the session with the envelope of contract 4.5 (`run` and `agent` of the
-#' session's current run, else NULL and "main"; `turn`)
+#' An event of the session with the contract 4.5 envelope (current run, else NULL and "main")
 #' @noRd
 compact_event = function(s, type, ...) {
   d = session_data(s)
@@ -534,20 +464,9 @@ compact_event = function(s, type, ...) {
          turn = d$turns, ...)
 }
 
-#' Send one checkpoint request in-conversation (a cache read) and wait for its reply
-#'
-#' The unchanged transcript plus one user message, the frozen tools and `max_tokens = 2048`;
-#' never the running call's `returns =` schema (the reply is free text). The request is guarded
-#' like any request, but the model's stored view is put back: the next request to the model
-#' extends the request before this one. Inside a run, the run's protected safety record goes
-#' with the request (IC-74: P05's preflight checks the effective origin against it). The reply
-#' is waited for in a nested pump that runs no queued tool (IC-57); the wait also ends when the
-#' run is aborted or settles meanwhile (another reactor callback), and an interrupt or such an
-#' end cancels the transfer. A request that cannot start (P05 signals before anything is sent: a
-#' refused preflight, a missing key) is a diagnostic and gives no reply.
-#'
-#' @param run The run the compaction started under (`compact_live_run()`), or NULL.
-#' @return The final assistant message, or `NULL`.
+#' Send one checkpoint request in-conversation (a cache read); its reply or NULL
+#' Guarded, then the model's stored view is put back; the run's safety record goes along (IC-74);
+#' the nested pump runs no tool (IC-57) and ends on abort or settle, cancelling the transfer.
 #' @noRd
 compact_ask_once = function(s, target, text, run = compact_live_run(s)) {
   d = session_data(s)
@@ -606,14 +525,8 @@ compact_ask_once = function(s, target, text, run = compact_live_run(s)) {
   box$msg
 }
 
-#' The checkpoint reply: a reply that calls a tool, stops on length or holds no text is asked
-#' again once; an error reply (for example a second overflow) is not retried, nor is a reply
-#' once the run is aborted
-#'
-#' @param run The run the compaction started under (`compact_live_run()`), or NULL.
-#' @return `list(msg, usage)`: the final assistant message (`NULL` when no usable reply came
-#'   back) and the usage of every reply received (`compact_usage_sum()`), rejected ones included;
-#'   a reply without a usage record counts as unknown usage.
+#' The checkpoint reply, `list(msg, usage)`: a tool call, a length stop or no text is asked
+#' again once, an error reply or a halted run is not; `usage` sums every reply received
 #' @noRd
 compact_ask = function(s, target, text, run = compact_live_run(s)) {
   usages = list()
@@ -632,9 +545,8 @@ compact_ask = function(s, target, text, run = compact_live_run(s)) {
   list(msg = NULL, usage = compact_usage_sum(usages))
 }
 
-#' The sum of usage records (contract 4.3): one record as it is, several summed field by field
-#' (an unknown count or cost, NA, makes the sum unknown, IC-74; a reply without a record, NULL,
-#' is unknown usage, P05's `usage_as()`), none NULL
+#' The sum of usage records (contract 4.3), field by field; an NA or a missing record makes the
+#' sum unknown (IC-74); none gives NULL
 #' @noRd
 compact_usage_sum = function(usages) {
   if (!length(usages)) return(NULL)
@@ -694,16 +606,9 @@ compact_skills = function(path, budget_total = 10000, budget_each = 5000) {
   out
 }
 
-#' The images of the latest request, which the continuation line repeats with its text
-#'
-#' Walking back from the leaf: the image blocks of the user's messages (`compact_user_sources`)
-#' up to and including the newest one with text, the request the line names (an image-only
-#' message after it is part of the same input). A compaction entry ends the walk with the images
-#' it carried (the request lies before it, iterative compaction); a steering relay, text only,
-#' ends it with none of its own.
-#'
-#' @param path Entries of the active path (R shape), root to leaf.
-#' @return A list of image blocks, oldest first, possibly empty.
+#' The images of the latest request, which the continuation line repeats, oldest first
+#' Walking back: user images up to the newest message with text; a compaction ends the walk with
+#' its images, a steering relay with none.
 #' @noRd
 compact_request_images = function(path) {
   is_image = function(b) is.list(b) && identical(b[["type"]], "image")
@@ -740,17 +645,8 @@ compact_mode_block = function(s) {
 }
 
 #' The built-in checkpoint compactor (kind `compactor`, name "checkpoint")
-#'
-#' @param session A `<session>`.
-#' @param ctx Its `gptr_ctx`; `ctx$input` holds `reason`, `focus`, `tokens` (`NA` when unknown;
-#'   the checkpoint's `tokens_before` is then estimated with the resolved model) and `target`.
-#' @return `list(blocks, summary, state, first_kept_entry_id, usage, details)`: the blocks of the
-#'   new first message (the reused project and environment blocks, the checkpoint, the mode, a
-#'   fresh workspace, active skills within budget, the images of the latest request
-#'   (`compact_request_images()`) and a continuation line repeating that request whole, as the
-#'   plan and G4's `make_compaction_entry()` do: with `keep_recent = 0` it is the only copy of a
-#'   prompt not answered yet); `usage` sums every checkpoint request's reply. `NULL` when the run
-#'   the compaction started under was aborted or settled meanwhile.
+#' Blocks: reused header, checkpoint, mode, workspace, skills, the latest request's images and a
+#' continuation line repeating it whole. NULL when the run halted meanwhile.
 #' @noRd
 compact_checkpoint = function(session, ctx) {
   inp = ctx$input
@@ -791,9 +687,7 @@ compact_checkpoint = function(session, ctx) {
   budget_skills = as.numeric(reinject$skills %||% 10000)
   hdr = list()
   used = 0
-  # project blocks the re-injection budget drops (IC-71) are recorded with the hash of their
-  # stored text (Task 5's context_text_hash()), so the next turn re-announces them as
-  # project_instructions_update only when the file changes
+  # dropped project blocks (IC-71) keep their stored hash: re-announced only when the file changes
   dropped = compact_last(session)$details$dropped %||% list()
   for (b in compact_header(path)) {
     if (identical(b$kind, "project_instructions")) {
@@ -808,9 +702,7 @@ compact_checkpoint = function(session, ctx) {
   }
   ws = context_block_by_name(session, "workspace", list(placement = "first"))
   skills = compact_skills(path, budget_total = budget_skills)
-  # keep_recent = 0: the latest request (often the new prompt the model has not answered yet)
-  # is repeated whole, its images included; only the checkpoint's <user_messages> list has a
-  # budget
+  # keep_recent = 0: the latest request (often unanswered) is repeated whole, images included
   last_user = if (length(st$user)) st$user[length(st$user)] else "(none)"
   cont = block_text(paste0(prompt_text("checkpoint_continue"), last_user))
   imgs = compact_request_images(path)
@@ -821,8 +713,7 @@ compact_checkpoint = function(session, ctx) {
                       dropped = if (length(dropped)) dropped))
 }
 
-#' The section name of a `section_patch` operator text (Task 8's `section_updated` or
-#' `section_removed` wording), or NA
+#' The section name of a `section_patch` operator text, or NA
 #' @noRd
 compact_patch_key = function(txt) {
   for (tmpl in c(prompt_text("section_updated"), prompt_text("section_removed"))) {
@@ -833,21 +724,9 @@ compact_patch_key = function(txt) {
   NA_character_
 }
 
-#' The operator state a compaction would drop, as messages to append after it
-#'
-#' Task 8 tells the model of tools added mid-session and of section patches only through
-#' operator messages (`tool_change`, `section_patch`); the frozen tool array and system prompt
-#' never change. With `keep_recent = 0` the compaction drops those messages from the projection,
-#' while `prompt_tools_known()` still counts them, so the model would lose the tools and a
-#' patched section would revert. Read from the active path in order: one `tool_change` with every
-#' declaration sent by value (the newest per name), one with the newest member signature line per
-#' registry key, and the newest patch per section (a removal stays a removal). An item whose
-#' newest message is at or after `keep` (the position of a result's `first_kept_entry_id`) stays
-#' visible in the kept entries and is left out.
-#'
-#' @param path Entries of the active path (R shape), root to leaf.
-#' @param keep `NA` or the path position from which the compaction keeps entries.
-#' @return A list of operator messages (`msg_operator()`), possibly empty.
+#' The tool additions and section patches a compaction drops, as operator messages to re-append
+#' The newest declaration per name, member line per key and patch per section; items at or after
+#' `keep` (the first kept entry) stay visible and are left out.
 #' @noRd
 compact_operator_state = function(path, keep = NA_integer_) {
   decls = list()
@@ -912,29 +791,8 @@ compact_result_ok = function(res) {
 }
 
 #' Compact a session (the compact.run service)
-#'
-#' Dispatches `session_before_compact` (first decision: cancel, or supply a result; a result
-#' without blocks is a diagnostic and the compactor runs instead), runs the selected compactor
-#' (falling back to the built-in checkpoint compactor with a diagnostic when it fails or returns
-#' no blocks), appends the `compaction` entry and emits `session_compact`; both events carry the
-#' envelope of contract 4.5. A `"threshold"` request that follows a `compact_should()` answer of
-#' `"cold"` is recorded as `"cold"` (the session kernel passes `"threshold"` for every `TRUE`).
-#' The entry's `details` keep the compactor's fields; `reason`, `strategy` and `tokens_after`
-#' are the harness's. A result `state` that is not a list is a diagnostic and replaced by the
-#' harness state (`extract_state()`). The tool additions and section patches the compaction
-#' drops are appended again right after it (`compact_operator_state()`; still-queued ones follow
-#' at the next request), and `tokens_after` counts them and the result's images. When the run
-#' the compaction started under is aborted or settles meanwhile (P06's `run_settle()` then clears
-#' the live record's `run`, so it is read once at the start), nothing is recorded. When no model
-#' resolves, the context's token count is unknown: the events carry `NA` and the entry has no
-#' `tokens_before` (IC-74).
-#'
-#' @param s A `<session>`.
-#' @param reason `"threshold"`, `"cold"`, `"overflow"` or `"manual"` (the whole vector of the four
-#'   is the first, as P01's `check_choice()` reads it).
-#' @param focus `NULL` or `chr(1)`: what the summary should focus on (`/compact <text>`).
-#' @return `s`, invisibly. Signals `gptr_error_internal` when no compactor produced a result and
-#'   `gptr_error_invalid_argument` for an unknown `reason` or a `focus` that is not a string.
+#' A `session_before_compact` result, else the compactor's (checkpoint fallback), becomes the
+#' entry; dropped operator state is re-appended; a halted run records nothing.
 #' @noRd
 compact_run = function(s, reason, focus = NULL) {
   reason = check_choice(reason, c("threshold", "cold", "overflow", "manual"), "reason")
@@ -1051,9 +909,6 @@ compact_run = function(s, reason, focus = NULL) {
 }
 
 #' The built-in `compaction` extension (contract section 10.3)
-#'
-#' @param gptr The extension API object.
-#' @return `NULL`, invisibly.
 #' @noRd
 builtin_compaction = function(gptr) {
   gptr$register(gptr_spec("compactor", "checkpoint", should = compact_checkpoint_should,

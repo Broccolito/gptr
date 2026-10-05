@@ -1,17 +1,13 @@
 # Request assembly, cache plans, the gap-based tail TTL and the prefix guard (P07).
-# Every request is a pure function of the frozen prompt, the append-only transcript and the
-# target. Its canonical form is the sequence of once-serialised elements (tools, T0, T1, then
-# one element per projected message), so a request is the previous request to the same model
-# plus appended elements (G4 sections 4.1 and 5.4, layout.R; architecture 6.11).
+# A request is a pure function of the frozen prompt, the append-only transcript and the target:
+# once-serialised elements (tools, T0, T1, one per message), so each request extends the
+# previous one to the same model (G4 4.1 and 5.4; architecture 6.11).
 
 #' Is `x` one message record (rather than a list of messages)?
 #' @noRd
 prompt_is_message = function(x) is.list(x) && !is.null(x$role)
 
-#' Adapter capabilities for a target model (an empty list when the adapter is absent)
-#'
-#' The adapter is the one of the model's own `api` (IC-74: routes are resolved per model, not
-#' per provider).
+#' Adapter capabilities of the target model's own `api` (IC-74), or an empty list
 #' @noRd
 prompt_target_caps = function(target) {
   ad = tryCatch(adapter_get(target$api), error = function(e) NULL)
@@ -19,10 +15,7 @@ prompt_target_caps = function(target) {
 }
 
 #' The session's frozen prompt for a request, frozen now when the session has none
-#'
-#' A session rebuilt from a foreign file (IC-52: `.d$refreeze`) is frozen afresh rather than
-#' restored from that file's gptr.frozen entry, as P06's `run_freeze()` asks `prompt.freeze`
-#' to; the pending refreeze is then consumed, as `run_freeze()` consumes it.
+#' A pending IC-52 refreeze composes afresh and is consumed, as P06's `run_freeze()` does.
 #' @noRd
 prompt_request_frozen = function(s) {
   d = session_data(s)
@@ -46,12 +39,8 @@ prompt_elided_images = function(s) {
 }
 
 #' The projection with the images elided on the path replaced by their omission text (IC-67)
-#'
-#' P05's `project_messages()` leaves `gptr.image_elision` to P06 or P07 (P05 decision 21). An
-#' image is elided by its id, 8 hex of its data's sha256, and every copy is sent as
-#' `[image omitted: gptr$plot("<id>")]`, as P06's `images_elide()` records and writes them; so
-#' the request is hashed and estimated as P06 sends it. Images newly elided for this request are
-#' P06's (`run_build()` elides them after `request.build`).
+#' Same id (8 hex of the data's sha256) and text as P06's `images_elide()`, so the request is
+#' hashed and estimated as P06 sends it.
 #' @noRd
 prompt_images_elided = function(messages, ids) {
   if (!length(ids)) return(messages)
@@ -70,19 +59,9 @@ prompt_images_elided = function(messages, ids) {
   messages
 }
 
-#' The adapter context for `target` (contract section 8.1)
-#'
-#' It writes nothing to the session, except the freeze of a session not frozen yet
-#' (`prompt_request_frozen()`); queued operator messages are left to `request_build()`. The
-#' projected transcript carries the images elided on the path as their omission text
-#' (`prompt_images_elided()`); the `extra` tail is appended as given.
-#'
-#' `params$returns` is the running call's `returns =` schema (the run options of contract
-#' section 7.6, read from the session's active run; the request.build service has no run
-#' argument and the session kernel does not refill it), and `params$thinking` is the target's
-#' level (a router or the session kernel sets it), else the session's level clamped to the
-#' target's levels, as P06's `run_target()` clamps it (IC-74: reasoning only as the selected
-#' model supports it).
+#' The adapter context for `target` (contract section 8.1); writes nothing but a needed freeze
+#' `params$returns` is the active run's `returns =` schema; `params$thinking` the target's level,
+#' else the session's clamped to the target's levels (IC-74, as P06's `run_target()`).
 #' @noRd
 prompt_request_context = function(s, target, extra = NULL) {
   d = session_data(s)
@@ -198,13 +177,7 @@ prompt_request_estimate = function(context, api = "anthropic", session_id = NULL
 # ---- cache plans --------------------------------------------------------------------------------
 
 #' The tail TTL after a request at time `now` (the gap rule of architecture 6.11)
-#'
-#' @param ttl The current tail TTL (`"5m"` or `"1h"`); `"1h"` is kept for the session.
-#' @param last Monotonic time of the previous request, or `NULL`.
-#' @param now Monotonic time of this request.
-#' @param policy `"gap"`, `"5m"` or `"1h"`.
-#' @param gap Seconds of inter-request gap that switch the tail to one hour.
-#' @return `"5m"` or `"1h"`.
+#' A fixed `policy` wins; `"1h"` is kept for the session; a gap over `gap` seconds switches to it.
 #' @noRd
 prompt_cache_ttl_next = function(ttl, last, now, policy = "gap", gap = 240) {
   if (policy %in% c("5m", "1h")) return(policy)
@@ -238,12 +211,7 @@ prompt_cache_gap_state = function(s) {
 }
 
 #' The built-in cache_policy "default": anchors per provider, gap-based tail TTL, cache key
-#'
-#' @param parts `list(t0, t1, tools_json, project = lgl(1), n = int(1))`.
-#' @param caps Adapter capabilities (`cache` names the provider mechanism; a missing entry
-#'   means none, contract section 8.1).
-#' @param session The `<session>`.
-#' @return `list(anchors = chr, tail_ttl = "5m" | "1h", key = chr(1))`.
+#' `caps$cache` names the provider mechanism (missing: none, contract section 8.1).
 #' @noRd
 prompt_cache_plan_gap = function(parts, caps, session) {
   anchors = switch(caps$cache %||% "none",
@@ -262,17 +230,8 @@ prompt_cache_plan_gap = function(parts, caps, session) {
 }
 
 #' Build one model request (contract section 7.7; the request.build service)
-#'
-#' Freezes the prompt when needed, appends the queued operator messages, projects the
-#' transcript for `target` (images elided on the path as their omission text, IC-67), attaches
-#' the cache plan of the `cache_policy` spec for the api and estimates the tokens per ledger
-#' component.
-#'
-#' @param s A `<session>`.
-#' @param target A model record (contract section 4.9).
-#' @param extra `NULL`, one message or a list of messages appended to the projection (the
-#'   compaction request).
-#' @return `list(context, view, tokens_est, components)`.
+#' Freezes when needed, flushes queued operator messages, then adds the api's cache plan and the
+#' token estimate: `list(context, view, tokens_est, components)`; `extra` is appended.
 #' @noRd
 request_build = function(s, target, extra = NULL) {
   d = session_data(s)
@@ -334,21 +293,8 @@ prefix_reset = function(s) {
 }
 
 #' Compare a request with the previous one to the same model (the prefix.guard service)
-#'
-#' The last view per model reference is kept in the session's memo. A view that extends the
-#' previous one element by element is quiet; the first request to a model, a request after a
-#' stated break (compaction, image elision, rewind: the view's `epoch` changed) and a request
-#' after `prefix_reset()` are not compared. On a break: emits `cache_break` (an `ev_new()` event
-#' with the envelope of contract 4.5: `run` and `agent` of the session's current run, else NULL
-#' and "main", `turn`; to the session's own ctx), appends a `gptr.cache_break` entry and acts per
-#' `gptr.check_prefix` (`"event"`
-#' records only, `"warn"` also signals `gptr_warning_cache_break`, `"error"` signals
-#' `gptr_error_internal`).
-#'
-#' @param s A `<session>`.
-#' @param target A model record.
-#' @param view The `view` of `request_build()`.
-#' @return `invisible(NULL)`.
+#' A first request, a stated break (`epoch` changed) or a reset is not compared; a break emits
+#' `cache_break` (contract 4.5), appends `gptr.cache_break` and acts per `gptr.check_prefix`.
 #' @noRd
 prefix_guard = function(s, target, view) {
   memo = prompt_memo(s)
@@ -412,15 +358,8 @@ prompt_register_guard = function(gptr) {
 # ---- the canonical request body -----------------------------------------------------------------
 
 #' The canonical request body: the elements joined in the Anthropic key order
-#'
-#' Everything constant within a session comes first and the growing message array last, so the
-#' body of a request without its closing `]}` (`open = TRUE`) is a byte prefix of the body of the
-#' next request to the same model (G4 section 5.4). Adapters assemble their wire bodies the
-#' same way; this body is what the prefix property tests and the token benchmark compare.
-#'
-#' @param elements Result of `prompt_request_elements()`.
-#' @param open `TRUE` to leave the message array open.
-#' @return `chr(1)` JSON text.
+#' Open (`open = TRUE`, no closing `]}`) it is a byte prefix of the next request's body (G4 5.4);
+#' the prefix tests and the token benchmark compare it.
 #' @noRd
 prompt_request_body = function(elements, open = FALSE) {
   m = elements[-(1:3)]
