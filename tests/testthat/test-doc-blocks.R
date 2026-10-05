@@ -856,3 +856,311 @@ test_that("token counts in the header are never written in scientific notation",
                            list(format = "r", template = "count rows"), 1L), "header")
   expect_identical(h$tokens, "100000/30")
 })
+
+# ---- Task 9: the writer doc_upsert() -----------------------------------------------------------
+
+# A located site for the first call with this prompt in an .R document
+doc_file_site = function(path, prompt = "count rows") {
+  calls = doc_calls(readLines(path, encoding = "UTF-8"))
+  k = which(calls$ph %in% prompt_hash(prompt))[1]
+  list(kind = "srcref", path = path_norm(path), format = "r", backend = "file",
+       anchor = doc_anchor_of(calls, calls[k, ]), prompt_hash = prompt_hash(prompt),
+       args_hash = NULL, template = prompt)
+}
+
+test_that("doc_upsert() writes nothing without consent and inserts, replaces and is idempotent", {
+  local_project()
+  f = file.path(getwd(), "a.R")
+  writeLines(c("library(gptr)", "gptr(\"count rows\")", "z = 1"), f)
+  site = doc_file_site(f)
+  hdr = list(model = "fake/fake-1", date = "2026-09-29", prompt = prompt_hash("count rows"))
+  lines = structure(c("n = nrow(mtcars)", "#> [1] 32"), header = hdr)
+  local_gptr_options(record = "off")
+  expect_identical(doc_upsert(site, lines)$action, "none")
+  expect_identical(readLines(f), c("library(gptr)", "gptr(\"count rows\")", "z = 1"))
+  local_gptr_options(record = "auto")
+  res = doc_upsert(site, lines)
+  expect_identical(res$action, "insert")
+  expect_identical(res$backend, "file")
+  expect_match(res$block_id, "^[0-9a-f]{6}$")
+  txt = readLines(f)
+  expect_identical(txt[3], paste0("# >>> gptr:", res$block_id, " model=fake/fake-1 ",
+                                  "date=2026-09-29 prompt=", prompt_hash("count rows"), " sha=",
+                                  doc_body_sha(c("n = nrow(mtcars)", "#> [1] 32"))))
+  expect_identical(txt[4:7], c("n = nrow(mtcars)", "#> [1] 32", paste0("# <<< gptr:", res$block_id),
+                               "z = 1"))
+  expect_identical(res$lines, c(3L, 6L))
+  md5 = tools::md5sum(f)
+  again = doc_upsert(utils::modifyList(site, list(regenerate = TRUE)), lines,
+                     block_id = res$block_id)
+  expect_identical(again$action, "unchanged")
+  expect_identical(tools::md5sum(f), md5)
+  rep = doc_upsert(utils::modifyList(site, list(regenerate = TRUE)),
+                   structure("n = 32", header = hdr), block_id = res$block_id)
+  expect_identical(rep$action, "replace")
+  expect_identical(readLines(f)[4], "n = 32")
+  expect_identical(nrow(doc_find_blocks(readLines(f))), 1L)
+})
+
+test_that("a hand-edited block is kept unless regenerating, and hooks can block or patch", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  body = "n = 1"
+  head = paste0("# >>> gptr:abc123 model=m prompt=", prompt_hash("count rows"), " sha=",
+                doc_body_sha(body))
+  writeLines(c("gptr(\"count rows\")", head, "n = 1 # edited by hand", "# <<< gptr:abc123"), f)
+  site = doc_file_site(f)
+  lines = structure("n = 2", header = list(model = "m", prompt = prompt_hash("count rows")))
+  expect_identical(doc_upsert(site, lines, block_id = "abc123")$action, "user-edited")
+  expect_identical(readLines(f)[3], "n = 1 # edited by hand")
+  off = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    list(block = TRUE, reason = "frozen")
+  }))
+  res = doc_upsert(utils::modifyList(site, list(regenerate = TRUE)), lines, block_id = "abc123")
+  off()
+  expect_identical(res$action, "blocked")
+  expect_identical(readLines(f)[3], "n = 1 # edited by hand")
+  off2 = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    list(lines = c(event$lines[1], "# reviewed", event$lines[-1]))
+  }))
+  res2 = doc_upsert(utils::modifyList(site, list(regenerate = TRUE)), lines, block_id = "abc123")
+  off2()
+  expect_identical(res2$action, "replace")
+  expect_identical(readLines(f)[3:4], c("# reviewed", "n = 2"))
+})
+
+test_that("a successful write appends gptr.doc_block and caches the answers in S2", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
+  site = doc_file_site(f)
+  lines = doc_block_lines(s, 1L, site, 1L)
+  attr(lines, "children") = list(n1 = list(text = "child text", session = "s1111111111",
+                                           model = "fake/fake-1", turn = 1L))
+  res = doc_upsert(site, lines)
+  ents = session_data(s)$entries
+  last = ents[[length(ents)]]
+  expect_identical(last$custom_type, "gptr.doc_block")
+  expect_identical(last$data$block, res$block_id)
+  expect_identical(last$data$action, "insert")
+  expect_identical(last$data$doc, "a.R")
+  expect_identical(last$data$backend, "file")
+  ph = prompt_hash("count rows")
+  rec = s2_get(s2_key("a.R", res$block_id, "", ph, ""))
+  expect_identical(rec$answer, "There are 32 rows.")
+  expect_identical(rec$session, session_data(s)$id)
+  expect_identical(s2_get(s2_key("a.R", res$block_id, "n1", ph, ""))$answer, "child text")
+})
+
+test_that("a document that keeps changing gives up after three attempts with a warning", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  site = doc_file_site(f)
+  testthat::local_mocked_bindings(doc_write = function(doc, lines, check = TRUE) {
+    gptr_abort("changed", "doc_write", path = doc$path, reason = "conflict")
+  })
+  res = NULL
+  expect_warning({
+    res = doc_upsert(site, structure("n = 1", header = list(model = "m")))
+  }, class = "gptr_warning_doc_conflict")
+  expect_identical(res$action, "conflict")
+})
+
+test_that("a lock held by another live process records nothing", {
+  local_project()
+  local_gptr_options(record = "auto", quiet = FALSE)
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  dir = doc_lock_dir(f)
+  dir.create(dir, recursive = TRUE)
+  writeLines(doc_lock_stamp(), file.path(dir, "pid"))
+  res = NULL
+  expect_message({
+    res = doc_upsert(doc_file_site(f), structure("n = 1", header = list()))
+  }, class = "gptr_message_notice")
+  expect_identical(res$action, "locked")
+  expect_identical(readLines(f), "gptr(\"count rows\")")
+})
+
+test_that("a format error writes nothing and falls back to the console transcript", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m"), f)
+  doc_project_transcript(".gptr/transcripts/t.R")
+  s = doc_test_session(list(doc_test_turn("n = 1")))
+  lines = doc_block_lines(s, 1L, doc_file_site(f), 1L)
+  res = doc_upsert(doc_file_site(f), lines)
+  expect_identical(res$backend, "transcript")
+  expect_identical(readLines(f), c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m"))
+  tr = readLines(file.path(getwd(), ".gptr", "transcripts", "t.R"))
+  expect_true("n = 1" %in% tr)
+})
+
+# ---- Task 9 adaptations (contract 4.6, 11.5, 10.2 row 18; IC-47, IC-74; dev/DEVIATIONS.md D-107)
+
+test_that("a block a document_write hook patched carries the sha of its body as written", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  off = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    list(lines = c(event$lines[1], "# reviewed", event$lines[-1]))
+  }))
+  withr::defer(off())
+  s = doc_test_session(list(doc_test_turn("n = 2")))
+  site = doc_file_site(f)
+  lines = doc_block_lines(s, 1L, site, 1L)
+  res = doc_upsert(site, lines)
+  expect_identical(res$action, "insert")
+  txt = readLines(f)
+  expect_identical(txt[3:4], c("# reviewed", "n = 2"))
+  sha = doc_body_sha(c("# reviewed", "n = 2"))
+  expect_identical(doc_find_blocks(txt)$header[[1L]]$sha, sha)
+  expect_identical(doc_existing_status("r", txt, res$block_id), "fresh")
+  ents = session_data(s)$entries
+  expect_identical(ents[[length(ents)]]$data$sha, sha)
+  again = doc_upsert(utils::modifyList(site, list(regenerate = TRUE)), lines,
+                     block_id = res$block_id)
+  expect_identical(again$action, "unchanged")
+  cell = doc_patch_sha(structure(c("# reviewed", "n = 2"),
+                                 meta = list(id = "abc123", prompt = "p", sha = "00000000")),
+                       "abc123")
+  expect_identical(attr(cell$lines, "meta"), list(id = "abc123", prompt = "p", sha = sha))
+  expect_identical(cell$sha, sha)
+  gone = doc_patch_sha(c("n = 2"), "abc123")
+  expect_identical(gone$lines, "n = 2")
+  expect_null(gone$sha)
+})
+
+test_that("a patched header keeps the hook's text and only its sha changes (11.5, 10.4)", {
+  body = c("# reviewed", "n = 2")
+  sha = doc_body_sha(body)
+  patch = function(head, indent = "") {
+    lines = c(head, paste0(indent, body), paste0(indent, "# <<< gptr:abc123"))
+    doc_patch_sha(lines, "abc123")$lines[1L]
+  }
+  tail = " reviewed-by=bob note=\"x sha=1\" (reviewed by bob)"
+  expect_identical(patch(paste0("  # >>> gptr:abc123 model=m prompt=\"p q\" sha=00000000", tail),
+                         "  "),
+                   paste0("  # >>> gptr:abc123 model=m prompt=\"p q\" sha=", sha, tail))
+  expect_identical(patch("# >>> gptr:abc123 model=m date=2026-09-29 prompt=p turn=3 (bob)"),
+                   paste0("# >>> gptr:abc123 model=m date=2026-09-29 prompt=p sha=", sha,
+                          " turn=3 (bob)"))
+  expect_identical(patch("# >>> gptr:abc123 x=1 (bob)"),
+                   paste0("# >>> gptr:abc123 x=1 (bob) sha=", sha))
+  expect_identical(patch("# >>> gptr:abc123"), paste0("# >>> gptr:abc123 sha=", sha))
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  off = gptr_register(gptr_hook("document_write", function(event, ctx) {
+    list(lines = c(paste(event$lines[1], "(reviewed by bob)"), "# reviewed", event$lines[-1]))
+  }))
+  withr::defer(off())
+  res = doc_upsert(doc_file_site(f), structure("n = 2", header = list(model = "m")))
+  expect_identical(res$action, "insert")
+  txt = readLines(f)
+  expect_identical(txt[2], paste0("# >>> gptr:", res$block_id, " model=m sha=", sha,
+                                  " (reviewed by bob)"))
+  expect_identical(doc_existing_status("r", txt, res$block_id), "fresh")
+})
+
+test_that("a block written to the console transcript instead is recorded under the transcript", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines(c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m"), f)
+  doc_project_transcript(".gptr/transcripts/t.R")
+  s = doc_test_session(list(doc_test_turn("n = 1")))
+  site = doc_file_site(f)
+  res = doc_upsert(site, doc_block_lines(s, 1L, site, 1L))
+  expect_identical(res$action, "insert")
+  expect_null(res$site)
+  tr = readLines(file.path(getwd(), ".gptr", "transcripts", "t.R"))
+  expect_identical(res$lines, doc_block_range("transcript", tr, res$block_id))
+  ents = session_data(s)$entries
+  rec = ents[[length(ents)]]$data
+  expect_identical(rec$doc, ".gptr/transcripts/t.R")
+  expect_identical(rec$format, "transcript")
+  expect_identical(rec$backend, "transcript")
+  ph = prompt_hash("count rows")
+  expect_identical(s2_get(s2_key(".gptr/transcripts/t.R", res$block_id, "", ph, ""))$answer,
+                   "There are 32 rows.")
+  expect_null(s2_get(s2_key("a.R", res$block_id, "", ph, "")))
+})
+
+test_that("a child without an answer is not cached in S2", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
+  site = doc_file_site(f)
+  lines = doc_block_lines(s, 1L, site, 1L)
+  attr(lines, "children") = list(
+    n1 = list(text = NA_character_, session = "s1111111111", model = "fake/fake-1", turn = 1L),
+    n2 = list(session = "s2222222222", model = "fake/fake-1", turn = 1L),
+    n3 = list(text = "third", session = "s3333333333", model = "fake/fake-1", turn = 1L)
+  )
+  res = doc_upsert(site, lines)
+  ph = prompt_hash("count rows")
+  expect_null(s2_get(s2_key("a.R", res$block_id, "n1", ph, "")))
+  expect_null(s2_get(s2_key("a.R", res$block_id, "n2", ph, "")))
+  expect_identical(s2_get(s2_key("a.R", res$block_id, "n3", ph, ""))$answer, "third")
+})
+
+test_that("a local model keeps its tag in the block and S2, and answers are redacted (IC-74)", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  ph = prompt_hash("count rows")
+  secret = "Authorization: Bearer FAKEtoken1234567890abcdef"
+  lines = structure("n = 1", header = list(model = "ollama/qwen3:8b", date = "2026-10-04",
+                                           prompt = ph),
+                    answer = secret,
+                    children = list(n1 = list(text = secret, session = "s1111111111",
+                                              model = "ollama/llama3.2:3b", turn = 1L)))
+  res = doc_upsert(doc_file_site(f), lines)
+  expect_identical(res$action, "insert")
+  expect_match(readLines(f)[2], " model=ollama/qwen3:8b ", fixed = TRUE)
+  rec = s2_get(s2_key("a.R", res$block_id, "", ph, ""))
+  expect_identical(rec$model, "ollama/qwen3:8b")
+  expect_identical(rec$answer, "Authorization: Bearer [secret:auth-header]")
+  kid = s2_get(s2_key("a.R", res$block_id, "n1", ph, ""))
+  expect_identical(kid$model, "ollama/llama3.2:3b")
+  expect_identical(kid$answer, "Authorization: Bearer [secret:auth-header]")
+  files = list.files(file.path(getwd(), ".gptr", "cache", "s2"), recursive = TRUE,
+                     full.names = TRUE)
+  expect_length(files, 2L)
+  expect_false(any(grepl("FAKEtoken", unlist(lapply(files, readLines, encoding = "UTF-8")),
+                         fixed = TRUE)))
+})
+
+test_that("a backend that no writer handles writes nothing and leaves a diagnostic", {
+  local_project()
+  local_gptr_options(record = "auto")
+  f = file.path(getwd(), "a.R")
+  writeLines("gptr(\"count rows\")", f)
+  dg = registry_env()$diag
+  old = dg$rows
+  withr::defer(assign("rows", old, envir = dg))
+  assign("rows", list(), envir = dg)
+  site = utils::modifyList(doc_file_site(f), list(backend = "fax"))
+  res = doc_upsert(site, structure("n = 1", header = list(model = "m")))
+  expect_identical(res$action, "failed")
+  expect_identical(res$backend, "fax")
+  expect_null(res$block_id)
+  expect_identical(readLines(f), "gptr(\"count rows\")")
+  d = gptr_registry(diagnostics = TRUE)
+  expect_identical(nrow(d), 1L)
+  expect_identical(c(d$source, d$event, d$class),
+                   c("builtin:documents", "document_write", "gptr_error_doc_write"))
+  expect_match(d$message, "\"fax\"", fixed = TRUE)
+})

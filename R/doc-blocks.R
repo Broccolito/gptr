@@ -1348,3 +1348,291 @@ doc_team_block_lines = function(team, site, call_ordinal) {
   structure(as.character(redact(body, "persist")), header = header, session = team,
             answer = d$last_text %||% NA_character_, children = children)
 }
+
+# ---- the writer (contract 7.15 doc_upsert(); IC-45, IC-47, IC-50, IC-51) ------------------------
+
+#' Pass the fail-closed, patchable `document_write` event (contract 10.4); returns
+#' list(block, reason, lines) with `lines` NULL when no handler changed them
+#' @noRd
+doc_event = function(path, format, kind, block_id, lines, session = NULL) {
+  res = ev_dispatch("document_write", list(path = path, format = format, kind = kind,
+                                           block_id = block_id, lines = as.character(lines)),
+                    session = session)
+  if (is.null(res)) return(list(block = FALSE, reason = NULL, lines = NULL))
+  if (identical(as.character(res$lines), as.character(lines))) res$lines = NULL
+  res
+}
+
+#' Ids of the agent blocks in a text of any format
+#' @noRd
+doc_existing_ids = function(format, text) {
+  if (identical(format, "ipynb")) {
+    ids = nb_cell_ids(nb_parse(text))
+    return(sub("^gptr-", "", ids[!is.na(ids) & startsWith(ids, "gptr-")]))
+  }
+  doc_find_blocks(text)$id
+}
+
+#' Status of an existing block by id, ignoring prompts (user-edited or undone detection)
+#' @noRd
+doc_existing_status = function(format, text, id) {
+  if (identical(format, "ipynb")) {
+    nb = nb_parse(text)
+    k = match(paste0("gptr-", id), nb_cell_ids(nb))
+    if (is.na(k)) return(NA_character_)
+    cell = nb[["cells"]][[k]]
+    return(doc_block_status(cell[["metadata"]][["gptr"]] %||% list(), nb_cell_lines(cell)))
+  }
+  b = doc_find_blocks(text)
+  k = which(b$id == id)
+  if (!length(k)) return(NA_character_)
+  doc_block_status(b$header[[k[1L]]], doc_block_body(text, b[k[1L], , drop = FALSE]))
+}
+
+#' Line range of a block in a text (a cell index for notebooks), or NULL
+#' @noRd
+doc_block_range = function(format, text, id) {
+  if (identical(format, "ipynb")) {
+    k = match(paste0("gptr-", id), nb_cell_ids(nb_parse(text)))
+    return(if (is.na(k)) NULL else c(k, k))
+  }
+  b = doc_find_blocks(text)
+  k = which(b$id == id)
+  if (length(k)) c(b$start[k[1L]], b$end[k[1L]]) else NULL
+}
+
+#' The sha of a block that a document_write hook patched is that of its body as written (contract
+#' 11.5: "of the body lines as last written"), so gptr's own write never reads as a hand edit: in
+#' a notebook cell's metadata (`meta` attribute), else in the header of the one marker block with
+#' this id that the lines hold. Returns list(lines, sha); `sha` is NULL (lines unchanged) when the
+#' patched lines hold no such block.
+#' @noRd
+doc_patch_sha = function(lines, id) {
+  meta = attr(lines, "meta", exact = TRUE)
+  if (is.list(meta)) {
+    sha = doc_body_sha(lines)
+    attr(lines, "meta") = nb_put(meta, "sha", sha)
+    return(list(lines = lines, sha = sha))
+  }
+  b = doc_find_blocks(lines)
+  if (nrow(b) != 1L || !identical(b$id, id) || isTRUE(attr(b, "malformed"))) {
+    return(list(lines = lines, sha = NULL))
+  }
+  sha = doc_body_sha(doc_block_body(lines, b))
+  lines[b$start] = doc_header_set_sha(lines[b$start], sha)
+  list(lines = lines, sha = sha)
+}
+
+#' Set the sha of a block header line and leave the rest of its text as written (a hook's free
+#' text, key spelling, order and quoting): each `sha=` pair that doc_parse_kv() reads gets the
+#' new value; without one, `sha=` goes after the last model/date/prompt pair (the order of
+#' contract 11.5), else at the end of the line
+#' @noRd
+doc_header_set_sha = function(line, sha) {
+  line = as_utf8(line)
+  kv = regmatches(line, regexec(doc_re_open, line, perl = TRUE))[[1L]][4L]
+  if (is.na(kv)) kv = ""
+  lead = substr(line, 1L, nchar(line) - nchar(kv))
+  at = gregexpr(doc_re_kv, kv, perl = TRUE)
+  pairs = regmatches(kv, at)[[1L]]
+  keys = sub("=.*$", "", pairs)
+  new = paste0("sha=", sha)
+  if (any(keys == "sha")) {
+    pairs[keys == "sha"] = new
+  } else {
+    before = which(keys %in% doc_header_keys[seq_len(match("sha", doc_header_keys) - 1L)])
+    if (!length(before)) return(paste0(sub("[ \t]+\\z", "", line, perl = TRUE), " ", new))
+    k = max(before)
+    pairs[k] = paste0(pairs[k], " ", new)
+  }
+  regmatches(kv, at) = list(pairs)
+  paste0(lead, kv)
+}
+
+#' Choose the block id, fill it into the body, render, and pass the document_write event:
+#' list(id, rendered, action, sha, prompt) or list(skip = <reason>, id)
+#' @noRd
+doc_prepare = function(fmt, site, up, text, taken = character()) {
+  loc = fmt$locate(text, site)
+  existing = doc_existing_ids(site$format, text)
+  id = up$block_id
+  replace = !is.null(id) && id %in% existing
+  if (is.null(id) && !is.null(loc$owned) && isTRUE(site$regenerate)) {
+    id = loc$owned$id
+    replace = TRUE
+  }
+  if (!replace && (is.null(loc$stmt) || !isTRUE(loc$top_level)) && !isTRUE(site$console)) {
+    return(list(skip = "not-found", id = id))
+  }
+  if (replace && !isTRUE(site$regenerate) &&
+      identical(doc_existing_status(site$format, text, id), "user-edited")) {
+    return(list(skip = "user-edited", id = id))
+  }
+  if (!replace) id = id_block(c(existing, taken))
+  body = gsub(doc_block_token, id, as.character(up$lines), fixed = TRUE)
+  header = up$header
+  header$sha = doc_body_sha(body)
+  rendered = fmt$render(list(id = id, header = header, body = body), site)
+  kind = if (isTRUE(site$console)) "transcript" else "block"
+  ev = doc_event(site$path, site$format, kind, id, rendered, up$session)
+  if (isTRUE(ev$block)) return(list(skip = "blocked", id = id, reason = ev$reason))
+  sha = header$sha
+  if (!is.null(ev$lines)) {
+    patched = as.character(ev$lines)
+    attributes(patched) = attributes(rendered)
+    fixed = doc_patch_sha(patched, id)
+    rendered = fixed$lines
+    sha = fixed$sha %||% sha
+  }
+  status = if (replace && !is.null(loc$owned) && identical(loc$owned$id, id)) loc$owned$status
+  action = if (!replace) "insert" else if (identical(status, "stale")) "stale-regenerate" else
+    "replace"
+  list(id = id, rendered = rendered, action = action, sha = sha, prompt = header$prompt)
+}
+
+#' Insert or replace a call's block through the site's backend (contract 7.15): checks write
+#' consent first (IC-45; otherwise nothing is written), passes `document_write` (fail closed,
+#' patchable), md5 conflict checks with re-locate and retry. Each backend's writer has its own
+#' branch: `file` and `transcript` sites are written on disk here; a backend that no writer
+#' handles is refused (a diagnostic and the transcript fallback), never written to disk.
+#' Returns list(action, block_id, lines, backend) invisibly.
+#' @noRd
+doc_upsert = function(site, block_lines, block_id = NULL) {
+  none = list(action = "none", block_id = NULL, lines = NULL, backend = NULL)
+  if (is.null(site) || is.null(site$path)) return(invisible(none))
+  fmt = doc_format_get(site$format %||% doc_format_of(site$path))
+  if (is.null(fmt)) return(invisible(none))
+  if (!doc_consent(site$path)) {
+    rel = doc_rel(site$path)
+    gptr_inform(paste0("gptr did not record into ", rel, ": no write consent. Call gptr_doc(\"",
+                       rel, "\") or set options(gptr.record = \"auto\") to record."), "notice",
+                .once = paste0("doc_consent:", path_key(site$path)))
+    return(invisible(none))
+  }
+  up = list(block_id = block_id %||% site$block_id, lines = as.character(block_lines),
+            header = attr(block_lines, "header") %||% list(),
+            session = attr(block_lines, "session"))
+  backend = site$backend %||% "file"
+  res = tryCatch({
+    if (backend %in% c("file", "transcript")) {
+      doc_file_upsert(fmt, site, up)
+    } else {
+      gptr_abort(paste0("No document writer handles the backend \"", backend, "\"."),
+                 "doc_write", path = site$path, reason = "backend")
+    }
+  }, error = function(e) {
+    registry_diagnostic("builtin:documents", "document_write", class(e)[1L],
+                        conditionMessage(e))
+    doc_upsert_fallback(site, up, backend)
+  })
+  written = res$site %||% site
+  res$site = NULL
+  if (!is.null(res$block_id) && res$action %in% c("insert", "replace", "stale-regenerate")) {
+    doc_after_write(written, res, block_lines)
+  }
+  invisible(res)
+}
+
+#' A format error writes nothing to the document and records the block in the console
+#' transcript instead, when there is one (contract 10.2 row 18). A block written there carries
+#' the transcript's site (`site`), so its `gptr.doc_block` entry, S2 answers and source log name
+#' the document that holds it.
+#' @noRd
+doc_upsert_fallback = function(site, up, backend) {
+  failed = list(action = "failed", block_id = NULL, lines = NULL, backend = backend)
+  if (isTRUE(site$console)) return(failed)
+  target = tryCatch(doc_transcript_target(ask = FALSE), error = function(e) NULL)
+  if (is.null(target) || identical(path_key(target), path_key(site$path)) ||
+      !identical(doc_format_of(target), "r")) {
+    return(failed)
+  }
+  s = up$session
+  tsite = doc_console_site(session_id = if (is.null(s)) NULL else session_data(s)$id,
+                           template = site$template)
+  if (is.null(tsite)) return(failed)
+  up$block_id = NULL
+  res = tryCatch(doc_file_upsert(doc_format_get("transcript"), tsite, up),
+                 error = function(e) failed)
+  if (!is.null(res$block_id)) res$site = tsite
+  res
+}
+
+#' Disk upsert under the document lock with md5 conflict checks and three attempts (IC-51)
+#' @noRd
+doc_file_upsert = function(fmt, site, up) {
+  path = site$path
+  backend = if (isTRUE(site$console)) "transcript" else "file"
+  lock = doc_lock(path)
+  if (is.null(lock)) {
+    gptr_inform(paste0("Another R process is writing ", doc_rel(path),
+                       "; this block was not recorded."), "notice")
+    return(list(action = "locked", block_id = NULL, lines = NULL, backend = backend))
+  }
+  on.exit(doc_unlock(lock), add = TRUE)
+  prep = NULL
+  for (attempt in 1:3) {
+    doc = doc_read_or_new(path)
+    prep = doc_prepare(fmt, site, up, doc$lines)
+    if (!is.null(prep$skip)) {
+      return(list(action = prep$skip, block_id = prep$id, lines = NULL, backend = backend))
+    }
+    new = fmt$upsert(doc$lines, site, prep$rendered, prep$id)
+    if (identical(new, doc$lines)) {
+      return(list(action = "unchanged", block_id = prep$id, lines = NULL, backend = backend))
+    }
+    ok = tryCatch({
+      doc_write(doc, new)
+      TRUE
+    }, gptr_error_doc_write = function(e) {
+      if (identical(e$reason, "conflict")) FALSE else stop(e)
+    })
+    if (ok) {
+      return(list(action = prep$action, block_id = prep$id, backend = backend,
+                  lines = doc_block_range(site$format, new, prep$id), sha = prep$sha,
+                  prompt = prep$prompt))
+    }
+  }
+  gptr_warn(paste0("The document ", doc_rel(path), " kept changing on disk; block ", prep$id,
+                   " was not written (the session log has it)."), "doc_conflict")
+  list(action = "conflict", block_id = NULL, lines = NULL, backend = backend)
+}
+
+#' After a write: the `gptr.doc_block` entry, the S2 answers (the block's and those of its
+#' children that answered, IC-47) and the gptr_source() log. A child without an answer is not
+#' cached, as the block's own answer is not: a replay of its call is then a miss.
+#' @noRd
+doc_after_write = function(site, res, block_lines) {
+  header = attr(block_lines, "header") %||% list()
+  s = attr(block_lines, "session")
+  rel = doc_rel(site$path)
+  if (!is.null(s)) {
+    data = list(doc = rel, format = site$format, block = res$block_id, action = res$action,
+                prompt = header$prompt, sha = res$sha,
+                lines = if (length(res$lines)) I(as.integer(res$lines)) else NULL,
+                backend = res$backend)
+    tryCatch(session_append(s, list(type = "custom", custom_type = "gptr.doc_block",
+                                    data = data[!vapply(data, is.null, NA)])),
+             error = function(e) NULL)
+  }
+  ph = header$prompt %||% ""
+  ah = header$args %||% ""
+  answer = attr(block_lines, "answer")
+  if (length(answer) && !is.na(answer[1L])) {
+    s2_put(s2_key(rel, res$block_id, "", ph, ah),
+           list(block = res$block_id, doc = rel, part = "", prompt = ph, model = header$model,
+                answer = answer[1L], usage = header$tokens, cost = header$cost,
+                session = header$session, turn = header$turn, date = header$date))
+  }
+  kids = attr(block_lines, "children") %||% list()
+  for (nm in names(kids)) {
+    k = kids[[nm]]
+    text = k[["text"]]
+    if (!length(text) || is.na(text[1L])) next
+    rec = list(block = res$block_id, doc = rel, part = nm, prompt = ph, model = k$model,
+               answer = text[1L], session = k$session, turn = k$turn %||% 1L,
+               date = header$date, sent = k$sent)
+    s2_put(s2_key(rel, res$block_id, nm, ph, ah), rec[!vapply(rec, is.null, NA)])
+  }
+  doc_source_log(site$path, res$block_id, if (isTRUE(site$regenerate)) "regenerated" else "ran")
+  invisible(NULL)
+}

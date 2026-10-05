@@ -6825,7 +6825,7 @@ test file red `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 337 ]` (`task6-fix3-red.log`), 
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 357 ]` (`task6-fix3-green.log`; the adaptation tests now add
 148).
 
-## D-106 - P20 cli-codex adapter: Codex's unreported cost and usage stay unknown, the turn cap is always a whole number, a late or aborted wall clock follows the claude adapter, no R condition escapes the normaliser, malformed events are read by their JSON types, and the Windows sandbox probe caches only answers (2026-10-04)
+## D-106 - P20 cli-codex adapter: Codex's unreported cost and usage stay unknown, the turn cap is always a whole number, a late or aborted wall clock follows the claude adapter, no R condition escapes the normaliser, malformed events are read by their JSON types, the Windows sandbox probe caches answers and timeouts only, and the control-file check never fails an exec (2026-10-04)
 
 P20 Task 7's plan-literal `R/cli-codex.R` changed in six ways (item 6 also in one line of P20
 Task 2's `pcli_version_forget()` in `R/cli-common.R`). The plan's thirteen tests, its test
@@ -6870,12 +6870,33 @@ support (`stub_mcp_handle()`, `local_mcp_stub()`) and its five fixtures are verb
    by position. They are now read only with the 08 section 3.9 types (`pcli_codex_chr()`,
    `pcli_codex_why()`): anything else is ignored or unknown, and a `file_change` lists only the
    paths it names.
-6. **The Windows sandbox probe caches only answers.** `pcli_codex_windows_ready()` cached a run
-   that could not start or timed out as "not ready" for the rest of the process, and
-   `gptr_providers(check = TRUE)` never probed again. As for the other probes (D-095 item 1), a
-   run without an exit status now counts as not ready for this exec only and is not cached, and
-   `pcli_version_forget()` drops the cached answer with the capability probe. The probe command
+6. **The Windows sandbox probe caches answers and timeouts only.** `pcli_codex_windows_ready()`
+   cached a run that could not start as "not ready" for the rest of the process, and
+   `gptr_providers(check = TRUE)` never probed again. A run that could not start or ended
+   without an exit status now counts as not ready for this exec only and is not cached (as for
+   the other probes, D-095 item 1). A run that timed out is still cached as not ready, as in the
+   plan (review round 1): `build()` runs the probe synchronously, so asking again would hold
+   every auto-mode exec for the 60 s timeout. `pcli_version_forget()` drops the cached answer
+   with the capability probe, so `gptr_providers(check = TRUE)` asks again. The probe command
    itself stays UNCERTAIN (plan self-review ambiguity 9; nothing ran on Windows).
+7. **The control-file check never fails an exec, and runs once Codex is stopped (review round
+   1; contract 8.1, IC-54, IC-65).** The plan's `pcli_control_hash()` hashed every listed entry
+   with `hash_file()`, which fails on a symbolic link whose target is gone (the recursive listing
+   of `.git/hooks`, `.gptr/extensions`, `plugins` and `agents` keeps those) and on a file gptr
+   cannot read. Every `workspace-write` exec in such a project then failed in `build()`, a
+   completed answer became an `internal` error at `turn.completed`, and in the wall-clock
+   callback (the one normaliser entry point P05 does not call) the error reached only the
+   reactor's diagnostic: no terminal event, the exec left open and Codex running without its
+   timer. Now each entry is hashed on its own (`pcli_control_digest()`); one that cannot be
+   hashed gets a marker that still changes with it (`link:<target>`, else
+   `unreadable:<size> <modification time>`), and a fixed control path that is a dangling link is
+   listed too. A check that fails anyway gives no paths and its reason
+   (`pcli_codex_after()`), so the exec ends with its terminal event and the
+   `gptr_warning_cli_sandbox` warning says the files were not checked. The wall clock is wrapped
+   as `push()` is (`internal` terminal event, Codex stopped). When gptr stops an exec (turn cap,
+   wall clock, an aborted run, an R error in `push()` or the wall clock) it stops Codex before it
+   checks the control files and before the terminal event, so nothing Codex writes between the
+   check and the kill goes unreported and P06's done callback finds the child gone.
 
 Not changed and recorded here (D-019 item 5): the prompt goes to Codex through P05's
 `write_all()`; a fresh thread's prompt carries gptr's instructions and the earlier conversation,
@@ -6883,9 +6904,127 @@ so it is not bounded and on Windows the write blocks until Codex has read it (Co
 the end before it starts the turn, so the expected effect is a short pause; not verified on
 Windows).
 
-Validation: `progress/P20.md`, Task 7. Seven tests added (+79 expectations). Against the
+Validation: `progress/P20.md`, Task 7. Twelve tests added (+118 expectations). Against the
 plan-literal source the plan's tests pass (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 71 ]`,
-`dev/.validation/P20/task7-plan-literal.log`) and the added tests fail
-(`[ FAIL 22 | WARN 4 | SKIP 0 | PASS 95 ]`, `task7-adapt-red.log`); final `^cli-codex$`
-`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 150 ]` (`task7-green.log`), so every later plan count for
-`test-cli-codex.R` is 79 higher.
+`dev/.validation/P20/task7-plan-literal.log`) and the first seven added tests fail
+(`[ FAIL 22 | WARN 4 | SKIP 0 | PASS 95 ]`, `task7-adapt-red.log`); the five of review round 1
+(and the probe test's new timeout case) failed against the round-0 source
+(`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 155 ]`, `task7-fix1-red.log`; the unreadable-file test
+`[ FAIL 2 | WARN 0 | SKIP 0 | PASS 178 ]` with the round-0 `pcli_control_hash()`,
+`task7-fix1-red-unreadable.log`); final `^cli-codex$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 189 ]`
+(`task7-fix1-green.log`), so every later plan count for `test-cli-codex.R` is 118 higher on
+macOS and Linux (the two symbolic-link and permission tests skip where those are unavailable).
+
+## D-107 - P15 writer: a block a document_write hook patched carries the sha of its body as written, a block the transcript fallback wrote is recorded under the transcript, a child without an answer is not cached in S2, and a backend no writer handles writes nothing (2026-10-04)
+
+P15 Task 9's plan-literal writer (`R/doc-blocks.R`: `doc_upsert()`, `doc_prepare()`,
+`doc_upsert_fallback()`, `doc_after_write()`) changed in four ways. The interface of contract 7.15
+(`doc_upsert(site, block_lines, block_id = NULL)` -> `list(action, block_id, lines, backend)`) and
+the helpers the plan lists are unchanged; two internal helpers are new, `doc_patch_sha(lines, id)`
+and `doc_header_set_sha(line, sha)`.
+
+1. **A patched block's `sha=` is that of its body as written** (contract 11.5: `sha` is the
+   "first 8 hex of sha256 of the body lines as last written"). The plan rendered the block with
+   the sha of the body it was given and wrote whatever a `document_write` hook returned in its
+   place, so a hook that added a line (the plan's own `# reviewed` test) left a block whose sha
+   did not match its body: gptr's own write read as a hand edit at once (`user-edited`), so a
+   later stale prompt replayed the old block instead of regenerating it, and the
+   `gptr.doc_block` entry named the pre-patch sha. `doc_patch_sha()` now recomputes it after a
+   patch: in a notebook cell's `metadata.gptr` (the `meta` attribute of the rendered lines),
+   else in the header line of the one marker block with that id that the patched lines hold;
+   when the patch holds no such block nothing is changed. In a header only the value of each
+   `sha=` pair that `doc_parse_kv()` reads changes (`doc_header_set_sha()`): the hook may patch
+   the lines (contract 10.4) and 11.5 allows any text after the id, so its free text, key
+   spelling, order and quoting stay as written (review round 1: a rebuild with
+   `doc_format_kv()` dropped `(reviewed by bob)` and wrote `reviewed-by=bob` back as `by=bob`).
+   A header without `sha=` gets one after its last `model`/`date`/`prompt` pair (the 11.5
+   order), else at the end of the line. The entry and the result carry the new sha.
+2. **A block the transcript fallback wrote is recorded under the transcript** (contract 4.6
+   `gptr.doc_block` `doc`; 10.2 row 18). After a format error the plan wrote the block into the
+   console transcript but then recorded it under the original document: the entry said
+   `doc = "a.R"`, `format = "r"`, `backend = "transcript"`, the S2 answers were keyed by `a.R`
+   (where no block has that id, so replaying the transcript missed them) and the
+   `gptr_source()` log of `a.R` got the transcript's block. Task 13's `session_tree` hook reads
+   `data$doc` to make rewound blocks inert and appends its `# /rewind` note to every `doc` with
+   `backend = "transcript"`: with the plan literal a rewind would have left the transcript block
+   live and appended a transcript note to the user's script. `doc_upsert_fallback()` now returns
+   the transcript's site with a written block (`res$site`, removed from the result before it is
+   returned) and `doc_after_write()` records the entry, the S2 answers and the source log there.
+3. **A child without an answer is not cached in S2** (IC-47). Team children without a report
+   keep `NA` text (D-068 item 8) and a nested child may have none; the plan cached `k$text %||%
+   ""`, so such a child was stored as a text (`NA` or empty) that a replay would return as the
+   child's answer. It is now skipped, as the block's own answer is when it is `NA`: replaying
+   that call is a miss (`auto` runs it, `replay` errors `not_recorded`).
+4. **A backend no writer handles writes nothing.** The plan dispatched `pending`/`deferred` to
+   `doc_pending_add()` (Task 10), `rstudio`/`positron`/`vscode` to `doc_ide_upsert()` (Task 11)
+   and every other backend, unknown ones included, to the disk writer. The two writers do not
+   exist yet, and naming them now fails the package lint (`object_usage_linter`: no visible
+   global function definition, `dev/.validation/P15/task9-lint-plan-literal.log`) while
+   suppressions and stubs are not allowed. Task 9 writes `file` and `transcript` sites and
+   refuses any other backend with `gptr_error_doc_write` (`reason = "backend"`), which the
+   writer's handler turns into a diagnostic and the transcript fallback, as the plan literal did
+   at run time for the missing functions. **Task 10 adds the `pending`/`deferred` branch
+   (`doc_pending_add(fmt, site, up, backend)`) and Task 11 the `rstudio`/`positron`/`vscode`
+   branch (`doc_ide_upsert(fmt, site, up)`) before that refusal**, which then still refuses an
+   unknown backend (the plan would have written a misspelt backend to disk, an open notebook
+   included). No caller reaches `doc_upsert()` before Task 13.
+
+IC-74 (07 section 6, P15 row): consent is checked first; the S2 records keep the model tag of
+the block (`ollama/qwen3:8b`) and of each child and hold the answers redacted by `s2_put()`; the
+writer calls no provider. Chat answers carry no model digest, so there is none to keep.
+
+Validation: `progress/P15.md`, Task 9. Six tests added (+43 expectations); the plan's six tests
+are verbatim. Against the plan-literal source the plan's tests pass and the added ones fail
+`[ FAIL 17 | WARN 0 | SKIP 0 | PASS 313 ]` (`dev/.validation/P15/task9-plan-literal.log`; the
+IC-74 test passes, coverage only); final `^doc-blocks$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 340 ]`
+(`task9-fix1-green.log`), so every later plan count for `test-doc-blocks.R` is 43 higher than the
+plan's (on top of the earlier D-062 and D-068 additions).
+
+## D-108 - P08 gptr_config() and gptr_init(): a project scope never stores a relaxed local_only, protected settings are written only as whole objects, a malformed filter is refused before anything is written, identifier refusals name the setting, the scope is one string, and the templates and the .Rbuildignore line are written as LF lines (2026-10-04)
+
+P08 Task 7's literal `gptr_config()`, `gptr_init()` and helpers (`R/gptr-config.R`) predate IC-74
+and the implemented Task 3-6 interfaces. Behaviours that differ from the plan literal:
+
+1. **A project scope never takes `providers.<id>.local_only = FALSE` (IC-74; 07-local-ollama.md
+   section 5: "Only an explicit human user/session configuration can relax it; project settings
+   ... cannot"; Task 3 obligation in `progress/P08.md`).** Contract 6.2 stores a project value
+   that would loosen a `tighten` setting and never applies it. For the protected local-only
+   control `gptr_config()` refuses it instead (`gptr_error_invalid_argument`, `arg = ".scope"`,
+   naming `.scope = "user"` or `"session"`), so nothing that looks like a relaxation lands in a
+   shared project file, where the layers (D-094 item 1) would ignore it silently. `TRUE` and
+   other provider fields are still written; the user and session scopes relax it as before;
+   model code is refused at every scope by `control_check()` (IC-53).
+2. **`providers` and `egress` are written only as whole objects.** A dotted name below them
+   (`providers.ollama.local_only`, `egress.corp`) is a known key only when an extension
+   registers a `setting` spec of that name; the layers never read such a key from a file
+   (D-094 item 9) and the spec's own `validate` would replace the core one. `gptr_config()`
+   refuses it at every scope (`arg` = the key), as `.opts` refuses these namespaces (D-102
+   item 2).
+3. **A malformed filter is refused before anything is written (04 10.1).** The plan wrote the
+   scope first and then called P02's `registry_filters_set()`, which raised for a malformed
+   filter after the session layer already held it (Task 9 merges call filters into that list),
+   while a user or project file kept it and only a notice followed. The form check of P02's
+   `registry_filter_rx` now runs with the other value checks; P02's refusals (IC-53) stay
+   diagnostics.
+4. **Identifier refusals name the setting.** Task 6's `resolve_identifier()` serves
+   `small_model` and `system1` directly (same pool as `model`), so `settings_ident()` passes the
+   key; the plan mapped them to `"model"`, so `gptr_config(small_model = 3)` reported
+   `arg = "model"`.
+5. **`.scope` is one string.** P01's `check_choice()` takes the whole vector of choices as its
+   first element, so `.scope = c("session", "project", "user")` silently meant `"session"`;
+   Task 5's `gateway_choice()` is used instead.
+6. **LF lines.** `template_copy()` reads the installed template as text and writes it with
+   `write_atomic()` (LF, final newline; contract 11), so a template checked out with CRLF line
+   endings is not copied byte for byte. `init_rbuildignore()` writes the lines themselves; the
+   plan pasted a final newline into the text that `write_atomic()` ends with another one, leaving
+   a blank last line in `.Rbuildignore`.
+
+The Task 4 temporary skip (D-099 item 8) is removed: the egress hint test now evaluates the hint
+through `gptr_config()`.
+
+Validation: `progress/P08.md`, Task 7. Red (no Task 7 code) `^gptr-config$`
+`[ FAIL 20 | WARN 0 | SKIP 1 | PASS 359 ]` (`dev/.validation/P08/task7-red.log`, all
+`could not find function`); against the plan-literal source
+`[ FAIL 42 | WARN 0 | SKIP 1 | PASS 410 ]` (`task7-red-adaptations-against-plan-literal.log`,
+every failure in the six adaptation tests); green `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 464 ]`
+(`task7-green.log`; the skip is P11's `gptr_permissions()` leg).
