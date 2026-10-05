@@ -1,0 +1,19 @@
+---
+title: "Project instructions"
+output: html_document
+---
+
+<!-- gptr reads this file as project instructions: text only, nothing here is executed.
+     Keep it short. To reuse an existing file, write its name on a line of its own: @AGENTS.md -->
+
+## Data
+
+- Where the main data sets live, how they are loaded and how large they are.
+
+## Conventions
+
+- Coding style, preferred packages, naming rules, units.
+
+## Do not
+
+- Things the agent must never do in this project.

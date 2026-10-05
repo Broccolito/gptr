@@ -817,10 +817,7 @@ test_that("a first non-interactive use without an acknowledgement is gptr_error_
   expect_length(parse(text = cnd$how_to_ack), 1L)
 })
 
-# The hint calls gptr_config(), which P08 Task 7 adds; Task 7 removes this skip.
 test_that("following the egress hint keeps the acknowledgements already given", {
-  skip_if_not(exists("gptr_config", envir = asNamespace("gptr"), inherits = FALSE),
-              "gptr_config() arrives with P08 Task 7")
   local_gw()
   cnd = expect_error(egress_check("corp"), class = "gptr_error_egress")
   settings_write("user", list(egress = list(anthropic = "ack")))
@@ -1037,4 +1034,365 @@ test_that("an acknowledgement another process records meanwhile is kept (IC-71)"
   })
   expect_invisible(egress_check("corp"))
   expect_identical(settings_read("user")$egress, list(anthropic = "ack", corp = "ack"))
+})
+
+# ------------------------------------------------------------- Task 7: gptr_config(), gptr_init()
+
+test_that("gptr_config() without arguments returns the effective settings", {
+  local_gw()
+  cfg = gptr_config()
+  expect_s3_class(cfg, "gptr_config")
+  expect_identical(cfg$mode, "manual")
+})
+
+test_that("gptr_config() takes bare identifiers and returns the previous values", {
+  local_gw(workspace = FALSE)
+  old = gptr_config(mode = plan)
+  expect_null(old$mode)
+  expect_identical(gptr_config()$mode, "plan")
+  expect_identical(settings_read("session")$mode, "plan")
+  gptr_config(mode = old$mode)
+  expect_identical(gptr_config()$mode, "manual")
+})
+
+test_that("gptr_config(.scope = NULL) writes the project file when a workspace exists (IC-71)", {
+  local_gw()
+  gptr_config(mode = manual)
+  expect_identical(settings_read("project")$mode, "manual")
+  expect_null(settings_read("session")$mode)
+})
+
+test_that("gptr_config() validates keys, scopes and values", {
+  local_gw()
+  expect_error(gptr_config(nope = 1), class = "gptr_error_invalid_argument")
+  expect_error(gptr_config(egress = list(a = "ack"), .scope = "session"),
+               class = "gptr_error_invalid_argument")
+  expect_error(gptr_config(mode = fast, .scope = "session"), class = "gptr_error_invalid_argument")
+  expect_error(gptr_config(plot = 3, .scope = "session"), class = "gptr_error_invalid_argument")
+  gptr_config(egress = list(corp = "ack"), .scope = "user")
+  expect_identical(settings_get("egress")$corp, "ack")
+})
+
+test_that("gptr_config(filters = ) applies the scope's filters to the registry (04 10.1)", {
+  local_gw(workspace = FALSE)
+  box = new.env()
+  local_mocked_bindings(
+    registry_filters_set = function(filters, scope = c("session", "user", "project")) {
+      box$args = list(filters = filters, scope = scope)
+      invisible(filters)
+    })
+  gptr_config(filters = "-builtin:mcp", .scope = "session")
+  expect_identical(box$args, list(filters = "-builtin:mcp", scope = "session"))
+  gptr_config(filters = NULL, .scope = "session")
+  expect_identical(box$args, list(filters = character(), scope = "session"))
+})
+
+test_that("user and trusted project filters reach the registry once per change (04 10.1)", {
+  proj = local_gw()
+  st = gateway_state()
+  old = st$filters_applied
+  withr::defer({
+    st$filters_applied = old
+  })
+  st$filters_applied = NULL
+  box = new.env()
+  box$calls = list()
+  local_mocked_bindings(
+    registry_filters_set = function(filters, scope = c("session", "user", "project")) {
+      box$calls = c(box$calls, list(list(filters = filters, scope = scope)))
+      invisible(filters)
+    })
+  settings_write("user", list(filters = "-builtin:mcp"))
+  settings_write("project", list(filters = "-plugin:panel"))
+  gateway_filters_sync()
+  # the project is untrusted, so its filters do not apply (IC-52)
+  expect_identical(box$calls, list(list(filters = "-builtin:mcp", scope = "user")))
+  gateway_filters_sync()
+  expect_length(box$calls, 1L)
+  gptr_trust(proj, TRUE)
+  gateway_filters_sync()
+  expect_identical(box$calls[[2L]], list(filters = "-plugin:panel", scope = "project"))
+  gptr_config(filters = NULL, .scope = "user")
+  expect_identical(box$calls[[3L]], list(filters = character(), scope = "user"))
+  expect_length(box$calls, 3L)
+})
+
+test_that("gptr_config() is refused from model code during a run (IC-53)", {
+  local_gw()
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  expect_error(gptr_config(mode = auto, .scope = "session"), class = "gptr_error_permission")
+  expect_null(settings_read("session")$mode)
+})
+
+test_that("the run$signal$control token check (shared with P11) refuses model code (IC-53)", {
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  cnd = expect_error(control_check("gptr_permissions"), class = "gptr_error_permission")
+  expect_identical(cnd$action, "gptr_permissions")
+})
+
+test_that("a model-code gptr_permissions() call during a run is refused (IC-53, P11)", {
+  skip_if_not(exists("gptr_permissions", mode = "function"), "gptr_permissions() arrives with P11")
+  local_gw()
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  expect_error(gptr_permissions(allow = "r(level<=3)"), class = "gptr_error_permission")
+})
+
+test_that("gptr_init() is refused from model code during a run (IC-53)", {
+  local_gw(workspace = FALSE)
+  d = withr::local_tempdir()
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  expect_error(gptr_init(d), class = "gptr_error_permission")
+  expect_false(dir.exists(file.path(d, ".gptr")))
+})
+
+test_that("gptr_init() without a path needs someone to answer", {
+  local_gw(workspace = FALSE)
+  expect_error(gptr_init(), class = "gptr_error_noninteractive")
+})
+
+test_that("gptr_init(path) writes the templates once and never overwrites them", {
+  local_gw(workspace = FALSE)
+  d = withr::local_tempdir()
+  ws = gptr_init(d)
+  expect_identical(ws, path_norm(file.path(d, ".gptr")))
+  expect_setequal(list.files(ws, all.files = TRUE, no.. = TRUE),
+                  c(".gitignore", "agents", "prompts", "settings.json", "skills", "vignette.Rmd"))
+  settings = json_decode(paste(readLines(file.path(ws, "settings.json"), encoding = "UTF-8"),
+                               collapse = "\n"))
+  expect_identical(settings, list(version = 1L, mode = "manual", record = "ask"))
+  expect_true("sessions/" %in% readLines(file.path(ws, ".gitignore"), encoding = "UTF-8"))
+  writeLines("{}", file.path(ws, "settings.json"))
+  gptr_init(d)
+  expect_identical(readLines(file.path(ws, "settings.json"), encoding = "UTF-8"), "{}")
+})
+
+test_that("gptr_init() in a package source offers the .Rbuildignore line, never writes it", {
+  local_gw(workspace = FALSE)
+  d = withr::local_tempdir()
+  writeLines(c("Package: toy", "Version: 0.1.0"), file.path(d, "DESCRIPTION"))
+  local_gptr_options(quiet = FALSE)
+  expect_message(gptr_init(d), class = "gptr_message_notice")
+  expect_false(file.exists(file.path(d, ".Rbuildignore")))
+})
+
+test_that("gptr_init() refuses a .gptr that is not a directory", {
+  local_gw(workspace = FALSE)
+  d = withr::local_tempdir()
+  writeLines("x", file.path(d, ".gptr"))
+  expect_error(gptr_init(d), class = "gptr_error_workspace")
+})
+
+test_that("with a human, gptr_init() asks to create the workspace and then about trust", {
+  proj = local_gw(workspace = FALSE)
+  local_gptr_options(interactive = TRUE)
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
+  ws = gptr_init()
+  expect_true(dir.exists(file.path(proj, ".gptr")))
+  expect_true(gptr_trust(proj))
+  d = withr::local_tempdir()
+  gptr_init(d)
+  expect_true(isTRUE(trust_record(d)$trusted))
+})
+
+# Task 7 adaptations (see dev/progress/P08.md, Task 7).
+
+test_that("a project never relaxes the protected local-only control by gptr_config() (IC-74)", {
+  local_gw()
+  # .scope = NULL is the project here: a project cannot turn local-only inference off (07 s. 5)
+  cnd = expect_error(gptr_config(providers = list(ollama = list(local_only = FALSE))),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, ".scope")
+  expect_match(conditionMessage(cnd), ".scope = \"user\"", fixed = TRUE)
+  expect_error(gptr_config(providers = list(ollama = list(models = "m"),
+                                            lmstudio = list(local_only = FALSE)),
+                           .scope = "project"), class = "gptr_error_invalid_argument")
+  expect_null(settings_read("project")$providers)
+  expect_true(settings_local_only("ollama"))
+  # model code cannot do it at any scope (IC-53)
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  expect_error(gptr_config(providers = list(ollama = list(local_only = FALSE)), .scope = "user"),
+               class = "gptr_error_permission")
+  local_mocked_bindings(run_current = function() NULL)
+  expect_null(settings_read("user")$providers)
+  expect_true(settings_local_only("ollama"))
+  # the human's user and session scopes can; a project may still tighten it
+  old = gptr_config(providers = list(ollama = list(local_only = FALSE)), .scope = "user")
+  expect_identical(old, list(providers = NULL))
+  expect_false(settings_local_only("ollama"))
+  gptr_config(providers = list(ollama = list(local_only = TRUE)), .scope = "session")
+  expect_true(settings_local_only("ollama"))
+  gptr_config(providers = NULL, .scope = "session")
+  expect_false(settings_local_only("ollama"))
+  gptr_config(providers = list(ollama = list(local_only = TRUE)))
+  expect_true(settings_read("project")$providers$ollama$local_only)
+  expect_true(settings_local_only("ollama"))
+})
+
+test_that("gptr_config() sets providers and egress only as whole objects (IC-74)", {
+  local_gw()
+  off = gptr_register(gptr_spec("setting", "providers.ollama.local_only", default = TRUE))
+  withr::defer(off())
+  off_c = gptr_register(gptr_spec("setting", "egress.corp", default = "ack"))
+  withr::defer(off_c())
+  for (scope in c("session", "project", "user")) {
+    cnd = expect_error(gptr_config(providers.ollama.local_only = FALSE, .scope = scope),
+                       class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, "providers.ollama.local_only")
+    cnd = expect_error(gptr_config(egress.corp = "ack", .scope = scope),
+                       class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, "egress.corp")
+  }
+  expect_null(settings_read("session")[["providers.ollama.local_only"]])
+  expect_null(settings_read("project")[["egress.corp"]])
+  expect_null(settings_read("user")[["providers.ollama.local_only"]])
+  expect_true(settings_local_only("ollama"))
+})
+
+test_that("gptr_config(filters = ) refuses a malformed filter before writing (04 10.1)", {
+  proj = local_gw()
+  box = new.env()
+  box$calls = 0L
+  local_mocked_bindings(
+    registry_filters_set = function(filters, scope = c("session", "user", "project")) {
+      box$calls = box$calls + 1L
+      invisible(filters)
+    })
+  for (scope in c("session", "project", "user")) {
+    cnd = expect_error(gptr_config(filters = c("-builtin:mcp", "mcp"), .scope = scope),
+                       class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, "filters")
+    expect_null(settings_read(scope)$filters)
+  }
+  expect_identical(box$calls, 0L)
+  expect_false(file.exists(settings_path("user")))
+})
+
+test_that("gptr_config() names the setting it refuses and wants one scope", {
+  local_gw(workspace = FALSE)
+  for (key in c("small_model", "system1")) {
+    args = stats::setNames(list(3, "session"), c(key, ".scope"))
+    cnd = expect_error(do.call(gptr_config, args), class = "gptr_error_invalid_identifier")
+    expect_identical(cnd$arg, key)
+    args = stats::setNames(list("", "session"), c(key, ".scope"))
+    cnd = expect_error(do.call(gptr_config, args), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, key)
+  }
+  gptr_config(small_model = haiku, system1 = "emulate:sonnet", .scope = "session")
+  expect_identical(settings_read("session")[c("small_model", "system1")],
+                   list(small_model = "haiku", system1 = "emulate:sonnet"))
+  cnd = expect_error(gptr_config(mode = plan, .scope = c("session", "project", "user")),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, ".scope")
+  expect_null(settings_read("session")$mode)
+})
+
+test_that("gptr_init() writes the templates with LF line endings (contract 11)", {
+  local_gw(workspace = FALSE)
+  src = withr::local_tempdir()
+  for (name in c("settings.json", "vignette.Rmd", "gitignore")) {
+    writeBin(charToRaw(paste0(name, " line 1\r\nline 2\r\n")), file.path(src, name))
+  }
+  local_mocked_bindings(template_file = function(name) file.path(src, name))
+  d = withr::local_tempdir()
+  ws = gptr_init(d)
+  for (f in c("settings.json", "vignette.Rmd", ".gitignore")) {
+    bytes = readBin(file.path(ws, f), "raw", n = 1000L)
+    expect_false(as.raw(13L) %in% bytes)
+    expect_identical(bytes[length(bytes)], as.raw(10L))
+  }
+  # the shipped templates hold no carriage return either
+  for (name in c("settings.json", "vignette.Rmd", "gitignore")) {
+    path = system.file("templates", name, package = "gptr")
+    expect_false(as.raw(13L) %in% readBin(path, "raw", n = file.size(path)))
+  }
+})
+
+test_that("with a human, gptr_init() adds the .Rbuildignore line on a yes and keeps the others", {
+  local_gw(workspace = FALSE)
+  local_gptr_options(interactive = TRUE)
+  seen = new.env()
+  seen$questions = character()
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    seen$questions = c(seen$questions, question)
+    !startsWith(question, "Trust")
+  })
+  d = withr::local_tempdir()
+  writeLines(c("Package: toy", "Version: 0.1.0"), file.path(d, "DESCRIPTION"))
+  writeLines(c("^.*\\.Rproj$", "^data-raw$"), file.path(d, ".Rbuildignore"))
+  gptr_init(d)
+  expect_identical(readLines(file.path(d, ".Rbuildignore"), encoding = "UTF-8"),
+                   c("^.*\\.Rproj$", "^data-raw$", "^\\.gptr$"))
+  expect_identical(seen$questions, c("Add ^\\.gptr$ to .Rbuildignore?",
+                                     paste0("Trust this project (its settings, extensions and ",
+                                            "MCP servers)?")))
+  # a "no" to trust is recorded (for `d` itself, not the project root override), and the line
+  # already present is not offered again
+  expect_identical(trust_record(d)$trusted, FALSE)
+  gptr_init(d)
+  expect_length(seen$questions, 3L)
+  expect_length(readLines(file.path(d, ".Rbuildignore"), encoding = "UTF-8"), 3L)
+})
+
+# Task 7 review round 1: gptr_init()'s own settings.json write re-fingerprints (IC-52), and a
+# choice setting takes one value.
+
+test_that("gptr_init() keeps the trust that held across its own settings.json write (IC-52)", {
+  proj = local_gw()
+  gptr_trust(proj, TRUE)
+  gptr_init(proj)
+  expect_true(file.exists(file.path(proj, ".gptr", "settings.json")))
+  expect_true(trust_get(proj))
+  expect_true(gptr_trust(proj))
+  expect_identical(names(trust_record(proj)$files), ".gptr/settings.json")
+  gptr_config(preset = minimal, .scope = "project")
+  expect_identical(settings_get("preset"), "minimal")
+  # a decision of this process is carried over in memory and never recorded
+  d = path_norm(withr::local_tempdir())
+  trust_mark(d, TRUE)
+  gptr_init(d)
+  expect_true(trust_holds(d)$live)
+  expect_null(trust_record(d))
+  # a trust that a foreign change had already voided is not restored
+  e = path_norm(withr::local_tempdir())
+  trust_store(e, TRUE)
+  dir.create(file.path(e, ".gptr"))
+  writeLines("{}", file.path(e, ".gptr", "mcp.json"))
+  gptr_init(e)
+  expect_false(trust_holds(e)$record)
+})
+
+test_that("gptr_init() does not carry trust over a gated file changed beside its write (IC-52)", {
+  proj = local_gw()
+  gptr_trust(proj, TRUE)
+  real = write_atomic
+  local_mocked_bindings(write_atomic = function(path, content) {
+    out = real(path, content)
+    if (identical(basename(path), "settings.json")) {
+      writeLines('{"mcpServers": {"evil": {"command": "sh"}}}',
+                 file.path(dirname(path), "mcp.json"))
+    }
+    out
+  })
+  gptr_init(proj)
+  expect_true(file.exists(file.path(proj, ".gptr", "settings.json")))
+  expect_false(trust_get(proj))
+  expect_false(".gptr/mcp.json" %in% names(trust_record(proj)$files))
+})
+
+test_that("a choice setting takes one of its values, never the whole set", {
+  local_gw(workspace = FALSE)
+  choice = Filter(function(x) identical(x$type, "choice"), settings_core())
+  for (x in choice) {
+    args = stats::setNames(list(x$choices, "session"), c(x$name, ".scope"))
+    cnd = expect_error(do.call(gptr_config, args), class = "gptr_error_invalid_argument")
+    expect_identical(cnd$arg, x$name)
+    expect_null(settings_read("session")[[x$name]])
+  }
+  gptr_config(context = "names", .scope = "session")
+  expect_identical(settings_read("session")$context, "names")
 })

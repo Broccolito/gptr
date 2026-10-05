@@ -1,0 +1,10 @@
+sessions/
+cache/s2/
+cache/tmp/
+checkpoints/
+artifacts/*/v*/data/
+artifacts/*/run/
+locks/
+*.lock/
+settings.local.json
+transcripts/

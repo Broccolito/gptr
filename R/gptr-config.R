@@ -11,7 +11,8 @@
 #' gateway_defer() depth, the pending run options of sessions built with `.run = FALSE`, the call
 #' records held for them and the ids of the rank-0 records each session's calls registered (all
 #' three keyed by session id; released by builtin:gateway's agent_end and session_shutdown hooks,
-#' Task 9)
+#' Task 9), and `filters_applied`, the user and project filter lists gateway_filters_sync() last
+#' handed to the registry
 #' @noRd
 gateway_state = function() {
   st = the$gateway
@@ -102,7 +103,7 @@ setting_validator = function(name, type, choices = NULL) {
       chr = check_string(value, name),
       chr_or_null = check_string(value, name, null = TRUE),
       ident = check_string(value, name, null = TRUE),
-      choice = check_choice(value, choices, name),
+      choice = gateway_choice(value, choices, name),
       chrs = as.character(check_strings(value, name)),
       object = settings_check_object(value, name),
       providers = settings_check_providers(value, name),
@@ -385,7 +386,7 @@ settings_read = function(scope) {
 #' re-fingerprint, IC-52; an in-process decision is never turned into a recorded one, and a trust
 #' a foreign change had already voided is not restored). Only gptr's own change is carried over:
 #' when another gated file changed beside the write, or settings.json no longer holds the bytes
-#' gptr wrote, the trust lapses and the human is asked again (trust_own_write()). Returns the
+#' gptr wrote, the trust lapses and the human is asked again (trust_carry()). Returns the
 #' merged value as settings_read() simplifies it.
 #' @noRd
 settings_write = function(scope, patch) {
@@ -407,13 +408,7 @@ settings_write = function(scope, patch) {
     cur$root = cur$root %||% root
   }
   wrote = settings_file_write(path, cur)
-  if (isTRUE(was$record) || isTRUE(was$live)) {
-    now = trust_fingerprint(root)
-    if (trust_own_write(was$fp, now, path_rel(path, root = root), wrote)) {
-      if (isTRUE(was$record)) trust_store(root, TRUE, now)
-      if (isTRUE(was$live)) trust_mark(root, TRUE, now)
-    }
-  }
+  trust_carry(root, was, path, wrote)
   invisible(json_simplify(cur))
 }
 
@@ -608,6 +603,23 @@ trust_own_write = function(before, after, rel, hash) {
   }
   identical(unname(after$files[rel]), hash) &&
     identical(others(before$files), others(after$files))
+}
+
+#' Keeps the trust that held just before gptr's own write of the gated file `path`, whose bytes
+#' have the sha256 `hash`: `was` is trust_holds(root) taken before the write. A recorded trust
+#' gets the new fingerprint in trust.json, a decision of this process gets it in memory (IC-52:
+#' gptr's own writes re-fingerprint; an in-process decision is never turned into a recorded one).
+#' Nothing changes when neither held, or when anything else changed beside the write
+#' (trust_own_write()). Used by settings_write() and gptr_init(). Returns TRUE when it carried a
+#' trust over, invisibly.
+#' @noRd
+trust_carry = function(root, was, path, hash) {
+  if (!isTRUE(was$record) && !isTRUE(was$live)) return(invisible(FALSE))
+  now = trust_fingerprint(root)
+  if (!trust_own_write(was$fp, now, path_rel(path, root = root), hash)) return(invisible(FALSE))
+  if (isTRUE(was$record)) trust_store(root, TRUE, now)
+  if (isTRUE(was$live)) trust_mark(root, TRUE, now)
+  invisible(TRUE)
 }
 
 #' TRUE only when the project is recorded as trusted, or a `project_trust` handler or the user
@@ -1302,4 +1314,333 @@ egress_check = function(provider_id) {
                paste0("Acknowledge it once with ", how,
                       ", or pass .opts = list(context = \"none\").")),
              "egress", provider = pid, how_to_ack = how)
+}
+
+# ------------------------------------------------------------------ gptr_config() (contract 6.2)
+
+#' Settings keys that take bare identifiers
+#' @noRd
+settings_ident_keys = function() c("model", "small_model", "system1", "mode", "preset")
+
+#' Resolves an identifier-valued setting; it must be one name. The key itself is the argument
+#' resolve_identifier() reads (`small_model` and `system1` have the pool of `model`), so a refusal
+#' names the setting that was written
+#' @noRd
+settings_ident = function(expr, key, envir) {
+  v = resolve_identifier(expr, key, envir)
+  if (is.null(v)) return(NULL)
+  if (!is.character(v) || length(v) != 1L) {
+    gptr_abort(paste0("`", key, "` takes one name, as in gptr_config(", key, " = sonnet); ",
+                      "register provider specs with gptr_register() and name them."),
+               c("invalid_identifier", "invalid_argument"), arg = key,
+               .data = list(class = class(v)[1L]))
+  }
+  v
+}
+
+#' Refuses a key that gptr_config() may not set in `scope` and returns its spec: a dotted name
+#' below a protected setting (settings_protected(): `providers`, `egress`; IC-74, contract 11.2),
+#' which the layers never read from a file and which a registered `setting` spec could otherwise
+#' make writable, and a `scope = "user"` setting outside user scope
+#' @noRd
+settings_config_key = function(key, scope) {
+  top = strsplit(key, ".", fixed = TRUE)[[1L]][1L]
+  if (!identical(top, key) && settings_protected(top)) {
+    gptr_abort(paste0("`", key, "` is part of the protected setting `", top, "`, which is set ",
+                      "as a whole object: gptr_config(", top, " = list(...), .scope = \"user\")."),
+               "invalid_argument", arg = key, expected = paste0("the whole `", top, "` object"))
+  }
+  spec = settings_spec(key)
+  if (identical(spec$scope, "user") && !identical(scope, "user")) {
+    gptr_abort(paste0("`", key, "` can only be set at user scope: gptr_config(", key,
+                      " = ..., .scope = \"user\")."), "invalid_argument", arg = ".scope",
+               expected = "\"user\"")
+  }
+  spec
+}
+
+#' The provider ids whose `local_only` a validated `providers` object sets to FALSE
+#' @noRd
+settings_relaxed_ids = function(value) {
+  if (!is.list(value) || is.null(names(value))) return(character())
+  out = character()
+  for (id in names(value)) {
+    e = value[[id]]
+    if (is.list(e) && identical(e[["local_only"]], FALSE)) out = c(out, id)
+  }
+  out
+}
+
+#' Checks a validated value against what gptr_config() may write in `scope`: `filters` must have
+#' the form P02's registry_filters_set() accepts, checked before anything is written (04 10.1);
+#' a project may not set `providers.<id>.local_only = FALSE`, which only the human's user file and
+#' session layer can relax (IC-74, 07-local-ollama.md section 5; the layers would never apply it)
+#' @noRd
+settings_config_value = function(key, value, scope) {
+  if (identical(key, "filters") && length(value) &&
+      !all(grepl(registry_filter_rx, as.character(unlist(value)), perl = TRUE))) {
+    gptr_abort(paste0("Invalid filter; use -builtin:<name>, -plugin:<name> or -<kind>:<name>, ",
+                      "and a leading + to undo one."), "invalid_argument", arg = "filters",
+               expected = "filters of the form -builtin:<name>, -plugin:<name>, -<kind>:<name>")
+  }
+  ids = if (identical(key, "providers") && identical(scope, "project")) {
+    settings_relaxed_ids(value)
+  } else {
+    character()
+  }
+  if (length(ids)) {
+    gptr_abort(c(paste0("A project cannot turn off local-only inference (", ids[1L],
+                        ": local_only = FALSE); only your user settings or this R session can."),
+                 paste0("Use gptr_config(providers = list(", ids[1L],
+                        " = list(local_only = FALSE)), .scope = \"user\") or .scope = ",
+                        "\"session\".")),
+               "invalid_argument", arg = ".scope", expected = "\"user\" or \"session\"")
+  }
+  invisible(value)
+}
+
+#' Show or change gptr's settings
+#'
+#' With no arguments, returns the effective settings with the layer each value came from:
+#' package defaults < user `settings.json` < project `.gptr/settings.json` (an untrusted project
+#' only tightens `mode`, `context`, `record` and permissions) < the user-level project file <
+#' `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
+#'
+#' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
+#' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
+#' accepted only at user scope. Local-only Ollama inference (`providers = list(ollama =
+#' list(local_only = FALSE))`) can be turned off only at user or session scope; a project can only
+#' keep it on. Called from model code during a run, it is refused.
+#'
+#' @param ... Named settings, e.g. `mode = manual`, `model = sonnet`, `budget = list(cost = 2)`.
+#' @param .scope `NULL` (the project when a `.gptr/` workspace exists, else this session), or
+#'   `"session"`, `"project"` or `"user"`.
+#' @return Without arguments, a `gptr_config` list. Otherwise the previous values in that scope,
+#'   invisibly (a named list; `NULL` where the key was unset).
+#' @examples
+#' old = gptr_config(mode = plan, .scope = "session")
+#' gptr_config()$mode
+#' gptr_config(mode = old$mode, .scope = "session")
+#' @export
+gptr_config = function(..., .scope = NULL) {
+  scope = if (is.null(.scope)) {
+    if (is.null(workspace_dir())) "session" else "project"
+  } else {
+    gateway_choice(.scope, c("session", "project", "user"), ".scope")
+  }
+  n = ...length()
+  if (n == 0L) return(settings_effective())
+  control_check("gptr_config")
+  keys = ...names()
+  if (is.null(keys) || anyNA(keys) || any(!nzchar(keys)) || anyDuplicated(keys)) {
+    gptr_abort(paste("Every setting passed to gptr_config() needs a unique name,",
+                     "as in gptr_config(mode = manual)."),
+               "invalid_argument", arg = "...", expected = "uniquely named settings")
+  }
+  exprs = as.list(substitute(list(...)))[-1L]
+  caller = parent.frame()
+  known = settings_keys()
+  patch = list()
+  i = 1L
+  while (i <= n) {
+    k = keys[i]
+    if (!k %in% known) {
+      gptr_abort(paste0("`", k, "` is not a registered setting."), "invalid_argument", arg = k,
+                 expected = "a registered setting (see gptr_config())")
+    }
+    spec = settings_config_key(k, scope)
+    v = if (k %in% settings_ident_keys()) settings_ident(exprs[[i]], k, caller) else ...elt(i)
+    if (!is.null(v) && is.function(spec$validate)) v = spec$validate(v)
+    settings_config_value(k, v, scope)
+    patch[k] = list(v)
+    i = i + 1L
+  }
+  # previous values without a closure: this frame holds `...` (rule R3)
+  cur = settings_read(scope)
+  prev = vector("list", n)
+  names(prev) = keys
+  i = 1L
+  while (i <= n) {
+    if (!is.null(cur[[keys[i]]])) prev[keys[i]] = list(cur[[keys[i]]])
+    i = i + 1L
+  }
+  settings_write(scope, patch)
+  # 04 10.1: gptr_config(filters =) is a filter path; P02 applies its own refusals (IC-53). The
+  # user and project files go through gateway_filters_sync(), which also applies them after a
+  # restart and honours the trust rule of the project layer
+  if ("filters" %in% keys) {
+    if (identical(scope, "session")) {
+      registry_filters_set(as.character(unlist(settings_read(scope)[["filters"]])), scope = scope)
+    } else {
+      gateway_filters_sync()
+    }
+  }
+  invisible(prev)
+}
+
+#' Applies the `filters` of the user settings file, and of the project settings file while the
+#' project layer is in effect (a trusted project: `filters` is not a tighten-type key, so an
+#' untrusted project contributes none, as in settings_layered()), to P02's registry with
+#' registry_filters_set(scope = "user" / "project") (04 10.1; P02 self-review item 18: only the
+#' settings layer knows which layer a value came from). A scope is applied only when its list
+#' differs from the one applied last (`the$gateway$filters_applied`); the files are read through
+#' the settings cache, which re-reads a changed file, so a file edited (or a project entered)
+#' since the last call is picked up by the next one. Called by gptr_config() for the user and
+#' project scopes and at the start of every top-level gateway_run(). A list that P02 rejects is
+#' a diagnostic and a one-time notice, never an error.
+#' @noRd
+gateway_filters_sync = function() {
+  st = gateway_state()
+  applied = st$filters_applied %||% list()
+  for (scope in c("user", "project")) {
+    f = character()
+    if (identical(scope, "user")) {
+      f = as.character(unlist(settings_file_read(settings_path("user"))[["filters"]]))
+    } else {
+      ws = workspace_dir()
+      if (!is.null(ws) && isTRUE(trust_get(project_root()))) {
+        f = as.character(unlist(settings_file_read(file.path(ws, "settings.json"))[["filters"]]))
+      }
+    }
+    if (identical(f, applied[[scope]] %||% character())) next
+    applied[[scope]] = f
+    tryCatch(registry_filters_set(f, scope = scope), error = function(e) {
+      why = conditionMessage(e)
+      registry_diagnostic("builtin:gateway", "settings", "filters_invalid",
+                          paste0("the ", scope, " settings filters were not applied: ", why))
+      gptr_inform(paste0("The filters of the ", scope, " settings file were not applied: ", why),
+                  "notice", .once = paste0("filters_invalid:", scope, ":",
+                                           paste(f, collapse = ",")))
+    })
+  }
+  st$filters_applied = applied
+  invisible(applied)
+}
+
+# ------------------------------------------------------------- gptr_init() (contract 6.2, 11.16)
+
+#' The installed path of a file in inst/templates (empty string when missing)
+#' @noRd
+template_file = function(name) system.file("templates", name, package = "gptr")
+
+#' Copies a template from inst/templates unless the target exists (never overwrites). The text is
+#' written with LF line endings and a final newline (contract 11), whatever endings the installed
+#' copy has. Returns the sha256 of the bytes written (NULL when the target existed), invisibly
+#' @noRd
+template_copy = function(name, dest) {
+  if (file.exists(dest)) return(invisible(NULL))
+  src = template_file(name)
+  if (!nzchar(src)) {
+    gptr_abort(paste0("The template ", name, " is missing from the installed package."),
+               "internal", detail = paste("inst/templates", name))
+  }
+  lines = as_utf8(readLines(src, warn = FALSE, encoding = "UTF-8"))
+  bytes = if (length(lines)) charToRaw(paste0(paste(lines, collapse = "\n"), "\n")) else raw(0)
+  write_atomic(dest, bytes)
+  invisible(hash_sha256(bytes))
+}
+
+#' Writes .gptr/settings.json from its template unless it exists, under the file's short lock
+#' (IC-71), and keeps the trust that held just before (trust_carry(); IC-52: gptr's own writes
+#' re-fingerprint, as in settings_write()). The new file is trust-gated, so otherwise the write
+#' would void a recorded trust, or a decision of this process, for a project without one.
+#' @noRd
+init_settings = function(root, dest) {
+  lock = file_lock(dest)
+  on.exit(file_unlock(lock), add = TRUE)
+  was = trust_holds(root)
+  hash = template_copy("settings.json", dest)
+  if (!is.null(hash)) trust_carry(root, was, dest, hash)
+  invisible(!is.null(hash))
+}
+
+#' Offers `^\.gptr$` for .Rbuildignore in a package source; never writes it silently (13 2.3)
+#' @noRd
+init_rbuildignore = function(dir) {
+  desc = file.path(dir, "DESCRIPTION")
+  if (!file.exists(desc)) return(invisible(FALSE))
+  if (!any(grepl("^Package:", readLines(desc, warn = FALSE, encoding = "UTF-8")))) {
+    return(invisible(FALSE))
+  }
+  rb = file.path(dir, ".Rbuildignore")
+  lines = if (file.exists(rb)) readLines(rb, warn = FALSE, encoding = "UTF-8") else character()
+  line = "^\\.gptr$"
+  if (line %in% trimws(lines)) return(invisible(FALSE))
+  # gptr_confirm() appends the " [y/N] " hint
+  ask = paste0("Add ", line, " to .Rbuildignore?")
+  if (gptr_can_prompt() && isTRUE(gptr_confirm(ask))) {
+    write_atomic(rb, c(lines, line))
+    return(invisible(TRUE))
+  }
+  gptr_inform(paste0("This is a package source: add the line ", line, " to ", rb,
+                     " so that R CMD build skips the workspace."), "notice")
+  invisible(FALSE)
+}
+
+#' Create the project workspace `.gptr/`
+#'
+#' Creates `.gptr/` with `settings.json`, `skills/`, `agents/`, `prompts/`, and (by default) the
+#' project-instructions file `vignette.Rmd` and `.gitignore`. Existing files are never
+#' overwritten, so calling it again is safe. There is no default path: without `path` gptr asks
+#' `Create .gptr/ in <project>? [y/N]` when you can answer, and signals an error otherwise.
+#' Creating the workspace is consent to write there; it is not trust: gptr then asks separately
+#' whether to trust the project (see [gptr_trust()]). In a package source it offers the
+#' `^\.gptr$` line for `.Rbuildignore` and never writes it silently.
+#'
+#' @param path The project directory (it must exist).
+#' @param instructions Write `vignette.Rmd` from the template when it is absent.
+#' @param gitignore Write `.gptr/.gitignore` from the template when it is absent.
+#' @return The absolute path of `.gptr/`, invisibly (`NULL` when you declined).
+#' @examples
+#' d = tempfile("proj")
+#' dir.create(d)
+#' gptr_init(d)
+#' list.files(file.path(d, ".gptr"), all.files = TRUE)
+#' unlink(d, recursive = TRUE)
+#' @export
+gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
+  check_flag(instructions, "instructions")
+  check_flag(gitignore, "gitignore")
+  control_check("gptr_init")
+  if (missing(path)) {
+    root = project_root()
+    if (!gptr_can_prompt()) {
+      gptr_abort(c("gptr_init() needs `path` when nobody can answer a question.",
+                   "gptr only writes to directories that you name: gptr_init(\"<project dir>\")."),
+                 "noninteractive", what = "gptr_init", questions = character())
+    }
+    if (!isTRUE(gptr_confirm(paste0("Create .gptr/ in ", root, "?")))) {
+      return(invisible(NULL))
+    }
+    proj = root
+  } else {
+    proj = check_string(path, "path")
+  }
+  if (!dir.exists(proj)) {
+    gptr_abort(paste0("The directory ", proj, " does not exist."), "invalid_argument",
+               arg = "path", expected = "an existing directory")
+  }
+  proj = path_norm(proj)
+  ws = file.path(proj, ".gptr")
+  if (file.exists(ws) && !dir.exists(ws)) {
+    gptr_abort(paste0(ws, " exists and is not a directory."), "workspace", path = ws)
+  }
+  if (!dir.exists(ws) && !dir.create(ws, showWarnings = FALSE)) {
+    gptr_abort(paste0("Could not create ", ws, "."), "workspace", path = ws)
+  }
+  for (sub in c("skills", "agents", "prompts")) {
+    dir.create(file.path(ws, sub), showWarnings = FALSE)
+  }
+  init_settings(proj, file.path(ws, "settings.json"))
+  if (instructions) template_copy("vignette.Rmd", file.path(ws, "vignette.Rmd"))
+  if (gitignore) template_copy("gitignore", file.path(ws, ".gitignore"))
+  init_rbuildignore(proj)
+  if (gptr_can_prompt()) {
+    answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
+                                        "servers)?")))
+    # `proj` itself: project_root(proj) returns the gptr.project_root / GPTR_PROJECT_ROOT override
+    # whenever one is set (IC-63), which need not be the directory just initialised
+    trust_store(proj, answer)
+  }
+  invisible(path_norm(ws))
 }
