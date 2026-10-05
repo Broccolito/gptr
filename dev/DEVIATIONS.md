@@ -5252,7 +5252,7 @@ together: 499 -> 521).
 Validation: `progress/P18.md`, Task 3. `^mcp-client$`: red `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`,
 green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 66 ]` (also in a C locale); lint clean.
 
-## D-091 - P08 settings files: the providers setting validates local_only (IC-74), a lock being released is not stale, a control refusal names the running tool (2026-10-04)
+## D-091 - P08 settings files: the providers setting validates local_only (IC-74), a lock being released is not stale, a control refusal names the running tool, a settings file that is not a JSON object is never rewritten, and a rewrite keeps the JSON types of the keys it does not change (2026-10-04)
 
 P08 Task 1's literal `R/gptr-config.R` predates IC-74. Behaviours changed, which P08's later tasks,
 P11 and P15 consume:
@@ -5271,11 +5271,38 @@ P11 and P15 consume:
 2. **A lock being released is not stale.** `lock_stale()` read the pid file after a
    `file.exists()` check, so an owner releasing the lock in between made `read_utf8()`'s error
    escape from `file_lock()` and `settings_write()`. An unreadable pid file now counts as not
-   stale and the 50 x 100 ms loop retries (IC-71).
+   stale and the 50 x 100 ms loop retries (IC-71). Review round 1: the same release in the other
+   branch, a lock directory that is gone (`file.info()$mtime` `NA`), counted as stale, so
+   `file_lock()` could `unlink()` a lock another writer had taken in the meantime and two
+   read-modify-writes could overlap (a lost update). A missing lock directory, or an unknown age,
+   is now not stale either; an empty lock directory older than 30 s still is.
 3. **The refusal names the running tool.** `control_check()` fills the `tool` field of
    `gptr_error_permission` from `run$tool_call$name` (else `"r"`), as P06's
    `session_control_check()` does; the plan always said `"r"`.
+4. **A settings file that is not a JSON object is never rewritten (review round 1, contract
+   11).** The plan's `settings_write()` merged the patch into `settings_file_read()`, which reads
+   a malformed file (or a top-level array or scalar) as empty, so one write, such as Task 4's
+   egress acknowledgement or P11's `perm_rules_update()`, silently replaced the file and lost
+   every key, `permissions.deny` included. The read-modify-write now loads the file with
+   `settings_file_load()` (`settings_decode(strict = TRUE)`): text that does not decode to a
+   JSON object is `gptr_error_workspace` (`path`), signalled under the lock before anything is
+   written, so the file and its cache entry are unchanged and the lock is released. A blank file
+   is still the empty object. The layered reads stay lenient (`settings_parse()`: a diagnostic
+   and empty; a non-object file is now a diagnostic too). P11 re-signals that `gptr_error`
+   unchanged. Task 2's replacement `settings_write()` must keep `settings_file_load()`.
+5. **A rewrite keeps the JSON types of the keys it does not change (review round 1, contract
+   11).** The merge base was the `json_simplify()`d value, so a one-element array under a key
+   `settings_arrays()` does not know (a plugin's dotted setting, `providers.<id>.models`) was
+   written back as a scalar. `settings_write()` now merges into the unsimplified
+   `json_decode()` object, which `json_encode()` writes back with the same types (arrays,
+   `{}`, `[]`, `null`); `settings_arrays()` still keeps the known name arrays arrays. It returns
+   the merged value as `settings_read()` simplifies it.
 
 Validation: `progress/P08.md`, Task 1. `^gptr-config$`: red `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`,
 green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 49 ]` (plan 30; the IC-74 test adds 15, the tool-name
-test 4, which fails 1 against the plan-literal line); lint clean.
+test 4, which fails 1 against the plan-literal line); lint clean. Review round 1 added three tests
+(21 expectations): against the round-0 source they fail 12
+(`dev/.validation/P08/task1-fix1-red.log`: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 58 ]`), and the
+lock test fails 2 against the plan-literal `lock_stale()` (`task1-fix1-red-lock-against-plan-literal.log`);
+final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 70 ]`, so every later plan count for `test-gptr-config.R` is
+40 higher (Task 2: 55 -> 95; Task 3: 79 -> 119; Task 4: 97 -> 137; Task 7: 130 -> 170).
