@@ -746,3 +746,477 @@ test_that("gptr$search() indexes text that is not valid UTF-8 instead of failing
   expect_identical(cv$kind[1L], "skill")
   expect_true(all(validUTF8(c(cv$name[1L], cv$signature[1L]))))
 })
+
+test_that("gptr$out() returns stored text from the process store and pages it with lines", {
+  id = out_put(sprintf("line %d", 1:50))
+  expect_identical(as.character(member_out(id, lines = 2:3)), c("line 2", "line 3"))
+  expect_s3_class(member_out(id), "gptr_text")
+  expect_identical(length(member_out(id)), 50L)
+  expect_error(member_out("o000000"), class = "gptr_error_invalid_argument")
+  expect_error(member_out(id, lines = 0), class = "gptr_error_invalid_argument")
+})
+
+test_that("gptr$plot() attaches the current plot or a stored one to the running r result", {
+  expect_null(member_plot())
+  withr::local_pdf(NULL)
+  grDevices::dev.control(displaylist = "enable")
+  graphics::plot(1:3)
+  n = with_r_call(function() {
+    member_plot(width = 800L, height = 600L)
+    length(ns_r_call()$images)
+  })
+  expect_identical(n, 1L)
+  td = withr::local_tempdir()
+  png_file = file.path(td, "plot4.png")
+  writeBin(png1, png_file)
+  session = list(id = "s0000000001")
+  details = list(plot_index = 1:4, plot_files = c("a.png", "b.png", "c.png", png_file))
+  result = list(role = "tool_result", tool_name = "r", details = details)
+  local_mocked_bindings(session_data = function(s) {
+    list(entries = list(list(type = "message", message = result)))
+  })
+  img = with_r_call(function() {
+    member_plot(which = 4L)
+    ns_r_call()$images[[1]]
+  }, list(session = session))
+  expect_identical(img$mime, "image/png")
+  expect_identical(img$width, 1L)
+  expect_error(with_r_call(function() member_plot(which = 9L), list(session = session)),
+               "No stored plot 9")
+})
+
+test_that("file members return R values; an image read inside r is attached", {
+  td = withr::local_tempdir()
+  writeBin(charToRaw("a\nb\n"), file.path(td, "x.txt"))
+  v = member_read(file.path(td, "x.txt"))
+  expect_s3_class(v, "gptr_lines")
+  expect_null(attr(v, "image_block"))
+  writeBin(png1, file.path(td, "i.png"))
+  n = with_r_call(function() {
+    member_read(file.path(td, "i.png"))
+    length(ns_r_call()$images)
+  })
+  expect_identical(n, 1L)
+  out = withVisible(member_write(file.path(td, "y.txt"), "z\n"))
+  expect_false(out$visible)
+  expect_identical(out$value, resolve_tool_path(file.path(td, "y.txt")))
+  p = member_edit(file.path(td, "y.txt"), list(list(oldText = "z", newText = "w")))
+  expect_s3_class(p, "gptr_patch")
+  expect_identical(p$n_edits, 1L)
+  expect_s3_class(member_grep("w", td), "gptr_matches")
+  expect_identical(member_find("*.txt", td)$path, c("x.txt", "y.txt"))
+  expect_identical(member_ls(td)$path, c("i.png", "x.txt", "y.txt"))
+})
+
+test_that("gptr$grep() and gptr$ls() accept the direct tools' argument names (P02 formals rule)", {
+  td = withr::local_tempdir()
+  writeBin(charToRaw("Alpha\nbeta\n"), file.path(td, "a.txt"))
+  writeBin(charToRaw("x"), file.path(td, "b.txt"))
+  expect_identical(member_grep("alpha", td, ignoreCase = TRUE)$line, 1L)
+  expect_identical(nrow(member_grep("a.p", td, literal = TRUE)), 0L)
+  expect_error(member_grep("a", td, colour = TRUE), "unused argument(s): colour",
+               fixed = TRUE, class = "gptr_error_invalid_argument")
+  one = member_ls(td, limit = 1L)
+  expect_identical(one$path, "a.txt")
+  expect_true(attr(one, "truncated"))
+  expect_identical(member_ls(td, limit = 5L)$path, c("a.txt", "b.txt"))
+  expect_error(member_ls(td, 1L), class = "gptr_error_invalid_argument")
+  expect_false(grepl("...", attr(ns_resolve("grep"), "signature"), fixed = TRUE))
+})
+
+test_that("gptr$out(lines =) accepts the list that a validated nested input carries", {
+  id = out_put(c("l1", "l2", "l3"))
+  expect_identical(as.character(member_out(id, lines = list(1, 3))), c("l1", "l3"))
+  expect_identical(as.character(member_out(id, lines = 2L)), "l2")
+  expect_error(member_out(id, lines = 0), class = "gptr_error_invalid_argument")
+})
+
+# A stand-in for P06's dispatch_nested(): validates the input against the tool's schema as P06
+# does (schema_validate(), P01), runs the tool's execute and returns its value
+local_nested_dispatch = function(seen = new.env(), .env = parent.frame()) {
+  local_mocked_bindings(dispatch_nested = function(name, input, ctx) {
+    seen$name = name
+    seen$input = input
+    tool = registry_get("tool", name)
+    v = schema_validate(tool$parameters, input)
+    if (!v$ok) gptr_abort(paste(v$errors, collapse = "; "), "tool", tool = name, status = "invalid")
+    res = tool$execute(v$input, ctx)
+    if (isTRUE(res$is_error)) gptr_abort(ns_result_text(res), "tool", tool = name, status = "error")
+    res$value
+  }, .env = .env)
+  seen
+}
+
+caps = c("read", "edit", "write", "grep", "find", "ls")
+members = c(caps, "help", "search", "describe", "plot", "out")
+
+test_that("builtin:tools registers one spec per capability, direct and member form (IC-37)", {
+  reg = gptr_registry("tool")
+  for (cap in caps) {
+    rows = reg[reg$name == cap & reg$source == "builtin:tools", , drop = FALSE]
+    expect_identical(nrow(rows), 1L, label = cap)
+    spec = registry_get("tool", cap)
+    expect_true(is.function(spec$execute) && is.function(spec$fun), label = cap)
+    expect_identical(attr(ns_resolve(cap), "spec"), spec, label = cap)
+  }
+  expect_identical(vapply(caps, function(n) registry_get("tool", n)$exposure, ""),
+                   c(read = "direct", edit = "direct", write = "direct", grep = "r", find = "r",
+                     ls = "r"))
+  expect_true(all(members %in% ns_names("")))
+  expect_identical(vapply(members, function(n) isTRUE(registry_get("tool", n)$record), NA),
+                   stats::setNames(!(members %in% c("help", "search", "describe", "plot", "out")),
+                                   members))
+  expect_identical(registry_get("tool", "read")$guidelines,
+                   "Use read to examine files instead of readLines() or cat() in r.")
+  expect_identical(registry_get("tool", "write")$guidelines,
+                   "Use write only for new files or complete rewrites.")
+  expect_identical(length(registry_get("tool", "edit")$guidelines), 4L)
+  expect_identical(registry_get("tool", "edit")$guidelines[1],
+                   "Use edit for precise changes (edits[].oldText must match exactly)")
+  snippets = c(
+    read = "Read file contents",
+    edit = paste("Make precise file edits with exact text replacement, including multiple",
+                 "disjoint edits in one call"),
+    write = "Create or overwrite files",
+    grep = "Search file contents for patterns (respects .gitignore)",
+    find = "Find files by glob pattern (respects .gitignore)",
+    ls = "List directory contents"
+  )
+  expect_identical(vapply(caps, function(n) registry_get("tool", n)$snippet, ""), snippets)
+})
+
+test_that("the direct schemas serialise byte for byte as contract section 9.2 (Pi's strings)", {
+  wire = function(n) {
+    spec = registry_get("tool", n)
+    json_encode(list(name = spec$name, description = spec$description,
+                     input_schema = spec$parameters))
+  }
+  write_json = paste0(
+    "{\"name\":\"write\",\"description\":\"Write content to a file. Creates the file if it ",
+    "doesn't exist, overwrites if it does. Automatically creates parent directories.\",",
+    "\"input_schema\":{\"type\":\"object\",\"required\":[\"path\",\"content\"],",
+    "\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path to the file to write ",
+    "(relative or absolute)\"},\"content\":{\"type\":\"string\",\"description\":\"Content to ",
+    "write to the file\"}}}}"
+  )
+  expect_identical(wire("write"), write_json)
+  ls_json = paste0(
+    "{\"name\":\"ls\",\"description\":\"List directory contents. Returns entries sorted ",
+    "alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ",
+    "500 entries or 50KB (whichever is hit first).\",\"input_schema\":{\"type\":\"object\",",
+    "\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Directory to list ",
+    "(default: current directory)\"},\"limit\":{\"type\":\"number\",\"description\":\"Maximum ",
+    "number of entries to return (default: 500)\"}}}}"
+  )
+  expect_identical(wire("ls"), ls_json)
+  expect_match(wire("read"), "\"required\":[\"path\"],\"properties\":{\"path\":", fixed = TRUE)
+  expect_match(wire("edit"),
+               "\"items\":{\"type\":\"object\",\"required\":[\"oldText\",\"newText\"]",
+               fixed = TRUE)
+})
+
+test_that("the specs reproduce P07's stand-ins byte for byte (prefix-baseline.json)", {
+  sb = jsonlite::fromJSON(test_path("fixtures", "bench", "prefix-baseline.json"),
+                          simplifyVector = FALSE)$standins
+  for (t in sb$tools) {
+    if (!(t$name %in% caps)) next
+    spec = registry_get("tool", t$name)
+    expect_identical(spec$description, t$description, label = t$name)
+    expect_identical(json_encode(spec$parameters), json_encode(t$input_schema), label = t$name)
+    expect_identical(spec$snippet, t$snippet, label = t$name)
+    expect_identical(as.character(spec$guidelines), as.character(unlist(t$guidelines)),
+                     label = t$name)
+  }
+  secs = registry_all("prompt_section")
+  for (f in sb$fragments[1:2]) {
+    mine = Filter(function(s) identical(s$name, f$name) && identical(s$parent, f$parent), secs)
+    expect_identical(length(mine), 1L, label = f$name)
+    expect_identical(mine[[1L]]$text, f$text, label = f$name)
+    expect_identical(as.integer(mine[[1L]]$order), as.integer(f$order), label = f$name)
+  }
+})
+
+test_that("builtin:tools registers fragments, the plugins section, a search source, services", {
+  secs = registry_all("prompt_section")
+  frag = Filter(function(s) identical(s$parent, "r_session") && s$name %in% c("helpers", "out"),
+                secs)
+  expect_identical(unname(vapply(frag, function(s) as.integer(s$order), 0L)), c(10L, 20L))
+  helpers = paste(
+    "- Helpers are R functions on the gptr object and return R values: gptr$grep(pattern,",
+    "path), gptr$find(pattern, path, sort), gptr$ls(path), gptr$describe(x).",
+    "gptr$search(\"words\") and gptr$help(name) find more."
+  )
+  out = paste(
+    "- Long output is cut to its head and tail; the notice names gptr$out(id) for the rest.",
+    "Use gptr$out(), gptr$help(), gptr$search() and gptr$plot() only with record = false."
+  )
+  expect_identical(unname(vapply(frag, function(s) s$text, "")), c(helpers, out))
+  plugins = Filter(function(s) identical(s$name, "plugins"), secs)[[1L]]
+  expect_identical(plugins$tier, "T1")
+  expect_identical(plugins$order, 860L)
+  expect_identical(plugins$budget, 1500L)
+  expect_true(is.function(plugins$text))
+  expect_true(is.function(registry_get("search_source", "members")$docs))
+  expect_identical(ext_service_get("ns.resolve"), ns_resolve)
+  expect_identical(ext_service_get("ns.names"), ns_names)
+  expect_identical(ext_service_get("search.sources"), search_sources)
+})
+
+# Number of calls of base file-system functions made while expr_fun() runs (traced, then untraced)
+count_io = function(expr_fun) {
+  counter = new.env()
+  counter$n = 0L
+  bump = function() {
+    counter$n = counter$n + 1L
+  }
+  fns = c("file", "readLines", "readBin", "readChar", "list.files", "file.exists", "dir.exists",
+          "file.info")
+  for (f in fns) suppressMessages(trace(f, tracer = bquote(.(bump)()), print = FALSE,
+                                        where = baseenv()))
+  on.exit(for (f in fns) suppressMessages(untrace(f, where = baseenv())), add = TRUE)
+  expr_fun()
+  counter$n
+}
+
+test_that("gptr$nope lists the members; completion lists the built-in members (acceptance 3)", {
+  cnd = tryCatch(gptr$nope, error = identity)
+  expect_s3_class(cnd, "gptr_error_unknown_member")
+  expect_identical(cnd$name, "nope")
+  expect_true(all(members %in% cnd$available))
+  expect_true(all(members %in% utils::.DollarNames(gptr, "")))
+  expect_identical(utils::.DollarNames(gptr, "^gr"), "grep")
+  expect_s3_class(gptr$grep, "gptr_member")
+  expect_identical(attr(gptr[["read"]], "spec"), registry_get("tool", "read"))
+})
+
+test_that("accessing a member performs no I/O and opens no connection", {
+  cons = nrow(showConnections())
+  n = count_io(function() {
+    for (m in members) ns_resolve(m)
+    ns_names("")
+    gptr$grep
+    gptr[["read"]]
+  })
+  expect_identical(n, 0L)
+  expect_identical(nrow(showConnections()), cons)
+  expect_gt(count_io(function() file.exists(tempdir())), 0L)
+})
+
+test_that("direct tools return Pi's texts", {
+  td = withr::local_tempdir()
+  f = file.path(td, "a.R")
+  r = tool_write_execute(list(path = f, content = "x = 1\ny = 2\n"), NULL)
+  expect_identical(ns_result_text(r), paste0("Successfully wrote to ", f))
+  expect_identical(r$details$created, TRUE)
+  r = tool_read_execute(list(path = f), NULL)
+  expect_identical(ns_result_text(r), "x = 1\ny = 2\n")
+  expect_identical(r$details$lines_total, 3L)
+  r = tool_edit_execute(list(path = f, edits = list(list(oldText = "y = 2", newText = "y = 3"))),
+                        NULL)
+  expect_identical(ns_result_text(r), paste0("Successfully replaced 1 block(s) in ", f, "."))
+  expect_s3_class(r$value, "gptr_patch")
+  r = tool_edit_execute(list(path = f, oldText = "x = 1", newText = "x = 0"), NULL)
+  expect_identical(rawToChar(readBin(f, "raw", 100)), "x = 0\ny = 3\n")
+  env = paste0("*** Begin Patch\n*** Update File: ", f, "\n@@\n-y = 3\n+y = 4\n*** End Patch")
+  r = tool_edit_execute(list(path = "ignored", edits = env), NULL)
+  expect_match(ns_result_text(r), "^Applied patch: 1 file\\(s\\) changed\\.")
+  dir.create(file.path(td, "sub"))
+  writeBin(charToRaw("NEEDLE here\n"), file.path(td, "sub", "b.txt"))
+  expect_identical(ns_result_text(tool_grep_execute(list(pattern = "needle", path = td,
+                                                         ignoreCase = TRUE), NULL)),
+                   "sub/b.txt:1: NEEDLE here")
+  expect_identical(ns_result_text(tool_grep_execute(list(pattern = "e.h", path = td,
+                                                         literal = TRUE), NULL)),
+                   "No matches found")
+  expect_identical(ns_result_text(tool_find_execute(list(pattern = "*", path = td), NULL)),
+                   "a.R\nsub/\nsub/b.txt")
+  expect_identical(ns_result_text(tool_ls_execute(list(path = td, limit = 1), NULL)),
+                   "a.R\n\n[1 entries limit reached. Use limit=2 for more]")
+})
+
+test_that("a fuzzy edit returns the message and a diff of at most 400 tokens (acceptance 6)", {
+  td = withr::local_tempdir()
+  f = file.path(td, "fuzzy.R")
+  body = paste0(paste(sprintf("v%03d = %d   ", 1:300, 1:300), collapse = "\n"), "\n")
+  writeBin(charToRaw(body), f)
+  fuzzy = list(list(oldText = "v150 = 150\nv151 = 151", newText = "v150 = 0\nv151 = 0"))
+  txt = ns_result_text(tool_edit_execute(list(path = f, edits = fuzzy), NULL))
+  lines = strsplit(txt, "\n")[[1L]]
+  expect_identical(lines[1], paste0("Successfully replaced 1 block(s) in ", f, "."))
+  expect_identical(lines[2], "[matched after whitespace, quote or dash normalisation]")
+  expect_true(any(startsWith(lines, "@@")))
+  expect_lte(est_tokens(lines[-(1:2)], "code"), 400)
+  g = file.path(td, "exact.R")
+  writeBin(charToRaw("a = 1\n"), g)
+  exact = list(list(oldText = "a = 1", newText = "a = 2"))
+  expect_identical(ns_result_text(tool_edit_execute(list(path = g, edits = exact), NULL)),
+                   paste0("Successfully replaced 1 block(s) in ", g, "."))
+})
+
+test_that("inside r members return R values through the gate; describe passes labels (R1)", {
+  td = withr::local_tempdir()
+  writeBin(charToRaw("needle one\nhay\n"), file.path(td, "x.txt"))
+  seen = local_nested_dispatch()
+  ctx = list(session = NULL, tag = "ctx")
+  m = with_r_call(function() ns_resolve("grep")("needle", path = td), ctx)
+  expect_s3_class(m, "gptr_matches")
+  expect_identical(seen$name, "grep")
+  expect_identical(seen$input, list(pattern = "needle", path = td))
+  v = with_r_call(function() withVisible(ns_resolve("write")(file.path(td, "y.txt"), "w\n")), ctx)
+  expect_false(v$visible)
+  expect_identical(v$value, resolve_tool_path(file.path(td, "y.txt")))
+  d = with_r_call(function() ns_resolve("describe")(mtcars, budget = 60L), ctx)
+  expect_identical(seen$name, "describe")
+  expect_identical(seen$input, list(x = "mtcars", budget = 60L))
+  expect_identical(as.character(d), gptr_describe(mtcars, budget = 60L))
+  h = with_r_call(function() ns_resolve("help")("grep"), ctx)
+  expect_s3_class(h, "gptr_text")
+  expect_identical(seen$input, list(name = "grep"))
+  expect_error(with_r_call(function() ns_resolve("read")(file.path(td, "nope.txt")), ctx),
+               class = "gptr_error")
+})
+
+test_that("inside r an envelope, member argument names and out lines pass the schema check", {
+  td = withr::local_tempdir()
+  withr::local_dir(td)
+  writeBin(charToRaw("x = 1\nNeedle\n"), file.path(td, "a.R"))
+  seen = local_nested_dispatch()
+  ctx = list(session = NULL)
+  env = "*** Begin Patch\n*** Update File: a.R\n@@\n-x = 1\n+x = 2\n*** End Patch"
+  p = with_r_call(function() ns_resolve("edit")("a.R", env), ctx)
+  expect_s3_class(p, "gptr_patch")
+  expect_identical(seen$input, list(path = "a.R", edits = list(), patch = env))
+  expect_identical(rawToChar(readBin(file.path(td, "a.R"), "raw", 100)), "x = 2\nNeedle\n")
+  m = with_r_call(function() ns_resolve("grep")("needle", ignore_case = TRUE, output = "files"),
+                  ctx)
+  expect_s3_class(m, "gptr_files")
+  expect_identical(m$path, "a.R")
+  id = out_put(c("l1", "l2", "l3"))
+  o = with_r_call(function() ns_resolve("out")(id, lines = c(1, 3)), ctx)
+  expect_identical(as.character(o), c("l1", "l3"))
+})
+
+test_that("risk levels follow contract 9.4 and the control and instructions classes (IC-54)", {
+  root = local_project(files = list("R/a.R" = "x = 1", "AGENTS.md" = "rules"))
+  lvl = function(fun, path) fun(list(path = path), NULL)$level
+  expect_identical(lvl(tool_risk_read, "R/a.R"), 0L)
+  expect_identical(lvl(tool_risk_read, "skill:demo/SKILL.md"), 0L)
+  expect_identical(lvl(tool_risk_read, file.path(R.home(), "elsewhere.txt")), 1L)
+  expect_identical(lvl(tool_risk_read, ".env"), 2L)
+  expect_identical(lvl(tool_risk_write, "R/a.R"), 2L)
+  expect_identical(lvl(tool_risk_write, tempfile()), 2L)
+  expect_identical(lvl(tool_risk_write, "AGENTS.md"), 3L)
+  expect_identical(lvl(tool_risk_write, file.path(R.home(), "elsewhere.txt")), 3L)
+  expect_identical(lvl(tool_risk_write, ".gptr/settings.json"), 4L)
+  expect_identical(tool_risk_write(list(path = ".gptr/settings.json"), NULL)$categories, "control")
+  expect_identical(tool_risk_write(list(path = "AGENTS.md"), NULL)$categories, "instructions")
+  env = "*** Begin Patch\n*** Add File: .gptr/mcp.json\n+{}\n*** End Patch"
+  r = tool_risk_write(list(path = "R/a.R", edits = env), NULL)
+  expect_identical(r$level, 4L)
+  expect_identical(sort(r$paths), sort(c("R/a.R", ".gptr/mcp.json")))
+  expect_identical(lvl(tool_risk_search, "."), 0L)
+  expect_identical(lvl(tool_risk_search, ".env"), 1L)
+  expect_identical(tool_risk_none(list(), NULL)$level, 0L)
+})
+
+test_that("instructions files read at 0 only in the project; risk sees every envelope field", {
+  root = local_project(files = list("R/a.R" = "x = 1", "AGENTS.md" = "rules",
+                                    ".gptr/skills/x/SKILL.md" = "skill"))
+  other = withr::local_tempdir()
+  writeBin(charToRaw("rules\n"), file.path(other, "AGENTS.md"))
+  lvl = function(path) tool_risk_read(list(path = path), NULL)$level
+  expect_identical(lvl("AGENTS.md"), 0L)
+  expect_identical(lvl(".gptr/skills/x/SKILL.md"), 0L)
+  expect_identical(lvl(file.path(other, "AGENTS.md")), 1L)
+  expect_identical(tool_risk_write(list(path = file.path(other, "AGENTS.md")), NULL)$level, 3L)
+  env = "*** Begin Patch\n*** Add File: .gptr/mcp.json\n+{}\n*** End Patch"
+  top = list(path = "R/a.R", oldText = "", newText = env)
+  r = tool_risk_write(top, NULL)
+  expect_identical(r$level, 4L)
+  expect_identical(sort(r$paths), sort(c("R/a.R", ".gptr/mcp.json")))
+  expect_identical(tool_risk_write(list(path = "R/a.R", edits = list(), patch = env), NULL)$level,
+                   4L)
+  txt = ns_result_text(tool_edit_execute(top, NULL))
+  expect_match(txt, "^Applied patch: 1 file\\(s\\)")
+  expect_true(file.exists(file.path(root, ".gptr", "mcp.json")))
+})
+
+test_that("plot as a direct tool is an error result; a nested call attaches the plot", {
+  r = tool_plot_execute(list(), NULL)
+  expect_true(r$is_error)
+  expect_match(ns_result_text(r), "running r call", fixed = TRUE)
+  withr::local_pdf(NULL)
+  grDevices::dev.control(displaylist = "enable")
+  graphics::plot(1:3)
+  seen = local_nested_dispatch()
+  ctx = list(session = NULL)
+  got = with_r_call(function() {
+    v = withVisible(ns_resolve("plot")(width = 800L, height = 600L))
+    list(images = length(ns_r_call()$images), visible = v$visible, value = v$value)
+  }, ctx)
+  expect_identical(got, list(images = 1L, visible = FALSE, value = NULL))
+  expect_identical(seen$input, list(width = 800L, height = 600L))
+  sub = with_r_call(function() {
+    r = tool_plot_execute(list(), list(session = NULL, tag = "sub-agent"))
+    list(error = r$is_error, images = length(ns_r_call()$images))
+  }, ctx)
+  expect_identical(sub, list(error = TRUE, images = 0L))
+})
+
+# Added in review round 1 (D-121 items 4-6): a direct read or describe returns the R value as
+# well, a direct help, search or out uses the session of its own ctx, and only a
+# `skill:<name>/<path>` string is a skill pseudo-path for the read risk.
+
+test_that("a direct read or describe returns the R value too (ctx$execute_tool, contract 10.6)", {
+  td = withr::local_tempdir()
+  f = file.path(td, "a.txt")
+  writeBin(charToRaw("one\ntwo\nthree\n"), f)
+  r = tool_read_execute(list(path = f, offset = 2, limit = 1), NULL)
+  expect_s3_class(r$value, "gptr_lines")
+  expect_identical(as.character(r$value), "two")
+  expect_identical(attr(r$value, "offset"), 2L)
+  expect_identical(attr(r$value, "path"), resolve_tool_path(f))
+  expect_identical(dispatch_nested("read", list(path = f), list(session = NULL)), member_read(f))
+  writeBin(png1, file.path(td, "i.png"))
+  sub = with_r_call(function() {
+    r = tool_read_execute(list(path = file.path(td, "i.png")), list(session = NULL, tag = "sub"))
+    list(value = as.character(r$value), block = attr(r$value, "image_block"),
+         content = vapply(r$content, function(b) b$type, ""),
+         attached = length(ns_r_call()$images))
+  }, list(session = NULL, tag = "parent"))
+  expect_identical(sub, list(value = "Read image file [image/png]", block = NULL,
+                             content = c("text", "image"), attached = 0L))
+  e = new.env()
+  e$df = data.frame(a = 1:3)
+  d = tool_describe_execute(list(x = "df"), list(session = NULL, envir = e))
+  expect_s3_class(d$value, "gptr_text")
+  expect_identical(paste(as.character(d$value), collapse = "\n"), ns_result_text(d))
+})
+
+test_that("help, search and out as direct tools use their ctx's session, not the r call's", {
+  probe = member_execute(function() ns_session_id(), "probe")
+  parent = list(session = list(id = "s_parent"))
+  child = list(session = list(id = "s_child"))
+  ids = with_r_call(function() {
+    c(nested = probe(list(), parent)$value, sub = probe(list(), child)$value,
+      process = probe(list(), NULL)$value %||% "none", r_call = ns_session_id())
+  }, parent)
+  expect_identical(ids, c(nested = "s_parent", sub = "s_child", process = "none",
+                          r_call = "s_parent"))
+  live = new.env()
+  live$out = NULL
+  local_mocked_bindings(session_live = function(s) if (identical(s$id, "s_child")) live)
+  id = out_put(c("c1", "c2"), session = live)
+  out = registry_get("tool", "out")$execute
+  got = with_r_call(function() out(list(id = id, lines = list(2)), child), parent)
+  expect_false(got$is_error)
+  expect_identical(as.character(got$value), "c2")
+  expect_identical(ns_result_text(got), "c2")
+})
+
+test_that("only skill:<name>/<path> is a skill pseudo-path for the read risk", {
+  local_project(files = list("R/a.R" = "x = 1"))
+  lvl = function(path) tool_risk_read(list(path = path), NULL)$level
+  expect_identical(lvl("skill:demo/SKILL.md"), 0L)
+  expect_identical(lvl("skill:secrets.env"), 2L)
+})

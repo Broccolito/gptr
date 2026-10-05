@@ -485,11 +485,39 @@ print.gptr_member = function(x, ...) {
 
 # ---- resolution (the ns.resolve and ns.names services) -------------------------------------------
 
-#' The session of the innermost running `r` evaluation, or NULL at the console
+#' Class of the marker that a direct member tool binds (as `gptr_ns_session`) in its execute frame:
+#' the session of the ctx it was called with (member_execute())
+#' @noRd
+ns_session_class = "gptr_ns_session"
+
+#' A session marker (holds the session or NULL, no user object)
+#' @noRd
+ns_session_marker = function(session) {
+  structure(list(session = session), class = ns_session_class)
+}
+
+#' The session a member call belongs to, or NULL at the console
+#'
+#' The innermost of two frame markers wins: the r-call marker of a running `r` evaluation (its
+#' ctx's session) and the session marker of a direct member tool. A sub-agent's direct `out`,
+#' `help` or `search`, executed while the parent's `r` evaluation is on the stack, thus uses the
+#' sub-agent's session. Like ns_r_call(), the walk forces no promise and calls no active binding.
 #' @noRd
 ns_current_session = function() {
-  rc = ns_r_call()
-  if (is.null(rc) || is.null(rc$ctx)) NULL else rc$ctx$session
+  k = sys.nframe() - 1L
+  while (k > 0L) {
+    fr = sys.frame(k)
+    for (nm in c("gptr_ns_session", "gptr_r_call")) {
+      if (exists(nm, envir = fr, inherits = FALSE) && !rlang::env_binding_are_lazy(fr, nm) &&
+            !rlang::env_binding_are_active(fr, nm)) {
+        m = get(nm, envir = fr, inherits = FALSE)
+        if (inherits(m, ns_session_class)) return(m$session)
+        if (inherits(m, r_call_class)) return(if (is.null(m$ctx)) NULL else m$ctx$session)
+      }
+    }
+    k = k - 1L
+  }
+  NULL
 }
 
 #' Id of that session (session-scoped rank-0 tools are visible to it), or NULL
@@ -1127,3 +1155,618 @@ member_help = function(name, package = NULL, budget = 800L) {
   more = if (shown$omitted > 0L) paste0("[... ", shown$omitted, " more lines of help not shown]")
   new_gptr_text(c(shown$lines, more))
 }
+
+#' The plots of the session's last completed `r` result: `list(index, path)` from its
+#' `details$plot_index` and `details$plot_files` (every rendered plot, attached or stored)
+#' @noRd
+ns_last_plots = function(session) {
+  none = list(index = integer(), path = character())
+  if (is.null(session)) return(none)
+  for (e in rev(session_data(session)$entries %||% list())) {
+    m = e$message
+    if (identical(e$type, "message") && identical(m$role, "tool_result") &&
+          identical(m$tool_name, "r")) {
+      return(list(index = as.integer(unlist(m$details$plot_index)),
+                  path = as.character(unlist(m$details$plot_files))))
+    }
+  }
+  none
+}
+
+#' `gptr$plot(which = NULL, width = 1000L, height = 700L)`: attach the current device's plot at that
+#' size, or plot `which` of the last `r` result (IC-67: the plots it listed as "not attached"), to
+#' the running `r` result; invisible NULL
+#' @noRd
+member_plot = function(which = NULL, width = 1000L, height = 700L) {
+  which = check_number(which, "which", min = 1, int = TRUE, null = TRUE)
+  width = check_number(width, "width", min = 64, max = 4000, int = TRUE)
+  height = check_number(height, "height", min = 64, max = 4000, int = TRUE)
+  rc = ns_r_call()
+  if (is.null(rc)) {
+    gptr_inform("gptr$plot() attaches a plot to a running r call; there is none here.", "notice")
+    return(invisible(NULL))
+  }
+  block = if (is.null(which)) {
+    if (grDevices::dev.cur() == 1L) {
+      gptr_abort("There is no plot to attach: draw one first.", "invalid_argument", arg = "which",
+                 expected = "a plot on the current device")
+    }
+    plot_png(grDevices::recordPlot(), width = width, height = height,
+             res = as.integer(gptr_opt("plot_res")))
+  } else {
+    plots = ns_last_plots(if (is.null(rc$ctx)) NULL else rc$ctx$session)
+    k = match(which, plots$index)
+    if (is.na(k) || !file.exists(plots$path[k])) {
+      gptr_abort(paste0("No stored plot ", which, ": the last r result made ",
+                        length(plots$index), " plot(s)."),
+                 "invalid_argument", arg = "which", expected = "the number of a stored plot")
+    }
+    b = read_raw(plots$path[k])
+    dims = image_dims(b, "image/png")
+    block_image(base64_raw(b), mime = "image/png", source = "plot", width = as.integer(dims[1]),
+                height = as.integer(dims[2]))
+  }
+  if (is.null(block)) {
+    gptr_abort("The plot could not be rendered to PNG.", "invalid_argument", arg = "which",
+               expected = "a plot that the PNG device can draw")
+  }
+  r_call_attach_image(block)
+  invisible(NULL)
+}
+
+#' `gptr$out(id, stream = c("stdout", "stderr"), lines = NULL)`: the stored full text of a truncated
+#' result (the session's out store, the process store, then the spill file; P01 out_get())
+#' @noRd
+member_out = function(id, stream = c("stdout", "stderr"), lines = NULL) {
+  check_string(id, "id")
+  stream = check_choice(stream, c("stdout", "stderr"), "stream")
+  if (is.list(lines)) lines = unlist(lines)
+  if (!is.null(lines) && (!is.numeric(lines) || anyNA(lines) || any(lines < 1))) {
+    gptr_abort("`lines` must be positive line numbers.", "invalid_argument", arg = "lines",
+               expected = "positive line numbers")
+  }
+  s = ns_current_session()
+  live = if (is.null(s)) NULL else session_live(s)
+  new_gptr_text(out_get(id, stream = stream, lines = lines, session = live))
+}
+
+#' `gptr$read(path, offset = NULL, limit = NULL)`: a `gptr_lines` value; an image is attached to the
+#' running `r` result
+#' @noRd
+member_read = function(path, offset = NULL, limit = NULL) {
+  v = read_lines_value(path, offset, limit)
+  img = attr(v, "image_block")
+  if (!is.null(img)) r_call_attach_image(img)
+  attr(v, "image_block") = NULL
+  v
+}
+
+#' `gptr$write(path, content)`: the absolute path written, invisibly
+#' @noRd
+member_write = function(path, content) invisible(write_file(path, content)$details$path)
+
+#' Extra arguments a built-in member accepts through `...`: the direct form's (Pi's) names
+#' @noRd
+ns_member_dots = function(dots, allowed, member) {
+  nms = names(dots) %||% rep("", length(dots))
+  bad = nms[!(nms %in% allowed)]
+  if (length(bad)) {
+    shown = if (any(nzchar(bad))) paste(bad[nzchar(bad)], collapse = ", ") else "unnamed"
+    gptr_abort(paste0("gptr$", member, "(): unused argument(s): ", shown, "."),
+               "invalid_argument", arg = "...",
+               expected = paste0("the arguments of gptr$", member, "()"))
+  }
+  dots
+}
+
+#' `gptr$grep()` (contract section 9.4); `ignoreCase` and `literal` (the direct tool's names) are
+#' accepted as aliases of `ignore_case` and `fixed`
+#' @noRd
+member_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE,
+                       context = 0L, limit = 100L, output = c("content", "files", "count"),
+                       sort = c("path", "count", "mtime"), ...) {
+  dots = ns_member_dots(list(...), c("ignoreCase", "literal"), "grep")
+  if (!is.null(dots$ignoreCase)) ignore_case = dots$ignoreCase
+  if (!is.null(dots$literal)) fixed = dots$literal
+  search_grep(pattern, path = path, glob = glob, ignore_case = ignore_case, fixed = fixed,
+              context = context, limit = limit, output = output, sort = sort)
+}
+
+#' `gptr$find()` (contract section 9.4)
+#' @noRd
+member_find = function(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"),
+                       type = "file", limit = 1000L) {
+  search_find(pattern, path = path, sort = sort, type = type, limit = limit)
+}
+
+#' `gptr$ls()` (contract section 9.4); `limit` (the direct tool's argument) keeps the first entries
+#' @noRd
+member_ls = function(path = ".", sort = c("name", "mtime", "size"), long = FALSE, ...) {
+  dots = ns_member_dots(list(...), "limit", "ls")
+  f = search_ls(path, sort = sort, long = long)
+  if (is.null(dots$limit)) return(f)
+  limit = check_number(dots$limit, "limit", min = 1, int = TRUE)
+  if (nrow(f) <= limit) return(f)
+  keep = seq_len(limit)
+  out = f[keep, , drop = FALSE]
+  rownames(out) = NULL
+  structure(out, class = class(f), root = attr(f, "root"), long = long, truncated = TRUE,
+            limit = limit, slash = attr(f, "slash")[keep])
+}
+
+# ---- tool executes: the direct-tool form and nested member calls ---------------------------------
+
+#' Is this execute a nested member call of the running `r` evaluation of the same session (not a
+#' direct tool call, and not a direct tool of a sub-agent started from that evaluation)?
+#' @noRd
+member_nested = function(ctx) {
+  rc = ns_r_call()
+  !is.null(rc) && !is.null(ctx) && identical(rc$ctx, ctx)
+}
+
+#' One-line summary of a member value (the text of a nested result; dispatch_nested() records it)
+#' @noRd
+ns_value_summary = function(name, value) {
+  shape = if (is.null(value)) {
+    "no value"
+  } else if (is.data.frame(value)) {
+    paste0(nrow(value), " rows")
+  } else {
+    paste0("<", class(value)[1L], "> length ", length(value))
+  }
+  paste0(name, ": ", shape)
+}
+
+#' The tool result of a nested member call: a summary text and the R value
+#' @noRd
+ns_value_result = function(name, value) {
+  gptr_tool_result(ns_value_summary(name, value), value = value)
+}
+
+#' Text of a member value for a direct tool result (help, search, out as direct tools)
+#' @noRd
+ns_value_text = function(value) {
+  if (is.null(value)) return("(no output)")
+  if (is.data.frame(value)) {
+    return(paste(utils::capture.output(print(value, row.names = FALSE)), collapse = "\n"))
+  }
+  paste(as.character(value), collapse = "\n")
+}
+
+#' The direct form carries the window's `gptr_lines` as its value too (read once by read_file()),
+#' so `ctx$execute_tool("read", ...)` returns the R value outside an `r` evaluation as well
+#' (contract 10.6); the image travels as the result's image block only
+#' @noRd
+tool_read_execute = function(input, ctx) {
+  if (member_nested(ctx)) return(ns_value_result("read", do.call(member_read, as.list(input))))
+  rf = read_file(input$path, offset = input$offset, limit = input$limit)
+  images = if (is.null(rf$image)) NULL else list(rf$image)
+  gptr_tool_result(rf$text, images = images, details = rf$details, value = rf$value)
+}
+
+#' @noRd
+tool_write_execute = function(input, ctx) {
+  wf = write_file(input$path, input$content)
+  gptr_tool_result(paste0("Successfully wrote to ", input$path), details = wf$details,
+                   value = wf$details$path)
+}
+
+#' The edits an `edit` call applies: `patch` (the envelope of a nested member call), else `edits`,
+#' else Pi's legacy top-level `oldText`/`newText`. The execute and the risk function both read them
+#' here, so the risk counts every file an envelope touches whichever field carries it.
+#' @noRd
+tool_edit_input_edits = function(input) {
+  edits = input$patch %||% input$edits
+  if (is.null(edits) && !is.null(input$oldText)) {
+    edits = list(list(oldText = input$oldText, newText = input$newText))
+  }
+  edits
+}
+
+#' @noRd
+tool_edit_execute = function(input, ctx) {
+  edits = tool_edit_input_edits(input)
+  routed = edit_route_document(input$path, edits, if (is.null(ctx)) NULL else ctx$session)
+  if (!is.null(routed)) {
+    routed$value = ns_routed_patch(input$path, routed)
+    return(routed)
+  }
+  ed = edit_file(input$path, edits, replace_all = isTRUE(input$replace_all %||% input$replaceAll))
+  value = new_gptr_patch(input$path, ed$message, ed$diff, ed$details$n_edits, ed$fuzzy)
+  gptr_tool_result(edit_result_text(ed), details = ed$details, value = value)
+}
+
+#' @noRd
+tool_grep_execute = function(input, ctx) {
+  if (member_nested(ctx)) return(ns_value_result("grep", do.call(member_grep, as.list(input))))
+  m = search_grep(input$pattern, path = input$path %||% ".", glob = input$glob,
+                  ignore_case = isTRUE(input$ignoreCase), fixed = isTRUE(input$literal),
+                  context = as.integer(input$context %||% 0L),
+                  limit = max(1L, as.integer(input$limit %||% grep_default_limit)))
+  gptr_tool_result(grep_tool_text(m), value = m,
+                   details = list(matches = nrow(m), truncated = isTRUE(attr(m, "truncated"))))
+}
+
+#' @noRd
+tool_find_execute = function(input, ctx) {
+  if (member_nested(ctx)) return(ns_value_result("find", do.call(member_find, as.list(input))))
+  f = search_find(input$pattern, path = input$path %||% ".", type = "any",
+                  limit = max(1L, as.integer(input$limit %||% find_default_limit)))
+  gptr_tool_result(find_tool_text(f), value = f,
+                   details = list(results = nrow(f), truncated = isTRUE(attr(f, "truncated"))))
+}
+
+#' @noRd
+tool_ls_execute = function(input, ctx) {
+  if (member_nested(ctx)) return(ns_value_result("ls", do.call(member_ls, as.list(input))))
+  f = search_ls(input$path %||% ".")
+  limit = max(1L, as.integer(input$limit %||% ls_default_limit))
+  gptr_tool_result(ls_tool_text(f, limit = limit), value = f, details = list(entries = nrow(f)))
+}
+
+#' Execute of a member-only capability (help, search, out): call the member function with the input
+#'
+#' A direct call binds the session of its own ctx as `gptr_ns_session` in this frame, so the member
+#' (which finds its session through ns_current_session()) uses that session, not the session of an
+#' enclosing `r` evaluation: a sub-agent's direct `out` reads its own store, its `help` and `search`
+#' see its own session-scoped tools; a NULL ctx is process-level dispatch
+#' @noRd
+member_execute = function(fun, name) {
+  force(fun)
+  force(name)
+  function(input, ctx) {
+    if (member_nested(ctx)) {
+      value = do.call(fun, as.list(input))
+      return(gptr_tool_result(ns_value_summary(name, value), value = value))
+    }
+    assign("gptr_ns_session", ns_session_marker(if (is.null(ctx)) NULL else ctx$session),
+           envir = environment())
+    value = do.call(fun, as.list(input))
+    gptr_tool_result(ns_value_text(value), value = value)
+  }
+}
+
+#' `describe`: nested calls only record the gate (the member computes the value locally, rule R1);
+#' as a direct tool it describes the binding named `x` in the session's environment and returns
+#' the description lines as a `gptr_text` value as well
+#' @noRd
+tool_describe_execute = function(input, ctx) {
+  if (member_nested(ctx)) {
+    return(gptr_tool_result(paste0("describe: ", as.character(input$x)[1L]), value = NULL))
+  }
+  envir = if (is.null(ctx)) NULL else ctx$envir
+  if (!is.environment(envir)) {
+    gptr_abort("describe needs the session's environment.", "invalid_argument", arg = "x",
+               expected = "the name of an object in the session")
+  }
+  budget = as.integer(input$budget %||% 150L)
+  lines = describe_binding(as.character(input$x), envir, budget = budget)
+  gptr_tool_result(paste(lines, collapse = "\n"), value = new_gptr_text(lines))
+}
+
+#' `plot` attaches to the running `r` result, so only a nested member call of that evaluation can
+#' run it; a direct call (a preset that declares `plot`, or a sub-agent's direct tool) gets an
+#' error result instead of a claim that a plot was attached
+#' @noRd
+tool_plot_execute = function(input, ctx) {
+  if (!member_nested(ctx)) {
+    return(gptr_tool_result(paste("plot attaches a plot to the result of a running r call; call",
+                                  "gptr$plot() inside r."), is_error = TRUE))
+  }
+  member_plot(input$which, input$width %||% 1000L, input$height %||% 700L)
+  gptr_tool_result("plot attached to the r result", value = NULL)
+}
+
+# ---- risk (contract section 9.4; control and instructions path classes, IC-54) -------------------
+
+#' Level and category of one path. Reads: 0 in the project (the project root included) and for skill
+#' pseudo-paths, 1 outside, 2 for protected, critical and control paths; an `instructions` file
+#' (AGENTS.md, `.gptr/skills/`, ...) reads at 0 only inside the project, at 1 elsewhere. Writes: 2
+#' in the project or tempdir(), 3 outside, protected or instructions, 4 control or critical.
+#' @noRd
+tool_path_risk = function(path, write = FALSE) {
+  if (!is.character(path) || length(path) != 1L || is.na(path)) {
+    return(list(level = 3L, category = "unknown"))
+  }
+  if (grepl("^skill:([^/]+)/(.+)$", path)) {
+    return(list(level = if (write) 3L else 0L, category = "instructions"))
+  }
+  abs = tryCatch(resolve_tool_path(path), error = function(e) NA_character_)
+  cls = if (is.na(abs)) "unknown" else as.character(path_class(abs))[1L]
+  if (!write && identical(cls, "critical") && identical(path_key(abs), path_key(project_root()))) {
+    cls = "workspace"
+  }
+  if (!write && identical(cls, "instructions") && !path_inside(abs, project_root())) {
+    cls = "outside"
+  }
+  if (!write) {
+    level = switch(cls, workspace = , instructions = 0L,
+                   protected = , critical = , control = 2L, 1L)
+    return(list(level = level, category = "read"))
+  }
+  level = switch(cls, workspace = , temp = 2L, control = , critical = 4L, 3L)
+  category = switch(cls, control = "control", instructions = "instructions", critical = "critical",
+                    protected = "protected", "write")
+  list(level = level, category = category)
+}
+
+#' Risk of a set of paths: `list(level, categories, paths)`
+#' @noRd
+tool_paths_risk = function(paths, write = FALSE) {
+  paths = as.character(unlist(paths))
+  if (!length(paths)) {
+    return(list(level = if (write) 2L else 0L, categories = if (write) "write" else "read",
+                paths = character()))
+  }
+  rs = lapply(paths, tool_path_risk, write = write)
+  list(level = max(vapply(rs, function(r) as.integer(r$level), 0L)),
+       categories = unique(vapply(rs, function(r) r$category, "")), paths = paths)
+}
+
+#' @noRd
+tool_risk_read = function(input, ctx) tool_paths_risk(input$path, write = FALSE)
+
+#' @noRd
+tool_risk_write = function(input, ctx) {
+  paths = input$path
+  env = edit_envelope_of(tool_edit_input_edits(input))
+  if (!is.null(env)) paths = unique(c(paths, patch_paths(env)))
+  tool_paths_risk(paths, write = TRUE)
+}
+
+#' @noRd
+tool_risk_search = function(input, ctx) {
+  r = tool_paths_risk(input$path %||% ".", write = FALSE)
+  r$level = min(r$level, 1L)
+  r
+}
+
+#' @noRd
+tool_risk_none = function(input, ctx) list(level = 0L, categories = "read", paths = character())
+
+# ---- the specs of builtin:tools (contract sections 9.2 and 9.4; Pi's strings, MIT, 01 section 3)
+
+tool_read_description = paste(
+  "Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp).",
+  "Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB",
+  "(whichever is hit first). Use offset/limit for large files. When you need the full file,",
+  "continue with offset until complete."
+)
+tool_edit_description = paste(
+  "Edit a single file using exact text replacement. Every edits[].oldText must match a unique,",
+  "non-overlapping region of the original file. If two changes affect the same block or nearby",
+  "lines, merge them into one edit instead of emitting overlapping edits. Do not include large",
+  "unchanged regions just to connect distant changes."
+)
+tool_write_description = paste(
+  "Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
+  "Automatically creates parent directories."
+)
+tool_grep_description = paste(
+  "Search file contents for a pattern. Returns matching lines with file paths and line numbers.",
+  "Respects .gitignore. Output is truncated to 100 matches or 50KB (whichever is hit first).",
+  "Long lines are truncated to 500 chars."
+)
+tool_find_description = paste(
+  "Search for files by glob pattern. Returns matching file paths relative to the search",
+  "directory. Respects .gitignore. Output is truncated to 1000 results or 50KB (whichever is hit",
+  "first)."
+)
+tool_ls_description = paste(
+  "List directory contents. Returns entries sorted alphabetically, with '/' suffix for",
+  "directories. Includes dotfiles. Output is truncated to 500 entries or 50KB (whichever is hit",
+  "first)."
+)
+
+#' A JSON Schema property
+#' @noRd
+tool_prop = function(type, description) list(type = type, description = description)
+
+#' A JSON Schema object of properties
+#' @noRd
+tool_obj = function(required, ...) {
+  s = list(type = "object")
+  if (length(required)) s$required = I(required)
+  s$properties = list(...)
+  s
+}
+
+tool_read_schema = tool_obj(
+  "path",
+  path = tool_prop("string", "Path to the file to read (relative or absolute)"),
+  offset = tool_prop("number", "Line number to start reading from (1-indexed)"),
+  limit = tool_prop("number", "Maximum number of lines to read")
+)
+tool_edit_item = tool_obj(
+  c("oldText", "newText"),
+  oldText = tool_prop("string", paste(
+    "Exact text for one targeted replacement. It must be unique in the original file and must",
+    "not overlap with any other edits[].oldText in the same call."
+  )),
+  newText = tool_prop("string", "Replacement text for this targeted edit.")
+)
+tool_edit_schema = tool_obj(
+  c("path", "edits"),
+  path = tool_prop("string", "Path to the file to edit (relative or absolute)"),
+  edits = list(type = "array", items = tool_edit_item, description = paste(
+    "One or more targeted replacements. Each edit is matched against the original file, not",
+    "incrementally. Do not include overlapping or nested edits. If two changes touch the same",
+    "block or nearby lines, merge them into one edit instead."
+  ))
+)
+tool_write_schema = tool_obj(
+  c("path", "content"),
+  path = tool_prop("string", "Path to the file to write (relative or absolute)"),
+  content = tool_prop("string", "Content to write to the file")
+)
+tool_grep_schema = tool_obj(
+  "pattern",
+  pattern = tool_prop("string", "Search pattern (regex or literal string)"),
+  path = tool_prop("string", "Directory or file to search (default: current directory)"),
+  glob = tool_prop("string", "Filter files by glob pattern, e.g. '*.ts' or '**/*.spec.ts'"),
+  ignoreCase = tool_prop("boolean", "Case-insensitive search (default: false)"),
+  literal = tool_prop("boolean",
+                      "Treat pattern as literal string instead of regex (default: false)"),
+  context = tool_prop("number",
+                      "Number of lines to show before and after each match (default: 0)"),
+  limit = tool_prop("number", "Maximum number of matches to return (default: 100)")
+)
+tool_find_schema = tool_obj(
+  "pattern",
+  pattern = tool_prop("string", paste(
+    "Glob pattern to match files, e.g. '*.ts', '**/*.json', or 'src/**/*.spec.ts'"
+  )),
+  path = tool_prop("string", "Directory to search in (default: current directory)"),
+  limit = tool_prop("number", "Maximum number of results (default: 1000)")
+)
+tool_ls_schema = tool_obj(
+  character(),
+  path = tool_prop("string", "Directory to list (default: current directory)"),
+  limit = tool_prop("number", "Maximum number of entries to return (default: 500)")
+)
+
+tool_read_guidelines = "Use read to examine files instead of readLines() or cat() in r."
+tool_edit_guidelines = c(
+  "Use edit for precise changes (edits[].oldText must match exactly)",
+  paste("When changing multiple separate locations in one file, use one edit call with multiple",
+        "entries in edits[] instead of multiple edit calls"),
+  paste("Each edits[].oldText is matched against the original file, not after earlier edits are",
+        "applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit."),
+  paste("Keep edits[].oldText as small as possible while still being unique in the file. Do not",
+        "pad with large unchanged regions.")
+)
+tool_write_guidelines = "Use write only for new files or complete rewrites."
+
+# The <r_session> fragments of builtin:tools (architecture section 7.3; IC-68)
+r_session_helpers_text = paste(
+  "- Helpers are R functions on the gptr object and return R values: gptr$grep(pattern, path),",
+  "gptr$find(pattern, path, sort), gptr$ls(path), gptr$describe(x). gptr$search(\"words\") and",
+  "gptr$help(name) find more."
+)
+r_session_out_text = paste(
+  "- Long output is cut to its head and tail; the notice names gptr$out(id) for the rest. Use",
+  "gptr$out(), gptr$help(), gptr$search() and gptr$plot() only with record = false."
+)
+
+# Member-only capabilities: descriptions and schemas
+tool_help_description = paste(
+  "Show the full schema of a gptr member, a plugin function (\"<ns>/<name>\") or an MCP tool",
+  "(\"<server>/<tool>\"), or else the R help page of a topic."
+)
+tool_help_schema = tool_obj(
+  "name",
+  name = tool_prop("string", "Member, \"<ns>/<name>\", \"<server>/<tool>\" or R topic"),
+  package = tool_prop("string", "Package of the R help topic"),
+  budget = tool_prop("number", "Token budget (default 800)")
+)
+tool_search_description = paste(
+  "Search gptr members, plugin functions, MCP tools and skills by keywords (BM25). Returns name,",
+  "kind, signature and score."
+)
+tool_search_schema = tool_obj(
+  "words",
+  words = tool_prop("string", "Keywords"),
+  limit = tool_prop("number", "Maximum results (default 8)")
+)
+tool_describe_description = paste(
+  "Describe an R object compactly within a token budget (class, shape, columns, values)."
+)
+tool_describe_schema = tool_obj(
+  "x",
+  x = list(description = "The object to describe"),
+  budget = tool_prop("number", "Token budget (default 150)")
+)
+tool_plot_description = paste(
+  "Attach the current plot, or stored plot `which` of the last r result, at a larger size to the",
+  "running r result."
+)
+tool_plot_schema = tool_obj(
+  character(),
+  which = tool_prop("number", "Number of a stored plot"),
+  width = tool_prop("number", "Width in pixels (default 1000)"),
+  height = tool_prop("number", "Height in pixels (default 700)")
+)
+tool_out_description = paste(
+  "Return the full text of a truncated result by the id in its notice, or some of its lines."
+)
+tool_out_schema = tool_obj(
+  "id",
+  id = tool_prop("string", "The id named in the truncation notice"),
+  stream = list(type = "string", enum = I(c("stdout", "stderr")),
+                description = "Which stream (default stdout)"),
+  lines = list(type = "array", items = list(type = "number"),
+               description = "Line numbers to return")
+)
+
+#' The tool specs of builtin:tools: one spec per capability, with a direct and a member form for
+#' read, edit, write, grep, find and ls (IC-37), and the members help, search, describe, plot and
+#' out (`record = FALSE`, IC-48)
+#' @noRd
+tool_builtin_specs = function() {
+  ro = list(read_only = TRUE)
+  edit_snippet = paste("Make precise file edits with exact text replacement, including multiple",
+                       "disjoint edits in one call")
+  list(
+    gptr_tool("read", tool_read_description, parameters = tool_read_schema,
+              execute = tool_read_execute, fun = member_read, exposure = "direct",
+              execution = "sequential", risk = tool_risk_read, snippet = "Read file contents",
+              guidelines = tool_read_guidelines, annotations = ro),
+    gptr_tool("edit", tool_edit_description, parameters = tool_edit_schema,
+              execute = tool_edit_execute, fun = member_edit, exposure = "direct",
+              execution = "sequential", risk = tool_risk_write, snippet = edit_snippet,
+              guidelines = tool_edit_guidelines),
+    gptr_tool("write", tool_write_description, parameters = tool_write_schema,
+              execute = tool_write_execute, fun = member_write, exposure = "direct",
+              execution = "sequential", risk = tool_risk_write,
+              snippet = "Create or overwrite files", guidelines = tool_write_guidelines),
+    gptr_tool("grep", tool_grep_description, parameters = tool_grep_schema,
+              execute = tool_grep_execute, fun = member_grep, exposure = "r",
+              execution = "sequential", risk = tool_risk_search,
+              signature = ns_signature_line("grep", member_grep, tool_grep_description, FALSE),
+              snippet = "Search file contents for patterns (respects .gitignore)",
+              annotations = ro),
+    gptr_tool("find", tool_find_description, parameters = tool_find_schema,
+              execute = tool_find_execute, fun = member_find, exposure = "r",
+              execution = "sequential", risk = tool_risk_search,
+              snippet = "Find files by glob pattern (respects .gitignore)", annotations = ro),
+    gptr_tool("ls", tool_ls_description, parameters = tool_ls_schema, execute = tool_ls_execute,
+              fun = member_ls, exposure = "r", execution = "sequential", risk = tool_risk_search,
+              signature = ns_signature_line("ls", member_ls, tool_ls_description, FALSE),
+              snippet = "List directory contents", annotations = ro),
+    gptr_tool("help", tool_help_description, parameters = tool_help_schema,
+              execute = member_execute(member_help, "help"), fun = member_help, exposure = "r",
+              risk = tool_risk_none, record = FALSE, annotations = ro),
+    gptr_tool("search", tool_search_description, parameters = tool_search_schema,
+              execute = member_execute(member_search, "search"), fun = member_search,
+              exposure = "r", risk = tool_risk_none, record = FALSE, annotations = ro),
+    gptr_tool("describe", tool_describe_description, parameters = tool_describe_schema,
+              execute = tool_describe_execute, fun = member_describe, exposure = "r",
+              risk = tool_risk_none, record = FALSE, annotations = ro),
+    gptr_tool("plot", tool_plot_description, parameters = tool_plot_schema,
+              execute = tool_plot_execute, fun = member_plot, exposure = "r",
+              risk = tool_risk_none, record = FALSE, annotations = ro),
+    gptr_tool("out", tool_out_description, parameters = tool_out_schema,
+              execute = member_execute(member_out, "out"), fun = member_out, exposure = "r",
+              risk = tool_risk_none, record = FALSE, annotations = ro)
+  )
+}
+
+#' builtin:tools: the file tools and members, their guidelines (for `<rules>`), the `<r_session>`
+#' fragments (helpers, out), the `plugins` section and the `members` search source (contract 7.10)
+#' @noRd
+builtin_tools = function(gptr) {
+  for (spec in tool_builtin_specs()) gptr$register(spec)
+  gptr$register(gptr_prompt_section("helpers", r_session_helpers_text, tier = "T0", order = 10L,
+                                    budget = 300L, parent = "r_session"))
+  gptr$register(gptr_prompt_section("out", r_session_out_text, tier = "T0", order = 20L,
+                                    budget = 300L, parent = "r_session"))
+  gptr$register(gptr_prompt_section("plugins", ns_plugins_section, tier = "T1", order = 860L,
+                                    budget = 1500L))
+  gptr$register(gptr_spec("search_source", "members", docs = ns_search_docs))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("tools", builtin_tools))
+on_load(ext_service_set("ns.resolve", ns_resolve, provided_by = "P10", builtin = "tools"))
+on_load(ext_service_set("ns.names", ns_names, provided_by = "P10", builtin = "tools"))
+on_load(ext_service_set("search.sources", search_sources, provided_by = "P10", builtin = "tools"))

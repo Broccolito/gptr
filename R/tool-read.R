@@ -857,7 +857,8 @@ read_text_body = function(rc) {
 #' @param offset,limit 1-based first line and number of lines (`NULL`: from line 1, up to the caps).
 #' @param budget_tokens Estimated-token cap of the text (`gptr.read_max_tokens`, 12,000).
 #' @return `list(text = chr(1), image = <image block> | NULL, details = list(path, offset, limit,
-#'   lines_total, truncated, image, encoding, eol))`
+#'   lines_total, truncated, image, encoding, eol), value = <gptr_lines>)`: `value` holds the
+#'   lines of the same window (read once), without the image block, which travels in `image`
 #' @noRd
 read_file = function(path, offset = NULL, limit = NULL,
                      budget_tokens = gptr_opt("read_max_tokens")) {
@@ -871,7 +872,9 @@ read_file = function(path, offset = NULL, limit = NULL,
                 image = rc$note,
                 binary = read_binary_text(path, rc$abs, rc$size),
                 read_text_body(rc))
-  list(text = as_utf8(text), image = rc$image, details = details)
+  value = read_lines_of(rc, path)
+  attr(value, "image_block") = NULL
+  list(text = as_utf8(text), image = rc$image, details = details, value = value)
 }
 
 #' The value of `gptr$read()`: the window's lines as a `gptr_lines` vector (contract section 5.10)
@@ -880,7 +883,12 @@ read_file = function(path, offset = NULL, limit = NULL,
 #' until the member attaches it to the running `r` result.
 #' @noRd
 read_lines_value = function(path, offset = NULL, limit = NULL) {
-  rc = read_core(path, offset, limit, budget_tokens = Inf)
+  read_lines_of(read_core(path, offset, limit, budget_tokens = Inf), path)
+}
+
+#' The `gptr_lines` of a read_core() window (shared by gptr$read() and the direct `read` value)
+#' @noRd
+read_lines_of = function(rc, path) {
   lines = switch(rc$kind,
                  empty = character(),
                  image = rc$note,

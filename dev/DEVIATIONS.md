@@ -2933,7 +2933,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe and follow the classifier standard (level 0 is an allowlist of known read-only programs, options and literal or plain-parameter words; a construct gptr does not model is at least level 3; level 4 needs a target literal text identifies): a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords (only unquoted ones are keywords) and literal text fed to a shell or an interpreter never hide a command, program-running options and environment values are read as command lines, values the line assigns and names a lister prints are read where they are used, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL code channels, stored code, function-form pragmas and COPY ... PROGRAM lines are read, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, R stopped from a shell or from Python is q(), a glob can stand for any guarded name, PCRE patterns anchor with \z, sed scripts and awk programs are parsed before they are searched, a program run from a path, an unknown git subcommand and an environment variable outside an allowlist are level 3, long options are read by prefix and git remote, config and stash by verb, a guarded name below a directory the shell computes keeps its class, git commands that print files read them, environment names code computes and R's /proc environ are secret reads, ps and jq options are not inert, `for NAME do`, a `[[ ]]` before a reserved word and a `function NAME` body hide no command, SQL reads every literal that may name a file but a compared value, Python's writes to gptr's and R's environment variables are control, an unquoted glob that can expand to an option is an option the shell computes and uniq and xxd may write a glob's second name, a glob that can move awk, sed, jq or yq program text, git's subcommand or verb, a ps or date word or less's `+` command is computed and a glob pattern or option value is read as the files it can hand the program, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2960,7 +2960,8 @@ readings of a parameter default (round 4), and every directory a `cd` can leave 
 (round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
 added, item 12 what round 4 added, item 13 what round 5 added, item 14 what round 6 added,
 item 15 what round 7 (the classifier standard) added, item 16 what round 8 added, item 17
-what round 9 added, item 18 what round 10 added and item 19 what round 11 added.
+what round 9 added, item 18 what round 10 added, item 19 what round 11 added and item 20 what
+round 12 added.
 
 **The classifier standard (coordinator decision, review round 7; it wins over the wording above
 and over items 1-14 where they differ).** (A) Level 0 means *known* read-only, never "nothing
@@ -3822,6 +3823,55 @@ below 1, and SQL keeps its keyword reading (Known limits).
       outside `risk_cmd_inert` with a leading glob go from 2 to 3, so edits mode now asks before
       running them: `cp *.txt out/`, `touch *.txt`, `tee *.log`, `chmod +x *.sh`, `git add *.R`
       and `git checkout *.R`. `cp R/*.R out/`, `cp -- *.txt out/` and `touch -- *.txt` stay 2.
+20. **Review round 12 (findings against the standard).** Both findings were reproduced with a
+    probe (`task2-fix12-probe-before.log`: every listed line was 0) and judged by (A)-(C); one
+    blocker and one major were accepted.
+    - *A glob moves the words after it (A, B).* A glob expands to every name it matches, so its
+      later names and the words after it move on by as many. Round 11 read that only where a
+      name can start with `-`. A glob at or before awk, gawk, sed, jq or yq program text
+      (`awk a* x.txt`, `gawk -v x=a* '{print x}' data.txt`, `jq --arg n a* .x f.json`,
+      `yq e a* x.yaml`), in git's global options or as git's subcommand (`git -C r* log`,
+      `git --git-dir a* log`) was 0, while the `$` forms were 3. With one planted name (a
+      level-2 write), the reviewer ran a shell command through `awk a* x.txt` and the gawk
+      line, deleted a tracked file through `git -C r* log` (`git -C r rm log`) and printed the
+      environment through `jq a* f.json`. The gate now reads a glob at or before the last
+      program-text word (risk_cmd_code_at()) as "a program text the shell computes", and one in
+      git's global options (`risk_git_global_values` lists those that take the next word) or
+      subcommand as "a git subcommand the shell computes" (3 `dynamic`). Self-review applied
+      the reading wherever gptr decides a level from a word's position: a glob among the words
+      of a git subcommand gptr reads by its verb (`risk_git_verb_subs`: config, reflog, bisect
+      and submodule before `--`, the verb of remote and stash) is "a git verb the shell
+      computes" (`git config c*` may set `core.pager`); a glob among ps's words (BSD option
+      letters: `ps x*` may expand to `xe`, which prints environments) or date's (a digit
+      operand sets the clock) is a computed option, and so is one that can match a name
+      starting with `+` for less and more (`less [+]*` may run `+!cmd`; risk_glob_dash() takes
+      the leading character). A program-text option without its value (`sed -e`) stopped the
+      gate with an error on the round-11 source; risk_cmd_code_at() now names no word for it.
+    - *A glob pattern or option value hands the program its names as files (C).*
+      `grep .env* x.txt` and `grep -e .R* x.txt` were 0, although bash runs
+      `grep -e .env .env.local x.txt`, which reads `.env.local`; as an operand the same glob
+      was 3 `secret`. risk_cmd_walk() now hands risk_cmd_simple() the words that are unquoted
+      globs (attribute `globs`; in a reading made from a variable's value or a link's source,
+      each unquoted word with a glob character), and risk_cmd_shifted() returns, when a glob is
+      no operand (a pattern or an option value, not a long option's value after `=`), that glob
+      and every later word that is no option. The read programs read them with their read
+      class (grep, egrep, fgrep, rg, ag, head, cut, diff and the other programs of the generic
+      read branch, sort, fd, tree, and git grep, blame, diff, show and log -p): `grep .env*
+      x.txt`, `rg -g .env* foo`, `diff -L .env* a` and `git grep -e .env* x` are 3 `secret`,
+      and `grep -A 1* .env x` reads `.env` (3). uniq and xxd write them (`uniq -f 1* in.txt` is
+      2, `uniq -f 1* .Rprofile` 4 `control`), and read their glob input from the attribute, so
+      a quoted glob is a name (`uniq 'a*' out.txt` is 2, was 3; round 11's known limit is
+      gone). risk_sh_glob_pat() marks a bracket expression live only with a `]` after its first
+      member, as risk_glob_rx() and the shell read it, so `jq .[] x.json` stays 0 while
+      `jq .[0] x.json` is 3. The guard rows stay 0: `awk '{print $1}' R/*.csv`,
+      `jq . R/*.json`, `git log R/*.R`, `git -C sub/dir log`, `grep 'a.*b' x.txt`,
+      `grep foo *.R`, `grep [Tt]odo notes.txt`, `grep -rn --include=*.R .Renviron R/`,
+      `git tag -l v1.*`, `git config --get user.name`, `ps aux`, `date +%s`; and
+      `git stash push -- R/*.R` stays 2.
+    - *Changed rows:* none in older blocks. The 528 lines of the round-5 to round-11 probes
+      give the same levels and categories. Among this round's probe lines, 55 are higher and one
+      is lower (`uniq 'a*' x`, 3 to 2). Raised outside the tests: unquoted program text with a
+      glob character (`sed -n s/a*/b/p x`, `jq .[0] x.json`, `jq .a? x.json`) is 3.
 Known limits (advisory classifier, not a security boundary; each shell, Python and SQL limit
 below is level 3 or the level of what can be read, never 0, except what (A) admits and the SQL
 functions named last). (A) admits a plain parameter as an operand, and as an option of a
@@ -3866,9 +3916,13 @@ the names `environ`, `environb`, putenv and unsetenv: through another name bound
 os.environ (`e = os.environ; e['GPTR_X'] = '1'`) they are 2 (the os.environ read), and a
 computed key next to literal ones in update() is not flagged. A glob whose first character is a
 literal other than `-` stays an operand, although it may expand to several words
-(`git log R/*.R`); none of those words can be an option. uniq and xxd read their operands
-without quote information, so a quoted glob operand (`uniq '*.txt'`) is read as a glob write
-(2).
+(`git log R/*.R`); none of those words can be an option. Where a glob's position matters it is
+read as one that matches several names: after a glob pattern or option value every later word
+that is no option is a file the program may read (`grep -A 1* .env x` reads `.env`), although
+the program may stop with an error first. `set -f` and zsh's `noglob` are not modelled (a glob
+still counts). risk_cmd_shifted() knows the glob words by their text, so a quoted word spelled
+like an unquoted glob in the same command counts as one, and a for loop's variable over a glob
+is read as the glob (`for p in .env*; do grep $p x; done` reads `.env*`).
 
 Validation: `progress/P11.md`, Task 2. Six blocks were added to `test-perm-classify.R`
 (145 expectations); against the plan-literal Task 2 source the file gives
@@ -3911,9 +3965,13 @@ before the argv change) with the round-10 call sites removed and round 9's gate 
 10). Review round 11 added item 19 with one block and rows in one older block (172
 expectations), and one changed assertion. The final test file fails 127 against the round-10
 source (`task2-fix11-red-final.log`). The first red run, in the working tree before the source
-changed and before the self-review rows were added, failed 99 (`task2-fix11-red.log`).
-Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2292 ]` in the UTF-8 and the C locale
-(`task2-fix11-green.log`, `task2-fix11-green-C.log`).
+changed and before the self-review rows were added, failed 99 (`task2-fix11-red.log`)
+(`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2292 ]` at the end of round 11). Review round 12 added item
+20 with one block (169 expectations) and no changed old row. The final test file fails 118
+against the round-11 source (`task2-fix12-red-final.log`: 117 failures and the `sed -e` error,
+which ends its block); the block as first written failed 117 in the working tree
+(`task2-fix12-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2461 ]` in
+the UTF-8 and the C locale (`task2-fix12-green.log`, `task2-fix12-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -8308,9 +8366,10 @@ mock server).
 ## D-121 - P10 builtin:tools: an instructions file outside the project reads at level 1, `plot` as a direct tool is an error result instead of a false "attached", the edit risk rates every field the execute applies, and four P06/P07 tests no longer assume that no built-in registers the core tools (2026-10-05)
 
 P10 Task 10's plan-literal members, executes, risk functions, specs and `builtin:tools`
-(`R/tool-namespace.R`, part 4) are changed in three ways. Member signatures, classes, condition
-fields, Pi's texts, descriptions, schemas, snippets, guidelines, fragment texts and orders, and
-the plan's 18 test blocks are unchanged. The plan-literal file is kept as
+(`R/tool-namespace.R`, part 4) are changed in three ways, and in three more after review round 1
+(items 4-6). Member signatures, classes, condition fields, Pi's texts, descriptions, schemas,
+snippets, guidelines, fragment texts and orders, and the plan's 16 test blocks are unchanged (2
+blocks were added by the implementation and 3 by review round 1). The plan-literal file is kept as
 `dev/.validation/P10/task10-source-plan-literal.R`.
 
 1. **An `instructions` file reads at 0 only inside the project.** P01's `path_class()` checks
@@ -8332,6 +8391,28 @@ the plan's 18 test blocks are unchanged. The plan-literal file is kept as
    `path` alone (level 2) while the execute wrote, for example, `.gptr/mcp.json` (control, level
    4). Schema validation requires `edits`, but a `modify` hook rewrites the validated input before
    P06's `perm_check()`. Both now read the edits through `tool_edit_input_edits()`.
+4. **A direct `read` or `describe` result carries the R value too** (review round 1). Contract
+   10.6 says `ctx$execute_tool(name, input)` returns the tool's result value, and
+   `dispatch_nested()` returns the result's `value`. The plan's direct `read` and `describe`
+   results had none, so a plugin's `ctx$execute_tool("read", ...)` got `NULL` outside an `r`
+   evaluation and a `gptr_lines` inside one. P10's own `R/tool-read.R` (Task 4) now builds the
+   `gptr_lines` of a window in `read_lines_of()`, shared by `read_lines_value()` and `read_file()`,
+   which returns it as `value` without reading the file twice and without the image block (the
+   image stays the result's image). `tool_read_execute()` passes it on; `tool_describe_execute()`
+   returns its lines as a `gptr_text` value. Texts and `details` are unchanged.
+5. **A direct `help`, `search` or `out` uses the session of its own ctx** (review round 1). These
+   members found their session through the innermost r-call marker, so a sub-agent's direct tool
+   (IC-37 lets a preset or `+out` declare one), executed while the parent's `r` evaluation was on
+   the stack, used the parent's session: `out` searched the parent's store and failed with "There
+   is no stored output" for an id of the sub-agent's own store. `member_execute()` now binds a
+   session marker (`gptr_ns_session`, the ctx's session, `NULL` for process-level dispatch) in its
+   frame for a direct call, and `ns_current_session()` returns the session of the innermost of the
+   two markers (no promise forced, no active binding called).
+6. **Only `skill:<name>/<path>` is a skill pseudo-path for the risk** (review round 1).
+   `tool_path_risk()` matched any `skill:` prefix, while `read_resolve()` treats only
+   `^skill:([^/]+)/(.+)$` as a skill path and reads any other `skill:...` string as a file of the
+   working directory: `skill:secrets.env` was rated level 0 although the file read is protected
+   (level 2). The risk now uses `read_resolve()`'s pattern.
 
 Outside P10's files (the D-112 precedent; no expectation and no P06/P07 code changes), four tests
 of completed plans assumed that no built-in registers the core tools or an `r_session` fragment
@@ -8352,4 +8433,6 @@ Validation: `progress/P10.md`, Task 10. Against the plan-literal source, the fin
 (`task10-probe1.R`) shows each case before (`task10-probe1-plan-literal.log`: an outside
 `AGENTS.md` and skill file at level 0, "plot attached to the r result" with `is_error` FALSE, and
 an envelope in `newText` rated 2 while `.gptr/mcp.json` is written) and after
-(`task10-probe1-after.log`). Final `^tool-namespace$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 384 ]`.
+(`task10-probe1-after.log`). Review round 1 (items 4-6): the 3 added blocks are red before the fix
+`[ FAIL 11 | WARN 0 | SKIP 0 | PASS 385 ]` (`task10-fix1-red.log`). Final `^tool-namespace$`:
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 398 ]` (`task10-fix1-green.log`).

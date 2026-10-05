@@ -70,6 +70,16 @@ local_without_services = function(names, .env = parent.frame()) {
   invisible(NULL)
 }
 
+#' Disable a built-in for the calling test with a user-scope `-builtin:<name>` filter (removed
+#' afterwards), for tests whose premise predates that built-in: P10's builtin:tools registers the
+#' core tools read, edit and write and the r_session fragments, which those tests did not expect
+local_without_builtin = function(name, .env = parent.frame()) {
+  old = registry_env()$filters$user
+  registry_filters_set(c(old, paste0("-builtin:", name)), "user")
+  withr::defer(registry_filters_set(old, "user"), envir = .env)
+  invisible(NULL)
+}
+
 #' A process-wide hook, or a session listener when `session` (an id) is given
 local_hook = function(event, handler, session = NULL, .env = parent.frame()) {
   id = hook_add(event, handler, rank = if (is.null(session)) 3L else 0L,

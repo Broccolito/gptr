@@ -112,7 +112,8 @@ test_that("prompt_specs keeps the winning record of each name, in order", {
   s = p07_session()
   sid = session_data(s)$id
   off1 = gptr_register(gptr_prompt_section("zz_late", "late", tier = "T1", order = 990L))
-  off2 = gptr_register(gptr_prompt_section("aa_early", "early", tier = "T0", order = 50L))
+  # order 1: below every registered section and r_session fragment (P10's helpers is order 10)
+  off2 = gptr_register(gptr_prompt_section("aa_early", "early", tier = "T0", order = 1L))
   withr::defer({
     off1()
     off2()
