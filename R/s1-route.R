@@ -426,3 +426,571 @@ s1_zip = function(parts) {
   for (p in parts) if (isTRUE(attr(p$states, "split"))) split = p$display
   list(states = states, names = nm, split = split, labels = vapply(parts, `[[`, "", "label"))
 }
+
+# ---- models -----------------------------------------------------------------------------------
+# IC-74 (07-local-ollama.md sections 2, 2.1, 3 and 5): the route matches and dispatches by the
+# model's own resolved type, never its provider's default (Clef on the chat-serving `ollama`
+# provider is a classifier); the target is preflighted before the call's values are read, a
+# state is built, a cache key is computed or a credential is looked up; egress follows P08's
+# effective-endpoint rule, never the `local` hint; images are checked against the model and keyed;
+# unknown usage and calibration stay NA, and the vector's meta carries the call's provenance.
+
+#' The configured System 1 setting when it opts into emulation ("emulate:<ref>"), else NULL
+#' @noRd
+s1_emulation_setting = function() {
+  v = setting_get("system1")
+  if (is.character(v) && length(v) == 1L && !is.na(v) && startsWith(v, "emulate:")) v else NULL
+}
+
+#' Is `model` (a reference, a provider id or a provider spec) a classifier, or an emulation
+#' reference? Never signals.
+#'
+#' The model's own resolved type decides (IC-74, 07 section 2), as P08's gateway_model_type()
+#' routes: a provider id or spec stands for its first model, and only a model without a type
+#' takes its provider's. P05's model_resolve() never discovers or contacts a provider.
+#' @noRd
+s1_is_classifier = function(model) {
+  ref = is.character(model) && length(model) == 1L && !is.na(model) && nzchar(model)
+  if (ref && startsWith(model, "emulate:")) return(TRUE)
+  if (!ref && !inherits(model, "gptr_provider")) return(FALSE)
+  type = tryCatch({
+    rec = s1_model(model, strict = FALSE)
+    t = if (is.list(rec)) rec[["type"]] else NULL
+    if (is.null(t)) {
+      p = if (inherits(model, "gptr_provider")) model else if (is.list(rec)) {
+        s1_provider(rec[["provider"]])
+      }
+      t = if (is.list(p)) p[["type"]] else NULL
+    }
+    t
+  }, error = function(e) NULL)
+  identical(type, "classifier")
+}
+
+#' The classifier route's match(): a prompt and a classifier model (contract 6.1.1, order 10)
+#' @noRd
+s1_match = function(call) !is.null(call$prompt) && s1_is_classifier(call$ids$model)
+
+#' The target of the classifier model record `rec` served by `provider`
+#'
+#' The model's own type must be `classifier` (IC-74; only a record without a type takes its
+#' provider's). `engine` is s1_engine()'s (the provider id; "fake" for P01's fake), and
+#' `calibrated` is NA: native decision probabilities are not calibrated without recorded evidence
+#' (07 section 3); an adapter that states its calibration decides for the answers it gives.
+#' @noRd
+s1_target_of = function(rec, provider, ref) {
+  type = rec[["type"]] %||% (if (is.list(provider)) provider[["type"]])
+  if (!identical(type, "classifier")) {
+    gptr_abort(paste0("Model ", ref, " is not a System 1 (classifier) model."),
+               "invalid_argument", arg = "model", expected = "a classifier model")
+  }
+  if (is.null(provider)) {
+    gptr_abort(paste0("No provider is registered for the System 1 model ", ref, "."),
+               "unknown_model", ref = ref, suggestions = character())
+  }
+  base = s1_base_url(provider)
+  endpoint = if (is.null(base)) paste0("offline:", provider[["id"]]) else s1_endpoint(base)
+  list(ref = paste0(rec[["provider"]], "/", rec[["id"]]), model = rec, provider = provider,
+       engine = s1_engine(rec), calibrated = NA, alias = rec[["id"]], endpoint = endpoint)
+}
+
+#' What answers a System 1 call: a classifier model (a reference, a provider id or a provider
+#' spec) or opt-in emulation through a chat model (architecture 4.1.5, IC-19)
+#'
+#' `jev` (the alias the system1 prompt section names) means the configured System 1 when the
+#' `system1` setting opts into emulation, so the agent's own calls follow the user's choice.
+#' @noRd
+s1_target = function(model) {
+  if (inherits(model, "gptr_provider")) {
+    return(s1_target_of(s1_model(model), model, model[["id"]] %||% model[["name"]]))
+  }
+  if (!is.character(model) || length(model) != 1L || is.na(model) || !nzchar(model)) {
+    arg_abort(model, "model", "a System 1 model reference, provider id or provider spec")
+  }
+  ref = model
+  emu = s1_emulation_setting()
+  if (identical(ref, "jev") && !is.null(emu)) ref = emu
+  if (startsWith(ref, "emulate:")) {
+    if (is.null(emu)) {
+      gptr_abort(c("System 1 emulation through a chat model is opt-in and is not enabled.",
+                   paste0("Enable it with gptr_config(system1 = \"emulate:<provider>/<model>\"); ",
+                          "its answers are not calibrated.")),
+                 "invalid_argument", arg = "model",
+                 expected = "a classifier model, or emulation enabled with gptr_config(system1 =)")
+    }
+    chat = s1_model(substring(ref, 9L), strict = TRUE)
+    return(list(ref = ref, model = chat, provider = s1_provider(chat[["provider"]]),
+                engine = "emulated:structured", calibrated = FALSE, alias = ref, endpoint = ref))
+  }
+  rec = s1_model(ref, strict = TRUE)
+  s1_target_of(rec, s1_provider(rec[["provider"]]), ref)
+}
+
+#' The running run's frozen safety record (P06's `run$opts$safety`, IC-53), or NULL outside a run,
+#' which keeps P05's local-only default (07 section 2.1: never built from settings, model metadata
+#' or call options here)
+#' @noRd
+s1_safety = function() {
+  run = run_current()
+  if (is.null(run)) NULL else run[["opts"]][["safety"]]
+}
+
+#' Preflight a target before the call's values are read, a state is built or serialised, a cache
+#' key is computed or a credential is looked up (07 section 2.1; IC-74): P05's pure check of the
+#' classifier on its provider, or for emulation of the chat model (s1_emu_ready(), which also
+#' refuses a decision-only model). The checked model, with the discovery evidence the preflight
+#' applies (digest, server version), replaces the resolved one, so it reaches the cache identity
+#' and the provenance; the safety record travels with the target to the request.
+#' @noRd
+s1_ready = function(target, safety = s1_safety()) {
+  target$model = if (identical(target$engine, "emulated:structured")) {
+    s1_emu_ready(target$model, safety)
+  } else {
+    s1_preflight(target$model, target$provider, safety = safety)
+  }
+  target["safety"] = list(safety)
+  target
+}
+
+#' The call's System 1 images (`.opts$system1_images`; IC-74, 07 section 4) checked against the
+#' target: only a native model whose decision record says it takes images gets them, and any
+#' other target refuses them (they are never dropped for a text-only request). P08 checked their
+#' shape and MIME types; s1_cache_identity() refuses a malformed record; the adapter applies its
+#' own size limits when it encodes them. NULL when there are none.
+#' @noRd
+s1_images = function(images, target) {
+  if (!length(images)) return(NULL)
+  d = target$model[["decision"]]
+  native = !identical(target$engine, "emulated:structured")
+  if (!native || !is.list(d) || !isTRUE(d[["images"]])) {
+    gptr_abort(c(paste0("The System 1 model ", target$ref, " does not take images."),
+                 paste0("Leave out .opts$system1_images, or ask a decision model whose record ",
+                        "says it accepts images.")),
+               "invalid_argument", arg = ".opts$system1_images",
+               expected = "images only for a decision model that accepts them")
+  }
+  if (!is.list(images) || is.object(images)) {
+    arg_abort(images, ".opts$system1_images", "a list of image records list(data, mime)")
+  }
+  unname(images)
+}
+
+#' The egress acknowledgement and the replay guard before any System 1 request (contract 7.8;
+#' IC-45, IC-47, IC-74)
+#'
+#' A System 1 state is always the user's data, so egress is checked whatever `.opts$context` says.
+#' P08's egress_check() itself exempts offline providers and local ones whose effective endpoint
+#' is a loopback address, never the `local` hint alone (D-099); an offline provider sends nothing,
+#' even as an unregistered spec. The call's own `replay =` decides, as for System 2 calls (P08's
+#' gateway_replay_guard()): in replay mode only offline providers may be called, so a cache miss
+#' signals gptr_error_not_recorded. The process option is set only for the guard and restored.
+#' @noRd
+s1_guards = function(target, replay = NULL) {
+  p = target$provider
+  if (!isTRUE(p[["offline"]])) egress_check(target$model[["provider"]])
+  if (!identical(replay_mode(replay), "replay")) return(invisible(TRUE))
+  if (!identical(replay_mode(), "replay")) {
+    old = options(gptr.replay = "replay")
+    on.exit(options(old), add = TRUE)
+  }
+  replay_guard(p %||% target$model, "System 1 call")
+  invisible(TRUE)
+}
+
+# ---- results ----------------------------------------------------------------------------------
+
+#' The typed vector from canonical answers (before abstention); NULL answers are failed elements
+#' @noRd
+s1_build = function(q, answers, nm, threshold, meta) {
+  n = length(answers)
+  if (identical(q$type, "noul")) {
+    prob = rep(NA_real_, n)
+    for (i in seq_len(n)) if (!is.null(answers[[i]])) prob[i] = answers[[i]][["prob"]]
+    value = prob >= threshold
+    names(value) = nm
+    return(new_gptr_decision(value, prob, threshold, meta))
+  }
+  k = length(q$options)
+  m = matrix(NA_real_, n, k)
+  conf = rep(NA_real_, n)
+  choice = identical(q$type, "choice")
+  value = if (choice) rep(NA_character_, n) else rep(NA_real_, n)
+  for (i in seq_len(n)) {
+    a = answers[[i]]
+    if (is.null(a)) next
+    m[i, ] = a[["probabilities"]]
+    conf[i] = a[["confidence"]]
+    value[i] = if (choice) a[["choice"]] else a[["score"]]
+  }
+  names(value) = nm
+  if (choice) {
+    new_gptr_choice(value, q$options, m, conf, meta)
+  } else {
+    new_gptr_score(value, q$options, m, conf, meta)
+  }
+}
+
+#' Validate the answer-shape arguments: threshold in (0, 1), min_confidence in [0, 1], uncertain
+#' @noRd
+s1_check_args = function(q, args) {
+  threshold = args[["threshold"]] %||% 0.5
+  check_number(threshold, "threshold")
+  if (threshold <= 0 || threshold >= 1) {
+    gptr_abort("threshold must lie strictly between 0 and 1.", "invalid_argument",
+               arg = "threshold", expected = "a number in (0, 1)")
+  }
+  mc = args[["min_confidence"]]
+  if (!is.null(mc)) check_number(mc, "min_confidence", min = 0, max = 1)
+  u = args[["uncertain"]]
+  ok = is.null(u) || is.function(u) || identical(u, "stop") || (is.logical(u) && length(u) == 1L)
+  if (!ok) {
+    gptr_abort("uncertain must be NA, TRUE, FALSE, \"stop\" or a function(state, answer).",
+               "invalid_argument", arg = "uncertain",
+               expected = "NA, TRUE, FALSE, \"stop\" or a function")
+  }
+  if (is.logical(u) && !is.na(u) && !identical(q$type, "noul")) {
+    gptr_abort("uncertain = TRUE or FALSE applies to yes/no questions only.", "invalid_argument",
+               arg = "uncertain", expected = "NA, \"stop\" or a function for choices and scores")
+  }
+  list(threshold = threshold, min_confidence = mc, uncertain = u)
+}
+
+#' One value returned by an uncertain() function, coerced to the result's type and checked
+#' against the question: a choice among the options, a score in [0, levels - 1] (fractional, as
+#' System 1 scores are), a decision that reads as TRUE or FALSE, or NA
+#' @noRd
+s1_coerce_one = function(r, q) {
+  v0 = if (inherits(r, "gptr_s1")) s1_bare(r) else r
+  one = length(v0) == 1L && is.atomic(v0)
+  v = NULL
+  if (one && is.na(v0)) {
+    v = switch(q$type, noul = NA, choice = NA_character_, NA_real_)
+  } else if (one && identical(q$type, "noul")) {
+    v = as.logical(v0)
+    if (is.na(v)) v = NULL
+  } else if (one && identical(q$type, "choice")) {
+    v = as.character(v0)
+    if (!v %in% q$options) v = NULL
+  } else if (one && (is.numeric(v0) || is.logical(v0))) {
+    v = as.double(v0)
+    if (v < 0 || v > length(q$options) - 1) v = NULL
+  }
+  if (is.null(v)) {
+    gptr_abort("The uncertain function must return one value of the answer's type (or NA).",
+               "invalid_argument", arg = "uncertain", expected = "one value per uncertain element")
+  }
+  unname(v)
+}
+
+#' Apply min_confidence and uncertain to the uncertain band (architecture 4.1.5): a decision is
+#' uncertain when abs(2 * p - 1) < min_confidence, a choice or a score when its confidence is
+#' below it. An answered element whose confidence is unknown (an empty probability map, IC-74)
+#' cannot show that it meets min_confidence, so it is inside any band above 0; a failed element
+#' is NA already and stays out. `uncertain` NULL or NA gives NA, TRUE/FALSE that value, "stop"
+#' the classed error gptr_error_s1_uncertain, and a function(state, answer) its return value
+#' (escalation)
+#' @noRd
+s1_abstain = function(out, q, a, states) {
+  mc = a$min_confidence
+  if (is.null(mc) || !length(out)) return(out)
+  conf = gptr_prob(out, "confidence")
+  unknown = !is.na(s1_bare(out)) & is.na(conf) & mc > 0
+  unsure = unknown | (!is.na(conf) & conf < mc)
+  if (!any(unsure)) return(out)
+  u = a$uncertain
+  if (identical(u, "stop")) {
+    gptr_abort(paste0(sum(unsure), " System 1 answer(s) fall inside the uncertain band ",
+                      "(confidence below ", mc, if (any(unknown)) " or unknown", ")."),
+               c("s1_uncertain", "s1"), prob = unname(gptr_prob(out)[unsure]),
+               min_confidence = mc)
+  }
+  value = s1_bare(out)
+  if (is.function(u)) {
+    for (i in which(unsure)) value[i] = s1_coerce_one(u(states[[i]], out[i]), q)
+  } else if (is.logical(u) && !is.na(u)) {
+    value[unsure] = u
+  } else {
+    value[unsure] = NA
+  }
+  s1_rebuild(out, value, seq_along(out))
+}
+
+#' The one-line summary for the document block and the gptr.decision entry (contract 11.5)
+#' @noRd
+s1_summary = function(out, meta) {
+  v = s1_bare(out)
+  n_na = sum(is.na(v))
+  body = if (inherits(out, "gptr_decision")) {
+    paste(c(paste(sum(v %in% TRUE), "TRUE"), paste(sum(v %in% FALSE), "FALSE"),
+            if (n_na) paste(n_na, "NA")), collapse = " / ")
+  } else if (inherits(out, "gptr_choice")) {
+    lv = attr(out, "s1_levels", exact = TRUE)
+    counts = tabulate(match(v[!is.na(v)], lv), nbins = length(lv))
+    keep = order(-counts, seq_along(lv))
+    keep = keep[counts[keep] > 0L]
+    paste(c(paste(lv[keep], counts[keep]), if (n_na) paste("NA", n_na)), collapse = ", ")
+  } else if (n_na == length(v)) {
+    "mean NA"
+  } else {
+    paste("mean", format(round(mean(v, na.rm = TRUE), 2)))
+  }
+  paste0(class(out)[1L], ": ", body, " (", meta$model %||% "unknown", ", ",
+         meta$date %||% format(Sys.Date()), ")")
+}
+
+#' JSON-able copies of at most 50 values (NA becomes JSON null)
+#' @noRd
+s1_json_values = function(v) {
+  w = unname(v)[seq_len(min(length(v), 50L))]
+  out = as.list(w)
+  out[is.na(w)] = list(NULL)
+  out
+}
+
+#' The failure policy (contract 2.2): a scalar call signals its element's condition; a
+#' vectorised call keeps NA for failed elements and warns once with class s1_errors
+#' @noRd
+s1_failures = function(conditions, n) {
+  errors = s1_errors_df(conditions)
+  if (is.null(errors)) return(invisible(NULL))
+  if (n == 1L) {
+    e = conditions[[1L]]
+    sub = sub("^gptr_error_", "", class(e)[1L])
+    gptr_abort(conditionMessage(e), unique(c(sub, "s1")), status = e[["status"]],
+               error_type = e[["error_type"]], request_id = e[["request_id"]],
+               model = e[["model"]])
+  }
+  gptr_warn(paste0(nrow(errors), " of ", n, " System 1 elements failed and are NA; ",
+                   "see attr(x, \"meta\")$errors."), "s1_errors", errors = errors)
+}
+
+#' Write the one-line block of a statement through P15's doc.s1_block service when it is
+#' registered and no run executes model code (System 1 calls made by the agent are recorded by
+#' their r block; P15 decides whether the statement is top level)
+#' @noRd
+s1_doc_block = function(call, summary) {
+  if (is.null(call) || !is.null(run_current()) || !ext_service_has("doc.s1_block")) {
+    return(invisible(NULL))
+  }
+  ext_service_get("doc.s1_block")(call, summary)
+  invisible(NULL)
+}
+
+#' The session a System 1 call is charged to: the piped session, else the running session
+#' @noRd
+s1_session_id = function(session) {
+  if (!is.null(session)) return(session_data(session)$id)
+  run = run_current()
+  if (is.null(run) || is.null(run$session)) NA_character_ else as.character(run$session)
+}
+
+#' Append the process System 1 accounting row (contract 4.3 and 7.5): one row per call that
+#' made requests; token counts the service did not report stay unknown (NA, IC-74)
+#' @noRd
+s1_log_usage = function(target, res, session, started) {
+  route = if (identical(target$engine, "emulated:structured")) "emulated" else "system-one"
+  rids = res[["request_ids"]]
+  rid = if (length(rids)) rids[1L] else NULL
+  u = res[["usage"]]
+  s1_usage_log(target$model, route, u[["input"]], u[["output"]], rid, s1_session_id(session),
+               started, as.numeric(difftime(Sys.time(), started, units = "secs")))
+  invisible(NULL)
+}
+
+#' The gptr.decision entry (piped sessions), the decision event and the document summary
+#'
+#' The event carries the question type as `question_type`: every event's `type` field is the
+#' event name (contract 4.5), and ev_new() would let a payload field `type` overwrite it. The
+#' summary handed to doc.s1_block carries `meta` (model and date), from which P15 writes the
+#' block header (`model=`, `date=`; contract 11.5).
+#' @noRd
+s1_record = function(out, prompt, q, meta, session, call) {
+  summary = s1_summary(out, meta)
+  n_cached = sum(meta$cached)
+  if (!is.null(session)) {
+    data = list(question = prompt, type = q$type, model = meta$model, alias = meta$alias,
+                n = length(out), summary = summary, answers = s1_json_values(s1_bare(out)),
+                probs = s1_json_values(gptr_prob(out)), cached = n_cached)
+    session_append(session, list(type = "custom", custom_type = "gptr.decision", data = data))
+  }
+  ev_dispatch("decision", ev_new("decision", model = meta$model, question = prompt,
+                                 question_type = q$type, n = length(out), summary = summary,
+                                 cached = n_cached),
+              session = session)
+  s1_doc_block(call, structure(summary, meta = list(model = meta$model, date = meta$date)))
+  invisible(summary)
+}
+
+#' The vector's meta (contract 5.2 as amended by IC-74; 07 section 3): the plan's fields plus the
+#' call's provenance: `provider`, `api`, `execution` ("native" or "emulated"), `locality`
+#' ("local", "remote" or "unknown"), `model_digest`, `server_version` and
+#' `calibration_provenance`
+#'
+#' A call answered entirely from the cache made no request: its usage is a known zero and its
+#' provenance and calibration are the target's. When requests were made, unknown usage stays NA,
+#' and cached elements next to fresh ones make the calibration claim conservative (TRUE only when
+#' both are calibrated).
+#' @noRd
+s1_meta = function(prompt, target, got) {
+  res = got$res
+  prov = res[["provenance"]] %||% s1_provenance(target$model, list(), target$engine)
+  calibrated = if (is.null(res)) {
+    target$calibrated
+  } else if (any(got$cached)) {
+    s1_calibration(NA, list(target$calibrated, res[["calibrated"]]))
+  } else {
+    res[["calibrated"]]
+  }
+  u = res[["usage"]]
+  usage = if (is.null(res)) {
+    list(input = 0, output = 0, cost = 0)
+  } else {
+    list(input = u[["input"]], output = u[["output"]], cost = u[["cost"]])
+  }
+  list(model = got$version %||% target$alias, alias = target$alias,
+       engine = res[["engine"]] %||% target$engine, calibrated = calibrated,
+       question = prompt, date = format(Sys.Date()), cached = got$cached,
+       errors = s1_errors_df(got$conditions), usage = usage,
+       request_ids = res[["request_ids"]] %||% character(),
+       provider = prov[["provider"]], api = prov[["api"]], execution = prov[["execution"]],
+       locality = prov[["locality"]], model_digest = prov[["digest"]],
+       server_version = prov[["server_version"]],
+       calibration_provenance = prov[["calibration_provenance"]])
+}
+
+# ---- the System 1 core --------------------------------------------------------------------------
+
+#' The physical model id a cache record names, or NULL
+#' @noRd
+s1_cached_version = function(rec) {
+  v = rec[["model"]]
+  if (is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)) v else NULL
+}
+
+#' Answers for the states: the cache first (skipped in live mode), then requests for the misses
+#' after the egress and replay guards; new answers are cached as they arrive
+#'
+#' The keys carry the preflighted model's identity and the images (s1_cache_identity(), IC-74);
+#' a record that is not a valid answer to the question is a miss. The request gets the target's
+#' safety record and the images.
+#' @noRd
+s1_answers = function(states, q, target, session, started, live = FALSE, images = NULL,
+                      replay = NULL) {
+  n = length(states)
+  questions = list(answer = q$wire)
+  salt = s1_cache_salt()
+  keys = s1_cache_keys(salt, target$endpoint, target$ref, q$wire, states,
+                       s1_cache_identity(target$model, images))
+  answers = vector("list", n)
+  conditions = vector("list", n)
+  cached = rep(FALSE, n)
+  version = NULL
+  if (!live) {
+    for (i in seq_len(n)) {
+      rec = s1_cache_get(keys[i])
+      a = if (is.null(rec)) NULL else s1_cache_answer(rec, q$wire)
+      if (is.null(a)) next
+      answers[i] = list(a)
+      cached[i] = TRUE
+      version = version %||% s1_cached_version(rec)
+    }
+  }
+  miss = which(!cached)
+  res = NULL
+  if (length(miss)) {
+    s1_guards(target, replay)
+    res = if (identical(target$engine, "emulated:structured")) {
+      s1_emulate(target$model, states[miss], questions)
+    } else {
+      s1_request(target$model, states[miss], questions,
+                 list(provider = target$provider, safety = target[["safety"]], images = images))
+    }
+    for (k in seq_along(miss)) {
+      i = miss[k]
+      got = res$answers[[k]]
+      if (is.null(got)) {
+        conditions[i] = list(res$conditions[[k]])
+        next
+      }
+      answers[i] = list(got[["answer"]])
+      s1_cache_put(keys[i], s1_cache_record(keys[i], got[["answer"]], res$model_version,
+                                            target$alias, q$wire, states[[i]], salt,
+                                            res$usages[[k]]))
+    }
+    version = res$model_version %||% version
+    s1_log_usage(target, res, session, started)
+  }
+  list(answers = answers, conditions = conditions, cached = cached, version = version, res = res)
+}
+
+#' The System 1 core shared by the classifier route and ctx$decide(): images, question (with the
+#' model's decision limits), element cap, split notice, answers, result vector, failures,
+#' abstention, records. `target` comes from s1_ready().
+#' @noRd
+s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
+  started = Sys.time()
+  images = s1_images(args[["opts"]][["system1_images"]], target)
+  zipped = s1_zip(parts)
+  q = s1_question(prompt, zipped$labels, args[["choices"]], args[["levels"]],
+                  decision = target$model[["decision"]])
+  a = s1_check_args(q, args)
+  states = zipped$states
+  n = length(states)
+  s1_check_cap(n)
+  if (!is.null(zipped$split)) {
+    gptr_inform(paste0("System 1 judged each row of ", zipped$split, " separately (", n,
+                       " states). To judge the whole table as one input, pass I(",
+                       zipped$split, ")."), "s1_split", .once = "s1_split")
+  }
+  replay = args[["replay"]]
+  live = identical(replay_mode(replay), "live")
+  got = s1_answers(states, q, target, session, started, live = live, images = images,
+                   replay = replay)
+  meta = s1_meta(prompt, target, got)
+  out = s1_build(q, got$answers, zipped$names, a$threshold, meta)
+  s1_failures(got$conditions, n)
+  out = s1_abstain(out, q, a, states)
+  s1_record(out, prompt, q, meta, session, call)
+  if (identical(q$type, "choice") &&
+        (isTRUE(q$factor) || identical(args[["opts"]][["output"]], "factor"))) {
+    return(factor(s1_bare(out), levels = q$options))
+  }
+  out
+}
+
+# ---- entry points -------------------------------------------------------------------------------
+
+#' The classifier route's run() (contract 7.13). No closure and no tryCatch() in this frame: it
+#' is the caller of s1_inputs(), which reads the user's values. The target is preflighted first.
+#' @noRd
+s1_call = function(call) {
+  target = s1_ready(s1_target(call$ids$model))
+  parts = s1_inputs(call)
+  s1_run(call$prompt, parts, target, call$args, session = call$session, call = call)
+}
+
+#' The s1.decide service behind ctx$decide(question, x, ...) (contract 7.0, 10.6): `x` is one
+#' input under the state key `input`; `...` takes choices, levels, threshold, min_confidence and
+#' uncertain; the model is the configured System 1 (model_default("system1"): the setting, the
+#' TypeSafe key or a verified local decision model, IC-74)
+#' @noRd
+s1_decide = function(question, x, ...) {
+  check_string(question, "question")
+  args = list(...)
+  ok = c("choices", "levels", "threshold", "min_confidence", "uncertain")
+  nm = names(args)
+  if (length(args) && (is.null(nm) || !all(nm %in% ok) || anyDuplicated(nm))) {
+    gptr_abort(paste0("ctx$decide() takes choices, levels, threshold, min_confidence and ",
+                      "uncertain after the input."), "invalid_argument", arg = "...",
+               expected = "named System 1 arguments")
+  }
+  ref = s1_default_ref()
+  if (is.null(ref)) {
+    gptr_abort(c("No System 1 model is configured.",
+                 paste0("Set TYPESAFE_API_KEY (for example with gptr_env()), prepare a local ",
+                        "decision model, or choose one with gptr_config(system1 = ...).")),
+               "no_key", provider = "typesafe", variables = "TYPESAFE_API_KEY")
+  }
+  target = s1_ready(s1_target(ref))
+  s1_run(question, list(s1_part(x, "input", "x")), target, args)
+}

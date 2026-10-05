@@ -7597,7 +7597,7 @@ every failure in the adaptation tests or Task 8's IC-74 test); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 284 ]` (`task9-green.log`; the plan's 30 tests give 118,
 exactly its 192 - 74).
 
-## D-115 - P13 classifier route core: match and target follow the model's own type, the target is preflighted before the call's values are read, egress follows the effective endpoint and the call's replay = wins, images are checked, keyed and handed to the adapter, meta carries the call's provenance with calibration and usage unknown when unknown, and a cached record that does not answer the question is a miss (2026-10-05)
+## D-115 - P13 classifier route core: match and target follow the model's own type, the target is preflighted before the call's values are read, egress follows the effective endpoint and the call's replay = wins, images are checked, keyed and handed to the adapter, meta carries the call's provenance with calibration and usage unknown when unknown, a cached record that does not answer the question is a miss, and an answer whose confidence is unknown is inside the uncertain band (2026-10-05)
 
 P13 Task 8 (`R/s1-route.R`; two small changes in `R/s1-client.R`; `tests/testthat/test-s1-route.R`).
 IC-74 (07-local-ollama.md sections 2-5) and the forward notes of D-076, D-077, D-078 and D-080
@@ -7648,9 +7648,22 @@ except one assertion (item 4).
    decision or score has no levels); an all-NA score summary says `mean NA`, not `mean NaN`;
    `s1_decide()` refuses duplicated argument names, and its no-key message names a local decision
    model as a third way.
+10. **Unknown confidence is inside the uncertain band; `uncertain()` values are checked** (review
+   round 1; 07 section 3; report 04 section 2.9). An answered choice or score whose confidence is
+   unknown (an empty probability map, as Vercel's gateway returns after it re-ran an uncertain
+   evaluation on a chat model) cannot show that `min_confidence` is met, so it is inside any band
+   above 0 and becomes NA, the given `TRUE`/`FALSE`, the `uncertain()` function's value or, with
+   `"stop"`, `gptr_error_s1_uncertain` (whose message then says "or unknown"). The plan's
+   `!is.na(conf) & conf < min_confidence` was written when an NA confidence only meant a failed
+   element, which still stays out. A value returned by an `uncertain()` function is checked
+   against the question, not only coerced: a score must be a number in [0, levels - 1] (the plan
+   kept 7 for three levels and turned "high" into NA with a coercion warning), and a decision
+   must read as TRUE or FALSE (the plan turned "maybe" into NA).
 
 Validation: `progress/P13.md`, Task 8. Red `^s1-route$` `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 68 ]`
 (`dev/.validation/P13/task8-red.log`, every failure `could not find function`); against the
 plan-literal code `[ FAIL 22 | WARN 0 | SKIP 0 | PASS 157 ]` (`task8-negative-detail.log`); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 196 ]` (`task8-green.log`: 68 + the plan's 55 + 73 in eight
-IC-74/IC-47 tests).
+IC-74/IC-47 tests). Review round 1 (item 10): two tests (23 expectations); against the pre-fix
+source `[ FAIL 13 | WARN 1 | SKIP 0 | PASS 206 ]` (`task8-fix1-negative.log`); green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 219 ]` (`task8-fix1-green.log`).

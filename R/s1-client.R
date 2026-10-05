@@ -905,10 +905,14 @@ s1_request_id = function(value) {
 
 #' The meta$engine of a classifier model: its provider id (contract 5.2 as amended by IC-74; the
 #' built-in providers give "typesafe" and "ollama"), or "emulated:structured" for the s1-emulate
-#' adapter. An adapter result may name its own engine (P01's fake reports "fake").
+#' adapter. An adapter result may name its own engine; P01's fake classifier always reports
+#' "fake" (contract 12.1), so its api gives "fake" here too and a call answered from the cache
+#' names the same engine as a fresh one.
 #' @noRd
 s1_engine = function(model) {
-  if (identical(model[["api"]], "s1-emulate")) return("emulated:structured")
+  api = model[["api"]]
+  if (identical(api, "s1-emulate")) return("emulated:structured")
+  if (identical(api, "fake-classifier")) return("fake")
   model[["provider"]] %||% NA_character_
 }
 
@@ -921,6 +925,8 @@ s1_engine = function(model) {
 #' runs at most `gptr.s1_rounds` rounds that resubmit only failures (408, 429, 5xx, network;
 #' `retry-after` capped at 60 s). `opts$provider` is the provider spec, for `model = <spec>`.
 #' Both are read by exact name: a longer option such as `safety_snapshot` is not the safety record.
+#' `opts$images` (the call's `.opts$system1_images`, already checked against the model by the
+#' route, IC-74) reaches the adapter as its `images` option, for every state.
 #' @return `list(answers = list per state, usage, model_version, request_ids, errors = df)` plus
 #'   `conditions`, `usages`, `engine`, `calibrated` (NA unless the adapter states it) and
 #'   `provenance`.
@@ -948,7 +954,7 @@ s1_request = function(model, states, questions, opts = list()) {
   signal$aborted = FALSE
   signal$reason = NULL
   aopts = list(credential = s1_credential(provider), base_url = s1_base_url(provider),
-               signal = signal, provider = provider)
+               signal = signal, provider = provider, images = opts[["images"]])
   start_for = function(ustates) {
     if (is.function(run)) {
       return(function(j, done) {
