@@ -113,7 +113,7 @@ arg_abort = function(x, arg, expected) {
 #' @noRd
 check_string = function(x, arg, null = FALSE, empty = FALSE) {
   if (null && is.null(x)) return(invisible(x))
-  ok = is.character(x) && length(x) == 1L && !is.na(x) && (empty || nzchar(x))
+  ok = rlang::is_string(x) && (empty || nzchar(x))
   if (!ok) arg_abort(x, arg, if (empty) "a single string" else "a single non-empty string")
   invisible(x)
 }
@@ -154,7 +154,7 @@ check_number = function(x, arg, min = -Inf, max = Inf, int = FALSE, null = FALSE
 #' @noRd
 check_choice = function(x, choices, arg) {
   if (identical(x, choices)) return(invisible(choices[[1L]]))
-  ok = is.character(x) && length(x) == 1L && !is.na(x) && x %in% choices
+  ok = rlang::is_string(x) && x %in% choices
   if (!ok) arg_abort(x, arg, paste0("one of ", paste0("\"", choices, "\"", collapse = ", ")))
   invisible(x)
 }

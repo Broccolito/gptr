@@ -281,9 +281,9 @@ test_that("builtin_fake() registers the two adapters through the API object only
   expect_identical(api$specs[["fake-classifier"]]$classify$run, fake_classify)
 })
 
-test_that("canonical choice probabilities follow the request order, including ties", {
+test_that("undescribed choices keep the request order, including ties (D-077)", {
   spec = gptr_fake_provider(list(c(cat = 0.5, dog = 0.5)), type = "classifier")
-  q = list(animal = list(type = "choice", criteria = list(dog = "dog", cat = "cat")))
+  q = list(animal = list(type = "choice", criteria = list(dog = NULL, cat = NULL)))
   answer = fake_classify(spec$models[[1]], list(text = "pet"), q, list())$answers$animal
   expect_identical(answer$probabilities, c(dog = 0.5, cat = 0.5))
   expect_identical(answer$choice, "dog")
@@ -309,20 +309,6 @@ test_that("invalid classifier probabilities are returned as typed errors", {
     result = fake_classify(spec$models[[1]], list(), case$q, list())
     expect_s3_class(result, c("gptr_error_s1_response", "gptr_error_s1"))
   }
-})
-
-test_that("classifier question IDs and option schemas must be unambiguous", {
-  spec = gptr_fake_provider(list(0.9), type = "classifier")
-  invalid = list(
-    list(list(type = "noul")), list(a = list(type = "noul"), a = list(type = "noul")),
-    list(a = list(type = "unknown")),
-    list(a = list(type = "choice", criteria = list(x = "one", x = "two")))
-  )
-  for (q in invalid) {
-    result = fake_classify(spec$models[[1]], list(), q, list())
-    expect_s3_class(result, c("gptr_error_s1_validation", "gptr_error_s1"))
-  }
-  expect_length(spec$log$requests, 0L)
 })
 
 test_that("pre-aborted chat streams never invoke the script", {

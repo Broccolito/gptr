@@ -47,3 +47,13 @@ Work packages of `dev/progress/simplicity-plan.md`; one short section per packag
   benchmark `--check` OK. Neighbours: `arch-layers|lint-rules|gptr-gateway|copy-gateway` green.
 - Reviews: none yet.
 - Deviations: none. Open: none.
+
+## Simplicity P01-S - P01 duplication and two defect fixes (fake classifier choices, doubled BOM) (2026-10-05)
+- F4, F5, F8, F10, F13-F16, F20, F21 applied (R -117, tests -39 lines; plan ~183). The fake classifier
+  accepts undescribed choices (closes D-077's forward note); read_utf8() leaves the BOM to raw_to_utf8().
+- Red: FAIL 4 (`provider-fake` undescribed choices refused; `utils-encoding` doubled BOM written once).
+  Green: plan filter PASS 1584. Lint clean. Neighbours: `session-object|agent-run|s1-client` PASS 1435;
+  `s1-|provider-|catalog-models|doc-io|gptr-config|ext-specs|mcp-client|tool-namespace|skill-templates|
+  prompt-compact|session-live|session-budget|lint-rules|arch-layers` PASS 6857 green.
+- Reviews: none yet. Recovery check reverted an unlisted est_image_tokens() rewrite (worse `expected` text).
+- Deviations: none. Open: INFRA-18 choices test stays on the mock server (lane s1; optional).

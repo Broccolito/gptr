@@ -51,30 +51,24 @@ acc_new = function() {
         api = ev$api, provider = ev$provider, model = ev$model,
         request_id = ev$request_id, response_id = ev$response_id
       )
-    } else if (type %in% c("text_start", "thinking_start", "toolcall_start")) {
-      state$blocks[[ev$index]] = new_buffer(sub("_start$", "", type), ev)
-    } else if (type %in% c("text_delta", "thinking_delta", "toolcall_delta")) {
+    } else if (grepl("^(text|thinking|toolcall)_(start|delta|end)$", type)) {
       buffer = state$blocks[ev$index][[1L]]
-      if (is.null(buffer)) {
-        buffer = new_buffer(sub("_delta$", "", type), ev)
+      if (is.null(buffer) || endsWith(type, "_start")) {
+        buffer = new_buffer(sub("_.*$", "", type), ev)
         state$blocks[[ev$index]] = buffer
       }
-      # Take the list out and clear its binding first: `buffer$parts[[i]] = x` on the list while
-      # it is still bound in the environment duplicates the whole list on every delta (20,000
-      # deltas: 1.7 s instead of 0.01 s), which would make accumulation quadratic (INFRA-23)
-      parts = buffer$parts
-      buffer$parts = NULL
-      if (buffer$n == length(parts)) length(parts) = 2L * length(parts)
-      buffer$n = buffer$n + 1L
-      parts[[buffer$n]] = ev$delta
-      buffer$parts = parts
-    } else if (type %in% c("text_end", "thinking_end", "toolcall_end")) {
-      buffer = state$blocks[ev$index][[1L]]
-      if (is.null(buffer)) {
-        buffer = new_buffer(sub("_end$", "", type), ev)
-        state$blocks[[ev$index]] = buffer
+      if (endsWith(type, "_end")) buffer$block = ev$block
+      if (endsWith(type, "_delta")) {
+        # Take the list out and clear its binding first: `buffer$parts[[i]] = x` on the list
+        # while it is still bound in the environment duplicates the whole list on every delta
+        # (20,000 deltas: 1.7 s instead of 0.01 s), making accumulation quadratic (INFRA-23)
+        parts = buffer$parts
+        buffer$parts = NULL
+        if (buffer$n == length(parts)) length(parts) = 2L * length(parts)
+        buffer$n = buffer$n + 1L
+        parts[[buffer$n]] = ev$delta
+        buffer$parts = parts
       }
-      buffer$block = ev$block
     } else if (type %in% c("done", "error")) {
       state$final = ev$message
     }

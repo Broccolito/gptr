@@ -89,9 +89,8 @@ read_utf8 = function(path) {
   }
   bytes = readBin(path, "raw", n = size)
   bom = length(bytes) >= 3L && identical(bytes[1:3], as.raw(c(0xef, 0xbb, 0xbf)))
-  body = if (bom) bytes[-(1:3)] else bytes
-  valid = validUTF8(rawToChar(body[body != as.raw(0L)]))
-  text = raw_to_utf8(body)
+  valid = validUTF8(rawToChar(bytes[bytes != as.raw(0L)]))
+  text = raw_to_utf8(bytes)
   eol = if (grepl("\r\n", text, fixed = TRUE)) "\r\n" else "\n"
   text = gsub("\r\n", "\n", text, fixed = TRUE)
   list(

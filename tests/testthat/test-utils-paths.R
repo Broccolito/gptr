@@ -39,14 +39,24 @@ test_that("write_atomic() refuses the in-place write when the file changed meanw
   expect_identical(readLines(path, encoding = "UTF-8"), "changed by someone else")
 })
 
-test_that("write_atomic() keeps the permission bits of the file it replaces", {
+test_that("write_atomic() writes privately and keeps the permission bits it replaces", {
   skip_on_os("windows")
   dir = withr::local_tempdir()
-  path = file.path(dir, "run.sh")
-  writeLines("echo old", path)
-  Sys.chmod(path, "0755", use_umask = FALSE)
-  write_atomic(path, "echo new")
-  expect_identical(format(file.info(path)$mode), "755")
+  writer = write_bytes
+  modes = character()
+  local_mocked_bindings(write_bytes = function(path, bytes) {
+    modes <<- c(modes, format(file.info(path)$mode))
+    writer(path, bytes)
+  })
+  for (mode in c("755", "600", "444")) {
+    target = file.path(dir, mode)
+    writeLines("old", target)
+    Sys.chmod(target, mode, use_umask = FALSE)
+    write_atomic(target, "new")
+    expect_identical(readLines(target), "new")
+    expect_identical(format(file.info(target)$mode), mode)
+  }
+  expect_identical(modes, rep("600", 3L))
 })
 
 test_that("project_root() honours the option, then GPTR_PROJECT_ROOT (IC-63)", {
@@ -248,23 +258,6 @@ test_that("path_class protects local credential directories and env files", {
   expect_identical(path_class(paths, root), rep("protected", length(paths)))
 })
 
-test_that("atomic temporary content is private before the first bytes are written", {
-  skip_on_os("windows")
-  dir = withr::local_tempdir()
-  target = file.path(dir, "private.txt")
-  writeLines("old synthetic secret", target)
-  Sys.chmod(target, "0600", use_umask = FALSE)
-  writer = write_bytes
-  modes = character()
-  local_mocked_bindings(write_bytes = function(path, bytes) {
-    modes <<- c(modes, if (file.exists(path)) format(file.info(path)$mode) else "absent")
-    writer(path, bytes)
-  })
-  write_atomic(target, "new synthetic secret")
-  expect_identical(modes, "600")
-  expect_identical(format(file.info(target)$mode), "600")
-})
-
 test_that("lexical control and secret paths stay protected when they are symlinks", {
   skip_on_os("windows")
   root = path_norm(withr::local_tempdir())
@@ -289,24 +282,4 @@ test_that("path_rel handles filesystem roots without dropping a character", {
   root = if (.Platform$OS.type == "windows") paste0(substr(path, 1L, 2L), "/") else "/"
   expect_identical(path_rel(path, root), substring(path, nchar(root) + 1L))
   expect_identical(path_rel(root, root), ".")
-})
-
-
-test_that("atomic replacement preserves read-only destination permissions", {
-  skip_on_os("windows")
-  dir = withr::local_tempdir()
-  target = file.path(dir, "readonly.txt")
-  writeLines("before", target)
-  Sys.chmod(target, "0444", use_umask = FALSE)
-  withr::defer(Sys.chmod(target, "0600", use_umask = FALSE))
-  writer = write_bytes
-  modes = character()
-  local_mocked_bindings(write_bytes = function(path, bytes) {
-    modes <<- c(modes, format(file.info(path)$mode))
-    writer(path, bytes)
-  })
-  expect_no_error(write_atomic(target, "after"))
-  expect_identical(modes, "600")
-  expect_identical(readLines(target), "after")
-  expect_identical(format(file.info(target)$mode), "444")
 })

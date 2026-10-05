@@ -16,7 +16,7 @@ token_cjk_pattern = "[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]"
 #' Whether an estimator input is one finite real number
 #' @noRd
 est_finite_number = function(x) {
-  is.numeric(x) && !is.complex(x) && length(x) == 1L && is.finite(x)
+  is.numeric(x) && length(x) == 1L && is.finite(x)
 }
 
 #' Estimated o200k tokens of `x` (joined with newlines) for a content class

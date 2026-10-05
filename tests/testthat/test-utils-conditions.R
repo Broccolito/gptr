@@ -108,6 +108,7 @@ test_that("checkers signal invalid_argument with arg and expected, never the val
   invalid = "gptr_error_invalid_argument"
   expect_error(check_string(NA_character_, "x"), class = invalid)
   expect_error(check_string("", "x"), class = invalid)
+  expect_error(check_string(c("a", "b"), "x"), class = invalid)
   expect_error(check_strings(c("a", NA), "x"), class = invalid)
   expect_error(check_number(2.5, "x", int = TRUE), class = invalid)
   expect_error(check_number(5, "x", max = 4), class = invalid)

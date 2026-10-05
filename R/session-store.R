@@ -170,13 +170,13 @@ store_pkg_version = function() as.character(utils::packageVersion("gptr"))
 #' @noRd
 store_header = function(d) {
   fork = d$fork_of
-  g = drop_null(list(version = store_pkg_version(), api = "1.0", kind = d$kind,
-                     parent = d$parent_id,
-                     depth = d$depth, home = d$home_label,
-                     forkOf = if (is.null(fork)) NULL else
-                       drop_null(fork[c("id", "entry", "turn")])))
-  drop_null(list(type = "session", version = 3L, id = d$id, timestamp = iso_time(d$created),
-                 cwd = path_norm(getwd()), parentSession = fork$file, gptr = g))
+  g = compact(list(version = store_pkg_version(), api = "1.0", kind = d$kind,
+                   parent = d$parent_id,
+                   depth = d$depth, home = d$home_label,
+                   forkOf = if (is.null(fork)) NULL else
+                     compact(fork[c("id", "entry", "turn")])))
+  compact(list(type = "session", version = 3L, id = d$id, timestamp = iso_time(d$created),
+               cwd = path_norm(getwd()), parentSession = fork$file, gptr = g))
 }
 
 #' One JSON line of an entry
@@ -190,16 +190,16 @@ entry_to_json = function(e) {
   out["parentId"] = list(e$parent_id)
   out$timestamp = e$timestamp
   body = switch(e$type,
-    message = drop_null(list(message = msg_to_json(e$message), gptr = e$gptr)),
+    message = compact(list(message = msg_to_json(e$message), gptr = e$gptr)),
     custom_message = if (!is.null(e$message)) operator_to_json(e$message) else e$raw,
-    model_change = drop_null(list(provider = e$provider, modelId = e$model_id,
-                                  gptr = drop_null(e$gptr))),
+    model_change = compact(list(provider = e$provider, modelId = e$model_id,
+                                gptr = compact(e$gptr))),
     thinking_level_change = list(thinkingLevel = e$thinking_level),
-    compaction = drop_null(list(summary = e$summary, firstKeptEntryId = e$first_kept_entry_id,
-                                tokensBefore = e$tokens_before, details = e$details,
-                                usage = entry_usage_to_json(e$usage),
-                                gptr = compaction_gptr_to_json(e$gptr))),
-    custom = drop_null(list(customType = e$custom_type, data = e$data)),
+    compaction = compact(list(summary = e$summary, firstKeptEntryId = e$first_kept_entry_id,
+                              tokensBefore = e$tokens_before, details = e$details,
+                              usage = usage_to_json(e$usage),
+                              gptr = compaction_gptr_to_json(e$gptr))),
+    custom = compact(list(customType = e$custom_type, data = e$data)),
     e$raw)
   c(out, body)
 }
@@ -210,26 +210,14 @@ operator_to_json = function(m) {
   list(customType = "gptr.operator",
        content = lapply(m$content, function(b) list(type = "text", text = b$text)),
        display = FALSE,
-       details = drop_null(list(kind = m$kind, toolAdd = m$tool_add, originText = m$origin_text)))
+       details = compact(list(kind = m$kind, toolAdd = m$tool_add, originText = m$origin_text)))
 }
-
-#' A usage record in its JSON shape (through P01's message mapping; not named usage_to_json(),
-#' which is P01's own helper inside msg_to_json())
-#' @noRd
-entry_usage_to_json = function(u) {
-  if (is.null(u)) return(NULL)
-  msg_to_json(msg_assistant(list(), api = "x", provider = "x", model = "x", usage = u))$usage
-}
-
-#' Content blocks in their JSON shape (through P01's message mapping)
-#' @noRd
-blocks_to_json = function(blocks) msg_to_json(msg_user(blocks))$content
 
 #' The `gptr` object of a compaction entry with its context blocks in JSON shape
 #' @noRd
 compaction_gptr_to_json = function(g) {
   if (is.null(g)) return(NULL)
-  if (!is.null(g$blocks)) g$blocks = blocks_to_json(g$blocks)
+  if (!is.null(g$blocks)) g$blocks = lapply(g$blocks, block_to_json)
   g
 }
 
@@ -362,11 +350,11 @@ entry_from_json = function(x) {
     thinking_level_change = list(thinking_level = x$thinkingLevel),
     compaction = list(summary = x$summary, first_kept_entry_id = x$firstKeptEntryId,
                       tokens_before = x$tokensBefore, details = x$details,
-                      usage = if (is.null(x$usage)) NULL else entry_usage_from_json(x$usage),
+                      usage = usage_from_json(x$usage),
                       gptr = compaction_gptr_from_json(x$gptr)),
     custom = list(custom_type = x$customType, data = x$data),
     list(raw = rest))
-  c(e, drop_null(body))
+  c(e, compact(body))
 }
 
 #' An operator message from a `gptr.operator` custom_message entry
@@ -377,25 +365,11 @@ operator_from_json = function(x) {
                origin_text = x$details$originText, timestamp = iso_ms(x$timestamp))
 }
 
-#' A usage record from its JSON shape (through P01's message mapping; not named
-#' usage_from_json(), which is P01's own helper inside msg_from_json())
-#' @noRd
-entry_usage_from_json = function(x) {
-  msg_from_json(list(role = "assistant", content = list(), api = "x", provider = "x", model = "x",
-                     usage = x, stopReason = "stop", timestamp = 0))$usage
-}
-
-#' Content blocks from their JSON shape (through P01's message mapping)
-#' @noRd
-blocks_from_json = function(x) {
-  msg_from_json(list(role = "user", content = x, timestamp = 0))$content
-}
-
 #' The `gptr` object of a compaction entry with its context blocks in R shape
 #' @noRd
 compaction_gptr_from_json = function(g) {
   if (is.null(g)) return(NULL)
-  if (!is.null(g$blocks)) g$blocks = blocks_from_json(g$blocks)
+  if (!is.null(g$blocks)) g$blocks = lapply(g$blocks, block_from_json)
   g
 }
 

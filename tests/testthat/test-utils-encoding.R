@@ -67,6 +67,7 @@ test_that("read_utf8() and write_utf8() round-trip CRLF, BOM and missing final n
   cases = list(
     lf = charToRaw("a\nb\n"),
     crlf_bom = c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\ny = 2\r\n")),
+    double_bom = c(rep(as.raw(c(0xef, 0xbb, 0xbf)), 2L), charToRaw("a\n")),
     no_final = charToRaw("last line"),
     utf8 = c(cafe_bytes, as.raw(0x0a))
   )

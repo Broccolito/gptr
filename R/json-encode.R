@@ -38,13 +38,17 @@ json_obj = function() {
   structure(list(), names = character())
 }
 
-#' Mark every string (and name) of a nested list as UTF-8; verbatim JSON is left alone
+#' Mark every string (and name) of a nested list as UTF-8, with object keys in radix order when
+#' `sort`; verbatim JSON is left alone
 #' @noRd
-json_utf8 = function(x) {
+json_utf8 = function(x, sort = FALSE) {
   if (is.character(x)) return(if (inherits(x, "json")) x else as_utf8(x))
   if (!is.list(x)) return(x)
   nms = names(x)
-  if (!is.null(nms)) names(x) = as_utf8(nms)
-  if (length(x)) x[] = lapply(x, json_utf8)
+  if (!is.null(nms)) {
+    names(x) = as_utf8(nms)
+    if (sort) x = x[order(names(x), method = "radix")]
+  }
+  if (length(x)) x[] = lapply(x, json_utf8, sort = sort)
   x
 }

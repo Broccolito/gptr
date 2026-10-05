@@ -548,8 +548,8 @@ run_route = function(run, reason = "turn") {
   }
   session_append(s, entry_model_change(rec$ref, rec$thinking, "router"))
   session_append(s, entry_custom("gptr.router",
-                                 drop_null(list(router = router, state = state, model = rec$ref,
-                                                reason = reason))))
+                                 compact(list(router = router, state = state, model = rec$ref,
+                                              reason = reason))))
   run_emit(run, "route", route = "router", router = router, model = rec$ref, reason = reason)
   rec
 }

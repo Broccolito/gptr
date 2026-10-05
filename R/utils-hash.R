@@ -30,28 +30,7 @@ hash_file = function(path) {
 
 #' JSON with object keys sorted by radix order at every level: byte-identical in every locale
 #' @noRd
-canonical_json = function(x) {
-  out = as.character(jsonlite::toJSON(
-    json_sort_keys(x),
-    auto_unbox = TRUE, null = "null", digits = NA, json_verbatim = TRUE
-  ))
-  Encoding(out) = "UTF-8"
-  out
-}
-
-#' @noRd
-json_sort_keys = function(x) {
-  if (is.character(x)) return(as_utf8(x))
-  if (!is.list(x)) return(x)
-  nms = names(x)
-  if (!is.null(nms)) {
-    nms = as_utf8(nms)
-    names(x) = nms
-    x = x[order(nms, method = "radix")]
-  }
-  if (length(x)) x[] = lapply(x, json_sort_keys)
-  x
-}
+canonical_json = function(x) json_encode(json_utf8(x, sort = TRUE))
 
 #' Per-process salt for identifiers (derived from the session, never from the RNG)
 #' @noRd

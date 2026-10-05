@@ -164,7 +164,7 @@ entry_model_change = function(ref, thinking = NULL, reason = "user") {
   list(type = "model_change",
        provider = if (router) "router" else sub("/.*$", "", ref),
        model_id = if (router) sub("^router:", "", ref) else sub("^[^/]*/", "", ref),
-       gptr = drop_null(list(ref = ref, thinking = thinking, reason = reason)))
+       gptr = compact(list(ref = ref, thinking = thinking, reason = reason)))
 }
 
 #' Append an entry to the transcript and the store; returns the entry id invisibly
@@ -262,10 +262,6 @@ final_text = function(path) {
   }
   NULL
 }
-
-#' Drop NULL elements of a list (top level)
-#' @noRd
-drop_null = function(x) x[!vapply(x, is.null, NA)]
 
 # ---------------------------------------------------------------------------- accessors
 
@@ -526,9 +522,9 @@ session_value_set = function(s, label, value, name = NULL, forced_home = NULL) {
   d$values = vals
   values_trim(d)
   session_append(s, entry_custom("gptr.value",
-                                 drop_null(list(turn = rec$turn, mode = mode, name = rec$name,
-                                                address = if (identical(mode, "name")) rec$address,
-                                                class = rec$class, bytes = rec$bytes))))
+                                 compact(list(turn = rec$turn, mode = mode, name = rec$name,
+                                              address = if (identical(mode, "name")) rec$address,
+                                              class = rec$class, bytes = rec$bytes))))
   invisible(NULL)
 }
 
@@ -1140,7 +1136,7 @@ replay_mark = function(s, block, header, text, advance) {
   d = session_data(s)
   if (block %in% d$seen) return(invisible(s))
   turn = if (advance) d$turns + 1L else d$turns
-  session_append(s, entry_custom("gptr.replay", drop_null(list(
+  session_append(s, entry_custom("gptr.replay", compact(list(
     doc = header$doc %||% d$doc$path, block = block, mode = header$mode %||% "replay",
     turn = turn, value = header$value))))
   d$seen = c(d$seen, block)

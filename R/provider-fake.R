@@ -166,18 +166,23 @@ fake_chunks = function(text, chunk) {
   substring(text, starts, pmin(starts + chunk - 1L, n))
 }
 
+#' Reply `n` of a script (the last one repeats), or what a script function returns for `args`;
+#' a failing or empty script is an error reply labelled `label`
+#' @noRd
+fake_script_reply = function(script, n, args, label) {
+  if (is.function(script)) {
+    return(tryCatch(do.call(script, args), error = function(e) {
+      list(error = paste(label, "script failed:", conditionMessage(e)), status = 500L)
+    }))
+  }
+  if (!length(script)) return(list(error = paste0(label, ": the script is empty"), status = 500L))
+  script[[min(n, length(script))]]
+}
+
 #' Pick the reply of request `n` from the script
 #' @noRd
 fake_pick = function(script, request) {
-  reply = if (is.function(script)) {
-    tryCatch(script(request), error = function(e) {
-      list(error = paste("fake provider script failed:", conditionMessage(e)), status = 500L)
-    })
-  } else if (!length(script)) {
-    list(error = "fake provider: the script is empty", status = 500L)
-  } else {
-    script[[min(request$n, length(script))]]
-  }
+  reply = fake_script_reply(script, request$n, list(request), "fake provider")
   if (is.character(reply) && length(reply) == 1L) reply = list(text = reply)
   if (!is.list(reply)) {
     reply = list(error = "fake provider: a reply must be a string or a list", status = 500L)
@@ -186,14 +191,14 @@ fake_pick = function(script, request) {
   reply
 }
 
-#' The class suffix of a provider failure with this HTTP status
+#' The failure class suffix of an HTTP status: auth, rate_limit, overloaded, else `other`
 #' @noRd
-fake_error_class = function(status) {
-  if (is.null(status) || is.na(status)) return("provider")
+fake_status_class = function(status, other) {
+  if (is.null(status) || is.na(status)) return(other)
   if (status %in% c(401L, 403L)) return("auth")
   if (status == 429L) return("rate_limit")
   if (status >= 500L) return("overloaded")
-  "provider"
+  other
 }
 
 #' Plan the event steps of one reply: list(steps = list of list(events, wait), hang, request_id)
@@ -252,7 +257,7 @@ fake_plan = function(reply, request, model, context, engine) {
     } else {
       message = as.character(reply$error)[1L]
       status = as.integer(reply$status %||% 500L)
-      class = fake_error_class(status)
+      class = fake_status_class(status, "provider")
     }
     msg = msg_assistant(
       content, api = api, provider = provider, model = model_id, stop_reason = "error",
@@ -436,8 +441,6 @@ fake_classifier_stream = function(model, context, opts) {
 #' calibration claim: `calibrated = NA`.
 #' @noRd
 fake_classify = function(model, state, questions, opts) {
-  invalid = fake_questions_check(questions, model)
-  if (!is.null(invalid)) return(invalid)
   engine = fake_engine(model, opts)
   if (is.null(engine)) {
     return(fake_s1_error("fake classifier: no script found for this model", 500L, model))
@@ -448,16 +451,7 @@ fake_classify = function(model, state, questions, opts) {
     question$id = id
     engine$n = engine$n + 1L
     engine$requests[[engine$n]] = list(n = engine$n, state = state, question = question)
-    script = engine$script
-    answer = if (is.function(script)) {
-      tryCatch(script(state, question), error = function(e) {
-        list(error = paste("fake classifier script failed:", conditionMessage(e)), status = 500L)
-      })
-    } else if (!length(script)) {
-      list(error = "fake classifier: the script is empty", status = 500L)
-    } else {
-      script[[min(engine$n, length(script))]]
-    }
+    answer = fake_script_reply(engine$script, engine$n, list(state, question), "fake classifier")
     if (is.list(answer) && !is.null(answer$error)) {
       return(fake_s1_error(answer$error, answer$status %||% 500L, model))
     }
@@ -477,41 +471,10 @@ fake_classify = function(model, state, questions, opts) {
     provider = model$provider,
     api = model$api,
     locality = "local",
-    model_digest = model$digest %||% NULL,
+    model_digest = model$digest,
     server_version = NULL,
     calibration_provenance = NULL
   )
-}
-
-#' Validate classifier question IDs and schemas before consuming scripted answers
-#' @noRd
-fake_questions_check = function(questions, model) {
-  bad = function(message) fake_s1_error(paste0("fake classifier: ", message), 400L, model)
-  ids = names(questions)
-  valid_names = function(x) {
-    !is.null(x) && !anyNA(x) && all(nzchar(x)) && !anyDuplicated(x)
-  }
-  if (!is.list(questions) || !length(questions) || !valid_names(ids)) {
-    return(bad("questions must have unique, non-empty IDs"))
-  }
-  for (question in questions) {
-    if (!is.list(question) || !is.character(question$type) || length(question$type) != 1L ||
-        is.na(question$type) || !(question$type %in% c("noul", "choice", "score"))) {
-      return(bad("question type must be noul, choice or score"))
-    }
-    if (identical(question$type, "noul")) next
-    criteria = question$criteria
-    if (!(is.list(criteria) || is.character(criteria)) || length(criteria) < 2L ||
-        !all(vapply(criteria, function(x) {
-          is.character(x) && length(x) == 1L && !is.na(x)
-        }, TRUE))) {
-      return(bad("choice and score questions need at least two text criteria"))
-    }
-    if (identical(question$type, "choice") && !valid_names(names(criteria))) {
-      return(bad("choice criteria must have unique, non-empty option names"))
-    }
-  }
-  NULL
 }
 
 #' One validated canonical IC-74 answer; never a provider-specific wire record
@@ -560,17 +523,8 @@ fake_answer = function(question, answer, model = list()) {
 #' @noRd
 fake_s1_error = function(message, status, model, class = NULL) {
   status = as.integer(status)
-  class = class %||% if (status %in% c(401L, 403L)) {
-    "s1_auth"
-  } else if (status %in% c(400L, 422L)) {
-    "s1_validation"
-  } else if (status == 429L) {
-    "s1_rate_limit"
-  } else if (status >= 500L) {
-    "s1_overloaded"
-  } else {
-    "s1_response"
-  }
+  other = if (status %in% c(400L, 422L)) "validation" else "response"
+  class = class %||% paste0("s1_", fake_status_class(status, other))
   gptr_condition(message, c(class, "s1"), "error", list(
     status = status, error_type = class, request_id = NULL, model = model$id %||% NA_character_
   ))

@@ -57,10 +57,10 @@ schema_check_type = function(type, value, schema) {
       }
     },
     string = list(ok = is.character(value) && schema_is_scalar(value), value = value),
-    number = list(ok = is.numeric(value) && !is.complex(value) && schema_is_scalar(value) &&
-                    is.finite(value), value = value),
+    number = list(ok = is.numeric(value) && schema_is_scalar(value) && is.finite(value),
+                  value = value),
     integer = {
-      ok = is.numeric(value) && !is.complex(value) && schema_is_scalar(value) && is.finite(value) &&
+      ok = is.numeric(value) && schema_is_scalar(value) && is.finite(value) &&
         value == round(value) && abs(value) <= .Machine$integer.max
       list(ok = ok, value = if (ok) as.integer(value) else value)
     },
@@ -70,35 +70,18 @@ schema_check_type = function(type, value, schema) {
   )
 }
 
-#' JSON equality for enum values: object key order is ignored, array order and scalar types
-#' are preserved, and integer/double representations of the same finite number are equivalent.
+#' JSON equality for enum values: equal canonical JSON (object key order ignored, 1L equals 1)
 #' @noRd
 schema_json_equal = function(x, y) {
-  if (is.null(x) || is.null(y)) return(is.null(x) && is.null(y))
-  if (is.data.frame(x) || is.data.frame(y)) return(FALSE)
-  object_x = schema_is_object(x)
-  object_y = schema_is_object(y)
-  if (object_x || object_y) {
-    if (!(object_x && object_y) || length(x) != length(y) ||
-        !setequal(names(x), names(y)) || anyDuplicated(names(x)) || anyDuplicated(names(y))) {
-      return(FALSE)
-    }
-    return(all(vapply(names(x), function(name) schema_json_equal(x[[name]], y[[name]]), TRUE)))
-  }
-  array_x = is.list(x) || (is.atomic(x) && length(x) != 1L)
-  array_y = is.list(y) || (is.atomic(y) && length(y) != 1L)
-  if (array_x || array_y) {
-    if (!(array_x && array_y) || length(x) != length(y)) return(FALSE)
-    return(all(vapply(seq_along(x), function(i) schema_json_equal(x[[i]], y[[i]]), TRUE)))
-  }
-  if (is.numeric(x) && is.numeric(y) && !is.complex(x) && !is.complex(y)) {
-    return(is.finite(x) && is.finite(y) && x == y)
-  }
-  if (is.character(x) && is.character(y)) {
-    return(!is.na(x) && !is.na(y) && as_utf8(x) == as_utf8(y))
-  }
-  if (is.logical(x) && is.logical(y)) return(!is.na(x) && !is.na(y) && x == y)
-  FALSE
+  schema_json_plain(x) && schema_json_plain(y) && identical(canonical_json(x), canonical_json(y))
+}
+
+#' Only JSON values: canonical JSON would write Inf as "Inf" and NA as null
+#' @noRd
+schema_json_plain = function(x) {
+  if (is.list(x)) return(!is.data.frame(x) && all(vapply(x, schema_json_plain, NA)))
+  is.null(x) || ((is.character(x) || is.logical(x)) && !anyNA(x)) ||
+    (is.numeric(x) && all(is.finite(x)))
 }
 
 #' Recursive validation; returns list(value, errors)
