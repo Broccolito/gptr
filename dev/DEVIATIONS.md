@@ -9558,3 +9558,65 @@ not 4); a path the code computes is `unknown` (a write 2, a delete 3), as a plai
 is in D-061.
 
 Validation: `progress/P11.md`, Task 3.
+
+## D-133 - P17 template commands: commands registered or removed after a sync are seen at the next sync and at dispatch, a template command runs only while its group is what a sync would register now, a plugin's code commands win over templates, template names and the /<plugin> dispatcher use ASCII whitespace in every locale, and directories are not template files (2026-10-05)
+
+P17 Task 6 (`R/skill-templates.R`). The plan's 7 tests, the shipped `/review` and `/explain` and
+the produced names are unchanged; `template_handler()`, `template_command()` and
+`template_specs()` gain optional trailing arguments (`name`, `group`), and the plan's
+`template_owned_commands()` is replaced by `template_foreign_commands()`.
+
+1. **Commands win over templates after the sync too** (the task's prose; Pi's dispatch order,
+   report 05 section 4.8). The plan found "a command registered by something else" by name,
+   `setdiff(registry_names("command"), template_owned_commands())`, and `template_sync()` skipped
+   a group while its files and the registry generation were unchanged. A command registered
+   after the sync (`gptr_register()`, or a plugin enabled at a later session start) under the
+   name of a template command was never seen, because its name counted as P17's own: the project
+   template (rank 1) kept shadowing it, and a user template (rank 3) won the tie with
+   `gptr_register()` (rank 3) as the first registered. A command removed after the sync left the
+   template without its command until a file changed. `template_foreign_commands()` now decides
+   by record id: the names of the process-level `command` records that no filter disables
+   (`registry_rec_filtered()`) and whose id is not one of P17's own (the `ids` of every resource
+   group and of every plugin entry, Task 10's declarative records). A disabled record of P17
+   (for example built-in `/review` under `-builtin:prompts`) or one removed elsewhere (a package
+   unload) therefore hides no other command; the round-1 review found that a first version,
+   which counted names against the groups' keys, let such a record hide one. And
+   `template_group_sig()` adds the group's template names that such commands hold to the
+   group's signature, so a later registration, removal or filter change re-syncs the group.
+2. **A template command runs only while its group is current** (contract reading 6: untrusted
+   project templates are not registered; IC-52; 04 section 10.1). Each command that
+   `template_sync()` registers knows its group, and its handler first checks
+   `template_group_current()` (the signature and generation a sync would give now). Otherwise it
+   syncs and hands the call to the command that now has the name, or returns a message naming
+   `/<name>`. Between session starts this keeps a project template from running after
+   `gptr_trust(p, FALSE)`, after a move to another project (nested ones included, as in D-129)
+   or after its file changed, and applies item 1 at the first call. Plugin template commands
+   (Task 10's resource handlers) have no group and are unchanged.
+3. **A plugin's code commands win over templates.** The plan counted every name in a plugin
+   entry's `provides` as P17's own, but Task 10 adds the manifest's `extension.provides` (records
+   the plugin's factory registers) to `provides` and keeps the declarative records P17 itself
+   registered in `ids` (their `kind:name` in `decl`). Only those `ids` count as P17's own.
+4. **The `/<plugin>` dispatcher splits on ASCII whitespace** (the set of the command pattern and
+   of `template_args_parse()`, D-084) instead of TRE `[[:space:]]` after `trimws()`: U+2003 and
+   U+3000 ended the command name in UTF-8 locales but not under `LC_ALL=C`, and a leading
+   vertical tab or form feed gave an empty command name.
+5. **Directories are not template files.** `template_files()` drops directories named `*.md`
+   (Pi reads files only); the plan parsed them and logged "cannot read the file".
+6. `template_sync()` prunes the groups that are no longer discovered before it syncs the others
+   (the plan pruned after), so the records of a group that is gone (an untrusted or left
+   project) are removed before the remaining groups are rewritten.
+7. **A template name may not hold ASCII whitespace, in every locale.** `template_parse()`
+   checked the name with TRE `[[:space:]]`, which matches U+2003 and U+3000 in a UTF-8 locale
+   but not under `LC_ALL=C`; it now uses the set of item 4 (byte-wise), the set that P02's
+   `command` name check and the command pattern use, so the same file gives the same command
+   in every locale.
+
+Tests: seven regression tests (24 expectations) under `# Task 6 adaptations (D-133)`, and five
+more (22 expectations) under `# Task 6 review round 1 (D-133)`. Against the plan-literal source
+`^skill-templates$` gave `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 128 ]`; mutants: without the
+dispatch check 6 failures, without the names in the signature 4, `provides` instead of `decl` 1.
+The round-1 tests against the first version gave 8 failures; mutants of the id rule: without
+the filter check 2 failures, without the process-level check 2, without the plugin entries'
+`ids` 1, the TRE name check 4.
+
+Validation: `progress/P17.md`, Task 6.
