@@ -947,7 +947,7 @@ s1_answers = function(states, q, target, session, started, live = FALSE, images 
   if (length(miss)) {
     s1_guards(target, replay)
     res = if (identical(target$engine, "emulated:structured")) {
-      s1_emulate(target$model, states[miss], questions)
+      s1_emulate(target$model, states[miss], questions, target[["safety"]])
     } else {
       s1_request(target$model, states[miss], questions,
                  list(provider = target$provider, safety = target[["safety"]], images = images))

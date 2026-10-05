@@ -423,14 +423,15 @@ s1_emu_start = function(model, questions, stream_opts = list(), jobs = s1_emu_jo
 #' Emulated answers for states: one chat request per unique state, uncalibrated
 #'
 #' The s1_dispatch() shape with `engine = "emulated:structured"` and `calibrated = FALSE`.
-#' Requests still open when the call ends early are let go of (s1_emu_release()).
+#' Requests still open when the call ends early are let go of (s1_emu_release()). `safety` is
+#' the run's protected safety record (s1_ready()), for the preflight and every request.
 #' @noRd
-s1_emulate = function(model, states, questions) {
-  model = s1_emu_ready(model)
+s1_emulate = function(model, states, questions, safety = NULL) {
+  model = s1_emu_ready(model, safety)
   s1_emu_notice(model)
   jobs = s1_emu_jobs()
   on.exit(s1_emu_release(jobs), add = TRUE)
-  s1_dispatch(model, states, questions, s1_emu_start(model, questions, jobs = jobs),
+  s1_dispatch(model, states, questions, s1_emu_start(model, questions, list(safety = safety), jobs),
               "emulated:structured", FALSE)
 }
 

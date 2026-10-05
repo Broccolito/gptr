@@ -176,6 +176,33 @@ test_that("emulation preflights the chat model before any state is serialised or
                class = "gptr_error_untrusted")
 })
 
+test_that("emulation keeps the run's safety record after s1_ready() (07 section 5)", {
+  s1_fresh()
+  rec = list(ollama_local_only = FALSE)
+  # s1_emulate() preflights with the record: a remote chat model then needs only its evidence
+  remote = list(ollama = list(base_url = "https://ollama.example.invalid/v1"))
+  local_gptr_options(providers = remote)
+  qwen = list(ref = "ollama/qwen3:1.7b", provider = "ollama", id = "qwen3:1.7b",
+              api = "openai-completions", type = "chat")
+  q = list(answer = s1_question("Ok?", "x")$wire)
+  expect_error(s1_emulate(qwen, list(list(x = "a")), q, safety = rec),
+               class = "gptr_error_not_available")
+  # the route hands the run's record to the emulated request
+  local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")
+  seen = new.env(parent = emptyenv())
+  stream = s1_stream
+  local_mocked_bindings(
+    run_current = function() list(id = "u00000001", session = NULL, opts = list(safety = rec)),
+    s1_stream = function(model, context, opts, emit, done) {
+      seen$safety = opts[["safety"]]
+      stream(model, context, opts, emit, done)
+    }
+  )
+  local_gptr_options(system1 = "emulate:emu/emu-1")
+  expect_true(as.logical(s1_call(s1_test_call("Q?", text = "a", model = "jev"))))
+  expect_identical(seen$safety, rec)
+})
+
 test_that("unreported usage stays unknown and provenance says emulated (IC-74)", {
   s1_fresh()
   local_fake_provider(list(list(json = list(answers = list(answer = 0.6)), usage = list())),
