@@ -12,11 +12,12 @@ on:
 
 name: R-CMD-check.yaml
 
-# A newer push to the same ref supersedes a running check: its results would validate an
-# outdated commit, so it is cancelled to free the runners.
+# One check runs per ref at a time and only the newest push waits behind it (GitHub drops
+# older pending runs). Running checks are not cancelled: frequent pushes would otherwise
+# cancel every run before it finishes, leaving no completed hosted evidence.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions: read-all
 
