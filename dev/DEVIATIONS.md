@@ -4600,12 +4600,13 @@ Validation: `progress/P13.md`, Task 6. `^s1-emulate$`:
 
 Lint is clean.
 
-## D-083 - P07 harness state: objects stay oldest first across reassignment and iterative compaction, so the checkpoint's object budget drops the oldest; snapshot rows without a class (unforced promises, active bindings) give no shape (2026-10-04)
+## D-083 - P07 harness state: objects stay oldest first across reassignment and iterative compaction, so the checkpoint's object budget drops the oldest; snapshot rows without a class (unforced promises, active bindings) give no shape; the user-message list holds its whole budget, decisions keep the newest, the state always has its seven fields, only a complete plan block counts and a call with an error result lists no file (2026-10-04)
 
-P07 Task 12 (`R/prompt-compact.R`). `compact_assigned_names()`, `compact_state_empty()`,
-`compact_user_messages()`, `compact_objects()`, `compact_checkpoint_body()`, the user, decision,
-file, skill and plan rules of `extract_state()` and the plan's 7 tests (28 expectations) are
-unchanged.
+P07 Task 12 (`R/prompt-compact.R`). `compact_state_empty()`, `compact_objects()`, the user and
+decision rules of `extract_state()` and the plan's 7 tests (28 expectations) are unchanged; items
+3-7 (review round 1) change `compact_assigned_names()`, `compact_user_messages()`, the decisions
+of `compact_checkpoint_body()`, the file, skill and plan rules of `extract_state()` and
+`compact_state_merge()`.
 
 1. **Objects stay oldest first (the plan's own rule: "`<r_objects>` ..., oldest dropped first
    beyond 800 tokens").** `compact_objects()` drops lines from the front, so the object list must
@@ -4624,7 +4625,75 @@ unchanged.
    `data.frame NA`. `compact_shapes()` now leaves out rows without a class (the object shows
    `?`) and reads an `NA` shape as empty.
 
+3. **The user-message list holds its whole budget (architecture 12.2: "compaction checkpoint ...
+   user messages 2,000"; review round 1).** The plan's `compact_user_messages()` always kept the
+   first and the newest message in full and budgeted only the messages between them, so the
+   test's two pasted prompts of 5,000 words gave a 13,770-token list, and the merge carries the
+   first message into every later checkpoint (the IC-71 floor check assumes a checkpoint of about
+   634 tokens). The whole list, line numbers and the omission line included, now stays within
+   the budget: when the first and the newest do not fit together, a message within half the
+   budget stays whole and the other is cut to the rest, else each is cut to half. New
+   `compact_clip()` keeps the head of a text and ends it with P07's `block_truncated` notice; it
+   cuts by characters, because `prompt_truncate()` keeps whole lines and would drop a one-line
+   message entirely. A list that fits is unchanged.
+4. **Decisions keep the newest (review round 1).** The plan cut the `- ` list with
+   `prompt_truncate()`, which keeps the oldest lines; the merge keeps every decision across
+   compactions, so after about 19 one-line notes no later decision reached any checkpoint (and a
+   single note over 300 tokens left only the notice). New `compact_decisions()` keeps the newest
+   decisions that fit in 300 tokens after a `(<n> earlier decisions omitted)` line, as the
+   objects drop the oldest first; the newest is cut, not dropped, when it alone exceeds the
+   budget. A list that fits is unchanged.
+5. **The state always has its seven fields (contract 7.7).** `a$plan = a$plan %||% b$plan`
+   removed `plan` when both were `NULL`, so a state merged with an earlier compaction had six
+   fields. The merge now assigns `a["plan"] = list(...)`.
+6. **Only a complete `<proposed_plan>` block is the plan.** With an opening tag and no closing
+   tag the plan's `sub()` matched nothing and returned the whole assistant text, which then rode
+   unbudgeted in every later checkpoint. The plan is now taken only from text holding a complete
+   block; such text no longer replaces an earlier complete plan.
+7. **A call whose result is an error lists no file or skill.** The plan recorded `read`,
+   `write` and `edit` paths from the calls alone (Pi's cumulative tracking), so a denied or failed
+   edit was listed as modified, while the model is told not to repeat that list. Calls are now
+   held in transcript order and dropped when the result with the same `tool_call_id` is an error
+   (P06 closes every failed, denied, blocked and unexecuted call with an error result). A call
+   without a result still counts, as in the plan's test. Within one `r` call a name assigned
+   twice now also takes the newest place (`compact_assigned_names()` uses
+   `compact_object_set()`, item 1).
+
 Validation: `progress/P07.md`, Task 12. Three tests (13 expectations) were added, including a
 round trip of a compaction state through P06's session-file JSON shape. On the plan literal 4
-expectations of the added tests fail (`dev/.validation/P07/task12-plan-literal.log`); final
-`^prompt-compact$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 59 ]`.
+expectations of the added tests fail (`dev/.validation/P07/task12-plan-literal.log`). Review
+round 1 added five tests and two expectations to the item-1 test (29 expectations); on the
+round's starting code 18 fail (`task12-fix1-red.log`). Final `^prompt-compact$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 88 ]`.
+
+## D-084 - P17 template arguments: command arguments split on the command pattern's ASCII whitespace in every locale, in linear time (2026-10-04)
+
+P17 Task 5 (`R/skill-templates.R`). `template_re`, `template_substitute()`, `template_expand()`,
+`template_expand_input()`, the fixture of 67 Pi assertions and the plan's 4 tests (77
+expectations) are the plan's literal ones. Only `template_args_parse()` (Pi `parseCommandArgs()`)
+changed; its signature and its results on every input of ASCII whitespace, quotes and other
+characters are unchanged (20,000 random inputs compared with the plan-literal function in a UTF-8
+and a C locale: 0 differences).
+
+1. **Whitespace is the same in every locale.** The plan tested each character with
+   `grepl("^[[:space:]]$", ch)`. TRE answers that with the C library's `iswspace()`, so U+1680,
+   U+2000-U+200A, U+2028 and U+3000 (the ideographic space of CJK input) split arguments in a
+   UTF-8 locale but not under `LC_ALL=C`, which the CI matrix runs (architecture 6.6). The command
+   pattern of the same file, `^/([^\s]+)(?:\s+([\s\S]*))?$` (PCRE, no UCP), treats them as
+   ordinary characters in both. Whitespace is now the fixed set that pattern's `\s` matches
+   (space, tab, newline, vertical tab, form feed, carriage return), which is also report 05's
+   verified prototype (`grepl("^\\s$", ch, perl = TRUE)`). `/review x<U+3000>y` gives one
+   argument in every locale.
+2. **Linear cost.** The plan appended each character with `paste0(cur, ch)`, which is quadratic in
+   an argument's length: one 100,000-character argument (a pasted log after `/explain`) took 11 s
+   alone and 22 s in the test. Each character is now tagged with the number of its argument and
+   every argument is joined once (0.03 s).
+
+Two regression tests appended to `tests/testthat/test-skill-templates.R` after the plan's 4 lock
+both items. They fail against the plan-literal code (`[ FAIL 9 | WARN 0 | SKIP 0 | PASS 81 ]`),
+so every later P17 count for this file is 13 higher (IC-74).
+
+Validation: `progress/P17.md`, Task 5. `^skill-templates$`: red
+`[ FAIL 4 | WARN 0 | SKIP 0 | PASS 0 ]`, plan-literal green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 77 ]`, final `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 90 ]` in a UTF-8
+locale and under `LC_ALL=C`; lint clean.
