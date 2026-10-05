@@ -269,3 +269,22 @@ implementation and a test that cross-checks the two on random inputs.
 - Commit only files the task lists. Never commit `.env` files, keys, or
   anything under `dev/research/` scratch paths.
 - End every commit message with the attribution line the harness specifies.
+
+## 11. Simplicity (maintainer's priority, 2026-10-05)
+
+Occam's razor governs every plan, task, fix and review, and wins over a plan's literal code
+where the literal code is more complex than the contract requires:
+
+- Implement the smallest design that satisfies the contract and the task's acceptance. Do not
+  add options, helpers, wrappers, layers or files the contract does not need.
+- One general, conservative rule beats a list of special cases. When an input cannot be
+  modelled simply, fail closed or classify conservatively instead of modelling it exactly.
+- No duplicated logic: reuse the existing helper; delete superseded code in the same change.
+- Comments say why, in one line where possible; no restating code, no historical narration.
+- Tests prove the acceptance claims and real regressions; no redundant or near-duplicate tests.
+- Documents (progress logs, deviations) are short and factual: record results, decisions and
+  open items, not narration.
+- Reviewers treat unnecessary complexity as a defect (major when it adds meaningful code or
+  surface), and must not demand bespoke handling of exotic inputs that a simple conservative rule
+  already covers.
+

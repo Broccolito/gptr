@@ -19,6 +19,13 @@ overrides its body.
 
 ## Non-negotiable rules
 
+- **Simplicity first (Occam's razor), maintainer's priority.** Build the smallest design that meets
+  the contract and the plan's acceptance. No redundant code, wrappers, options, abstractions,
+  comments, phrases or scripts; prefer one general, conservative rule over many special cases;
+  delete what is not needed. Unnecessary complexity is a defect in review (conventions section 11).
+- **Naming.** The package is `gptr`; the main entry point users call is `peter()` (in scripts and at
+  the console), and its member namespace is `peter$...`. Other exports keep the `gptr_` prefix.
+  Older spec/plan text that says `gptr()` or `gptr$` means `peter()` / `peter$` (rename: D-135).
 - R style: assign with `=`, never `<-`; pipe with `|>`, never `%>%`. `.lintr` (created by P01 Task 1) enforces it.
 - After editing any plan, re-run the cross-plan checks in `dev/research/assets/consolidation-tools/README.md`.
 - Run R as `Rscript --vanilla`. Tests: `Rscript --vanilla -e 'devtools::test(filter = "<name>")'`.

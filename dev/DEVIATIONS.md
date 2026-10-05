@@ -9628,3 +9628,16 @@ the filter check 2 failures, without the process-level check 2, without the plug
 `ids` 1, the TRE name check 4.
 
 Validation: `progress/P17.md`, Task 6.
+
+## D-135 - Maintainer decisions: the entry point is `peter()`; simplicity first (2026-10-05)
+
+1. **Naming.** The maintainer renamed the main entry point. The package stays `gptr`; users call
+   `peter(...)` in scripts and at the console (formerly `gptr()`), and its member namespace is
+   `peter$...` (formerly `gptr$...`; the namespace is the same gateway object, so it follows the
+   function). Other exports keep the `gptr_` prefix (`gptr_last()`, `gptr_usage()`, ...). The specs,
+   plans, prompts, model-facing texts, token baselines, examples, README and code are updated in one
+   coordinated change; until then older text saying `gptr()`/`gptr$` means `peter()`/`peter$`.
+2. **Simplicity.** Occam's razor is a primary design and review criterion (CLAUDE.md, conventions
+   section 11): smallest design that meets the contract, one conservative rule over many special
+   cases, no duplicated logic or redundant text. A retrospective simplicity review of the existing
+   code follows; it changes no contract behaviour and keeps every acceptance test.
