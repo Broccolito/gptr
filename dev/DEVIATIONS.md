@@ -3790,8 +3790,9 @@ below 1, and SQL keeps its keyword reading (Known limits).
       `-delete` made `find [-]*` delete the directory. Planting such a name is a level-2
       workspace write, which edits mode approves without asking. The tokens now carry each
       word's glob pattern (`glob`, from risk_sh_tokens() through risk_sh_breaks() and
-      risk_sh_split(); quoted and escaped characters are literal, and risk_sh_brace() returns
-      each brace word's quote flags). `risk_glob_dash()` decides whether the pattern can match a
+      risk_sh_split(); quoted and escaped characters are literal, risk_sh_brace() returns
+      each brace word's quote flags, and a brace expansion too long to list reads each group
+      as `*`). `risk_glob_dash()` decides whether the pattern can match a
       name starting with `-`: its first character is `-` (quoted or not), `*` or `?`, or a
       bracket expression that matches `-` (`[-]`, `[!.]`, `[^a]`, `[+-.]`, `[[:punct:]]`; a
       collating element gptr cannot read counts as a match). For a program outside
@@ -3907,11 +3908,11 @@ four blocks as first written (144 expectations) fail 110 against the round-9 sou
 (`task2-fix10-red.log`). The final test file fails 128 against a copy of the source (taken
 before the argv change) with the round-10 call sites removed and round 9's gate line restored
 (`task2-fix10-red-final.log`) (`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2120 ]` at the end of round
-10). Review round 11 added item 19 with one block and rows in one older block (170
-expectations), and one changed assertion. The final test file fails 125 against the round-10
+10). Review round 11 added item 19 with one block and rows in one older block (172
+expectations), and one changed assertion. The final test file fails 127 against the round-10
 source (`task2-fix11-red-final.log`). The first red run, in the working tree before the source
 changed and before the self-review rows were added, failed 99 (`task2-fix11-red.log`).
-Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2290 ]` in the UTF-8 and the C locale
+Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 2292 ]` in the UTF-8 and the C locale
 (`task2-fix11-green.log`, `task2-fix11-green-C.log`).
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
@@ -7667,14 +7668,16 @@ against the plan-literal source `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 89 ]`
 missing, the classifier call ending as an internal error); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` (`task8-green.log`; the plan's 20 tests give its 74).
 
-## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone, and (review round 1) a session's own provider record decides egress (never the process-wide record of its id), a routed session honours the call's replay = and router:<name> must name a registered router, and (review round 2) a routed session honours .opts$context = "none" and a router's provider:<level> keeps its level (2026-10-05)
+## D-114 - P08 gateway_run(): the built-in routes leave decision-only models alone, a root run freezes the protected ollama_local_only from human settings, the guards follow the effective endpoint, the call's replay = wins, System 1 images are refused in a conversation, colon model ids stay whole, and P17's test-side trust.get is gone, and (review round 1) a session's own provider record decides egress (never the process-wide record of its id), a routed session honours the call's replay = and router:<name> must name a registered router, and (review round 2) a routed session honours .opts$context = "none" and a router's provider:<level> keeps its level, and (review round 3) a router's choice is judged under the frozen safety record of the run it serves and a session's own provider named alone resolves on a continuation (2026-10-05)
 
 P08 Task 9's plan-literal code (`gateway_run()`, the `builtin:gateway` routes, the guards and
 `router.call`) changed in seven ways. The plan's 30 tests are verbatim except one line (item 7).
 The first version of this entry landed in `e934f34` (P15's commit staged the whole file); items
 3, 4 and 6 and the review round 1 paragraph below are the review round 1 amendment, which landed
 in `b8cbb60` (P15's next commit staged the whole file again); the review round 2 sentences of
-items 3 and 6 and the review round 2 paragraph are the review round 2 amendment.
+items 3 and 6 and the review round 2 paragraph are the review round 2 amendment, which landed
+in `1b2d566` (P10's commit staged the whole file); the review round 3 sentences of items 2 and 6
+and the review round 3 paragraph are the review round 3 amendment.
 
 1. **The built-in routes decline a decision-only model** (IC-74, 07-local-ollama.md section 2;
    D-113 item 2). `nested`, `continue` and `new` match only when `gateway_model_type()` of the
@@ -7691,6 +7694,19 @@ items 3 and 6 and the review round 2 paragraph are the review round 2 amendment.
    (P06's `run_new()`). A `.run = FALSE` session gets its record when it is started, not when it
    is queued (the pending run options hold none); Task 10 starts pending runs through
    `gateway_run_start()`. The plan never set the field, so every run read the strict default.
+   Egress is judged under the same record (review round 3): `gateway_run()` takes a root run's
+   record once and hands it to `gateway_guards()` and `gateway_run_start()`, and
+   `router_guards()` reads the record of the run driving the routed session
+   (`gateway_run_record()`), because P06 calls `router.call` between turns, where
+   `run_current()` finds no run. P08's `egress_state()`, `egress_require()`,
+   `egress_local_only()` and `egress_can_ask()` take that record (`safety`, by default
+   `egress_safety()`: the record of the run on the call stack, an empty one for a run without
+   one, `NULL` outside a run). An Ollama exemption needs both the live control and the record,
+   and the acknowledgement is asked only when the record's `can_prompt` allows it. Before, a
+   routed request was judged under the live settings and `gptr_can_prompt()` while P05's
+   preflight read the frozen record, so one request got the weaker guarantee of each: with the
+   record relaxed and the session layer tightened during the run, `router.call` exempted an
+   Ollama choice that the preflight then did not hold to local-only inference.
 3. **The guards follow the effective endpoint of the session's own record** (D-020 item 1,
    D-099; Task 4 obligation). `gateway_guards()` (unless `.opts$context = "none"`) and
    `router_guards()` call `gateway_egress()`, which hands P08's `egress_state()` of the provider
@@ -7729,7 +7745,9 @@ items 3 and 6 and the review round 2 paragraph are the review round 2 amendment.
    reference, and `router_model()` reads a `:<suffix>` as a thinking level only when it is one
    (as P05 and P06 do); the plan's version set `thinking` to the tag. A router answer that names
    a provider alone with a level (`fake2:high`) keeps the level, as the plan's version did
-   (review round 2).
+   (review round 2). On a continuation, a provider registered for the session alone (a rank-0
+   spec) named by its bare id means its first model, as `provider/id` already did; the plan's
+   branch looked the id up process-wide only (review round 3).
 7. **Test adaptations.** The plan's "a pending session collected without running releases its
    call record [R2]" calls `ev_drain()` after `gc()`: since FIX-1 (D-085) the finalizer defers
    `session_shutdown` to the next safe point, so the release hook runs there. D-092 item 7 is
@@ -7771,6 +7789,20 @@ fails it twice, `task9-fix2-red-inherit-mutation.log`). Red against the round-1 
 `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 312 ]` (`task9-fix2-red.log`: the routed call answered
 "fallback answer" from the default model, and the two levels were `NULL`); green
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 318 ]` (`task9-fix2-green-gateway.log`).
+
+Review round 3 regression tests: "router.call judges egress under the frozen record of the run
+it serves (07 sec. 5)" (10: the run froze `ollama_local_only = FALSE`, the router tightens the
+session layer and picks `ollama/qwen3:1.7b`, and `router.call` still refuses it with
+`gptr_error_egress`, so the call answers from the default model; a run frozen with
+`can_prompt = FALSE` is never asked, even when `gptr.interactive` turns `TRUE` during it; no
+acknowledgement is recorded and nothing reaches the mocked HTTP layer) and "a continuation names
+a provider registered for the session by its bare id" (4). Red against the round-2 source
+`[ FAIL 2 | WARN 0 | SKIP 1 | PASS 316 ]` (`task9-fix3-red.log`: the routed call reached P05's
+preflight and failed with `gptr_error_not_available`, and `corpx` was `unknown_model`); the
+`can_prompt` leg alone, with `router_guards()` reading `egress_safety()` again, fails the same
+way (`task9-fix3-red-canprompt.log`: it asked, recorded the acknowledgement and reached the
+preflight). Green `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 330 ]` (`task9-fix3-green.log`; the skip is
+Task 8's "before the namespace services exist", now that P10 registers `ns.resolve`).
 
 Validation: `progress/P08.md`, Task 9. Red `^gptr-gateway$` `[ FAIL 42 | WARN 0 | SKIP 0 |
 PASS 121 ]` (`dev/.validation/P08/task9-red.log`); against the plan-literal source
@@ -8048,12 +8080,13 @@ plan-literal source with the final test file `[ FAIL 11 | WARN 0 | SKIP 0 | PASS
 (`task9-fix1-red.log`), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 209 ]` (`task9-fix1-green.log`);
 probe `task9-fix1-probe.R` (`task9-fix1-probe-before.log`, `task9-fix1-probe-after.log`).
 
-## D-119 - P15 replay decisions and replaying fresh blocks: a stale block under replay is also not_recorded, an S2 record without a usable answer replays without one, the old block is skipped only in the gptr_source() frame of its own document (the knitr skip comes with Task 16), and malformed children entries are skipped (2026-10-05)
+## D-119 - P15 replay decisions and replaying fresh blocks: a stale block under replay is also not_recorded, an S2 record without a usable answer replays without one, the old block is skipped only in the gptr_source() frame of its own document (the knitr skip comes with Task 16), and malformed children entries are skipped, and (review round 1) an undone block regenerates under record with every driver and a hand-edited block is not offered for overwriting where it cannot be regenerated, and (review round 2) a hand-edited block whose prompt or args changed is stale (2026-10-05)
 
 P15 Task 12's plan-literal source (`R/doc-replay.R`: `doc_decide()`, `doc_skip_old()`,
 `doc_block_text()`, `doc_replay_doc()`, `doc_replay_header()`, `doc_replay_call()`,
-`doc_run_block_nested()`, `doc_replay_team()`) changed in four ways. The signatures are the
-plan's; one internal helper is new, `doc_s2_answer(rec)`.
+`doc_run_block_nested()`, `doc_replay_team()`) changed in seven ways (items 5 and 6 are the
+review round 1 amendment, item 7 the review round 2 amendment). The signatures are the plan's;
+one internal helper is new, `doc_s2_answer(rec)`.
 
 1. **A stale block under `replay` is also `not_recorded`** (contract 2.2: `stale_block` has the
    parent `not_recorded`, as P06's `replay_unbound` does). The plan signalled the class
@@ -8080,19 +8113,61 @@ plan's; one internal helper is new, `doc_s2_answer(rec)`.
 4. **Malformed `children=` entries are skipped**: an entry without both a name and a session id
    (`":s2222222222"`, `"code:"`) is passed over like one of the wrong arity, since P06's
    `session_replay_bind()` refuses an empty child name.
-
-IC-74 (07 section 6, P15 row: "replay invokes no provider"): a test replays a fan-out block with
+5. **An undone block regenerates under `record` with every driver** (review round 1). The plan
+   sent the undone `record` cell through the driver check, so under base `source()`/Rscript
+   it answered `"replay"` with `replay_downgraded` ("the recorded code runs anyway"). Contract
+   7.15 takes the undone row from G7 section 3.8, where `record` is "regenerate in place (the
+   block becomes live)" without report 14's driver footnote, and architecture 6.9.3 downgrades
+   only "live and stale regeneration". An undone block is inert (`#~ ` lines; `eval=FALSE` in
+   Rmd/qmd; `#~ ` cell source in ipynb), so no driver can run it twice; replaying it instead
+   gave a session claiming the turn the user undid (its `value=` name designated but never
+   bound) and a false warning. `doc_decide()` now answers `"regenerate"` there directly;
+   `doc_skip_old()` stays harmless for an inert block.
+6. **A hand-edited block is not offered for overwriting where it cannot be regenerated**
+   (review round 1). Under base `source()`/Rscript the plan asked "Overwrite it?" in `live` and
+   `record` although a yes could only downgrade to replay. `doc_decide()` now downgrades first
+   (the same `replay_downgraded` warning as a stale block there) and asks only under a driver
+   that can skip the old block.
+7. **A hand-edited block whose `prompt=` or `args=` no longer matches is stale too** (review
+   round 2). `doc_block_status()` ranks `user-edited` above `stale`, and the plan's
+   `user-edited` cell answered `"replay"` in `auto` and `replay` without comparing the hashes
+   (self-review ambiguity 4: "otherwise replays (user code wins)"). IC-45 (section 15, which
+   wins) says a block is fresh only when `prompt=` and `args=` both match and a stale block
+   under `replay` errors `gptr_error_stale_block`; contract 2.2 defines `stale_block` as "replay
+   mode and the block's prompt or interpolated values changed"; architecture 6.9.3 keeps
+   `args=` "so a parameterised report never replays another parameter's block" (acceptance 6e).
+   With the plan's cell a typo fix in a recorded block made a changed prompt or another
+   parameter pass silently, even under `GPTR_REPLAY=replay`, and `doc_replay_call()` attached
+   the S2 answer of the old args hash. `doc_decide()` now also compares the header without
+   `sha=` with the call's hashes. When they moved: `replay` signals
+   `c("stale_block", "not_recorded")` (the stale cell's error); `auto`, `live` and `record` take
+   the hand-edited overwrite path (a driver that can skip the old block asks "Overwrite it?"
+   and regenerates after a yes; a no, no human to ask, or base `source()`/Rscript downgrades
+   to replay with `replay_downgraded`, never silently). User code still wins without a warning
+   while both hashes match.
 a local `ollama/qwen3:8b` child and a piped session while `catalog_discover()`,
-`catalog_ollama_discover()` and `http_handle()` are mocked to fail; the replayed sessions keep
+`catalog_ollama_discover()`, `model_prepare()` and `http_handle()` are mocked to fail and are
+counted (review round 1: P06's `model_canonical()` and the HTTP reactor catch errors, so a
+refusal alone could be swallowed; the test asserts zero calls); the replayed sessions keep
 the local model tag, and the reconstructed answer is recorded with provider `ollama` and model
 `qwen3:8b`.
 
 Validation: `progress/P15.md`, Task 12. Seven tests added (39 expectations) after the plan's six
 (54, verbatim). Against the plan-literal source with the final test file
 `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 131 ]` (`task12-plan-literal.log`; items 1-4, one each); green
-`^doc-replay$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 145 ]` (`task12-green.log`).
+`^doc-replay$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 145 ]` (`task12-green.log`). Review round 1
+added one test and changed two (items 5 and 6, the IC-74 count; 27 more expectations; the
+hand-edited test now expects 3 questions, not 4): against the round-0 source
+`[ FAIL 5 | WARN 0 | SKIP 0 | PASS 167 ]` (`task12-fix1-red-final.log`; item 5 four, item 6
+one), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 172 ]` (`task12-fix1-green.log`). The IC-74
+count passes on both sources; with discovery injected where `model_canonical()` swallows it,
+the old test passes and the new one fails (`task12-fix1-negative-ic74.log`). Review round 2
+added one test (item 7, 31 expectations): against the round-1 source
+`[ FAIL 8 | WARN 0 | SKIP 0 | PASS 178 ]` (`task12-fix2-red.log`; the test stopped at its
+first auto-mode downgrade), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 203 ]`
+(`task12-fix2-green.log`).
 
-## D-120 - P13 native Ollama System One (IC-74, coordinator-added task 8b): the `ollama-system-one` adapter validates Ollama's own entropy confidence and refuses answers without probabilities or from another model, a model's decision record only lowers the adapter's limits, an oversized state fails alone while bad questions or images end the call before any request, Clef is admitted one request at a time per server across calls, no key is ever looked up for it, a live call prepares a referenced Ollama model, replay reads answers and the model identity frozen with them from cache pins without discovery or preflight, and the replay guard runs before the egress check (2026-10-05)
+## D-120 - P13 native Ollama System One (IC-74, coordinator-added task 8b): the `ollama-system-one` adapter validates Ollama's own entropy confidence and refuses answers without probabilities or from another model, a model's decision record only lowers the adapter's limits, an oversized state fails alone while bad questions or images end the call before any request, Clef is admitted one request at a time per server across calls, no key is ever looked up for it, a live call prepares a referenced Ollama model, replay reads answers and the model identity frozen with them from cache pins without discovery or preflight, and the replay guard runs before the egress check, and (review round 1) a native Ollama model without max_active is still admitted one request at a time per server and its answers are checked at Ollama's four-decimal rounding (2026-10-05)
 
 P13 has no plan text for `R/s1-ollama.R`; `07-local-ollama.md` sections 2-6 are the
 specification (HANDOFF: "add it after P13 Task 8 and before Task 9"). Files: `R/s1-ollama.R`
@@ -8178,3 +8253,103 @@ function. Green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 243 ]` (`task8b-green-ollama.
 Negative control with the confidence formula, the gate, the keyless headers and the frozen
 replay sabotaged: `[ FAIL 32 | WARN 0 | SKIP 0 | PASS 178 ]` (`task8b-negative.log`). With the
 egress-first guard order alone: `[ FAIL 1 | ... | PASS 238 ]` (`task8b-negative-guard.log`).
+
+Review round 1 (`progress/P13.md`, Task 8b review round 1; D-120's first version landed in
+`1b2d566`, P10's commit, which staged the whole file):
+
+12. **Admission without a decision record** (amends item 5). A native Ollama model whose record
+    sets no `max_active` had no per-server gate and the global cap (8): a provider spec, which
+    P05's preflight checks against the discovery evidence without adding the discovered decision
+    record, sent six states to a local Clef at once. `s1_own_active()` now gives such a model
+    Ollama's default of one active request per server (`s1_ollama_max_active`), for the per-call
+    cap and the per-server gate alike. Only an explicit decision record raises it (07 section 2:
+    "User changes to concurrency are explicit"), and `gptr.s1_max_active` stays the upper bound;
+    a `max_active` beyond the integer range means no own limit below that cap.
+13. **Four-decimal rounding** (amends item 2). Ollama documents its probabilities and scores as
+    rounded to four decimal places. The sum of the probabilities, the support of a choice and the
+    reconstruction of a score are now checked with 5e-5 per value (`s1_ollama_round_tol`), not
+    TypeSafe's 0.005, which on 26 levels let sums off by 0.13 and scores off by 1.6 levels
+    through. `s1_answer_probs()`, `s1_parse_choice()` and `s1_parse_score()` take the tolerance
+    as a last argument whose default stays TypeSafe's. The common dispatch recheck keeps the
+    default: it revalidates canonical records that the adapter checked at its own rounding. The
+    confidence slack of item 2 (0.01) is unchanged.
+14. **Egress by the registered record (unchanged; forward note to P08).** `s1_guards()` asks
+    `egress_check(target$model$provider)`, which judges the process-wide record of that id. For a
+    call-level provider spec at another endpoint the acknowledgement names the wrong origin (an
+    Ollama spec at 10.1.2.3 under a relaxed run is told about 127.0.0.1:11434), and a classifier
+    spec that reuses a built-in loopback id (`lmstudio`) at a LAN address would be exempted by
+    the built-in record (D-114's case). P08's `egress_require(pid, egress_state(record))` decides
+    by the request's own record, but IC-33's kernel SDK (contract 12.2, enforced by
+    `test-arch-layers.R`) gives an L4 file only `egress_check(provider_id)`, and contract 7.8
+    lists P13 as a consumer of that signature only; calling P08's internals failed the layering
+    test and was reverted. P08 (or the contract) must let the SDK verb take the request's
+    provider record, for example `egress_check(provider_id, provider = NULL)`; `s1_guards()`
+    then passes `target$provider`. For Ollama the local-only preflight refuses a non-loopback
+    spec unless a run relaxes it, and then the registered record is not exempt either, so only
+    the named origin is wrong there.
+15. **Known limitation: replay of a discovered tag** (amends item 8). Replay without discovery
+    works for references that P05's static catalog resolves as classifiers (`ollama/clef`,
+    `ollama/clef-flash`) and for provider specs whose model record is a classifier. Without
+    discovery a discovered tag such as `ollama/clef-flash:latest` resolves as a chat model
+    (`model_resolve(strict = FALSE)`: type `chat`, api `openai-completions`), so `s1_target()`
+    refuses it (`invalid_argument`) before any pin is read, and P08's routing would not choose
+    the classifier route either. P13 does not infer a classifier from a name (07 section 2: a
+    model name alone grants nothing). Offline resolution of discovered decision tags (for
+    instance a `:latest` tag as its bare catalog name) belongs to P05, with P08's routing; until
+    then, record and replay under the bare catalog name or a provider spec.
+
+Review round 1 validation: the final tests against the pre-fix behaviour (a scratch copy with
+`s1_ollama_round_tol = 0.005` and no Ollama default in `s1_own_active()`):
+`[ FAIL 11 | WARN 0 | SKIP 0 | PASS 262 ]` (`task8b-fix1-negative.log`; 5 rounding, 6
+admission). Green `^s1-ollama$` `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 273 ]`
+(`task8b-fix1-green-ollama.log`; 243 + 30, with the `error-404.json` fixture now served by P01's
+mock server).
+
+## D-121 - P10 builtin:tools: an instructions file outside the project reads at level 1, `plot` as a direct tool is an error result instead of a false "attached", the edit risk rates every field the execute applies, and four P06/P07 tests no longer assume that no built-in registers the core tools (2026-10-05)
+
+P10 Task 10's plan-literal members, executes, risk functions, specs and `builtin:tools`
+(`R/tool-namespace.R`, part 4) are changed in three ways. Member signatures, classes, condition
+fields, Pi's texts, descriptions, schemas, snippets, guidelines, fragment texts and orders, and
+the plan's 18 test blocks are unchanged. The plan-literal file is kept as
+`dev/.validation/P10/task10-source-plan-literal.R`.
+
+1. **An `instructions` file reads at 0 only inside the project.** P01's `path_class()` checks
+   `instructions` (`AGENTS.md`, `CLAUDE.md`, `.gptr/skills/`, ...) before `workspace`, so the
+   plan's read mapping `instructions = 0L` rated an `AGENTS.md` or skill file of any directory at
+   level 0, against 04 section 9.4 ("0 in project, 1 outside"). `tool_path_risk()` now reads such
+   a file outside `project_root()` as `outside` (level 1). Writes keep IC-54's level 3.
+2. **`plot` as a direct tool is an error result.** IC-37 lets a preset declare `plot` (it carries
+   an `execute`), but `gptr$plot()` attaches to the running `r` result. The plan's execute
+   answered "plot attached to the r result" when nothing was attached (no `r` call: a console
+   notice, nothing attached) and, for a sub-agent's direct tool started inside a parent `r`
+   evaluation, attached the image to the parent's result. `tool_plot_execute()` now runs
+   `member_plot()` only for a nested member call of the running evaluation (`member_nested(ctx)`,
+   the test the other executes use) and otherwise returns an error result that says to call
+   `gptr$plot()` inside `r`.
+3. **The edit risk rates what the execute applies.** `tool_edit_execute()` applies `patch`, else
+   `edits`, else Pi's legacy top-level `oldText`/`newText`. The plan's `tool_risk_write()` looked
+   for an envelope only in `patch`/`edits`, so an envelope in a top-level `newText` was rated by
+   `path` alone (level 2) while the execute wrote, for example, `.gptr/mcp.json` (control, level
+   4). Schema validation requires `edits`, but a `modify` hook rewrites the validated input before
+   P06's `perm_check()`. Both now read the edits through `tool_edit_input_edits()`.
+
+Outside P10's files (the D-112 precedent; no expectation and no P06/P07 code changes), four tests
+of completed plans assumed that no built-in registers the core tools or an `r_session` fragment
+ordered before 50. P10 registers both, as 04 section 7.10, IC-37 and IC-68 require:
+- P07's "prompt_specs keeps the winning record of each name, in order"
+  (`test-prompt-sections.R`) registers its `aa_early` section at order 1 instead of 50, so it is
+  still first with P10's `helpers` fragment (order 10) registered.
+- P06's two fallback-freeze tests (`test-agent-run.R`) got `tool_names` `read`, `edit`, `write`
+  instead of the test's own `read`. P06's "a token budget stops the run before the next request
+  with status budget" (`test-session-budget.R`) sent no request, because the real `read`, `edit`
+  and `write` schemas pushed the first request's estimate over its 1,000-token budget. These three
+  tests call the new `local_without_builtin("tools")` of P06's harness
+  (`tests/testthat/fixtures/oracles/report02/harness.R`). It sets a user-scope `-builtin:tools`
+  filter and removes it after the test.
+
+Validation: `progress/P10.md`, Task 10. Against the plan-literal source, the final test file gives
+`[ FAIL 6 | WARN 0 | SKIP 0 | PASS 378 ]` (`task10-red-final-plan-literal.log`). The probe
+(`task10-probe1.R`) shows each case before (`task10-probe1-plan-literal.log`: an outside
+`AGENTS.md` and skill file at level 0, "plot attached to the r result" with `is_error` FALSE, and
+an envelope in `newText` rated 2 while `.gptr/mcp.json` is written) and after
+(`task10-probe1-after.log`). Final `^tool-namespace$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 384 ]`.
