@@ -459,3 +459,304 @@ test_that("gptr's own write does not carry trust over a foreign rewrite of its f
   expect_false(trust_get(proj))
   expect_identical(gptr_trust(proj), NA)
 })
+
+# ------------------------------------------------------------------ Task 3: settings layers
+
+test_that("settings_get() layers defaults, user file, options and the session", {
+  local_gw()
+  expect_identical(settings_get("mode"), "manual")
+  settings_write("user", list(preset = "readonly"))
+  expect_identical(settings_get("preset"), "readonly")
+  withr::local_options(gptr.preset = "minimal")
+  expect_identical(settings_get("preset"), "minimal")
+  settings_write("session", list(preset = "extended"))
+  expect_identical(settings_get("preset"), "extended")
+})
+
+test_that("an untrusted project only tightens (IC-52)", {
+  proj = local_gw()
+  writeLines(paste0('{"mode": "auto", "preset": "extended", "context": "names", ',
+                    '"permissions": {"allow": ["write(**)"], "deny": ["r(fn:unlink)"]}}'),
+             file.path(proj, ".gptr", "settings.json"))
+  expect_identical(settings_get("mode"), "manual")
+  expect_identical(settings_get("preset"), "standard")
+  expect_identical(settings_get("context"), "names")
+  p = settings_get("permissions")
+  expect_identical(p$deny, "r(fn:unlink)")
+  expect_null(p$allow)
+})
+
+test_that("a trusted project applies every key, but tighten-type keys only tighten", {
+  proj = local_gw()
+  writeLines('{"mode": "auto", "preset": "extended", "permissions": {"allow": ["write(**)"]}}',
+             file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  expect_identical(settings_get("preset"), "extended")
+  expect_identical(settings_get("mode"), "manual")
+  expect_identical(settings_get("permissions")$allow, "write(**)")
+})
+
+test_that("the user-level project file adds rules; egress comes from the user file only", {
+  proj = local_gw()
+  settings_write("user_project", list(permissions = list(allow = "r(level<=1)")))
+  expect_identical(settings_get("permissions")$allow, "r(level<=1)")
+  writeLines('{"egress": {"corp": "ack"}}', file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  expect_null(settings_get("egress")$corp)
+  settings_write("user", list(egress = list(corp = "ack")))
+  expect_identical(settings_get("egress")$corp, "ack")
+})
+
+test_that("dotted keys read nested objects and their own options", {
+  local_gw()
+  expect_identical(settings_get("subagents.max_depth"), 1L)
+  withr::local_options(gptr.subagents.max_depth = 2L)
+  expect_identical(settings_get("subagents.max_depth"), 2L)
+  expect_identical(setting_get("subagents.max_depth"), 2L)
+})
+
+test_that("settings_effective() reports each key with its layer and prints it", {
+  proj = local_gw()
+  writeLines('{"mode": "plan"}', file.path(proj, ".gptr", "settings.json"))
+  cfg = settings_effective()
+  expect_s3_class(cfg, "gptr_config")
+  expect_identical(cfg$mode, "plan")
+  expect_identical(unname(attr(cfg, "sources")["mode"]), "project")
+  expect_output(print(cfg), "mode +plan +\\[project\\]")
+})
+
+# The bootstrap entry only: P01's setting_get() uses it once builtin:gateway is loaded (Task 9
+# tests setting_get() end to end).
+test_that("settings_get() is registered as the settings.get service of builtin:gateway", {
+  local_gw()
+  entry = the$services[["settings.get"]]
+  expect_identical(entry[c("provided_by", "builtin")],
+                   list(provided_by = "P08", builtin = "gateway"))
+  settings_write("session", list(preset = "minimal"))
+  expect_identical(entry$fun("preset"), "minimal")
+})
+
+# Task 3 adaptations (see dev/progress/P08.md, Task 3).
+
+test_that("project files and options() never relax providers.<id>.local_only (IC-74)", {
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  expect_true(settings_local_only("ollama"))
+  writeLines('{"providers": {"ollama": {"local_only": false, "models": ["clef"]}}}', p)
+  expect_true(settings_local_only("ollama"))
+  expect_null(settings_get("providers")$ollama)
+  gptr_trust(proj, TRUE)
+  expect_identical(settings_get("providers")$ollama$models, "clef")
+  expect_false("local_only" %in% names(settings_get("providers")$ollama))
+  expect_true(settings_local_only("ollama"))
+  withr::local_options(gptr.providers = list(ollama = list(local_only = FALSE)),
+                       gptr.providers.ollama = list(local_only = FALSE),
+                       gptr.providers.ollama.local_only = FALSE)
+  expect_true(settings_local_only("ollama"))
+  expect_null(settings_get("providers.ollama.local_only"))
+  expect_false("local_only" %in% names(settings_get("providers.ollama")))
+  expect_identical(settings_get("providers.ollama")$models, "clef")
+  # a value that is not TRUE or FALSE counts as TRUE, even in the user file
+  settings_write("user", list(providers = list(ollama = list(local_only = "no"))))
+  expect_true(settings_get("providers")$ollama$local_only)
+  expect_true(settings_local_only("ollama"))
+  expect_error(settings_local_only("a.b"), class = "gptr_error_invalid_argument")
+})
+
+test_that("the user file and the session relax local_only; projects and options tighten it", {
+  proj = local_gw()
+  settings_write("user", list(providers = list(ollama = list(local_only = FALSE))))
+  expect_false(settings_local_only("ollama"))
+  expect_true(settings_local_only("lmstudio"))
+  expect_identical(settings_resolve("providers")$source, "user")
+  withr::with_options(list(gptr.providers.ollama.local_only = TRUE), {
+    expect_true(settings_local_only("ollama"))
+    expect_identical(settings_resolve("providers.ollama.local_only")$source, "option")
+  })
+  writeLines('{"providers": {"ollama": {"local_only": true, "base_url": "http://x:1"}}}',
+             file.path(proj, ".gptr", "settings.json"))
+  expect_true(settings_local_only("ollama"))
+  expect_identical(settings_resolve("providers")$source, "project")
+  expect_null(settings_get("providers")$ollama$base_url)
+  settings_write("session", list(providers = list(ollama = list(local_only = FALSE))))
+  expect_false(settings_local_only("ollama"))
+  # the session layer is above options() (contract 11.2): an option cannot undo a session choice
+  withr::local_options(gptr.providers.ollama.local_only = TRUE)
+  expect_false(settings_local_only("ollama"))
+  expect_identical(settings_resolve("providers.ollama.local_only")$source, "session")
+  settings_write("session", list(providers.ollama.local_only = TRUE))
+  expect_true(settings_local_only("ollama"))
+})
+
+test_that("a project base URL needs trust and a one-time confirmation (contract 11.2)", {
+  proj = local_gw()
+  p = file.path(proj, ".gptr", "settings.json")
+  mine = "https://llm.user.example/v1"
+  theirs = "https://llm.project.example/v1"
+  settings_write("user", list(providers = list(corp = list(base_url = mine))))
+  writeLines(paste0('{"providers": {"corp": {"base_url": "', theirs, '", "models": ["m"]}}}'), p)
+  expect_identical(settings_get("providers")$corp$base_url, mine)
+  gptr_trust(proj, TRUE)
+  local_gptr_options(quiet = FALSE)
+  expect_message(settings_get("providers"), "needs your one-time confirmation",
+                 class = "gptr_message_notice")
+  expect_silent(settings_get("providers"))
+  corp = settings_get("providers")$corp
+  expect_identical(corp$base_url, mine)
+  expect_identical(corp$models, "m")
+  local_gptr_options(interactive = TRUE)
+  box = new.env()
+  box$asked = 0L
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$asked = box$asked + 1L
+    box$question = question
+    TRUE
+  })
+  expect_identical(settings_get("providers")$corp$base_url, theirs)
+  expect_identical(box$asked, 1L)
+  expect_match(box$question, theirs, fixed = TRUE)
+  expect_identical(trust_record(proj)$base_url_confirmed$corp, theirs)
+  expect_identical(settings_get("providers.corp.base_url"), theirs)
+  expect_identical(box$asked, 1L)
+  st = gateway_state()$base_urls
+  rm(list = ls(st, all.names = TRUE), envir = st)
+  expect_identical(settings_get("providers")$corp$base_url, theirs)
+  expect_identical(box$asked, 1L)
+  expect_true(gptr_trust(proj))
+})
+
+test_that("a refused project base URL is not asked again in this process", {
+  proj = local_gw()
+  writeLines('{"providers": {"corp": {"base_url": "https://llm.project.example/v1"}}}',
+             file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  local_gptr_options(interactive = TRUE)
+  box = new.env()
+  box$asked = 0L
+  local_mocked_bindings(gptr_confirm = function(question, default = FALSE) {
+    box$asked = box$asked + 1L
+    FALSE
+  })
+  expect_null(settings_get("providers")$corp$base_url)
+  expect_null(settings_get("providers")$corp$base_url)
+  expect_identical(box$asked, 1L)
+  expect_null(trust_record(proj)$base_url_confirmed)
+})
+
+test_that("user-scope settings and egress come from the user file only", {
+  proj = local_gw()
+  off = gptr_register(gptr_spec("setting", "demo.level", default = 1L, scope = "user"))
+  withr::defer(off())
+  writeLines('{"demo.level": 3, "egress": {"corp": "ack"}}',
+             file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  withr::local_options(gptr.demo.level = 4L, gptr.egress = list(corp = "ack"),
+                       gptr.egress.corp = "ack")
+  settings_write("session", list(demo.level = 5L, egress = list(corp = "ack")))
+  expect_identical(settings_get("demo.level"), 1L)
+  expect_null(settings_get("egress")$corp)
+  expect_null(settings_get("egress.corp"))
+  settings_write("user", list(demo.level = 2L, egress = list(corp = "ack")))
+  expect_identical(settings_get("demo.level"), 2L)
+  expect_identical(settings_resolve("egress.corp"), list(value = "ack", source = "user"))
+})
+
+test_that("an explicit null in a settings file is a value; option-only keys keep their defaults", {
+  proj = local_gw()
+  expect_identical(settings_get("compact_at"), 200000)
+  writeLines('{"compact_at": null}', settings_path("user", create = TRUE))
+  expect_null(settings_get("compact_at"))
+  expect_identical(settings_resolve("compact_at")$source, "user")
+  expect_identical(settings_get("max_turns"), 50L)
+  withr::local_options(gptr.max_turns = 7L)
+  expect_identical(settings_get("max_turns"), 7L)
+  expect_null(settings_get("no_such_setting"))
+})
+
+test_that("a trusted project's settings.local.json adds only deny and ask rules (IC-52)", {
+  proj = local_gw()
+  writeLines('{"permissions": {"allow": ["write(**)"], "deny": ["r(fn:unlink)"]}}',
+             file.path(proj, ".gptr", "settings.local.json"))
+  expect_null(settings_get("permissions")$deny)
+  writeLines("{}", file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  local_gptr_options(quiet = FALSE)
+  expect_message(settings_get("permissions"), "permissions.allow", class = "gptr_message_notice")
+  p = settings_get("permissions")
+  expect_identical(p$deny, "r(fn:unlink)")
+  expect_null(p$allow)
+  expect_identical(settings_resolve("permissions")$source, "project")
+})
+
+test_that("print(<gptr_config>) shows nulls and redacts secret-looking values", {
+  local_gw()
+  secret = "abcdef0123456789abcdef0123"
+  settings_write("session", list(providers = list(corp = list(
+    headers = list(Authorization = paste("Bearer", secret))))))
+  out = paste(utils::capture.output(print(settings_effective())), collapse = "\n")
+  expect_match(out, "model +null +\\[default\\]")
+  expect_match(out, "providers +.* +\\[session\\]")
+  expect_false(grepl(secret, out, fixed = TRUE))
+  expect_false(grepl(substr(secret, 1L, 12L), out, fixed = TRUE))
+})
+
+# Task 3 review round 1.
+
+test_that("a registered setting spec cannot relax local_only or widen egress (IC-74)", {
+  proj = local_gw()
+  for (d in c(TRUE, FALSE)) {
+    off = gptr_register(gptr_spec("setting", "providers.ollama.local_only", default = d))
+    expect_true(settings_local_only("ollama"))
+    expect_null(settings_get("providers.ollama.local_only"))
+    withr::with_options(list(gptr.providers.ollama.local_only = FALSE), {
+      expect_true(settings_local_only("ollama"))
+    })
+    off()
+  }
+  off = gptr_register(gptr_spec("setting", "providers.ollama.local_only", default = TRUE))
+  withr::defer(off())
+  writeLines('{"providers.ollama.local_only": false, "providers": {"ollama": {"models": ["m"]}}}',
+             file.path(proj, ".gptr", "settings.json"))
+  gptr_trust(proj, TRUE)
+  expect_true(settings_local_only("ollama"))
+  expect_true("providers.ollama.local_only" %in% names(settings_effective()))
+  off_p = gptr_register(gptr_spec("setting", "providers", scope = "both",
+                                  default = list(ollama = list(local_only = FALSE))))
+  withr::defer(off_p())
+  expect_true(settings_local_only("ollama"))
+  expect_identical(settings_get("providers")$ollama, list(models = "m"))
+  off_e = gptr_register(gptr_spec("setting", "egress", default = list(corp = "ack")))
+  withr::defer(off_e())
+  off_c = gptr_register(gptr_spec("setting", "egress.corp", default = "ack"))
+  withr::defer(off_c())
+  withr::local_options(gptr.egress = list(corp = "ack"), gptr.egress.corp = "ack")
+  expect_identical(settings_resolve("egress"), list(value = json_obj(), source = "default"))
+  expect_null(settings_get("egress.corp"))
+  settings_write("user", list(providers = list(ollama = list(local_only = FALSE))))
+  expect_false(settings_local_only("ollama"))
+})
+
+test_that("a session object is above the dotted options of its keys (contract 11.2)", {
+  local_gw()
+  settings_write("session", list(subagents = list(max_depth = 2L)))
+  withr::local_options(gptr.subagents.max_depth = 0L, gptr.subagents = list(max_cli = 1L))
+  expect_identical(settings_resolve("subagents.max_depth"), list(value = 2L, source = "session"))
+  expect_identical(settings_resolve("subagents.max_cli"), list(value = 1L, source = "option"))
+  expect_identical(settings_resolve("subagents.max_active"), list(value = 8L, source = "default"))
+  settings_write("session", list(subagents.max_depth = 3L))
+  expect_identical(settings_resolve("subagents.max_depth"), list(value = 3L, source = "session"))
+})
+
+test_that("a layer whose providers the guard drops entirely contributes nothing", {
+  local_gw()
+  withr::local_options(gptr.providers = list(ollama = list(local_only = FALSE)))
+  expect_identical(settings_resolve("providers"), list(value = json_obj(), source = "default"))
+  settings_write("session", list(providers = list(corp = list(models = "m"))))
+  withr::local_options(gptr.providers = list(ollama = list(local_only = FALSE),
+                                             corp = list(enabled = TRUE)))
+  r = settings_resolve("providers")
+  expect_identical(names(r$value), "corp")
+  expect_identical(r$source, "session")
+  expect_identical(settings_resolve("providers.corp.enabled"),
+                   list(value = TRUE, source = "option"))
+})

