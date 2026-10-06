@@ -152,3 +152,127 @@ test_that("bg_park() records the first ask only and never stops the run itself",
   expect_identical(s$status, "running")
   expect_false(bg_park("s_not_a_background_session", "input", "x"))
 })
+
+test_that("bg.register is a service provided by P21 and owned by builtin:background", {
+  skip_on_cran()
+  expect_true("builtin:background" %in% gptr_registry()$source)
+  expect_null(registry_get("service", "bg.register"))
+  expect_true(ext_service_has("bg.register"))
+  expect_true(is.function(ext_service_get("bg.register")))
+})
+
+test_that("an ask tool call at an idle tick is blocked and recorded, never shown", {
+  skip_on_cran()
+  s = bg_fixture()
+  ev = list(type = "tool_call", session = s$id, tool_name = "ask", tool_call_id = "c1",
+            input = list())
+  expect_null(bg_on_tool_call(ev, NULL))
+  st = bg_state()
+  st$ticking = TRUE
+  out = bg_on_tool_call(ev, NULL)
+  other = bg_on_tool_call(list(type = "tool_call", session = "s_other", tool_name = "ask"), NULL)
+  st$ticking = FALSE
+  expect_identical(out$decision, "block")
+  expect_match(out$reason, "call the tool again with the same input", fixed = TRUE)
+  expect_null(other)
+  expect_identical(session_live(s)$background$ask$what, "questions")
+})
+
+test_that("without later, background runs fail with gptr_error_missing_package", {
+  skip_on_cran()
+  local_mocked_bindings(bg_has_later = function() FALSE)
+  fake = gptr_fake_provider(list("ok"))
+  s = peter("idle job", model = fake, .run = FALSE, envir = new.env())
+  cnd = expect_error(bg_register(s), class = "gptr_error_missing_package")
+  expect_identical(cnd$package, "later")
+  expect_identical(cnd$feature, "background sessions")
+  expect_identical(s$status, "idle")
+  expect_error(peter("x", model = fake, envir = new.env(), background = TRUE),
+               class = "gptr_error_missing_package")
+  expect_false(bg_has(s$id))
+})
+
+test_that("bg_run_opts() keeps the options a resumed run needs, never a frame or a snapshot", {
+  skip_on_cran()
+  run = list(opts = list(max_turns = 5L, budget = list(tokens = 100), call = new.env(),
+                         safety = list(can_prompt = TRUE), doc = list(path = "a.R"),
+                         background = FALSE, timeout = 30))
+  expect_identical(bg_run_opts(run), list(max_turns = 5L, budget = list(tokens = 100),
+                                          timeout = 30, background = TRUE))
+  expect_identical(bg_run_opts(list(opts = NULL)), list(background = TRUE))
+})
+
+test_that("bg_register() starts a queued session in the background (contract 7.21 example)", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  calls = new.env()
+  calls$n = 0L
+  bg_recording_ui(calls)
+  s = peter("long job", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+           envir = new.env())
+  res = withVisible(ext_service_get("bg.register")(s))
+  expect_false(res$visible)
+  expect_identical(res$value, s)
+  expect_identical(s$status, "running")
+  expect_true(isTRUE(session_live(s)$run$opts$background))
+  expect_true(bg_has(s$id))
+  expect_true(length(session_live(s)$background$ui) >= 1L)
+  expect_true(isTRUE(session_live(s)$background$opts$background))
+  jobs = gptr_jobs()
+  row = jobs[jobs$id == s$id, , drop = FALSE]
+  expect_identical(nrow(row), 1L)
+  expect_identical(row$kind, "session")
+  expect_match(row$name, "long job", fixed = TRUE)
+  expect_identical(row$status, "running")
+})
+
+test_that("bg_register() marks a running foreground run (the pause menu's [b]ackground)", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  s = peter("foreground", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+           envir = new.env())
+  run = run_start(s, NULL, opts = list())
+  expect_false(isTRUE(run$opts$background))
+  bg_register(s)
+  expect_true(isTRUE(run$opts$background))
+  expect_identical(session_live(s)$background$run, run$id)
+})
+
+test_that("an idle session without queued input cannot run in the background", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  s = peter("done already", model = gptr_fake_provider(list("ok")), envir = new.env())
+  expect_identical(s$status, "idle")
+  cnd = expect_error(bg_register(s), class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "s")
+  expect_error(bg_register("not a session"), class = "gptr_error_invalid_argument")
+  a = peter("stopped", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+           envir = new.env())
+  run_abort(run_start(a, NULL))
+  expect_error(bg_register(a), class = "gptr_error_invalid_argument")
+  expect_identical(a$status, "aborted")
+  expect_false(bg_has(a$id))
+})
+
+test_that("gptr_jobs(kill = TRUE) and bg_shutdown() stop background sessions", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  hang = gptr_fake_provider(list(list(hang = TRUE)))
+  a = peter("first", model = hang, .run = FALSE, envir = new.env())
+  b = peter("second", model = hang, .run = FALSE, envir = new.env())
+  bg_register(a)
+  bg_register(b)
+  gptr_jobs(kill = TRUE)
+  expect_identical(a$status, "aborted")
+  expect_false(bg_has(a$id))
+  expect_false(a$id %in% gptr_jobs()$id)
+  expect_identical(b$status, "aborted")
+  c1 = peter("third", model = hang, .run = FALSE, envir = new.env())
+  bg_register(c1)
+  bg_shutdown()
+  expect_identical(c1$status, "aborted")
+  expect_null(the$bg)
+})

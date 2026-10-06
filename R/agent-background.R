@@ -170,3 +170,135 @@ bg_install_ui = function(id) {
     registry_add(bg_ui_spec(nm, id), source = "session", rank = 0L, session = id)
   }, "", USE.NAMES = FALSE)
 }
+
+on_load(ext_declare_builtin("background", builtin_background))
+on_load(ext_service_set("bg.register", bg_register, provided_by = "P21", builtin = "background"))
+on_load(on_unload(bg_shutdown))
+
+#' The `builtin:background` factory. Its hook is also the record that keeps the bootstrap service
+#' `bg.register` visible (service_builtin_active(), IC-34)
+#' @noRd
+builtin_background = function(gptr) {
+  gptr$on("tool_call", bg_on_tool_call, matcher = "ask")
+}
+
+#' `tool_call` hook (matcher "ask"): during an idle tick a background session's `ask` call is
+#' blocked with the pending text and recorded, because a cancelled answer would tell the model
+#' that the user dismissed the questions
+#' @noRd
+bg_on_tool_call = function(event, ctx) {
+  if (!bg_ticking() || !bg_park(event$session, "questions", "a question from the agent")) {
+    return(NULL)
+  }
+  list(decision = "block", reason = bg_pending_text("answers"))
+}
+
+#' Is the later package available?
+#' @noRd
+bg_has_later = function() {
+  requireNamespace("later", quietly = TRUE)
+}
+
+#' Run a session in the background (service `bg.register`, 04 section 7.21) [experimental]
+#'
+#' A live run is marked background, an idle session with queued input is started in the
+#' background, and anything else is refused.
+#' @noRd
+bg_register = function(s) {
+  check_class(s, "gptr_session", "s")
+  run = session_live(s)$run
+  if (!bg_has_later()) {
+    # a run that P08 started for the background would otherwise never be pumped
+    if (isTRUE(run$opts$background)) run_abort(run, reason = "missing_package")
+    gptr_abort(c("Background sessions need the 'later' package.",
+                 "Install it with install.packages(\"later\")."),
+               "missing_package", package = "later", feature = "background sessions")
+  }
+  if (is.null(run)) {
+    q = session_data(s)$queue
+    if (!length(c(q$steer, q$follow_up))) {
+      gptr_abort("The session is not running and has no queued input to run in the background.",
+                 "invalid_argument", arg = "s",
+                 expected = "a running session or a session with queued input (.run = FALSE)")
+    }
+    run = run_start(s, NULL, opts = list(background = TRUE))
+  }
+  run$opts$background = TRUE
+  bg_track(s, run)
+  invisible(s)
+}
+
+#' The run options (04 section 7.6) a resumed background run keeps; never `call` (the caller's
+#' frame, rule R2) or `safety` (snapshotted again at resume, IC-53)
+#' @noRd
+bg_run_opts = function(run) {
+  o = run$opts[intersect(names(run$opts), c("max_turns", "budget", "returns", "context",
+                                             "timeout", "preset", "tools", "root", "agent",
+                                             "depth"))]
+  o$background = TRUE
+  o
+}
+
+#' Hold the session and record its live handle `list(ui, run, opts)` (ids and options only); the
+#' first registration also adds the job row, installs the UI wrappers and prints the notice
+#' @noRd
+bg_track = function(s, run) {
+  d = session_data(s)
+  live = session_live(s)
+  bg = live$background
+  if (!bg_has(d$id)) {
+    assign(d$id, s, envir = bg_state()$sessions)
+    bg = list(ui = bg_install_ui(d$id))
+    first = Filter(function(m) identical(m$role, "user"), path_messages(entries_path(d)))
+    bg_job_add(d$id, bg_cut(if (length(first)) msg_text(first[[1L]]), 40L))
+    gptr_inform(c("Background sessions are experimental.",
+                  "See help(\"gptr-background\") for the consoles where they are supported."),
+                "notice", .once = "background_experimental")
+  }
+  bg$run = run$id
+  bg$ask = NULL
+  bg$opts = bg_run_opts(run)
+  live$background = bg
+}
+
+#' Add the `session` job row; its closures hold the id only, never the session (rule R1)
+#' @noRd
+bg_job_add = function(id, name) {
+  job_add("session", id, name, stop = function() bg_stop(id), status = function() {
+    s = bg_get(id)
+    if (is.null(s)) "done" else session_data(s)$status
+  })
+}
+
+#' Stop a background session (the job row's `stop`, gptr_jobs(kill = TRUE))
+#' @noRd
+bg_stop = function(id) {
+  s = bg_get(id)
+  run = if (!is.null(s)) session_live(s)$run
+  if (!is.null(run)) run_abort(run)
+  bg_release(id)
+}
+
+#' Forget a background session: UI wrappers, live handle, job row, strong reference
+#' @noRd
+bg_release = function(id) {
+  s = bg_get(id)
+  if (is.null(s)) return(invisible(FALSE))
+  live = session_live(s)
+  if (!is.null(live)) {
+    for (rid in live$background$ui) registry_remove(rid)
+    live$background = NULL
+  }
+  job_remove(id)
+  rm(list = id, envir = bg_state()$sessions)
+  invisible(TRUE)
+}
+
+#' Unload cleanup (registered with on_unload()): stop every background session
+#' @noRd
+bg_shutdown = function() {
+  if (is.null(the$bg)) return(invisible(NULL))
+  for (id in bg_ids()) try(bg_stop(id), silent = TRUE)
+  the$bg = NULL
+  invisible(NULL)
+}
