@@ -290,6 +290,10 @@ test_that("an r member declared with fun only runs through the generated execute
 # ---------------------------------------------------------------- permission checks (IC-04, IC-53)
 
 test_that("with no mode policy a mutating tool asks and is blocked without a UI (NS-12)", {
+  recs = registry_all_recs
+  local_mocked_bindings(registry_all_recs = function(kind, session = NULL) {
+    Filter(function(r) !identical(r$name, "mode"), recs(kind, session))
+  })
   local_tool("w", function(input, ctx) "written")
   s = test_session(mode = "manual")
   x = dispatch(s, list(tc("w"), tc("w", id = "c2")))
@@ -425,6 +429,7 @@ test_that("a hook answering allow to an ask_human is ignored (IC-53)", {
 
 test_that("gptr.noninteractive_ask = \"deny\" returns a denial the model sees", {
   local_gptr_options(noninteractive_ask = "deny")
+  local_policy("mode", function(call, ctx) list(decision = "ask", reason = "level 2"))
   run = test_run(test_session())
   dec = perm_check(a_call(), run)
   expect_identical(dec$decision, "deny")
@@ -473,7 +478,7 @@ test_that("an option changed by model code mid-run does not change the run's gat
     if (identical(call$name, "loosen")) list(decision = "allow", reason = "ok") else
       list(decision = "ask", reason = "needs approval")
   })
-  x = dispatch(test_session(mode = "manual"), list(tc("loosen"), tc("w")))
+  x = dispatch(test_session(), list(tc("loosen"), tc("w")))
   expect_identical(msg_text(x$msgs[[1L]]), "loosened")
   expect_match(msg_text(x$msgs[[2L]]), "^Permission denied")
   expect_false(is.null(x$run$blocked))

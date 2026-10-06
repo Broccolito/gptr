@@ -1836,9 +1836,13 @@ gptr_risk = function(code, envir = NULL, root = NULL) {
 }
 
 #' The `risk.classify` service: classify R code, a shell command, SQL or Python
+#'
+#' Each classifier frame that binds `envir` releases it on exit: a closure or handler can keep
+#' the frame, which would keep a function-frame home and copy its objects (copy-safety R4).
 #' @noRd
 risk_classify = function(code, envir = NULL, root = NULL,
                          kind = c("r", "command", "sql", "python")) {
+  on.exit(assign("envir", NULL), add = TRUE)
   kind = check_choice(kind, c("r", "command", "sql", "python"), "kind")
   root = root %||% project_root()
   if (identical(kind, "r")) return(risk_classify_r(code, envir, root))
@@ -1880,6 +1884,7 @@ risk_parse = function(code) {
 #' Classify R code: the parse walk plus P03's secret rules (a walk that fails is level 3)
 #' @noRd
 risk_classify_r = function(code, envir, root) {
+  on.exit(assign("envir", NULL), add = TRUE)
   parsed = risk_parse(code)
   if (!is.null(parsed$error)) {
     out = risk_new(risk_flags_empty())
@@ -1910,7 +1915,7 @@ risk_secret_scan = function(text, tainted = character()) {
   empty = list(findings = data.frame(rule = character(), name = character(), level = integer(),
                                      guard = logical(), stringsAsFactors = FALSE),
                level = 0L, guard = FALSE, assigned = character())
-  res = tryCatch(secret_scan(text, tainted = tainted), error = function(e) NULL)
+  res = tryCatch(secret_scan(text, tainted = as.character(tainted)), error = function(e) NULL)
   if (is.null(res) || !is.data.frame(res$findings)) return(empty)
   res
 }
@@ -2065,6 +2070,7 @@ risk_binding_leaf = function(obj) {
 #' risk_binding_info() with errors caught one frame up
 #' @noRd
 risk_binding_safe = function(name, envir) {
+  on.exit(assign("envir", NULL), add = TRUE)
   tryCatch(risk_binding_info(name, envir),
            error = function(e) list(class = "<unknown>", bytes = NA_real_))
 }
@@ -2236,6 +2242,7 @@ risk_bound = function(exprs) {
 #' The one parse walk (IC-31): list(flags, targets, calls, sizes)
 #' @noRd
 risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
+  on.exit(assign("envir", NULL), add = TRUE)
   flags = list()
   sizes = numeric()
   tg = list(assign = character(), modify = character(), byref = character(),
@@ -2282,7 +2289,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
     if (is.null(envir) || !grepl("^[A-Za-z.][A-Za-z0-9._]*\\z", gen, perl = TRUE)) {
       return(invisible())
     }
-    if (is.null(env_names)) env_names <<- ls(envir, all.names = TRUE)
+    if (is.null(env_names)) env_names <<- sort(names(envir)) # ls() keeps envir (R4)
     for (m in env_names[startsWith(env_names, paste0(gen, "."))]) {
       w = risk_fn_where(m, envir)
       if (isTRUE(w$user)) read_user(w$code, paste0("via S3 method ", m, "(): "), ctx)

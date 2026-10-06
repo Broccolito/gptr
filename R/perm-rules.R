@@ -92,7 +92,7 @@ rule_code_text = function(fl) {
 
 #' Does one parsed rule match a call? `lst` is the list the rule came from.
 #'
-#' Allow rules with fn/category/sh/sql match only when EVERY flagged call (level >= 1, with a
+#' Allow rules with fn/category/sh/sql/secret match only when EVERY flagged call (level >= 1, with a
 #' function name) is covered; deny and ask rules match when ANY is (report 18 section 3.7).
 #' @noRd
 rule_hit = function(p, call, lst) {
@@ -105,11 +105,13 @@ rule_hit = function(p, call, lst) {
     return(!is.na(path) && grepl(rule_glob_re(p$value), path, perl = TRUE))
   }
   if (p$kind == "level") return(risk$level <= p$value)
+  fl = risk$flagged
   if (p$kind == "secret") {
     s = risk$secrets
-    return(length(s) > 0L && if (lst == "allow") all(s %in% p$value) else any(s %in% p$value))
+    if (lst != "allow") return(any(s %in% p$value))
+    read = sub("^secret_env(_registered)? ", "", fl$call[fl$level >= 1L])
+    return(length(s) > 0L && all(c(s, read) %in% p$value))
   }
-  fl = risk$flagged
   fl = fl[fl$level >= 1L & (p$kind == "category" | !is.na(fl$fn)), , drop = FALSE]
   text = rule_code_text(fl)
   hit = switch(p$kind, fn = fl$fn %in% p$value, category = fl$category %in% p$value,
