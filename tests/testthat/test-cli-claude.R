@@ -769,9 +769,14 @@ test_that("gptr_cancel() sends the interrupt control request, then kill_all()", 
   local_cli_cleanup(s)
   expect_identical(wait_fake_log(f, "turn", 1L, s), 1L)
   expect_identical(s$status, "running")
+  # output gptr has not read yet (the fixture pauses before its last line) must not stop the
+  # child before the interrupt reaches it
+  expect_identical(processx::poll(list(pcli_tracked(s$id)$process), 10000L)[[1L]][["output"]],
+                   "ready")
   gptr_cancel(s)
   expect_identical(s$status, "aborted")
   expect_length(fake_log(f, "interrupt"), 1L)
+  expect_true(pcli_tracked(s$id)$interrupt_acked)
   expect_all_dead(fake_pids(f))
   expect_null(pcli_tracked(s$id)$process)
 })

@@ -1990,6 +1990,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-cli-common.R "request_params ensures gptr's MCP server for a codex session, not for claude".
   Evidence: progress/P19.md Task 2.
 
+## D-163 - P20 claude interrupt: the child's lines answer only the interrupt while it waits (2026-10-06)
+- Rule: from the interrupt on, `pcli_stop_child()` routes a claude child's lines to its acknowledgement
+  check (`state$route`, a field P05 owns, D-018 item 4). P05's route of an aborted turn ran `stream_over()`
+  on the next line and killed the child (signal, 2 s grace, tree) before the CLI read the request, or,
+  with output unread at the cancel, before `write_all()` wrote it (a pump reads output before it drains
+  stdin). The aborted turn's P05 stream is let go without its own `aborted` event (the run settled in
+  `run_abort()`), as P20 Task 9 assumed. The normaliser's acknowledgement check, now unreachable, goes.
+- Contract-visible: none (03 section 8.3 "interrupt, then `kill_all()`" now holds with output pending).
+- Tests: test-cli-claude.R "gptr_cancel() sends the interrupt control request, then kill_all()" (waits for
+  unread output; `claude-hang.ndjson` pauses before its last line). Evidence: progress/infra.md Task CI-14.
+
 ## D-164 - P14 console: nothing printed while a tool executes; status line uses format_count/format_cost (2026-10-06)
 - Rule: `console_foreground()` also requires `is.null(run_current())`: a run's events fired while a tool
   executes on the stack (a nested `peter$<tool>()` in the model's `r` code, P09 capturing) print

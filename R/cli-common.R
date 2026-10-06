@@ -738,7 +738,9 @@ pcli_send = function(opts, obj) {
 #'
 #' A claude child in the middle of a turn first gets the control-protocol interrupt; with
 #' `wait_ack` the reactor is pumped (no FIFO tool runs) until the CLI acknowledges it or `grace`
-#' seconds pass. Then the child is forgotten (its late lines and exit reach no turn), its stdin
+#' seconds pass. From the interrupt on, the child's lines only answer it: P05's route of an
+#' aborted turn would kill the child at its next line (D-018), even before the interrupt is
+#' written. Then the child is forgotten (its late lines and exit reach no turn), its stdin
 #' is closed (a stream-json claude CLI exits at end of input) and P05's stream_process_kill()
 #' stops it: P04's reactor_cancel() of the child's watcher (interrupt, grace, kill_all() of the
 #' process tree) and the removal of its `cli` job row. kill_all() under the living watcher would
@@ -766,6 +768,10 @@ pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
     req = pcli_control_request(state, list(subtype = "interrupt"))
     state$interrupt_id = req$request_id
     state$interrupt_acked = FALSE
+    state$route = function(line) {
+      obj = tryCatch(json_decode(line), error = function(e) NULL)
+      if (is.list(obj)) pcli_claude_ack(obj, state)
+    }
     sent = tryCatch({
       write_all(p, paste0(json_encode(req), "\n"))
       TRUE

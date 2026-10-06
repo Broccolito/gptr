@@ -23,6 +23,7 @@ pending (maintainer).
 | 37303873005 (`602ba53`), 37313611932 (`e214a61`), 37317629994 (`0c37a8d`), 37329796830 (`718659d`) | every R 4.6.1 and devel job: `test-copy-gateway.R:108` (G3 copy of `big`); both Windows: `test-cli-codex.R:477-490` (links); Windows release cancelled at 45 min (stream timed out in quadratic `pd_calls()`); `test-proc-supervise.R:89` (oldrel-1, connections); Windows INFRA-23 5 of 9, INFRA-01 | CI-6 |
 | 37351073211 (`2823b07`) | green, 13/13: macOS; Windows release, oldrel-4; Ubuntu devel, release, oldrel-1, oldrel-4; no-Suggests; LC_ALL=C; copy-safety release, devel; connections; token bench. Confirms CI-6 | - |
 | 37390651676 (`31118fb`, docs only) | Windows oldrel-4 only: INFRA-23 1.040 s (`test-http-sse.R:126`); 12 jobs green | CI-7 |
+| 37503348214 (`fba1a15`) | Ubuntu oldrel-4 only: `test-cli-claude.R:774` (no `interrupt` row), Chrome detritus NOTE; 12 jobs green | CI-14 |
 
 ## Task CI-1 - Cross-platform hosted CI corrections (2026-10-03, `118f78b`)
 - Fixed: P01's service test isolated from undeclared built-ins (D-016 item 2); INFRA-01 measured on the mock's clock
@@ -164,6 +165,20 @@ pending (maintainer).
   `^artifact-` PASS 316 (beside lint). Lint clean. Neighbours: `^(lint-rules|arch-layers)$` PASS 19 green.
 - Reviews: r1 1 finding (0/0/1; heading named a test change, the fix is in R/) -> fixed. Deviations: none. Open: none.
 
+## Task CI-14 - A claude interrupt is not raced by the aborted turn's stream (2026-10-06)
+- Red: hosted `test-cli-claude.R:774` (run 37503348214). Cause in R/: P05's route of the aborted turn kills the
+  child at its next line (D-018), so a line unread at the cancel stopped it before `write_all()` wrote the
+  interrupt. The test now waits for unread output (`claude-hang.ndjson` pauses 0.5 s before its last line):
+  `^cli-claude$` FAIL 2 (`:778` no interrupt, the hosted message; `:794` 2 of 3). Fix: `pcli_stop_child()`
+  routes the child's lines to its acknowledgement check from the interrupt on (grace 2 s unchanged); the
+  normaliser's now unreachable check goes (`R/cli-claude.R`).
+- Green: `^cli-claude$` PASS 238 (x3); a throwaway copy with a slowed fake (0.3 s before each stdin read and
+  each turn) under two busy cores, every cancel acknowledged. Lint clean. Neighbours: `^cli-` SKIP 3 PASS 750,
+  `^(provider-registry|subagent-backends)$` PASS 838, `^(arch-layers|lint-rules)$` PASS 19 green.
+- Reviews: r1 3 findings (0/0/2, 1 nit): no test asserted the acknowledgement (a no-ack mutant passed) -> fixed,
+  the mutant now FAIL 1 `:779`; heading named a test change, the fix is in R/ -> fixed; another lane's
+  DEVIATIONS hunk -> not CI-14's, stage D-163 only. Deviations: D-163. Open: hosted confirmation.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
@@ -181,6 +196,8 @@ pending (maintainer).
   `R/ext-specs.R:1330` (also needs `fs_path()`) and P08 `R/gptr-gateway.R:796` should use `path_ext()` (D-111).
 - ctx members read with `get()`, `get0()`, `mget()` or `as.list()` pin a function frame on R >= 4.6 (D-137 item 1);
   none in `R/`.
+- Chrome leaves `com.google.Chrome.*` temp dirs that R CMD check reports as detritus NOTEs on hosted runners
+  (run 37503348214); harmless for CRAN because those tests `skip_on_cran()`.
 - Non-gating NOTEs: Windows `Rscript*` temp detritus from killed `Rscript -e` children (suggested, unverified: give
   them TMPDIR/TMP/TEMP in `withr::local_tempdir()` or run a script file); macOS `com.apple.*` folders under
   `/var/folders/.../T` (runner); Windows installed size 6.8 MB; local "future file timestamps" (no time server).

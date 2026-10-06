@@ -129,8 +129,6 @@ pcli_claude_budgeted = function(flags) {
 pcli_claude_build = function(model, context, opts) {
   state = pcli_state(opts)
   state$pcli_request_id = context[["request_id"]]
-  state$interrupt_id = NULL
-  state$interrupt_acked = FALSE
   pcli_track(opts[["session"]], state)
   model_id = pcli_model_id(model)
   par = pcli_params(context)
@@ -498,7 +496,6 @@ pcli_claude_parse = function(model, opts) {
     obj = ev[["obj"]]
     if (!is.list(obj)) return(s$done)
     type = pcli_chr(obj[["type"]]) %||% ""
-    if (identical(type, "control_response")) pcli_claude_ack(obj, s$state)
     if (identical(type, "control_request")) pcli_claude_control(obj, s)
     if (s$done || type %in% c("control_response", "control_request")) return(s$done)
     if (pcli_aborted(s)) {
