@@ -547,7 +547,7 @@ bridge_job_bytes = function(job, stream) {
   bytes
 }
 
-#' New complete lines of one stream since the last read, with the footer "[<id> <status>, <s>s]"
+#' New complete lines of one stream since the last read, with the footer `"[<id> <status>, <s>s]"`
 #' @noRd
 bridge_job_read = function(job, stream = "stdout", n = NULL) {
   stream = check_choice(stream, c("stdout", "stderr"), "stream")
