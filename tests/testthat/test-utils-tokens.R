@@ -34,6 +34,20 @@ test_that("est_tokens() counts characters, not bytes, in a C locale", {
   )
 })
 
+test_that("lines_fit() keeps the most leading lines, with a notice of the omitted count", {
+  lines = sprintf("row %02d of some printed words", 1:40)
+  k = lines_fit(lines, 50, "r_output")
+  expect_lte(est_tokens(lines[seq_len(k)], "r_output"), 50)
+  expect_gt(est_tokens(lines[seq_len(k + 1L)], "r_output"), 50)
+  more = function(m) if (m > 0L) sprintf("(+ %d more)", m)
+  j = lines_fit(lines, 50, "r_output", more)
+  expect_lte(est_tokens(c(lines[seq_len(j)], more(40L - j)), "r_output"), 50)
+  expect_gt(est_tokens(c(lines[seq_len(j + 1L)], more(39L - j)), "r_output"), 50)
+  expect_identical(lines_fit(c("~ a", "~ b"), 4, "r_output", function(m) if (m) "(+ 9 more)"), 2L)
+  expect_identical(lines_fit(character(), 10, "r_output"), 0L)
+  expect_identical(lines_fit(lines, Inf, "r_output"), 40L)
+})
+
 test_that("est_image_tokens() follows the provider formulas", {
   expect_identical(est_image_tokens(768, 512), 532)
   expect_identical(est_image_tokens(1400, 1000), 1551)

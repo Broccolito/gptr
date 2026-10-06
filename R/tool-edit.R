@@ -250,7 +250,7 @@ edit_normalize_args = function(edits) {
   for (i in seq_along(edits)) {
     for (f in c("oldText", "old_text", "newText", "new_text")) {
       v = edits[[i]][[f]]
-      if (!is.null(v) && !(is.character(v) && length(v) == 1L && !is.na(v))) {
+      if (!is.null(v) && !rlang::is_string(v)) {
         msg = paste0("Edit tool input is invalid. edits[", i - 1L, "].", f, " must be a string.")
         gptr_abort(msg, "invalid_argument", arg = "edits", expected = "string oldText and newText")
       }
@@ -361,8 +361,7 @@ edit_result_text = function(ed) {
 #' @noRd
 patch_is_envelope = function(x) {
   if (is.list(x) && length(x) == 1L && is.null(names(x))) x = x[[1L]]
-  is.character(x) && length(x) == 1L && !is.na(x) &&
-    grepl("^\\s*\\*\\*\\* Begin Patch", x, perl = TRUE)
+  rlang::is_string(x) && grepl("^\\s*\\*\\*\\* Begin Patch", x, perl = TRUE)
 }
 
 #' The patch envelope carried by an edit's arguments, or NULL
@@ -533,12 +532,7 @@ patch_remove = function(abs, path) {
 #' system the key is folded (Unicode case and NFC with stringi, ASCII case without).
 #' @noRd
 patch_key = function(p, fold) {
-  t = resolve_link_target(p)
-  k = if (file.exists(fs_path(t))) {
-    as_utf8(normalizePath(fs_path(t), winslash = "/", mustWork = FALSE))
-  } else {
-    tool_path_physical(t)
-  }
+  k = tool_path_physical(resolve_link_target(p))
   if (!fold) return(k)
   if (requireNamespace("stringi", quietly = TRUE)) {
     return(utf8_mark(stringi::stri_trans_nfc(stringi::stri_trans_tolower(k, locale = "en"))))

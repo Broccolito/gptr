@@ -4,26 +4,13 @@
 # Pi's `**/` rule; the git oracle compares the file set with `git ls-files --others
 # --exclude-standard`.
 
-put = function(root, rel, text = "x\n") {
-  p = file.path(root, rel)
-  dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
-  writeBin(charToRaw(text), p)
-  invisible(p)
-}
-
 test_that("resolve_tool_path() follows Pi's resolveToCwd rules", {
   expect_identical(resolve_tool_path("sub/../f.R", "/w"), "/w/f.R")
   expect_identical(resolve_tool_path("@src/x.R", "/w"), "/w/src/x.R")
   expect_identical(resolve_tool_path("a\u00a0b.txt", "/w"), "/w/a b.txt")
   expect_identical(resolve_tool_path("file:///tmp/a%20b.txt", "/w"), "/tmp/a b.txt")
-  expect_identical(resolve_tool_path("~/x", "/w"), tool_path_norm(path.expand("~/x")))
+  expect_identical(resolve_tool_path("~/x", "/w"), path_lexical(path.expand("~/x")))
   expect_identical(resolve_tool_path("~draft.md", "/c"), "/c/~draft.md")
-  expect_identical(tool_path_norm("/a/./b/../c//d/"), "/a/c/d")
-  expect_identical(tool_path_norm("C:\\x\\..\\y\\.\\z"), "C:/y/z")
-  expect_identical(tool_path_norm("C:/.."), "C:/")
-  expect_identical(tool_path_norm("\\\\server\\share\\..\\x"), "//server/share/x")
-  expect_identical(tool_path_norm("../../a"), "../../a")
-  expect_true(tool_path_is_abs("C:\\x") && tool_path_is_abs("/x") && !tool_path_is_abs("x/y"))
 })
 
 test_that("glob_to_regex() implements fd/Pi semantics including the `**/` prefix rule", {
@@ -58,10 +45,10 @@ test_that("bracket expressions follow git's wildmatch and always compile", {
   td = withr::local_tempdir()
   rules = c("[:digit:]", "[z-a].txt", "[z-ab].md", "[[:digit:]-z].x", "[!-a].y", "[[:word:]].a",
             "foo[bar", "[\\]]q", "[a-[:digit:]].w", "a[/]b")
-  put(td, ".gitignore", paste(rules, collapse = "\n"))
+  put_file(td, ".gitignore", paste(rules, collapse = "\n"))
   files = c("1", "d", "a.R", "b.txt", "z.txt", "a.md", "b.md", "z.md", "1.x", "-.x", "z.x", "a.x",
             "-.y", "a.y", "b.y", "x.a", "foo[bar", "]q", "aq", "1.w", "d].w", "a/b")
-  for (p in files) put(td, p)
+  for (p in files) put_file(td, p)
   w = expect_no_warning(walk_files(td, hidden = TRUE))
   expect_identical(sort(w$path, method = "radix"),
                    sort(c(".gitignore", "-.y", "1", "1.w", "a.R", "a.md", "a.x", "a.y", "a/b", "aq",
@@ -76,12 +63,12 @@ test_that("bracket expressions follow git's wildmatch and always compile", {
   expect_error(glob_to_regex("{a,[}]"), class = "gptr_error_invalid_argument")
 })
 
-test_that("case folding inside brackets follows git's wildmatch (core.ignorecase)", {
+test_that("ignore rules match case-insensitively on a case-insensitive file system", {
   td = withr::local_tempdir()
-  put(td, ".gitignore", "[B-C].r\n[[:upper:]]x\n[A]y\n")
-  for (p in c("b.r", "c.r", "d.r", "ax", "ay")) put(td, p)
+  put_file(td, ".gitignore", "[B-C].r\n[[:upper:]]x\n[A]y\n")
+  for (p in c("b.r", "c.r", "d.r", "ax", "ay")) put_file(td, p)
   local_mocked_bindings(fs_case_insensitive = function(dir) TRUE)
-  expect_identical(walk_files(td)$path, c("ay", "d.r"))
+  expect_identical(walk_files(td)$path, "d.r")
   local_mocked_bindings(fs_case_insensitive = function(dir) FALSE)
   expect_identical(walk_files(td)$path, c("ax", "ay", "b.r", "c.r", "d.r"))
 })
@@ -90,12 +77,12 @@ test_that("the .gitignore engine: negation, anchoring, dir-only rules, `**`, esc
   td = withr::local_tempdir()
   rules = c("# comment", "", "*.log", "!keep.log", "/rootonly.txt", "build/", "docs/**/*.tmp",
             "sub/inner.txt", "trail.txt   ", "\\#hash.txt", "data/*", "!data/keep/")
-  put(td, ".gitignore", paste(rules, collapse = "\n"))
+  put_file(td, ".gitignore", paste(rules, collapse = "\n"))
   files = c("a.log", "keep.log", "x/y/b.log", "rootonly.txt", "x/rootonly.txt", "build/o.txt",
             "x/build/o.txt", "build.txt", "docs/a.tmp", "docs/p/q/b.tmp", "docs/b.md",
             "sub/inner.txt", "x/sub/inner.txt", "trail.txt", "#hash.txt", "data/raw.csv",
             "data/keep/k.csv", "src/main.R")
-  for (p in files) put(td, p)
+  for (p in files) put_file(td, p)
   w = walk_files(td, type = "file", hidden = TRUE)
   expect_identical(sort(w$path, method = "radix"),
                    sort(c(".gitignore", "keep.log", "x/rootonly.txt", "build.txt", "docs/b.md",
@@ -104,11 +91,11 @@ test_that("the .gitignore engine: negation, anchoring, dir-only rules, `**`, esc
 
 test_that("nested .gitignore files apply to their own subtree only", {
   td = withr::local_tempdir()
-  put(td, "a/.gitignore", "ignored.txt\n")
-  put(td, "a/deep/.gitignore", "secret.txt\n")
+  put_file(td, "a/.gitignore", "ignored.txt\n")
+  put_file(td, "a/deep/.gitignore", "secret.txt\n")
   for (p in c("a/ignored.txt", "a/kept.txt", "a/deep/ignored.txt", "a/deep/secret.txt",
               "a/deep/kept.txt", "b/ignored.txt", "b/kept.txt", "root.txt")) {
-    put(td, p)
+    put_file(td, p)
   }
   w = walk_files(td, type = "file", hidden = FALSE)
   expect_identical(w$path, c("a/deep/kept.txt", "a/kept.txt", "b/ignored.txt", "b/kept.txt",
@@ -118,12 +105,12 @@ test_that("nested .gitignore files apply to their own subtree only", {
 test_that(".gptrignore wins over .ignore, which wins over .gitignore, at every level", {
   td = withr::local_tempdir()
   dir.create(file.path(td, ".git"))
-  put(td, ".gitignore", "a.txt\nb.txt\n")
-  put(td, ".ignore", "!a.txt\nc.txt\n")
-  put(td, ".gptrignore", "!c.txt\n")
+  put_file(td, ".gitignore", "a.txt\nb.txt\n")
+  put_file(td, ".ignore", "!a.txt\nc.txt\n")
+  put_file(td, ".gptrignore", "!c.txt\n")
   for (p in c("a.txt", "b.txt", "c.txt", "d.txt", "sub/a.txt", "sub/b.txt", "sub/c.txt",
               "sub/d.txt")) {
-    put(td, p)
+    put_file(td, p)
   }
   expect_identical(walk_files(td)$path,
                    c("a.txt", "c.txt", "d.txt", "sub/a.txt", "sub/c.txt", "sub/d.txt"))
@@ -133,7 +120,7 @@ test_that(".gptrignore wins over .ignore, which wins over .gitignore, at every l
 test_that("the walker prunes .git, node_modules, renv/library; dotfiles only with hidden = TRUE", {
   td = withr::local_tempdir()
   for (p in c(".git/config", "node_modules/p/i.js", "renv/library/x/DESCRIPTION", "renv/activate.R",
-              ".hid/h.txt", "R/a.R")) put(td, p)
+              ".hid/h.txt", "R/a.R")) put_file(td, p)
   w = walk_files(td, type = "file", hidden = TRUE)
   expect_identical(w$path, c(".hid/h.txt", "R/a.R", "renv/activate.R"))
   expect_identical(walk_files(td, type = "file")$path, c("R/a.R", "renv/activate.R"))
@@ -142,10 +129,10 @@ test_that("the walker prunes .git, node_modules, renv/library; dotfiles only wit
 
 test_that("a negation in an ignore file never re-includes a pruned directory", {
   td = withr::local_tempdir()
-  put(td, ".gitignore", "*\n!*/\n!*.R\n")
+  put_file(td, ".gitignore", "*\n!*/\n!*.R\n")
   for (p in c(".git/HEAD", ".git/hooks/h.R", "node_modules/m/x.R", "a.R", "b.txt", "sub/c.R",
               "sub/d.txt", "sub/deep/e.R")) {
-    put(td, p)
+    put_file(td, p)
   }
   expect_identical(walk_files(td, type = "any", hidden = TRUE)$path,
                    c("a.R", "sub", "sub/c.R", "sub/deep", "sub/deep/e.R"))
@@ -154,8 +141,8 @@ test_that("a negation in an ignore file never re-includes a pruned directory", {
 
 test_that("walk_files() returns path, size, mtime, type and honours max", {
   td = withr::local_tempdir()
-  put(td, "a.txt", "12345")
-  put(td, "d/b.txt", "1")
+  put_file(td, "a.txt", "12345")
+  put_file(td, "d/b.txt", "1")
   w = walk_files(td, type = "any")
   expect_named(w, c("path", "size", "mtime", "type"))
   expect_identical(w$type, c("file", "dir", "file"))
@@ -168,7 +155,7 @@ test_that("walk_files() returns path, size, mtime, type and honours max", {
 
 test_that("max counts only rows of the requested type (directories do not use it up)", {
   td = withr::local_tempdir()
-  for (i in 1:12) put(td, sprintf("d%02d/f.txt", i))
+  for (i in 1:12) put_file(td, sprintf("d%02d/f.txt", i))
   w = walk_files(td, type = "file", max = 5)
   expect_identical(w$path, sprintf("d%02d/f.txt", 1:5))
   expect_true(attr(w, "truncated"))
@@ -179,9 +166,9 @@ test_that("max counts only rows of the requested type (directories do not use it
 test_that("ancestor .gitignore files apply when walking a subdirectory of a repository", {
   td = withr::local_tempdir()
   dir.create(file.path(td, ".git"))
-  put(td, ".gitignore", "*.tmp\n")
-  put(td, "src/a.R")
-  put(td, "src/b.tmp")
+  put_file(td, ".gitignore", "*.tmp\n")
+  put_file(td, "src/a.R")
+  put_file(td, "src/b.tmp")
   expect_identical(walk_files(file.path(td, "src"))$path, "a.R")
 })
 
@@ -194,13 +181,13 @@ test_that("the file set equals git ls-files on a repository with tricky rules", 
             "src/gen/keep.R", "logs/2026/a.txt", "logs/2026/b.txt", "sp ace.txt",
             "nested/inner/drop.csv", "nested/inner/ok.R", "nested/drop.csv", "abc/x/y",
             "#hash.txt", "!bang.txt")
-  for (f in files) put(td, f)
+  for (f in files) put_file(td, f)
   rules = c("# comment", "*.log", "!keep.log", "build/", "!build/keep.txt", "/doc/frotz/",
             "logs/**/b.txt", "sp\\ ace.txt", "abc/**", "\\#hash.txt", "\\!bang.txt", "",
             "src/deep/tmp.R   ")
-  put(td, ".gitignore", paste(rules, collapse = "\n"))
-  put(td, "src/.gitignore", "gen/*\n!gen/keep.R\n")
-  put(td, "nested/inner/.gitignore", "*.csv\n")
+  put_file(td, ".gitignore", paste(rules, collapse = "\n"))
+  put_file(td, "src/.gitignore", "gen/*\n!gen/keep.R\n")
+  put_file(td, "nested/inner/.gitignore", "*.csv\n")
   system2("git", c("-C", shQuote(td), "init", "-q"), stdout = FALSE, stderr = FALSE)
   git = sort(system2("git", c("-C", shQuote(td), "ls-files", "--others", "--exclude-standard"),
                      stdout = TRUE), method = "radix")
@@ -228,10 +215,10 @@ test_that("non-ASCII directory and file names are walked and matched in any loca
 test_that("a file name holding a newline is matched like git", {
   skip_on_os("windows")
   td = withr::local_tempdir()
-  put(td, ".gitignore", "z.log\n[mn].tmp\nq/**\n**/w.md\n")
+  put_file(td, ".gitignore", "z.log\n[mn].tmp\nq/**\n**/w.md\n")
   for (p in c("x\ny/z.log", "x\ny/keep.txt", "n.tmp\n", "m.tmp", "q/a\nb", "q\nr/w.md",
               "q\nr/v.md")) {
-    put(td, p)
+    put_file(td, p)
   }
   expect_identical(sort(walk_files(td, hidden = TRUE)$path, method = "radix"),
                    sort(c(".gitignore", "n.tmp\n", "q\nr/v.md", "x\ny/keep.txt"), method = "radix"))
@@ -254,7 +241,7 @@ test_that("the prune list is anchored at the walk root, also below a git root", 
   td = withr::local_tempdir()
   dir.create(file.path(td, ".git"))
   for (p in c("proj/R/a.R", "proj/renv/library/pkg/DESCRIPTION", "proj/renv/activate.R")) {
-    put(td, p)
+    put_file(td, p)
   }
   proj = file.path(td, "proj")
   expect_identical(walk_files(proj)$path, c("R/a.R", "renv/activate.R"))
@@ -263,16 +250,16 @@ test_that("the prune list is anchored at the walk root, also below a git root", 
 
 test_that("a git root at the file-system root keeps the ancestor rules", {
   td = withr::local_tempdir()
-  put(td, ".gitignore", "*.tmp\n/proj/drop.txt\n")
-  for (p in c("proj/keep.R", "proj/drop.txt", "proj/x.tmp")) put(td, p)
-  local_mocked_bindings(git_root_of = function(dir) tool_path_prefix(dir))
+  put_file(td, ".gitignore", "*.tmp\n/proj/drop.txt\n")
+  for (p in c("proj/keep.R", "proj/drop.txt", "proj/x.tmp")) put_file(td, p)
+  local_mocked_bindings(git_root_of = function(dir) sub("^([A-Za-z]:)?/.*$", "\\1/", dir))
   expect_identical(walk_files(file.path(td, "proj"))$path, "keep.R")
 })
 
 test_that("an entry whose name is not valid UTF-8 is skipped and counted, never fatal", {
   td = withr::local_tempdir()
-  put(td, "a.R")
-  put(td, "d/b.R")
+  put_file(td, "a.R")
+  put_file(td, "d/b.R")
   bad = rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xe9, 0x2e, 0x52)))
   real = walk_list_dir
   local_mocked_bindings(walk_list_dir = function(dir) c(real(dir), bad))

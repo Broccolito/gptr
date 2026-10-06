@@ -20,11 +20,11 @@ file_rename = function(from, to) {
 #'
 #' `content` is a character vector (written as UTF-8 lines, each ending in LF) or a raw vector.
 #' The bytes go to a temporary file in the same directory (with the permission bits of an
-#' existing `path`), which is renamed over `path`; the rename is retried 3 times with 100 ms
-#' pauses, then the file is written in place after an md5 check that nobody else changed it
+#' existing `path`, else `mode`), which is renamed over `path`; the rename is retried 3 times with
+#' 100 ms pauses, then the file is written in place after an md5 check that nobody else changed it
 #' meanwhile.
 #' @noRd
-write_atomic = function(path, content) {
+write_atomic = function(path, content, mode = "0600") {
   check_string(path, "path")
   if (is.character(content)) {
     lines = as_utf8(content)
@@ -44,11 +44,12 @@ write_atomic = function(path, content) {
     )
   }
   before = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_
+  old = file.info(path, extra_cols = FALSE)$mode
+  if (!is.na(old)) mode = old
   tmp = tempfile(".gptr-write-", tmpdir = dir)
   on.exit(if (file.exists(tmp)) unlink(tmp), add = TRUE)
   # Create an empty private file before writing any content; changing permissions after
   # write_bytes() would expose a private target's new content under an ordinary umask.
-  mode = if (!is.na(before)) file.info(path)$mode else "0600"
   if (!file.create(tmp, showWarnings = FALSE) ||
         !isTRUE(Sys.chmod(tmp, "0600", use_umask = FALSE))) {
     gptr_abort("Cannot create a private temporary file.", "doc_write", path = path,
@@ -129,9 +130,10 @@ gptr_user_dir = function(which = c("config", "cache", "data"), create = FALSE) {
   dir
 }
 
+#' Is each path absolute ("/x", "C:/x", "C:\\x", UNC)?
 #' @noRd
 is_abs_path = function(path) {
-  grepl("^(/|[A-Za-z]:/|//)", path)
+  grepl("^([/\\\\]|[A-Za-z]:[/\\\\])", path)
 }
 
 #' Normalise one path: absolute, forward slashes, symlinks resolved on the deepest existing
@@ -401,21 +403,26 @@ path_class_key = function(key, context) {
   "outside"
 }
 
-#' Normalize an absolute path lexically without following symlinks
+#' Normalise one path lexically, without the file system: "/" separators; ".." never climbs above
+#' a root ("/", "C:/", "//server/share") and is kept at the start of a relative path ("" is ".")
 #' @noRd
 path_lexical = function(path) {
+  path = gsub("\\", "/", as_utf8(path), fixed = TRUE)
   unc = startsWith(path, "//")
   prefix = if (unc) "//" else if (startsWith(path, "/")) "/" else ""
   floor = if (unc) 2L else if (grepl("^[A-Za-z]:/", path)) 1L else 0L
-  pieces = strsplit(path, "/", fixed = TRUE)[[1L]]
   out = character()
-  for (piece in pieces) {
+  for (piece in strsplit(path, "/", fixed = TRUE)[[1L]]) {
     if (piece %in% c("", ".")) next
-    if (identical(piece, "..")) {
-      if (length(out) > floor) out = out[-length(out)]
-    } else {
+    if (piece != "..") {
       out = c(out, piece)
+    } else if (length(out) > floor && out[length(out)] != "..") {
+      out = out[-length(out)]
+    } else if (!nzchar(prefix) && !floor) {
+      out = c(out, "..")
     }
   }
-  paste0(prefix, paste(out, collapse = "/"))
+  out = paste0(prefix, paste(out, collapse = "/"))
+  if (floor == 1L && !grepl("/", out, fixed = TRUE)) out = paste0(out, "/")
+  if (nzchar(out)) out else "."
 }

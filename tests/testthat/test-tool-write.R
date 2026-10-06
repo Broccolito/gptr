@@ -60,7 +60,7 @@ test_that("write refuses directories and writes through symbolic links keeping t
   expect_identical(raw_of(real), charToRaw("new"))
   expect_true(nzchar(Sys.readlink(link)))
   expect_identical(format(file.info(real)$mode), "755")
-  expect_identical(w$details$path, resolve_tool_path(real))
+  expect_identical(w$details$path, resolve_tool_path(normalizePath(real)))
 })
 
 test_that("no temporary file is left behind", {
@@ -70,7 +70,7 @@ test_that("no temporary file is left behind", {
 })
 
 # Added blocks (dev/DEVIATIONS.md D-051): a file without a line ending, the 1 MiB sample cut, the
-# mode of a new file, relative links that climb, the hop limit, non-ASCII paths in a C locale and a
+# mode of a new file, relative links that climb, link chains, non-ASCII paths in a C locale and a
 # file the process may write but not read.
 
 test_that("an existing file without a line ending takes the content's line endings verbatim", {
@@ -142,20 +142,23 @@ test_that("a relative link that climbs with .. resolves from the link's physical
                    resolve_tool_path(normalizePath(file.path(other, "shared", "f.txt"))))
 })
 
-test_that("a chain of 40 links is followed; a longer chain or a loop is refused", {
+test_that("a chain of links is followed; a loop or a dangling link is refused", {
   skip_on_os("windows")
   td = withr::local_tempdir()
   writeBin(charToRaw("end"), file.path(td, "l0"))
-  for (i in 1:41) file.symlink(paste0("l", i - 1L), file.path(td, paste0("l", i)))
-  w = write_file(file.path(td, "l40"), "new")
+  for (i in 1:3) file.symlink(paste0("l", i - 1L), file.path(td, paste0("l", i)))
+  w = write_file(file.path(td, "l3"), "new")
   expect_identical(raw_of(file.path(td, "l0")), charToRaw("new"))
-  expect_identical(w$details$path, resolve_tool_path(file.path(td, "l0")))
-  expect_error(write_file(file.path(td, "l41"), "x"), "ELOOP",
-               class = "gptr_error_invalid_argument")
+  expect_identical(w$details$path, resolve_tool_path(normalizePath(file.path(td, "l0"))))
   file.symlink("lb", file.path(td, "la"))
   file.symlink("la", file.path(td, "lb"))
-  expect_error(write_file(file.path(td, "la"), "x"), "ELOOP",
+  expect_error(write_file(file.path(td, "la"), "x"), "symbolic link",
                class = "gptr_error_invalid_argument")
+  file.symlink("gone", file.path(td, "dangling"))
+  expect_error(write_file(file.path(td, "dangling"), "x"), "symbolic link",
+               class = "gptr_error_invalid_argument")
+  expect_identical(sort(list.files(td, all.files = TRUE, no.. = TRUE)),
+                   c("dangling", "l0", "l1", "l2", "l3", "la", "lb"))
   expect_identical(raw_of(file.path(td, "l0")), charToRaw("new"))
 })
 
@@ -171,7 +174,8 @@ test_that("non-ASCII directories, files and relative links work in a C locale", 
   file.symlink(fs_path("f\u00fc.txt"), fs_path(paste0(d, "/l\u00ee.txt")))
   w = write_file(paste0(d, "/l\u00ee.txt"), "via\n")
   expect_identical(raw_of(paste0(d, "/f\u00fc.txt")), charToRaw("via\r\n"))
-  expect_identical(w$details$path, resolve_tool_path(paste0(d, "/f\u00fc.txt")))
+  expect_identical(w$details$path,
+                   resolve_tool_path(normalizePath(fs_path(paste0(d, "/f\u00fc.txt")))))
   expect_true(validUTF8(w$details$path))
 })
 
@@ -213,9 +217,9 @@ test_that("a link text that climbs after a symlinked component resolves as the k
   expect_identical(raw_of(file.path(other, "shared", "f.txt")), charToRaw("rel"))
   expect_identical(w$details$path, real_f)
   file.symlink(paste0(proj, "/linkdir/../new/g.txt"), file.path(td, "dangling.txt"))
-  w = write_file(file.path(td, "dangling.txt"), "g")
-  expect_true(w$created)
-  expect_identical(raw_of(file.path(other, "new", "g.txt")), charToRaw("g"))
+  expect_error(write_file(file.path(td, "dangling.txt"), "g"), "symbolic link",
+               class = "gptr_error_invalid_argument")
+  expect_false(file.exists(file.path(other, "new")))
   expect_identical(list.files(proj, all.files = TRUE, no.. = TRUE), "linkdir")
 })
 

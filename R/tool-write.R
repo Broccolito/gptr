@@ -1,5 +1,5 @@
 # The `write` tool and `peter$write()` (P10; research 11 section 5.5): an atomic replace that keeps
-# an existing file's line endings, BOM, encoding and mode bits. A symlink is resolved first because
+# an existing file's line endings, BOM, encoding and mode bits. The OS resolves a symlink first, as
 # rename() would replace the link; new files are written verbatim with the umask's mode, and an
 # existing file the process may not write is refused with EACCES, as in Pi.
 
@@ -11,13 +11,11 @@ write_sniff_bytes = 1024^2
 #' @noRd
 tool_path_dir = function(p) as_utf8(dirname(fs_path(p)))
 
-#' Kernel-style resolution of an absolute path that climbs with ".."
-#' Its longest existing leading part is resolved physically, the rest left for lexical
-#' normalisation; the final component is never resolved here.
+#' An absolute path with its longest existing leading part resolved by the OS
 #' @noRd
 tool_path_physical = function(q) {
   parts = strsplit(q, "/", fixed = TRUE)[[1L]]
-  for (k in rev(seq_len(length(parts) - 1L))) {
+  for (k in rev(seq_along(parts))) {
     lead = paste(parts[seq_len(k)], collapse = "/")
     if (!nzchar(lead)) break
     if (file.exists(fs_path(lead))) {
@@ -28,23 +26,18 @@ tool_path_physical = function(q) {
   q
 }
 
-#' Follow a symlink chain to the file it names, at most `max_hops` links (a no-op on Windows)
-#' A ".." in a link text climbs from a symlinked directory's real location, as the kernel does.
+#' The file a symbolic link names, resolved by the OS (realpath; a no-op on Windows and for a path
+#' that is no link); a link to no file (dangling, or a loop) is refused, never replaced
 #' @noRd
-resolve_link_target = function(p, max_hops = 40L) {
-  hops = 0L
-  repeat {
-    l = Sys.readlink(fs_path(p))
-    if (is.na(l) || !nzchar(l)) return(p)
-    if (hops >= max_hops) break
-    hops = hops + 1L
-    l = as_utf8(l)
-    q = if (tool_path_is_abs(l)) l else paste0(tool_path_dir(p), "/", l)
-    if (grepl("(^|/)\\.\\.(/|$)", l)) q = tool_path_physical(q)
-    p = tool_path_norm(q)
+resolve_link_target = function(p) {
+  l = Sys.readlink(fs_path(p))
+  if (is.na(l) || !nzchar(l)) return(p)
+  if (!file.exists(fs_path(p))) {
+    gptr_abort(paste0("Cannot write through the symbolic link '", p, "': it names no file ",
+                      "(a dangling link or a loop)."),
+               "invalid_argument", arg = "path", expected = "a link to an existing file")
   }
-  gptr_abort(paste0("ELOOP: too many symbolic links encountered, open '", p, "'"),
-             "invalid_argument", arg = "path", expected = "a path without a symbolic-link loop")
+  as_utf8(normalizePath(fs_path(p), winslash = "/"))
 }
 
 #' Encoding, BOM and dominant line ending of an existing text file; NULL for a new file
@@ -79,7 +72,6 @@ write_conventions = function(path) {
 write_bytes_keep_mode = function(target, bytes) {
   p = fs_path(target)
   existed = file.exists(p)
-  mode = if (existed) file.info(p, extra_cols = FALSE)$mode else NULL
   dir = tool_path_dir(target)
   if (!dir.exists(fs_path(dir))) {
     dir.create(fs_path(dir), recursive = TRUE, showWarnings = FALSE)
@@ -88,14 +80,7 @@ write_bytes_keep_mode = function(target, bytes) {
                  arg = "path", expected = "a path whose parent directory can be created")
     }
   }
-  write_atomic(p, bytes)
-  if (.Platform$OS.type != "windows") {
-    if (is.null(mode)) {
-      Sys.chmod(p, "0666", use_umask = TRUE)
-    } else {
-      Sys.chmod(p, mode, use_umask = FALSE)
-    }
-  }
+  write_atomic(p, bytes, mode = as.octmode("666") & !Sys.umask(NA))
   invisible(existed)
 }
 

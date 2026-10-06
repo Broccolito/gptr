@@ -47,6 +47,24 @@ est_tokens_each = function(x, class) {
   ceiling(ascii / token_cpt[[class]] + 0.848 * cjk + 0.35 * (other - cjk))
 }
 
+#' The most leading lines within a token budget, counted with the line `notice(omitted)` when
+#' given: all lines, else a binary search below them (where fewer lines never cost more)
+#' @noRd
+lines_fit = function(lines, budget, class, notice = NULL) {
+  n = length(lines)
+  fits = function(k) {
+    est_tokens(c(lines[seq_len(k)], if (!is.null(notice)) notice(n - k)), class) <= budget
+  }
+  if (fits(n)) return(n)
+  lo = 0L
+  hi = n - 1L
+  while (lo < hi) {
+    mid = (lo + hi + 1L) %/% 2L
+    if (fits(mid)) lo = mid else hi = mid - 1L
+  }
+  lo
+}
+
 #' Estimated tokens of an image (report G2 section 3.1 and its plot-size prototype)
 #'
 #' Anthropic (standard tier): the long edge is scaled to at most 1568 px, then the scale shrinks

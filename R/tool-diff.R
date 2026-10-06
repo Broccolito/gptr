@@ -275,14 +275,9 @@ diff_hunks = function(a, b, ops, context = 3L, a_final_nl = TRUE, b_final_nl = T
 #' Cut diff lines to a token budget, ending with a notice (alone below about 12 tokens)
 #' @noRd
 diff_budget = function(lines, max_tokens) {
-  if (!length(lines) || est_tokens(lines, "code") <= max_tokens) return(lines)
-  lo = 0L
-  hi = length(lines)
-  while (lo < hi) {
-    mid = (lo + hi + 1L) %/% 2L
-    if (est_tokens(lines[seq_len(mid)], "code") + 12 <= max_tokens) lo = mid else hi = mid - 1L
-  }
-  c(lines[seq_len(lo)], paste0("[diff truncated: ", length(lines) - lo, " more lines]"))
+  if (est_tokens(lines, "code") <= max_tokens) return(lines)
+  k = lines_fit(lines, max_tokens - 12, "code")
+  c(lines[seq_len(k)], paste0("[diff truncated: ", length(lines) - k, " more lines]"))
 }
 
 #' Unified diff of two line vectors (contract section 7.10): hunk lines without file headers

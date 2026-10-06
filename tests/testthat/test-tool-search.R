@@ -3,22 +3,15 @@
 # dev/research/01-pi-builtin-tools.md section 5.9 (Pi's tools.test.ts cases for grep limit/context
 # and ls).
 
-put = function(root, rel, bytes) {
-  p = file.path(root, rel)
-  dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
-  writeBin(if (is.character(bytes)) charToRaw(bytes) else bytes, p)
-  invisible(p)
-}
-
 grep_fixture = function() {
   td = withr::local_tempdir(.local_envir = parent.frame())
-  put(td, "a.R", "alpha = 1\nbeta = 2\n# TODO fix\ngamma = alpha + beta\n")
-  put(td, "b.txt", paste0("Alpha\r\nx.y\r\n\u00e9t\u00e9\r\n"))
-  put(td, "bin.dat", as.raw(c(97, 108, 112, 104, 97, 0, 1)))
-  put(td, "sub/c.R", paste0(sprintf("line %d", 1:12), "\n", collapse = ""))
-  put(td, ".gitignore", "ignored.R\n")
-  put(td, "ignored.R", "alpha\n")
-  put(td, "long.js", paste0(strrep("x", 3000), "needle", strrep("y", 3000), "\n"))
+  put_file(td, "a.R", "alpha = 1\nbeta = 2\n# TODO fix\ngamma = alpha + beta\n")
+  put_file(td, "b.txt", paste0("Alpha\r\nx.y\r\n\u00e9t\u00e9\r\n"))
+  put_file(td, "bin.dat", as.raw(c(97, 108, 112, 104, 97, 0, 1)))
+  put_file(td, "sub/c.R", paste0(sprintf("line %d", 1:12), "\n", collapse = ""))
+  put_file(td, ".gitignore", "ignored.R\n")
+  put_file(td, "ignored.R", "alpha\n")
+  put_file(td, "long.js", paste0(strrep("x", 3000), "needle", strrep("y", 3000), "\n"))
   td
 }
 
@@ -54,10 +47,10 @@ test_that("grep options: ignore case, literal, CRLF anchors, UTF-8 and PCRE clas
 
 test_that("grep decodes UTF-8 BOM, UTF-16 and CP1252 files before matching", {
   td = withr::local_tempdir()
-  put(td, "bom.R", c(as.raw(c(0xEF, 0xBB, 0xBF)), charToRaw("x\u00e9yz = 1\n")))
-  put(td, "u16.txt", c(as.raw(c(0xFF, 0xFE)), iconv("u16 needle\r\n", "UTF-8", "UTF-16LE",
+  put_file(td, "bom.R", c(as.raw(c(0xEF, 0xBB, 0xBF)), charToRaw("x\u00e9yz = 1\n")))
+  put_file(td, "u16.txt", c(as.raw(c(0xFF, 0xFE)), iconv("u16 needle\r\n", "UTF-8", "UTF-16LE",
                                                     toRaw = TRUE)[[1L]]))
-  put(td, "legacy.R", as.raw(c(charToRaw("# caf"), 0xE9, charToRaw(" legacyword\n"))))
+  put_file(td, "legacy.R", as.raw(c(charToRaw("# caf"), 0xE9, charToRaw(" legacyword\n"))))
   expect_identical(grep_tool_text(search_grep("^x\u00e9yz", td)), "bom.R:1: x\u00e9yz = 1")
   expect_identical(grep_tool_text(search_grep("needle$", td)), "u16.txt:1: u16 needle")
   expect_identical(grep_tool_text(search_grep("\u00e9 legacy", td)),
@@ -74,7 +67,7 @@ test_that("grep context merges overlapping windows and separates blocks with --"
 
 test_that("grep reproduces Pi's limit and context texts (tools.test.ts)", {
   td = withr::local_tempdir()
-  p = put(td, "context.txt", paste(c("before", "match one", "after", "middle", "match two",
+  p = put_file(td, "context.txt", paste(c("before", "match one", "after", "middle", "match two",
                                      "after two"), collapse = "\n"))
   expect_identical(grep_tool_text(search_grep("match", p, limit = 1L, context = 1L)),
                    paste0("context.txt-1- before\ncontext.txt:2: match one\ncontext.txt-3- after",
@@ -133,8 +126,8 @@ find_fixture = function() {
   td = withr::local_tempdir(.local_envir = parent.frame())
   for (f in c("f1.R", "f10.R", "f2.R", "B.R", "a.R", "sub/x.R", "sub/y.Rmd", ".hid.R", "test.R",
               "tests/testthat/test-find.R",
-              "README.md")) put(td, f, "x\n")
-  put(td, "big.R", strrep("x", 5000))
+              "README.md")) put_file(td, f, "x\n")
+  put_file(td, "big.R", strrep("x", 5000))
   Sys.setFileTime(file.path(td, "f2.R"), Sys.time() + 100)
   td
 }
@@ -171,7 +164,7 @@ test_that("find applies Pi's limit notice", {
 
 test_that("ls lists entries case-insensitively with dotfiles and '/' after directories (Pi)", {
   td = withr::local_tempdir()
-  for (f in c(".hidden-file", "Zeta.txt", "alpha.txt", "_under.R", "beta.R")) put(td, f, "")
+  for (f in c(".hidden-file", "Zeta.txt", "alpha.txt", "_under.R", "beta.R")) put_file(td, f, "")
   dir.create(file.path(td, ".hidden-dir"))
   dir.create(file.path(td, "Sub"))
   l = search_ls(td)
@@ -190,7 +183,7 @@ test_that("ls lists entries case-insensitively with dotfiles and '/' after direc
 
 test_that("prints of matches and files stay within the member budget with a notice", {
   td = withr::local_tempdir()
-  put(td, "many.txt", paste0("hit ", strrep("w", 80), " ", 1:2000, "\n", collapse = ""))
+  put_file(td, "many.txt", paste0("hit ", strrep("w", 80), " ", 1:2000, "\n", collapse = ""))
   m = search_grep("hit", td, limit = 2000L)
   out = utils::capture.output(print(m))
   expect_lte(est_tokens(paste(out, collapse = "\n"), "r_output"), 1500 + 40)
@@ -242,12 +235,12 @@ test_that("non-ASCII file and directory names are searched, found and listed in 
 # ran (ripgrep -P reports every row below).
 test_that("the whole-file prefilter never drops a file the per-line matcher matches", {
   td = withr::local_tempdir()
-  put(td, "eol.R", "x = c(1,\n  2)\n")
-  put(td, "hash.R", "y = 1\n#comment\n")
-  put(td, "ws.R", "a  \nb\n")
-  put(td, "multi.R", "x\nfoo\n")
-  put(td, "cond.R", "q\nz\n")
-  put(td, "commit.R", "xz\nxy\n")
+  put_file(td, "eol.R", "x = c(1,\n  2)\n")
+  put_file(td, "hash.R", "y = 1\n#comment\n")
+  put_file(td, "ws.R", "a  \nb\n")
+  put_file(td, "multi.R", "x\nfoo\n")
+  put_file(td, "cond.R", "q\nz\n")
+  put_file(td, "commit.R", "xz\nxy\n")
   rows = c(",(?!\\s)" = "eol.R:1: x = c(1,", ",(*nla:\\s)" = "eol.R:1: x = c(1,",
            "(?<!\\s)#" = "hash.R:2: #comment", "(?<!\\n)foo" = "multi.R:2: foo",
            "a\\s*+$" = "ws.R:1: a  ", "a\\s{0,3}+$" = "ws.R:1: a  ", "a(?>\\s*)$" = "ws.R:1: a  ",
@@ -271,7 +264,7 @@ test_that("the whole-file prefilter never drops a file the per-line matcher matc
 # it is injected.
 test_that("ls skips and counts an entry whose name is not valid UTF-8, as the walker does", {
   td = withr::local_tempdir()
-  put(td, "good.txt", "x\n")
+  put_file(td, "good.txt", "x\n")
   dir.create(file.path(td, "sub"))
   bad = rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xe9, 0x2e, 0x74, 0x78, 0x74)))
   real = walk_list_dir
@@ -289,7 +282,7 @@ test_that("ls skips and counts an entry whose name is not valid UTF-8, as the wa
 # risk 3). The window then starts at the beginning of the line.
 test_that("a match-limit error while placing a long line's window leaks no warning", {
   td = withr::local_tempdir()
-  put(td, "cat.txt", paste0("aaa\n", strrep("a", 600), "b\n"))
+  put_file(td, "cat.txt", paste0("aaa\n", strrep("a", 600), "b\n"))
   m = expect_no_warning(search_grep("(a+)+$", td, context = 1L))
   expect_true(attr(m, "incomplete"))
   expect_no_warning(grep_tool_text(m))
@@ -306,21 +299,21 @@ test_that("a match-limit error while placing a long line's window leaks no warni
 test_that("a match-limit failure is reported without rows and loses only the lines it hits", {
   note = "he pattern was too expensive on some lines; results may be incomplete]"
   td = withr::local_tempdir()
-  put(td, "cat.txt", paste0(strrep("a", 600), "b\naaa\n"))
+  put_file(td, "cat.txt", paste0(strrep("a", 600), "b\naaa\n"))
   m = expect_no_warning(search_grep("(a+)+$", td))
   expect_true(attr(m, "incomplete"))
   expect_identical(grep_tool_text(m), paste0("cat.txt:2: aaa\n\n[T", note))
   expect_identical(utils::capture.output(print(search_grep("(a+)+$", td, output = "files"))),
                    c("cat.txt", paste0("[t", note)))
   one = withr::local_tempdir()
-  put(one, "only.txt", paste0(strrep("a", 600), "b\n"))
+  put_file(one, "only.txt", paste0(strrep("a", 600), "b\n"))
   m = expect_no_warning(search_grep("(a+)+$", one))
   expect_identical(grep_tool_text(m), paste0("No matches found\n\n[T", note))
   expect_identical(utils::capture.output(print(m)), c("No matches found", paste0("[t", note)))
   expect_identical(utils::capture.output(print(search_grep("(a+)+$", one, output = "files"))),
                    c("(no files)", paste0("[t", note)))
   cheap = withr::local_tempdir()
-  put(cheap, "f.txt", paste0(strrep("aaaa\n", 12), "x\naab\n"))
+  put_file(cheap, "f.txt", paste0(strrep("aaaa\n", 12), "x\naab\n"))
   m = expect_no_warning(search_grep("((a|\\s)+)+b", cheap))
   expect_identical(grep_tool_text(m), "f.txt:14: aab")
   expect_false(attr(m, "incomplete"))
@@ -336,7 +329,7 @@ test_that("a match-limit failure is reported without rows and loses only the lin
 # sees peter$grep(). The fixture is sparse: only its last byte is written.
 test_that("a skipped file over 20 MB is reported with or without rows, in the text and prints", {
   td = withr::local_tempdir()
-  put(td, "small.txt", "needle one\n")
+  put_file(td, "small.txt", "needle one\n")
   con = file(file.path(td, "big.log"), "wb")
   seek(con, 21 * 2^20, rw = "write")
   writeBin(as.raw(10), con)
@@ -371,7 +364,7 @@ test_that("a skipped file over 20 MB is reported with or without rows, in the te
 # with ignore_case.
 test_that("the prefilter is off when ignorable pattern text precedes a possessive +", {
   td = withr::local_tempdir()
-  put(td, "ws.R", "a  \nb\n")
+  put_file(td, "ws.R", "a  \nb\n")
   for (p in c("a\\s*\\E+$", "a\\s*\\Q\\E+$", "a\\s*\\Q\\E\\Q\\E+$", "a\\s*(?#c)+$",
               "(?x:a\\s* +$)", "(?ix)A\\s* +$", "(?xx)a\\s* +$", "(?x)a\\s*#c\n+$")) {
     expect_identical(grep_tool_text(search_grep(p, td)), "ws.R:1: a  ", label = p)

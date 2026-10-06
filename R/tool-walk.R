@@ -17,49 +17,6 @@ fs_path = function(p) {
   p
 }
 
-#' Is a path absolute ("/x", "C:/x", "C:\\x", UNC)?
-#' @noRd
-tool_path_is_abs = function(p) grepl("^([/\\\\]|[A-Za-z]:[/\\\\])", p)
-
-#' Root prefix of a "/"-separated path (drive, UNC share or "/"), "" for a relative path
-#' @noRd
-tool_path_prefix = function(p) {
-  if (grepl("^[A-Za-z]:/", p)) return(substr(p, 1L, 3L))
-  if (grepl("^//[^/]+/[^/]+", p)) return(regmatches(p, regexpr("^//[^/]+/[^/]+/?", p)))
-  if (startsWith(p, "/")) return("/")
-  ""
-}
-
-#' Lexical path normalisation (no file-system access; ".." never climbs above a root)
-#' @noRd
-tool_path_norm = function(p) {
-  p = gsub("\\", "/", as_utf8(p), fixed = TRUE)
-  pre = tool_path_prefix(p)
-  if (nzchar(pre)) {
-    p = substring(p, nchar(pre) + 1L)
-    if (!endsWith(pre, "/")) pre = paste0(pre, "/")
-  }
-  out = character()
-  for (s in strsplit(p, "/", fixed = TRUE)[[1L]]) {
-    if (s == "" || s == ".") next
-    if (s == "..") {
-      if (length(out) && out[length(out)] != "..") {
-        out = out[-length(out)]
-      } else if (!nzchar(pre)) {
-        out = c(out, "..")
-      }
-      next
-    }
-    out = c(out, s)
-  }
-  res = paste0(pre, paste(out, collapse = "/"))
-  if (!nzchar(res)) res = "."
-  if (nchar(res) > 1L && endsWith(res, "/") && !grepl("^[A-Za-z]:/$", res)) {
-    res = sub("/+$", "", res)
-  }
-  as_utf8(res)
-}
-
 #' Resolve a model- or user-supplied path to an absolute, normalised path (Pi resolveToCwd; report
 #' 11 section 2.8): Unicode spaces become " ", one leading "@" is dropped, file:// URLs are decoded,
 #' Git-Bash and WSL drive paths are rewritten on Windows, "~" is expanded (only "~", "~/", "~\\").
@@ -85,8 +42,8 @@ resolve_tool_path = function(path, cwd = getwd()) {
   if (.Platform$OS.type == "windows" && grepl("^[A-Za-z]:[^/\\\\]", p)) {
     p = normalizePath(p, winslash = "/", mustWork = FALSE)
   }
-  if (!tool_path_is_abs(p)) p = paste0(gsub("\\", "/", as_utf8(cwd), fixed = TRUE), "/", p)
-  tool_path_norm(p)
+  if (!is_abs_path(p)) p = paste0(as_utf8(cwd), "/", p)
+  path_lexical(p)
 }
 
 #' Character classes git's wildmatch knows (PCRE also knows "ascii" and "word", accepted in globs)
@@ -100,13 +57,12 @@ glob_punct = strsplit("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", "", fixed = TRUE)[[1
 
 #' Translate the bracket expression opening at `ch[i]` (git's wildmatch rules): `list(end, re)`
 #' NULL when unclosed; `re = NA` when wildmatch matches nothing (`git = TRUE`, unknown class), where
-#' a glob errors instead (also on a reversed range); `fold` folds case as wildmatch does.
+#' a glob errors instead (also on a reversed range).
 #' @noRd
-glob_class = function(ch, i, git = FALSE, fold = FALSE) {
+glob_class = function(ch, i, git = FALSE) {
   n = length(ch)
   names_ok = if (git) glob_posix else c(glob_posix, "ascii", "word")
   esc = function(x) if (x %in% glob_punct) paste0("\\", x) else x
-  lit = function(x) if (fold && x %in% LETTERS) "" else esc(x)
   bad = function(what) {
     gptr_abort(paste0("`glob` ", what, "."), "invalid_argument", arg = "glob",
                expected = "a valid glob")
@@ -122,7 +78,7 @@ glob_class = function(ch, i, git = FALSE, fold = FALSE) {
     if (ch[p] == "\\") {
       if (p == n) return(NULL)
       prev = ch[p + 1L]
-      out = c(out, lit(prev))
+      out = c(out, esc(prev))
       p = p + 2L
       next
     }
@@ -135,11 +91,7 @@ glob_class = function(ch, i, git = FALSE, fold = FALSE) {
       lo = utf8ToInt(prev)
       hi = utf8ToInt(ch[p])
       if (isTRUE(hi >= lo)) {
-        rng = paste0(esc(prev), "-", esc(ch[p]))
-        if (fold && max(lo, 65L) <= min(hi, 90L)) {
-          rng = paste0(rng, intToUtf8(max(lo, 65L) + 32L), "-", intToUtf8(min(hi, 90L) + 32L))
-        }
-        out[length(out)] = rng
+        out[length(out)] = paste0(esc(prev), "-", esc(ch[p]))
       } else if (!git) {
         bad(paste0("has a reversed range `", prev, "-", ch[p], "`"))
       }
@@ -157,7 +109,6 @@ glob_class = function(ch, i, git = FALSE, fold = FALSE) {
           if (git) return(list(end = e, re = NA_character_))
           bad(paste0("names an unknown character class `[:", nm, ":]`"))
         }
-        if (fold && nm %in% c("upper", "lower")) nm = "alpha"
         out = c(out, paste0("[:", nm, ":]"))
         prev = NULL
         p = e + 1L
@@ -165,7 +116,7 @@ glob_class = function(ch, i, git = FALSE, fold = FALSE) {
       }
     }
     prev = ch[p]
-    out = c(out, lit(prev))
+    out = c(out, esc(prev))
     p = p + 1L
   }
   if (p > n) return(NULL)
@@ -184,7 +135,7 @@ glob_class = function(ch, i, git = FALSE, fold = FALSE) {
 #' `*`/`?` never cross "/", a whole-segment `**` does, `{a,b}` only when balanced; `git = TRUE`
 #' reads an ignore-file line (no braces) and returns NA where wildmatch matches nothing.
 #' @noRd
-glob_translate = function(glob, git = FALSE, fold = FALSE) {
+glob_translate = function(glob, git = FALSE) {
   ch = strsplit(as_utf8(glob), "", fixed = TRUE)[[1L]]
   n = length(ch)
   i = 1L
@@ -192,10 +143,7 @@ glob_translate = function(glob, git = FALSE, fold = FALSE) {
   depth = 0L
   braces = !git
   meta = c(".", "+", "(", ")", "|", "^", "$", "{", "}", "[", "]", "\\", "*", "?")
-  esc = function(x) {
-    if (fold) x = tolower(x)
-    if (x %in% meta) paste0("\\", x) else x
-  }
+  esc = function(x) if (x %in% meta) paste0("\\", x) else x
   closes = function(from) {
     d = 0L
     j = from
@@ -216,7 +164,6 @@ glob_translate = function(glob, git = FALSE, fold = FALSE) {
   while (i <= n) {
     chr = ch[i]
     if (chr == "\\" && i < n) {
-      if (fold && ch[i + 1L] %in% LETTERS) return(NA_character_)
       out = c(out, esc(ch[i + 1L]))
       i = i + 2L
       next
@@ -246,7 +193,7 @@ glob_translate = function(glob, git = FALSE, fold = FALSE) {
       next
     }
     if (chr == "[") {
-      cls = glob_class(ch, i, git, fold)
+      cls = glob_class(ch, i, git)
       if (is.null(cls)) {
         if (git) return(NA_character_)
         out = c(out, "\\[")
@@ -306,7 +253,8 @@ glob_to_regex = function(glob) {
   re
 }
 
-#' Compile ignore-file lines into rules (git PATTERN FORMAT; report 11 section 3.4)
+#' Compile ignore-file lines into rules (git PATTERN FORMAT; report 11 section 3.4); with
+#' `ignore_case` a rule matches case-insensitively (`(?i)`, not wildmatch's casefold quirks)
 #' @noRd
 ignore_compile = function(lines, base = "", ignore_case = FALSE) {
   rules = list()
@@ -335,9 +283,9 @@ ignore_compile = function(lines, base = "", ignore_case = FALSE) {
     } else {
       # A pattern wildmatch can never match (an unclosed bracket expression, an unknown class name)
       # has no effect, so its rule is dropped, as is one whose PCRE would not compile
-      value = glob_translate(raw, git = TRUE, fold = ignore_case)
+      value = glob_translate(raw, git = TRUE)
       if (is.na(value)) next
-      value = glob_anchor(value)
+      value = paste0(if (ignore_case) "(?i)", glob_anchor(value))
       if (!spec_regex_ok(value)) next
     }
     rules[[length(rules) + 1L]] = list(kind = kind, value = value, negated = neg,

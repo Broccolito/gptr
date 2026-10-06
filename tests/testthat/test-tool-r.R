@@ -3,16 +3,6 @@
 # collection, risk, and (below) end-to-end runs through peter() on the fake provider: the gptr shim,
 # the value policy, nested gating and the fuzzy-edit diff (05 P10 acceptance 4-7).
 
-# Bind a service for the calling test only (the entry in the bootstrap table is restored afterwards)
-local_service = function(name, fun, .env = parent.frame()) {
-  old = the$services[[name]]
-  withr::defer({
-    the$services[[name]] = old
-  }, envir = .env)
-  ext_service_set(name, fun, provided_by = "test")
-  invisible(fun)
-}
-
 # A stand-in for P06's dispatch_nested(): runs the tool's execute with the input and returns its
 # value
 local_nested_dispatch = function(seen = new.env(), .env = parent.frame()) {
@@ -89,7 +79,7 @@ test_that("the r tool evaluates in ctx$envir outside a run and fills the details
   expect_false("keep" %in% c(d$objects$added, d$objects$modified))
   expect_identical(d$nested, list())
   expect_null(d$value)
-  expect_match(ns_result_text(res), "42", fixed = TRUE)
+  expect_match(format(res), "42", fixed = TRUE)
   fields = c("code", "record", "note", "status", "n_done", "n_total", "objects", "plots",
              "warnings", "error", "changes", "elapsed", "out_id", "spill", "outputs", "nested",
              "bridge", "artifacts", "checkpoint", "value")
@@ -140,7 +130,7 @@ test_that("images beyond gptr.r_max_images are not attached and the result names
   imgs = Filter(function(b) identical(b$type, "image"), res$content)
   expect_identical(length(imgs), 2L)
   expect_identical(res$details$plots, 2L)
-  expect_match(ns_result_text(res), paste0("[3 image(s) from peter$plot() or peter$read() not ",
+  expect_match(format(res), paste0("[3 image(s) from peter$plot() or peter$read() not ",
                                            "attached: at most 2 per r call]"), fixed = TRUE)
 })
 
@@ -292,6 +282,6 @@ test_that("images from peter$plot() count against gptr.r_output_tokens too (IC-6
   res = r_tool_execute(list(code = code), list(envir = e, session = NULL))
   expect_identical(res$details$plots, 1L)
   expect_true(res$truncated)
-  expect_match(ns_result_text(res), "peter$out(", fixed = TRUE)
+  expect_match(format(res), "peter$out(", fixed = TRUE)
   expect_identical(res$details$out_id, res$out_id)
 })

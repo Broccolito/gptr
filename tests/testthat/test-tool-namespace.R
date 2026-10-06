@@ -8,16 +8,6 @@ png1 = jsonlite::base64_dec(paste0(
   "BAEAX+XDSwAAAABJRU5ErkJggg=="
 ))
 
-# Bind a service for the calling test only (the entry in the bootstrap table is restored afterwards)
-local_service = function(name, fun, .env = parent.frame()) {
-  old = the$services[[name]]
-  withr::defer({
-    the$services[[name]] = old
-  }, envir = .env)
-  ext_service_set(name, fun, provided_by = "test")
-  invisible(fun)
-}
-
 # Evaluate `expr_fun()` as if it ran inside the `r` tool: the r-call marker is bound in this frame
 # (by name, as the `r` tool binds it in its execute frame; nothing here reads it back)
 with_r_call = function(expr_fun, ctx = NULL) {
@@ -110,7 +100,6 @@ test_that("budget_head() and budget_head_tail() keep whole lines within the budg
   expect_identical(ht$tail, utils::tail(lines, length(ht$tail)))
   expect_identical(length(ht$head) + length(ht$tail) + ht$omitted, 500L)
   expect_identical(budget_head(c("a", "b"), 200), list(lines = c("a", "b"), omitted = 0L))
-  expect_identical(lines_fit(character(), 10), 0L)
 })
 
 test_that("print.gptr_text() prints head and tail within the budget with a notice", {
@@ -841,7 +830,7 @@ local_nested_dispatch = function(seen = new.env(), .env = parent.frame()) {
     v = schema_validate(tool$parameters, input)
     if (!v$ok) gptr_abort(paste(v$errors, collapse = "; "), "tool", tool = name, status = "invalid")
     res = tool$execute(v$input, ctx)
-    if (isTRUE(res$is_error)) gptr_abort(ns_result_text(res), "tool", tool = name, status = "error")
+    if (isTRUE(res$is_error)) gptr_abort(format(res), "tool", tool = name, status = "error")
     res$value
   }, .env = .env)
   seen
@@ -1006,31 +995,31 @@ test_that("direct tools return Pi's texts", {
   td = withr::local_tempdir()
   f = file.path(td, "a.R")
   r = tool_write_execute(list(path = f, content = "x = 1\ny = 2\n"), NULL)
-  expect_identical(ns_result_text(r), paste0("Successfully wrote to ", f))
+  expect_identical(format(r), paste0("Successfully wrote to ", f))
   expect_identical(r$details$created, TRUE)
   r = tool_read_execute(list(path = f), NULL)
-  expect_identical(ns_result_text(r), "x = 1\ny = 2\n")
+  expect_identical(format(r), "x = 1\ny = 2\n")
   expect_identical(r$details$lines_total, 3L)
   r = tool_edit_execute(list(path = f, edits = list(list(oldText = "y = 2", newText = "y = 3"))),
                         NULL)
-  expect_identical(ns_result_text(r), paste0("Successfully replaced 1 block(s) in ", f, "."))
+  expect_identical(format(r), paste0("Successfully replaced 1 block(s) in ", f, "."))
   expect_s3_class(r$value, "gptr_patch")
   r = tool_edit_execute(list(path = f, oldText = "x = 1", newText = "x = 0"), NULL)
   expect_identical(rawToChar(readBin(f, "raw", 100)), "x = 0\ny = 3\n")
   env = paste0("*** Begin Patch\n*** Update File: ", f, "\n@@\n-y = 3\n+y = 4\n*** End Patch")
   r = tool_edit_execute(list(path = "ignored", edits = env), NULL)
-  expect_match(ns_result_text(r), "^Applied patch: 1 file\\(s\\) changed\\.")
+  expect_match(format(r), "^Applied patch: 1 file\\(s\\) changed\\.")
   dir.create(file.path(td, "sub"))
   writeBin(charToRaw("NEEDLE here\n"), file.path(td, "sub", "b.txt"))
-  expect_identical(ns_result_text(tool_grep_execute(list(pattern = "needle", path = td,
+  expect_identical(format(tool_grep_execute(list(pattern = "needle", path = td,
                                                          ignoreCase = TRUE), NULL)),
                    "sub/b.txt:1: NEEDLE here")
-  expect_identical(ns_result_text(tool_grep_execute(list(pattern = "e.h", path = td,
+  expect_identical(format(tool_grep_execute(list(pattern = "e.h", path = td,
                                                          literal = TRUE), NULL)),
                    "No matches found")
-  expect_identical(ns_result_text(tool_find_execute(list(pattern = "*", path = td), NULL)),
+  expect_identical(format(tool_find_execute(list(pattern = "*", path = td), NULL)),
                    "a.R\nsub/\nsub/b.txt")
-  expect_identical(ns_result_text(tool_ls_execute(list(path = td, limit = 1), NULL)),
+  expect_identical(format(tool_ls_execute(list(path = td, limit = 1), NULL)),
                    "a.R\n\n[1 entries limit reached. Use limit=2 for more]")
 })
 
@@ -1040,7 +1029,7 @@ test_that("a fuzzy edit returns the message and a diff of at most 400 tokens (ac
   body = paste0(paste(sprintf("v%03d = %d   ", 1:300, 1:300), collapse = "\n"), "\n")
   writeBin(charToRaw(body), f)
   fuzzy = list(list(oldText = "v150 = 150\nv151 = 151", newText = "v150 = 0\nv151 = 0"))
-  txt = ns_result_text(tool_edit_execute(list(path = f, edits = fuzzy), NULL))
+  txt = format(tool_edit_execute(list(path = f, edits = fuzzy), NULL))
   lines = strsplit(txt, "\n")[[1L]]
   expect_identical(lines[1], paste0("Successfully replaced 1 block(s) in ", f, "."))
   expect_identical(lines[2], "[matched after whitespace, quote or dash normalisation]")
@@ -1049,7 +1038,7 @@ test_that("a fuzzy edit returns the message and a diff of at most 400 tokens (ac
   g = file.path(td, "exact.R")
   writeBin(charToRaw("a = 1\n"), g)
   exact = list(list(oldText = "a = 1", newText = "a = 2"))
-  expect_identical(ns_result_text(tool_edit_execute(list(path = g, edits = exact), NULL)),
+  expect_identical(format(tool_edit_execute(list(path = g, edits = exact), NULL)),
                    paste0("Successfully replaced 1 block(s) in ", g, "."))
 })
 
@@ -1136,7 +1125,7 @@ test_that("instructions files read at 0 only in the project; risk sees every env
   expect_identical(sort(r$paths), sort(c("R/a.R", ".gptr/mcp.json")))
   expect_identical(tool_risk_write(list(path = "R/a.R", edits = list(), patch = env), NULL)$level,
                    4L)
-  txt = ns_result_text(tool_edit_execute(top, NULL))
+  txt = format(tool_edit_execute(top, NULL))
   expect_match(txt, "^Applied patch: 1 file\\(s\\)")
   expect_true(file.exists(file.path(root, ".gptr", "mcp.json")))
 })
@@ -1144,7 +1133,7 @@ test_that("instructions files read at 0 only in the project; risk sees every env
 test_that("plot as a direct tool is an error result; a nested call attaches the plot", {
   r = tool_plot_execute(list(), NULL)
   expect_true(r$is_error)
-  expect_match(ns_result_text(r), "running r call", fixed = TRUE)
+  expect_match(format(r), "running r call", fixed = TRUE)
   withr::local_pdf(NULL)
   grDevices::dev.control(displaylist = "enable")
   graphics::plot(1:3)
@@ -1190,7 +1179,7 @@ test_that("a direct read or describe returns the R value too (ctx$execute_tool, 
   e$df = data.frame(a = 1:3)
   d = tool_describe_execute(list(x = "df"), list(session = NULL, envir = e))
   expect_s3_class(d$value, "gptr_text")
-  expect_identical(paste(as.character(d$value), collapse = "\n"), ns_result_text(d))
+  expect_identical(paste(as.character(d$value), collapse = "\n"), format(d))
 })
 
 test_that("help, search and out as direct tools use their ctx's session, not the r call's", {
@@ -1211,7 +1200,7 @@ test_that("help, search and out as direct tools use their ctx's session, not the
   got = with_r_call(function() out(list(id = id, lines = list(2)), child), parent)
   expect_false(got$is_error)
   expect_identical(as.character(got$value), "c2")
-  expect_identical(ns_result_text(got), "c2")
+  expect_identical(format(got), "c2")
 })
 
 test_that("only skill:<name>/<path> is a skill pseudo-path for the read risk", {

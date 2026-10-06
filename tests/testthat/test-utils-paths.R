@@ -39,7 +39,7 @@ test_that("write_atomic() refuses the in-place write when the file changed meanw
   expect_identical(readLines(path, encoding = "UTF-8"), "changed by someone else")
 })
 
-test_that("write_atomic() writes privately and keeps the permission bits it replaces", {
+test_that("write_atomic() writes privately, keeps replaced permission bits, else `mode`", {
   skip_on_os("windows")
   dir = withr::local_tempdir()
   writer = write_bytes
@@ -52,11 +52,15 @@ test_that("write_atomic() writes privately and keeps the permission bits it repl
     target = file.path(dir, mode)
     writeLines("old", target)
     Sys.chmod(target, mode, use_umask = FALSE)
-    write_atomic(target, "new")
+    write_atomic(target, "new", mode = "0640")
     expect_identical(readLines(target), "new")
     expect_identical(format(file.info(target)$mode), mode)
   }
-  expect_identical(modes, rep("600", 3L))
+  write_atomic(file.path(dir, "new"), "x", mode = "0640")
+  expect_identical(format(file.info(file.path(dir, "new"))$mode), "640")
+  write_atomic(file.path(dir, "private"), "x")
+  expect_identical(format(file.info(file.path(dir, "private"))$mode), "600")
+  expect_identical(modes, rep("600", 5L))
 })
 
 test_that("project_root() honours the option, then GPTR_PROJECT_ROOT (IC-63)", {
@@ -141,6 +145,18 @@ test_that("path_norm() expands '~' before it turns backslashes into slashes (CI-
   expect_identical(path_norm("~"), home)
   expect_identical(path_norm(c("~/a", "~b/c")), c(file.path(home, "a"), path_norm("~b/c")))
   expect_false(any(grepl("\\", path_norm(c("~", "~/sub", "~/no/such")), fixed = TRUE)))
+})
+
+test_that("path_lexical() normalises without the file system, keeping roots and leading ..", {
+  expect_identical(path_lexical("/a/./b/../c//d/"), "/a/c/d")
+  expect_identical(path_lexical("C:\\x\\..\\y\\.\\z"), "C:/y/z")
+  expect_identical(path_lexical("C:/.."), "C:/")
+  expect_identical(path_lexical("\\\\server\\share\\..\\x"), "//server/share/x")
+  expect_identical(path_lexical("/.."), "/")
+  expect_identical(path_lexical("../../a"), "../../a")
+  expect_identical(path_lexical("a/../.."), "..")
+  expect_identical(path_lexical("./"), ".")
+  expect_true(is_abs_path("C:\\x") && is_abs_path("/x") && !is_abs_path("x/y"))
 })
 
 # CI-5 (D-111): R >= 4.6's tools::file_ext() and tools::file_path_sans_ext() call basename(),

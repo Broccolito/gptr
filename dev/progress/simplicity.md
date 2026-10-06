@@ -217,6 +217,20 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Deviations: D-146. Open: P11 plan text (lane perm) names `control_check()`; 04 section 7.8 rows
   not amended (outside lane).
 
+## P10-S - Tools (2026-10-05)
+- F2 one `lines_fit(notice =)` in utils-tokens.R (`env_tokens()` gone); F3 execute-only members via
+  `spec_tool_fun()`, `format(res)`; F5 OS realpath links; F6 `helper-files.R`; F9 one-entry index
+  cache (LRU test out); F11 `(?i)`; P01 F6 one `path_lexical()`; P01 F22 `write_atomic(mode =)`;
+  one completion matcher (R -159, tests -31).
+- Red: FAIL 18 (links, casefold, `path_lexical()`, `mode`, `notice`, cache key). Green: plan filter
+  PASS 2196 (2187: -10 LRU or moved, +19); P10 rows 1-4 PASS 1616/554/397/95, layers 18,
+  `run.R --check` OK; budget loops identical on 3,000 random cases. Lint clean. Neighbours (19
+  filters) PASS 8840.
+- Reviews: r1 5 findings (0/0/2 + 3 nits): D-041/D-048/D-051/D-116 edited in place, index-cache
+  test restores the cache, D-147 tightened, test moved, 3 `rlang::is_string()`; re-green same counts.
+- Deviations: D-147. Open: F10, F12-F15 specifics lost (only the dedupes above applied); 04 section
+  7.1 `write_atomic` row not amended (outside lane).
+
 ## P01-T - Test infrastructure (2026-10-05)
 - Mock callbacks sent with `baseenv()` (plan literal; `mock_capture_*()` gone); `parse_request()` in
   the plan form (per-client error boundary, loopback proxy bypass, parent-vanished exit kept);

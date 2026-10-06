@@ -29,8 +29,8 @@ binary_hints = c(rds = "readRDS()", rda = "load()", rdata = "load()", qs = "qs::
                  fst = "fst::read_fst()", pdf = "pdftools::pdf_text()",
                  zip = "utils::unzip(list = TRUE)", gz = "readLines(gzfile())")
 
-# Sparse line indexes of files above 20 MB (read_line_index())
-read_index_cache = list2env(list(entries = list(), clock = 0), parent = emptyenv())
+# The sparse line index of the last file above 20 MB that read_line_index() built
+read_index_cache = new.env(parent = emptyenv())
 
 #' Pi formatSize(): 512B, 50.0KB, 3.0MB
 #' @noRd
@@ -393,13 +393,13 @@ skill_file_path = function(name, rel) {
     gptr_abort(paste0("Unknown skill: ", name), "invalid_argument", arg = "path",
                expected = "skill:<name>/<path> of a visible skill")
   }
-  inner = tool_path_norm(rel)
-  if (tool_path_is_abs(rel) || inner == ".." || startsWith(inner, "../")) {
+  inner = path_lexical(rel)
+  if (is_abs_path(rel) || inner == ".." || startsWith(inner, "../")) {
     gptr_abort(paste0("A skill path must stay inside the skill directory: ", rel),
                "invalid_argument", arg = "path",
                expected = "a path relative to the skill directory")
   }
-  tool_path_norm(file.path(sk$dir, inner))
+  path_lexical(file.path(sk$dir, inner))
 }
 
 #' Resolve a path for reading: skill pseudo-paths, then Pi's fallbacks for macOS screenshot names
@@ -504,35 +504,16 @@ read_line_index_build = function(abs, every = read_index_every, chunk = read_chu
   list(every = every, offsets = as.numeric(unlist(offs)), total = as.integer(line))
 }
 
-#' The sparse index of a file, cached per process for files above 20 MB (key: path, size, mtime)
-#' At most 8 entries, least recently used evicted, an old version's entry dropped; a list compared
-#' by value, since an environment symbol made from a path would need locale translation.
+#' The sparse index of a file; one file above 20 MB is cached per process (key: path, size, mtime,
+#' every; a list compared by value, as a symbol made from a path would need locale translation)
 #' @noRd
 read_line_index = function(abs, size, every = read_index_every) {
-  mtime = as.numeric(file.mtime(fs_path(abs)))
-  ents = read_index_cache$entries
-  read_index_cache$clock = read_index_cache$clock + 1
-  same = vapply(ents, function(e) identical(e$path, abs), TRUE)
-  hit = which(same & vapply(ents, function(e) {
-    identical(e$size, as.numeric(size)) && identical(e$mtime, mtime) &&
-      identical(e$every, as.numeric(every))
-  }, TRUE))
-  if (length(hit)) {
-    ents[[hit[1L]]]$used = read_index_cache$clock
-    read_index_cache$entries = ents
-    return(ents[[hit[1L]]]$idx)
-  }
+  key = list(abs, as.numeric(size), as.numeric(file.mtime(fs_path(abs))), as.numeric(every))
+  if (identical(read_index_cache$key, key)) return(read_index_cache$idx)
   idx = read_line_index_build(abs, every = every)
   if (size > read_index_min) {
-    ents = ents[!same]
-    if (length(ents) >= 8L) {
-      used = vapply(ents, function(e) e$used, 0)
-      ents = ents[-order(used)[seq_len(length(ents) - 7L)]]
-    }
-    ents[[length(ents) + 1L]] = list(path = abs, size = as.numeric(size), mtime = mtime,
-                                     every = as.numeric(every), idx = idx,
-                                     used = read_index_cache$clock)
-    read_index_cache$entries = ents
+    read_index_cache$key = key
+    read_index_cache$idx = idx
   }
   idx
 }
@@ -748,9 +729,8 @@ read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
   tr = truncate_lines_head(w$lines)
   lines = tr$lines
   cls = read_token_class(abs)
-  if (!tr$first_line_exceeds && length(lines) && is.finite(budget_tokens) &&
-        est_tokens(lines, cls) > budget_tokens) {
-    k = lines_fit(lines, budget_tokens, cls)
+  k = lines_fit(lines, budget_tokens, cls)
+  if (k < length(lines)) {
     if (k == 0L) {
       tr$first_line_exceeds = TRUE
       out$first_line_limit = "tokens"

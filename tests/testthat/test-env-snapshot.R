@@ -122,7 +122,7 @@ test_that("six objects cost at most 600 tokens and promises stay unforced", {
   delayedAssign("lazy", stop("forced!"), assign.env = e)
   makeActiveBinding("act", function() stop("called!"), e)
   lines = workspace_lines(env_snapshot(e))
-  expect_lte(env_tokens(lines), 600)
+  expect_lte(est_tokens(lines, "describe"), 600)
   expect_true(any(grepl("^lazy +<promise>$", lines)))
   expect_true(any(grepl("^act +<active>$", lines)))
   expect_true(rlang::env_binding_are_lazy(e, "lazy"))
@@ -143,7 +143,7 @@ test_that("changes_lines renders the workspace_changes grammar within budget", {
               removed = character())
   out = changes_lines(many, snap, character(), budget = 50L)
   expect_match(out[length(out)], "^\\(\\+ [0-9]+ more changes\\)$")
-  expect_lte(env_tokens(out), 50)
+  expect_lte(est_tokens(out, "describe"), 50)
 })
 
 test_that("Seurat shapes come from attributes only", {
@@ -197,19 +197,19 @@ test_that("a function-frame home with unsupplied arguments or empty dots is list
   expect_equal(h(), list(added = "old", modified = "x", removed = character()))
 })
 
-test_that("change lines of a very large diff are cut before the budget loop", {
+test_that("change lines of a very large diff fit the budget quickly", {
   many = list(added = character(), modified = sprintf("object_%05d", 1:20000),
               removed = character())
   t0 = proc.time()[["elapsed"]]
   out = changes_lines(many, env_snapshot(new.env()), character())
   expect_lt(proc.time()[["elapsed"]] - t0, 5)
-  expect_lte(env_tokens(out), 300)
+  expect_lte(est_tokens(out, "describe"), 300)
   kept = length(out) - 1L
   expect_equal(out[seq_len(kept)], paste("~", sprintf("object_%05d", seq_len(kept))))
   expect_equal(out[length(out)], sprintf("(+ %d more changes)", 20000L - kept))
   one_more = c(out[seq_len(kept)], sprintf("~ object_%05d", kept + 1L),
                sprintf("(+ %d more changes)", 20000L - kept - 1L))
-  expect_gt(env_tokens(one_more), 300)
+  expect_gt(est_tokens(one_more, "describe"), 300)
 })
 
 test_that("counts and sizes keep their format under a comma decimal mark", {

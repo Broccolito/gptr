@@ -395,7 +395,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
      `invalid_names` attribute, for P11's `find`/`ls` (`walk_list_dir()` lists).
   8. Bracket expressions follow git's wildmatch and always compile (`glob_class()`); in ignore
      files an unclosed bracket or unknown class drops the rule, a reversed range keeps its first
-     character, a class never matches `/` and `core.ignorecase` folds as git; in globs a reversed
+     character and a class never matches `/` (case folding: superseded by D-147); in globs a reversed
      range or unknown class is `gptr_error_invalid_argument` and an unclosed `[` stays literal;
      escaped braces are literal; `spec_regex_ok()` drops or refuses an uncompilable PCRE. Known
      difference: the walker matches characters, git bytes.
@@ -509,7 +509,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   8. Streaming reader (files above 16 MiB): the 64 KB head is cut back to a character boundary before choosing the encoding; a CP1252 gap byte in a later window falls back to latin1; invalid UTF-8 there sets the lossy notice.
   9. A NUL anywhere means binary: `grepRaw()` over the whole in-memory file (ripgrep's rule, report 11 section 2.2); the streaming reader checks its 64 KB head and each window.
   10. The streaming reader keeps at most `read_window_cap` (102,400) bytes of a window via `read_span()`; a longer first line is measured by scanning (`first_bytes`) and reported truncated; `read_text_window()` gained `cap = Inf`.
-  11. The sparse-index cache keys on the normalised tool path (not P01's `path_key()`), holds at most 8 entries compared by value, evicts the least recently used and drops an older version's entry on re-index.
+  11. The sparse-index cache keys on the normalised tool path (not P01's `path_key()`), size, mtime and `every`, compared by value, and holds one entry (D-147).
 - Contract-visible: the token-limit wording of item 6 only; no other signature, class or text of `read_file()`, `read_lines_value()` or `gptr_lines` changed.
 - Tests: test-tool-read.R: 15 added blocks (after the D-048 marker). Evidence: progress/P10.md Task 4.
 
@@ -537,13 +537,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: the plan-literal `R/tool-write.R` defects are fixed as below; the `EISDIR` check runs on the resolved target.
   1. An existing file without a line ending has no EOL convention: `write_conventions()` returns `eol = "asis"` and the content is written as given (encoding and BOM kept; Pi, report 01 section 2.4).
   2. A 1 MiB sample shorter than the file (no BOM or a UTF-8 BOM) is cut back to a whole character with `utf8_trim_partial()` before `decode_raw()` (report 11 section 2.2).
-  3. A file `write_bytes_keep_mode()` created gets `Sys.chmod(p, "0666", use_umask = TRUE)` (not on Windows); an existing file keeps its mode; P01's `write_atomic()` stays 0600 for gptr's state (progress/P01.md Task 8); Task 6's `Add File` inherits this.
-  4. A link text with a ".." segment (relative or absolute) is joined to the link's directory and resolved by `tool_path_physical()` (`normalizePath()` on the longest existing leading part, lexical `tool_path_norm()` for the rest); texts without ".." keep the lexical join.
-  5. 40 links are followed and the 41st is refused with `ELOOP` (Linux MAXSYMLINKS); a loop gives `ELOOP`.
-  6. `tool_path_dir()` takes `dirname()` of the unmarked bytes (`fs_path()`) and re-marks UTF-8; link texts are joined with `paste0()`, so non-ASCII paths work in a C locale.
+  3. A file `write_bytes_keep_mode()` created gets mode 0666 less the umask (`write_atomic(mode =)`, D-147); an existing file keeps its mode; P01's `write_atomic()` default stays 0600 for gptr's state (progress/P01.md Task 8); Task 6's `Add File` inherits this.
+  4. (superseded by D-147)
+  5. (superseded by D-147)
+  6. `tool_path_dir()` takes `dirname()` of the unmarked bytes (`fs_path()`) and re-marks UTF-8, so non-ASCII paths work in a C locale.
   7. A file that may be written but not read (mode 0200) is written as given, like a binary file, keeping its mode.
   8. An existing (link-resolved) target failing `file.access(target, 2L)` is refused before encoding with `EACCES: permission denied, open '<path>'` (`gptr_error_invalid_argument`); a read-only directory still fails in `write_atomic()` with `gptr_error_doc_write`.
-- Contract-visible: none (`write_file()` and its result, `resolve_link_target(p, max_hops = 40L)`, `write_bytes_keep_mode()` unchanged).
+- Contract-visible: none (`write_file()` and its result, `write_bytes_keep_mode()` unchanged).
 - Tests: test-tool-write.R: 9 added blocks. Evidence: progress/P10.md Task 5.
 
 ## D-052 - P09 agent RNG streams: rng_swap() restores the generator kind after a user seed; word 2^31 is NA (2026-10-04)
@@ -1361,7 +1361,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   4. `ns_names()` and `.DollarNames.gptr_ns()` also catch the warning of a `pattern` that is not a regular
      expression and fall back to a prefix match.
   5. Documentation only: `member_describe()`'s roxygen says "rule R4", not an Rd link.
-  6. A schema that is a `function(ctx)` (contract 9.1) gives the member `...` (`ns_schema_formals()`); its
+  6. A schema that is a `function(ctx)` (contract 9.1) gives the member `...` (P02's `spec_tool_fun()`); its
      arguments are the input.
   7. `ns_fun_formals()` reads `formals(args(fun))` (`...` when NULL), so a primitive `fun` keeps its arguments.
   8. Member bodies inline `base::missing()`, `base::substitute()`, `base::list()` and call `fun` through a symbol
@@ -1783,3 +1783,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-s1-route.R call-level LAN spec (+3); test-gptr-config.R 2 token tests out (P11's
   plan keeps the gptr_permissions one), 3 dotted sources; one registration test replaces 5 (gateway,
   config, capture); test-gptr-gateway.R 928 folded into 356. Evidence: progress/simplicity.md P08-S.
+
+## D-147 - P10 tools: OS realpath links, case-insensitive ignore rules, one lexical normaliser (2026-10-05)
+- Rule: write and patch resolve a symbolic link with the OS realpath (`normalizePath()`; the chain
+  limit is the OS's, `details$path` the realpath); a link naming no file (dangling, loop) is refused.
+- Rule: on a case-insensitive file system ignore rules match with `(?i)` (`[A]`, `\A`: either case).
+- Rule: `path_lexical()` is the one lexical normaliser (`\` to `/`, `C:/` and a relative leading
+  `..` kept, `""` is `.`, tool paths keep a leading `//`); `is_abs_path()` takes `\` and `C:\`;
+  `write_atomic(mode =)` sets a new file's mode (tools: 0666 less the umask), an existing (even
+  unreadable) one keeps its bits; one read-index cache entry. Supersedes D-041 item 8's casefold,
+  D-048 item 11, D-051 items 4-5.
+- Contract-visible: 04 section 7.1 `write_atomic()` gains an optional trailing `mode`; 7.10 names no
+  link limit (contract text not edited, outside lane simp-core).
+- Tests: test-tool-write.R link chain, loop, dangling; test-tool-walk.R casefold; test-utils-paths.R
+  `path_lexical()`, `mode`. Evidence: progress/simplicity.md P10-S.

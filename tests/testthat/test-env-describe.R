@@ -151,7 +151,7 @@ test_that("describers keep at least 90% of G2's facts at 150 tokens and stay in 
   total = 0L
   for (nm in names(facts)) {
     d = describe_binding(nm, obj, budget = 150L)
-    expect_lte(env_tokens(d), 150 + env_tokens(paste0(nm, ": ")))
+    expect_lte(est_tokens(d, "describe"), 150 + est_tokens(paste0(nm, ": "), "describe"))
     txt = paste(d, collapse = "\n")
     ok = vapply(facts[[nm]], function(p) grepl(p, txt, perl = TRUE), NA)
     hit = hit + sum(ok)
@@ -204,7 +204,7 @@ test_that("describe_value truncates a third-party method that ignores the budget
   chatty = function(x, budget = 150L, ...) sprintf("line %03d of a long description", 1:200)
   registerS3method("gptr_describe", "p09_chatty", chatty, envir = environment(gptr_describe))
   out = describe_value(x, 60L)
-  expect_lte(env_tokens(out), 60)
+  expect_lte(est_tokens(out, "describe"), 60)
   expect_match(out[length(out)], "more lines")
 })
 
@@ -356,7 +356,7 @@ test_that("the harness cuts a first line that alone overruns the budget", {
   registerS3method("gptr_describe", "p09_wide", wide, envir = environment(gptr_describe))
   out = describe_value(structure(list(), class = "p09_wide"), 20L)
   expect_length(out, 1L)
-  expect_lte(env_tokens(out), 20)
+  expect_lte(est_tokens(out, "describe"), 20)
   expect_match(out, "^header header .* \\.\\.\\.$")
 })
 
@@ -387,7 +387,7 @@ test_that("an overrunning method whose forced levels are NA is cut, not replaced
   expect_false(anyNA(out))
   expect_equal(out[1], "line 001 of a long description")
   expect_match(out[length(out)], "more lines")
-  expect_lte(env_tokens(out), 60)
+  expect_lte(est_tokens(out, "describe"), 60)
 })
 
 test_that("NAMESPACE exports gptr_describe() and registers its 15 methods", {

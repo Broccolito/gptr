@@ -3,23 +3,6 @@
 # (CR of CRLF stripped, empty/binary/decoding notices, a long first line shown in part), images by
 # magic bytes, encodings, the token cap, the big-file index and skill pseudo-paths.
 
-put = function(dir, name, text) {
-  p = fs_path(file.path(dir, name))
-  dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
-  writeBin(if (is.raw(text)) text else charToRaw(text), p)
-  p
-}
-
-# Bind a service for the calling test only (the entry in the bootstrap table is restored afterwards)
-local_service = function(name, fun, .env = parent.frame()) {
-  old = the$services[[name]]
-  withr::defer({
-    the$services[[name]] = old
-  }, envir = .env)
-  ext_service_set(name, fun, provided_by = "test")
-  invisible(fun)
-}
-
 png1 = jsonlite::base64_dec(paste0(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwAB",
   "BAEAX+XDSwAAAABJRU5ErkJggg=="
@@ -27,7 +10,7 @@ png1 = jsonlite::base64_dec(paste0(
 
 test_that("read returns a small file verbatim, without line numbers", {
   td = withr::local_tempdir()
-  f = put(td, "test.txt", "Hello, world!\nLine 2\nLine 3")
+  f = put_file(td, "test.txt", "Hello, world!\nLine 2\nLine 3")
   r = read_file(f)
   expect_identical(r$text, "Hello, world!\nLine 2\nLine 3")
   expect_null(r$image)
@@ -41,19 +24,19 @@ test_that("read returns a small file verbatim, without line numbers", {
 
 test_that("read truncates at 2000 lines and 50 KB with Pi's notices", {
   td = withr::local_tempdir()
-  r = read_file(put(td, "large.txt", paste(sprintf("Line %d", 1:2500), collapse = "\n")))
+  r = read_file(put_file(td, "large.txt", paste(sprintf("Line %d", 1:2500), collapse = "\n")))
   expect_match(r$text, "[Showing lines 1-2000 of 2500. Use offset=2001 to continue.]", fixed = TRUE)
   expect_false(grepl("Line 2001", r$text, fixed = TRUE))
   expect_true(r$details$truncated)
   wide = paste(sprintf("Line %d: %s", 1:500, strrep("x", 200)), collapse = "\n")
-  r = read_file(put(td, "large-bytes.txt", wide), budget_tokens = 1e6)
+  r = read_file(put_file(td, "large-bytes.txt", wide), budget_tokens = 1e6)
   expect_match(r$text, paste0("\\[Showing lines 1-\\d+ of 500 \\(50\\.0KB limit\\)\\. ",
                               "Use offset=\\d+ to continue\\.\\]"))
 })
 
 test_that("offset and limit follow Pi (1-indexed; remaining-lines notice)", {
   td = withr::local_tempdir()
-  f = put(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
+  f = put_file(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
   o = read_file(f, offset = 51)$text
   expect_true(startsWith(o, "Line 51") && endsWith(o, "Line 100"))
   expect_false(grepl("Use offset=", o, fixed = TRUE))
@@ -64,14 +47,14 @@ test_that("offset and limit follow Pi (1-indexed; remaining-lines notice)", {
   expect_match(o, "Line 60\n\n[40 more lines in file. Use offset=61 to continue.]", fixed = TRUE)
   expect_identical(read_file(f, offset = 0, limit = 1)$text,
                    "Line 1\n\n[99 more lines in file. Use offset=2 to continue.]")
-  f = put(td, "short.txt", "Line 1\nLine 2\nLine 3")
+  f = put_file(td, "short.txt", "Line 1\nLine 2\nLine 3")
   expect_error(read_file(f, offset = 100), "Offset 100 is beyond end of file (3 lines total)",
                fixed = TRUE)
 })
 
 test_that("images are recognised by magic bytes, not by extension", {
   td = withr::local_tempdir()
-  r = read_file(put(td, "image.txt", png1))
+  r = read_file(put_file(td, "image.txt", png1))
   expect_identical(r$text, "Read image file [image/png]")
   expect_identical(r$image$type, "image")
   expect_identical(r$image$mime, "image/png")
@@ -79,7 +62,7 @@ test_that("images are recognised by magic bytes, not by extension", {
   expect_false(grepl("\n", r$image$data, fixed = TRUE))
   expect_identical(image_dims(png1, "image/png"), c(1, 1))
   expect_true(r$details$image)
-  r = read_file(put(td, "not-an-image.png", "definitely not a png"))
+  r = read_file(put_file(td, "not-an-image.png", "definitely not a png"))
   expect_identical(r$text, "definitely not a png")
   expect_null(r$image)
 })
@@ -90,7 +73,7 @@ test_that("a BMP is converted with magick or omitted with a note", {
   bmp[1:2] = charToRaw("BM")
   bmp[c(3, 11, 15, 19, 23, 27, 29, 35, 57)] = as.raw(c(58, 54, 40, 1, 1, 1, 24, 4, 0xff))
   expect_identical(detect_image_mime(bmp), "image/bmp")
-  r = read_file(put(td, "image.bmp", bmp))
+  r = read_file(put_file(td, "image.bmp", bmp))
   if (requireNamespace("magick", quietly = TRUE)) {
     expect_match(r$text, "Read image file [image/png]", fixed = TRUE)
     expect_match(r$text, "[Image converted from image/bmp to image/png.]", fixed = TRUE)
@@ -106,24 +89,24 @@ test_that("binary files get a notice with a loading hint and are never deseriali
   saveRDS(mtcars, p, compress = FALSE)
   expect_match(read_file(p)$text, paste0("^\\[Binary file: .*obj\\.rds \\([0-9.]+KB\\)\\. ",
                                          "Not shown as text\\. .*readRDS\\(\\)\\.\\]$"))
-  expect_identical(read_file(put(td, "empty.txt", raw()))$text,
+  expect_identical(read_file(put_file(td, "empty.txt", raw()))$text,
                    paste0("[File is empty: ", file.path(td, "empty.txt"), "]"))
 })
 
 test_that("CP1252, UTF-16 and BOM files are decoded; the CR of CRLF is not shown", {
   td = withr::local_tempdir()
-  o = read_file(put(td, "latin1.txt", as.raw(c(0x63, 0x61, 0x66, 0xe9, 0x0a))))$text
+  o = read_file(put_file(td, "latin1.txt", as.raw(c(0x63, 0x61, 0x66, 0xe9, 0x0a))))$text
   expect_true(startsWith(o, "caf\u00e9\n"))
   expect_match(o, "[Decoded from CP1252]", fixed = TRUE)
   u16 = c(as.raw(c(0xff, 0xfe)), iconv("h\u00e9llo\n", "UTF-8", "UTF-16LE", toRaw = TRUE)[[1]])
-  r = read_file(put(td, "utf16.txt", u16))
+  r = read_file(put_file(td, "utf16.txt", u16))
   expect_identical(charToRaw(sub("\n\n\\[Decoded from UTF-16LE\\]$", "", r$text)),
                    charToRaw("h\u00e9llo\n"))
   expect_identical(r$details$encoding, "UTF-16LE")
-  r = read_file(put(td, "bom.txt", c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("a\r\nb\r\n"))))
+  r = read_file(put_file(td, "bom.txt", c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("a\r\nb\r\n"))))
   expect_identical(r$text, "a\nb\n")
   expect_identical(r$details$eol, "\r\n")
-  o = read_file(put(td, "stray.txt", c(charToRaw("caf\u00e9 ok "), as.raw(0xff),
+  o = read_file(put_file(td, "stray.txt", c(charToRaw("caf\u00e9 ok "), as.raw(0xff),
                                        charToRaw(" end\n"))))$text
   expect_match(o, "[File is not valid UTF-8; invalid bytes shown as U+FFFD]", fixed = TRUE)
   expect_true(validUTF8(o))
@@ -131,17 +114,18 @@ test_that("CP1252, UTF-16 and BOM files are decoded; the CR of CRLF is not shown
 
 test_that("the token cap and a giant first line are reported, never a partial line", {
   td = withr::local_tempdir()
-  f = put(td, "prose.txt", paste(rep("a sentence of ordinary prose words", 400), collapse = "\n"))
+  f = put_file(td, "prose.txt",
+                paste(rep("a sentence of ordinary prose words", 400), collapse = "\n"))
   r = read_file(f, budget_tokens = 100)
   expect_match(r$text, paste0("\\[Showing lines 1-[0-9]+ of 400 \\(100 token limit\\)\\. ",
                               "Use offset=[0-9]+ to continue\\.\\]"))
   expect_lte(est_tokens(sub("\n\n\\[Showing.*$", "", r$text), "prose"), 100)
-  f = put(td, "wide.txt", paste0(strrep("y", 60000), "\nsecond\n"))
+  f = put_file(td, "wide.txt", paste0(strrep("y", 60000), "\nsecond\n"))
   o = read_file(f, budget_tokens = 1e6)$text
   expect_match(o, "[Line 1 is 58.6KB, exceeds the 50.0KB limit; showing its first 50.0KB.",
                fixed = TRUE)
   expect_identical(nchar(strsplit(o, "\n")[[1]][1]), 51200L)
-  mb = put(td, "euro.txt", strrep("\u20ac", 20000))
+  mb = put_file(td, "euro.txt", strrep("\u20ac", 20000))
   first = strsplit(read_file(mb, budget_tokens = 1e6)$text, "\n")[[1]][1]
   expect_true(validUTF8(first))
   expect_identical(nchar(first, "bytes") %% 3L, 0L)
@@ -149,7 +133,8 @@ test_that("the token cap and a giant first line are reported, never a partial li
 
 test_that("the streaming index gives the same windows as the in-memory reader", {
   td = withr::local_tempdir()
-  f = put(td, "idx.txt", paste0(paste(sprintf("row %d caf\u00e9", 1:1000), collapse = "\n"), "\n"))
+  f = put_file(td, "idx.txt",
+                paste0(paste(sprintf("row %d caf\u00e9", 1:1000), collapse = "\n"), "\n"))
   small = read_text_window(f, 1L, NULL)
   expect_identical(small$total, 1001L)
   for (off in c(1L, 7L, 8L, 500L, 995L, 1001L)) {
@@ -164,8 +149,8 @@ test_that("the streaming index gives the same windows as the in-memory reader", 
 
 test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)", {
   td = withr::local_tempdir()
-  put(td, "sk/references/a.md", "reference text")
-  put(td, "sk/SKILL.md", "---\nname: demo\n---\nbody")
+  put_file(td, "sk/references/a.md", "reference text")
+  put_file(td, "sk/SKILL.md", "---\nname: demo\n---\nbody")
   local_service("skill.body", function(name) {
     if (identical(name, "demo")) list(text = "", dir = file.path(td, "sk"))
   })
@@ -177,16 +162,16 @@ test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)"
 
 test_that("macOS screenshot names are found through Pi's fallbacks", {
   td = withr::local_tempdir()
-  real = put(td, "Screenshot 2024-01-01 at 10.00.00\u202fAM.png", "x")
+  real = put_file(td, "Screenshot 2024-01-01 at 10.00.00\u202fAM.png", "x")
   expect_identical(read_resolve(file.path(td, "Screenshot 2024-01-01 at 10.00.00 AM.png")),
-                   tool_path_norm(real))
-  real = put(td, "Capture d\u2019cran.txt", "x")
-  expect_identical(read_resolve(file.path(td, "Capture d'cran.txt")), tool_path_norm(real))
+                   path_lexical(real))
+  real = put_file(td, "Capture d\u2019cran.txt", "x")
+  expect_identical(read_resolve(file.path(td, "Capture d'cran.txt")), path_lexical(real))
 })
 
 test_that("peter$read() gives gptr_lines with the contract attributes and prints within budget", {
   td = withr::local_tempdir()
-  f = put(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
+  f = put_file(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
   v = read_lines_value(f, offset = 11, limit = 5)
   expect_s3_class(v, "gptr_lines")
   expect_identical(as.character(v), sprintf("Line %d", 11:15))
@@ -202,7 +187,7 @@ test_that("peter$read() gives gptr_lines with the contract attributes and prints
   local_gptr_options(helper_output_tokens = 30L)
   out = utils::capture.output(print(read_lines_value(f)))
   expect_match(out[length(out)], "^\\[\\.\\.\\. [0-9]+ more lines not printed")
-  img = read_lines_value(put(td, "i.png", png1))
+  img = read_lines_value(put_file(td, "i.png", png1))
   expect_identical(as.character(img), "Read image file [image/png]")
   expect_identical(attr(img, "image_block")$mime, "image/png")
 })
@@ -214,7 +199,7 @@ test_that("a file that starts with BM is an image only with a plausible DIB head
   td = withr::local_tempdir()
   txt = "BMI notes: body mass index is weight / height^2 in metric units.\n"
   expect_true(is.na(detect_image_mime(charToRaw(txt))))
-  r = read_file(put(td, "bmi.md", txt))
+  r = read_file(put_file(td, "bmi.md", txt))
   expect_identical(r$text, txt)
   expect_null(r$image)
   core = raw(32)
@@ -233,7 +218,7 @@ test_that("an image magick cannot decode is omitted with Pi's note, never an err
   bmp[1:2] = charToRaw("BM")
   bmp[c(3, 11, 15, 19, 23, 27, 29, 35, 57)] = as.raw(c(58, 54, 40, 1, 1, 1, 24, 4, 0xff))
   local_mocked_bindings(image_read = function(...) stop("ImproperImageHeader"), .package = "magick")
-  r = read_file(put(td, "broken.bmp", bmp))
+  r = read_file(put_file(td, "broken.bmp", bmp))
   expect_identical(r$text, paste0("Read image file [image/bmp]\n[Image omitted: could not be ",
                                   "converted to a supported inline image format.]"))
   expect_null(r$image)
@@ -248,7 +233,7 @@ test_that("JPEG fill bytes before a marker are skipped when the dimensions are r
 
 test_that("offsets print without scientific notation; integer-range overflow is never an NA", {
   td = withr::local_tempdir()
-  f = put(td, "short.txt", "Line 1\nLine 2\nLine 3")
+  f = put_file(td, "short.txt", "Line 1\nLine 2\nLine 3")
   expect_error(read_file(f, offset = 100000),
                "Offset 100000 is beyond end of file (3 lines total)", fixed = TRUE)
   expect_error(read_file(f, offset = 1e10), class = "gptr_error_invalid_argument")
@@ -260,14 +245,14 @@ test_that("a long line is cut on a UTF-8 character boundary without dropping a w
   expect_identical(read_line_prefix("a\u00e9", 2), "a")
   expect_identical(read_line_prefix("\u20ac\u20ac", 5), "\u20ac")
   td = withr::local_tempdir()
-  f = put(td, "accents.txt", paste0(strrep("\u00e9", 30000), "\nsecond\n"))
+  f = put_file(td, "accents.txt", paste0(strrep("\u00e9", 30000), "\nsecond\n"))
   first = strsplit(read_file(f, budget_tokens = 1e6)$text, "\n")[[1]][1]
   expect_identical(nchar(first, "bytes"), 51200L)
 })
 
 test_that("a first line cut by the token budget names the token limit, not the 50 KB cap", {
   td = withr::local_tempdir()
-  f = put(td, "tok.txt", paste0(strrep("word ", 400), "\nnext\n"))
+  f = put_file(td, "tok.txt", paste0(strrep("word ", 400), "\nnext\n"))
   o = read_file(f, budget_tokens = 10)$text
   expect_match(o, "[Line 1 is 2.0KB, exceeds the 10 token limit; showing its first ", fixed = TRUE)
   expect_false(grepl("50.0KB limit", o, fixed = TRUE))
@@ -276,7 +261,7 @@ test_that("a first line cut by the token budget names the token limit, not the 5
 test_that("UTF-8 BOM text with invalid bytes decodes as decode_raw() decodes it for write/edit", {
   td = withr::local_tempdir()
   b = c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("caf"), as.raw(0xe9), charToRaw("\n"))
-  r = read_file(put(td, "bom-bad.txt", b))
+  r = read_file(put_file(td, "bom-bad.txt", b))
   expect_identical(r$details$encoding, decode_raw(b)$encoding)
   expect_identical(r$details$encoding, "UTF-8")
   expect_match(r$text, "[File is not valid UTF-8; invalid bytes shown as U+FFFD]", fixed = TRUE)
@@ -284,16 +269,16 @@ test_that("UTF-8 BOM text with invalid bytes decodes as decode_raw() decodes it 
 
 test_that("the streaming reader decides the encoding on whole characters and decodes late bytes", {
   td = withr::local_tempdir()
-  cut = put(td, "cut.txt", c(charToRaw(strrep("a", 65531)), charToRaw("\u00e9"),
+  cut = put_file(td, "cut.txt", c(charToRaw(strrep("a", 65531)), charToRaw("\u00e9"),
                              charToRaw(paste0(strrep("b", 100), "\nline two caf\u00e9\n"))))
   big = read_text_window(cut, 2L, 1L, big = 10)
   small = read_text_window(cut, 2L, 1L)
   expect_identical(big[c("lines", "encoding", "lossy")], small[c("lines", "encoding", "lossy")])
   expect_identical(big$lines, "line two caf\u00e9")
-  gap = put(td, "gap.txt", c(charToRaw("caf"), as.raw(0xe9), charToRaw("\n"),
+  gap = put_file(td, "gap.txt", c(charToRaw("caf"), as.raw(0xe9), charToRaw("\n"),
                              charToRaw(strrep("x\n", 40000)), as.raw(0x81), charToRaw("\n")))
   expect_identical(read_text_window(gap, 40002L, 1L, big = 10)$lines, "\u0081")
-  late = put(td, "late.txt", c(charToRaw(strrep("x\n", 40000)), charToRaw("caf"), as.raw(0xff),
+  late = put_file(td, "late.txt", c(charToRaw(strrep("x\n", 40000)), charToRaw("caf"), as.raw(0xff),
                                charToRaw("\n")))
   w = read_text_window(late, 40001L, 1L, big = 10)
   expect_identical(w$lines, "caf\ufffd")
@@ -302,21 +287,21 @@ test_that("the streaming reader decides the encoding on whole characters and dec
 
 test_that("a NUL byte in a large file's head or window makes it binary, never an error", {
   td = withr::local_tempdir()
-  f = put(td, "nul-head.bin", c(charToRaw(strrep("y\n", 5000)), as.raw(0), charToRaw("\n"),
+  f = put_file(td, "nul-head.bin", c(charToRaw(strrep("y\n", 5000)), as.raw(0), charToRaw("\n"),
                                 charToRaw(strrep("z\n", 10))))
   expect_true(read_text_window(f, 1L, 5L, big = 10)$binary)
-  f = put(td, "nul-late.bin", c(charToRaw(strrep("y\n", 40000)), charToRaw("a"), as.raw(0),
+  f = put_file(td, "nul-late.bin", c(charToRaw(strrep("y\n", 40000)), charToRaw("a"), as.raw(0),
                                 charToRaw("b\n")))
   expect_true(read_text_window(f, 40001L, 1L, big = 10)$binary)
 })
 
 test_that("trailing NUL bytes past the first 8000 make an in-memory file binary, never an error", {
   td = withr::local_tempdir()
-  cp = put(td, "nul-tail-cp.txt", c(charToRaw(strrep("x\n", 5000)), charToRaw("caf"),
+  cp = put_file(td, "nul-tail-cp.txt", c(charToRaw(strrep("x\n", 5000)), charToRaw("caf"),
                                     as.raw(c(0xe9, 0x0a, 0, 0))))
   expect_true(read_text_window(cp, 5000L, 2L)$binary)
   expect_match(read_file(cp, offset = 5000)$text, "^\\[Binary file: ")
-  u8 = put(td, "nul-tail-u8.txt", c(charToRaw(strrep("x\n", 5000)), charToRaw("end\n"),
+  u8 = put_file(td, "nul-tail-u8.txt", c(charToRaw(strrep("x\n", 5000)), charToRaw("end\n"),
                                     as.raw(c(0, 0))))
   expect_true(read_text_window(u8, 5000L, 2L)$binary)
   expect_match(read_file(u8, offset = 5000)$text, "^\\[Binary file: ")
@@ -325,7 +310,7 @@ test_that("trailing NUL bytes past the first 8000 make an in-memory file binary,
 
 test_that("the streaming reader keeps at most cap bytes of a window and measures a longer line", {
   td = withr::local_tempdir()
-  f = put(td, "long.txt", paste0("short\n", strrep("z", 1000), "\r\nend\n"))
+  f = put_file(td, "long.txt", paste0("short\n", strrep("z", 1000), "\r\nend\n"))
   w = read_text_window(f, 1L, 10L, big = 10, every = 7L, cap = 100)
   expect_identical(w$lines, c("short", strrep("z", 94)))
   expect_true(is.na(w$first_bytes))
@@ -355,34 +340,12 @@ test_that("a giant line in a file above 16 MiB is reported like the in-memory re
   expect_identical(read_file(p, offset = 3)$text, "end\n")
 })
 
-test_that("the sparse-index cache keeps 8 entries, least recently used out, stale versions out", {
-  td = withr::local_tempdir()
-  old = read_index_cache$entries
-  withr::defer({
-    read_index_cache$entries = old
-  })
-  read_index_cache$entries = list()
-  fs = vapply(1:9, function(i) put(td, sprintf("f%d.txt", i), paste0("line ", i, "\n")), "")
-  for (f in fs[1:8]) read_line_index(f, size = 3e7, every = 7L)
-  read_line_index(fs[1], size = 3e7, every = 7L)
-  read_line_index(fs[9], size = 3e7, every = 7L)
-  paths = vapply(read_index_cache$entries, function(e) e$path, "")
-  expect_length(paths, 8L)
-  expect_setequal(paths, fs[c(1, 3:9)])
-  read_line_index(fs[9], size = 3.1e7, every = 7L)
-  paths = vapply(read_index_cache$entries, function(e) e$path, "")
-  expect_identical(sum(paths == fs[9]), 1L)
-})
-
 test_that("the sparse index of a non-ASCII path is built and cached in any locale", {
   td = withr::local_tempdir()
-  old = read_index_cache$entries
-  withr::defer({
-    read_index_cache$entries = old
-  })
-  f = resolve_tool_path(put(td, "caf\u00e9/x.txt", "a\nb\n"))
+  withr::defer(rm(list = ls(read_index_cache), envir = read_index_cache))
+  f = resolve_tool_path(put_file(td, "caf\u00e9/x.txt", "a\nb\n"))
   expect_identical(read_line_index(f, size = 3e7, every = 7L)$total, 3L)
-  expect_true(any(vapply(read_index_cache$entries, function(e) identical(e$path, f), TRUE)))
+  expect_identical(read_index_cache$key[[1L]], f)
 })
 
 test_that("skill pseudo-paths need P17's skill.body service", {
@@ -398,8 +361,8 @@ test_that("a non-ASCII file is read and classed by its extension in any locale (
   local_name_locale()
   local_r46_file_ext()
   td = withr::local_tempdir()
-  put(td, "caf\u00e9.R", "x = 1\ny = 2")
-  put(td, "caf\u00e9.rds", as.raw(c(0x58, 0x0a, 0x00, 0x00, 0x00, 0x03)))
+  put_file(td, "caf\u00e9.R", "x = 1\ny = 2")
+  put_file(td, "caf\u00e9.rds", as.raw(c(0x58, 0x0a, 0x00, 0x00, 0x00, 0x03)))
   code = paste0(td, "/caf\u00e9.R")
   expect_identical(read_token_class(code), "code")
   expect_identical(read_file(code)$text, "x = 1\ny = 2")

@@ -30,13 +30,6 @@ env_text = function(x) {
   x
 }
 
-#' Estimated tokens of description lines (content class "describe", G2 section 3.1)
-#' @noRd
-env_tokens = function(lines, class = "describe") {
-  if (!length(lines)) return(0)
-  est_tokens(paste(lines, collapse = "\n"), class)
-}
-
 #' Is x a compact-looking integer sequence (ALTREP 1:n)? (a leaf)
 #' Reads three elements through .subset(), which never materialises a compact sequence.
 #' @noRd
@@ -275,13 +268,9 @@ workspace_lines = function(snapshot, budget = 600L) {
   top = seq_len(k)
   lines = env_align(env_text(s$name[top]), env_text(cls[top]), env_text(shape[top]),
                     size_txt[top])
-  rest = n - k
-  more = function(r) if (r > 0L) sprintf("(+ %d smaller objects: use ls())", r) else NULL
-  while (length(lines) > 1L && env_tokens(c(lines, more(rest))) > budget) {
-    lines = lines[-length(lines)]
-    rest = rest + 1L
-  }
-  c(lines, more(rest))
+  more = function(m) if (n - k + m > 0L) sprintf("(+ %d smaller objects: use ls())", n - k + m)
+  shown = utils::head(lines, max(1L, lines_fit(lines, budget, "describe", more)))
+  c(shown, more(k - length(shown)))
 }
 
 #' Lines of the `<workspace_changes>` block within `budget` (empty when nothing changed)
@@ -302,17 +291,9 @@ changes_lines = function(diff, snapshot, user_ran, budget = 300L) {
     if (length(user_ran)) paste("user ran:", env_text(user_ran))
   ))
   lines = gsub(" {2,}", " ", lines)
-  # Each line costs over one token, so lines past `budget` never fit: cutting them first keeps the
-  # loop below, which re-estimates the whole text per line, from going quadratic (same result)
-  cap = floor(budget) + 1L
-  rest = max(0L, length(lines) - cap)
-  if (rest) lines = lines[seq_len(cap)]
-  more = function(r) if (r > 0L) sprintf("(+ %d more changes)", r) else NULL
-  while (length(lines) > 1L && env_tokens(c(lines, more(rest))) > budget) {
-    lines = lines[-length(lines)]
-    rest = rest + 1L
-  }
-  c(lines, more(rest))
+  more = function(m) if (m > 0L) sprintf("(+ %d more changes)", m)
+  shown = utils::head(lines, max(1L, lines_fit(lines, budget, "describe", more)))
+  c(shown, more(length(lines) - length(shown)))
 }
 
 # ---------------------------------------------------------------- builtin:workspace
@@ -471,7 +452,7 @@ env_block_skills = function(ctx, budget) {
     b = body(skills[k])
     txt = if (is.list(b)) b$text else b
     lines = strsplit(as.character(txt %||% ""), "\n", fixed = TRUE)[[1L]]
-    while (length(lines) > 1L && env_tokens(lines, "prose") > per) lines = lines[-length(lines)]
+    lines = utils::head(lines, max(1L, lines_fit(lines, per, "prose")))
     parts[k] = paste(c(if (length(skills) > 1L) sprintf("[skill: %s]", skills[k]), lines),
                      collapse = "\n")
   }

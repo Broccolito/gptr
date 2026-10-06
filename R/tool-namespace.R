@@ -69,24 +69,9 @@ member_budget = function() {
   b
 }
 
-#' The largest number of leading lines within a token budget (binary search over est_tokens())
-#' @noRd
-lines_fit = function(lines, budget, class = "r_output") {
-  lo = 0L
-  hi = length(lines)
-  while (lo < hi) {
-    mid = (lo + hi + 1L) %/% 2L
-    if (est_tokens(lines[seq_len(mid)], class) <= budget) lo = mid else hi = mid - 1L
-  }
-  lo
-}
-
 #' Leading lines within a budget and the number of lines left out
 #' @noRd
 budget_head = function(lines, budget, class = "r_output") {
-  if (!length(lines) || est_tokens(lines, class) <= budget) {
-    return(list(lines = lines, omitted = 0L))
-  }
   k = lines_fit(lines, budget, class)
   list(lines = lines[seq_len(k)], omitted = length(lines) - k)
 }
@@ -188,20 +173,6 @@ ns_formals_schema = function(fun) {
        properties = if (length(props)) props else json_obj())
 }
 
-#' Formals from a JSON Schema: required properties first, optional ones default NULL
-#' `...` when the schema is a `function(ctx)` evaluated at freeze (contract 9.1), as in P02's `fun`.
-#' @noRd
-ns_schema_formals = function(schema) {
-  if (!is.list(schema)) return(as.pairlist(alist(... = )))
-  props = names(schema$properties %||% list())
-  req = as.character(unlist(schema$required %||% list()))
-  nms = c(intersect(req, props), setdiff(props, req))
-  f = rep(list(quote(expr = )), length(nms))
-  names(f) = nms
-  for (nm in setdiff(nms, req)) f[nm] = list(NULL)
-  as.pairlist(f)
-}
-
 #' One-line signature of a member: the spec's `signature`, else (contract 9.3) the typed catalog
 #' line of a namespaced member or the R formals, each with `  # <first sentence>`
 #' @noRd
@@ -216,10 +187,7 @@ member_signature = function(spec) {
     return(schema_signature(qualified, schema, description = spec$description, prefix = "peter$"))
   }
   fun = spec$fun
-  if (!is.function(fun)) {
-    fun = function() NULL
-    formals(fun) = ns_schema_formals(spec$parameters)
-  }
+  if (!is.function(fun)) fun = spec_tool_fun(spec$execute, spec$parameters, spec$name)
   ns_signature_line(spec$name, fun, spec$description)
 }
 
@@ -310,34 +278,6 @@ ns_arg_symbols = function(arg_names) {
   out
 }
 
-#' Text of a tool result (its text blocks joined)
-#' @noRd
-ns_result_text = function(res) {
-  blocks = Filter(function(b) identical(b$type, "text"), res$content %||% list())
-  txt = vapply(blocks, function(b) b$text, "")
-  paste(txt, collapse = "\n")
-}
-
-#' A member function for an execute-only spec (the fallback for P02's generated `fun`)
-#' `exec` gets ctx_default(NULL) (contract 10.6); the body calls an inlined closure on the inlined
-#' base::environment(), so no schema property can shadow the machinery.
-#' @noRd
-ns_generated_fun = function(fmls, exec, tool_name) {
-  arg_names = names(fmls) %||% character()
-  run = function(frame) {
-    input = ns_collect_input(frame, arg_names, FALSE)
-    res = as_tool_result(exec(input, ctx_default(NULL)))
-    if (isTRUE(res$is_error)) {
-      gptr_abort(ns_result_text(res), "tool", tool = tool_name, status = "error")
-    }
-    res$value %||% ns_result_text(res)
-  }
-  f = function() NULL
-  formals(f) = fmls
-  body(f) = as.call(list(run, as.call(list(base::environment))))
-  f
-}
-
 #' `peter$describe(x, budget = 150L)`: gptr_describe() of the object as printable text
 #' Copy safety R4: `x` reaches only the describer's leaf functions; nothing keeps it.
 #' @noRd
@@ -359,7 +299,7 @@ edit_route_document = function(path, edits, session = NULL) {
 ns_routed_patch = function(path, res) {
   if (inherits(res$value, "gptr_patch")) return(res$value)
   d = res$details %||% list()
-  new_gptr_patch(path, ns_result_text(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
+  new_gptr_patch(path, format(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
 }
 
 #' `peter$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`; an edit the document backend
@@ -369,7 +309,7 @@ member_edit = function(path, edits, replace_all = FALSE) {
   routed = edit_route_document(path, edits)
   if (!is.null(routed)) {
     if (isTRUE(routed$is_error)) {
-      gptr_abort(ns_result_text(routed), "tool", tool = "edit", status = "error")
+      gptr_abort(format(routed), "tool", tool = "edit", status = "error")
     }
     return(ns_routed_patch(path, routed))
   }
@@ -390,19 +330,16 @@ ns_member_flags = function(spec) {
 }
 
 #' A `gptr_member` closure for a tool spec (7.10): inside `r` dispatch_nested() first, else `fun`
-#' Arguments reach `fun` as promises through a call of symbols, never a list; the body and the
-#' `member_fun` symbol (dot-prefixed past any formal) are built so no argument can shadow them.
+#' (P02's spec_tool_fun() for an execute-only spec). Arguments reach `fun` as promises through a
+#' call of symbols, never a list; the body and the `member_fun` symbol (dot-prefixed past any
+#' formal) are built so no argument can shadow them.
 #' @noRd
 member_closure = function(spec) {
   check_class(spec, "gptr_tool", "spec")
   tool_name = ns_tool_name(spec)
   member_fun = spec$fun
-  fmls = if (is.function(member_fun)) {
-    ns_fun_formals(member_fun)
-  } else {
-    ns_schema_formals(spec$parameters)
-  }
-  if (!is.function(member_fun)) member_fun = ns_generated_fun(fmls, spec$execute, tool_name)
+  if (!is.function(member_fun)) member_fun = spec_tool_fun(spec$execute, spec$parameters, tool_name)
+  fmls = ns_fun_formals(member_fun)
   arg_names = names(fmls) %||% character()
   required = ns_required_formals(fmls)
   flags = ns_member_flags(spec)
@@ -545,10 +482,15 @@ ns_names = function(pattern) {
   sid = ns_session_id()
   members = ns_member_names(sid)
   all = unique(c(members, ls(ns_providers), ns_plugin_namespaces(sid, members)))
-  all = sort(all, method = "radix")
-  if (is.null(pattern) || !nzchar(pattern)) return(all)
-  prefix = function(cnd) startsWith(all, pattern)
-  all[tryCatch(grepl(pattern, all), warning = prefix, error = prefix)]
+  ns_match(sort(all, method = "radix"), pattern)
+}
+
+#' Names matching a completion pattern: a regular expression, else (invalid) a prefix; all for ""
+#' @noRd
+ns_match = function(nms, pattern) {
+  if (is.null(pattern) || !nzchar(pattern)) return(nms)
+  prefix = function(cnd) startsWith(nms, pattern)
+  nms[tryCatch(grepl(pattern, nms), warning = prefix, error = prefix)]
 }
 
 #' A `gptr_ns` node (contract section 5.3): an environment with bindings `path` and `kind`, and for
@@ -654,12 +596,7 @@ names.gptr_ns = function(x) {
 
 #' @exportS3Method utils::.DollarNames
 #' @noRd
-.DollarNames.gptr_ns = function(x, pattern = "") {
-  nms = names(x)
-  if (is.null(pattern) || !nzchar(pattern)) return(nms)
-  prefix = function(cnd) startsWith(nms, pattern)
-  nms[tryCatch(grepl(pattern, nms), warning = prefix, error = prefix)]
-}
+.DollarNames.gptr_ns = function(x, pattern = "") ns_match(names(x), pattern)
 
 #' Print a namespace node: its member signatures within the member budget
 #'
@@ -924,8 +861,7 @@ ns_catalog_docs = function(session) {
   rows = list()
   catalog = function(service) {
     txt = tryCatch(ext_service_get(service)(session, 1e6), error = function(e) "")
-    ok = is.character(txt) && length(txt) == 1L && !is.na(txt)
-    split_lines_count(if (ok) search_utf8(txt) else "")
+    split_lines_count(if (rlang::is_string(txt)) search_utf8(txt) else "")
   }
   if (ext_service_has("skill.catalog")) {
     lines = catalog("skill.catalog")

@@ -35,7 +35,7 @@ dsc_pick = function(levels, budget, level = NULL) {
     level = check_number(level, "level", min = 1, int = TRUE)
     return(levels[[min(level, length(levels))]])
   }
-  ok = vapply(levels, function(l) env_tokens(l) <= budget, NA)
+  ok = vapply(levels, function(l) est_tokens(l, "describe") <= budget, NA)
   if (any(ok)) return(levels[[max(which(ok))]])
   dsc_fit(levels[[1L]], budget)
 }
@@ -45,14 +45,11 @@ dsc_pick = function(levels, budget, level = NULL) {
 #' @noRd
 dsc_fit = function(lines, budget) {
   lines = env_text(as.character(lines))
-  if (env_tokens(lines) <= budget) return(lines)
+  if (est_tokens(lines, "describe") <= budget) return(lines)
   if (length(lines) > 1L) {
-    k = length(lines)
-    while (k > 1L && env_tokens(c(lines[seq_len(k)], "  ... (999 more lines)")) > budget) {
-      k = k - 1L
-    }
+    k = max(1L, lines_fit(lines, budget, "describe", function(m) "  ... (999 more lines)"))
     out = c(lines[seq_len(k)], sprintf("  ... (%d more lines)", length(lines) - k))
-    if (env_tokens(out) <= budget) return(out)
+    if (est_tokens(out, "describe") <= budget) return(out)
   }
   dsc_cut_line(lines[1L], budget)
 }
@@ -60,8 +57,8 @@ dsc_fit = function(lines, budget) {
 #' Cut one line to at most `budget` estimated tokens, ending it with " ..."
 #' @noRd
 dsc_cut_line = function(line, budget) {
-  keep = max(10L, floor(nchar(line) * budget / env_tokens(line)) - 4L)
-  while (keep > 10L && env_tokens(paste0(substr(line, 1L, keep), " ...")) > budget) {
+  keep = max(10L, floor(nchar(line) * budget / est_tokens(line, "describe")) - 4L)
+  while (keep > 10L && est_tokens(paste0(substr(line, 1L, keep), " ..."), "describe") > budget) {
     keep = max(10L, floor(keep * 0.9))
   }
   paste0(substr(line, 1L, keep), " ...")
@@ -74,10 +71,10 @@ dsc_cut_line = function(line, budget) {
 describe_value = function(x, budget = 150L) {
   out = dsc_lines(gptr_describe(x, budget = budget))
   if (is.null(out)) return(dsc_fit(gptr_describe.default(x, budget = budget), budget))
-  if (env_tokens(out) <= budget) return(out)
+  if (est_tokens(out, "describe") <= budget) return(out)
   for (lv in 3:1) {
     alt = dsc_lines(gptr_describe(x, budget = budget, level = lv))
-    if (!is.null(alt) && env_tokens(alt) <= budget) return(alt)
+    if (!is.null(alt) && est_tokens(alt, "describe") <= budget) return(alt)
   }
   dsc_fit(out, budget)
 }
