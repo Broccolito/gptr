@@ -184,3 +184,10 @@ test_that("gptr_preimage() is a leaf (R4)", {
                         "bytes = 4e7, budget = 1e9)))"),
                  label = "gptr_preimage() default method")
 })
+
+test_that("gptr_checkpoints() reads only", {
+  expect_no_copy(ckpt_e2e_setup("n = length(big)"),
+                 c("s = peter('count', model = fake, mode = 'auto', envir = globalenv())",
+                   "cp = gptr_checkpoints(s)"),
+                 label = "gptr_checkpoints() after a checkpointed turn")
+})

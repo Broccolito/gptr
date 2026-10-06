@@ -520,3 +520,119 @@ test_that("undone blocks in a bound document become inert; re-sourcing reproduce
   expect_false(exists("b", envir = e2, inherits = FALSE))
   expect_identical(length(fake_requests(fake)), n)
 })
+
+two_turn_session = function(e, .env = parent.frame()) {
+  local_fake_provider(list(fake_tool("r", code = "x = 1; writeLines('a', 'a.txt')"), "one",
+                           fake_tool("r", code = "x = 2"), "two", "three"), .env = .env)
+  s = peter("first prompt", model = "fake/fake-1", mode = "auto", envir = e)
+  s |> peter("second prompt")
+}
+
+test_that("gptr_checkpoints() lists the turns of the active path (contract 5.12)", {
+  local_project()
+  e = new.env()
+  s = two_turn_session(e)
+  cp = gptr_checkpoints(s)
+  expect_s3_class(cp, c("gptr_checkpoints", "gptr_listing", "data.frame"))
+  expect_named(cp, c("turn", "id", "time", "prompt", "objects", "files", "held_mb", "disk_mb",
+                     "branch"))
+  expect_identical(cp$turn, 1:2)
+  expect_identical(cp$prompt, c("first prompt", "second prompt"))
+  expect_identical(cp$objects, c("1/1", "1/1"))
+  expect_identical(cp$files, c("1/1", "0/0"))
+  expect_identical(cp$branch, c("active", "active"))
+  expect_s3_class(cp$time, "POSIXct")
+  expect_true(all(cp$held_mb >= 0))
+  expect_identical(cp$id[2L], session_data(s)$leaf)
+  expect_output(print(cp), "Rewind with gptr_rewind")
+})
+
+test_that("gptr_checkpoints(all = TRUE) adds abandoned branches", {
+  local_project()
+  e = new.env()
+  s = two_turn_session(e)
+  gptr_rewind(s, 1)
+  expect_identical(nrow(gptr_checkpoints(s)), 1L)
+  all = gptr_checkpoints(s, all = TRUE)
+  expect_identical(all$branch, c("active", "abandoned"))
+  expect_identical(all$prompt[2L], "second prompt")
+  expect_error(gptr_checkpoints(list()), class = "gptr_error_invalid_argument")
+})
+
+test_that("/undo, /redo, /rewind k and /checkpoints drive gptr_rewind()", {
+  local_project()
+  e = new.env()
+  s = two_turn_session(e)
+  ctx = list(session = s, has_ui = function() FALSE)
+  out = ckpt_cmd_undo("", ctx)
+  expect_match(out[1L], "^Rewound \\(all\\)")
+  expect_true("second prompt" %in% out)
+  expect_identical(e$x, 1)
+  out = ckpt_cmd_redo("", ctx)
+  expect_match(out[1L], "^Rewound")
+  expect_identical(e$x, 2)
+  expect_identical(ckpt_cmd_redo("", ctx), "Nothing to redo.")
+  out = ckpt_cmd_rewind("0", ctx)
+  expect_false(exists("x", envir = e, inherits = FALSE))
+  expect_identical(ckpt_cmd_rewind("abc", ctx), "Usage: /rewind [turn]")
+  expect_match(ckpt_cmd_rewind("9", ctx), "Cannot rewind to turn 9")
+  lines = ckpt_cmd_checkpoints("all", ctx)
+  expect_true(any(grepl("abandoned", lines, fixed = TRUE)))
+  expect_identical(ckpt_cmd_undo("", list(session = NULL)), "There is no session to undo.")
+})
+
+test_that("/undo asks first when the preview finds items it cannot restore", {
+  local_project()
+  e = new.env()
+  s = two_turn_session(e)
+  e$x = 99
+  ui = local_scripted_ui(answers = list(2L))
+  ctx = list(session = s, has_ui = function() TRUE,
+             ui = function() ext_service_get("ui.get")(s))
+  expect_identical(ckpt_cmd_undo("", ctx), "Undo cancelled.")
+  expect_identical(s$turns, 2L)
+  expect_identical(ui$remaining(), 0L)
+})
+
+test_that("/rewind without a turn offers a menu through the UI", {
+  local_project()
+  e = new.env()
+  s = two_turn_session(e)
+  ui = local_scripted_ui(answers = list(2L, 3L))
+  ctx = list(session = s, has_ui = function() TRUE,
+             ui = function() ext_service_get("ui.get")(s))
+  out = ckpt_cmd_rewind("", ctx)
+  expect_match(out[1L], "^Rewound \\(workspace\\)")
+  expect_identical(e$x, 1)
+  expect_identical(s$turns, 2L)
+  expect_identical(ui$remaining(), 0L)
+})
+
+test_that("/redo follows chains of undos and stops after a redo", {
+  rw = function(id, parent, from, to) {
+    list(type = "custom", id = id, parent_id = parent, custom_type = "gptr.rewind",
+         data = list(from = from, to = to, restore = "all"))
+  }
+  base = list(e_frozen("f0"), e_user("u1", "f0", "one", 1), e_cp("c1", "u1"), e_asst("a1", "c1"),
+              e_user("u2", "a1", "two", 2), e_cp("c2", "u2"), e_asst("a2", "c2"))
+  undo1 = rw("r1", "a1", "a2", "a1")
+  expect_identical(ckpt_redo_target(do.call(tree_of, c(base, list(undo1))))$to, "a2")
+  redo1 = rw("r2", "a2", "r1", "a2")
+  expect_null(ckpt_redo_target(do.call(tree_of, c(base, list(undo1, redo1)))))
+  undo2 = rw("r2", "f0", "r1", "f0")
+  redo2 = rw("r3", "r1", "r2", "r1")
+  expect_identical(ckpt_redo_target(do.call(tree_of, c(base, list(undo1, undo2, redo2))))$to,
+                   "a2")
+  redo3 = rw("r4", "a2", "r3", "a2")
+  expect_null(ckpt_redo_target(do.call(tree_of, c(base, list(undo1, undo2, redo2, redo3)))))
+  again = e_user("u3", "r1", "three", 2)
+  expect_null(ckpt_redo_target(do.call(tree_of, c(base, list(undo1, again)))))
+})
+
+test_that("builtin:checkpoints registers the four commands", {
+  reg = gptr_registry("command")
+  mine = reg$name[reg$source == "builtin:checkpoints"]
+  expect_setequal(mine, c("undo", "redo", "rewind", "checkpoints"))
+  undo = registry_get("command", "undo")
+  expect_match(undo$description, "Undo the last turn")
+})
