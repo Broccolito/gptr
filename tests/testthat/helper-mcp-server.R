@@ -179,3 +179,16 @@ local_mcp_server = function(fx, name = "fixture", .env = parent.frame()) {
   withr::defer(gptr_mcp_remove(name), envir = .env)
   invisible(name)
 }
+
+# A JSON-RPC request in either era: modern requests carry the 2026-07-28 `_meta` fields
+mcp_test_msg = function(method, params = json_obj(), id = 1L, modern = TRUE) {
+  if (modern) {
+    params[["_meta"]] = stats::setNames(
+      list("2026-07-28", json_obj(), list(name = "test", version = "1")),
+      c("io.modelcontextprotocol/protocolVersion", "io.modelcontextprotocol/clientCapabilities",
+        "io.modelcontextprotocol/clientInfo"))
+  }
+  msg = list(jsonrpc = "2.0", method = method, params = params)
+  if (!is.null(id)) msg$id = id
+  msg
+}
