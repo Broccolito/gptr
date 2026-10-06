@@ -558,16 +558,16 @@ perm_rank = function(decision) match(decision, perm_decisions)
 #' modify > allow; no active `mode` policy means ask
 #' @noRd
 perm_policies = function(call, ctx, run, risk) {
-  specs = registry_all("policy", session = run$session)
+  recs = registry_all_recs("policy", session = run$session)
   call$risk = risk
   best = NULL
-  for (p in specs) {
-    res = ext_policy_decide(p, call, ctx)
+  for (r in recs) {
+    res = ctx_with_source(ctx, r$source, function() ext_policy_decide(r$spec, call, ctx))
     if (is.null(res)) next
-    if (!rlang::is_string(res[["rule"]])) res$rule = p$name
+    if (!rlang::is_string(res[["rule"]])) res$rule = r$name
     if (is.null(best) || perm_rank(res$decision) > perm_rank(best$decision)) best = res
   }
-  has_mode = any(vapply(specs, function(p) identical(p$name, "mode"), NA))
+  has_mode = any(vapply(recs, function(r) identical(r$name, "mode"), NA))
   if (!has_mode && (is.null(best) || perm_rank(best$decision) < perm_rank("ask"))) {
     best = list(decision = "ask", reason = "no permission mode policy is active", rule = NULL)
   }

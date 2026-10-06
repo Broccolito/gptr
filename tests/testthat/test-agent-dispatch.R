@@ -336,6 +336,25 @@ test_that("policies combine deny > ask_human > ask > modify > allow", {
   expect_identical(dec$rule, "other")
 })
 
+test_that("a policy reads the state its own extension's hooks wrote (FIX-9)", {
+  local_tool("echo", function(input, ctx) "ok")
+  seen = new.env()
+  ext_load(function(gptr) {
+    gptr$on("tool_call", function(event, ctx) {
+      st = ctx$state()
+      st$x = "tainted"
+      NULL
+    })
+    gptr$register_policy("taint", check = function(call, ctx) {
+      seen$x = ctx$state()$x
+      NULL
+    })
+  }, source = "plugin:taint", rank = 5L)
+  withr::defer(ext_unload("plugin:taint"))
+  dispatch(test_session(), list(tc("echo")))
+  expect_identical(seen$x, "tainted")
+})
+
 test_that("a throwing policy denies", {
   run = test_run(test_session())
   local_policy("mode", function(call, ctx) stop("broken policy"))

@@ -1,6 +1,6 @@
-# Coordinator follow-up fixes (FIX-1..8)
+# Coordinator follow-up fixes (FIX-1..9)
 Defects routed from plan lanes and fixed outside plan tasks; the owning plans' logs cross-reference
-them. Status: FIX-1..4, 6..8 committed; FIX-5 partial (P15 part done, the rest is FIX5-LINT).
+them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest is FIX5-LINT).
 
 ## FIX-1 - Fix session finalizer race with registry iteration (2026-10-04, `a5af999`)
 - Owners P02 (`R/ext-registry.R`, `ext-events.R`, `ext-load.R`, `ext-check.R`) and P06
@@ -113,3 +113,14 @@ them. Status: FIX-1..4, 6..8 committed; FIX-5 partial (P15 part done, the rest i
   after its anchor as omitted until the next reported total; listings whose copies a compaction
   cut still omit the next copies of their id, so the first `peter$plot("<id>")` after it is
   omitted again (as at HEAD; tying listings to their entries is a larger change).
+
+## FIX-9 - Policies read their own extension state (2026-10-06)
+- `perm_policies()` calls each policy with the ctx attributed to its record's source
+  (`ctx_with_source()`, as `ev_call()` does for hooks), so `ctx$state()` is the policy's own
+  extension state (04 section 10.6); `registry_all_recs()` returns the records `registry_all()`
+  maps.
+- Red: FAIL 1 (`agent-dispatch`: the policy read NULL). Green: `agent-dispatch` PASS 210 (+1 test).
+  Lint clean. Neighbours: `agent-|ext-|session-` PASS 4027, `^perm-` PASS 879.
+- Reviews: R1 clear, 1 minor (counts taken with Task 7's uncommitted files; header not updated):
+  counts re-measured on HEAD plus FIX-9, header updated.
+- Deviations: none. Open: none.

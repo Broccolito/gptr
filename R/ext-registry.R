@@ -359,10 +359,10 @@ registry_get = function(kind, name, session = NULL) {
   NULL
 }
 
-#' Specs of a kind: every record of an `all` kind, ordered; the winner per name otherwise. Lazy
+#' Records of a kind: every record of an `all` kind, ordered; the winner per name otherwise. Lazy
 #' records are activated first, except `tool` placeholders (their declarations feed catalogs; 10.8)
 #' @noRd
-registry_all = function(kind, session = NULL) {
+registry_all_recs = function(kind, session = NULL) {
   check_string(kind, "kind")
   sid = ext_session_id(session)
   reg = registry_env()
@@ -382,9 +382,14 @@ registry_all = function(kind, session = NULL) {
     recs = recs[!duplicated(keys)]
     recs = recs[order(vapply(recs, function(r) r$name, ""), method = "radix")]
   }
-  specs = lapply(recs, function(r) r$spec)
-  names(specs) = vapply(recs, function(r) r$name, "")
-  specs
+  recs
+}
+
+#' Specs of a kind, named, in registry_all_recs() order
+#' @noRd
+registry_all = function(kind, session = NULL) {
+  recs = registry_all_recs(kind, session)
+  stats::setNames(lapply(recs, function(r) r$spec), vapply(recs, function(r) r$name, ""))
 }
 
 #' Names with an enabled record, lazy placeholders included (contract 7.2)
