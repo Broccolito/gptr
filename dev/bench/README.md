@@ -11,6 +11,7 @@ step stops for the maintainer; nothing is installed).
 | Golden transcripts NS-1..NS-11 (P07's runner) | `dev/bench/tokens/run.R [--check] [--update [ids]]` | prefix +2%, input and output totals +5%, requests and image tokens +0, describer facts no loss, catalogs +5% |
 | Shiny vs HTML/JS (G2 part a), on demand; needs Chrome or Edge | `dev/bench/shiny-html/check.R [--set=apps\|revised\|mutants]`, `dev/bench/shiny-html/tokens.R` | apps and revisions pass the ladder, mutants fail; ratio and edit-vs-rewrite tracked in `results.csv` |
 | Live calibration (IC-73), at release (P25); paid requests | `GPTR_LIVE_TESTS=true dev/bench/tokens/live.R` after `run.R` | requests +2 and input 20% of the golden transcript (o200k x provider prior), in `live-<date>.csv` |
+| Polyglot tasks (G5); a task whose program or R package is missing is skipped | `dev/bench/polyglot/run.R [--check] [--update]` | B and C totals within 10% (at least 6 tasks in common) |
 | Cache economics (G4), before layout or TTL changes | `dev/bench/cache-sim/run.R [--check] [--update]` | simulated session cost +2% |
 | Development tests | `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests")'` | green |
 
