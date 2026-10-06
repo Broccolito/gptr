@@ -1965,3 +1965,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   the remaining `r` budget (04 section 9.4 not amended).
 - Tests: test-bridge-sh.R "the print budget is the option, capped at 0.6 x the r budget inside a run".
   Evidence: progress/P22.md Task P22-1.
+
+## D-161 - P18 OAuth sign-in: stateless redirects need the full address; one masked prompt (2026-10-06)
+- Rule: `oauth_parse_redirect()` without a state (the OpenRouter key exchange) accepts only the full
+  redirect URL, whose random path ties it to the sign-in (IC-71); `oauth_key_exchange()` uses it
+  instead of its own prefix and code checks.
+- Rule: `gptr_login()` checks openssl only where a flow needs it (`pkce_new()`, `rand_hex()`), so key
+  entry and an MCP server without OAuth metadata need no openssl; one masked `oauth_ask()` reads keys,
+  bearer tokens and a client id (nothing entered: `invalid_argument`, `arg = "input"`).
+- Rule: the DCR body omits `software_id`/`software_version`; `oauth_http()` returns
+  `list(status, body, error)`; a refresh updates the re-read record; a missing refresh token is null;
+  one `oauth_post()` replaces the plan's three POST-and-check blocks (`oauth_token_request()` goes).
+- Contract-visible: none.
+- Tests: test-auth-oauth.R "without httpuv and later the redirect is pasted, iss included" (+1),
+  "a refused OAuth request is gptr_error_provider with its HTTP status" (+2).
+  Evidence: progress/P18.md Task 2.
