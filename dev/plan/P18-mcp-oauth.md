@@ -1521,11 +1521,12 @@ git commit -m "feat(auth): add OAuth discovery, the locked refresh, gptr_login()
 
 **Files:**
 - Create: `R/mcp-client.R`
+- Modify: `R/json-encode.R` (the JSON-RPC builders; simplicity package P18-S)
 - Test: `tests/testthat/test-mcp-client.R` (create)
 
 **Interfaces:**
 - Consumes: P01 `json_encode()`, `json_decode()`, `json_obj()`, `as_utf8()`, `first_sentence()`, `hash_sha256()`, `canonical_json()`, `gptr_user_dir()`, `read_utf8()`, `write_atomic()`, `user_home()`, `project_root()`, `block_image()`, `gptr_opt()`, `gptr_abort()`; P03 `redact()`, `secret_register()`, `secret_lookup()` (tests); P04 `url_origin()`, `url_for_log()`.
-- Produces (internal; used by Tasks 4-9): `mcp_versions()` -> `list(modern = "2026-07-28", legacy = c("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"))`; the `_meta` key constants `mcp_k_ver`, `mcp_k_caps`, `mcp_k_cinfo`, `mcp_k_sinfo`; `json_ascii(s)`, `mcp_json(x)` (ASCII-only JSON text); `mcp_header_value(x)` (`=?base64?...?=` for non-ASCII); `mcp_r_name(x)`, `mcp_wire_name(server, tool)` (`mcp__<server>__<tool>`, at most 64 characters); `mcp_first_sentence(d, n = 120L)`; `mcp_coerce(x, schema, path = "args")`; `mcp_tool_norm(t)` -> `list(name, title, description, input_schema, annotations, output_schema)`; `mcp_result_parse(res, elapsed = NA_real_)` -> `list(content, structured, is_error, text, images, elapsed)`; `mcp_value(res)`; `mcp_rpc_ok(id, result)`, `mcp_rpc_err(id, code, message, data = NULL)`; `mcp_client_caps()`, `mcp_client_info()`, `mcp_meta_fields(version)`, `mcp_file_uri(path)`; `mcp_state()` (`the$mcp_conns`: environments `conns`, `specs`, `servers`, `lru`, `sessions` (session id -> weak reference, Task 7) and the config `stamp`); `mcp_transport(spec)`; the caches `mcp_cache_key(spec)`, `mcp_cache_path(kind, spec, create = FALSE)`, `mcp_era_get(spec)`, `mcp_era_put(spec, era, version)`, `mcp_era_forget(spec)`, `mcp_tools_cache_get(spec)`, `mcp_tools_cache_put(spec, tools, ttl_ms = NULL, cache_scope = NULL)`, `mcp_tools_cache_fresh(x)`; the logs `mcp_log_path(name)`, `mcp_log_append(path, txt)`, `mcp_log(conn, line)`; placeholders `mcp_expand(x, project = project_root())`, `mcp_expand1(s, project)`, `mcp_secret_name(x)`, `mcp_expand_spec(spec, project = project_root())`.
+- Produces (internal; used by Tasks 4-9): `mcp_versions()` -> `list(modern = "2026-07-28", legacy = c("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"))`; the `_meta` key constants `mcp_k_ver`, `mcp_k_caps`, `mcp_k_cinfo`, `mcp_k_sinfo`; `json_ascii(s)`, `mcp_json(x)` (ASCII-only JSON text); `mcp_header_value(x)` (`=?base64?...?=` for non-ASCII); `mcp_r_name(x)`, `mcp_wire_name(server, tool)` (`mcp__<server>__<tool>`, at most 64 characters); `mcp_first_sentence(d, n = 120L)`; `mcp_coerce(x, schema, path = "args")`; `mcp_tool_norm(t)` -> `list(name, title, description, input_schema, annotations, output_schema)`; `mcp_result_parse(res, elapsed = NA_real_)` -> `list(content, structured, is_error, text, images, elapsed)`; `mcp_value(res)`; `mcp_rpc_ok(id, result)`, `mcp_rpc_err(id, code, message, data = NULL)` (L0, `R/json-encode.R`, also used by P20's `cli-claude.R`); `mcp_client_caps()`, `mcp_client_info()`, `mcp_meta_fields(version)`, `mcp_file_uri(path)`; `mcp_state()` (`the$mcp_conns`: environments `conns`, `specs`, `servers`, `lru`, `sessions` (session id -> weak reference, Task 7) and the config `stamp`); `mcp_transport(spec)`; the caches `mcp_cache_key(spec)`, `mcp_cache_path(kind, spec, create = FALSE)`, `mcp_era_get(spec)`, `mcp_era_put(spec, era, version)`, `mcp_era_forget(spec)`, `mcp_tools_cache_get(spec)`, `mcp_tools_cache_put(spec, tools, ttl_ms = NULL, cache_scope = NULL)`, `mcp_tools_cache_fresh(x)`; the logs `mcp_log_path(name)`, `mcp_log_append(path, txt)`, `mcp_log(conn, line)`; placeholders `mcp_expand(x, project = project_root())`, `mcp_expand1(s, project)`, `mcp_secret_name(x)`, `mcp_map_chr(x)` (a config value as a character vector, D-090), `mcp_expand_spec(spec, project = project_root())`.
 
 Every JSON text sent to a server is ASCII (report 16 §2.17: servers in a C locale or a Windows code page read it intact; jsonlite would otherwise write unknown-encoded bytes as `<c3><a9>`). Arguments are coerced by the tool's schema before `json_encode()` so that `auto_unbox = TRUE` never turns a length-1 array into a scalar (report 06 §4.5.3's `coerce_to_schema()`). `structuredContent` is the one value gptr parses with `simplifyVector = TRUE`, because 04 §9.4 promises "R values (`structuredContent` simplified, else text)".
 
@@ -1873,18 +1874,6 @@ mcp_value = function(res) {
   res$text
 }
 
-#' A JSON-RPC success response
-#' @noRd
-mcp_rpc_ok = function(id, result) list(jsonrpc = "2.0", id = id, result = result)
-
-#' A JSON-RPC error response
-#' @noRd
-mcp_rpc_err = function(id, code, message, data = NULL) {
-  err = list(code = as.integer(code), message = message)
-  if (!is.null(data)) err$data = data
-  list(jsonrpc = "2.0", id = id, error = err)
-}
-
 #' clientCapabilities gptr declares: form elicitation (the ask UI) and roots
 #' @noRd
 mcp_client_caps = function() {
@@ -2086,6 +2075,20 @@ mcp_expand1 = function(s, project) {
 #' @noRd
 mcp_secret_name = function(x) grepl("(?i)(key|token|secret|pass|auth|cred|cookie)", x, perl = TRUE)
 
+#' A config value as a character vector: numbers and logicals become their JSON text (8080 ->
+#' "8080", TRUE -> "true"), names are kept and NULL stays NULL
+#' @noRd
+mcp_map_chr = function(x) {
+  if (is.null(x)) return(NULL)
+  text = function(v) {
+    if (is.logical(v)) return(ifelse(v, "true", "false"))
+    if (is.numeric(v)) return(vapply(v, json_encode, ""))
+    v
+  }
+  y = unlist(if (is.list(x)) lapply(x, text) else text(x))
+  stats::setNames(as.character(y), names(y))
+}
+
 #' The connect-time view of a spec: placeholders expanded; values that came from a placeholder
 #' under a secret-like name, or that look secret, are registered in the vault at once (env
 #' entries by their name; `${VAR}` placeholders of args and the URL by the variable's name)
@@ -2112,6 +2115,22 @@ mcp_expand_spec = function(spec, project = project_root()) {
     if (nchar(v) >= 8L && mcp_secret_name(var)) secret_register(as_utf8(v), var, source = "mcp")
   }
   ex
+}
+```
+
+Append the JSON-RPC response builders to P01's `R/json-encode.R` (L0, so P20's claude adapter uses them too; simplicity package P18-S):
+
+```r
+#' A JSON-RPC success response
+#' @noRd
+mcp_rpc_ok = function(id, result) list(jsonrpc = "2.0", id = id, result = result)
+
+#' A JSON-RPC error response
+#' @noRd
+mcp_rpc_err = function(id, code, message, data = NULL) {
+  err = list(code = as.integer(code), message = message)
+  if (!is.null(data)) err$data = data
+  list(jsonrpc = "2.0", id = id, error = err)
 }
 ```
 
@@ -4372,19 +4391,6 @@ mcp_config_sources = function(project = project_root()) {
     src("pi", "user", file.path(home, ".pi", "agent", "mcp.json"), "mcpServers"))
 }
 
-#' A character vector from a JSON value (NULL stays NULL)
-#' @noRd
-mcp_chr = function(x) if (is.null(x)) NULL else as_utf8(as.character(unlist(x)))
-
-#' A named character vector from a JSON object (NULL or empty stays NULL)
-#' @noRd
-mcp_named_chr = function(x) {
-  if (is.null(x) || !length(x) || is.null(names(x))) return(NULL)
-  out = vapply(x, function(v) as_utf8(as.character(unlist(v))[1L]), "")
-  names(out) = names(x)
-  out
-}
-
 #' One entry of any harness as the fields of gptr's `mcp_server` spec (contract 11.7) plus
 #' `path`, `needs_input` (VS Code ${input:...}) and `startable` (FALSE for project entries of
 #' an untrusted project)
@@ -4403,13 +4409,13 @@ mcp_entry_norm = function(name, e, harness, scope, path) {
   } else {
     NA_character_
   }
-  env = mcp_named_chr(e$env)
-  headers = mcp_named_chr(e$headers)
+  env = mcp_map_chr(e$env)
+  headers = mcp_map_chr(e$headers)
   tool_exposure = e$toolExposure
   timeout = e$timeout
   if (identical(harness, "codex")) {
-    for (v in mcp_chr(e$env_vars)) env[[v]] = paste0("${", v, "}")
-    headers = c(headers, mcp_named_chr(e$http_headers))
+    for (v in mcp_map_chr(e$env_vars)) env[[v]] = paste0("${", v, "}")
+    headers = c(headers, mcp_map_chr(e$http_headers))
     for (h in names(e$env_http_headers)) {
       headers[[h]] = paste0("${", as.character(e$env_http_headers[[h]]), "}")
     }
@@ -4418,9 +4424,9 @@ mcp_entry_norm = function(name, e, harness, scope, path) {
     }
     timeout = e$tool_timeout_sec
     te = list()
-    for (t in mcp_chr(e$disabled_tools)) te[[t]] = "hidden"
+    for (t in mcp_map_chr(e$disabled_tools)) te[[t]] = "hidden"
     if (length(e$enabled_tools)) {
-      for (t in mcp_chr(e$enabled_tools)) te[[t]] = "r"
+      for (t in mcp_map_chr(e$enabled_tools)) te[[t]] = "r"
       te[["*"]] = "hidden"
     }
     if (length(te)) tool_exposure = te
@@ -4433,16 +4439,16 @@ mcp_entry_norm = function(name, e, harness, scope, path) {
       (!harness %in% c("gptr", "codex") && isTRUE(timeout >= 1000))
     if (ms) timeout = timeout / 1000
   }
-  exposure = mcp_chr(e$exposure)
+  exposure = mcp_map_chr(e$exposure)
   if (!is.null(exposure) && !exposure[1L] %in% c("r", "direct", "deferred", "hidden")) {
     exposure = NULL
   }
   protocol = as.character(e$protocol %||% "auto")
   if (!protocol %in% c("auto", "modern", "legacy")) protocol = "auto"
   raw = json_encode(list(env = e$env, headers = e$headers, args = e$args))
-  out = list(name = name, transport = transport, command = mcp_chr(e$command)[1L],
-             args = mcp_chr(e$args) %||% character(), env = env, headers = headers,
-             cwd = mcp_chr(e$cwd)[1L], url = mcp_chr(url)[1L], timeout = timeout,
+  out = list(name = name, transport = transport, command = mcp_map_chr(e$command)[1L],
+             args = mcp_map_chr(e$args) %||% character(), env = env, headers = headers,
+             cwd = mcp_map_chr(e$cwd)[1L], url = mcp_map_chr(url)[1L], timeout = timeout,
              protocol = protocol, exposure = exposure[1L], toolExposure = tool_exposure,
              enabled = !isFALSE(e$enabled) && !isTRUE(e$disabled),
              trusted = identical(harness, "gptr") && identical(scope, "user") && isTRUE(e$trusted),
@@ -4512,7 +4518,7 @@ mcp_setting = function(key, default = NULL) {
 #' renamed `<harness>_<name>`; project entries of an untrusted project get `startable = FALSE`.
 #' @noRd
 mcp_config_all = function(project = project_root()) {
-  import = mcp_chr(mcp_setting("import", mcp_harnesses))
+  import = mcp_map_chr(mcp_setting("import", mcp_harnesses))
   trusted = mcp_trusted(project)
   all = list()
   for (src in mcp_config_sources(project)) {
@@ -4560,7 +4566,7 @@ mcp_sync = function(force = FALSE, session = NULL) {
   srcs = mcp_config_sources(project)
   info = file.info(vapply(srcs, function(s) s$path, ""))
   stamp = paste(c(project, info$size, as.numeric(info$mtime), mcp_trusted(project),
-                  mcp_chr(mcp_setting("import", character()))), collapse = "|")
+                  mcp_map_chr(mcp_setting("import", character()))), collapse = "|")
   if (!isTRUE(force) && identical(st$stamp, stamp)) return(mcp_servers_all(session))
   for (nm in ls(st$servers)) {
     registry_remove(get(nm, envir = st$servers))
@@ -7242,3 +7248,4 @@ Consolidation of 2026-10-01 against 04 (§7.0 `mcp.serve_ensure` `function(sessi
 | F6 | finalize | minor | Global Constraints (server, package state, layering); Functions consumed (P06); File Structure (`R/mcp-server.R`, `test-mcp-server.R`); Task 9 Interfaces and text; roxygen of `gptr_mcp_serve()`; Plan acceptance lint/arch expectation | applied | The prose now matches row F4. It names the dedicated session, `the$mcp_server$user` and `mcp_serve_session()`, and lists `session_new()` among P06's consumed functions as the one contract edge outside the IC-33 kernel SDK, and `setting_get()` (settings `model` and `mode`) among Task 9's. It also lists the tests' P06 functions (`session_home()`, `gptr_usage()`, `usage_add()`, `usage_conform()`). The busy rule now speaks of "the user's token (its dedicated session never runs)" instead of "the user's own serving context". The arch-layers expectation now admits `session_new()` through P01's `arch_contract_edges()`. The roxygen paragraph was reflowed to 100 columns. Every `r` block was re-extracted and parses under `Rscript --vanilla` (27 blocks, no `<-` token, no `%>%`, ASCII only, no line over 100 characters). |
 | L1 | simplicity LOCK | minor | Task 1 Files, lock literal and test; Tasks 2 and 6 callers; Functions consumed (P03); ambiguity 18; acceptance row 5b | applied | One IC-71 short lock (D-153): `oauth_lock_with()` is P03's `lock_with()` in `R/auth-store.R`, whose literal Task 1 now shows. The index's two warnings "P18 Modify/replace R/auth-store.R, which contract 04 section 14 assigns to P03" are this recorded exception. |
 | U1 | simplicity URL | minor | Task 1 Files, Interfaces, URL literal and tests; Task 2 `oauth_as_metadata()`, `oauth_discover()`, `oauth_key_exchange()`; Task 3 `mcp_cache_key()`; ambiguity 18 | applied | One URL parser (D-155): `url_parts()` is P03's `url_parse()` in `R/auth-secrets.R`, whose literal Task 1 now shows; a redirect libcurl cannot parse is `gptr_error_invalid_argument`; Task 2 reads an unparseable URL's path as `""`; the cache key hashes `url_for_log()`. The index's warning "P18 Modify R/auth-secrets.R, which contract 04 section 14 assigns to P03" is this recorded exception. |
+| R1 | simplicity P18-S | minor | Task 3 Files, Produces, `mcp_map_chr()` and builders literals; Task 6 `mcp_entry_norm()` and the `mcp.import` readers; P20 Task 6 | applied | `mcp_rpc_ok()`/`mcp_rpc_err()` move to P01's `R/json-encode.R` (L0), so P20's `pcli_jsonrpc_error()` is gone; Task 6 reads config values with Task 3's `mcp_map_chr()` (D-090 item 6) instead of `mcp_chr()`/`mcp_named_chr()`. The index's two warnings "P18 Modify/append R/json-encode.R, which contract 04 section 14 assigns to P01" are this recorded exception. |

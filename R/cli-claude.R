@@ -186,12 +186,6 @@ pcli_control_err = function(id, error) {
        response = list(subtype = "error", request_id = id, error = error))
 }
 
-#' A JSON-RPC error answering `msg`
-#' @noRd
-pcli_jsonrpc_error = function(msg, code, text) {
-  list(jsonrpc = "2.0", id = msg[["id"]], error = list(code = code, message = text))
-}
-
 #' Note the CLI's answer to gptr's interrupt request (pcli_stop_child() waits for it)
 #' @noRd
 pcli_claude_ack = function(obj, state) {
@@ -222,21 +216,21 @@ pcli_claude_mcp = function(req, id, s) {
     pcli_send(opts, out)
   }
   if (!identical(req[["server_name"]], "gptr")) {
-    return(answer(pcli_jsonrpc_error(msg, -32601L, "Server not found")))
+    return(answer(mcp_rpc_err(msg[["id"]], -32601L, "Server not found")))
   }
   dispatch = opts[["mcp_dispatch"]]
   if (!is.function(dispatch)) {
-    return(answer(pcli_jsonrpc_error(msg, -32603L, "gptr's MCP dispatcher is not available")))
+    return(answer(mcp_rpc_err(msg[["id"]], -32603L, "gptr's MCP dispatcher is not available")))
   }
   run_it = function() {
     if (pcli_aborted(s)) {
-      return(answer(pcli_jsonrpc_error(msg, -32603L, "The gptr run was aborted.")))
+      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr run was aborted.")))
     }
     if (s$done || !pcli_turn_current(s)) {
-      return(answer(pcli_jsonrpc_error(msg, -32603L, "The gptr turn is over.")))
+      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr turn is over.")))
     }
     resp = tryCatch(dispatch(msg), error = function(e) {
-      pcli_jsonrpc_error(msg, -32603L, redact(conditionMessage(e), "context"))
+      mcp_rpc_err(msg[["id"]], -32603L, redact(conditionMessage(e), "context"))
     })
     if (is.null(resp)) resp = list(jsonrpc = "2.0", result = json_obj())
     answer(resp)

@@ -368,3 +368,16 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   `local_bootstrap_service()`); inline `p07_project()`/`block_kinds()` bodies in `test-prompt-compact.R`,
   `test-prompt-sections.R` and `test-context-prefix.R` replaced by the helpers.
 - Deviations: none. Open: P11 plan literal (line 3625) defines its own `fake_run(id)` (lane perm).
+
+## P18-S - MCP plan text and RPC builders (2026-10-05)
+- `mcp_rpc_ok()`, `mcp_rpc_err()` moved verbatim to `R/json-encode.R` (L0); `pcli_jsonrpc_error()` gone, its callers
+  use `mcp_rpc_err()` (same lists); `mcp_map_chr()` comment trimmed. Plan text: P18 Task 3 literal and Produces, Task 6
+  on `mcp_map_chr()` (`mcp_chr()`, `mcp_named_chr()` gone), P20 Task 6 (R -8, plans +1; plan ~20).
+- Red: none (refactor). Green: `mcp-client|cli-claude|cli-common|json-` PASS 1281 (SKIP 1: P18 dispatcher not
+  loaded; re-run after review), `^(arch-layers|lint-rules)$` PASS 19. Lint clean. Neighbours:
+  `cli-|provider-registry|zzz` PASS 1570; cross-plan 0 errors, warn 86 (+2 recorded as P18 R1), 767 R blocks 0
+  problems, no lints.
+- Reviews: R1 clear, 1 minor + 2 nits. Fixed: P20's interfaces table lists P18's `mcp_rpc_err()`; D-090 item 6
+  no longer says "every config value". Not ours: the D-154/D-155 evidence-line hunk (P06-S1); left unstaged.
+- Deviations: D-090 item 6 edited in place. Open: `stream_mcp_dispatch()` (`R/provider-registry.R`, no stage-1 lane)
+  still builds its JSON-RPC error inline; `progress/P18.md` Task 3's Open line on `mcp_chr()` is superseded.

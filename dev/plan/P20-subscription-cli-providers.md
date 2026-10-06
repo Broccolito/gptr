@@ -78,7 +78,7 @@ Exact signatures (04 and the dependency plans); the tasks call nothing else.
 | P06 | events (04 §10.4): `request_params` (patch chain; payload `provider`, `model`, `params` limited to the adapter's `capabilities$request_params`), `usage` (`row`), `agent_end` (`status`, `reason`, ...), `session_shutdown` (`reason`); `ctx` members (04 §10.6) `ctx$session`, `ctx$run`, `ctx$mode()`, `ctx$state()`, `ctx$get(kind, name)`; the injected `opts$gate`, `opts$mcp_dispatch`, `opts$signal`, `opts$run`, `opts$session` (04 §8.1); in tests `peter()`, `gptr_wait(x, timeout = Inf)`, `gptr_cancel(x)` and the session accessors `$text`, `$status`, `$id`, `$messages`, `$cost`, `$kind` | hooks and end-to-end tests |
 | P11 tests | `local_scripted_ui(answers = list(), .env = parent.frame())` (log column `method`, value `"permission"`) | the gated-once test |
 | P12 | `anthropic_normaliser(model, opts)` -> `list(push, push_parsed, finish, fail, message)` | claude `stream_event` lines |
-| P18 | services `mcp.dispatch_local` `function(message, session) list` (reached through the injected `opts$mcp_dispatch`, IC-33) and `mcp.serve_ensure` `function(session) <gptr_mcp_handle>` (`session` is the `gptr_session` object: P18's `mcp_serve_ensure()` checks its class, so builtin:cli's `request_params` hook calls it with `ctx$session`; fields `url`, `port`, `token_env`, `config` with `config$codex$env[[token_env]]` = the token, `stop()`, 04 §5.11); `gptr_mcp_serve(..., stop = FALSE)` in tests | live R for both routes |
+| P18 | services `mcp.dispatch_local` `function(message, session) list` (reached through the injected `opts$mcp_dispatch`, IC-33) and `mcp.serve_ensure` `function(session) <gptr_mcp_handle>` (`session` is the `gptr_session` object: P18's `mcp_serve_ensure()` checks its class, so builtin:cli's `request_params` hook calls it with `ctx$session`; fields `url`, `port`, `token_env`, `config` with `config$codex$env[[token_env]]` = the token, `stop()`, 04 §5.11); `gptr_mcp_serve(..., stop = FALSE)` in tests; `mcp_rpc_err(id, code, message, data = NULL)` (internal, L0 `json-encode.R`) | live R for both routes; JSON-RPC errors in claude's `mcp_message` answers |
 | P19 | `subagent_backend(agent, model)` (the `auto` rule); `gptr_agent(..., model = NULL, ..., backend = c("auto", "inline", "worker", "cli"), ...)`; teams through `peter(agents = list(...))` | the `cli` backend tests (IC-36) |
 
 ## Interfaces this plan produces
@@ -2455,8 +2455,8 @@ git commit -m "feat(cli): cli-claude build with the exact argv of architecture 8
 - Test: `tests/testthat/test-cli-claude.R` (append)
 
 **Interfaces:**
-- Consumes: `anthropic_normaliser(model, opts)` with `push_parsed(obj)` (P12, 04 §7.12); the injected `opts$send(obj)`, `opts$mcp_dispatch(message)` (P18's `mcp.dispatch_local` bound to the session, "the single gate for the claude route", IC-65), `opts$gate(call)` (the run's `perm_check()`), `opts$signal`, `opts$run`, `opts$emit` (04 §8.1, IC-33); `reactor_enqueue_tool(run, fn)` (P04); `redact(x, profile = "persist")` (P03); `usage_new(...)` (P05); `json_obj()` (P01); Tasks 3-4.
-- Produces: `pcli_claude_parse(model, opts)` -> `list(push, finish, fail, message)` (04 §8.1); private `pcli_control_ok(id, response)`, `pcli_control_err(id, error)`, `pcli_jsonrpc_error(msg, code, text)`, `pcli_claude_ack(obj, state)`, `pcli_claude_mcp(req, id, s)`, `pcli_claude_permission(req, opts)`, `pcli_claude_control(obj, s)`, `pcli_claude_refuse(obj, s)`, `pcli_claude_forward(ev, s)`, `pcli_claude_stream(event, s)`, `pcli_claude_system(obj, s)`, `pcli_claude_cost(obj, state = NULL)`, `pcli_claude_usage(obj, state = NULL)`, `pcli_claude_stop(raw)`, `pcli_claude_error_class(obj)`, `pcli_claude_result(obj, s)`, `pcli_claude_timeout(s)`. Terminal error classes: `billing`, `max_turns`, `budget_cost`, `auth`, `rate_limit`, `overloaded`, `provider`, `timeout`, `aborted`. Test support: `local_normaliser(parse, model, opts, .env = parent.frame())`, `feed_fixture(n, name)`, `push_obj(n, obj)`.
+- Consumes: `anthropic_normaliser(model, opts)` with `push_parsed(obj)` (P12, 04 §7.12); the injected `opts$send(obj)`, `opts$mcp_dispatch(message)` (P18's `mcp.dispatch_local` bound to the session, "the single gate for the claude route", IC-65), `opts$gate(call)` (the run's `perm_check()`), `opts$signal`, `opts$run`, `opts$emit` (04 §8.1, IC-33); `reactor_enqueue_tool(run, fn)` (P04); `redact(x, profile = "persist")` (P03); `usage_new(...)` (P05); `json_obj()` (P01); `mcp_rpc_err(id, code, message, data = NULL)` (P18, L0 `json-encode.R`); Tasks 3-4.
+- Produces: `pcli_claude_parse(model, opts)` -> `list(push, finish, fail, message)` (04 §8.1); private `pcli_control_ok(id, response)`, `pcli_control_err(id, error)`, `pcli_claude_ack(obj, state)`, `pcli_claude_mcp(req, id, s)`, `pcli_claude_permission(req, opts)`, `pcli_claude_control(obj, s)`, `pcli_claude_refuse(obj, s)`, `pcli_claude_forward(ev, s)`, `pcli_claude_stream(event, s)`, `pcli_claude_system(obj, s)`, `pcli_claude_cost(obj, state = NULL)`, `pcli_claude_usage(obj, state = NULL)`, `pcli_claude_stop(raw)`, `pcli_claude_error_class(obj)`, `pcli_claude_result(obj, s)`, `pcli_claude_timeout(s)`. Terminal error classes: `billing`, `max_turns`, `budget_cost`, `auth`, `rate_limit`, `overloaded`, `provider`, `timeout`, `aborted`. Test support: `local_normaliser(parse, model, opts, .env = parent.frame())`, `feed_fixture(n, name)`, `push_obj(n, obj)`.
 
 The control protocol follows report 07 §3.10 and §5.7 (`cc_proto.R`, verified live with CLI 2.1.261; verification log item 18): `mcp_message` is answered with `{"mcp_response": <JSON-RPC response>}`, a JSON-RPC notification (no `id`) with the ack `{"jsonrpc":"2.0","result":{}}` (`query.py:670-673`), an unknown server with JSON-RPC error `-32601`, an unsupported subtype with an error response `Unsupported control request subtype: <subtype>`. `tools/call` runs from P04's tool FIFO of the run (`reactor_enqueue_tool(opts$run, ...)`), so it never overlaps another agent's R tool and a nested pump runs it only for the runs it waits for (IC-57); the handshake runs at once. `can_use_tool` for `mcp__gptr__*` is allowed without a gate call (they are pre-allowed by `--allowedTools`, so the gate runs once, in the `mcp_message` dispatch; IC-65); any other tool goes to `opts$gate(call)` with a 04 §4.4 call record. `stream_event` lines (07 §2.14; `parent_tool_use_id` non-null lines belong to the CLI's own sub-agents and are skipped) feed a fresh `anthropic_normaliser()` per API message (07 §5.8: "The CLI stream reuses the native accumulator", verified); its `start` and terminal events are absorbed and text/thinking blocks re-indexed into the one outer stream of the turn, while its tool-call events are dropped (the tools ran through `mcp_message`). `rate_limit_event` is nested under `rate_limit_info` (07 verification log item 25). The `result` line ends the turn (07 §2.14 subtypes; an API failure arrives as `subtype: "success"` with `is_error: true` and `api_error_status`); its `total_cost_usd` covers the CLI process (it equals `modelUsage.costUSD` in the 07 §3.14 capture, which also counts the CLI's auxiliary calls), so a turn's cost is the increase since the child's previous result (`pcli_claude_cost()`; a child without budget flags serves several runs); "No conversation found" clears the CLI session id so the next child starts fresh (07 §2.13). Error texts for a timeout contain "out of budget", which P06's retry rules treat as final. The fixture `claude-call2.ndjson` is the redacted live capture of 07 §3.14 (39 lines; only the R code the model wrote inside two JSON strings is spelled with `=`, conventions §4); `claude-apikey.ndjson` and `claude-hang.ndjson` are constructed in the same shapes.
 
@@ -2772,12 +2772,6 @@ pcli_control_err = function(id, error) {
        response = list(subtype = "error", request_id = id, error = error))
 }
 
-#' A JSON-RPC error answering `msg`
-#' @noRd
-pcli_jsonrpc_error = function(msg, code, text) {
-  list(jsonrpc = "2.0", id = msg[["id"]], error = list(code = code, message = text))
-}
-
 #' Note the CLI's answer to gptr's interrupt request (pcli_stop_child() waits for it)
 #' @noRd
 pcli_claude_ack = function(obj, state) {
@@ -2798,18 +2792,18 @@ pcli_claude_mcp = function(req, id, s) {
   msg = req[["message"]] %||% list()
   answer = function(resp) pcli_send(opts, pcli_control_ok(id, list(mcp_response = resp)))
   if (!identical(req[["server_name"]], "gptr")) {
-    return(answer(pcli_jsonrpc_error(msg, -32601L, "Server not found")))
+    return(answer(mcp_rpc_err(msg[["id"]], -32601L, "Server not found")))
   }
   dispatch = opts[["mcp_dispatch"]]
   if (!is.function(dispatch)) {
-    return(answer(pcli_jsonrpc_error(msg, -32603L, "gptr's MCP dispatcher is not available")))
+    return(answer(mcp_rpc_err(msg[["id"]], -32603L, "gptr's MCP dispatcher is not available")))
   }
   run_it = function() {
     if (pcli_aborted(s)) {
-      return(answer(pcli_jsonrpc_error(msg, -32603L, "The gptr run was aborted.")))
+      return(answer(mcp_rpc_err(msg[["id"]], -32603L, "The gptr run was aborted.")))
     }
     resp = tryCatch(dispatch(msg), error = function(e) {
-      pcli_jsonrpc_error(msg, -32603L, redact(conditionMessage(e), "context"))
+      mcp_rpc_err(msg[["id"]], -32603L, redact(conditionMessage(e), "context"))
     })
     if (is.null(resp)) resp = list(jsonrpc = "2.0", result = json_obj())
     answer(resp)
@@ -2868,7 +2862,7 @@ pcli_claude_refuse = function(obj, s) {
   id = obj[["request_id"]]
   if (identical(req[["subtype"]], "mcp_message")) {
     msg = req[["message"]] %||% list()
-    resp = pcli_jsonrpc_error(msg, -32603L, "The gptr turn is over.")
+    resp = mcp_rpc_err(msg[["id"]], -32603L, "The gptr turn is over.")
     return(pcli_send(s$opts, pcli_control_ok(id, list(mcp_response = resp))))
   }
   if (identical(req[["subtype"]], "can_use_tool")) {

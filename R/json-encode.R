@@ -53,3 +53,15 @@ json_utf8 = function(x, sort = FALSE) {
   if (length(x)) x[] = lapply(x, json_utf8, sort = sort)
   x
 }
+
+#' A JSON-RPC success response
+#' @noRd
+mcp_rpc_ok = function(id, result) list(jsonrpc = "2.0", id = id, result = result)
+
+#' A JSON-RPC error response
+#' @noRd
+mcp_rpc_err = function(id, code, message, data = NULL) {
+  err = list(code = as.integer(code), message = message)
+  if (!is.null(data)) err$data = data
+  list(jsonrpc = "2.0", id = id, error = err)
+}

@@ -1033,7 +1033,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   3. `mcp_value()` simplifies with `jsonlite::parse_json(simplifyVector = TRUE)` (never reads its input as a file or URL).
   4. A cache file that is not a JSON object, or an era entry whose `era` is not `"modern"`/`"legacy"` or whose `date` is not one string, reads as absent; `mcp_era_get()` uses exact `[[`; `mcp_tools_cache_fresh()` always returns a flag.
   5. `mcp_log_append()` joins text given in pieces and removes the old `.1` before rotating (Windows `file.rename()` does not replace).
-  6. Env and header maps go through `mcp_map_chr()` (numbers and logicals become JSON text, names kept); secret registration skips unnamed env entries. P18 Task 6 keeps the plan's `mcp_chr()` in `R/mcp-config.R` unchanged under its own name (one home per function).
+  6. Env and header maps go through `mcp_map_chr()` (numbers and logicals become JSON text, names kept); secret registration skips unnamed env entries. P18 Task 6 uses it instead of `mcp_chr()`/`mcp_named_chr()` (P18-S).
 - Contract-visible: an MCP tool argument that cannot become one scalar, or an `integer` beyond 2^53 - 1, is `gptr_error_invalid_argument`; no section amended.
 - Tests: test-mcp-client.R: 4 blocks (literal one-pass placeholders, scalar errors and big integers, non-object cache files, 5 MB log rotation; +22 expectations, so later P18 plan counts for the file are 22 higher). Evidence: progress/P18.md Task 3.
 

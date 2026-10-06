@@ -235,18 +235,6 @@ mcp_value = function(res) {
   res$text
 }
 
-#' A JSON-RPC success response
-#' @noRd
-mcp_rpc_ok = function(id, result) list(jsonrpc = "2.0", id = id, result = result)
-
-#' A JSON-RPC error response
-#' @noRd
-mcp_rpc_err = function(id, code, message, data = NULL) {
-  err = list(code = as.integer(code), message = message)
-  if (!is.null(data)) err$data = data
-  list(jsonrpc = "2.0", id = id, error = err)
-}
-
 #' clientCapabilities gptr declares: form elicitation (the ask UI) and roots
 #' @noRd
 mcp_client_caps = function() {
@@ -469,10 +457,8 @@ mcp_placeholder_value = function(m, project) {
 #' @noRd
 mcp_secret_name = function(x) grepl("(?i)(key|token|secret|pass|auth|cred|cookie)", x, perl = TRUE)
 
-#' A config map (env, headers) as a named character vector: each number or logical becomes its
-#' JSON text (8080 -> "8080", TRUE -> "true"), so child_env() and headers get strings; names are
-#' kept and NULL stays NULL. Not mcp_chr(): that name belongs to Task 6 (R/mcp-config.R), which
-#' drops names.
+#' A config value as a character vector: numbers and logicals become their JSON text (8080 ->
+#' "8080", TRUE -> "true"), names are kept and NULL stays NULL
 #' @noRd
 mcp_map_chr = function(x) {
   if (is.null(x)) return(NULL)
