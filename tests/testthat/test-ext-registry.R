@@ -216,6 +216,8 @@ test_that("registry_recs() skips ids whose record is gone (FIX-1)", {
 })
 
 test_that("a deferred session_shutdown waits for the next registry entry (FIX-1)", {
+  # earlier tests' dead sessions are collected first, so their shutdowns are not queued here
+  invisible(gc())
   reg = local_registry()
   log = new.env()
   log$seen = character()

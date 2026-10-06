@@ -103,6 +103,14 @@ pending (maintainer).
 - Reviews: r1 5 findings (0/0/3, 2 nits; CI-7 overclaimed, incoming NOTE cause, D-011 measurements) -> fixed.
   Deviations: none. Open: M0 tag (maintainer); hosted CI-7 confirmation.
 
+## Task CI-10 - The FIX-1 deferred-shutdown test counts only its own sessions (2026-10-05)
+- Red: hosted devel (run 37404322232, `167baf8`) `test-ext-registry.R:244`: seven earlier tests' dead sessions,
+  collected during the test, queued their `gc` shutdowns in its scratch registry; a throwaway control (dead sessions
+  plus a forced collection inside `registry_add()`) FAIL 3 the same way. Fix (test only): `gc()` before
+  `local_registry()`, as `fix1_registry()` does. Green: control PASS; `^ext-registry$` PASS 175 (x3); `ext-` PASS
+  1782. Lint clean. Neighbours: `ext-` green.
+- Reviews: none recorded. Deviations: none. Open: hosted devel confirmation.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
