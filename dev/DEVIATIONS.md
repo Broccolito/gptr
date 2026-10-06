@@ -1910,3 +1910,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-cache-sim.R: "the gptr strategy keeps the 1 h tail from the 12-minute pause on, as P07
   does", "messages are priced as gptr's Anthropic adapter sends them, without record metadata".
   Evidence: progress/P24.md Task 6.
+
+## D-157 - P24 live calibration: per-fixture budget and preset, unknown usage fails, cache reads per run (2026-10-05)
+- Rule: `GPTR_BENCH_BUDGET_USD` caps each fixture and model (P25 Task 14): a budget binds one run
+  (IC-66), so each turn gets what the earlier turns left; the plan capped only the first turn and
+  later turns fell back to the 5 USD settings default.
+- Rule: the first call passes the fixture's `preset` (as P07's runner), so live input is compared
+  with the golden prefix it was measured on.
+- Rule: usage sums keep `NA` (IC-74), so a run with unknown usage fails its row; a fixture without a
+  `results.csv` row fails too.
+- Rule: `cache_read_seen` is the row's own `cache_read_live > 0` (every fixture repeats the frozen
+  prefix); no separate paid cache check. `s$usage` is per request (04 section 5.12), so no aggregated
+  branch. CSV columns unchanged (P25 Task 14); `GPTR_BENCH_ONLY` dropped.
+- Contract-visible: none.
+- Tests: test-live.R: "live_usage() sums per-request rows and keeps unknown usage unknown",
+  "live_run_fixture() runs every turn on the fixture's attached objects and preset",
+  "live_run_fixture() caps the cost of the whole fixture, not of each turn". Evidence:
+  progress/P24.md Task P24-4.
