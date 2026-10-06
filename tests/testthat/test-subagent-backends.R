@@ -453,3 +453,48 @@ test_that("INFRA-16: two inline agents and two workers interleave on one reactor
   # it would equal if they ran one after the other (a relative bound, robust to slow machines)
   expect_lt(elapsed, 0.75 * sum(end - start))
 })
+
+# ---- Task 10: the shipped skill and agent definitions --------------------------------------------
+
+test_that("reviewer and explorer are shipped agent definitions (03 section 3.3)", {
+  for (nm in c("reviewer", "explorer")) {
+    path = system.file("gptr", "agents", paste0(nm, ".md"), package = "gptr")
+    expect_true(nzchar(path))
+    a = agent_file_parse(path)
+    expect_s3_class(a, "gptr_agent")
+    expect_identical(a$name, nm)
+    expect_identical(a$tools, c("read", "r", "grep", "find", "ls"))
+    expect_identical(a$mode, "plan")
+    expect_identical(a$preset, "minimal")
+    expect_identical(a$backend, "auto")
+    expect_match(a$system, "Do not change files or objects.", fixed = TRUE)
+  }
+  listed = gptr_agents("packages")
+  expect_true(all(c("reviewer", "explorer") %in% listed$name))
+})
+
+test_that("gptr_agent('reviewer') loads the shipped definition", {
+  a = gptr_agent("reviewer")
+  expect_identical(a$name, "reviewer")
+  expect_match(a$description, "Reviews R code", fixed = TRUE)
+})
+
+test_that("the gptr-orchestration skill is shipped but kept out of the catalog", {
+  path = system.file("gptr", "skills", "gptr-orchestration", "SKILL.md", package = "gptr")
+  expect_true(nzchar(path))
+  txt = readLines(path, encoding = "UTF-8")
+  expect_identical(txt[1:2], c("---", "name: gptr-orchestration"))
+  expect_true("disable-model-invocation: true" %in% txt)
+  expect_false(any(grepl("str(", txt, fixed = TRUE)))
+  sk = gptr_skills("packages")
+  expect_true("gptr-orchestration" %in% sk$name)
+  expect_false(isTRUE(sk$visible[sk$name == "gptr-orchestration"]))
+  all = paste(txt, collapse = "\n")
+  code = unlist(regmatches(all, gregexpr("(?s)```r\n.*?```", all, perl = TRUE)))
+  code = gsub("```r\n|```", "", code)
+  expect_true(length(code) >= 5L)
+  for (chunk in code) {
+    pd = utils::getParseData(parse(text = chunk, keep.source = TRUE))
+    expect_false(any(pd$token == "LEFT_ASSIGN" & pd$text == paste0("<", "-")))
+  }
+})
