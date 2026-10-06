@@ -370,6 +370,11 @@ skip_if_no_chrome = function() {
   skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
 }
 
+# A Chrome that does not start in time (hosted runners) gives the contract's HTTP-only result
+skip_if_browser_failed = function(res) {
+  skip_if(is.na(res$ok) && is.null(artifact_state$browser), res$messages[1])
+}
+
 # chromote always starts processx's supervisor; when gptr does not supervise (IC-60), end it
 # with this file, after the tests have closed the browser
 withr::defer(if (!supervise_default()) processx::supervisor_kill())
@@ -430,6 +435,7 @@ test_that("the session check passes a working app and returns a 1000x700 screens
   png = file.path(artifact_dir("good"), "run", "shot.png")
   res = artifact_session_check(rec, png)
   expect_identical(get(".Random.seed", envir = globalenv()), seed)
+  skip_if_browser_failed(res)
   expect_true(res$ok)
   expect_identical(res$messages, character())
   expect_identical(res$screenshot, png)
@@ -448,12 +454,14 @@ test_that("the session check catches render errors and crashed servers but not v
                    "server = function(input, output, session) {",
                    "  output$p = renderPlot(plot(1:3, 1:2))", "}", "shinyApp(ui, server)")
   res = artifact_session_check(served_record("render", render_error), tempfile(fileext = ".png"))
+  skip_if_browser_failed(res)
   expect_false(res$ok)
   expect_true(any(grepl("output error in p", res$messages, fixed = TRUE)))
   crash = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
             "server = function(input, output, session) undefined_helper()",
             "shinyApp(ui, server)")
   res = artifact_session_check(served_record("crash", crash), tempfile(fileext = ".png"))
+  skip_if_browser_failed(res)
   expect_false(res$ok)
   expect_true(any(grepl("undefined_helper", res$messages, fixed = TRUE)))
   valid = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
@@ -461,6 +469,7 @@ test_that("the session check catches render errors and crashed servers but not v
             "  output$t = renderText(validate(need(FALSE, 'Pick a region')))", "}",
             "shinyApp(ui, server)")
   res = artifact_session_check(served_record("valid", valid), tempfile(fileext = ".png"))
+  skip_if_browser_failed(res)
   expect_true(res$ok)
 })
 

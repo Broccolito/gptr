@@ -135,6 +135,19 @@ pending (maintainer).
   re-run green).
 - Reviews: none recorded. Deviations: none. Open: hosted Windows INFRA-23 confirmation.
 
+## Task CI-11 - The headless-browser session checks skip when Chrome cannot start (2026-10-05)
+- Red: run 37410891417 (`3418582`): Windows release and oldrel-4 FAIL 9 (both session-check tests), Ubuntu oldrel-4
+  FAIL 4 (first test only, the cold start): the contract's HTTP-only fallback (`ok` NA, "the headless browser failed:
+  Chrome debugging port not open after 10 seconds."); a throwaway control with `artifact_session_browse()` mocked to
+  that error FAIL 9 WARN 1, as hosted. Fix (tests only): `skip_if_browser_failed(res)` after each
+  `artifact_session_check()` skips with the result's message when `ok` is NA and no browser started
+  (`artifact_state$browser` NULL). Green: control with `artifact_browser()` mocked to that error SKIP 2 FAIL 0; a broken
+  `artifact_js_state` (Chrome starts) still FAIL 9 WARN 1; `^artifact-` PASS 316 (Chrome starts locally). Lint clean.
+  Neighbours: `^(lint-rules|arch-layers)$` PASS 19.
+- Reviews: r1 2 findings (0/1/0, 1 nit): the skip matched every "headless browser failed" and hid gptr regressions
+  after Chrome started -> fixed (no-browser condition); Red wording -> fixed. Deviations: none. Open: hosted
+  confirmation.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
