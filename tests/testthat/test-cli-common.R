@@ -806,3 +806,30 @@ test_that("the hooks check the control files of a codex exec they stopped (D-106
                  class = "gptr_warning_cli_sandbox")
   expect_null(st$codex_control)
 })
+
+# ---- the codex route (Task 10) ------------------------------------------------------------------
+
+test_that("builtin:cli registers the codex route and its adapter", {
+  codex = registry_get("provider", "codex")
+  expect_identical(codex$api, "cli-codex")
+  expect_identical(codex$type, "cli")
+  expect_true("codex" %in% codex$aliases)
+  expect_identical(vapply(codex$models, function(m) m$id, ""),
+                   c("default", "gpt-6-sol", "gpt-6-luna"))
+  a = registry_get("adapter", "cli-codex")
+  expect_identical(a$transport, "process_jsonl")
+  expect_identical(a$build, pcli_codex_build)
+  expect_identical(a$parse, pcli_codex_parse)
+})
+
+test_that("gptr_providers() lists both plan routes without starting a process", {
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  local_mocked_bindings(proc_run = function(...) stop("spawned a process"),
+                        proc_spawn = function(...) stop("spawned a process"))
+  pr = gptr_providers()
+  expect_true(all(c("claude-cli", "codex") %in% pr$id))
+  expect_identical(pr$type[pr$id == "codex"], "cli")
+  expect_identical(pr$api[pr$id == "claude-cli"], "cli-claude")
+  expect_true(pr$status[pr$id == "codex"] %in% c("found", "not found", "shim refused"))
+})

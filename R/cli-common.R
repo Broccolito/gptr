@@ -1132,8 +1132,14 @@ builtin_cli = function(gptr) {
                               models = pcli_models("claude"),
                               status = pcli_status("claude", "claude-cli", "cli-claude"),
                               aliases = "claude_code"))
+  gptr$register(gptr_provider("codex", api = "cli-codex", type = "cli",
+                              models = pcli_models("codex"),
+                              status = pcli_status("codex", "codex", "cli-codex"),
+                              aliases = "codex"))
   gptr$register(gptr_adapter("cli-claude", transport = "process_jsonl", build = pcli_claude_build,
                              parse = pcli_claude_parse, capabilities = pcli_capabilities()))
+  gptr$register(gptr_adapter("cli-codex", transport = "process_jsonl", build = pcli_codex_build,
+                             parse = pcli_codex_parse, capabilities = pcli_capabilities()))
   gptr$on("request_params", pcli_hook_params)
   gptr$on("usage", pcli_hook_usage)
   gptr$on("agent_end", pcli_hook_end)

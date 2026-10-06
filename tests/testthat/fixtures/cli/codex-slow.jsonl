@@ -1,0 +1,10 @@
+{"type":"thread.started","thread_id":"$THREAD"}
+{"type":"turn.started"}
+{"fake":"sleep","seconds":1}
+{"type":"item.completed","item":{"id":"item_r1","type":"reasoning","text":"step 1"}}
+{"fake":"sleep","seconds":1}
+{"type":"item.completed","item":{"id":"item_r2","type":"reasoning","text":"step 2"}}
+{"fake":"sleep","seconds":1}
+{"type":"item.completed","item":{"id":"item_r3","type":"reasoning","text":"step 3"}}
+{"type":"item.completed","item":{"id":"item_9","type":"agent_message","text":"Slow codex done."}}
+{"type":"turn.completed","usage":{"input_tokens":24763,"cached_input_tokens":24448,"cache_write_input_tokens":0,"output_tokens":122,"reasoning_output_tokens":0}}

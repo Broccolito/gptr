@@ -734,3 +734,109 @@ test_that("an exec that ends in an internal error has its control files checked,
   expect_match(seen$text, ".gptr/settings.json", fixed = TRUE)
   expect_null(opts3$state$codex_control)
 })
+
+# ---- the codex route end to end, the CLI leg of INFRA-16 (Task 10) ------------------------------
+
+test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env", {
+  skip_on_cran()
+  f = local_fake_cli("codex", "text")
+  local_mcp_stub()
+  withr::local_envvar(OPENAI_API_KEY = "sk-p20fake-openai-0000000000000000",
+                      CODEX_API_KEY = "codex-p20fake-0000000000000",
+                      OPENAI_BASE_URL = "https://example.invalid/v1", CODEX_SANDBOX = "seatbelt")
+  big = paste0("Summarise this text: ", strrep("abcdefghij", 5000L), " caf\u00e9.")
+  seen = new.env()
+  seen$vars = character()
+  s = withCallingHandlers(
+    peter(big, model = f$model, envir = new.env(), mode = "edits"),
+    gptr_warning_billing_env = function(w) {
+      seen$vars = c(seen$vars, w$variables)
+      invokeRestart("muffleWarning")
+    })
+  expect_identical(fake_argv(f)[[1]],
+                   c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m",
+                     "gpt-6-sol", "-C", path_norm(getwd()), codex_mcp_8_5(54321L), "--sandbox",
+                     "read-only", "-"))
+  bytes = fake_prompts(f)[[1]]
+  prompt = rawToChar(bytes)
+  Encoding(prompt) = "UTF-8"
+  expect_gt(length(bytes), 50000L)
+  expect_true(grepl(big, prompt, fixed = TRUE, useBytes = TRUE))
+  expect_match(prompt, "^<gptr_instructions>\n")
+  env = fake_env_names(f)[[1]]
+  expect_true("GPTR_MCP_TOKEN" %in% env)
+  expect_false(any(c("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL", "CODEX_SANDBOX") %in%
+                     env))
+  expect_true(all(c("OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL") %in% seen$vars))
+  expect_false("CODEX_SANDBOX" %in% seen$vars)
+  expect_identical(s$text, paste0("Hello from the fake codex CLI (", length(bytes),
+                                  " prompt bytes)."))
+  m = s$messages[[length(s$messages)]]
+  expect_identical(m$route, "plan-cli")
+  expect_equal(m$usage$cache_read, 24448)
+})
+
+test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
+  skip_on_cran()
+  f = local_fake_cli("codex", "text")
+  local_mcp_stub()
+  s = peter("First", model = f$model, envir = new.env(), mode = "auto")
+  s |> peter("Second")
+  argv = fake_argv(f)
+  expect_length(argv, 2L)
+  expect_identical(argv[[1]][match("--sandbox", argv[[1]]) + 1L], "workspace-write")
+  expect_identical(argv[[2]][1:3], c("exec", "resume", "00000000-0000-4000-8000-000000000001"))
+  expect_true("sandbox_mode=workspace-write" %in% argv[[2]])
+  expect_false(any(c("-C", "--sandbox") %in% argv[[2]]))
+  second = rawToChar(fake_prompts(f)[[2]])
+  expect_false(grepl("<gptr_instructions>", second, fixed = TRUE))
+  expect_match(second, "Second\n$")
+})
+
+test_that("a fake codex evaluates R in the live session through gptr's MCP server", {
+  skip_on_cran()
+  skip_if_not_installed("httpuv")
+  skip_if_not_installed("later")
+  skip_if_not_installed("openssl")
+  skip_if_not(ext_service_has("mcp.serve_ensure"), "P18's mcp.serve_ensure is not loaded")
+  withr::defer(gptr_mcp_serve(stop = TRUE))
+  f = local_fake_cli("codex", "mcp")
+  e = new.env()
+  s = peter("Compute the sum of 1 to 10 in R", model = f$model, envir = e, mode = "auto")
+  expect_identical(e$live_answer, 55L)
+  expect_identical(fake_log(f, "mcp")[[1]]$status, 200L)
+  expect_match(s$text, "55", fixed = TRUE)
+})
+
+test_that("the auto rule runs CLI-only models on the cli backend", {
+  f = local_fake_cli("codex", "text")
+  expect_identical(subagent_backend(gptr_agent("code", model = "fakecodex/gpt-6-sol"),
+                                    model_resolve(f$model)), "cli")
+})
+
+test_that("a fake CLI joins two inline agents and two workers on one reactor (INFRA-16)", {
+  skip_on_cran()
+  skip_without_installed_gptr()
+  skip_if(is.null(registry_get("route", "team")), "P19's team route is not loaded")
+  f = local_fake_cli("codex", "slow")
+  local_mcp_stub()
+  slow = function(name) {
+    gptr_fake_provider(list(list(text = paste(name, "done"), delay = 3)), name = name)
+  }
+  inline1 = slow("fakea")
+  inline2 = slow("fakeb")
+  work1 = slow("fakec")
+  work2 = slow("faked")
+  t0 = Sys.time()
+  team = peter("Review the analysis", envir = new.env(), agents = list(
+    a1 = agent(model = inline1), a2 = agent(model = inline2),
+    w1 = agent(model = work1, backend = "worker"), w2 = agent(model = work2, backend = "worker"),
+    code = agent(model = "fakecodex/gpt-6-sol")))
+  elapsed = as.numeric(difftime(Sys.time(), t0, units = "secs"))
+  expect_identical(team$kind, "team")
+  expect_identical(team$code$text, "Slow codex done.")
+  expect_identical(team$a1$text, "fakea done")
+  expect_identical(team$w2$text, "faked done")
+  expect_identical(team$code$messages[[length(team$code$messages)]]$route, "plan-cli")
+  expect_lt(elapsed, 13)
+})
