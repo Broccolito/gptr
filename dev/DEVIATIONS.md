@@ -1936,7 +1936,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   decoded by R's parser on the literal's bytes (D-062 item 2 edited).
 - Rule: the `r` format assigns a statement's blocks one to one like rmd/qmd/ipynb (`doc_owner()`, 11.5),
   so two calls never own one block; an unnamed backend goes to the editor writer (D-107 item 4 edited).
-- Contract-visible: notebook numbers from non-Python writers are kept; 04 section 11.5 not amended.
+- Contract-visible: notebook numbers from non-Python writers are kept; 04 section 11.5 amended.
 - Tests: test-doc-formats.R "notebook numbers keep their text and strings are written as json.dumps()"
   (Python repr tests out); test-doc-blocks.R "fax" backend test out.
   Evidence: progress/simplicity.md P15-S.
