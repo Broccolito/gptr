@@ -146,3 +146,36 @@ local_mcp_fixture = function(era = c("modern", "legacy"), transport = c("stdio",
   withr::defer(mcp_close_all(), envir = .env)
   list(spec = spec, log = function() mcp_fixture_log(log), stop = function() mcp_close_all())
 }
+
+# A fresh user config directory, home and vault for the calling test, so that gptr's user
+# mcp.json, the foreign harness files and the secrets of one test never reach another; the
+# registry is re-synced last, after the home and the project are restored
+local_mcp_home = function(.env = parent.frame()) {
+  withr::defer(mcp_sync(force = TRUE), envir = .env)
+  home = path_norm(withr::local_tempdir("home-", .local_envir = .env))
+  withr::local_envvar(HOME = home, USERPROFILE = home,
+                      APPDATA = file.path(home, "AppData", "Roaming"),
+                      XDG_CONFIG_HOME = file.path(home, ".config"), CODEX_HOME = "",
+                      R_USER_CONFIG_DIR = file.path(home, "gptr-config"),
+                      R_USER_CACHE_DIR = file.path(home, "gptr-cache"), .local_envir = .env)
+  vault_reset()
+  withr::defer(vault_reset(), envir = .env)
+  home
+}
+
+write_json_file = function(path, x) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  write_atomic(path, json_encode(x, pretty = TRUE))
+}
+
+# Register a fixture (local_mcp_fixture()) as gptr's user server `name` for the calling test
+local_mcp_server = function(fx, name = "fixture", .env = parent.frame()) {
+  s = fx$spec
+  if (identical(s$transport, "stdio")) {
+    gptr_mcp_add(name, command = s$command, args = s$args, env = s$env, timeout = 30)
+  } else {
+    gptr_mcp_add(name, url = s$url, timeout = 30)
+  }
+  withr::defer(gptr_mcp_remove(name), envir = .env)
+  invisible(name)
+}

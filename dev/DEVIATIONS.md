@@ -2036,6 +2036,26 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-subagent-team.R "gptr_parallel() returns a team of the members (contract 6.5 example)".
   Evidence: progress/P19.md Task 3.
 
+## D-167 - P18 MCP configuration: exact fields, safe mcp.json writes, untrusted precedence, failures (2026-10-06)
+- Rule: `mcp_entry_norm()` reads entry fields with exact `[[` (the plan's `$` read Codex's `env_vars` as
+  `env`, an unnamed env entry) and normalises `env` and `headers` once with `mcp_map_chr()`.
+- Rule: `mcp_file_update()` never rewrites a gptr `mcp.json` that is not a JSON object: `gptr_error_workspace`,
+  as P08's settings writer (the plan replaced it with only the new server); a blank file reads as empty;
+  listings record a diagnostic.
+- Rule: in an untrusted project gptr's user `mcp.json` wins a name collision with `.gptr/mcp.json` (03 section
+  6.14 "project when trusted"; the plan's order let the untrusted entry shadow it).
+- Rule: with `server = NULL`, `gptr_mcp(tools = TRUE)` records one server's connection failure as a registry
+  diagnostic and lists the others (the plan's refresh rule, now one loop); a named server's problem is raised.
+- Rule: no `mcp_trusted()`/`mcp_setting()`: P17's `trust_ok()` and `setting_get("mcp.<field>", default =)`
+  (Task 7 reads `mcp.budget` and `mcp.exposure` so); `local_mcp_home()` re-syncs the registry after the
+  home and project are restored, so no test's servers stay registered.
+- Contract-visible: `gptr_mcp_add()`/`gptr_mcp_remove()` signal `gptr_error_workspace` for that file (04
+  section 6.3 not amended).
+- Tests: test-mcp-config.R "foreign configs are found under user_home() ..." (+1, Codex `env_vars`),
+  "gptr_mcp_add() validates its arguments ..." (+4, broken, non-object and blank files), "gptr_mcp() lists
+  servers ..." (+1, untrusted shadowing), "gptr_mcp(tools = TRUE) uses a fresh tool cache ..." (+2, a failing
+  foreign server). Evidence: progress/P18.md Task 6.
+
 ## D-168 - P22 token bench: Task 11 re-baselines four rows it does not own (2026-10-06)
 - Rule: exception to "a row is refreshed only by the plan that owns its fixture" (`dev/bench/README.md`):
   P22 Task 11's `--update` also re-records `ns02-mixed-model`, `ns03-pipe-steering` (P07), `ns04-system-one`
