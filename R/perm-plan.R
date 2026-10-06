@@ -50,7 +50,7 @@ plan_slug = function(text) {
   if (is.na(slug) || !nzchar(slug)) "plan" else slug
 }
 
-#' A new path <workspace root>/plans/<YYYY-MM-DD>-<slug>[-n].md
+#' A new path <workspace root>/plans/<YYYY-MM-DD>-<slug>.md, or <slug>-<n>.md when taken
 #' @noRd
 plan_path = function(slug) {
   base = paste0(format(Sys.Date(), "%Y-%m-%d"), "-", slug)
