@@ -242,3 +242,17 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   gptr-config`, `local_project(trust = TRUE)` users green. Full suite: coordinator.
 - Reviews: none yet.
 - Deviations: none. Open: none.
+
+## P17-S - Skills, templates, plugins (2026-10-05)
+- S01 three SKILL.md copies of the guard tests; S02 skill and template roots on `res_roots()` (untrusted
+  project skill roots rank 7, as D-134), `res_foreign_names("command")`; S04 aliases and wrappers; S05
+  (D-151); S07 `template_expand_input()` in the test file; S12 `res_dir_specs()`, `res_md_files()`; S19
+  `plugin_from_dir(path, name, kind)`; S20 `res_group_fresh()`; `api_satisfies()`; is_string (R -237,
+  tests -91; plan ~247).
+- Red: FAIL 17 (merged alias refusal, aliases within the cap accepted, `res_md_files` missing). Green:
+  PASS 871 (895 before: -8 plugin_api_ok, -15 duplicated, -2 fm_size_ok, +1 unparseable API); `LC_ALL=C`
+  skill-templates 166. Lint clean. Neighbours: `arch-layers|lint-rules|zzz|ext-|gptr-config`,
+  `gptr-gateway|gptr-sdk|tool-read|tool-namespace|prompt-sections|session-add|agent-dispatch|s1-route|
+  cli-codex|cli-claude|subagent` green.
+- Reviews: none yet.
+- Deviations: D-151 (D-074, D-088 edited in place). Open: none.

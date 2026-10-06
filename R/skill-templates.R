@@ -115,28 +115,6 @@ template_expand = function(text, args = character()) {
   template_substitute(text, a)
 }
 
-#' Expand `/name args` input when `lookup` knows the template, else return the input unchanged
-#'
-#' `lookup` is a named list or chr of template texts, or `function(name)` returning the text or
-#' NULL. Pi's command pattern `^/([^\s]+)(?:\s+([\s\S]*))?$` (report 05 section 3.7).
-#' @noRd
-template_expand_input = function(text, lookup) {
-  if (!startsWith(text, "/")) return(text)
-  mm = regmatches(text, regexec("^/([^\\s]+)(?:\\s+([\\s\\S]*))?$", text, perl = TRUE))[[1L]]
-  if (!length(mm)) return(text)
-  name = mm[2L]
-  argstr = if (length(mm) >= 3L && !is.na(mm[3L])) mm[3L] else ""
-  content = if (is.function(lookup)) {
-    lookup(name)
-  } else if (name %in% names(lookup)) {
-    lookup[[name]]
-  } else {
-    NULL
-  }
-  if (is.null(content)) return(text)
-  template_substitute(content, template_args_parse(argstr))
-}
-
 # ---- template files, commands, builtin:prompts -----------------------------------------------
 
 #' Parse a template `.md` into a `prompt_template` spec (Pi `prompt-templates.ts`; 11.13)
@@ -161,7 +139,7 @@ template_parse = function(path, name = NULL) {
   meta = fm$meta
   body = fm$body %||% ""
   desc = meta[["description"]]
-  if (!is.character(desc) || length(desc) != 1L || !nzchar(desc)) {
+  if (!rlang::is_string(desc) || !nzchar(desc)) {
     lines = strsplit(body, "\n", fixed = TRUE)[[1L]]
     first = lines[nzchar(trimws(lines))][1L]
     desc = if (is.na(first)) {
@@ -177,10 +155,10 @@ template_parse = function(path, name = NULL) {
   res_spec("prompt_template", nm, list(
     text = body,
     description = desc,
-    argument_hint = if (is.character(hint) && length(hint) == 1L) hint else NULL,
+    argument_hint = if (rlang::is_string(hint)) hint else NULL,
     source = "user",
     path = path_norm(path),
-    model = if (is.character(model) && length(model) == 1L) model else NULL,
+    model = if (rlang::is_string(model)) model else NULL,
     allowed_tools = fm_chr_list(meta[["allowed-tools"]])
   ), diag_source = "builtin:prompts")
 }
@@ -228,29 +206,6 @@ template_command = function(tpl, group = NULL) {
   ), diag_source = "builtin:prompts")
 }
 
-#' Names of the process-level commands that something other than P17's templates registered
-#'
-#' A console command, the code of a plugin (its manifest `provides`) or `gptr_register()`.
-#' Decided per record id: a process-level `command` record that no filter disables and whose
-#' id is not one of P17's own (the records of the resource groups and the declarative records
-#' of plugin entries, Task 10's `ids`). A command registered under the name of a template
-#' command therefore counts, while a disabled or removed record of P17 hides nothing (D-133).
-#' @noRd
-template_foreign_commands = function() {
-  reg = registry_env()
-  registry_enter(reg)
-  on.exit(registry_leave(reg), add = TRUE)
-  recs = registry_recs(reg, get0("command", envir = reg$by_kind, inherits = FALSE))
-  if (!length(recs)) return(character())
-  st = res_state()
-  own = c(unlist(lapply(st$groups, function(g) g$ids), use.names = FALSE),
-          unlist(lapply(st$plugins, function(e) e$ids), use.names = FALSE))
-  keep = vapply(recs, function(r) {
-    is.null(r$session) && !(r$id %in% own) && !registry_rec_filtered(r, reg)
-  }, NA)
-  unique(vapply(recs[keep], function(r) r$name, ""))
-}
-
 #' Template and command specs for template files
 #'
 #' A template whose name is a command registered by something else (a console command, a
@@ -260,7 +215,7 @@ template_foreign_commands = function() {
 #' `source` field; `group` is the synced group of the commands (`template_sync()`).
 #' @noRd
 template_specs = function(files, labels = NULL, prefix = NULL, source = NULL, group = NULL) {
-  existing = template_foreign_commands()
+  existing = res_foreign_names("command")
   tpls = list()
   for (i in seq_along(files)) {
     nm = labels[i] %||% sub("\\.md$", "", basename(files[i]))
@@ -286,19 +241,10 @@ template_specs = function(files, labels = NULL, prefix = NULL, source = NULL, gr
   c(tpls, cmds)
 }
 
-#' Template files of a directory: direct `*.md` files only, no directories (Pi), or the file
-#' itself
-#' @noRd
-template_files = function(dir) {
-  if (!dir.exists(dir)) return(if (file.exists(dir) && grepl("\\.md$", dir)) dir else character())
-  f = list.files(dir, pattern = "\\.md$", full.names = TRUE)
-  sort(f[!dir.exists(f)], method = "radix")
-}
-
 #' Resource handler for gptr plugin `prompts/` directories
 #' @noRd
 template_dir_specs = function(paths, p, labels = NULL) {
-  template_specs(unlist(lapply(paths, template_files), use.names = FALSE),
+  template_specs(unlist(lapply(paths, res_md_files), use.names = FALSE),
                  source = paste0("plugin:", p$name))
 }
 
@@ -337,7 +283,7 @@ template_plugin_dispatcher = function(plugin, specs) {
   if (!length(tpls) || !is.character(plugin) || !nzchar(plugin)) return(list())
   texts = lapply(tpls, function(s) s[["text"]])
   names(texts) = substring(vapply(tpls, function(s) s[["name"]], ""), nchar(plugin) + 2L)
-  if (plugin %in% template_foreign_commands()) {
+  if (plugin %in% res_foreign_names("command")) {
     registry_diagnostic("builtin:prompts", "template", "collision",
                         paste0("/", plugin, " is an existing command; the plugin's commands ",
                                "keep their full names /", plugin, ":<cmd>"))
@@ -358,7 +304,7 @@ template_command_specs = function(paths, p, labels = NULL) {
   files = character()
   nms = character()
   for (i in seq_along(paths)) {
-    f = template_files(paths[i])
+    f = res_md_files(paths[i])
     files = c(files, f)
     lab = if (is.null(labels)) "" else labels[i] %||% ""
     nms = c(nms, if (nzchar(lab) && length(f) == 1L) lab else sub("\\.md$", "", basename(f)))
@@ -369,36 +315,25 @@ template_command_specs = function(paths, p, labels = NULL) {
 }
 
 #' Template roots: trusted project, user, gptr's own, attached packages, discovered paths
+#' (`res_roots()` without untrusted and plugin roots; plugin templates are `plugin_enable()`'s)
 #' @noRd
 template_roots = function() {
-  proj = if (trust_ok()) res_project_dirs(".gptr/prompts") else character()
-  user = file.path(gptr_user_dir("config"), "prompts")
-  user = user[dir.exists(user)]
-  builtin = res_builtin_dir("prompts")
-  pk = res_attached_dirs("prompts")
-  disc = res_state()$discovered$prompt_paths
-  disc = disc[dir.exists(disc)]
-  n = c(length(proj), length(user), length(builtin), nrow(pk), length(disc))
-  data.frame(
-    dir = c(proj, user, builtin, pk$dir, disc),
-    rank = rep(c(1L, 3L, 6L, 5L, 5L), n),
-    reg = c(rep("project", n[1L]), rep("user", n[2L]), rep("builtin:prompts", n[3L]),
-            res_prefix("plugin:", pk$pkg), rep("plugin:discovered", n[5L])),
-    stringsAsFactors = FALSE
-  )
+  roots = res_roots("prompts", res_project_dirs(".gptr/prompts"),
+                    file.path(gptr_user_dir("config"), "prompts"))
+  roots[roots$trusted & roots$origin != "plugin", , drop = FALSE]
 }
 
 #' The template files of one group of `template_roots()`
 #' @noRd
 template_group_files = function(roots, g) {
-  unlist(lapply(roots$dir[roots$reg == g], template_files), use.names = FALSE)
+  unlist(lapply(roots$dir[roots$reg == g], res_md_files), use.names = FALSE)
 }
 
 #' Signature of a template group: its files and the names among them that another command
 #' holds, so a command registered or removed after a sync re-syncs the group (D-133)
 #' @noRd
 template_group_sig = function(g, files) {
-  taken = intersect(sub("\\.md$", "", basename(files)), template_foreign_commands())
+  taken = intersect(sub("\\.md$", "", basename(files)), res_foreign_names("command"))
   paste(g, res_file_sig(files), paste(sort(taken, method = "radix"), collapse = ","),
         sep = "\n")
 }
@@ -406,10 +341,9 @@ template_group_sig = function(g, files) {
 #' Is the registered template group `g` what `template_sync()` would register now? (D-133)
 #' @noRd
 template_group_current = function(g) {
-  old = res_state()$groups[[paste0("prompts:", g)]]
-  if (is.null(old) || !identical(old$gen, registry_generation())) return(FALSE)
   roots = template_roots()
-  g %in% roots$reg && identical(old$sig, template_group_sig(g, template_group_files(roots, g)))
+  g %in% roots$reg &&
+    res_group_fresh(paste0("prompts:", g), template_group_sig(g, template_group_files(roots, g)))
 }
 
 #' Register discovered templates and their commands, one registry group per source
@@ -424,11 +358,7 @@ template_sync = function() {
   for (g in groups) {
     files = template_group_files(roots, g)
     sig = template_group_sig(g, files)
-    old = res_state()$groups[[paste0("prompts:", g)]]
-    if (!is.null(old) && identical(old$sig, sig) && identical(old$gen, registry_generation())) {
-      next
-    }
-    res_unregister(paste0("prompts:", g))
+    if (res_group_fresh(paste0("prompts:", g), sig)) next
     res_register(paste0("prompts:", g), template_specs(files, source = g, group = g),
                  source = g, rank = roots$rank[roots$reg == g][1L], sig = sig)
   }

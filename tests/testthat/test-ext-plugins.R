@@ -74,17 +74,6 @@ test_that("fm_chr_list accepts comma strings, space strings and arrays", {
   expect_null(fm_chr_list(""))
 })
 
-test_that("plugin_api_ok implements the requirement grammar (G1 section 3.5)", {
-  expect_true(plugin_api_ok(">= 1.0, < 2", have = "1.0"))
-  expect_true(plugin_api_ok("1.0", have = "1.3"))
-  expect_false(plugin_api_ok("1.2", have = "1.0"))
-  expect_false(plugin_api_ok("1", have = "2.0"))
-  expect_false(plugin_api_ok(">= 2.0", have = "1.0"))
-  expect_true(plugin_api_ok(NULL))
-  expect_true(plugin_api_ok(">= 1.0, < 2"))
-  expect_false(plugin_api_ok("about one", have = "1.0"))
-})
-
 test_that("rdepends_missing reads DESCRIPTION versions and loads nothing", {
   expect_identical(rdepends_missing(c("stats", "utils (>= 1.0)")), character())
   expect_identical(rdepends_missing("stats (>= 999.0)"), "stats (>= 999.0)")
@@ -126,8 +115,8 @@ test_that("res_project_dirs walks from the working directory up to the project r
   expect_identical(res_project_dirs(c(".agents/skills", ".claude/skills")),
                    c(path_norm(file.path(p, "sub", ".claude", "skills")),
                      path_norm(file.path(p, ".agents", "skills"))))
-  expect_true(res_inside(file.path(p, "sub", "x.R")))
-  expect_false(res_inside(tempdir()))
+  expect_true(path_inside(file.path(p, "sub", "x.R"), project_root()))
+  expect_false(path_inside(tempdir(), project_root()))
 })
 
 test_that("plugin_type_paths honours Claude manifest component keys and refuses escapes", {
@@ -221,7 +210,8 @@ test_that("frontmatter string keys keep R yaml's NA spellings as text (IC-71, D-
   expect_identical(fm$meta$license, NA_character_)
 })
 
-# Task 2 review round 3 (D-074): YAML aliases never expand without bound.
+# Task 2 review round 3 (D-074): YAML aliases never expand without bound. At most 4 references
+# to anchors reach yaml, so the text cap bounds what they expand to (D-151).
 
 fm_alias_chain = function(levels) {
   out = "x0: &a0 [a, b, c, d, e, f, g, h, i]"
@@ -240,17 +230,12 @@ test_that("frontmatter whose YAML aliases expand too far is an error string (D-0
   bomb = frontmatter_parse(c("---", "name: bomb", "description: d", fm_alias_chain(7L),
                              "metadata: *a7", "---", "x"))
   expect_null(bomb$meta)
-  expect_match(bomb$error %||% "", "too many aliases", fixed = TRUE)
-  # Round 5: at most 4 references to anchors reach yaml, so a fixture within that cap shows
-  # fm_size_ok() still refusing what they expand to.
+  expect_match(bomb$error %||% "", "too many merge keys, tags and aliases", fixed = TRUE)
   many = paste0("x0: &a0 [", paste(rep("a", 8000L), collapse = ","), "]")
   wide = frontmatter_parse(c("---", "name: wide", "description: d", many,
                              "x1: [*a0, *a0, *a0, *a0]", "---", "x"))
-  expect_null(wide$meta)
-  expect_match(wide$error %||% "", "too large once its aliases are expanded", fixed = TRUE)
-  long = strrep("y", 300000L)
-  expect_true(fm_size_ok(rep(list(long), 3L), 1e4, 1e6))
-  expect_false(fm_size_ok(rep(list(long), 4L), 1e4, 1e6))
+  expect_null(wide$error)
+  expect_identical(lengths(wide$meta$x1), rep(8000L, 4L))
 })
 
 test_that("fm_chr_list takes only flat values and never flattens nested lists (D-074)", {
@@ -290,7 +275,8 @@ test_that("frontmatter YAML that would make yaml slow is refused before yaml run
   }
   merges = frontmatter_parse(fm("base: &b {k: 1}", "m: {<<: [*b, *b, *b, *b, *b]}"))
   expect_null(merges$meta)
-  expect_match(merges$error %||% "", "invalid YAML frontmatter: too many aliases", fixed = TRUE)
+  expect_match(merges$error %||% "", "invalid YAML frontmatter: too many merge keys, tags and",
+               fixed = TRUE)
 })
 
 # Task 2 review round 5 (D-074 item 9): at most 4 references to anchors reach yaml, however the
@@ -311,7 +297,7 @@ test_that("frontmatter with more than 4 references to its anchors never reaches 
   expect_identical(merged$meta$mm, list(k = 1L))
   expect_identical(merged$meta$note, "Use *args, *kwargs and **bold** text *freely*.")
   local_mocked_bindings(fm_load = function(...) simpleError("yaml ran"))
-  refused = "invalid YAML frontmatter: too many aliases (more than 4 references to anchors)"
+  refused = "invalid YAML frontmatter: too many merge keys, tags and aliases (more than 4 in all)"
   b = "base: &b {k: 1}"
   five = "[*b, *b, *b, *b, *b]"
   bad = list(c(four, "m:", "  ? *a1", "  : 1"), c(four, "m:", "  *a1 : 1"),
@@ -633,6 +619,8 @@ test_that("an unmet API requirement disables the plugin with a diagnostic", {
   expect_null(registry_get("command", "p17-future", session = sid))
   diag = gptr_registry(diagnostics = TRUE)
   expect_true(any(grepl("requires gptr extension API >= 2.0", diag$message, fixed = TRUE)))
+  write_file(file.path(d, "plugin.json"), '{"name": "future-plug", "gptr": {"api": "about one"}}')
+  expect_warning(plugin_enable(d, 0L, session = "s00000000c8"), class = "gptr_warning_plugin")
 })
 
 test_that("missing rDepends disable a plugin", {

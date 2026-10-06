@@ -818,21 +818,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   1. `skill_parse(path)` never throws: an NA description is "description is required", an NA name falls back to the directory name, and any other error is a `builtin:skills` diagnostic `<path>: cannot parse the skill: <message>` and `NULL`; interrupts are not caught (contract 11.13, section 10 `skill` row).
   2. `fm_raw_tags` adds R yaml's `str#na`, `bool#na`, `int#na`, `float#na`, so the IC-71 string keys (`name`, `description`, `version`, `model`, `tools`, `argument-hint`) keep `.na` spellings as text; other keys keep typed values.
   3. Temporary test-side `local_trust_record()` in test-skill-discover.R; removed by P08 Task 9 (D-092 item 7), the test passes against the real `trust.get`.
-  4. `skill_setting_paths()` returns `list(project, user)`: relative `skills.paths` entries (resolved against the project root, `..` included) are project roots after `.gptr/skills`, `.agents/skills`, `.claude/skills` (rank 1, origin `project`, trust from `trust_ok()`); absolute and home entries are user roots (rank 3); NA entries are dropped (IC-52, contract 6.3).
-  5. Alias expansion is bounded: `fm_yaml()` refuses parsed YAML that `fm_size_ok()` finds expanding past 10,000 values or 1,000,000 string bytes beyond its own text (`invalid YAML frontmatter: too large once its aliases are expanded`); `fm_chr_list()` returns NULL for a value that is not flat (`fm_flat()`), diagnosed `allowed-tools must be a list of tool names; it was ignored`; `disable-model-invocation` is read only from a logical scalar or a text scalar `true` (any case), else FALSE, never converted to text; item 9's 4-reference cap bounds expansion inside yaml itself.
+  4. `skill_setting_paths()` returns `list(project, user)`: relative `skills.paths` entries (resolved against the project root, `..` included) are project roots after `.gptr/skills`, `.agents/skills`, `.claude/skills` (rank 1, or 7 when untrusted as in D-134; origin `project`, trust from `trust_ok()`); absolute and home entries are user roots (rank 3); NA entries are dropped (IC-52, contract 6.3).
+  5. Alias expansion is bounded by item 9's cap (D-151); `fm_chr_list()` returns NULL for a value that is not flat (`fm_flat()`), diagnosed `allowed-tools must be a list of tool names; it was ignored`; `disable-model-invocation` is read only from a logical scalar or a text scalar `true` (any case), else FALSE, never converted to text.
   6. The frontmatter read runs under `suppressWarnings()`: an unreadable file gives only the `cannot read the file` diagnostic (contract 6.3, 11.13).
   7. Only `~`, `~/` and `~\` entries are home directories (IC-63); any other `~name` entry is a relative project root under item 4.
   8. A skill name must match `^[a-z0-9][a-z0-9-]*\z` (PCRE, bytes): `skill_parse()` skips others with `<path>: name must match ^[a-z0-9][a-z0-9-]*$ to its last character; the skill was skipped`; every P02 `perl = TRUE` name and version rule (provider id, tool name and namespace, skill, command, setting, env_alias, kind specs, `kind_define()` names, IC-74 `decision.server_min`) ends in `\z`, its message still shows `$`. A name the `skill` kind refuses (`Bad_Name`) now gets this diagnostic instead of `res_spec()`'s `invalid_spec` one.
-  9. `fm_text_problem()` refuses text before yaml runs (`meta = NULL`; the skill is skipped with the message, siblings listed), on bytes so invalid UTF-8 never warns: more than 16,384 bytes (`invalid YAML frontmatter: too large (more than 16384 bytes)`); more than 1,000 `[`/`{` in all or more than 64 `-`/`?` block entries in a row (`invalid YAML frontmatter: too deeply nested (...)`); more than 4 references, a reference being any `*name` whose `name` (`[0-9A-Za-z_-]+`) also occurs as `&name` (`invalid YAML frontmatter: too many aliases (more than 4 references to anchors)`); more than 4 merge keys, tags and references in all, counting every `<<` and every `!` at the text start or after an ASCII character other than a letter, digit or `!`, U+0085, U+2028, U+2029 or a BOM (`invalid YAML frontmatter: too many merge keys, tags and aliases (more than 4 in all)`).
+  9. `fm_text_problem()` refuses text before yaml runs (`meta = NULL`; the skill is skipped with the message, siblings listed), on bytes so invalid UTF-8 never warns: more than 16,384 bytes (`invalid YAML frontmatter: too large (more than 16384 bytes)`); more than 1,000 `[`/`{` in all or more than 64 `-`/`?` block entries in a row (`invalid YAML frontmatter: too deeply nested (...)`); more than 4 merge keys, tags and references in all, counting every `<<`, every `!` at the text start or after an ASCII character other than a letter, digit or `!`, U+0085, U+2028, U+2029 or a BOM, and every `*name` whose `name` (`[0-9A-Za-z_-]+`) also occurs as `&name` (`invalid YAML frontmatter: too many merge keys, tags and aliases (more than 4 in all)`; D-151).
 - Contract-visible: the diagnostics and error strings above (contract 6.3, 11.13 "diagnostics, never errors"); P02 name and version
   rules end in `\z` (messages unchanged); relative and `~name` `skills.paths` entries are project content, `project (untrusted)` in
   an untrusted project (contract 6.3, IC-52). No section amended.
-- Open: `R/perm-classify.R` (~line 903) still anchors with `$` (P11-A, HANDOFF section 6); simplicity package P17-S S05 would drop
-  `fm_size_ok()` (new D-entry).
-- Tests: test-skill-discover.R: 12 blocks from "NA spellings in SKILL.md frontmatter never stop gptr_skills() (IC-71)" to "a SKILL.md
-  with more than 4 merge keys, tags and aliases is skipped before yaml" (the newline-directory and unreadable-file blocks skip on
-  Windows or where the file system refuses); test-ext-plugins.R: the 6 `(D-074)` blocks; test-ext-specs.R: "name and version rules
-  refuse a trailing newline (PCRE $ matches before one)". Evidence: progress/P17.md Task 2; progress/P02.md (post-completion fix).
+- Open: `R/perm-classify.R` (~line 903) still anchors with `$` (P11-A, HANDOFF section 6).
+- Tests: test-skill-discover.R: 9 blocks from "NA spellings in SKILL.md frontmatter never stop gptr_skills() (IC-71)" to "a skill
+  directory whose name ends in a newline is refused too" (the newline-directory and unreadable-file blocks skip on Windows or where
+  the file system refuses); test-ext-plugins.R: the 6 `(D-074)` blocks; test-ext-specs.R: "name and version rules refuse a trailing
+  newline (PCRE $ matches before one)". Evidence: progress/P17.md Task 2; progress/P02.md (post-completion fix).
 
 ## D-075 - P07 tool additions: by value only when sendable and callable; hidden never announced; no redeclaring (2026-10-04)
 - Rule: `R/prompt-sections.R` (contract 7.7, 9.1, IC-69):
@@ -1008,15 +1007,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-prompt-compact.R: Task 13 adaptations and review fixes (rounds 1 and 3) blocks (20 tests). Evidence: progress/P07.md Task 13.
 
 ## D-088 - P17 plugin resolution: non-object manifests, newest existing install, `~` via user_home(), key as name (2026-10-04)
-- Rule: `plugin_resolve()` and `plugin_manifest_read()` change as below; `plugin_api_req()`, `plugin_from_dir()`, `plugin_from_package()` and the resolution order are the plan's.
+- Rule: `plugin_resolve()`, `plugin_manifest_read()` and `plugin_from_dir()` change as below; `plugin_api_req()`, `plugin_from_package()` and the resolution order are the plan's.
   1. A `plugin.json` that is not a JSON object (string, number, boolean, array, null) is the `user`/`plugin`/`manifest` diagnostic "<file>: the manifest is not a JSON object" and gives `NULL`, as invalid JSON (contract 7.17).
   2. An installed Claude plugin uses the newest entry whose `installPath` exists; non-object entries, a plugin not given as an array of entries, or a non-object file are skipped; a `lastUpdated` that is not one string sorts last.
   3. A name is tested with `dir.exists(path_norm(name))`, so `~` expands with `user_home()`, never R's expansion (IC-63).
-  4. `plugin_from_claude_install(name, path)` keeps a manifest name that is one non-empty string, else uses the installed key without `@<marketplace>`; a directly given path is still named by `plugin_from_dir()`.
+  4. An installed Claude plugin, `plugin_from_dir(path, key, "claude-plugin")`, keeps a manifest name that is one non-empty string, else uses the installed key without `@<marketplace>`; a directly given path is still named after its directory.
 - Contract-visible: the manifest diagnostic of item 1; installed Claude plugins without a manifest name are named by their key.
 - Counts: every later P17 count for test-ext-plugins.R is 175 higher than the plan's (82 -> 257 at Task 9, 133 -> 308, 166 -> 341, 184 -> 359); acceptance 1 is 745 (with D-072, D-074, D-084, D-086), 3a 359 and 4c 522 (IC-74; D-129 raises 1 and 4c again).
 - Tests: test-ext-plugins.R: Task 9 adaptations (D-088) (5 tests). Evidence: progress/P17.md Task 9.
-- Open (P17 Task 11): `plugin_candidates()` must name installed Claude plugins through `plugin_from_claude_install()`.
 
 ## D-089 - P18 OAuth helpers: UTF-8 percent-encoding, first-`=` query split, exact fields, token challenges (2026-10-04)
 - Rule: `R/auth-oauth.R` differs from the plan literal in six places (the plan's 8 tests kept):
@@ -1815,6 +1813,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   run's requests (`pcli_hook_usage()`). A per-call `budget =` and a root's remaining budget (IC-66)
   do not reach `--max-turns`/`--max-budget-usd` or the codex cap, which IC-65 asks for; P06 still
   stops the run at the next request boundary. The hook cannot read the run's budget (`ctx` has no
+
+## D-151 - P17 frontmatter: one cap on merge keys, tags and aliases; no expansion check after yaml (2026-10-05)
+- Rule: `fm_size_ok()` and the alias-only refusal `too many aliases (more than 4 references to anchors)` go
+  (simplicity P17-S S05; reverts D-074 item 5's expansion check and item 9's separate alias count): every
+  reference counts in the one cap of 4 merge keys, tags and references, refused before yaml runs as
+  `invalid YAML frontmatter: too many merge keys, tags and aliases (more than 4 in all)`.
+- Rule: 4 references in at most 16,384 bytes expand to at most about 2^4 times the text, so YAML within the
+  caps is accepted however its aliases expand (`too large once its aliases are expanded` no longer occurs).
+- Contract-visible: those diagnostic strings (contract 6.3, 11.13 "diagnostics, never errors"); no section
+  amended.
+- Tests: test-ext-plugins.R "frontmatter whose YAML aliases expand too far is an error string (D-074)" and
+  the three `(D-074)` refusal blocks; test-skill-discover.R "a SKILL.md whose YAML aliases expand too far is
+  skipped with a diagnostic". Evidence: progress/simplicity.md P17-S.
   such member; L1 may not call P06, IC-33).
 - Contract-visible: proposed, not edited (outside lane cli-sub): the 04 section 10.4 `request_params`
   payload gains `budget`, the run chain's remaining `turns` and `cost` (P06 `run_chain()`,

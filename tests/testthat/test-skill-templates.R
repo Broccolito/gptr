@@ -5,6 +5,14 @@ pi_oracle = function() {
   json_decode(read_utf8(path)$text)
 }
 
+# Pi's `/name args` expansion for the oracle: Pi's command pattern (report 05 section 3.7) and a
+# named list of template texts
+template_expand_input = function(text, lookup) {
+  mm = regmatches(text, regexec("^/([^\\s]+)(?:\\s+([\\s\\S]*))?$", text, perl = TRUE))[[1L]]
+  if (!length(mm) || !(mm[2L] %in% names(lookup))) return(text)
+  template_substitute(lookup[[mm[2L]]], template_args_parse(mm[3L]))
+}
+
 test_that("Pi's 67 template tests pass (report 05 section 5.1)", {
   o = pi_oracle()
   n = 0L
@@ -303,7 +311,7 @@ test_that("only files are template files (D-133)", {
   root = withr::local_tempdir()
   dir.create(file.path(root, "dir.md"))
   writeLines("x", file.path(root, "a.md"))
-  expect_identical(template_files(root), file.path(root, "a.md"))
+  expect_identical(res_md_files(root), file.path(root, "a.md"))
 })
 
 # Task 6 review round 1 (D-133): ownership by record id; ASCII whitespace in template names
@@ -322,7 +330,7 @@ test_that("a filtered template command does not hide a later command (D-133)", {
   writeLines("Project review $1", file.path(p, ".gptr", "prompts", "review.md"))
   template_sync()
   expect_identical(registry_get("command", "review")$handler("x", NULL), "real")
-  expect_true("review" %in% template_foreign_commands())
+  expect_true("review" %in% res_foreign_names("command"))
 })
 
 test_that("a filtered template command does not keep a user template running (D-133)", {
@@ -389,7 +397,7 @@ test_that("only enabled process-level commands of others hold a template's name 
   for (f in c("p17-off.md", "p17-sess.md")) writeLines("Template $1", file.path(user, f))
   withr::defer(unlink(file.path(user, c("p17-off.md", "p17-sess.md"))))
   template_sync()
-  expect_false(any(c("p17-off", "p17-sess") %in% template_foreign_commands()))
+  expect_false(any(c("p17-off", "p17-sess") %in% res_foreign_names("command")))
   expect_identical(registry_get("command", "p17-off")$handler("x", NULL),
                    list(prompt = "Template x"))
   expect_identical(registry_get("command", "p17-sess")$handler("x", NULL),

@@ -85,57 +85,50 @@ skill_parse = function(path) {
   diag = function(msg) {
     registry_diagnostic("builtin:skills", "skill", "warning", paste0(path, ": ", msg))
   }
-  tryCatch(skill_parse_md(path, diag), error = function(e) {
+  tryCatch({
+    fm = frontmatter_read(path)
+    if (!is.null(fm$error)) {
+      diag(fm$error)
+      return(NULL)
+    }
+    meta = fm$meta
+    desc = meta[["description"]]
+    if (!rlang::is_string(desc) || !nzchar(trimws(desc))) {
+      diag("description is required")
+      return(NULL)
+    }
+    desc = trimws(gsub("[[:space:]]+", " ", desc))
+    if (nchar(desc) > 1024L) {
+      diag(paste0("description exceeds 1024 characters (", nchar(desc), "); it was cut"))
+      desc = substr(desc, 1L, 1024L)
+    }
+    dir = dirname(path)
+    name = meta[["name"]]
+    if (!rlang::is_string(name) || !nzchar(name)) name = basename(dir)
+    for (p in skill_name_problems(name)) diag(p)
+    if (!grepl("^[a-z0-9][a-z0-9-]*\\z", name, perl = TRUE, useBytes = TRUE)) {
+      diag("name must match ^[a-z0-9][a-z0-9-]*$ to its last character; the skill was skipped")
+      return(NULL)
+    }
+    if (!identical(name, basename(dir))) diag("name does not match the directory name")
+    if (isTRUE(fm$repaired)) diag("frontmatter was not valid YAML; repaired by quoting values")
+    dmi = meta[["disable-model-invocation"]]
+    tools = meta[["allowed-tools"]]
+    if (!fm_flat(tools)) diag("allowed-tools must be a list of tool names; it was ignored")
+    res_spec("skill", name, list(
+      description = desc,
+      path = path_norm(path),
+      dir = path_norm(dir),
+      source = "user",
+      disable_model_invocation = isTRUE(dmi) || (rlang::is_string(dmi) && tolower(dmi) == "true"),
+      allowed_tools = fm_chr_list(tools) %||% character(),
+      tokens = est_tokens(skill_line(name, desc), "prose"),
+      version = if (is.character(meta[["version"]])) meta[["version"]] else NULL
+    ), diag_source = "builtin:skills")
+  }, error = function(e) {
     diag(paste0("cannot parse the skill: ", conditionMessage(e)))
     NULL
   })
-}
-
-#' The body of `skill_parse()`; `diag(msg)` records a diagnostic for `path`
-#' @noRd
-skill_parse_md = function(path, diag) {
-  fm = frontmatter_read(path)
-  if (!is.null(fm$error)) {
-    diag(fm$error)
-    return(NULL)
-  }
-  meta = fm$meta
-  desc = meta[["description"]]
-  if (!is.character(desc) || length(desc) != 1L || is.na(desc) || !nzchar(trimws(desc))) {
-    diag("description is required")
-    return(NULL)
-  }
-  desc = trimws(gsub("[[:space:]]+", " ", desc))
-  if (nchar(desc) > 1024L) {
-    diag(paste0("description exceeds 1024 characters (", nchar(desc), "); it was cut"))
-    desc = substr(desc, 1L, 1024L)
-  }
-  dir = dirname(path)
-  name = meta[["name"]]
-  if (!is.character(name) || length(name) != 1L || is.na(name) || !nzchar(name)) {
-    name = basename(dir)
-  }
-  for (p in skill_name_problems(name)) diag(p)
-  if (!grepl("^[a-z0-9][a-z0-9-]*\\z", name, perl = TRUE, useBytes = TRUE)) {
-    diag("name must match ^[a-z0-9][a-z0-9-]*$ to its last character; the skill was skipped")
-    return(NULL)
-  }
-  if (!identical(name, basename(dir))) diag("name does not match the directory name")
-  if (isTRUE(fm$repaired)) diag("frontmatter was not valid YAML; repaired by quoting values")
-  dmi = meta[["disable-model-invocation"]]
-  dmi_text = is.character(dmi) && length(dmi) == 1L && !is.na(dmi)
-  tools = meta[["allowed-tools"]]
-  if (!fm_flat(tools)) diag("allowed-tools must be a list of tool names; it was ignored")
-  res_spec("skill", name, list(
-    description = desc,
-    path = path_norm(path),
-    dir = path_norm(dir),
-    source = "user",
-    disable_model_invocation = isTRUE(dmi) || (dmi_text && identical(tolower(dmi[[1L]]), "true")),
-    allowed_tools = fm_chr_list(tools) %||% character(),
-    tokens = est_tokens(skill_line(name, desc), "prose"),
-    version = if (is.character(meta[["version"]])) meta[["version"]] else NULL
-  ), diag_source = "builtin:skills")
 }
 
 #' `skill_parse()` once per file version
@@ -153,7 +146,7 @@ skill_setting_paths = function() {
   p = as.character(unlist(setting_get("skills", default = list())[["paths"]], use.names = FALSE))
   p = p[!is.na(p)]
   home = p == "~" | grepl("^~[/\\\\]", p)
-  rel = !grepl("^([A-Za-z]:)?[/\\\\]", p) & !home
+  rel = !is_abs_path(p) & !home
   list(project = path_norm(file.path(rep(project_root(), sum(rel)), p[rel])),
        user = path_norm(p[!rel]))
 }
@@ -162,42 +155,18 @@ skill_setting_paths = function() {
 #'
 #' Project `.gptr/skills`, `.agents/skills`, `.claude/skills` (nearest directory first) and the
 #' relative `skills.paths` entries, user directories under `gptr_user_dir("config")` and
-#' `user_home()` plus the absolute and `~` `skills.paths` entries, gptr's own, attached packages,
-#' enabled plugins and `resources_discover` paths. Returns
-#' `data.frame(dir, origin, rank, reg, label, trusted)`: `reg` is the registry source, `label`
-#' the listing source.
+#' `user_home()` plus the absolute and `~` `skills.paths` entries, then the shared roots of
+#' `res_roots()`.
 #' @noRd
 skill_roots = function() {
-  trusted = trust_ok()
   extra = skill_setting_paths()
   proj = c(res_project_dirs(c(".gptr/skills", ".agents/skills", ".claude/skills")),
            extra$project)
-  proj = unique(proj[dir.exists(proj)])
   home = user_home()
   user = c(file.path(gptr_user_dir("config"), "skills"), file.path(home, ".agents", "skills"),
            file.path(home, ".claude", "skills"), file.path(home, ".codex", "skills"),
            file.path(home, ".pi", "agent", "skills"), extra$user)
-  user = unique(user[dir.exists(user)])
-  builtin = res_builtin_dir("skills")
-  pk = res_attached_dirs("skills")
-  pl = res_plugin_dirs("skills")
-  disc = res_state()$discovered$skill_paths
-  disc = disc[dir.exists(disc)]
-  n = c(length(proj), length(user), length(builtin), nrow(pk), nrow(pl), length(disc))
-  data.frame(
-    dir = c(proj, user, builtin, pk$dir, pl$dir, disc),
-    origin = rep(c("project", "user", "builtin", "package", "plugin", "discovered"), n),
-    rank = c(rep(1L, n[1L]), rep(3L, n[2L]), rep(6L, n[3L]), rep(5L, n[4L]),
-             as.integer(pl$rank), rep(5L, n[6L])),
-    reg = c(rep("project", n[1L]), rep("user", n[2L]), rep("builtin:skills", n[3L]),
-            res_prefix("plugin:", pk$pkg), res_prefix("plugin:", pl$name),
-            rep("plugin:discovered", n[6L])),
-    label = c(rep(if (trusted) "project" else "project (untrusted)", n[1L]),
-              rep("user", n[2L]), rep("builtin", n[3L]), res_prefix("package:", pk$pkg),
-              res_prefix("plugin:", pl$name), rep("discovered", n[6L])),
-    trusted = c(rep(trusted, n[1L]), rep(TRUE, sum(n[-1L]))),
-    stringsAsFactors = FALSE
-  )
+  res_roots("skills", unique(proj[dir.exists(proj)]), unique(user))
 }
 
 #' Discover every skill: `list(rows, specs)`, aligned by position
@@ -328,7 +297,7 @@ skill_group_sig = function(df, g, i) paste(g, res_file_sig(df$path[i]))
 #' Skill specs the catalog may show for a session: model-invocable registered skills
 #' @noRd
 skill_visible_specs = function(session = NULL) {
-  specs = tryCatch(registry_all("skill", session = res_session_id(session)),
+  specs = tryCatch(registry_all("skill", session = ext_session_id(session)),
                    error = function(e) list())
   Filter(function(s) !isTRUE(s[["disable_model_invocation"]]) && !isTRUE(s[["lazy"]]), specs)
 }
@@ -336,9 +305,8 @@ skill_visible_specs = function(session = NULL) {
 #' Catalog budget: `gptr.skills_budget` when set, else the `skills.budget` setting, else 1,500
 #' @noRd
 skills_budget = function() {
-  if (!is.null(getOption("gptr.skills_budget"))) return(as.integer(gptr_opt("skills_budget")))
-  b = setting_get("skills", default = list())[["budget"]]
-  as.integer(b %||% gptr_opt("skills_budget") %||% 1500L)
+  b = getOption("gptr.skills_budget") %||% setting_get("skills", default = list())[["budget"]]
+  as.integer(b %||% gptr_opt("skills_budget"))
 }
 
 #' The compact skill catalog (service `skill.catalog`; contract 7.0; G2 (b); IC-68)
@@ -392,7 +360,7 @@ skill_catalog = function(session = NULL, budget = skills_budget()) {
 #' session argument).
 #' @noRd
 skill_find = function(name, session = NULL) {
-  sid = res_session_id(session)
+  sid = ext_session_id(session)
   hit = res_match(name, registry_names("skill", session = sid), "skill")
   if (length(hit)) return(registry_get("skill", hit, session = sid))
   for (e in res_state()$plugins) {
@@ -408,9 +376,7 @@ skill_find = function(name, session = NULL) {
 
 #' Does a skill's `SKILL.md` still exist?
 #' @noRd
-skill_file_ok = function(path) {
-  is.character(path) && length(path) == 1L && !is.na(path) && file.exists(fs_path(path))
-}
+skill_file_ok = function(path) rlang::is_string(path) && file.exists(fs_path(path))
 
 #' Does the registry hold the project skills a sync would register now?
 #'
@@ -427,32 +393,22 @@ skill_project_synced = function() {
   !is.null(have) && identical(have$sig, skill_group_sig(df, "project", want))
 }
 
-#' May `skill_body()` serve a skill it found in the registry without syncing first?
-#'
-#' The registry holds what the last `skill_sync()` saw, and P08 builds `skills =` preloads before
-#' `session_start` syncs again. So the `SKILL.md` must still exist and the registered project
-#' skills must be the current project's (`skill_project_synced()`): a project skill of another,
-#' an untrusted or a nested project is never served, and a current project skill displaces a
-#' user, package or built-in skill of its name (rank 1, 04 section 10.1; IC-52; D-129).
-#' @noRd
-skill_spec_current = function(spec) {
-  skill_file_ok(spec[["path"]]) && skill_project_synced()
-}
-
 #' The body of a skill (service `skill.body`; contract 7.0)
 #'
 #' Returns `list(text, dir, name)`: the body without frontmatter plus one line naming the
 #' `skill:<name>/<path>` pseudo-paths, the skill directory and the canonical name. Used by
 #' `skills =` preloads and by `read` of `skill:<name>/...` pseudo-paths (P10); it marks the skill
-#' as used for catalog trimming. A registered skill that is no longer current
-#' (`skill_spec_current()`) is looked up again after a sync. An untrusted project's skill signals
-#' `gptr_error_untrusted`; an unknown name, or a skill whose `SKILL.md` is gone,
-#' `gptr_error_invalid_argument`.
+#' as used for catalog trimming. P08 builds `skills =` preloads before `session_start` syncs, so
+#' a registered skill is served without a sync only while its `SKILL.md` exists and
+#' `skill_project_synced()` holds: a skill of another, an untrusted or a nested project is never
+#' served, and a current project skill displaces others of its name (rank 1; IC-52; D-129). An
+#' untrusted project's skill signals `gptr_error_untrusted`; an unknown name, or a skill whose
+#' `SKILL.md` is gone, `gptr_error_invalid_argument`.
 #' @noRd
 skill_body = function(name, session = NULL) {
   check_string(name, "name")
   spec = skill_find(name, session)
-  if (is.null(spec) || !skill_spec_current(spec)) {
+  if (is.null(spec) || !skill_file_ok(spec[["path"]]) || !skill_project_synced()) {
     skill_sync()
     spec = skill_find(name, session)
     if (!is.null(spec) && !skill_file_ok(spec[["path"]])) spec = NULL
@@ -482,22 +438,6 @@ skills_section_text = function(ctx) {
   if (!("read" %in% ctx$input$tool_names)) return(NULL)
   txt = skill_catalog(ctx$session, skills_budget())
   if (nzchar(txt)) txt else NULL
-}
-
-#' Resource handler for plugin `skills/` directories (installed with `res_handler_set()`)
-#' @noRd
-skill_dir_specs = function(paths, p, labels = NULL) {
-  out = list()
-  for (d in paths) {
-    for (f in skill_walk(d)) {
-      s = skill_parse_cached(f)
-      if (is.null(s)) next
-      s[["source"]] = paste0("plugin:", p$name)
-      out[[length(out) + 1L]] = s
-    }
-  }
-  nm = vapply(out, function(s) s[["name"]], "")
-  out[!duplicated(nm)]
 }
 
 #' Is this a child session (depth > 0)? Children reuse what their root session synced.
@@ -537,4 +477,4 @@ builtin_skills = function(gptr) {
 on_load(ext_declare_builtin("skills", builtin_skills))
 on_load(ext_service_set("skill.catalog", skill_catalog, provided_by = "P17", builtin = "skills"))
 on_load(ext_service_set("skill.body", skill_body, provided_by = "P17", builtin = "skills"))
-on_load(res_handler_set("skills", skill_dir_specs))
+on_load(res_handler_set("skills", res_dir_specs(skill_walk, skill_parse_cached)))

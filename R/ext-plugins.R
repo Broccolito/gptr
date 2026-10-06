@@ -60,14 +60,6 @@ res_match = function(name, candidates, what) {
   hit[seq_len(min(1L, length(hit)))]
 }
 
-#' `paste0(prefix, x)` that stays empty for an empty `x`
-#' @noRd
-res_prefix = function(prefix, x) if (length(x)) paste0(prefix, x) else character()
-
-#' The session id of a session, a session id, or NULL (P02's `ext_session_id()` rule)
-#' @noRd
-res_session_id = function(session) ext_session_id(session)
-
 # ---- frontmatter (report 05 section 5.2; contract 11.13; IC-71) -----------------------------
 
 #' Frontmatter keys whose scalars keep their source text (IC-71)
@@ -111,51 +103,20 @@ fm_repair = function(y) {
   paste(out, collapse = "\n")
 }
 
-#' Whether a parsed YAML value stays small once its aliases are expanded
-#'
-#' yaml shares an aliased node, so a short text (`&a0 [...]`, `&a1 [*a0, *a0, ...]`, ...) loads
-#' quickly but expands exponentially in `as.character()` or `unlist()`. Counts values (one per
-#' list, one per element of an atomic vector) and string bytes level by level, with vectorised
-#' steps, and stops as soon as either count passes its limit, so the cost is bounded by
-#' `max_values` whatever the aliasing (D-074).
-#' @noRd
-fm_size_ok = function(x, max_values, max_bytes) {
-  chr_bytes = function(s) sum(as.numeric(nchar(s, type = "bytes")), na.rm = TRUE)
-  level = list(x)
-  values = 0
-  bytes = 0
-  while (length(level)) {
-    is_list = vapply(level, is.list, NA)
-    atoms = level[!is_list]
-    values = values + sum(is_list) + sum(lengths(atoms))
-    chr = atoms[vapply(atoms, is.character, NA)]
-    bytes = bytes + sum(vapply(chr, chr_bytes, 0))
-    level = level[is_list]
-    if (values + sum(lengths(level)) > max_values || bytes > max_bytes) return(FALSE)
-    level = unlist(level, recursive = FALSE, use.names = FALSE)
-  }
-  TRUE
-}
-
 #' Why frontmatter YAML text is refused before yaml parses it, or NULL
 #'
 #' yaml's work grows faster than its input: with the square of the number of keys in a map (it
 #' checks each new key against the others), with the square of the nesting depth of flow
 #' collections (`[[[...]]]`) and of block entries opened on one line (`- - - x`), with the size
-#' of a map times the number of merges into it or above it, and with what an aliased collection
-#' used as a mapping key expands to (yaml turns the key into text, so a chain of aliases costs
-#' about ninefold per level). Frontmatter is a few kilobytes, so the text may hold at most
-#' 16,384 bytes, 1,000 `[` and `{` (a bound on the flow depth that quoted brackets cannot hide),
-#' 64 `-` or `?` entries in a row, and 4 references to the anchors it defines: every `*name`
-#' whose `name` is the name of an `&name` anywhere in the text (libyaml's names are
-#' `[0-9A-Za-z_-]+`), so no key syntax, merge spelling (`<<:`, `? <<`, a `!!merge` tag) or
-#' separator can hide a reference. yaml merges under a `<<` key, under a key with any tag that
-#' names merge (`!!merge`, `!merge`, `!<merge>`, percent-encoded spellings) and under an alias
-#' of an anchored merge key, so the text may also hold at most 4 merge keys, tags and references
-#' in all: every `<<`, every `!` that can start a tag (one that follows the start of the text,
-#' an ASCII character other than a letter, a digit or `!`, the line breaks U+0085, U+2028 and
-#' U+2029, or a byte order mark), and the references above. The patterns are ASCII, so bytes are
-#' matched (D-074).
+#' of a map times the number of merges into it or above it, and with what aliases expand to.
+#' Frontmatter is a few kilobytes, so the text may hold at most 16,384 bytes, 1,000 `[` and `{`
+#' (a bound on the flow depth that quoted brackets cannot hide), 64 `-` or `?` entries in a row,
+#' and 4 merge keys, tags and references in all, which also bounds alias expansion (D-151): every
+#' `<<`, every `!` that can start a tag (one that follows the start of the text, an ASCII
+#' character other than a letter, a digit or `!`, the line breaks U+0085, U+2028 and U+2029, or a
+#' byte order mark; yaml merges under any tag that names merge) and every `*name` whose `name`
+#' (libyaml's `[0-9A-Za-z_-]+`) is that of an `&name` anywhere in the text, so no key syntax,
+#' merge spelling or separator hides one. The patterns are ASCII, so bytes are matched (D-074).
 #' @noRd
 fm_text_problem = function(y) {
   max_bytes = 16384L
@@ -182,9 +143,6 @@ fm_text_problem = function(y) {
   }
   anchors = names_after("&")
   refs = if (length(anchors)) sum(names_after("\\*") %in% anchors) else 0L
-  if (refs > max_aliases) {
-    return(paste0("too many aliases (more than ", max_aliases, " references to anchors)"))
-  }
   tag = "(?:^|[^0-9A-Za-z!\\x80-\\xFF]|\\xC2\\x85|\\xE2\\x80[\\xA8\\xA9]|\\xEF\\xBB\\xBF)!"
   if (hits("<<") + hits(tag) + refs > max_aliases) {
     return(paste0("too many merge keys, tags and aliases (more than ", max_aliases, " in all)"))
@@ -197,9 +155,7 @@ fm_text_problem = function(y) {
 #' Strict yaml first, then once more after `fm_repair()`; never evaluates `!expr` tags. The
 #' values of `fm_string_keys` keep their source text, so `name: on` stays `"on"` and
 #' `version: 1.0` stays `"1.0"` (IC-71). A failure gives `meta = NULL` and the message. So
-#' does text that `fm_text_problem()` refuses before yaml runs, and YAML whose aliases expand to
-#' more than 10,000 values or 1,000,000 string bytes beyond the size of the text (an alias bomb;
-#' `fm_size_ok()`, D-074).
+#' does text that `fm_text_problem()` refuses before yaml runs.
 #' @noRd
 fm_yaml = function(y) {
   if (!nzchar(trimws(y))) return(list(meta = list(), repaired = FALSE, error = NULL))
@@ -220,13 +176,8 @@ fm_yaml = function(y) {
     return(list(meta = NULL, repaired = FALSE,
                 error = paste0("invalid YAML frontmatter: ", conditionMessage(typed))))
   }
-  size = nchar(used, type = "bytes")
-  too_large = list(meta = NULL, repaired = FALSE,
-                   error = "invalid YAML frontmatter: too large once its aliases are expanded")
-  if (!fm_size_ok(typed, 1e4 + size, 1e6 + size)) return(too_large)
   meta = if (is.list(typed) && !is.null(names(typed))) typed else list()
   raw = fm_load(used, raw = TRUE)
-  if (!fm_size_ok(raw, 1e4 + size, 1e6 + size)) return(too_large)
   if (is.list(raw) && !is.null(names(raw))) {
     for (k in intersect(fm_string_keys, names(raw))) {
       v = raw[[k]]
@@ -336,21 +287,22 @@ res_spec = function(kind, name, fields, diag_source = "user") {
   )
 }
 
+#' Is the resource group registered with signature `sig` in the current registry generation?
+#' @noRd
+res_group_fresh = function(group, sig) {
+  old = res_state()$groups[[group]]
+  !is.null(old) && identical(old$sig, sig) && identical(old$gen, registry_generation())
+}
+
 #' Register one group of discovered resources, replacing the group's previous records
 #'
-#' A group (for example `"skills:user"`) is rewritten only when its file signature `sig` or the
-#' registry generation changed. Returns `TRUE` invisibly when records were (re)written.
+#' A group (for example `"skills:user"`) is rewritten only when it is not `res_group_fresh()`.
+#' Returns `TRUE` invisibly when records were (re)written.
 #' @noRd
 res_register = function(group, specs, source, rank, sig) {
-  st = res_state()
-  gen = registry_generation()
-  old = st$groups[[group]]
-  if (!is.null(old) && identical(old$sig, sig) && identical(old$gen, gen)) {
-    return(invisible(FALSE))
-  }
-  if (!is.null(old)) for (id in old$ids) registry_remove(id)
+  if (res_group_fresh(group, sig)) return(invisible(FALSE))
+  res_unregister(group)
   ids = character()
-  keys = character()
   for (s in specs) {
     if (is.null(s)) next
     id = tryCatch(
@@ -361,12 +313,10 @@ res_register = function(group, specs, source, rank, sig) {
         NULL
       }
     )
-    if (!is.null(id)) {
-      ids = c(ids, id)
-      keys = c(keys, paste0(s[["kind"]], ":", s[["name"]]))
-    }
+    if (!is.null(id)) ids = c(ids, id)
   }
-  st$groups[[group]] = list(sig = sig, gen = gen, ids = ids, keys = keys)
+  st = res_state()
+  st$groups[[group]] = list(sig = sig, gen = registry_generation(), ids = ids)
   invisible(TRUE)
 }
 
@@ -426,6 +376,30 @@ res_handler_set = function(type, fun) {
 #' @noRd
 res_handler_get = function(type) res_state()$handlers[[type]]
 
+#' A resource handler for plugin `skills/` and `agents/` paths: the specs `parse()` gives for the
+#' files `files()` lists, sourced from the plugin, the first of each name
+#' @noRd
+res_dir_specs = function(files, parse) {
+  force(files)
+  force(parse)
+  function(paths, p, labels = NULL) {
+    out = Filter(Negate(is.null), lapply(unlist(lapply(paths, files), use.names = FALSE), parse))
+    out = lapply(out, function(s) {
+      s[["source"]] = paste0("plugin:", p[["name"]])
+      s
+    })
+    out[!duplicated(vapply(out, function(s) s[["name"]], ""))]
+  }
+}
+
+#' Markdown files of a directory (files only, recursive or not), or the `.md` file itself
+#' @noRd
+res_md_files = function(dir, recursive = FALSE) {
+  if (!dir.exists(dir)) return(if (file.exists(dir) && grepl("\\.md$", dir)) dir else character())
+  f = list.files(dir, pattern = "\\.md$", full.names = TRUE, recursive = recursive)
+  sort(f[!dir.exists(f)], method = "radix")
+}
+
 #' Record that a skill was used (preloaded or read), for catalog trimming
 #' @noRd
 res_touch = function(name) {
@@ -451,10 +425,6 @@ trust_ok = function(path = project_root()) {
   isTRUE(tryCatch(ext_service_get("trust.get")(path), error = function(e) FALSE))
 }
 
-#' Is each path equal to or inside `root` (compared with `path_key()`; P01's `path_inside()`)?
-#' @noRd
-res_inside = function(path, root = project_root()) path_inside(path, root)
-
 #' Existing `subs` directories from the working directory up to the project root
 #'
 #' Nearest directory first; only the project root when the working directory is outside it.
@@ -463,7 +433,7 @@ res_project_dirs = function(subs) {
   root = path_norm(project_root())
   here = path_norm(getwd())
   chain = root
-  if (res_inside(here, root)) {
+  if (path_inside(here, root)) {
     chain = here
     d = here
     while (!identical(path_key(d), path_key(root))) {
@@ -514,7 +484,7 @@ res_attached_dirs = function(type) {
 plugin_rel = function(root, x) {
   x = gsub("\\", "/", as.character(x), fixed = TRUE)
   x = sub("/+$", "", sub("^\\./", "", x))
-  if (!nzchar(x) || grepl("(^|/)\\.\\.(/|$)", x) || grepl("^([A-Za-z]:)?[/\\\\]", x)) {
+  if (!nzchar(x) || grepl("(^|/)\\.\\.(/|$)", x) || is_abs_path(x)) {
     registry_diagnostic("user", "plugin", "manifest",
                         paste0(root, ": a path outside the plugin was ignored: ", x))
     return(NULL)
@@ -611,11 +581,11 @@ res_roots = function(type, proj, user, flat = character()) {
     rank = c(rep(if (trusted) 1L else 7L, n[1L]), rep(3L, n[2L]), rep(6L, n[3L]),
              rep(5L, n[4L]), as.integer(pl$rank), rep(5L, n[6L])),
     reg = c(rep("project", n[1L]), rep("user", n[2L]), rep(paste0("builtin:", type), n[3L]),
-            res_prefix("plugin:", pk$pkg), res_prefix("plugin:", pl$name),
+            sprintf("plugin:%s", pk$pkg), sprintf("plugin:%s", pl$name),
             rep("plugin:discovered", n[6L])),
     label = c(rep(if (trusted) "project" else "project (untrusted)", n[1L]),
-              rep("user", n[2L]), rep("builtin", n[3L]), res_prefix("package:", pk$pkg),
-              res_prefix("plugin:", pl$name), rep("discovered", n[6L])),
+              rep("user", n[2L]), rep("builtin", n[3L]), sprintf("package:%s", pk$pkg),
+              sprintf("plugin:%s", pl$name), rep("discovered", n[6L])),
     trusted = c(rep(trusted, n[1L]), rep(TRUE, sum(n[-1L]))),
     recursive = !(dirs %in% flat),
     stringsAsFactors = FALSE
@@ -623,36 +593,6 @@ res_roots = function(type, proj, user, flat = character()) {
 }
 
 # ---- versions --------------------------------------------------------------------------------
-
-#' Does gptr's extension API satisfy a requirement? (grammar of report G1 section 3.5)
-#'
-#' `"1.2"` means `>= 1.2, < 2` (caret); otherwise a comma list of `op version` with `op` in
-#' `>=`, `>`, `<=`, `<`, `==`; one-component versions are normalised (`"2"` is `"2.0"`).
-#' `NULL` or an empty string is satisfied; an unparseable requirement is not.
-#' @noRd
-plugin_api_ok = function(req, have = NULL) {
-  if (is.null(req)) return(TRUE)
-  req = trimws(as.character(req)[1L])
-  if (is.na(req) || !nzchar(req)) return(TRUE)
-  have = have %||% as.character(gptr_api()$version)
-  norm = function(v) if (grepl(".", v, fixed = TRUE)) v else paste0(v, ".0")
-  parts = trimws(strsplit(req, ",", fixed = TRUE)[[1L]])
-  if (length(parts) == 1L && grepl("^[0-9]+(\\.[0-9]+)*$", parts)) {
-    v = norm(parts)
-    major = as.integer(strsplit(v, ".", fixed = TRUE)[[1L]][1L])
-    parts = c(paste(">=", v), paste0("< ", major + 1L, ".0"))
-  }
-  hv = package_version(norm(have))
-  for (p in parts) {
-    m = regmatches(p, regexec("^(>=|<=|==|>|<)[ ]*([0-9]+(\\.[0-9]+)*)$", p))[[1L]]
-    if (length(m) != 4L) return(FALSE)
-    rv = package_version(norm(m[3L]))
-    ok = switch(m[2L], ">=" = hv >= rv, ">" = hv > rv, "<=" = hv <= rv, "<" = hv < rv,
-                "==" = hv == rv)
-    if (!isTRUE(ok)) return(FALSE)
-  }
-  TRUE
-}
 
 #' Pattern of one `rDepends` entry: `pkg` or `pkg (op version)`
 #' @noRd
@@ -714,36 +654,37 @@ plugin_manifest_read = function(file) {
 plugin_api_req = function(manifest) {
   g = manifest[["gptr"]]
   if (is.list(g)) g = g[["api"]]
-  if (is.character(g) && length(g) == 1L && !is.na(g) && nzchar(g)) g else NULL
+  if (rlang::is_string(g) && nzchar(g)) g else NULL
 }
 
 #' A resolved plugin from a directory, or NULL when the directory is not a plugin
 #'
 #' `plugin.json` makes a gptr directory plugin; `.claude-plugin/plugin.json` (or an empty
 #' `.claude-plugin/`) a Claude bundle; a directory without a manifest counts when it has
-#' `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`.
+#' `skills/`, `prompts/`, `agents/`, `extensions/`, `commands/` or `mcp.json`. Without a manifest
+#' name the plugin is named `name`. A given `kind` always resolves: an installed Claude Code plugin
+#' is `kind = "claude-plugin"` named by its key, never by its version directory (D-088).
 #' @noRd
-plugin_from_dir = function(path) {
+plugin_from_dir = function(path, name = basename(path), kind = NULL) {
   gp = file.path(path, "plugin.json")
   cp = file.path(path, ".claude-plugin", "plugin.json")
-  kind = NULL
   man = list()
   subdirs = c("skills", "prompts", "agents", "extensions", "commands")
   has_dirs = any(dir.exists(file.path(path, subdirs)))
   if (file.exists(gp)) {
-    kind = "directory"
+    kind = kind %||% "directory"
     man = plugin_manifest_read(gp) %||% list()
   } else if (file.exists(cp)) {
-    kind = "claude-plugin"
+    kind = kind %||% "claude-plugin"
     man = plugin_manifest_read(cp) %||% list()
   } else if (dir.exists(file.path(path, ".claude-plugin"))) {
-    kind = "claude-plugin"
+    kind = kind %||% "claude-plugin"
   } else if (has_dirs || file.exists(file.path(path, "mcp.json"))) {
-    kind = "directory"
+    kind = kind %||% "directory"
   }
   if (is.null(kind)) return(NULL)
   nm = man[["name"]]
-  if (!is.character(nm) || length(nm) != 1L || !nzchar(nm)) nm = basename(path)
+  if (!rlang::is_string(nm) || !nzchar(nm)) nm = name
   version = man[["version"]]
   list(kind = kind, name = as_utf8(nm), path = path_norm(path), manifest = man,
        version = if (is.character(version)) version else NA_character_,
@@ -799,38 +740,18 @@ plugin_claude_installed = function() {
     if (!is.list(entries) || !is.null(names(entries))) next
     ok = vapply(entries, function(e) {
       p = if (is.list(e)) e[["installPath"]]
-      is.character(p) && length(p) == 1L && isTRUE(dir.exists(p))
+      rlang::is_string(p) && dir.exists(p)
     }, NA)
     entries = entries[ok]
     if (!length(entries)) next
     when = vapply(entries, function(e) {
       w = e[["lastUpdated"]]
-      if (is.character(w) && length(w) == 1L) w else ""
+      if (rlang::is_string(w)) w else ""
     }, "")
     e = entries[[order(when, decreasing = TRUE, method = "radix")[1L]]]
     out[[sub("@.*$", "", key)]] = e[["installPath"]]
   }
   out
-}
-
-#' An installed Claude Code plugin as a resolved plugin of kind `claude-plugin`
-#'
-#' `name` is the plugin's installed key without `@<marketplace>`, `path` its install path. The
-#' directory is read with `plugin_from_dir()`. Its manifest's name is kept, but a Claude
-#' `plugin.json` is optional and an install path ends in a version or commit directory
-#' (`cache/<marketplace>/<plugin>/<version>/`, report 16 section 3.8), so without one name in the
-#' manifest the plugin is named `name`, never after that directory (D-088).
-#' @noRd
-plugin_from_claude_install = function(name, path) {
-  p = plugin_from_dir(path)
-  if (is.null(p)) {
-    p = list(kind = "claude-plugin", name = name, path = path_norm(path), manifest = list(),
-             version = NA_character_, api = NA_character_)
-  }
-  nm = p$manifest[["name"]]
-  if (!is.character(nm) || length(nm) != 1L || !nzchar(nm)) p$name = as_utf8(name)
-  p$kind = "claude-plugin"
-  p
 }
 
 #' Resolve a plugin name or path (contract 04 section 7.17)
@@ -876,7 +797,7 @@ plugin_resolve = function(name) {
   }
   cl = plugin_claude_installed()
   hit = res_match(name, names(cl), "plugin")
-  if (length(hit)) return(plugin_from_claude_install(hit, cl[[hit]]))
+  if (length(hit)) return(plugin_from_dir(cl[[hit]], hit, "claude-plugin"))
   gptr_abort(paste0("No plugin with this name was found: install a package with inst/gptr/, ",
                     "or use a directory with plugin.json or .claude-plugin/, or ",
                     ".gptr/plugins/<name>/."), "invalid_argument", arg = "name",
@@ -1012,7 +933,7 @@ plugin_code = function(p) {
   factory = NULL
   if (identical(p$kind, "package")) {
     entry = ext[["entry"]]
-    if (!is.character(entry) || length(entry) != 1L) return(NULL)
+    if (!rlang::is_string(entry)) return(NULL)
     parts = strsplit(entry, "::", fixed = TRUE)[[1L]]
     if (grepl(":::", entry, fixed = TRUE) || length(parts) != 2L) {
       registry_diagnostic(paste0("plugin:", p$name), "plugin", "manifest",
@@ -1087,7 +1008,7 @@ extension_resolve = function(name) {
   path = path_norm(name)
   if (grepl("\\.[Rr]$", name) && file.exists(path)) {
     return(list(path = path, name = sub("\\.[Rr]$", "", basename(path)),
-                scope = if (res_inside(path)) "project" else "user"))
+                scope = if (path_inside(path, project_root())) "project" else "user"))
   }
   places = list()
   ws = workspace_dir()
@@ -1137,7 +1058,7 @@ extension_enable = function(ext, rank, session = NULL) {
 plugin_enable = function(name, rank, session = NULL) {
   check_string(name, "name")
   rank = check_number(rank, "rank", min = 0, max = 6, int = TRUE)
-  session = res_session_id(session)
+  session = ext_session_id(session)
   # gptr's resources are the built-ins'; a pkgload source tree has no installed gptr/ to resolve
   if (identical(res_norm(name), "gptr")) return(invisible(TRUE))
   ext = extension_resolve(name)
@@ -1145,7 +1066,7 @@ plugin_enable = function(name, rank, session = NULL) {
   p = plugin_resolve(name)
   key = paste(p$kind, p$path, rank, session %||% "", sep = "|")
   gen = registry_generation()
-  trusted = identical(p$kind, "package") || !res_inside(p$path) || trust_ok()
+  trusted = identical(p$kind, "package") || !path_inside(p$path, project_root()) || trust_ok()
   old = res_state()$plugins[[key]]
   alive = is.null(old) || plugin_entry_alive(old)
   if (!is.null(old) && alive && identical(old$gen, gen) && (isTRUE(old$trusted) || !trusted)) {
@@ -1170,8 +1091,9 @@ plugin_enable = function(name, rank, session = NULL) {
     return(invisible(FALSE))
   }
   req = plugin_api_req(p$manifest)
+  api_ok = is.null(req) || isTRUE(tryCatch(api_satisfies(req), error = function(e) FALSE))
   miss = rdepends_missing(p$manifest[["rDepends"]])
-  problem = if (!plugin_api_ok(req)) {
+  problem = if (!api_ok) {
     paste0("Plugin ", p$name, " requires gptr extension API ", req, "; this gptr provides ",
            as.character(gptr_api()$version), ".")
   } else if (length(miss)) {
@@ -1271,7 +1193,7 @@ plugin_tokens = function(p, specs) {
 #' Returns `data.frame(name, kind, path, rank, session)`.
 #' @noRd
 plugins_enabled = function(session = NULL) {
-  sid = res_session_id(session)
+  sid = ext_session_id(session)
   es = Filter(function(e) {
     isTRUE(e$enabled) && !isTRUE(e$failed) && (is.null(e$session) || identical(e$session, sid))
   }, res_state()$plugins)
@@ -1286,7 +1208,7 @@ plugins_enabled = function(session = NULL) {
 #' Forget the plugin table entries of an ended session (P02 already dropped its records)
 #' @noRd
 plugins_session_end = function(session) {
-  sid = res_session_id(session)
+  sid = ext_session_id(session)
   if (is.null(sid)) return(invisible(0L))
   st = res_state()
   hit = names(st$plugins)[vapply(st$plugins, function(e) identical(e$session, sid), NA)]
@@ -1319,7 +1241,7 @@ plugin_candidates = function(installed = FALSE) {
   dirs = if (is.null(ws)) character() else list.dirs(file.path(ws, "plugins"), recursive = FALSE)
   cl = plugin_claude_installed()
   c(lapply(setdiff(unique(pk), "gptr"), plugin_from_package), lapply(dirs, plugin_from_dir),
-    Map(plugin_from_claude_install, names(cl), cl))
+    Map(plugin_from_dir, cl, names(cl), "claude-plugin"))
 }
 
 #' Plugins known to this session

@@ -180,7 +180,7 @@ test_that("a relative skills.paths entry is a project root and follows project t
   rel = df[df$name == "rel-skill", , drop = FALSE]
   expect_identical(rel$source, "project (untrusted)")
   expect_identical(rel$origin, "project")
-  expect_identical(rel$rank, 1L)
+  expect_identical(rel$rank, 7L)
   expect_false(rel$trusted)
   expect_false(rel$visible)
   ab = df[df$name == "abs-skill", , drop = FALSE]
@@ -193,28 +193,16 @@ test_that("a relative skills.paths entry is a project root and follows project t
 
 # Task 2 review round 3 (D-074 items 5-7): bounded parsing, no warnings, `~name` entries.
 
-skill_alias_chain = function(levels) {
-  out = "x0: &a0 [a, b, c, d, e, f, g, h, i]"
-  for (i in seq_len(levels)) {
-    refs = paste(rep(sprintf("*a%d", i - 1L), 9L), collapse = ", ")
-    out = c(out, sprintf("x%d: &a%d [%s]", i, i, refs))
-  }
-  out
-}
-
 test_that("a SKILL.md whose YAML aliases expand too far is skipped with a diagnostic", {
   p = local_project(trust = FALSE)
   root = file.path(p, ".gptr", "skills")
   write_skill(root, "good", skill_md("good", "A valid skill."))
-  # Round 5: at most 4 references to anchors reach yaml, so this stays within that cap.
-  many = paste0("x0: &a0 [", paste(rep("a", 8000L), collapse = ","), "]")
-  f = write_skill(root, "bomb", c("---", "name: bomb", "description: d", many,
-                                  "disable-model-invocation: &a1 [*a0, *a0, *a0]",
-                                  "allowed-tools: *a1", "---", "x"))
+  f = write_skill(root, "bomb", c("---", "name: bomb", "description: d", "x0: &a0 [a, b]",
+                                  "allowed-tools: [*a0, *a0, *a0, *a0, *a0]", "---", "x"))
   expect_identical(gptr_skills("project")$name, "good")
   expect_null(skill_parse_cached(f))
   msgs = gptr_registry(diagnostics = TRUE)$message
-  expect_true(any(grepl("bomb/SKILL.md: invalid YAML frontmatter: too large once its aliases",
+  expect_true(any(grepl("bomb/SKILL.md: invalid YAML frontmatter: too many merge keys, tags",
                         msgs, fixed = TRUE)))
 })
 
@@ -278,8 +266,7 @@ test_that("only ~ and ~/ skills.paths entries are home directories; ~name is pro
   expect_true(hs$visible)
 })
 
-# Task 2 review round 4 (D-074 items 8 and 9): a name ends at the end of the string, and
-# frontmatter that would make yaml slow is refused before yaml runs.
+# Task 2 review round 4 (D-074 item 8): a name ends at the end of the string.
 
 test_that("a skill name ending in a newline is refused with a diagnostic (contract 11.13)", {
   p = local_project(trust = FALSE)
@@ -311,80 +298,6 @@ test_that("a skill directory whose name ends in a newline is refused too", {
   expect_null(skill_parse(f))
   msgs = gptr_registry(diagnostics = TRUE)$message
   expect_true(any(grepl("dir-nl\n/SKILL.md: name must match", msgs, fixed = TRUE)))
-})
-
-test_that("frontmatter that would make yaml slow is skipped; a sibling skill is still listed", {
-  p = local_project(trust = FALSE)
-  root = file.path(p, ".gptr", "skills")
-  write_skill(root, "good", skill_md("good", "A valid skill."))
-  # Round 6: the byte limit is 16,384, so `deep` stays below it and `huge` is 20 KB.
-  write_skill(root, "deep", skill_md("deep", "d", paste0("x: ", strrep("[", 5000L),
-                                                         strrep("]", 5000L))))
-  write_skill(root, "huge", skill_md("huge", strrep("y", 20000L)))
-  expect_identical(gptr_skills("project")$name, "good")
-  msgs = gptr_registry(diagnostics = TRUE)$message
-  expect_true(any(grepl("deep/SKILL.md: invalid YAML frontmatter: too deeply nested", msgs,
-                        fixed = TRUE)))
-  expect_true(any(grepl("huge/SKILL.md: invalid YAML frontmatter: too large (more than 16384",
-                        msgs, fixed = TRUE)))
-})
-
-# Task 2 review round 5 (D-074 item 9): a chain of aliases used as a mapping key, or merged
-# under a `? <<` key, never reaches yaml.
-
-test_that("a SKILL.md with more than 4 references to its anchors is skipped before yaml runs", {
-  p = local_project(trust = FALSE)
-  root = file.path(p, ".gptr", "skills")
-  write_skill(root, "good", skill_md("good", "A valid skill."))
-  key = write_skill(root, "key", c("---", "name: key", "description: d", skill_alias_chain(7L),
-                                   "m:", "  ? *a7", "  : 1", "---", "x"))
-  merge = write_skill(root, "merge", c("---", "name: merge", "description: d",
-                                       "base: &b {k: 1}", "m:", "  ? <<",
-                                       "  : [*b, *b, *b, *b, *b]", "---", "x"))
-  real_load = fm_load
-  local_mocked_bindings(fm_load = function(txt, raw = FALSE) {
-    if (grepl("*", txt, fixed = TRUE)) return(simpleError("yaml ran on the aliases"))
-    real_load(txt, raw)
-  })
-  expect_identical(gptr_skills("project")$name, "good")
-  expect_null(skill_parse_cached(key))
-  expect_null(skill_parse_cached(merge))
-  msgs = gptr_registry(diagnostics = TRUE)$message
-  for (d in c("key", "merge")) {
-    expect_true(any(grepl(paste0(d, "/SKILL.md: invalid YAML frontmatter: too many aliases ",
-                                 "(more than 4 references to anchors)"), msgs, fixed = TRUE)))
-  }
-})
-
-# Task 2 review round 6 (D-074 item 9): nested merges with no alias, under `<<` or a merge tag,
-# never reach yaml.
-
-test_that("a SKILL.md with more than 4 merge keys, tags and aliases is skipped before yaml", {
-  p = local_project(trust = FALSE)
-  root = file.path(p, ".gptr", "skills")
-  write_skill(root, "good", skill_md("good", "A valid skill."))
-  keys = paste0("{", paste0("k", 1:500, collapse = ", "), "}")
-  bad = list(
-    flowmerge = paste0("m: ", strrep("{<<: ", 200L), keys, strrep("}", 200L)),
-    blockmerge = c("m:", vapply(1:20, function(i) paste0(strrep(" ", i), "<<:"), ""),
-                   paste0(strrep(" ", 21L), "<<: ", keys)),
-    tagmerge = paste0("m: ", strrep("{!!merge x: ", 5L), keys, strrep("}", 5L))
-  )
-  files = vapply(names(bad), function(d) {
-    write_skill(root, d, c("---", paste0("name: ", d), "description: d", bad[[d]], "---", "x"))
-  }, "")
-  real_load = fm_load
-  local_mocked_bindings(fm_load = function(txt, raw = FALSE) {
-    if (grepl("<<|!", txt)) return(simpleError("yaml ran on the merge keys"))
-    real_load(txt, raw)
-  })
-  expect_identical(gptr_skills("project")$name, "good")
-  for (f in files) expect_null(skill_parse_cached(f))
-  msgs = gptr_registry(diagnostics = TRUE)$message
-  for (d in names(bad)) {
-    expect_true(any(grepl(paste0(d, "/SKILL.md: invalid YAML frontmatter: too many merge keys, ",
-                                 "tags and aliases (more than 4 in all)"), msgs, fixed = TRUE)))
-  }
 })
 
 # Task 3: the built-in high-performance-r skill and gptr's own manifest.

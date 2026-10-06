@@ -35,7 +35,7 @@ tool_name_map = function(names) {
 #' A permission mode from gptr `mode` or Claude `permissionMode`, or NULL
 #' @noRd
 agent_mode = function(x) {
-  if (!is.character(x) || length(x) != 1L) return(NULL)
+  if (!rlang::is_string(x)) return(NULL)
   switch(tolower(x), plan = "plan", manual = "manual", default = "manual", edits = "edits",
          acceptedits = "edits", auto = "auto", dontask = "auto", bypasspermissions = "auto",
          NULL)
@@ -78,9 +78,7 @@ agent_file_parse = function(path) {
   name = m[["name"]]
   desc = m[["description"]]
   if (is.null(name)) return(NULL)
-  ok_name = is.character(name) && length(name) == 1L && nzchar(name)
-  ok_desc = is.character(desc) && length(desc) == 1L
-  if (!ok_name || !ok_desc) {
+  if (!rlang::is_string(name) || !nzchar(name) || !rlang::is_string(desc)) {
     diag("name and description must be strings")
     return(NULL)
   }
@@ -96,13 +94,11 @@ agent_file_parse = function(path) {
   unknown = attr(tools, "unknown")
   if (length(unknown)) diag(paste0("unknown tools ignored: ", paste(unknown, collapse = ", ")))
   model = m[["model"]]
-  ok_model = is.character(model) && length(model) == 1L && nzchar(model)
-  if (!ok_model || identical(model, "inherit")) model = NULL
+  if (!rlang::is_string(model) || !nzchar(model) || model == "inherit") model = NULL
   mt = agent_max_turns(m[["max_turns"]] %||% m[["maxTurns"]])
   backend = m[["backend"]]
   mode_raw = m[["mode"]]
-  pi_mode = is.character(mode_raw) && length(mode_raw) == 1L &&
-    mode_raw %in% c("inline", "worker", "cli")
+  pi_mode = rlang::is_string(mode_raw) && mode_raw %in% c("inline", "worker", "cli")
   if (is.null(backend) && pi_mode) backend = mode_raw
   mode = (if (!pi_mode) agent_mode(mode_raw)) %||% agent_mode(m[["permissionMode"]])
   preset = m[["preset"]]
@@ -112,8 +108,8 @@ agent_file_parse = function(path) {
     tools = if (length(tools)) as.character(tools) else NULL,
     skills = fm_chr_list(m[["skills"]]),
     system = fm$body,
-    backend = if (is.character(backend) && length(backend) == 1L) backend else "auto",
-    preset = if (is.character(preset) && length(preset) == 1L) preset else "minimal",
+    backend = if (rlang::is_string(backend)) backend else "auto",
+    preset = if (rlang::is_string(preset)) preset else "minimal",
     max_turns = mt,
     mode = mode,
     returns = if (is.list(m[["returns"]])) m[["returns"]] else NULL,
@@ -134,32 +130,6 @@ agent_untrust = function(spec) {
   spec[["tools"]] = NULL
   spec[["trusted"]] = FALSE
   spec
-}
-
-#' Agent `.md` files of a directory (recursive except Pi's flat `.pi` directories), or the file
-#'
-#' Files only: a directory named `*.md` in a flat directory is not an agent file (D-134).
-#' @noRd
-agent_files = function(dir, recursive = TRUE) {
-  if (!dir.exists(dir)) return(if (file.exists(dir) && grepl("\\.md$", dir)) dir else character())
-  f = list.files(dir, pattern = "\\.md$", full.names = TRUE, recursive = recursive)
-  sort(f[!dir.exists(f)], method = "radix")
-}
-
-#' Resource handler for plugin `agents/` paths (installed with `res_handler_set()`)
-#' @noRd
-agent_dir_specs = function(paths, p, labels = NULL) {
-  out = list()
-  for (d in paths) {
-    for (f in agent_files(d)) {
-      s = agent_parse_cached(f)
-      if (is.null(s)) next
-      s[["source"]] = paste0("plugin:", p[["name"]])
-      out[[length(out) + 1L]] = s
-    }
-  }
-  nm = vapply(out, function(s) s[["name"]], "")
-  out[!duplicated(nm)]
 }
 
 # ---- agent discovery, sync, builtin:agents ---------------------------------------------------
@@ -196,7 +166,7 @@ agent_collect = function(mode = NULL) {
   specs = list()
   seen = character()
   for (i in seq_len(nrow(roots))) {
-    for (f in agent_files(roots$dir[i], roots$recursive[i])) {
+    for (f in res_md_files(roots$dir[i], roots$recursive[i])) {
       id = paste(path_norm(f), roots$reg[i])
       if (id %in% seen) next
       seen = c(seen, id)
@@ -294,7 +264,7 @@ agent_def_get = function(name = NULL, file = NULL) {
                         "and description)."), "invalid_argument", arg = "file",
                  expected = "a Markdown agent file")
     }
-    if (res_inside(file) && !trust_ok()) spec = agent_untrust(spec)
+    if (path_inside(file, project_root()) && !trust_ok()) spec = agent_untrust(spec)
     return(spec)
   }
   check_string(name, "name")
@@ -347,4 +317,5 @@ builtin_agents = function(gptr) {
 
 on_load(ext_declare_builtin("agents", builtin_agents))
 on_load(ext_service_set("agent_def.get", agent_def_get, provided_by = "P17", builtin = "agents"))
-on_load(res_handler_set("agents", agent_dir_specs))
+on_load(res_handler_set("agents", res_dir_specs(function(d) res_md_files(d, TRUE),
+                                                 agent_parse_cached)))
