@@ -40,7 +40,7 @@ s1_ollama_native = function(model) is.list(model) && identical(model[["api"]], s
 #' @noRd
 s1_ollama_endpoint = function(base_url) {
   if (!rlang::is_string(base_url)) return(NULL)
-  parts = http_url_parts(base_url)
+  parts = url_parse(base_url)
   if (is.null(parts) || !tolower(parts$scheme) %in% c("http", "https")) return(NULL)
   origin = url_origin(base_url)
   if (is.na(origin)) return(NULL)

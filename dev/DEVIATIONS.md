@@ -1882,6 +1882,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   collection or unload); `run_wait(runs, timeout = Inf, background = FALSE)`.
 - Tests: test-session-budget.R (two refusal blocks out), test-agent-loop.R (three re-validation fragments
   out), test-agent-run.R (two folds, the retry refusal loop out), test-agent-dispatch.R (one message).
+
+## D-155 - P03/P04/P18 one URL parser: url_parse() (2026-10-05)
+- Rule: `url_parse(url)` (`R/auth-secrets.R`, L0) is libcurl's parse with `decode = FALSE, params = FALSE`,
+  host lower-cased, or `NULL`; `origin_of()`, `url_origin()`, `url_for_log()`, the catalog and Ollama
+  endpoints, the OAuth redirect check and the MCP cache key (`url_for_log()`) use it. `http_url_parts()`,
+  `url_parts()` and `catalog_header()` (now `hdr_value()`) go.
+- Contract-visible: an OAuth redirect URL libcurl refuses (control character, backslash) is
+  `gptr_error_invalid_argument`, not `untrusted` or accepted; the redirect target compares curl's
+  normalised path; percent-encoded paths stay encoded in `url_for_log()` and built endpoints (before:
+  decoded); an MCP URL cache key hashes curl's path (`/` for an empty path: one cache miss). No 04 text.
+- Tests: test-auth-oauth.R "url helpers split URLs; ..." (url_parse, raw path and query), "redirects are
+  checked ..." (+2). Evidence: progress/simplicity.md URL.
   Evidence: progress/simplicity.md P06-S1.
 
 ## D-156 - P24 cache simulator prices gptr's Anthropic elements in a trusted project (2026-10-05)

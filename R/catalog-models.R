@@ -972,14 +972,6 @@ model_default = function(role = c("chat", "small", "system1")) {
   }
 }
 
-#' A case-insensitive header value from a named list or character vector
-#' @noRd
-catalog_header = function(headers, name) {
-  if (!length(headers) || is.null(names(headers))) return(NULL)
-  h = headers[tolower(names(headers)) == tolower(name)]
-  if (!length(h)) NULL else as.character(h[[1]])
-}
-
 #' One bounded request on the P04 reactor: `list(status, headers, body)` for any HTTP status
 #' Only its own unsettled transfer is cancelled (timeout, interrupt, oversized body); a failure
 #' without a status, a timeout or an oversized answer signals `gptr_error_network`.
@@ -987,8 +979,8 @@ catalog_header = function(headers, name) {
 catalog_http_request = function(url, method = "GET", headers = list(), body = NULL,
                                 timeout = 30, attempts = NULL, max_bytes = 64 * 1024^2) {
   check_string(url, "url")
-  parts = http_url_parts(url)
-  if (is.null(parts) || !tolower(parts$scheme) %in% c("http", "https")) {
+  parts = url_parse(url)
+  if (is.null(parts) || !parts$scheme %in% c("http", "https")) {
     arg_abort(url, "url", "an absolute HTTP or HTTPS URL")
   }
   check_string(method, "method")
@@ -1101,7 +1093,7 @@ catalog_refresh = function() {
             res$status)
   }
   write_atomic(json_path, json_encode(snap))
-  etag = catalog_header(res$headers, "etag")
+  etag = hdr_value(res$headers, "etag")
   ok = rlang::is_string(etag) && nzchar(etag) && !grepl("[[:cntrl:]]", etag) &&
     nchar(etag) <= 1024L
   if (ok) write_atomic(etag_path, etag) else unlink(etag_path)
@@ -1163,8 +1155,8 @@ catalog_loopback = function(host) {
 #' @noRd
 catalog_endpoint = function(p) {
   base = if (is.list(p)) provider_base_url(p) else NULL
-  parts = if (is.null(base)) NULL else http_url_parts(base)
-  if (is.null(parts) || !tolower(parts$scheme) %in% c("http", "https")) return(NULL)
+  parts = if (is.null(base)) NULL else url_parse(base)
+  if (is.null(parts) || !parts$scheme %in% c("http", "https")) return(NULL)
   origin = url_origin(base)
   if (is.na(origin)) return(NULL)
   path = sub("/+$", "", parts$path %||% "")

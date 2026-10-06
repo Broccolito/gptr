@@ -15,28 +15,6 @@
 
 # ---- URLs, headers, forms (pure) -----------------------------------------------------------
 
-#' Split a URL into scheme, host, port, path and query (the query without "?")
-#' @noRd
-url_parts = function(url) {
-  pat = "^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)(\\?[^#]*)?"
-  url = as.character(url %||% "")
-  m = if (length(url) == 1L && !is.na(url)) regmatches(url, regexec(pat, url))[[1L]]
-  if (!length(m)) {
-    gptr_abort("A URL must start with a scheme such as https://.", "invalid_argument",
-               arg = "url", expected = "an absolute URL")
-  }
-  hostport = sub("^.*@", "", m[3L])
-  if (startsWith(hostport, "[")) {
-    host = sub("^(\\[[^]]*\\]).*$", "\\1", hostport)
-    port = sub("^\\[[^]]*\\]:?", "", hostport)
-  } else {
-    host = sub(":.*$", "", hostport)
-    port = if (grepl(":", hostport, fixed = TRUE)) sub("^[^:]*:", "", hostport) else ""
-  }
-  list(scheme = tolower(m[2L]), host = tolower(host), port = port, path = m[4L],
-       query = sub("^\\?", "", m[5L]))
-}
-
 #' One header value from a named list or vector (case-insensitive), or NULL
 #' @noRd
 hdr_value = function(headers, name) {
@@ -149,10 +127,13 @@ oauth_parse_redirect = function(input, redirect_uri, state, issuer, iss_supporte
   if (!length(input) || is.na(input[1L]) || !nzchar(input[1L])) untrusted("nothing was received")
   input = input[1L]
   if (grepl("^[A-Za-z][A-Za-z0-9+.-]*://", input)) {
-    got = url_parts(input)
-    want = url_parts(redirect_uri)
+    got = url_parse(input)
+    if (is.null(got)) {
+      gptr_abort("The sign-in redirect is not a valid URL.", "invalid_argument", arg = "input",
+                 expected = "an absolute URL")
+    }
     keys = c("scheme", "host", "port", "path")
-    if (!identical(got[keys], want[keys])) {
+    if (!identical(got[keys], url_parse(redirect_uri)[keys])) {
       untrusted("it went to another address than the one gptr registered")
     }
     q = query_parse(got$query)

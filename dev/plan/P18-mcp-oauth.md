@@ -42,7 +42,7 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `R/auth-oauth.R` | create (Tasks 1, 2) | URL, header, form and query helpers; PKCE S256; metadata, redirect and `iss` checks; reactor HTTP, RFC 9728/8414 discovery, DCR; access tokens in the vault, the locked refresh; the loopback or paste redirect; `oauth_flow()`; `gptr_login()`, `gptr_logout()` |
+| `R/auth-oauth.R` | create (Tasks 1, 2) | header, form and query helpers; PKCE S256; metadata, redirect and `iss` checks; reactor HTTP, RFC 9728/8414 discovery, DCR; access tokens in the vault, the locked refresh; the loopback or paste redirect; `oauth_flow()`; `gptr_login()`, `gptr_logout()` |
 | `R/mcp-client.R` | create (Tasks 3, 4, 5) | wire helpers (ASCII JSON, header values, names, schema coercion, results); the process state and the era, tool and log caches; placeholder expansion; connections (era handshake, requests, progress, cancellation, server requests, MRTR, elicitation, pagination); the stdio transport; the Streamable HTTP transport with stored credentials |
 | `R/mcp-config.R` | create (Task 6) | the TOML subset; the config sources of every harness; normalisation, merging, trust; `mcp_server` records; gptr's `mcp.json` writer; `gptr_mcp()`, `gptr_mcp_add()`, `gptr_mcp_remove()` |
 | `R/mcp-namespace.R` | create (Task 7) | MCP tool specs and risk; `gptr_ns` nodes and `gptr_member` closures; the budgeted `<mcp>` catalog; the `mcp.catalog` service; direct tools at session start; `builtin:mcp`; the namespace provider and login target registered at load |
@@ -98,11 +98,12 @@ Exactly as defined in 04 and in the dependency plans (internal helpers of a depe
 **Files:**
 - Create: `R/auth-oauth.R`
 - Modify: `R/auth-store.R` (the lock; simplicity package LOCK, D-153)
+- Modify: `R/auth-secrets.R` (`url_parse()`; simplicity package URL, D-155)
 - Test: `tests/testthat/test-auth-oauth.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `gptr_abort()`, `as_utf8()`, `json_obj()`, `with_seed_preserved()`, `rscript_path()` (tests); P03 `lock_with(path, fun, tries = 50L, wait = 0.1)` (internal: runs `fun()` holding `<path>.lock/`, breaking a lock older than 30 s or whose pid is dead or reused, else `gptr_error_timeout`; IC-71, D-153); `jsonlite::base64_enc()`; Suggests `openssl::rand_bytes()`, `openssl::sha256()`; `ps::ps_handle()`, `ps::ps_create_time()`.
-- Produces (internal; used by Tasks 2-9): `url_parts(url)` -> `list(scheme, host, port, path, query)`; `hdr_value(headers, name)` -> chr(1) or `NULL`; `form_encode(fields)` -> chr(1); `query_parse(q)` -> named list; `b64url(bytes)`; `oauth_parse_challenge(h)` -> named list; `oauth_check_metadata(meta, issuer)` -> `meta` invisibly or `gptr_error_untrusted`; `oauth_authorize_url(meta, client_id, redirect_uri, scope, state, challenge, resource = NULL)`; `oauth_parse_redirect(input, redirect_uri, state, issuer, iss_supported = FALSE)` -> the code or `gptr_error_untrusted`/`gptr_error_provider`; `oauth_need(pkg, feature)` (`gptr_error_missing_package`); `rand_hex(n)` -> 2n lower-hex characters; `pkce_new(verifier = NULL)` -> `list(verifier, challenge, method = "S256")`.
+- Consumes: P01 `gptr_abort()`, `as_utf8()`, `json_obj()`, `with_seed_preserved()`, `rscript_path()` (tests); P03 `lock_with(path, fun, tries = 50L, wait = 0.1)` (internal: runs `fun()` holding `<path>.lock/`, breaking a lock older than 30 s or whose pid is dead or reused, else `gptr_error_timeout`; IC-71, D-153), `url_parse(url)` (internal: libcurl's URL parts with the host lower-cased and the path and query as written, or `NULL`; D-155); `jsonlite::base64_enc()`; Suggests `openssl::rand_bytes()`, `openssl::sha256()`; `ps::ps_handle()`, `ps::ps_create_time()`.
+- Produces (internal; used by Tasks 2-9): `hdr_value(headers, name)` -> chr(1) or `NULL`; `form_encode(fields)` -> chr(1); `query_parse(q)` -> named list; `b64url(bytes)`; `oauth_parse_challenge(h)` -> named list; `oauth_check_metadata(meta, issuer)` -> `meta` invisibly or `gptr_error_untrusted`; `oauth_authorize_url(meta, client_id, redirect_uri, scope, state, challenge, resource = NULL)`; `oauth_parse_redirect(input, redirect_uri, state, issuer, iss_supported = FALSE)` -> the code or `gptr_error_untrusted`/`gptr_error_provider`; `oauth_need(pkg, feature)` (`gptr_error_missing_package`); `rand_hex(n)` -> 2n lower-hex characters; `pkce_new(verifier = NULL)` -> `list(verifier, challenge, method = "S256")`.
 
 These helpers are pure or local: report 03 §5.6 (PKCE checked against RFC 7636 appendix B) and report 16 §2.9, §3.5 and §5.15 with its verification-log fixes 7 (metadata without `code_challenge_methods_supported` is refused) and 17 (gptr reads the redirect itself so that `iss` survives). The lock is P03's `lock_with()` (D-153); its test stays here.
 
@@ -112,14 +113,16 @@ Create `tests/testthat/test-auth-oauth.R`:
 
 ```r
 test_that("url helpers split URLs; hdr_value reads headers case-insensitively", {
-  u = url_parts("https://Example.org:8443/a/b?x=1&y=2")
+  u = url_parse("https://Example.org:8443/a/b?x=1&y=2")
   expect_identical(u$scheme, "https")
   expect_identical(u$host, "example.org")
   expect_identical(u$port, "8443")
   expect_identical(u$path, "/a/b")
   expect_identical(u$query, "x=1&y=2")
-  expect_identical(url_parts("http://[::1]:5000/cb")$host, "[::1]")
-  expect_error(url_parts("no scheme"), class = "gptr_error_invalid_argument")
+  expect_identical(url_parse("http://h/a%2Fb?c=d%26e")[c("path", "query")],
+                   list(path = "/a%2Fb", query = "c=d%26e"))
+  expect_identical(url_parse("http://[::1]:5000/cb")$host, "[::1]")
+  expect_null(url_parse("no scheme"))
   expect_identical(hdr_value(list(`Www-Authenticate` = "Bearer x"), "WWW-Authenticate"), "Bearer x")
   expect_null(hdr_value(list(a = "1"), "b"))
   expect_null(hdr_value(NULL, "b"))
@@ -178,7 +181,7 @@ test_that("the authorization URL carries PKCE, state and the resource", {
   meta = list(authorization_endpoint = "https://as.example/authorize")
   url = oauth_authorize_url(meta, "c1", "http://127.0.0.1:50000/callback", "read", "st", "CH",
                             resource = "https://mcp.example/mcp")
-  q = query_parse(url_parts(url)$query)
+  q = query_parse(url_parse(url)$query)
   expect_identical(q$response_type, "code")
   expect_identical(q$code_challenge_method, "S256")
   expect_identical(q$code_challenge, "CH")
@@ -206,6 +209,10 @@ test_that("redirects are checked for target, state and iss before the code is us
                                     "st", iss), "declined", class = "gptr_error_provider")
   expect_error(oauth_parse_redirect("", redirect, "st", iss), "nothing",
                class = "gptr_error_untrusted")
+  expect_error(oauth_parse_redirect(paste0(redirect, "?code=a\001b&state=st"), redirect, "st", iss),
+               class = "gptr_error_invalid_argument")
+  expect_error(oauth_parse_redirect("http://127.0.0.1:50000\\@evil.example/callback?state=st",
+                                    redirect, "st", iss), class = "gptr_error_invalid_argument")
 })
 
 test_that("lock_with() serialises, waits for a live holder and breaks stale locks", {
@@ -232,7 +239,7 @@ test_that("lock_with() serialises, waits for a live holder and breaks stale lock
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-oauth")'`
-Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`; the first error is `could not find function "url_parts"`.
+Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`; the first error is `could not find function "url_parse"`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -255,27 +262,6 @@ Create `R/auth-oauth.R`:
 # origin) with their expiry in the store record (contract 11.8).
 
 # ---- URLs, headers, forms (pure) -----------------------------------------------------------
-
-#' Split a URL into scheme, host, port, path and query (the query without "?")
-#' @noRd
-url_parts = function(url) {
-  pat = "^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)(\\?[^#]*)?"
-  m = regmatches(url, regexec(pat, url))[[1L]]
-  if (!length(m)) {
-    gptr_abort("A URL must start with a scheme such as https://.", "invalid_argument",
-               arg = "url", expected = "an absolute URL")
-  }
-  hostport = sub("^.*@", "", m[3L])
-  if (startsWith(hostport, "[")) {
-    host = sub("^(\\[[^]]*\\]).*$", "\\1", hostport)
-    port = sub("^\\[[^]]*\\]:?", "", hostport)
-  } else {
-    host = sub(":.*$", "", hostport)
-    port = if (grepl(":", hostport, fixed = TRUE)) sub("^[^:]*:", "", hostport) else ""
-  }
-  list(scheme = tolower(m[2L]), host = tolower(host), port = port, path = m[4L],
-       query = sub("^\\?", "", m[5L]))
-}
 
 #' One header value from a named list or vector (case-insensitive), or NULL
 #' @noRd
@@ -368,10 +354,13 @@ oauth_parse_redirect = function(input, redirect_uri, state, issuer, iss_supporte
   if (!length(input) || is.na(input[1L]) || !nzchar(input[1L])) untrusted("nothing was received")
   input = input[1L]
   if (grepl("^[A-Za-z][A-Za-z0-9+.-]*://", input)) {
-    got = url_parts(input)
-    want = url_parts(redirect_uri)
+    got = url_parse(input)
+    if (is.null(got)) {
+      gptr_abort("The sign-in redirect is not a valid URL.", "invalid_argument", arg = "input",
+                 expected = "an absolute URL")
+    }
     keys = c("scheme", "host", "port", "path")
-    if (!identical(got[keys], want[keys])) {
+    if (!identical(got[keys], url_parse(redirect_uri)[keys])) {
       untrusted("it went to another address than the one gptr registered")
     }
     q = query_parse(got$query)
@@ -463,10 +452,27 @@ lock_with = function(path, fun, tries = 50L, wait = 0.1) {
 }
 ```
 
+URLs are parsed by P03's `url_parse()` (simplicity package URL, D-155): in `R/auth-secrets.R`, the transport's URL parser becomes the following, which `origin_of()`, `url_origin()` and `url_for_log()` use:
+
+```r
+#' A URL's parts by libcurl's rules (the transport's), or NULL; the host lower-cased, the path
+#' and query as written
+#' @noRd
+url_parse = function(url) {
+  if (!rlang::is_string(url) || !validUTF8(url) || grepl("[[:cntrl:]\\\\]", url) ||
+      !grepl("\\A[A-Za-z][A-Za-z0-9+.-]*://", url, perl = TRUE)) return(NULL)
+  parts = tryCatch(curl::curl_parse_url(url, decode = FALSE, params = FALSE),
+                   error = function(e) NULL)
+  if (is.null(parts) || is.null(parts$host) || !nzchar(parts$host)) return(NULL)
+  parts$host = tolower(parts$host)
+  parts
+}
+```
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "auth-oauth")'`
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 47 ]`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 50 ]`
 
 - [ ] **Step 5: Commit**
 
@@ -995,9 +1001,8 @@ oauth_get_json = function(url) {
 #' order of the MCP authorization specification; report 16 section 3.5)
 #' @noRd
 oauth_as_metadata = function(issuer) {
-  u = url_parts(issuer)
   base = url_origin(issuer)
-  path = sub("/$", "", u$path)
+  path = sub("/$", "", url_parse(issuer)$path %||% "")
   cands = if (nzchar(path)) {
     c(paste0(base, "/.well-known/oauth-authorization-server", path),
       paste0(base, "/.well-known/openid-configuration", path),
@@ -1022,7 +1027,7 @@ oauth_as_metadata = function(issuer) {
 oauth_discover = function(resource_url, www_authenticate = NULL) {
   ch = oauth_parse_challenge(www_authenticate)
   base = url_origin(resource_url)
-  path = sub("/$", "", url_parts(resource_url)$path)
+  path = sub("/$", "", url_parse(resource_url)$path %||% "")
   cands = unique(c(ch$resource_metadata,
                    if (nzchar(path)) paste0(base, "/.well-known/oauth-protected-resource", path),
                    paste0(base, "/.well-known/oauth-protected-resource")))
@@ -1371,7 +1376,7 @@ oauth_key_exchange = function(id, flow, client) {
     gptr_abort("The sign-in redirect went to another address than the one gptr opened.",
                "untrusted", what = "OAuth redirect", path = NA_character_, origin = flow$origin)
   }
-  code = query_parse(url_parts(got)$query)$code
+  code = query_parse(url_parse(got)$query)$code
   if (is.null(code) || !nzchar(code)) {
     gptr_abort("The sign-in redirect carries no code.", "untrusted", what = "OAuth redirect",
                path = NA_character_, origin = flow$origin)
@@ -1519,7 +1524,7 @@ git commit -m "feat(auth): add OAuth discovery, the locked refresh, gptr_login()
 - Test: `tests/testthat/test-mcp-client.R` (create)
 
 **Interfaces:**
-- Consumes: P01 `json_encode()`, `json_decode()`, `json_obj()`, `as_utf8()`, `first_sentence()`, `hash_sha256()`, `canonical_json()`, `gptr_user_dir()`, `read_utf8()`, `write_atomic()`, `user_home()`, `project_root()`, `block_image()`, `gptr_opt()`, `gptr_abort()`; P03 `redact()`, `secret_register()`, `secret_lookup()` (tests); P04 `url_origin()`; Task 1 `url_parts()`.
+- Consumes: P01 `json_encode()`, `json_decode()`, `json_obj()`, `as_utf8()`, `first_sentence()`, `hash_sha256()`, `canonical_json()`, `gptr_user_dir()`, `read_utf8()`, `write_atomic()`, `user_home()`, `project_root()`, `block_image()`, `gptr_opt()`, `gptr_abort()`; P03 `redact()`, `secret_register()`, `secret_lookup()` (tests); P04 `url_origin()`, `url_for_log()`.
 - Produces (internal; used by Tasks 4-9): `mcp_versions()` -> `list(modern = "2026-07-28", legacy = c("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"))`; the `_meta` key constants `mcp_k_ver`, `mcp_k_caps`, `mcp_k_cinfo`, `mcp_k_sinfo`; `json_ascii(s)`, `mcp_json(x)` (ASCII-only JSON text); `mcp_header_value(x)` (`=?base64?...?=` for non-ASCII); `mcp_r_name(x)`, `mcp_wire_name(server, tool)` (`mcp__<server>__<tool>`, at most 64 characters); `mcp_first_sentence(d, n = 120L)`; `mcp_coerce(x, schema, path = "args")`; `mcp_tool_norm(t)` -> `list(name, title, description, input_schema, annotations, output_schema)`; `mcp_result_parse(res, elapsed = NA_real_)` -> `list(content, structured, is_error, text, images, elapsed)`; `mcp_value(res)`; `mcp_rpc_ok(id, result)`, `mcp_rpc_err(id, code, message, data = NULL)`; `mcp_client_caps()`, `mcp_client_info()`, `mcp_meta_fields(version)`, `mcp_file_uri(path)`; `mcp_state()` (`the$mcp_conns`: environments `conns`, `specs`, `servers`, `lru`, `sessions` (session id -> weak reference, Task 7) and the config `stamp`); `mcp_transport(spec)`; the caches `mcp_cache_key(spec)`, `mcp_cache_path(kind, spec, create = FALSE)`, `mcp_era_get(spec)`, `mcp_era_put(spec, era, version)`, `mcp_era_forget(spec)`, `mcp_tools_cache_get(spec)`, `mcp_tools_cache_put(spec, tools, ttl_ms = NULL, cache_scope = NULL)`, `mcp_tools_cache_fresh(x)`; the logs `mcp_log_path(name)`, `mcp_log_append(path, txt)`, `mcp_log(conn, line)`; placeholders `mcp_expand(x, project = project_root())`, `mcp_expand1(s, project)`, `mcp_secret_name(x)`, `mcp_expand_spec(spec, project = project_root())`.
 
 Every JSON text sent to a server is ASCII (report 16 §2.17: servers in a C locale or a Windows code page read it intact; jsonlite would otherwise write unknown-encoded bytes as `<c3><a9>`). Arguments are coerced by the tool's schema before `json_encode()` so that `auto_unbox = TRUE` never turns a length-1 array into a scalar (report 06 §4.5.3's `coerce_to_schema()`). `structuredContent` is the one value gptr parses with `simplifyVector = TRUE`, because 04 §9.4 promises "R values (`structuredContent` simplified, else text)".
@@ -1940,10 +1945,7 @@ mcp_transport = function(spec) {
 #' (contract 11.9)
 #' @noRd
 mcp_cache_key = function(spec) {
-  if (!is.null(spec$url)) {
-    where = paste0(url_origin(spec$url), url_parts(spec$url)$path)
-    return(hash_sha256(canonical_json(list(url = where))))
-  }
+  if (!is.null(spec$url)) return(hash_sha256(canonical_json(list(url = url_for_log(spec$url)))))
   hash_sha256(canonical_json(list(command = as.character(spec$command),
                                   args = I(as.character(unlist(spec$args) %||% character())))))
 }
@@ -7191,7 +7193,7 @@ The assembled plan was searched for "TBD", "TODO", "implement later", "fill in",
 15. **`mcp_server` records** are registered on demand by `mcp_sync()` (when a listing, the catalog or a `peter$mcp` lookup needs them, and again when a config file, the trust state or `mcp.import` changes), not by `builtin_mcp()` at load, because a load must do no file I/O beyond the package (04 §7.1 `zzz.R`).
 16. **Server instructions** are not added to the `<mcp>` catalog (report 16 §4.5 suggested it; 03 §7.3's section template has no slot); they are kept on the connection.
 17. **Disk tool-cache freshness for legacy servers** (no `ttlMs`) is 24 hours; a live connection still lists tools on connect and after `notifications/tools/list_changed`.
-18. **Internal helpers of dependency plans** consumed as their plans define them: `first_sentence()` (P01), `ext_control_guard()` (P02), `lock_with()`, `secrets_state()` and, in tests, `vault_reset()` (P03), `reactor_depth()` (P04), `url_origin()`, `write_close()`, `proc_pool_cap()`, `reactor_allow_runs()` (P04).
+18. **Internal helpers of dependency plans** consumed as their plans define them: `first_sentence()` (P01), `ext_control_guard()` (P02), `lock_with()`, `url_parse()`, `secrets_state()` and, in tests, `vault_reset()` (P03), `reactor_depth()` (P04), `url_origin()`, `url_for_log()`, `write_close()`, `proc_pool_cap()`, `reactor_allow_runs()` (P04).
 19. **The shape of `config$codex`.** 04 §5.11 says only "named list of client snippets", and §6.3 says the token is placed "in child environments and in `$config` snippets marked as secret". P20 (written earlier) reads `h$config$codex$env[[h$token_env]]` in `pcli_codex_env(h)` and stubs the handle's `config` as `list(codex = list(env = c(GPTR_MCP_TOKEN = token)))` (`stub_mcp_handle()`). So P18's Codex snippet is a list, `args` (the `-c` overrides, which name `bearer_token_env_var=GPTR_MCP_TOKEN`) plus `env` = `c(GPTR_MCP_TOKEN = <value>)`, marked secret and printed redacted. The other three snippets stay JSON text, so `as.character()` is the text to paste. Every `mcp.serve_ensure(session)` call for one session returns the same token value, because P20's builtin:cli `request_params` hook calls the service (`pcli_codex_ensure(ctx$session)`) before each Codex request.
 20. **Session ids for the services.** 04 §7.0 types `mcp.serve_ensure` as `function(session)` and `mcp.dispatch_local` as `function(message, session)`, but 04 §8.1 gives L1 adapters only ids (`run`, `session` | ids). P20's builtin:cli `request_params` hook calls `mcp.serve_ensure(ctx$session)` (a session object, through `pcli_codex_ensure()`) before each Codex request and stores url, port and the session's token by session id; the adapter reads that record by `opts$session` (`pcli_codex_mcp(opts)`) and never calls the service (P20 ambiguity 1). P18 still accepts an id, for a caller that holds only `opts$session`: `session_by_id()` is not on the IC-33 kernel SDK, so an L4 file cannot call it; P18 keeps its own weak index `id -> weakref(session)` in `the$mcp_conns$sessions`, filled by builtin:mcp's `session_start` hook (every first freeze and every `gptr_fork()`, reason `fork`) and by every service call made with a session object. An id P18 never saw is `gptr_error_invalid_argument`; on any error from the service P20's `pcli_codex_ensure()` records the reason and Codex runs on files only with its notice. Should 04 later add `session_by_id()` to the kernel SDK, `mcp_session_resolve()` would use it instead.
 21. **`gptr_logout()` and in-memory tokens.** 04 §6.2 says `gptr_logout()` "removes stored and in-memory credentials". P03 has no unregister function, so `oauth_forget_access()` marks the `auth:<key>:access` entries of P03's registry (`secrets_state()$reg`, the same `auth` area, layer L0) inactive, which is the state P03's own `active = FALSE` registration produces: `secret_lookup()` no longer returns them, and their values stay registered, so they are still redacted.
@@ -7239,3 +7241,4 @@ Consolidation of 2026-10-01 against 04 (§7.0 `mcp.serve_ensure` `function(sessi
 | F5 | finalize | minor | Task 9 tests; Steps 2 and 4; Plan acceptance (final command, rows 4 and R1); Executed validation | applied | The test "an r call through the server is gated ..." now shows that the dedicated session keeps its mode when the `mode` option changes, and that a restart applies the new mode (2 more expectations). The new test "the user's token has a dedicated chat session; its usage stays its own (IC-58)" (12 expectations) checks these things: kind `chat`, mode, no parent, home `envir`, the live `mcp_token` and the token record's id and key; a write on the user's token is denied by the session's manual mode while the user's auto-mode session exists; a usage row charged to the session with P06's `usage_add()` appears in `gptr_usage(s)` and `gptr_usage()` but leaves `gptr_usage()` of the user's session unchanged; `stop()` releases the session and revokes the token. In "both client eras work ...", `local_gptr_options(mode = "auto")` now comes before `gptr_mcp_serve()`, because the session takes its mode at start. Re-measured counts: Task 9 red `FAIL 8` -> `FAIL 9` (`PASS 38`), green `PASS 110` -> `PASS 124`; all P18 files `PASS 476` -> `PASS 490` (Windows 477 -> 491); with `test-lint-rules.R` 481 -> 495. |
 | F6 | finalize | minor | Global Constraints (server, package state, layering); Functions consumed (P06); File Structure (`R/mcp-server.R`, `test-mcp-server.R`); Task 9 Interfaces and text; roxygen of `gptr_mcp_serve()`; Plan acceptance lint/arch expectation | applied | The prose now matches row F4. It names the dedicated session, `the$mcp_server$user` and `mcp_serve_session()`, and lists `session_new()` among P06's consumed functions as the one contract edge outside the IC-33 kernel SDK, and `setting_get()` (settings `model` and `mode`) among Task 9's. It also lists the tests' P06 functions (`session_home()`, `gptr_usage()`, `usage_add()`, `usage_conform()`). The busy rule now speaks of "the user's token (its dedicated session never runs)" instead of "the user's own serving context". The arch-layers expectation now admits `session_new()` through P01's `arch_contract_edges()`. The roxygen paragraph was reflowed to 100 columns. Every `r` block was re-extracted and parses under `Rscript --vanilla` (27 blocks, no `<-` token, no `%>%`, ASCII only, no line over 100 characters). |
 | L1 | simplicity LOCK | minor | Task 1 Files, lock literal and test; Tasks 2 and 6 callers; Functions consumed (P03); ambiguity 18; acceptance row 5b | applied | One IC-71 short lock (D-153): `oauth_lock_with()` is P03's `lock_with()` in `R/auth-store.R`, whose literal Task 1 now shows. The index's two warnings "P18 Modify/replace R/auth-store.R, which contract 04 section 14 assigns to P03" are this recorded exception. |
+| U1 | simplicity URL | minor | Task 1 Files, Interfaces, URL literal and tests; Task 2 `oauth_as_metadata()`, `oauth_discover()`, `oauth_key_exchange()`; Task 3 `mcp_cache_key()`; ambiguity 18 | applied | One URL parser (D-155): `url_parts()` is P03's `url_parse()` in `R/auth-secrets.R`, whose literal Task 1 now shows; a redirect libcurl cannot parse is `gptr_error_invalid_argument`; Task 2 reads an unparseable URL's path as `""`; the cache key hashes `url_for_log()`. The index's warning "P18 Modify R/auth-secrets.R, which contract 04 section 14 assigns to P03" is this recorded exception. |

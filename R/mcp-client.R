@@ -307,10 +307,7 @@ mcp_transport = function(spec) {
 #' (contract 11.9)
 #' @noRd
 mcp_cache_key = function(spec) {
-  if (!is.null(spec$url)) {
-    where = paste0(url_origin(spec$url), url_parts(spec$url)$path)
-    return(hash_sha256(canonical_json(list(url = where))))
-  }
+  if (!is.null(spec$url)) return(hash_sha256(canonical_json(list(url = url_for_log(spec$url)))))
   hash_sha256(canonical_json(list(command = as.character(spec$command),
                                   args = I(as.character(unlist(spec$args) %||% character())))))
 }

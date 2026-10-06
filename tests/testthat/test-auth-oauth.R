@@ -1,12 +1,14 @@
 test_that("url helpers split URLs; hdr_value reads headers case-insensitively", {
-  u = url_parts("https://Example.org:8443/a/b?x=1&y=2")
+  u = url_parse("https://Example.org:8443/a/b?x=1&y=2")
   expect_identical(u$scheme, "https")
   expect_identical(u$host, "example.org")
   expect_identical(u$port, "8443")
   expect_identical(u$path, "/a/b")
   expect_identical(u$query, "x=1&y=2")
-  expect_identical(url_parts("http://[::1]:5000/cb")$host, "[::1]")
-  expect_error(url_parts("no scheme"), class = "gptr_error_invalid_argument")
+  expect_identical(url_parse("http://h/a%2Fb?c=d%26e")[c("path", "query")],
+                   list(path = "/a%2Fb", query = "c=d%26e"))
+  expect_identical(url_parse("http://[::1]:5000/cb")$host, "[::1]")
+  expect_null(url_parse("no scheme"))
   expect_identical(hdr_value(list(`Www-Authenticate` = "Bearer x"), "WWW-Authenticate"), "Bearer x")
   expect_null(hdr_value(list(a = "1"), "b"))
   expect_null(hdr_value(NULL, "b"))
@@ -65,7 +67,7 @@ test_that("the authorization URL carries PKCE, state and the resource", {
   meta = list(authorization_endpoint = "https://as.example/authorize")
   url = oauth_authorize_url(meta, "c1", "http://127.0.0.1:50000/callback", "read", "st", "CH",
                             resource = "https://mcp.example/mcp")
-  q = query_parse(url_parts(url)$query)
+  q = query_parse(url_parse(url)$query)
   expect_identical(q$response_type, "code")
   expect_identical(q$code_challenge_method, "S256")
   expect_identical(q$code_challenge, "CH")
@@ -93,6 +95,10 @@ test_that("redirects are checked for target, state and iss before the code is us
                                     "st", iss), "declined", class = "gptr_error_provider")
   expect_error(oauth_parse_redirect("", redirect, "st", iss), "nothing",
                class = "gptr_error_untrusted")
+  expect_error(oauth_parse_redirect(paste0(redirect, "?code=a\001b&state=st"), redirect, "st", iss),
+               class = "gptr_error_invalid_argument")
+  expect_error(oauth_parse_redirect("http://127.0.0.1:50000\\@evil.example/callback?state=st",
+                                    redirect, "st", iss), class = "gptr_error_invalid_argument")
 })
 
 test_that("lock_with() serialises, waits for a live holder and breaks stale locks", {
@@ -135,5 +141,5 @@ test_that("encoding keeps percent signs, padding and malformed escapes; fields m
                class = "gptr_error_untrusted")
   url = oauth_authorize_url(list(authorization_endpoint = "https://as.example/authorize?p=1"),
                             "c1", "http://127.0.0.1:1/cb", c("read", "write"), "st", "CH")
-  expect_identical(query_parse(url_parts(url)$query)$scope, "read write")
+  expect_identical(query_parse(url_parse(url)$query)$scope, "read write")
 })

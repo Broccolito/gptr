@@ -309,3 +309,14 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   retry refusal loop; gateway copies left to simp-gw (Open).
 - Deviations: D-154 (D-021, D-059 edited; 04 section 7.6 amended). Open: F13/F17 specifics lost (only the
   items above applied); simp-gw: `gateway_last_custom()` and the `router_call()` loop can use `path_custom()`.
+
+## URL - One URL parser (2026-10-05)
+- `url_parse()` (L0, raw path and query) serves `origin_of()`, `url_origin()`, `url_for_log()`, the
+  catalog and Ollama endpoints, the OAuth redirect check and the MCP cache key; `http_url_parts()`,
+  `url_parts()`, `catalog_header()` gone (R -35, tests +6; plan ~28). IPv6 hosts keep brackets.
+- Red: FAIL 5 (`auth-oauth`: `url_parse` missing; control-character redirect accepted; backslash
+  redirect untrusted). Green: plan filter PASS 902 (+3). Lint clean. Neighbours: `s1-|http-|auth-|
+  mcp-|eval-guard|arch-layers|lint-rules` PASS 3408, `provider-|gptr-(config|gateway|capture)|
+  session-live|doc-io|cli-common|ext-check` PASS 4744; cross-plan 0 errors, warn 84 (+1 as P18 U1).
+- Reviews: none yet.
+- Deviations: D-155. Open: `R/s1-ollama.R` (no stage-1 lane) renamed only.

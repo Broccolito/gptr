@@ -88,20 +88,27 @@ secret_bound_origin = function(handle) {
   handle$origin %||% secrets_state()$reg[[handle$id]]$origin
 }
 
+#' A URL's parts by libcurl's rules (the transport's), or NULL; the host lower-cased, the path
+#' and query as written
+#' @noRd
+url_parse = function(url) {
+  if (!rlang::is_string(url) || !validUTF8(url) || grepl("[[:cntrl:]\\\\]", url) ||
+      !grepl("\\A[A-Za-z][A-Za-z0-9+.-]*://", url, perl = TRUE)) return(NULL)
+  parts = tryCatch(curl::curl_parse_url(url, decode = FALSE, params = FALSE),
+                   error = function(e) NULL)
+  if (is.null(parts) || is.null(parts$host) || !nzchar(parts$host)) return(NULL)
+  parts$host = tolower(parts$host)
+  parts
+}
+
 #' Normalised origin (scheme://host:port) of a URL, or NA
 #' @noRd
 origin_of = function(url) {
-  if (!is.character(url) || length(url) != 1L || is.na(url) || !validUTF8(url) ||
-      grepl("[[:cntrl:]\\\\]", url) ||
-      !grepl("\\A[A-Za-z][A-Za-z0-9+.-]*://", url, perl = TRUE)) return(NA_character_)
-  # Use libcurl's URL parser just like the transport, including abbreviated IPv4
-  # and compressed IPv6 forms, without crossing the L0 -> HTTP layer boundary.
-  parts = tryCatch(curl::curl_parse_url(url), error = function(e) NULL)
-  if (is.null(parts) || is.null(parts$host) || !nzchar(parts$host)) return(NA_character_)
-  scheme = tolower(parts$scheme)
+  parts = url_parse(url)
+  if (is.null(parts)) return(NA_character_)
   port = parts$port %||%
-    switch(scheme, https = "443", wss = "443", http = "80", ws = "80", "")
-  paste0(scheme, "://", tolower(parts$host), if (nzchar(port)) paste0(":", port) else "")
+    switch(parts$scheme, https = "443", wss = "443", http = "80", ws = "80", "")
+  paste0(parts$scheme, "://", parts$host, if (nzchar(port)) paste0(":", port))
 }
 
 #' Derived forms of a value that commonly appear in output (G6 section 3.4)

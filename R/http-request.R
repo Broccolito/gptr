@@ -15,24 +15,12 @@
 #' @return chr(1), or NA when the URL cannot be parsed.
 #' @noRd
 url_origin = function(url) {
-  parts = http_url_parts(url)
+  parts = url_parse(url)
   if (is.null(parts)) return(NA_character_)
-  scheme = tolower(parts$scheme)
-  host = tolower(parts$host)
+  scheme = parts$scheme
   port = parts$port %||% ""
   if ((scheme == "https" && port == "443") || (scheme == "http" && port == "80")) port = ""
-  paste0(scheme, "://", host, if (nzchar(port)) paste0(":", port))
-}
-
-#' Parse with the same URL rules used by the transport, without making a request
-#' @noRd
-http_url_parts = function(url) {
-  if (!is.character(url) || length(url) != 1L || is.na(url) || !validUTF8(url) ||
-      grepl("[[:cntrl:]\\\\]", url) ||
-      !grepl("\\A[A-Za-z][A-Za-z0-9+.-]*://", url, perl = TRUE)) return(NULL)
-  parts = tryCatch(curl::curl_parse_url(url), error = function(e) NULL)
-  if (is.null(parts) || is.null(parts$host) || !nzchar(parts$host)) return(NULL)
-  parts
+  paste0(scheme, "://", parts$host, if (nzchar(port)) paste0(":", port))
 }
 
 #' A URL for logs: origin and path, never the query, fragment or credentials
@@ -40,7 +28,7 @@ http_url_parts = function(url) {
 url_for_log = function(url) {
   o = url_origin(url)
   if (is.na(o)) return("")
-  paste0(o, http_url_parts(url)$path %||% "")
+  paste0(o, url_parse(url)$path %||% "")
 }
 
 #' Materialise header values for one origin
