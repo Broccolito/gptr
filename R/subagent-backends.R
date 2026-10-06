@@ -194,29 +194,31 @@ subagent_model_info = function(model, sid = NULL) {
        type = registry_get("provider", pid, session = sid)$type %||% "chat", spec = NULL)
 }
 
-#' The egress acknowledgement and the replay guard on the child's own record of its canonical
-#' model's provider, as P08's gateway_guards(): a router's are checked per routed request
-#' (contract 7.8; IC-29, IC-30, IC-69, IC-74)
+#' The egress acknowledgement and the replay guard on the child's own record of the provider of
+#' `model` (the model the child calls; a worker proxy's session model is `worker/worker`), as
+#' P08's gateway_guards(): a router's are checked per routed request (contract 7.8; IC-29, IC-30,
+#' IC-69, IC-74)
 #' @noRd
-subagent_guards = function(child, opts = list()) {
-  d = session_data(child)
-  if (startsWith(d$model, "router:")) return(invisible(TRUE))
-  pid = sub("[/:].*$", "", d$model)
-  pr = registry_get("provider", pid, session = d$id)
+subagent_guards = function(child, opts = list(), model = session_data(child)$model) {
+  if (startsWith(model, "router:")) return(invisible(TRUE))
+  pid = sub("[/:].*$", "", model)
+  pr = registry_get("provider", pid, session = session_data(child)$id)
   if (!identical(opts$context %||% setting_get("context", default = "summary"), "none")) {
     egress_check(pid, pr)
   }
-  replay_guard(pr %||% d$model)
+  replay_guard(pr %||% model)
 }
 
-#' A child session: kind `child` under its parent, in an overlay of `spec$base`, with its backend,
-#' agent label and export names (P19 is the only writer of these fields, architecture 5.8) and
-#' its rank-0 records: the model's provider spec, the isolation policy of parallel children and
-#' the agent's system text as a T1 section
+#' A child session of model `model_ref`: kind `child` under its parent, in an overlay of
+#' `spec$base` holding `spec$bind`, with its backend, agent label and export names (P19 is the only
+#' writer of these fields, architecture 5.8) and its rank-0 records: the model's provider spec,
+#' the isolation policy of parallel children and the agent's system text as a T1 section
 #' @noRd
-subagent_child_new = function(spec) {
-  child = session_new(spec$info$ref, spec$mode, home = subagent_overlay(spec$base, spec$name),
-                      kind = "child", parent = spec$parent, preset = spec$preset,
+subagent_child_new = function(spec, model_ref = spec$info$ref) {
+  home = subagent_overlay(spec$base, spec$name)
+  list2env(spec$bind %||% list(), envir = home)
+  child = session_new(model_ref, spec$mode, home = home, kind = "child", parent = spec$parent,
+                      preset = spec$preset,
                       opts = list(name = spec$name,
                                   max_turns = spec$agent$max_turns %||% spec$max_turns))
   d = session_data(child)
@@ -305,7 +307,6 @@ subagent_handle = function(session, run) {
 #' @noRd
 backend_child_start = function(spec, ctx) {
   child = subagent_child_new(spec)
-  if (length(spec$bind)) list2env(spec$bind, envir = session_home(child))
   subagent_guards(child, spec$opts)
   run = run_start(child, subagent_first_message(child, spec), subagent_run_opts(spec, child))
   subagent_handle(child, run)
@@ -442,16 +443,24 @@ subagent_export = function(h, target, taken = character()) {
 
 # ---- builtin:subagents (contract 7.19, 10.3) ---------------------------------------------------
 
-#' builtin:subagents: the backends `inline` and `cli`, the routes `team` (order 15) and `fanout`
-#' (order 16), the `<r_session>` fragment for sub-agents and the `agent_reports` context block
+#' builtin:subagents: the backends `inline`, `worker` and `cli`, the provider and adapter of
+#' worker proxies, the routes `team` (order 15) and `fanout` (order 16), the `<r_session>`
+#' fragment for sub-agents and the `agent_reports` context block (contract 7.19, 10.3)
 #' @noRd
 builtin_subagents = function(gptr) {
   gptr$register(gptr_backend("inline", start = backend_child_start, cancel = backend_cancel,
                              capabilities = list(parallel = "io", live_objects = TRUE,
                                                  ask = "queue")))
+  gptr$register(gptr_backend("worker", start = backend_worker_start, cancel = backend_cancel,
+                             capabilities = list(parallel = "cpu", live_objects = FALSE,
+                                                 ask = "forward")))
   gptr$register(gptr_backend("cli", start = backend_child_start, cancel = backend_cancel,
                              capabilities = list(parallel = "io", live_objects = FALSE,
                                                  ask = "none")))
+  # the proxy calls no model itself; backend_worker_start() guards the worker's real model
+  gptr$register(gptr_provider("worker", api = "subagent-worker", local = TRUE, offline = TRUE,
+                              models = list(list(id = "worker", name = "Worker sub-agent"))))
+  gptr$register(gptr_adapter("subagent-worker", transport = "inprocess", stream = worker_stream))
   gptr$register(gptr_spec("route", "team", order = 15, match = route_team_match,
                           run = route_team_run,
                           description = "agents = given: a team session of sub-agents"))

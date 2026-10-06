@@ -311,7 +311,7 @@ run_retryable = function(msg, err) {
   k = err_class(err)
   if (!is.na(k) && k %in% c("spend_cap", "auth", "retry_after", "redirect", "billing",
                             "context_overflow", "no_key", "not_available", "untrusted",
-                            "invalid_argument", "invalid_spec", "missing_package")) {
+                            "invalid_argument", "invalid_spec", "missing_package", "process")) {
     return(FALSE)
   }
   quota = grepl(non_retryable_pattern, text, perl = TRUE, ignore.case = TRUE)
@@ -922,7 +922,15 @@ run_initial_input = function(run, input) {
 #' injects into adapters (IC-33); the closures capture a frame that holds only `run` (rule R2)
 #' @noRd
 run_wire = function(run) {
-  run$gate = function(call) perm_check(call, run)
+  run$gate = function(call) {
+    dec = perm_check(call, run)
+    # no dispatcher stops an adapter's run after the user's abort answer: the gate does
+    if (isTRUE(run$abort_after_call)) {
+      run$signal$reason = "user"
+      run$signal$aborted = TRUE
+    }
+    dec
+  }
   run$tool_result = function(result, call) tool_result_message(result, call)
   run$mcp_dispatch = function(message) ext_service_get("mcp.dispatch_local")(message, run$shell)
   run$loop = loop_new(max_turns = run$max_turns,

@@ -342,3 +342,114 @@ test_that("builtin:subagents registers backends, routes, the fragment and the re
   blk = registry_get("context_block", "agent_reports")
   expect_identical(blk$authority, "data")
 })
+
+# ---- Task 8: INFRA-16, inline and worker children on one reactor (architecture 6.18) -------------
+
+# Architecture 6.18 names this file for INFRA-16 (P19's leg; the fake-CLI leg is P20's, IC-36),
+# and P24's INFRA suite runs it. testthat sources each test file on its own, so the helpers the
+# test needs are repeated from test-subagent-worker.R (05 names no helper file for P19).
+
+# Worker children load gptr with library(): under R CMD check the installed package is on the
+# library path; from a source tree (devtools::test()) the tree is installed once per R session
+# into a temporary library that is put first on .libPaths() (never the user library)
+local_worker_lib = function(.env = parent.frame()) {
+  testthat::skip_on_cran()
+  path = getNamespaceInfo(asNamespace("gptr"), "path")
+  if (!file.exists(file.path(path, "R", "aaa-state.R"))) return(invisible(NULL))
+  lib = file.path(tempdir(), "gptr-worker-lib")
+  if (!file.exists(file.path(lib, "gptr", "DESCRIPTION"))) {
+    dir.create(lib, showWarnings = FALSE, recursive = TRUE)
+    cmd = sprintf(paste0("install.packages('%s', lib = '%s', repos = NULL, type = 'source', ",
+                         "INSTALL_opts = c('--no-docs', '--no-multiarch', '--no-test-load'))"),
+                  normalizePath(path, winslash = "/"), normalizePath(lib, winslash = "/"))
+    res = processx::run(rscript_path(), c("--vanilla", "-e", cmd), error_on_status = FALSE,
+                        timeout = 600)
+    if (!file.exists(file.path(lib, "gptr", "DESCRIPTION"))) {
+      testthat::skip(paste("could not install gptr for worker children:", res$stderr))
+    }
+  }
+  withr::local_libpaths(lib, action = "prefix", .local_envir = .env)
+  invisible(lib)
+}
+
+local_team_fake = function(script = function(request) paste("reply", request$n),
+                           .env = parent.frame()) {
+  local_project(.env = .env)
+  local_gptr_options(mode = "auto", model = "fake/fake-1", .env = .env)
+  local_fake_provider(script, .env = .env)
+}
+
+team_call = function(prompt, agents = NULL, envir = new.env(), opts = list()) {
+  call_new(prompt = prompt, template = prompt, envir = envir,
+           ids = list(model = NULL, mode = NULL, skills = NULL, plugins = NULL,
+                      extensions = NULL, tools = NULL, agents = agents),
+           args = list(parallel = NULL, background = FALSE, budget = NULL, replay = NULL,
+                       opts = opts, run = TRUE, stdin = FALSE))
+}
+
+# A fake script that a worker child can run: its environment is the base environment, so it is
+# sent without the test's environment and uses base functions only (the test helpers
+# fake_text() and fake_tool() do not exist in the child)
+worker_script = function(fn) {
+  environment(fn) = baseenv()
+  fn
+}
+
+test_that("INFRA-16: two inline agents and two workers interleave on one reactor", {
+  local_worker_lib()
+  local_team_fake(worker_script(function(request) {
+    if (length(request$last_results)) return(list(text = "done", delay = 1))
+    t1 = request$system$t1
+    if (length(t1) && grepl("inline", t1, fixed = TRUE)) {
+      list(tool = "r", input = list(code = "Sys.sleep(0.5)"))
+    } else {
+      list(text = "worker done", delay = 2)
+    }
+  }))
+  # two worker slots even on a two-core machine (the default pool is min(4, cores - 1))
+  local_gptr_options(subagents.max_workers = 2L)
+  log = new.env()
+  log$events = list()
+  log$start = new.env()
+  log$end = new.env()
+  ids = c(hook_add("tool_execution_start", function(event, ctx) {
+    log$events[[length(log$events) + 1L]] = list(agent = session_data(ctx$session)$agent,
+                                                 what = "start", t = reactor_now())
+    NULL
+  }), hook_add("tool_execution_end", function(event, ctx) {
+    log$events[[length(log$events) + 1L]] = list(agent = session_data(ctx$session)$agent,
+                                                 what = "end", t = reactor_now())
+    NULL
+  }), hook_add("subagent_start", function(event, ctx) {
+    assign(event$agent, reactor_now(), envir = log$start)
+    NULL
+  }), hook_add("subagent_end", function(event, ctx) {
+    assign(event$agent, reactor_now(), envir = log$end)
+    NULL
+  }))
+  withr::defer(for (id in ids) hook_remove(id))
+  mk = function(nm, backend, system) {
+    gptr_agent(nm, description = nm, model = "fake/fake-1", backend = backend, system = system)
+  }
+  agents = list(a = mk("a", "inline", "inline agent"), b = mk("b", "inline", "inline agent"),
+                c = mk("c", "worker", "worker agent"), d = mk("d", "worker", "worker agent"))
+  t0 = reactor_now()
+  team = route_team_run(team_call("go", agents = agents))
+  elapsed = reactor_now() - t0
+  expect_identical(unname(vapply(team$children, function(s) s$status, "")), rep("idle", 4L))
+  # R tools never overlap: the inline agents' tool spans are disjoint
+  span = function(nm) {
+    ev = Filter(function(x) identical(x$agent, nm), log$events)
+    range(vapply(ev, function(x) x$t, 0))
+  }
+  a = span("a")
+  b = span("b")
+  expect_true(a[2] <= b[1] || b[2] <= a[1])
+  # the two workers were alive at the same time
+  start = unlist(mget(c("a", "b", "c", "d"), envir = log$start))
+  end = unlist(mget(c("a", "b", "c", "d"), envir = log$end))
+  expect_true(max(start[c("c", "d")]) < min(end[c("c", "d")]))
+  # all four interleaved: the team took well under the sum of the agents' own lifetimes, which
+  # it would equal if they ran one after the other (a relative bound, robust to slow machines)
+  expect_lt(elapsed, 0.75 * sum(end - start))
+})
