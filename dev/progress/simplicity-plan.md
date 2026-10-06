@@ -376,21 +376,21 @@ every lane, so they need the freeze).
 
 ### Stage C (lane-bound)
 
-**P11-A Classifier duplication and test clusters** (P11; ~565; low; S13, S14, S2 step one, `\z` fix). One
+(Replaced by P11 Task 2b, `1d60792`, D-061.) **P11-A Classifier duplication and test clusters** (P11; ~565; low; S13, S14, S2 step one, `\z` fix). One
 option parser (`risk_cmd_args`), class_ctx set once, merge the five test clusters into table-driven blocks with
 the current code (no behaviour change). After P11 Task 3 commits. Green: `filter = "^perm-classify$"`, timing test
 line 2531.
 
-**P11-B1 Lexer and gate** (P11; ~1,410; high; S3, S9, S2 part). One tokenizer; one unmodelled-construct scan ->
+(Replaced by P11 Task 2b, `1d60792`, D-061.) **P11-B1 Lexer and gate** (P11; ~1,410; high; S3, S9, S2 part). One tokenizer; one unmodelled-construct scan ->
 level 3 `dynamic`; the mandatory quote-blind literal scan (per physical line and split on `;`/`&`/`|`, maximum
 taken) that keeps level 4 for literal destructive payloads; gate rules without per-program exceptions.
 
-**P11-B2 Program models** (P11; ~3,840; high/medium; S1, S5, S6, S7, S8, S2 part). Universal `guarded()` and
+(Replaced by P11 Task 2b, `1d60792`, D-061.) **P11-B2 Program models** (P11; ~3,840; high/medium; S1, S5, S6, S7, S8, S2 part). Universal `guarded()` and
 secret-operand rules; sed/awk/find level-0 regexes; cp/mv/mkdir/touch/redirects/tee with the edits-parity rows;
 one cd rule; one `NAME=literal` substitution; stdin-fed shells level 3 (payload still 4 via B1's scan); git verb
 rules; one over-approximating glob matcher. Preserves the call texts and fn values Tasks 3/7 parse.
 
-**P11-B3 SQL, Python, secrets** (P11; ~750; medium; S10, S11, S12 as changed in section 3, S2 part). One SQL
+(Replaced by P11 Task 2b, `1d60792`, D-061.) **P11-B3 SQL, Python, secrets** (P11; ~750; medium; S10, S11, S12 as changed in section 3, S2 part). One SQL
 lexing pass plus a raw fallback; Python env-write regex and import-line flags; the env-dump token table (category
 `secret`, 4 with a sink).
 
