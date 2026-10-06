@@ -419,3 +419,122 @@ artifact_build_html = function(id, dir, data, ctx) {
   artifact_copy_working(id, dir, "html")
   write_utf8(file.path(dir, "app.R"), artifact_html_wrapper(vapply(data, function(r) r$name, "")))
 }
+
+# ---- the child process: artifact_serve() and the access token ---------------------------------
+
+#' Is openssl installed? (a seam for tests)
+#' @noRd
+artifact_has_openssl = function() requireNamespace("openssl", quietly = TRUE)
+
+#' A per-launch 128-bit access token as 32 hex digits, never from R's RNG (IC-61, IC-71), or ""
+#' with a one-time notice when neither openssl nor /dev/urandom is available
+#' @noRd
+artifact_token = function() {
+  bytes = raw(0)
+  if (artifact_has_openssl()) {
+    bytes = openssl::rand_bytes(16L)
+  } else if (.Platform$OS.type == "unix" && file.exists("/dev/urandom")) {
+    # raw = TRUE: a plain file() warns that /dev/urandom is not a regular file
+    con = file("/dev/urandom", open = "rb", raw = TRUE)
+    on.exit(close(con), add = TRUE)
+    bytes = readBin(con, "raw", 16L)
+  }
+  if (length(bytes) != 16L) {
+    gptr_inform(paste0("Artifacts are served without an access token: install the openssl ",
+                       "package so that other users of this computer cannot open them."),
+                "notice", .once = "artifact_token")
+    return("")
+  }
+  paste(sprintf("%02x", as.integer(bytes)), collapse = "")
+}
+
+#' Candidate ports of a launch: the previous port first (a revision keeps its URL), then 20
+#' RNG-free candidates (IC-61)
+#' @noRd
+artifact_ports = function(id) {
+  prev = artifact_meta_read(id)$port
+  ok = is.numeric(prev) && length(prev) == 1L && !is.na(prev)
+  unique(c(if (ok) as.integer(prev), port_candidates(20L)))
+}
+
+#' The callr environment of the child: the secret-free `artifact` profile (IC-60) plus the
+#' candidate ports and library paths (its empty R profile sets none), and the three values of
+#' callr's default `rcmd_safe_env()` that `env =` replaces (R CMD check's relative
+#' `R_TESTS=startup.Rs` would halt the child; no viewer opens from model code)
+#' @noRd
+artifact_child_env = function(ports) {
+  set = c(GPTR_ARTIFACT_PORTS = paste(ports, collapse = ","),
+          R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
+          R_TESTS = "", R_BROWSER = "false", R_PDFVIEWER = "false")
+  child_env_callr(child_env("artifact", set = set))
+}
+
+#' Serve one artifact version: the entry of the callr child (contract 7.23)
+#'
+#' Self-contained (base R and `pkg::` calls only; callr runs it with `package = FALSE`, so the
+#' child never loads gptr). shinyAppDir() sources the app now, so a broken app ends the child
+#' before a port exists. The page request and every session must carry `gptr_token` (IC-71);
+#' the first candidate of `GPTR_ARTIFACT_PORTS` that binds on 127.0.0.1 is published by atomic
+#' rename; a watchdog stops the app when the parent is gone. Errors are reported on stderr:
+#' with the empty R profile of IC-60 callr's own handler cannot print them.
+#' @noRd
+artifact_serve = function(dir, port_file, parent_pid, token) {
+  report = function(e) {
+    message("Error: ", conditionMessage(e))
+    invisible(NULL)
+  }
+  query_ok = function(query) {
+    if (!nzchar(token)) return(TRUE)
+    q = shiny::parseQueryString(if (is.null(query)) "" else query)
+    identical(q$gptr_token, token)
+  }
+  parent = tryCatch(ps::ps_handle(as.integer(parent_pid)), error = function(e) NULL)
+  watchdog = function() {
+    up = !is.null(parent) && isTRUE(tryCatch(ps::ps_is_running(parent), error = function(e) FALSE))
+    if (!up) {
+      message("gptr: the parent R process is gone; stopping the app")
+      return(shiny::stopApp())
+    }
+    later::later(watchdog, 1)
+  }
+  app = tryCatch(shiny::shinyAppDir(dir), error = function(e) e)
+  if (inherits(app, "error")) return(report(app))
+  inner_http = app$httpHandler
+  inner_server = app$serverFuncSource
+  app$httpHandler = function(req) {
+    path = req$PATH_INFO
+    if ((is.null(path) || path %in% c("", "/")) && !query_ok(req$QUERY_STRING)) {
+      return(list(status = 403L, headers = list("Content-Type" = "text/plain; charset=UTF-8"),
+                  body = "Forbidden: open this artifact with the URL that gptr printed.\n"))
+    }
+    inner_http(req)
+  }
+  app$serverFuncSource = function() {
+    server = inner_server()
+    function(input, output, session) {
+      if (!query_ok(shiny::isolate(session$clientData$url_search))) return(session$close())
+      args = list(input = input, output = output)
+      if (any(c("session", "...") %in% names(formals(server)))) args$session = session
+      do.call(server, args)
+    }
+  }
+  ports = suppressWarnings(as.integer(strsplit(Sys.getenv("GPTR_ARTIFACT_PORTS"), ",")[[1L]]))
+  port = NA_integer_
+  for (p in unique(ports[!is.na(ports)])) {
+    srv = tryCatch(httpuv::startServer("127.0.0.1", p, list()), error = function(e) NULL)
+    if (!is.null(srv)) {
+      httpuv::stopServer(srv)
+      port = p
+      break
+    }
+  }
+  if (is.na(port)) return(report(simpleError("no free loopback port among the candidates")))
+  tmp = paste0(port_file, ".tmp")
+  writeLines(as.character(port), tmp)
+  if (!file.rename(tmp, port_file)) return(report(simpleError("could not publish the port")))
+  later::later(watchdog, 1)
+  res = tryCatch(shiny::runApp(app, port = port, host = "127.0.0.1", launch.browser = FALSE),
+                 error = function(e) e)
+  if (inherits(res, "error")) report(res)
+  invisible(NULL)
+}

@@ -241,3 +241,126 @@ test_that("version directories are claimed in order and never reused", {
   expect_true(dir.exists(artifact_version_dir("vers", 3L)))
   expect_error(artifact_version_claim("absent"), class = "gptr_error_artifact")
 })
+
+skip_if_cannot_launch = function() {
+  skip_on_cran()
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("httpuv")
+  skip_if_not_installed("later")
+}
+
+tiny_app = c("library(shiny)", "ui = fluidPage('hi')", "server = function(input, output) {}",
+             "shinyApp(ui, server)")
+
+# A version directory built from app lines (and data objects of `envir`)
+build_version = function(id, lines, data = character(), envir = new.env()) {
+  write_working(id, lines)
+  vdir = artifact_version_dir(id, artifact_version_claim(id))
+  artifact_snapshot(vdir, data, envir, id = id)
+  artifact_build_shiny(id, vdir, list(), NULL)
+  vdir
+}
+
+# Run artifact_serve() in a callr child as the launcher does; the child is killed when the
+# calling test ends
+serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.frame()) {
+  port_file = file.path(withr::local_tempdir(.local_envir = .env), "port")
+  raw = withr::local_tempfile(fileext = ".log", .local_envir = .env)
+  p = callr::r_bg(artifact_serve,
+                  args = list(dir = vdir, port_file = port_file, parent_pid = parent_pid,
+                              token = token),
+                  stdout = raw, stderr = "2>&1", supervise = TRUE, package = FALSE,
+                  user_profile = FALSE, system_profile = FALSE,
+                  env = artifact_child_env(port_candidates(5L)), cleanup = TRUE,
+                  cleanup_tree = TRUE, encoding = "UTF-8", wd = vdir)
+  withr::defer(kill_all(p, grace = 0), envir = .env)
+  deadline = Sys.time() + 30
+  while (!file.exists(port_file) && p$is_alive() && Sys.time() < deadline) Sys.sleep(0.05)
+  list(proc = p, port_file = port_file, raw = raw)
+}
+
+# Status of a GET (NA when nothing answers), polled until the app answers
+http_status = function(url, wait = 15) {
+  deadline = Sys.time() + wait
+  repeat {
+    h = curl::new_handle(followlocation = 0L)
+    s = tryCatch(curl::curl_fetch_memory(url, handle = h)$status_code,
+                 error = function(e) NA_integer_)
+    if (!is.na(s) || Sys.time() > deadline) return(s)
+    Sys.sleep(0.1)
+  }
+}
+
+test_that("the access token is 128 random bits from openssl or /dev/urandom", {
+  tok = artifact_token()
+  expect_match(tok, "^[0-9a-f]{32}$")
+  expect_false(identical(tok, artifact_token()))
+  skip_on_os("windows")
+  local_mocked_bindings(artifact_has_openssl = function() FALSE)
+  expect_match(artifact_token(), "^[0-9a-f]{32}$")
+})
+
+test_that("ports come from port_candidates() after the artifact's previous port", {
+  local_project()
+  ports = artifact_ports("fresh")
+  expect_length(ports, 20L)
+  expect_true(all(ports >= 49152L & ports <= 65535L))
+  meta = artifact_meta_new("old")
+  meta$port = 51234L
+  artifact_meta_write("old", meta)
+  expect_identical(artifact_ports("old")[1], 51234L)
+})
+
+test_that("the child env is the artifact profile with ports, library paths and safe R vars", {
+  withr::local_envvar(R_TESTS = "startup.Rs")
+  env = artifact_child_env(c(50001L, 50002L))
+  expect_identical(env[["GPTR_ARTIFACT_PORTS"]], "50001,50002")
+  expect_identical(env[["R_LIBS"]], paste(.libPaths(), collapse = .Platform$path.sep))
+  expect_true(nzchar(env[["R_PROFILE_USER"]]))
+  expect_identical(unname(file.size(env[["R_PROFILE_USER"]])), 0)
+  expect_identical(env[["R_TESTS"]], "")
+  expect_identical(env[["R_BROWSER"]], "false")
+})
+
+test_that("artifact_serve() publishes a loopback port and serves only requests with the token", {
+  skip_if_cannot_launch()
+  local_project()
+  e = new.env()
+  e$markers = data.frame(gene = c("CD14", "LYZ"))
+  vdir = build_version("served", ok_app, "markers", e)
+  tok = artifact_token()
+  ch = serve_child(vdir, tok)
+  expect_true(file.exists(ch$port_file))
+  port = as.integer(readLines(ch$port_file))
+  expect_true(port >= 49152L && port <= 65535L)
+  base = sprintf("http://127.0.0.1:%d/", port)
+  expect_identical(http_status(paste0(base, "?gptr_token=", tok)), 200L)
+  expect_identical(http_status(base), 403L)
+  expect_identical(http_status(paste0(base, "?gptr_token=", strrep("0", 32))), 403L)
+  expect_identical(http_status(paste0(base, "shared/shiny.min.js")), 200L)
+})
+
+test_that("a broken app ends the child before a port exists, with its error on stderr", {
+  skip_if_cannot_launch()
+  local_project()
+  broken = c("library(shiny)", "ui = fluidPage(textOutput(no_such_object))",
+             "server = function(input, output, session) {}", "shinyApp(ui, server)")
+  ch = serve_child(build_version("broken", broken), "")
+  ch$proc$wait(10000)
+  expect_false(ch$proc$is_alive())
+  expect_false(file.exists(ch$port_file))
+  log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
+  expect_true(any(grepl("Error: .*no_such_object", log)))
+})
+
+test_that("the watchdog stops the app when the parent process is gone", {
+  skip_if_cannot_launch()
+  local_project()
+  dead = processx::process$new(rscript_path(), c("--vanilla", "-e", "invisible(0)"))
+  dead$wait(10000)
+  ch = serve_child(build_version("orphan", tiny_app), "", parent_pid = dead$get_pid())
+  ch$proc$wait(15000)
+  expect_false(ch$proc$is_alive())
+  log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
+  expect_true(any(grepl("parent R process is gone", log, fixed = TRUE)))
+})
