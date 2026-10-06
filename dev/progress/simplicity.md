@@ -320,3 +320,15 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   session-live|doc-io|cli-common|ext-check` PASS 4744; cross-plan 0 errors, warn 84 (+1 as P18 U1).
 - Reviews: none yet.
 - Deviations: D-155. Open: `R/s1-ollama.R` (no stage-1 lane) renamed only.
+
+## P06-S2 - Estimator and replay rebuild (2026-10-05)
+- F5 (shared decision 5): `request_fallback()` and `context_tokens()` use P07's `prompt_request_estimate()`
+  (`entry_messages()`, `entry_compaction_cut()`; image default 768x512); `images_omit()` serves `images_elide()`,
+  `prompt_request_context()`; the P06 estimator helpers, `compaction_kept()`, `image_id()`, `image_omitted_text()`
+  gone. F9 `session_undo()` (was `rebuild_undo()`, `replay_undo()`), `path_fields()` (R -91, tests +2; plan ~53).
+- Red: FAIL 4 (`agent-run`: 768x512 image, code-class tool call). Green: `agent-run|session-` PASS 1599 incl.
+  FIX-3; token bench `--check` OK. Lint clean. Neighbours: `prompt-|context-|bench|arch-layers|lint-rules`,
+  `agent-|copy-|ext-check|provider-transform|zzz|aaa-state`, `doc-|gptr-|s1-route|cli-common|subagent` green.
+- Reviews: none yet.
+- Deviations: D-036 item 8, D-050 item 4, D-056 item 2 edited in place. Open: only two named tests changed numbers
+  (third name lost); D-081's re-estimate after a new elision unchanged.

@@ -301,10 +301,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
      leaves it out with a `tool_left_out` diagnostic.
   7. Every copy of an elided image id is elided at once (IC-67: one stated cache break).
   8. Context estimates (IC-74; 07 section 5; 03 section 12.5): only a finite provider-reported
-     total anchors; the kept tail and frozen prompt count after a compaction; `msg_tokens_est()`
-     counts context, thinking, tool-call JSON and images (`est_image_tokens()`, block size else
-     1000 x 700); an elided image counts as its omitted text (`request_fallback()` elides before
-     it estimates); an unknown count keeps the multiplier, an omitted one is P05's legacy zero.
+     total anchors; after a compaction its message, the kept tail and the frozen prompt count;
+     P07's `prompt_request_estimate()` counts the messages sent (`entry_messages()`; images at
+     block size else 768x512; an elided image as its omitted text, `request_fallback()` eliding
+     before it estimates); an unknown count keeps the multiplier, an omitted one is P05's legacy zero.
 - Also: `plugin_state_persist()` writes a state emptied to `{}`; `run_returns()` reports an
   unappliable `returns` schema as the same notice instead of throwing.
 - Contract-visible: none amended; diagnostics `router_fallback`, `router_state`, `tool_left_out`.
@@ -527,7 +527,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   1. `store_read()` skips a parsed line that is not a readable entry (no string `type`; an entry id that is not one non-empty string of at most 10000 bytes; a message `msg_from_json()` refuses) under the single `torn_line` diagnostic; an invalid `parentId` counts as missing, re-parenting to the previous entry (04 section 7.6, IC-59).
   2. Ids are checked before they name anything: `store_rebuild()` refuses a header id failing `check_session_id()`'s rule with `gptr_error_invalid_argument` (`arg = "x"`); `store_find()` returns `NULL` for a non-id string and matches file names with `endsWith()`; `gptr_resume(<directory>)` is `gptr_error_invalid_argument`; `session_id_ok()` holds the unchanged rule.
   3. Mode, model and frozen prompt come from the active path (04 section 6.5): the frozen prompt is the path's last `gptr.frozen` entry; `rebuild_model()` starts from its `model`, overridden by later `model_change` entries and answers.
-  4. Every step after `session_new()` runs in `rebuild_fill()`; until it completes, `on.exit()` runs `rebuild_undo()` under `suspendInterrupts()` (release this process's lock, `live_forget()`, restore `the$last`); errors and interrupts propagate unchanged (03 section 6.4).
+  4. Every step after `session_new()` runs in `rebuild_fill()`; until it completes, `on.exit()` runs `session_undo()` under `suspendInterrupts()` (release this process's lock, `live_forget()`, restore `the$last`); errors and interrupts propagate unchanged (03 section 6.4).
   5. `rebuild_own()` drops a fork file's copied prefix (through `gptr.forkOf.entry`), so a rebuilt fork's usage is its own requests (04 section 6.5); no `forkOf.entry`, or one missing from the file, leaves the entries as they are.
   6. `iso_ms()` returns `NULL` for anything but one parsable ISO 8601 string; a usage row's start time falls back to the message's epoch-ms time, then the epoch; `created` falls back as for a missing time.
 - Contract-visible: none amended; `gptr_resume()` of a directory or of a header id failing the session-id rule is `gptr_error_invalid_argument`.
@@ -597,7 +597,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-056 - P06 replay functions: header and doc checked first, all-or-nothing reconstruction, cut-path rebuild (2026-10-04)
 - Rule: `session_replay_apply()` and `session_replay_new()` (IC-45/IC-46 `document` route; consumed by P15 and P19):
   1. Before any lookup or record, `header$session` passes `check_session_id()` (D-050 item 2), `header$value` is one non-empty string, and `header$model` one non-empty string whose parts around its first `/` are non-empty (no `/`: kept as given, 04 section 11.5).
-  2. `doc` defaults to `NULL`; `path`, `format`, `template`, `text` are one string or `NULL`, `code`, `output` character without NA; the plan's `replay_reconstruct(header, envir, doc)` is split into `replay_session_new(header, envir)`, `replay_reconstruct(s, header, doc)` and `replay_adopt()`; any failure after the session exists is undone by `replay_undo()` (forget it, restore the last session, release the lock, remove the file this call created) and propagates unchanged; a rebuilt session relies on `store_rebuild()`'s own all-or-nothing (contract note in progress/P06.md Task 14).
+  2. `doc` defaults to `NULL`; `path`, `format`, `template`, `text` are one string or `NULL`, `code`, `output` character without NA; the plan's `replay_reconstruct(header, envir, doc)` is split into `replay_session_new(header, envir)`, `replay_reconstruct(s, header, doc)` and `replay_adopt()`; any failure after the session exists is undone by `session_undo()` (forget it, restore the last session, release the lock, remove the file this call created) and propagates unchanged; a rebuilt session relies on `store_rebuild()`'s own all-or-nothing (contract note in progress/P06.md Task 14).
   3. A header turn is one whole number >= 0, else unknown (`replay_turn()`): no cut for a rebuild, turn 1 for a reconstruction (always at least 1).
   4. A session rebuilt for a replay re-reads model, mode and frozen prompt from the cut path (`rebuild_model()`, `rebuild_mode()`, `rebuild_frozen()`; D-050 item 3: the frozen prompt only when the file is not foreign).
   5. A reconstructed answer says "its code is above" only when the `r` call is reconstructed; `last_text` stays `NA`.

@@ -1056,7 +1056,7 @@ session_replay_new = function(block, header, envir, doc = NULL) {
   prev_last = the$last
   s = replay_session_new(header, envir)
   done = FALSE
-  on.exit(if (!done) replay_undo(s, prev_last), add = TRUE)
+  on.exit(if (!done) session_undo(s, prev_last), add = TRUE)
   replay_reconstruct(s, header, doc)
   replay_adopt(s, block, header, doc)
   done = TRUE
@@ -1157,7 +1157,6 @@ replay_value = function(s, name) {
 }
 
 #' Rebuild a replayed session from its JSONL, the leaf moved back to the end of the recorded turn
-#' Every field store_rebuild() derives from the active path is derived again from the cut path.
 #' @noRd
 replay_rebuild = function(path, header, envir) {
   s = store_rebuild(path, envir)
@@ -1167,14 +1166,8 @@ replay_rebuild = function(path, header, envir) {
     cut = tryCatch(fork_cut(d, turn), error = function(e) NULL)
     if (!is.null(cut) && !is.null(cut$entry)) {
       d$leaf = cut$entry
-      d$turns = cut$turn
-      path_e = entries_path(d)
-      d$last_text = final_text(path_e) %||% NA_character_
+      path_fields(d, entries_path(d))
       d$values = Filter(function(v) as.integer(v$turn) <= cut$turn, d$values)
-      d$model = rebuild_model(path_e) %||% d$model
-      d$mode = rebuild_mode(path_e)
-      if (!isTRUE(d$refreeze)) d$frozen = rebuild_frozen(path_e)
-      d$history_source = history_source_of(path_e)
       d$status = "idle"
     }
   }
@@ -1192,10 +1185,10 @@ replay_session_new = function(header, envir) {
               opts = list(id = header$session %||% id_new("s", 10L)))
 }
 
-#' Undo a reconstruction that did not complete (not interruptible): forget the session, restore
-#' the last one, release the lock and remove a file this call created
+#' Undo a rebuild or reconstruction that did not complete (not interruptible): forget the session,
+#' restore the last one, release its lock and remove a file this call created
 #' @noRd
-replay_undo = function(s, prev_last) {
+session_undo = function(s, prev_last) {
   suspendInterrupts({
     file = session_data(s)$file
     st = session_live(s)$store

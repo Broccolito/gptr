@@ -413,23 +413,11 @@ store_rebuild = function(path, home) {
                   kind = g$kind %||% "chat", opts = list(id = h$id))
   # on.exit() undoes a failed or interrupted rebuild, never an exiting tryCatch() (03 section 6.4)
   done = FALSE
-  on.exit(if (!done) rebuild_undo(s, file, prev_last), add = TRUE)
+  on.exit(if (!done) session_undo(s, prev_last), add = TRUE)
   rebuild_fill(s, h, g, file, tree, path_e, foreign)
   done = TRUE
   if (length(session_data(s)$frozen)) session_emit(s, "session_start", reason = "resume")
   s
-}
-
-#' Undo a rebuild that did not complete: release a lock this process took, forget the live
-#' session and restore the last session (not interruptible itself)
-#' @noRd
-rebuild_undo = function(s, file, prev_last) {
-  suspendInterrupts({
-    lock_release(lock_path(file))
-    live_forget(s)
-    the$last = prev_last
-  })
-  invisible(NULL)
 }
 
 #' Fill a rebuilt session's data from its file, then open its store (lock, torn-line recovery)
@@ -445,18 +433,27 @@ rebuild_fill = function(s, h, g, file, tree, path_e, foreign) {
   d$entries = tree$entries
   d$index = tree$index
   d$leaf = tree$leaf
-  d$model = rebuild_model(path_e) %||% d$model
-  d$turns = path_turn(path_e)
-  d$last_text = final_text(path_e) %||% NA_character_
-  d$status = rebuild_status(path_e)
-  d$frozen = if (foreign) NULL else rebuild_frozen(path_e)
   d$refreeze = foreign
+  path_fields(d, path_e)
+  d$status = rebuild_status(path_e)
   d$values = rebuild_values(path_e)
-  d$history_source = history_source_of(path_e)
   d$usage = rebuild_usage(rebuild_own(tree$entries, fork), d)
   live = session_live(s)
   live$store = store_open(s)
   invisible(s)
+}
+
+#' Set the fields a rebuilt session derives from its active path (resume and replay cut); a
+#' foreign file keeps no frozen prompt (IC-52)
+#' @noRd
+path_fields = function(d, path) {
+  d$model = rebuild_model(path) %||% d$model
+  d$mode = rebuild_mode(path)
+  d$turns = path_turn(path)
+  d$last_text = final_text(path) %||% NA_character_
+  if (!isTRUE(d$refreeze)) d$frozen = rebuild_frozen(path)
+  d$history_source = history_source_of(path)
+  invisible(d)
 }
 
 #' The model of a rebuilt session: the last model the given entries (the active path) name,

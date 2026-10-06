@@ -780,9 +780,11 @@ test_that("the fallback request and the context projection count elided images a
   sent = req$context$messages
   expect_identical(vapply(sent[[1L]]$content, function(b) b$type, ""),
                    c("text", "text", "text", "image", "text"))
-  transcript = sum(vapply(sent, msg_tokens_est, 1))
-  expect_equal(req$components$transcript, transcript)
-  expect_equal(req$tokens_est, frozen_tokens(session_data(s)$frozen) + transcript)
+  texts = unlist(lapply(sent[[1L]]$content, function(b) b$text))
+  transcript = sum(vapply(texts, est_tokens, 1, class = "prose"))
+  expect_equal(req$components[["transcript"]], transcript)
+  static = est_tokens(session_data(s)$frozen$tools_json, "json")
+  expect_equal(req$tokens_est, static + transcript + est_image_tokens(768, 512))
   # no reported total yet: the projection estimates the same elided messages
   expect_equal(context_tokens(s), req$tokens_est)
 })
@@ -814,8 +816,8 @@ test_that("context_tokens() anchors on provider-reported totals only and counts 
   call = block_tool_call("c1", "r", list(code = "x = 1"))
   session_append(s, entry_message(msg_assistant(list(call), api = "fake", provider = "fake",
                                                 model = "fake-1", stop_reason = "tool_use")))
-  tail = est_image_tokens(1000, 700) + est_tokens("plot", "prose") +
-    est_tokens(json_encode(list(code = "x = 1")), "json")
+  tail = est_image_tokens(768, 512) + est_tokens("plot", "prose") +
+    est_tokens(paste("r", json_encode(list(code = "x = 1"))), "code")
   expect_equal(context_tokens(s), 520 + tail)
   summary = block_context("checkpoint", "short")
   session_append(s, list(type = "compaction", summary = "short", first_kept_entry_id = kept,

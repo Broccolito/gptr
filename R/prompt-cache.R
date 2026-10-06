@@ -22,12 +22,7 @@ prompt_request_frozen = function(s) {
 prompt_request_context = function(s, target, extra = NULL) {
   d = session_data(s)
   frozen = prompt_request_frozen(s)
-  msgs = project_messages(d$entries, d$leaf, target)
-  # images elided on the path go as P06 sends them, as their omission text (IC-67)
-  img = images_scan(msgs)
-  for (r in which(img$id %in% elided_image_ids(d))) {
-    msgs[[img$msg[r]]]$content[[img$block[r]]] = block_text(image_omitted_text(img$id[r]))
-  }
+  msgs = images_omit(project_messages(d$entries, d$leaf, target), elided_image_ids(d))
   if (is.list(extra) && !is.null(extra$role)) extra = list(extra)
   msgs = c(msgs, extra)
   tools = lapply(frozen$tool_names, function(n) registry_get("tool", n, session = d$id))

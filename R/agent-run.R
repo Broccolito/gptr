@@ -611,8 +611,6 @@ request_fallback = function(run, target) {
   msgs = images_elide(s, project_messages(d$entries, d$leaf, target), target)
   tools = lapply(fr$tool_names %||% character(), function(n) tool_lookup(n, d$id))
   tools = Filter(Negate(is.null), tools)
-  transcript = sum(vapply(msgs, msg_tokens_est, 1))
-  static = frozen_tokens(fr)
   max_out = suppressWarnings(as.numeric(target$max_output %||% NA))
   context = list(system = list(t0 = fr$t0 %||% "", t1 = fr$t1 %||% ""),
                  tools_json = json_verbatim(fr$tools_json %||% "[]"), tools = tools,
@@ -622,54 +620,8 @@ request_fallback = function(run, target) {
                                thinking = target$thinking, effort = NULL, tool_choice = "auto",
                                returns = run$opts$returns, temperature = NULL),
                  session_id = d$id, request_id = id_new("q", 12L))
-  list(context = context, view = NULL, tokens_est = static + transcript,
-       components = list(tools = static, transcript = transcript))
-}
-
-#' Estimated tokens of a frozen prompt: T0 and T1 as prose, the tool array as JSON
-#' @noRd
-frozen_tokens = function(fr) {
-  if (!length(fr)) return(0)
-  est_tokens(fr$t0 %||% "", "prose") + est_tokens(fr$t1 %||% "", "prose") +
-    est_tokens(fr$tools_json %||% "", "json")
-}
-
-#' Estimated tokens of a message's content (03 section 12.5): text as prose, tool-call arguments
-#' as JSON, images by size (1000 x 700 by default) or, when in `elided`, as their omission text
-#' @noRd
-msg_tokens_est = function(m, elided = character()) {
-  total = 0
-  for (b in m[["content"]] %||% list()) {
-    type = if (is.list(b)) b[["type"]] else NULL
-    if (!rlang::is_string(type)) next
-    total = total + switch(type,
-      text = ,
-      context = est_tokens(b[["text"]], "prose"),
-      thinking = est_tokens(b[["thinking"]], "prose"),
-      tool_call = tryCatch(est_tokens(json_encode(b[["arguments"]] %||% json_obj()), "json"),
-                           error = function(e) 0),
-      image = image_tokens_est(b, elided),
-      0)
-  }
-  total
-}
-
-#' Estimated tokens of an image block (Anthropic's formula, est_image_tokens()), or of its
-#' omission text when its id is in `elided`
-#' @noRd
-image_tokens_est = function(b, elided = character()) {
-  if (length(elided)) {
-    id = image_id(b)
-    if (!is.na(id) && id %in% elided) return(est_tokens(image_omitted_text(id), "prose"))
-  }
-  size = function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 1
-  w = b[["width"]]
-  h = b[["height"]]
-  if (!size(w) || !size(h)) {
-    w = 1000
-    h = 700
-  }
-  est_image_tokens(w, h)
+  est = prompt_request_estimate(context, target$api, d$id)
+  list(context = context, view = NULL, tokens_est = est$total, components = est$components)
 }
 
 #' The `request_params` patch chain over the adapter's declared non-prefix fields (IC-69)
@@ -710,27 +662,21 @@ images_elide = function(s, messages, target) {
     new = c(new, id)
   }
   if (length(new)) session_append(s, entry_custom("gptr.image_elision", list(images = I(new))))
-  for (r in which(!keep)) {
-    messages[[info$msg[r]]]$content[[info$block[r]]] = block_text(image_omitted_text(info$id[r]))
+  images_omit(messages, info$id[!keep], info)
+}
+
+#' The messages with the images whose id is in `ids` projected as their omission text (IC-67)
+#' @noRd
+images_omit = function(messages, ids, info = images_scan(messages)) {
+  for (r in which(info$id %in% ids)) {
+    messages[[info$msg[r]]]$content[[info$block[r]]] =
+      block_text(paste0("[image omitted: peter$plot(\"", info$id[r], "\")]"))
   }
   messages
 }
 
-#' The id of an image block: 8 hex of its data's sha256 (NA when the block has no data string)
-#' @noRd
-image_id = function(b) {
-  data = b[["data"]]
-  if (!rlang::is_string(data)) return(NA_character_)
-  substr(hash_sha256(data), 1L, 8L)
-}
-
-#' The text an elided image is projected as (IC-67)
-#' @noRd
-image_omitted_text = function(id) {
-  paste0("[image omitted: peter$plot(\"", id, "\")]")
-}
-
-#' The image blocks of a message list: position, id (8 hex of the data's sha256) and bytes
+#' The image blocks of a message list: position, id (8 hex of the data's sha256, NA without a data
+#' string) and bytes
 #' @noRd
 images_scan = function(messages) {
   rows = list()
@@ -739,8 +685,8 @@ images_scan = function(messages) {
     for (j in seq_along(content)) {
       b = content[[j]]
       if (!identical(b$type, "image")) next
-      rows[[length(rows) + 1L]] = data.frame(msg = i, block = j,
-                                             id = image_id(b),
+      id = if (rlang::is_string(b$data)) substr(hash_sha256(b$data), 1L, 8L) else NA_character_
+      rows[[length(rows) + 1L]] = data.frame(msg = i, block = j, id = id,
                                              bytes = nchar(b$data, type = "bytes") * 3 / 4,
                                              stringsAsFactors = FALSE)
     }
@@ -838,39 +784,27 @@ run_estimator_update = function(run, msg) {
 }
 
 #' Context size projection (03 section 12.5): the last provider-reported total plus the
-#' multiplier times the estimate of what follows it
+#' multiplier times P07's estimate of the messages sent after it (elided images as omitted)
 #' The anchor is the newest compaction or reported total (an unknown one is none, IC-74).
 #' @noRd
 context_tokens = function(s) {
   d = session_data(s)
   path = entries_path(d)
   m = d$estimator$m %||% 1
-  elided = elided_image_ids(d)
-  est = function(idx) sum(vapply(path[idx], entry_tokens_est, 1, elided = elided))
-  after = function(i) seq_along(path)[-seq_len(i)]
-  for (i in rev(seq_along(path))) {
-    e = path[[i]]
-    if (identical(e$type, "compaction")) {
-      blocks = sum(vapply(e$gptr$blocks %||% list(), function(b) {
-        est_tokens(b$text %||% "", "prose")
-      }, 1))
-      tail = c(compaction_kept(path, i), after(i))
-      return(m * (frozen_tokens(d$frozen) + blocks + est(tail)))
-    }
-    total = reported_total(e)
-    if (!is.na(total)) return(total + m * est(after(i)))
+  est = function(entries, fr = NULL) {
+    msgs = Filter(Negate(msg_failed), unlist(lapply(entries, entry_messages), recursive = FALSE))
+    context = list(system = list(t0 = fr$t0, t1 = fr$t1), tools_json = fr$tools_json %||% "",
+                   messages = images_omit(msgs, elided_image_ids(d)))
+    prompt_request_estimate(context, session_id = d$id)$total
   }
-  m * (frozen_tokens(d$frozen) + est(seq_along(path)))
-}
-
-#' Path positions of a compaction's kept tail (from its first kept entry up to the compaction)
-#' @noRd
-compaction_kept = function(path, i) {
-  first = path[[i]]$first_kept_entry_id
-  if (!rlang::is_string(first) || i < 2L) return(integer())
-  ids = vapply(path[seq_len(i - 1L)], function(e) as.character(e$id %||% NA_character_), "")
-  from = match(first, ids)
-  if (is.na(from)) integer() else from:(i - 1L)
+  for (i in rev(seq_along(path))) {
+    if (identical(path[[i]]$type, "compaction")) {
+      return(m * est(entry_compaction_cut(path), d$frozen))
+    }
+    total = reported_total(path[[i]])
+    if (!is.na(total)) return(total + m * est(path[-seq_len(i)]))
+  }
+  m * est(path, d$frozen)
 }
 
 #' The provider-reported total of an entry (an assistant reply that did not fail), else NA
@@ -888,16 +822,6 @@ reported_total = function(e) {
     return(NA_real_)
   }
   as.numeric(total)
-}
-
-#' Estimated tokens of an entry's message as the projection sends it (0 for other entries and for
-#' errored or aborted replies; images in `elided` as their omission text)
-#' @noRd
-entry_tokens_est = function(e, elided = character()) {
-  m = e$message
-  if (!isTRUE(e$type %in% c("message", "custom_message")) || !is.list(m)) return(0)
-  if (identical(m$role, "assistant") && msg_failed(m)) return(0)
-  msg_tokens_est(m, elided)
 }
 
 #' Seconds since the last assistant message on the path (the cold rule of compact.should)
