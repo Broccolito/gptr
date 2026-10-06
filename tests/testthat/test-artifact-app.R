@@ -478,14 +478,22 @@ local_events = function(event, .env = parent.frame()) {
   seen
 }
 
+# An artifact.json with `n` versions (current = n)
+seed_artifact = function(id, n = 1L) {
+  meta = artifact_meta_new(id, paste("Title of", id))
+  meta$versions = lapply(seq_len(n), function(i) {
+    dir.create(artifact_version_dir(id, i), recursive = TRUE, showWarnings = FALSE)
+    list(n = i, created = artifact_time(), data = list(), session = NULL,
+         checks = artifact_checks_json(artifact_checks(parse = TRUE)))
+  })
+  meta$current = n
+  artifact_meta_write(id, meta)
+}
+
 # An artifact.json whose version 1 is `lines`, ready for artifact_start()
 version_one = function(id, lines, data = character(), envir = new.env()) {
   vdir = build_version(id, lines, data, envir)
-  meta = artifact_meta_new(id, paste("Title of", id))
-  meta$versions = list(list(n = 1L, created = artifact_time(), data = list(), session = NULL,
-                            checks = artifact_checks_json(artifact_checks(parse = TRUE))))
-  meta$current = 1L
-  artifact_meta_write(id, meta)
+  seed_artifact(id)
   vdir
 }
 
@@ -641,4 +649,46 @@ test_that("the ladder with the session check leaves .Random.seed unchanged (IC-6
   h = artifact_start("seed", 1L, shiny_type(), session_check = TRUE)
   expect_identical(get(".Random.seed", envir = globalenv()), seed)
   expect_identical(h$status, "running")
+})
+
+test_that("the checkpointer records current before and after an r call (G7 3.1)", {
+  local_project()
+  seed_artifact("ck", n = 1L)
+  r_call = list(id = "c1", name = "r", input = list(code = "peter$app('ck')"))
+  expect_null(artifact_ckpt_before(list(id = "c0", name = "write", input = list()), NULL))
+  token = artifact_ckpt_before(r_call, NULL)
+  expect_identical(token$ck, list(current = 1L, running = FALSE))
+  expect_null(artifact_ckpt_after(r_call, NULL, token))
+  seed_artifact("ck", n = 2L)
+  seed_artifact("new", n = 1L)
+  frag = artifact_ckpt_after(r_call, NULL, token)
+  expect_identical(frag, list(
+    list(id = "ck", current_before = 1L, current_after = 2L, running_before = FALSE,
+         running_after = FALSE),
+    list(id = "new", current_before = 0L, current_after = 1L, running_before = FALSE,
+         running_after = FALSE)))
+  expect_identical(artifact_ckpt_describe(frag),
+                   c("artifact ck: v001 -> v002", "artifact new: (none) -> v001"))
+  back = json_decode(json_encode(frag))
+  expect_identical(artifact_ckpt_describe(back), artifact_ckpt_describe(frag))
+  expect_null(artifact_ckpt_after(r_call, NULL, NULL))
+})
+
+test_that("undo and redo move current and report each artifact", {
+  local_project()
+  seed_artifact("ck", n = 2L)
+  frag = list(list(id = "ck", current_before = 1L, current_after = 2L, running_before = FALSE,
+                   running_after = FALSE),
+              list(id = "gone", current_before = 0L, current_after = 1L,
+                   running_before = FALSE, running_after = FALSE))
+  rep = artifact_ckpt_undo(frag, NULL, FALSE)
+  expect_identical(rep, c("artifact ck: current version 1",
+                          "artifact gone: not restored (it no longer exists)"))
+  expect_identical(as.integer(artifact_meta_read("ck")$current), 1L)
+  expect_true(dir.exists(artifact_version_dir("ck", 2L)))
+  expect_identical(artifact_ckpt_redo(frag[1], NULL, FALSE), "artifact ck: current version 2")
+  expect_identical(as.integer(artifact_meta_read("ck")$current), 2L)
+  failed = list(restorable = FALSE, reason = "boom")
+  expect_identical(artifact_ckpt_undo(failed, NULL, FALSE), "artifacts: not restored (boom)")
+  expect_identical(artifact_ckpt_describe(failed), "artifacts: not restored (boom)")
 })

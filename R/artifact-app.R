@@ -959,3 +959,83 @@ artifact_relaunch = function(id, version, ctx = NULL) {
   artifact_set_current(id, version)
   artifact_start(id, version, type, ctx = ctx)
 }
+
+# ---- the artifacts checkpointer (contract 10.2 row 29; G7 sections 3.1 and 4.3) ----------------
+# No `prune`: version directories are immutable and stay (artifact.json lists them; redo and
+# gptr_artifacts(version =) relaunch them).
+
+#' `current` and the running state of every artifact of the workspace (names: ids)
+#' @noRd
+artifact_ckpt_state = function() {
+  ids = Filter(artifact_exists, basename(list.dirs(artifact_root(), recursive = FALSE)))
+  out = lapply(ids, function(id) {
+    list(current = as.integer(artifact_meta_read(id)$current %||% 0L),
+         running = identical(artifact_status(id), "running"))
+  })
+  names(out) = ids
+  out
+}
+
+#' Checkpointer `before`: the artifact state before a call that can run peter$app() (an `r`
+#' call, or `app` when a preset exposes it directly); NULL for every other tool
+#' @noRd
+artifact_ckpt_before = function(call, ctx) {
+  if (call$name %in% c("r", "app")) artifact_ckpt_state()
+}
+
+#' Checkpointer `after`: the artifacts whose `current` changed (G7 section 3.1), with whether each
+#' was running; NULL when nothing changed
+#' @noRd
+artifact_ckpt_after = function(call, ctx, token) {
+  if (is.null(token)) return(NULL)
+  now = artifact_ckpt_state()
+  changed = list()
+  for (id in names(now)) {
+    was = token[[id]]
+    before = as.integer(was$current %||% 0L)
+    if (before == now[[id]]$current) next
+    changed[[length(changed) + 1L]] = list(
+      id = id, current_before = before, current_after = now[[id]]$current,
+      running_before = isTRUE(was$running), running_after = now[[id]]$running
+    )
+  }
+  if (length(changed)) changed
+}
+
+#' Move each artifact of a fragment to its `before` or `after` side: stop it, set `current` and
+#' relaunch what was running there (G7 section 4.3); report lines read by P16's partial rule
+#' @noRd
+artifact_ckpt_move = function(fragment, ctx, side) {
+  if (isFALSE(fragment$restorable)) return(artifact_ckpt_describe(fragment))
+  vapply(fragment, function(r) {
+    head = paste0("artifact ", r$id, ": ")
+    if (!artifact_exists(r$id)) return(paste0(head, "not restored (it no longer exists)"))
+    n = as.integer(r[[paste0("current_", side)]])
+    artifact_stop(r$id, reason = "rewind")
+    artifact_set_current(r$id, n)
+    line = paste0(head, "current version ", n)
+    if (!isTRUE(r[[paste0("running_", side)]])) return(line)
+    failed = inherits(try(artifact_relaunch(r$id, n, ctx), silent = TRUE), "try-error")
+    paste0(line, if (failed) " (relaunch failed)" else " (relaunched)")
+  }, character(1))
+}
+
+#' Checkpointer `undo`
+#' @noRd
+artifact_ckpt_undo = function(fragment, ctx, force) artifact_ckpt_move(fragment, ctx, "before")
+
+#' Checkpointer `redo`
+#' @noRd
+artifact_ckpt_redo = function(fragment, ctx, force) artifact_ckpt_move(fragment, ctx, "after")
+
+#' Checkpointer `describe`: one line per artifact, or the reason a fragment is not restorable
+#' @noRd
+artifact_ckpt_describe = function(fragment) {
+  if (isFALSE(fragment$restorable)) {
+    return(paste0("artifacts: not restored (", fragment$reason, ")"))
+  }
+  v = function(n) if (n > 0L) sprintf("v%03d", as.integer(n)) else "(none)"
+  vapply(fragment, function(r) {
+    paste0("artifact ", r$id, ": ", v(r$current_before), " -> ", v(r$current_after))
+  }, character(1))
+}
