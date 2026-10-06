@@ -398,7 +398,7 @@ pcli_codex_check = function(state) {
 #' (pcli_stop_child()). build() calls this before it takes the next baseline, so Codex's edits
 #' are reported instead of absorbed into it; the changes may include edits made since that exec,
 #' which the warning says. A no-op when the last exec was checked. Builtin:cli's `agent_end` and
-#' `session_shutdown` hooks (Task 9) can call it after pcli_stop_child(), so an aborted exec is
+#' `session_shutdown` hooks call it after pcli_stop_child(), so an aborted exec is
 #' reported without waiting for the session's next one (D-106).
 #' @noRd
 pcli_codex_settle = function(state) {

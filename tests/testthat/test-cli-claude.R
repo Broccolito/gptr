@@ -759,3 +759,34 @@ test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)",
   expect_true(length(ended) == n && max(started) < min(ended))
   expect_lt(elapsed, 8)
 })
+
+# ---- stopping CLI children (Task 9) --------------------------------------------------------------
+
+test_that("gptr_cancel() sends the interrupt control request, then kill_all()", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "hang")
+  s = peter("Wait for it", model = f$model, envir = new.env(), .run = FALSE)
+  local_cli_cleanup(s)
+  expect_identical(wait_fake_log(f, "turn", 1L, s), 1L)
+  expect_identical(s$status, "running")
+  gptr_cancel(s)
+  expect_identical(s$status, "aborted")
+  expect_length(fake_log(f, "interrupt"), 1L)
+  expect_all_dead(fake_pids(f))
+  expect_null(pcli_tracked(s$id)$process)
+})
+
+test_that("an abort of three running CLI agents leaves no process tree (INFRA-19)", {
+  skip_on_cran()
+  n = proc_pool_cap(3L)
+  f = local_fake_cli("claude", "hang")
+  runs = lapply(seq_len(n), function(i) {
+    peter(paste("Wait", i), model = f$model, envir = new.env(), .run = FALSE)
+  })
+  for (s in runs) local_cli_cleanup(s)
+  expect_identical(wait_fake_log(f, "turn", n, runs), n)
+  gptr_cancel(runs)
+  expect_identical(vapply(runs, function(s) s$status, ""), rep("aborted", n))
+  expect_length(fake_log(f, "interrupt"), n)
+  expect_all_dead(fake_pids(f))
+})

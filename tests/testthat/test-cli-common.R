@@ -740,3 +740,69 @@ test_that("request_params ensures gptr's MCP server for a codex session, not for
   expect_identical(h$port, 54777L)
   expect_identical(h$env, c(GPTR_MCP_TOKEN = "tok-test-0123456789"))
 })
+
+# ---- stopping CLI children (Task 9) --------------------------------------------------------------
+
+test_that("agent_end stops a child whose turn is open; session_shutdown always", {
+  calls = new.env()
+  calls$n = 0L
+  local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
+    calls$n = calls$n + 1L
+    calls$wait = c(calls$wait, wait_ack)
+    invisible(TRUE)
+  })
+  ctx = stub_ctx(id = "s00000000dd")
+  st = new.env()
+  st$turn_open = FALSE
+  pcli_track("s00000000dd", st)
+  pcli_hook_end(list(status = "idle"), ctx)
+  expect_identical(calls$n, 0L)
+  st$turn_open = TRUE
+  pcli_hook_end(list(status = "aborted"), ctx)
+  expect_identical(calls$n, 1L)
+  st$turn_open = FALSE
+  st$cli_api = "cli-claude"
+  st$claude_flags = list(turns = NULL, cost = 5)
+  pcli_hook_end(list(status = "idle"), ctx)
+  expect_identical(calls$n, 2L)
+  st$claude_flags = list(turns = NULL, cost = NULL)
+  pcli_hook_end(list(status = "idle"), ctx)
+  expect_identical(calls$n, 2L)
+  st$claude_mcp_file = withr::local_tempfile(lines = "{}")
+  tab = pcli_cache$mcp %||% list()
+  tab$s00000000dd = list(port = 54321L)
+  pcli_cache$mcp = tab
+  pcli_hook_shutdown(list(reason = "exit"), ctx)
+  expect_identical(calls$n, 3L)
+  expect_identical(calls$wait, c(TRUE, FALSE, FALSE))
+  expect_false(file.exists(st$claude_mcp_file))
+  expect_null(pcli_tracked("s00000000dd"))
+  expect_null(pcli_cache$mcp$s00000000dd)
+  pcli_hook_shutdown(list(reason = "gc"), list(session = NULL))
+  expect_identical(calls$n, 3L)
+})
+
+test_that("builtin:cli also hooks agent_end and session_shutdown", {
+  expect_true(all(c("agent_end", "session_shutdown") %in% cli_hook_events()))
+})
+
+test_that("the hooks check the control files of a codex exec they stopped (D-106)", {
+  root = local_project(files = list(".gptr/settings.json" = "{}"))
+  local_mocked_bindings(pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
+    invisible(TRUE)
+  })
+  ctx = stub_ctx(id = "s00000000ee")
+  st = new.env()
+  st$turn_open = TRUE
+  pcli_track("s00000000ee", st)
+  withr::defer(pcli_untrack("s00000000ee"))
+  st$codex_control = pcli_control_hash(root)
+  writeLines('{"a": 1}', file.path(root, ".gptr", "settings.json"))
+  expect_warning(pcli_hook_end(list(status = "aborted"), ctx), class = "gptr_warning_cli_sandbox")
+  expect_null(st$codex_control)
+  st$codex_control = pcli_control_hash(root)
+  writeLines('{"a": 2}', file.path(root, ".gptr", "settings.json"))
+  expect_warning(pcli_hook_shutdown(list(reason = "exit"), ctx),
+                 class = "gptr_warning_cli_sandbox")
+  expect_null(st$codex_control)
+})

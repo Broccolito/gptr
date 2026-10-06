@@ -1093,6 +1093,38 @@ pcli_hook_params = function(event, ctx) {
 #' @noRd
 pcli_ctx_session = function(ctx) pcli_sid(tryCatch(ctx$session$id, error = function(e) NULL))
 
+#' `agent_end` hook: a run that ended mid-turn (Ctrl-C, gptr_cancel(), a budget stop) stops its
+#' child: claude interrupt, then kill_all() (03 8.3; INFRA-19); a budgeted claude child is retired
+#' (Task 5). A stopped codex exec has its control files checked (D-106)
+#' @noRd
+pcli_hook_end = function(event, ctx) {
+  state = pcli_tracked(pcli_ctx_session(ctx))
+  if (is.null(state)) return(invisible(NULL))
+  if (isTRUE(state$turn_open)) {
+    pcli_stop_child(state, wait_ack = TRUE)
+  } else if (identical(state$cli_api, "cli-claude") &&
+             pcli_claude_budgeted(state$claude_flags)) {
+    pcli_stop_child(state, wait_ack = FALSE)
+  }
+  pcli_codex_settle(state)
+  invisible(NULL)
+}
+
+#' `session_shutdown` hook: stop the session's CLI child, check a codex exec's control files,
+#' remove the claude files and forget the MCP record
+#' @noRd
+pcli_hook_shutdown = function(event, ctx) {
+  id = pcli_ctx_session(ctx)
+  state = pcli_tracked(id)
+  pcli_untrack(id)
+  pcli_codex_forget(id)
+  if (is.null(state)) return(invisible(NULL))
+  pcli_stop_child(state, wait_ack = FALSE)
+  pcli_codex_settle(state)
+  unlink(c(state$claude_mcp_file, state$claude_system_file))
+  invisible(NULL)
+}
+
 #' builtin:cli: the plan routes, their process_jsonl adapters and hooks (contract 7.20, 10.3)
 #' @noRd
 builtin_cli = function(gptr) {
@@ -1104,6 +1136,8 @@ builtin_cli = function(gptr) {
                              parse = pcli_claude_parse, capabilities = pcli_capabilities()))
   gptr$on("request_params", pcli_hook_params)
   gptr$on("usage", pcli_hook_usage)
+  gptr$on("agent_end", pcli_hook_end)
+  gptr$on("session_shutdown", pcli_hook_shutdown)
   invisible(NULL)
 }
 
