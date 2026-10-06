@@ -566,9 +566,29 @@ test_that("older images are elided above the model's image limit, once (IC-67)",
   d = session_data(s)
   expect_identical(d$entries[[length(d$entries)]]$custom_type, "gptr.image_elision")
   n = length(d$entries)
-  again = images_elide(s, msgs, list(max_images = 2))
+  again = images_elide(s, out, list(max_images = 2))
   expect_length(d$entries, n)
   expect_match(again[[1L]]$content[[1L]]$text, "image omitted", fixed = TRUE)
+})
+
+test_that("the omitted-image call re-attaches the image and the copy is sent (IC-67)", {
+  s = test_session()
+  img = function(k) block_image(strrep(as.character(k), 40))
+  session_append(s, entry_message(msg_user(list(img(1), img(2)))))
+  d = session_data(s)
+  path = function() images_omit(path_messages(entries_path(d)), elided_image_ids(d))
+  out = images_elide(s, path(), list(max_images = 1))
+  call = sub("^\\[image omitted: (.*)\\]$", "\\1", out[[1L]]$content[[1L]]$text)
+  attached = (function() {
+    gptr_r_call = r_call_new(list(session = s))
+    eval(str2lang(call))
+    gptr_r_call$images
+  })()
+  expect_identical(attached, list(img(1)))
+  session_append(s, entry_message(msg_user(attached)))
+  again = images_elide(s, path(), list(max_images = 1))
+  expect_identical(again[[2L]]$content, list(img(1)))
+  expect_match(again[[1L]]$content[[1L]]$text, "^\\[image omitted: ")
 })
 
 test_that("returns = <schema> designates the parsed final answer; a mismatch is a notice", {
@@ -760,8 +780,8 @@ test_that("an elided image is elided in every copy at once (IC-67)", {
   d = session_data(s)
   el = d$entries[[length(d$entries)]]
   expect_identical(as.character(unlist(el$data$images)),
-                   substr(hash_sha256(strrep("1", 40)), 1L, 8L))
-  expect_identical(images_elide(s, msgs, list(max_images = 2)), out)
+                   rep(substr(hash_sha256(strrep("1", 40)), 1L, 8L), 2L))
+  expect_identical(images_elide(s, out, list(max_images = 2)), out)
 })
 
 test_that("the fallback request and the context projection count elided images as omitted", {
@@ -787,6 +807,9 @@ test_that("the fallback request and the context projection count elided images a
   expect_equal(req$tokens_est, static + transcript + est_image_tokens(768, 512))
   # no reported total yet: the projection estimates the same elided messages
   expect_equal(context_tokens(s), req$tokens_est)
+  n = length(session_data(s)$entries)
+  expect_identical(run_build(run, target)$context$messages, sent)
+  expect_length(session_data(s)$entries, n)
 })
 
 test_that("context_tokens() anchors on provider-reported totals only and counts every block", {

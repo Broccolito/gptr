@@ -1035,11 +1035,14 @@ ns_last_plots = function(session) {
   none
 }
 
-#' `peter$plot(which = NULL, width = 1000L, height = 700L)`: attach the device's plot, or stored
-#' plot `which` of the last `r` result (IC-67), to the running `r` result; invisible NULL
+#' `peter$plot(which = NULL, width = 1000L, height = 700L)`: attach the device's plot, stored plot
+#' `which` of the last `r` result or the session's image with id `which` (an omitted image, IC-67)
+#' to the running `r` result; invisible NULL
 #' @noRd
 member_plot = function(which = NULL, width = 1000L, height = 700L) {
-  which = check_number(which, "which", min = 1, int = TRUE, null = TRUE)
+  if (!rlang::is_string(which)) {
+    which = check_number(which, "which", min = 1, int = TRUE, null = TRUE)
+  }
   width = check_number(width, "width", min = 64, max = 4000, int = TRUE)
   height = check_number(height, "height", min = 64, max = 4000, int = TRUE)
   rc = ns_r_call()
@@ -1054,6 +1057,16 @@ member_plot = function(which = NULL, width = 1000L, height = 700L) {
     }
     plot_png(grDevices::recordPlot(), width = width, height = height,
              res = as.integer(gptr_opt("plot_res")))
+  } else if (is.character(which)) {
+    s = rc$ctx$session
+    msgs = lapply(if (is.null(s)) list() else session_data(s)$entries, function(e) e$message)
+    info = images_scan(msgs)
+    k = match(which, info$id)
+    if (is.na(k)) {
+      gptr_abort(paste0("No image ", which, " in this session."), "invalid_argument",
+                 arg = "which", expected = "the id of an omitted image")
+    }
+    msgs[[info$msg[k]]]$content[[info$block[k]]]
   } else {
     plots = ns_last_plots(if (is.null(rc$ctx)) NULL else rc$ctx$session)
     k = match(which, plots$index)
@@ -1532,11 +1545,11 @@ tool_describe_schema = tool_obj(
 )
 tool_plot_description = paste(
   "Attach the current plot, or stored plot `which` of the last r result, at a larger size to the",
-  "running r result."
+  "running r result; `which` may also be the id of an omitted image."
 )
 tool_plot_schema = tool_obj(
   character(),
-  which = tool_prop("number", "Number of a stored plot"),
+  which = list(description = "Number of a stored plot, or id of an omitted image"),
   width = tool_prop("number", "Width in pixels (default 1000)"),
   height = tool_prop("number", "Height in pixels (default 700)")
 )

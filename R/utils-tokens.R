@@ -89,6 +89,29 @@ est_image_tokens = function(width, height, api = "anthropic") {
   }
 }
 
+#' The image blocks of a message list: position, id (8 hex of the data's sha256, NA without a data
+#' string) and bytes
+#' @noRd
+images_scan = function(messages) {
+  rows = list()
+  for (i in seq_along(messages)) {
+    content = messages[[i]]$content %||% list()
+    for (j in seq_along(content)) {
+      b = content[[j]]
+      if (!identical(b$type, "image")) next
+      id = if (rlang::is_string(b$data)) substr(hash_sha256(b$data), 1L, 8L) else NA_character_
+      rows[[length(rows) + 1L]] = data.frame(msg = i, block = j, id = id,
+                                             bytes = nchar(b$data, type = "bytes") * 3 / 4,
+                                             stringsAsFactors = FALSE)
+    }
+  }
+  if (!length(rows)) {
+    return(data.frame(msg = integer(), block = integer(), id = character(), bytes = numeric(),
+                      stringsAsFactors = FALSE))
+  }
+  do.call(rbind, rows)
+}
+
 #' Update the per-session estimator multiplier (EWMA of the log ratio; G2 section 3.3)
 #'
 #' `state` is NULL or `list(m, n)`; it starts at `prior`. It changes only when the estimate of the

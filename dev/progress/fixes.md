@@ -1,6 +1,6 @@
-# Coordinator follow-up fixes (FIX-1..7)
+# Coordinator follow-up fixes (FIX-1..8)
 Defects routed from plan lanes and fixed outside plan tasks; the owning plans' logs cross-reference
-them. Status: FIX-1..4, 6, 7 committed; FIX-5 partial (P15 part done, the rest is FIX5-LINT).
+them. Status: FIX-1..4, 6..8 committed; FIX-5 partial (P15 part done, the rest is FIX5-LINT).
 
 ## FIX-1 - Fix session finalizer race with registry iteration (2026-10-04, `a5af999`)
 - Owners P02 (`R/ext-registry.R`, `ext-events.R`, `ext-load.R`, `ext-check.R`) and P06
@@ -96,3 +96,20 @@ them. Status: FIX-1..4, 6, 7 committed; FIX-5 partial (P15 part done, the rest i
   as home_keep() does, so a kept eval() target is `<environment>`, not `frame of eval()`; verdict
   clear.
 - Deviations: none (implements 03 section 5.1 `home`: never a function frame). Open: none.
+
+## FIX-8 - The image placeholder names a call that works (2026-10-05)
+- `peter$plot("<id>")` (IC-67) re-attaches the session's image with that id (`images_scan()` moved
+  to L0 `utils-tokens.R` for P10); `gptr.image_elision` lists an id once per omitted copy and
+  `images_omit()` omits one copy per listing, so the re-attached copy is sent; `images_elide()`
+  takes the projection (`request_fallback()` omits first). Two P06 tests re-elide the projection;
+  a second fallback build checks that elision is recorded once.
+- Red: FAIL 1 (`'which' must be number`), then FAIL 1 (the copy omitted again). Green: `agent-run`
+  PASS 597 (+1 test), `tool-namespace` 398 (+1), `prompt-cache` 104. Lint clean. Neighbours
+  `^(arch-layers|lint-rules|session-|agent-|prompt-|tool-r$|tool-read|eval-plots|eval-format|`
+  `utils-tokens|copy-)` PASS 3510; token bench `run.R --check` OK (placeholder text unchanged).
+- Reviews: R1 changes required. Major (the fallback's `images_omit()` untested): second fallback
+  build added, FAIL 1 with the line removed. Minor (listings cut by a compaction): Open. Nits fixed.
+- Deviations: none (D-036 item 7 holds). Open: `context_tokens()` estimates a copy re-attached
+  after its anchor as omitted until the next reported total; listings whose copies a compaction
+  cut still omit the next copies of their id, so the first `peter$plot("<id>")` after it is
+  omitted again (as at HEAD; tying listings to their entries is a larger change).

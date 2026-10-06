@@ -772,6 +772,8 @@ test_that("peter$plot() attaches the current plot or a stored one to the running
   expect_identical(img$width, 1L)
   expect_error(with_r_call(function() member_plot(which = 9L), list(session = session)),
                "No stored plot 9")
+  expect_error(with_r_call(function() member_plot(which = "0badf00d"), list(session = session)),
+               "No image 0badf00d")
 })
 
 test_that("file members return R values; an image read inside r is attached", {

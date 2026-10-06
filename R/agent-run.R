@@ -608,7 +608,8 @@ request_fallback = function(run, target) {
   s = run$shell
   d = session_data(s)
   fr = d$frozen
-  msgs = images_elide(s, project_messages(d$entries, d$leaf, target), target)
+  msgs = images_omit(project_messages(d$entries, d$leaf, target), elided_image_ids(d))
+  msgs = images_elide(s, msgs, target)
   tools = lapply(fr$tool_names %||% character(), function(n) tool_lookup(n, d$id))
   tools = Filter(Negate(is.null), tools)
   max_out = suppressWarnings(as.numeric(target$max_output %||% NA))
@@ -645,60 +646,35 @@ run_request_params = function(run, target, params) {
 }
 
 #' Older images projected as omitted when a request exceeds the model's image count or 32 MB (IC-67)
-#' Elision is by id, recorded once in a `gptr.image_elision` entry and kept on the path, so the next
-#' request projects the same messages.
+#' `messages` already omit the path's elisions; every copy of the oldest image goes at once, listed
+#' once per copy in one `gptr.image_elision` entry kept on the path.
 #' @noRd
 images_elide = function(s, messages, target) {
   info = images_scan(messages)
-  if (!nrow(info)) return(messages)
-  d = session_data(s)
   max_n = suppressWarnings(as.numeric(target[["max_images"]] %||% NA))
-  keep = !(info$id %in% elided_image_ids(d))
+  keep = rep(TRUE, nrow(info))
   over = function() (is.finite(max_n) && sum(keep) > max_n) || sum(info$bytes[keep]) > 32 * 1024^2
-  new = character()
-  while (any(keep) && over()) {
-    id = info$id[which(keep)[[1L]]]
-    keep[info$id == id] = FALSE
-    new = c(new, id)
-  }
-  if (length(new)) session_append(s, entry_custom("gptr.image_elision", list(images = I(new))))
+  while (any(keep) && over()) keep[info$id %in% info$id[which(keep)[[1L]]]] = FALSE
+  if (all(keep)) return(messages)
+  session_append(s, entry_custom("gptr.image_elision", list(images = I(info$id[!keep]))))
   images_omit(messages, info$id[!keep], info)
 }
 
-#' The messages with the images whose id is in `ids` projected as their omission text (IC-67)
+#' The messages with one image per id in `ids`, oldest first, projected as its omission text (IC-67)
+#' A copy attached after the elision (by peter$plot(<id>)) is sent.
 #' @noRd
 images_omit = function(messages, ids, info = images_scan(messages)) {
-  for (r in which(info$id %in% ids)) {
+  for (r in seq_len(nrow(info))) {
+    k = match(info$id[r], ids)
+    if (is.na(k)) next
+    ids = ids[-k]
     messages[[info$msg[r]]]$content[[info$block[r]]] =
       block_text(paste0("[image omitted: peter$plot(\"", info$id[r], "\")]"))
   }
   messages
 }
 
-#' The image blocks of a message list: position, id (8 hex of the data's sha256, NA without a data
-#' string) and bytes
-#' @noRd
-images_scan = function(messages) {
-  rows = list()
-  for (i in seq_along(messages)) {
-    content = messages[[i]]$content %||% list()
-    for (j in seq_along(content)) {
-      b = content[[j]]
-      if (!identical(b$type, "image")) next
-      id = if (rlang::is_string(b$data)) substr(hash_sha256(b$data), 1L, 8L) else NA_character_
-      rows[[length(rows) + 1L]] = data.frame(msg = i, block = j, id = id,
-                                             bytes = nchar(b$data, type = "bytes") * 3 / 4,
-                                             stringsAsFactors = FALSE)
-    }
-  }
-  if (!length(rows)) {
-    return(data.frame(msg = integer(), block = integer(), id = character(), bytes = numeric(),
-                      stringsAsFactors = FALSE))
-  }
-  do.call(rbind, rows)
-}
-
-#' Image ids already elided on the session's path
+#' Image ids elided on the session's path, one per omitted copy
 #' @noRd
 elided_image_ids = function(d) {
   ids = character()
