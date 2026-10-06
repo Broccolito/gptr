@@ -477,3 +477,62 @@ test_that("artifact_start events print the NS-8 line through builtin:console (ac
   expect_identical(out,
                    "artifact  marker-explorer  ->  http://127.0.0.1:4827   (running in background)")
 })
+
+# ---------------------------------------------------------------- Task 8: INFRA-27
+
+# Rendering is decoupled from transport (INFRA-27, 03 section 2.2 rule 2): the JSONL transcript
+# of one run does not depend on what the renderer prints.
+
+# Fields that depend on time or on generated ids (contract 12.3 golden-event rule: ts, session,
+# run, request_id; plus the other clocks, the prefix guard's view of the request and the r
+# tool's checkpoint entry id)
+infra27_volatile = c("ts", "timestamp", "session", "run", "request_id", "requestId", "elapsed",
+                     "started", "seconds", "view", "response_id", "responseId", "checkpoint")
+
+infra27_norm_value = function(x) {
+  if (is.list(x)) {
+    nms = names(x)
+    if (!is.null(nms)) x = x[!(nms %in% infra27_volatile)]
+    return(lapply(x, infra27_norm_value))
+  }
+  if (is.character(x)) {
+    x = gsub("\\bs[0-9a-f]{10}\\b", "<session>", x, perl = TRUE)
+    x = gsub("\\bu[0-9a-f]{8}\\b", "<run>", x, perl = TRUE)
+    x = gsub("\\bq[0-9a-f]{12}\\b", "<request>", x, perl = TRUE)
+  }
+  x
+}
+
+infra27_normalise = function(lines) {
+  vapply(lines, function(l) json_encode(infra27_norm_value(json_decode(l))), "",
+         USE.NAMES = FALSE)
+}
+
+# One fake-provider run (an `r` call, then an answer) streamed to a JSONL file at `verbose`,
+# with whatever the renderer prints captured and discarded; the free RAM in <environment> is fixed
+infra27_run = function(verbose) {
+  local_gptr_options(verbose = verbose, quiet = TRUE, record = "off")
+  local_mocked_bindings(context_r_line = function() "R")
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 1")),
+                                 "The answer is 42."))
+  s = peter("compute", model = fake, .run = FALSE, envir = new.env(parent = globalenv()),
+           mode = "auto")
+  file = tempfile(fileext = ".jsonl")
+  on.exit(unlink(file), add = TRUE)
+  con = file(file, open = "wb")
+  off = jsonl_sink(s, con)
+  utils::capture.output(gptr_step(s, turns = Inf))
+  off()
+  close(con)
+  readLines(file, encoding = "UTF-8", warn = FALSE)
+}
+
+test_that("the transcript is the same at verbosity 0, 1 and 2 (INFRA-27, acceptance 4)", {
+  local_project()
+  v0 = infra27_normalise(infra27_run(0L))
+  v1 = infra27_normalise(infra27_run(1L))
+  v2 = infra27_normalise(infra27_run(2L))
+  expect_gt(length(v0), 10L)
+  expect_identical(v1, v0)
+  expect_identical(v2, v0)
+})

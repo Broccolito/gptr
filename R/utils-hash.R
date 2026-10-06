@@ -1,4 +1,4 @@
-# Hashes, canonical JSON, RNG-free identifiers, seed preservation and fingerprints
+# Hashes, canonical JSON, RNG-free identifiers, ISO times, seed preservation and fingerprints
 # (contract section 1.2, 7.1; IC-20, IC-61). Nothing here touches .Random.seed except
 # with_seed_preserved(), which saves and restores the user's value.
 
@@ -51,6 +51,14 @@ id_new = function(prefix = "", n = 10L) {
     format(Sys.time(), "%Y%m%d%H%M%OS6"), Sys.getpid(), the$id_count, id_salt()
   )
   paste0(prefix, substr(cli::hash_sha256(seed), 1L, n))
+}
+
+#' ISO 8601 UTC time with milliseconds, locale independent (04 section 1.2)
+#' @noRd
+iso_time = function(t = as.numeric(Sys.time())) {
+  ms = round(t * 1000)
+  paste0(format(.POSIXct(ms %/% 1000, tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC"), ".",
+         sprintf("%03d", as.integer(ms %% 1000)), "Z", recycle0 = TRUE)
 }
 
 #' An 8-hex entry id not in `taken` (12 hex after 100 collisions)

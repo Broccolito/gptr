@@ -18,7 +18,6 @@ repl_state = function(session, envir, stdin = FALSE, call = NULL) {
   rs$envir_given = isTRUE(call$args$envir_given)
   rs$stdin = stdin
   rs$reader = NULL
-  rs$render = TRUE
   ids = call$ids
   rs$model = ids$model
   rs$mode = ids$mode
@@ -455,8 +454,7 @@ console_call = function(rs, text) {
     rs$opts$images = NULL
   }
   if (length(skills)) args$skills = skills
-  if (isTRUE(rs$render) && verbosity() >= 2L && !isFALSE(opts$interpolate) &&
-        !isFALSE(gptr_opt("interpolate"))) {
+  if (verbosity() >= 2L && !isFALSE(opts$interpolate) && !isFALSE(gptr_opt("interpolate"))) {
     shown = interpolate_prompt(text, env)$prompt
     if (!identical(shown, text)) console_write(cli::col_grey(paste0("> ", console_escape(shown))))
   }
@@ -602,10 +600,7 @@ repl_main = function(rs) {
   .gptr_repl = rs
   force(.gptr_repl)
   piped = rs$session
-  on.exit({
-    if (!is.null(rs$reader)) rs$reader$close()
-    rs$envir = NULL
-  }, add = TRUE)
+  on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
   if (rs$stdin) {
     set = list()
@@ -646,6 +641,14 @@ repl_main = function(rs) {
                 session = s)
   }
   invisible(s)
+}
+
+#' End a REPL: its reader closed (IC-59), its environment released (rule R2)
+#' @noRd
+repl_close = function(rs) {
+  if (!is.null(rs$reader)) rs$reader$close()
+  rs$envir = NULL
+  invisible(NULL)
 }
 
 #' The REPL on `s`, a new session from the first prompt when `s` is NULL (contract 7.14)

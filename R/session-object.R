@@ -132,14 +132,6 @@ model_canonical = function(model, strict = FALSE) {
 #' @noRd
 session_data = function(s) get(".d", envir = s, inherits = FALSE)
 
-#' ISO 8601 UTC time with milliseconds, locale independent (04 section 1.2)
-#' @noRd
-iso_time = function(t = as.numeric(Sys.time())) {
-  ms = round(t * 1000)
-  paste0(format(.POSIXct(ms %/% 1000, tz = "UTC"), "%Y-%m-%dT%H:%M:%S", tz = "UTC"), ".",
-         sprintf("%03d", as.integer(ms %% 1000)), "Z")
-}
-
 #' Entry constructors (R shape, 04 section 4.6); id, parent and time are set by session_append()
 #' An operator message is a `gptr.operator` custom_message, which P05's project_messages()
 #' projects as an operator message.
