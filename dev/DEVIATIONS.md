@@ -1883,3 +1883,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-session-budget.R (two refusal blocks out), test-agent-loop.R (three re-validation fragments
   out), test-agent-run.R (two folds, the retry refusal loop out), test-agent-dispatch.R (one message).
   Evidence: progress/simplicity.md P06-S1.
+
+## D-156 - P24 cache simulator prices gptr's Anthropic elements in a trusted project (2026-10-05)
+- Rule: messages are the elements gptr's Anthropic adapter sends (`anthropic_elements()`, without
+  cache_control markers; G4 section 5.8), not the record JSON of the plan's `msg_to_json()`.
+- Rule: the gap strategy keeps the 1 h tail from the first gap over 240 s on, as P07's
+  `prompt_cache_ttl_next()` does (architecture 6.11); the plan re-evaluated each gap.
+- Rule: the scenario runs in a trusted temporary project with an AGENTS.md, so BP2 on the first message
+  is gptr's project anchor (architecture 6.11), and with `gptr.unsafe_no_permissions` (IC-53) while
+  P11's `mode` policy is not registered. No `results.csv`; the baseline is per machine (README).
+- Contract-visible: none.
+- Tests: test-cache-sim.R: "the gptr strategy keeps the 1 h tail from the 12-minute pause on, as P07
+  does", "messages are priced as gptr's Anthropic adapter sends them, without record metadata".
+  Evidence: progress/P24.md Task 6.

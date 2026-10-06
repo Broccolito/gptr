@@ -49,6 +49,21 @@ tok_count = function(x) {
   as.integer(rtiktoken::get_token_count(bench_utf8(x), "o200k_base"))
 }
 
+# Loads the gptr source tree in a runner's own process (internals visible): every user directory
+# and the project root move to a temporary home, and GPTR_REPLAY=replay refuses any provider that
+# is not offline (IC-30), so a runner neither reads the user's state nor calls a model.
+bench_load_gptr = function(root) {
+  vars = c("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME",
+           "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_PROJECT_ROOT")
+  dirs = file.path(tempfile("gptr-bench-"), vars)
+  for (d in dirs) dir.create(d, recursive = TRUE)
+  do.call(Sys.setenv, as.list(c(stats::setNames(dirs, vars), GPTR_REPLAY = "replay")))
+  bench_require("pkgload", "loading the gptr source tree")
+  pkgload::load_all(root, quiet = TRUE, export_all = TRUE, helpers = FALSE,
+                    attach_testthat = FALSE)
+  invisible()
+}
+
 bench_read_csv = function(path) {
   if (!file.exists(path)) return(NULL)
   utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE, encoding = "UTF-8")

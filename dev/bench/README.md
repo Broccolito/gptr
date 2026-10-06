@@ -9,6 +9,7 @@ step stops for the maintainer; nothing is installed).
 | Suite | Command | Gate (architecture 12.7) |
 |---|---|---|
 | Golden transcripts NS-1..NS-11 (P07's runner) | `dev/bench/tokens/run.R [--check] [--update [ids]]` | prefix +2%, input and output totals +5%, requests and image tokens +0, describer facts no loss, catalogs +5% |
+| Cache economics (G4), before layout or TTL changes | `dev/bench/cache-sim/run.R [--check] [--update]` | simulated session cost +2% |
 | Development tests | `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests")'` | green |
 
 `dev/bench/tokens/run.R`, its NS-2/NS-3 fixtures and `baseline.csv` belong to P07; P10, P13, P15,
@@ -16,3 +17,7 @@ P18, P19, P22, P23 and P24 add fixtures and baseline rows; every other file here
 fixture without a baseline row fails `run.R --check`: review the replayed numbers, then run
 `Rscript --vanilla dev/bench/tokens/run.R --update <fixture id>`. A row is refreshed only by the
 plan that owns its fixture, never to make a regression pass.
+
+`dev/bench/cache-sim/baseline.csv` holds for the machine that recorded it (T1's `<r_env>` and the
+`<environment>` block are measured live): on another machine, run `--update` on the unchanged tree
+before measuring a change.
