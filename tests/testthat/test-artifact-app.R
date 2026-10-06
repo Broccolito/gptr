@@ -459,3 +459,186 @@ test_that("the session check catches render errors and crashed servers but not v
   res = artifact_session_check(served_record("valid", valid), tempfile(fileext = ".png"))
   expect_true(res$ok)
 })
+
+# The built-in shiny type as a record, before builtin:artifacts registers it (Task 9)
+shiny_type = function() {
+  list(build = artifact_build_shiny, check = artifact_check_shiny,
+       launch = artifact_launch_shiny, stop = artifact_stop_handle)
+}
+
+# Collect the payloads of an event for the calling test
+local_events = function(event, .env = parent.frame()) {
+  seen = new.env(parent = emptyenv())
+  seen$events = list()
+  id = hook_add(event, function(event, ctx) {
+    seen$events[[length(seen$events) + 1L]] = event
+    NULL
+  })
+  withr::defer(hook_remove(id), envir = .env)
+  seen
+}
+
+# An artifact.json whose version 1 is `lines`, ready for artifact_start()
+version_one = function(id, lines, data = character(), envir = new.env()) {
+  vdir = build_version(id, lines, data, envir)
+  meta = artifact_meta_new(id, paste("Title of", id))
+  meta$versions = list(list(n = 1L, created = artifact_time(), data = list(), session = NULL,
+                            checks = artifact_checks_json(artifact_checks(parse = TRUE))))
+  meta$current = 1L
+  artifact_meta_write(id, meta)
+  vdir
+}
+
+test_that("the launcher serves a version on a random loopback port behind the token", {
+  skip_if_cannot_launch()
+  local_project()
+  e = new.env()
+  e$markers = data.frame(gene = c("CD14", "LYZ"))
+  h = artifact_launch_shiny(build_version("hello", ok_app, "markers", e), NULL)
+  withr::defer(h$stop())
+  expect_match(h$url, "^http://127\\.0\\.0\\.1:[0-9]+/\\?gptr_token=[0-9a-f]{32}$")
+  expect_true(h$port >= 49152L && h$port <= 65535L)
+  expect_true(h$alive())
+  expect_true(artifact_wait_http(h$url, h$alive)$ok)
+  expect_identical(artifact_http_status(h$url), 200L)
+  expect_identical(artifact_http_status(sprintf("http://127.0.0.1:%d/", h$port)), 403L)
+  expect_identical(basename(h$log), "app-v001.log")
+  h$stop()
+  expect_false(h$alive())
+  expect_true(is.na(artifact_http_status(h$url, timeout = 1)))
+})
+
+test_that("the artifact child gets no registered secret in its environment", {
+  skip_if_cannot_launch()
+  local_project()
+  vault_reset()
+  withr::defer(vault_reset())
+  fake = paste0("sk-ant-", "api03-", strrep("FAKEartifact", 4L), "00AA")
+  withr::local_envvar(GPTR_ARTIFACT_TEST_KEY = fake, GPTR_TEST_PLAIN = fake)
+  secret_register(fake, "GPTR_ARTIFACT_TEST_KEY", source = "test")
+  h = artifact_launch_shiny(build_version("env-check", tiny_app), NULL)
+  withr::defer(h$stop())
+  env = tryCatch(ps::ps_environ(ps::ps_handle(h$pid)), error = function(e) NULL)
+  skip_if(is.null(env), "ps cannot read the child's environment here")
+  expect_false(any(grepl(fake, env, fixed = TRUE)))
+  expect_false(any(c("GPTR_ARTIFACT_TEST_KEY", "GPTR_TEST_PLAIN") %in% names(env)))
+})
+
+test_that("a broken app fails at the launch stage with the child's error in the log tail", {
+  skip_if_cannot_launch()
+  local_project()
+  broken = c("library(shiny)", "ui = fluidPage(textOutput(no_such_object))",
+             "server = function(input, output, session) {}", "shinyApp(ui, server)")
+  cnd = expect_error(artifact_launch_shiny(build_version("broken", broken), NULL),
+                     class = "gptr_error_artifact")
+  expect_identical(cnd$id, "broken")
+  expect_identical(cnd$stage, "launch")
+  expect_true(any(grepl("no_such_object", cnd$log, fixed = TRUE)))
+  expect_match(conditionMessage(cnd), "no_such_object", fixed = TRUE)
+  expect_true(file.exists(file.path(artifact_dir("broken"), "run", "app-v001.log")))
+  expect_length(list.files(tempdir(), pattern = "^gptr-artifact-broken-"), 0L)
+})
+
+test_that("artifact_start() runs the ladder, records the run and keeps the port across versions", {
+  skip_if_cannot_launch()
+  local_project()
+  starts = local_events("artifact_start")
+  version_one("ladder", tiny_app)
+  withr::defer(artifact_stop("ladder", emit = FALSE))
+  h = artifact_start("ladder", 1L, shiny_type())
+  expect_s3_class(h, "gptr_artifact")
+  expect_identical(h$status, "running")
+  expect_identical(h$version, 1L)
+  expect_identical(h$checks[c("parse", "launch", "http")],
+                   list(parse = TRUE, launch = TRUE, http = TRUE))
+  expect_true(is.na(h$checks$session))
+  expect_identical(format(h)[1], paste0("artifact  ladder  ->  ", h$url,
+                                        "   (running in background)"))
+  run = json_decode(read_utf8(file.path(artifact_dir("ladder"), "run", "run.json"))$text)
+  expect_identical(run$url, h$url)
+  meta = artifact_meta_read("ladder")
+  expect_identical(as.integer(meta$port), artifact_proc_get("ladder")$port)
+  expect_true(meta$versions[[1]]$checks$http)
+  expect_identical(job_list("artifact")$id, "artifact:ladder")
+  expect_length(starts$events, 1L)
+  expect_identical(starts$events[[1]]$url, h$url)
+  write_working("ladder", sub("'hi'", "'v2'", tiny_app))
+  dir.create(artifact_version_dir("ladder", 2L))
+  artifact_build_shiny("ladder", artifact_version_dir("ladder", 2L), list(), NULL)
+  port1 = artifact_proc_get("ladder")$port
+  h2 = artifact_start("ladder", 2L, shiny_type())
+  expect_identical(artifact_proc_get("ladder")$port, port1)
+  expect_false(identical(h2$url, h$url))
+  expect_identical(artifact_proc_get("ladder")$version, 2L)
+})
+
+test_that("an app whose page fails stops at the http stage with status failed", {
+  skip_if_cannot_launch()
+  local_project()
+  bad_page = c("library(shiny)", "ui = function(req) stop('the page failed')",
+               "server = function(input, output, session) {}", "shinyApp(ui, server)")
+  version_one("page", bad_page)
+  withr::defer(artifact_stop("page", emit = FALSE))
+  cnd = expect_error(artifact_start("page", 1L, shiny_type()), class = "gptr_error_artifact")
+  expect_identical(cnd$stage, "http")
+  expect_match(conditionMessage(cnd), "HTTP 500", fixed = TRUE)
+  expect_identical(artifact_status("page"), "failed")
+  expect_false(artifact_meta_read("page")$versions[[1]]$checks$http)
+})
+
+test_that("a launch that cannot start reads failed and keeps its checks", {
+  local_project()
+  version_one("nolaunch", tiny_app)
+  broken_type = list(launch = function(version_dir, ctx) stop("no runtime"),
+                     stop = function(handle) NULL)
+  cnd = expect_error(artifact_start("nolaunch", 1L, broken_type), class = "gptr_error_artifact")
+  expect_identical(cnd$stage, "launch")
+  expect_match(conditionMessage(cnd), "no runtime", fixed = TRUE)
+  expect_identical(artifact_status("nolaunch"), "failed")
+  expect_false(artifact_handle("nolaunch")$checks$launch)
+  artifact_stop("nolaunch")
+  expect_identical(artifact_status("nolaunch"), "stopped")
+})
+
+test_that("relaunch refuses a version that was never stored and a kind without a type", {
+  local_project()
+  version_one("rel", tiny_app)
+  cnd = expect_error(artifact_relaunch("rel", 2L), class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "version")
+  cnd = expect_error(artifact_type_get("no-such-kind"), class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "kind")
+})
+
+test_that("missing shiny is a missing_package error naming the feature", {
+  local_project()
+  local_mocked_bindings(artifact_shiny_available = function() FALSE)
+  cnd = expect_error(artifact_launch_shiny(artifact_version_dir("x", 1L), NULL),
+                     class = "gptr_error_missing_package")
+  expect_identical(cnd$package, "shiny")
+  expect_identical(cnd$feature, "artifacts")
+})
+
+test_that("the viewer opens only when a human is present (13 C-42)", {
+  seen = new.env(parent = emptyenv())
+  seen$urls = character()
+  withr::local_options(viewer = function(url) seen$urls = c(seen$urls, url))
+  local_gptr_options(interactive = FALSE)
+  expect_false(artifact_view("http://127.0.0.1:50000/"))
+  local_gptr_options(interactive = TRUE)
+  expect_true(artifact_view("http://127.0.0.1:50000/"))
+  expect_false(artifact_view(NA_character_))
+  expect_identical(seen$urls, "http://127.0.0.1:50000/")
+})
+
+test_that("the ladder with the session check leaves .Random.seed unchanged (IC-61)", {
+  skip_if_cannot_launch()
+  local_project()
+  version_one("seed", tiny_app)
+  withr::defer(artifact_stop("seed", emit = FALSE))
+  withr::defer(artifact_browser_close())
+  withr::local_seed(7)
+  seed = get(".Random.seed", envir = globalenv())
+  h = artifact_start("seed", 1L, shiny_type(), session_check = TRUE)
+  expect_identical(get(".Random.seed", envir = globalenv()), seed)
+  expect_identical(h$status, "running")
+})

@@ -723,3 +723,239 @@ artifact_session_check = function(rec, png, width = artifact_shot_size[["width"]
                                   height = artifact_shot_size[["height"]], timeout = 20) {
   with_seed_preserved(artifact_session_run(rec, png, width, height, timeout))
 }
+
+# ---- launch and the validation ladder (stages launch, http, session) -------------------------
+
+#' Seconds a launch may take to publish its port and to answer HTTP (report 17 section 3.4)
+#' @noRd
+artifact_launch_timeout = 30
+
+#' Seconds between the interrupt and the tree kill of a stop (report 17 section 2.2: 2 s was
+#' exceeded once under load)
+#' @noRd
+artifact_stop_grace = 3
+
+#' Is shiny installed? Checked without loading it (loading shiny touches the RNG, IC-61)
+#' @noRd
+artifact_shiny_available = function() nzchar(system.file(package = "shiny"))
+
+#' Pump the reactor until the child publishes its port or exits; NA when there is no port
+#' @noRd
+artifact_wait_port = function(proc, port_file, timeout = artifact_launch_timeout) {
+  published = function() file.exists(port_file) || !isTRUE(proc$is_alive())
+  reactor_pump(until = published, slice_ms = 50L, timeout = timeout)
+  if (!file.exists(port_file)) return(NA_integer_)
+  suppressWarnings(as.integer(readLines(port_file, n = 1L, warn = FALSE, encoding = "UTF-8")))[1L]
+}
+
+#' Closures over the child process only (a record never holds the launching frame)
+#' @noRd
+artifact_proc_fns = function(proc) {
+  list(alive = function() isTRUE(tryCatch(proc$is_alive(), error = function(e) FALSE)),
+       stop = function() kill_all(proc, grace = artifact_stop_grace))
+}
+
+#' The `launch` of the shiny and html artifact types (contract 10.2 row 19): a supervised callr
+#' child serving the version (architecture 6.15)
+#'
+#' The child runs the self-contained artifact_serve() with `package = FALSE`, the secret-free
+#' environment, `encoding = "UTF-8"`, `supervise = supervise_default()` and the version
+#' directory as its working directory (IC-60); its stdout and stderr go to a raw file in
+#' tempdir() that the parent copies, redacted, into run/app-vNNN.log (IC-70). A child that ends
+#' or publishes no port within the launch timeout is the `launch` stage failure, reported with
+#' the log tail (a broken UI shows the child's error).
+#' @return `list(url, pid, stop)` (contract 10.2 row 19) plus `alive`, `port`, `token`, `raw`,
+#'   `log`
+#' @noRd
+artifact_launch_shiny = function(version_dir, ctx) {
+  if (!artifact_shiny_available()) {
+    gptr_abort("Artifacts need the shiny package: install.packages(\"shiny\").",
+               "missing_package", package = "shiny", feature = "artifacts")
+  }
+  id = basename(dirname(version_dir))
+  run_dir = file.path(dirname(version_dir), "run")
+  dir.create(run_dir, recursive = TRUE, showWarnings = FALSE)
+  port_file = file.path(run_dir, "port")
+  log = file.path(run_dir, paste0("app-", basename(version_dir), ".log"))
+  unlink(c(port_file, log))
+  raw = tempfile(paste0("gptr-artifact-", id, "-"), fileext = ".log")
+  token = artifact_token()
+  proc = callr::r_bg(
+    artifact_serve,
+    args = list(dir = path_norm(version_dir), port_file = path_norm(port_file),
+                parent_pid = Sys.getpid(), token = token),
+    stdout = raw, stderr = "2>&1", supervise = supervise_default(), package = FALSE,
+    user_profile = FALSE, system_profile = FALSE, env = artifact_child_env(artifact_ports(id)),
+    cleanup = TRUE, cleanup_tree = TRUE, encoding = "UTF-8", wd = path_norm(version_dir)
+  )
+  port = artifact_wait_port(proc, port_file)
+  if (is.na(port)) {
+    reason = if (isTRUE(proc$is_alive())) {
+      paste0("it did not publish a port within ", artifact_launch_timeout, " s")
+    } else {
+      "the app process exited"
+    }
+    kill_all(proc, grace = 1)
+    artifact_log_sync(artifact_log_new(raw, log), final = TRUE)
+    tail = artifact_log_tail(log)
+    gptr_abort(paste0("Artifact ", id, " did not start (stage launch): ", reason, ".",
+                      artifact_tail_text(tail, log)),
+               "artifact", id = id, stage = "launch", log = tail)
+  }
+  url = sprintf("http://127.0.0.1:%d/", port)
+  if (nzchar(token)) url = paste0(url, "?gptr_token=", token)
+  fns = artifact_proc_fns(proc)
+  list(url = url, pid = proc$get_pid(), stop = fns$stop, alive = fns$alive, port = port,
+       token = token, raw = raw, log = log)
+}
+
+#' The `stop` of the built-in artifact types
+#' @noRd
+artifact_stop_handle = function(handle) handle$stop()
+
+#' One GET through the reactor (architecture 6.15: "checks HTTP 200 through the reactor"); the
+#' HTTP status, or NA when nothing answered. No retry and no redirect (IC-64).
+#' @noRd
+artifact_http_status = function(url, timeout = 3) {
+  st = new.env(parent = emptyenv())
+  st$done = FALSE
+  st$status = NA_integer_
+  finish = function(status) {
+    st$status = as.integer(status %||% NA_integer_)
+    st$done = TRUE
+  }
+  spec = list(url = url, connect_timeout = 1, first_byte_timeout = timeout,
+              idle_timeout = timeout)
+  id = reactor_http(spec, on_bytes = function(raw) NULL,
+                    on_done = function(status, headers) finish(status),
+                    on_fail = function(cnd) finish(cnd$status),
+                    retry = list(max_attempts = 1L, committed = function() TRUE))
+  if (!reactor_pump(until = function() st$done, slice_ms = 50L, timeout = timeout + 1)) {
+    reactor_cancel(id)
+  }
+  st$status
+}
+
+#' Poll the app until it answers HTTP (validation ladder stage 3); ok only for 200
+#' @noRd
+artifact_wait_http = function(url, alive, timeout = artifact_launch_timeout) {
+  deadline = reactor_now() + timeout
+  repeat {
+    if (!isTRUE(alive())) {
+      return(list(ok = FALSE, status = NA_integer_, reason = "the app process exited"))
+    }
+    status = artifact_http_status(url)
+    if (!is.na(status)) {
+      return(list(ok = identical(status, 200L), status = status,
+                  reason = paste0("it answered HTTP ", status)))
+    }
+    if (reactor_now() >= deadline) {
+      return(list(ok = FALSE, status = NA_integer_,
+                  reason = paste0("it did not answer within ", timeout, " s")))
+    }
+    reactor_pump(slice_ms = 50L, timeout = 0.1)
+  }
+}
+
+#' Open a URL in the IDE viewer or the browser, only when a human is present (13 C-42, C-43)
+#' @noRd
+artifact_view = function(url) {
+  if (length(url) != 1L || is.na(url) || !gptr_has_human()) return(invisible(FALSE))
+  getOption("viewer", utils::browseURL)(url)
+  invisible(TRUE)
+}
+
+#' The registered artifact type of a kind (IC-69: any registered `artifact_type`)
+#' @noRd
+artifact_type_get = function(kind, ctx = NULL) {
+  check_string(kind, "kind")
+  spec = registry_get("artifact_type", kind, session = ctx$session)
+  if (is.null(spec)) {
+    kinds = paste(registry_names("artifact_type", session = ctx$session), collapse = ", ")
+    gptr_abort(paste0("`kind` must name a registered artifact type (", kinds, ")."),
+               "invalid_argument", arg = "kind", expected = "a registered artifact_type")
+  }
+  spec
+}
+
+#' Launch one version and run the validation ladder: launch, HTTP 200, optional session check
+#' (architecture 6.15)
+#'
+#' The artifact's running process is stopped first (its port is offered again, so the URL
+#' stays). A failing `launch` or `http` stage records its checks in artifact.json, leaves the
+#' record with status `failed` (its child is stopped without a stop request) and signals
+#' `gptr_error_artifact` with the stage and the redacted log tail, so the model sees the child's
+#' error; a failing session check is reported in the checks and messages, not raised. On success
+#' the run files, the port and the job row are written, `artifact_start` is emitted and, with a
+#' human present, the viewer opens.
+#' @return The `gptr_artifact` handle.
+#' @noRd
+artifact_start = function(id, version, type, ctx = NULL, session_check = FALSE) {
+  version = as.integer(version)
+  artifact_stop(id, reason = "relaunch")
+  vrec = artifact_version_record(artifact_meta_read(id), version)
+  checks = artifact_checks(parse = vrec$checks$parse %||% NA)
+  handle = tryCatch(type$launch(artifact_version_dir(id, version), ctx), error = function(e) e)
+  launched = !inherits(handle, "error")
+  rec = artifact_record_new(id, version, type, if (launched) handle else list())
+  assign(id, rec, envir = artifact_state$procs)
+  if (!launched) {
+    checks$launch = FALSE
+    rec$checks = checks
+    artifact_version_checks_set(id, version, checks)
+    if (inherits(handle, c("gptr_error_artifact", "gptr_error_missing_package"))) stop(handle)
+    gptr_abort(paste0("Artifact ", id, " did not start (stage launch): ",
+                      conditionMessage(handle)),
+               "artifact", id = id, stage = "launch", log = character())
+  }
+  http = artifact_wait_http(rec$url, function() artifact_rec_alive(rec))
+  checks$launch = artifact_rec_alive(rec)
+  checks$http = isTRUE(http$ok)
+  if (!checks$http) {
+    stage = if (checks$launch) "http" else "launch"
+    try(type$stop(handle), silent = TRUE)
+    artifact_log_sync(rec, final = TRUE)
+    rec$checks = checks
+    artifact_version_checks_set(id, version, checks)
+    tail = artifact_log_tail(rec$log)
+    gptr_abort(paste0("Artifact ", id, " v", sprintf("%03d", version), " failed at stage ",
+                      stage, ": ", http$reason, ".", artifact_tail_text(tail, rec$log)),
+               "artifact", id = id, stage = stage, log = tail)
+  }
+  artifact_run_write(rec)
+  meta = artifact_meta_read(id)
+  if (!is.na(rec$port)) meta$port = rec$port
+  artifact_meta_write(id, meta)
+  artifact_job_add(id, meta$title %||% id, rec$pid)
+  if (session_check) {
+    png = file.path(artifact_dir(id), "run", sprintf("screenshot-v%03d.png", version))
+    sc = artifact_session_check(rec, png)
+    checks$session = sc$ok
+    checks$messages = sc$messages
+    rec$screenshot = sc$screenshot
+  } else {
+    artifact_log_sync(rec)
+    checks$messages = artifact_log_messages(rec$log)
+  }
+  rec$checks = checks
+  artifact_version_checks_set(id, version, checks)
+  artifact_emit("artifact_start", id = id, url = rec$url, version = version)
+  artifact_view(rec$url)
+  artifact_handle(id)
+}
+
+#' Relaunch a stored version with the type of the kind it was built with (its record's `kind`,
+#' else the artifact's) and make it current; launch and HTTP checks only (gptr_artifacts(version
+#' =), open = TRUE and the checkpointer)
+#' @noRd
+artifact_relaunch = function(id, version, ctx = NULL) {
+  meta = artifact_meta_read(id)
+  vrec = artifact_version_record(meta, version)
+  if (is.null(vrec)) {
+    gptr_abort("`version` is not a stored version of this artifact.", "invalid_argument",
+               arg = "version", expected = "the number of a stored version (vNNN)")
+  }
+  type = artifact_type_get(vrec$kind %||% meta$kind %||% "shiny", ctx)
+  artifact_set_current(id, version)
+  artifact_start(id, version, type, ctx = ctx)
+}
