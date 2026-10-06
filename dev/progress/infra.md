@@ -1,7 +1,8 @@
 # Infrastructure - hosted CI, tooling and Linux portability
 
 Status: hosted CI rounds CI-1..CI-6 committed (`118f78b`..`38db483`); M0 hosted gate: run 37351073211 on `2823b07`
-green on all 13 jobs. A hosted run validates only its own commit; formal milestone close pending (00-index section 5).
+green on all 13 jobs. A hosted run validates only its own commit; P03/P04 acceptance recorded (M0-ACC); M0 tag
+pending (maintainer).
 
 ## Workflow and hosted runs
 - `.github/workflows/R-CMD-check.yaml` (P01 Task 21, `22c9ee6`) runs on push to `main`; concurrency (`d051686`,
@@ -92,6 +93,15 @@ green on all 13 jobs. A hosted run validates only its own commit; formal milesto
   assertion (best of three 3.3 s), its unslowed control passes. Green: http-sse PASS 70 (unchanged; local runs
   0.39-0.40 s). Lint clean. Neighbours: `http-|proc-` PASS 990 green.
 - Reviews: none recorded. Deviations: D-011 (Rule line edited in place). Open: hosted Windows confirmation.
+
+## Task M0-ACC - Record the P03 and P04 plan acceptance tables (2026-10-05)
+- Red: not applicable (records only). Green: every P03 and P04 row filter FAIL 0, WARN 0 on the working tree
+  (`auth` SKIP 1 PASS 1068, `http|proc` PASS 990, `lint|arch` PASS 143); `http-sse|http-reactor` PASS 273 with
+  INFRA-01 latency at most 0.025 s, six-stream wall 2.262 s, INFRA-23 0.378 s CPU (load about 11); gate rows cite
+  the clean export of `bd8eeaf` (suite SKIP 13 PASS 22392, R CMD check 0/0/0, M0 install `* DONE`, filter PASS
+  1133). No R files touched.
+- Reviews: r1 5 findings (0/0/3, 2 nits; CI-7 overclaimed, incoming NOTE cause, D-011 measurements) -> fixed.
+  Deviations: none. Open: M0 tag (maintainer); hosted CI-7 confirmation.
 
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
