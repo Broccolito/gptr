@@ -78,3 +78,63 @@ test_that("a SQL result prints within the helper budget and keeps every row", {
   expect_lte(est_tokens(out, "r_output"), 1500)
   expect_identical(dim(x), c(200L, 40L))
 })
+
+skip_if_no_python = function() {
+  skip_on_cran()
+  skip_if_not_installed("reticulate")
+  vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
+  configured = any(nzchar(Sys.getenv(vars))) || reticulate::py_available(initialize = FALSE)
+  skip_if_not(configured, "Python is not configured (set RETICULATE_PYTHON)")
+}
+
+test_that("peter$py() refuses a Python that reticulate would have to provision", {
+  skip_if_not_installed("reticulate")
+  testthat::local_mocked_bindings(py_available = function(initialize = FALSE) FALSE,
+                                  .package = "reticulate")
+  withr::local_envvar(RETICULATE_PYTHON = NA, RETICULATE_PYTHON_ENV = NA, VIRTUAL_ENV = NA)
+  err = expect_error(bridge_py("1"), class = "gptr_error_not_available")
+  expect_identical(err$member, "py")
+})
+
+test_that("peter$py() keeps objects in __main__, shows the last value and one-line errors", {
+  skip_if_no_python()
+  bridge_py("counter = 41")
+  r = bridge_py("counter += 1\ncounter")
+  expect_s3_class(r, "gptr_py")
+  expect_identical(names(unclass(r)), c("name", "output", "repr"))
+  expect_identical(r$value, 42L)
+  expect_identical(r$repr, "42")
+  expect_identical(r$kind, "int")
+  expect_output(print(r), "^42$")
+  expect_identical(out_get(r$id), "42")
+  e = bridge_py("x = 1\ny = undefined_name + x")
+  expect_match(e$error, "NameError", fixed = TRUE)
+  s = bridge_py("def f(:\n  pass")
+  expect_match(s$error, "^SyntaxError")
+  expect_false(grepl("\n", s$error, fixed = TRUE))
+  expect_identical(bridge_py("x")$value, 1L)
+  w = bridge_py("import sys\nsys.stderr.write('to stderr\\n')\nprint('hello')")
+  expect_identical(w$output, c("hello", "[stderr]", "to stderr"))
+  expect_null(w$value)
+})
+
+test_that("peter$py() receives R objects by name and knitr python chunks share __main__", {
+  skip_if_no_python()
+  skip_if_not(reticulate::py_module_available("pandas"), "pandas is not installed")
+  log = local_bridge_events()
+  sales = data.frame(region = rep(c("north", "south"), 50), revenue = seq_len(100))
+  r = bridge_py("t = sales.groupby('region').revenue.sum()\nt", name = sales)
+  expect_identical(r$name, "sales")
+  expect_identical(r$kind, "Series 2")
+  v = r$value
+  expect_equal(as.numeric(v), c(2500, 2550))
+  expect_identical(names(v), c("north", "south"))
+  expect_identical(log$events[[length(log$events)]]$digest, "#> py: Series 2")
+  expect_identical(bridge_py("a + b", name = list(a = 1L, b = 2L))$value, 3L)
+  skip_if_not_installed("knitr")
+  bridge_py("shared_value = 42")
+  opts = knitr::opts_chunk$merge(list(engine = "python", code = "print(shared_value)",
+                                      label = "k", echo = FALSE, results = "markup"))
+  out = knitr::knit_engines$get("python")(opts)
+  expect_match(paste(out, collapse = ""), "42", fixed = TRUE)
+})

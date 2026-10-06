@@ -191,3 +191,138 @@ print.gptr_sql = function(x, ...) {
   bridge_write(bridge_view_lines(bridge_sql_lines(x), bridge_budget()))
   invisible(x)
 }
+
+# ---- peter$py() ---------------------------------------------------------------------------------
+
+#' The Python helper defined once in __main__ (G5 PY_HELPER): REPL-style last value, captured
+#' stdout and stderr, one-line errors, pandas display bounded by max_rows
+#' @noRd
+bridge_py_source = c(
+  "import ast, contextlib, io, sys, traceback",
+  "def _gptr_run(src, max_rows=10):",
+  "    g = __import__('__main__').__dict__",
+  "    out, err = io.StringIO(), io.StringIO()",
+  "    val, exc, rep, kind = None, None, '', ''",
+  "    try:",
+  "        tree = ast.parse(src, filename='<gptr>', mode='exec')",
+  "        last = None",
+  "        if tree.body and isinstance(tree.body[-1], ast.Expr):",
+  "            last = ast.Expression(tree.body.pop().value)",
+  "        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):",
+  "            exec(compile(tree, '<gptr>', 'exec'), g)",
+  "            if last is not None:",
+  "                val = eval(compile(last, '<gptr>', 'eval'), g)",
+  "    except Exception as e:",
+  "        lines = src.splitlines()",
+  "        where = [f'line {f.lineno}: {lines[f.lineno - 1].strip()}'",
+  "                 for f in traceback.extract_tb(e.__traceback__)",
+  "                 if f.filename == '<gptr>' and 0 < f.lineno <= len(lines)]",
+  "        if isinstance(e, SyntaxError):",
+  "            exc = f'SyntaxError: {e.msg} (line {e.lineno}: {(e.text or \"\").strip()})'",
+  "        else:",
+  "            exc = '\\n'.join(where[-2:] + traceback.format_exception_only(type(e), e)).strip()",
+  "    if val is not None:",
+  "        try:",
+  "            pd = sys.modules.get('pandas')",
+  "            with (pd.option_context('display.max_rows', max_rows, 'display.min_rows', max_rows,",
+  "                                    'display.max_columns', 12, 'display.width', 160,",
+  "                                    'display.expand_frame_repr', False)",
+  "                  if pd else contextlib.nullcontext()):",
+  "                rep = repr(val)",
+  "        except Exception as e:",
+  "            rep = '<repr failed: %s>' % e",
+  "        g['_'] = val",
+  "        shp = getattr(val, 'shape', None)",
+  "        dims = ' ' + 'x'.join(map(str, shp)) if isinstance(shp, tuple) and shp else ''",
+  "        kind = type(val).__name__ + dims",
+  "    return dict(out=out.getvalue(), err=err.getvalue(), repr=rep, error=exc, kind=kind), val"
+)
+
+#' reticulate's __main__ with the helper; refuses a Python that reticulate would have to provision
+#' (its discovery ends in a uv-managed download; G5 item 21)
+#' @noRd
+bridge_py_main = function() {
+  if (!requireNamespace("reticulate", quietly = TRUE)) {
+    gptr_abort("peter$py() needs the 'reticulate' package.", "missing_package",
+               package = "reticulate", feature = "peter$py()")
+  }
+  vars = c("RETICULATE_PYTHON", "RETICULATE_PYTHON_ENV", "VIRTUAL_ENV")
+  if (!reticulate::py_available(initialize = FALSE) && !any(nzchar(Sys.getenv(vars)))) {
+    gptr_abort(c("Python is not configured for peter$py().",
+                 paste("Set RETICULATE_PYTHON (or RETICULATE_PYTHON_ENV), activate a virtual",
+                       "environment, or initialise Python yourself (reticulate::py_config());",
+                       "gptr never lets reticulate download a managed Python.")),
+               "not_available", member = "py", provided_by = "reticulate")
+  }
+  main = reticulate::import_main(convert = FALSE)
+  if (!reticulate::py_has_attr(main, "_gptr_run")) {
+    reticulate::py_run_string(paste(bridge_py_source, collapse = "\n"), convert = FALSE)
+  }
+  main
+}
+
+#' All display lines of a gptr_py: output, then the repr of the last value, then the error
+#' @noRd
+bridge_py_lines = function(x) {
+  lines = c(x$output, x$repr, if (!is.null(x$error)) c("[python error]", clean_terminal(x$error)))
+  if (length(lines)) lines else "(no output)"
+}
+
+#' peter$py(): Python in reticulate's persistent __main__ (shared with knitr python chunks); R
+#' objects passed by name become Python variables (one copy on their next edit, rule R9)
+#' The record has the 04 5.10 fields; error, kind, out id and the last value (a Python object)
+#' are attributes (P22 self-review 3).
+#' @noRd
+bridge_py = function(code, name = NULL, max_rows = 10L) {
+  src_lines = bridge_chr(code)
+  check_strings(src_lines, "code")
+  rows = check_number(max_rows %||% 10L, "max_rows", min = 1, int = TRUE)
+  labels = if (is.null(name)) character() else bridge_object_names(name, "name", bridge_py)
+  main = bridge_py_main()
+  if (bridge_is_object_list(name)) {
+    for (nm in labels) reticulate::py_set_attr(main, nm, reticulate::r_to_py(name[[nm]]))
+  } else if (!is.null(name)) {
+    reticulate::py_set_attr(main, labels, reticulate::r_to_py(name))
+  }
+  src = as_utf8(paste(src_lines, collapse = "\n"))
+  t0 = reactor_now()
+  res = main$`_gptr_run`(src, rows)
+  r = reticulate::py_to_r(reticulate::py_get_item(res, 0L))
+  output = c(clean_terminal(r$out), if (nzchar(r$err)) c("[stderr]", clean_terminal(r$err)))
+  x = structure(list(name = labels, output = output, repr = clean_terminal(r$repr)),
+                class = "gptr_py", error = r$error, kind = r$kind,
+                py = reticulate::py_get_item(res, 1L))
+  text = paste(bridge_py_lines(x), collapse = "\n")
+  attr(x, "id") = out_put(text, meta = list(bridge = "py"), session = bridge_out_session())
+  digest = if (nzchar(r$kind)) paste("py:", r$kind) else "py: ok (no value)"
+  if (!is.null(r$error)) digest = paste("py error:", sub("\n.*", "", r$error))
+  bridge_emit(list(bridge = "py", id = x$id, cmd = src, level = bridge_level(src, "python"),
+                   status = if (is.null(r$error)) "ok" else "error",
+                   seconds = reactor_now() - t0, bytes_out = nchar(text, type = "bytes"),
+                   bytes_err = nchar(r$err, type = "bytes"), spill = NULL, digest = digest))
+  x
+}
+
+#' Fields of a Python result: `$value` converts the last Python value to R through reticulate;
+#' `$error`, `$kind` and `$id` read the attributes of the same names; other names are fields
+#' @param x A `gptr_py`.
+#' @param name Field name.
+#' @return The field, the attribute or the converted value.
+#' @export
+#' @noRd
+`$.gptr_py` = function(x, name) {
+  if (identical(name, "value")) return(reticulate::py_to_r(attr(x, "py", exact = TRUE)))
+  if (name %in% c("error", "kind", "id")) return(attr(x, name, exact = TRUE))
+  .subset2(x, name)
+}
+
+#' Print a Python result within the helper budget
+#' @param x A `gptr_py`.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_py = function(x, ...) {
+  bridge_write(bridge_view_lines(bridge_py_lines(x), bridge_budget(), id = x$id))
+  invisible(x)
+}
