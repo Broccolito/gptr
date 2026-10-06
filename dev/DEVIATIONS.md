@@ -1842,3 +1842,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-ext-plugins.R "frontmatter whose YAML aliases expand too far is an error string (D-074)" and
   the three `(D-074)` refusal blocks; test-skill-discover.R "a SKILL.md whose YAML aliases expand too far is
   skipped with a diagnostic". Evidence: progress/simplicity.md P17-S.
+
+## D-152 - P19 sub-agent usage sums keep unknown counts; the isolation scanner has the contract's forms (2026-10-05)
+- Rule: `subagent_usage_sums(u)` sums each column of the usage de-duplicated by request id without `na.rm`:
+  an unknown count or cost stays `NA` (IC-74, 07 section 5; as D-021 item 2); no usage sums to 0. The plan's
+  `na.rm = TRUE` is superseded.
+- Rule: `code_writes_by_ref()` finds 03 section 6.13's forms only: `<<-` (and `->>`), `:=`, data.table `set*()`
+  (a fixed list) and `assign()` with any argument beyond `x` and `value` (conservative); the plan's
+  `delayedAssign()`, `makeActiveBinding()` and `list2env()` rules are dropped (conventions section 11).
+- Contract-visible: `usage` of `subagent_end` (04 section 10.4) and of the `gptr.subagent` entry (04 section
+  4.6) may hold `NA`; no section amended.
+- Tests: test-subagent-backends.R "usage sums count each request once and keep unknown usage unknown (IC-74)",
+  "writes that leave the overlay are found statically, nothing is evaluated". Evidence: progress/P19.md Task 1.
