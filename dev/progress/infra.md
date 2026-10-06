@@ -123,11 +123,23 @@ pending (maintainer).
 - Reviews: r1 1 finding (0/1/0; `:770` blamed on mid-commit edits) -> corrected, reported to the coordinator.
   Deviations: none. Open: hosted connections confirmation, which also needs lane cli-sub's `:770` fix.
 
+## Task CI-9 - INFRA-23 headroom: one-pass as_utf8() and json_decode() without paste for one string (2026-10-05)
+- Red: not applicable (performance; INFRA-23 and its 1 s budget unchanged, D-011). Differential against HEAD in
+  en_US.UTF-8 and C: `as_utf8()` on 40,050 vectors (UTF-8, latin1, unknown, bytes, invalid bytes, NA, empty, names,
+  class, dim, 5,000 elements, 200 kB strings), `json_decode()` on 3,169 inputs: 0 mismatches in values, marks, bytes,
+  attributes, warnings and errors (mutation controls: 569-34,216). INFRA-23 workload CPU, best of 3 (7 rounds, macOS,
+  load 6-10): 0.330 -> 0.241 s (-27%; interleaved -24%); `json_decode()` alone 0.202 -> 0.118 s.
+- Green: `^http-sse$` PASS 70; `utils-encoding|json-` PASS 745 (with http-sse under LC_ALL=C: SKIP 1 PASS 811);
+  `^(arch-layers|lint-rules)$` PASS 19. Lint clean. Neighbours: `http-|proc-|provider-|s1-|doc-io|tool-read|auth-`
+  SKIP 1 PASS 6601 (first run FAIL 3 `test-provider-anthropic.R:816-818`, mock stream retried under load; alone and
+  re-run green).
+- Reviews: none recorded. Deviations: none. Open: hosted Windows INFRA-23 confirmation.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
-  local macOS 0.30-0.40 s. CI-7 asserts the best of three runs, budget unchanged (D-011); if hosted Windows still
-  fails, optimise the SSE split and decode (P04).
+  local macOS 0.30-0.40 s. CI-7 asserts the best of three runs, budget unchanged (D-011); CI-9 cut the decode (-27%
+  CPU); if hosted Windows still fails, optimise the SSE split (P04).
 - INFRA-01: the CI-1 macOS gap failure (`test-http-reactor.R:557`) is unexplained; Windows release had late first
   deltas (0.38 / 0.181 s, `0c37a8d`) and a six-stream failure (`718659d`). Messages print the mock's lateness and
   gptr's latency; a gptr-side failure needs a P04 investigation (D-011).

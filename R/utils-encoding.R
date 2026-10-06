@@ -29,17 +29,20 @@ utf8_mark = function(x) {
 #' @noRd
 as_utf8 = function(x) {
   if (!is.character(x) || !length(x)) return(x)
-  x = utf8_mark(x)
   enc = Encoding(x)
-  invalid = !is.na(x) & enc == "unknown" & !validUTF8(x)
-  if (any(invalid) && isTRUE(l10n_info()[["UTF-8"]])) {
-    y = x[invalid]
+  mark = enc == "unknown" & !is.na(x)
+  convert = enc == "latin1"
+  if (any(mark)) {
+    invalid = mark & !validUTF8(x)
+    if (any(invalid) && !isTRUE(l10n_info()[["UTF-8"]])) {
+      mark = mark & !invalid
+      convert = convert | invalid
+    }
+    y = x[mark]
     Encoding(y) = "UTF-8"
-    x[invalid] = y
-    invalid[] = FALSE
+    x[mark] = y
   }
-  convert = which(!is.na(x) & (enc == "latin1" | invalid))
-  if (length(convert)) x[convert] = enc2utf8(x[convert])
+  if (any(convert)) x[convert] = enc2utf8(x[convert])
   x
 }
 

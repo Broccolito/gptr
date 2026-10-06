@@ -21,7 +21,8 @@ json_encode = function(x, pretty = FALSE) {
 #' never treats its input as a file name or URL.
 #' @noRd
 json_decode = function(text) {
-  text = paste(as_utf8(as.character(text)), collapse = "\n")
+  text = as_utf8(as.character(text))
+  if (length(text) != 1L) text = paste(text, collapse = "\n")
   jsonlite::parse_json(text, simplifyVector = FALSE)
 }
 
