@@ -58,7 +58,8 @@ polyglot_fixture = function(dir) {
   n = 5000L
   i = seq_len(n)
   sales = data.frame(region = rep_len(c("north", "south", "east", "west"), n),
-                     month = (i * 7L) %% 12L + 1L, revenue = round(((i * 37L) %% 1000L) / 3.7, 2))
+                     month = ((i - 1L) %/% 4L) %% 12L + 1L,
+                     revenue = round(((i * 37L) %% 1000L) / 3.7, 2))
   utils::write.csv(sales, file.path(dir, "sales.csv"), row.names = FALSE)
   j = seq_len(20000L)
   orders = data.frame(id = j, region = rep_len(c("north", "south", "east", "west"), 20000L),
@@ -170,7 +171,7 @@ polyglot_tasks = function(fx) {
       A = list("python3 long.py"),
       B = list('peter$sh("python3 long.py")'),
       C = list(q('j = peter$bg(c("python3", "long.py"))',
-                 'invisible(j$wait(timeout = 60, until = "DONE"))', "tail(j$read(), 2)"))))
+                 'tail(j$wait(timeout = 60, until = "DONE"), 2)'))))
 }
 
 # A bash tool with Pi semantics (report 01 section 3.5): bash -c, stdout and stderr merged,

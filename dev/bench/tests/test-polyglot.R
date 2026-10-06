@@ -36,6 +36,18 @@ test_that("every B and C call parses and calls only contract members (section 9.
   }
 })
 
+test_that("the T4 sales fixture fills every region and month", {
+  s = polyglot_fixture(withr::local_tempdir())$sales
+  expect_true(all(table(s$region, s$month) > 0))
+})
+
+test_that("the T8 C variant prints the job's last lines (wait() returns what it read)", {
+  skip_if_not(nzchar(Sys.which("python3")))
+  bench_test_load_gptr()
+  t = polyglot_tasks(polyglot_fixture(withr::local_tempdir()))$T8_long
+  expect_match(polyglot_r_tool(t$C[[1L]], t$wd, new.env())$result, "DONE best_loss", fixed = TRUE)
+})
+
 test_that("polyglot_check() passes within 10% and fails above it for B or C", {
   base = pg_table()
   expect_identical(suppressMessages(polyglot_check(pg_table(scale_b = 1.09), base)), character())
