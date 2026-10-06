@@ -229,3 +229,84 @@ test_that("the cmd engine is refused outside Windows", {
   skip_on_os("windows")
   expect_error(bridge_knit("cmd", "dir"), class = "gptr_error_invalid_argument")
 })
+
+lang_line = paste("- Other languages: peter$py(code); peter$sql(query, name = df);",
+                  "peter$knit(engine, code).")
+
+test_that("builtin:lang registers py, sql and knit as peter$ members only", {
+  for (nm in c("py", "sql", "knit")) {
+    spec = registry_get("tool", nm)
+    expect_s3_class(spec, "gptr_tool")
+    expect_identical(spec$exposure, "r")
+    expect_null(spec$namespace)
+    expect_true(is.function(spec$execute))
+    expect_false(spec$available(NULL))
+    expect_true(all(gptr_check(spec)$ok))
+    expect_true(inherits(peter[[nm]], "gptr_member"))
+  }
+  expect_identical(names(formals(registry_get("tool", "py")$fun)), c("code", "name", "max_rows"))
+  expect_identical(formals(registry_get("tool", "py")$fun)$max_rows, 10L)
+  expect_identical(names(formals(registry_get("tool", "sql")$fun)), c("query", "name", "con", "n"))
+  expect_identical(formals(registry_get("tool", "sql")$fun)$n, 10L)
+  expect_identical(names(formals(registry_get("tool", "knit")$fun)), c("engine", "code"))
+  frag = registry_get("prompt_section", "languages")
+  expect_identical(frag$text, lang_line)
+  expect_identical(frag$parent, "r_session")
+  expect_identical(as.integer(frag$order), 40L)
+})
+
+test_that("tool calls named py, sql or knit are refused before the permission check (S-4)", {
+  skip_on_cran()
+  local_project()
+  calls = fake_tools(list("py", list(code = "import os")),
+                     list("sql", list(query = "drop table t")),
+                     list("knit", list(engine = "bash", code = "rm -rf data")))
+  fake = local_fake_provider(list(calls, fake_text("done")))
+  # manual mode without a human: a call that reached the permission check would stop the run
+  s = peter("run them", model = fake, envir = new.env(), mode = "manual")
+  res = Filter(function(m) identical(m$role, "tool_result"), s$messages)
+  expect_identical(vapply(res, function(m) m$tool_name, ""), c("py", "sql", "knit"))
+  for (m in res) {
+    expect_true(isTRUE(m$is_error))
+    expect_match(msg_text(m), "is an R function, not a tool", fixed = TRUE)
+  }
+  expect_identical(s$status, "idle")
+})
+
+test_that("SQL, Python and knit risks follow 04 (acceptance 3)", {
+  sql = registry_get("tool", "sql")
+  expect_identical(as.integer(sql$risk(list(query = "select * from t"), NULL)$level), 0L)
+  expect_identical(as.integer(sql$risk(list(query = "drop table t"), NULL)$level), 3L)
+  expect_identical(gptr_risk("peter$sql(\"select * from t\")")$level, 0L)
+  expect_identical(gptr_risk("peter$sql(\"drop table t\")")$level, 3L)
+  expect_gte(registry_get("tool", "py")$risk(list(code = "import subprocess"), NULL)$level, 3L)
+  knit = registry_get("tool", "knit")
+  expect_identical(as.integer(knit$risk(list(engine = "bash", code = "wc -l data.csv"),
+                                        NULL)$level), 0L)
+  expect_identical(knit$risk(list(engine = "perl", code = "print 1"), NULL)$level, 3L)
+  expect_identical(knit$risk(list(engine = "sql", code = "select 1"), NULL)$level, 3L)
+  expect_identical(knit$risk(list(engine = "python", code = "x = 1"), NULL)$level, 3L)
+})
+
+test_that("peter$sql(name = df) labels the table by the expression, at the console and in r", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("duckdb")
+  big = data.frame(v = seq_len(1000))
+  expect_equal(peter$sql("SELECT COUNT(*) AS n FROM big", name = big)$n, 1000)
+  skip_on_cran()
+  local_project()
+  e = new.env()
+  e$orders = data.frame(id = 1:12)
+  code = "n = peter$sql(\"SELECT COUNT(*) AS n FROM orders\", name = orders)$n"
+  fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+  peter("count the orders", model = fake, envir = e, mode = "auto")
+  expect_equal(e$n, 12)
+})
+
+test_that("<r_session> carries the shell and languages lines in order", {
+  t0 = gptr_prompt(preset = "standard")$system$t0
+  at_shell = regexpr("- There is no shell tool.", t0, fixed = TRUE)
+  at_lang = regexpr(lang_line, t0, fixed = TRUE)
+  expect_gt(at_shell, 0)
+  expect_gt(at_lang, at_shell)
+})

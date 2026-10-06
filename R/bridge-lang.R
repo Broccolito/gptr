@@ -1,7 +1,7 @@
 # Polyglot bridges, language side (P22; contract 9.4; architecture 4.2, 6.4): objects passed by
-# name, peter$sql(), peter$py() and peter$knit(), adapted from G5's verified prototype. DBI, duckdb,
-# reticulate and knitr are Suggests; an object handed to duckdb or Python copies once on its next
-# in-place edit (rule R9).
+# name, peter$sql(), peter$py(), peter$knit() and builtin:lang, adapted from G5's verified
+# prototype. DBI, duckdb, reticulate and knitr are Suggests; an object handed to duckdb or Python
+# copies once on its next in-place edit (rule R9).
 
 # ---- objects passed by name --------------------------------------------------------------------
 
@@ -433,3 +433,65 @@ bridge_knit = function(engine, code) {
                                    if (length(lines) == 1L) " line" else " lines")))
   bridge_text(lines, out_id = id)
 }
+
+# ---- builtin:lang --------------------------------------------------------------------------------
+
+#' Risk of peter$knit(): the command classifier for the shell engines, else 3 like peter$script()
+#' (contract 9.4, IC-67)
+#' @noRd
+bridge_risk_knit = function(input, ctx) {
+  if (isTRUE(tolower(input$engine) %in% bridge_knit_shells)) {
+    return(bridge_risk(paste(bridge_chr(input$code), collapse = "\n"), "command"))
+  }
+  list(level = 3L, categories = "process", paths = character())
+}
+
+#' builtin:lang (contract 7.22): the members py, sql, knit (contract 9.4) with their S-4
+#' `tool_call` hook, and the <r_session> line `languages` (architecture 7.3 as amended by IC-68,
+#' byte for byte; order 40)
+#' @noRd
+builtin_lang = function(gptr) {
+  members = list(
+    bridge_member(
+      "py",
+      paste("Run Python in reticulate's persistent __main__ (shared with knitr python chunks);",
+            "the last expression is shown with pandas output bounded by max_rows, and $value",
+            "converts it to R. name = obj (or a named list) makes R objects Python variables."),
+      list(code = bridge_strings("Python code (one string or lines)."),
+           name = list(description = "An R object by name, or a named list of objects."),
+           max_rows = bridge_prop("integer", "Rows of pandas output (default 10).")),
+      "code", bridge_py, function(input, ctx) bridge_risk(bridge_chr(input$code), "python")
+    ),
+    bridge_member(
+      "sql",
+      paste("Run SQL and return all rows as a data frame that prints its dimensions and the",
+            "first n rows. name = df (or a named list of data frames) registers them in an",
+            "in-memory duckdb under those names; otherwise con = or the one DBI connection in",
+            "scope is used."),
+      list(query = bridge_strings("The SQL statement."),
+           name = list(description = "A data frame by name, or a named list of data frames."),
+           con = list(description = "A DBI connection."),
+           n = bridge_prop("integer", "Rows to print (default 10).")),
+      "query", bridge_sql, function(input, ctx) bridge_risk(bridge_chr(input$query), "sql")
+    ),
+    bridge_member(
+      "knit",
+      paste("Run code with a knitr language engine and return its output lines; bash, sh, zsh,",
+            "powershell and cmd run through peter$sh() with its child environment and timeout,",
+            "engines with a registered interpreter (Rscript, perl, ruby, node, julia) run as",
+            "scripts like peter$script(), python through peter$py() and sql through peter$sql()."),
+      list(engine = bridge_prop("string", "A knitr engine name, for example \"perl\"."),
+           code = bridge_strings("The code (one string or lines).")),
+      c("engine", "code"), bridge_knit, bridge_risk_knit
+    )
+  )
+  for (spec in members) gptr$register(spec)
+  gptr$on("tool_call", bridge_block_hook(c("py", "sql", "knit")))
+  gptr$register(gptr_prompt_section("languages", paste(
+    "- Other languages: peter$py(code); peter$sql(query, name = df);",
+    "peter$knit(engine, code)."
+  ), order = 40L, parent = "r_session"))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("lang", builtin_lang))

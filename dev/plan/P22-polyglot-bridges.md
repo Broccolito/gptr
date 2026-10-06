@@ -2687,8 +2687,8 @@ git commit -m 'feat(bridge): peter$knit() with shell engines on the sh engine an
 - Test: `tests/testthat/test-bridge-lang.R` (append)
 
 **Interfaces:**
-- Consumes: Task 5 (`bridge_member()`, `bridge_block_hook()`, `bridge_prop()`, `bridge_strings()`), Task 2 (`bridge_risk()`, `bridge_chr()`), Task 8 (`bridge_knit_shells`); `gptr_prompt_section()`, `ext_declare_builtin()`, the factory API's `gptr$on()` (P02); `on_load()` (P01); tests: `gptr_check()`, `registry_get()` (P02), `gptr_risk()` (P11), `gptr_prompt()` (P07), the gateway `peter` (P08/P10), `local_project()`, `local_fake_provider()`, `fake_tool()`, `fake_text()` (P01).
-- Produces: the member specs `py`, `sql`, `knit` (04 §9.4); the prompt section `languages` (`parent = "r_session"`, T0, order 40); `builtin_lang(gptr)` declared as `builtin:lang`; `bridge_risk_py()`, `bridge_risk_sql()`, `bridge_risk_knit()`; `bridge_lang_members()`; `bridge_lang_fragment`.
+- Consumes: Task 5 (`bridge_member()`, `bridge_block_hook()`, `bridge_prop()`, `bridge_strings()`), Task 2 (`bridge_risk()`, `bridge_chr()`), Task 8 (`bridge_knit_shells`); `gptr_prompt_section()`, `ext_declare_builtin()`, the factory API's `gptr$on()` (P02); `on_load()` (P01); tests: `gptr_check()`, `registry_get()` (P02), `gptr_risk()` (P11), `gptr_prompt()` (P07), the gateway `peter` (P08/P10), `local_project()`, `local_fake_provider()`, `fake_tool()`, `fake_tools()`, `fake_text()` (P01).
+- Produces: the member specs `py`, `sql`, `knit` (04 §9.4); the prompt section `languages` (`parent = "r_session"`, T0, order 40); `builtin_lang(gptr)` declared as `builtin:lang` (the `py` and `sql` risks inline); `bridge_risk_knit()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2718,6 +2718,24 @@ test_that("builtin:lang registers py, sql and knit as peter$ members only", {
   expect_identical(frag$text, lang_line)
   expect_identical(frag$parent, "r_session")
   expect_identical(as.integer(frag$order), 40L)
+})
+
+test_that("tool calls named py, sql or knit are refused before the permission check (S-4)", {
+  skip_on_cran()
+  local_project()
+  calls = fake_tools(list("py", list(code = "import os")),
+                     list("sql", list(query = "drop table t")),
+                     list("knit", list(engine = "bash", code = "rm -rf data")))
+  fake = local_fake_provider(list(calls, fake_text("done")))
+  # manual mode without a human: a call that reached the permission check would stop the run
+  s = peter("run them", model = fake, envir = new.env(), mode = "manual")
+  res = Filter(function(m) identical(m$role, "tool_result"), s$messages)
+  expect_identical(vapply(res, function(m) m$tool_name, ""), c("py", "sql", "knit"))
+  for (m in res) {
+    expect_true(isTRUE(m$is_error))
+    expect_match(msg_text(m), "is an R function, not a tool", fixed = TRUE)
+  }
+  expect_identical(s$status, "idle")
 })
 
 test_that("SQL, Python and knit risks follow 04 (acceptance 3)", {
@@ -2774,39 +2792,22 @@ Append to `R/bridge-lang.R`:
 ```r
 # ---- builtin:lang --------------------------------------------------------------------------------
 
-#' The <r_session> languages line (architecture 7.3 as amended by IC-68, byte for byte)
-#' @noRd
-bridge_lang_fragment = paste0(
-  "- Other languages: peter$py(code); peter$sql(query, name = df); peter$knit(engine, code)."
-)
-
-#' Risk of peter$py(): the Python token classifier
-#' @noRd
-bridge_risk_py = function(input, ctx) {
-  bridge_risk(paste(bridge_chr(input$code), collapse = "\n"), "python")
-}
-
-#' Risk of peter$sql(): the SQL keyword classifier (select 0, drop 3)
-#' @noRd
-bridge_risk_sql = function(input, ctx) {
-  bridge_risk(paste(bridge_chr(input$query), collapse = "\n"), "sql")
-}
-
-#' Risk of peter$knit(): the command classifier for the shell engines, 3 for every other engine,
-#' like peter$script() (contract 9.4, IC-67)
+#' Risk of peter$knit(): the command classifier for the shell engines, else 3 like peter$script()
+#' (contract 9.4, IC-67)
 #' @noRd
 bridge_risk_knit = function(input, ctx) {
-  eng = tolower(as.character(input$engine %||% "")[1L])
-  if (eng %in% bridge_knit_shells) {
+  if (isTRUE(tolower(input$engine) %in% bridge_knit_shells)) {
     return(bridge_risk(paste(bridge_chr(input$code), collapse = "\n"), "command"))
   }
   list(level = 3L, categories = "process", paths = character())
 }
 
-#' The member specs py, sql and knit (contract 9.4)
+#' builtin:lang (contract 7.22): the members py, sql, knit (contract 9.4) with their S-4
+#' `tool_call` hook, and the <r_session> line `languages` (architecture 7.3 as amended by IC-68,
+#' byte for byte; order 40)
 #' @noRd
-bridge_lang_members = function() {
-  list(
+builtin_lang = function(gptr) {
+  members = list(
     bridge_member(
       "py",
       paste("Run Python in reticulate's persistent __main__ (shared with knitr python chunks);",
@@ -2815,7 +2816,7 @@ bridge_lang_members = function() {
       list(code = bridge_strings("Python code (one string or lines)."),
            name = list(description = "An R object by name, or a named list of objects."),
            max_rows = bridge_prop("integer", "Rows of pandas output (default 10).")),
-      "code", bridge_py, bridge_risk_py
+      "code", bridge_py, function(input, ctx) bridge_risk(bridge_chr(input$code), "python")
     ),
     bridge_member(
       "sql",
@@ -2827,7 +2828,7 @@ bridge_lang_members = function() {
            name = list(description = "A data frame by name, or a named list of data frames."),
            con = list(description = "A DBI connection."),
            n = bridge_prop("integer", "Rows to print (default 10).")),
-      "query", bridge_sql, bridge_risk_sql
+      "query", bridge_sql, function(input, ctx) bridge_risk(bridge_chr(input$query), "sql")
     ),
     bridge_member(
       "knit",
@@ -2840,16 +2841,12 @@ bridge_lang_members = function() {
       c("engine", "code"), bridge_knit, bridge_risk_knit
     )
   )
-}
-
-#' builtin:lang (contract 7.22): the members py, sql, knit with their S-4 `tool_call` hook and the
-#' <r_session> fragment `languages` (order 40, IC-68)
-#' @noRd
-builtin_lang = function(gptr) {
-  for (spec in bridge_lang_members()) gptr$register(spec)
+  for (spec in members) gptr$register(spec)
   gptr$on("tool_call", bridge_block_hook(c("py", "sql", "knit")))
-  gptr$register(gptr_prompt_section("languages", bridge_lang_fragment, tier = "T0", order = 40L,
-                                    budget = 300L, parent = "r_session"))
+  gptr$register(gptr_prompt_section("languages", paste(
+    "- Other languages: peter$py(code); peter$sql(query, name = df);",
+    "peter$knit(engine, code)."
+  ), order = 40L, parent = "r_session"))
   invisible(NULL)
 }
 
@@ -2862,7 +2859,7 @@ on_load(ext_declare_builtin("lang", builtin_lang))
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 85 ]` without duckdb and Python, `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` with both.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 93 ]` without duckdb and Python, `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 128 ]` with both.
 
 - [ ] **Step 5: Commit**
 
@@ -3138,7 +3135,7 @@ Commands and expected results:
 Rscript --vanilla -e 'devtools::test(filter = "bridge|copy-bridge")'
 ```
 
-Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 366 ]` (`test-bridge-sh.R` 271; `test-bridge-lang.R` 85 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 405 ]`.
+Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 374 ]` (`test-bridge-sh.R` 271; `test-bridge-lang.R` 93 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 413 ]`.
 
 ```bash
 Rscript --vanilla dev/bench/tokens/run.R --check
