@@ -138,3 +138,94 @@ test_that("peter$py() receives R objects by name and knitr python chunks share _
   out = knitr::knit_engines$get("python")(opts)
   expect_match(paste(out, collapse = ""), "42", fixed = TRUE)
 })
+
+test_that("shell engines run through peter$sh() without registered keys and with a timeout", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if(!nzchar(Sys.which("bash")) || !nzchar(Sys.which("pgrep")))
+  key = paste0("gptr-fake-", "key-0123456789abcdef")
+  vault_reset()
+  withr::defer(vault_reset())
+  withr::local_envvar(GPTR_P22_PLAIN = key)
+  secret_register(key, "GPTR_P22_PLAIN", source = "user")
+  log = local_bridge_events()
+  out = bridge_knit("bash", "echo \"from bash: $((6 * 7))\"; env")
+  expect_s3_class(out, "gptr_bridge_text")
+  expect_true("from bash: 42" %in% out)
+  expect_false(any(grepl(key, out, fixed = TRUE)))
+  expect_true("TERM=dumb" %in% out)
+  ev = log$events[[length(log$events)]]
+  expect_identical(ev$bridge, "knit")
+  expect_match(ev$digest, "^#> knit bash: exit 0, ")
+  testthat::local_mocked_bindings(bridge_knit_timeout = function() 1)
+  t0 = proc.time()[["elapsed"]]
+  slow = bridge_knit("bash", "sleep 999")
+  expect_lt(proc.time()[["elapsed"]] - t0, 10)
+  expect_true(any(grepl("timed out after", slow, fixed = TRUE)))
+  Sys.sleep(0.5)
+  left = processx::run("pgrep", c("-f", "sleep 999"), error_on_status = FALSE)$stdout
+  expect_identical(left, "")
+})
+
+test_that("interpreter engines run as scripts without registered keys and with a timeout", {
+  skip_on_cran()
+  key = paste0("gptr-fake-", "key-fedcba9876543210")
+  vault_reset()
+  withr::defer(vault_reset())
+  withr::local_envvar(GPTR_P22_PLAIN = key)
+  secret_register(key, "GPTR_P22_PLAIN", source = "user")
+  log = local_bridge_events()
+  code = "cat(sprintf('from R: %d [%s]\\n', 6L * 7L, Sys.getenv('GPTR_P22_PLAIN')))"
+  out = bridge_knit("Rscript", code)
+  expect_s3_class(out, "gptr_bridge_text")
+  expect_identical(as.character(out), "from R: 42 []")
+  expect_identical(out_get(attr(out, "out_id")), "from R: 42 []")
+  ev = log$events[[length(log$events)]]
+  expect_identical(ev$bridge, "knit")
+  expect_identical(ev$digest, "#> knit Rscript: exit 0, 1 line")
+  testthat::local_mocked_bindings(bridge_knit_timeout = function() 1)
+  t0 = proc.time()[["elapsed"]]
+  slow = bridge_knit("Rscript", "Sys.sleep(30)")
+  expect_lt(proc.time()[["elapsed"]] - t0, 10)
+  expect_true(any(grepl("timed out after", slow, fixed = TRUE)))
+  skip_if(!nzchar(Sys.which("perl")))
+  pl = bridge_knit("perl", "print \"from perl: \", 6 * 7, \"\\n\";")
+  expect_identical(as.character(pl), "from perl: 42")
+})
+
+test_that("other engines run through knitr", {
+  skip_if_not_installed("knitr")
+  knitr::knit_engines$set(gptrp22test = function(options) {
+    paste0("engine gptrp22test got: ", paste(options$code, collapse = " | "))
+  })
+  withr::defer(knitr::knit_engines$delete("gptrp22test"))
+  out = bridge_knit("gptrp22test", c("a", "b"))
+  expect_s3_class(out, "gptr_bridge_text")
+  expect_identical(as.character(out), "engine gptrp22test got: a | b")
+  expect_identical(out_get(attr(out, "out_id")), "engine gptrp22test got: a | b")
+  expect_error(bridge_knit("nosuchengine", "x"), class = "gptr_error_invalid_argument")
+})
+
+test_that("the python and sql engines run through peter$py() and peter$sql()", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("RSQLite")
+  f = function() {
+    shop = DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+    on.exit(DBI::dbDisconnect(shop), add = TRUE)
+    DBI::dbWriteTable(shop, "orders", data.frame(id = 1:3))
+    bridge_knit("sql", "SELECT COUNT(*) AS n FROM orders")
+  }
+  out = f()
+  expect_s3_class(out, "gptr_bridge_text")
+  expect_identical(out[[1L]], "# 1 rows x 1 cols")
+  expect_true(any(grepl("^ *3$", out)))
+  skip_if_no_python()
+  py = bridge_knit("python", "6 * 7")
+  expect_identical(as.character(py), "42")
+  expect_identical(out_get(attr(py, "out_id")), "42")
+})
+
+test_that("the cmd engine is refused outside Windows", {
+  skip_on_os("windows")
+  expect_error(bridge_knit("cmd", "dir"), class = "gptr_error_invalid_argument")
+})

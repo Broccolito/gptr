@@ -2471,15 +2471,15 @@ git commit -m 'feat(bridge): peter$py() in reticulate __main__ with the provisio
 
 ### Task 8: `peter$knit()`
 
-`peter$knit(engine, code)` (04 §9.4) returns the output lines of a knitr language engine. The shell engines (`bash`, `sh`, `zsh`, `powershell`, `cmd`) never reach knitr: knitr's bash engine runs `system2()` with no timeout and assumes bash (G5 verification item 7), so they run through the `peter$sh()` engine of Task 2 with the complete `helper` environment and a timeout (IC-67): `bash -c`/`sh -c`/`zsh -c` on Unix, Git Bash on Windows, PowerShell with `-EncodedCommand` (P04's `shell_ps_encode()`), and `cmd /d /s /c "chcp 65001 >nul & ..."` on Windows only. `python` and `sql` run through `peter$py()` (its provisioning guard and the shared `__main__`) and `peter$sql()` on the one DBI connection in the caller's scope, as G5 routes them. An engine that names a registered interpreter (an interpreter of that name, or one whose `programs` include it: `Rscript`, `R`, `perl`, `ruby`, `node`, `js`, `julia`, `python3`) runs like `peter$script()`: the code goes to a temporary script with the interpreter's first extension and runs through the `peter$sh()` engine with the `helper` environment and the timeout. knitr's own engines for these programs call `system2()` without a timeout and hand the child the session's complete environment, registered keys included, which IC-60 forbids for bridge children (a `perl` chunk could read a key the secret guard would stop in `r`). Every other engine (non-interpreter engines such as `cat`, `verbatim` or a user-registered engine, and programs gptr has no interpreter record for) runs through knitr with its `running:` message suppressed. The timeout is `bridge_knit_timeout()` (120 s, `peter$sh()`'s default), a function so that the test can shorten it with `local_mocked_bindings()` without a new option.
+`peter$knit(engine, code)` (04 §9.4) returns the output lines of a knitr language engine. The shell engines (`bash`, `sh`, `zsh`, `powershell`, `cmd`) never reach knitr: knitr's bash engine runs `system2()` with no timeout and assumes bash (G5 verification item 7), so they run through the `peter$sh()` engine of Task 2 with the complete `helper` environment and a timeout (IC-67): `bash -c`/`sh -c`/`zsh -c` (Git Bash when Windows lacks the program), PowerShell with `-EncodedCommand` (P04's `shell_ps_encode()`), and `cmd /d /s /c "chcp 65001 >nul & ..."` on Windows only. `python` and `sql` run through `peter$py()` (its provisioning guard and the shared `__main__`) and `peter$sql()` on the one DBI connection in the caller's scope, as G5 routes them. An engine that names a registered interpreter (an interpreter of that name, or one whose `programs` include it: `Rscript`, `R`, `perl`, `ruby`, `node`, `js`, `julia`, `python3`) runs like `peter$script()`: the code goes to a temporary script with the interpreter's first extension and runs through the `peter$sh()` engine with the `helper` environment and the timeout. knitr's own engines for these programs call `system2()` without a timeout and hand the child the session's complete environment, registered keys included, which IC-60 forbids for bridge children (a `perl` chunk could read a key the secret guard would stop in `r`). Every other engine (non-interpreter engines such as `cat`, `verbatim` or a user-registered engine, and programs gptr has no interpreter record for) runs through knitr with its `running:` message suppressed. The timeout is `bridge_knit_timeout()` (120 s, `peter$sh()`'s default), a function so that the test can shorten it with `local_mocked_bindings()` without a new option.
 
 **Files:**
 - Modify: `R/bridge-lang.R` (append), `R/bridge-sh.R` (`bridge_text()` and `print.gptr_bridge_text()` take the `out_id` of knit output)
 - Test: `tests/testthat/test-bridge-lang.R` (append)
 
 **Interfaces:**
-- Consumes: `shell_resolve(cmd)` (P04, Windows Git Bash) and `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()`, `clean_terminal()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_status_line()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
-- Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_text(lines, footer = NULL, out_id = NULL)` (replaces Task 4's); `bridge_cmd_lines(x)`; `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`; `bridge_knit_interpreter(engine)` -> an interpreter spec or `NULL`; `bridge_knit_script(spec, engine, src)` -> `gptr_cmd`.
+- Consumes: `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `text_lines()`, `is_windows()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()`, `clean_terminal()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_git_bash()`, `bridge_status_line()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
+- Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_text(lines, footer = NULL, out_id = NULL)` (replaces Task 4's); `bridge_cmd_lines(x)`; `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2606,68 +2606,44 @@ bridge_text = function(lines, footer = NULL, out_id = NULL) {
 Append to `R/bridge-lang.R`:
 
 ```r
-# ---- peter$knit() --------------------------------------------------------------------------------
+# ---- peter$knit() -------------------------------------------------------------------------------
 
 #' knitr engines that run through the peter$sh() engine (IC-67)
 #' @noRd
 bridge_knit_shells = c("bash", "sh", "zsh", "powershell", "cmd")
 
-#' Seconds before a shell engine's process tree is killed: peter$sh()'s default
+#' Seconds before a knit child's process tree is killed (peter$sh()'s default; mocked in tests)
 #' @noRd
-bridge_knit_timeout = function() {
-  120
-}
+bridge_knit_timeout = function() 120
 
-#' How to run code with a shell engine: list(command, args, via); knitr's own bash engine has no
-#' timeout and assumes bash (G5 item 7)
+#' How a shell engine runs code: list(command, args, via). The engine's program, else Git Bash on
+#' Windows, takes `-c`; knitr's own bash engine has no timeout and assumes bash (G5 item 7).
 #' @noRd
 bridge_knit_target = function(engine, code) {
-  windows = identical(.Platform$OS.type, "windows")
-  if (engine %in% c("bash", "sh", "zsh")) {
-    if (windows) {
-      sh = shell_resolve(code)
-      if (!grepl("bash", basename(sh$command), ignore.case = TRUE)) {
-        gptr_abort(paste0("The ", engine, " engine needs Git Bash on Windows."), "spawn",
-                   command = engine)
-      }
-      return(list(command = sh$command, args = sh$args, via = "shell"))
+  if (identical(engine, "cmd")) {
+    if (!is_windows()) {
+      gptr_abort("The cmd engine runs only on Windows.", "invalid_argument", arg = "engine",
+                 expected = "an engine available on this platform")
     }
-    prog = bridge_program(engine)
-    if (is.null(prog)) {
-      gptr_abort(paste0("No ", engine, " program was found."), "spawn", command = engine)
-    }
-    return(list(command = prog, args = c("-c", code), via = "shell"))
+    comspec = Sys.getenv("COMSPEC")
+    if (!nzchar(comspec)) comspec = "cmd.exe"
+    args = c("/d", "/s", "/c", paste0("\"chcp 65001 >nul & ", code, "\""))
+    attr(args, "verbatim") = TRUE
+    return(list(command = comspec, args = args, via = "shell"))
   }
-  if (identical(engine, "powershell")) {
-    prog = bridge_program(c("pwsh", "powershell"))
-    if (is.null(prog)) {
-      gptr_abort("No PowerShell program was found.", "spawn", command = "powershell")
-    }
-    return(list(command = prog, args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy",
-                                         "Bypass", "-EncodedCommand", shell_ps_encode(code)),
-                via = "shell"))
+  ps = identical(engine, "powershell")
+  prog = bridge_program(if (ps) c("pwsh", "powershell") else c(engine, bridge_git_bash()))
+  if (is.null(prog)) {
+    gptr_abort(paste0("No program was found for the ", engine, " engine."), "spawn",
+               command = engine)
   }
-  if (!windows) {
-    gptr_abort("The cmd engine runs only on Windows.", "invalid_argument", arg = "engine",
-               expected = "an engine available on this platform")
+  args = if (ps) {
+    c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
+      shell_ps_encode(code))
+  } else {
+    c("-c", code)
   }
-  comspec = Sys.getenv("COMSPEC")
-  if (!nzchar(comspec)) comspec = "cmd.exe"
-  args = c("/d", "/s", "/c", paste0("\"chcp 65001 >nul & ", code, "\""))
-  attr(args, "verbatim") = TRUE
-  list(command = comspec, args = args, via = "shell")
-}
-
-#' The registered interpreter that runs a knitr engine, or NULL: an interpreter named like the
-#' engine, else one whose programs include it (Rscript, perl, ruby, node, julia, ...)
-#' @noRd
-bridge_knit_interpreter = function(engine) {
-  eng = tolower(engine)
-  for (spec in registry_all("interpreter", session = run_current()$session)) {
-    progs = tolower(sub("\\.exe$", "", basename(spec$programs), ignore.case = TRUE))
-    if (identical(tolower(spec$name), eng) || eng %in% progs) return(spec)
-  }
-  NULL
+  list(command = prog, args = args, via = "shell")
 }
 
 #' All display lines of a gptr_cmd (stdout, [stderr], status) without truncation
@@ -2677,27 +2653,10 @@ bridge_cmd_lines = function(x) {
   c(clean_terminal(x$stdout), if (length(err)) c("[stderr]", err), bridge_status_line(x))
 }
 
-#' Run engine code with an interpreter, like peter$script(): a temporary script with the
-#' interpreter's first extension, run through the peter$sh() engine with the helper environment
-#' and the knit timeout (IC-60); knitr's own engines would call system2() without a timeout and
-#' with the session's complete environment
-#' @noRd
-bridge_knit_script = function(spec, engine, src) {
-  f = tempfile("gptr-knit-", fileext = paste0(".", spec$ext[[1L]]))
-  on.exit(unlink(f), add = TRUE)
-  bridge_write_lines(src, f)
-  argv = bridge_interpreter_argv(spec, f, character())
-  bridge_exec(argv, timeout = bridge_knit_timeout(), bridge = "knit", label = engine,
-              level = 3L)
-}
-
-#' peter$knit(): run code with a knitr language engine and return its output lines
-#'
-#' Shell engines run through the peter$sh() engine (helper environment, timeout; IC-67); `python`
-#' and `sql` run through peter$py() (its provisioning guard and shared __main__) and peter$sql()
-#' (the one DBI connection in the caller's scope), as G5 routes them; an engine that names a
-#' registered interpreter runs as a script through the same engine (IC-60); every other engine
-#' runs through knitr with its "running:" message suppressed.
+#' peter$knit(): the output lines of a knitr language engine (04 9.4)
+#' Shell engines and engines naming a registered interpreter (by name or program) run on the
+#' peter$sh() engine with the helper environment and a timeout (IC-67, IC-60); python and sql
+#' through peter$py() and peter$sql() (G5); any other engine through knitr.
 #' @noRd
 bridge_knit = function(engine, code) {
   check_string(engine, "engine")
@@ -2707,7 +2666,7 @@ bridge_knit = function(engine, code) {
   eng = tolower(engine)
   if (eng %in% bridge_knit_shells) {
     res = bridge_exec(c(eng, src), timeout = bridge_knit_timeout(), bridge = "knit",
-                      label = eng, level = bridge_level(src, "command"),
+                      label = engine, level = bridge_level(src, "command"),
                       target = bridge_knit_target(eng, src))
     return(bridge_text(bridge_cmd_lines(res), out_id = res$id))
   }
@@ -2719,9 +2678,15 @@ bridge_knit = function(engine, code) {
     con = bridge_find_connection(bridge_caller_env(bridge_knit))
     return(bridge_text(bridge_sql_lines(bridge_sql(src, con = con))))
   }
-  interp = bridge_knit_interpreter(engine)
-  if (!is.null(interp)) {
-    res = bridge_knit_script(interp, engine, src)
+  spec = Filter(function(s) {
+    eng %in% tolower(c(s$name, sub("\\.exe$", "", basename(s$programs), ignore.case = TRUE)))
+  }, registry_all("interpreter", session = run_current()$session))
+  if (length(spec)) {
+    f = tempfile("gptr-knit-", fileext = paste0(".", spec[[1L]]$ext[[1L]]))
+    on.exit(unlink(f), add = TRUE)
+    bridge_write_lines(src, f)
+    res = bridge_exec(bridge_interpreter_argv(spec[[1L]], f, character()),
+                      timeout = bridge_knit_timeout(), bridge = "knit", label = engine, level = 3L)
     return(bridge_text(bridge_cmd_lines(res), out_id = res$id))
   }
   if (!requireNamespace("knitr", quietly = TRUE)) {
@@ -2733,18 +2698,16 @@ bridge_knit = function(engine, code) {
     gptr_abort("Unknown knitr engine.", "invalid_argument", arg = "engine",
                expected = "a name in names(knitr::knit_engines$get())")
   }
-  opts = knitr::opts_chunk$merge(list(engine = engine, code = strsplit(src, "\n")[[1L]],
-                                      label = "gptr-knit", echo = FALSE, results = "asis"))
+  opts = knitr::opts_chunk$merge(list(engine = engine, code = text_lines(src), label = "gptr-knit",
+                                      echo = FALSE, results = "asis"))
   t0 = reactor_now()
-  out = suppressMessages(fun(opts))
-  text = as_utf8(sub("\n+$", "", paste(out, collapse = "\n")))
-  lines = if (nzchar(text)) strsplit(text, "\n", fixed = TRUE)[[1L]] else character()
-  id = out_put(text, stream = "stdout", meta = list(bridge = "knit", engine = engine),
-               session = bridge_out_session())
+  text = as_utf8(sub("\n+$", "", paste(suppressMessages(fun(opts)), collapse = "\n")))
+  lines = text_lines(text)
+  id = out_put(text, meta = list(bridge = "knit", cmd = engine), session = bridge_out_session())
   bridge_emit(list(bridge = "knit", id = id, cmd = src, level = 3L, status = "ok",
                    seconds = reactor_now() - t0, bytes_out = nchar(text, type = "bytes"),
                    bytes_err = 0L, spill = NULL,
-                   digest = paste0("knit ", eng, ": ", length(lines),
+                   digest = paste0("knit ", engine, ": ", length(lines),
                                    if (length(lines) == 1L) " line" else " lines")))
   bridge_text(lines, out_id = id)
 }

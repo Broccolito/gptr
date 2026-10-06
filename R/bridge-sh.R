@@ -502,10 +502,10 @@ bridge_script = function(path, args = character(), interpreter = NULL, ...) {
 bridge_state = new.env(parent = emptyenv())
 bridge_state$jobs = list()
 
-#' Output lines with a budgeted print and a footer (job reads)
+#' Output lines with a budgeted print and a footer (job reads, knit output)
 #' @noRd
-bridge_text = function(lines, footer) {
-  structure(lines, class = c("gptr_bridge_text", "character"), footer = footer)
+bridge_text = function(lines, footer = NULL, out_id = NULL) {
+  structure(lines, class = c("gptr_bridge_text", "character"), footer = footer, out_id = out_id)
 }
 
 #' Print bridge output lines within the helper budget, then the footer
@@ -516,7 +516,8 @@ bridge_text = function(lines, footer) {
 #' @noRd
 print.gptr_bridge_text = function(x, ...) {
   footer = attr(x, "footer", exact = TRUE)
-  view = bridge_view_lines(as.character(x), bridge_budget(NULL) - est_tokens(footer, "r_output"))
+  view = bridge_view_lines(as.character(x), bridge_budget(NULL) - est_tokens(footer, "r_output"),
+                           id = attr(x, "out_id", exact = TRUE))
   bridge_write(c(if (length(view)) view else "(no output)", footer))
   invisible(x)
 }
