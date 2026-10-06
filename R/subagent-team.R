@@ -355,3 +355,132 @@ route_team_run = function(call) {
   }
   subagent_value(team)
 }
+
+# ---- the `fanout` route (order 16) and gptr_map() (contract 6.5, IC-36, IC-39) ----------------
+
+#' `match()` of the fan-out route: `parallel =` was given (the team route serves `agents =`
+#' first); run() refuses calls without exactly one list-like context object
+#' @noRd
+route_fanout_match = function(call) !is.null(call$args$parallel)
+
+#' The shape of a context value [leaf]: `kind` (`list`, `rows`, `atomic` or `none`), `n` and
+#' `keys` (element names, or NULL)
+#' @noRd
+subagent_shape = function(x) {
+  if (is.data.frame(x)) {
+    rn = attr(x, "row.names")
+    return(list(kind = "rows", n = nrow(x), keys = if (is.character(rn)) rn))
+  }
+  if (is.list(x) && !is.object(x)) return(list(kind = "list", n = length(x), keys = names(x)))
+  if (is.atomic(x) && length(x) >= 1L && is.null(dim(x))) {
+    return(list(kind = "atomic", n = length(x), keys = names(x)))
+  }
+  list(kind = "none", n = 0L, keys = NULL)
+}
+
+#' The one list-like context item of a fan-out call: its index and shape; any other number of
+#' list-like items is `gptr_error_invalid_argument`
+#' @noRd
+subagent_fanout_item = function(call) {
+  shapes = lapply(seq_along(call$context), function(i) subagent_shape(call_value(call, i)))
+  hits = which(vapply(shapes, function(s) s$n >= 1L, NA))
+  if (length(hits) != 1L) {
+    gptr_abort(paste0("parallel = fans out over exactly one list, vector or data frame; this ",
+                      "call has ", length(hits), "."),
+               "invalid_argument", arg = "parallel",
+               expected = "one list-like object, as in peter(\"...\", cohorts, parallel = 4)")
+  }
+  list(index = hits, shape = shapes[[hits]])
+}
+
+#' The names of the children of a fan-out: element names when they are unique and non-empty,
+#' else the positions
+#' @noRd
+subagent_fanout_names = function(shape) {
+  k = shape$keys
+  if (length(k) == shape$n && !anyNA(k) && all(nzchar(k)) && !anyDuplicated(k)) return(k)
+  as.character(seq_len(shape$n))
+}
+
+#' The R expression a fan-out child reads its element with: `cohorts[["A"]]` (a context symbol,
+#' read in place through the child's overlay), else `.x[["A"]]` (`.x` bound in the overlay);
+#' data-frame rows as `x[i, ]`. A worker receives its element alone, as `.x[["<key>"]]`.
+#' @noRd
+subagent_element_label = function(item, key, i, kind, bound, worker = FALSE) {
+  quoted = paste0("[[", encodeString(key, quote = "\""), "]]")
+  if (worker) return(paste0(".x", quoted))
+  base = if (bound) ".x" else item$name
+  if (identical(kind, "rows")) return(paste0(base, "[", i, ", ]"))
+  if (identical(key, as.character(i))) return(paste0(base, "[[", i, "]]"))
+  paste0(base, quoted)
+}
+
+#' The child spec of fan-out element `i`: the call's prompt, the element as its first context
+#' item (slot `.e1` of a private values environment, released after the first message) and the
+#' call's other context items
+#' @noRd
+subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
+  item = call$context[[target$index]]
+  kind = target$shape$kind
+  x = call_value(call, target$index)
+  el = if (identical(kind, "rows")) x[i, , drop = FALSE] else x[[i]]
+  worker = identical(backend, "worker")
+  bound = worker || !identical(item$kind, "symbol")
+  values = new.env(parent = emptyenv())
+  assign(".e1", el, envir = values)
+  ctx = list(list(label = subagent_element_label(item, key, i, kind, bound, worker),
+                  kind = "value", name = NULL, slot = ".e1", address = NULL,
+                  facts = list(class = class(el), dim = dim(el), length = length(el),
+                               bytes = as.numeric(utils::object.size(el)),
+                               is_chr1 = is.character(el) && length(el) == 1L && !is.na(el))))
+  for (it in call$context[-target$index]) {
+    if (!is.null(it$slot)) assign(it$slot, get(it$slot, envir = call$values), envir = values)
+    ctx = c(ctx, list(it))
+  }
+  opts = call$args$opts
+  fd = session_data(fan)
+  list(agent = agent, name = key, prompt = call$prompt, context = ctx, values = values,
+       values_owned = TRUE, model = call$ids$model %||% fd$model, mode = call$ids$mode,
+       preset = opts$preset, parent = fan, base = call$envir, opts = opts,
+       budget = call$args$budget, nested_group = fd$id, isolate = target$shape$n > 1L,
+       seed = opts$seed, max_turns = opts$max_turns, backend = backend,
+       bind = if (worker) list(.x = stats::setNames(list(el), key)) else if (bound) list(.x = x))
+}
+
+#' The function behind `parallel =` (internal, IC-36)
+#'
+#' One child per element of the call's list-like context object (a list, an atomic vector or
+#' the rows of a data frame), `call$args$parallel` at a time; every element is queued (the task
+#' limit applies only to fan-outs started by model code, IC-39). Each child receives the prompt
+#' and its element as context, read in place by name (`cohorts[["A"]]`). Returns a fan-out
+#' session (`kind = "fanout"`): `$text` is the named chr of child texts, `[[i]]`/`$name` the
+#' child sessions.
+#' @param call The gptr_call record of the gateway (contract 7.8).
+#' @param target The list-like item: `subagent_fanout_item(call)`.
+#' @noRd
+gptr_map = function(call, target = subagent_fanout_item(call)) {
+  cur = run_current()
+  subagent_task_limit(target$shape$n, cur)
+  keys = subagent_fanout_names(target$shape)
+  fan = subagent_container(call, "fanout", cur)
+  fd = session_data(fan)
+  agent = gptr_agent("fanout", description = "One element of a fan-out")
+  backend = subagent_choose_backend(agent, call$args$opts, subagent_model_info(fd$model, fd$id))
+  pool = subagent_pool(backend, registry_get("backend", backend))
+  items = lapply(seq_along(keys), function(i) {
+    force(i)
+    list(start = function() {
+      subagent_start(subagent_fanout_spec(call, fan, agent, target, i, keys[[i]], backend), cur)
+    }, pool = pool)
+  })
+  subagent_run_children(fan, items, call$args$parallel, call$envir, call$doc)
+}
+
+#' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map()
+#' @noRd
+route_fanout_run = function(call) {
+  subagent_route_checks(call)
+  target = subagent_fanout_item(call)
+  subagent_value(subagent_doc_replay(call, subagent_fanout_names(target$shape), "fanout") %||%
+                   gptr_map(call, target))
+}

@@ -273,3 +273,111 @@ test_that("a settled team dispatches agent_end with its document site (IC-47)", 
   expect_identical(seen$doc$note, "the statement's site")
   expect_identical(seen$status, "idle")
 })
+
+# ---- Task 5: fan-outs ------------------------------------------------------------------------
+
+# A symbol context item as the gateway captures `cohorts` (contract 7.8)
+sym_item = function(name, x) {
+  list(label = name, kind = "symbol", name = name, slot = NULL,
+       address = rlang::obj_address(x),
+       facts = list(class = class(x)[[1L]], dim = dim(x), length = length(x), bytes = 0,
+                    is_chr1 = FALSE))
+}
+
+# The attrs$name of the `attached` context blocks of a session's first user message
+attached_names = function(s) {
+  for (e in session_data(s)$entries) {
+    m = e$message
+    if (identical(e$type, "message") && identical(m$role, "user")) {
+      ctx = Filter(function(b) identical(b$type, "context") && identical(b$kind, "attached"),
+                   m$content)
+      return(vapply(ctx, function(b) as.character(b$attrs$name), ""))
+    }
+  }
+  character()
+}
+
+test_that("shapes: lists, data-frame rows and vectors fan out; other objects do not", {
+  expect_identical(subagent_shape(list(a = 1, b = 2))[c("kind", "n")], list(kind = "list", n = 2L))
+  expect_identical(subagent_shape(mtcars[1:3, ])$kind, "rows")
+  expect_identical(subagent_shape(mtcars[1:3, ])$n, 3L)
+  expect_identical(subagent_shape(c(x = 1, y = 2))$keys, c("x", "y"))
+  expect_identical(subagent_shape(lm(mpg ~ wt, mtcars))$kind, "none")
+  expect_identical(subagent_shape(matrix(1:4, 2))$kind, "none")
+})
+
+test_that("children are named by element names, else by position", {
+  expect_identical(subagent_fanout_names(list(kind = "list", n = 2L, keys = c("A", "B"))),
+                   c("A", "B"))
+  expect_identical(subagent_fanout_names(list(kind = "list", n = 2L, keys = c("A", "A"))),
+                   c("1", "2"))
+  expect_identical(subagent_fanout_names(list(kind = "atomic", n = 3L, keys = NULL)),
+                   c("1", "2", "3"))
+})
+
+test_that("each child reads its element in place by name", {
+  item = list(name = "cohorts")
+  expect_identical(subagent_element_label(item, "A", 1L, "list", FALSE), "cohorts[[\"A\"]]")
+  expect_identical(subagent_element_label(item, "2", 2L, "list", FALSE), "cohorts[[2]]")
+  expect_identical(subagent_element_label(item, "3", 3L, "rows", FALSE), "cohorts[3, ]")
+  expect_identical(subagent_element_label(item, "A", 1L, "list", TRUE), ".x[[\"A\"]]")
+  expect_identical(subagent_element_label(item, "3", 3L, "rows", TRUE, worker = TRUE),
+                   ".x[[\"3\"]]")
+})
+
+test_that("a fan-out needs exactly one list-like context object", {
+  local_team_fake()
+  e = new.env()
+  e$a = list(1, 2)
+  e$b = list(3, 4)
+  call = team_call("x", parallel = 2L, envir = e,
+                   context = list(sym_item("a", e$a), sym_item("b", e$b)))
+  expect_error(route_fanout_run(call), class = "gptr_error_invalid_argument")
+  none = team_call("x", parallel = 2L, envir = e)
+  expect_error(route_fanout_run(none), class = "gptr_error_invalid_argument")
+  expect_true(route_fanout_match(none))
+  expect_false(route_fanout_match(team_call("x")))
+})
+
+test_that("gptr_map() runs one child per element and returns a fan-out session", {
+  local_team_fake(function(request) paste("summary", request$n))
+  e = new.env()
+  e$cohorts = list(A = 1:3, B = 4:6, C = 7:9)
+  call = team_call("Summarise this cohort", parallel = 2L, envir = e,
+                   context = list(sym_item("cohorts", e$cohorts)))
+  fan = gptr_map(call)
+  expect_identical(fan$kind, "fanout")
+  expect_identical(names(fan$children), c("A", "B", "C"))
+  expect_identical(names(fan$text), c("A", "B", "C"))
+  expect_true(all(startsWith(fan$text, "summary")))
+  expect_identical(fan[["B"]], fan$children$B)
+  expect_identical(attached_names(fan$A), "cohorts[[\"A\"]]")
+  expect_identical(parent.env(fan$C$envir), e)
+  expect_identical(fan$C$envir$.x, NULL)
+})
+
+test_that("a fan-out over a value binds .x in each overlay only while the child runs", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) "ok" else fake_tool("r", code = "n = length(.x[[1]])")
+  })
+  e = new.env()
+  call = team_call("x", parallel = 3L, envir = e, values = new.env(),
+                   context = list(list(label = "..2", kind = "value", name = NULL,
+                                       slot = ".v2", address = NULL,
+                                       facts = list(class = "list"))))
+  assign(".v2", list(1:2, 1:5), envir = call$values)
+  fan = gptr_map(call)
+  expect_identical(attached_names(fan[["1"]]), ".x[[1]]")
+  expect_identical(fan[["1"]]$envir$n, 2L)
+  expect_false(exists(".x", envir = fan[["1"]]$envir, inherits = FALSE))
+})
+
+test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks says (IC-39)", {
+  local_team_fake()
+  local_gptr_options(subagents.max_tasks = 2L)
+  e = new.env()
+  e$xs = as.list(1:5)
+  fan = gptr_map(team_call("x", parallel = 2L, envir = e, context = list(sym_item("xs", e$xs))))
+  expect_length(fan$children, 5L)
+  expect_true(all(fan$text != ""))
+})
