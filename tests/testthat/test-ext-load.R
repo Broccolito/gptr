@@ -1,11 +1,3 @@
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
-cmd = function(name, text = name) gptr_command(name, function(args, ctx) text)
-
 # A plugin manifest (contract 11.12) as json_decode() returns it
 manifest = function(provides, declarations = NULL, api = NULL, activation = "lazy") {
   m = list(name = "demo", version = "0.1.0",

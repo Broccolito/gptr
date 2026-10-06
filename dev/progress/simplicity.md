@@ -177,3 +177,15 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   route_needs_subagents wording) fixed, tokens still equal HEAD.
 - Deviations: none. Open: test-gptr-gateway.R, test-gptr-sdk.R, test-copy-gateway.R keep their
   "(Task n: create)" markers (outside this package).
+
+## P02-S - Extension core (2026-10-05)
+- X-1 `helper-ext.R`; X-2 comments; X-3 one load transaction; X-4 `registry_enabled()` (lazy
+  activation folded in); X-5 one `kind_from_spec()` (P22 text); X-6, X-8, X-9, X-10 (is_string,
+  `spec_field_ok(rule = NULL)`), X-11, X-12 (hits via `registry_drops_guard()`), X-13; X-7 drops
+  the isolated stand-in test; shared decision 6 (R -251, tests -61; plan ~266).
+- Red: FAIL 1 (`ext-events`: a list without `decision` denied). Green: `ext-` PASS 1776 (1777
+  before: +1, -2 stand-in). Lint clean. Neighbours: `copy-|arch-layers|lint-rules|zzz|aaa-state`,
+  `agent-|session-`, `tool-|skill-|prompt-|provider-registry|mcp-|res-|subagent-defs|s1-route|
+  eval-`, `gptr-|doc-replay|cli-common` green; cross-plan 0 errors.
+- Reviews: none yet.
+- Deviations: D-145. Open: X-14/X-15 specifics lost (only registry_all()'s duplicate sort folded).

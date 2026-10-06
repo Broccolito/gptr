@@ -1,9 +1,3 @@
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
 test_that("the API object exposes name, dir, state and the verbs; it refuses assignment", {
   local_registry()
   api = ext_api_new("plugin:demo", dir = tempdir())

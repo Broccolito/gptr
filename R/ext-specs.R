@@ -1,9 +1,6 @@
-# ext-specs.R -- the kind table, the spec engine and its validators (contract 5.4, 7.2, 10.2).
-# 37 kinds are defined here: architecture 11.1 minus `interpreter` (P22 adds it through the `kind`
-# kind), plus route, preset, risk_rule, service, renderer, search_source, store and evaluator
-# (IC-02, IC-34, IC-69). Validators accept unknown fields (forward compatibility) and reject wrong
-# types of known fields with gptr_error_invalid_spec naming the field (contract 10.2). Fields are
-# read with [[ ]] so that a missing field never partially matches another one.
+# ext-specs.R -- the kind table (37 kinds; P22 adds `interpreter`), the spec engine and its
+# validators (contract 5.4, 7.2, 10.2; IC-02, IC-34, IC-69). Validators keep unknown fields and
+# name the failing known field; fields are read with [[ ]] (no partial matching).
 
 #' The extension API version (contract 10.9)
 #' @noRd
@@ -11,16 +8,15 @@ ext_api_version = "1.0"
 
 # ---- validation helpers -----------------------------------------------------------------------
 
-# Name and version rules end with `\z`, not `$`: PCRE's `$` also matches before a final newline,
-# so `"ok\n"` would pass `^[a-z0-9][a-z0-9-]*$` (D-074 item 8).
+# Name and version rules end with `\z`: PCRE's `$` also matches before a final newline (D-074).
 
 #' Signal gptr_error_invalid_spec for one field of a spec
 #' @noRd
 spec_abort = function(spec, field, problem) {
   kind = spec[["kind"]]
   name = spec[["name"]]
-  kind = if (is.character(kind) && length(kind) == 1L && !is.na(kind)) kind else "?"
-  name = if (is.character(name) && length(name) == 1L && !is.na(name)) name else "?"
+  kind = if (rlang::is_string(kind)) kind else "?"
+  name = if (rlang::is_string(name)) name else "?"
   gptr_abort(paste0("Invalid ", kind, " spec '", name, "': field '", field, "' ", problem, "."),
              "invalid_spec", kind = kind, name = name, field = field, problem = problem)
 }
@@ -46,9 +42,9 @@ spec_fn_accepts = function(f, args) {
 
 #' Is value `v` of the rule type `type`?
 #' @noRd
-spec_field_ok = function(v, type, rule) {
+spec_field_ok = function(v, type, rule = NULL) {
   switch(type,
-    chr1 = is.character(v) && length(v) == 1L && !is.na(v),
+    chr1 = rlang::is_string(v),
     chrna = is.character(v) && length(v) == 1L,
     chr = is.character(v) && !anyNA(v),
     lgl1 = is.logical(v) && length(v) == 1L && !is.na(v),
@@ -60,7 +56,7 @@ spec_field_ok = function(v, type, rule) {
       (is.finite(v) || (is.na(v) && !is.nan(v)))) || (is.logical(v) && is.na(v))),
     int1 = typeof(v) %in% c("integer", "double") && length(v) == 1L &&
       is.finite(v) && abs(v) <= .Machine$integer.max && v == round(v),
-    enum = is.character(v) && length(v) == 1L && !is.na(v) && v %in% rule$values,
+    enum = rlang::is_string(v) && v %in% rule$values,
     enums = is.character(v) && !anyNA(v) && all(v %in% rule$values),
     fn = is.function(v) && spec_fn_accepts(v, rule$args),
     list = is.list(v) && !is.data.frame(v),
@@ -207,8 +203,7 @@ spec_tool_fun = function(execute, parameters, name) {
     if (isTRUE(res$is_error)) gptr_abort(format(res), "tool", tool = name, status = "error")
     if (is.null(res$value)) format(res) else res$value
   }
-  # Capture the call frame before creating scratch bindings. Embed the runner so no schema
-  # property can shadow it, and preserve schema order when turning the frame into input.
+  # the runner is embedded, so no schema property can shadow it; the frame keeps schema order
   f = function() NULL
   body(f) = substitute(RUN(base::as.list(base::environment(), all.names = TRUE)),
                        list(RUN = run))
@@ -246,8 +241,7 @@ kind_check_provider = function(spec) {
   for (i in seq_along(spec[["models"]])) {
     m = spec[["models"]][[i]]
     spec_field_check(spec, paste0("models[[", i, "]]"), m, kind_field("nlist"))
-    if (!is.character(m[["id"]]) || length(m[["id"]]) != 1L ||
-        is.na(m[["id"]]) || !nzchar(m[["id"]])) {
+    if (!rlang::is_string(m[["id"]]) || !nzchar(m[["id"]])) {
       spec_abort(spec, "models", "must be a list of model records, each with an `id` string")
     }
     spec$models[[i]] = spec_model_metadata(spec, m, paste0("models[[", i, "]]."))
@@ -326,25 +320,14 @@ spec_model_metadata = function(spec, model, prefix = "") {
     if (!is.null(value)) model[[name]] = field_check(name, value, rules[[name]])
   }
   for (name in c("digest", "server_version")) {
-    value = model[[name]]
-    if (is.null(value)) next
-    field_check(name, value, kind_field("chr1"))
-    if (!nzchar(value)) spec_abort(spec, paste0(prefix, name), "must not be empty")
-  }
-  if (!is.null(model[["locality"]])) {
-    field_check("locality", model[["locality"]],
-      kind_field("enum", values = c("local", "remote", "unknown")))
+    if (isFALSE(nzchar(model[[name]]))) spec_abort(spec, paste0(prefix, name), "must not be empty")
   }
   caps = model[["capabilities"]]
-  if (!is.null(caps)) {
-    field_check("capabilities", caps, kind_field("nlist"))
-    for (name in names(caps)) {
-      field_check(paste0("capabilities.", name), caps[[name]], kind_field("lgl1"))
-    }
+  for (name in names(caps)) {
+    field_check(paste0("capabilities.", name), caps[[name]], kind_field("lgl1"))
   }
   decision = model[["decision"]]
   if (is.null(decision)) return(model)
-  field_check("decision", decision, kind_field("nlist"))
   if (!is.null(decision[["types"]])) {
     types = decision[["types"]]
     field_check("decision.types", types,
@@ -794,8 +777,7 @@ kinds_install = function(k) {
   invisible(k)
 }
 
-#' Define a kind (P02's own kinds use kinds_install(); plugins and P22 go through the `kind`
-#' kind, which calls this; contract 7.2)
+#' Define a kind (contract 7.2)
 #' @noRd
 kind_define = function(name, validate, resolve = c("first", "all"), fields = character(),
                        order_field = NULL, experimental = FALSE, source = "builtin") {
@@ -826,7 +808,7 @@ kind_define = function(name, validate, resolve = c("first", "all"), fields = cha
 #' The definition of a kind, or gptr_error_unknown_kind (a gptr_error_invalid_spec)
 #' @noRd
 kind_get = function(name) {
-  ok = is.character(name) && length(name) == 1L && !is.na(name)
+  ok = rlang::is_string(name)
   k = if (ok) get0(name, envir = kinds_env(), inherits = FALSE)
   if (is.null(k)) {
     label = if (ok) name else "?"
@@ -869,13 +851,13 @@ spec_finish = function(spec, k) {
   }
   if (anyDuplicated(nms)) spec_abort(spec, nms[[anyDuplicated(nms)]], "is given twice")
   nm = spec[["name"]]
-  if (!is.character(nm) || length(nm) != 1L || is.na(nm) || !nzchar(nm)) {
+  if (!rlang::is_string(nm) || !nzchar(nm)) {
     spec_abort(spec, "name", "must be a non-empty string")
   }
   spec$kind = k$name
   if (is.null(spec[["api_version"]])) spec$api_version = ext_api_version
   av = spec[["api_version"]]
-  if (!is.character(av) || length(av) != 1L || is.na(av)) {
+  if (!rlang::is_string(av)) {
     spec_abort(spec, "api_version", "must be a version string such as \"1.0\"")
   }
   spec = unclass(k$validate(spec))
@@ -887,7 +869,7 @@ spec_finish = function(spec, k) {
 #' Build and validate a spec of a registered kind (the engine behind gptr_spec())
 #' @noRd
 spec_new = function(kind, name, ...) {
-  if (!is.character(kind) || length(kind) != 1L || is.na(kind)) {
+  if (!rlang::is_string(kind)) {
     gptr_abort("`kind` must be the name of a registered kind.", "invalid_argument", arg = "kind",
                expected = "a kind name")
   }
@@ -959,7 +941,7 @@ spec_arg_first = function(x, choices) if (identical(x, choices)) choices[[1]] el
 #' gptr_error_invalid_spec for a required constructor argument that is missing
 #' @noRd
 spec_missing = function(kind, name, field) {
-  label = if (is.character(name) && length(name) == 1L && !is.na(name)) name else "?"
+  label = if (rlang::is_string(name)) name else "?"
   spec_abort(list(kind = kind, name = label), field, "is required")
 }
 
@@ -1129,8 +1111,7 @@ gptr_router = function(name, route, description = NULL, timeout = 2) {
 #' gptr_hook("tool_result", function(event, ctx) NULL, matcher = "r")
 #' @export
 gptr_hook = function(event, handler, matcher = NULL) {
-  ok = is.character(event) && length(event) == 1L && !is.na(event) && nzchar(event)
-  label = if (ok) event else "hook"
+  label = if (rlang::is_string(event) && nzchar(event)) event else "hook"
   if (missing(handler)) spec_missing("hook", label, "handler")
   spec_new("hook", label, event = event, handler = handler, matcher = matcher)
 }
@@ -1410,25 +1391,18 @@ print.gptr_tool_result = function(x, ...) {
 
 # ---- kinds defined by `kind` records (contract 10.2 row 30) -------------------------------------
 
-#' A kind record for a `kind` spec
+#' Define the kind of a `kind` spec: owned by registry record `id`, or (id NULL) staged by
+#' extension `ext` while its factory runs, until kinds_unstage() at commit or rollback
 #' @noRd
-kind_record_from_spec = function(spec, source) {
-  kind_record(spec[["name"]], kind_user_validate(spec[["validate"]]), spec[["resolve"]],
-              spec[["fields"]], spec[["order_field"]], spec[["experimental"]], source)
-}
-
-#' Define the kind described by a `kind` spec; `id` is its registry record
-#' @noRd
-kind_from_spec = function(spec, source, id) {
+kind_from_spec = function(spec, source, id = NULL, ext = registry_env()$current_ext) {
   k = kinds_env()
   old = get0(spec[["name"]], envir = k, inherits = FALSE)
-  staged_here = !is.null(old) && !is.null(old$staged) &&
-    identical(old$staged, registry_env()$current_ext)
-  if (!is.null(old) && !staged_here) {
+  if (!is.null(old) && (is.null(old$staged) || !identical(old$staged, ext))) {
     spec_abort(spec, "name", paste0("names a kind already defined by ", old$source))
   }
-  rec = kind_record_from_spec(spec, source)
-  rec$record = id
+  rec = kind_record(spec[["name"]], kind_user_validate(spec[["validate"]]), spec[["resolve"]],
+                    spec[["fields"]], spec[["order_field"]], spec[["experimental"]], source)
+  if (is.null(id)) rec$staged = ext else rec$record = id
   assign(spec[["name"]], rec, envir = k)
   registry_touch()
   invisible(spec[["name"]])

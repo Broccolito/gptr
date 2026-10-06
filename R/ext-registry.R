@@ -1,20 +1,11 @@
 # ext-registry.R -- the registry keyed by (kind, name) with ranks, filters, diagnostics and a
-# generation counter (contract 5.5, 7.2, 10.1; architecture 5.10, 11.1). Adapted from the verified
-# G1 prototype (report G1 5.1) with its verification-log fixes: every regex on a registration or
-# dispatch path uses perl = TRUE (row 9), overrides are per record (IC-69), filters are applied at
-# resolution time (G1 pitfall 8), and no binding is ever locked (IC-26, rule R5).
+# generation counter (contract 5.5, 7.2, 10.1; architecture 5.10, 11.1). Overrides are per record
+# (IC-69), filters apply at resolution time, and no binding is locked (IC-26, rule R5).
 
 #' A fresh registry environment holding all P02 state (contract 5.13 `gptr_registry_env`)
 #'
-#' `recs` maps record ids to records (contract 5.5); `by_kind`, `by_key` and `hooks` index them;
-#' `exts` holds one environment per loaded extension and `states` the `gptr$state` environments;
-#' `runs` and `executing` mirror the active runs and executing tools seen through ev_dispatch();
-#' `grants` holds one-shot approvals of control exports (IC-53); `builtins_loaded` names the
-#' built-ins already loaded into this registry and `watched` the packages whose unload is watched;
-#' `version` counts changes that can alter gptr_registry() and `listing` caches its full listing.
-#' `deferred` queues the events that GC-time session finalizers defer (ev_defer()), keyed by
-#' `deferred_seq`; `busy` counts the registry work in progress and `draining` marks a running
-#' ev_drain(), which only starts when no registry work is in progress (D-085).
+#' `recs` maps record ids to records (5.5), indexed by `by_kind`, `by_key` and `hooks`; `deferred`,
+#' `busy` and `draining` serve ev_defer() and ev_drain() (D-085).
 #' @noRd
 registry_new = function() {
   reg = new.env(parent = emptyenv())
@@ -50,9 +41,8 @@ registry_new = function() {
   reg
 }
 
-#' Begin registry work (a lookup, a dispatch, a factory run): first drain the deferred events when
-#' `drain` is TRUE and no other registry work is in progress, then count this work, so that no
-#' drain runs under it. Pair with `on.exit(registry_leave(reg), add = TRUE)` (D-085)
+#' Begin registry work: drain the deferred events first (if `drain`), then count this work so no
+#' drain runs under it; pair with on.exit(registry_leave(reg)) (D-085)
 #' @noRd
 registry_enter = function(reg, drain = TRUE) {
   if (drain && length(reg$deferred)) ev_drain(reg)
@@ -112,10 +102,10 @@ registry_swap = function(reg) {
 #' @noRd
 ext_session_id = function(session) {
   if (is.null(session)) return(NULL)
-  if (is.character(session) && length(session) == 1L && !is.na(session)) return(session)
+  if (rlang::is_string(session)) return(session)
   if (!is.environment(session) && !is.list(session)) return(NULL)
   id = tryCatch(session$id, error = function(e) NULL)
-  if (is.character(id) && length(id) == 1L && !is.na(id)) id else NULL
+  if (rlang::is_string(id)) id else NULL
 }
 
 # ---- records (contract 5.5, 7.2, 10.1) ----------------------------------------------------------
@@ -137,8 +127,7 @@ registry_index_drop = function(env, key, id) {
   invisible(NULL)
 }
 
-#' Records for a vector of ids, skipping ids whose record is gone: callers pass a snapshot of an
-#' index, and a record may be removed between that snapshot and this read (D-085)
+#' Records for a snapshot of ids, skipping records removed since (D-085)
 #' @noRd
 registry_recs = function(reg, ids) {
   if (!length(ids)) return(list())
@@ -155,15 +144,29 @@ registry_sort = function(recs) {
   recs[order(rank, ord)]
 }
 
-#' Is a record visible to a session (process records, or that session's own)?
+#' The records under `key` of an index that session `sid` sees (process records and its own)
+#' and no filter disables; with `activate`, lazy ones are activated first
 #' @noRd
-registry_visible = function(rec, sid) is.null(rec$session) || identical(rec$session, sid)
+registry_enabled = function(reg, index, key, sid, activate = FALSE) {
+  pick = function() {
+    recs = registry_recs(reg, get0(key, envir = index, inherits = FALSE))
+    recs[vapply(recs, function(r) {
+      (is.null(r$session) || identical(r$session, sid)) && !registry_rec_filtered(r, reg)
+    }, NA)]
+  }
+  lazy = function(recs) vapply(recs, function(r) identical(r$state, "lazy"), NA)
+  recs = pick()
+  if (!activate || !any(lazy(recs))) return(recs)
+  for (r in recs[lazy(recs)]) ext_activate_record(r)
+  recs = pick()
+  recs[!lazy(recs)]
+}
 
 #' Registry key of a spec: tools with a namespace are "<namespace>/<name>" (contract 10.2)
 #' @noRd
 spec_key = function(spec) {
   ns = spec[["namespace"]]
-  if (identical(spec[["kind"]], "tool") && is.character(ns) && length(ns) == 1L) {
+  if (identical(spec[["kind"]], "tool") && rlang::is_string(ns)) {
     return(paste0(ns, "/", spec[["name"]]))
   }
   spec[["name"]]
@@ -281,8 +284,7 @@ registry_check_source = function(source) {
 }
 
 #' Store a validated spec as a registry record; returns its id (contract 7.2). Lazy placeholders
-#' (state "lazy", made by ext_load()) are stored unvalidated and may name a kind that their
-#' factory defines on activation.
+#' are stored unvalidated (their kind may come with their factory)
 #' @noRd
 registry_add = function(spec, source, rank, session = NULL, state = "active") {
   check_class(spec, "gptr_spec", "spec")
@@ -335,11 +337,7 @@ registry_remove = function(id) {
 #' Enabled records of (kind, key) visible to a session, winner first
 #' @noRd
 registry_candidates = function(kind, key, sid, reg = registry_env()) {
-  ids = get0(paste(kind, key, sep = "\r"), envir = reg$by_key, inherits = FALSE)
-  recs = registry_recs(reg, ids)
-  recs = recs[vapply(recs, function(r) registry_visible(r, sid) && !registry_rec_filtered(r, reg),
-                     NA)]
-  registry_sort(recs)
+  registry_sort(registry_enabled(reg, reg$by_key, paste(kind, key, sep = "\r"), sid))
 }
 
 #' The winning spec for (kind, name) or NULL; a lazy winner is activated first (contract 7.2)
@@ -362,8 +360,7 @@ registry_get = function(kind, name, session = NULL) {
 }
 
 #' Specs of a kind: every record of an `all` kind, ordered; the winner per name otherwise. Lazy
-#' records are activated first, except `tool` placeholders, whose manifest declarations feed the
-#' frozen prompt's catalogs before activation (contract 10.8)
+#' records are activated first, except `tool` placeholders (their declarations feed catalogs; 10.8)
 #' @noRd
 registry_all = function(kind, session = NULL) {
   check_string(kind, "kind")
@@ -372,29 +369,15 @@ registry_all = function(kind, session = NULL) {
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
   k = kind_get(kind)
-  pick = function() {
-    recs = registry_recs(reg, get0(kind, envir = reg$by_kind, inherits = FALSE))
-    recs[vapply(recs, function(r) registry_visible(r, sid) && !registry_rec_filtered(r, reg),
-                NA)]
-  }
-  recs = pick()
-  if (!identical(kind, "tool")) {
-    lazy = recs[vapply(recs, function(r) identical(r$state, "lazy"), NA)]
-    if (length(lazy)) {
-      for (r in lazy) ext_activate_record(r)
-      recs = pick()
-      recs = recs[!vapply(recs, function(r) identical(r$state, "lazy"), NA)]
-    }
-  }
+  recs = registry_sort(registry_enabled(reg, reg$by_kind, kind, sid,
+                                        activate = !identical(kind, "tool")))
   if (identical(k$resolve, "all")) {
-    recs = registry_sort(recs)
     of = k$order_field
     if (!is.null(of) && length(recs) > 1L) {
       o = vapply(recs, function(r) as.numeric(r$spec[[of]] %||% 500), 0)
       recs = recs[order(o, seq_along(recs))]
     }
   } else {
-    recs = registry_sort(recs)
     keys = vapply(recs, function(r) r$name, "")
     recs = recs[!duplicated(keys)]
     recs = recs[order(vapply(recs, function(r) r$name, ""), method = "radix")]
@@ -412,9 +395,7 @@ registry_names = function(kind, session = NULL) {
   reg = registry_env()
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
-  recs = registry_recs(reg, get0(kind, envir = reg$by_kind, inherits = FALSE))
-  recs = recs[vapply(recs, function(r) registry_visible(r, sid) && !registry_rec_filtered(r, reg),
-                     NA)]
+  recs = registry_enabled(reg, reg$by_kind, kind, sid)
   unique(vapply(recs, function(r) r$name, ""))
 }
 
@@ -436,9 +417,8 @@ registry_diagnostic = function(source, event, class, message) {
   invisible(NULL)
 }
 
-#' Forget an extension record: its API objects turn stale, its factory (and every frame the
-#' factory closes over) is released, and a per-load `gptr$state` goes with it (rule R10). Plugin
-#' and built-in state, keyed by source, lives for the process (contract 10.5)
+#' Forget an extension record: its API objects turn stale, its factory and per-load state are
+#' released (rule R10; plugin and built-in state lives for the process, 10.5)
 #' @noRd
 ext_forget = function(info, reg = registry_env()) {
   info$unloaded = TRUE
@@ -450,6 +430,25 @@ ext_forget = function(info, reg = registry_env()) {
   invisible(NULL)
 }
 
+#' Remove the records and forget the extensions whose `field` (session or source) is `value`;
+#' returns the number of records removed
+#' @noRd
+registry_drop_where = function(field, value, reg) {
+  n = 0L
+  for (id in ls(reg$recs)) {
+    rec = get0(id, envir = reg$recs, inherits = FALSE)
+    if (!is.null(rec) && identical(rec[[field]], value)) n = n + registry_remove(id)
+  }
+  for (eid in ls(reg$exts)) {
+    info = get0(eid, envir = reg$exts, inherits = FALSE)
+    if (!is.null(info) && identical(info[[field]], value)) {
+      info$status = "unloaded"
+      ext_forget(info, reg)
+    }
+  }
+  n
+}
+
 #' Drop a session's records and forget its extensions (at its session_shutdown; IC-69)
 #' @noRd
 registry_session_drop = function(sid) {
@@ -458,28 +457,14 @@ registry_session_drop = function(sid) {
   reg = registry_env()
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
-  for (id in ls(reg$recs)) {
-    rec = get0(id, envir = reg$recs, inherits = FALSE)
-    if (!is.null(rec) && identical(rec$session, sid)) registry_remove(id)
-  }
-  for (eid in ls(reg$exts)) {
-    info = get0(eid, envir = reg$exts, inherits = FALSE)
-    if (!is.null(info) && identical(info$session, sid)) {
-      info$status = "unloaded"
-      ext_forget(info, reg)
-    }
-  }
+  registry_drop_where("session", sid, reg)
   invisible(NULL)
 }
 
 # ---- control exports (IC-53 point 3) ------------------------------------------------------------
 
-#' Refuse a gptr configuration export called from model code during a run (IC-53)
-#'
-#' A tool is executing when ev_dispatch() has seen its tool_execution_start and not yet its
-#' tool_execution_end (or its run's agent_end). Inside a tool, the call passes only with a
-#' one-shot grant recorded by ext_control_grant() after an ask_human approval; an unused grant
-#' ends with the top-level call it was granted in (ev_track(), Task 8).
+#' Refuse a gptr configuration export called from model code while a tool executes (IC-53),
+#' unless a one-shot grant of ext_control_grant() allows it
 #' @noRd
 ext_control_guard = function(what) {
   reg = registry_env()
@@ -510,9 +495,8 @@ ext_control_grant = function(run, what) {
 
 # ---- exported registration and listing ----------------------------------------------------------
 
-#' The unregister closure returned by gptr_register(). Removing a record reconfigures gptr as much
-#' as adding one, and users keep this closure in the environment model code evaluates in
-#' (`off = gptr_register(gptr_policy(...))`), so it passes the same IC-53 guard
+#' The unregister closure returned by gptr_register(); model code can reach it, so it passes the
+#' same IC-53 guard
 #' @noRd
 registry_unregister_fn = function(id) {
   force(id)
@@ -640,8 +624,8 @@ print.gptr_diagnostics = function(x, ...) {
 
 # ---- filter state read at resolution time (contract 10.1; IC-53) --------------------------------
 
-#' Built-ins that no filter may disable: the permission kernel, secrets, and every built-in
-#' declared with replaceable = FALSE (IC-53, contract 7.2 ext_declare_builtin)
+#' Built-ins that no filter may disable: the permission kernel, secrets and every built-in
+#' declared with replaceable = FALSE (IC-53)
 #' @noRd
 registry_protected_builtins = function() {
   b = the$builtins %||% list()
@@ -700,23 +684,16 @@ registry_filters_effective = function(filters) {
 #' Is a whole source (builtin:<name>, plugin:<name>) disabled by a filter?
 #' @noRd
 registry_source_filtered = function(source, reg = registry_env()) {
-  if (registry_source_protected(source)) return(FALSE)
   if (startsWith(source, "builtin:") && substring(source, 9L) %in% registry_protected_builtins()) {
     return(FALSE)
   }
   source %in% names(reg$eff)
 }
 
-#' Does a filter key match an enabled policy or hook record?
+#' Does a filter key match an enabled policy or hook record (as a full-effect "-key" would)?
 #' @noRd
 registry_filter_hits_policy = function(key, reg) {
-  for (k in c("policy", "hook")) {
-    for (r in registry_recs(reg, get0(k, envir = reg$by_kind, inherits = FALSE))) {
-      if (registry_source_protected(r$source) || registry_rec_filtered(r, reg)) next
-      if (identical(key, paste0(r$kind, ":", r$name)) || identical(key, r$source)) return(TRUE)
-    }
-  }
-  FALSE
+  registry_drops_guard(reg, c(reg$eff, stats::setNames("session", key)))
 }
 
 #' Would the effective filters `eff` disable a policy or hook record that is enabled now?
@@ -760,8 +737,7 @@ registry_filters_set = function(filters, scope = c("session", "user", "project")
                "invalid_argument", arg = "filters",
                expected = "filters of the form -builtin:<name>, -plugin:<name>, -<kind>:<name>")
   }
-  # A kind that a lazy plugin defines on activation does not exist yet when the settings layer
-  # applies the user's filters: keep the filter (it applies once the kind exists) and note it
+  # a kind of a lazy plugin may not exist yet: keep its filter with a note
   prefix = sub("^[+-]([a-z][a-z0-9_]*):.*$", "\\1", filters, perl = TRUE)
   for (f in filters[!(prefix %in% c("builtin", "plugin", kind_names()))]) {
     registry_diagnostic(paste0("filters:", scope), "filter", "filter_unknown_kind",

@@ -1,7 +1,5 @@
-# ext-check.R -- the extension API version and features (contract 6.7 gptr_api()), the
-# deprecation helper for API members (contract 10.9; architecture 3.2, 11.4) and the gptr_check()
-# conformance suites for specs, factories and installed plugin packages (contract 6.7, 7.2;
-# IC-42, IC-69). No network: adapter fixture replay is the `check.adapter` service of P12.
+# ext-check.R -- gptr_api() (contract 6.7), the deprecation helper (10.9) and the offline
+# gptr_check() suites for specs, factories and plugin packages (6.7, 7.2; IC-42, IC-69).
 
 #' Extension API version and features
 #'
@@ -32,8 +30,7 @@ print.gptr_api = function(x, ...) {
 }
 
 #' Deprecated members of the API object ("api") and of ctx ("ctx"): member -> list(since,
-#' instead). Extension API 1.0 deprecates nothing; a MINOR release adds entries here and keeps the
-#' member for at least one MINOR release and six months (contract 10.9)
+#' instead); API 1.0 deprecates nothing (contract 10.9)
 #' @noRd
 ext_deprecations = function() list(api = list(), ctx = list())
 
@@ -49,8 +46,6 @@ ext_warn_deprecated = function(object, name) {
 }
 
 # ---- conformance (contract 6.7 gptr_check(), 7.2; architecture 11.4) ----------------------------
-# Adapted from the verified G1 prototype (report G1 5.1 check.R: check_row(),
-# with_scratch_registry(), the tool, policy, factory and package suites) and its checks 5.2/5.5.
 
 #' One conformance row (contract 5.11: target, check, ok, message)
 #' @noRd
@@ -80,12 +75,8 @@ check_as_rows = function(df, target) {
   })
 }
 
-#' Run `fun()` in a scratch registry that mirrors the current one: its plugin kinds and its
-#' enabled, active process-level records (never session records or lazy placeholders). Without
-#' the records, P01's ext_service_get() would treat every bootstrap service owned by a loaded
-#' built-in as filtered out (the scratch lists records but none of that built-in), so a policy
-#' calling ctx$risk() would fail its matrix, and a plugin namespace clashing with a live member
-#' would pass. Checks register only into the scratch, so nothing leaks into the live registry
+#' Run `fun()` in a scratch registry mirroring the live one's plugin kinds and enabled, active
+#' process-level records (so built-in services and member names stay visible); nothing leaks back
 #' @noRd
 check_in_scratch = function(fun) {
   live = registry_env()
@@ -217,30 +208,13 @@ check_policy_calls = function() {
 #' call throws, and the median call takes at most 10 ms (contract 10.2 row 12)
 #' @noRd
 check_policy = function(spec, target) {
-  cell = new.env(parent = emptyenv())
-  cell$mode = "manual"
-  kernel = function() list(mode = function(ctx) cell$mode, model = function(ctx) "check/check-1")
-  # Temporarily hide mirrored kernels, including rank 0 records, so every mode is exercised.
-  reg = registry_env()
-  key = "service\rctx.kernel"
-  ids = get0(key, envir = reg$by_key, inherits = FALSE) %||% character()
-  saved = registry_recs(reg, ids)
-  for (old_id in ids) registry_remove(old_id)
-  id = registry_add(gptr_spec("service", "ctx.kernel", fun = kernel), "user", 0L)
-  on.exit({
-    registry_remove(id)
-    for (record in saved) {
-      assign(record$id, record, envir = reg$recs)
-      registry_index_push(reg$by_kind, "service", record$id)
-      registry_index_push(reg$by_key, key, record$id)
-    }
-    registry_touch(reg)
-  }, add = TRUE)
+  # synthetic members of this ctx win over any kernel the registry holds
   ctx = ctx_new(NULL)
+  assign("model", function() "check/check-1", envir = ctx)
   bad = character()
   times = numeric()
   for (mode in c("plan", "manual", "edits", "auto")) {
-    cell$mode = mode
+    assign("mode", function() mode, envir = ctx)
     for (call in check_policy_calls()) {
       t0 = proc.time()[["elapsed"]]
       v = tryCatch(spec[["check"]](call, ctx), error = function(e) e)
@@ -299,8 +273,8 @@ check_backend = function(spec, target) {
                            "")))
 }
 
-#' Adapters: fixture replay through the `check.adapter` service (P12) when it is available. The
-#' name check_adapter() belongs to P12's service implementation (04 section 7.12)
+#' Adapters: fixture replay through P12's `check.adapter` service, when available (04 section
+#' 7.12)
 #' @noRd
 check_adapter_rows = function(spec, target, adapter_check) {
   if (is.null(adapter_check)) return(list())
@@ -342,8 +316,8 @@ check_tokens = function(spec, target) {
 check_spec = function(spec, tokens = FALSE, adapter_check = NULL) {
   kind = if (is.list(spec)) spec[["kind"]] else NULL
   name = if (is.list(spec)) spec[["name"]] else NULL
-  ok_kind = is.character(kind) && length(kind) == 1L && !is.na(kind)
-  ok_name = is.character(name) && length(name) == 1L && !is.na(name)
+  ok_kind = rlang::is_string(kind)
+  ok_name = rlang::is_string(name)
   target = paste0(if (ok_kind) kind else "?", ":", if (ok_name) name else "?")
   ok_class = inherits(spec, "gptr_spec") && ok_kind && ok_name
   rows = list(check_row(target, "spec.class", ok_class,
@@ -371,9 +345,7 @@ check_spec = function(spec, tokens = FALSE, adapter_check = NULL) {
   rows
 }
 
-#' What a factory may not change while it loads: working directory, search path, environment
-#' variables, options, the random-number state and child processes ("no action at load",
-#' contract 6.7; IC-61)
+#' What a factory may not change while it loads ("no action at load", contract 6.7; IC-61)
 #' @noRd
 check_snapshot = function() {
   list(wd = getwd(), search = search(), env = Sys.getenv(), options = options(),
@@ -389,29 +361,17 @@ check_factory = function(factory, manifest = NULL, tokens = FALSE, adapter_check
   reg = registry_env()
   previous_ids = ls(reg$recs)
   previous_diag = length(reg$diag$rows)
-  invocation = new.env(parent = emptyenv())
-  invocation$id = NULL
-  checked = function(gptr) {
-    # Identify the outer transaction from the API it receives. Nested loads may share
-    # its source string, but their registrations must not satisfy this factory's claims.
-    for (eid in ls(reg$exts)) {
-      info = get0(eid, envir = reg$exts, inherits = FALSE)
-      if (!is.null(info) && identical(info$api, gptr)) invocation$id = eid
-    }
-    factory(gptr)
-  }
-  attr(checked, "gptr_api") = attr(factory, "gptr_api", exact = TRUE)
+  # the id ext_load() gives this factory; nested loads (even of the same source) get later ids
+  ext_id = paste0("e", reg$ext_seq + 1L)
   before = check_snapshot()
   ok = withCallingHandlers(
-    ext_load(checked, source = source, rank = 5L, manifest = manifest),
+    ext_load(factory, source = source, rank = 5L, manifest = manifest),
     gptr_warning_plugin = function(w) invokeRestart("muffleWarning")
   )
   after = check_snapshot()
   reg = registry_env()
-  recs = Filter(function(r) {
-    !is.null(invocation$id) && identical(r$ext, invocation$id) &&
-      identical(r$source, source) && !identical(r$state, "lazy")
-  }, registry_recs(reg, setdiff(ls(reg$recs), previous_ids)))
+  recs = Filter(function(r) identical(r$ext, ext_id) && identical(r$source, source),
+                registry_recs(reg, setdiff(ls(reg$recs), previous_ids)))
   recs = recs[order(vapply(recs, function(r) r$order, 0L))]
   d = utils::tail(reg$diag$rows, length(reg$diag$rows) - previous_diag)
   mine = Filter(function(r) identical(r$source, source), d)
@@ -453,7 +413,7 @@ ext_pkg_factory = function(pkg, fun) getExportedValue(pkg, fun)
 #' @noRd
 ext_pkg_description = function(pkg, field) {
   v = suppressWarnings(utils::packageDescription(pkg, fields = field))
-  if (is.character(v) && length(v) == 1L) v else NA_character_
+  if (rlang::is_string(v)) v else NA_character_
 }
 
 #' The objects of a package namespace as a named list; mockable in tests
@@ -493,8 +453,7 @@ ext_call_name = function(call) {
   ""
 }
 
-#' The assignment operators and `for` (the arrows are written as \u escapes, so that no arrow
-#' appears in gptr's own source)
+#' The assignment operators and `for` (arrows as \u escapes: none appears in gptr's source)
 #' @noRd
 ext_binding_heads = c("=", "\u003c-", "\u003c\u003c-", "for")
 
@@ -512,12 +471,8 @@ ext_local_names = function(f) {
   unique(acc$names)
 }
 
-#' Bare identifiers passed to gptr's identifier arguments in package code (IC-42): a symbol that
-#' is neither local nor a binding of the package or base makes R CMD check report "no visible
-#' binding" and should be a string. gptr_agent() stores `model` and `skills` unevaluated (IC-34)
-#' and the gateway resolves them in the frame of a later peter() call, where the package
-#' function's locals and objects are not visible, so every bare symbol there is reported (use a
-#' string, or I(x) for a variable's value)
+#' Bare identifiers passed to gptr's identifier arguments in package code (IC-42); every bare
+#' `model`/`skills` of gptr_agent() counts, as they are resolved later in peter()'s frame (IC-34)
 #' @noRd
 ext_bare_identifiers = function(objects) {
   args = c("model", "mode", "preset", "skills", "agents", "tools", "plugins", "extensions",
@@ -622,7 +577,7 @@ check_package = function(pkg, tokens = FALSE, adapter_check = NULL) {
                                          ext_api_version))))
   }
   entry = man[["extension"]][["entry"]]
-  if (is.character(entry) && length(entry) == 1L) {
+  if (rlang::is_string(entry)) {
     parts = check_entry(entry)
     factory = tryCatch(ext_pkg_factory(parts[[1L]], parts[[2L]]), error = function(e) e)
     exported = is.function(factory)
@@ -673,7 +628,7 @@ gptr_check = function(x, error = FALSE, tokens = FALSE) {
       check_spec(x, tokens, adapter_check)
     } else if (is.function(x)) {
       check_factory(x, NULL, tokens, adapter_check)
-    } else if (is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)) {
+    } else if (rlang::is_string(x) && nzchar(x)) {
       check_package(x, tokens, adapter_check)
     } else {
       gptr_abort("`x` must be a spec, a factory function(gptr) or an installed package name.",

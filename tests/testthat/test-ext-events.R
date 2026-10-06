@@ -43,12 +43,6 @@ test_that("Claude, Codex, pre-IC-03 and unported names are refused with a hint",
   expect_false(ev_is_channel("a:b:c"))
 })
 
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
 test_that("notify runs listeners then hooks by rank; a handler error is a diagnostic", {
   local_registry()
   log = new.env()
@@ -463,7 +457,7 @@ test_that("hook_add validates names; hook_remove removes", {
   expect_false(hook_remove(id))
 })
 
-test_that("a throwing policy denies; malformed answers deny; NULL has no opinion", {
+test_that("a throwing policy denies; malformed answers deny; NULL or no decision has no opinion", {
   local_registry()
   call = list(id = "c1", name = "r", input = list(code = "1"))
   bad = gptr_policy("buggy", function(call, ctx) stop("policy bug"))
@@ -474,6 +468,9 @@ test_that("a throwing policy denies; malformed answers deny; NULL has no opinion
   expect_equal(ext_policy_decide(gptr_policy("odd", function(call, ctx) "yes"), call)$decision,
                "deny")
   expect_null(ext_policy_decide(gptr_policy("quiet", function(call, ctx) NULL), call))
+  # D-030 item 4: a list without `decision` has no opinion, as in P06's perm_policies()
+  expect_null(ext_policy_decide(gptr_policy("aside", function(call, ctx) list(reason = "n/a")),
+                                call))
   mod = gptr_policy("mod", function(call, ctx) list(decision = "modify", input = list(code = "2")))
   expect_equal(ext_policy_decide(mod, call)$input, list(code = "2"))
   ok = gptr_policy("ok", function(call, ctx) list(decision = "allow"))

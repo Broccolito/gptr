@@ -1,16 +1,13 @@
-# ext-builtins.R -- the built-in declaration table and its load order (contract 7.2, 10.3;
-# architecture 2.2 rule 3, 3.2). Each built-in is declared from its own file with
-# on_load(ext_declare_builtin("<name>", builtin_<name>)); P01's .onLoad evaluates the on_load()
-# expressions and then calls ext_load_builtins(), which loads every declared built-in through
-# ext_load(source = "builtin:<name>", rank = 6L), so later plans never edit a shared list (IC-32).
+# ext-builtins.R -- the built-in declaration table and its load order (contract 7.2, 10.3). Each
+# built-in declares itself from its own file with on_load(ext_declare_builtin(...)), so later
+# plans never edit a shared list (IC-32); .onLoad then calls ext_load_builtins().
 
 the$builtins = list()
 
-#' Declare a built-in extension (contract 7.2)
+#' Declare a built-in extension (contract 7.2); a second declaration of a name replaces the first
 #'
-#' `after` names built-ins that must be loaded first; `replaceable = FALSE` means no
-#' `-builtin:<name>` filter can disable it (contract 10.3, IC-53, IC-69). Declaring a name again
-#' replaces the earlier declaration.
+#' `after` names built-ins loaded first; `replaceable = FALSE` means no `-builtin:<name>` filter
+#' can disable it (contract 10.3, IC-53, IC-69).
 #' @noRd
 ext_declare_builtin = function(name, factory, after = character(), replaceable = TRUE) {
   check_string(name, "name")
@@ -27,8 +24,8 @@ ext_declare_builtin = function(name, factory, after = character(), replaceable =
   invisible(name)
 }
 
-#' Built-in names in load order: every built-in after the declared built-ins it names in `after`
-#' (names that are not declared are ignored); a cycle is reported and loaded in declaration order
+#' Built-in names in load order, each after the declared built-ins of its `after`; a cycle is a
+#' diagnostic and loads in declaration order
 #' @noRd
 ext_builtin_order = function(builtins = the$builtins %||% list()) {
   pending = names(builtins)
@@ -52,11 +49,8 @@ ext_builtin_order = function(builtins = the$builtins %||% list()) {
 
 #' Load the declared built-ins into the current registry in dependency order (contract 7.2)
 #'
-#' Skips built-ins already attempted in this registry and built-ins disabled by a
-#' `-builtin:<name>` filter; called by .onLoad and again when a `+builtin:<name>` filter
-#' re-enables one. Failed factories stay disabled for this registry's lifetime, preventing
-#' automatic retries of their load-time effects; a fresh registry can attempt them again.
-#' Returns only the names successfully loaded now, invisibly.
+#' Each is attempted once per registry (a failed one is not retried) unless a filter disables
+#' it; returns the names loaded now, invisibly.
 #' @noRd
 ext_load_builtins = function() {
   b = the$builtins %||% list()

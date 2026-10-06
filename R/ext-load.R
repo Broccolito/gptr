@@ -1,10 +1,6 @@
 # ext-load.R -- transactional factory loading (stage, commit, rollback), API requirements, lazy
-# activation from manifests with declarations, session-scoped extensions, package unload and
-# gptr_reload() (contract 7.2, 10.8; IC-69; architecture 11.2). Adapted from the verified G1
-# prototype (report G1 5.1 ext_load(), commit(), ext_declare_lazy(), ext_activate(),
-# plugin_watch_unload(); checks 5.2 and 5.5) with the verification-log fixes: requirement strings
-# of one component are normalised (row 25) and a factory's kinds are committed before the specs
-# that use them.
+# activation from manifests, session-scoped extensions, package unload and gptr_reload()
+# (contract 7.2, 10.8; IC-69; architecture 11.2).
 
 #' The API requirement of an extension: the manifest's `gptr.api`, else the factory attribute
 #' `gptr_api` (report G1 3.5); NULL when none is declared
@@ -25,12 +21,7 @@ ext_check_requirement = function(req, source) {
 ext_provides = function(manifest) {
   p = manifest[["extension"]][["provides"]]
   if (is.null(p) || identical(p, list())) return(list())
-  check_list(p, "provides")
-  check_strings(names(p), "provides kinds")
-  if (is.null(names(p)) || any(!nzchar(names(p))) || anyDuplicated(names(p))) {
-    gptr_abort("Manifest provides must name unique kinds.", "invalid_argument",
-               arg = "provides", expected = "unique named kinds")
-  }
+  check_list(p, "provides", named = TRUE)
   out = lapply(p, function(x) {
     if (!length(x)) return(character())
     value = unlist(x, use.names = FALSE)
@@ -51,10 +42,8 @@ ext_manifest_lazy = function(manifest) {
   !eager && length(ext_provides(manifest)) > 0L
 }
 
-#' A lazy placeholder spec for one provided name (contract 10.8). Placeholders carry
-#' `lazy = TRUE`, the `source` and the manifest `declaration` (list(signature, description) or
-#' NULL), so catalogs can list a lazy capability before its factory runs; hooks are provided by
-#' event name
+#' A lazy placeholder spec for one provided name (contract 10.8); its manifest `declaration`
+#' lets catalogs list the capability before the factory runs (hooks are provided by event name)
 #' @noRd
 ext_placeholder = function(kind, name, source, declaration = NULL) {
   spec = list(kind = kind, name = name, lazy = TRUE, source = source, declaration = declaration,
@@ -83,26 +72,8 @@ kinds_unstage = function(ext_id) {
   invisible(NULL)
 }
 
-#' Define a kind while its factory runs, so later registrations of the factory can use it; the
-#' commit replaces the staged definition, a rollback removes it (kinds_unstage())
-#' @noRd
-kind_stage = function(spec, ext_id, source) {
-  k = kinds_env()
-  old = get0(spec[["name"]], envir = k, inherits = FALSE)
-  if (!is.null(old) && !identical(old$staged, ext_id)) {
-    spec_abort(spec, "name", paste0("names a kind already defined by ", old$source))
-  }
-  rec = kind_record_from_spec(spec, source)
-  rec$staged = ext_id
-  assign(spec[["name"]], rec, envir = k)
-  registry_touch()
-  invisible(spec[["name"]])
-}
-
-#' Snapshot registry-owned state bindings before invoking a factory
-#'
-#' This restores bindings on failure; arbitrary side effects through external
-#' resources or reference objects held in those bindings are not sandboxed.
+#' Snapshot the extension's state bindings before its factory runs (restored on failure; effects
+#' through reference objects in them are not)
 #' @noRd
 ext_state_snapshot = function(info) {
   key = if (info$source %in% c("session", "user", "project")) info$id else info$source
@@ -144,9 +115,7 @@ ext_rollback = function(info) {
   invisible(NULL)
 }
 
-#' Roll an extension back: drop staged kinds, staged and committed records, forget the extension
-#' (its factory is released); record a diagnostic and warn once per source (class
-#' gptr_warning_plugin with field `diagnostic`)
+#' Roll a failed extension back with a diagnostic and a `plugin` warning once per source
 #' @noRd
 ext_fail = function(info, err) {
   ext_rollback(info)
@@ -157,25 +126,18 @@ ext_fail = function(info, err) {
   FALSE
 }
 
-#' Commit the staged registrations: kinds first, then the rest in registration order; a failing
-#' commit rolls everything back
+#' Commit the staged registrations: kinds first, then the rest in registration order
 #' @noRd
-ext_commit = function(info, reg = registry_env(), generation = reg$generation) {
+ext_commit = function(info, reg, generation) {
   items = Filter(function(it) !isTRUE(it$cancelled), info$stage)
   is_kind = vapply(items, function(it) identical(it$spec$kind, "kind"), NA)
-  items = c(items[is_kind], items[!is_kind])
   info$stage = list()
   kinds_unstage(info$id)
-  err = tryCatch({
-    for (it in items) {
-      api_alive(info, reg, generation)
-      it$id = ext_commit_one(info, it$spec)
-      api_alive(info, reg, generation)
-    }
-    NULL
-  }, error = function(e) e)
-  if (!is.null(err)) return(ext_fail(info, err))
-  TRUE
+  for (it in c(items[is_kind], items[!is_kind])) {
+    it$id = ext_commit_one(info, it$spec)
+    api_alive(info, reg, generation)
+  }
+  invisible(NULL)
 }
 
 #' Diagnostics for provided names the factory did not register (report G1 4.4 rule 4)
@@ -202,38 +164,27 @@ ext_check_provided = function(info) {
   invisible(NULL)
 }
 
-#' Run an extension's factory transactionally: stage, then commit or roll back (contract 7.2)
+#' Run an extension's factory transactionally: stage, then commit; an error rolls back with a
+#' diagnostic, an interrupt rolls back on exit and propagates (contract 7.2)
 #' @noRd
 ext_run_factory = function(info) {
   reg = registry_env()
-  # registry work: a lookup the factory makes does not drain deferred events under it (D-085)
+  # a lookup the factory makes does not drain deferred events under it (D-085)
   registry_enter(reg, drain = FALSE)
   on.exit(registry_leave(reg), add = TRUE)
   generation = reg$generation
   info$status = "loading"
-  on.exit({
-    if (identical(info$status, "loading")) ext_rollback(info)
-  }, add = TRUE)
+  on.exit(if (identical(info$status, "loading")) ext_rollback(info), add = TRUE)
   ext_drop_placeholders(info)
   info$lazy = FALSE
-  req_ok = tryCatch({
+  info$stage = list()
+  err = tryCatch({
     ext_provides(info$manifest)
     ext_check_requirement(ext_requirement(info$factory, info$manifest), info$source)
-    NULL
-  }, error = function(e) e)
-  if (!is.null(req_ok)) return(ext_fail(info, req_ok))
-  info$status = "loading"
-  info$stage = list()
-  ext_state_snapshot(info)
-  api = api_build(info, reg)
-  err = tryCatch({
-    info$factory(api)
+    ext_state_snapshot(info)
+    info$factory(api_build(info, reg))
     api_alive(info, reg, generation)
-    NULL
-  }, error = function(e) e)
-  if (!is.null(err)) return(ext_fail(info, err))
-  if (!ext_commit(info, reg, generation)) return(FALSE)
-  post = tryCatch({
+    ext_commit(info, reg, generation)
     ext_check_provided(info)
     if (startsWith(info$source, "plugin:")) {
       pkg = substring(info$source, 8L)
@@ -241,7 +192,7 @@ ext_run_factory = function(info) {
     }
     NULL
   }, error = function(e) e)
-  if (!is.null(post)) return(ext_fail(info, post))
+  if (!is.null(err)) return(ext_fail(info, err))
   info$status = "active"
   info$state_before = NULL
   TRUE
@@ -271,15 +222,10 @@ ext_declare_lazy = function(info) {
   TRUE
 }
 
-#' Load an extension factory (contract 7.2)
+#' Load an extension factory (contract 7.2); TRUE when it is loaded or declared
 #'
-#' Stages every registration of `factory(gptr)` and commits them only when it returns; a thrown
-#' error, an unmet API requirement or a missing method rolls the extension back with a diagnostic
-#' (and a `plugin` warning once). With `lazy = TRUE` and a manifest that provides capabilities,
-#' only placeholders and declarations are registered and the factory runs on the first
-#' registry_get() of a provided name or the first dispatch of a provided event. With `session`
-#' (a session or its id) every record is scoped to that session and removed at its
-#' session_shutdown. Returns TRUE when the extension is loaded or declared.
+#' With `lazy` and a manifest that provides capabilities, only placeholders are registered until
+#' first use; with `session` every record is scoped to that session (IC-69).
 #' @noRd
 ext_load = function(factory, source, rank, dir = NULL, manifest = NULL, lazy = FALSE,
                     session = NULL) {
@@ -310,10 +256,7 @@ ext_load = function(factory, source, rank, dir = NULL, manifest = NULL, lazy = F
     } else {
       ext_run_factory(info)
     }
-  }, error = function(e) e, interrupt = function(e) {
-    ext_rollback(info)
-    stop(e)
-  })
+  }, error = function(e) e)
   if (inherits(result, "error")) ext_fail(info, result) else result
 }
 
@@ -355,23 +298,7 @@ ext_unload = function(source) {
   reg = registry_env()
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
-  n = 0L
-  for (id in ls(reg$recs)) {
-    rec = get0(id, envir = reg$recs, inherits = FALSE)
-    if (!is.null(rec) && identical(rec$source, source)) {
-      registry_remove(id)
-      n = n + 1L
-    }
-  }
-  for (eid in ls(reg$exts)) {
-    info = get0(eid, envir = reg$exts, inherits = FALSE)
-    if (!is.null(info) && identical(info$source, source)) {
-      info$status = "unloaded"
-      info$ids = character()
-      info$placeholders = character()
-      ext_forget(info, reg)
-    }
-  }
+  n = registry_drop_where("source", source, reg)
   registry_diagnostic(source, "unload", "unloaded",
                       paste0(source, " was unloaded; ", n, " record(s) removed"))
   invisible(n)
@@ -385,8 +312,8 @@ ext_unhook = function(hook, fun) {
   invisible(NULL)
 }
 
-#' Remove a plugin package's records when its namespace unloads (contract 10.8); the hook is
-#' removed again when gptr itself unloads (P01's on_unload()), so no hook outlives gptr
+#' Remove a plugin package's records when its namespace unloads (contract 10.8); the hook leaves
+#' with gptr (on_unload())
 #' @noRd
 ext_watch_unload = function(pkg, source = paste0("plugin:", pkg)) {
   check_string(pkg, "pkg")

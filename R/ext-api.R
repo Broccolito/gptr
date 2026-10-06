@@ -1,8 +1,6 @@
-# ext-api.R -- the factory API object (contract 5.6, 10.5) and the ctx object handlers receive
-# (contract 5.6, 10.6). Both are classed environments. No binding is locked (IC-26, rule R5): the
-# `$<-` and `[[<-` methods refuse assignment instead. Shapes follow the verified G1 prototype
-# (report G1 3.3, 5.1 api_new() and session_ctx(), 5.3), minus its binding locks, with the
-# verification-log fix of row 25 (one-component requirements such as "2" become "2.0").
+# ext-api.R -- the factory API object (contract 5.6, 10.5) and the ctx handlers receive (10.6).
+# Both are classed environments; no binding is locked (IC-26, rule R5): `$<-` and `[[<-` refuse
+# assignment instead.
 
 # ---- the factory API object (contract 5.6, 10.5) ------------------------------------------------
 
@@ -61,8 +59,7 @@ ext_state = function(info) {
 #' @noRd
 api_alive = function(info, reg, gen, read_only = FALSE) {
   same = identical(the$registry, reg)
-  # Conformance may inspect a current live API's immutable feature/version contract. It
-  # never authorizes registration or cancellation across the scratch-registry boundary.
+  # gptr_check() may read (require, has) the live API it checks, never register through it
   origin = if (is.environment(the$registry)) the$registry$check_origin else NULL
   current = (same || (read_only && identical(origin, reg))) &&
     identical(reg$generation, gen) && !isTRUE(info$unloaded)
@@ -116,7 +113,7 @@ ext_register = function(info, spec) {
   item$id = NULL
   item$cancelled = FALSE
   if (identical(info$status, "loading")) {
-    if (identical(spec$kind, "kind")) kind_stage(spec, info$id, info$source)
+    if (identical(spec$kind, "kind")) kind_from_spec(spec, info$source, ext = info$id)
     info$stage = c(info$stage, list(item))
   } else {
     item$id = ext_commit_one(info, spec)
@@ -139,8 +136,6 @@ api_parse_requires = function(requires, plugin = "?") {
     m = regmatches(p, regexec("\\A(>=|<=|==|>|<)?\\s*([0-9]+(\\.[0-9]+)*)\\z",
                               p, perl = TRUE))[[1]]
     if (!length(m) || (length(parts) > 1L && !nzchar(m[[2]]))) invalid(p)
-    components = suppressWarnings(as.double(strsplit(m[[3]], ".", fixed = TRUE)[[1]]))
-    if (any(!is.finite(components) | components > .Machine$integer.max)) invalid(p)
     v = if (grepl(".", m[[3]], fixed = TRUE)) m[[3]] else paste0(m[[3]], ".0")
     version = tryCatch(package_version(v), error = function(e) invalid(p),
                         warning = function(w) invalid(p))
@@ -164,7 +159,6 @@ api_satisfies = function(requires, provided = package_version(ext_api_version), 
 #' gptr$require(): signal gptr_error_api_version when unmet
 #' @noRd
 api_require = function(requires, plugin) {
-  check_string(requires, "requires")
   if (!api_satisfies(requires, plugin = plugin)) {
     gptr_abort(paste0(plugin, " requires gptr extension API ", requires, ", but this gptr ",
                       "provides API ", ext_api_version, "."),
@@ -220,7 +214,6 @@ api_build = function(info, reg) {
 #' The API object handed to a factory (contract 7.2)
 #' @noRd
 ext_api_new = function(source, dir = NULL, manifest = NULL) {
-  check_string(source, "source")
   check_string(dir, "dir", null = TRUE)
   check_list(manifest, "manifest", null = TRUE)
   info = ext_info_new(source, dir, manifest)
@@ -273,15 +266,11 @@ print.gptr_extension_api = function(x, ...) {
 }
 
 # ---- ctx (contract 5.6, 10.6) --------------------------------------------------------------------
-# ctx members fetch their services lazily, at call time, through the registry `service` kind and
-# P01's service table (IC-09, IC-34); a member whose service has not arrived signals
-# gptr_error_not_available. Members marked P06 in contract 10.6 are implemented by the
-# `ctx.kernel` service: a named list of functions called as impl(ctx, ...).
+# Members look their service up at call time (IC-09, IC-34); P06's members come from the
+# `ctx.kernel` service, called as impl(ctx, ...).
 
-# ---- services and ctx --------------------------------------------------------------------------
-
-#' A service function or NULL: a `service` registry record first (it may be session-scoped),
-#' then P01's bootstrap table (IC-34), looked up once
+#' A service function or NULL: a (possibly session-scoped) `service` record, else P01's
+#' bootstrap table (IC-34)
 #' @noRd
 ext_service_try = function(name, session = NULL) {
   spec = registry_get("service", name, session)
@@ -325,21 +314,15 @@ ctx_call = function(ctx, member, ...) {
 #' The `none` UI used before a UI backend is registered (contract 10.6): nobody answers
 #' @noRd
 ctx_ui_none = function() {
-  select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
-                    allow_other = FALSE) {
-    NA_integer_
-  }
-  permission = function(request) list(decision = "deny", remember = NULL, feedback = NULL)
-  gptr_spec("ui", "none", has_ui = function() FALSE, select = select, permission = permission)
+  gptr_spec("ui", "none", has_ui = function() FALSE, select = function(...) NA_integer_)
 }
 
 #' The extension source a handler runs for (set by ev_dispatch() around each handler)
 #' @noRd
 ctx_source = function(ctx) get0(".source", envir = ctx, inherits = FALSE)
 
-#' Call a plugin-scoped kernel member: the handler's source (`"plugin:panel"`) is passed last,
-#' positionally, and only when the member runs for a handler, so the kernel's default applies
-#' otherwise (P06 names that argument `extension` and derives the label "panel" itself)
+#' Call a plugin-scoped kernel member with the handler's source, if any, as its last argument
+#' (P06's `extension`)
 #' @noRd
 ctx_call_plugin = function(ctx, member, ...) {
   src = ctx_source(ctx)
@@ -363,12 +346,10 @@ ctx_members = c("session", "envir", "run", "input", "mode", "model", "has_ui", "
                 "eval", "describe", "append_entry", "abort", "aborted", "update", "decide",
                 "usage", "state", "emit", "get")
 
-#' The ctx of a session (one per session; contract 7.2, 10.6)
+#' The ctx of a session (contract 7.2, 10.6)
 #'
-#' `session` is a session object, a session id, or NULL for process-level dispatch; `run` is the
-#' run (or run id) whose tool is executing. Members marked P06 in contract 10.6 call the
-#' `ctx.kernel` implementations as impl(ctx, ...); send(), append_entry() and state() add the
-#' source of the handler that called them as their last argument (ctx_call_plugin()).
+#' `session` is a session, its id, or NULL (process-level dispatch); `run` the run (or its id)
+#' whose tool is executing.
 #' @noRd
 ctx_new = function(session, run = NULL) {
   session_id = ext_session_id(session)
@@ -470,8 +451,7 @@ ctx_new = function(session, run = NULL) {
   ctx
 }
 
-#' The ctx used for a dispatch whose caller passed none: the process ctx for session-less
-#' dispatch, else a ctx for that session (sessions pass their own ctx; contract 10.6)
+#' The ctx of a dispatch whose caller passed none: the process ctx, or a new one for `session`
 #' @noRd
 ctx_default = function(session) {
   if (!is.null(session)) return(ctx_new(session))
@@ -482,9 +462,8 @@ ctx_default = function(session) {
 
 #' Get a ctx member; unknown names signal gptr_error_unknown_member
 #'
-#' An active member (`envir`, `run`, `input`) is read by calling its function: R >= 4.6 marks a
-#' value read through an active binding as not mutable, which pins a function-frame home so R
-#' never releases its arguments (rule R2, IC-41; CI-6).
+#' An active member (`envir`, `run`, `input`) is read by calling its function: R >= 4.6 pins a
+#' value read through the binding (rule R2, IC-41; D-137).
 #' @export
 #' @noRd
 `$.gptr_ctx` = function(x, name) {

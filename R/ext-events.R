@@ -1,8 +1,6 @@
-# ext-events.R -- the event catalogue (contract 10.4) and dispatch (contract 7.2, 10.7).
-# Event names follow D-25 / IC-03: Pi names where the semantics match, gptr names otherwise.
-# Claude and Codex hook names are refused with a hint (report G1 3.2; the v1.x importer maps
-# them). Semantics are encoded as notify, collect, transform (chain), decision, first_decision,
-# patch (chain) and block_patch.
+# ext-events.R -- the event catalogue (contract 10.4) and dispatch (contract 7.2, 10.7). Names
+# follow IC-03 (Pi names where the semantics match); Claude and Codex hook names are refused
+# with a hint.
 
 #' One row of the event catalogue
 #' @noRd
@@ -113,8 +111,7 @@ ev_catalogue = function() {
 #' Is `event` a plugin channel name ("<plugin>:<topic>")?
 #' @noRd
 ev_is_channel = function(event) {
-  is.character(event) && length(event) == 1L && !is.na(event) &&
-    grepl("\\A[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+\\z", event, perl = TRUE)
+  rlang::is_string(event) && grepl("\\A[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+\\z", event, perl = TRUE)
 }
 
 #' Dispatch semantics of an event; channels notify; NULL for unknown names
@@ -129,7 +126,7 @@ ev_semantics = function(event) {
 #' A hint for an unknown event name, or NULL
 #' @noRd
 ev_hint = function(event) {
-  if (!is.character(event) || length(event) != 1L || is.na(event)) return(NULL)
+  if (!rlang::is_string(event)) return(NULL)
   h = ev_hints[event]
   if (!is.na(h)) return(unname(h))
   i = match(tolower(event), tolower(ev_table$event))
@@ -140,10 +137,10 @@ ev_hint = function(event) {
 #' Validate an event name for hook registration (contract 7.2 hook_add)
 #' @noRd
 ev_check_name = function(event, arg = "event") {
-  ok = is.character(event) && length(event) == 1L && !is.na(event) &&
-    (event %in% ev_table$event || ev_is_channel(event))
-  if (ok) return(invisible(event))
-  label = if (is.character(event) && length(event) == 1L && !is.na(event)) event else "?"
+  if (rlang::is_string(event) && (event %in% ev_table$event || ev_is_channel(event))) {
+    return(invisible(event))
+  }
+  label = if (rlang::is_string(event)) event else "?"
   hint = ev_hint(event)
   gptr_abort(paste0("Unknown gptr event '", label, "'",
                     if (is.null(hint)) "" else paste0("; ", hint),
@@ -163,8 +160,8 @@ ev_cap = 10000L
 #' @noRd
 ev_opaque_data = function(x) {
   typ = x[["type"]]
-  if (!is.character(typ) || length(typ) != 1L || is.na(typ)) return(FALSE)
-  typ %in% c("image", "redacted_thinking") || (typ == "thinking" && isTRUE(x[["redacted"]]))
+  rlang::is_string(typ) &&
+    (typ %in% c("image", "redacted_thinking") || (typ == "thinking" && isTRUE(x[["redacted"]])))
 }
 
 #' Redact every string of a payload with a profile, leaving opaque replay fields untouched
@@ -174,7 +171,7 @@ ev_redact_payload = function(x, profile = "stream", preserve_replay = TRUE) {
   if (!is.list(x)) return(x)
   typ = x[["type"]]
   replay = character()
-  if (preserve_replay && spec_field_ok(typ, "chr1", kind_field("chr1"))) {
+  if (preserve_replay && rlang::is_string(typ)) {
     replay = switch(typ,
       text = c("signature", "text_signature", "textSignature"),
       thinking = c("signature", "thinking_signature", "encrypted_content"),
@@ -219,15 +216,12 @@ ev_default = function(sem, payload) {
   )
 }
 
-#' Mirror active runs and executing tools from the events P06 dispatches (IC-53): agent_start
-#' and agent_end bracket a run; tool_execution_start and tool_execution_end bracket a tool. The
-#' one-shot grants of a run (ext_control_grant()) end with the top-level call they were granted
-#' in (a tool_call_id without "/"; nested calls are "<outer>/<k>"), as P06's tool_execute_frame()
-#' clears run$signal$control, so an unused approval never reaches a later call
+#' Mirror active runs (agent_start/end) and executing tools (tool_execution_start/end) for IC-53;
+#' a run's one-shot grants end with their top-level call (an id without "/"), as in P06
 #' @noRd
 ev_track = function(reg, event, payload) {
   run = payload[["run"]]
-  run = if (is.character(run) && length(run) == 1L && !is.na(run)) run else NULL
+  run = if (rlang::is_string(run)) run else NULL
   drop_grants = function() {
     keep = vapply(reg$grants, function(g) !identical(g$run, run), NA)
     reg$grants = reg$grants[keep]
@@ -239,7 +233,7 @@ ev_track = function(reg, event, payload) {
     drop_grants()
   }
   id = payload[["tool_call_id"]]
-  if (is.character(id) && length(id) == 1L && !is.na(id)) {
+  if (rlang::is_string(id)) {
     key = paste0(run %||% "", "\r", id)
     if (identical(event, "tool_execution_start")) reg$executing[[key]] = run %||% ""
     if (identical(event, "tool_execution_end")) {
@@ -250,26 +244,10 @@ ev_track = function(reg, event, payload) {
   invisible(NULL)
 }
 
-#' Is a record a lazy placeholder?
-#' @noRd
-ev_lazy = function(rec) identical(rec$state, "lazy")
-
 #' Hook records for an event: session listeners (rank 0) first, then by rank; lazy ones activated
 #' @noRd
 ev_hooks = function(reg, event, sid) {
-  pick = function() {
-    recs = registry_recs(reg, get0(event, envir = reg$hooks, inherits = FALSE))
-    recs[vapply(recs, function(r) registry_visible(r, sid) && !registry_rec_filtered(r, reg),
-                NA)]
-  }
-  recs = pick()
-  lazy = recs[vapply(recs, ev_lazy, NA)]
-  if (length(lazy)) {
-    for (r in lazy) ext_activate_record(r)
-    recs = pick()
-    recs = recs[!vapply(recs, ev_lazy, NA)]
-  }
-  registry_sort(recs)
+  registry_sort(registry_enabled(reg, reg$hooks, event, sid, activate = TRUE))
 }
 
 #' Does a hook's matcher accept the event (NULL, a tool-name glob, or a predicate)?
@@ -278,7 +256,7 @@ ev_matches = function(matcher, ev) {
   if (is.null(matcher)) return(TRUE)
   if (is.function(matcher)) return(isTRUE(matcher(ev)))
   tool = ev[["tool_name"]]
-  is.character(tool) && length(tool) == 1L && grepl(utils::glob2rx(matcher), tool, perl = TRUE)
+  rlang::is_string(tool) && grepl(utils::glob2rx(matcher), tool, perl = TRUE)
 }
 
 #' Sentinel returned for a handler whose matcher did not match
@@ -362,15 +340,12 @@ ev_cap_blocks = function(blocks, event) {
   blocks[keep]
 }
 
-#' Merge a handler's `params` patch into the current params (request_params, IC-69). The payload
-#' holds only the declared request_params that are set, so a handler may add a declared key that
-#' is unset (`metadata`, `user`); which keys the adapter accepts is known only to the emitter,
-#' P06's run_request_params(), which drops undeclared keys with its own diagnostic
+#' Merge a handler's `params` patch into the current params (request_params, IC-69); P06's
+#' run_request_params() drops the keys its adapter does not accept
 #' @noRd
 ev_params_patch = function(old, new, rec, event) {
   old = old %||% list()
-  ok = spec_field_ok(new, "nlist", kind_field("nlist"))
-  if (!ok) {
+  if (!spec_field_ok(new, "nlist")) {
     registry_diagnostic(rec$source, event, "patch_ignored", "params must be a named list")
     return(old)
   }
@@ -446,7 +421,7 @@ ev_run_decision = function(hooks, ev, ctx, event, payload) {
     if (identical(d, "block")) {
       return(list(decision = "block", reason = ev_reason(r, h$source), input = input))
     }
-    if (identical(d, "modify") && spec_field_ok(r[["input"]], "nlist", kind_field("nlist"))) {
+    if (identical(d, "modify") && spec_field_ok(r[["input"]], "nlist")) {
       input = r[["input"]]
       modified = TRUE
       ev$input = ev_redact_payload(input, "stream", preserve_replay = FALSE)
@@ -460,10 +435,8 @@ ev_run_decision = function(hooks, ev, ctx, event, payload) {
   list(decision = if (modified) "modify" else "allow", reason = NULL, input = input)
 }
 
-#' first decision: the first non-empty list returned wins; a failing permission_request handler
-#' denies. Returns are lists (contract 10.4); a non-list return (the value of a logging
-#' assignment such as `log$n = log$n + 1`) has no opinion, so it neither hides the handlers after
-#' it nor reaches emitters that read `res$cancel`
+#' first decision: the first non-empty list returned wins (a non-list return has no opinion); a
+#' failing permission_request handler denies
 #' @noRd
 ev_run_first = function(hooks, ev, ctx, event, payload) {
   for (h in hooks) {
@@ -475,7 +448,7 @@ ev_run_first = function(hooks, ev, ctx, event, payload) {
     r = ev_try(h, ev, ctx, event, on_error = deny)
     if (!ev_usable(r) || !length(r)) next
     if (identical(event, "permission_request") &&
-        !spec_field_ok(r[["decision"]], "enum", kind_field("enum", values = c("allow", "deny")))) {
+        !rlang::is_string(r[["decision"]], c("allow", "deny"))) {
       why = "a permission_request hook returned a malformed decision"
       registry_diagnostic(h$source, event, "malformed_decision", why)
       return(list(decision = "deny", reason = why))
@@ -488,10 +461,8 @@ ev_run_first = function(hooks, ev, ctx, event, payload) {
 #' Validate one canonical tool-result patch field without changing the original result
 #' @noRd
 ev_tool_patch_ok = function(field, value) {
-  if (identical(field, "is_error")) return(spec_field_ok(value, "lgl1", kind_field("lgl1")))
-  if (identical(field, "details")) {
-    return(is.null(value) || spec_field_ok(value, "nlist", kind_field("nlist")))
-  }
+  if (identical(field, "is_error")) return(spec_field_ok(value, "lgl1"))
+  if (identical(field, "details")) return(is.null(value) || spec_field_ok(value, "nlist"))
   if (!is.list(value) || is.data.frame(value)) return(FALSE)
   isTRUE(tryCatch({
     for (block in value) {
@@ -569,11 +540,8 @@ ev_run_block_patch = function(hooks, ev, ctx, event, payload) {
 
 #' Dispatch an event to session listeners, then registry hooks by rank (contract 7.2, 10.7)
 #'
-#' Returns NULL (notify), the merged list (collect), list(action, text) (transform),
-#' list(decision, reason, input) (tool_call), the first answer or NULL (first decision), the
-#' patched payload (patch) or list(block, reason, lines) (document_write). A session_shutdown
-#' removes the session's records after its handlers ran (IC-69). Events deferred by GC-time
-#' finalizers are dispatched first, unless this dispatch runs under other registry work (D-085).
+#' Returns what the event's semantics produce; a session_shutdown removes the session's records
+#' after its handlers ran (IC-69).
 #' @noRd
 ev_dispatch = function(event, payload, session = NULL, ctx = NULL) {
   check_string(event, "event")
@@ -607,12 +575,8 @@ ev_dispatch = function(event, payload, session = NULL, ctx = NULL) {
 
 #' Queue an event for the next safe point instead of dispatching it now (D-085)
 #'
-#' P06's session finalizer runs at whatever allocation triggers a garbage collection, possibly in
-#' the middle of a loop over registry state; dispatching there would run arbitrary hooks and drop
-#' records under that loop. This only adds one binding to the live registry's `deferred` queue
-#' (never gptr_check()'s scratch), under a key no queued event has (a finalizer that runs inside
-#' another ev_defer() call takes the next number), so no other code reads and rewrites the binding
-#' it adds; ev_drain() dispatches it. `session` is a session id (never the shell being finalized).
+#' A GC-time finalizer may run inside a loop over registry state, so this only adds one binding,
+#' under a fresh key, to the live registry's queue (never gptr_check()'s scratch).
 #' @noRd
 ev_defer = function(event, payload, session = NULL) {
   reg = registry_env()
@@ -627,21 +591,10 @@ ev_defer = function(event, payload, session = NULL) {
   invisible(TRUE)
 }
 
-#' Dispatch the deferred events, oldest first (D-085)
+#' Dispatch the deferred events, oldest first, at a safe point (D-085)
 #'
-#' A safe point: the registry entries that registry_enter() marks (ev_dispatch(), registry_get(),
-#' registry_all(), registry_names(), gptr_registry(), ext_load(), ext_activate(), ext_unload(),
-#' gptr_reload(), registry_session_drop()), session creation and attach, package unload and
-#' process exit call it. It does nothing while other registry work is in progress (so it never
-#' runs inside a loop over registry state) unless `force` is TRUE (unload, exit), and nothing
-#' while a drain runs: an event deferred by a handler during a drain is taken by the same drain,
-#' never dispatched nested. Each item is removed before its dispatch, so an interrupted drain
-#' never repeats one; a failing dispatch becomes a diagnostic.
-#'
-#' With `session` (an id), only that session's events are dispatched, at once: P06 calls this
-#' before it registers a new live shell under an id whose collected shell may still have its
-#' shutdown queued, so that shutdown never reaches (or drops the records of) the new shell.
-#' @return The number of events dispatched, invisibly.
+#' Nothing runs under other registry work (unless `force`) or inside a drain; with `session` (an
+#' id) only that session's events run, at once. Returns the number dispatched, invisibly.
 #' @noRd
 ev_drain = function(reg = registry_env(), force = FALSE, session = NULL) {
   if (!length(reg$deferred)) return(invisible(0L))
@@ -689,26 +642,17 @@ hook_remove = function(id) registry_remove(id)
 
 # ---- policies (contract 10.2 row 12) ------------------------------------------------------------
 
-#' A well-formed policy decision: allow, deny, ask, ask_human (IC-53 item 6, combined as deny >
-#' ask_human > ask > modify > allow by P06's perm_check(), 04 section 7.6), or modify with an
-#' input list
+#' A well-formed policy decision: allow, deny, ask, ask_human (IC-53 item 6) or modify with a
+#' named input list
 #' @noRd
 ext_policy_ok = function(r) {
-  if (!spec_field_ok(r, "nlist", kind_field("nlist"))) return(FALSE)
-  if (!is.null(r[["reason"]]) && !spec_field_ok(r[["reason"]], "chr1", kind_field("chr1"))) {
-    return(FALSE)
-  }
-  d = r[["decision"]]
-  known = c("allow", "deny", "ask", "ask_human", "modify")
-  if (!is.character(d) || length(d) != 1L || !(d %in% known)) {
-    return(FALSE)
-  }
-  !identical(d, "modify") || spec_field_ok(r[["input"]], "nlist", kind_field("nlist"))
+  spec_field_ok(r, "nlist") && (is.null(r[["reason"]]) || rlang::is_string(r[["reason"]])) &&
+    rlang::is_string(r[["decision"]], c("allow", "deny", "ask", "ask_human", "modify")) &&
+    (!identical(r[["decision"]], "modify") || spec_field_ok(r[["input"]], "nlist"))
 }
 
-#' Evaluate one policy on a call, failing closed: NULL (no opinion) or list(decision, reason,
-#' input); an error or a malformed answer denies (contract 10.2 row 12; P06's perm_policies()
-#' applies the same rule while combining policies)
+#' Evaluate one policy on a call, failing closed: NULL or a list without `decision` is no
+#' opinion, an error or a malformed answer denies (contract 10.2 row 12; D-030 item 4)
 #' @noRd
 ext_policy_decide = function(spec, call, ctx = NULL) {
   deny = function(why) {
@@ -721,7 +665,7 @@ ext_policy_decide = function(spec, call, ctx = NULL) {
                         conditionMessage(r))
     return(deny(paste0("failed: ", conditionMessage(r))))
   }
-  if (is.null(r)) return(NULL)
+  if (is.null(r) || (is.list(r) && is.null(r[["decision"]]))) return(NULL)
   if (!ext_policy_ok(r)) return(deny("returned a malformed decision"))
   input = if (identical(r[["decision"]], "modify")) r[["input"]] else call[["input"]]
   reason = paste(as.character(r[["reason"]] %||% ""), collapse = " ")

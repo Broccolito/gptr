@@ -1740,3 +1740,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none (D-026's layout is not contract text; 12.4 unchanged).
 - Tests: test-provider-anthropic.R classifier blocks (fixture directory, test fixtures in the new
   shape). Evidence: progress/simplicity.md K-CLS.
+
+## D-145 - P02 extension core: one load transaction, no-opinion policy lists, a synthetic check ctx (2026-10-05)
+- Rule: `ext_run_factory()` runs requirement, factory, commit and post-checks in one
+  `tryCatch(error)`; an interrupt is no longer caught and re-signalled by `ext_load()`: it
+  propagates and `on.exit()` rolls back a loading extension (an interrupted lazy declaration keeps
+  the placeholders already registered).
+- Rule: `ext_policy_decide()` treats a list without `decision` as no opinion, as P06's
+  `perm_policies()` does (D-030 item 4).
+- Rule: `gptr_check()`'s policy matrix assigns `mode` and `model` into its own ctx instead of
+  swapping the registry's `ctx.kernel` records; other kernel members resolve as in any process ctx.
+- Contract-visible: none (04 sections 7.2, 10.2 row 12 unchanged).
+- Tests: test-ext-events.R no-opinion expectation; test-ext-load.R interruption and test-ext-check.R
+  synthetic-kernel blocks unchanged. Evidence: progress/simplicity.md P02-S.

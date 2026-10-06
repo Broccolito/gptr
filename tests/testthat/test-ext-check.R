@@ -1,9 +1,3 @@
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
 test_that("tool conformance distinguishes handler errors from malformed results", {
   local_registry()
   bad = gptr_tool("bad", "Malformed result", execute = function(input, ctx) 42)

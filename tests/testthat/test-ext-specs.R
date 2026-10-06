@@ -1,9 +1,3 @@
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
 test_that("classifier callback validation keeps the IC-74 and chat signatures separate", {
   local_registry()
   build = function(model, state, questions, opts) NULL
@@ -110,24 +104,6 @@ test_that("UI selection fails closed for malformed index values", {
     expect_identical(spec_ui_permission(select)(list(tool = "r"))$decision, "deny")
   }
   expect_identical(spec_ui_permission(function(...) 1L)(list(tool = "r"))$decision, "allow")
-})
-
-test_that("generated member formals cannot be overwritten by implementation scratch names", {
-  # Isolated unit boundary: the real Task 3/7 integration runs when those owners exist.
-  scope = new.env(parent = environment(spec_tool_fun))
-  scope$as_tool_result = identity
-  scope$ctx_default = function(session) list(session = session)
-  make_member = spec_tool_fun
-  environment(make_member) = scope
-  props = c("input", "nm", "v", "res", "name", "props", "run", "execute",
-             "as_tool_result", "as.list", "environment", "all.names")
-  parameters = list(type = "object", properties = stats::setNames(
-    rep(list(list(type = "string")), length(props)), props), required = as.list(props))
-  execute = function(input, ctx) list(is_error = FALSE, value = input)
-  member = make_member(execute, parameters, "capture")
-  values = stats::setNames(as.list(paste0("value_", props)), props)
-  expect_identical(do.call(member, values), values)
-  expect_identical(names(formals(member)), props)
 })
 
 test_that("top-level and embedded model records validate known fields and unique names", {

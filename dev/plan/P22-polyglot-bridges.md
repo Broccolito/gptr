@@ -938,7 +938,7 @@ git commit -m 'feat(bridge): peter$sh() engine, gptr_cmd results and bridge_call
 
 ### Task 3: The `interpreter` kind and `peter$script()`
 
-P22 defines the 38th kind, `interpreter` (04 §10.2 row 6, IC-02, IC-69), by registering a `kind` spec from its built-in factory: P02's `ext_register()` stages a `kind` spec at once (`kind_stage()`), so the same factory can then build `interpreter` specs with `gptr_spec()`. The validator normalises `ext` (lower case, no dot) and checks the four fields; a failing field is `gptr_error_invalid_spec` naming it. The seven built-in interpreters are `sh` (`.sh`, `.bash`: bash, sh, Git Bash), `py` (python3, python, py), `r` (the running R's `Rscript`), `js` (`.js`, `.mjs`, `.cjs`: node), `pl` (perl), `rb` (ruby) and `jl` (julia); program candidates are resolved when a script runs, never at load (no disk or process work at load, 04 §7.1 `zzz.R`). `peter$script()` picks, in order: `interpreter =` (a registered name, else a program plus leading arguments), the interpreter named like the extension (so a user record of that name overrides the built-in, IC-69), any interpreter listing the extension, then the `#!` line. Windows stubs (`System32\bash.exe`, the WindowsApps aliases) are skipped (G5 Windows notes). The `...` options of `peter$script()` are the `peter$sh()` options, read one by one with `...elt()` (rule R3: `list(...)` would keep a user's `input` referenced). The script's risk is 3 (Task 5).
+P22 defines the 38th kind, `interpreter` (04 §10.2 row 6, IC-02, IC-69), by registering a `kind` spec from its built-in factory: P02's `ext_register()` stages a `kind` spec at once (`kind_from_spec()`), so the same factory can then build `interpreter` specs with `gptr_spec()`. The validator normalises `ext` (lower case, no dot) and checks the four fields; a failing field is `gptr_error_invalid_spec` naming it. The seven built-in interpreters are `sh` (`.sh`, `.bash`: bash, sh, Git Bash), `py` (python3, python, py), `r` (the running R's `Rscript`), `js` (`.js`, `.mjs`, `.cjs`: node), `pl` (perl), `rb` (ruby) and `jl` (julia); program candidates are resolved when a script runs, never at load (no disk or process work at load, 04 §7.1 `zzz.R`). `peter$script()` picks, in order: `interpreter =` (a registered name, else a program plus leading arguments), the interpreter named like the extension (so a user record of that name overrides the built-in, IC-69), any interpreter listing the extension, then the `#!` line. Windows stubs (`System32\bash.exe`, the WindowsApps aliases) are skipped (G5 Windows notes). The `...` options of `peter$script()` are the `peter$sh()` options, read one by one with `...elt()` (rule R3: `list(...)` would keep a user's `input` referenced). The script's risk is 3 (Task 5).
 
 This task adds the first version of `builtin_bridges()` (the kind and the interpreters) and its `on_load()` declaration as the last section of `R/bridge-sh.R`; Task 4 inserts its section above it and Task 5 replaces it.
 
@@ -1113,7 +1113,7 @@ bridge_git_bash = function() {
 
 #' The built-in interpreters .sh, .py, .R, .js, .pl, .rb, .jl (contract 7.22), as interpreter
 #' specs; called inside builtin_bridges() after the kind is registered (P02's ext_register()
-#' defines a staged `kind` at once through kind_stage(), so gptr_spec("interpreter", ...) works
+#' defines a staged `kind` at once through kind_from_spec(), so gptr_spec("interpreter", ...) works
 #' in the same factory)
 #' @noRd
 bridge_interpreters = function() {

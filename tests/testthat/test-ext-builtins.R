@@ -1,16 +1,3 @@
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
-local_builtins = function(env = parent.frame()) {
-  old = the$builtins
-  withr::defer(assign("builtins", old, envir = the), envir = env)
-  the$builtins = list()
-  invisible(NULL)
-}
-
 test_that("built-in identifiers reject newline suffixes", {
   local_registry()
   local_builtins()
@@ -42,8 +29,6 @@ test_that("failed built-ins are omitted and attempted once per registry", {
   expect_identical(calls$n, 2L)
   expect_equal(registry_get("command", "ready")$handler("", NULL), "ready")
 })
-
-cmd = function(name, text = name) gptr_command(name, function(args, ctx) text)
 
 test_that("ext_declare_builtin() records declarations; a second declaration replaces the first", {
   local_builtins()

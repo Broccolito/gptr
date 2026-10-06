@@ -1,11 +1,3 @@
-local_registry = function(env = parent.frame()) {
-  old = registry_swap(registry_scratch())
-  withr::defer(registry_swap(old), envir = env)
-  invisible(registry_env())
-}
-
-cmd = function(name, text = name) gptr_command(name, function(args, ctx) text)
-
 test_that("the lowest rank wins per (kind, name): session < project < user < plugin < builtin", {
   local_registry()
   registry_add(cmd("hi", "builtin"), "builtin:console", 6L)
@@ -285,13 +277,6 @@ test_that("malformed session and source values cannot widen registration scope",
   registry_session_drop(NULL)
   expect_equal(registry_names("command"), "global")
 })
-
-local_builtins = function(env = parent.frame()) {
-  old = the$builtins
-  withr::defer(assign("builtins", old, envir = the), envir = env)
-  the$builtins = list()
-  invisible(NULL)
-}
 
 test_that("-kind:name hides a record and +kind:name restores it", {
   local_registry()
