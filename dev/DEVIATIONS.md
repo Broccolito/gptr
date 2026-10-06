@@ -1954,3 +1954,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `~` into a dead rule and turns a root file into `//**`).
 - Contract-visible: none (04 7.11 surface as planned; levels unchanged).
 - Tests: test-perm-rules.R: plan Task 5 blocks, one "(D-159)" block. Evidence: progress/P11.md Task 5.
+
+## D-160 - P22 bridge prints: inside `r` at most 0.6 x gptr.r_output_tokens, not of the remaining budget (2026-10-05)
+- Rule: `bridge_budget()` is `max_tokens`, else `gptr.helper_output_tokens`, at most 0.6 x
+  `gptr.r_output_tokens` while `run_current()` is set (P22 ambiguity 6). The remaining `r` budget of
+  04 section 9.4 lives in P10's r-call marker (`member_budget()`), which IC-33 keeps from the L4
+  `bridge` area; bridge prints do not add to its printed count. P09 still cuts the `r` result to
+  `gptr.r_output_tokens`.
+- Contract-visible: inside `r`, a bridge print after earlier prints of the same call may exceed 0.6x
+  the remaining `r` budget (04 section 9.4 not amended).
+- Tests: test-bridge-sh.R "the print budget is the option, capped at 0.6 x the r budget inside a run".
+  Evidence: progress/P22.md Task P22-1.
