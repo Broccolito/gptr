@@ -153,3 +153,34 @@ test_that("G7's 24-verdict tracemem matrix reproduces, c03 and c06 included (acc
 test_that("user data is serialised without a sticky reference only with ascii = FALSE (R7)", {
   ckpt_copy_check(ckpt_serialize_rows)
 })
+
+# End-to-end rows (04 section 1.3: gptr_rewind() [R1][R6], gptr_preimage() [R4]). The child runs
+# the fake provider in its global environment, with replay off and a temporary project root,
+# so nothing touches the test process.
+ckpt_e2e_setup = function(code) {
+  c("d = tempfile('proj'); dir.create(d)",
+    "options(gptr.project_root = d, gptr.replay = 'live')",
+    "big = runif(5e6)",
+    sprintf("fake = gptr_fake_provider(list(list(tool = 'r', input = list(code = '%s')), 'done'))",
+            code))
+}
+
+test_that("a checkpointed turn leaves an object the agent only read editable in place", {
+  expect_no_copy(ckpt_e2e_setup("n = length(big)"),
+                 "s = peter('count', model = fake, mode = 'auto', envir = globalenv())",
+                 label = "peter() with checkpoints on, the agent reads big")
+})
+
+test_that("gptr_rewind() after an in-place edit by the agent leaves the restored object editable", {
+  expect_no_copy(ckpt_e2e_setup("big[1] = -1"),
+                 c("s = peter('edit', model = fake, mode = 'auto', envir = globalenv())",
+                   "suppressWarnings(gptr_rewind(s))", "stopifnot(big[1] != -1)"),
+                 edit = "big[2] = 0", label = "gptr_rewind() swaps the pre-image back")
+})
+
+test_that("gptr_preimage() is a leaf (R4)", {
+  expect_no_copy(c("big = runif(5e6)"),
+                 paste0("invisible(gptr_preimage(big, 'big', list(predicted = 'modify', ",
+                        "bytes = 4e7, budget = 1e9)))"),
+                 label = "gptr_preimage() default method")
+})
