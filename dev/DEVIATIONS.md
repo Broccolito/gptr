@@ -2010,4 +2010,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none.
 - Tests: test-console-render.R "a run's events while a tool executes print nothing (P09 captures that
   output)" (+3), "the status line names an unusual end and sums the usage rows" (+1).
+
+## D-165 - P18 MCP stdio client: stale era re-probed in the handshake; answers re-arm; cancel after unwind (2026-10-06)
+- Rule: `R/mcp-client.R` differs from the plan literal (03 section 6.14, report 16 section 4.5):
+  1. A stale cached era met by the handshake's `initialize` is probed again and not replayed (the plan
+     replayed `initialize` on the now-modern connection and failed).
+  2. Answering a legacy server request (elicitation waits for a person) re-arms the soft deadline, as
+     progress does; the 10 x hard cap stays.
+  3. Any unwind (interrupt, timeout, error) cancels from one `on.exit()`, not the plan's calling handler: an
+     interrupt the pause menu resumes keeps the call (03 interrupt policy, G3), and `notifications/cancelled`
+     is written once the pump has unwound (inside an outer pump P04 queues it for that pump).
+  4. Task 4 omits the plan's HTTP branches until Task 5 (as D-077 item 5); `mcp_cancel()` sends through
+     `mcp_notify()`; `mcp_ui()` is inlined in `mcp_elicit()`.
+- Contract-visible: none.
+- Tests: test-mcp-client.R "a stale cached era is probed again once, in both directions" (+6), "time spent
+  answering a legacy server request does not time the call out" (+1), "an interrupt can be resumed (G3); ..."
+  (+1, and waits for the cancel without pumping). Evidence: progress/P18.md Task 4.
   Evidence: progress/P14.md Task 2.

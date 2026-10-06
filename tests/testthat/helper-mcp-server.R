@@ -104,3 +104,45 @@ local_login_target = function(urls, .env = parent.frame()) {
   }, envir = .env)
   invisible(urls)
 }
+
+# Rows of a fixture server's JSONL request log: df(t, method, id, era, via)
+mcp_fixture_log = function(path) {
+  empty = data.frame(t = numeric(), method = character(), id = character(), era = character(),
+                     via = character(), stringsAsFactors = FALSE)
+  if (!file.exists(path)) return(empty)
+  lines = readLines(path, warn = FALSE, encoding = "UTF-8")
+  if (!length(lines)) return(empty)
+  rows = lapply(lines, function(l) {
+    x = jsonlite::fromJSON(l, simplifyVector = FALSE)
+    data.frame(t = x$t, method = x$method, id = as.character(x$id %||% NA), era = x$era,
+               via = x$via, stringsAsFactors = FALSE)
+  })
+  do.call(rbind, rows)
+}
+
+# The MCP fixture server (contract 12.2): list(spec, log = function() df, stop = function()).
+# The spec is a plain list in the shape of a `mcp_server` spec, connectable with mcp_connect().
+local_mcp_fixture = function(era = c("modern", "legacy"), transport = c("stdio", "http"),
+                             tools = c("echo", "add", "slow", "fail", "elicit"), n_extra = 0L,
+                             .env = parent.frame()) {
+  era = era[1L]
+  transport = transport[1L]
+  stopifnot(era %in% c("modern", "legacy"), transport %in% c("stdio", "http"))
+  testthat::skip_on_cran()
+  log = withr::local_tempfile(fileext = ".jsonl", .local_envir = .env)
+  script = file.path(mcp_fixture_dir, "server.R")
+  args = c(paste0("--era=", era), paste0("--tools=", paste(tools, collapse = ",")),
+           paste0("--extra=", n_extra), paste0("--log=", log))
+  spec = if (identical(transport, "stdio")) {
+    list(name = "fixture", transport = "stdio", command = rscript_path(),
+         args = c("--vanilla", script, args, "--transport=stdio"),
+         env = c(R_LIBS = mcp_fixture_libs()), timeout = 30, protocol = "auto")
+  } else {
+    testthat::skip_if_not_installed("httpuv")
+    srv = mcp_fixture_http(script, c(args, "--transport=http"), .env)
+    list(name = "fixture", transport = "http",
+         url = paste0("http://127.0.0.1:", srv$port, "/mcp"), timeout = 30, protocol = "auto")
+  }
+  withr::defer(mcp_close_all(), envir = .env)
+  list(spec = spec, log = function() mcp_fixture_log(log), stop = function() mcp_close_all())
+}

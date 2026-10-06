@@ -501,3 +501,531 @@ mcp_expand_spec = function(spec, project = project_root()) {
   }
   ex
 }
+
+# ---- connections: handshake, requests, cancellation, server requests -------------------------
+
+#' Open a connection (contract 7.18): start the transport, then the era handshake (probe,
+#' fallback, cache). Returns a `gptr_mcp_conn` environment.
+#' @noRd
+mcp_connect = function(spec) {
+  check_list(spec, "spec", named = TRUE)
+  name = as.character(spec$name %||% "server")
+  transport = mcp_transport(spec)
+  if (identical(transport, "sse")) {
+    gptr_abort(paste0("MCP server ", name, " uses the old HTTP+SSE transport, which gptr does ",
+                      "not support; use its Streamable HTTP endpoint (often the same URL ending ",
+                      "in /mcp)."), c("mcp_protocol", "mcp"), server = name, code = NA_integer_)
+  }
+  if (!identical(transport, "stdio")) {
+    gptr_abort(paste0("MCP server ", name, " needs a command (stdio) or a url (Streamable HTTP)."),
+               c("mcp_protocol", "mcp"), server = name, code = NA_integer_)
+  }
+  conn = new.env(parent = emptyenv())
+  conn$name = name
+  conn$spec = spec
+  conn$transport = transport
+  conn$next_id = 0L
+  conn$pending = new.env(parent = emptyenv())
+  conn$cancelled = new.env(parent = emptyenv())
+  conn$progress = new.env(parent = emptyenv())
+  conn$requests = list()
+  conn$alive = TRUE
+  conn$era = NA_character_
+  conn$version = NA_character_
+  conn$tools = NULL
+  conn$tools_stale = TRUE
+  conn$era_from_cache = FALSE
+  conn$timeout = as.numeric(spec$timeout %||% gptr_opt("mcp_timeout"))
+  conn$project = project_root()
+  conn$last_used = reactor_now()
+  class(conn) = "gptr_mcp_conn"
+  ok = FALSE
+  on.exit(if (!ok) mcp_close(conn), add = TRUE)
+  mcp_stdio_start(conn)
+  mcp_handshake(conn)
+  ok = TRUE
+  conn
+}
+
+#' The era handshake: a cached era skips the probe; otherwise `server/discover` with the modern
+#' _meta, and on any other answer or a timeout the legacy initialize and
+#' notifications/initialized (report 16 4.5 step 3)
+#' @noRd
+mcp_handshake = function(conn, use_cache = TRUE) {
+  spec = conn$spec
+  v = mcp_versions()
+  want = as.character(spec$protocol %||% "auto")
+  auto = identical(want, "auto")
+  cached = if (use_cache && auto) mcp_era_get(spec)
+  conn$era = NA_character_
+  if (!is.null(cached)) {
+    conn$era_from_cache = TRUE
+    if (identical(cached$era, "modern")) {
+      conn$era = "modern"
+      conn$version = v$modern
+      return(invisible(conn))
+    }
+    want = "legacy"
+  }
+  if (want %in% c("auto", "modern")) {
+    probe = tryCatch(
+      mcp_request(conn, "server/discover", json_obj(), timeout = gptr_opt("mcp_probe_timeout"),
+                  modern = TRUE, raw = TRUE),
+      gptr_error_timeout = function(e) list(error = list(code = NA_integer_, message = "timeout")))
+    sup = as.character(unlist(probe$result$supportedVersions %||% probe$error$data$supported))
+    if (!is.null(probe$result) && v$modern %in% sup) {
+      conn$era = "modern"
+      conn$version = v$modern
+      conn$server_info = probe$result[["_meta"]][[mcp_k_sinfo]]
+      conn$capabilities = probe$result$capabilities
+      conn$instructions = probe$result$instructions
+    } else if (identical(want, "modern") ||
+                 isTRUE(probe$error$code == -32022L && v$modern %in% sup)) {
+      if (!v$modern %in% sup) {
+        gptr_abort(paste0("MCP server ", conn$name, " did not answer as a ", v$modern, " server."),
+                   c("mcp_protocol", "mcp"), server = conn$name,
+                   code = probe$error$code %||% NA_integer_)
+      }
+      conn$era = "modern"
+      conn$version = v$modern
+    }
+  }
+  if (is.na(conn$era)) {
+    init = mcp_request(conn, "initialize",
+                       list(protocolVersion = v$legacy[1L], capabilities = mcp_client_caps(),
+                            clientInfo = mcp_client_info()), modern = FALSE)
+    # NULL: the cached era was stale and mcp_request() completed a fresh handshake
+    if (is.null(init)) return(invisible(conn))
+    if (!isTRUE(init$protocolVersion %in% v$legacy)) {
+      gptr_abort(paste0("MCP server ", conn$name, " chose protocol version ",
+                        init$protocolVersion %||% "(none)", ", which gptr does not speak."),
+                 c("mcp_protocol", "mcp"), server = conn$name, code = NA_integer_)
+    }
+    conn$era = "legacy"
+    conn$version = init$protocolVersion
+    conn$server_info = init$serverInfo
+    conn$capabilities = init$capabilities
+    conn$instructions = init$instructions
+    mcp_notify(conn, "notifications/initialized")
+  }
+  if (auto) mcp_era_put(spec, conn$era, conn$version)
+  invisible(conn)
+}
+
+#' Send a request and wait for its response on the reactor. Every request carries a progress
+#' token whose notifications re-arm the soft deadline (`timeout`); the hard deadline is ten
+#' times the timeout; a timeout or an interrupt cancels the request.
+#' @noRd
+mcp_request = function(conn, method, params = NULL, timeout = NULL, modern = NULL, raw = FALSE,
+                       on_progress = NULL, retried = FALSE) {
+  if (!isTRUE(conn$alive)) {
+    gptr_abort(paste0("MCP server ", conn$name, " is not running."), c("mcp_protocol", "mcp"),
+               server = conn$name, code = NA_integer_)
+  }
+  timeout = as.numeric(timeout %||% conn$timeout)
+  conn$next_id = conn$next_id + 1L
+  conn$last_used = reactor_now()
+  id = conn$next_id
+  key = as.character(id)
+  modern = modern %||% identical(conn$era, "modern")
+  params = params %||% json_obj()
+  meta = params[["_meta"]] %||% json_obj()
+  if (modern) {
+    f = mcp_meta_fields(mcp_versions()$modern)
+    for (k in names(f)) meta[[k]] = f[[k]]
+  }
+  tok = paste0("p", id)
+  meta$progressToken = tok
+  params[["_meta"]] = meta
+  st = new.env(parent = emptyenv())
+  st$deadline = reactor_now() + timeout
+  st$hard = reactor_now() + 10 * timeout
+  # a named closure, then assign(): lintr's object_usage_linter checks a function literal passed
+  # to assign() on its own, without this function's arguments
+  on_tick = function(p) {
+    st$deadline = reactor_now() + timeout
+    if (is.function(on_progress)) on_progress(p)
+  }
+  assign(tok, on_tick, envir = conn$progress)
+  on.exit(if (exists(tok, envir = conn$progress, inherits = FALSE)) {
+    rm(list = tok, envir = conn$progress)
+  }, add = TRUE)
+  msg = list(jsonrpc = "2.0", id = id, method = method, params = params)
+  mcp_stdio_send(conn, msg)
+  resp = mcp_await(conn, key, st, id, method, timeout)
+  if (raw) return(resp)
+  if (!is.null(resp$error)) {
+    code = suppressWarnings(as.integer(resp$error$code %||% NA_integer_))
+    stale = isTRUE(conn$era_from_cache) && !isTRUE(retried) &&
+      isTRUE(code %in% c(-32600L, -32601L, -32602L))
+    if (stale) {
+      in_handshake = is.na(conn$era)
+      conn$era_from_cache = FALSE
+      mcp_era_forget(conn$spec)
+      mcp_handshake(conn, use_cache = FALSE)
+      # the handshake's own request is not replayed: the fresh handshake replaces it
+      if (in_handshake) return(NULL)
+      params[["_meta"]] = NULL
+      return(mcp_request(conn, method, params, timeout, NULL, raw, on_progress, TRUE))
+    }
+    gptr_abort(paste0("MCP server ", conn$name, " answered ", method, " with error ",
+                      format(code), ": ", as.character(resp$error$message %||% "")),
+               c("mcp_protocol", "mcp"), server = conn$name, code = code)
+  }
+  resp$result %||% json_obj()
+}
+
+#' Pump the reactor until the response, a server request, an exit or a deadline
+#' @noRd
+mcp_await = function(conn, key, st, id, method, timeout) {
+  done = function() {
+    exists(key, envir = conn$pending, inherits = FALSE) || length(conn$requests) > 0L ||
+      !isTRUE(conn$alive) || reactor_now() > min(st$deadline, st$hard)
+  }
+  # any unwind cancels, after the pump has unwound; an interrupt the pause menu resumes does not
+  # unwind (G3)
+  reason = "user interrupt"
+  settled = FALSE
+  on.exit(if (!settled) mcp_cancel(conn, id, reason), add = TRUE)
+  repeat {
+    left = min(st$deadline, st$hard) - reactor_now()
+    reactor_pump(until = done, slice_ms = 50L, timeout = max(0.05, left))
+    if (length(conn$requests)) {
+      # an answer may wait for a person (elicitation); like progress, it re-arms the deadline
+      mcp_answer_requests(conn)
+      st$deadline = reactor_now() + timeout
+    }
+    if (exists(key, envir = conn$pending, inherits = FALSE)) {
+      r = get(key, envir = conn$pending, inherits = FALSE)
+      rm(list = key, envir = conn$pending)
+      settled = TRUE
+      return(r)
+    }
+    if (!isTRUE(conn$alive)) {
+      settled = TRUE
+      return(list(error = list(code = NA_integer_, message = "the server process exited"),
+                  exited = TRUE))
+    }
+    if (reactor_now() > min(st$deadline, st$hard)) {
+      reason = "timeout"
+      gptr_abort(paste0("MCP server ", conn$name, " did not answer ", method, " within ",
+                        format(timeout), " s."), "timeout", seconds = timeout,
+                 what = paste("MCP", method))
+    }
+  }
+}
+
+#' Cancel an in-flight request: a late answer is dropped and the server is sent
+#' notifications/cancelled
+#' @noRd
+mcp_cancel = function(conn, id, reason) {
+  assign(as.character(id), TRUE, envir = conn$cancelled)
+  if (isTRUE(conn$alive)) {
+    try(mcp_notify(conn, "notifications/cancelled", list(requestId = id, reason = reason)),
+        silent = TRUE)
+  }
+  invisible(NULL)
+}
+
+#' Send a notification
+#' @noRd
+mcp_notify = function(conn, method, params = NULL) {
+  msg = list(jsonrpc = "2.0", method = method)
+  if (!is.null(params)) msg$params = params
+  mcp_reply(conn, msg)
+}
+
+#' Send a message that expects no answer (a notification or a response to a server request)
+#' @noRd
+mcp_reply = function(conn, msg) {
+  mcp_stdio_send(conn, msg)
+  invisible(NULL)
+}
+
+#' Route one incoming JSON-RPC message: responses by id (late answers to cancelled ids are
+#' dropped), notifications to their handlers, server requests queued for mcp_answer_requests()
+#' @noRd
+mcp_on_message = function(conn, msg) {
+  if (!is.list(msg)) return(invisible(NULL))
+  id = msg$id
+  if (!is.null(id) && (!is.null(msg$result) || !is.null(msg$error))) {
+    k = as.character(id)
+    if (exists(k, envir = conn$cancelled, inherits = FALSE)) {
+      rm(list = k, envir = conn$cancelled)
+      return(invisible(NULL))
+    }
+    assign(k, msg, envir = conn$pending)
+    return(invisible(NULL))
+  }
+  method = msg$method
+  if (is.null(method)) return(invisible(NULL))
+  if (is.null(id)) {
+    if (identical(method, "notifications/progress")) {
+      cb = get0(as.character(msg$params$progressToken %||% ""), envir = conn$progress,
+                inherits = FALSE)
+      if (is.function(cb)) cb(msg$params)
+    } else if (identical(method, "notifications/tools/list_changed")) {
+      conn$tools_stale = TRUE
+    } else if (identical(method, "notifications/message")) {
+      mcp_log(conn, paste("[log]", msg$params$level %||% "info", json_encode(msg$params$data)))
+    }
+    return(invisible(NULL))
+  }
+  conn$requests[[length(conn$requests) + 1L]] = msg
+  invisible(NULL)
+}
+
+#' Answer queued server requests (legacy era) outside reactor callbacks: ping, roots/list and
+#' elicitation/create through the ask UI; sampling and everything else are refused
+#' @noRd
+mcp_answer_requests = function(conn) {
+  while (length(conn$requests)) {
+    req = conn$requests[[1L]]
+    conn$requests = conn$requests[-1L]
+    out = switch(as.character(req$method),
+      ping = mcp_rpc_ok(req$id, json_obj()),
+      `roots/list` = mcp_rpc_ok(req$id, mcp_roots(conn)),
+      `elicitation/create` = mcp_rpc_ok(req$id, mcp_elicit(conn, req$params)),
+      mcp_rpc_err(req$id, -32601L, paste("Method not supported by gptr:", req$method)))
+    mcp_reply(conn, out)
+  }
+  invisible(NULL)
+}
+
+#' The roots gptr offers: the project directory
+#' @noRd
+mcp_roots = function(conn) {
+  list(roots = list(list(uri = mcp_file_uri(conn$project), name = basename(conn$project))))
+}
+
+#' Answer an elicitation form through the ask UI; declined without a person (IC-43) and for the
+#' URL mode
+#' @noRd
+mcp_elicit = function(conn, params) {
+  if (!identical(params$mode %||% "form", "form") || !gptr_can_prompt()) {
+    return(list(action = "decline"))
+  }
+  ui = if (ext_service_has("ui.get")) ext_service_get("ui.get")(NULL)
+  if (is.null(ui) || !isTRUE(ui$has_ui())) return(list(action = "decline"))
+  props = params$requestedSchema$properties %||% list()
+  if (!length(props)) return(list(action = "accept", content = json_obj()))
+  qs = lapply(seq_along(props), function(i) {
+    p = props[[i]]
+    lead = if (i == 1L) {
+      paste0("MCP server ", conn$name, " asks: ", params$message %||% "", "\n")
+    } else {
+      ""
+    }
+    out = list(id = names(props)[i],
+               question = paste0(lead, p$title %||% p$description %||% names(props)[i]),
+               type = if (length(p$enum)) "single" else "text")
+    if (length(p$enum)) out$options = as.character(unlist(p$enum))
+    out
+  })
+  ans = ui$questions(qs)
+  if (isTRUE(ans$cancelled)) return(list(action = "cancel"))
+  content = lapply(names(props), function(nm) mcp_elicit_value(ans$answers[[nm]], props[[nm]]))
+  names(content) = names(props)
+  content = content[!vapply(content, is.null, NA)]
+  list(action = "accept", content = if (length(content)) content else json_obj())
+}
+
+#' Convert one elicitation answer to the schema's primitive type
+#' @noRd
+mcp_elicit_value = function(x, p) {
+  if (is.null(x) || !length(x)) return(NULL)
+  x = as.character(unlist(x))
+  switch(as.character(p$type %||% "string"),
+    number = as.numeric(x[1L]),
+    integer = as.integer(x[1L]),
+    boolean = tolower(x[1L]) %in% c("true", "yes", "y", "1"),
+    array = as.list(x),
+    x[1L])
+}
+
+#' Answer the inputRequests of a modern input_required result (MRTR)
+#' @noRd
+mcp_fulfil = function(conn, requests) {
+  out = lapply(names(requests), function(k) {
+    r = requests[[k]]
+    switch(as.character(r$method),
+      `elicitation/create` = mcp_elicit(conn, r$params),
+      `roots/list` = mcp_roots(conn),
+      gptr_abort(paste0("MCP server ", conn$name, " asked for ", r$method,
+                        "; gptr does not let servers call models or other client features."),
+                 c("mcp_protocol", "mcp"), server = conn$name, code = -32601L))
+  })
+  names(out) = names(requests)
+  if (length(out)) out else json_obj()
+}
+
+#' The paginated tool list (at most 100 pages), kept in memory and in the disk cache
+#' @noRd
+mcp_tools = function(conn, refresh = FALSE) {
+  if (!isTRUE(refresh) && !isTRUE(conn$tools_stale) && !is.null(conn$tools)) return(conn$tools)
+  tools = list()
+  cursor = NULL
+  ttl = NULL
+  scope = NULL
+  for (i in seq_len(100L)) {
+    params = if (is.null(cursor)) json_obj() else list(cursor = cursor)
+    res = mcp_request(conn, "tools/list", params)
+    tools = c(tools, res$tools %||% list())
+    ttl = res$ttlMs %||% ttl
+    scope = res$cacheScope %||% scope
+    cursor = res$nextCursor
+    if (is.null(cursor)) break
+  }
+  tools = lapply(tools, mcp_tool_norm)
+  conn$tools = tools
+  conn$tools_stale = FALSE
+  mcp_tools_cache_put(conn$spec, tools, ttl, scope)
+  tools
+}
+
+#' The input schema of a tool (listing the tools first when needed)
+#' @noRd
+mcp_tool_schema = function(conn, tool) {
+  find = function(tl) Filter(function(t) identical(t$name, tool), tl)
+  hit = find(conn$tools %||% mcp_tools(conn))
+  if (!length(hit)) hit = find(mcp_tools(conn, refresh = TRUE))
+  if (!length(hit)) {
+    gptr_abort(paste0("MCP server ", conn$name, " has no tool ", tool, "."),
+               c("mcp_protocol", "mcp"),
+               server = conn$name, code = -32602L)
+  }
+  hit[[1L]]$input_schema
+}
+
+#' Call a tool (contract 7.18): arguments coerced by the schema, progress re-arms the timer,
+#' input_required rounds (MRTR) answered at most 5 times
+#' @noRd
+mcp_call = function(conn, tool, args, timeout = NULL, on_progress = NULL) {
+  t0 = reactor_now()
+  schema = mcp_tool_schema(conn, tool)
+  obj = c(list(type = "object"), schema[setdiff(names(schema), "type")])
+  params = list(name = tool, arguments = mcp_coerce(args %||% list(), obj, "args") %||% json_obj())
+  rounds = 0L
+  repeat {
+    res = mcp_request(conn, "tools/call", params, timeout = timeout, on_progress = on_progress)
+    if (!identical(res$resultType, "input_required")) break
+    rounds = rounds + 1L
+    if (rounds > 5L) {
+      gptr_abort(paste0("MCP server ", conn$name, " asked for input more than 5 times in one ",
+                        "call of ", tool, "."), c("mcp_protocol", "mcp"), server = conn$name,
+                 code = NA_integer_)
+    }
+    params$inputResponses = mcp_fulfil(conn, res$inputRequests %||% list())
+    if (!is.null(res$requestState)) params$requestState = res$requestState
+  }
+  mcp_result_parse(res, reactor_now() - t0)
+}
+
+#' Close a connection (contract 7.18): stdin closed, 2 s grace, then kill_all()
+#' @noRd
+mcp_close = function(conn) {
+  if (!inherits(conn, "gptr_mcp_conn")) return(invisible(FALSE))
+  if (!is.null(conn$proc)) {
+    p = conn$proc
+    if (isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
+      write_close(p)
+      reactor_pump(until = function() !p$is_alive(), slice_ms = 50L, timeout = 2)
+      if (p$is_alive()) kill_all(p, grace = 0)
+    }
+    if (!is.null(conn$watch)) try(reactor_cancel(conn$watch), silent = TRUE)
+  }
+  if (!is.null(conn$rs)) mcp_log_append(conn$log_path, conn$rs$flush())
+  conn$alive = FALSE
+  invisible(TRUE)
+}
+
+#' Close every connection of this process (on unload and in tests)
+#' @noRd
+mcp_close_all = function() {
+  st = mcp_state()
+  for (nm in ls(st$conns)) {
+    try(mcp_close(get(nm, envir = st$conns)), silent = TRUE)
+    rm(list = nm, envir = st$conns)
+  }
+  invisible(NULL)
+}
+
+# ---- stdio transport -----------------------------------------------------------------------
+
+#' Close the least recently used stdio connection while the stdio pool is full (IC-60: at most
+#' 2 children under R CMD check, through P04's proc_pool_cap())
+#' @noRd
+mcp_stdio_make_room = function() {
+  st = mcp_state()
+  repeat {
+    live = Filter(function(n) {
+      x = get(n, envir = st$conns)
+      identical(x$transport, "stdio") && isTRUE(x$alive)
+    }, ls(st$conns))
+    if (length(live) < proc_pool_cap(64L)) break
+    used = vapply(live, function(n) get(n, envir = st$conns)$last_used, 0)
+    victim = live[which.min(used)]
+    mcp_close(get(victim, envir = st$conns))
+    rm(list = victim, envir = st$conns)
+  }
+  invisible(NULL)
+}
+
+#' The program of a stdio server. A bare `Rscript` or `R` (the usual command of R MCP servers,
+#' such as `Rscript -e "mcptools::mcp_server()"`) is this R's own binary: P04's proc_resolve()
+#' refuses R by name, because R CMD check puts failing R and Rscript scripts first on PATH (IC-60)
+#' @noRd
+mcp_stdio_command = function(command) {
+  if (!is.character(command) || length(command) != 1L) return(command)
+  if (command %in% c("Rscript", "Rscript.exe")) return(rscript_path())
+  if (command %in% c("R", "R.exe")) {
+    return(file.path(R.home("bin"), if (.Platform$OS.type == "windows") "R.exe" else "R"))
+  }
+  command
+}
+
+#' Start a stdio server through the process engine with the mcp child environment plus the
+#' spec's expanded env (IC-60; `.cmd`/`.bat` shims run through cmd.exe /d /c call in
+#' proc_spawn()); stdout and stderr lines are read by the reactor
+#' @noRd
+mcp_stdio_start = function(conn) {
+  mcp_stdio_make_room()
+  ex = mcp_expand_spec(conn$spec, conn$project)
+  env = child_env("mcp", set = ex$env %||% character())
+  conn$log_path = mcp_log_path(conn$name)
+  conn$rs = redact_stream("persist")
+  conn$proc = proc_spawn(mcp_stdio_command(ex$command), ex$args, env = env, wd = ex$cwd,
+                         stdin = "|", stdout = "|", stderr = "|")
+  conn$watch = reactor_proc(conn$proc,
+    on_line = function(line) mcp_on_line(conn, line),
+    on_exit = function(status) {
+      conn$alive = FALSE
+      conn$exit_status = status
+    },
+    stream = "stdout",
+    on_stderr = function(line) mcp_log(conn, line))
+  invisible(conn)
+}
+
+#' One stdout line of a stdio server (anything that is not JSON goes to the log)
+#' @noRd
+mcp_on_line = function(conn, line) {
+  if (!nzchar(trimws(line))) return(invisible(NULL))
+  msg = tryCatch(json_decode(line), error = function(e) NULL)
+  if (is.null(msg)) {
+    mcp_log(conn, paste("[stdout is not JSON]", substr(line, 1L, 200L)))
+    return(invisible(NULL))
+  }
+  mcp_on_message(conn, msg)
+}
+
+#' Write one ASCII JSON line to a stdio server (non-blocking inside a pump; IC-60)
+#' @noRd
+mcp_stdio_send = function(conn, msg) {
+  if (!isTRUE(tryCatch(conn$proc$is_alive(), error = function(e) FALSE))) {
+    conn$alive = FALSE
+    return(invisible(FALSE))
+  }
+  write_all(conn$proc, paste0(mcp_json(msg), "\n"))
+  invisible(TRUE)
+}
