@@ -87,13 +87,6 @@ store_append = function(store, entries) {
   invisible(store)
 }
 
-#' Release the lock of a store
-#' @noRd
-store_close = function(store) {
-  if (!is.null(store$lock)) lock_release(store$lock)
-  invisible(TRUE)
-}
-
 #' Touch the lock file (called from a reactor timer every 10 minutes while a run is live)
 #' @noRd
 store_heartbeat = function(store) {
@@ -162,17 +155,12 @@ file_tail_info = function(path, window = 1048576) {
   list(size = size, ends_lf = FALSE, last_lf = 0)
 }
 
-#' The installed gptr version (header field `gptr.version`)
-#' @noRd
-store_pkg_version = function() as.character(utils::packageVersion("gptr"))
-
 #' The header line of a session file (04 section 4.7)
 #' @noRd
 store_header = function(d) {
   fork = d$fork_of
-  g = compact(list(version = store_pkg_version(), api = "1.0", kind = d$kind,
-                   parent = d$parent_id,
-                   depth = d$depth, home = d$home_label,
+  g = compact(list(version = as.character(utils::packageVersion("gptr")), api = "1.0",
+                   kind = d$kind, parent = d$parent_id, depth = d$depth, home = d$home_label,
                    forkOf = if (is.null(fork)) NULL else
                      compact(fork[c("id", "entry", "turn")])))
   compact(list(type = "session", version = 3L, id = d$id, timestamp = iso_time(d$created),
@@ -284,7 +272,7 @@ store_read = function(path) {
   bad = 0L
   for (line in lines) {
     obj = tryCatch(json_decode(line), error = function(e) NULL)
-    if (!is.list(obj) || !store_chr1(obj$type)) {
+    if (!is.list(obj) || !rlang::is_string(obj$type)) {
       bad = bad + 1L
       next
     }
@@ -322,14 +310,10 @@ store_read = function(path) {
   list(header = header, entries = entries)
 }
 
-#' One string (not NA)
-#' @noRd
-store_chr1 = function(x) is.character(x) && length(x) == 1L && !is.na(x)
-
 #' Can a value be an entry id? One non-empty string within R's 10000-byte limit on variable
 #' names (an id names a binding of the entry index)
 #' @noRd
-store_id_ok = function(x) store_chr1(x) && fork_id_ok(x)
+store_id_ok = function(x) rlang::is_string(x) && fork_id_ok(x)
 
 #' An entry from its JSON shape; unknown types (Pi's label, branch_summary, ...) keep their
 #' fields under `raw` and are written back unchanged
@@ -377,7 +361,7 @@ compaction_gptr_from_json = function(g) {
 #' in another format), so a caller's `%||%` fallback also covers a hand-edited time
 #' @noRd
 iso_ms = function(x) {
-  if (!store_chr1(x)) return(NULL)
+  if (!rlang::is_string(x)) return(NULL)
   t = as.numeric(as.POSIXct(sub("Z$", "", x), format = "%Y-%m-%dT%H:%M:%OS", tz = "UTC"))
   if (!is.finite(t)) return(NULL)
   round(t * 1000)
@@ -482,11 +466,10 @@ rebuild_model = function(entries) {
   model = NULL
   for (e in entries) {
     if (identical(e$type, "custom") && identical(e$custom_type, "gptr.frozen") &&
-        store_chr1(e$data$model)) {
+        rlang::is_string(e$data$model)) {
       model = e$data$model
     }
-    if (identical(e$type, "model_change")) model = e$gptr$ref %||% paste0(e$provider, "/",
-                                                                          e$model_id)
+    if (identical(e$type, "model_change")) model = entry_model_ref(e)
     if (identical(e$type, "message") && identical(e$message$role, "assistant") &&
         !is.null(e$message$provider)) {
       model = paste0(e$message$provider, "/", e$message$model)
@@ -499,12 +482,8 @@ rebuild_model = function(entries) {
 #' path), else the `mode` setting
 #' @noRd
 rebuild_mode = function(entries) {
-  mode = setting_get("mode", default = "manual")
-  for (e in entries) {
-    if (identical(e$type, "custom") && identical(e$custom_type,
-                                                 "gptr.mode_change")) mode = e$data$to
-  }
-  mode
+  e = path_custom(entries, "gptr.mode_change")
+  if (is.null(e)) setting_get("mode", default = "manual") else e$data$to
 }
 
 #' `idle` when the path ends with a final answer, else `interrupted`
@@ -512,11 +491,7 @@ rebuild_mode = function(entries) {
 rebuild_status = function(path) {
   msgs = Filter(function(e) identical(e$type, "message"), path)
   if (!length(msgs)) return("idle")
-  m = msgs[[length(msgs)]]$message
-  final = identical(m$role, "assistant") && !(m$stop_reason %||% "stop") %in% c("error",
-                                                                                "aborted") &&
-    !any(vapply(m$content %||% list(), function(b) identical(b$type, "tool_call"), NA))
-  if (final) "idle" else "interrupted"
+  if (msg_final(msgs[[length(msgs)]]$message)) "idle" else "interrupted"
 }
 
 #' The frozen prompt of a rebuilt session from the last gptr.frozen entry of the active path, or
@@ -524,19 +499,14 @@ rebuild_status = function(path) {
 #' `reinject` (D-069)
 #' @noRd
 rebuild_frozen = function(path) {
-  for (e in rev(path)) {
-    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.frozen")) {
-      x = e$data
-      return(list(preset = x$preset, model = x$model, t0 = x$t0 %||% "", t1 = x$t1 %||% "",
-                  tools_json = x$toolsJson %||% "[]",
-                  tool_names = as.character(unlist(x$toolNames)),
-                  sections = frozen_sections_df(x$sections),
-                  human = x$human %||% gptr_can_prompt(), document = NULL,
-                  reinject = prompt_reinject_read(x$reinject) %||%
-                    list(project = Inf, skills = 10000)))
-    }
-  }
-  NULL
+  e = path_custom(path, "gptr.frozen")
+  if (is.null(e)) return(NULL)
+  x = e$data
+  list(preset = x$preset, model = x$model, t0 = x$t0 %||% "", t1 = x$t1 %||% "",
+       tools_json = x$toolsJson %||% "[]", tool_names = as.character(unlist(x$toolNames)),
+       sections = frozen_sections_df(x$sections), human = x$human %||% gptr_can_prompt(),
+       document = NULL,
+       reinject = prompt_reinject_read(x$reinject) %||% list(project = Inf, skills = 10000))
 }
 
 #' Value records of a rebuilt session (metadata only: held copies are not persisted)
@@ -558,7 +528,7 @@ rebuild_values = function(path) {
 #' are not the fork's usage (04 section 6.5); all entries without a fork entry in the file
 #' @noRd
 rebuild_own = function(entries, fork) {
-  if (!is.list(fork) || !store_chr1(fork$entry)) return(entries)
+  if (!is.list(fork) || !rlang::is_string(fork$entry)) return(entries)
   at = match(fork$entry, vapply(entries, function(e) e$id, ""))
   if (is.na(at)) entries else entries[-seq_len(at)]
 }
@@ -585,7 +555,7 @@ rebuild_usage = function(entries, d) {
 #' Is a session file foreign to this project (another machine or tracked by git)? (IC-52)
 #' @noRd
 rebuild_foreign = function(h, path) {
-  cwd = if (store_chr1(h$cwd)) h$cwd else ""
+  cwd = if (rlang::is_string(h$cwd)) h$cwd else ""
   if (!nzchar(cwd) || !dir.exists(cwd)) return(TRUE)
   if (!identical(path_key(project_root(cwd)), path_key(project_root()))) return(TRUE)
   git_tracked(path)
@@ -782,7 +752,7 @@ gptr_resume = function(x = NULL, envir = parent.frame(), block = NULL, child = N
     session_attach(x, envir)
     return(x)
   }
-  if (is.character(x) && length(x) == 1L && !is.na(x) && grepl("^s[0-9a-f]{10}$", x)) {
+  if (rlang::is_string(x) && grepl("^s[0-9a-f]{10}$", x)) {
     live_s = session_by_id(x)
     if (!is.null(live_s)) {
       session_control_check("gptr_resume", live_s)
@@ -807,7 +777,7 @@ resume_path = function(x) {
     }
     return(files[[which.max(file.mtime(files))]])
   }
-  if (!(is.character(x) && length(x) == 1L && !is.na(x))) {
+  if (!rlang::is_string(x)) {
     gptr_abort("`x` must be NULL, a session id, a file path or a gptr_session", "invalid_argument",
                arg = "x", expected = "NULL, a session id, a file path or a gptr_session")
   }

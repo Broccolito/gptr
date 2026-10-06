@@ -2493,10 +2493,11 @@ creation time; on an existing file whose last byte is not LF it first appends `"
 entry), `store_append(store, entries)` (one line per entry: `json_encode()` of the §4.6 JSON shape; the file is
 opened with `file(path, "ab")`, written, flushed and closed through `on.exit()` inside `suspendInterrupts()`; no
 connection outlives the call), `store_read(path)` -> `list(header, entries)` (skips any unparsable line with a
-diagnostic; children of missing ids are re-parented to the nearest valid ancestor in projection), `store_close(store)`
-(releases the lock), `store_fork(s, cut, new)`, `store_rebuild(path, home)` -> `<session>` (a fork gets a fresh
+diagnostic; children of missing ids are re-parented to the nearest valid ancestor in projection),
+`store_fork(s, cut, new)`, `store_rebuild(path, home)` -> `<session>` (a fork gets a fresh
 overlay `new.env(parent = home)`), `store_heartbeat(store)` (touches the lock every 10 minutes from a reactor
-timer). Consumers: P06, P15 (replay), P16.
+timer). There is no `store_close()`: the lock is released when the session is collected or the package unloads
+(D-154). Consumers: P06, P15 (replay), P16.
 
 **Replay functions** (`session-object.R`, IC-46): `session_replay_apply(s, block, header, text = NULL)` (advances
 the piped session in place: `gptr.replay` entry, `seen`, `turns`, the `value=` name, `last_text`; returns `s`),
@@ -2515,7 +2516,7 @@ table behind `gptr_resume(block =)`). Consumers: P15, P19.
 |---|---|---|
 | `session_run(s, input, opts = list())` | appends the input (a user message or queued items) and runs `s` to settlement on the reactor under the interrupt policy (`console.interrupt_policy` service if present, else abort-only); returns `s` invisibly; raises nothing itself (the gateway maps terminal statuses to conditions, §6.1.2) | P08, P14, P15, P19 |
 | `run_start(s, input, opts = list())` | the non-blocking form: returns a `gptr_run` registered with the reactor (strong reference until settled); snapshots the safety options of IC-53 into the run | P08 (`.run`, background), P19, P21 |
-| `run_wait(runs, timeout = Inf)` | pumps the reactor until every run settled or `timeout`; `invisible(lgl(1))` all settled | P08, P19 |
+| `run_wait(runs, timeout = Inf, background = FALSE)` | pumps the reactor until every run settled (with `background = TRUE`, or was sent to the background) or `timeout`; `invisible(lgl(1))` all done | P08, P19 |
 | `run_abort(run, reason = "user")` | cancels transfers and children, records the partial with `stop_reason = "aborted"`, moves the queue to `dropped` | P08, P14, P21 |
 | `run_current()` | the innermost run whose tool is executing on this call stack (for nested calls), or `NULL` | P08 (`nested` route), P10, P19 |
 | `run_eval_env(run)` | the environment where `r` evaluates for this run: the scratch overlay in plan mode (IC-15), a child overlay for inline sub-agents, else the home (a function-frame home is held in the run's `home` binding only, reset at settlement) [R2] | P09, P10, P16, P22, P23 |

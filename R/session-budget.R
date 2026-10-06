@@ -10,77 +10,23 @@ usage_columns = c("request_id", "session", "agent", "parent_id", "provider", "mo
 usage_token_columns = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h",
                         "reasoning", "images", "cost")
 
-#' Conform usage rows (from P05's usage_row()) to the section 4.3 columns, types and order
-#' A missing column is typed NA (unknown, IC-74); a wrong type, a non-finite or a negative number
-#' is refused, never coerced; extra columns are dropped.
+#' Conform usage rows (from P05's usage_row()) to the section 4.3 columns, types and order; a
+#' missing or all-NA column is the typed NA of usage_empty() (unknown, IC-74)
 #' @noRd
 usage_conform = function(row) {
-  if (!is.data.frame(row)) row = usage_conform_list(row)
   row = as.data.frame(row, stringsAsFactors = FALSE)
   empty = usage_empty()
-  for (col in setdiff(usage_columns, names(row))) {
-    row[[col]] = rep(empty[[col]][NA_integer_], nrow(row))
+  for (col in usage_columns) {
+    if (is.null(row[[col]]) || all(is.na(row[[col]]))) {
+      row[[col]] = rep(empty[[col]][NA_integer_], nrow(row))
+    }
   }
   row = row[usage_columns]
-  for (col in usage_columns) row[[col]] = usage_conform_column(row[[col]], empty[[col]], col)
+  for (col in c(usage_token_columns, "seconds", "multiplier")) row[[col]] = as.numeric(row[[col]])
+  row$estimated = as.logical(row$estimated)
+  if (!inherits(row$started, "POSIXct")) row$started = .POSIXct(as.numeric(row$started), tz = "UTC")
   rownames(row) = NULL
   row
-}
-
-#' A named list of usage columns, checked before as.data.frame() could flatten or recycle it
-#' @noRd
-usage_conform_list = function(row) {
-  expected = "a data frame or a named list of equal-length usage columns"
-  if (!is.list(row)) {
-    gptr_abort("Invalid usage rows; expected a data frame or a named list.", "invalid_argument",
-               arg = "row", expected = expected)
-  }
-  row = row[!vapply(row, is.null, logical(1L))]
-  column = function(x) {
-    inherits(x, "POSIXlt") || (is.atomic(x) && !is.null(x) && is.null(dim(x)))
-  }
-  keys = names(row)
-  ok = (length(row) == 0L || (!is.null(keys) && !anyNA(keys) && all(nzchar(keys)))) &&
-    !anyDuplicated(keys) && all(vapply(row, column, logical(1L))) &&
-    length(unique(vapply(row, length, integer(1L)))) <= 1L
-  if (!ok) {
-    gptr_abort("Invalid usage rows; expected a data frame or a named list.", "invalid_argument",
-               arg = "row", expected = expected)
-  }
-  row
-}
-
-#' One usage column in its section 4.3 type (`proto` is the column of usage_empty())
-#' @noRd
-usage_conform_column = function(x, proto, col) {
-  bad = function(expected) {
-    gptr_abort(paste0("Invalid usage column `", col, "`; expected ", expected, "."),
-               "invalid_argument", arg = paste0("row$", col), expected = expected)
-  }
-  if (is.logical(x) && all(is.na(x)) && !is.logical(proto)) {
-    return(rep(proto[NA_integer_], length(x)))
-  }
-  if (inherits(proto, "POSIXct")) {
-    if (inherits(x, "POSIXlt")) x = as.POSIXct(x)
-    if (!inherits(x, "POSIXct") && !is.numeric(x)) bad("POSIXct times or epoch seconds")
-    secs = as.numeric(x)
-    if (any(is.nan(secs) | is.infinite(secs))) {
-      bad("finite POSIXct times or epoch seconds, or NA")
-    }
-    return(if (inherits(x, "POSIXct")) x else .POSIXct(secs, tz = "UTC"))
-  }
-  if (is.character(proto)) {
-    if (!is.character(x)) bad("a character column")
-    return(x)
-  }
-  if (is.logical(proto)) {
-    if (!is.logical(x)) bad("a logical column")
-    return(x)
-  }
-  if (!is.numeric(x) || any(is.nan(x)) || any(!is.na(x) & (!is.finite(x) | x < 0))) {
-    bad("finite nonnegative numbers or NA")
-  }
-  as.numeric(x)
 }
 
 #' Totals of usage rows; a sum over an unknown (`NA`) value is unknown (IC-74)
@@ -202,7 +148,7 @@ run_budget_limits = function(s, opts, outer) {
 #' @noRd
 run_budget_root = function(s, opts) {
   rid = opts$root
-  if (!is.character(rid) || length(rid) != 1L || is.na(rid)) return(NULL)
+  if (!rlang::is_string(rid)) return(NULL)
   if (identical(rid, session_data(s)$id)) return(NULL)
   session_by_id(rid)
 }

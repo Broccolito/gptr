@@ -156,12 +156,6 @@ test_that("request caps preserve queued input that cannot be delivered", {
   expect_identical(polls, "steer")
 })
 
-test_that("invalid request caps fail explicitly without truncation or warnings", {
-  for (cap in list(-1L, 1.5, NA_real_, Inf, c(1L, 2L), "3", TRUE, 2147483648)) {
-    expect_error(loop_new(max_turns = cap), class = "gptr_error_invalid_argument")
-  }
-})
-
 test_that("tools finish in source order before steering or follow-ups are polled", {
   log = character()
   append_log = function(x) log <<- c(log, x)
@@ -268,7 +262,7 @@ test_that("follow-ups are consumed one at a time and text stop at cap leaves que
   expect_length(pending, 1L)
 })
 
-test_that("both truncation reasons mark tool batches and invalid sources fail closed", {
+test_that("both truncation reasons mark tool batches; user-source steers become relays", {
   for (reason in c("length", "refusal")) {
     lp = loop_new()
     loop_next(lp)
@@ -280,17 +274,14 @@ test_that("both truncation reasons mark tool batches and invalid sources fail cl
     expect_identical(queue_item_message(item, "steer", TRUE)$role, "operator")
     expect_identical(queue_item_message(item, "follow_up", TRUE)$role, "user")
   }
-  expect_error(queue_item_message(list(text = "hi", source = "unknown"), "steer"),
-               class = "gptr_error_invalid_argument")
 })
 
-test_that("steering relays retain text blocks and refuse unsupported attachments", {
+test_that("steering relays retain text blocks; follow-ups keep attachments", {
   item = list(text = "hello", source = "pipe", blocks = list(block_text("extra")))
   relay = queue_item_message(item, "steer", TRUE)
   expect_identical(relay$content[[1L]], item$blocks[[1L]])
   expect_identical(relay$origin_text, "hello")
   item$blocks = list(block_image("YQ==", "image/png"))
-  expect_error(queue_item_message(item, "steer", TRUE), class = "gptr_error_invalid_argument")
   expect_identical(queue_item_message(item, "follow_up", TRUE)$content[[1L]], item$blocks[[1L]])
 })
 

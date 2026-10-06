@@ -294,3 +294,18 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   lint-rules`) PASS 7626; cross-plan 0 errors, warn 82 (+2 recorded as P18 L1), no lints.
 - Reviews: none yet.
 - Deviations: D-153 (D-091 item 2 edited; 04 IC-71 safe-17 amended). Open: `doc-io.R` adopts it in P15-S.
+
+## P06-S1 - Kernel duplication (2026-10-05)
+- F2 plan-size `usage_conform()`; F3 no re-checks after ingress (loop, queue items, retry delay); F4
+  `ext_policy_decide()` keeps the answer's fields; F6 `path_custom()`, `entry_model_ref()`; F7 `msg_failed()`,
+  `msg_calls()`, `msg_final()`; F8 one emitter; F10 `run_compact()`, `run_apply_pending_model()`; F11 is_string;
+  F13 `store_close()`, `store_pkg_version()` gone; F14 `tool_call_hook()`; F15; F16; F17 two folds (R -150,
+  tests -78; plan ~292).
+- Red: none (refactor). Green: `agent-|session-|copy-session` PASS 2167 incl. L01-L24, S-oracles (2142 own +
+  25 of cli-sub's new test-agent-background.R; 2198 before: -35 refusals, -16 re-checks, -5 folded). Lint
+  clean. Neighbours: `arch-layers|lint-rules|ext-|copy-|zzz|aaa-state`, `gptr-|prompt-|context-|doc-|s1-|
+  provider-usage|tool-|cli-common|bench-context` green.
+- Reviews: round 1 clear, 1 minor + 1 nit: `rebuild_mode()` uses `path_custom()`; D-154 Tests line names the
+  retry refusal loop; gateway copies left to simp-gw (Open).
+- Deviations: D-154 (D-021, D-059 edited; 04 section 7.6 amended). Open: F13/F17 specifics lost (only the
+  items above applied); simp-gw: `gateway_last_custom()` and the `router_call()` loop can use `path_custom()`.

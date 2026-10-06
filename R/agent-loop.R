@@ -12,11 +12,6 @@ queue_sources = c(queue_user_sources, "extension", "agent")
 #' @noRd
 loop_new = function(max_turns = NULL, steering = function() list(), follow_up = function() list(),
                     finish_turn = function(turn) NULL, emit = function(type, ...) invisible(NULL)) {
-  max_turns = check_number(max_turns, "max_turns", min = 0, int = TRUE, null = TRUE)
-  check_function(steering, "steering")
-  check_function(follow_up, "follow_up")
-  check_function(finish_turn, "finish_turn")
-  check_function(emit, "emit")
   lp = new.env(parent = emptyenv())
   lp$advancing = FALSE
   lp$state = "begin"
@@ -117,11 +112,11 @@ loop_response = function(lp, message) {
   lp$message = message
   lp$results = list()
   lp$calls = list()
-  if ((message$stop_reason %||% "stop") %in% c("error", "aborted")) {
+  if (msg_failed(message)) {
     lp$state = "failed"
     return(invisible(lp))
   }
-  lp$calls = Filter(function(b) identical(b$type, "tool_call"), message$content %||% list())
+  lp$calls = msg_calls(message)
   lp$has_more = FALSE
   lp$state = if (length(lp$calls)) "tools" else "after_turn"
   invisible(lp)
@@ -132,8 +127,6 @@ loop_response = function(lp, message) {
 loop_results = function(lp, results, terminate = FALSE) {
   if (identical(lp$state, "done")) return(invisible(lp))
   loop_expect_state(lp, "await_tools")
-  check_list(results, "results")
-  check_flag(terminate, "terminate")
   lp$results = results
   lp$has_more = !isTRUE(terminate)
   lp$state = "after_turn"
@@ -144,7 +137,6 @@ loop_results = function(lp, results, terminate = FALSE) {
 #' @noRd
 loop_end = function(lp, reason) {
   if (identical(lp$state, "done")) return(list(action = "end", reason = lp$reason))
-  check_string(reason, "reason")
   lp$state = "done"
   lp$reason = reason
   list(action = "end", reason = reason)
@@ -168,24 +160,13 @@ loop_expect_state = function(lp, expected) {
 
 #' Turn one queue item into the message delivered to the model (IC-55)
 #' A user-source steer is an operator relay once the run has made a request (`relay`); extension
-#' notes and agent reports are user-role data, never relays.
+#' notes and agent reports are user-role data. Items were checked by session_enqueue().
 #' @noRd
 queue_item_message = function(item, which, relay = FALSE) {
-  check_list(item, "item", named = TRUE)
-  check_string(item$source, "source")
-  check_choice(item$source, queue_sources, "source")
-  which = check_choice(which, c("steer", "follow_up"), "which")
-  check_flag(relay, "relay")
   text = item$text
-  check_string(text, "text", empty = TRUE)
   blocks = item$blocks %||% list()
-  check_list(blocks, "blocks")
   if (item$source %in% queue_user_sources) {
     if (identical(which, "steer") && isTRUE(relay)) {
-      if (!all(vapply(blocks, function(b) is.list(b) && identical(b$type, "text"), TRUE))) {
-        gptr_abort("Steering relays support text blocks only; send attachments as a follow-up.",
-                   "invalid_argument", arg = "blocks", expected = "text blocks")
-      }
       message = msg_operator("steer_relay",
                               paste0("The user sent this message while you were working: ", text),
                               origin_text = text)
@@ -206,3 +187,15 @@ queue_item_message = function(item, which, relay = FALSE) {
   }
   msg_user(content, source = "agent")
 }
+
+#' Did a message fail (`stop_reason` error or aborted)?
+#' @noRd
+msg_failed = function(m) isTRUE((m$stop_reason %||% "stop") %in% c("error", "aborted"))
+
+#' The tool-call blocks of a message
+#' @noRd
+msg_calls = function(m) Filter(function(b) identical(b$type, "tool_call"), m$content %||% list())
+
+#' Is a message a final answer: an assistant message that did not fail and calls no tool?
+#' @noRd
+msg_final = function(m) identical(m$role, "assistant") && !msg_failed(m) && !length(msg_calls(m))

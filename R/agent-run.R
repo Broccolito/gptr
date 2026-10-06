@@ -103,27 +103,20 @@ run_eval_env = function(run) {
   run$scratch %||% run$home
 }
 
-#' Build and dispatch an agent event for a run (ev_dispatch() redacts the payload)
+#' Build and dispatch an event of a run (ev_dispatch() redacts the payload)
 #' @return The dispatch result (decision, collect and patch events).
 #' @noRd
-run_emit = function(run, type, ...) {
-  s = run$shell
-  d = session_data(s)
-  live = session_live(s)
-  ev = ev_new(type, session = d$id, run = run$id, agent = run$opts$agent %||% "main",
-              turn = d$turns, ...)
-  ev_dispatch(type, ev, session = s, ctx = if (is.null(live)) NULL else live$ctx)
-}
+run_emit = function(run, type, ...) session_emit(run$shell, type, ..., .run = run)
 
-#' Build and dispatch a session event (outside a run, or for the session's current run)
+#' Build and dispatch an event of a session: for `.run`, else for the session's current run with
+#' agent "main"
 #' @noRd
-session_emit = function(s, type, ...) {
+session_emit = function(s, type, ..., .run = NULL) {
   d = session_data(s)
   live = session_live(s)
-  run = if (is.null(live)) NULL else live$run
-  ev = ev_new(type, session = d$id, run = if (is.null(run)) NULL else run$id, agent = "main",
-              turn = d$turns, ...)
-  ev_dispatch(type, ev, session = s, ctx = if (is.null(live)) NULL else live$ctx)
+  ev = ev_new(type, session = d$id, run = (.run %||% live$run)$id,
+              agent = .run$opts$agent %||% "main", turn = d$turns, ...)
+  ev_dispatch(type, ev, session = s, ctx = live$ctx)
 }
 
 #' The UI backend of a run (the `ui.get` service of P11), or NULL
@@ -220,7 +213,7 @@ any_match = function(patterns, x) {
 #' @noRd
 run_error_text = function(msg) {
   x = if (is.list(msg)) msg[["error_message"]] else NULL
-  if (is.character(x) && length(x) == 1L && !is.na(x)) x else ""
+  if (rlang::is_string(x)) x else ""
 }
 
 #' A context window in tokens (one positive finite number), else NA
@@ -268,7 +261,7 @@ is_context_overflow = function(message, context_window = NULL, error = NULL) {
 #' Does an error text describe a transient failure? (non-retryable patterns win)
 #' @noRd
 retryable_error_text = function(text) {
-  if (!is.character(text) || length(text) != 1L || is.na(text) || !nzchar(text)) return(FALSE)
+  if (!rlang::is_string(text) || !nzchar(text)) return(FALSE)
   if (grepl(non_retryable_pattern, text, perl = TRUE, ignore.case = TRUE)) return(FALSE)
   grepl(retryable_pattern, text, perl = TRUE, ignore.case = TRUE)
 }
@@ -333,10 +326,7 @@ run_retryable = function(msg, err) {
 
 #' Agent-level retry delays in seconds: 2 s, then 4 s (C-33)
 #' @noRd
-agent_retry_delay = function(attempt) {
-  attempt = check_number(attempt, "attempt", min = 1, int = TRUE)
-  c(2, 4)[min(attempt, 2L)]
-}
+agent_retry_delay = function(attempt) c(2, 4)[min(attempt, 2L)]
 
 # ---------------------------------------------------------------------------- freeze and input
 
@@ -454,13 +444,8 @@ input_insert_blocks = function(input, blocks) {
 #' A decision-only model is refused before any request is built (IC-74, D-017).
 #' @noRd
 run_target = function(run) {
-  s = run$shell
-  d = session_data(s)
-  pm = run$pending_model
-  if (!is.null(pm)) {
-    run$pending_model = NULL
-    kernel_model_switch(s, pm$ref, pm$thinking, pm$reason %||% "plugin")
-  }
+  d = session_data(run$shell)
+  run_apply_pending_model(run)
   if (startsWith(d$model, "router:")) return(run_route(run, "turn"))
   if (is.null(run$model) || !identical(run$model_key, d$model)) {
     rec = run_model_resolve(d$model, d$id)
@@ -534,7 +519,7 @@ run_route = function(run, reason = "turn") {
     registry_diagnostic("session", "router", "router_fallback",
                         paste0("router ", router, " ", ans$why, "; using the default model"))
     rec = route_default(router, d)
-    state = path_router_state(path)
+    state = path_custom(path, "gptr.router")$data$state
   } else if (is.list(res)) {
     state = res[["state"]]
   }
@@ -559,7 +544,7 @@ run_route = function(run, reason = "turn") {
 #' @noRd
 route_answer = function(res, sid) {
   ref = if (is.list(res)) res[["model"]] else res
-  if (!is.character(ref) || length(ref) != 1L || is.na(ref) || !nzchar(ref)) {
+  if (!rlang::is_string(ref) || !nzchar(ref)) {
     return(list(why = "gave no model"))
   }
   rec = tryCatch(run_model_resolve(ref, sid), error = function(e) e)
@@ -572,7 +557,7 @@ route_answer = function(res, sid) {
                              "conversation")))
   }
   th = if (is.list(res)) res[["thinking"]] else NULL
-  if (is.character(th) && length(th) == 1L && !is.na(th)) {
+  if (rlang::is_string(th)) {
     rec$thinking = model_clamp_thinking(rec$thinking_levels, th)
   }
   list(rec = rec)
@@ -594,22 +579,7 @@ route_default = function(router, d) {
 #' The model of the last `model_change` entry of a path, or NULL
 #' @noRd
 path_model_ref = function(path) {
-  for (e in rev(path)) {
-    if (identical(e$type, "model_change")) {
-      return(e$gptr$ref %||% paste0(e$provider, "/", e$model_id))
-    }
-  }
-  NULL
-}
-
-#' The router state of the last `gptr.router` entry of a path, or NULL
-#' @noRd
-path_router_state = function(path) {
-  for (e in rev(path)) {
-    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.router")) {
-      return(e$data$state)
-    }
-  }
+  for (e in rev(path)) if (identical(e$type, "model_change")) return(entry_model_ref(e))
   NULL
 }
 
@@ -671,7 +641,7 @@ msg_tokens_est = function(m, elided = character()) {
   total = 0
   for (b in m[["content"]] %||% list()) {
     type = if (is.list(b)) b[["type"]] else NULL
-    if (!is.character(type) || length(type) != 1L || is.na(type)) next
+    if (!rlang::is_string(type)) next
     total = total + switch(type,
       text = ,
       context = est_tokens(b[["text"]], "prose"),
@@ -750,7 +720,7 @@ images_elide = function(s, messages, target) {
 #' @noRd
 image_id = function(b) {
   data = b[["data"]]
-  if (!is.character(data) || length(data) != 1L || is.na(data)) return(NA_character_)
+  if (!rlang::is_string(data)) return(NA_character_)
   substr(hash_sha256(data), 1L, 8L)
 }
 
@@ -804,8 +774,7 @@ run_returns = function(run) {
   if (is.null(schema)) return(invisible(NULL))
   s = run$shell
   txt = session_data(s)$last_text
-  ok_txt = is.character(txt) && length(txt) == 1L && !is.na(txt)
-  val = if (ok_txt) tryCatch(json_decode(txt), error = function(e) NULL) else NULL
+  val = if (rlang::is_string(txt)) tryCatch(json_decode(txt), error = function(e) NULL) else NULL
   chk = if (is.null(val)) NULL else tryCatch(schema_validate(schema, val), error = function(e) e)
   if (is.null(chk) || inherits(chk, "error") || !isTRUE(chk$ok)) {
     why = if (is.null(chk)) {
@@ -898,7 +867,7 @@ context_tokens = function(s) {
 #' @noRd
 compaction_kept = function(path, i) {
   first = path[[i]]$first_kept_entry_id
-  if (!is.character(first) || length(first) != 1L || i < 2L) return(integer())
+  if (!rlang::is_string(first) || i < 2L) return(integer())
   ids = vapply(path[seq_len(i - 1L)], function(e) as.character(e$id %||% NA_character_), "")
   from = match(first, ids)
   if (is.na(from)) integer() else from:(i - 1L)
@@ -909,7 +878,7 @@ compaction_kept = function(path, i) {
 reported_total = function(e) {
   m = e$message
   if (!identical(e$type, "message") || !is.list(m) || !identical(m$role, "assistant") ||
-      isTRUE((m$stop_reason %||% "stop") %in% c("error", "aborted"))) {
+      msg_failed(m)) {
     return(NA_real_)
   }
   u = m$usage
@@ -927,10 +896,7 @@ reported_total = function(e) {
 entry_tokens_est = function(e, elided = character()) {
   m = e$message
   if (!isTRUE(e$type %in% c("message", "custom_message")) || !is.list(m)) return(0)
-  if (identical(m$role, "assistant") &&
-      isTRUE((m$stop_reason %||% "stop") %in% c("error", "aborted"))) {
-    return(0)
-  }
+  if (identical(m$role, "assistant") && msg_failed(m)) return(0)
   msg_tokens_est(m, elided)
 }
 
@@ -954,22 +920,13 @@ context_idle = function(s) {
 #' @noRd
 session_run = function(s, input, opts = list()) {
   run = run_start(s, input, opts)
-  wait = function() run_wait_foreground(run)
+  wait = function() run_wait(run, background = TRUE)
   if (ext_service_has("console.interrupt_policy")) {
     ext_service_get("console.interrupt_policy")(wait, list(run), mode = "call")
   } else {
     run_abort_only(wait, run)
   }
   invisible(s)
-}
-
-#' Pump until the run settles or is sent to the background; a nested pump runs only this run's
-#' FIFO tools (IC-57)
-#' @noRd
-run_wait_foreground = function(run) {
-  allow = if (reactor_depth() == 0L) NULL else run$id
-  reactor_pump(until = function() isTRUE(run$settled) || isTRUE(run$opts$background),
-               slice_ms = 100L, allow_runs = allow)
 }
 
 #' The abort-only interrupt policy: abort the run, then re-signal the interrupt
@@ -1054,15 +1011,9 @@ run_initial_input = function(run, input) {
   for (which in c("steer", "follow_up")) {
     if (length(d$queue[[which]])) return(run_take(run, which))
   }
-  msgs = Filter(function(m) {
-    !(identical(m$role, "assistant") && (m$stop_reason %||% "stop") %in% c("error", "aborted"))
-  }, path_messages(entries_path(d)))
-  if (length(msgs)) {
-    last = msgs[[length(msgs)]]
-    open_calls = any(vapply(last$content %||% list(),
-                            function(b) identical(b$type, "tool_call"), NA))
-    if (!identical(last$role, "assistant") || open_calls) return(NULL)
-  }
+  msgs = Filter(function(m) !(identical(m$role, "assistant") && msg_failed(m)),
+                path_messages(entries_path(d)))
+  if (length(msgs) && !msg_final(msgs[[length(msgs)]])) return(NULL)
   gptr_abort("nothing to run: no input, an empty queue and a finished answer", "invalid_argument",
              arg = "input", expected = "a message or queued items")
 }
@@ -1105,17 +1056,20 @@ run_count_nested = function(outer, opts) {
   invisible(length(keys))
 }
 
-#' Pump the reactor until every run settled or `timeout` seconds passed; a nested pump runs only
-#' the awaited runs' FIFO tools (IC-57)
-#' @return `invisible(TRUE)` when all settled.
+#' Pump the reactor until every run settled (or, with `background`, was sent to the background)
+#' or `timeout` seconds passed; a nested pump runs only the awaited runs' FIFO tools (IC-57)
+#' @return `invisible(TRUE)` when all are done.
 #' @noRd
-run_wait = function(runs, timeout = Inf) {
+run_wait = function(runs, timeout = Inf, background = FALSE) {
   if (inherits(runs, "gptr_run")) runs = list(runs)
-  settled = function() all(vapply(runs, function(r) isTRUE(r$settled), NA))
-  if (settled()) return(invisible(TRUE))
+  done = function() {
+    all(vapply(runs, function(r) isTRUE(r$settled) || (background && isTRUE(r$opts$background)),
+               NA))
+  }
+  if (done()) return(invisible(TRUE))
   allow = if (reactor_depth() == 0L) NULL else vapply(runs, function(r) r$id, "")
-  ok = reactor_pump(until = settled, slice_ms = 100L, allow_runs = allow, timeout = timeout)
-  invisible(isTRUE(ok) || settled())
+  ok = reactor_pump(until = done, slice_ms = 100L, allow_runs = allow, timeout = timeout)
+  invisible(isTRUE(ok) || done())
 }
 
 #' Append messages and emit their events; the first user message of a run opens a prompt turn
@@ -1370,17 +1324,7 @@ run_response_error = function(run, msg) {
   if (is_context_overflow(msg, run$model$context, err)) {
     if (!isTRUE(run$overflow_used) && ext_service_has("compact.run")) {
       run$overflow_used = TRUE
-      ok = tryCatch({
-        ext_service_get("compact.run")(run$shell, "overflow")
-        TRUE
-      }, error = function(e) {
-        registry_diagnostic("session", "compaction", "compaction_failed", conditionMessage(e))
-        FALSE
-      })
-      if (ok) {
-        run$boundary_compacted = TRUE
-        return(run_schedule_request(run, 0))
-      }
+      if (run_compact(run, "overflow")) return(run_schedule_request(run, 0))
     }
     run$condition = run_condition(
       run, msg, c("context_overflow", "provider"),
@@ -1435,7 +1379,7 @@ run_condition = function(run, msg, cls, message = NULL, ...) {
   err = run$last_error %||% list()
   d = session_data(run$shell)
   rid = err[["request_id"]]
-  if (!is.character(rid) || length(rid) != 1L || is.na(rid)) rid = run$request_id %||% NA_character_
+  if (!rlang::is_string(rid)) rid = run$request_id %||% NA_character_
   gptr_condition(message %||% msg$error_message %||% "the model request failed", cls, "error",
                  list(provider = run$model$provider %||% NA_character_,
                       model = run$model$ref %||% d$model, status = err_status(err),
@@ -1459,15 +1403,21 @@ run_compact_check = function(run) {
   }
   if (is.null(reason) || !ext_service_has("compact.run")) return(invisible(FALSE))
   if (startsWith(session_data(s)$model, "router:")) run_route(run, "compaction")
+  invisible(run_compact(run, reason))
+}
+
+#' Compact the run's session (`compact.run`): TRUE when it did; a failure is a diagnostic
+#' @noRd
+run_compact = function(run, reason) {
   ok = tryCatch({
-    ext_service_get("compact.run")(s, reason)
+    ext_service_get("compact.run")(run$shell, reason)
     TRUE
   }, error = function(e) {
     registry_diagnostic("session", "compaction", "compaction_failed", conditionMessage(e))
     FALSE
   })
   if (ok) run$boundary_compacted = TRUE
-  invisible(ok)
+  ok
 }
 
 #' Ask to extend a reached budget by the same amount (ask_human: the run's UI only)
@@ -1560,7 +1510,13 @@ run_settle = function(run, reason) {
   if (identical(status, "error") && is.null(run$condition)) {
     run$condition = run_condition(run, run$message %||% list(), "provider")
   }
-  run_settle_model(run)
+  # a switch no later request took applies at the end; a failure is a diagnostic, not a failed run
+  ref = run$pending_model$ref
+  tryCatch(run_apply_pending_model(run), error = function(e) {
+    registry_diagnostic("session", "set_model", class(e)[[1L]],
+                        paste0("the model switch to ", ref, " was not applied: ",
+                               conditionMessage(e)))
+  })
   status = run_settle_persist(run, status)
   d$status = status
   d$reason = if (is.null(run$condition)) NULL else conditionMessage(run$condition)
@@ -1585,20 +1541,14 @@ run_settle = function(run, reason) {
   invisible(NULL)
 }
 
-#' Apply a `ctx$set_model()` switch that no later request of the run took: the run's end is its
-#' boundary (IC-69, 04 section 10.6); a failure is a diagnostic, never a failed settlement
+#' Apply a pending `ctx$set_model()` switch at a request boundary or the run's end (IC-69, 04
+#' section 10.6)
 #' @noRd
-run_settle_model = function(run) {
+run_apply_pending_model = function(run) {
   pm = run$pending_model
   if (is.null(pm)) return(invisible(NULL))
   run$pending_model = NULL
-  tryCatch(kernel_model_switch(run$shell, pm$ref, pm$thinking, pm$reason %||% "plugin"),
-           error = function(e) {
-             registry_diagnostic("session", "set_model", class(e)[[1L]],
-                                 paste0("the model switch to ", pm$ref, " was not applied: ",
-                                        conditionMessage(e)))
-           })
-  invisible(NULL)
+  kernel_model_switch(run$shell, pm$ref, pm$thinking, pm$reason)
 }
 
 #' Persist a settling run's outcome (last text, `returns` value, plugin state); returns the status
@@ -1852,7 +1802,7 @@ ctx_run = function(ctx) {
 #' @noRd
 ctx_own_run_id = function(ctx) {
   id = if (is.environment(ctx)) get0(".run", envir = ctx, inherits = FALSE) else NULL
-  if (is.character(id) && length(id) == 1L && !is.na(id) && nzchar(id)) id else NULL
+  if (rlang::is_string(id) && nzchar(id)) id else NULL
 }
 
 #' The plugin label of a handler's extension source (`"plugin:units"` -> `"units"`), or `"plugin"`

@@ -137,10 +137,10 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: P06 Task 2 usage frames (IC-74, 07 section 5; consumed by P06 Tasks 4, 10, 11, 13 and P18):
   1. `usage_conform(row)` fills every missing column, tokens and cost included, with the typed NA of P05's `usage_empty()`; known zeros stay; P05 `usage_row()` rows pass unchanged.
   2. `usage_totals()` sums without `na.rm` (one unknown makes the total unknown); `format_count()` returns `"unknown"` for NA and picks the unit from the printed value (999.7 -> `"1.0k"`, 999999 -> `"1.0M"`).
-  3. `usage_conform()` refuses wrong-typed columns, negative, infinite or NaN known numbers and an infinite or NaN `started` (`gptr_error_invalid_argument`, `arg = "row$<col>"`), and a non-list or a list that is not named, equal-length, non-nested columns (`arg = "row"`; a `NULL` element is an absent column); a bare logical `NA` becomes its typed NA.
+  3. A bare logical `NA` becomes its typed NA; the refusals of malformed rows are withdrawn (D-154).
 - Rule: printed usage shows an unknown cost as unknown, never `$NA` (`format_cost()`, D-024).
 - Contract-visible: none.
-- Tests: test-session-budget.R: "usage_conform() keeps missing usage unknown and known zeros known (IC-74)", "usage_conform() refuses values it would otherwise coerce or invent", "usage_conform() refuses a malformed list instead of flattening or recycling it", "usage_totals() makes a sum with an unknown value unknown (IC-74)", "format_count() prints an unknown count as unknown and rounds across units". Evidence: progress/P06.md Task 2.
+- Tests: test-session-budget.R: "usage_conform() keeps missing usage unknown and known zeros known (IC-74)", "usage_totals() makes a sum with an unknown value unknown (IC-74)", "format_count() prints an unknown count as unknown and rounds across units". Evidence: progress/P06.md Task 2.
 
 ## D-022 - P12 IC-74 usage in the normaliser core; contract-typed stop reasons and errors (2026-10-03)
 - Rule: shared normaliser core `R/provider-anthropic.R` (consumed by every P12 adapter, P20's `anthropic_normaliser()` reuse and P06 usage rows):
@@ -641,7 +641,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   6. `abort()` while a tool executes or the run's status is `tools` only raises the abort signal (first reason kept); `dispatch_steps()` (`R/agent-dispatch.R`) checks it after the `tool_call` hooks and after `perm_check()`, and such a call gets "Tool call not executed: the run was aborted (<reason>)." with neither checkpointers nor tool run.
   7. Members act on the run executing on the call stack first (`run_current()` of the ctx's session), else `session_live(s)$run`, so a run settled while its tool executes still answers `ctx$aborted()` and `ctx$run`; `envir` falls back to the kept home; `set_model` applies at once to a settled run's session.
   8. `state()` seeds only from a named list (else starts empty); `ctx_ext_label("plugin:")` is `"plugin"`.
-  9. A pending `set_model()` switch applies when the run settles (`run_settle_model()` from `run_settle()`, any status): the run's end is the request boundary of 04 section 10.6 and IC-69; a failure there is a registry diagnostic (`event = "set_model"`) that never interrupts settlement.
+  9. A pending `set_model()` switch applies when the run settles (`run_apply_pending_model()` from `run_settle()`, any status): the run's end is the request boundary of 04 section 10.6 and IC-69; a failure there is a registry diagnostic (`event = "set_model"`) that never interrupts settlement.
   10. `run_request()` returns through `run_abort()` when the run is signalled or settled (`run_halted()`) after `run_target()`, after the `before_request` emit and after the `request_params` chain, so no transfer starts.
 - Contract-visible: `arg` values `"ctx"`, `"thinking"`, `"data"`, `"type"`; `model_change` entries carry the thinking level; the aborted-call
   result text above; registry diagnostic `event = "set_model"`. No contract section amended.
@@ -1868,3 +1868,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-auth-store.R lock_stale() blocks (vanished flips to `FALSE`); test-auth-oauth.R "lock_with()
   serialises, ..."; test-gptr-config.R (2 duplicate file_lock() expectations out). Evidence:
   progress/simplicity.md LOCK.
+
+## D-154 - P06 kernel duplication: one policy evaluator, plan-size usage_conform(), no store_close() (2026-10-05)
+- Rule: `usage_conform()` is the plan's: a missing or all-NA column is the typed NA of `usage_empty()`
+  (IC-74), types are coerced, nothing is refused (D-021 item 3 edited; rows come from P05's `usage_row()`).
+- Rule: `perm_policies()` evaluates each policy with P02's `ext_policy_decide()` (shared decision 6): any
+  malformed answer, an unknown decision included, denies as "returned a malformed answer"; a throwing policy
+  also leaves P02's diagnostic.
+- Rule: queue items, loop callbacks and retry attempts are checked once at ingress (`session_enqueue()`, the
+  gateway), not again in `queue_item_message()`, `loop_new()`, `loop_results()`, `loop_end()`,
+  `agent_retry_delay()`. A refused entry-id cut says "`at` is not an entry id of session <id>".
+- Contract-visible: 04 section 7.6 amended: `store_close()` removed (unused; the lock is released at
+  collection or unload); `run_wait(runs, timeout = Inf, background = FALSE)`.
+- Tests: test-session-budget.R (two refusal blocks out), test-agent-loop.R (three re-validation fragments
+  out), test-agent-run.R (two folds, the retry refusal loop out), test-agent-dispatch.R (one message).
+  Evidence: progress/simplicity.md P06-S1.

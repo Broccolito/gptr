@@ -85,13 +85,8 @@ dispatch_steps = function(run, call, st = NULL) {
                              paste(v$errors, collapse = "; "))))
   }
   call$input = v$input
-  hk = run_emit(run, "tool_call", tool_name = call$name, tool_call_id = call$id, input = call$input,
-                nested = FALSE, parent_tool_call_id = NULL, risk = call_risk(call, ctx, run))
-  if (is.list(hk) && identical(hk$decision, "block")) {
-    return(tool_error(paste0("Tool execution was blocked: ",
-                             hk$reason %||% "a tool_call hook blocked it")))
-  }
-  if (is.list(hk) && identical(hk$decision, "modify") && is.list(hk$input)) call$input = hk$input
+  call = tool_call_hook(run, call, call_risk(call, ctx, run))
+  if (!is.null(call$blocked)) return(tool_error(call$blocked))
   if (isTRUE(run$signal$aborted)) return(dispatch_aborted_result(run))
   dec = perm_check(call, run)
   call$risk = dec$risk
@@ -105,6 +100,22 @@ dispatch_steps = function(run, call, st = NULL) {
   nested = run$nested[[call$id]]
   if (length(nested)) res$details$nested = nested
   tool_result_hooks(run, call, res)
+}
+
+#' The `tool_call` hook chain of a call: the call with a `modify` decision's input, or with
+#' `blocked` (the denial text) when a hook blocks it
+#' @noRd
+tool_call_hook = function(run, call, risk = NULL) {
+  hk = run_emit(run, "tool_call", tool_name = call$name, tool_call_id = call$id, input = call$input,
+                nested = call$nested, parent_tool_call_id = call$parent_id, risk = risk)
+  if (!is.list(hk)) return(call)
+  if (identical(hk$decision, "block")) {
+    call$blocked = paste0("Tool execution was blocked: ",
+                          hk$reason %||% "a tool_call hook blocked it")
+  } else if (identical(hk$decision, "modify") && is.list(hk$input)) {
+    call$input = hk$input
+  }
+  call
 }
 
 #' The error result of a call that the run's abort ended before it executed
@@ -267,7 +278,7 @@ tool_frozen = function(run, tool) {
   memo = if (is.null(live)) NULL else get0("tool_schemas", envir = live$memo, inherits = FALSE)
   if (is.null(memo) || !identical(memo$json, json)) {
     arr = tryCatch(json_decode(json), error = function(e) list())
-    arr = Filter(function(t) is.list(t) && is.character(t$name) && length(t$name) == 1L, arr)
+    arr = Filter(function(t) is.list(t) && rlang::is_string(t$name), arr)
     schemas = stats::setNames(lapply(arr, function(t) t$input_schema),
                               vapply(arr, function(t) t$name, ""))
     memo = list(json = json, schemas = schemas)
@@ -403,14 +414,11 @@ dispatch_nested = function(name, input, ctx) {
   call = list(id = nested_next_id(run, outer$id), name = name, input = v$input, raw = NULL,
               tool = tool, nested = TRUE, parent_id = outer$id,
               outer_level = outer$approved_level %||% 0L, risk = NULL)
-  hk = run_emit(run, "tool_call", tool_name = name, tool_call_id = call$id, input = call$input,
-                nested = TRUE, parent_tool_call_id = outer$id, risk = NULL)
-  if (is.list(hk) && identical(hk$decision, "block")) {
+  call = tool_call_hook(run, call)
+  if (!is.null(call$blocked)) {
     nested_record(run, outer$id, name, tool_error("blocked"), NA_integer_)
-    gptr_abort(paste0("Tool execution was blocked: ", hk$reason %||% "a tool_call hook blocked it"),
-               "tool", tool = name, status = "blocked")
+    gptr_abort(call$blocked, "tool", tool = name, status = "blocked")
   }
-  if (is.list(hk) && identical(hk$decision, "modify") && is.list(hk$input)) call$input = hk$input
   level = nested_listed_level(outer, name)
   if (is.null(level) || level > call$outer_level) {
     dec = perm_check(call, run)
@@ -546,32 +554,17 @@ perm_reason = function(x) {
 #' @noRd
 perm_rank = function(decision) match(decision, perm_decisions)
 
-#' Combine every policy's opinion: deny > ask_human > ask > modify > allow; no active `mode`
-#' policy means ask (fail closed). NULL or no `decision` is no opinion; a throwing policy or a
-#' malformed answer (`ext_policy_ok()`) denies (04 section 10.2 row 12).
+#' Combine every policy's opinion (ext_policy_decide(), fail closed): deny > ask_human > ask >
+#' modify > allow; no active `mode` policy means ask
 #' @noRd
 perm_policies = function(call, ctx, run, risk) {
   specs = registry_all("policy", session = run$session)
   call$risk = risk
   best = NULL
   for (p in specs) {
-    res = tryCatch(p$check(call, ctx), error = function(e) {
-      list(decision = "deny", reason = paste0("policy ", p$name, " failed: ", conditionMessage(e)))
-    })
+    res = ext_policy_decide(p, call, ctx)
     if (is.null(res)) next
-    malformed = list(decision = "deny",
-                     reason = paste0("policy ", p$name, " returned a malformed answer"))
-    if (!is.list(res)) res = malformed
-    d = res[["decision"]]
-    if (is.null(d)) next
-    if (!(is.character(d) && length(d) == 1L && d %in% perm_decisions)) {
-      res = list(decision = "deny",
-                 reason = paste0("policy ", p$name, " returned an unknown decision"))
-    } else if (!ext_policy_ok(res)) {
-      res = malformed
-    }
-    rule = res[["rule"]]
-    res$rule = if (is.character(rule) && length(rule) == 1L && !is.na(rule)) rule else p$name
+    if (!rlang::is_string(res[["rule"]])) res$rule = p$name
     if (is.null(best) || perm_rank(res$decision) > perm_rank(best$decision)) best = res
   }
   has_mode = any(vapply(specs, function(p) identical(p$name, "mode"), NA))
@@ -607,7 +600,7 @@ perm_ask = function(call, run, out, risk) {
     ans = tryCatch(ui$permission(req), error = function(e) NULL)
     if (!is.list(ans) || is.data.frame(ans)) ans = list(decision = "deny", feedback = NULL)
     fb = ans[["feedback"]]
-    if (!(is.character(fb) && length(fb) == 1L && !is.na(fb) && nzchar(fb))) ans$feedback = NULL
+    if (!rlang::is_string(fb) || !nzchar(fb)) ans$feedback = NULL
     if (identical(ans[["decision"]], "allow")) {
       # a `remember` answer is stored by P11's builtin:permissions, not here
       if (identical(tier, "ask_human")) perm_grant_control(run, risk)
@@ -683,10 +676,10 @@ perm_request_record = function(call, run, out, risk, tier) {
   } else {
     NULL
   }
-  one_string = function(x) if (is.character(x) && length(x) == 1L && !is.na(x)) x else NULL
+  rule = out$suggested_rule
   list(tool = call$name, input = call$input, summary = perm_summary(call), risk = risk,
-       reason = perm_reason(out$reason), suggested_rule = one_string(out$suggested_rule),
-       undo_note = one_string(note), session = d$id, turn = d$turns,
+       reason = perm_reason(out$reason), suggested_rule = if (rlang::is_string(rule)) rule,
+       undo_note = if (rlang::is_string(note)) note, session = d$id, turn = d$turns,
        nested = isTRUE(call$nested), tier = tier)
 }
 
@@ -695,7 +688,7 @@ perm_request_record = function(call, run, out, risk, tier) {
 perm_summary = function(call) {
   input = if (is.list(call$input)) call$input else list()
   code = input[["code"]]
-  if (is.character(code) && length(code) == 1L) {
+  if (rlang::is_string(code)) {
     lines = strsplit(code, "\n", fixed = TRUE)[[1L]]
     if (length(lines) > 20L) lines = c(lines[1:20], paste0("+", length(lines) - 20L, " more lines"))
     return(lines)

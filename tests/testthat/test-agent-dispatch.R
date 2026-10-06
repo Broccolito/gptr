@@ -355,7 +355,7 @@ test_that("a malformed policy answer denies instead of throwing (fail closed)", 
   box$answer = list(decision = c("allow", "deny"), reason = "two answers")
   dec = perm_check(a_call(), run)
   expect_identical(dec$decision, "deny")
-  expect_match(dec$reason, "unknown decision", fixed = TRUE)
+  expect_match(dec$reason, "malformed answer", fixed = TRUE)
   box$answer = TRUE
   expect_identical(perm_check(a_call(), run)$decision, "deny")
 })

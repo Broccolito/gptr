@@ -111,7 +111,7 @@ check_session_id = function(x, arg) {
 #' Can a value be a session id? The rule of check_session_id(), without signalling
 #' @noRd
 session_id_ok = function(x) {
-  is.character(x) && length(x) == 1L && !is.na(x) && grepl("^[A-Za-z0-9-]{1,64}$", x)
+  rlang::is_string(x) && grepl("^[A-Za-z0-9-]{1,64}$", x)
 }
 
 #' Canonical model reference; lenient (an unknown model fails at the first request, not here)
@@ -165,6 +165,17 @@ entry_model_change = function(ref, thinking = NULL, reason = "user") {
        provider = if (router) "router" else sub("/.*$", "", ref),
        model_id = if (router) sub("^router:", "", ref) else sub("^[^/]*/", "", ref),
        gptr = compact(list(ref = ref, thinking = thinking, reason = reason)))
+}
+
+#' The model reference a `model_change` entry records
+#' @noRd
+entry_model_ref = function(e) e$gptr$ref %||% paste0(e$provider, "/", e$model_id)
+
+#' The last `custom` entry of a type on a path, or NULL
+#' @noRd
+path_custom = function(path, type) {
+  for (e in rev(path)) if (identical(e$type, "custom") && identical(e$custom_type, type)) return(e)
+  NULL
 }
 
 #' Append an entry to the transcript and the store; returns the entry id invisibly
@@ -254,11 +265,8 @@ final_text = function(path) {
   for (e in rev(path)) {
     if (!identical(e$type, "message")) next
     m = e$message
-    if (!identical(m$role, "assistant")) next
-    if ((m$stop_reason %||% "stop") %in% c("error", "aborted")) next
-    calls = vapply(m$content %||% list(), function(b) identical(b$type, "tool_call"), NA)
-    if (any(calls)) return(NULL)
-    return(msg_text(m))
+    if (!identical(m$role, "assistant") || msg_failed(m)) next
+    return(if (length(msg_calls(m))) NULL else msg_text(m))
   }
   NULL
 }
@@ -399,9 +407,8 @@ session_history = function(s) {
     e = path[[i]]
     m = e$message
     if (identical(m$role, "user")) turn = as.integer(e$gptr$turn %||% (turn + 1L))
-    calls = Filter(function(b) identical(b$type, "tool_call"), m$content %||% list())
     tools = if (identical(m$role, "tool_result")) m$tool_name else
-      paste(vapply(calls, function(b) b$name, ""), collapse = ",")
+      paste(vapply(msg_calls(m), function(b) b$name, ""), collapse = ",")
     text = msg_text(m)
     tokens = if (identical(m$role, "assistant") && !is.null(m$usage$total)) m$usage$total else
       est_tokens(text, "prose")
@@ -695,7 +702,7 @@ mode_block_text = function(s, mode) {
     }
     body = out
   }
-  if (!is.character(body) || length(body) != 1L || is.na(body) || !nzchar(body)) {
+  if (!rlang::is_string(body) || !nzchar(body)) {
     body = paste0("The permission mode is now ", mode, ".")
   }
   block_context("mode", body, attrs = list(name = mode))$text
@@ -801,11 +808,11 @@ gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   check_class(s, "gptr_session", "s")
   envir = check_choice(envir, c("overlay", "shared"), "envir")
   session_control_check("gptr_fork", s)
-  if (!is.null(at) && !(is.character(at) && length(at) == 1L && !is.na(at))) {
+  if (!is.null(at) && !rlang::is_string(at)) {
     check_number(at, "at", min = 0, int = TRUE)
   }
   d = session_data(s)
-  if (is.character(at) && !fork_id_ok(at)) fork_id_refuse(d, at)
+  if (is.character(at) && !fork_id_ok(at)) fork_id_refuse(d)
   live = session_live(s)
   if (is.null(live) && !is.null(d$file) && lock_held_elsewhere(d$file)) {
     gptr_abort(paste0("session ", d$id, " is attached in another R process"), "busy",
@@ -814,9 +821,7 @@ gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   dec = session_emit(s, "session_before_fork", source = d$id, at = at)
   if (is.list(dec) && isTRUE(dec[["cancel"]])) {
     why = dec[["reason"]]
-    if (!is.character(why) || length(why) != 1L || is.na(why) || !nzchar(why)) {
-      why = "no reason given"
-    }
+    if (!rlang::is_string(why) || !nzchar(why)) why = "no reason given"
     gptr_abort(paste0("gptr_fork() was cancelled by a session_before_fork handler: ", why),
                "invalid_argument", arg = "s", expected = "a session whose fork no handler cancels")
   }
@@ -874,7 +879,7 @@ fork_copy_specs = function(src_id, new_id) {
 #' @noRd
 fork_cut = function(d, at) {
   if (is.character(at)) {
-    if (!fork_id_ok(at) || !exists(at, envir = d$index, inherits = FALSE)) fork_id_refuse(d, at)
+    if (!fork_id_ok(at) || !exists(at, envir = d$index, inherits = FALSE)) fork_id_refuse(d)
     return(list(entry = at, turn = path_turn(entries_path(d, at))))
   }
   if (!is.null(at) && as.integer(at) == 0L) return(list(entry = NULL, turn = 0L))
@@ -902,11 +907,8 @@ fork_id_ok = function(at) nzchar(at) && nchar(at, "bytes") <= 10000L
 
 #' Refuse an entry-id cut that is not on the source: `gptr_error_invalid_argument`, arg `at`
 #' @noRd
-fork_id_refuse = function(d, at) {
-  n = nchar(at, "bytes")
-  what = if (!n) "an empty entry id" else if (n > 64L) paste0("an entry id of ", n, " bytes") else
-    paste0("entry ", at)
-  gptr_abort(paste0(what, " is not in session ", d$id), "invalid_argument", arg = "at",
+fork_id_refuse = function(d) {
+  gptr_abort(paste0("`at` is not an entry id of session ", d$id), "invalid_argument", arg = "at",
              expected = "an entry id of this session")
 }
 
@@ -916,13 +918,8 @@ fork_id_refuse = function(d, at) {
 #' @noRd
 fork_frozen = function(d, fd) {
   if (!length(d$frozen)) return(NULL)
-  for (e in rev(entries_path(d))) {
-    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.frozen")) {
-      if (exists(e$id, envir = fd$index, inherits = FALSE)) return(d$frozen)
-      return(NULL)
-    }
-  }
-  NULL
+  e = path_custom(entries_path(d), "gptr.frozen")
+  if (!is.null(e) && exists(e$id, envir = fd$index, inherits = FALSE)) d$frozen else NULL
 }
 
 #' The value records a fork keeps: those of the turns it copies, less those whose `gptr.value`
@@ -968,8 +965,8 @@ fork_boundaries = function(path) {
       next
     }
     if (identical(m$role, "assistant")) {
-      if ((m$stop_reason %||% "stop") %in% c("error", "aborted")) next
-      open = sum(vapply(m$content %||% list(), function(b) identical(b$type, "tool_call"), NA))
+      if (msg_failed(m)) next
+      open = length(msg_calls(m))
     }
     if (identical(m$role, "tool_result")) open = max(0L, open - 1L)
     if (open == 0L) {

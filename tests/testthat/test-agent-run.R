@@ -33,19 +33,6 @@ test_that("the safety options are snapshotted at the start of a root run (IC-53)
                                   "unsafe_no_permissions", "can_prompt", "has_human"))
 })
 
-test_that("a nested run tightens the mode, inherits the snapshot and links to the outer run", {
-  outer_s = test_session(mode = "manual")
-  outer = run_new(outer_s, list(), NULL)
-  child = test_session(mode = "auto", kind = "child", parent = outer_s)
-  inner = run_new(child, list(), outer)
-  expect_identical(inner$mode, "manual")
-  expect_identical(inner$opts$safety, outer$opts$safety)
-  expect_identical(inner$parent_run, outer$id)
-  expect_identical(inner$depth, 1L)
-  expect_true(session_data(child)$id %in% outer$children)
-  expect_identical(run_mode_tighter("auto", "plan"), "plan")
-})
-
 test_that("plan mode evaluates in a scratch overlay of the home (IC-15)", {
   home = new.env()
   s = test_session(mode = "plan", home = home)
@@ -219,7 +206,7 @@ test_that(oracle_title(recovery_recs, "R09"), {
 })
 
 test_that(oracle_title(recovery_recs, "R10"), {
-  expect_identical(vapply(1:2, agent_retry_delay, 1), c(2, 4))
+  expect_identical(vapply(1:3, agent_retry_delay, 1), c(2, 4, 4))
 })
 
 test_that(oracle_title(recovery_recs, "R11"), {
@@ -415,13 +402,6 @@ test_that("the fake provider's terminal error records classify as the contract s
   ev = terminal()
   expect_false(run_retryable(ev$message, ev$error))
   expect_identical(provider_classes(ev$error), c("rate_limit", "provider"))
-})
-
-test_that("agent_retry_delay() keeps the second delay and refuses a bad attempt", {
-  expect_identical(agent_retry_delay(3L), 4)
-  for (a in list(0L, 1.5, NA_integer_, "1", c(1L, 2L), NULL)) {
-    expect_error(agent_retry_delay(a), class = "gptr_error_invalid_argument")
-  }
 })
 
 # ---------------------------------------------------------------- request shaping
@@ -1132,8 +1112,10 @@ test_that("a nested run tightens the mode, inherits the snapshot and links to th
   expect_identical(box$child_run$mode, "manual")
   expect_identical(box$child_run$opts$safety, box$outer$opts$safety)
   expect_identical(box$child_run$parent_run, box$outer$id)
+  expect_identical(box$child_run$depth, 1L)
   expect_true(session_data(box$child)$id %in% box$outer$children)
   expect_identical(session_data(box$child)$depth, 1L)
+  expect_identical(run_mode_tighter("auto", "plan"), "plan")
   expect_identical(box$child$text, "child answer")
   expect_identical(nrow(s$usage), 3L)
 })

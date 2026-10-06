@@ -652,7 +652,8 @@ ext_policy_ok = function(r) {
 }
 
 #' Evaluate one policy on a call, failing closed: NULL or a list without `decision` is no
-#' opinion, an error or a malformed answer denies (contract 10.2 row 12; D-030 item 4)
+#' opinion, an error or a malformed answer denies (contract 10.2 row 12; D-030 item 4); an answer
+#' keeps its other fields (`rule`, `suggested_rule`) with `reason` and `input` set
 #' @noRd
 ext_policy_decide = function(spec, call, ctx = NULL) {
   deny = function(why) {
@@ -666,8 +667,8 @@ ext_policy_decide = function(spec, call, ctx = NULL) {
     return(deny(paste0("failed: ", conditionMessage(r))))
   }
   if (is.null(r) || (is.list(r) && is.null(r[["decision"]]))) return(NULL)
-  if (!ext_policy_ok(r)) return(deny("returned a malformed decision"))
-  input = if (identical(r[["decision"]], "modify")) r[["input"]] else call[["input"]]
-  reason = paste(as.character(r[["reason"]] %||% ""), collapse = " ")
-  list(decision = r[["decision"]], reason = reason, input = input)
+  if (!ext_policy_ok(r)) return(deny("returned a malformed answer"))
+  r$reason = r[["reason"]] %||% ""
+  r$input = if (identical(r[["decision"]], "modify")) r[["input"]] else call[["input"]]
+  r
 }

@@ -77,57 +77,6 @@ test_that("usage_conform() passes P05's usage_row() rows through unchanged", {
   expect_identical(both$input, c(5, NA))
 })
 
-test_that("usage_conform() refuses values it would otherwise coerce or invent", {
-  bad = function(...) {
-    expect_error(usage_conform(data.frame(request_id = "q1", ..., stringsAsFactors = FALSE)),
-                 class = "gptr_error_invalid_argument")
-  }
-  bad(input = "5")
-  bad(cost = -1)
-  bad(seconds = Inf)
-  bad(output = NaN)
-  bad(session = 1)
-  bad(estimated = "yes")
-  bad(started = "2026-10-01")
-  # a known start must be finite, as P05's usage_time() and usage_rows_check() require
-  bad(started = Inf)
-  bad(started = -Inf)
-  bad(started = NaN)
-  bad(started = .POSIXct(Inf, tz = "UTC"))
-  expect_error(usage_conform(data.frame(request_id = 1)), class = "gptr_error_invalid_argument")
-  expect_error(usage_conform("q1"), class = "gptr_error_invalid_argument")
-  # the refusal names the column and what it expects (contract 04 section 2.2)
-  err = expect_error(usage_conform(data.frame(request_id = "q1", input = "5",
-                                              stringsAsFactors = FALSE)),
-                     class = "gptr_error_invalid_argument")
-  expect_identical(err$arg, "row$input")
-  expect_identical(err$expected, "finite nonnegative numbers or NA")
-  err = expect_error(usage_conform(data.frame(request_id = "q1", started = Inf)),
-                     class = "gptr_error_invalid_argument")
-  expect_identical(err$arg, "row$started")
-})
-
-test_that("usage_conform() refuses a malformed list instead of flattening or recycling it", {
-  bad = function(row) {
-    err = expect_error(usage_conform(row), class = "gptr_error_invalid_argument")
-    expect_identical(err$arg, "row")
-  }
-  # a nested value would be flattened to `cost.total` and dropped, inventing an unknown cost
-  bad(list(request_id = "q1", cost = list(total = 1)))
-  bad(list(request_id = c("a", "b", "c"), input = c(1, 2)))
-  bad(list(request_id = c("a", "b"), session = "s1"))
-  bad(list("q1"))
-  bad(list(request_id = "q1", 5))
-  bad(list(request_id = "q1", input = 1, input = 2))
-  bad(list(request_id = "q1", input = matrix(c(1, 2), 1L)))
-  # a NULL element is an absent column; a POSIXlt start is one value, not a nested list
-  u = usage_conform(list(request_id = "q1", cost = NULL,
-                         started = as.POSIXlt("2026-10-01 12:00:00", tz = "UTC")))
-  expect_identical(u$cost, NA_real_)
-  expect_identical(as.numeric(u$started), as.numeric(as.POSIXct("2026-10-01 12:00:00", tz = "UTC")))
-  expect_identical(nrow(usage_conform(list())), 0L)
-})
-
 test_that("usage_totals() sums requests, tokens and cost", {
   u = rbind(usage_fixture("s1", "q1", cost = 0.25), usage_fixture("s1", "q2", cost = 0.5))
   tot = usage_totals(u)
