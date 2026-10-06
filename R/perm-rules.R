@@ -1,4 +1,4 @@
-# perm-rules.R -- permission rules: grammar, matching and suggestion (P11).
+# perm-rules.R -- permission rules: grammar, matching, suggestion, stores, gptr_permissions() (P11).
 #
 # Grammar of report 18 section 3.7 (c2_permissions.R) with G5's r(sh:) and r(sql:) specs and
 # G6's r(secret:) (architecture section 6.8.2, contract section 7.11).
@@ -173,4 +173,170 @@ rule_suggest = function(call) {
   }
   if (any(fl$fn %in% c(perm_shell_fns, perm_sql_fns))) return(NULL)
   paste0("r(fn:", paste(unique(fl$fn), collapse = ","), ")")
+}
+
+# ---- stores (IC-52) ---------------------------------------------------------------------------
+
+#' The process rules `the$rules_session` (contract section 7.0): list(allow, ask, deny)
+#' @noRd
+perm_store = function() {
+  the$rules_session %||% list(allow = character(), ask = character(), deny = character())
+}
+
+#' The user-level project file of IC-52 (P08 writes it as settings scope `user_project`)
+#' @noRd
+perm_project_file = function(root = project_root()) {
+  key = substr(hash_sha256(path_key(root)), 1L, 16L)
+  file.path(gptr_user_dir("config"), "projects", paste0(key, ".json"))
+}
+
+#' The user settings file
+#' @noRd
+perm_user_file = function() file.path(gptr_user_dir("config"), "settings.json")
+
+#' The allow/ask/deny rules of a settings file; none when it is absent or unreadable
+#' @noRd
+perm_file_rules = function(path) {
+  x = if (file.exists(path)) tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
+  p = if (is.list(x)) x[["permissions"]]
+  sapply(perm_lists, function(l) unique(as.character(unlist(if (is.list(p)) p[[l]]))),
+         simplify = FALSE)
+}
+
+#' Is the project trusted? (the trust.get service; untrusted when unavailable)
+#' @noRd
+perm_trusted = function(root = project_root()) {
+  isTRUE(tryCatch(ext_service_get("trust.get")(root), error = function(e) FALSE))
+}
+
+#' Every rule in effect: df(rule, list, scope, source)
+#'
+#' Untrusted, `.gptr/settings.json` gives only deny/ask rules and `.gptr/settings.local.json`
+#' none; trusted, the latter gives deny/ask; its allow rules only get a notice (IC-52).
+#' @noRd
+perm_rules_table = function() {
+  root = project_root()
+  ws = file.path(root, ".gptr")
+  trusted = perm_trusted(root)
+  lf = file.path(ws, "settings.local.json")
+  local = perm_file_rules(lf)
+  if (length(local$allow)) {
+    gptr_inform(paste0("Ignoring allow rules in .gptr/settings.local.json: remembered answers ",
+                       "now live in the user-level project file."), "notice",
+                .once = paste0("perm.local:", path_key(lf)))
+  }
+  ask_deny = c("ask", "deny")
+  src = list(
+    list("session", "process", perm_store(), perm_lists),
+    list("project", "user-level project file", perm_file_rules(perm_project_file(root)),
+         perm_lists),
+    list("project", ".gptr/settings.json", perm_file_rules(file.path(ws, "settings.json")),
+         if (trusted) perm_lists else ask_deny),
+    list("project", ".gptr/settings.local.json", local, if (trusted) ask_deny else character()),
+    list("user", "user settings", perm_file_rules(perm_user_file()), perm_lists)
+  )
+  do.call(rbind, lapply(src, function(s) {
+    r = s[[3L]][s[[4L]]]
+    n = sum(lengths(r))
+    data.frame(rule = as.character(unlist(r, use.names = FALSE)), list = rep(s[[4L]], lengths(r)),
+               scope = rep(s[[1L]], n), source = rep(s[[2L]], n))
+  }))
+}
+
+#' The rules in effect as list(allow, ask, deny)
+#' @noRd
+perm_rules_effective = function() {
+  tab = perm_rules_table()
+  sapply(perm_lists, function(l) unique(tab$rule[tab$list == l]), simplify = FALSE)
+}
+
+#' Add and remove rules in one scope: the process store, or the user-level project file and the
+#' user settings through P08's settings_write() (atomic, locked, other keys kept)
+#' @noRd
+perm_rules_update = function(scope, add = list(), remove = character()) {
+  file = switch(scope, project = perm_project_file(), user = perm_user_file())
+  cur = if (is.null(file)) perm_store() else perm_file_rules(file)
+  new = sapply(perm_lists, function(l) setdiff(trimws(c(cur[[l]], add[[l]])), trimws(remove)),
+               simplify = FALSE)
+  if (is.null(file)) {
+    the$rules_session = new
+  } else {
+    settings_write(if (scope == "project") "user_project" else "user", list(permissions = new))
+  }
+  invisible(new)
+}
+
+#' IC-53's one-shot token check, as P06's session_control_check() (L3, outside IC-33's SDK)
+#' @noRd
+perm_control_guard = function(what) {
+  run = run_current()
+  if (is.null(run)) return(invisible(TRUE))
+  i = match(what, run$signal$control %||% character())
+  if (is.na(i)) {
+    gptr_abort(paste0(what, "() is refused from model code during a run unless a person ",
+                      "approves it"),
+               "permission", action = what, tool = run$tool_call[["name"]] %||% "r", risk = 4L,
+               how_to_allow = "call it outside the run, or approve it when asked",
+               session = run$session)
+  }
+  run$signal$control = run$signal$control[-i]
+  invisible(TRUE)
+}
+
+#' Manage permission rules
+#'
+#' Lists the permission rules in effect, or adds and removes rules. A rule is `tool` or
+#' `tool(spec)`: a path glob for `read`, `write`, `edit`, `grep`, `find` and `ls`
+#' (`write(results/**)`, relative to the project root; `~/...` for the home; `//...` for other
+#' absolute paths); for `r`, `level<=n`, `fn:name,...` (every flagged function covered),
+#' `category:name,...`, `sh:<command glob>` (`r(sh:git status*)`), `sql:<keywords>`
+#' (`r(sql:select)`) and `secret:NAME` (the only rule that pre-approves a guarded secret read);
+#' MCP tools by name (`mcp__github__*`). Deny rules win over ask rules, which win over allow
+#' rules. Allow rules never loosen plan mode and never pre-approve level-4 (critical or control)
+#' actions.
+#'
+#' Scopes: `"session"` is this R process; `"project"` is the user-level project file
+#' `tools::R_user_dir("gptr", "config")/projects/<hash>.json`, personal and never inside the
+#' project tree; `"user"` is the user settings file. The listing also shows the shared project
+#' rules of `.gptr/settings.json` (an untrusted project contributes only `deny` and `ask`
+#' rules) and the `deny`/`ask` rules of a legacy `.gptr/settings.local.json` in a trusted
+#' project.
+#'
+#' Called from model code during a run, adding or removing rules needs the user's approval of
+#' that call; otherwise it signals `gptr_error_permission`.
+#'
+#' @param allow,ask,deny Character vectors of rules to add to that list, or `NULL`.
+#' @param remove Character vector of rules to remove from every list of `scope`, or `NULL`.
+#' @param scope One of `"session"`, `"project"`, `"user"`.
+#' @return A `gptr_permissions` data frame with columns `rule`, `list`, `scope` and `source`;
+#'   invisibly when rules were added or removed.
+#' @examples
+#' gptr_permissions(allow = "r(level<=1)")
+#' gptr_permissions()
+#' gptr_permissions(remove = "r(level<=1)")
+#' @export
+gptr_permissions = function(allow = NULL, ask = NULL, deny = NULL, remove = NULL,
+                            scope = c("session", "project", "user")) {
+  check_strings(allow, "allow", null = TRUE)
+  check_strings(ask, "ask", null = TRUE)
+  check_strings(deny, "deny", null = TRUE)
+  check_strings(remove, "remove", null = TRUE)
+  scope = check_choice(scope, c("session", "project", "user"), "scope")
+  add = list(allow = allow, ask = ask, deny = deny)
+  change = length(c(allow, ask, deny, remove)) > 0L
+  if (change) {
+    for (l in perm_lists) {
+      for (i in seq_along(add[[l]])) {
+        tryCatch(rule_parse(add[[l]][i]), gptr_error_invalid_argument = function(e) {
+          gptr_abort(paste0("`", l, "[", i, "]` is not a valid permission rule: expected ",
+                            perm_rule_expected, "."), "invalid_argument", arg = l,
+                     expected = perm_rule_expected)
+        })
+      }
+    }
+    perm_control_guard("gptr_permissions")
+    perm_rules_update(scope, add = add, remove = remove)
+  }
+  out = new_listing(perm_rules_table(), "gptr_permissions")
+  if (change) invisible(out) else out
 }

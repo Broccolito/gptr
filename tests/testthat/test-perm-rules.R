@@ -127,3 +127,105 @@ test_that("rules read every code-argument row; dynamic or mixed code gets no rul
     expect_identical(rule_match(list(allow = sug), path_call("read", "/z.R"))$allow, character())
   }
 })
+
+test_that("gptr_permissions() adds, lists and removes session rules (6.2)", {
+  root = local_project()
+  local_permission_rules()
+  x = gptr_permissions(allow = "r(level<=1)")
+  expect_s3_class(x, c("gptr_permissions", "gptr_listing", "data.frame"))
+  expect_identical(names(x), c("rule", "list", "scope", "source"))
+  expect_true(any(x$rule == "r(level<=1)" & x$list == "allow" & x$scope == "session"))
+  expect_visible(gptr_permissions())
+  expect_invisible(gptr_permissions(deny = "r(fn:install.packages)"))
+  expect_identical(perm_rules_effective()$deny, "r(fn:install.packages)")
+  gptr_permissions(remove = c("r(level<=1)", "r(fn:install.packages)"))
+  expect_false(any(gptr_permissions()$rule %in% c("r(level<=1)", "r(fn:install.packages)")))
+})
+
+test_that("project rules go to the user-level project file, never the project tree (IC-52)", {
+  root = local_project()
+  gptr_permissions(deny = "r(fn:install.packages)", scope = "project")
+  pf = perm_project_file(root)
+  expect_true(file.exists(pf))
+  expect_match(pf, "projects/[0-9a-f]{16}[.]json$")
+  expect_false(startsWith(path_norm(pf), path_norm(root)))
+  saved = json_decode(read_utf8(pf)$text)
+  expect_identical(unlist(saved$permissions$deny), "r(fn:install.packages)")
+  expect_identical(saved$root, root)
+  x = gptr_permissions()
+  expect_true(any(x$rule == "r(fn:install.packages)" & x$scope == "project" &
+                    x$source == "user-level project file"))
+  gptr_permissions(remove = "r(fn:install.packages)", scope = "project")
+  expect_identical(unlist(json_decode(read_utf8(pf)$text)$permissions$deny), NULL)
+  expect_false(file.exists(file.path(root, ".gptr", "settings.local.json")))
+})
+
+test_that("user rules go to the user settings file and keep its other keys", {
+  root = local_project()
+  uf = perm_user_file()
+  dir.create(dirname(uf), recursive = TRUE, showWarnings = FALSE)
+  write_atomic(uf, "{\"model\": \"sonnet\", \"permissions\": {\"ask\": [\"r(category:network)\"]}}")
+  withr::defer(unlink(uf))
+  gptr_permissions(allow = "write(results/**)", scope = "user")
+  saved = json_decode(read_utf8(uf)$text)
+  expect_identical(saved$model, "sonnet")
+  expect_identical(unlist(saved$permissions$allow), "write(results/**)")
+  expect_identical(unlist(saved$permissions$ask), "r(category:network)")
+  expect_true(any(gptr_permissions()$scope == "user"))
+})
+
+test_that("an invalid rule signals invalid_argument and writes nothing (6.2)", {
+  root = local_project()
+  local_permission_rules()
+  cnd = expect_error(gptr_permissions(allow = c("r(level<=1)", "bad(")),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "allow")
+  expect_false(grepl("bad(", conditionMessage(cnd), fixed = TRUE))
+  expect_false("r(level<=1)" %in% perm_store()$allow)
+  expect_error(gptr_permissions(allow = 1), class = "gptr_error_invalid_argument")
+  expect_error(gptr_permissions(allow = "r", scope = "global"),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("model code needs a one-shot approval to change rules during a run (IC-53)", {
+  root = local_project()
+  local_permission_rules()
+  run = fake_run(session = "s0000000001")
+  local_mocked_bindings(run_current = function() run)
+  cnd = expect_error(gptr_permissions(allow = "r(level<=3)"), class = "gptr_error_permission")
+  expect_identical(cnd$action, "gptr_permissions")
+  expect_identical(cnd$session, "s0000000001")
+  expect_false("r(level<=3)" %in% perm_store()$allow)
+  run$signal$control = c("gptr_config", "gptr_permissions")
+  gptr_permissions(allow = "r(level<=2)")
+  expect_true("r(level<=2)" %in% perm_store()$allow)
+  expect_identical(run$signal$control, "gptr_config")
+  expect_error(gptr_permissions(allow = "r(level<=3)"), class = "gptr_error_permission")
+  expect_s3_class(gptr_permissions(), "gptr_permissions")
+})
+
+test_that("a cloned settings.local.json only tightens, and only when trusted (IC-52)", {
+  root = local_project(files = list(
+    ".gptr/settings.local.json" = paste0("{\"permissions\": {\"allow\": [\"r(level<=3)\"], ",
+                                         "\"deny\": [\"r(fn:system)\"]}}"),
+    ".gptr/settings.json" = paste0("{\"permissions\": {\"allow\": [\"write(**)\"], ",
+                                   "\"ask\": [\"r(category:network)\"]}}")))
+  local_gptr_options(quiet = FALSE)
+  expect_message(perm_rules_table(), "Ignoring allow rules", class = "gptr_message_notice")
+  tab = perm_rules_table()
+  expect_false(any(tab$rule %in% c("r(level<=3)", "r(fn:system)", "write(**)")))
+  expect_true("r(category:network)" %in% tab$rule)
+  local_mocked_bindings(perm_trusted = function(root = project_root()) TRUE)
+  tab = perm_rules_table()
+  expect_false("r(level<=3)" %in% tab$rule)
+  expect_true(all(c("r(fn:system)", "write(**)") %in% tab$rule))
+})
+
+test_that("the allow-rule notice keeps P08's notice of ignored settings.local.json keys (IC-52)", {
+  root = local_project(files = list(".gptr/settings.local.json" = paste0(
+    "{\"permissions\": {\"allow\": [\"r(level<=3)\"]}, \"transcript\": {\"target\": \"a.R\"}}")),
+    trust = TRUE)
+  local_gptr_options(quiet = FALSE)
+  expect_message(perm_rules_table(), "Ignoring allow rules", class = "gptr_message_notice")
+  expect_message(settings_layered("permissions"), "transcript", class = "gptr_message_notice")
+})
