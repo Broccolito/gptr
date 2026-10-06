@@ -2887,14 +2887,14 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_cli(gptr)` | `cli-common.R` | registers providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` (`transport = "process_jsonl"`), a `status` function per provider for `gptr_providers()` | P02 load |
-| `cli_find(cli = c("claude", "codex"))` | `cli-common.R` | path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise | P20 |
-| `cli_version(path)`, `cli_probe(path)` | `cli-common.R` | `package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version` | P20 (`status()` reads the cache only unless `gptr_providers(check = TRUE)`, IC-65) |
+| `pcli_find(cli = c("claude", "codex"))` | `cli-common.R` | path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise | P20 |
+| `pcli_version(path)`, `pcli_probe(path)` | `cli-common.R` | `package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version` | P20 (`status()` reads the cache only unless `gptr_providers(check = TRUE)`, IC-65) |
 
 Example calls:
 
 ```r
-path = cli_find("claude")
-cli_version(path)
+path = pcli_find("claude")
+pcli_version(path)
 ```
 
 ### 7.21 P21 Background sessions [experimental]
@@ -4666,7 +4666,7 @@ document are exact.
 
 **IC-65 CLI discovery and invocation.** (cran-9, cons-21, req-33, fid-7, fid-8, safe-12)
 
-- `cli_find()`: `options(gptr.cli_path = list(claude =, codex =))`, then PATH, then per-OS known locations
+- `pcli_find()`: `options(gptr.cli_path = list(claude =, codex =))`, then PATH, then per-OS known locations
   (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.npm-global/bin`, `%USERPROFILE%\.local\bin`,
   WinGet links, and for codex the npm prefix resolved to the vendored `codex.exe`); RStudio and Positron on macOS
   do not source shell profiles. The npm `claude.cmd` shim is **refused** with an install hint (07); native
