@@ -11,9 +11,9 @@
 #' (architecture section 2.2).
 #' @noRd
 ui_escape = function(x) {
-  vapply(as_utf8(as.character(x)), function(s) {
+  vapply(console_utf8(x), function(s) {
+    if (is.na(s)) return(s)
     cp = utf8ToInt(s)
-    if (anyNA(cp)) return(iconv(s, "UTF-8", "ASCII", sub = "byte"))
     bad = (cp <= 0x1F & cp != 0x09) | (cp >= 0x7F & cp <= 0x9F) | cp == 0x061C |
       (cp >= 0x200B & cp <= 0x200F) | (cp >= 0x202A & cp <= 0x202E) |
       (cp >= 0x2060 & cp <= 0x2069) | cp == 0xFEFF
