@@ -51,8 +51,9 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-011 - P04 Explicit transport performance acceptance (2026-10-03)
 - Rule: INFRA-01 (first-delta latency, six-stream concurrency; architecture 6.18) and INFRA-23 are the P04 Global Constraints' existing exceptions to the five-second test guidance; no new target or waiver.
 - Rule: run the named performance checks on a resource-healthy host with heavy validation paused and record measurements; a timing failure is investigated, never silently loosened or replaced by a callbacks-only claim; functional tests prefer event and ordering assertions.
+- Rule: INFRA-23 asserts the minimum user+sys CPU of three identical runs (shared runners only add time); the 1 s budget is unchanged.
 - Contract-visible: none.
-- Tests: test-http-reactor.R INFRA-01 blocks (measured per D-016 item 1). Evidence: progress/P04.md Task 11.
+- Tests: test-http-reactor.R INFRA-01 blocks (measured per D-016 item 1); test-http-sse.R INFRA-23 block. Evidence: progress/P04.md Task 11, progress/infra.md Task CI-7.
 
 ## D-012 - P04 Reactor retries fail closed and honour the hint's class (2026-10-03)
 - Rule: P04 Task 12 reactor retries (contract 8.1-8.2):

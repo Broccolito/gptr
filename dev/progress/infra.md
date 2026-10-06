@@ -21,6 +21,7 @@ green on all 13 jobs. A hosted run validates only its own commit; formal milesto
 | 37262066260 (`0398aee`), 37266727707 (`bdf7c18`), 37269169488 (`01e13a5`, partial) | R 4.6.1, devel, macOS, connections: `test-tool-search.R:223` (`basename()` inside `tools::file_ext()`); Windows: CRLF checkout (`test-doc-formats.R` x15, `test-perm-classify.R:19`), `~` with a backslash home (`test-ext-plugins.R:481`, `test-skill-discover.R:295-297`), C-locale names (`test-tool-search.R:219-229`), finalizer reaching the `ps_kill` mock (`test-proc-supervise.R:306`); Windows oldrel-4 INFRA-23 1.020 s. Ubuntu oldrel-4 passes: confirms CI-4 | CI-5 |
 | 37303873005 (`602ba53`), 37313611932 (`e214a61`), 37317629994 (`0c37a8d`), 37329796830 (`718659d`) | every R 4.6.1 and devel job: `test-copy-gateway.R:108` (G3 copy of `big`); both Windows: `test-cli-codex.R:477-490` (links); Windows release cancelled at 45 min (stream timed out in quadratic `pd_calls()`); `test-proc-supervise.R:89` (oldrel-1, connections); Windows INFRA-23 5 of 9, INFRA-01 | CI-6 |
 | 37351073211 (`2823b07`) | green, 13/13: macOS; Windows release, oldrel-4; Ubuntu devel, release, oldrel-1, oldrel-4; no-Suggests; LC_ALL=C; copy-safety release, devel; connections; token bench. Confirms CI-6 | - |
+| 37390651676 (`31118fb`, docs only) | Windows oldrel-4 only: INFRA-23 1.040 s (`test-http-sse.R:126`); 12 jobs green | CI-7 |
 
 ## Task CI-1 - Cross-platform hosted CI corrections (2026-10-03, `118f78b`)
 - Fixed: P01's service test isolated from undeclared built-ins (D-016 item 2); INFRA-01 measured on the mock's clock
@@ -86,11 +87,17 @@ green on all 13 jobs. A hosted run validates only its own commit; formal milesto
 - Reviews: r1 2 findings (0/0/1, 1 nit; documentation) -> fixed. Deviations: D-137 (committed with `ff3a558`).
   Open: Open hosted items.
 
+## Task CI-7 - INFRA-23 measures the best of three runs on shared runners (2026-10-05)
+- Red: not applicable (hosted flake, run 37390651676); a throwaway slowed `json_decode()` mock fails the new
+  assertion (best of three 3.3 s), its unslowed control passes. Green: http-sse PASS 70 (unchanged; local runs
+  0.39-0.40 s). Lint clean. Neighbours: `http-|proc-` PASS 990 green.
+- Reviews: none recorded. Deviations: D-011 (Rule line edited in place). Open: hosted Windows confirmation.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
-  1.01-1.39 s, 5 failures in 9 Windows executions of the CI-6 runs (2 in the gating oldrel-4 check, 3 in the
-  non-gating stream); local macOS (R 4.5.0) 0.30-0.33 s. P04 decision: optimise the SSE split and decode, or define
-  the measurement on slow runners (D-011: never loosen silently).
+  single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
+  local macOS 0.30-0.40 s. CI-7 asserts the best of three runs, budget unchanged (D-011); if hosted Windows still
+  fails, optimise the SSE split and decode (P04).
 - INFRA-01: the CI-1 macOS gap failure (`test-http-reactor.R:557`) is unexplained; Windows release had late first
   deltas (0.38 / 0.181 s, `0c37a8d`) and a six-stream failure (`718659d`). Messages print the mock's lateness and
   gptr's latency; a gptr-side failure needs a P04 investigation (D-011).

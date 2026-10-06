@@ -105,25 +105,30 @@ test_that("20,000 deltas are split, decoded and accumulated in under 1 s of CPU 
   # one TCP segment (1,460 bytes) per chunk, as libcurl hands a fast stream over; the
   # invariance test above covers splits at every byte
   chunks = split_at(bytes, seq(1460L, length(bytes) - 1L, by = 1460L))
-  gc()
-  cpu = system.time({
-    s = sse_splitter()
-    parts = vector("list", 20100L)
-    k = 0L
-    for (ch in chunks) {
-      for (e in s$push(ch)) {
-        if (identical(e$event, "content_block_delta")) {
-          d = json_decode(e$data)
-          k = k + 1L
-          parts[[k]] = d$delta$text
+  # shared runners only add time: the best of three runs estimates the code's own cost (D-011)
+  cpu = Inf
+  for (run in 1:3) {
+    gc()
+    used = system.time({
+      s = sse_splitter()
+      parts = vector("list", 20100L)
+      k = 0L
+      for (ch in chunks) {
+        for (e in s$push(ch)) {
+          if (identical(e$event, "content_block_delta")) {
+            d = json_decode(e$data)
+            k = k + 1L
+            parts[[k]] = d$delta$text
+          }
         }
       }
-    }
-    text = paste(unlist(parts[seq_len(k)]), collapse = "")
-  })
+      text = paste(unlist(parts[seq_len(k)]), collapse = "")
+    })
+    cpu = min(cpu, used[["user.self"]] + used[["sys.self"]])
+  }
   expect_identical(k, 20000L)
   expect_identical(text, paste(deltas, collapse = ""))
-  expect_lt(cpu[["user.self"]] + cpu[["sys.self"]], 1)
+  expect_lt(cpu, 1)
 })
 
 test_that("ndjson_splitter returns complete lines, strips CR and keeps the tail for flush", {
