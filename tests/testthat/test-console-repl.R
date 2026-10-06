@@ -338,3 +338,237 @@ test_that("console_send() passes max_turns from gptr.max_turns_console", {
   console_send(rs, "hello")
   expect_identical(got$max_turns, 7L)
 })
+
+# ---------------------------------------------------------------- Task 7: console sessions
+
+# A console test: a temporary project, no history, no document recording questions
+local_console_test = function(.env = parent.frame()) {
+  local_project(.env = .env)
+  local_gptr_options(history = FALSE, record = "off", .env = .env)
+}
+
+test_that("builtin:console registers its frontend, route, commands, blocks and service", {
+  routes = registry_all("route")
+  console = Filter(function(r) identical(r$name, "console"), routes)
+  expect_length(console, 1L)
+  expect_identical(console[[1L]]$order, 30)
+  expect_false(is.null(registry_get("frontend", "console")))
+  expect_false(is.null(registry_get("command", "mode")))
+  expect_true(all(c("user_ran", "user_files") %in% registry_names("context_block")))
+  expect_true(ext_service_has("console.interrupt_policy"))
+})
+
+test_that("the console route never matches inside a run (model code cannot open a REPL)", {
+  call = list(prompt = NULL, args = list(stdin = TRUE))
+  expect_true(console_route_match(call))
+  local_mocked_bindings(run_current = function() structure(new.env(), class = "gptr_run"))
+  expect_false(console_route_match(call))
+})
+
+test_that("the stdin UI answers selections and approvals from the reader", {
+  rd = stdin_reader(c("2", "maybe", "y", "n use base R"))
+  ui = ui_console_spec(rd$read, "console_stdin")
+  pick = NULL
+  a1 = NULL
+  a2 = NULL
+  err = utils::capture.output({
+    pick = ui$select("Which?", c("Table", "Plot"))
+    a1 = ui$permission(list(tool = "r", input = list(code = "y = 2"), risk = list(level = 1L)))
+    a2 = ui$permission(list(tool = "r", input = list(code = "unlink('x')"),
+                            risk = list(level = 3L)))
+  }, type = "message")
+  expect_identical(pick, 2L)
+  expect_identical(a1$decision, "allow")
+  expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R"))
+  expect_true(any(grepl("Answer [y]es", err, fixed = TRUE)))
+  expect_s3_class(ui, "gptr_ui")
+})
+
+test_that("the stdin UI never echoes a secret answer", {
+  rd = stdin_reader(c("FAKE-TOKEN-123", "plain"), echo = TRUE)
+  ui = ui_console_spec(rd$read, "console_stdin")
+  got = NULL
+  out = utils::capture.output({
+    got = c(ui$input("Token", secret = TRUE), ui$input("Name"))
+  })
+  expect_identical(got, c("FAKE-TOKEN-123", "plain"))
+  expect_identical(out, c("Token: ", "Name: plain"))
+})
+
+test_that("a scripted .stdin console session (acceptance 2)", {
+  local_console_test()
+  local_scripted_ui()
+  fake = gptr_fake_provider(list("first answer", "second answer"))
+  e = new.env(parent = globalenv())
+  e$x = matrix(1:6, 2)
+  local_console_stdin(c("hello there", "!dim(x)", "!!x", "/mode auto", '"""', "line one",
+                        "line two", '"""', "/exit"))
+  n0 = nrow(showConnections())
+  res = NULL
+  out = utils::capture.output({
+    res = withVisible(peter(.stdin = TRUE, model = fake, envir = e))
+  })
+  expect_false(res$visible)
+  s = res$value
+  expect_s3_class(s, "gptr_session")
+  expect_identical(s$turns, 2L)
+  expect_identical(s$mode, "auto")
+  expect_identical(nrow(showConnections()), n0)
+  reqs = fake_requests(fake)
+  expect_length(reqs, 2L)
+  expect_identical(reqs[[1L]]$last_user, "hello there")
+  expect_identical(reqs[[2L]]$last_user, "line one\nline two")
+  blocks = last_user_blocks(reqs[[2L]])
+  expect_match(blocks[["user_ran"]], "> dim(x)\n#> [1] 2 3", fixed = TRUE)
+  expect_false(grepl("> x\n", blocks[["user_ran"]], fixed = TRUE))
+  expect_true("mode" %in% names(blocks))
+  types = vapply(session_data(s)$entries, function(e) e$custom_type %||% "", "")
+  expect_true("gptr.mode_change" %in% types)
+  expect_true("peter> hello there" %in% out)
+  expect_true("first answer" %in% out)
+  expect_true("second answer" %in% out)
+  expect_true("[1] 2 3" %in% out)
+})
+
+test_that("the end of piped input leaves the REPL like /exit", {
+  local_console_test()
+  local_scripted_ui()
+  local_console_stdin("only line")
+  res = NULL
+  utils::capture.output({
+    res = peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env())
+  })
+  expect_s3_class(res, "gptr_session")
+  expect_identical(res$text, "ok")
+})
+
+test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
+  local_console_test()
+  withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE)
+  box = new.env(parent = emptyenv())
+  box$answers = c("/status", "/exit")
+  local_mocked_bindings(
+    gptr_is_interactive = function() FALSE, is_testthat = function() FALSE,
+    check_running = function() FALSE, is_knitting = function() FALSE,
+    gptr_readline = function(prompt = "") {
+      a = box$answers[[1L]]
+      box$answers = box$answers[-1L]
+      a
+    })
+  res = NULL
+  out = utils::capture.output({
+    res = withVisible(peter(envir = new.env()))
+  })
+  expect_false(res$visible)
+  expect_null(res$value)
+  expect_match(out[[1L]], "^gptr .* \\| model .* \\| mode .* \\| ")
+  expect_true(any(grepl("session   (none yet", out, fixed = TRUE)))
+  expect_length(box$answers, 0L)
+})
+
+test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
+  local_console_test()
+  ctrl_c = function(prompt = "") {
+    signalCondition(structure(class = c("interrupt", "condition"),
+                              list(message = "", call = NULL)))
+    ""
+  }
+  local_mocked_bindings(gptr_readline = ctrl_c)
+  res = "not set"
+  err = utils::capture.output(invisible(utils::capture.output({
+    res = console_run(NULL, new.env())
+  })), type = "message")
+  expect_null(res)
+  expect_length(grep("again to leave gptr", err, fixed = TRUE), 1L)
+})
+
+test_that("a line at the readline limit is reported at once and not sent", {
+  local_console_test()
+  box = new.env(parent = emptyenv())
+  box$answers = c(strrep("a", readline_limit()), "/exit")
+  local_mocked_bindings(gptr_readline = function(prompt = "") {
+    a = box$answers[[1L]]
+    box$answers = box$answers[-1L]
+    a
+  })
+  res = "not set"
+  err = utils::capture.output(invisible(utils::capture.output({
+    res = console_run(NULL, new.env())
+  })), type = "message")
+  expect_null(res)
+  expect_true(any(grepl("^Warning: That line was [0-9]+ bytes long", err)))
+})
+
+test_that("background sessions that wait for approval are announced once (IC-57)", {
+  rows = data.frame(id = c("s1", "s2"), kind = "session", name = c("a", "b"),
+                    pid = NA_integer_, status = c("waiting", "running"),
+                    stringsAsFactors = FALSE)
+  local_mocked_bindings(job_list = function(kind = NULL) rows)
+  rs = repl_state(NULL, new.env())
+  err = utils::capture.output({
+    repl_waiting_notice(rs)
+    repl_waiting_notice(rs)
+  }, type = "message")
+  expect_identical(err, paste("[gptr] 1 background session waits for approval;",
+                              "the next prompt or gptr_wait() asks."))
+  expect_identical(rs$waiting, 1L)
+})
+
+test_that("an error is printed on stderr and the REPL goes on", {
+  local_console_test()
+  local_scripted_ui()
+  fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L),
+                                 "recovered"))
+  local_console_stdin(c("first", "second", "/exit"))
+  res = NULL
+  err = utils::capture.output(invisible(utils::capture.output({
+    res = peter(.stdin = TRUE, model = fake, envir = new.env())
+  })), type = "message")
+  expect_true(any(startsWith(err, "Error: ")))
+  expect_identical(res$text, "recovered")
+})
+
+test_that("approvals of a .stdin session are answered from the same stdin", {
+  local_console_test()
+  withr::local_options(gptr.interactive = NULL, gptr.ui = NULL)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "y = 2")), "made y"))
+  e = new.env(parent = globalenv())
+  local_console_stdin(c("make y", "y", "/exit"))
+  res = NULL
+  out = NULL
+  err = utils::capture.output({
+    out = utils::capture.output({
+      res = peter(.stdin = TRUE, model = fake, envir = e, mode = manual)
+    })
+  }, type = "message")
+  expect_identical(e$y, 2)
+  expect_identical(res$text, "made y")
+  expect_true(any(grepl("allow? [y]es", out, fixed = TRUE)))
+  expect_true("  r  y = 2" %in% err)
+  expect_null(getOption("gptr.ui"))
+  expect_null(getOption("gptr.interactive"))
+})
+
+test_that("the frontend comes from .opts$frontend or the setting frontend (IC-69)", {
+  local_console_test()
+  off = gptr_register(gptr_spec("frontend", "probe", run = function(session, ...) "probe ran"))
+  withr::defer(off())
+  res = withVisible(peter(.stdin = TRUE, .opts = list(frontend = "probe")))
+  expect_identical(res$value, "probe ran")
+  expect_false(res$visible)
+  local_gptr_options(frontend = "probe")
+  expect_identical(peter(.stdin = TRUE), "probe ran")
+})
+
+test_that("the console echoes an interpolated prompt at verbosity 2", {
+  local_console_test()
+  local_scripted_ui()
+  local_gptr_options(verbose = 2L)
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  e = new.env(parent = globalenv())
+  e$cl = 4L
+  local_console_stdin(c("describe cluster {cl}", "/exit"))
+  out = utils::capture.output(peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")),
+                                   envir = e))
+  expect_true("> describe cluster 4" %in% out)
+})

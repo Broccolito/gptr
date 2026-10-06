@@ -429,3 +429,51 @@ test_that("permission_request ends partial lines and never decides", {
   expect_identical(out, c("partial", "allow? "))
   console_drop("u0000test")
 })
+
+# ---------------------------------------------------------------- Task 7: end-to-end rendering
+
+test_that("a streamed reply is printed verbatim and never evaluated (acceptance 3, rule C1)", {
+  local_project()
+  local_gptr_options(verbose = 2L, record = "off")
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  withr::local_envvar(GPTR_PWNED = NA)
+  fake = gptr_fake_provider(list("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care."))
+  res = NULL
+  out = utils::capture.output({
+    res = withVisible(peter("hi", model = fake, envir = new.env()))
+  })
+  expect_true("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care." %in% out)
+  expect_identical(Sys.getenv("GPTR_PWNED"), "")
+  expect_false(res$visible)
+  expect_match(out[[length(out)]], "^  done \\| 1 turn \\| ")
+})
+
+test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
+  local_project()
+  local_gptr_options(verbose = 0L, record = "off")
+  out = utils::capture.output(invisible(peter("hi", model = gptr_fake_provider(list("quiet")),
+                                             envir = new.env())))
+  expect_false(any(grepl("quiet", out, fixed = TRUE)))
+})
+
+test_that("tool calls of a run show escaped previews and results (acceptance 7)", {
+  local_project()
+  local_gptr_options(verbose = 2L, record = "off")
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 1 # \033[31mred")),
+                                 "done"))
+  e = new.env(parent = globalenv())
+  out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
+  expect_true("  * r  z = 1 # <U+001B>[31mred" %in% out)
+  expect_true("    -> + z" %in% out)
+  expect_false(any(grepl("\033", out, fixed = TRUE)))
+  expect_identical(e$z, 1)
+})
+
+test_that("artifact_start events print the NS-8 line through builtin:console (acceptance 7)", {
+  local_gptr_options(verbose = 2L)
+  out = utils::capture.output(invisible(ev_dispatch("artifact_start", ev_new(
+    "artifact_start", id = "marker-explorer", url = "http://127.0.0.1:4827", version = 1L))))
+  expect_identical(out,
+                   "artifact  marker-explorer  ->  http://127.0.0.1:4827   (running in background)")
+})

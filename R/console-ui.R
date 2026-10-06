@@ -165,9 +165,9 @@ ui_undo_note = function(request) {
   tryCatch(ext_service_get("checkpoint.note")(call, NULL), error = function(e) NULL)
 }
 
-#' Read one console line; Ctrl-C or EOF gives NA
+#' Read one console line; Ctrl-C or EOF gives NA (a terminal echoes even a `secret` itself)
 #' @noRd
-ui_console_read = function(prompt) {
+ui_console_read = function(prompt, secret = FALSE) {
   ans = tryCatch(gptr_readline(prompt), interrupt = function(e) NA_character_)
   if (rlang::is_string(ans)) ans else NA_character_
 }
@@ -187,7 +187,7 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 #' Console select(): numbered choices; NA = cancelled; attr "other" = free text
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
-                             allow_other = FALSE) {
+                             allow_other = FALSE, read = ui_console_read) {
   labels = as.character(unlist(choices))
   msg_verbatim(ui_escape(c("", title, if (length(details)) paste0("  | ", details),
                            sprintf("  %d: %s", seq_along(labels), labels))))
@@ -195,7 +195,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
            if (allow_other) "or type your own answer",
            if (length(default)) paste0("Enter = ", paste(labels[default], collapse = ", ")))
   for (attempt in seq_len(5L)) {
-    ans = ui_console_read(ui_escape(paste0("Choose (", paste(hint, collapse = "; "), "): ")))
+    ans = read(ui_escape(paste0("Choose (", paste(hint, collapse = "; "), "): ")))
     if (is.na(ans)) return(NA_integer_)
     if (!nzchar(trimws(ans)) && length(default)) return(as.integer(default))
     idx = ui_parse_choice(ans, labels, multiple)
@@ -208,24 +208,24 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
 
 #' Console input(); NA = cancelled; a secret is asked through RStudio's masked dialog there
 #' @noRd
-ui_console_input = function(prompt, default = "", secret = FALSE) {
+ui_console_input = function(prompt, default = "", secret = FALSE, read = ui_console_read) {
   if (isTRUE(secret) && ui_rstudio()) {
     ans = tryCatch(rstudioapi::askForPassword(prompt), error = function(e) NULL)
     return(if (rlang::is_string(ans)) as_utf8(ans) else NA_character_)
   }
-  ans = ui_console_read(ui_escape(paste0(prompt, if (nzchar(default)) paste0(" [", default, "]"),
-                                         ": ")))
+  ans = read(ui_escape(paste0(prompt, if (nzchar(default)) paste0(" [", default, "]"), ": ")),
+             secret = isTRUE(secret))
   if (!is.na(ans) && !nzchar(ans)) default else ans
 }
 
 #' Console permission(): the one-line prompt of NS-1, `?` for the detail view
 #' @noRd
-ui_console_permission = function(request) {
+ui_console_permission = function(request, read = ui_console_read) {
   can = ui_can_remember(request)
   opts = if (can) "[y]es / [a]lways / [n]o / [?]" else "[y]es / [n]o / [?]"
   msg_verbatim(ui_permission_lines(request))
   for (attempt in seq_len(5L)) {
-    a = trimws(ui_console_read(paste0("  allow? ", opts, ": ")))
+    a = trimws(read(paste0("  allow? ", opts, ": ")))
     if (is.na(a)) return(ui_answer("abort"))
     low = tolower(a)
     if (low %in% c("y", "yes")) return(ui_answer("allow"))
@@ -269,18 +269,22 @@ ui_questions_via = function(select, input, qs) {
   list(answers = answers, cancelled = FALSE)
 }
 
-#' The `console` UI: readline() through gptr_readline() (IRkernel answers it too, IC-43)
+#' The `console` UI: readline() through gptr_readline() (IRkernel answers it too, IC-43); a
+#' `.stdin` console passes its reader (P14)
 #' @noRd
-ui_console_spec = function() {
-  gptr_spec("ui", "console",
+ui_console_spec = function(read = ui_console_read, name = "console") {
+  force(read)
+  select = function(...) ui_console_select(..., read = read)
+  input = function(...) ui_console_input(..., read = read)
+  gptr_spec("ui", name,
             has_ui = function() isTRUE(gptr_can_prompt()),
-            select = ui_console_select,
-            input = ui_console_input,
-            questions = function(qs) ui_questions_via(ui_console_select, ui_console_input, qs),
+            select = select,
+            input = input,
+            questions = function(qs) ui_questions_via(select, input, qs),
             notify = function(text, level = "info") {
               msg_verbatim(paste0("[", level, "] ", ui_escape(text)), "stderr")
             },
-            permission = ui_console_permission)
+            permission = function(request) ui_console_permission(request, read))
 }
 
 #' The `none` UI: nobody answers; P02's defaults fail closed (contract section 10.2 row 22)

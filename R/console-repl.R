@@ -90,10 +90,10 @@ readline_limit = function() {
 
 #' A line reader: gptr_readline() or the persistent stdin connection (closed by `close()`, IC-59)
 #'
-#' Returns an environment with `read(prompt = "", stream = "stdout")` -> chr(1), NA at the end of
-#' piped input; `close()`; `flag` (TRUE when a line reached the readline limit). With `echo` the
-#' stdin reader writes the prompt and the escaped line on `stream`, so a piped session reads like
-#' a terminal session.
+#' Returns an environment with `read(prompt = "", stream = "stdout", secret = FALSE)` -> chr(1), NA
+#' at the end of piped input; `close()`; `flag` (TRUE when a line reached the readline limit). With
+#' `echo` the stdin reader writes the prompt and the escaped line (never a `secret` one) on
+#' `stream`, so a piped session reads like a terminal session.
 #' @noRd
 console_reader = function(stdin = FALSE, echo = stdin) {
   rd = new.env(parent = emptyenv())
@@ -102,7 +102,7 @@ console_reader = function(stdin = FALSE, echo = stdin) {
   echo = isTRUE(echo)
   if (isTRUE(stdin)) {
     rd$con = console_stdin_open()
-    rd$read = function(prompt = "", stream = "stdout") {
+    rd$read = function(prompt = "", stream = "stdout", secret = FALSE) {
       if (is.null(rd$con)) return(NA_character_)
       out = if (identical(stream, "stderr")) stderr() else stdout()
       if (echo) cat(prompt, file = out, sep = "")
@@ -112,7 +112,7 @@ console_reader = function(stdin = FALSE, echo = stdin) {
         return(NA_character_)
       }
       x = as_utf8(x)
-      if (echo) cat(console_escape(x, FALSE), "\n", file = out, sep = "")
+      if (echo) cat(if (!secret) console_escape(x, FALSE), "\n", file = out, sep = "")
       x
     }
   } else {
@@ -510,3 +510,219 @@ console_send = function(rs, text) {
   if (identical(res$status, "interrupt") && !is.null(rs$session)) console_abort_stray(rs$session)
   res
 }
+
+# ---------------------------------------------------------------------------------------------
+# The REPL (Task 7): report 18 A.7 gptr_repl() on gptr's gateway. Each logical input is a slash
+# command (console-commands.R), `!code`/`!!code` (repl_passthrough()) or a prompt (console_send());
+# errors are printed escaped on stderr and the REPL goes on.
+# ---------------------------------------------------------------------------------------------
+
+#' The banner (architecture 6.17, NS-1): `gptr <version> | model ... | mode ... | .gptr/ found`,
+#' up to six objects of the evaluation environment, then the keys
+#' @noRd
+repl_banner = function(rs) {
+  ws = if (is.null(workspace_dir())) "no .gptr/" else ".gptr/ found"
+  console_write(c(
+    paste0("gptr ", utils::packageVersion("gptr"), " | model ",
+           console_escape(repl_model(rs), FALSE), " | mode ",
+           console_escape(repl_mode(rs), FALSE), " | ", ws),
+    console_escape(console_env_lines(repl_eval_env(rs), n = 6L), FALSE),
+    paste0("/help lists commands; ", console_interrupt_key(),
+           " pauses an answer, twice at the prompt leaves")))
+}
+
+#' A notice when background sessions wait for approval; P21 asks at the next blocking call
+#' (IC-57). Said again only when their number changes.
+#' @noRd
+repl_waiting_notice = function(rs) {
+  n = sum(job_list("session")$status == "waiting")
+  if (n > 0L && n != rs$waiting) {
+    console_notice("[gptr] ", n, if (n == 1L) " background session waits" else
+      " background sessions wait", " for approval; the next prompt or gptr_wait() asks.")
+  }
+  rs$waiting = n
+  invisible(NULL)
+}
+
+#' Print an error on stderr: escaped, its line feeds kept
+#' @noRd
+repl_error = function(e) {
+  console_notice("Error: ", console_escape(conditionMessage(e)))
+}
+
+#' One prompt through console_send(); the answer is printed here when the renderer hooks did not
+#' stream it (verbosity < 2), any other value is printed
+#' @noRd
+repl_turn = function(rs, text) {
+  res = console_send(rs, text)
+  if (identical(res$status, "error")) return(repl_error(res$error))
+  if (!identical(res$status, "ok")) return(invisible(NULL))
+  value = res$value
+  if (!inherits(value, "gptr_session")) {
+    console_out(utils::capture.output(print(value)))
+  } else if (verbosity() < 2L) {
+    console_print_text(value$text)
+  }
+  invisible(NULL)
+}
+
+#' Dispatch one logical input: /command, !code or a prompt; inputs of an interactive console go
+#' to R's history (gptr.history)
+#' @noRd
+repl_dispatch = function(rs, line) {
+  text = trimws(line)
+  if (!nzchar(text)) return(invisible(NULL))
+  if (isTRUE(gptr_opt("history")) && !rs$stdin && gptr_is_interactive()) {
+    console_history_add(line)
+  }
+  tryCatch({
+    if (startsWith(text, "/")) {
+      console_command(text, rs$session, send = function(prompt) repl_turn(rs, prompt))
+    } else if (startsWith(text, "!")) {
+      repl_passthrough(rs, text)
+    } else {
+      repl_turn(rs, text)
+    }
+  }, interrupt = function(e) {
+    if (!is.null(rs$session)) console_abort_stray(rs$session)
+    console_notice("[gptr] interrupted")
+  }, error = repl_error)
+  invisible(NULL)
+}
+
+#' The REPL loop on a repl_state(); returns the session invisibly (NULL when none was started)
+#'
+#' Ctrl-C at the prompt prints a hint, twice in a row leaves; `/exit` and the end of piped input
+#' leave too. Under `.stdin = TRUE` the console is a person at a pipe (plan ambiguity 8): unset,
+#' `gptr.interactive` becomes TRUE and `gptr.ui` P11's console UI on the REPL's reader until the
+#' REPL ends. The session returned gets `session_shutdown` (reason "exit") unless the caller
+#' piped it in.
+#' @noRd
+repl_main = function(rs) {
+  .gptr_repl = rs
+  force(.gptr_repl)
+  piped = rs$session
+  on.exit({
+    if (!is.null(rs$reader)) rs$reader$close()
+    rs$envir = NULL
+  }, add = TRUE)
+  rs$reader = console_reader(rs$stdin)
+  if (rs$stdin) {
+    set = list()
+    if (is.null(getOption("gptr.interactive"))) set$gptr.interactive = TRUE
+    if (is.null(getOption("gptr.ui"))) {
+      set$gptr.ui = ui_console_spec(rs$reader$read, "console_stdin")
+    }
+    old = options(set)
+    on.exit(options(old), add = TRUE)
+  }
+  repl_banner(rs)
+  repeat {
+    if (rs$exit) break
+    repl_waiting_notice(rs)
+    # a readline-limit warning would wait for the REPL to return (warn = 0): shown at once
+    line = tryCatch(withCallingHandlers(
+      repl_read_logical(rs$reader, repl_prompt(rs)),
+      gptr_warning_readline_limit = function(w) {
+        console_notice("Warning: ", conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }), interrupt = function(e) FALSE)
+    if (isFALSE(line)) {
+      rs$interrupts = rs$interrupts + 1L
+      if (rs$interrupts >= 2L) break
+      console_notice("[gptr] press ", console_interrupt_key(),
+                     " again to leave gptr, or type /exit")
+      next
+    }
+    if (is.na(line)) break
+    rs$interrupts = 0L
+    repl_dispatch(rs, line)
+  }
+  s = rs$session
+  if (!is.null(s) && !identical(s, piped)) {
+    d = session_data(s)
+    ev_dispatch("session_shutdown", ev_new("session_shutdown", session = d$id, run = NULL,
+                                           agent = "main", turn = d$turns, reason = "exit"),
+                session = s)
+  }
+  invisible(s)
+}
+
+#' The REPL on `s`, a new session from the first prompt when `s` is NULL (contract 7.14)
+#' @noRd
+console_run = function(s, envir, stdin = FALSE) {
+  repl_main(repl_state(s, envir, stdin))
+}
+
+#' run() of the `console` frontend: the REPL on the call's session and environment, else on the
+#' session's kept home
+#' @noRd
+console_frontend_run = function(session, ..., call = NULL) {
+  envir = call$envir
+  if (is.null(envir) && !is.null(session)) envir = session_home(session)
+  repl_main(repl_state(session, envir, isTRUE(call$args$stdin), call))
+}
+
+#' match() of the `console` route (contract 6.1.1): no prompt, and someone can answer (IC-43) or
+#' `.stdin = TRUE`; never while a run's tool executes, so model code cannot open a REPL that reads
+#' the user's input or sets `gptr.ui` (plan ambiguity 25)
+#' @noRd
+console_route_match = function(call) {
+  is.null(call$prompt) && is.null(run_current()) &&
+    (isTRUE(call$args$stdin) || gptr_can_prompt())
+}
+
+#' run() of the `console` route: the frontend named by `.opts$frontend`, else the setting
+#' `frontend`, else `console` (IC-69); its value comes back invisibly
+#' @noRd
+console_route_run = function(call) {
+  name = call$args$opts$frontend %||% setting_get("frontend") %||% "console"
+  fe = registry_get("frontend", name, session = call$session)
+  if (is.null(fe)) {
+    gptr_abort(paste0("No frontend named '", name, "' is registered."), "invalid_argument",
+               arg = "frontend", expected = "a registered frontend name")
+  }
+  invisible(fe$run(call$session, call = call))
+}
+
+#' builtin:console (contract 7.14, 10.3): renderer hooks, context blocks, the slash commands, the
+#' `console` frontend and route; the console.interrupt_policy service (console-interrupt.R) is
+#' owned by it
+#' @noRd
+builtin_console = function(gptr) {
+  specs = c(console_hooks(), console_blocks(), console_commands(), list(
+    gptr_spec("frontend", "console", run = console_frontend_run),
+    gptr_spec("route", "console", order = 30, match = console_route_match,
+              run = console_route_run,
+              description = "peter() with no prompt: the console on the piped or a new session")))
+  for (spec in specs) gptr$register(spec)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("console", builtin_console))
+
+#' @section The interactive console:
+#' `peter()` without a prompt opens a console when someone can answer (interactive R or
+#' IRkernel); `peter(.stdin = TRUE)` reads its input from standard input, and `s |> peter()`
+#' opens it on `s`. Each input is one of:
+#'
+#' * a prompt, sent as `s |> peter("...")` with `{name}` interpolation; `@file` adds the head of a
+#'   file and `@object` attaches an object by name;
+#' * `!code`: R code run in the session's environment; the code and its output go with the next
+#'   prompt (at most 300 tokens). `!!code` runs without telling the model. A fenced R block works
+#'   like `!code`, a `"""` block is a multi-line prompt, and a trailing backslash continues a line;
+#' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
+#'
+#' Ctrl-C (Esc in RStudio and Rgui) while an answer runs opens a pause menu in terminal R:
+#' `[s]teer` (delivered after the current tool results), `[f]ollow-up`, `[c]ontinue`, `[a]bort`
+#' and, when background sessions are available, `[b]ackground`; a second Ctrl-C aborts. In other
+#' front ends Ctrl-C aborts. `/exit`, Ctrl-C twice at the prompt or the end of piped input return
+#' the session invisibly, so `s = peter()` keeps the conversation.
+#'
+#' Options: `gptr.verbose` (0 silent, 1 progress on stderr, 2 streamed console, 3 debug; by
+#' default 0 in knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`
+#' (turns per console prompt, default 200) and `gptr.history` (console inputs to R's history,
+#' default `TRUE`).
+#' @name peter
+#' @rdname peter
+NULL

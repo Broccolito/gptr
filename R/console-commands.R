@@ -200,19 +200,26 @@ cmd_tools = function(args, ctx) {
     paste0("peter$ members: ", if (length(members)) paste(members, collapse = ", ") else "(none)"))
 }
 
-#' /env [pattern]: the first 30 objects, described without forcing promises
+#' The first `n` objects of `env` whose names contain `pattern`, described without forcing
+#' promises (/env and the console banner)
+#' @noRd
+console_env_lines = function(env, pattern = "", n = 30L) {
+  nms = sort(ls(env), method = "radix")
+  nms = nms[grepl(pattern, nms, fixed = TRUE)]
+  lines = vapply(utils::head(nms, n), function(nm) {
+    paste0("  ", describe_binding(nm, env, budget = 40L)[[1L]])
+  }, "", USE.NAMES = FALSE)
+  c(lines, if (length(nms) > n) paste0("  (+ ", length(nms) - n, " more)"))
+}
+
+#' /env [pattern]
 #' @noRd
 cmd_env = function(args, ctx) {
   rs = console_repl_find()
   env = if (!is.null(rs)) repl_eval_env(rs) else ctx$envir
   if (!is.environment(env)) return("No environment is attached to this console.")
-  nms = sort(ls(env), method = "radix")
-  nms = nms[grepl(args, nms, fixed = TRUE)]
-  if (!length(nms)) return("(no objects)")
-  lines = vapply(utils::head(nms, 30L), function(nm) {
-    paste0("  ", describe_binding(nm, env, budget = 40L)[[1L]])
-  }, "", USE.NAMES = FALSE)
-  c(lines, if (length(nms) > 30L) paste0("  (+ ", length(nms) - 30L, " more)"))
+  lines = console_env_lines(env, args)
+  if (length(lines)) lines else "(no objects)"
 }
 
 #' /compact [focus], under the interrupt policy (mode "repl": an abort returns NULL)

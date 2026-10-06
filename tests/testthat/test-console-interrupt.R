@@ -349,3 +349,156 @@ test_that("the policy is the console.interrupt_policy service of builtin:console
   expect_identical(names(formals(the$services[["console.interrupt_policy"]]$fun)),
                    c("expr_fun", "runs", "mode"))
 })
+
+# ---------------------------------------------------------------- Task 7: INFRA-03 (real SIGINTs)
+
+# Drives an interactive R child through processx like a user at a terminal (report 18 A.8
+# e2_driver.R): reads its merged stdout/stderr, waits for markers, sends lines
+infra03_driver = function(p) {
+  st = new.env(parent = emptyenv())
+  st$out = ""
+  st$seen = 0L
+  pump = function(ms = 200L) {
+    p$poll_io(ms)
+    x = p$read_output()
+    if (nzchar(x)) st$out = paste0(st$out, x)
+    invisible(NULL)
+  }
+  st$wait_for = function(pattern, timeout = 30) {
+    deadline = Sys.time() + timeout
+    repeat {
+      pump()
+      rest = substring(st$out, st$seen + 1L)
+      pos = regexpr(pattern, rest, fixed = TRUE)
+      if (pos > 0L) {
+        st$seen = st$seen + pos + nchar(pattern) - 1L
+        return(TRUE)
+      }
+      if (!p$is_alive() || Sys.time() > deadline) return(FALSE)
+    }
+  }
+  st$send = function(x) {
+    Sys.sleep(0.2)
+    p$write_input(paste0(x, "\n"))
+  }
+  st$has = function(pattern) grepl(pattern, st$out, fixed = TRUE)
+  st$value = function(key) {
+    m = regmatches(st$out, regexpr(paste0(key, "\\[[^]]*\\]"), st$out))
+    if (!length(m)) return(NA_character_)
+    sub("\\]$", "", sub(paste0("^", key, "\\["), "", m))
+  }
+  st
+}
+
+# The child script: loads gptr (tracemem_loader(), P01), defines one function per scenario
+infra03_child = function(providers) {
+  c(
+    tracemem_loader(),
+    paste0("options(gptr.interactive = TRUE, gptr.verbose = 2L, gptr.record = 'off', ",
+           "cli.num_colors = 1L)"),
+    sprintf("prov = readRDS('%s')", providers),
+    "e = new.env(parent = globalenv())",
+    "msg_texts = function(msgs) vapply(msgs, function(m) {",
+    "  paste(vapply(Filter(function(b) identical(b$type, 'text'), m$content),",
+    "               function(b) b$text, ''), collapse = '')",
+    "}, '')",
+    "step_ttft = function() {",
+    "  s = peter('first', model = prov$ttft, envir = e, mode = auto)",
+    "  cat('STATUS-TTFT', s$status, '\\n')",
+    "}",
+    "step_tool = function() {",
+    "  fake = gptr_fake_provider(list(",
+    "    list(tool = 'r', input = list(code = 'Sys.sleep(3); 1')), 'after the tool'))",
+    "  peter('tool', model = fake, envir = e, mode = auto)",
+    "  req = fake$log$requests[[2L]]$messages",
+    "  roles = vapply(req, function(m) m$role, '')",
+    "  steer = which(grepl('use base R only', msg_texts(req), fixed = TRUE))",
+    "  tool = which(roles == 'tool_result')",
+    "  ok = length(steer) == 1L && length(tool) >= 1L && steer[[1L]] > tool[[1L]]",
+    "  cat('STEER-AFTER-TOOL', ok, '\\n')",
+    "}",
+    "step_abort = function() {",
+    "  res = tryCatch(peter('stream', model = prov$stream, envir = e, mode = auto),",
+    "                 interrupt = function(i) 'INTERRUPTED')",
+    "  s = gptr_last()",
+    "  m = s$messages[[length(s$messages)]]",
+    "  cat('STOP', m$stop_reason, '\\n')",
+    "  cat('PARTIAL[', msg_texts(list(m)), ']\\n', sep = '')",
+    "  cat('ABORT-DONE', identical(res, 'INTERRUPTED'), '\\n')",
+    "}",
+    "cat('CHILD READY\\n')"
+  )
+}
+
+test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if_not(identical(Sys.getenv("CI"), "true"), "INFRA-03 drives an interactive R on CI")
+  ttft = local_mock_server("ttft", delay = 3, n = 4L, interval = 0.05)
+  stream = local_mock_server("stream", n = 40L, interval = 0.25)
+  dir = withr::local_tempdir("gptr-infra03-")
+  providers = file.path(dir, "providers.rds")
+  saveRDS(list(ttft = ttft$provider, stream = stream$provider), providers)
+  child = file.path(dir, "child.R")
+  writeLines(infra03_child(normalizePath(providers, winslash = "/")), child)
+  # a complete environment (processx rejects NA, IC-60) without the IDE variables that would
+  # make front_end() report RStudio, Positron, VS Code or Jupyter (abort-only, no menu)
+  env = unclass(Sys.getenv())
+  env = env[!names(env) %in% c("RSTUDIO", "POSITRON", "TERM_PROGRAM", "JPY_SESSION_NAME",
+                               "QUARTO_DOCUMENT_PATH", "QUARTO_DOCUMENT_FILE")]
+  env[["TERM"]] = "xterm"
+  env[["LANG"]] = "en_US.UTF-8"
+  env[["R_LIBS"]] = paste(.libPaths(), collapse = .Platform$path.sep)
+  # `R --interactive`, not rscript_path(): only R reads its console from a pipe interactively
+  # (report 18 A.8); an absolute path, so R CMD check's dummy `R` on PATH is never used (IC-60)
+  p = processx::process$new(file.path(R.home("bin"), "R"),
+                            c("--vanilla", "--interactive", "--quiet", "--no-echo"),
+                            stdin = "|", stdout = "|", stderr = "2>&1", env = env,
+                            cleanup = TRUE)
+  withr::defer(if (p$is_alive()) p$kill())
+  drv = infra03_driver(p)
+  p$write_input(sprintf("source('%s')\n", normalizePath(child, winslash = "/")))
+  expect_true(drv$wait_for("CHILD READY", timeout = 120))
+
+  # 1. SIGINT while waiting for the first byte, then [c]ontinue: the request completes
+  drv$send("step_ttft()")
+  Sys.sleep(1)
+  p$interrupt()
+  expect_true(drv$wait_for("paused"))
+  drv$send("c")
+  expect_true(drv$wait_for("STATUS-TTFT idle"))
+  expect_true(drv$has("tok04"))
+
+  # 2. SIGINT while a tool runs, then [s]teer: the steer arrives after the tool result
+  drv$send("step_tool()")
+  expect_true(drv$wait_for("Sys.sleep(3)"))
+  Sys.sleep(0.5)
+  p$interrupt()
+  expect_true(drv$wait_for("paused"))
+  drv$send("s")
+  expect_true(drv$wait_for("steer>"))
+  drv$send("use base R only")
+  expect_true(drv$wait_for("STEER-AFTER-TOOL TRUE"))
+
+  # 3. SIGINT mid-stream, then [a]bort: the socket closes and the partial is what arrived
+  drv$send("step_abort()")
+  expect_true(drv$wait_for("tok03"))
+  p$interrupt()
+  expect_true(drv$wait_for("paused"))
+  drv$send("a")
+  expect_true(drv$wait_for("ABORT-DONE TRUE"))
+  expect_true(drv$has("STOP aborted"))
+  partial = drv$value("PARTIAL")
+  full = paste(sprintf("tok%02d ", 1:40), collapse = "")
+  expect_true(nzchar(partial))
+  expect_true(startsWith(full, partial))
+  expect_lt(nchar(partial), nchar(full))
+  deadline = Sys.time() + 15
+  closed = FALSE
+  while (!closed && Sys.time() < deadline) {
+    closed = any(stream$log()$disconnected %in% TRUE)
+    if (!closed) Sys.sleep(0.25)
+  }
+  expect_true(closed)
+  p$write_input("q('no')\n")
+})
