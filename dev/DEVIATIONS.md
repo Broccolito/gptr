@@ -2110,3 +2110,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-mcp-namespace.R "tool arguments named like ..." (+2), "signatures name the closure's formals ..."
   (+4), "tool specs follow their server ..." (+5), "setting mcp.exposure = \"direct\" ..." (+1). Evidence:
   progress/P18.md Task 7.
+
+## D-173 - P18 `gptr_mcp_serve()`: builtin:mcp revokes server tokens at session shutdown (2026-10-06)
+- Rule (IC-58; 04 7.18): builtin:mcp's one `session_shutdown` hook revokes the session's bearer tokens;
+  the plan's per-token `hook_add()` closure held the session (and the token's value) strongly, so a served
+  session was never collected and its token never lapsed. Token records hold their session weakly.
+- Rule: `mcp_serve_token(session, tools)` also issues the user's token for the dedicated session;
+  `target$envir` is the served environment itself; the plan's `mcp_token_new()`, `mcp_tokens_env()`,
+  `mcp_serve_need()`, `mcp_serve_session()`, `mcp_snippet()`, `st$tools` and the snippets' `secret`
+  attribute are not needed.
+- Rule (04 6.3 "binds 127.0.0.1 on port"): a `port` other than the running socket's (opened by
+  `mcp.serve_ensure`) is refused (`gptr_error_invalid_argument`); the plan returned the other port.
+- Contract-visible: none.
+- Tests: test-mcp-server.R "a session's token is revoked when the session shuts down (IC-58)" (+2),
+  "gptr_mcp_serve() refuses a port other than the shared socket's" (+2).
+  Evidence: progress/P18.md Task 9.

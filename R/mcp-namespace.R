@@ -446,14 +446,15 @@ mcp_login_target = function(name) {
   list(url = ex$url, oauth = mcp_expand(s$oauth))
 }
 
-#' builtin:mcp (contract 10.3): the `mcp` prompt section and the session_start hook. The
-#' namespace provider, the services and the login target are registered by the on_load()
-#' expressions below.
+#' builtin:mcp (contract 10.3): the `mcp` prompt section, the session_start hook and the
+#' session_shutdown hook revoking the session's server token (IC-58). The namespace provider, the
+#' services and the login target are registered by the on_load() expressions below.
 #' @noRd
 builtin_mcp = function(gptr) {
   gptr$register(gptr_prompt_section("mcp", text = mcp_section_text, tier = "T1", order = 840L,
                                     budget = 1500L))
   gptr$on("session_start", mcp_on_session_start)
+  gptr$on("session_shutdown", function(event, ctx) mcp_token_revoke(event$session))
   invisible(NULL)
 }
 

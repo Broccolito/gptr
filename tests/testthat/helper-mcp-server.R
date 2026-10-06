@@ -192,3 +192,58 @@ mcp_test_msg = function(method, params = json_obj(), id = 1L, modern = TRUE) {
   if (!is.null(id)) msg$id = id
   msg
 }
+
+# One HTTP POST to a gptr server from this process, through the reactor (its outermost pump
+# services httpuv with later::run_now(0), IC-57): list(status, body, json, headers)
+mcp_test_post = function(url, msg, token = NULL, headers = list(), timeout = 20) {
+  st = new.env(parent = emptyenv())
+  st$done = FALSE
+  st$chunks = list()
+  st$status = NA_integer_
+  h = c(list(`Content-Type` = "application/json",
+             Accept = "application/json, text/event-stream"), headers)
+  if (!is.null(token)) h$Authorization = list("Bearer ", token)
+  ver = if (is.list(msg)) msg$params[["_meta"]][["io.modelcontextprotocol/protocolVersion"]]
+  if (!is.null(ver)) {
+    h[["MCP-Protocol-Version"]] = h[["MCP-Protocol-Version"]] %||% ver
+    h[["Mcp-Method"]] = h[["Mcp-Method"]] %||% msg$method
+  }
+  body = if (is.character(msg)) msg else json_encode(msg)
+  reactor_http(list(url = url, method = "POST", headers = h, body = body),
+               on_bytes = function(raw) st$chunks[[length(st$chunks) + 1L]] = raw,
+               on_done = function(status, hd) {
+                 st$status = status
+                 st$headers = hd
+                 st$done = TRUE
+               },
+               on_fail = function(cnd) {
+                 st$status = cnd$status
+                 st$done = TRUE
+               },
+               retry = list(max_attempts = 1L))
+  reactor_pump(until = function() isTRUE(st$done), timeout = timeout)
+  txt = if (length(st$chunks)) rawToChar(do.call(c, st$chunks)) else ""
+  list(status = as.integer(st$status), body = txt,
+       json = if (nzchar(txt)) jsonlite::fromJSON(txt, simplifyVector = FALSE),
+       headers = st$headers)
+}
+
+# A stand-in CLI child of a session (fixtures/mcp/client.R): a separate R process whose
+# environment carries GPTR_MCP_TOKEN (child_env(), IC-58; `token` is the handle's token handle,
+# or the value of its Codex snippet as P20 passes it) posts `msgs` to `url` while this process
+# pumps the reactor; returns one list(status, body) per message
+mcp_cli_child = function(url, token, msgs, timeout = 60) {
+  env = child_env("mcp", set = list(GPTR_MCP_TOKEN = token, R_LIBS = mcp_fixture_libs()))
+  bodies = vapply(msgs, json_encode, "")
+  p = proc_spawn(rscript_path(), c("--vanilla", file.path(mcp_fixture_dir, "client.R"), url,
+                                   bodies), env = env, stdin = NULL, stdout = "|", stderr = "|")
+  on.exit(kill_all(p, grace = 0), add = TRUE)
+  got = new.env(parent = emptyenv())
+  got$lines = character()
+  reactor_pump(until = function() {
+    got$lines = c(got$lines, p$read_output_lines())
+    !p$is_alive()
+  }, timeout = timeout)
+  lines = c(got$lines, p$read_output_lines())
+  lapply(lines[nzchar(lines)], function(l) jsonlite::fromJSON(l, simplifyVector = FALSE))
+}
