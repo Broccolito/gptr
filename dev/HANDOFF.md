@@ -8,7 +8,7 @@ and is pushed after every few commits. This file is self-contained; read it top 
 ## 0. Summary
 
 gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R
-session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **about 239 of 307 plan tasks
+session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **about 244 of 307 plan tasks
 are committed** (each test-first and independently reviewed), plus coordinator work: the IC-74 Ollama
 System 1 adapter, FIX-1..9, CI-1..10, and every simplicity package (`progress/simplicity.md`). P01-P10,
 P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135, landed in `bd8eeaf`).
@@ -47,7 +47,7 @@ P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135
 | Plan | Done | Acceptance | Notes |
 |---|---|---|---|
 | P01-P10, P12, P13 | all | recorded (see PROGRESS) | P03/P04 tables `b024286` |
-| P11 Permissions | 6/11 | - | classifier rebuilt (Task 2b, D-061); Task 7 next, then 8, 10, 9, 11 |
+| P11 Permissions | 11/11 | `0f2ac14` | classifier rebuilt (Task 2b, D-061); FIX-9 |
 | P14 Console | 0/8 | - | needs P11 Task 8 |
 | P15 Documents | 19/19 | `84d85db` | Quarto and plan-mode rows skip until available |
 | P16 Checkpoints | 4/8 | - | Tasks 5-8 need P11 Task 8 |
@@ -60,32 +60,31 @@ P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135
 | P23 Artifacts | 9/12 | - | Task 9 needs P11 Task 7; Task 10 needs P14 Task 7; Task 12 after 9 |
 | P24 Benchmarks/e2e | 6/13 | - | live calibration and polyglot baseline pending; Tasks 3, 8-13 later |
 | P25 Release | 1/15 | - | Task 2+ need P11, P16, P18, P19 |
-| **Total** | **~239/307** | | |
+| **Total** | **~244/307** | | |
 
-Milestones: M0 and M1 pass every local gate and hosted CI was green on `2823b07` (13/13 jobs); a
-formal gate on a clean export of `bd8eeaf` passed (full suite 22,392, R CMD check --as-cran 0/0/0, M0/M1
-commands). Hosted CI since then fails only on runner-specific items being fixed (CI-7..CI-13). Tags wait
-for the maintainer.
-M2 waits for P11. Hosted CI: `.github/workflows/R-CMD-check.yaml` on every push to `main` (one run
-per ref; superseded queued runs are cancelled); logs via `gh run view <run> --json jobs`.
+Milestones: **M0 and M1 are closed** (tags `gptr-1.0-m0`, `gptr-1.0-m1` on `5e01bf4`: local gates on a clean
+export and hosted CI 13/13 green). M2's plans (P09-P13) are complete; its gate (local + hosted) and tag
+(ask the maintainer) are next. Hosted CI: `.github/workflows/R-CMD-check.yaml` on every push to `main` (one
+run per ref; superseded queued runs are cancelled); logs via `gh run view <run> --json jobs`.
 
 ## 4. Running now and how to resume
 
 Lane ownership: `dev/.validation/scratch/lanes-current.txt` (local, ignored): files of other running
-lanes are off limits; every other file is free for a task's minimal edits. Running: **perm** (P11
-Tasks 7, 8, 10, 9, 11 + acceptance) and **infra** (CI-11 browser-start skips, CI-12 the codex billing
-test's order dependence, CI-13 the artifact launcher stop race). Each lane is one run of
-`dev/ci/orchestration/plan-tasks.workflow.js` (section 7).
+lanes are off limits; every other file is free for a task's minimal edits. Running (Stage 3): **mcp**
+(P18 Tasks 2, 4-10 + acceptance; critical path), **console** (P14 Tasks 1-8 + acceptance), **sub** (P19
+Tasks 2-12 + acceptance), **ckptbg** (P16 Tasks 5-8 + acceptance, then P21 Tasks 4-7 + acceptance),
+**bridgeart** (P22 Tasks 5, 9-11 + acceptance, then P23 Tasks 9, 12, 10). Each lane is one run of
+`dev/ci/orchestration/plan-tasks.workflow.js` (section 7); early prechecks block tasks whose
+prerequisites another lane has not landed yet (re-dispatch them).
 
-The P11 redesign (design, prototypes, the acknowledged change list `fin-changes.tsv` and its checker
-`fin-accept.R`) is in `dev/.validation/scratch/p11/` (local); the remaining-work schedule with every
-task's earliest start is `dev/.validation/scratch/schedule.md` (local). If a session ends mid-task, the
-uncommitted work stays in the tree: re-dispatch that task with "ALREADY IMPLEMENTED, UNCOMMITTED:
-review, fix, commit".
+The P11 redesign evidence (design, prototypes, `fin-changes.tsv`, `fin-accept.R`) is in
+`dev/.validation/scratch/p11/` (local); the remaining-work schedule is `dev/.validation/scratch/schedule.md`
+(local). If a session ends mid-task, the uncommitted work stays in the tree: re-dispatch that task with
+"ALREADY IMPLEMENTED, UNCOMMITTED: review, fix, commit".
 
 ## 5. Next steps
 
-1. Finish P11 (Task 8 unblocks P14, P18, P16 Tasks 5-8); re-dispatch any `review-not-clear` or `blocked` task.
+1. Let the Stage 3 lanes finish; re-dispatch any `review-not-clear` or `blocked` task; run the M2 gate.
 2. Stage 2-4 (schedule section 3): after P11 Task 3, P11 Task 4 and P16 Tasks 2-4; at P11 Task 7,
    P19 Tasks 2+, P21 Task 4+, P22 Tasks 5/9/10, P23 Task 9; at **P11 Task 8** (critical), P18 Tasks
    2, 4-10 and P14 Tasks 1-8 in parallel lanes; then P19 rest, P20 Tasks 10-11, P21 rest, P23 Tasks
