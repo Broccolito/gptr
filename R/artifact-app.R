@@ -157,3 +157,140 @@ print.gptr_artifact = function(x, ...) {
   writeLines(as_utf8(format(x)), useBytes = TRUE)
   invisible(x)
 }
+
+# ---- validation ladder stage 1: static checks of the working copy ----------------------------
+
+#' Calls an app must not make: it runs in its own process and version directory (architecture
+#' 6.15: "no setwd(), installs, runApp()")
+#' @noRd
+artifact_forbidden_calls = c("setwd", "runApp", "runGadget", "runExample", "shinyAppDir",
+                             "install.packages", "remove.packages", "update.packages",
+                             "install_github", "install_cran", "install_local", "install_version",
+                             "pkg_install", "q", "quit")
+
+#' File readers whose literal path argument must name a file in the snapshot
+#' @noRd
+artifact_read_calls = c(
+  "read.csv", "read.csv2", "read.table", "read.delim", "read.delim2", "readRDS", "readLines",
+  "scan", "load", "source", "sys.source", "file", "gzfile", "bzfile", "xzfile", "readBin",
+  "readChar", "readRenviron", "fread", "read_csv", "read_csv2", "read_tsv", "read_delim",
+  "read_lines", "read_file", "read_rds", "read_excel", "read_xlsx", "read_xls", "read_json",
+  "read_parquet", "read_feather", "read_csv_arrow", "open_dataset", "qs_read", "qd_read",
+  "qread", "vroom", "includeHTML", "includeMarkdown", "includeText"
+)
+
+#' Argument names that carry a reader's path (`text =` and the like are data)
+#' @noRd
+artifact_path_args = c("file", "con", "path", "description", "input", "x", "dsn", "filename")
+
+#' Every call in a parsed expression, depth first (an empty argument, as in `d[, 1]`, is skipped
+#' by index: binding the empty symbol to a variable would make it unusable)
+#' @noRd
+artifact_calls = function(e) {
+  if (!is.call(e) && !is.expression(e)) return(list())
+  out = if (is.call(e)) list(e) else list()
+  for (i in seq_along(e)) {
+    if (!identical(e[[i]], quote(expr = ))) out = c(out, artifact_calls(e[[i]]))
+  }
+  out
+}
+
+#' Packages an app uses: every `pkg::` prefix and the literal name given to library(),
+#' require() or loadNamespace()
+#' @noRd
+artifact_packages = function(calls) {
+  pkgs = vapply(calls, function(cl) {
+    if (scan_call_name(cl) %in% c("library", "require", "loadNamespace") && length(cl) > 1L &&
+        !isTRUE(cl$character.only) && (is.name(cl[[2L]]) || is.character(cl[[2L]]))) {
+      return(as.character(cl[[2L]]))
+    }
+    scan_call_pkg(cl)
+  }, character(1))
+  unique(pkgs[!is.na(pkgs) & nzchar(pkgs)])
+}
+
+#' Literal paths an app reads outside its snapshot (architecture 6.15). A version directory holds
+#' only app.R, R/gptr_data.R and data/, so a reader's literal path (its first path-named
+#' argument, else its first unnamed one) outside data/ names a file the running app cannot see;
+#' a string with a newline is inline data, not a path.
+#' @noRd
+artifact_outside_reads = function(calls) {
+  reads = vapply(calls, function(cl) {
+    fn = scan_call_name(cl)
+    nms = names(cl) %||% rep("", length(cl))
+    k = c(which(nms %in% artifact_path_args), which(!nzchar(nms[-1L])) + 1L)[1L]
+    if (!(fn %in% artifact_read_calls) || is.na(k) || !is.character(cl[[k]])) {
+      return(NA_character_)
+    }
+    p = cl[[k]]
+    if (is.na(p) || !nzchar(p) || grepl("\n|^data[/\\\\]", p)) NA_character_ else
+      paste0(fn, "(\"", p, "\")")
+  }, character(1))
+  unique(reads[!is.na(reads)])
+}
+
+#' Is the last top-level expression shinyApp(...) or shiny::shinyApp(...)?
+#' @noRd
+artifact_ends_with_app = function(exprs) {
+  last = exprs[[length(exprs)]]
+  is.call(last) && identical(scan_call_name(last), "shinyApp")
+}
+
+#' Static checks of app.R code, never evaluated (validation ladder stage 1; architecture 6.15,
+#' IC-71): it parses, ends with shinyApp(), makes no forbidden call, uses installed packages
+#' (found without loading them: loading shiny touches the RNG, IC-61), reads no literal path
+#' outside its snapshot and no secret file (level 3: the app is refused)
+#' @return `list(ok, stage = "parse" | "static" | "ok", messages, packages)`
+#' @noRd
+artifact_static_check = function(code) {
+  code = paste(code, collapse = "\n")
+  exprs = tryCatch(parse(text = code, keep.source = FALSE), error = function(e) e)
+  bad = if (inherits(exprs, "error")) {
+    paste("app.R does not parse:", conditionMessage(exprs))
+  } else if (!length(exprs)) {
+    "app.R has no expressions"
+  }
+  if (length(bad)) return(list(ok = FALSE, stage = "parse", messages = bad, packages = character()))
+  calls = artifact_calls(exprs)
+  forbidden = intersect(vapply(calls, scan_call_name, character(1)), artifact_forbidden_calls)
+  pkgs = artifact_packages(calls)
+  absent = pkgs[!vapply(pkgs, function(p) nzchar(system.file(package = p)), logical(1))]
+  reads = artifact_outside_reads(calls)
+  found = secret_scan(code)$findings
+  secret = unique(found$name[found$rule == "secret_file"])
+  msgs = c(
+    if (length(forbidden)) {
+      paste0("remove the call(s) to ", toString(forbidden),
+             ": the app runs in its own process and version directory")
+    },
+    if (length(absent)) paste0("package(s) not installed: ", toString(absent)),
+    if (length(reads)) {
+      paste0("app.R reads files that are not in its snapshot: ", toString(reads),
+             "; pass the objects it needs with data = instead")
+    },
+    if (length(secret)) paste0("app.R reads a secret file (level 3): ", toString(secret)),
+    if (!artifact_ends_with_app(exprs)) "the last expression of app.R must be shinyApp(ui, server)"
+  )
+  list(ok = !length(msgs), stage = if (length(msgs)) "static" else "ok",
+       messages = as.character(msgs), packages = pkgs)
+}
+
+#' The `check` of the shiny artifact type (contract 10.2 row 19): static checks of <dir>/app.R
+#' @noRd
+artifact_check_shiny = function(dir, ctx) {
+  path = artifact_working_file(dir, "shiny")
+  if (!file.exists(path)) {
+    return(list(ok = FALSE, stage = "parse",
+                messages = paste0("there is no app.R: write ", path_rel(path), " first")))
+  }
+  artifact_static_check(read_utf8(path)$text)
+}
+
+#' The `check` of the html artifact type: <dir>/page.html exists and is not empty
+#' @noRd
+artifact_check_html = function(dir, ctx) {
+  path = artifact_working_file(dir, "html")
+  if (isTRUE(file.size(path) > 0)) return(list(ok = TRUE, stage = "ok", messages = character()))
+  list(ok = FALSE, stage = "parse",
+       messages = paste0("there is no page.html: write ", path_rel(path), " first"))
+}
