@@ -100,3 +100,73 @@ bg_request_summary = function(request) {
   first = lines[nzchar(trimws(lines))][[1L]]
   bg_cut(paste0(request$tool %||% "tool", ": ", first), 100L)
 }
+
+#' The text the model reads when an ask could not be shown at an idle tick (IC-57): nothing ran,
+#' nobody declined, and repeating the call later reaches the user
+#' @noRd
+bg_pending_text = function(what) {
+  paste0("the user could not be asked for ", what, " because this session runs in the ",
+         "background; the session now waits for the user, and when it continues, call the tool ",
+         "again with the same input and the user will be asked")
+}
+
+#' Record that the background session `id` needs a human (the first ask wins). It runs inside the
+#' dispatcher, so it never stops the run: the sweep after the tick does
+#' @noRd
+bg_park = function(id, what, summary) {
+  s = bg_get(id)
+  live = if (!is.null(s)) session_live(s)
+  if (is.null(live$background)) return(invisible(FALSE))
+  if (is.null(live$background$ask)) {
+    live$background$ask = list(what = what, summary = bg_cut(summary, 100L))
+  }
+  invisible(TRUE)
+}
+
+#' The process-level `ui` record `name` that a session wrapper delegates to
+#' @noRd
+bg_ui_target = function(name) {
+  registry_get("ui", name) %||%
+    gptr_abort(paste0("The UI backend '", name, "' is no longer registered."), "not_available",
+               member = name, provided_by = "P11")
+}
+
+#' A session-scoped wrapper of the `ui` record `name`: it delegates, but during an idle tick it
+#' records the ask and answers without prompting. `permission()` answers a denial with the pending
+#' text, never "abort" (P06 would tell the model that the user aborted the run)
+#' @noRd
+bg_ui_spec = function(name, id) {
+  force(id)
+  gptr_spec("ui", name,
+    has_ui = function() isTRUE(bg_ui_target(name)$has_ui()),
+    select = function(title, ...) {
+      if (!bg_ticking()) return(bg_ui_target(name)$select(title, ...))
+      bg_park(id, "select", title)
+      NA_integer_
+    },
+    input = function(prompt, ...) {
+      if (!bg_ticking()) return(bg_ui_target(name)$input(prompt, ...))
+      bg_park(id, "input", prompt)
+      NA_character_
+    },
+    questions = function(qs) {
+      if (!bg_ticking()) return(bg_ui_target(name)$questions(qs))
+      bg_park(id, "questions", "a question from the agent")
+      list(answers = json_obj(), cancelled = TRUE)
+    },
+    notify = function(...) bg_ui_target(name)$notify(...),
+    permission = function(request) {
+      if (!bg_ticking()) return(bg_ui_target(name)$permission(request))
+      bg_park(id, "permission", bg_request_summary(request))
+      list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"))
+    }
+  )
+}
+
+#' Shadow every registered `ui` record with a wrapper for session `id`; returns the record ids
+#' @noRd
+bg_install_ui = function(id) {
+  vapply(registry_names("ui"), function(nm) {
+    registry_add(bg_ui_spec(nm, id), source = "session", rank = 0L, session = id)
+  }, "", USE.NAMES = FALSE)
+}
