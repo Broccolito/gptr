@@ -1980,3 +1980,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-auth-oauth.R "without httpuv and later the redirect is pasted, iss included" (+1),
   "a refused OAuth request is gptr_error_provider with its HTTP status" (+2).
   Evidence: progress/P18.md Task 2.
+
+## D-162 - P19 cli backend: no mcp.serve_ensure call at child start (2026-10-06)
+- Rule: the `inline` and `cli` backends share `backend_child_start()`, which does not call `mcp.serve_ensure`;
+  P20's `request_params` hook (`pcli_hook_params()` -> `pcli_codex_ensure()`) binds gptr's MCP server to every
+  codex session, children included, before each request (IC-58).
+- Contract-visible: 04 section 7.0 still lists the `cli` backend (P19) as a consumer of `mcp.serve_ensure` (not
+  amended); plan P19 Task 12 Step 3's P19 service names drop `mcp.serve_ensure`.
+- Tests: test-cli-common.R "request_params ensures gptr's MCP server for a codex session, not for claude".
+  Evidence: progress/P19.md Task 2.
