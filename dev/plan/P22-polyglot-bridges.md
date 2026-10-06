@@ -1095,7 +1095,7 @@ git commit -m 'feat(bridge): the interpreter kind, seven built-in interpreters a
 
 **Interfaces:**
 - Consumes: `proc_spawn()`, `kill_all()`, `write_all(p, data)`, `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_now()`, `gptr_jobs(kill = FALSE)` (tests) (P04, 04 §7.4, §8.2, §6.5); `proc_pool_cap(n)` (P04 `proc-supervise.R`: `n`, or at most 2 while `check_running()`); `child_env("helper")` (P03); `raw_to_utf8(x)`, `clean_terminal()`, `id_new(prefix, n)`, `check_choice()`, `check_number()`, `check_string()`, `check_strings()`, `check_flag()`, `est_tokens()` (P01); Tasks 1-2 (`bridge_chr()`, `bridge_check_cmd()`, `bridge_resolve()`, `bridge_label()`, `bridge_view_lines()`, `bridge_budget()`, `bridge_write()`, `bridge_level()`, `bridge_emit()`); tests: `withr::local_envvar()`, `withr::defer()`.
-- Produces: `bridge_bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` -> `gptr_job` (the `fun` of member `bg`); `bridge_jobs(kill = FALSE)` -> df(`id`, `name`, `pid`, `status`, `seconds`, `cmd`) (the `fun` of member `jobs`); the `gptr_job` environment: fields `id`, `cmd`, `name`, `pid`, closures `read(stream = "stdout", n = NULL)`, `wait(timeout = Inf, until = NULL)`, `write(text)`, `kill()`, `status()` (`running`, `done`, `error`, `stopped`); `bridge_text(lines, footer = NULL, out_id = NULL)` -> class `c("gptr_bridge_text", "character")` (job reads, knit output); S3 methods `print.gptr_job()`, `print.gptr_bridge_text()`; `bridge_state`.
+- Produces: `bridge_bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)` -> `gptr_job` (the `fun` of member `bg`); `bridge_jobs(kill = FALSE)` -> df(`id`, `name`, `pid`, `status`, `seconds`, `cmd`) (the `fun` of member `jobs`); the `gptr_job` environment: fields `id`, `cmd`, `name`, `pid`, closures `read(stream = "stdout", n = NULL)`, `wait(timeout = Inf, until = NULL)`, `write(text)`, `kill()`, `status()` (`running`, `done`, `error`, `stopped`); `bridge_text(lines, footer)` -> class `c("gptr_bridge_text", "character")` (job reads; Task 8 adds `out_id`); S3 methods `print.gptr_job()`, `print.gptr_bridge_text()`; `bridge_state`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1202,18 +1202,16 @@ Insert into `R/bridge-sh.R`, directly above the line `# ---- builtin:bridges ---
 ```r
 # ---- background jobs: peter$bg() and peter$jobs() ------------------------------------------------
 
-#' The gptr_job objects of this process: a job process table, which architecture 2.2 rule 5
-#' allows in the namespace; each job also has a row in P04's job table, which gptr_jobs() lists
-#' and whose unload cleanup stops it
+#' The gptr_job objects of this process, a job process table (architecture 2.2 rule 5); each job
+#' also has a P04 job-table row, which gptr_jobs() lists and the unload cleanup stops (IC-12)
 #' @noRd
 bridge_state = new.env(parent = emptyenv())
 bridge_state$jobs = list()
 
-#' Output lines with a budgeted print (job reads, knit output): a character vector
+#' Output lines with a budgeted print and a footer (job reads)
 #' @noRd
-bridge_text = function(lines, footer = NULL, out_id = NULL) {
-  structure(as_utf8(as.character(lines)), class = c("gptr_bridge_text", "character"),
-            footer = footer, out_id = out_id)
+bridge_text = function(lines, footer) {
+  structure(lines, class = c("gptr_bridge_text", "character"), footer = footer)
 }
 
 #' Print bridge output lines within the helper budget, then the footer
@@ -1224,110 +1222,71 @@ bridge_text = function(lines, footer = NULL, out_id = NULL) {
 #' @noRd
 print.gptr_bridge_text = function(x, ...) {
   footer = attr(x, "footer", exact = TRUE)
-  budget = bridge_budget(NULL)
-  if (length(footer)) budget = max(50L, budget - est_tokens(footer, "r_output"))
-  view = bridge_view_lines(as.character(unclass(x)), budget, id = attr(x, "out_id", exact = TRUE))
+  view = bridge_view_lines(as.character(x), bridge_budget(NULL) - est_tokens(footer, "r_output"))
   bridge_write(c(if (length(view)) view else "(no output)", footer))
   invisible(x)
-}
-
-#' Directory of job output files: tempdir() only, raw child output is never persisted (IC-70)
-#' @noRd
-bridge_job_dir = function() {
-  dir = file.path(tempdir(), "gptr-jobs")
-  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  dir
-}
-
-#' Number of background jobs still running
-#' @noRd
-bridge_running_jobs = function() {
-  sum(vapply(bridge_state$jobs, function(j) isTRUE(j$.proc$is_alive()), TRUE))
-}
-
-#' Default job name: the program's base name
-#' @noRd
-bridge_job_name = function(cmd) {
-  first = if (length(cmd) > 1L) cmd[[1L]] else strsplit(trimws(cmd[[1L]]), "\\s+")[[1L]][[1L]]
-  basename(first)
-}
-
-#' Bytes [from, from + n) of a file; the connection is closed before returning (IC-59)
-#' @noRd
-bridge_read_span = function(path, from, n) {
-  if (n <= 0) return(raw())
-  con = file(path, "rb")
-  on.exit(close(con), add = TRUE)
-  if (from > 0) seek(con, from)
-  readBin(con, "raw", n)
 }
 
 #' Status of a job: running, done, error (non-zero exit) or stopped (after kill(), IC-60)
 #' @noRd
 bridge_job_status = function(job) {
-  p = job$.proc
-  if (isTRUE(p$is_alive())) return("running")
-  if (isTRUE(job$.stop_requested)) return("stopped")
-  if (identical(p$get_exit_status(), 0L)) "done" else "error"
+  if (isTRUE(job$.proc$is_alive())) return("running")
+  if (job$.stop_requested) return("stopped")
+  if (identical(job$.proc$get_exit_status(), 0L)) "done" else "error"
 }
 
-#' New complete lines of one stream since the last read (a partial last line waits while the
-#' job runs), as a gptr_bridge_text with the footer "[<id> <status>, <s>s]"
+#' New bytes of a job's output file since the last read; while the job runs only through the
+#' last newline, so a partial last line waits
+#' @noRd
+bridge_job_bytes = function(job, stream) {
+  alive = isTRUE(job$.proc$is_alive())
+  path = job$.files[[stream]]
+  from = job$.pos[[stream]]
+  n = if (file.exists(path)) file.size(path) - from else 0
+  if (n <= 0) return(raw())
+  con = file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  seek(con, from)
+  bytes = readBin(con, "raw", n)
+  if (alive) bytes = bytes[seq_len(max(0L, which(bytes == as.raw(10L))))]
+  bytes
+}
+
+#' New complete lines of one stream since the last read, with the footer "[<id> <status>, <s>s]"
 #' @noRd
 bridge_job_read = function(job, stream = "stdout", n = NULL) {
   stream = check_choice(stream, c("stdout", "stderr"), "stream")
   n = check_number(n, "n", min = 1, int = TRUE, null = TRUE)
-  path = job$.files[[stream]]
-  if (is.na(path)) {
+  if (is.na(job$.files[[stream]])) {
     gptr_abort("This job merges stderr into stdout (merge = TRUE); read stdout.",
                "invalid_argument", arg = "stream", expected = "\"stdout\" for a merged job")
   }
-  size = if (file.exists(path)) file.size(path) else 0
-  pos = job$.pos[[stream]]
-  bytes = bridge_read_span(path, pos, size - pos)
-  if (length(bytes) && isTRUE(job$.proc$is_alive())) {
-    nl = which(bytes == as.raw(10L))
-    bytes = bytes[seq_len(if (length(nl)) max(nl) else 0L)]
-  }
-  job$.pos[[stream]] = pos + length(bytes)
+  bytes = bridge_job_bytes(job, stream)
+  job$.pos[[stream]] = job$.pos[[stream]] + length(bytes)
   lines = clean_terminal(raw_to_utf8(bytes))
-  if (!is.null(n) && length(lines) > n) lines = utils::tail(lines, n)
-  footer = paste0("[", job$id, " ", bridge_job_status(job), ", ",
-                  round(reactor_now() - job$.started), "s]")
-  bridge_text(lines, footer = footer)
+  if (!is.null(n)) lines = utils::tail(lines, n)
+  bridge_text(lines, paste0("[", job$id, " ", bridge_job_status(job), ", ",
+                            round(reactor_now() - job$.started), "s]"))
 }
 
-#' Wait for the exit, for `until` (a regular expression) in new complete lines of stdout, or for
-#' `timeout` seconds; then read() the new stdout
-#'
-#' `until` is matched against complete lines only, the lines read() returns, so a match in a
-#' partial last line keeps waiting until the line is complete. The wait pumps P04's reactor with
-#' its default `allow_runs` (contract 8.2: every run at the console, none inside an `r`
-#' evaluation), so stdin queued by write() is drained meanwhile.
+#' Wait for the exit, for `until` (a regular expression) in a new complete line of stdout, or for
+#' `timeout` seconds, pumping P04's reactor (so stdin queued by write() drains); then read()
 #' @noRd
 bridge_job_wait = function(job, timeout = Inf, until = NULL) {
-  check_number(timeout, "timeout", min = 0)
   check_string(until, "until", null = TRUE)
-  path = job$.files[["stdout"]]
   settled = function() {
     if (!isTRUE(job$.proc$is_alive())) return(TRUE)
-    if (is.null(until)) return(FALSE)
-    size = if (file.exists(path)) file.size(path) else 0
-    pos = job$.pos[["stdout"]]
-    if (size <= pos) return(FALSE)
-    bytes = bridge_read_span(path, pos, size - pos)
-    nl = which(bytes == as.raw(10L))
-    length(nl) > 0L && grepl(until, raw_to_utf8(bytes[seq_len(max(nl))]), perl = TRUE)
+    !is.null(until) &&
+      any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout"))), perl = TRUE))
   }
   reactor_pump(until = settled, slice_ms = 200L, timeout = timeout)
   bridge_job_read(job)
 }
 
-#' Send lines to a job's stdin through P04's non-blocking write_all() (IC-60): outside a pump it
-#' writes them at once; inside a running tool it queues them for the reactor
+#' Send lines to a job's stdin through P04's non-blocking write_all() (IC-60)
 #' @noRd
 bridge_job_write = function(job, text) {
-  if (!isTRUE(job$.stdin)) {
+  if (!job$.proc$has_input_connection()) {
     gptr_abort("This job was started without stdin = TRUE.", "invalid_argument", arg = "text",
                expected = "a job started with peter$bg(..., stdin = TRUE)")
   }
@@ -1336,11 +1295,11 @@ bridge_job_write = function(job, text) {
     gptr_abort(paste0("Job ", job$id, " has exited and cannot read input."), "process",
                command = job$cmd, status = job$.proc$get_exit_status(), stderr = "")
   }
-  write_all(job$.proc, paste0(paste(as_utf8(text), collapse = "\n"), "\n"))
+  write_all(job$.proc, paste0(text, "\n"))
   invisible(job)
 }
 
-#' Stop a running job and its tree; the status reads stopped, never error (IC-60)
+#' Stop a running job and its process tree; its status then reads stopped (IC-60)
 #' @noRd
 bridge_job_kill = function(job) {
   if (isTRUE(job$.proc$is_alive())) {
@@ -1351,12 +1310,10 @@ bridge_job_kill = function(job) {
   invisible(job)
 }
 
-#' The gptr_job environment (contract 5.10): fields id, cmd, name, pid; closures read(), wait(),
-#' write(), kill(), status(); private fields start with a dot. The job is added to this process's
-#' job table and to P04's (kind "bg"). This frame holds no user object, so the closures it
-#' creates keep none alive (architecture 6.4 rule R1).
+#' The gptr_job environment (04 5.10), kept in both job tables; private fields start with a dot.
+#' This frame holds no user object, so its closures keep none alive (architecture 6.4 rule R1).
 #' @noRd
-bridge_job_new = function(id, label, name, proc, out_f, err_f, stdin) {
+bridge_job_new = function(id, label, name, proc, out_f, err_f) {
   job = new.env(parent = emptyenv())
   job$id = id
   job$cmd = label
@@ -1366,7 +1323,6 @@ bridge_job_new = function(id, label, name, proc, out_f, err_f, stdin) {
   job$.files = c(stdout = out_f, stderr = err_f %||% NA_character_)
   job$.pos = c(stdout = 0, stderr = 0)
   job$.started = reactor_now()
-  job$.stdin = stdin
   job$.stop_requested = FALSE
   job$read = function(stream = "stdout", n = NULL) bridge_job_read(job, stream, n)
   job$wait = function(timeout = Inf, until = NULL) bridge_job_wait(job, timeout, until)
@@ -1375,38 +1331,36 @@ bridge_job_new = function(id, label, name, proc, out_f, err_f, stdin) {
   job$status = function() bridge_job_status(job)
   class(job) = "gptr_job"
   bridge_state$jobs[[id]] = job
-  job_add("bg", id, name, pid = job$pid, stop = function() bridge_job_kill(job),
-          status = function() bridge_job_status(job))
+  job_add("bg", id, name, pid = job$pid, stop = job$kill, status = job$status)
   job
 }
 
-#' peter$bg(): start a program in the background; stdout (and stderr unless merged) go to files
-#' in tempdir(), so an unread job never blocks (G5 g5_bg)
+#' peter$bg(): start a program in the background; stdout (and stderr unless merged) go to files in
+#' tempdir() (IC-70), so an unread job never blocks; at most 2 run under R CMD check (IC-60)
 #' @noRd
 bridge_bg = function(cmd, name = NULL, stdin = FALSE, merge = TRUE) {
   argv = bridge_chr(cmd)
   bridge_check_cmd(argv)
   check_string(name, "name", null = TRUE)
-  use_stdin = stdin %||% FALSE
-  check_flag(use_stdin, "stdin")
-  merged = merge %||% TRUE
-  check_flag(merged, "merge")
+  check_flag(stdin, "stdin")
+  check_flag(merge, "merge")
   label = bridge_label(argv)
-  if (bridge_running_jobs() >= proc_pool_cap(.Machine$integer.max)) {
+  running = sum(vapply(bridge_state$jobs, function(j) isTRUE(j$.proc$is_alive()), NA))
+  if (running >= proc_pool_cap(.Machine$integer.max)) {
     gptr_abort(paste("At most 2 background jobs run at once while R CMD check runs;",
                      "kill one with peter$jobs(kill = TRUE) or job$kill()."),
                "spawn", command = label)
   }
   target = bridge_resolve(argv)
   id = id_new("j", 6L)
-  dir = bridge_job_dir()
+  dir = file.path(tempdir(), "gptr-jobs")
+  dir.create(dir, showWarnings = FALSE)
   out_f = file.path(dir, paste0(id, ".out"))
-  err_f = if (merged) NULL else file.path(dir, paste0(id, ".err"))
-  p = proc_spawn(target$command, target$args, env = child_env("helper"), wd = getwd(),
-                 stdin = if (use_stdin) "|" else NULL, stdout = out_f,
-                 stderr = if (merged) "2>&1" else err_f)
-  job = bridge_job_new(id, bridge_label(argv, 60L), name %||% bridge_job_name(argv), p, out_f,
-                       err_f, use_stdin)
+  err_f = if (!merge) file.path(dir, paste0(id, ".err"))
+  p = proc_spawn(target$command, target$args, env = child_env("helper"),
+                 stdin = if (stdin) "|", stdout = out_f, stderr = if (merge) "2>&1" else err_f)
+  program = if (length(argv) > 1L) argv[[1L]] else sub("\\s.*", "", trimws(argv))
+  job = bridge_job_new(id, label, name %||% basename(program), p, out_f, err_f)
   bridge_emit(list(bridge = "bg", id = id, cmd = argv,
                    level = max(3L, bridge_level(argv, "command")), status = "running",
                    seconds = 0, bytes_out = 0L, bytes_err = 0L, spill = NULL,
@@ -1425,33 +1379,22 @@ print.gptr_job = function(x, ...) {
   invisible(x)
 }
 
-#' The data frame of background jobs (id, name, pid, status, seconds, cmd)
-#' @noRd
-bridge_jobs_frame = function(jobs) {
-  if (!length(jobs)) {
-    return(data.frame(id = character(), name = character(), pid = integer(),
-                      status = character(), seconds = numeric(), cmd = character()))
-  }
-  now = reactor_now()
-  data.frame(id = vapply(jobs, function(j) j$id, ""),
-             name = vapply(jobs, function(j) j$name, ""),
-             pid = vapply(jobs, function(j) as.integer(j$pid), 1L),
-             status = vapply(jobs, function(j) j$status(), ""),
-             seconds = vapply(jobs, function(j) round(now - j$.started), 1),
-             cmd = vapply(jobs, function(j) j$cmd, ""),
-             row.names = NULL)
-}
-
-#' peter$jobs(): the background jobs; kill = TRUE stops the running ones first and returns the
-#' table invisibly
+#' peter$jobs(): the background jobs (id, name, pid, status, seconds, cmd); kill = TRUE stops the
+#' running ones first and returns the table invisibly
 #' @noRd
 bridge_jobs = function(kill = FALSE) {
-  stop_all = kill %||% FALSE
-  check_flag(stop_all, "kill")
+  check_flag(kill, "kill")
   jobs = bridge_state$jobs
-  if (!stop_all) return(bridge_jobs_frame(jobs))
-  for (job in jobs) bridge_job_kill(job)
-  invisible(bridge_jobs_frame(jobs))
+  if (kill) for (job in jobs) job$kill()
+  now = reactor_now()
+  tab = data.frame(id = vapply(jobs, function(j) j$id, ""),
+                   name = vapply(jobs, function(j) j$name, ""),
+                   pid = vapply(jobs, function(j) j$pid, 1L),
+                   status = vapply(jobs, function(j) j$status(), ""),
+                   seconds = vapply(jobs, function(j) round(now - j$.started), 1),
+                   cmd = vapply(jobs, function(j) j$cmd, ""),
+                   row.names = NULL)
+  if (kill) invisible(tab) else tab
 }
 ```
 
@@ -2574,12 +2517,12 @@ git commit -m 'feat(bridge): peter$py() in reticulate __main__ with the provisio
 `peter$knit(engine, code)` (04 §9.4) returns the output lines of a knitr language engine. The shell engines (`bash`, `sh`, `zsh`, `powershell`, `cmd`) never reach knitr: knitr's bash engine runs `system2()` with no timeout and assumes bash (G5 verification item 7), so they run through the `peter$sh()` engine of Task 2 with the complete `helper` environment and a timeout (IC-67): `bash -c`/`sh -c`/`zsh -c` on Unix, Git Bash on Windows, PowerShell with `-EncodedCommand` (P04's `shell_ps_encode()`), and `cmd /d /s /c "chcp 65001 >nul & ..."` on Windows only. `python` and `sql` run through `peter$py()` (its provisioning guard and the shared `__main__`) and `peter$sql()` on the one DBI connection in the caller's scope, as G5 routes them. An engine that names a registered interpreter (an interpreter of that name, or one whose `programs` include it: `Rscript`, `R`, `perl`, `ruby`, `node`, `js`, `julia`, `python3`) runs like `peter$script()`: the code goes to a temporary script with the interpreter's first extension and runs through the `peter$sh()` engine with the `helper` environment and the timeout. knitr's own engines for these programs call `system2()` without a timeout and hand the child the session's complete environment, registered keys included, which IC-60 forbids for bridge children (a `perl` chunk could read a key the secret guard would stop in `r`). Every other engine (non-interpreter engines such as `cat`, `verbatim` or a user-registered engine, and programs gptr has no interpreter record for) runs through knitr with its `running:` message suppressed. The timeout is `bridge_knit_timeout()` (120 s, `peter$sh()`'s default), a function so that the test can shorten it with `local_mocked_bindings()` without a new option.
 
 **Files:**
-- Modify: `R/bridge-lang.R` (append)
+- Modify: `R/bridge-lang.R` (append), `R/bridge-sh.R` (`bridge_text()` and `print.gptr_bridge_text()` take the `out_id` of knit output)
 - Test: `tests/testthat/test-bridge-lang.R` (append)
 
 **Interfaces:**
 - Consumes: `shell_resolve(cmd)` (P04, Windows Git Bash) and `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()`, `clean_terminal()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_status_line()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
-- Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_cmd_lines(x)`; `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`; `bridge_knit_interpreter(engine)` -> an interpreter spec or `NULL`; `bridge_knit_script(spec, engine, src)` -> `gptr_cmd`.
+- Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_text(lines, footer = NULL, out_id = NULL)` (replaces Task 4's); `bridge_cmd_lines(x)`; `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`; `bridge_knit_interpreter(engine)` -> an interpreter spec or `NULL`; `bridge_knit_script(spec, engine, src)` -> `gptr_cmd`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2687,6 +2630,21 @@ Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 Expected: the five new tests error with `could not find function "bridge_knit"`; summary `[ FAIL 5 | WARN 0 | SKIP 4 | PASS 20 ]` without duckdb and Python, `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 51 ]` with both.
 
 - [ ] **Step 3: Write the implementation**
+
+In `R/bridge-sh.R`, replace Task 4's `bridge_text()` (with its title line) and the `view =` line of `print.gptr_bridge_text()`, so the notice of a cut knit view names its `peter$out()` id:
+
+```r
+#' Output lines with a budgeted print and a footer (job reads, knit output)
+#' @noRd
+bridge_text = function(lines, footer = NULL, out_id = NULL) {
+  structure(lines, class = c("gptr_bridge_text", "character"), footer = footer, out_id = out_id)
+}
+```
+
+```r
+  view = bridge_view_lines(as.character(x), bridge_budget(NULL) - est_tokens(footer, "r_output"),
+                           id = attr(x, "out_id", exact = TRUE))
+```
 
 Append to `R/bridge-lang.R`:
 
@@ -2846,7 +2804,7 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 45 ]` without duckdb and Python (th
 - [ ] **Step 5: Commit**
 
 ```bash
-git add R/bridge-lang.R tests/testthat/test-bridge-lang.R
+git add R/bridge-lang.R R/bridge-sh.R tests/testthat/test-bridge-lang.R
 git commit -m 'feat(bridge): peter$knit() with shell engines on the sh engine and a timeout'
 ```
 

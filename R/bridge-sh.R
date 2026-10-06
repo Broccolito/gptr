@@ -1,6 +1,6 @@
 # Polyglot bridges, shell side (P22; contract 5.10, 7.22, 9.4, 10.2 row 6, 10.4; architecture
 # 4.2, 6.7): command resolution, budgeted head+tail views, peter$sh() and the gptr_cmd result,
-# the interpreter kind and peter$script().
+# the interpreter kind and peter$script(), background jobs (peter$bg(), peter$jobs()).
 
 #' Split a simple command line into words, or NULL when it needs a shell
 #' Words split on space and tab (as sh); quotes group them. A metacharacter or backslash outside
@@ -492,6 +492,203 @@ bridge_script = function(path, args = character(), interpreter = NULL, ...) {
   file = normalizePath(path, winslash = "/")
   bridge_exec(bridge_script_argv(file, script_args, interp), ..., bridge = "script",
               label = bridge_label(c(basename(file), script_args)), level = 3L)
+}
+
+# ---- background jobs: peter$bg() and peter$jobs() ------------------------------------------------
+
+#' The gptr_job objects of this process, a job process table (architecture 2.2 rule 5); each job
+#' also has a P04 job-table row, which gptr_jobs() lists and the unload cleanup stops (IC-12)
+#' @noRd
+bridge_state = new.env(parent = emptyenv())
+bridge_state$jobs = list()
+
+#' Output lines with a budgeted print and a footer (job reads)
+#' @noRd
+bridge_text = function(lines, footer) {
+  structure(lines, class = c("gptr_bridge_text", "character"), footer = footer)
+}
+
+#' Print bridge output lines within the helper budget, then the footer
+#' @param x A `gptr_bridge_text`.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_bridge_text = function(x, ...) {
+  footer = attr(x, "footer", exact = TRUE)
+  view = bridge_view_lines(as.character(x), bridge_budget(NULL) - est_tokens(footer, "r_output"))
+  bridge_write(c(if (length(view)) view else "(no output)", footer))
+  invisible(x)
+}
+
+#' Status of a job: running, done, error (non-zero exit) or stopped (after kill(), IC-60)
+#' @noRd
+bridge_job_status = function(job) {
+  if (isTRUE(job$.proc$is_alive())) return("running")
+  if (job$.stop_requested) return("stopped")
+  if (identical(job$.proc$get_exit_status(), 0L)) "done" else "error"
+}
+
+#' New bytes of a job's output file since the last read; while the job runs only through the
+#' last newline, so a partial last line waits
+#' @noRd
+bridge_job_bytes = function(job, stream) {
+  alive = isTRUE(job$.proc$is_alive())
+  path = job$.files[[stream]]
+  from = job$.pos[[stream]]
+  n = if (file.exists(path)) file.size(path) - from else 0
+  if (n <= 0) return(raw())
+  con = file(path, "rb")
+  on.exit(close(con), add = TRUE)
+  seek(con, from)
+  bytes = readBin(con, "raw", n)
+  if (alive) bytes = bytes[seq_len(max(0L, which(bytes == as.raw(10L))))]
+  bytes
+}
+
+#' New complete lines of one stream since the last read, with the footer "[<id> <status>, <s>s]"
+#' @noRd
+bridge_job_read = function(job, stream = "stdout", n = NULL) {
+  stream = check_choice(stream, c("stdout", "stderr"), "stream")
+  n = check_number(n, "n", min = 1, int = TRUE, null = TRUE)
+  if (is.na(job$.files[[stream]])) {
+    gptr_abort("This job merges stderr into stdout (merge = TRUE); read stdout.",
+               "invalid_argument", arg = "stream", expected = "\"stdout\" for a merged job")
+  }
+  bytes = bridge_job_bytes(job, stream)
+  job$.pos[[stream]] = job$.pos[[stream]] + length(bytes)
+  lines = clean_terminal(raw_to_utf8(bytes))
+  if (!is.null(n)) lines = utils::tail(lines, n)
+  bridge_text(lines, paste0("[", job$id, " ", bridge_job_status(job), ", ",
+                            round(reactor_now() - job$.started), "s]"))
+}
+
+#' Wait for the exit, for `until` (a regular expression) in a new complete line of stdout, or for
+#' `timeout` seconds, pumping P04's reactor (so stdin queued by write() drains); then read()
+#' @noRd
+bridge_job_wait = function(job, timeout = Inf, until = NULL) {
+  check_string(until, "until", null = TRUE)
+  settled = function() {
+    if (!isTRUE(job$.proc$is_alive())) return(TRUE)
+    !is.null(until) &&
+      any(grepl(until, clean_terminal(raw_to_utf8(bridge_job_bytes(job, "stdout"))), perl = TRUE))
+  }
+  reactor_pump(until = settled, slice_ms = 200L, timeout = timeout)
+  bridge_job_read(job)
+}
+
+#' Send lines to a job's stdin through P04's non-blocking write_all() (IC-60)
+#' @noRd
+bridge_job_write = function(job, text) {
+  if (!job$.proc$has_input_connection()) {
+    gptr_abort("This job was started without stdin = TRUE.", "invalid_argument", arg = "text",
+               expected = "a job started with peter$bg(..., stdin = TRUE)")
+  }
+  check_strings(text, "text")
+  if (!isTRUE(job$.proc$is_alive())) {
+    gptr_abort(paste0("Job ", job$id, " has exited and cannot read input."), "process",
+               command = job$cmd, status = job$.proc$get_exit_status(), stderr = "")
+  }
+  write_all(job$.proc, paste0(text, "\n"))
+  invisible(job)
+}
+
+#' Stop a running job and its process tree; its status then reads stopped (IC-60)
+#' @noRd
+bridge_job_kill = function(job) {
+  if (isTRUE(job$.proc$is_alive())) {
+    job$.stop_requested = TRUE
+    kill_all(job$.proc)
+    job$.proc$wait(1000L)
+  }
+  invisible(job)
+}
+
+#' The gptr_job environment (04 5.10), kept in both job tables; private fields start with a dot.
+#' This frame holds no user object, so its closures keep none alive (architecture 6.4 rule R1).
+#' @noRd
+bridge_job_new = function(id, label, name, proc, out_f, err_f) {
+  job = new.env(parent = emptyenv())
+  job$id = id
+  job$cmd = label
+  job$name = name
+  job$pid = proc$get_pid()
+  job$.proc = proc
+  job$.files = c(stdout = out_f, stderr = err_f %||% NA_character_)
+  job$.pos = c(stdout = 0, stderr = 0)
+  job$.started = reactor_now()
+  job$.stop_requested = FALSE
+  job$read = function(stream = "stdout", n = NULL) bridge_job_read(job, stream, n)
+  job$wait = function(timeout = Inf, until = NULL) bridge_job_wait(job, timeout, until)
+  job$write = function(text) bridge_job_write(job, text)
+  job$kill = function() bridge_job_kill(job)
+  job$status = function() bridge_job_status(job)
+  class(job) = "gptr_job"
+  bridge_state$jobs[[id]] = job
+  job_add("bg", id, name, pid = job$pid, stop = job$kill, status = job$status)
+  job
+}
+
+#' peter$bg(): start a program in the background; stdout (and stderr unless merged) go to files in
+#' tempdir() (IC-70), so an unread job never blocks; at most 2 run under R CMD check (IC-60)
+#' @noRd
+bridge_bg = function(cmd, name = NULL, stdin = FALSE, merge = TRUE) {
+  argv = bridge_chr(cmd)
+  bridge_check_cmd(argv)
+  check_string(name, "name", null = TRUE)
+  check_flag(stdin, "stdin")
+  check_flag(merge, "merge")
+  label = bridge_label(argv)
+  running = sum(vapply(bridge_state$jobs, function(j) isTRUE(j$.proc$is_alive()), NA))
+  if (running >= proc_pool_cap(.Machine$integer.max)) {
+    gptr_abort(paste("At most 2 background jobs run at once while R CMD check runs;",
+                     "kill one with peter$jobs(kill = TRUE) or job$kill()."),
+               "spawn", command = label)
+  }
+  target = bridge_resolve(argv)
+  id = id_new("j", 6L)
+  dir = file.path(tempdir(), "gptr-jobs")
+  dir.create(dir, showWarnings = FALSE)
+  out_f = file.path(dir, paste0(id, ".out"))
+  err_f = if (!merge) file.path(dir, paste0(id, ".err"))
+  p = proc_spawn(target$command, target$args, env = child_env("helper"),
+                 stdin = if (stdin) "|", stdout = out_f, stderr = if (merge) "2>&1" else err_f)
+  program = if (length(argv) > 1L) argv[[1L]] else sub("\\s.*", "", trimws(argv))
+  job = bridge_job_new(id, label, name %||% basename(program), p, out_f, err_f)
+  bridge_emit(list(bridge = "bg", id = id, cmd = argv,
+                   level = max(3L, bridge_level(argv, "command")), status = "running",
+                   seconds = 0, bytes_out = 0L, bytes_err = 0L, spill = NULL,
+                   digest = paste0("bg ", job$name, " ", id, " started: ", label)))
+  job
+}
+
+#' One line per job: <job id name pid status>
+#' @param x A `gptr_job`.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+#' @noRd
+print.gptr_job = function(x, ...) {
+  bridge_write(paste0("<job ", x$id, " ", x$name, " ", x$pid, " ", x$status(), ">"))
+  invisible(x)
+}
+
+#' peter$jobs(): the background jobs (id, name, pid, status, seconds, cmd); kill = TRUE stops the
+#' running ones first and returns the table invisibly
+#' @noRd
+bridge_jobs = function(kill = FALSE) {
+  check_flag(kill, "kill")
+  jobs = bridge_state$jobs
+  if (kill) for (job in jobs) job$kill()
+  now = reactor_now()
+  tab = data.frame(id = vapply(jobs, function(j) j$id, ""),
+                   name = vapply(jobs, function(j) j$name, ""),
+                   pid = vapply(jobs, function(j) j$pid, 1L),
+                   status = vapply(jobs, function(j) j$status(), ""),
+                   seconds = vapply(jobs, function(j) round(now - j$.started), 1),
+                   cmd = vapply(jobs, function(j) j$cmd, ""),
+                   row.names = NULL)
+  if (kill) invisible(tab) else tab
 }
 
 # ---- builtin:bridges -----------------------------------------------------------------------------

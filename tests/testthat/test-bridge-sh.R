@@ -337,3 +337,87 @@ test_that("unknown extensions, missing scripts and unknown options are argument 
   expect_error(bridge_script(file.path(d, "b.R"), shell = "zsh"),
                class = "gptr_error_invalid_argument")
 })
+
+test_that("a background job is read incrementally and waited for until a pattern", {
+  skip_on_cran()
+  j = bridge_bg(r_cmd("cat('ready\\n'); flush(stdout()); Sys.sleep(1); cat('DONE acc=0.93\\n')"),
+                name = "trainer")
+  withr::defer(j$kill())
+  expect_s3_class(j, "gptr_job")
+  expect_identical(j$name, "trainer")
+  expect_true(all(c("id", "cmd", "name", "pid", "read", "wait", "write", "kill", "status") %in%
+                    ls(j)))
+  first = j$wait(timeout = 20, until = "ready")
+  expect_s3_class(first, "gptr_bridge_text")
+  expect_true("ready" %in% first)
+  rest = j$wait(timeout = 20)
+  expect_true("DONE acc=0.93" %in% rest)
+  expect_false("ready" %in% rest)
+  expect_identical(j$status(), "done")
+  expect_output(print(j), "^<job j[0-9a-f]{6} trainer [0-9]+ done>$")
+  expect_output(print(rest), "DONE acc=0.93", fixed = TRUE)
+  expect_output(print(rest), paste0("[", j$id, " done, "), fixed = TRUE)
+  expect_length(j$read(), 0L)
+})
+
+test_that("wait(until =) returns once the matching line is complete", {
+  skip_on_cran()
+  j = bridge_bg(r_cmd(paste0("cat('rea'); flush(stdout()); Sys.sleep(1); cat('dy\\n'); ",
+                             "flush(stdout()); Sys.sleep(30)")))
+  withr::defer(j$kill())
+  first = j$wait(timeout = 20, until = "rea")
+  expect_true("ready" %in% first)
+})
+
+test_that("a job with stdin = TRUE talks over stdin and kill() stops it", {
+  skip_on_cran()
+  code = paste("con = file('stdin'); open(con); cat('ready\\n'); flush(stdout());",
+               "repeat { l = readLines(con, n = 1L); if (!length(l)) break;",
+               "cat('echo:', toupper(l), '\\n'); flush(stdout()) }")
+  j = bridge_bg(r_cmd(code), stdin = TRUE)
+  withr::defer(j$kill())
+  j$wait(timeout = 20, until = "ready")
+  j$write(c("hello", "gptr"))
+  out = j$wait(timeout = 20, until = "echo: GPTR")
+  expect_true(any(grepl("echo: HELLO", out, fixed = TRUE)))
+  expect_true(any(grepl("echo: GPTR", out, fixed = TRUE)))
+  j$kill()
+  expect_identical(j$status(), "stopped")
+  tab = bridge_jobs()
+  expect_identical(tab$status[match(j$id, tab$id)], "stopped")
+  expect_error(j$write("again"), class = "gptr_error_process")
+})
+
+test_that("separate stderr is read on request and a failing job reads error", {
+  skip_on_cran()
+  j = bridge_bg(r_cmd("cat('o\\n'); message('e'); quit(status = 1)"), merge = FALSE)
+  withr::defer(j$kill())
+  j$wait(timeout = 20)
+  expect_true("e" %in% j$read("stderr"))
+  expect_identical(j$status(), "error")
+})
+
+test_that("bg jobs are in gptr_jobs(), write() needs stdin and kill = TRUE stops them", {
+  skip_on_cran()
+  j = bridge_bg(r_cmd("Sys.sleep(30)"))
+  withr::defer(j$kill())
+  tab = gptr_jobs()
+  expect_true(j$id %in% tab$id)
+  expect_identical(tab$kind[match(j$id, tab$id)], "bg")
+  expect_error(j$write("x"), class = "gptr_error_invalid_argument")
+  expect_error(j$read("stderr"), class = "gptr_error_invalid_argument")
+  invisible(bridge_jobs(kill = TRUE))
+  expect_identical(j$status(), "stopped")
+  expect_identical(gptr_jobs()$status[match(j$id, gptr_jobs()$id)], "stopped")
+})
+
+test_that("at most two jobs run at once under R CMD check (IC-60)", {
+  skip_on_cran()
+  invisible(bridge_jobs(kill = TRUE))
+  withr::local_envvar(`_R_CHECK_PACKAGE_NAME_` = "gptr")
+  a = bridge_bg(r_cmd("Sys.sleep(30)"))
+  withr::defer(a$kill())
+  b = bridge_bg(r_cmd("Sys.sleep(30)"))
+  withr::defer(b$kill())
+  expect_error(bridge_bg(r_cmd("Sys.sleep(30)")), class = "gptr_error_spawn")
+})
