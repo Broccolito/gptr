@@ -692,3 +692,30 @@ test_that("undo and redo move current and report each artifact", {
   expect_identical(artifact_ckpt_undo(failed, NULL, FALSE), "artifacts: not restored (boom)")
   expect_identical(artifact_ckpt_describe(failed), "artifacts: not restored (boom)")
 })
+
+test_that("the shiny-bslib skill has its catalog line, house style and a valid example app", {
+  f = system.file("gptr", "skills", "shiny-bslib", "SKILL.md", package = "gptr", mustWork = TRUE)
+  # The frontmatter is read with yaml (an Import, 03 section 9), not P17's skill_parse(): P17 is
+  # outside P23's dependency closure (05: P10, P11, P14, P16)
+  lines = readLines(f, encoding = "UTF-8")
+  end = which(lines == "---")[2L]
+  s = yaml::yaml.load(paste(lines[2L:(end - 1L)], collapse = "\n"))
+  expect_identical(s[["name"]], "shiny-bslib")
+  expect_identical(paste0("- ", s[["name"]], ": ", s[["description"]], " [skill:", s[["name"]],
+                          "/SKILL.md]"),
+                   paste0("- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, ",
+                          "cards, value boxes) for artifacts. [skill:shiny-bslib/SKILL.md]"))
+  txt = paste(lines, collapse = "\n")
+  expect_false(grepl("(^|[^A-Za-z0-9_.])str\\(", txt))
+  expect_false(grepl("<\\-", txt))
+  expect_true(all(utf8ToInt(txt) < 128L))
+  expect_match(txt, "peter$app(\"<id>\", data = c(\"obj\"))", fixed = TRUE)
+  open = which(lines == "```r")
+  expect_length(open, 1L)
+  close = which(lines == "```")
+  code = lines[(open + 1L):(close[close > open][1L] - 1L)]
+  expect_no_error(parse(text = code, keep.source = FALSE))
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  expect_true(artifact_static_check(code)$ok)
+})
