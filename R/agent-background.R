@@ -177,11 +177,12 @@ on_load(ext_declare_builtin("background", builtin_background))
 on_load(ext_service_set("bg.register", bg_register, provided_by = "P21", builtin = "background"))
 on_load(on_unload(bg_shutdown))
 
-#' The `builtin:background` factory. Its hook is also the record that keeps the bootstrap service
+#' The `builtin:background` factory. Its hooks are also the records that keep the bootstrap service
 #' `bg.register` visible (service_builtin_active(), IC-34)
 #' @noRd
 builtin_background = function(gptr) {
   gptr$on("tool_call", bg_on_tool_call, matcher = "ask")
+  gptr$on("tool_result", bg_on_tool_result, matcher = "r")
 }
 
 #' `tool_call` hook (matcher "ask"): during an idle tick a background session's `ask` call is
@@ -395,6 +396,7 @@ bg_tick = function() {
   } else {
     tryCatch(pump(), interrupt = function(cnd) for (run in runs) run_abort(run, reason = "user"))
   }
+  bg_flush_changes()
   invisible(TRUE)
 }
 
@@ -464,4 +466,30 @@ bg_resume = function(s) {
   }
   bg_release(d$id)
   invisible(NULL)
+}
+
+#' `tool_result` hook (matcher "r"): record the names an idle-tick r call of a background session
+#' changed. It never prints (it runs inside the dispatcher); plan mode changes a scratch overlay
+#' @noRd
+bg_on_tool_result = function(event, ctx) {
+  s = if (bg_ticking()) bg_get(event$session)
+  if (is.null(s) || identical(session_data(s)$mode, "plan")) return(NULL)
+  nm = unlist(event$details$objects, use.names = FALSE)
+  if (length(nm)) {
+    st = bg_state()
+    st$changed = c(st$changed, list(list(id = event$session, names = nm)))
+  }
+  NULL
+}
+
+#' Print one notice per r result of the tick that changed bindings
+#' @noRd
+bg_flush_changes = function() {
+  st = bg_state()
+  items = st$changed
+  st$changed = NULL
+  for (it in items) {
+    gptr_inform(paste0("Background session ", it$id, " changed ", bg_names_text(it$names),
+                       " in your workspace."), "notice")
+  }
 }

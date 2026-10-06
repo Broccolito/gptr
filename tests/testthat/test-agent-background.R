@@ -477,3 +477,46 @@ test_that("a waiting session that cannot continue is aborted and released", {
   expect_false(bg_has(s$id))
   expect_null(session_live(s)$background)
 })
+
+test_that("an r tool that changed bindings at an idle tick prints one notice", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_gptr_options(background_tools = "idle", quiet = FALSE)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "made_in_bg = 1")), "ok"))
+  e = new.env()
+  notes = bg_capture_notices(function() {
+    s = peter("make it", model = fake, mode = "auto", envir = e, background = TRUE)
+    bg_pump_until(function() !bg_has(s$id))
+  })
+  expect_identical(e$made_in_bg, 1)
+  expect_length(grep("changed made_in_bg in your workspace", notes, fixed = TRUE), 1L)
+  fg = gptr_fake_provider(list(list(tool = "r", input = list(code = "made_fg = 2")), "ok"))
+  notes2 = bg_capture_notices(function() {
+    peter("make it here", model = fg, mode = "auto", envir = e)
+  })
+  expect_identical(e$made_fg, 2)
+  expect_length(grep("made_fg", notes2, fixed = TRUE), 0L)
+  expect_true("builtin:background" %in% gptr_registry()$source)
+})
+
+test_that("the r result hook records only idle-tick changes outside plan mode", {
+  skip_on_cran()
+  local_gptr_options(quiet = FALSE)
+  s = bg_fixture()
+  ev = list(type = "tool_result", session = s$id, tool_name = "r",
+            details = list(objects = list(added = "a", modified = character(), removed = "b")))
+  st = bg_state()
+  expect_null(bg_on_tool_result(ev, NULL))
+  expect_null(st$changed)
+  st$ticking = TRUE
+  expect_null(bg_on_tool_result(ev, NULL))
+  d = session_data(s)
+  d$mode = "plan"
+  bg_on_tool_result(ev, NULL)
+  st$ticking = FALSE
+  expect_identical(st$changed, list(list(id = s$id, names = c("a", "b"))))
+  expect_message(bg_flush_changes(), "changed a, b in your workspace",
+                 class = "gptr_message_notice")
+  expect_null(st$changed)
+})
