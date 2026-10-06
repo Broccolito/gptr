@@ -2095,3 +2095,18 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   transports" (+6), "modern HTTP requests carry the era headers; invalid x-mcp-header tools are dropped" (+4),
   "Streamable HTTP works in both eras: ..." (+2, a legacy session the server forgot is initialised again).
   Evidence: progress/P18.md Task 5.
+
+## D-172 - P18 `peter$mcp`: closures immune to argument names; specs follow their server; setting exposure (2026-10-06)
+- Rule: `mcp_member_closure()` calls its runner inlined, as P10's closures do (a tool argument named `tool`,
+  `server`, `fm` or `label` shadowed the plan's closure variables).
+- Rule: a tool spec keeps the server record it was built from; `mcp_sync()`'s re-read drops it when that record
+  changed or is gone (the plan kept a removed server's direct tools in later tool arrays, and old risk levels
+  after a `trusted` change). builtin:mcp's `session_start` also honours setting `mcp.exposure = "direct"`.
+- Rule: every MCP signature (spec, `<mcp>` catalog, `gptr_mcp(tools = TRUE)`) names its arguments by
+  `mcp_r_name()`, as the closure's formals (`mcp_signature()`; the plan showed raw property names).
+- Rule: `mcp_invoke()` leaves the 4,000-token cap to the dispatcher (`output_tokens`); settings are read with
+  `setting_get("mcp.<field>")` (D-167).
+- Contract-visible: none.
+- Tests: test-mcp-namespace.R "tool arguments named like ..." (+2), "signatures name the closure's formals ..."
+  (+4), "tool specs follow their server ..." (+5), "setting mcp.exposure = \"direct\" ..." (+1). Evidence:
+  progress/P18.md Task 7.

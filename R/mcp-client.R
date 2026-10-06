@@ -84,6 +84,14 @@ mcp_first_sentence = function(d, n = 120L) {
   d
 }
 
+#' R signature of an MCP tool: its arguments under mcp_r_name(), the formals of its closure
+#' @noRd
+mcp_signature = function(name, schema, description, prefix = "") {
+  if (length(schema$properties)) names(schema$properties) = mcp_r_name(names(schema$properties))
+  schema$required = mcp_r_name(as.character(unlist(schema$required)))
+  schema_signature(mcp_r_name(name), schema, description, prefix = prefix)
+}
+
 #' Abort for an argument that does not fit the tool's schema
 #' @noRd
 mcp_arg_error = function(path, what) {

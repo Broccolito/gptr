@@ -568,6 +568,14 @@ mcp_sync = function(force = FALSE, session = NULL) {
     id = registry_add(spec, source = source, rank = rank)
     assign(s$name, id, envir = st$servers)
   }
+  # tool specs live as long as the server record they were built from (mcp_spec_ensure())
+  for (k in ls(st$specs)) {
+    rec = get(k, envir = st$specs)
+    if (!identical(registry_get("mcp_server", rec$server$name, session = rec$sid), rec$server)) {
+      registry_remove(rec$id)
+      rm(list = k, envir = st$specs)
+    }
+  }
   st$stamp = stamp
   mcp_servers_all(session)
 }
@@ -668,19 +676,16 @@ mcp_unlisted_line = function(name) {
          ") lists them")
 }
 
-#' Catalog lines of one server: "<server>: <n> tools, <k> shown" and one signature per shown
-#' `r` tool (`keep` = tools shown, NULL for all; `bare` = shown without their description)
+#' Catalog lines of one server: "<server>: <n> tools, <n> shown" and one signature per `r`
+#' tool (`bare` = tools shown without their description)
 #' @noRd
-mcp_server_lines = function(s, tools = mcp_tools_known(s), keep = NULL, bare = character(),
-                            exposures = "r") {
+mcp_server_lines = function(s, tools = mcp_tools_known(s), bare = character(), exposures = "r") {
   if (is.null(tools)) return(mcp_unlisted_line(s$name))
   mine = Filter(function(t) mcp_tool_exposure(s, t$name) %in% exposures, tools)
-  nm = vapply(mine, function(t) t$name, "")
-  show = if (is.null(keep)) nm else intersect(nm, keep)
-  lines = paste0(mcp_r_name(s$name), ": ", length(mine), " tools, ", length(show), " shown")
-  for (t in mine[nm %in% show]) {
-    d = if (t$name %in% bare) NULL else mcp_first_sentence(t$description)
-    lines = c(lines, paste0("  ", schema_signature(mcp_r_name(t$name), t$input_schema, d %||% "")))
+  lines = paste0(mcp_r_name(s$name), ": ", length(mine), " tools, ", length(mine), " shown")
+  for (t in mine) {
+    d = if (t$name %in% bare) "" else mcp_first_sentence(t$description)
+    lines = c(lines, paste0("  ", mcp_signature(t$name, t$input_schema, d)))
   }
   lines
 }
@@ -887,7 +892,7 @@ gptr_mcp = function(server = NULL, tools = FALSE, refresh = FALSE) {
       })
     }
     for (t in if (tools) tl) {
-      sig = schema_signature(mcp_r_name(t$name), t$input_schema, mcp_first_sentence(t$description))
+      sig = mcp_signature(t$name, t$input_schema, mcp_first_sentence(t$description))
       rows[[length(rows) + 1L]] = data.frame(server = s$name, tool = t$name, signature = sig,
                                              exposure = mcp_tool_exposure(s, t$name),
                                              tokens = est_tokens(sig, "code"),
