@@ -155,6 +155,15 @@ pending (maintainer).
   `^auth-childenv$` PASS 140. Lint clean. Neighbours: `^(lint-rules|arch-layers)$` PASS 19 green.
 - Reviews: none recorded. Deviations: none. Open: hosted connections confirmation (with CI-8).
 
+## Task CI-13 - The launcher's stop returns once the child has exited (2026-10-06)
+- Red: `test-artifact-app.R:528` (CI-8's `:519`) `h$alive()` TRUE after `h$stop()`: a child that outlives the 3 s
+  grace gets `kill_tree()`'s SIGKILL, and processx's `kill()` then returns without reaping it while it exits (a 1.2 GB
+  child reads alive for about 20 ms); a throwaway control (an 800 MB app that sleeps 5 s at exit) FAIL 3 of 3. Fix:
+  the launcher's `stop` waits for the exit, bounded by the grace (artifact children are the only `kill_all()` targets
+  without a gptr marker, whose cleanup already waits). Green: control PASS 6; `^artifact-app$` PASS 272 (x5, r1 x3);
+  `^artifact-` PASS 316 (beside lint). Lint clean. Neighbours: `^(lint-rules|arch-layers)$` PASS 19 green.
+- Reviews: r1 1 finding (0/0/1; heading named a test change, the fix is in R/) -> fixed. Deviations: none. Open: none.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);

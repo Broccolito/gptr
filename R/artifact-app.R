@@ -748,11 +748,16 @@ artifact_wait_port = function(proc, port_file, timeout = artifact_launch_timeout
   suppressWarnings(as.integer(readLines(port_file, n = 1L, warn = FALSE, encoding = "UTF-8")))[1L]
 }
 
-#' Closures over the child process only (a record never holds the launching frame)
+#' Closures over the child process only (a record never holds the launching frame); `stop`
+#' returns once the child has exited (processx's kill() can return while it is still exiting)
 #' @noRd
 artifact_proc_fns = function(proc) {
   list(alive = function() isTRUE(tryCatch(proc$is_alive(), error = function(e) FALSE)),
-       stop = function() kill_all(proc, grace = artifact_stop_grace))
+       stop = function() {
+         kill_all(proc, grace = artifact_stop_grace)
+         try(proc$wait(artifact_stop_grace * 1000), silent = TRUE)
+         invisible(NULL)
+       })
 }
 
 #' The `launch` of the shiny and html artifact types (contract 10.2 row 19): a supervised callr
