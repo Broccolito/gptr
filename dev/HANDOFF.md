@@ -39,8 +39,8 @@ P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135
   the plan row `get(nm)` becomes 3, and read rows for common base functions (Task 3b).
 - Standing: work on `main`, task-sized commits with the plan's subject + `Co-Authored-By`, periodic
   pushes; **ask first** before pushing tags, releases, CRAN, paid/live runs (section 9).
-- **M0/M1 tags approved** (maintainer, 2026-10-06): push annotated `gptr-1.0-m0` and `gptr-1.0-m1` on the
-  first commit whose hosted CI run is fully green and whose local gates pass. Later tags still need asking.
+- **Milestone tags** (maintainer, 2026-10-06): M0, M1 and M2 approved and pushed; the maintainer's condition is
+  hosted CI green and the code reviewed and tested. Ask before each later tag (M3-M5) and before release.
 
 ## 3. Status
 
@@ -56,15 +56,15 @@ P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135
 | P19 Sub-agents | 1/12 | - | Task 2+ need P11 Task 7 |
 | P20 CLI providers | 11/11 | (with M4 gate) | live test gated (maintainer) |
 | P21 Background | 3/7 | - | Task 4+ need P11 Task 7 |
-| P22 Polyglot | 7/11 | - | Tasks 5, 9-11 need P11 Task 7 |
-| P23 Artifacts | 9/12 | - | Task 9 needs P11 Task 7; Task 10 needs P14 Task 7; Task 12 after 9 |
+| P22 Polyglot | 11/11 | `fa9c171` | |
+| P23 Artifacts | 11/12 | - | Task 10 needs P14 Task 7 (console renderer hooks) |
 | P24 Benchmarks/e2e | 6/13 | - | live calibration and polyglot baseline pending; Tasks 3, 8-13 later |
 | P25 Release | 1/15 | - | Task 2+ need P11, P16, P18, P19 |
 | **Total** | **~244/307** | | |
 
-Milestones: **M0 and M1 are closed** (tags `gptr-1.0-m0`, `gptr-1.0-m1` on `5e01bf4`: local gates on a clean
-export and hosted CI 13/13 green). M2's plans (P09-P13) are complete; its gate (local + hosted) and tag
-(ask the maintainer) are next. Hosted CI: `.github/workflows/R-CMD-check.yaml` on every push to `main` (one
+Milestones: **M0, M1 and M2 are closed** (tags `gptr-1.0-m0`, `gptr-1.0-m1` on `5e01bf4`; `gptr-1.0-m2` on
+`ef21d3f`; each with local gates on a clean export and hosted CI 13/13 green). M3 needs P14, P16 (and
+the P17 row 5 exit), M4 needs P18, P19, P21 (P20 done). Hosted CI: `.github/workflows/R-CMD-check.yaml` on every push to `main` (one
 run per ref; superseded queued runs are cancelled); logs via `gh run view <run> --json jobs`.
 
 ## 4. Running now and how to resume
