@@ -67,7 +67,7 @@ repl_model = function(rs) {
   as.character(m %||% setting_get("model") %||% "the default model")[1L]
 }
 
-#' The prompt: "peter> " in manual mode, "peter[<mode>]> " otherwise
+#' The prompt: `"peter> "` in manual mode, `"peter[<mode>]> "` otherwise
 #' @noRd
 repl_prompt = function(rs) {
   mode = repl_mode(rs)

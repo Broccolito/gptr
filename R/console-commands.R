@@ -359,7 +359,7 @@ cmd_mcp = function(args, ctx) {
   utils::capture.output(print(f()))
 }
 
-#' /permissions [allow|ask|deny|remove <rule>]: the rules, or a change for this R session
+#' `/permissions [allow|ask|deny|remove <rule>]`: the rules, or a change for this R session
 #' (gptr_permissions() validates the rule)
 #' @noRd
 cmd_permissions = function(args, ctx) {
