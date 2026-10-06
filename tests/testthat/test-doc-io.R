@@ -1309,10 +1309,9 @@ test_that("an editor buffer is never edited without write consent (IC-45, IC-74)
 # ---- FIX-5 (CI-5, D-111): document formats are read without tools::file_ext() ----------------
 
 # R >= 4.6's tools::file_ext() calls basename(), which stops on a marked UTF-8 non-ASCII path in
-# a non-UTF-8 locale; local_r46_file_ext() gives any R the R 4.6 tools functions
+# a non-UTF-8 locale
 test_that("a non-ASCII document name has its format in any locale (R >= 4.6)", {
   local_name_locale()
-  local_r46_file_ext()
   expect_identical(doc_format_of("caf\u00e9.R"), "r")
   expect_identical(doc_format_of("/tmp/r\u00e9sum\u00e9/caf\u00e9.Rmd"), "rmd")
   expect_identical(doc_format_of("\u00e9tude.QMD"), "qmd")

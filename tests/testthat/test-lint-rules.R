@@ -132,7 +132,9 @@ lint_scan = function(paths) {
       magrittr = pd$token == "SPECIAL" & pd$text == paste0("%", ">%"),
       left_assign = (pd$token == "LEFT_ASSIGN" & pd$text == as.character(arch_arrow)) |
         pd$token == "RIGHT_ASSIGN",
-      withr = pd$token == "SYMBOL_PACKAGE" & pd$text == "withr"
+      withr = pd$token == "SYMBOL_PACKAGE" & pd$text == "withr",
+      file_ext = pd$token %in% c("SYMBOL_FUNCTION_CALL", "SYMBOL") &
+        pd$text %in% c("file_ext", "file_path_sans_ext")
     )
     for (rule in names(token_rules)) {
       rows = pd[token_rules[[rule]], ]
@@ -187,7 +189,8 @@ test_that("each lint rule catches its violation (negative controls)", {
     "f18 = function() withr::local_tempdir()",
     "f19 = function() proc_spawn(\"Rscript\", \"-e\")",
     "f20 = function(p) readLines(p)",
-    "f21 = function() \"caf\u00e9\""
+    "f21 = function() \"caf\u00e9\"",
+    "f22 = function(p) c(tools::file_ext(p), vapply(p, tools::file_path_sans_ext, \"\"))"
   )
   path = file.path(dir, "demo-bad.R")
   writeBin(charToRaw(enc2utf8(paste(bad, collapse = "\n"))), path)
@@ -196,9 +199,10 @@ test_that("each lint rule catches its violation (negative controls)", {
     "ns_get_int", "quosure", "cli_literal", "globalenv_sym", "binding_lock", "processx_run",
     "serialize_ascii", "left_assign", "super_assign", "magrittr", "prompt_fun", "setenv", "rng",
     "random_seed", "random_port", "pskill", "enc2utf8", "withr", "r_command",
-    "readlines_encoding", "non_ascii"
+    "readlines_encoding", "non_ascii", "file_ext"
   ))
   expect_identical(hits$line[hits$rule == "left_assign"], 9L)
+  expect_identical(sum(hits$rule == "file_ext"), 2L)
 })
 
 test_that("the file and function exemptions of the rules hold", {

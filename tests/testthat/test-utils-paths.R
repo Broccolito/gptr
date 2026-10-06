@@ -177,17 +177,9 @@ test_that("path_ext() and path_sans_ext() follow R 4.6's rule without basename()
   expect_identical(path_sans_ext(character()), character())
   # The same answers in a locale where basename() cannot translate the non-ASCII names
   local_name_locale()
-  local_r46_file_ext()
   expect_identical(path_ext(p), ext)
   expect_identical(path_sans_ext(p), sans)
   expect_identical(Encoding(path_sans_ext("caf\u00e9.R")), "UTF-8")
-  # and R 4.6's own functions agree on the names basename() can take, except where D-111 item 1
-  # differs on purpose: "\\" separates components on every OS ("dir\\.env" has no extension;
-  # tools gives "env" on macOS and Linux) and a trailing separator leaves no extension
-  # (tools::file_ext("trail.R/") is "trail.R/")
-  ascii = !is.na(p) & !grepl("[^ -~]", p) & !grepl("\\\\|/$", p)
-  expect_identical(tools::file_ext(p[ascii]), ext[ascii])
-  expect_identical(tools::file_path_sans_ext(p[ascii]), sans[ascii])
 })
 
 test_that("path_key() lower-cases on Windows and macOS only (IC-51)", {

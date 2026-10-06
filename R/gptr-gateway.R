@@ -692,7 +692,7 @@ gateway_image_blocks = function(images, s) {
   out = list()
   for (x in images) {
     if (is.character(x)) {
-      ext = tolower(tools::file_ext(x))
+      ext = tolower(path_ext(x))
       mime = switch(ext, png = "image/png", jpg = , jpeg = "image/jpeg", gif = "image/gif",
                     webp = "image/webp",
                     gptr_abort(paste0("Unsupported image type: ", x), "invalid_argument",

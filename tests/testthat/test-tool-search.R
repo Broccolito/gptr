@@ -199,13 +199,10 @@ test_that("prints of matches and files stay within the member budget with a noti
 # basename() calls stopped a search of one non-ASCII file and every relevance sort that met a
 # non-ASCII name (IC-62: text is marked UTF-8 in every locale). The writer goes through fs_path()
 # so the fixture is named correctly in a C locale.
-# CI-5 (D-111): R >= 4.6's tools::file_path_sans_ext() calls basename() itself, so the relevance
-# sort stopped again on hosted R 4.6.1 and devel; local_r46_file_ext() gives any R that version's
-# tools functions. On Windows R cannot name these files in a C locale at all, so the test keeps
-# R's own UTF-8 locale there (local_name_locale(), helper-locale.R).
+# CI-5 (D-111): on Windows R cannot name these files in a C locale at all, so the test keeps R's
+# own UTF-8 locale there (local_name_locale(), helper-locale.R).
 test_that("non-ASCII file and directory names are searched, found and listed in any locale", {
   local_name_locale()
-  local_r46_file_ext()
   td = withr::local_tempdir()
   put_bytes = function(rel, text) {
     p = paste0(fs_path(td), "/", fs_path(rel))

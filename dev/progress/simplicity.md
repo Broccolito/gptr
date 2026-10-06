@@ -270,3 +270,16 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   cli-codex|cli-claude|subagent` green.
 - Reviews: none yet.
 - Deviations: D-151 (D-074, D-088 edited in place). Open: none.
+
+## FIX5-LINT - R 4.6 file_ext ban (2026-10-05)
+- `spec_result_images()`, `gateway_image_blocks()` use `path_ext()`; test-lint-rules.R token rule `file_ext`
+  forbids `file_ext`/`file_path_sans_ext` in R/, called or passed; `r46_*`, `local_r46_file_ext()` and the
+  test-utils-paths comparison with tools (R-version dependent without them) gone; `local_name_locale()` kept.
+- Red: FAIL 1 (`lint-rules`: ext-specs.R:1311, gptr-gateway.R:695). Green: plan filter PASS 1391 (-2
+  tools-comparison expectations). Lint clean. Neighbours: `arch-layers|doc-replay|doc-formats|ext-api|
+  ext-check|gptr-sdk|tool-namespace` green; cross-plan 0 errors.
+- Reviews: round 1 minor (a passed `tools::file_ext` escaped the call rule; now a token rule, red: f22's
+  value reference uncaught) and nit (P11 Task 3 literal added to Open) fixed; nit (stage own hunks) noted.
+- Deviations: D-111 edited in place (FIX-5 closed). Open: P22 Task 3 `tools::file_ext(path)` and P11 Task 3
+  (plan line 2981) `tools::file_ext(full)` literals fail the rule; plan text kept (`path_ext()` is in no
+  plan: cross-plan undefined_function), implementers use it.

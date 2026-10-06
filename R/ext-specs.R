@@ -1308,7 +1308,7 @@ spec_result_images = function(images) {
                           width = im[["width"]], height = im[["height"]]))
     }
     if (is.raw(im)) return(block_image(b64(im), mime = "image/png", source = "plot"))
-    ext = if (is.character(im) && length(im) == 1L) tolower(tools::file_ext(im)) else ""
+    ext = if (is.character(im) && length(im) == 1L) tolower(path_ext(im)) else ""
     if (nzchar(ext) && ext %in% names(mimes) && file.exists(im)) {
       raw = readBin(im, "raw", n = file.info(im)$size)
       return(block_image(b64(raw), mime = unname(mimes[ext]), source = "file"))

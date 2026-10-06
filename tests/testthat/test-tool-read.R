@@ -355,11 +355,9 @@ test_that("skill pseudo-paths need P17's skill.body service", {
 
 # CI-5 (D-111): R >= 4.6's tools::file_ext() calls basename(), which stops on a marked UTF-8
 # non-ASCII path in a non-UTF-8 locale, so reading cafe.R or cafe.rds with an accent stopped there
-# (the read tool names files through fs_path(), D-041). local_r46_file_ext() gives any R the
-# R 4.6 tools functions.
+# (the read tool names files through fs_path(), D-041).
 test_that("a non-ASCII file is read and classed by its extension in any locale (R >= 4.6)", {
   local_name_locale()
-  local_r46_file_ext()
   td = withr::local_tempdir()
   put_file(td, "caf\u00e9.R", "x = 1\ny = 2")
   put_file(td, "caf\u00e9.rds", as.raw(c(0x58, 0x0a, 0x00, 0x00, 0x00, 0x03)))
