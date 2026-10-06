@@ -270,22 +270,22 @@ subagent_choose_backend = function(agent, opts, info) {
   subagent_backend(list(backend = be), info)
 }
 
-#' Run the children of a container: record each settled child, move the exports into `target`
-#' in task order, then dispatch the container's `agent_end` with the statement's document site
-#' (P15 records the block of an idle end, which needs every child idle; IC-47)
+#' Run the children of a container: record each settled child, move the exports into
+#' `call$envir` in task order, then dispatch the container's `agent_end` with the statement's
+#' document site (P15 records the block of an idle end, which needs every child idle; IC-47)
 #' @noRd
-subagent_run_children = function(container, items, max_total, target, doc) {
+subagent_run_children = function(container, items, max_total, call) {
   handles = subagent_schedule(items, max_total, function(i, h) {
     subagent_record_end(container, h)
     subagent_unbind(h)
     subagent_overlay_release(h$session, h$base_is_frame)
   })
   taken = character()
-  for (h in handles) taken = subagent_export(h, target, taken)
+  for (h in handles) taken = subagent_export(h, call$envir, taken)
   idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
   d = session_data(container)
   subagent_emit(container, "agent_end", status = if (all(idle)) "idle" else "error",
-                reason = NULL, usage = d$usage, doc = doc, turns = d$turns)
+                reason = NULL, usage = d$usage, doc = call$doc, turns = d$turns)
   container
 }
 
@@ -342,7 +342,7 @@ subagent_team_spec = function(call, team, agent, name, isolate) {
   model = agent[["model"]] %||% call$ids$model %||% setting_get("model") %||% td$model
   list(agent = agent, name = name, prompt = call$prompt, context = call$context,
        values = call$values, model = model, mode = call$ids$mode, preset = opts$preset,
-       parent = team, base = call$envir, opts = opts, budget = call$args$budget,
+       parent = team, call = call, opts = opts, budget = call$args$budget,
        nested_group = td$id, isolate = isolate, seed = opts$seed, max_turns = opts$max_turns,
        backend = subagent_choose_backend(agent, opts, subagent_model_info(model, td$id)))
 }
@@ -365,7 +365,7 @@ route_team_run = function(call) {
            pool = subagent_pool(spec$backend, registry_get("backend", spec$backend)))
     })
     max_total = call$args$opts$max_active %||% subagent_limit("inline")
-    subagent_run_children(team, items, max_total, call$envir, call$doc)
+    subagent_run_children(team, items, max_total, call)
   }
   subagent_value(team)
 }
@@ -455,7 +455,7 @@ subagent_fanout_spec = function(call, fan, agent, target, i, key, backend) {
   fd = session_data(fan)
   list(agent = agent, name = key, prompt = call$prompt, context = ctx, values = values,
        values_owned = TRUE, model = call$ids$model %||% fd$model, mode = call$ids$mode,
-       preset = opts$preset, parent = fan, base = call$envir, opts = opts,
+       preset = opts$preset, parent = fan, call = call, opts = opts,
        budget = call$args$budget, nested_group = fd$id, isolate = target$shape$n > 1L,
        seed = opts$seed, max_turns = opts$max_turns, backend = backend,
        bind = if (worker) list(.x = stats::setNames(list(el), key)) else if (bound) list(.x = x))
@@ -487,7 +487,7 @@ gptr_map = function(call, target = subagent_fanout_item(call)) {
       subagent_start(subagent_fanout_spec(call, fan, agent, target, i, keys[[i]], backend), cur)
     }, pool = pool)
   })
-  subagent_run_children(fan, items, call$args$parallel, call$envir, call$doc)
+  subagent_run_children(fan, items, call$args$parallel, call)
 }
 
 #' `run()` of the fan-out route: a replayed block (IC-47), else gptr_map()

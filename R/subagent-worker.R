@@ -318,7 +318,7 @@ worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth =
       return(FALSE)
     }
     assign(key, TRUE, envir = seen)
-    x = as.list(x, all.names = TRUE)
+    x = as.list.environment(x, all.names = TRUE)
   }
   is.list(x) && any(vapply(x, worker_unserialisable, NA, seen = seen, depth = depth + 1L))
 }
@@ -381,7 +381,7 @@ worker_key_provider = function(ref) {
 backend_worker_start = function(spec, ctx) {
   child = subagent_child_new(spec, "worker/worker")
   subagent_guards(child, spec$opts, spec$info$ref)
-  worker_ship_objects(spec$objects, spec$base)
+  worker_ship_objects(spec$objects, spec$home)
   opts = subagent_run_opts(spec, child)
   state = session_live(child)$adapter
   state$worker_home = session_home(child)

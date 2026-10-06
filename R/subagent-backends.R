@@ -209,15 +209,14 @@ subagent_guards = function(child, opts = list(), model = session_data(child)$mod
   replay_guard(pr %||% model)
 }
 
-#' A child session of model `model_ref`: kind `child` under its parent, in an overlay of
-#' `spec$base` holding `spec$bind`, with its backend, agent label and export names (P19 is the only
+#' A child session of model `model_ref`: kind `child` under its parent, in its overlay
+#' `spec$home` holding `spec$bind`, with its backend, agent label and export names (P19 is the only
 #' writer of these fields, architecture 5.8) and its rank-0 records: the model's provider spec,
 #' the isolation policy of parallel children and the agent's system text as a T1 section
 #' @noRd
 subagent_child_new = function(spec, model_ref = spec$info$ref) {
-  home = subagent_overlay(spec$base, spec$name)
-  list2env(spec$bind %||% list(), envir = home)
-  child = session_new(model_ref, spec$mode, home = home, kind = "child", parent = spec$parent,
+  list2env(spec$bind %||% list(), envir = spec$home)
+  child = session_new(model_ref, spec$mode, home = spec$home, kind = "child", parent = spec$parent,
                       preset = spec$preset,
                       opts = list(name = spec$name,
                                   max_turns = spec$agent$max_turns %||% spec$max_turns))
@@ -320,9 +319,9 @@ backend_cancel = function(handle) handle$cancel()
 
 #' Fill a contract-shaped spec (04 section 7.19: `agent`, `prompt`, `context`, `model`, `mode`,
 #' `depth`, `export`, `objects`, `preset`, `rng_state`, `registry`) with P19's fields: `name`,
-#' `parent` (the team, fan-out or running session), `base` (the environment overlays read),
-#' `values` and `values_owned`, `opts` (the call's `.opts`), `budget`, `root`, `nested_group`,
-#' `isolate`, `seed`, `max_turns`, `backend`, `bind` (named values bound in the overlay) and `info`
+#' `parent` (the team, fan-out or running session), `values` and `values_owned`, `opts` (the
+#' call's `.opts`), `budget`, `root`, `nested_group`, `isolate`, `seed`, `max_turns`, `backend`,
+#' `bind` (named values bound in the overlay) and `info`; the inputs `base` or `call` pass through
 #' @noRd
 subagent_spec_complete = function(spec, parent_run) {
   check_list(spec, "spec")
@@ -345,8 +344,6 @@ subagent_spec_complete = function(spec, parent_run) {
   out$objects = subagent_chr(spec$objects %||% a$objects)
   out$preset = as.character(spec$preset %||% a$preset %||% "minimal")[[1L]]
   out$backend = spec$backend %||% subagent_backend(a, out$info)
-  out$base = spec$base %||% run_eval_env(parent_run) %||% session_home(out$parent) %||%
-    globalenv()
   out$parent_run = parent_run$id
   out$root = spec$root %||% (if (is.null(parent_run)) pd$id else
     parent_run$opts$root %||% parent_run$session)
@@ -365,7 +362,10 @@ subagent_emit = function(parent, type, ...) {
 
 #' Start one child through its registered backend (contract 7.19); enforces the nesting limit
 #' (gptr.subagents.max_depth, at most 2; the caller enforces the task limit and the pools, IC-39,
-#' IC-60) and emits `subagent_start` on the parent
+#' IC-60) and emits `subagent_start` on the parent. The child's overlay `home` reads `base`, else
+#' `call$envir`; routes pass the gateway's `call` record, never its frame: R never lowers the
+#' reference counts a list holds, so a list holding a function frame would keep the frame's
+#' objects referenced after it returned [R2].
 #' @return The backend's handle `list(session, run, fds, poll, cancel)` plus `backend`, `name`,
 #'   `model`, `base_is_frame` and `bound`.
 #' @noRd
@@ -386,6 +386,8 @@ subagent_start = function(spec, parent_run) {
                "invalid_argument", arg = "backend",
                expected = "a registered backend name or \"auto\"")
   }
+  s2$home = subagent_overlay(spec$base %||% spec$call$envir %||% run_eval_env(parent_run) %||%
+                               session_home(s2$parent) %||% globalenv(), s2$name)
   h = be$start(s2, session_live(s2$parent)$ctx)
   if (!is.list(h) || !inherits(h$session, "gptr_session")) {
     gptr_abort(paste0("Backend '", s2$backend, "' did not return a handle with a session."),
@@ -394,7 +396,7 @@ subagent_start = function(spec, parent_run) {
   h$backend = s2$backend
   h$name = s2$name
   h$model = s2$info$ref
-  h$base_is_frame = subagent_is_frame(s2$base)
+  h$base_is_frame = subagent_is_frame(s2$home)
   h$bound = names(s2$bind)
   subagent_emit(s2$parent, "subagent_start", child = session_data(h$session)$id,
                 agent = s2$name, backend = s2$backend, model = s2$info$ref)

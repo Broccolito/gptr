@@ -374,6 +374,7 @@ test_that("specs that cannot be serialised are found; others are not (IC-69)", {
   })
   expect_true(worker_unserialisable(holder))
   expect_true(worker_unserialisable(list(x = list(y = con))))
+  expect_true(worker_unserialisable(structure(list2env(list(k = con)), class = "foo")))
   expect_false(worker_unserialisable(peter))
 })
 
