@@ -49,7 +49,7 @@ All commands run from the repository root `/Users/wanjun/Desktop/gptr`.
 | `tests/testthat/test-copy-bridge.R` (create, Task 10) | copy-safety rows: `peter$sh()` (console, `input =`, model code) and `peter$sql(name = df)`, with negative controls |
 | `NAMESPACE` (regenerated, Tasks 2, 4, 6, 7) | `S3method()` lines for `print`/`format`/`as.character` of `gptr_cmd`, `print` of `gptr_bridge_text`, `gptr_job`, `gptr_sql`, `gptr_py` and `$` of `gptr_py` (via `devtools::document()`) |
 | `dev/bench/tokens/fixtures/ns01b-polyglot-build.json` (create, Task 11) | P22's golden transcript (IC-73) |
-| `dev/bench/tokens/baseline.csv` (modify, Task 11, written by P07's runner) | the `ns01b-polyglot-build` baseline row |
+| `dev/bench/tokens/baseline.csv` (modify, Task 11, written by P07's runner) | the `ns01b-polyglot-build` baseline row, and the standard rows that Tasks 5 and 9 grow |
 
 Tasks:
 
@@ -2981,15 +2981,15 @@ git commit -m 'test(bridge): copy-safety rows for peter$sh() and peter$sql(name 
 
 ### Task 11: P22's golden transcript and baseline row (`dev/bench/tokens/`)
 
-IC-73: P22 adds its north-star fixture and baseline row to P07's golden-transcript runner (`dev/bench/tokens/run.R`, a development tool excluded from the build that needs rtiktoken). No north-star example is a polyglot task, so P22's fixture is an NS-1 console turn (02 §1: the interactive session) whose request is G5's task T2 ("a 402-line build log"), done the way the `shell` line of `<r_session>` tells the model: one composed `r` call runs the build through `peter$sh()` and prints only the exit status, stderr and the last line (G5 variant C). It measures what P22 adds to the token budget: the `shell` and `languages` lines inside the standard prefix and a bridge result of 73 o200k tokens where printing the whole `gptr_cmd` would cost 1,018 and a bash tool about 8,100 (G5 token table, T2). The result text is exactly what the bridge returns for this build (the `gptr_cmd` fields printed by `b$status`, `b$stderr` and the `tail()` call, measured on the scratch build of this plan) followed by P09's state and status lines; `details$bridge` holds the digest P22 emits for it. The runner never runs the scripted code: `scripts/build.R` is written into the fixture's project only so that the session sees the file the prompt names.
+IC-73: P22 adds its north-star fixture and baseline row to P07's golden-transcript runner (`dev/bench/tokens/run.R`, a development tool excluded from the build that needs rtiktoken). No north-star example is a polyglot task, so P22's fixture is an NS-1 console turn (02 §1: the interactive session) whose request is G5's task T2 ("a 402-line build log"), done the way the `shell` line of `<r_session>` tells the model: one composed `r` call runs the build through `peter$sh()` and prints only the exit status, stderr and the last line (G5 variant C). It measures what P22 adds to the token budget: the `shell` and `languages` lines inside the standard prefix and a bridge result of 53 o200k tokens where printing the whole `gptr_cmd` would cost 1,018 and a bash tool about 8,100 (G5 token table, T2). The result text is exactly what the bridge returns for this build (the `gptr_cmd` fields printed by `b$status`, `b$stderr` and the `tail()` call, measured on the scratch build of this plan) followed by P09's state line (P09 adds a status line only when the status is not `ok`); `details$bridge` holds the digest P22 emits for it. The runner never runs the scripted code: `scripts/build.R` is written into the fixture's project only so that the session sees the file the prompt names.
 
 **Files:**
 - Create: `dev/bench/tokens/fixtures/ns01b-polyglot-build.json`
-- Modify: `dev/bench/tokens/baseline.csv` (one row, written by P07's runner with `--update`)
+- Modify: `dev/bench/tokens/baseline.csv` (its row, and the standard rows that Tasks 5 and 9 grow, written by P07's runner with `--update`)
 
 **Interfaces:**
 - Consumes (P07, IC-73): `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format (`id`, `north_star`, `description`, `mode`, `human`, `preset`, `models`, `standins`, `environment`, `files`, `objects`, `facts`, `turns` with `prompt`, `source`, `context`, `steps` of `text` and `calls` (`id`, `name`, `input`, `result`, `details`)); its metrics (`requests`, `prefix`, `input_total`, `output_total`, `image_tokens`, `catalog`, `facts`, `est_prefix`, `est_input_total`) and gates (prefix +2%, input and output totals +5%, requests and image tokens +0, catalog +5%, facts no loss, `gptr_error_token_regression`); the development package rtiktoken.
-- Produces: the fixture `ns01b-polyglot-build` and its row in `dev/bench/tokens/baseline.csv` (P24 gates every row).
+- Produces: the fixture `ns01b-polyglot-build` and its row in `dev/bench/tokens/baseline.csv`, and the standard rows that Tasks 5 and 9 grow (P24 gates every row).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3036,7 +3036,7 @@ Create `dev/bench/tokens/fixtures/ns01b-polyglot-build.json`:
               "input": {
                 "code": "b = peter$sh(c(\"Rscript\", \"scripts/build.R\"))\nb$status\nb$stderr\ntail(strsplit(b$stdout, \"\\n\", fixed = TRUE)[[1]], 1)"
               },
-              "result": "[1] 0\n[1] \"WARNING: 3 chunks had missing timestamps\\n\"\n[1] \"== done: 400 chunks, 1,203,300 rows, output in out/\"\n[r] + b <gptr_cmd>\n[status: ok; 4 of 4 top-level expressions completed; 1.9s]",
+              "result": "[1] 0\n[1] \"WARNING: 3 chunks had missing timestamps\\n\"\n[1] \"== done: 400 chunks, 1,203,300 rows, output in out/\"\n+ b <gptr_cmd length 8>",
               "details": {
                 "code": "b = peter$sh(c(\"Rscript\", \"scripts/build.R\"))\nb$status\nb$stderr\ntail(strsplit(b$stdout, \"\\n\", fixed = TRUE)[[1]], 1)",
                 "status": "ok",
@@ -3068,24 +3068,28 @@ Expected: P07's static-prefix table and one results row per fixture (including `
 ```text
 Error: Token-efficiency regression:
   ns01b-polyglot-build: no baseline row (run with --update ns01b-polyglot-build)
+  ns02-mixed-model: prefix 2,277 -> 2,362 (tolerance +2%)
+  ns03-pipe-steering: prefix 2,277 -> 2,362 (tolerance +2%)
+  ns04-system-one: prefix 2,277 -> 2,362 (tolerance +2%)
+  ns07-script-history: prefix 2,511 -> 2,596 (tolerance +2%)
 Execution halted
 ```
 
 - [ ] **Step 3: Write the implementation**
 
-Record the baseline row with P07's runner:
+Record the baseline row with P07's runner. The `shell` and `languages` lines of Tasks 5 and 9 (85 o200k tokens) also enter the standard prefix of the earlier rows, whose baselines predate them (`--check` reports `prefix 2,277 -> 2,362`), so the same run re-baselines those rows (D-168):
 
 ```bash
-Rscript --vanilla dev/bench/tokens/run.R --update ns01b-polyglot-build
+Rscript --vanilla dev/bench/tokens/run.R --update ns01b-polyglot-build ns02-mixed-model ns03-pipe-steering ns04-system-one ns07-script-history
 ```
 
-Expected: the static-prefix and results tables, then `baseline written: ns01b-polyglot-build`. Check the new row of `dev/bench/tokens/baseline.csv` against what the fixture scripts:
+Expected: the static-prefix and results tables, then `baseline written: ns01b-polyglot-build, ns02-mixed-model, ns03-pipe-steering, ns04-system-one, ns07-script-history`; the earlier rows change only by the prefix (+85 per request). Check the new row of `dev/bench/tokens/baseline.csv` against what the fixture scripts:
 
 - `requests` is 2 (one request before the `r` call, one before the answer);
 - `prefix` and `catalog` equal those of the `ns02-mixed-model` row of the same run (the same composition: standard preset, a human, no document, the same stand-ins); with every `<r_session>` fragment registered (P10's `helpers` and `out`, P22's `shell` and `languages`, P19's `subagents`) the prefix is the IC-68 total of 2,722 o200k tokens, and P22's two lines are part of it;
-- `output_total` is 99 (the `r` call as the runner counts it, `r` plus the JSON of its input: 53 o200k tokens; the answer: 46);
+- `output_total` is 98 (the `r` call as the runner counts it, `r` and the JSON of its input joined by a newline: 52 o200k tokens; the answer: 46);
 - `image_tokens` and `facts` are 0;
-- `input_total` is twice the prefix plus the message payloads: the first user message (its context blocks and the prompt) in both requests, then the `r` call (53) and its result (73).
+- `input_total` is twice the prefix plus the message payloads: the first user message (its context blocks and the prompt) in both requests, then the `r` call (52) and its result (53).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

@@ -2035,3 +2035,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: the member name of 04 section 6.5's example (not amended).
 - Tests: test-subagent-team.R "gptr_parallel() returns a team of the members (contract 6.5 example)".
   Evidence: progress/P19.md Task 3.
+
+## D-168 - P22 token bench: Task 11 re-baselines four rows it does not own (2026-10-06)
+- Rule: exception to "a row is refreshed only by the plan that owns its fixture" (`dev/bench/README.md`):
+  P22 Task 11's `--update` also re-records `ns02-mixed-model`, `ns03-pipe-steering` (P07), `ns04-system-one`
+  (P13) and `ns07-script-history` (P15), whose baselines predate the IC-68 `shell` and `languages` lines of
+  Tasks 5 and 9 (+85 o200k per request; `--check` failed `prefix 2,277 -> 2,362`, `2,511 -> 2,596`). Only
+  `prefix`, `input_total` (+85 per request) and `est_*` (+70 per request) moved; `requests`, `output_total`,
+  `image_tokens`, `catalog` and `facts` are unchanged.
+- Contract-visible: none.
+- Tests: token bench `run.R --check`. Evidence: progress/P22.md Task 11.
