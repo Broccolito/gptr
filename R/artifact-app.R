@@ -2,11 +2,12 @@
 # model writes to <root>/artifacts/<id>/ and launches with peter$app() as immutable vNNN/
 # versions served by supervised background R processes. Layer L4.
 
-#' Package state of the artifact area: the process table (id -> record environment) and the
-#' once-per-process orphan-sweep flag (architecture 2.2 rule 5)
+#' Package state of the artifact area: the process table (id -> record environment), the
+#' process's headless browser and the once-per-process orphan-sweep flag (architecture 2.2 rule 5)
 #' @noRd
 artifact_state = new.env(parent = emptyenv())
 artifact_state$procs = new.env(parent = emptyenv())
+artifact_state$browser = NULL
 artifact_state$swept = FALSE
 
 #' Validate an artifact id (contract 11.6, IC-63); returns it invisibly
@@ -544,4 +545,181 @@ artifact_serve = function(dir, port_file, parent_pid, token) {
                  error = function(e) e)
   if (inherits(res, "error")) report(res)
   invisible(NULL)
+}
+
+# ---- validation ladder stage 4: the headless session check and the screenshot ----------------
+
+#' The screenshot size: 1000x700 is about 900 image tokens (architecture 6.15)
+#' @noRd
+artifact_shot_size = c(width = 1000L, height = 700L)
+
+#' JavaScript: the Shiny connection state of the page (report 17 section 5.2)
+#' @noRd
+artifact_js_state = paste0(
+  "(function(){var s = window.Shiny && Shiny.shinyapp; return JSON.stringify({",
+  "connected: !!(s && s.isConnected && s.isConnected()), ",
+  "busy: document.documentElement.classList.contains('shiny-busy'), ",
+  "recalculating: document.querySelectorAll('.recalculating').length, ",
+  "disconnected: !!document.getElementById('shiny-disconnected-overlay')});})()"
+)
+
+#' JavaScript: output errors; validate(need()) messages are not errors
+#' @noRd
+artifact_js_errors = paste0(
+  "JSON.stringify(Array.from(document.querySelectorAll(",
+  "'.shiny-output-error:not(.shiny-output-error-validation)')).map(function(e){",
+  "return {id: e.id, message: e.textContent.trim()};}))"
+)
+
+#' Why the headless session check cannot run here, or NULL when it can
+#' @noRd
+artifact_chromote_missing = function() {
+  if (!requireNamespace("chromote", quietly = TRUE)) return("chromote is not installed")
+  chrome = tryCatch(suppressMessages(chromote::find_chrome()), error = function(e) NULL)
+  if (is.null(chrome) || !nzchar(chrome)) {
+    return("no Chrome or Chromium was found (set CHROMOTE_CHROME)")
+  }
+  NULL
+}
+
+#' The process's headless browser, started once: the cold start costs about 3.4 s, later checks
+#' 1.1-2.1 s (report 17 section 2.3). The mock keychain keeps macOS Chrome from waiting on the
+#' user's keychain, which hangs navigation without one (CI, an isolated HOME).
+#' @noRd
+artifact_browser = function() {
+  b = artifact_state$browser
+  if (!is.null(b) && isTRUE(tryCatch(b$is_alive(), error = function(e) FALSE))) return(b)
+  args = c(chromote::get_chrome_args(), "--use-mock-keychain")
+  b = chromote::Chromote$new(browser = chromote::Chrome$new(args = args))
+  artifact_state$browser = b
+  b
+}
+
+#' Close the headless browser (CRAN: external software is closed explicitly, 13 C-42)
+#' @noRd
+artifact_browser_close = function() {
+  b = artifact_state$browser
+  artifact_state$browser = NULL
+  if (!is.null(b)) try(b$close(), silent = TRUE)
+  invisible(NULL)
+}
+
+#' Error and warning lines of a redacted server log; a warning's text is on its next, indented
+#' line (report 17 section 5.2, known gap)
+#' @noRd
+artifact_log_errors = function(log) {
+  none = list(errors = character(), warnings = character())
+  if (is.null(log) || !file.exists(log)) return(none)
+  lines = strsplit(read_utf8(log)$text, "\n", fixed = TRUE)[[1L]]
+  err = grep("^(Warning: Error in|Error)", lines)
+  warn = setdiff(grep("^Warning( in|:)", lines), err)
+  warn_text = vapply(warn, function(i) {
+    more = if (i < length(lines) && grepl("^\\s", lines[i + 1L])) lines[i + 1L]
+    paste(trimws(c(lines[i], more)), collapse = " ")
+  }, character(1))
+  list(errors = utils::tail(unique(lines[err]), 10L),
+       warnings = utils::tail(unique(warn_text), 10L))
+}
+
+#' The server-log lines reported to the model
+#' @noRd
+artifact_log_messages = function(log) {
+  logged = artifact_log_errors(log)
+  c(character(), if (length(logged$errors)) paste0("server log: ", logged$errors),
+    if (length(logged$warnings)) paste0("server log warning: ", logged$warnings))
+}
+
+#' Load the page in headless Chrome; collect its state, errors and a PNG (base64)
+#'
+#' Report 17 section 5.2 `art_session_check()`: the load event is registered before navigating
+#' (the first version raced), validate(need()) messages are not errors, and the session is
+#' closed on exit.
+#' @noRd
+artifact_session_browse = function(url, width, height, timeout) {
+  b = artifact_browser()$new_session(width = width, height = height)
+  on.exit(try(b$close(), silent = TRUE), add = TRUE)
+  seen = new.env(parent = emptyenv())
+  seen$js = character()
+  b$Runtime$enable()
+  b$Runtime$exceptionThrown(callback_ = function(m) {
+    d = m$exceptionDetails
+    seen$js = c(seen$js, as.character(d$exception$description %||% d$text %||% "exception"))
+  })
+  b$Runtime$consoleAPICalled(callback_ = function(m) {
+    if (identical(m$type, "error")) {
+      txt = vapply(m$args, function(a) as.character(a$value %||% a$description %||% ""),
+                   character(1))
+      seen$js = c(seen$js, paste(txt, collapse = " "))
+    }
+  })
+  loaded = b$Page$loadEventFired(wait_ = FALSE, timeout_ = timeout)
+  b$Page$navigate(url, wait_ = FALSE)
+  b$wait_for(loaded)
+  eval_js = function(js) b$Runtime$evaluate(js, returnByValue = TRUE)$result$value
+  state = list()
+  stable = 0L
+  t0 = reactor_now()
+  while (reactor_now() - t0 < timeout) {
+    state = json_decode(eval_js(artifact_js_state))
+    if (isTRUE(state$disconnected)) break
+    idle = isTRUE(state$connected) && !isTRUE(state$busy) &&
+      identical(as.integer(state$recalculating), 0L)
+    stable = if (idle) stable + 1L else 0L
+    if (stable >= 5L) break
+    # the reactor is the only blocking wait (contract 8.2): other runs' transfers go on
+    reactor_pump(until = function() FALSE, slice_ms = 50L, timeout = 0.1)
+  }
+  errors = json_decode(eval_js(artifact_js_errors))
+  list(connected = isTRUE(state$connected), disconnected = isTRUE(state$disconnected),
+       output_errors = vapply(errors, function(e) paste0(e$id, ": ", e$message), character(1)),
+       js_errors = unique(seen$js),
+       png = b$Page$captureScreenshot(format = "png")$data)
+}
+
+#' The body of artifact_session_check()
+#' @noRd
+artifact_session_run = function(rec, png, width, height, timeout) {
+  why = artifact_chromote_missing()
+  res = if (is.null(why)) {
+    tryCatch(artifact_session_browse(rec$url, width, height, timeout), error = function(e) e)
+  }
+  if (inherits(res, "error")) why = paste0("the headless browser failed: ", conditionMessage(res))
+  artifact_log_sync(rec)
+  if (!is.null(why)) {
+    return(list(ok = NA,
+                messages = c(paste0("HTTP-only check: ", why, "; the page was not rendered"),
+                             artifact_log_messages(rec$log)),
+                screenshot = NULL))
+  }
+  logged = artifact_log_errors(rec$log)
+  msgs = c(
+    if (length(res$output_errors)) paste0("output error in ", res$output_errors),
+    if (length(res$js_errors)) paste0("JavaScript error: ", res$js_errors),
+    artifact_log_messages(rec$log),
+    if (res$disconnected) "the Shiny session disconnected: the server function failed",
+    if (!res$connected && !res$disconnected) {
+      paste0("the Shiny session did not connect within ", timeout, " s")
+    }
+  )
+  ok = res$connected && !res$disconnected && !length(res$output_errors) &&
+    !length(res$js_errors) && !length(logged$errors)
+  shot = NULL
+  if (length(res$png) == 1L && nzchar(res$png)) {
+    writeBin(jsonlite::base64_dec(res$png), png)
+    shot = png
+  }
+  list(ok = ok, messages = msgs, screenshot = shot)
+}
+
+#' The headless session check with a 1000x700 screenshot (validation ladder stage 4)
+#'
+#' `ok` is NA when the check could not run (no chromote or no Chrome: an HTTP-only check, which
+#' the messages say; report 17 section 7, risk 4), TRUE when the session connected with no
+#' output, JavaScript or server-log errors, else FALSE. `.Random.seed` is preserved: chromote's
+#' port picker calls sample() (report 17 verification log item 6; IC-61).
+#' @return `list(ok, messages, screenshot = <png path> | NULL)`
+#' @noRd
+artifact_session_check = function(rec, png, width = artifact_shot_size[["width"]],
+                                  height = artifact_shot_size[["height"]], timeout = 20) {
+  with_seed_preserved(artifact_session_run(rec, png, width, height, timeout))
 }

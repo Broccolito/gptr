@@ -364,3 +364,98 @@ test_that("the watchdog stops the app when the parent process is gone", {
   log = readLines(ch$raw, warn = FALSE, encoding = "UTF-8")
   expect_true(any(grepl("parent R process is gone", log, fixed = TRUE)))
 })
+
+skip_if_no_chrome = function() {
+  skip_if_not_installed("chromote")
+  skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
+}
+
+# A served version as a record the session check reads: its URL, its redacted log
+served_record = function(id, lines, data = character(), envir = new.env(),
+                         .env = parent.frame()) {
+  tok = artifact_token()
+  ch = serve_child(build_version(id, lines, data, envir), tok, .env = .env)
+  port = as.integer(readLines(ch$port_file))
+  rec = artifact_log_new(ch$raw, file.path(artifact_dir(id), "run", "app-v001.log"))
+  rec$url = sprintf("http://127.0.0.1:%d/?gptr_token=%s", port, tok)
+  expect_identical(http_status(rec$url), 200L)
+  rec
+}
+
+test_that("server-log errors and warnings are read with the warning's text", {
+  local_project()
+  log = file.path(artifact_dir("log"), "app.log")
+  dir.create(dirname(log), recursive = TRUE)
+  writeLines(c("Listening on http://127.0.0.1:50000",
+               "Warning in mean.default(x$revnue) :",
+               "  argument is not numeric or logical: returning NA",
+               "Warning: Error in xy.coords: 'x' and 'y' lengths differ",
+               "  [No stack trace available]"), log)
+  got = artifact_log_errors(log)
+  expect_identical(got$errors, "Warning: Error in xy.coords: 'x' and 'y' lengths differ")
+  expect_identical(got$warnings, paste("Warning in mean.default(x$revnue) :",
+                                       "argument is not numeric or logical: returning NA"))
+  expect_identical(artifact_log_messages(log)[1],
+                   "server log: Warning: Error in xy.coords: 'x' and 'y' lengths differ")
+  expect_identical(artifact_log_errors(file.path(dirname(log), "none.log")),
+                   list(errors = character(), warnings = character()))
+  expect_identical(artifact_log_messages(file.path(dirname(log), "none.log")), character())
+})
+
+test_that("without chromote the check is HTTP-only: ok is NA and the messages say so", {
+  local_project()
+  local_mocked_bindings(artifact_chromote_missing = function() "chromote is not installed")
+  rec = artifact_log_new(NULL, file.path(artifact_dir("none"), "run", "app-v001.log"))
+  res = artifact_session_check(rec, tempfile(fileext = ".png"))
+  expect_true(is.na(res$ok))
+  expect_null(res$screenshot)
+  expect_identical(res$messages,
+                   "HTTP-only check: chromote is not installed; the page was not rendered")
+})
+
+test_that("the session check passes a working app and returns a 1000x700 screenshot", {
+  skip_if_cannot_launch()
+  skip_if_no_chrome()
+  local_project()
+  withr::defer(artifact_browser_close())
+  e = new.env()
+  e$markers = data.frame(gene = c("CD14", "LYZ"))
+  rec = served_record("good", ok_app, "markers", e)
+  withr::local_seed(42)
+  seed = get(".Random.seed", envir = globalenv())
+  png = file.path(artifact_dir("good"), "run", "shot.png")
+  res = artifact_session_check(rec, png)
+  expect_identical(get(".Random.seed", envir = globalenv()), seed)
+  expect_true(res$ok)
+  expect_identical(res$messages, character())
+  expect_identical(res$screenshot, png)
+  bytes = readBin(png, "raw", 24L)
+  expect_identical(bytes[1:4], as.raw(c(0x89, 0x50, 0x4e, 0x47)))
+  expect_identical(c(readBin(bytes[17:20], "integer", endian = "big"),
+                     readBin(bytes[21:24], "integer", endian = "big")), c(1000L, 700L))
+})
+
+test_that("the session check catches render errors and crashed servers but not validate()", {
+  skip_if_cannot_launch()
+  skip_if_no_chrome()
+  local_project()
+  withr::defer(artifact_browser_close())
+  render_error = c("library(shiny)", "ui = fluidPage(plotOutput('p'))",
+                   "server = function(input, output, session) {",
+                   "  output$p = renderPlot(plot(1:3, 1:2))", "}", "shinyApp(ui, server)")
+  res = artifact_session_check(served_record("render", render_error), tempfile(fileext = ".png"))
+  expect_false(res$ok)
+  expect_true(any(grepl("output error in p", res$messages, fixed = TRUE)))
+  crash = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
+            "server = function(input, output, session) undefined_helper()",
+            "shinyApp(ui, server)")
+  res = artifact_session_check(served_record("crash", crash), tempfile(fileext = ".png"))
+  expect_false(res$ok)
+  expect_true(any(grepl("undefined_helper", res$messages, fixed = TRUE)))
+  valid = c("library(shiny)", "ui = fluidPage(textOutput('t'))",
+            "server = function(input, output, session) {",
+            "  output$t = renderText(validate(need(FALSE, 'Pick a region')))", "}",
+            "shinyApp(ui, server)")
+  res = artifact_session_check(served_record("valid", valid), tempfile(fileext = ".png"))
+  expect_true(res$ok)
+})
