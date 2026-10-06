@@ -670,7 +670,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   open items are superseded.
 - Contract-visible: none (plan call texts, fn values and both CSVs unchanged).
 - Tests: test-perm-classify.R: plan Task 1-2 and D-060 blocks verbatim, five "(D-061)" blocks; 347
-  of e8b2d19's 2,216 D-061 level cases change (level changes reported to the maintainer 2026-10-05).
+  of e8b2d19's 2,216 D-061 level cases change (level changes acknowledged by the maintainer 2026-10-06).
   Evidence: progress/P11.md Task 2b.
 
 ## D-062 - P15 block headers: line breaks quoted, quoted values decoded on their bytes, keys matched exactly (2026-10-04)

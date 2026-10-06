@@ -35,10 +35,12 @@ P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135
   replayable documents) - in `?peter` and the README.
 - **Simplicity first** (conventions section 11). DEC-1..DEC-4 of the simplicity plan are not taken.
 - **P11 classifier redesign accepted** (D-061 standard (A)-(C), architecture 6.8.1). Coordinator took
-  the design's D1-D3 on 2026-10-05 (reported to the maintainer): accept the 347 listed level changes,
+  the design's D1-D3 on 2026-10-05; the maintainer acknowledged them on 2026-10-06: accept the 347 listed level changes,
   the plan row `get(nm)` becomes 3, and read rows for common base functions (Task 3b).
 - Standing: work on `main`, task-sized commits with the plan's subject + `Co-Authored-By`, periodic
   pushes; **ask first** before pushing tags, releases, CRAN, paid/live runs (section 9).
+- **M0/M1 tags approved** (maintainer, 2026-10-06): push annotated `gptr-1.0-m0` and `gptr-1.0-m1` on the
+  first commit whose hosted CI run is fully green and whose local gates pass. Later tags still need asking.
 
 ## 3. Status
 
