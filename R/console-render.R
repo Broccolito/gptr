@@ -339,8 +339,8 @@ console_spinner = function(label = "thinking") {
 # maps a run id to its session from agent_start to agent_end, at any verbosity, because the
 # interrupt policy needs the session of a run (04 gives no accessor from a run to its session).
 
-#' The console's process state (`the$console`, owned by P14): `active` (run id -> record) and
-#' `artifacts` (NS-8 lines queued while a tool executes)
+#' The console's process state (`the$console`, owned by P14): `active` (run id -> record);
+#' `artifacts` (NS-8 lines) and `pending` (pause-menu items) held while a tool executes
 #' @noRd
 console_state = function() {
   if (is.null(the$console)) {
@@ -651,10 +651,11 @@ console_on_tool_start = function(event, ctx) {
   NULL
 }
 
-#' tool_execution_end: print the artifact lines queued while tools ran, keep the elapsed time
-#' for the result line, report a failure at verbosity 1
+#' tool_execution_end: queue the pause-menu items and print the artifact lines held while tools
+#' ran, keep the elapsed time for the result line, report a failure at verbosity 1
 #' @noRd
 console_on_tool_end = function(event, ctx) {
+  policy_flush()
   console_artifact_flush()
   rec = console_record(event)
   if (is.null(rec)) return(NULL)
