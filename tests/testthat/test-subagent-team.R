@@ -170,3 +170,106 @@ test_that("replayed children bound to a block are attached to the replayed team 
   expect_identical(out$stats, kid)
   expect_identical(out$text, "### stats (fake/fake-1)\nLooks fine.")
 })
+
+# ---- Task 4: teams ---------------------------------------------------------------------------
+
+# A gateway call record (P08's call_new(), contract 7.8) for driving the routes directly
+team_call = function(prompt, agents = NULL, envir = new.env(), parallel = NULL, context = list(),
+                     values = NULL, opts = list(), run = TRUE, background = FALSE,
+                     model = NULL) {
+  call_new(prompt = prompt, template = prompt, context = context, values = values,
+           envir = envir,
+           ids = list(model = model, mode = NULL, skills = NULL, plugins = NULL,
+                      extensions = NULL, tools = NULL, agents = agents),
+           args = list(parallel = parallel, background = background, budget = NULL,
+                       replay = NULL, opts = opts, run = run, stdin = FALSE))
+}
+
+team_agents = function(...) {
+  nms = c(...)
+  out = lapply(nms, function(nm) {
+    gptr_agent(nm, description = paste("agent", nm), model = "fake/fake-1")
+  })
+  names(out) = nms
+  out
+}
+
+test_that("the team route matches calls with agents only", {
+  expect_true(route_team_match(team_call("x", agents = team_agents("a"))))
+  expect_false(route_team_match(team_call("x")))
+})
+
+test_that("a team session holds one child per agent and joins their reports", {
+  local_team_fake(function(request) paste("report for", request$last_user))
+  team = route_team_run(team_call("Review it", agents = team_agents("stats", "code")))
+  expect_s3_class(team, "gptr_session")
+  expect_identical(team$kind, "team")
+  expect_identical(names(team$children), c("stats", "code"))
+  expect_identical(team$stats$text, "report for Review it")
+  expect_identical(team$text, paste0("### stats (fake/fake-1)\nreport for Review it\n\n",
+                                     "### code (fake/fake-1)\nreport for Review it"))
+  expect_identical(session_data(team$code)$agent, "code")
+  ents = Filter(function(e) identical(e$custom_type, "gptr.subagent"), session_data(team)$entries)
+  expect_identical(vapply(ents, function(e) e$data$status, ""), c("idle", "idle"))
+})
+
+test_that("the reports reach a continuation as user-role data (IC-55)", {
+  local_team_fake(function(request) "report text that is long")
+  team = route_team_run(team_call("Review it", agents = team_agents("stats", "code")))
+  txt = subagent_reports_block(list(session = team), 20000L)
+  expect_match(txt, "<agent_report from=\"stats\">\nreport text that is long\n</agent_report>",
+               fixed = TRUE)
+  expect_match(txt, "<agent_report from=\"code\">", fixed = TRUE)
+  expect_null(subagent_reports_block(list(session = team$stats), 20000L))
+  local_gptr_options(child_text_max = 8L)
+  short = subagent_reports_block(list(session = team), 20000L)
+  expect_match(short, ">\nreport t\n</agent_report>", fixed = TRUE)
+})
+
+test_that("exports return to the caller in task order; a second exporter keeps the first", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("done")
+    fake_tool("r", code = paste0("res = '", if (request$n == 1L) "first" else "second", "'"))
+  })
+  local_gptr_options(quiet = FALSE)
+  e = new.env()
+  agents = list(a = gptr_agent("a", description = "a", model = "fake/fake-1", export = "res"),
+                b = gptr_agent("b", description = "b", model = "fake/fake-1", export = "res"))
+  expect_message(route_team_run(team_call("make res", agents = agents, envir = e,
+                                          opts = list(max_active = 1L))),
+                 "also exported `res`", fixed = TRUE)
+  expect_identical(e$res, "first")
+})
+
+test_that("team calls run in the foreground and start new agents", {
+  local_team_fake()
+  a = team_agents("a")
+  cnd = expect_error(route_team_run(team_call("x", agents = a, background = TRUE)),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "background")
+  cnd = expect_error(route_team_run(team_call("x", agents = a, run = FALSE)),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, ".run")
+  call = team_call("x", agents = a)
+  call$session = session_new("fake/fake-1", "auto", home = new.env())
+  expect_error(route_team_run(call), class = "gptr_error_invalid_argument")
+})
+
+
+test_that("a settled team dispatches agent_end with its document site (IC-47)", {
+  local_team_fake()
+  seen = new.env()
+  id = hook_add("agent_end", function(event, ctx) {
+    if (identical(ctx$session$kind, "team")) {
+      seen$doc = event$doc
+      seen$status = event$status
+    }
+    NULL
+  })
+  withr::defer(hook_remove(id))
+  call = team_call("Review", agents = team_agents("a", "b"))
+  call$doc = list(note = "the statement's site")
+  route_team_run(call)
+  expect_identical(seen$doc$note, "the statement's site")
+  expect_identical(seen$status, "idle")
+})

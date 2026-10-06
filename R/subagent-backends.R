@@ -352,8 +352,8 @@ subagent_spec_complete = function(spec, parent_run) {
   out
 }
 
-#' Dispatch `subagent_start` or `subagent_end` (contract 10.4) on the parent; `agent` in `...`
-#' (the child's label) replaces ev_new()'s "main"
+#' Dispatch an event on a session without a run: `subagent_start`/`subagent_end` (contract 10.4)
+#' on the parent, a container's `agent_end`; `agent` in `...` replaces ev_new()'s "main"
 #' @noRd
 subagent_emit = function(parent, type, ...) {
   d = session_data(parent)

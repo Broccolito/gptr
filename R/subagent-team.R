@@ -217,3 +217,141 @@ gptr_parallel = function(..., .list = NULL, max_active = NULL, on_error = c("ret
   }
   team
 }
+
+# ---- teams and fan-outs: common parts (contract 6.1.1, IC-39, IC-47, IC-55) ---------------------
+
+#' Team and fan-out calls run to completion in the foreground and start new agents
+#' @noRd
+subagent_route_checks = function(call) {
+  if (isTRUE(call$args$background) || !isTRUE(call$args$run)) {
+    gptr_abort(c("agents = and parallel = run in the foreground and cannot be deferred",
+                 "(background = TRUE, .run = FALSE or a gptr_parallel() member); pass plain",
+                 "peter() calls to gptr_parallel() instead."),
+               "invalid_argument", arg = if (isTRUE(call$args$background)) "background" else ".run",
+               expected = "a foreground call")
+  }
+  if (!is.null(call$session)) {
+    gptr_abort(c("agents = and parallel = start new sub-agents and cannot continue a session.",
+                 "Pipe the team into peter() without agents = to continue it."),
+               "invalid_argument", arg = "agents", expected = "no piped session")
+  }
+  invisible(TRUE)
+}
+
+#' The replayed session of a fresh team or fan-out block from P15's doc.replay service (NULL
+#' for calls from model code or a statement to run live), with its children attached
+#' @noRd
+subagent_doc_replay = function(call, names, kind) {
+  s = if (ext_service_has("doc.replay")) ext_service_get("doc.replay")(call)
+  if (is.null(s)) NULL else subagent_replay_attach(s, names, kind)
+}
+
+#' A team or fan-out container (kind `team`/`fanout`): a child of the running session inside a
+#' run (IC-39); its model is the call's, the settings default, `fallback` or the running
+#' session's, and is used only when the container is continued
+#' @noRd
+subagent_container = function(call, kind, cur, fallback = NULL) {
+  info = subagent_model_info(call$ids$model %||% setting_get("model") %||% fallback %||%
+                               (if (!is.null(cur)) session_data(cur$shell)$model))
+  mode = subagent_mode_tighten(cur$mode, call$ids$mode %||% setting_get("mode", default = "manual"))
+  s = session_new(info$ref, mode, home = call$envir, kind = kind, parent = cur$shell)
+  if (!is.null(info$spec)) {
+    registry_add(info$spec, source = "session", rank = 0L, session = session_data(s)$id)
+  }
+  s
+}
+
+#' The backend of a child, known before it starts (for its pool): the agent's own, else
+#' `.opts$backend`, else the auto rule
+#' @noRd
+subagent_choose_backend = function(agent, opts, info) {
+  be = agent[["backend"]] %||% "auto"
+  if (identical(be, "auto")) be = opts$backend %||% "auto"
+  subagent_backend(list(backend = be), info)
+}
+
+#' Run the children of a container: record each settled child, move the exports into `target`
+#' in task order, then dispatch the container's `agent_end` with the statement's document site
+#' (P15 records the block of an idle end, which needs every child idle; IC-47)
+#' @noRd
+subagent_run_children = function(container, items, max_total, target, doc) {
+  handles = subagent_schedule(items, max_total, function(i, h) {
+    subagent_record_end(container, h)
+    subagent_unbind(h)
+    subagent_overlay_release(h$session, h$base_is_frame)
+  })
+  taken = character()
+  for (h in handles) taken = subagent_export(h, target, taken)
+  idle = vapply(handles, function(h) identical(session_data(h$session)$status, "idle"), NA)
+  d = session_data(container)
+  subagent_emit(container, "agent_end", status = if (all(idle)) "idle" else "error",
+                reason = NULL, usage = d$usage, doc = doc, turns = d$turns)
+  container
+}
+
+#' A container returned from a route: invisible when answers stream (verbosity 2)
+#' @noRd
+subagent_value = function(s) {
+  if (verbosity() >= 2L) invisible(s) else s
+}
+
+#' `provide()` of the `agent_reports` context block: one `<agent_report from="<name>">` element
+#' per child of a team or fan-out (IC-55, user-role data), cut to gptr.child_text_max bytes; a
+#' child that did not end idle says so on the first line
+#' @noRd
+subagent_reports_block = function(ctx, budget) {
+  s = ctx$session
+  d = if (is.null(s)) NULL else session_data(s)
+  if (!isTRUE(d$kind %in% c("team", "fanout")) || !length(d$children)) return(NULL)
+  max_bytes = as.integer(gptr_opt("child_text_max"))
+  parts = vapply(names(d$children), function(nm) {
+    cd = session_data(d$children[[nm]])
+    txt = if (is.na(cd$last_text)) "(no report)" else subagent_text_cut(cd$last_text, max_bytes)
+    if (!identical(cd$status, "idle")) txt = paste0("(ended with status ", cd$status, ")\n", txt)
+    paste0("<agent_report from=\"", nm, "\">\n", txt, "\n</agent_report>")
+  }, "")
+  paste(parts, collapse = "\n")
+}
+
+# ---- the `team` route (order 15) ----------------------------------------------------------------
+
+#' `match()` of the team route: `agents =` was given
+#' @noRd
+route_team_match = function(call) length(call$ids$agents) > 0L
+
+#' The child spec of one team member (contract 7.19; subagent_spec_complete() fills the rest): the
+#' agent's model, else the call's, the settings default or the team's
+#' @noRd
+subagent_team_spec = function(call, team, agent, name, isolate) {
+  td = session_data(team)
+  opts = call$args$opts %||% list()
+  model = agent[["model"]] %||% call$ids$model %||% setting_get("model") %||% td$model
+  list(agent = agent, name = name, prompt = call$prompt, context = call$context,
+       values = call$values, model = model, mode = call$ids$mode, preset = opts$preset,
+       parent = team, base = call$envir, opts = opts, budget = call$args$budget,
+       nested_group = td$id, isolate = isolate, seed = opts$seed, max_turns = opts$max_turns,
+       backend = subagent_choose_backend(agent, opts, subagent_model_info(model, td$id)))
+}
+
+#' `run()` of the team route: a replayed block (IC-47), else a team session whose children are
+#' the agents, run concurrently, `.opts$max_active` at a time; members of a team of several
+#' agents are isolated
+#' @noRd
+route_team_run = function(call) {
+  subagent_route_checks(call)
+  agents = call$ids$agents
+  team = subagent_doc_replay(call, names(agents), "team")
+  if (is.null(team)) {
+    cur = run_current()
+    subagent_task_limit(length(agents), cur)
+    team = subagent_container(call, "team", cur, agents[[1L]][["model"]])
+    items = lapply(names(agents), function(nm) {
+      spec = subagent_team_spec(call, team, agents[[nm]], nm, length(agents) > 1L)
+      list(start = function() subagent_start(spec, cur),
+           pool = subagent_pool(spec$backend, registry_get("backend", spec$backend)))
+    })
+    max_total = call$args$opts$max_active %||% subagent_limit("inline")
+    subagent_run_children(team, items, max_total, call$envir, call$doc)
+  }
+  subagent_value(team)
+}
