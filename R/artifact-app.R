@@ -2,6 +2,13 @@
 # model writes to <root>/artifacts/<id>/ and launches with peter$app() as immutable vNNN/
 # versions served by supervised background R processes. Layer L4.
 
+#' Package state of the artifact area: the process table (id -> record environment) and the
+#' once-per-process orphan-sweep flag (architecture 2.2 rule 5)
+#' @noRd
+artifact_state = new.env(parent = emptyenv())
+artifact_state$procs = new.env(parent = emptyenv())
+artifact_state$swept = FALSE
+
 #' Validate an artifact id (contract 11.6, IC-63); returns it invisibly
 #' @noRd
 artifact_id_check = function(id) {
