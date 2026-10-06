@@ -5,6 +5,66 @@
 # nothing while a reactor pump is on the call stack (IC-57: reactor_depth() > 0). An ask at an idle
 # tick parks the session as `waiting`; the next blocking gptr call continues it and asks the user.
 
+#' Background sessions (experimental)
+#'
+#' @description
+#' \code{peter(..., background = TRUE)} returns the session at once while its run keeps going.
+#' A timer from the \pkg{later} package advances the run every 50 ms while the R console is
+#' idle, so you can keep working. Piping into the running session,
+#' \code{s |> peter("...")}, queues a steer that the agent receives after its current tool
+#' result; \code{\link{gptr_wait}()} waits for the session, \code{\link{gptr_cancel}()}
+#' aborts its run and \code{\link{gptr_jobs}()} lists it. Background sessions are
+#' \strong{experimental}: they need the \pkg{later} package, and they are never used in
+#' examples or in CRAN tests.
+#'
+#' @section How a background run behaves:
+#' \itemize{
+#'   \item Streams progress at every idle tick. While a blocking gptr call runs
+#'     (\code{peter()}, \code{gptr_wait()}, \code{gptr_step()} or a console turn), that call
+#'     advances the background runs as well and the background timer does nothing.
+#'   \item R tools of a background run execute at an idle tick when
+#'     \code{options(gptr.background_tools = "idle")} (the default). The console is busy
+#'     while such a tool runs; Ctrl-C then opens the pause menu. With \code{"wait"} they run
+#'     only inside a blocking gptr call such as \code{gptr_wait()}.
+#'   \item A background run never asks a question at the idle console. When it needs an
+#'     approval or an answer at an idle tick, the action is not performed: the agent is told
+#'     that the user will be asked, its run stops, and the session moves to status
+#'     \code{"waiting"} with a notice. At your next \code{gptr_wait()}, \code{peter()} call or
+#'     console turn the session continues with one more model request, the agent repeats the
+#'     call, and you are asked as usual. A message piped into a waiting session is delivered
+#'     when it continues.
+#'   \item \code{gptr_cancel()} stops a running background session. A waiting session has no
+#'     run to cancel: \code{gptr_jobs(kill = TRUE)} stops it (together with every other job).
+#'   \item When an R tool changed objects in your workspace at an idle tick, one notice
+#'     names them.
+#'   \item Under Rscript, knitr and Quarto there is no idle console: background runs
+#'     progress only inside blocking gptr calls.
+#' }
+#'
+#' @section Support matrix:
+#' \tabular{ll}{
+#'   \strong{Front end} \tab \strong{Status} \cr
+#'   Terminal R on macOS \tab verified: idle ticks, pause menu, pipe steering \cr
+#'   Terminal R on Linux \tab unverified (the same \pkg{later} event loop as macOS) \cr
+#'   Rscript, knitr, Quarto \tab no idle ticks by design; progress inside blocking gptr calls \cr
+#'   RStudio \tab unverified (\pkg{later} is expected to run callbacks at its idle console) \cr
+#'   Positron, Jupyter (IRkernel), Rgui \tab unverified \cr
+#'   Windows consoles \tab unverified; a timer polls the reactor, so child pipes are served
+#' }
+#'
+#' @section Options:
+#' \describe{
+#'   \item{\code{gptr.background_tools}}{\code{"idle"} (default) or \code{"wait"}: whether
+#'     R tools of background runs execute at idle ticks or wait for the next blocking gptr
+#'     call.}
+#' }
+#'
+#' @seealso \code{\link{peter}}, \code{\link{gptr_wait}}, \code{\link{gptr_cancel}},
+#'   \code{\link{gptr_steer}}, \code{\link{gptr_jobs}}
+#' @name gptr-background
+#' @aliases background-sessions
+NULL
+
 #' The background pump state `the$bg` (owned by P21, 04 section 7.0), created on first use
 #' @noRd
 bg_state = function() {

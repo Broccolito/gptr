@@ -520,3 +520,42 @@ test_that("the r result hook records only idle-tick changes outside plan mode", 
                  class = "gptr_message_notice")
   expect_null(st$changed)
 })
+
+test_that("the gptr-background topic documents the status, the matrix and the option", {
+  skip_on_cran()
+  man = testthat::test_path("..", "..", "man")
+  skip_if_not(dir.exists(man), "man/ is not available (installed tests)")
+  rd = file.path(man, "gptr-background.Rd")
+  expect_true(file.exists(rd))
+  txt = paste(readLines(rd, encoding = "UTF-8"), collapse = "\n")
+  expect_match(txt, "experimental", fixed = TRUE)
+  expect_match(txt, "Support matrix", fixed = TRUE)
+  expect_match(txt, "gptr.background_tools", fixed = TRUE)
+})
+
+test_that("no example uses background = TRUE", {
+  skip_on_cran()
+  man = testthat::test_path("..", "..", "man")
+  skip_if_not(dir.exists(man), "man/ is not available (installed tests)")
+  hits = character()
+  for (f in list.files(man, pattern = "[.]Rd$", full.names = TRUE)) {
+    rd = tools::parse_Rd(f)
+    tags = vapply(rd, function(x) attr(x, "Rd_tag") %||% "", "")
+    ex = paste(unlist(rd[tags == "\\examples"]), collapse = "")
+    if (grepl("background[[:space:]]*=[[:space:]]*TRUE", ex)) hits = c(hits, basename(f))
+  }
+  expect_identical(hits, character())
+})
+
+test_that("a settled background run leaves the caller's object editable in place", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  wait_loop = paste0("while (identical(s$status, 'running') && ",
+                     "as.numeric(Sys.time() - t0, units = 'secs') < 20) later::run_now(0.05)")
+  start = paste("s = peter('describe big', big, model = gptr_fake_provider(list('ok')),",
+                "background = TRUE)")
+  action = paste(start, "t0 = Sys.time()", wait_loop, "for (i in 1:5) later::run_now(0.06)",
+                 sep = "\n")
+  expect_no_copy(setup = "big = runif(5e6)", action = action,
+                 label = "background run with context, then settled")
+})
