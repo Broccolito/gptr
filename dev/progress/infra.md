@@ -111,6 +111,18 @@ pending (maintainer).
   1782. Lint clean. Neighbours: `ext-` green.
 - Reviews: none recorded. Deviations: none. Open: hosted devel confirmation.
 
+## Task CI-8 - Close the processx supervisor the artifact tests leave open (2026-10-05)
+- Red: hosted connections (run 37404322232, `167baf8`) table 3 -> 5, processx's supervisor fifos: `serve_child()`
+  passed `supervise = TRUE` and chromote 0.5.1 always supervises Chrome; the gate on `^artifact-(app|registry)$`
+  gives 3 -> 5 locally. Fix (tests only; `supervisor_kill()` in R/ could end other code's supervised processes):
+  `serve_child()` uses `supervise_default()`; test-artifact-app.R ends the supervisor with the file when gptr does
+  not supervise (IC-60). Green: that gate 3 -> 3, PASS 316 (one run beside lint under load: FAIL 1 `:519`,
+  launcher `h$alive()` after `h$stop()`; re-run PASS 316); `^artifact-` PASS 316. Lint clean. Neighbours: the whole
+  connections gate keeps the table (3 -> 3), FAIL 1 `test-cli-codex.R:770`: order-dependent, the once-only
+  `billing_env` warning is spent by `test-auth-childenv.R` (`^(auth-childenv|cli-codex)$` FAIL 1); lane cli-sub.
+- Reviews: r1 1 finding (0/1/0; `:770` blamed on mid-commit edits) -> corrected, reported to the coordinator.
+  Deviations: none. Open: hosted connections confirmation, which also needs lane cli-sub's `:770` fix.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);

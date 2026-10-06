@@ -269,7 +269,7 @@ serve_child = function(vdir, token, parent_pid = Sys.getpid(), .env = parent.fra
   p = callr::r_bg(artifact_serve,
                   args = list(dir = vdir, port_file = port_file, parent_pid = parent_pid,
                               token = token),
-                  stdout = raw, stderr = "2>&1", supervise = TRUE, package = FALSE,
+                  stdout = raw, stderr = "2>&1", supervise = supervise_default(), package = FALSE,
                   user_profile = FALSE, system_profile = FALSE,
                   env = artifact_child_env(port_candidates(5L)), cleanup = TRUE,
                   cleanup_tree = TRUE, encoding = "UTF-8", wd = vdir)
@@ -369,6 +369,10 @@ skip_if_no_chrome = function() {
   skip_if_not_installed("chromote")
   skip_if(!is.null(artifact_chromote_missing()), "no Chrome or Chromium for chromote")
 }
+
+# chromote always starts processx's supervisor; when gptr does not supervise (IC-60), end it
+# with this file, after the tests have closed the browser
+withr::defer(if (!supervise_default()) processx::supervisor_kill())
 
 # A served version as a record the session check reads: its URL, its redacted log
 served_record = function(id, lines, data = character(), envir = new.env(),
