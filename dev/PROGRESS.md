@@ -10,10 +10,10 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 |---|---|---|---|
 | M0 Foundation | P01-P04 | local gates pass; hosted CI green on `2823b07`; tag pending (maintainer) | P01-P04 logs; `progress/infra.md` |
 | M1 Offline session kernel | P05-P08 | local gates pass; hosted CI green on `2823b07`; tag pending (maintainer) | P05 `df47cbe`, P06 `a535986`, P07 `698e495`, P08 `7d89173` |
-| M2 Live R agent and decisions | P09-P13 | P11 in progress (redesign) | P09 `4ef76fa`, P10 `2823b07`, P12 `3b26e32`, P13 `1968f1c` |
-| M3 Interactive, recorded, reversible | P14-P17 | P15 and P17 complete; P14, P16 pending | P15 `84d85db`, P17 `59d7987` |
-| M4 Interop and scale-out | P18-P21 | early tasks running | P18 Tasks 1, 3; P20 Tasks 1-7 |
-| M5 Polyglot, apps, release | P22-P25 | early tasks running | - |
+| M2 Live R agent and decisions | P09-P13 | P11 6/11 (classifier rebuilt, Task 2b) | P09 `4ef76fa`, P10 `2823b07`, P12 `3b26e32`, P13 `1968f1c` |
+| M3 Interactive, recorded, reversible | P14-P17 | P15, P17 complete; P16 4/8; P14 waits for P11 Task 8 | P15 `84d85db`, P17 `59d7987` |
+| M4 Interop and scale-out | P18-P21 | P20 11/11; P18 2/10, P19 1/12, P21 3/7 (wait for P11 Tasks 7-8) | P20 `40cf6d5` |
+| M5 Polyglot, apps, release | P22-P25 | P22 7/11, P23 9/12, P24 6/13, P25 1/15 | - |
 
 ## Resume log
 
@@ -25,6 +25,9 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 - 2026-10-05 (resume): hosted CI green on `2823b07`; FIX-7; P15 and P17 complete; 14 simplicity
   packages; records condensed (DOC-1/DOC-2, `31118fb`); `peter()` rename (`bd8eeaf`); Stage 1
   lanes (P11 redesign, simplicity, P16/P19/P20/P21/P22/P23/P24/P25 early tasks).
+- 2026-10-06: simplicity plan complete; P20 complete; P11 Tasks 2b-6, P16 1-4, P22 1-4/6-8, P23 1-8/11,
+  P24 offline tasks, P21 1-3, P25 1; FIX-8, FIX-9; CI-7..CI-10 (INFRA-23 headroom, hermetic CLI tests,
+  connection leak, GC-isolated FIX-1 test).
 
 ## Execution and recording rules
 

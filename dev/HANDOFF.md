@@ -1,17 +1,17 @@
 # GPTR 1.0 implementation - handoff
 
-**State on 2026-10-05 (~19:00 PDT): work in progress, five lanes running** (section 4). A coordinator
-session resumed the 11:20 pause at ~12:30, settled the six interrupted tasks, landed the `peter()`
-rename and the record condensation, and started Stage 1 of the remaining plans. `main` is the only
-branch and is pushed after every few commits. This file is self-contained; read it top to bottom.
+**State on 2026-10-06 (~02:00 PDT): work in progress.** A coordinator session resumed the 2026-10-05
+pause, settled the six interrupted tasks, landed the `peter()` rename, condensed the records and
+finished the simplicity plan; lanes now run the remaining plans (section 4). `main` is the only branch
+and is pushed after every few commits. This file is self-contained; read it top to bottom.
 
 ## 0. Summary
 
 gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R
-session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **200 of 307 plan tasks
+session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **about 239 of 307 plan tasks
 are committed** (each test-first and independently reviewed), plus coordinator work: the IC-74 Ollama
-System 1 adapter, FIX-1..7, CI-1..6, and the simplicity packages of `progress/simplicity.md`. P01-P10,
-P12, P13, P15 and P17 are complete. The entry point is **`peter()`** (D-135, landed in `bd8eeaf`).
+System 1 adapter, FIX-1..9, CI-1..10, and every simplicity package (`progress/simplicity.md`). P01-P10,
+P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135, landed in `bd8eeaf`).
 
 ## 1. Read first
 
@@ -44,52 +44,46 @@ P12, P13, P15 and P17 are complete. The entry point is **`peter()`** (D-135, lan
 
 | Plan | Done | Acceptance | Notes |
 |---|---|---|---|
-| P01-P10, P12, P13 | all | recorded (see PROGRESS) | |
-| P11 Permissions | 2/11 | - | redesign running (lane perm, section 4) |
+| P01-P10, P12, P13 | all | recorded (see PROGRESS) | P03/P04 tables `b024286` |
+| P11 Permissions | 6/11 | - | classifier rebuilt (Task 2b, D-061); Task 7 next, then 8, 10, 9, 11 |
 | P14 Console | 0/8 | - | needs P11 Task 8 |
 | P15 Documents | 19/19 | `84d85db` | Quarto and plan-mode rows skip until available |
-| P16 Checkpoints | 0/8 | - | T1 now (lane cli-sub); T2+ need P11 Task 4 |
+| P16 Checkpoints | 4/8 | - | Tasks 5-8 need P11 Task 8 |
 | P17 Skills/plugins | 12/12 | `59d7987` | row 5 = M3 exit |
-| P18 MCP/OAuth | 2/10 | - | T2 needs P11 Task 8 + LOCK, URL, P18-S |
-| P19 Sub-agents | 0/12 | - | T1 now; T2+ need P11 Task 7 (not P14) |
-| P20 CLI providers | 7/11 | - | T8-9 after P20-S (lane cli-sub); T10-11 need P19 |
-| P21 Background | 0/7 | - | T1-3 now; T4+ need P11 Task 7 |
-| P22 Polyglot | 0/11 | - | T1-4, 6-8 now (lane simp-core); T5, 9-11 need P11 Task 7 |
-| P23 Artifacts | 0/12 | - | T1-8, 11 now (lane art-bench); T9-10 need P11/P14 |
-| P24 Benchmarks/e2e | 0/13 | - | offline T1, 2, 4-7 now; T3, 8-13 later |
-| P25 Release | 0/15 | - | T1 now (lane simp-gw); maintainer steps T14-15 |
-| **Total** | **200/307** | | |
+| P18 MCP/OAuth | 2/10 | - | Task 2 needs P11 Task 8 (LOCK, URL, P18-S done) |
+| P19 Sub-agents | 1/12 | - | Task 2+ need P11 Task 7 |
+| P20 CLI providers | 11/11 | (with M4 gate) | live test gated (maintainer) |
+| P21 Background | 3/7 | - | Task 4+ need P11 Task 7 |
+| P22 Polyglot | 7/11 | - | Tasks 5, 9-11 need P11 Task 7 |
+| P23 Artifacts | 9/12 | - | Task 9 needs P11 Task 7; Task 10 needs P14 Task 7; Task 12 after 9 |
+| P24 Benchmarks/e2e | 6/13 | - | live calibration and polyglot baseline pending; Tasks 3, 8-13 later |
+| P25 Release | 1/15 | - | Task 2+ need P11, P16, P18, P19 |
+| **Total** | **~239/307** | | |
 
 Milestones: M0 and M1 pass every local gate and hosted CI was green on `2823b07` (13/13 jobs); a
-formal gate on a clean export of `bd8eeaf` was running at this writing. Tags wait for the maintainer.
+formal gate on a clean export of `bd8eeaf` passed (full suite 22,392, R CMD check --as-cran 0/0/0, M0/M1
+commands). Hosted CI since then fails only on runner-specific items being fixed (CI-7..CI-13). Tags wait
+for the maintainer.
 M2 waits for P11. Hosted CI: `.github/workflows/R-CMD-check.yaml` on every push to `main` (one run
 per ref; superseded queued runs are cancelled); logs via `gh run view <run> --json jobs`.
 
-## 4. Running now (Stage 1) and how to resume
+## 4. Running now and how to resume
 
-Lane ownership is in `dev/.validation/scratch/lanes-stage1.txt` (local, ignored). Each lane is one run
-of `dev/ci/orchestration/plan-tasks.workflow.js` (section 7):
+Lane ownership: `dev/.validation/scratch/lanes-current.txt` (local, ignored): files of other running
+lanes are off limits; every other file is free for a task's minimal edits. Running: **perm** (P11
+Tasks 7, 8, 10, 9, 11 + acceptance) and **infra** (CI-11 browser-start skips, CI-12 the codex billing
+test's order dependence, CI-13 the artifact launcher stop race). Each lane is one run of
+`dev/ci/orchestration/plan-tasks.workflow.js` (section 7).
 
-| Lane | Tasks, in order |
-|---|---|
-| perm | P11 Task 2b, 3, 3b, 4, 5, 6, 7, 8, 10, 9, 11 + acceptance |
-| simp-gw | P08-C, P08-S, P01-T, P03-S, LOCK, URL, P18-S, P15-S, P25 Task 1 |
-| simp-core | P02-S, P10-S, P17-S, FIX5-LINT, P06-S1, P06-S2, FIX-8, TEST-H, P22 Tasks 1, 2, 3, 6, 4, 7, 8 |
-| cli-sub | P20-S, P20 Tasks 8-9, P19 Task 1, P16 Task 1, P21 Tasks 1-3 |
-| art-bench | P23 Tasks 1-8, 11; P24 Tasks 1, 2, 6, 7, 4 (offline), 5 (tests) |
-
-The P11 redesign (design, prototypes `fin-task2.R`/`fin-task3.R`, the acknowledged change list
-`fin-changes.tsv` and its checker `fin-accept.R`) is in `dev/.validation/scratch/p11/` (local, ignored;
-`design-final.md` section 7 lists the tasks). The full remaining-work schedule with every task's earliest
-start is `dev/.validation/scratch/schedule.md`. If a session ends mid-task, the uncommitted work stays in
-the tree: re-dispatch that task with the note "ALREADY IMPLEMENTED, UNCOMMITTED: review, fix, commit".
-
-FIX-8 (in lane simp-core): the omitted-image placeholder `[image omitted: peter$plot("<id>")]` names a
-call that errors (`member_plot()` takes only a stored-plot index; IC-67).
+The P11 redesign (design, prototypes, the acknowledged change list `fin-changes.tsv` and its checker
+`fin-accept.R`) is in `dev/.validation/scratch/p11/` (local); the remaining-work schedule with every
+task's earliest start is `dev/.validation/scratch/schedule.md` (local). If a session ends mid-task, the
+uncommitted work stays in the tree: re-dispatch that task with "ALREADY IMPLEMENTED, UNCOMMITTED:
+review, fix, commit".
 
 ## 5. Next steps
 
-1. Let the Stage 1 lanes finish; re-dispatch any `review-not-clear` or `blocked` task.
+1. Finish P11 (Task 8 unblocks P14, P18, P16 Tasks 5-8); re-dispatch any `review-not-clear` or `blocked` task.
 2. Stage 2-4 (schedule section 3): after P11 Task 3, P11 Task 4 and P16 Tasks 2-4; at P11 Task 7,
    P19 Tasks 2+, P21 Task 4+, P22 Tasks 5/9/10, P23 Task 9; at **P11 Task 8** (critical), P18 Tasks
    2, 4-10 and P14 Tasks 1-8 in parallel lanes; then P19 rest, P20 Tasks 10-11, P21 rest, P23 Tasks
