@@ -1940,3 +1940,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-doc-formats.R "notebook numbers keep their text and strings are written as json.dumps()"
   (Python repr tests out); test-doc-blocks.R "fax" backend test out.
   Evidence: progress/simplicity.md P15-S.
+
+## D-159 - P11 rule grammar: code rows read through every code function; no rule for dynamic code (2026-10-05)
+- Rule: `r(sh:)`/`r(sql:)` read the rows of every code-argument function the classifier reads
+  (`perm_shell_fns`/`perm_sql_fns` derive from `risk_code_args`: `pipe`, `fread` and the DBI
+  statement functions join the plan's), without their `fn(): ` prefix (`rule_code_text()`); rule
+  path globs are anchored `(?s)^...\z` (`glob_anchor()`, P10).
+- Rule: `rule_suggest()` is NULL for code the classifier cannot read (`risk$dynamic`: unmodelled
+  shell constructs, computed calls, code arguments) and for shell or SQL text mixed with other
+  calls, so it never suggests a rule naming a placeholder row (`r(sh:not modelled:*)`,
+  `r(fn:<computed>)`); a computed code argument's row is category `dynamic` (was the function's).
+  A path outside the project gets its exact path, not the plan's `dirname()/**` (which expands
+  `~` into a dead rule and turns a root file into `//**`).
+- Contract-visible: none (04 7.11 surface as planned; levels unchanged).
+- Tests: test-perm-rules.R: plan Task 5 blocks, one "(D-159)" block. Evidence: progress/P11.md Task 5.

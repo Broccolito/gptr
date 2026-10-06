@@ -2411,8 +2411,7 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       more = if (name %in% c("system2", "run")) risk_arg(a, "args", 2L)
       argv = if (!is.null(more)) risk_fold(more)
       if (is.null(x) || (!is.null(more) && is.null(argv))) {
-        add(ctx, paste0(label, " (code the code computes)"), name, max(3L, row$level),
-            if (row$category == "read") "dynamic" else row$category)
+        add(ctx, paste0(label, " (code the code computes)"), name, max(3L, row$level), "dynamic")
         return(TRUE)
       }
       f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
