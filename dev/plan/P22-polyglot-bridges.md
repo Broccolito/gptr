@@ -1954,7 +1954,7 @@ git commit -m "feat(bridge): builtin:bridges members, the S-4 refusal, run-time 
 
 ### Task 6: Objects passed by name and `peter$sql()`
 
-`peter$sql(query, name = NULL, con = NULL, n = 10L)` (04 §9.4) runs SQL on one of three targets: data frames given as `name` (one object, registered in an in-memory duckdb under the label of its expression, `name = mtcars` -> table `mtcars`, or a named list of data frames), an explicit DBI connection `con`, or the one DBI connection bound in the caller's environment (G5 `find_connection()`: only `class()` is read, lazy and active bindings are skipped; several connections or none is an argument error naming them). The value holds all rows; it prints its dimensions and `n` rows within the helper budget. Statements that return no rows report the rows affected.
+`peter$sql(query, name = NULL, con = NULL, n = 10L)` (04 §9.4) runs SQL on one of three targets: data frames given as `name` (one object, registered in an in-memory duckdb under the label of its expression, `name = mtcars` -> table `mtcars`, or a named list of data frames), an explicit DBI connection `con`, or the one DBI connection bound in the caller's environment (G5 `find_connection()`: a leaf reads `methods::is(<binding>, "DBIConnection")`, `FALSE` for a binding that cannot be read such as a missing argument; lazy and active bindings are skipped; several connections or none is an argument error naming them). The value holds all rows; it prints its dimensions and `n` rows within the helper budget. Statements that return no rows report the rows affected. The in-memory duckdb keeps extensions and secrets in the session's temporary directory: without a storage choice duckdb >= 1.5 asks in an interactive session and otherwise prints where it keeps them on every connection.
 
 The label of `name = df` is read from the member call on the stack (the user's `peter$sql(..., name = df)` or the model's own expression inside `r`), else from the direct call; the objects are never put into a new list (rule R1): `duckdb_register()` receives the user's data frame directly. The registration itself copies nothing; the next in-place edit of the frame copies once, as rule R9 documents (Task 10 measures it). The caller's environment is the run's evaluation environment while a run executes (`run_eval_env()`, kernel SDK), else the frame that called the member; frames are only looked up, never kept (rule R2).
 
@@ -1964,8 +1964,8 @@ The label of `name = df` is read from the member call on the stack (the user's `
 - Generate: `NAMESPACE` (`devtools::document()`)
 
 **Interfaces:**
-- Consumes: `run_current()`, `run_eval_env(run)` (P06 kernel SDK); `rlang::env_binding_are_lazy()`, `rlang::env_binding_are_active()`, `methods::extends()`, `methods::is()`; `DBI::dbConnect()`, `DBI::dbGetQuery()`, `DBI::dbExecute()`, `DBI::dbDisconnect()`, `duckdb::duckdb()`, `duckdb::duckdb_register()` (Suggests, behind `requireNamespace()`); `as_utf8()`, `check_strings()`, `check_number()`, `gptr_abort()`, `reactor_now()` (P01, P04); Tasks 1-2 (`bridge_chr()`, `bridge_view_lines()`, `bridge_budget()`, `bridge_write()`, `bridge_level()`, `bridge_emit()`); tests: `RSQLite::SQLite()`, `gptr_register()`, `gptr_hook()` (P02).
-- Produces: `bridge_sql(query, name = NULL, con = NULL, n = 10L)` -> a data frame of class `c("gptr_sql", "data.frame")` with attributes `gptr_n` and `gptr_affected` (the `fun` of member `sql`); `bridge_frames(fun)`, `bridge_arg_label(arg, fun)`, `bridge_is_object_list(value)`, `bridge_object_names(value, arg, fun)` (reused by Task 7), `bridge_caller_env(fun)`, `bridge_find_connection(envir)` (reused by Task 8), `bridge_sql_lines(x)`, `bridge_sql_digest(x)`, `bridge_sql_is_query(query)`; S3 method `print.gptr_sql()`.
+- Consumes: `run_current()`, `run_eval_env(run)` (P06 kernel SDK); `rlang::env_binding_are_lazy()`, `rlang::env_binding_are_active()`, `methods::is()`; `DBI::dbConnect()`, `DBI::dbGetQuery()`, `DBI::dbExecute()`, `DBI::dbDisconnect()`, `duckdb::duckdb()`, `duckdb::duckdb_register()` (Suggests, behind `requireNamespace()`); `as_utf8()`, `check_strings()`, `check_number()`, `gptr_abort()`, `reactor_now()` (P01, P04); Tasks 1-2 (`bridge_chr()`, `bridge_view_lines()`, `bridge_budget()`, `bridge_write()`, `bridge_level()`, `bridge_emit()`); tests: `RSQLite::SQLite()`, `gptr_register()`, `gptr_hook()` (P02).
+- Produces: `bridge_sql(query, name = NULL, con = NULL, n = 10L)` -> a data frame of class `c("gptr_sql", "data.frame")` with attributes `gptr_n` and `gptr_affected` (the `fun` of member `sql`); `bridge_call_frame(fun)`, `bridge_is_object_list(value)`, `bridge_object_names(value, arg, fun)` (reused by Task 7), `bridge_caller_env(fun)`, `bridge_is_connection(name, envir)`, `bridge_find_connection(envir)` (reused by Task 8), `bridge_sql_size(x)`, `bridge_sql_lines(x)`, `bridge_sql_is_query(query)`; S3 method `print.gptr_sql()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1992,7 +1992,7 @@ test_that("objects passed by name take the label of their expression", {
 test_that("peter$sql() uses the one DBI connection in the calling frame", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("RSQLite")
-  f = function() {
+  f = function(missing_arg) {
     shop = DBI::dbConnect(RSQLite::SQLite(), ":memory:")
     on.exit(DBI::dbDisconnect(shop), add = TRUE)
     DBI::dbWriteTable(shop, "orders", data.frame(id = 1:30, region = rep(c("n", "s", "e"), 10)))
@@ -2012,6 +2012,7 @@ test_that("peter$sql() uses the one DBI connection in the calling frame", {
   out = utils::capture.output(print(r$x))
   expect_identical(out[[1L]], "# 25 rows x 2 cols")
   expect_identical(out[[length(out)]], "# ... 15 more rows (all rows are in the value)")
+  expect_identical(utils::capture.output(print(r$x["id"]))[[1L]], "# 25 rows x 1 cols")
   expect_identical(as.integer(r$agg$n), c(10L, 10L, 10L))
   expect_identical(utils::capture.output(print(r$upd)), "# 2 rows affected")
   expect_match(r$amb, "(other, shop)", fixed = TRUE)
@@ -2046,7 +2047,7 @@ test_that("a SQL result prints within the helper budget and keeps every row", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("duckdb")
   wide = as.data.frame(matrix(seq_len(200 * 40), nrow = 200))
-  x = bridge_sql("SELECT * FROM wide", name = wide, n = 200L)
+  x = expect_silent(bridge_sql("SELECT * FROM wide", name = wide, n = 200L))
   out = utils::capture.output(print(x))
   expect_lte(est_tokens(out, "r_output"), 1500)
   expect_identical(dim(x), c(200L, 40L))
@@ -2066,48 +2067,23 @@ Expected: the tests error with `could not find function "bridge_object_names"` a
 Create `R/bridge-lang.R`:
 
 ```r
-# Polyglot bridges, language side (P22): peter$py(), peter$sql(), peter$knit() and builtin:lang
-# (contract 7.22, 9.4; architecture 4.2). Adapted from the verified G5 prototype
-# (dev/research/G5-polyglot-glue-helpers.md, g5_helpers.R: find_connection(), sql_is_query(),
-# g5_sql(), PY_HELPER, py_ready(), g5_py(), g5_knit()) with its verification-log fixes:
-# reticulate's uv provisioning is refused unless Python is configured (item 21), a data frame
-# handed to duckdb or Python is copied once on its next in-place edit (item 22, rule R9), and
-# knitr's shell engines, and engines with a registered interpreter, run through the peter$sh()
-# engine with a timeout and the helper environment (item 7, IC-67, IC-60). reticulate, DBI,
-# duckdb and knitr are Suggests.
+# Polyglot bridges, language side (P22; contract 9.4; architecture 4.2, 6.4): objects passed by
+# name and peter$sql(), adapted from G5's verified prototype. DBI and duckdb are Suggests; a frame
+# handed to duckdb copies once on its next in-place edit (rule R9).
 
 # ---- objects passed by name --------------------------------------------------------------------
 
-#' Frame numbers of the innermost peter$ member closure and of `fun` on the call stack (0: none);
-#' frames are inspected with sys.function() and never kept [R2, R3]
+#' The frame number of the innermost peter$ member call on the stack, else of `fun` (0: none)
+#' Frames are read with sys.function(), never kept (rule R2).
 #' @noRd
-bridge_frames = function(fun) {
-  member = 0L
+bridge_call_frame = function(fun) {
   own = 0L
-  k = sys.nframe() - 1L
-  while (k >= 1L) {
+  for (k in rev(seq_len(sys.nframe() - 1L))) {
     f = sys.function(k)
-    if (member == 0L && inherits(f, "gptr_member")) member = k
+    if (inherits(f, "gptr_member")) return(k)
     if (own == 0L && identical(f, fun)) own = k
-    k = k - 1L
   }
-  list(member = member, own = own)
-}
-
-#' The label of a symbol argument (name = mtcars -> "mtcars"): read from the member call when one
-#' is on the stack (the user's or the model's own expression), else from the call of `fun`
-#' @noRd
-bridge_arg_label = function(arg, fun) {
-  frames = bridge_frames(fun)
-  k = if (frames$member > 0L) frames$member else frames$own
-  if (k > 0L) {
-    mc = tryCatch(match.call(sys.function(k), sys.call(k)), error = function(e) NULL)
-    expr = if (is.null(mc)) NULL else mc[[arg]]
-    if (is.symbol(expr)) return(as.character(expr))
-  }
-  gptr_abort(paste0("Pass `", arg, " = <an object by its name>` or `", arg,
-                    " = list(<name> = <object>, ...)`."),
-             "invalid_argument", arg = arg, expected = "a symbol or a named list")
+  own
 }
 
 #' Is a value passed as `name` a list of named objects (rather than one object)?
@@ -2116,35 +2092,37 @@ bridge_is_object_list = function(value) {
   is.list(value) && !is.data.frame(value)
 }
 
-#' Names under which objects are handed to another runtime: the names of a named list, or the
-#' label of one object's expression. The objects themselves are never put into a new list: a
-#' list holding a user object keeps it referenced after the call (architecture 6.4 rule R1).
+#' Names under which objects reach another runtime: a named list's names, else the label of the
+#' symbol in the member call (the user's or the model's expression), else in the call of `fun`
+#' The objects are never put into a new list (rule R1).
 #' @noRd
 bridge_object_names = function(value, arg, fun) {
   if (bridge_is_object_list(value)) {
     nms = names(value)
-    ok = length(value) && !is.null(nms) && !anyNA(nms) && all(nzchar(nms)) &&
-      !anyDuplicated(nms) && identical(make.names(nms), nms)
-    if (!ok) {
+    if (!length(nms) || !identical(make.names(nms, unique = TRUE), nms)) {
       gptr_abort("A list given as `name` needs unique syntactic names.", "invalid_argument",
                  arg = arg, expected = "a named list with unique syntactic names")
     }
     return(nms)
   }
-  bridge_arg_label(arg, fun)
+  k = bridge_call_frame(fun)
+  expr = if (k > 0L) {
+    tryCatch(match.call(sys.function(k), sys.call(k))[[arg]], error = function(e) NULL)
+  }
+  if (is.symbol(expr)) return(as.character(expr))
+  gptr_abort(paste0("Pass `", arg, " = <an object by its name>` or `", arg,
+                    " = list(<name> = <object>, ...)`."),
+             "invalid_argument", arg = arg, expected = "a symbol or a named list")
 }
 
-#' The environment of the caller: the run's evaluation environment while a run executes, else
-#' the frame that called the member (or `fun`); used only for a lookup, never kept [R2]
+#' The caller's environment: the run's evaluation environment while a run executes, else the
+#' frame that called the member (or `fun`); only looked up, never kept (rule R2)
 #' @noRd
 bridge_caller_env = function(fun) {
   run = run_current()
   if (!is.null(run)) return(run_eval_env(run))
-  frames = bridge_frames(fun)
-  target = if (frames$member > 0L) frames$member else frames$own
-  if (target == 0L) return(globalenv())
-  parent = sys.parents()[[target]]
-  if (parent == 0L) globalenv() else sys.frame(parent)
+  k = bridge_call_frame(fun)
+  if (k == 0L) globalenv() else sys.frame(sys.parents()[[k]])
 }
 
 # ---- peter$sql() --------------------------------------------------------------------------------
@@ -2157,31 +2135,23 @@ bridge_sql_is_query = function(query) {
         perl = TRUE)
 }
 
-#' The class of a binding, read in a leaf that returns a primitive [R4]; lazy and active
-#' bindings are skipped by the caller, so no promise is forced
+#' Is the binding `name` a DBI connection? A leaf returning a primitive (rule R4); a binding that
+#' cannot be read (a missing argument) is not one
 #' @noRd
-bridge_class_of = function(name, envir) {
-  class(get(name, envir = envir, inherits = FALSE))[[1L]]
+bridge_is_connection = function(name, envir) {
+  tryCatch(methods::is(get(name, envir = envir, inherits = FALSE), "DBIConnection"),
+           error = function(e) FALSE)
 }
 
-#' The one DBI connection bound in envir (G5 find_connection: lazy and active bindings skipped)
+#' The one DBI connection bound in envir; lazy and active bindings are skipped (G5)
 #' @noRd
 bridge_find_connection = function(envir) {
   nms = ls(envir)
-  if (length(nms)) {
-    lazy = rlang::env_binding_are_lazy(envir, nms) | rlang::env_binding_are_active(envir, nms)
-    nms = nms[!lazy]
-  }
-  hits = character()
-  for (nm in nms) {
-    cls = bridge_class_of(nm, envir)
-    if (isTRUE(tryCatch(methods::extends(cls, "DBIConnection"), error = function(e) FALSE))) {
-      hits = c(hits, nm)
-    }
-  }
+  nms = nms[!(rlang::env_binding_are_lazy(envir, nms) | rlang::env_binding_are_active(envir, nms))]
+  hits = nms[vapply(nms, bridge_is_connection, NA, envir = envir)]
   if (length(hits) != 1L) {
     what = if (length(hits)) {
-      paste0("Several DBI connections are in scope (", paste(sort(hits), collapse = ", "),
+      paste0("Several DBI connections are in scope (", paste(hits, collapse = ", "),
              "); pass con =.")
     } else {
       "No DBI connection is in scope; pass con = or name = (data frames)."
@@ -2191,59 +2161,33 @@ bridge_find_connection = function(envir) {
   get(hits, envir = envir, inherits = FALSE)
 }
 
-#' A SQL result: all rows; prints the dimensions and `n` rows (contract 9.4)
+#' The size of a SQL result: "25 rows x 2 cols", or "2 rows affected" for a statement
 #' @noRd
-bridge_sql_result = function(df, n, affected = NULL) {
-  class(df) = c("gptr_sql", class(df))
-  attr(df, "gptr_n") = as.integer(n)
-  attr(df, "gptr_affected") = affected
-  df
-}
-
-#' The digest of a SQL result (G5 p09: "sql: 3 rows x 2 cols")
-#' @noRd
-bridge_sql_digest = function(x) {
+bridge_sql_size = function(x) {
   affected = attr(x, "gptr_affected", exact = TRUE)
-  if (!is.null(affected)) return(paste0("sql: ", affected, " rows affected"))
-  paste0("sql: ", format(nrow(x), big.mark = ","), " rows x ", ncol(x), " cols")
+  if (is.null(affected)) return(paste(format(nrow(x), big.mark = ","), "rows x", ncol(x), "cols"))
+  paste(format(affected, big.mark = ",", scientific = FALSE), "rows affected")
 }
 
-#' The display lines of a SQL result: dimensions, the first n rows, the rows not shown
+#' The display lines of a SQL result: its size, the first n rows, the rows not shown
 #' @noRd
 bridge_sql_lines = function(x) {
-  affected = attr(x, "gptr_affected", exact = TRUE)
-  if (!is.null(affected)) return(paste0("# ", format(affected, big.mark = ","), " rows affected"))
+  lines = paste("#", bridge_sql_size(x))
+  if (!is.null(attr(x, "gptr_affected", exact = TRUE))) return(lines)
   n = attr(x, "gptr_n", exact = TRUE) %||% 10L
-  y = x
-  class(y) = setdiff(class(y), "gptr_sql")
-  attr(y, "gptr_n") = NULL
-  attr(y, "gptr_affected") = NULL
-  lines = paste0("# ", format(nrow(y), big.mark = ","), " rows x ", ncol(y), " cols")
-  if (n > 0L && nrow(y) > 0L) {
-    lines = c(lines, utils::capture.output(print(utils::head(y, n), row.names = FALSE)))
+  if (n > 0L && nrow(x) > 0L) {
+    rows = utils::head(as.data.frame(x), n)
+    lines = c(lines, utils::capture.output(print(rows, row.names = FALSE)))
   }
-  if (nrow(y) > n) {
-    lines = c(lines, paste0("# ... ", format(nrow(y) - n, big.mark = ","),
+  if (nrow(x) > n) {
+    lines = c(lines, paste0("# ... ", format(nrow(x) - n, big.mark = ","),
                             " more rows (all rows are in the value)"))
   }
   as_utf8(lines)
 }
 
-#' Register the data frames given as `name` in an in-memory duckdb connection (under their
-#' labels, contract 9.4); the registration copies nothing, the next in-place edit of a frame
-#' copies once (rule R9)
-#' @noRd
-bridge_sql_register = function(db, name, labels) {
-  if (bridge_is_object_list(name)) {
-    for (nm in labels) duckdb::duckdb_register(db, nm, name[[nm]])
-  } else {
-    duckdb::duckdb_register(db, labels, name)
-  }
-  invisible(db)
-}
-
-#' peter$sql(): SQL on data frames (an in-memory duckdb), on `con`, or on the one DBI connection
-#' in the caller's environment; returns all rows
+#' peter$sql(): SQL on data frames (registered in an in-memory duckdb under their labels), on
+#' `con`, or on the one DBI connection in the caller's environment; returns all rows
 #' @noRd
 bridge_sql = function(query, name = NULL, con = NULL, n = 10L) {
   q_lines = bridge_chr(query)
@@ -2269,7 +2213,7 @@ bridge_sql = function(query, name = NULL, con = NULL, n = 10L) {
   if (!is.null(name)) {
     labels = bridge_object_names(name, "name", bridge_sql)
     one = !bridge_is_object_list(name)
-    frames = if (one) is.data.frame(name) else all(vapply(name, is.data.frame, TRUE))
+    frames = if (one) is.data.frame(name) else all(vapply(name, is.data.frame, NA))
     if (!frames) {
       gptr_abort("`name` must hold data frames.", "invalid_argument", arg = "name",
                  expected = "a data frame or a named list of data frames")
@@ -2278,35 +2222,42 @@ bridge_sql = function(query, name = NULL, con = NULL, n = 10L) {
       gptr_abort("SQL over data frames needs the 'duckdb' package; or pass con =.",
                  "missing_package", package = "duckdb", feature = "peter$sql(name =)")
     }
-    db = DBI::dbConnect(duckdb::duckdb())
+    # Fixed session storage: duckdb >= 1.5 otherwise asks (interactive) or says where to keep it
+    home = file.path(tempdir(), "duckdb")
+    db = DBI::dbConnect(duckdb::duckdb(config = list(extension_directory = home,
+                                                     secret_directory = home)))
     on.exit(DBI::dbDisconnect(db, shutdown = TRUE), add = TRUE)
-    bridge_sql_register(db, name, labels)
-  } else if (!is.null(con)) {
-    db = con
+    if (one) {
+      duckdb::duckdb_register(db, labels, name)
+    } else {
+      for (nm in labels) duckdb::duckdb_register(db, nm, name[[nm]])
+    }
   } else {
-    db = bridge_find_connection(bridge_caller_env(bridge_sql))
+    db = con %||% bridge_find_connection(bridge_caller_env(bridge_sql))
   }
   t0 = reactor_now()
-  x = if (bridge_sql_is_query(q)) {
-    bridge_sql_result(DBI::dbGetQuery(db, q), rows)
+  affected = NULL
+  if (bridge_sql_is_query(q)) {
+    x = DBI::dbGetQuery(db, q)
   } else {
-    k = DBI::dbExecute(db, q)
-    bridge_sql_result(data.frame(rows_affected = k), rows, affected = k)
+    affected = DBI::dbExecute(db, q)
+    x = data.frame(rows_affected = affected)
   }
+  x = structure(x, class = c("gptr_sql", class(x)), gptr_n = rows, gptr_affected = affected)
   bridge_emit(list(bridge = "sql", id = NULL, cmd = q, level = bridge_level(q, "sql"),
                    status = "ok", seconds = reactor_now() - t0, bytes_out = 0L, bytes_err = 0L,
-                   spill = NULL, digest = bridge_sql_digest(x)))
+                   spill = NULL, digest = paste("sql:", bridge_sql_size(x))))
   x
 }
 
-#' Print a SQL result: dimensions, then the first n rows, within the helper budget
+#' Print a SQL result: its size, then the first n rows, within the helper budget
 #' @param x A `gptr_sql` data frame.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
 #' @noRd
 print.gptr_sql = function(x, ...) {
-  bridge_write(bridge_view_lines(bridge_sql_lines(x), bridge_budget(NULL)))
+  bridge_write(bridge_view_lines(bridge_sql_lines(x), bridge_budget()))
   invisible(x)
 }
 ```
@@ -2318,7 +2269,7 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected: `devtools::document()` adds `S3method(print,gptr_sql)` to `NAMESPACE`; the tests print `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 17 ]` without duckdb and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 27 ]` with it.
+Expected: `devtools::document()` adds `S3method(print,gptr_sql)` to `NAMESPACE`; the tests print `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 18 ]` without duckdb and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 29 ]` with it.
 
 - [ ] **Step 5: Commit**
 
@@ -2416,7 +2367,7 @@ test_that("peter$py() receives R objects by name and knitr python chunks share _
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected without duckdb and Python: the refusal test errors with `could not find function "bridge_py"` and the two Python tests skip with `Python is not configured (set RETICULATE_PYTHON)`; summary `[ FAIL 1 | WARN 0 | SKIP 4 | PASS 17 ]`. With duckdb and a configured Python: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 27 ]`.
+Expected without duckdb and Python: the refusal test errors with `could not find function "bridge_py"` and the two Python tests skip with `Python is not configured (set RETICULATE_PYTHON)`; summary `[ FAIL 1 | WARN 0 | SKIP 4 | PASS 18 ]`. With duckdb and a configured Python: `[ FAIL 3 | WARN 0 | SKIP 0 | PASS 29 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2609,7 +2560,7 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected: `devtools::document()` adds `S3method("$",gptr_py)` and `S3method(print,gptr_py)` to `NAMESPACE`; the tests print `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 19 ]` without duckdb and Python, and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 49 ]` with duckdb and `RETICULATE_PYTHON` set to a Python with pandas (for example `RETICULATE_PYTHON=/opt/homebrew/bin/python3 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'`; nothing is installed by the test).
+Expected: `devtools::document()` adds `S3method("$",gptr_py)` and `S3method(print,gptr_py)` to `NAMESPACE`; the tests print `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 20 ]` without duckdb and Python, and `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 51 ]` with duckdb and `RETICULATE_PYTHON` set to a Python with pandas (for example `RETICULATE_PYTHON=/opt/homebrew/bin/python3 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'`; nothing is installed by the test).
 
 - [ ] **Step 5: Commit**
 
@@ -2733,7 +2684,7 @@ test_that("the cmd engine is refused outside Windows", {
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected: the five new tests error with `could not find function "bridge_knit"`; summary `[ FAIL 5 | WARN 0 | SKIP 4 | PASS 19 ]` without duckdb and Python, `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 49 ]` with both.
+Expected: the five new tests error with `could not find function "bridge_knit"`; summary `[ FAIL 5 | WARN 0 | SKIP 4 | PASS 20 ]` without duckdb and Python, `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 51 ]` with both.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2890,7 +2841,7 @@ bridge_knit = function(engine, code) {
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 44 ]` without duckdb and Python (the Python half of "the python and sql engines ..." skips), `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 76 ]` with both.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 5 | PASS 45 ]` without duckdb and Python (the Python half of "the python and sql engines ..." skips), `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 78 ]` with both.
 
 - [ ] **Step 5: Commit**
 
@@ -3083,7 +3034,7 @@ on_load(ext_declare_builtin("lang", builtin_lang))
 Rscript --vanilla -e 'devtools::test(filter = "bridge-lang")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 84 ]` without duckdb and Python, `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 118 ]` with both.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 6 | PASS 85 ]` without duckdb and Python, `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 120 ]` with both.
 
 - [ ] **Step 5: Commit**
 
@@ -3359,7 +3310,7 @@ Commands and expected results:
 Rscript --vanilla -e 'devtools::test(filter = "bridge|copy-bridge")'
 ```
 
-Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 363 ]` (`test-bridge-sh.R` 269; `test-bridge-lang.R` 84 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 401 ]`.
+Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 364 ]` (`test-bridge-sh.R` 269; `test-bridge-lang.R` 85 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 403 ]`.
 
 ```bash
 Rscript --vanilla dev/bench/tokens/run.R --check
