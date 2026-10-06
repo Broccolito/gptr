@@ -148,6 +148,13 @@ pending (maintainer).
   after Chrome started -> fixed (no-browser condition); Red wording -> fixed. Deviations: none. Open: hosted
   confirmation.
 
+## Task CI-12 - The codex billing-warning test does not depend on test order (2026-10-06)
+- Red: `^(auth-childenv|cli-codex)$` FAIL 1 `test-cli-codex.R:770`: `test-auth-childenv.R` had spent the once-only
+  `billing_env` warning (`the$once`). Fix (test only): the codex turn test binds a fresh `the$once` for itself
+  (`rlang::local_bindings()`, restored at its end). Green: that filter PASS 385; `^cli-` SKIP 3 PASS 748;
+  `^auth-childenv$` PASS 140. Lint clean. Neighbours: `^(lint-rules|arch-layers)$` PASS 19 green.
+- Reviews: none recorded. Deviations: none. Open: hosted connections confirmation (with CI-8).
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);

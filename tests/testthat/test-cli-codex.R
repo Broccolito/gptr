@@ -744,6 +744,7 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token o
   withr::local_envvar(OPENAI_API_KEY = "sk-p20fake-openai-0000000000000000",
                       CODEX_API_KEY = "codex-p20fake-0000000000000",
                       OPENAI_BASE_URL = "https://example.invalid/v1", CODEX_SANDBOX = "seatbelt")
+  rlang::local_bindings(once = new.env(parent = emptyenv()), .env = the)
   big = paste0("Summarise this text: ", strrep("abcdefghij", 5000L), " caf\u00e9.")
   seen = new.env()
   seen$vars = character()
