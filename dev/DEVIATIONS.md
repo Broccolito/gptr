@@ -1471,9 +1471,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
       Ollama's four-decimal rounding); `s1_answer_probs()`, `s1_parse_choice()`, `s1_parse_score()` take the
       tolerance as a last argument defaulting to TypeSafe's 0.005, which the common dispatch recheck keeps; item 2's
       0.01 confidence slack is unchanged.
-  14. Open (P08-F4): `s1_guards()` judges egress by the registered record of `target$model$provider`; the SDK verb
-      must take the request's record (e.g. `egress_check(provider_id, provider = NULL)`, contract 12.2, 7.8), then
-      `s1_guards()` passes `target$provider`.
+  14. Closed by D-146: `s1_guards()` judges egress on `target$provider` (`egress_check(id, provider)`).
   15. Open (P05, with P08 routing): offline replay works for `ollama/clef`, `ollama/clef-flash` and classifier
       provider specs; a discovered tag (`ollama/clef-flash:latest`) resolves as chat without discovery and is
       refused; until then record and replay under the bare catalog name or a provider spec.
@@ -1768,3 +1766,20 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none (04 sections 7.2, 10.2 row 12 unchanged).
 - Tests: test-ext-events.R no-opinion expectation; test-ext-load.R interruption and test-ext-check.R
   synthetic-kernel blocks unchanged. Evidence: progress/simplicity.md P02-S.
+
+## D-146 - P08 gateway duplication: one IC-53 check, guards take the request's record (2026-10-05)
+- Rule: `session_control_check(what, s = NULL)` (P06; neutral message) is the one IC-53 token check;
+  `control_check()`, `gateway_control_other()` and `sdk_control_other()` are gone.
+- Rule: `egress_check(provider_id, provider = provider_get(provider_id), safety = egress_safety())`
+  judges the record the request uses and `replay_guard(model, what, mode = replay_mode())` takes the
+  call's mode (no temporary `options(gptr.replay)`); `gateway_guards()` serves sessions and router
+  choices, `s1_guards()` passes `target$provider` (System 1 egress was judged on the registered
+  record of the id, D-120 item 14).
+- Rule: a setting's `source` is the highest layer that set or changed its top-level key, also for
+  a dotted key (D-094 item 3); helper names in D-091 items 3-4, D-092 item 3, D-099 item 4, D-105
+  item 5, D-114 items 2-4 and D-115 item 3 are superseded (rules unchanged).
+- Contract-visible: 04 section 7.8 `egress_check()` and `replay_guard()` gain optional trailing
+  arguments (contract text not edited, outside lane simp-gw).
+- Tests: test-s1-route.R call-level LAN spec (+3); test-gptr-config.R 2 token tests out (P11's
+  plan keeps the gptr_permissions one), 3 dotted sources; one registration test replaces 5 (gateway,
+  config, capture); test-gptr-gateway.R 928 folded into 356. Evidence: progress/simplicity.md P08-S.

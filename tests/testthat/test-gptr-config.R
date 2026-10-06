@@ -129,26 +129,26 @@ test_that("a lock that is gone or being released is not stale; an old empty one 
   expect_false(lock_stale(lock))
 })
 
-test_that("control_check() refuses model-code calls; an approval is one-shot (IC-53)", {
+test_that("a configuration change from model code needs a one-shot approval (IC-53)", {
   local_gw()
-  expect_invisible(control_check("gptr_config"))
+  expect_invisible(session_control_check("gptr_config"))
   run = fake_run()
   local_mocked_bindings(run_current = function() run)
-  cnd = expect_error(control_check("gptr_config"), class = "gptr_error_permission")
+  cnd = expect_error(session_control_check("gptr_config"), class = "gptr_error_permission")
   expect_identical(cnd$action, "gptr_config")
   run$signal$control = "gptr_config"
-  expect_invisible(control_check("gptr_config"))
-  expect_error(control_check("gptr_config"), class = "gptr_error_permission")
+  expect_invisible(session_control_check("gptr_config"))
+  expect_error(session_control_check("gptr_config"), class = "gptr_error_permission")
 })
 
-test_that("a control_check() refusal names the running tool call (IC-53)", {
+test_that("a configuration refusal names the running tool call (IC-53)", {
   local_gw()
   run = fake_run()
   local_mocked_bindings(run_current = function() run)
-  cnd = expect_error(control_check("gptr_trust"), class = "gptr_error_permission")
+  cnd = expect_error(session_control_check("gptr_trust"), class = "gptr_error_permission")
   expect_identical(cnd$tool, "r")
   run$tool_call = list(id = "t1", name = "bash", input = list())
-  cnd = expect_error(control_check("gptr_trust"), class = "gptr_error_permission")
+  cnd = expect_error(session_control_check("gptr_trust"), class = "gptr_error_permission")
   expect_identical(c(cnd$tool, cnd$session), c("bash", "s0000000000"))
 })
 
@@ -216,18 +216,6 @@ test_that("gptr's own writes to a trusted project re-fingerprint it", {
   gptr_trust(proj, TRUE)
   settings_write("project", list(preset = "minimal"))
   expect_true(trust_get(proj))
-})
-
-# The bootstrap entry only: ext_service_get() serves it once builtin:gateway is loaded (Task 9
-# tests that), because P01's service_builtin_active() hides a service of a built-in that the
-# registry does not list yet.
-test_that("trust_get() is registered as the trust.get service of builtin:gateway (IC-33)", {
-  proj = local_gw()
-  entry = the$services[["trust.get"]]
-  expect_identical(entry[c("provided_by", "builtin")],
-                   list(provided_by = "P08", builtin = "gateway"))
-  gptr_trust(proj, TRUE)
-  expect_true(entry$fun(proj))
 })
 
 test_that("a trust decision taken in this process lapses when a gated file changes (IC-52)", {
@@ -525,17 +513,6 @@ test_that("settings_effective() reports each key with its layer and prints it", 
   expect_output(print(cfg), "mode +plan +\\[project\\]")
 })
 
-# The bootstrap entry only: P01's setting_get() uses it once builtin:gateway is loaded (Task 9
-# tests setting_get() end to end).
-test_that("settings_get() is registered as the settings.get service of builtin:gateway", {
-  local_gw()
-  entry = the$services[["settings.get"]]
-  expect_identical(entry[c("provided_by", "builtin")],
-                   list(provided_by = "P08", builtin = "gateway"))
-  settings_write("session", list(preset = "minimal"))
-  expect_identical(entry$fun("preset"), "minimal")
-})
-
 # Task 3 adaptations (see dev/progress/P08.md, Task 3).
 
 test_that("project files and options() never relax providers.<id>.local_only (IC-74)", {
@@ -741,8 +718,8 @@ test_that("a session object is above the dotted options of its keys (contract 11
   settings_write("session", list(subagents = list(max_depth = 2L)))
   withr::local_options(gptr.subagents.max_depth = 0L, gptr.subagents = list(max_cli = 1L))
   expect_identical(settings_resolve("subagents.max_depth"), list(value = 2L, source = "session"))
-  expect_identical(settings_resolve("subagents.max_cli"), list(value = 1L, source = "option"))
-  expect_identical(settings_resolve("subagents.max_active"), list(value = 8L, source = "default"))
+  expect_identical(settings_resolve("subagents.max_cli"), list(value = 1L, source = "session"))
+  expect_identical(settings_resolve("subagents.max_active"), list(value = 8L, source = "session"))
   settings_write("session", list(subagents.max_depth = 3L))
   expect_identical(settings_resolve("subagents.max_depth"), list(value = 3L, source = "session"))
 })
@@ -758,7 +735,7 @@ test_that("a layer whose providers the guard drops entirely contributes nothing"
   expect_identical(names(r$value), "corp")
   expect_identical(r$source, "session")
   expect_identical(settings_resolve("providers.corp.enabled"),
-                   list(value = TRUE, source = "option"))
+                   list(value = TRUE, source = "session"))
 })
 
 # Task 4: replay mode, the replay guard and the egress acknowledgement.
@@ -1123,21 +1100,6 @@ test_that("gptr_config() is refused from model code during a run (IC-53)", {
   local_mocked_bindings(run_current = function() run)
   expect_error(gptr_config(mode = auto, .scope = "session"), class = "gptr_error_permission")
   expect_null(settings_read("session")$mode)
-})
-
-test_that("the run$signal$control token check (shared with P11) refuses model code (IC-53)", {
-  run = fake_run()
-  local_mocked_bindings(run_current = function() run)
-  cnd = expect_error(control_check("gptr_permissions"), class = "gptr_error_permission")
-  expect_identical(cnd$action, "gptr_permissions")
-})
-
-test_that("a model-code gptr_permissions() call during a run is refused (IC-53, P11)", {
-  skip_if_not(exists("gptr_permissions", mode = "function"), "gptr_permissions() arrives with P11")
-  local_gw()
-  run = fake_run()
-  local_mocked_bindings(run_current = function() run)
-  expect_error(gptr_permissions(allow = "r(level<=3)"), class = "gptr_error_permission")
 })
 
 test_that("gptr_init() is refused from model code during a run (IC-53)", {

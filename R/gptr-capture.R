@@ -52,14 +52,6 @@ dot_is_literal = function(e) {
     is.null(attributes(e))
 }
 
-#' Names of peter()'s formals after the dots (contract 6.1)
-#' @noRd
-gateway_formal_names = function() {
-  c("model", "mode", "skills", "plugins", "extensions", "tools", "agents", "parallel", "choices",
-    "levels", "threshold", "min_confidence", "uncertain", "prompt", "envir", "background", "budget",
-    "replay", ".opts", ".run", ".stdin")
-}
-
 #' For each dot, the symbol written at the call site when the dot is a plain symbol there, else NA;
 #' forwarded dots are NA, forced through ...elt() (IC-41). Arguments are read by index, never bound
 #' to a local, so an empty one is never evaluated.
@@ -71,7 +63,7 @@ dot_sites = function(sc, n) {
   nm = names(args)
   if (is.null(nm)) nm = rep("", length(args))
   nm[is.na(nm)] = ""
-  keep = which(!(nzchar(nm) & nm %in% gateway_formal_names()))
+  keep = which(!(nzchar(nm) & nm %in% setdiff(names(formals(peter)), "...")))
   syms = character(length(keep))
   fwd = logical(length(keep))
   k = 1L
@@ -182,10 +174,6 @@ unmask_env = function(env) {
 #' @noRd
 name_norm = function(x) tolower(gsub("[._]", "-", x))
 
-#' The permission modes, known before their plans register anything
-#' @noRd
-gateway_modes = function() c("plan", "manual", "edits", "auto")
-
 #' The built-in preset names (P07 registers them as `preset` records)
 #' @noRd
 gateway_presets = function() c("minimal", "standard", "readonly", "extended")
@@ -285,13 +273,9 @@ gateway_choice = function(x, choices, arg) {
   x
 }
 
-#' TRUE for a name `.opts` never takes as a plugin namespace: the protected settings and `safety`,
-#' the run's frozen record (IC-53; IC-74: per-call options cannot relax `local_only`)
-#' @noRd
-gateway_opts_reserved = function(k) settings_protected(k) || identical(k, "safety")
-
 #' Validates `.opts`: the core switches, and plugin-namespace entries by that plugin's `setting`
-#' specs `<namespace>.<field>` (IC-44); a reserved name is refused
+#' specs `<namespace>.<field>` (IC-44); the protected settings and `safety`, the run's frozen
+#' record, are refused (IC-53; IC-74: per-call options cannot relax `local_only`)
 #' @noRd
 gateway_opts = function(opts) {
   if (is.null(opts) || (is.list(opts) && !length(opts))) return(list())
@@ -304,7 +288,7 @@ gateway_opts = function(opts) {
       out[k] = list(gateway_opt_check(k, v))
       next
     }
-    if (gateway_opts_reserved(k)) {
+    if (settings_protected(k) || identical(k, "safety")) {
       hint = if (settings_protected(k)) {
         paste0("Set `", k, "` with gptr_config(", k, " = ..., .scope = \"user\").")
       } else {
@@ -591,7 +575,7 @@ identifier_pool = function(arg) {
     model = , small_model = , system1 = c(catalog_aliases(), registry_names("provider"),
                                           registry_names("router"), registry_names("model"),
                                           identifier_provider_aliases()),
-    mode = gateway_modes(),
+    mode = session_modes,
     preset = c(gateway_presets(), registry_names("preset")),
     tools = c(registry_names("tool"), gateway_builtin_tools(), gateway_presets()),
     skills = registry_names("skill"),
@@ -640,7 +624,7 @@ ident_check_chr = function(x, arg) {
     gptr_abort(paste0("`", arg, "` contains an empty or missing name."), "invalid_argument",
                arg = arg, expected = "non-empty names")
   }
-  if (identical(arg, "mode") && (length(x) != 1L || !(x %in% gateway_modes()))) {
+  if (identical(arg, "mode") && (length(x) != 1L || !(x %in% session_modes))) {
     gptr_abort("`mode` must be one of plan, manual, edits or auto.", "invalid_argument",
                arg = "mode", expected = "plan, manual, edits or auto")
   }
@@ -932,10 +916,6 @@ ident_value = function(x, arg, expr) {
   ident_accept(x, arg, ident_label(label))
 }
 
-#' Session accessor names that agent names may not take (IC-71; P06's list)
-#' @noRd
-session_accessor_names = function() session_accessors
-
 #' Checks agent names: unique syntactic names that are not session accessors (contract 6.1, IC-71)
 #' @noRd
 agents_check_names = function(nms) {
@@ -944,7 +924,7 @@ agents_check_names = function(nms) {
     gptr_abort("Agent names must be unique syntactic names, as in agents = list(stats = agent()).",
                "invalid_argument", arg = "agents", expected = "unique syntactic names")
   }
-  clash = intersect(nms, session_accessor_names())
+  clash = intersect(nms, session_accessors)
   if (length(clash)) {
     gptr_abort(paste0("Agent names may not equal session accessors: ",
                       paste(clash, collapse = ", "), "."), "invalid_argument", arg = "agents",

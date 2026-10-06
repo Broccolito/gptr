@@ -980,9 +980,9 @@ fork_boundaries = function(path) {
   data.frame(index = idx, turn = trn)
 }
 
-#' Model code may reach another session through gptr's control exports only with the one-shot
-#' token of an approved `ask_human` call (IC-53 item 3; perm_grant_control())
-#' @param s The target session, or NULL when unknown (always another session).
+#' Model code may call a control export (configuration, or a session other than its own) only
+#' with the one-shot token of an approved `ask_human` call (IC-53 item 3; perm_grant_control())
+#' @param s The target session, or NULL when there is none or it is unknown (always checked).
 #' @noRd
 session_control_check = function(what, s = NULL) {
   run = run_current()
@@ -994,8 +994,8 @@ session_control_check = function(what, s = NULL) {
     run$signal$control = tokens[-i]
     return(invisible(TRUE))
   }
-  gptr_abort(paste0(what, "() on another session is refused while a run executes model code; ",
-                    "a person must approve it"),
+  gptr_abort(paste0(what, "() is refused from model code during a run unless a person approves ",
+                    "it"),
              "permission", action = what, tool = run$tool_call[["name"]] %||% "r", risk = 4L,
              how_to_allow = "call it outside the run, or approve it when asked",
              session = run$session)

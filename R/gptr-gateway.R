@@ -215,7 +215,7 @@ dot_empty = function(exprs) {
 gateway_dispatch = function(call) {
   on.exit(call_release(call), add = TRUE)
   cur = run_current()
-  if (!is.null(cur)) call$ids$mode = mode_tighter(call$ids$mode %||% cur$mode, cur$mode)
+  if (!is.null(cur)) call$ids$mode = run_mode_tighter(call$ids$mode, cur$mode)
   for (r in registry_all("route")) {
     if (!route_matches(r, call)) next
     ev_dispatch("route", ev_new("route", route = r$name, router = NULL,
@@ -351,20 +351,6 @@ home_address = function(envir) {
   rlang::obj_address(envir)
 }
 
-#' The strictest of two modes (plan < manual < edits < auto); NULL means "no constraint", and a
-#' value that is not a mode never loosens the other
-#' @noRd
-mode_tighter = function(a, b) {
-  if (is.null(a)) return(b)
-  if (is.null(b)) return(a)
-  modes = gateway_modes()
-  ia = match(a, modes)
-  ib = match(b, modes)
-  if (is.na(ia)) return(b)
-  if (is.na(ib)) return(a)
-  if (ia <= ib) a else b
-}
-
 # ------------------------------------------------------------------ the default System 2 runner
 
 #' A list view of an identifier value (NULL, a character vector, a spec, a function or a list)
@@ -431,12 +417,10 @@ gateway_model_ref = function(model, thinking = NULL, session = NULL) {
 #' @noRd
 gateway_provider_id = function(ref) sub("/.*$", "", sub(":.*$", "", ref))
 
-#' The provider record of a session's model, including the session's rank-0 records
+#' The session's own record of provider `pid` (default: its model's), rank-0 records included
 #' @noRd
-gateway_provider = function(s) {
-  d = session_data(s)
-  pid = gateway_provider_id(d$model)
-  registry_get("provider", pid, session = d$id) %||% provider_get(pid)
+gateway_provider = function(s, pid = gateway_provider_id(session_data(s)$model)) {
+  registry_get("provider", pid, session = session_data(s)$id) %||% provider_get(pid)
 }
 
 #' The model record of a session's model, or NULL; the whole id is tried first (IC-74 colons)
@@ -490,13 +474,6 @@ gateway_child_depth = function(cur) {
   depth
 }
 
-#' The live session object with this id, or NULL
-#' @noRd
-gateway_session_by_id = function(id) {
-  for (s in live_all()) if (identical(session_data(s)$id, id)) return(s)
-  NULL
-}
-
 #' Registers one spec of a call at rank 0 for a session, first removing an earlier call's spec of
 #' the same kind and name (ties keep the first registered, contract 10.1); ids are kept in
 #' `the$gateway$specs` until session_shutdown
@@ -517,7 +494,7 @@ gateway_register_spec = function(spec, sid) {
 #' model code unless approved (IC-53 items 3-4)
 #' @noRd
 gateway_filters_apply = function(filters) {
-  control_check("gptr_config")
+  session_control_check("gptr_config")
   cur = as.character(unlist(settings_read("session")$filters))
   for (f in filters) {
     cur = cur[substring(cur, 2L) != substring(f, 2L)]
@@ -566,14 +543,6 @@ gateway_register = function(call, s) {
   invisible(specs)
 }
 
-#' Asks the project trust question once per process for a new top-level session (IC-52)
-#' @noRd
-gateway_trust_check = function() {
-  root = project_root()
-  if (!is.null(workspace_dir()) || trust_resources_present(root)) trust_resolve(root)
-  invisible(TRUE)
-}
-
 #' Creates the session of a new call: resolved model and mode, the evaluation environment as home;
 #' inside a run, the mode tightened, kind `child` and the running session as parent
 #' @noRd
@@ -581,9 +550,9 @@ gateway_new_session = function(call, cur) {
   nested = !is.null(cur)
   ref = gateway_model_ref(call$ids$model, call$args$opts$thinking)
   mode = call$ids$mode %||% setting_get("mode", default = "manual")
-  if (nested) mode = mode_tighter(mode, cur$mode)
+  if (nested) mode = run_mode_tighter(mode, cur$mode)
   if (nested) gateway_child_depth(cur)
-  parent = if (nested) gateway_session_by_id(cur$session) else NULL
+  parent = if (nested) session_by_id(cur$session) else NULL
   # session_new() derives the depth from `parent`; gateway_child_depth() only enforces the limit
   s = session_new(ref, mode, home = call$envir, kind = if (nested) "child" else "chat",
                   parent = parent, preset = gateway_preset(call),
@@ -618,7 +587,7 @@ gateway_continue_session = function(call, s, cur) {
     if (!identical(ref, d$model)) session_set_model(s, ref, reason = "user")
   }
   mode = if (isTRUE(call$args$mode_given)) call$ids$mode else NULL
-  if (!is.null(mode) && !is.null(cur)) mode = mode_tighter(mode, cur$mode)
+  if (!is.null(mode) && !is.null(cur)) mode = run_mode_tighter(mode, cur$mode)
   if (!is.null(mode) && !identical(mode, d$mode)) {
     session_set_mode(s, mode, source = if (is.null(cur)) "user" else "run")
   }
@@ -664,38 +633,19 @@ gateway_check_visible = function(call) {
   invisible(TRUE)
 }
 
-#' The replay guard under the call's `replay =`, which overrides the process mode (contract 3.1,
-#' IC-45); replay_guard() reads the option, so it is set for the check and restored on exit
+#' Egress acknowledgement (unless the context of `call` is "none") under `safety` and the replay
+#' guard under `call`'s `replay =` (contract 3.1, IC-45), on the session's own record of the
+#' provider: of the session's model, or of `m`, a router's choice (a router session's own model is
+#' checked per request by router_call(); IC-29, IC-74; D-099, D-114)
 #' @noRd
-gateway_replay_guard = function(model, arg = NULL) {
-  if (!identical(replay_mode(arg), "replay")) return(invisible(TRUE))
-  if (!identical(replay_mode(), "replay")) {
-    old = options(gptr.replay = "replay")
-    on.exit(options(old), add = TRUE)
-  }
-  replay_guard(model)
-}
-
-#' The egress acknowledgement for provider record `pr` (NULL when unknown) under id `pid`, judged
-#' by egress_state() of the record the request uses, under the run's `safety` record (IC-74;
-#' D-020, D-099, D-114)
-#' @noRd
-gateway_egress = function(pr, pid, safety = egress_safety()) {
-  pid = pr[["id"]] %||% pr[["name"]] %||% pid
-  egress_require(pid, egress_state(pr, safety), safety)
-}
-
-#' Egress acknowledgement (unless `.opts$context = "none"`, under `safety`) and replay guard for
-#' the session's model; a router session is checked per request by router_call()
-#' @noRd
-gateway_guards = function(call, s, safety = egress_safety()) {
-  ref = session_data(s)$model
-  if (startsWith(ref, "router:")) return(invisible(TRUE))
-  pr = gateway_provider(s)
+gateway_guards = function(call, s, safety, m = NULL) {
+  d = session_data(s)
+  if (is.null(m) && startsWith(d$model, "router:")) return(invisible(TRUE))
+  pid = m$provider %||% gateway_provider_id(d$model)
+  pr = gateway_provider(s, pid)
   context = call$args$opts$context %||% setting_get("context", default = "summary")
-  if (!identical(context, "none")) gateway_egress(pr, gateway_provider_id(ref), safety)
-  gateway_replay_guard(if (is.null(pr)) ref else pr, call$args$replay)
-  invisible(TRUE)
+  if (!identical(context, "none")) egress_check(pid, pr, safety)
+  replay_guard(pr %||% m %||% d$model, mode = replay_mode(call$args$replay))
 }
 
 #' <skill_content> preloads through the skill.body service (P17)
@@ -762,14 +712,6 @@ gateway_image_blocks = function(images, s) {
   out
 }
 
-#' Context blocks from P07's context.first / context.turn services (none when P07 is filtered out)
-#' @noRd
-gateway_context_blocks = function(s, inp, first) {
-  name = if (first) "context.first" else "context.turn"
-  if (!ext_service_has(name)) return(list())
-  ext_service_get(name)(s, inp) %||% list()
-}
-
 #' The prompt redacted with the `context` profile (gptr.prompt_secrets, 04 3.1): "redact" (also
 #' "ask" when nobody can answer, IC-43) sends it with a notice; "ask" asks first and, on no, stops
 #' the call before anything is sent. P06 redacts every entry at ingress anyway.
@@ -811,7 +753,9 @@ gateway_input = function(call, s, first, nested) {
   inp = list(call = call, turn = as.integer(session_data(s)$turns %||% 0L) + 1L, prompt = prompt,
              placement = if (first) "first" else "turn", last_hash = NULL,
              opts = call$args$opts %||% list())
-  ctx = gateway_context_blocks(s, inp, first)
+  # P07's context.first / context.turn services (none when P07 is filtered out)
+  svc = if (first) "context.first" else "context.turn"
+  ctx = if (ext_service_has(svc)) ext_service_get(svc)(s, inp) %||% list() else list()
   skills = gateway_skill_blocks(call$ids$skills)
   images = gateway_image_blocks(call$args$opts$images, s)
   list(prompt = prompt, blocks = c(ctx, skills, images),
@@ -941,7 +885,11 @@ gateway_run = function(call, s = NULL) {
   # IC-40 fails fast: the evaluation environment is checked before anything changes
   if (!first) gateway_continue_envir(call, s)
   gateway_check_visible(call)
-  if (first && is.null(cur)) gateway_trust_check()
+  # the project trust question, once per process for a new top-level session (IC-52)
+  if (first && is.null(cur)) {
+    root = project_root()
+    if (!is.null(workspace_dir()) || trust_resources_present(root)) trust_resolve(root)
+  }
   # settings-file `filters` reach the registry before the session is built (04 10.1)
   if (is.null(cur)) gateway_filters_sync()
   if (first) {
@@ -978,7 +926,7 @@ gateway_run = function(call, s = NULL) {
   run = gateway_run_start(s, msg, ropts, cur, safety)
   run_foreground(run)
   # sent to the background from the pause menu (04 7.14): hold the record until it settles [R2]
-  if (!run_settled(run) && isTRUE(run$opts$background)) {
+  if (!isTRUE(run$settled) && isTRUE(run$opts$background)) {
     call_hold(call, s)
     return(invisible(s))
   }
@@ -988,19 +936,10 @@ gateway_run = function(call, s = NULL) {
 
 # ------------------------------------------------------------------ pumping runs (6.1.1 step 6)
 
-#' TRUE once a run settled (`run$settled` or a terminal status, 04 7.6); `waiting` is not settled
-#' @noRd
-run_settled = function(run) {
-  if (is.null(run) || isTRUE(run$settled)) return(TRUE)
-  terminal = c("idle", "blocked", "budget", "max_turns", "error", "aborted", "interrupted",
-               "detached")
-  isTRUE(run$status %in% terminal)
-}
-
 #' Aborts every unsettled run (the abort-only interrupt fallback)
 #' @noRd
 sdk_abort_all = function(runs) {
-  for (r in runs) if (!run_settled(r)) run_abort(r, reason = "interrupt")
+  for (r in runs) if (!isTRUE(r$settled)) run_abort(r, reason = "interrupt")
   invisible(NULL)
 }
 
@@ -1035,7 +974,7 @@ sdk_pump = function(runs, until = NULL, timeout = Inf) {
 #' @noRd
 run_foreground = function(run) {
   force(run)
-  sdk_pump(list(run), until = function() run_settled(run) || isTRUE(run$opts$background))
+  sdk_pump(list(run), until = function() isTRUE(run$settled) || isTRUE(run$opts$background))
 }
 
 # ------------------------------------------------------------------ terminal statuses (6.1.2)
@@ -1107,15 +1046,6 @@ gateway_signal = function(s, run = NULL) {
 
 # ------------------------------------------------------------------ built-in routes (IC-24, IC-39)
 
-#' Refuses a verb or pipe from model code that acts on a session other than the running one,
-#' unless approved (IC-53 item 3)
-#' @noRd
-gateway_control_other = function(s, what) {
-  cur = run_current()
-  if (is.null(cur) || identical(cur$session, session_data(s)$id)) return(invisible(TRUE))
-  control_check(what)
-}
-
 #' The `continue` route: a running (or waiting) session is steered with the redacted pipe text
 #' (IC-55; from model code only its own session unless approved, IC-53); otherwise a new turn
 #' @noRd
@@ -1124,7 +1054,7 @@ route_continue = function(call) {
   route_refuse_s1_images(call)
   s = call$session
   if (session_data(s)$status %in% c("running", "waiting")) {
-    gateway_control_other(s, "gptr_steer")
+    session_control_check("gptr_steer", s)
     session_enqueue(s, gateway_prompt_secrets(call$prompt), as = "steer", source = "pipe")
     return(invisible(s))
   }
@@ -1268,51 +1198,14 @@ router_invoke = function(spec, request, ctx) {
   NULL
 }
 
-#' Egress acknowledgement and replay guard for the provider a router chose for session `s`: the
-#' session's own provider record, judged under the record, context and `replay =` of the run
-#' driving `s`, which run_current() does not find between turns (IC-29, IC-74; D-099, D-114)
+#' gateway_guards() for router choice `m` under the call and safety record of the run driving
+#' session `s`, which run_current() does not find between turns (an empty record, failing
+#' closed, for a run without one; outside a run, egress_safety())
 #' @noRd
 router_guards = function(m, s) {
-  sid = session_data(s)$id
-  pr = registry_get("provider", m$provider, session = sid) %||% provider_get(m$provider)
-  if (!identical(gateway_run_context(s), "none")) {
-    gateway_egress(pr, m$provider, gateway_run_record(s))
-  }
-  gateway_replay_guard(pr %||% m, gateway_run_replay(s))
-  invisible(TRUE)
-}
-
-#' The run driving session `s` (P06 keeps it on the live session until it settles), or NULL
-#' @noRd
-gateway_session_run = function(s) {
-  live = session_live(s)
-  if (is.null(live)) NULL else live$run
-}
-
-#' The protected safety record of the run driving session `s` (07 section 5); an empty record,
-#' which fails closed, for a run without one; outside a run, egress_safety()
-#' @noRd
-gateway_run_record = function(s) {
-  run = gateway_session_run(s)
-  if (is.null(run)) return(egress_safety())
-  run$opts$safety %||% list()
-}
-
-#' The automatic context of the run driving session `s`: its `context` run option, else the setting
-#' @noRd
-gateway_run_context = function(s) {
-  run = gateway_session_run(s)
-  ctx = if (is.null(run)) NULL else run$opts$context
-  ctx %||% setting_get("context", default = "summary")
-}
-
-#' The `replay =` of the peter() call whose run is driving session `s`, or NULL (contract 3.1)
-#' @noRd
-gateway_run_replay = function(s) {
-  run = gateway_session_run(s)
-  if (is.null(run)) return(NULL)
-  call = run$opts$call
-  if (is.null(call)) NULL else call$args$replay
+  run = session_live(s)$run
+  safety = if (is.null(run)) egress_safety() else run$opts$safety %||% list()
+  gateway_guards(run$opts$call, s, safety, m)
 }
 
 #' Falls back to the default model after a router failure, with a diagnostic; the router's last

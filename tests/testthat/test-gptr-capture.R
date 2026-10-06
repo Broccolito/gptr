@@ -192,7 +192,6 @@ test_that("dot_sites() skips peter()'s own formals; the leaves tolerate an empty
   w = function(...) g(..., ...)
   expect_identical(w(a, b), rep(NA_character_, 4L))
   expect_identical(dot_sites(quote(g()), 0L), character())
-  expect_identical(gateway_formal_names()[c(1L, 21L)], c("model", ".stdin"))
 })
 
 test_that("gateway_context_items() builds the context items of contract 7.8 from facts", {
@@ -227,7 +226,6 @@ test_that("select_prompt() gives an explicit prompt the win and handles no dots"
   expect_true(is.na(none$target))
   expect_true(is.na(none$prompt))
   expect_length(none$context, 0L)
-  expect_identical(gateway_modes(), c("plan", "manual", "edits", "auto"))
 })
 
 test_that("call_value() checks its index and refuses value items once released", {
@@ -441,12 +439,6 @@ test_that("agents take their list names; model and skills resolve as identifiers
                class = "gptr_error_invalid_argument")
 })
 
-# The bootstrap entry (ext_service_get() serves it once builtin:gateway is loaded, Task 9)
-test_that("resolve_identifier() is registered as the identifier.resolve service", {
-  entry = the$services[["identifier.resolve"]]
-  expect_identical(entry$fun(quote(opus), "model", new.env()), "opus")
-})
-
 # ---- Task 6 adaptation tests (contract 1.1, 6.1, 6.1.3, IC-42, IC-71, IC-74, rule R3)
 
 test_that("agents written with gptr_agent() or gptr::gptr_agent() take their list names (IC-42)", {
@@ -483,9 +475,8 @@ test_that("agents written with gptr_agent() or gptr::gptr_agent() take their lis
   expect_null(resolve_agents(NULL, e))
 })
 
-test_that("session_accessor_names() is P06's accessor list and P02 refuses each name (IC-71)", {
-  nms = session_accessor_names()
-  expect_identical(nms, session_accessors)
+test_that("P02 refuses each of P06's session accessors as an agent name (IC-71)", {
+  nms = session_accessors
   expect_true(all(c("text", "value", "usage", "children", "editor_text") %in% nms))
   for (nm in nms) {
     expect_error(gptr_agent(name = nm, description = "d"), class = "gptr_error")

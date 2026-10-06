@@ -67,10 +67,9 @@ doc_remembered_target = function(pf = doc_project_get()) {
 }
 
 #' Refuse a control-category export called from model code during a run unless the dispatcher
-#' approved exactly this call (IC-53; the one-shot token in `run$signal$control`, as P08's
-#' control_check() reads it). P08's control_check() is L6 and outside IC-33's kernel SDK, so
-#' this L4 copy keeps its token protocol and, like it and P06's session_control_check(), names
-#' the running tool (else "r") in the refusal.
+#' approved exactly this call (IC-53; the one-shot token in `run$signal$control`, as P06's
+#' session_control_check() reads it). That check is outside IC-33's kernel SDK, so this L4 copy
+#' keeps its token protocol and, like it, names the running tool (else "r") in the refusal.
 #' @noRd
 doc_control_guard = function(what) {
   run = run_current()

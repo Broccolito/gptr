@@ -202,3 +202,17 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   eval-`, `gptr-|doc-replay|cli-common` green; cross-plan 0 errors.
 - Reviews: none yet.
 - Deviations: D-145. Open: X-14/X-15 specifics lost (only registry_all()'s duplicate sort folded).
+
+## P08-S - Gateway duplication (2026-10-05)
+- F2-F4, F6-F10, F13 (R -197, tests -48; plan ~308): one IC-53 check (`session_control_check()`);
+  `gateway_guards()` and `s1_guards()` on `egress_check(id, provider, safety)` and
+  `replay_guard(mode =)`; `settings_file_update()`, `settings_is_object()` (P01's
+  `schema_is_object()` refuses `list()`), `trust_read(strict)`; P06's modes, session lookup and
+  `run$settled`; sources per top-level key.
+- Red: FAIL 2 (`s1-route`: a call-level LAN spec passed egress on its id's loopback record). Green:
+  plan filter PASS 2045 (2051 before: -9 removed-helper expectations, +3). Lint clean. Neighbours:
+  `session|agent`, `prompt|context-prefix|bench-context`, `s1-|arch-layers|lint-rules|doc-|copy-|
+  ext-check|provider-registry` green; cross-plan 0 errors, warn 83 (P16 edit adds none).
+- Reviews: none yet.
+- Deviations: D-146. Open: P11 plan text (lane perm) names `control_check()`; 04 section 7.8 rows
+  not amended (outside lane).

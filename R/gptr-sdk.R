@@ -5,9 +5,8 @@
 #' The unsettled run of a session, or NULL
 #' @noRd
 sdk_run_of = function(s) {
-  live = session_live(s)
-  run = if (is.null(live)) NULL else live$run
-  if (is.null(run) || run_settled(run)) NULL else run
+  run = session_live(s)$run
+  if (isTRUE(run$settled)) NULL else run
 }
 
 #' TRUE when a session has queued input (a steer or a follow-up)
@@ -75,7 +74,7 @@ sdk_until_turns = function(run, counter, turns) {
   force(run)
   force(counter)
   force(turns)
-  function() counter$n() >= turns || run_settled(run)
+  function() counter$n() >= turns || isTRUE(run$settled)
 }
 
 #' The stop condition of gptr_wait(): no session is running or waiting (P21 resumes `waiting`)
@@ -98,18 +97,6 @@ sdk_sessions = function(x, arg = "x") {
                "invalid_argument", arg = arg, expected = "a gptr_session or a list of them")
   }
   ss
-}
-
-#' The IC-53 control check of a verb acting on sessions: one check (one token) per call, made when
-#' any of them is not the running session
-#' @noRd
-sdk_control_other = function(ss, what) {
-  cur = run_current()
-  if (is.null(cur)) return(invisible(TRUE))
-  for (s in ss) {
-    if (!identical(cur$session, session_data(s)$id)) return(gateway_control_other(s, what))
-  }
-  invisible(TRUE)
 }
 
 #' Advance a session
@@ -140,7 +127,7 @@ gptr_step = function(s, turns = 1L) {
   counter = sdk_turn_counter(s)
   on.exit(counter$off(), add = TRUE)
   sdk_pump(list(run), until = sdk_until_turns(run, counter, turns))
-  if (run_settled(run)) gateway_signal(s, run)
+  if (isTRUE(run$settled)) gateway_signal(s, run)
   invisible(s)
 }
 
@@ -182,7 +169,7 @@ gptr_wait = function(x, timeout = Inf) {
   }
   until = sdk_until_settled(ss)
   if (!until()) sdk_pump(runs, until = until, timeout = timeout)
-  if (inherits(x, "gptr_session") && length(runs) && run_settled(runs[[1L]])) {
+  if (inherits(x, "gptr_session") && length(runs) && isTRUE(runs[[1L]]$settled)) {
     gateway_signal(x, runs[[1L]])
   }
   invisible(x)
@@ -208,7 +195,7 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
   check_class(s, "gptr_session", "s")
   check_string(text, "text")
   kind = check_choice(as, c("steer", "follow_up"), "as")
-  gateway_control_other(s, "gptr_steer")
+  session_control_check("gptr_steer", s)
   session_enqueue(s, redact(as_utf8(text), "context"), as = kind, source = "api_user")
   invisible(s)
 }
@@ -228,7 +215,10 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 #' @export
 gptr_cancel = function(x) {
   ss = sdk_sessions(x)
-  sdk_control_other(ss, "gptr_cancel")
+  # one check (one token) per call, made when any session is not the running one (IC-53)
+  cur = run_current()
+  other = Filter(function(s) !identical(session_data(s)$id, cur$session), ss)
+  if (length(other)) session_control_check("gptr_cancel", other[[1L]])
   for (s in ss) {
     r = sdk_run_of(s)
     if (!is.null(r)) run_abort(r, reason = "user")
@@ -264,7 +254,7 @@ gptr_on = function(s, event, handler, matcher = NULL) {
   check_string(event, "event")
   check_function(handler, "handler")
   if (!is.null(matcher) && !is.function(matcher)) check_string(matcher, "matcher")
-  control_check("gptr_on")
+  session_control_check("gptr_on")
   id = hook_add(event, handler, matcher = matcher, rank = 0L, source = "session",
                 session = session_data(s)$id)
   invisible(sdk_off(id))
@@ -302,7 +292,7 @@ gptr_return = function(x) {
     return(invisible(x))
   }
   expr = substitute(x)
-  s = gateway_session_by_id(run$session)
+  s = session_by_id(run$session)
   if (is.null(s)) {
     gptr_abort("The running session is not registered in this process.", "internal",
                detail = "gptr_return() without a live session")

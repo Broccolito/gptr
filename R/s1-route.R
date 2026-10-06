@@ -549,19 +549,12 @@ s1_images = function(images, target) {
 #' IC-45, IC-47, IC-74)
 #'
 #' The call's own `replay =` guard runs first (a replayed miss is not_recorded); egress is checked
-#' whatever `.opts$context` says, on the id's registered record (D-120 item 14).
+#' whatever `.opts$context` says, on the target's own provider record (D-146).
 #' @noRd
 s1_guards = function(target, replay = NULL) {
   p = target$provider
-  if (identical(replay_mode(replay), "replay")) {
-    if (!identical(replay_mode(), "replay")) {
-      old = options(gptr.replay = "replay")
-      on.exit(options(old), add = TRUE)
-    }
-    replay_guard(p %||% target$model, "System 1 call")
-  }
-  if (!isTRUE(p[["offline"]])) egress_check(target$model[["provider"]])
-  invisible(TRUE)
+  replay_guard(p %||% target$model, "System 1 call", replay_mode(replay))
+  egress_check(target$model[["provider"]], p)
 }
 
 # ---- results ----------------------------------------------------------------------------------

@@ -30,7 +30,6 @@ gateway_state = function() {
 #' The core settings of contract section 11.2 as plain records
 #' @noRd
 settings_core = function() {
-  modes = c("plan", "manual", "edits", "auto")
   rec = function(name, default, type, description, choices = NULL, tighten = NULL,
                  scope = "both") {
     list(name = name, default = default, type = type, description = description,
@@ -41,7 +40,8 @@ settings_core = function() {
     rec("model", NULL, "ident", "Default model reference (null: the first available route)."),
     rec("small_model", NULL, "ident", "Small model (null: the small sibling of model)."),
     rec("system1", NULL, "ident", "System 1 model (null: typesafe/jev-latest when a key exists)."),
-    rec("mode", "manual", "choice", "Permission mode.", choices = modes, tighten = modes),
+    rec("mode", "manual", "choice", "Permission mode.", choices = session_modes,
+        tighten = session_modes),
     rec("preset", "standard", "chr", "Tool and prompt preset."),
     rec("tools", json_obj(), "object", "Tool enable and disable lists and per-model presets."),
     rec("permissions", json_obj(), "object", "Permission rules: allow, ask, deny."),
@@ -105,12 +105,14 @@ setting_validator = function(name, type, choices = NULL) {
   }
 }
 
-#' Checks that a setting value is a JSON object (a named list, possibly empty)
+#' TRUE for a JSON object: a plain list that is named or empty
+#' @noRd
+settings_is_object = function(x) is.list(x) && !is.object(x) && (!length(x) || !is.null(names(x)))
+
+#' Checks that a setting value is a JSON object with non-empty names
 #' @noRd
 settings_check_object = function(value, name) {
-  ok = is.list(value) && !is.object(value) &&
-    (length(value) == 0L || (!is.null(names(value)) && all(nzchar(names(value)))))
-  if (!ok) {
+  if (!settings_is_object(value) || !all(nzchar(names(value)))) {
     gptr_abort(paste0("The setting `", name, "` takes a named list (a JSON object)."),
                "invalid_argument", arg = name, expected = "a named list")
   }
@@ -191,15 +193,13 @@ settings_path = function(scope, create = FALSE) {
       }
       file.path(ws, "settings.json")
     },
+    # the first 16 hex of sha256 of the project root's path key (IC-52)
     user_project = file.path(gptr_user_dir("config", create = create), "projects",
-                             paste0(project_hash(project_root()), ".json")),
+                             paste0(substr(hash_sha256(path_key(project_root())), 1L, 16L),
+                                    ".json")),
     gptr_abort(paste0("Unknown settings scope `", scope, "`."), "invalid_argument",
                arg = "scope", expected = "session, project, user or user_project"))
 }
-
-#' First 16 hex of sha256 of the path key of a project root (IC-52)
-#' @noRd
-project_hash = function(root) substr(hash_sha256(path_key(root)), 1L, 16L)
 
 #' Unnamed JSON arrays of scalars become atomic vectors; objects stay named lists
 #' @noRd
@@ -214,24 +214,20 @@ json_simplify = function(x) {
   lapply(x, json_simplify)
 }
 
-#' Reads a JSON settings file through a cache keyed by path, mtime and size
+#' Reads a JSON settings file through a cache keyed by path, mtime and size; a malformed file is
+#' a diagnostic and reads as empty
 #' @noRd
-settings_file_read = function(path, fresh = FALSE) {
+settings_file_read = function(path) {
   if (!file.exists(path)) return(list())
   st = gateway_state()
   info = file.info(path, extra_cols = FALSE)
   stamp = paste(format(as.numeric(info$mtime), digits = 15), info$size)
-  hit = if (isTRUE(fresh)) NULL else get0(path, envir = st$files, inherits = FALSE)
+  hit = get0(path, envir = st$files, inherits = FALSE)
   if (!is.null(hit) && identical(hit$stamp, stamp)) return(hit$value)
-  value = settings_parse(path)
+  value = json_simplify(settings_decode(path))
   assign(path, list(stamp = stamp, value = value), envir = st$files)
   value
 }
-
-#' Parses one settings file for the layered reads; a malformed file is a diagnostic and reads as
-#' empty
-#' @noRd
-settings_parse = function(path) json_simplify(settings_decode(path))
 
 #' Decodes one settings file into its unsimplified JSON object (blank: empty). Not an object:
 #' `gptr_error_workspace` when `strict` (a writer never replaces a file it could not read), else
@@ -254,14 +250,6 @@ settings_decode = function(path, strict = FALSE) {
   }
   registry_diagnostic("builtin:gateway", "settings", "parse_error", bad)
   list()
-}
-
-#' Reads a settings file for a read-modify-write under its lock: the unsimplified object of
-#' settings_decode(strict = TRUE), never the cache; a missing file is empty
-#' @noRd
-settings_file_load = function(path) {
-  if (!file.exists(path)) return(list())
-  settings_decode(path, strict = TRUE)
 }
 
 #' Keeps array-valued settings arrays at length 1 when written
@@ -292,6 +280,18 @@ settings_file_write = function(path, value) {
   st = gateway_state()
   if (exists(path, envir = st$files, inherits = FALSE)) rm(list = path, envir = st$files)
   invisible(hash_sha256(bytes))
+}
+
+#' Read-modify-write of a settings file under its short lock (IC-71): `fun` turns the unsimplified
+#' object (settings_decode(strict = TRUE), never the cache; missing: empty) into the one to write,
+#' or NULL to leave the file. Returns list(value, hash), the hash of the bytes written, invisibly.
+#' @noRd
+settings_file_update = function(path, fun) {
+  lock = file_lock(path)
+  on.exit(file_unlock(lock), add = TRUE)
+  value = fun(if (file.exists(path)) settings_decode(path, strict = TRUE) else list())
+  if (is.null(value)) return(invisible(NULL))
+  invisible(list(value = value, hash = settings_file_write(path, value)))
 }
 
 #' Merges a patch at top level; a NULL value removes the key
@@ -377,40 +377,18 @@ settings_write = function(scope, patch) {
   }
   path = settings_path(scope, create = TRUE)
   root = project_root()
-  lock = file_lock(path)
-  on.exit(file_unlock(lock), add = TRUE)
-  was = if (identical(scope, "project")) trust_holds(root) else list(record = FALSE, live = FALSE)
-  cur = settings_merge_top(settings_file_load(path), patch)
-  if (identical(scope, "user_project")) {
-    cur$version = cur$version %||% 1L
-    cur$root = cur$root %||% root
-  }
-  wrote = settings_file_write(path, cur)
-  trust_carry(root, was, path, wrote)
-  invisible(json_simplify(cur))
-}
-
-# ------------------------------------------------------------------ control-category check (IC-53)
-
-#' Refuses a configuration change from model code during a run unless approved: consumes the
-#' one-shot token `what` in `run$signal$control` (IC-53; granted by perm_grant_control())
-#' @noRd
-control_check = function(what) {
-  run = run_current()
-  if (is.null(run)) return(invisible(TRUE))
-  sig = run$signal
-  ok = if (is.environment(sig)) sig$control %||% character() else character()
-  i = match(what, ok)
-  if (!is.na(i)) {
-    sig$control = ok[-i]
-    return(invisible(TRUE))
-  }
-  gptr_abort(c(paste0(what, "() changes gptr's configuration and was called from model code ",
-                      "during a run."),
-               "Only you can make this change: run it outside the run, or approve it when asked."),
-             "permission", action = what, tool = run$tool_call[["name"]] %||% "r", risk = 4L,
-             how_to_allow = "call it yourself outside peter(), or approve the r call when asked",
-             session = run$session)
+  was = list(record = FALSE, live = FALSE)
+  up = settings_file_update(path, function(cur) {
+    if (identical(scope, "project")) was <<- trust_holds(root)
+    cur = settings_merge_top(cur, patch)
+    if (identical(scope, "user_project")) {
+      cur$version = cur$version %||% 1L
+      cur$root = cur$root %||% root
+    }
+    cur
+  })
+  trust_carry(root, was, path, up$hash)
+  invisible(json_simplify(up$value))
 }
 
 # ------------------------------------------------------------- trust (contract 6.2, 11.8; IC-52)
@@ -421,27 +399,20 @@ trust_file = function(create = FALSE) {
   file.path(gptr_user_dir("config", create = create), "trust.json")
 }
 
-#' The trust store for reading: list(version, projects = named list keyed by path_key(root)).
-#' A file that is not a JSON object, or whose `projects` is not an object, trusts nothing.
+#' The trust store `x`: list(version, projects keyed by path_key(root)). A file that is not a JSON
+#' object, or whose `projects` is not an object, trusts nothing; `strict` (a writer's object under
+#' the lock) refuses such a `projects` with `gptr_error_workspace`, so it is never rewritten.
 #' @noRd
-trust_read = function(fresh = FALSE) {
-  x = settings_file_read(trust_file(), fresh = fresh)
+trust_read = function(x = settings_file_read(trust_file()), strict = FALSE) {
   p = x[["projects"]]
-  if (!is.list(p) || (length(p) && is.null(names(p)))) x$projects = list()
-  x
-}
-
-#' The trust store for a read-modify-write under its lock (settings_file_load()); a file whose
-#' `projects` is not an object is never rewritten (`gptr_error_workspace`)
-#' @noRd
-trust_load = function(path) {
-  x = settings_file_load(path)
-  p = x[["projects"]]
-  if (!is.null(p) && !(is.list(p) && (!length(p) || !is.null(names(p))))) {
+  if (settings_is_object(p)) return(x)
+  if (strict && !is.null(p)) {
+    path = trust_file()
     gptr_abort(c(paste0("The trust store ", path, " has no `projects` object, so gptr will not ",
                         "rewrite it."),
                  "Fix the file or remove it, then try again."), "workspace", path = path)
   }
+  x$projects = list()
   x
 }
 
@@ -510,24 +481,23 @@ trust_fingerprint = function(root) {
 #' atomically under a short lock, keeping the other projects and the entry's other fields
 #' @noRd
 trust_store = function(root, trusted, fp = NULL) {
-  path = trust_file(create = TRUE)
   fp = fp %||% trust_fingerprint(root)
-  lock = file_lock(path)
-  on.exit(file_unlock(lock), add = TRUE)
-  x = trust_load(path)
   key = path_key(root)
-  rec = x[["projects"]][[key]]
-  if (!is.list(rec) || (length(rec) && is.null(names(rec)))) rec = list()
-  rec$trusted = isTRUE(trusted)
-  rec$date = format(Sys.Date())
-  rec$fingerprint = fp$fp
-  rec$files = if (length(fp$files)) as.list(fp$files) else json_obj()
-  x$version = x[["version"]] %||% 1L
-  x$projects[[key]] = rec
-  settings_file_write(path, x)
+  up = settings_file_update(trust_file(create = TRUE), function(x) {
+    x = trust_read(x, strict = TRUE)
+    rec = x[["projects"]][[key]]
+    if (!settings_is_object(rec)) rec = list()
+    rec$trusted = isTRUE(trusted)
+    rec$date = format(Sys.Date())
+    rec$fingerprint = fp$fp
+    rec$files = if (length(fp$files)) as.list(fp$files) else json_obj()
+    x$version = x[["version"]] %||% 1L
+    x$projects[[key]] = rec
+    x
+  })
   st = gateway_state()
   if (exists(key, envir = st$trust, inherits = FALSE)) rm(list = key, envir = st$trust)
-  invisible(rec)
+  invisible(up$value[["projects"]][[key]])
 }
 
 #' Remembers a trust decision taken in this process with the fingerprint it was taken for; it
@@ -673,7 +643,7 @@ gptr_trust = function(path = ".", trust = NULL) {
   rec = trust_record(root)
   prev = if (is.null(rec)) NA else isTRUE(rec[["trusted"]])
   if (is.null(trust)) return(prev)
-  control_check("gptr_trust")
+  session_control_check("gptr_trust")
   trust_store(root, trust)
   invisible(prev)
 }
@@ -741,27 +711,13 @@ settings_guard = function(key, value, human) {
   value
 }
 
-#' TRUE when a dotted path is present in nested named lists (a present NULL counts)
-#' @noRd
-settings_reaches = function(x, parts) {
-  for (p in parts) {
-    if (!is.list(x) || is.null(names(x)) || !p %in% names(x)) return(FALSE)
-    x = x[[p]]
-  }
-  TRUE
-}
-
 #' Applies one layer's contribution `add` (none once settings_guard() empties it) to `st`
-#' (list(value, source)); for a dotted key the layer becomes the source only when it reaches
-#' `path` or replaces the whole object
+#' (list(value, source)); the layer becomes the source of the top-level key
 #' @noRd
-settings_apply = function(st, key, add, layer, human, path = character()) {
+settings_apply = function(st, key, add, layer, human) {
   g = settings_guard(key, add, human)
   if (is.list(add) && length(add) && is.list(g) && !length(g)) return(st)
-  st$value = settings_combine(st$value, g)
-  named = is.list(g) && !is.object(g) && !is.null(names(g))
-  if (!length(path) || !named || settings_reaches(g, path)) st$source = layer
-  st
+  list(value = settings_combine(st$value, g), source = layer)
 }
 
 #' Applies the option or session entries of the dotted names from `key` down to `key.<path>`, less
@@ -774,7 +730,7 @@ settings_dotted = function(st, key, path, layer) {
     v = if (identical(layer, "option")) getOption(paste0("gptr.", name)) else ses[[name]]
     if (is.null(v)) next
     st = settings_apply(st, key, settings_nest(path[seq_len(j)], v), layer,
-                        human = identical(layer, "session"), path = path)
+                        human = identical(layer, "session"))
   }
   st
 }
@@ -871,20 +827,18 @@ settings_base_url_ok = function(root, id, url) {
 #' under the short lock; the entry's other fields and the other projects are kept)
 #' @noRd
 trust_store_base_url = function(root, id, url) {
-  path = trust_file(create = TRUE)
-  lock = file_lock(path)
-  on.exit(file_unlock(lock), add = TRUE)
-  x = trust_load(path)
   key = path_key(root)
-  rec = x[["projects"]][[key]]
-  if (!is.list(rec) || !isTRUE(rec[["trusted"]])) return(invisible(FALSE))
-  done = rec[["base_url_confirmed"]]
-  if (!is.list(done) || (length(done) && is.null(names(done)))) done = list()
-  done[[id]] = url
-  rec$base_url_confirmed = done
-  x$projects[[key]] = rec
-  settings_file_write(path, x)
-  invisible(TRUE)
+  settings_file_update(trust_file(create = TRUE), function(x) {
+    x = trust_read(x, strict = TRUE)
+    rec = x[["projects"]][[key]]
+    if (!is.list(rec) || !isTRUE(rec[["trusted"]])) return(NULL)
+    done = rec[["base_url_confirmed"]]
+    if (!settings_is_object(done)) done = list()
+    done[[id]] = url
+    rec$base_url_confirmed = done
+    x$projects[[key]] = rec
+    x
+  })
 }
 
 #' Normalises a resolved value to its spec's type (JSON arrays of names become character vectors)
@@ -920,8 +874,9 @@ settings_local_permissions = function(ws, value) {
 settings_at = function(x, path) if (length(path)) settings_dig(x, path) else x
 
 #' A top-level key through every layer, lowest to highest (contract 11.2); the source is the
-#' highest layer that set or changed it. With `path`, `<key>.<path>` resolves inside the object (a
-#' session object above a dotted option); a `scope = "user"` setting reads the user file only.
+#' highest layer that set or changed the top-level key. With `path`, `<key>.<path>` resolves inside
+#' the object (a session object above a dotted option); a `scope = "user"` setting reads the user
+#' file only.
 #' @noRd
 settings_layered = function(key, path = character()) {
   spec = settings_spec(key)
@@ -932,7 +887,7 @@ settings_layered = function(key, path = character()) {
     list(value = settings_at(settings_normalise(spec, st$value), path), source = st$source)
   }
   u = settings_lookup(settings_file_read(settings_path("user")), key)
-  if (u$found) st = settings_apply(st, key, u$value, "user", human = TRUE, path = path)
+  if (u$found) st = settings_apply(st, key, u$value, "user", human = TRUE)
   if (identical(spec$scope, "user")) return(done(st))
   ws = workspace_dir()
   if (!is.null(ws)) {
@@ -942,8 +897,7 @@ settings_layered = function(key, path = character()) {
     trusted = (p$found || perms) && isTRUE(trust_get(root))
     if (p$found) {
       nv = settings_project_value(key, spec, st$value, p$value, trusted, root)
-      if (!identical(settings_at(nv, path), settings_at(st$value, path))) st$source = "project"
-      st$value = nv
+      if (!identical(nv, st$value)) st = list(value = nv, source = "project")
     }
     if (perms && trusted) {
       nv = settings_local_permissions(ws, st$value)
@@ -958,10 +912,10 @@ settings_layered = function(key, path = character()) {
     }
   }
   opt = getOption(paste0("gptr.", key))
-  if (!is.null(opt)) st = settings_apply(st, key, opt, "option", human = FALSE, path = path)
+  if (!is.null(opt)) st = settings_apply(st, key, opt, "option", human = FALSE)
   st = settings_dotted(st, key, path, "option")
   ses = settings_lookup(the$settings_session %||% list(), key)
-  if (ses$found) st = settings_apply(st, key, ses$value, "session", human = TRUE, path = path)
+  if (ses$found) st = settings_apply(st, key, ses$value, "session", human = TRUE)
   done(settings_dotted(st, key, path, "session"))
 }
 
@@ -1100,12 +1054,13 @@ replay_provider_id = function(model) {
              "invalid_argument", arg = "model", expected = "a model record or reference")
 }
 
-#' In replay mode, refuses a request to a provider whose record is not `offline = TRUE` (a local
-#' server is not); never contacts a provider (07 sections 2.1 and 4)
+#' In replay `mode` (a call's `replay =` overrides the process mode, contract 3.1), refuses a
+#' request to a provider whose record is not `offline = TRUE` (a local server is not); never
+#' contacts a provider (07 sections 2.1 and 4)
 #' @noRd
-replay_guard = function(model, what = "model call") {
+replay_guard = function(model, what = "model call", mode = replay_mode()) {
   check_string(what, "what")
-  if (!identical(replay_mode(), "replay")) return(invisible(TRUE))
+  if (!identical(mode, "replay")) return(invisible(TRUE))
   pid = replay_provider_id(model)
   rec = if (inherits(model, "gptr_provider")) model else provider_get(pid)
   if (isTRUE(rec[["offline"]])) return(invisible(TRUE))
@@ -1195,38 +1150,31 @@ egress_question = function(id, origin = NULL) {
 #' @noRd
 egress_record = function(id) {
   path = settings_path("user", create = TRUE)
-  lock = file_lock(path)
-  on.exit(file_unlock(lock), add = TRUE)
-  cur = settings_file_load(path)
-  acks = cur[["egress"]]
-  if (!is.list(acks) || (length(acks) && is.null(names(acks)))) acks = list()
-  acks[[id]] = "ack"
-  cur[["egress"]] = acks
-  settings_file_write(path, cur)
+  settings_file_update(path, function(cur) {
+    acks = cur[["egress"]]
+    if (!settings_is_object(acks)) acks = list()
+    acks[[id]] = "ack"
+    cur[["egress"]] = acks
+    cur
+  })
   invisible(path)
 }
 
 #' `invisible(TRUE)` when automatic context may go to `provider_id` (acknowledged, offline or a
-#' local endpoint); else asks once (IC-53) and records the answer, or gptr_error_egress (13 C-34)
+#' local endpoint), judged on `provider`, the record the request uses (IC-29, IC-74; D-099,
+#' D-114); else asks once when `safety` allows (IC-53) and records the answer, or
+#' gptr_error_egress (13 C-34)
 #' @noRd
-egress_check = function(provider_id) {
+egress_check = function(provider_id, provider = provider_get(provider_id),
+                        safety = egress_safety()) {
   check_string(provider_id, "provider_id")
-  rec = provider_get(provider_id)
-  pid = if (is.null(rec)) provider_id else rec[["id"]] %||% rec[["name"]] %||% provider_id
-  egress_require(pid, egress_state(rec))
-}
-
-#' egress_check() for the record the request uses (`st`, its egress_state()), which can differ
-#' from the process-wide record of the same id (IC-29, IC-74; D-099, D-114); `safety` decides asking
-#' @noRd
-egress_require = function(pid, st, safety = egress_safety()) {
+  pid = provider[["id"]] %||% provider[["name"]] %||% provider_id
   # the id is pasted into the hint the user is told to run, so it must be a plain provider id
-  plain = is.character(pid) && length(pid) == 1L && !is.na(pid) &&
-    grepl("^[a-z0-9][a-z0-9-]*\\z", pid, perl = TRUE)
-  if (!plain) {
+  if (!rlang::is_string(pid) || !grepl("^[a-z0-9][a-z0-9-]*\\z", pid, perl = TRUE)) {
     gptr_abort("`provider_id` must be a provider id such as \"anthropic\".", "invalid_argument",
                arg = "provider_id", expected = "a provider id (^[a-z0-9][a-z0-9-]*$)")
   }
+  st = egress_state(provider, safety)
   if (isTRUE(st$exempt)) return(invisible(TRUE))
   acks = settings_get("egress")
   if (is.list(acks) && identical(acks[[pid]], "ack")) return(invisible(TRUE))
@@ -1291,7 +1239,7 @@ settings_config_key = function(key, scope) {
 #' The provider ids whose `local_only` a validated `providers` object sets to FALSE
 #' @noRd
 settings_relaxed_ids = function(value) {
-  if (!is.list(value) || is.null(names(value))) return(character())
+  if (!settings_is_object(value)) return(character())
   out = character()
   for (id in names(value)) {
     e = value[[id]]
@@ -1357,7 +1305,7 @@ gptr_config = function(..., .scope = NULL) {
   }
   n = ...length()
   if (n == 0L) return(settings_effective())
-  control_check("gptr_config")
+  session_control_check("gptr_config")
   keys = ...names()
   if (is.null(keys) || anyNA(keys) || any(!nzchar(keys)) || anyDuplicated(keys)) {
     gptr_abort(paste("Every setting passed to gptr_config() needs a unique name,",
@@ -1516,7 +1464,7 @@ init_rbuildignore = function(dir) {
 gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
   check_flag(instructions, "instructions")
   check_flag(gitignore, "gitignore")
-  control_check("gptr_init")
+  session_control_check("gptr_init")
   if (missing(path)) {
     root = project_root()
     if (!gptr_can_prompt()) {

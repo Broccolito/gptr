@@ -578,7 +578,7 @@ test_that("egress and the call's replay mode guard requests, not cache hits (IC-
   expect_error(s1_call(s1_test_call("Q?", text = "a", model = near)),
                class = "gptr_error_not_recorded")
   expect_identical(seen$n, 0L)
-  # the call's own replay mode decides, as for System 2 calls (P08's gateway_replay_guard())
+  # the call's own replay mode decides, as for System 2 calls (replay_guard(mode =))
   s1_call(s1_test_call("Q?", text = "a", model = near, args = list(replay = "auto")))
   expect_identical(seen$n, 1L)
   hit = s1_call(s1_test_call("Q?", text = "a", model = near))
@@ -590,6 +590,15 @@ test_that("egress and the call's replay mode guard requests, not cache hits (IC-
                class = "gptr_error_not_recorded")
   # a `local` hint with a remote endpoint still needs the egress acknowledgement (D-099)
   expect_error(s1_call(s1_test_call("Q?", text = "a", model = far)), class = "gptr_error_egress")
+  expect_identical(seen$n, 1L)
+  # a call-level spec at a LAN address is judged by itself, not by the loopback record of its id
+  lan = gptr_provider("nearby", api = "s1-guard-test", type = "classifier", local = TRUE,
+                      base_url = "http://192.168.1.20:9/v1",
+                      models = list(list(id = "nearby-s1", type = "classifier")))
+  cnd = expect_error(s1_call(s1_test_call("Q?", text = "c", model = lan,
+                                          args = list(replay = "auto"))),
+                     class = "gptr_error_egress")
+  expect_match(conditionMessage(cnd), "192.168.1.20", fixed = TRUE)
   expect_identical(seen$n, 1L)
 })
 

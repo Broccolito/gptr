@@ -234,10 +234,6 @@ test_that("print(peter) shows the usage and the members hint", {
   expect_snapshot(print(peter))
 })
 
-test_that("the capture helpers know peter()'s formals after the dots", {
-  expect_identical(gateway_formal_names(), setdiff(names(formals(peter)), "..."))
-})
-
 test_that("routes run in order; route_pass() hands on; a failing match() is skipped", {
   local_gw()
   seen = new.env()
@@ -257,15 +253,12 @@ test_that("routes run in order; route_pass() hands on; a failing match() is skip
   expect_identical(seen$order, c("test_a", "test_b"))
 })
 
-test_that("route_pass(), gateway_defer(), home_address() and mode_tighter()", {
+test_that("route_pass(), gateway_defer() and home_address()", {
   expect_s3_class(route_pass(), "gptr_route_pass")
   expect_false(gateway_deferring())
   expect_true(gateway_defer(function() gateway_deferring()))
   expect_false(gateway_deferring())
   expect_identical(home_address(globalenv()), rlang::obj_address(globalenv()))
-  expect_identical(mode_tighter("auto", "plan"), "plan")
-  expect_identical(mode_tighter(NULL, "edits"), "edits")
-  expect_identical(mode_tighter("manual", "edits"), "manual")
 })
 
 
@@ -393,6 +386,26 @@ test_that("routes select by the model-level type, without discovery (IC-74, 07 s
   expect_identical(peter("Is it ok?", model = judge), "decided")
   expect_identical(seen$models[[1L]], "ollama/clef-flash")
   expect_s3_class(seen$models[[2L]], "gptr_provider")
+  # the built-in routes decline decision-only models (Task 8 obligation)
+  s0 = session_new("fake/fake-1", "manual", home = new.env())
+  call_for = function(model, session = NULL) {
+    list(prompt = "Is it ok?", session = session, ids = list(model = model), args = list())
+  }
+  new = registry_get("route", "new")
+  continue = registry_get("route", "continue")
+  expect_true(new$match(call_for("ollama/qwen3:1.7b")))
+  expect_true(new$match(call_for(NULL)))
+  for (m in list("ollama/clef-flash", "ollama/clef", "jev", judge)) {
+    expect_false(new$match(call_for(m)))
+    expect_false(continue$match(call_for(m, s0)))
+  }
+  expect_true(continue$match(call_for(NULL, s0)))
+  run = fake_run()
+  local_mocked_bindings(run_current = function() run)
+  nested = registry_get("route", "nested")
+  expect_true(nested$match(call_for("fake/fake-1")))
+  expect_false(nested$match(call_for("ollama/clef-flash")))
+  expect_false(nested$match(call_for(judge)))
 })
 
 test_that("without the classifier route a decision-only model is not_available (IC-74)", {
@@ -447,23 +460,24 @@ test_tool = function(name, fun) {
             execute = function(input, ctx) fun(ctx))
 }
 
-test_that("builtin:gateway registers the routes nested, continue, new and the core settings", {
+test_that("builtin:gateway registers its routes, core settings and four services (IC-24, IC-33)", {
   routes = registry_all("route")
-  nm = vapply(routes, function(r) r$name, "")
-  expect_true(all(c("nested", "continue", "new") %in% nm))
-  ord = vapply(routes, function(r) as.numeric(r$order), 0)
-  expect_identical(unname(ord[match(c("nested", "continue", "new"), nm)]), c(20, 60, 70))
+  ord = stats::setNames(vapply(routes, function(r) as.numeric(r$order), 0),
+                        vapply(routes, function(r) r$name, ""))
+  expect_identical(ord[c("nested", "continue", "new")], c(nested = 20, continue = 60, new = 70))
   expect_true(all(c("mode", "model", "budget", "egress") %in% registry_names("setting")))
-})
-
-test_that("with builtin:gateway loaded, P08's four services are served (IC-33, IC-34, IC-69)", {
   for (nm in c("settings.get", "trust.get", "identifier.resolve", "router.call")) {
+    expect_identical(the$services[[nm]][c("provided_by", "builtin")],
+                     list(provided_by = "P08", builtin = "gateway"), label = nm)
     expect_true(ext_service_has(nm), label = nm)
   }
-  local_gw()
+  proj = local_gw()
   settings_write("session", list(preset = "minimal"))
   expect_identical(setting_get("preset"), "minimal")
   expect_identical(setting_get("no_such_key", default = 7L), 7L)
+  gptr_trust(proj, TRUE)
+  expect_true(ext_service_get("trust.get")(proj))
+  expect_identical(ext_service_get("identifier.resolve")(quote(opus), "model", new.env()), "opus")
 })
 
 test_that("call-level filters join the session filter layer instead of replacing it", {
@@ -924,30 +938,6 @@ test_that("parallel = and agents = need the sub-agent routes (P19)", {
 })
 
 # ---- Task 9 adaptations (see dev/progress/P08.md, Task 9) ------------------------------------
-
-test_that("the built-in routes decline a decision-only model (IC-74, Task 8 obligation)", {
-  local_gw()
-  nested = registry_get("route", "nested")
-  continue = registry_get("route", "continue")
-  new = registry_get("route", "new")
-  s0 = session_new("fake/fake-1", "manual", home = new.env())
-  judge = gptr_fake_provider(list(0.9), name = "judge", type = "classifier")
-  call_for = function(model, session = NULL) {
-    list(prompt = "Is it ok?", session = session, ids = list(model = model), args = list())
-  }
-  expect_true(new$match(call_for("ollama/qwen3:1.7b")))
-  expect_true(new$match(call_for(NULL)))
-  for (m in list("ollama/clef-flash", "ollama/clef", "jev", judge)) {
-    expect_false(new$match(call_for(m)))
-    expect_false(continue$match(call_for(m, s0)))
-  }
-  expect_true(continue$match(call_for(NULL, s0)))
-  run = fake_run()
-  local_mocked_bindings(run_current = function() run)
-  expect_true(nested$match(call_for("fake/fake-1")))
-  expect_false(nested$match(call_for("ollama/clef-flash")))
-  expect_false(nested$match(call_for(judge)))
-})
 
 test_that("a root run freezes ollama_local_only from human settings only; children inherit", {
   local_gw()
