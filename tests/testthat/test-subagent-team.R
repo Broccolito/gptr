@@ -381,3 +381,170 @@ test_that("user fan-outs queue every element whatever gptr.subagents.max_tasks s
   expect_length(fan$children, 5L)
   expect_true(all(fan$text != ""))
 })
+
+test_that("each report fits min(2000, budget / n) tokens in a closed element (03 section 12.2)", {
+  local_team_fake(function(request) report)
+  e = new.env()
+  e$two = list(`a"b` = 1, c = 2)
+  e$many = as.list(1:20)
+  for (report in c(strrep("A line of a long report.\n", 2000L), strrep("word ", 3000L))) {
+    for (nm in c("two", "many")) {
+      ctx = list(sym_item(nm, e[[nm]]))
+      fan = gptr_map(team_call("x", parallel = 4L, envir = e, context = ctx))
+      txt = subagent_reports_block(list(session = fan), 20000L)
+      els = strsplit(txt, "(?<=</agent_report>)\n", perl = TRUE)[[1L]]
+      expect_length(els, length(e[[nm]]))
+      expect_true(all(startsWith(els, "<agent_report from=") &
+                        endsWith(els, "\n[... truncated; full report in $text]\n</agent_report>")))
+      expect_true(all(est_tokens_each(els, "prose") <= min(2000, 20000 / length(els))))
+      expect_lte(est_tokens(txt), 20000)
+    }
+  }
+  fan = gptr_map(team_call("x", parallel = 4L, envir = e, context = list(sym_item("two", e$two))))
+  expect_true(startsWith(subagent_reports_block(list(session = fan), 20000L),
+                         "<agent_report from=\"a&quot;b\">\nword word"))
+})
+
+# ---- Task 6: teams and fan-outs through peter() --------------------------------------------------
+
+# Hooks that track how many children run at once (subagent_start / subagent_end)
+local_active = function(.env = parent.frame()) {
+  box = new.env(parent = emptyenv())
+  box$active = 0L
+  box$peak = 0L
+  box$ended = 0L
+  ids = c(hook_add("subagent_start", function(event, ctx) {
+    box$active = box$active + 1L
+    box$peak = max(box$peak, box$active)
+    NULL
+  }), hook_add("subagent_end", function(event, ctx) {
+    box$active = box$active - 1L
+    box$ended = box$ended + 1L
+    NULL
+  }))
+  withr::defer(for (id in ids) hook_remove(id), envir = .env)
+  box
+}
+
+# The user message of a session's last turn
+last_user_message = function(s) {
+  out = NULL
+  for (e in session_data(s)$entries) {
+    if (identical(e$type, "message") && identical(e$message$role, "user")) out = e$message
+  }
+  out
+}
+
+test_that("NS-6: a team through peter(), its members, its text, and its continuation", {
+  local_team_fake(function(request) {
+    if (grepl("Reconcile", request$last_user, fixed = TRUE)) "One list of fixes." else
+      paste("Review:", request$last_user)
+  })
+  reviews = peter("Review analysis.R for statistical errors.",
+                 agents = list(stats = agent(model = "fake/fake-1"),
+                               code = agent(model = "fake/fake-1")))
+  expect_identical(reviews$kind, "team")
+  expect_s3_class(reviews$stats, "gptr_session")
+  expect_identical(reviews$code$text, "Review: Review analysis.R for statistical errors.")
+  expect_match(reviews$text, "### stats (fake/fake-1)", fixed = TRUE)
+  expect_identical(gptr_last(), reviews)
+  out = reviews |> peter("Reconcile these into one list of fixes")
+  expect_identical(out, reviews)
+  expect_identical(reviews$turns, 1L)
+  expect_identical(session_data(reviews)$last_text, "One list of fixes.")
+  m = last_user_message(reviews)
+  kinds = vapply(m$content, function(b) b$kind %||% b$type, "")
+  expect_true("agent_reports" %in% kinds)
+  rep = m$content[[match("agent_reports", kinds)]]$text
+  expect_match(rep, "<agent_report from=\"stats\"", fixed = TRUE)
+})
+
+test_that("a fan-out runs every element, parallel at a time (P19 acceptance 6)", {
+  local_team_fake(list(fake_text("summary", delay = 0.3)))
+  box = local_active()
+  cohorts = stats::setNames(as.list(1:20), paste0("c", 1:20))
+  summaries = peter("Summarise this cohort", cohorts, parallel = 4)
+  expect_identical(summaries$kind, "fanout")
+  expect_length(summaries$children, 20L)
+  expect_identical(names(summaries$text), paste0("c", 1:20))
+  expect_identical(box$ended, 20L)
+  expect_identical(box$peak, 4L)
+})
+
+test_that("teams and fan-outs started in an r evaluation are children of the running session", {
+  local_team_fake(function(request) {
+    if (identical(request$last_user, "check")) return("inner report")
+    if (identical(request$last_user, "each")) return("inner element")
+    if (length(request$last_results)) return("done")
+    fake_tool("r", code = paste0("rev = peter(\"check\", agents = list(",
+                                 "a = agent(model = \"fake/fake-1\")))\n",
+                                 "fan = peter(\"each\", list(p = 1, q = 2), parallel = 2)"))
+  })
+  e = new.env()
+  s = peter("outer", envir = e)
+  expect_identical(s$status, "idle")
+  team = e$rev
+  expect_identical(team$kind, "team")
+  expect_identical(session_data(team)$parent_id, s$id)
+  expect_identical(team$a$text, "inner report")
+  fan = e$fan
+  expect_identical(fan$kind, "fanout")
+  expect_identical(session_data(fan)$parent_id, s$id)
+  expect_identical(unname(fan$text), c("inner element", "inner element"))
+  kids = vapply(s$children, function(x) x$id, "")
+  expect_true(all(c(team$id, fan$id) %in% kids))
+  expect_identical(session_data(team$a)$depth, session_data(team)$depth + 1L)
+  # usage rolls up to the root (IC-39, IC-66): 2 own requests, 1 team member, 2 fan-out elements
+  expect_identical(nrow(s$usage), 5L)
+})
+
+test_that("model-issued teams above gptr.subagents.max_tasks fail in the tool result", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("done")
+    fake_tool("r", code = paste0("rev = peter(\"check\", agents = list(",
+                                 "a = agent(model = \"fake/fake-1\"), ",
+                                 "b = agent(model = \"fake/fake-1\"), ",
+                                 "c = agent(model = \"fake/fake-1\")))"))
+  })
+  local_gptr_options(subagents.max_tasks = 2L)
+  e = new.env()
+  s = peter("outer", envir = e)
+  res = Filter(function(x) {
+    identical(x$type, "message") && identical(x$message$role, "tool_result")
+  }, session_data(s)$entries)
+  expect_match(msg_text(res[[1L]]$message), "gptr.subagents.max_tasks", fixed = TRUE)
+  expect_false(exists("rev", envir = e, inherits = FALSE))
+})
+
+test_that("System 1 inside one agent's evaluation never runs a sibling's tool (IC-57)", {
+  local_team_fake(function(request) {
+    if (length(request$last_results)) return("done")
+    if (grepl("Agent one", request$system$t1 %||% "", fixed = TRUE)) {
+      fake_tool("r", code = "ok = peter(\"Is 1 positive?\", 1, model = \"s1fake/s1fake-s1\")")
+    } else {
+      fake_tool("r", code = "y = 1")
+    }
+  })
+  local_fake_provider(list(0.9), name = "s1fake", type = "classifier")
+  log = new.env()
+  log$events = character()
+  ids = c(hook_add("tool_execution_start", function(event, ctx) {
+    log$events = c(log$events, paste0("start:", session_data(ctx$session)$agent))
+    NULL
+  }), hook_add("tool_execution_end", function(event, ctx) {
+    log$events = c(log$events, paste0("end:", session_data(ctx$session)$agent))
+    NULL
+  }))
+  withr::defer(for (id in ids) hook_remove(id))
+  team = peter("first and second",
+              agents = list(first = agent(model = "fake/fake-1", system = "Agent one"),
+                            second = agent(model = "fake/fake-1")))
+  # the System 1 call really ran inside the first agent's evaluation
+  expect_true(isTRUE(as.logical(team$first$envir$ok)))
+  ev = log$events
+  a_start = match("start:first", ev)
+  a_end = match("end:first", ev)
+  b_start = match("start:second", ev)
+  expect_false(is.na(a_start) || is.na(a_end) || is.na(b_start))
+  expect_true(b_start < a_start || b_start > a_end)
+})

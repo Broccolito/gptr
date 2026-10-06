@@ -442,8 +442,8 @@ subagent_export = function(h, target, taken = character()) {
 
 # ---- builtin:subagents (contract 7.19, 10.3) ---------------------------------------------------
 
-#' builtin:subagents: the `inline` and `cli` backends, which subagent_start() finds only in the
-#' registry (the routes, the fragment, the reports block and the worker backend come later)
+#' builtin:subagents: the backends `inline` and `cli`, the routes `team` (order 15) and `fanout`
+#' (order 16), the `<r_session>` fragment for sub-agents and the `agent_reports` context block
 #' @noRd
 builtin_subagents = function(gptr) {
   gptr$register(gptr_backend("inline", start = backend_child_start, cancel = backend_cancel,
@@ -452,6 +452,16 @@ builtin_subagents = function(gptr) {
   gptr$register(gptr_backend("cli", start = backend_child_start, cancel = backend_cancel,
                              capabilities = list(parallel = "io", live_objects = FALSE,
                                                  ask = "none")))
+  gptr$register(gptr_spec("route", "team", order = 15, match = route_team_match,
+                          run = route_team_run,
+                          description = "agents = given: a team session of sub-agents"))
+  gptr$register(gptr_spec("route", "fanout", order = 16, match = route_fanout_match,
+                          run = route_fanout_run,
+                          description = "parallel = given: one sub-agent per element"))
+  gptr$register(gptr_prompt_section("subagents", subagent_fragment_text, tier = "T0",
+                                    order = 50L, budget = 300L, parent = "r_session"))
+  gptr$register(gptr_context_block("agent_reports", subagent_reports_block, placement = "turn",
+                                   authority = "data", budget = 20000L, order = 620L))
   invisible(NULL)
 }
 

@@ -325,3 +325,20 @@ test_that("a router model is guarded per routed request, as in peter() (IC-69)",
   run_wait(list(h$run), timeout = 30)
   expect_identical(h$session$text, "routed")
 })
+
+# ---- Task 6: builtin:subagents ---------------------------------------------------------------
+
+test_that("builtin:subagents registers backends, routes, the fragment and the reports block", {
+  for (nm in c("inline", "cli")) expect_s3_class(registry_get("backend", nm), "gptr_backend")
+  team = registry_get("route", "team")
+  fan = registry_get("route", "fanout")
+  expect_identical(c(team$order, fan$order), c(15, 16))
+  orders = vapply(registry_all("route"), function(r) as.numeric(r$order), 0)
+  expect_true(orders[["team"]] < orders[["nested"]])
+  sec = registry_get("prompt_section", "subagents")
+  expect_identical(sec$parent, "r_session")
+  expect_identical(sec$order, 50L)
+  expect_identical(sec$text, subagent_fragment_text)
+  blk = registry_get("context_block", "agent_reports")
+  expect_identical(blk$authority, "data")
+})

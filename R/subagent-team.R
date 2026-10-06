@@ -296,19 +296,33 @@ subagent_value = function(s) {
 }
 
 #' `provide()` of the `agent_reports` context block: one `<agent_report from="<name>">` element
-#' per child of a team or fan-out (IC-55, user-role data), cut to gptr.child_text_max bytes; a
-#' child that did not end idle says so on the first line
+#' per child of a team or fan-out (IC-55, user-role data), cut to gptr.child_text_max bytes, then
+#' by characters, with a notice, to min(2000, budget / n) tokens less one for the joining newline
+#' (03 section 12.2); a child that did not end idle says so on the first line
 #' @noRd
 subagent_reports_block = function(ctx, budget) {
   s = ctx$session
   d = if (is.null(s)) NULL else session_data(s)
   if (!isTRUE(d$kind %in% c("team", "fanout")) || !length(d$children)) return(NULL)
   max_bytes = as.integer(gptr_opt("child_text_max"))
+  per = min(2000, budget / length(d$children)) - 1
   parts = vapply(names(d$children), function(nm) {
     cd = session_data(d$children[[nm]])
     txt = if (is.na(cd$last_text)) "(no report)" else subagent_text_cut(cd$last_text, max_bytes)
     if (!identical(cd$status, "idle")) txt = paste0("(ended with status ", cd$status, ")\n", txt)
-    paste0("<agent_report from=\"", nm, "\">\n", txt, "\n</agent_report>")
+    n = nchar(txt)
+    el = function(k) {
+      x = if (k < n) paste0(substr(txt, 1L, k), "\n[... truncated; full report in $text]") else txt
+      block_context("agent_report", x, list(from = nm))$text
+    }
+    if (est_tokens(el(n)) <= per) return(el(n))
+    lo = 0L
+    hi = n - 1L
+    while (lo < hi) {
+      mid = (lo + hi + 1L) %/% 2L
+      if (est_tokens(el(mid)) <= per) lo = mid else hi = mid - 1L
+    }
+    el(lo)
   }, "")
   paste(parts, collapse = "\n")
 }
