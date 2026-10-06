@@ -665,3 +665,78 @@ test_that("wire-log values are redacted before encoding, so each line stays vali
   expect_identical(rec$url, "cli:claude")
   expect_identical(rec$event, "start")
 })
+
+# ---- builtin:cli (Task 8) -----------------------------------------------------------------------
+
+# A ctx stand-in with the members the hooks use (contract 10.6)
+stub_ctx = function(api = "cli-codex", mode = "edits", run = "r0000000001", id = "s00000000cc") {
+  st = new.env()
+  list(get = function(kind, name) list(id = name, api = api), mode = function() mode,
+       run = run, session = list(id = id), state = function() st)
+}
+
+# The hook events builtin:cli registered
+cli_hook_events = function() {
+  reg = gptr_registry("hook")
+  reg$name[reg$source == "builtin:cli"]
+}
+
+test_that("builtin:cli registers the claude-cli route, its adapter and two hooks", {
+  claude = registry_get("provider", "claude-cli")
+  expect_identical(claude$api, "cli-claude")
+  expect_identical(claude$type, "cli")
+  expect_true("claude_code" %in% claude$aliases)
+  expect_true(is.function(claude$status))
+  expect_false(isTRUE(claude$offline))
+  expect_identical(claude$models[[1]]$id, "default")
+  a = registry_get("adapter", "cli-claude")
+  expect_identical(a$transport, "process_jsonl")
+  expect_identical(a$build, pcli_claude_build)
+  expect_identical(a$parse, pcli_claude_parse)
+  expect_identical(a$capabilities$request_params, c("cli_mode", "cli_budget"))
+  expect_true(all(c("request_params", "usage") %in% cli_hook_events()))
+})
+
+test_that("tests find no installed CLI: setup.R points gptr.cli_path at no file", {
+  skip_if(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))
+  expect_error(pcli_find("claude"), class = "gptr_error_cli_missing")
+  expect_error(pcli_find("codex"), class = "gptr_error_cli_missing")
+})
+
+test_that("request_params gives CLI routes the mode and the remaining budget", {
+  withr::defer(pcli_codex_forget("s00000000cc"))
+  local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) {
+    if (identical(key, "budget")) list(tokens = 2e6, cost = 5, turns = 10) else default
+  })
+  expect_null(pcli_hook_params(list(provider = "openai"), stub_ctx(api = "openai-responses")))
+  ctx = stub_ctx()
+  p = pcli_hook_params(list(provider = "codex"), ctx)$params
+  expect_identical(p$cli_mode, "edits")
+  expect_equal(p$cli_budget, list(turns = 10, cost = 5))
+  row = data.frame(cost = 1.25, request_id = "q1")
+  pcli_hook_usage(list(row = row), ctx)
+  pcli_hook_usage(list(row = row), ctx)
+  p = pcli_hook_params(list(provider = "codex"), ctx)$params
+  expect_equal(p$cli_budget, list(turns = 8, cost = 2.5))
+  ctx$run = "r0000000002"
+  expect_equal(pcli_hook_params(list(provider = "codex"), ctx)$params$cli_budget,
+               list(turns = 10, cost = 5))
+  local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) {
+    list(tokens = 2e6, cost = NULL, turns = NULL)
+  })
+  b = pcli_hook_params(list(provider = "codex"), ctx)$params$cli_budget
+  expect_null(b$turns)
+  expect_null(b$cost)
+})
+
+test_that("request_params ensures gptr's MCP server for a codex session, not for claude", {
+  withr::defer(pcli_codex_forget("s00000000cc"))
+  local_mocked_bindings(setting_get = function(key, session = NULL, default = NULL) default)
+  local_mcp_stub(stub_mcp_handle(port = 54777L))
+  pcli_hook_params(list(provider = "claude-cli"), stub_ctx(api = "cli-claude"))
+  expect_null(pcli_codex_mcp(list(session = "s00000000cc")))
+  pcli_hook_params(list(provider = "codex"), stub_ctx())
+  h = pcli_codex_mcp(list(session = "s00000000cc"))
+  expect_identical(h$port, 54777L)
+  expect_identical(h$env, c(GPTR_MCP_TOKEN = "tok-test-0123456789"))
+})

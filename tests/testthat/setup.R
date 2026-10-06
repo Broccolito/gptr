@@ -1,6 +1,7 @@
 # Test environment (contract section 3.2 and 12.2, IC-63): nothing a test does may touch the
-# user's home directory, the user's R_user_dir() folders, a real `.gptr/` workspace, real keys or
-# the network. Everything below is restored when the test run ends.
+# user's home directory, the user's R_user_dir() folders, a real `.gptr/` workspace, real keys,
+# an installed claude or codex CLI or the network. Everything below is restored when the test run
+# ends.
 local({
   root = withr::local_tempdir("gptr-tests-", .local_envir = testthat::teardown_env())
   dirs = c(
@@ -33,6 +34,12 @@ local({
     )
     withr::local_envvar(
       stats::setNames(rep("", length(keys)), keys),
+      .local_envir = testthat::teardown_env()
+    )
+    # tests that need a CLI point this option at the fake CLI (P20)
+    none = file.path(root, "no-cli")
+    withr::local_options(
+      gptr.cli_path = list(claude = none, codex = none),
       .local_envir = testthat::teardown_env()
     )
   }

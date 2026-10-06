@@ -626,3 +626,136 @@ test_that("a late timer or queued tools/call of an earlier turn leaves the next 
   expect_identical(killed$n, 1L)
   expect_null(opts2$state$process)
 })
+
+# ---- the claude route end to end (Task 8) -------------------------------------------------------
+
+test_that("a claude turn through peter() streams the answer; the next call resumes the session", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  local_cli_cleanup(s)
+  expect_identical(s$text, "Hello from the fake claude CLI.")
+  expect_identical(s$status, "idle")
+  s |> peter("Again")
+  expect_identical(s$text, "Hello from the fake claude CLI.")
+  argv = fake_argv(f)
+  expect_length(argv, 2L)
+  expect_false("--resume" %in% argv[[1]])
+  expect_identical(utils::tail(argv[[2]], 2L),
+                   c("--resume", "11111111-1111-4111-8111-111111111111"))
+  expect_length(fake_log(f, "turn"), 2L)
+  expect_length(fake_log(f, "handshake"), 2L)
+  expect_identical(json_decode(fake_log(f, "stdin")[[1]]$line)$request$subtype, "initialize")
+  expect_all_dead(fake_pids(f)[1L])
+})
+
+test_that("the claude argv of a peter() call equals architecture 8.3", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  s = peter("Say hello", model = f$model, envir = new.env())
+  local_cli_cleanup(s)
+  st = pcli_tracked(s$id)
+  expect_identical(fake_argv(f)[[1]],
+                   c(claude_argv_8_3(st$claude_mcp_file, st$claude_system_file,
+                                     "claude-sonnet-5-5"), "--max-budget-usd", "5"))
+  expect_identical(readLines(st$claude_mcp_file), pcli_claude_mcp_json())
+  expect_gt(file.size(st$claude_system_file), 0)
+})
+
+test_that("usage fields are populated and the rate-limit event becomes plan status", {
+  skip_on_cran()
+  pcli_cache_clear()
+  withr::defer(pcli_cache_clear())
+  f = local_fake_cli("claude", "call2", models = "claude-haiku-4-5")
+  s = peter("Compute", model = f$model, envir = new.env())
+  local_cli_cleanup(s)
+  expect_identical(s$text, "24")
+  msgs = s$messages
+  m = msgs[[length(msgs)]]
+  expect_identical(m$route, "plan-cli")
+  u = m$usage
+  expect_equal(c(u$input, u$output, u$cache_read, u$cache_write_1h, u$reasoning),
+               c(20, 172, 7448, 7641, 91))
+  expect_equal(s$cost, 0.0178928)
+  expect_identical(f$provider$status()$plan$type, "five_hour")
+})
+
+test_that("an mcp_message round trip evaluates R in the live session and is gated once", {
+  skip_on_cran()
+  skip_if_not(ext_service_has("mcp.dispatch_local"), "P18's mcp.dispatch_local is not loaded")
+  f = local_fake_cli("claude", "tool")
+  ui = local_scripted_ui(answers = list("y"))
+  e = new.env()
+  e$big_vector = c(2, 4, 6, 8, 40)
+  s = peter("Compute twice the mean of big_vector", model = f$model, envir = e, mode = "manual")
+  local_cli_cleanup(s)
+  expect_identical(e$answer, 24)
+  expect_identical(sum(ui$log$method == "permission"), 1L)
+  expect_identical(fake_log(f, "permission")[[1]]$behavior, "allow")
+  expect_match(fake_log(f, "mcp")[[1]]$text, "24", fixed = TRUE)
+  expect_match(s$text, "The tool said:", fixed = TRUE)
+})
+
+test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "apikey")
+  err = expect_error(peter("hi", model = f$model, envir = new.env()), class = "gptr_error_billing")
+  expect_match(conditionMessage(err), "apiKeySource ANTHROPIC_API_KEY", fixed = TRUE)
+  expect_all_dead(fake_pids(f))
+})
+
+test_that("billing and enclosing-agent variables never reach the claude child", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  withr::local_envvar(ANTHROPIC_API_KEY = "sk-ant-api03-p20fake-000000000000000000000",
+                      ANTHROPIC_PROFILE = "work", ANTHROPIC_FEDERATION_RULE_ID = "p20-rule",
+                      CLAUDECODE = "1")
+  seen = new.env()
+  seen$vars = character()
+  seen$text = character()
+  s = withCallingHandlers(
+    peter("Say hello", model = f$model, envir = new.env()),
+    gptr_warning_billing_env = function(w) {
+      seen$vars = c(seen$vars, w$variables)
+      seen$text = c(seen$text, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    })
+  local_cli_cleanup(s)
+  env = fake_env_names(f)[[1]]
+  expect_false(any(c("ANTHROPIC_API_KEY", "ANTHROPIC_PROFILE", "ANTHROPIC_FEDERATION_RULE_ID",
+                     "CLAUDECODE") %in% env))
+  expect_true(all(c("ANTHROPIC_API_KEY", "ANTHROPIC_PROFILE", "ANTHROPIC_FEDERATION_RULE_ID") %in%
+                    seen$vars))
+  expect_false("CLAUDECODE" %in% seen$vars)
+  expect_false(any(grepl("p20fake", seen$text, fixed = TRUE)))
+})
+
+test_that("a .cmd claude is refused with the install hint through peter()", {
+  skip_on_cran()
+  f = local_fake_cli("claude", "text")
+  shim = file.path(withr::local_tempdir(), "claude.cmd")
+  writeLines("@echo off", shim)
+  withr::local_options(gptr.cli_path = list(claude = shim))
+  expect_error(peter("hi", model = f$model, envir = new.env()), "install.ps1", fixed = TRUE)
+})
+
+test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)", {
+  skip_on_cran()
+  n = proc_pool_cap(3L)
+  f = local_fake_cli("claude", "slow")
+  runs = lapply(seq_len(n), function(i) {
+    peter(paste("Count", i), model = f$model, envir = new.env(), .run = FALSE)
+  })
+  for (s in runs) local_cli_cleanup(s)
+  t0 = Sys.time()
+  gptr_wait(runs, timeout = 30)
+  elapsed = as.numeric(difftime(Sys.time(), t0, units = "secs"))
+  expect_identical(vapply(runs, function(s) s$text, ""), rep("One two three four five six.", n))
+  expect_length(unique(fake_pids(f)), n)
+  # every turn started before any turn ended: the children streamed at the same time (with
+  # proc_pool_cap() = 2 under R CMD check a time bound alone could not tell)
+  started = vapply(fake_log(f, "turn"), function(r) as.numeric(r$t), 0)
+  ended = vapply(fake_log(f, "turn_done"), function(r) as.numeric(r$t), 0)
+  expect_true(length(ended) == n && max(started) < min(ended))
+  expect_lt(elapsed, 8)
+})

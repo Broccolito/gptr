@@ -195,3 +195,25 @@ local_mcp_stub = function(handle = stub_mcp_handle(), .env = parent.frame()) {
   withr::defer(off(), envir = .env)
   invisible(handle)
 }
+
+# Stop a session's CLI child and forget it when the calling test ends (claude children live as
+# long as their session)
+local_cli_cleanup = function(s, .env = parent.frame()) {
+  id = s$id
+  withr::defer({
+    st = pcli_tracked(id)
+    if (!is.null(st)) pcli_stop_child(st, wait_ack = FALSE)
+    pcli_untrack(id)
+  }, envir = .env)
+  invisible(s)
+}
+
+# Pump the given sessions until the fake CLI has logged `n` rows of `kind` or `timeout` seconds
+# passed; returns the count (tests wait on events, never on short wall-clock limits)
+wait_fake_log = function(fake, kind, n, runs, timeout = 20) {
+  deadline = Sys.time() + timeout
+  while (length(fake_log(fake, kind)) < n && Sys.time() < deadline) {
+    gptr_wait(runs, timeout = 0.25)
+  }
+  length(fake_log(fake, kind))
+}

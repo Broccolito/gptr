@@ -1797,3 +1797,27 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   link limit (contract text not edited, outside lane simp-core).
 - Tests: test-tool-write.R link chain, loop, dangling; test-tool-walk.R casefold; test-utils-paths.R
   `path_lexical()`, `mode`. Evidence: progress/simplicity.md P10-S.
+
+## D-148 - P20 tests find no installed CLI: setup.R points gptr.cli_path at no file (2026-10-05)
+- Rule: outside `GPTR_LIVE_TESTS=true`, `tests/testthat/setup.R` sets `options(gptr.cli_path)` for
+  claude and codex to a path that does not exist, so `pcli_find()` fails closed and no test runs a
+  real CLI (offline tests; IC-65: tests point the option at the fake CLI). Tests of discovery set
+  the option to `NULL` and use temporary files or mocked PATH and install locations.
+- Contract-visible: 04 section 3.2 and the section 12.2 `setup.R` row gain "and, unless
+  `GPTR_LIVE_TESTS=true`, `options(gptr.cli_path)` pointing at a missing file" (not edited, outside
+  lane cli-sub).
+- Tests: test-cli-common.R "tests find no installed CLI"; test-provider-registry.R
+  `gptr_providers(check = TRUE)` blocks WARN 0 with `ANTHROPIC_BASE_URL` exported. Evidence:
+  progress/P20.md Task 8.
+
+## D-149 - P20 CLI budget flags read the settings budget, not the run's per-call or root budget (2026-10-05)
+- Rule: `pcli_hook_params()` keeps the plan's rule: `cli_budget` is the settings `budget` less this
+  run's requests (`pcli_hook_usage()`). A per-call `budget =` and a root's remaining budget (IC-66)
+  do not reach `--max-turns`/`--max-budget-usd` or the codex cap, which IC-65 asks for; P06 still
+  stops the run at the next request boundary. The hook cannot read the run's budget (`ctx` has no
+  such member; L1 may not call P06, IC-33).
+- Contract-visible: proposed, not edited (outside lane cli-sub): the 04 section 10.4 `request_params`
+  payload gains `budget`, the run chain's remaining `turns` and `cost` (P06 `run_chain()`,
+  `run_used()`); the hook then passes it on and `pcli_used()`/`pcli_hook_usage()` go.
+- Tests: test-cli-common.R "request_params gives CLI routes the mode and the remaining budget"
+  (settings path). Evidence: progress/P20.md Task 8.

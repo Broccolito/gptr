@@ -1028,3 +1028,83 @@ pcli_wire_log = function(s, event) {
   tryCatch(wire_log_append(path, json_encode(redact(rec, "persist"))), error = function(e) NULL)
   invisible(path)
 }
+
+# ---- builtin:cli (Task 8) ----------------------------------------------------------------------
+
+#' Adapter capabilities of the two plan routes (contract 8.1); `cli_mode` and `cli_budget` are
+#' patched in by pcli_hook_params()
+#' @noRd
+pcli_capabilities = function() {
+  list(images_in_results = FALSE, tool_addition = FALSE, structured_output = FALSE,
+       reasoning_replay = FALSE, parallel_tools = FALSE, forced_tool_choice = FALSE,
+       request_params = c("cli_mode", "cli_budget"), operator_role = "user", cache = "none",
+       tool_shape = "anthropic")
+}
+
+#' Cost and request count of the session's current run, kept in its plugin state inside an
+#' environment, so P06 never persists them as a gptr.ext entry
+#' @noRd
+pcli_used = function(ctx) {
+  st = tryCatch(ctx$state(), error = function(e) NULL)
+  if (!is.environment(st)) return(NULL)
+  run = tryCatch(ctx$run, error = function(e) NULL)
+  u = st$used
+  if (!is.environment(u) || !identical(u$run, run)) {
+    u = new.env(parent = emptyenv())
+    u$run = run
+    u$cost = 0
+    u$turns = 0
+    st$used = u
+  }
+  u
+}
+
+#' `usage` hook: count each request of the run (contract 10.4 payload `row`)
+#' @noRd
+pcli_hook_usage = function(event, ctx) {
+  row = event[["row"]]
+  u = pcli_used(ctx)
+  if (is.null(u) || !is.data.frame(row)) return(invisible(NULL))
+  u$cost = u$cost + sum(row[["cost"]], na.rm = TRUE)
+  u$turns = u$turns + nrow(row)
+  invisible(NULL)
+}
+
+#' `request_params` hook: the run's mode and the settings budget less this run's requests for the
+#' plan routes (IC-65; per-call and root budgets do not reach it, D-149), and gptr's MCP server for
+#' a codex session (mcp.serve_ensure takes the session object, IC-58)
+#' @noRd
+pcli_hook_params = function(event, ctx) {
+  p = tryCatch(ctx$get("provider", event[["provider"]]), error = function(e) NULL)
+  api = p[["api"]] %||% ""
+  if (!(api %in% c("cli-claude", "cli-codex"))) return(NULL)
+  if (identical(api, "cli-codex")) pcli_codex_ensure(ctx$session)
+  lim = setting_get("budget", session = ctx$session,
+                    default = list(tokens = 2e6, cost = 5, turns = NULL))
+  u = pcli_used(ctx)
+  turns = pcli_scalar_num(lim[["turns"]])
+  cost = pcli_scalar_num(lim[["cost"]])
+  if (!is.null(turns)) turns = max(1, turns - (u$turns %||% 0))
+  if (!is.null(cost)) cost = max(0.01, cost - (u$cost %||% 0))
+  list(params = list(cli_mode = ctx$mode(), cli_budget = list(turns = turns, cost = cost)))
+}
+
+#' The session id of a ctx (NULL for process-level dispatch or a collected session)
+#' @noRd
+pcli_ctx_session = function(ctx) pcli_sid(tryCatch(ctx$session$id, error = function(e) NULL))
+
+#' builtin:cli: the plan routes, their process_jsonl adapters and hooks (contract 7.20, 10.3)
+#' @noRd
+builtin_cli = function(gptr) {
+  gptr$register(gptr_provider("claude-cli", api = "cli-claude", type = "cli",
+                              models = pcli_models("claude"),
+                              status = pcli_status("claude", "claude-cli", "cli-claude"),
+                              aliases = "claude_code"))
+  gptr$register(gptr_adapter("cli-claude", transport = "process_jsonl", build = pcli_claude_build,
+                             parse = pcli_claude_parse, capabilities = pcli_capabilities()))
+  gptr$on("request_params", pcli_hook_params)
+  gptr$on("usage", pcli_hook_usage)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("cli", builtin_cli))
