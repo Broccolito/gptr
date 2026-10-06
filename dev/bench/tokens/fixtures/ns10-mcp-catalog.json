@@ -1,0 +1,66 @@
+{
+  "id": "ns10-mcp-catalog",
+  "north_star": 10,
+  "description": "peter(\"Find trials for this indication\", indication) in a trusted project whose .gptr/mcp.json configures a ClinicalTrials-style MCP server with 12 tools: the tools reach the model as R signatures in the T1 <mcp> catalog (no tool declarations), and one composed r call runs peter$mcp$trials$search_trials() and filters the data frame it returns. The object expression of `indication` seeds the tool cache from .bench/trials-tools.json and trusts the temporary project, so no server is contacted.",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": [
+    "benchmain/benchmain-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Trial searches: prefer recruiting phase 2/3 trials; report NCT numbers.",
+    ".gptr/mcp.json": "{\"mcpServers\": {\"trials\": {\"url\": \"https://trials.example/mcp\"}}}",
+    ".bench/trials-tools.json": "{\"tools\": [{\"name\": \"search_trials\", \"description\": \"Search clinical trials by condition, recruitment status, phase and location. Returns one row per trial.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"condition\": {\"type\": \"string\", \"description\": \"Condition or disease\"}, \"status\": {\"type\": \"string\", \"description\": \"Recruitment status, e.g. RECRUITING\"}, \"phase\": {\"type\": \"string\", \"description\": \"Phases separated by |, e.g. PHASE2|PHASE3\"}, \"location\": {\"type\": \"string\", \"description\": \"Country or city\"}, \"limit\": {\"type\": \"integer\", \"description\": \"Maximum number of trials\"}}, \"required\": [\"condition\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_trial\", \"description\": \"Get the full record of one trial by its NCT number.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_id\": {\"type\": \"string\", \"description\": \"NCT number\"}}, \"required\": [\"nct_id\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_eligibility\", \"description\": \"Get the inclusion and exclusion criteria of a trial.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_id\": {\"type\": \"string\", \"description\": \"NCT number\"}}, \"required\": [\"nct_id\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"list_locations\", \"description\": \"List the recruiting sites of a trial with city and country.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_id\": {\"type\": \"string\", \"description\": \"NCT number\"}}, \"required\": [\"nct_id\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_outcomes\", \"description\": \"Get the primary and secondary outcome measures of a trial.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_id\": {\"type\": \"string\", \"description\": \"NCT number\"}}, \"required\": [\"nct_id\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_results\", \"description\": \"Get the posted results of a completed trial.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_id\": {\"type\": \"string\", \"description\": \"NCT number\"}}, \"required\": [\"nct_id\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"search_by_intervention\", \"description\": \"Search trials by drug, device or procedure.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"intervention\": {\"type\": \"string\", \"description\": \"Intervention name\"}, \"condition\": {\"type\": \"string\", \"description\": \"Condition\"}, \"limit\": {\"type\": \"integer\", \"description\": \"Maximum number of trials\"}}, \"required\": [\"intervention\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"search_by_sponsor\", \"description\": \"Search trials by lead sponsor.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"sponsor\": {\"type\": \"string\", \"description\": \"Sponsor name\"}, \"limit\": {\"type\": \"integer\", \"description\": \"Maximum number of trials\"}}, \"required\": [\"sponsor\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"list_conditions\", \"description\": \"Suggest condition names and synonyms for a query.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\", \"description\": \"Free text\"}, \"limit\": {\"type\": \"integer\", \"description\": \"Maximum number of names\"}}, \"required\": [\"query\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"count_trials\", \"description\": \"Count trials matching a condition and status.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"condition\": {\"type\": \"string\", \"description\": \"Condition\"}, \"status\": {\"type\": \"string\", \"description\": \"Recruitment status\"}}, \"required\": [\"condition\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"get_contacts\", \"description\": \"Get the central contacts of a trial.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_id\": {\"type\": \"string\", \"description\": \"NCT number\"}}, \"required\": [\"nct_id\"]}, \"annotations\": {\"readOnlyHint\": true}}, {\"name\": \"compare_trials\", \"description\": \"Compare design, phase and enrollment of up to 10 trials.\", \"input_schema\": {\"type\": \"object\", \"properties\": {\"nct_ids\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"NCT numbers\"}}, \"required\": [\"nct_ids\"]}, \"annotations\": {\"readOnlyHint\": true}}], \"fetched_at\": 1790000000000, \"ttl_ms\": 300000, \"cache_scope\": \"public\"}"
+  },
+  "objects": {
+    "indication": "local({\n  key = cli::hash_sha256('{\"url\":\"https://trials.example/mcp\"}')\n  dir = file.path(tools::R_user_dir('gptr', 'cache'), 'mcp-tools')\n  dir.create(dir, recursive = TRUE, showWarnings = FALSE)\n  file.copy('.bench/trials-tools.json', file.path(dir, paste0(key, '.json')), overwrite = TRUE)\n  gptr::gptr_trust('.', trust = TRUE)\n  'idiopathic pulmonary fibrosis'\n})"
+  },
+  "facts": [
+    "indication",
+    "pulmonary fibrosis"
+  ],
+  "turns": [
+    {
+      "prompt": "Find trials for this indication",
+      "source": "prompt",
+      "context": [
+        {
+          "label": "indication",
+          "class": "character"
+        }
+      ],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "trials = peter$mcp$trials$search_trials(condition = indication, status = \"RECRUITING\",\n                                       phase = \"PHASE2|PHASE3\", limit = 50)\ndim(trials)\nhead(trials[order(trials$start_date, decreasing = TRUE), c(\"nct_id\", \"phase\", \"enrollment\", \"sponsor\")], 6)"
+              },
+              "result": "[1] 37  9\n         nct_id  phase enrollment                       sponsor\n3   NCT06617351 PHASE3        660          Boehringer Ingelheim\n11  NCT06569160 PHASE2        180             Pliant Therapeutics\n7   NCT06422884 PHASE3        420                   Bristol Myers\n24  NCT06331624 PHASE2        120  University of California, SF\n15  NCT06238622 PHASE2         90                    Vicore Pharma\n30  NCT06119191 PHASE3        800                          Roche\n[r] + trials <data.frame 37 x 9>\n[status: ok; 3 of 3 top-level expressions completed; 1.8s]",
+              "details": {
+                "code": "trials = peter$mcp$trials$search_trials(condition = indication, status = \"RECRUITING\",\n                                       phase = \"PHASE2|PHASE3\", limit = 50)\ndim(trials)\nhead(trials[order(trials$start_date, decreasing = TRUE), c(\"nct_id\", \"phase\", \"enrollment\", \"sponsor\")], 6)",
+                "status": "ok",
+                "note": "recruiting phase 2/3 trials via the trials MCP server"
+              }
+            }
+          ]
+        },
+        {
+          "text": "37 recruiting phase 2 or 3 trials study idiopathic pulmonary fibrosis. The newest are NCT06617351 (phase 3, 660 patients, Boehringer Ingelheim) and NCT06569160 (phase 2, 180 patients, Pliant Therapeutics). The full table is in `trials`.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}
