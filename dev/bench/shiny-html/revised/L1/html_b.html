@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sales by region</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+  </style>
+</head>
+<body>
+  <h1>Sales by region</h1>
+  <table id="summary" class="display" style="width:100%">
+    <thead>
+      <tr><th>Region</th><th>Orders</th><th>Units</th><th>Revenue</th><th>Avg price</th></tr>
+    </thead>
+  </table>
+  <script>
+    function summarise(rows) {
+      var groups = {};
+      rows.forEach(function (row) {
+        if (!groups[row.region]) {
+          groups[row.region] = { region: row.region, orders: 0, units: 0, revenue: 0, price: 0 };
+        }
+        groups[row.region].orders += 1;
+        groups[row.region].units += row.units;
+        groups[row.region].revenue += row.revenue;
+        groups[row.region].price += row.price;
+      });
+      return Object.values(groups).sort(function (a, b) { return b.revenue - a.revenue; });
+    }
+
+    $(function () {
+      $.getJSON("data/sales.json", function (rows) {
+        var data = summarise(rows).map(function (g) {
+          return [g.region, g.orders, g.units.toLocaleString("en-US"),
+                  g.revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                  (g.price / g.orders).toFixed(2)];
+        });
+        $("#summary").DataTable({ data: data, paging: false, searching: false, info: false, ordering: false });
+      });
+    });
+  </script>
+</body>
+</html>

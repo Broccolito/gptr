@@ -19,9 +19,10 @@ bench_args = function(args = commandArgs(TRUE)) {
        only = if (length(only)) strsplit(only[[1L]], ",", fixed = TRUE)[[1L]] else NULL)
 }
 
-# A missing development tool stops the step for the maintainer (conventions section 1).
-bench_require = function(pkg, why) {
-  if (requireNamespace(pkg, quietly = TRUE)) return(invisible(TRUE))
+# A missing development tool stops the step for the maintainer (conventions section 1); `ok`
+# tells whether a tool that is not an R package is present.
+bench_require = function(pkg, why, ok = requireNamespace(pkg, quietly = TRUE)) {
+  if (ok) return(invisible(TRUE))
   msg = paste0("the development tool '", pkg, "' is not installed (needed for ", why, "). ",
                "This step stops for the maintainer; nothing is installed.")
   stop(structure(class = c("bench_missing_tool", "error", "condition"),

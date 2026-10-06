@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Car explorer</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .layout { display: flex; gap: 24px; }
+    #plot { flex: 3; height: 480px; }
+    .side { flex: 2; }
+    button { margin-top: 12px; padding: 8px 14px; }
+  </style>
+</head>
+<body>
+  <h1>Car explorer</h1>
+  <div class="layout">
+    <div id="plot"></div>
+    <div class="side">
+      <p id="n">0 selected</p>
+      <table id="selected" class="display" style="width:100%"></table>
+      <button id="download">Download CSV</button>
+    </div>
+  </div>
+  <script>
+    var COLUMNS = ["name", "wt", "mpg", "hp"];
+    var cars = [];
+    var selected = [];
+    var table;
+
+    function refresh() {
+      $("#n").text(selected.length + " selected");
+      table.clear();
+      table.rows.add(selected.map(function (car) {
+        return COLUMNS.map(function (col) { return car[col]; });
+      }));
+      table.draw();
+    }
+
+    function toCsv(rows) {
+      var lines = [COLUMNS.join(",")];
+      rows.forEach(function (car) {
+        lines.push(COLUMNS.map(function (col) {
+          var value = car[col];
+          return typeof value === "string" ? '"' + value.replace(/"/g, '""') + '"' : value;
+        }).join(","));
+      });
+      return lines.join("\n");
+    }
+
+    $(document).ready(function () {
+      table = $("#selected").DataTable({
+        data: [],
+        columns: COLUMNS.map(function (col) { return { title: col }; }),
+        paging: false, searching: false, info: false
+      });
+
+      $.getJSON("data/cars_df.json", function (rows) {
+        cars = rows;
+        var trace = {
+          x: cars.map(function (c) { return c.wt; }),
+          y: cars.map(function (c) { return c.mpg; }),
+          text: cars.map(function (c) { return c.name; }),
+          mode: "markers",
+          type: "scatter"
+        };
+        var layout = { dragmode: "select", xaxis: { title: "Weight (wt)" }, yaxis: { title: "MPG" } };
+        Plotly.newPlot("plot", [trace], layout);
+        var plot = document.getElementById("plot");
+        plot.on("plotly_selected", function (event) {
+          selected = event ? event.points.map(function (p) { return cars[p.pointIndex]; }) : [];
+          refresh();
+        });
+        plot.on("plotly_deselect", function () {
+          selected = [];
+          refresh();
+        });
+      });
+
+      $("#download").on("click", function () {
+        var blob = new Blob([toCsv(selected)], { type: "text/csv;charset=utf-8" });
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "selected.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+    });
+  </script>
+</body>
+</html>

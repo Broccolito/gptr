@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inventory</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="container py-3">
+<h2>Inventory</h2>
+<div class="row">
+  <div class="col" id="a"></div>
+  <div class="col" id="b"></div>
+</div>
+<p id="total"></p>
+<script>
+const money = x => x.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const warehouses = [];
+function renderAll() {
+  warehouses.forEach(w => document.getElementById(`${w.id}-value`).textContent = `Stock value: ${money(w.value())}`);
+  document.getElementById("total").textContent =
+    `Total stock value: ${money(warehouses.reduce((s, w) => s + w.value(), 0))}`;
+}
+function warehouse(id, title, rows) {
+  const el = document.getElementById(id);
+  el.innerHTML = `<div class="card"><div class="card-header">${title}</div>
+    <table class="table table-sm mb-0" id="${id}-table">
+    <thead><tr><th>product</th><th>price</th><th>stock</th></tr></thead><tbody>` +
+    rows.map((r, i) => `<tr><td>${r.product}</td><td contenteditable data-i="${i}" data-k="price">${r.price}</td>` +
+      `<td contenteditable data-i="${i}" data-k="stock">${r.stock}</td></tr>`).join("") +
+    `</tbody></table><div class="card-body" id="${id}-value"></div></div>`;
+  el.addEventListener("input", e => {
+    const c = e.target;
+    rows[c.dataset.i][c.dataset.k] = Number(c.textContent) || 0;
+    renderAll();
+  });
+  warehouses.push({id, value: () => rows.reduce((s, r) => s + r.price * r.stock, 0)});
+}
+Promise.all(["inv_a", "inv_b"].map(n => fetch(`data/${n}.json`).then(r => r.json()))).then(([a, b]) => {
+  warehouse("a", "Warehouse A", a);
+  warehouse("b", "Warehouse B", b);
+  renderAll();
+});
+</script>
+</body>
+</html>
