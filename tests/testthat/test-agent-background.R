@@ -391,3 +391,89 @@ test_that("an unreferenced settled background session is collected", {
   invisible(gc())
   expect_null(rlang::wref_key(w))
 })
+
+bg_capture_notices = function(fun) {
+  log = new.env()
+  log$m = character()
+  withCallingHandlers(fun(), gptr_message_notice = function(m) {
+    log$m = c(log$m, conditionMessage(m))
+    invokeRestart("muffleMessage")
+  })
+  log$m
+}
+
+test_that("an ask at an idle tick parks the run as waiting until a blocking pump", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  ui = local_scripted_ui(answers = list("y"))
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  reply = list(tool = "r", input = list(code = "z = 3"))
+  fake = gptr_fake_provider(list(reply, reply, "done"))
+  e = new.env()
+  s = peter("set z", model = fake, mode = "manual", envir = e, background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  expect_identical(nrow(ui$log), 0L)
+  expect_null(e$z)
+  jobs = gptr_jobs()
+  expect_identical(jobs$status[jobs$id == s$id], "waiting")
+  for (i in 1:5) later::run_now(0.06)
+  expect_identical(s$status, "waiting")
+  reactor_pump(until = function() !(s$status %in% c("running", "waiting")), slice_ms = 50L,
+               timeout = 20)
+  expect_identical(s$status, "idle")
+  expect_identical(e$z, 3)
+  expect_identical(ui$log$method, "permission")
+  texts = vapply(fake$log$requests[[2L]]$messages, msg_text, "")
+  expect_true(any(grepl("call the tool again with the same input", texts, fixed = TRUE)))
+  expect_true(bg_pump_until(function() !bg_has(s$id)))
+})
+
+test_that("gptr_jobs(kill = TRUE) cancels a waiting background session", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  ui = local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "w = 1")), "done"))
+  s = peter("set w", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() identical(s$status, "waiting")))
+  gptr_jobs(kill = TRUE)
+  expect_identical(s$status, "aborted")
+  expect_false(bg_has(s$id))
+  expect_identical(nrow(ui$log), 0L)
+})
+
+test_that("parking prints one waiting notice naming the action", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_scripted_ui(answers = list())
+  local_gptr_options(background_tools = "idle", record = "off", verbose = 0L, quiet = FALSE)
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "v = 1")), "done"))
+  notes = bg_capture_notices(function() {
+    s = peter("set v", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+    bg_pump_until(function() identical(s$status, "waiting"))
+  })
+  expect_length(grep("is waiting for approval: r", notes, fixed = TRUE), 1L)
+})
+
+test_that("a waiting session that cannot continue is aborted and released", {
+  skip_on_cran()
+  s = peter("finished", model = gptr_fake_provider(list("ok")), envir = new.env())
+  assign(s$id, s, envir = bg_state()$sessions)
+  withr::defer({
+    the$bg = NULL
+  })
+  live = session_live(s)
+  live$background = list(id = s$id, run = NULL, ui = character(), dropped_n = 0L,
+                         ask = list(what = "permission", summary = "r: x = 1"), waiting = TRUE,
+                         opts = list(background = TRUE))
+  d = session_data(s)
+  d$status = "waiting"
+  expect_null(bg_resume(s))
+  expect_identical(s$status, "aborted")
+  expect_match(s$reason, "could not continue after waiting", fixed = TRUE)
+  expect_false(bg_has(s$id))
+  expect_null(session_live(s)$background)
+})
