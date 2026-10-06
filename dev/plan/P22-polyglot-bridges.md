@@ -701,7 +701,7 @@ bridge_exec = function(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL,
   timeout = timeout %||% 120
   merge = merge %||% FALSE
   check = check %||% FALSE
-  env = env %||% character()
+  env = bridge_chr(env) %||% character()
   check_string(wd, "wd")
   check_number(timeout, "timeout", min = 0)
   check_flag(merge, "merge")
@@ -749,7 +749,7 @@ bridge_sh = function(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, mer
                      check = FALSE, max_tokens = NULL) {
   argv = bridge_chr(cmd)
   bridge_check_cmd(argv)
-  bridge_exec(argv, input, wd, timeout, bridge_chr(env), merge, check, max_tokens)
+  bridge_exec(argv, input, wd, timeout, env, merge, check, max_tokens)
 }
 
 #' Print a command result within its budget
@@ -803,7 +803,7 @@ git commit -m 'feat(bridge): peter$sh() engine, gptr_cmd results and bridge_call
 
 ### Task 3: The `interpreter` kind and `peter$script()`
 
-P22 defines the 38th kind, `interpreter` (04 §10.2 row 6, IC-02, IC-69), by registering a `kind` spec from its built-in factory: P02's `ext_register()` stages a `kind` spec at once (`kind_from_spec()`), so the same factory can then build `interpreter` specs with `gptr_spec()`. The validator normalises `ext` (lower case, no dot) and checks the four fields; a failing field is `gptr_error_invalid_spec` naming it. The seven built-in interpreters are `sh` (`.sh`, `.bash`: bash, sh, Git Bash), `py` (python3, python, py), `r` (the running R's `Rscript`), `js` (`.js`, `.mjs`, `.cjs`: node), `pl` (perl), `rb` (ruby) and `jl` (julia); program candidates are resolved when a script runs, never at load (no disk or process work at load, 04 §7.1 `zzz.R`). `peter$script()` picks, in order: `interpreter =` (a registered name, else a program plus leading arguments), the interpreter named like the extension (so a user record of that name overrides the built-in, IC-69), any interpreter listing the extension, then the `#!` line. Windows stubs (`System32\bash.exe`, the WindowsApps aliases) are skipped (G5 Windows notes). The `...` options of `peter$script()` are the `peter$sh()` options, read one by one with `...elt()` (rule R3: `list(...)` would keep a user's `input` referenced). The script's risk is 3 (Task 5).
+P22 defines the 38th kind, `interpreter` (04 §10.2 row 6, IC-02, IC-69), by registering a `kind` spec from its built-in factory: P02's `ext_register()` stages a `kind` spec at once (`kind_from_spec()`), so the same factory can then build `interpreter` specs with `gptr_spec()`. The validator normalises `ext` (lower case, no dot) and checks the four fields; a failing field is `gptr_error_invalid_spec` naming it. The seven built-in interpreters are `sh` (`.sh`, `.bash`: bash, sh, Git Bash), `py` (python3, python, py), `r` (the running R's `Rscript`), `js` (`.js`, `.mjs`, `.cjs`: node), `pl` (perl), `rb` (ruby) and `jl` (julia); program candidates are resolved when a script runs, never at load (no disk or process work at load, 04 §7.1 `zzz.R`). `peter$script()` picks, in order: `interpreter =` (a registered name, else a program plus leading arguments), the interpreter named like the extension (so a user record of that name overrides the built-in, IC-69), any interpreter listing the extension, then the `#!` line. Windows stubs (`System32\bash.exe`, the WindowsApps aliases) are skipped (G5 Windows notes). The `...` options of `peter$script()` are the named `peter$sh()` options, passed on unevaluated to `bridge_exec()` (rule R3: `list(...)` would keep a user's `input` referenced). The script's risk is 3 (Task 5).
 
 This task adds the first version of `builtin_bridges()` (the kind and the interpreters) and its `on_load()` declaration as the last section of `R/bridge-sh.R`; Task 4 inserts its section above it and Task 5 replaces it.
 
@@ -812,8 +812,8 @@ This task adds the first version of `builtin_bridges()` (the kind and the interp
 - Test: `tests/testthat/test-bridge-sh.R` (append)
 
 **Interfaces:**
-- Consumes: `gptr_spec(kind, name, ...)` and the `kind` meta-kind (fields `validate` `function(spec)`, `resolve`, `fields`, `order_field`, `experimental`; P02, 04 §10.2 row 30), `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)` (for a `first`-resolving kind: the winning spec of each name), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02); `on_load(expr)`, `rscript_path()`, `gptr_abort()`, `check_string()`, `check_strings()` (P01); `run_current()` (P06) and its field `session` (the session id, 04 §7.6); Tasks 1-2 (`bridge_program_word()`, `bridge_chr()`, `bridge_label()`, `bridge_exec()`); tests: `gptr_api()`, `registry_names()`, `gptr_register()` (P02), `withr::local_tempdir()`.
-- Produces: the kind `interpreter` [experimental] (source `builtin:bridges`); the interpreter specs `sh`, `py`, `r`, `js`, `pl`, `rb`, `jl`; `interpreter_validate(spec)`; `bridge_script(path, args = character(), interpreter = NULL, ...)` -> `gptr_cmd` (the `fun` of member `script`, 04 §9.4); `bridge_program(programs)` -> path or `NULL`; `bridge_script_argv(path, args, interpreter = NULL)`; `bridge_session_id()`; `bridge_sh_option_names`; `builtin_bridges(gptr)` (first version) declared as `builtin:bridges`.
+- Consumes: `gptr_spec(kind, name, ...)` and the `kind` meta-kind (fields `validate` `function(spec)`, `resolve`, `fields`, `order_field`, `experimental`; P02, 04 §10.2 row 30), `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)` (for a `first`-resolving kind: the winning spec of each name), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `spec_abort()`, `spec_validate()`, `kind_field()` (P02); `on_load(expr)`, `rscript_path()`, `is_windows()`, `gptr_abort()`, `check_string()`, `check_strings()` (P01); `run_current()` (P06) and its field `session` (the session id, 04 §7.6); Tasks 1-2 (`bridge_program_word()`, `bridge_chr()`, `bridge_label()`, `bridge_exec()`); tests: `gptr_api()`, `registry_names()`, `gptr_register()` (P02), `withr::local_tempdir()`.
+- Produces: the kind `interpreter` [experimental] (source `builtin:bridges`); the interpreter specs `sh`, `py`, `r`, `js`, `pl`, `rb`, `jl`; `interpreter_validate(spec)`; `bridge_script(path, args = character(), interpreter = NULL, ...)` -> `gptr_cmd` (the `fun` of member `script`, 04 §9.4); `bridge_program(programs)` -> path or `NULL`; `bridge_script_argv(path, args, interpreter = NULL)`; `builtin_bridges(gptr)` (first version) declared as `builtin:bridges`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -846,9 +846,9 @@ test_that("builtin:bridges defines the interpreter kind and the seven built-in i
   off = gptr_register(sp)
   withr::defer(off())
   expect_identical(registry_get("interpreter", "tcl")$ext, "tcl")
-  expect_error(gptr_spec("interpreter", "bad", ext = 1, programs = "x",
-                         args = function(path, args) path, windows_only = FALSE),
-               class = "gptr_error_invalid_spec")
+  expect_identical(tryCatch(gptr_spec("interpreter", "bad", ext = 1, programs = "x",
+                                      args = function(path, args) path, windows_only = FALSE),
+                            gptr_error_invalid_spec = function(e) e$field), "ext")
 })
 
 test_that("scripts run with the interpreter of their extension, a name or a program", {
@@ -914,7 +914,7 @@ test_that("unknown extensions, missing scripts and unknown options are argument 
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 119 ]`. The six new tests fail: `could not find function "interpreter_validate"` and `could not find function "bridge_script"`; `"kind.interpreter" %in% gptr_api()$features` is `FALSE`, and `registry_names("interpreter")` and `gptr_spec("interpreter", ...)` signal `Unknown capability kind 'interpreter'; registered kinds are listed by gptr_api()$features.`
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 119 ]`. The six new tests fail: `could not find function "interpreter_validate"` and `could not find function "bridge_script"`; `"kind.interpreter" %in% gptr_api()$features` is `FALSE`, `registry_names("interpreter")` lists none of the seven and `registry_get("interpreter", ...)` is `NULL` (four failures), and `gptr_spec("interpreter", ...)` signals `Unknown capability kind 'interpreter'; registered kinds are listed by gptr_api()$features.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -923,69 +923,40 @@ Append to `R/bridge-sh.R` (the interpreter kind and `peter$script()`):
 ```r
 # ---- the interpreter kind and peter$script() -----------------------------------------------------
 
-#' Fields of the interpreter kind (contract 10.2 row 6)
-#' @noRd
-bridge_interpreter_fields = c("ext", "programs", "args", "windows_only")
-
-#' Validator of the interpreter kind: ext (chr, normalised to lower case without the dot),
-#' programs (chr candidates, first found wins), args (function(path, args) -> chr), windows_only
+#' Validator of the interpreter kind (04 10.2 row 6): `ext` lower case without the dot
 #' @noRd
 interpreter_validate = function(spec) {
-  name = if (is.character(spec$name) && length(spec$name) == 1L) spec$name else "?"
-  bad = function(field, problem) {
-    gptr_abort(paste0("Invalid interpreter spec '", name, "': field '", field, "' ", problem, "."),
-               "invalid_spec", kind = "interpreter", name = name, field = field,
-               problem = problem)
+  for (field in c("ext", "programs")) {
+    x = spec[[field]]
+    if (!is.character(x) || !length(x) || anyNA(x) || !all(nzchar(x))) {
+      spec_abort(spec, field, "must be a non-empty character vector")
+    }
   }
-  ext = spec$ext
-  if (!is.character(ext) || !length(ext) || anyNA(ext) || !all(nzchar(ext))) {
-    bad("ext", "must be a non-empty character vector")
-  }
-  spec$ext = tolower(sub("^\\.", "", ext))
-  progs = spec$programs
-  if (!is.character(progs) || !length(progs) || anyNA(progs) || !all(nzchar(progs))) {
-    bad("programs", "must be a non-empty character vector")
-  }
-  args = spec$args %||% bridge_interpreter_args
-  if (!is.function(args) || !all(c("path", "args") %in% names(formals(args)))) {
-    bad("args", "must be a function(path, args)")
-  }
-  spec$args = args
-  only = spec$windows_only %||% FALSE
-  if (!is.logical(only) || length(only) != 1L || is.na(only)) {
-    bad("windows_only", "must be TRUE or FALSE")
-  }
-  spec$windows_only = only
-  spec
+  spec$ext = tolower(sub("^\\.", "", spec$ext))
+  spec_validate(spec, list(
+    args = kind_field("fn", default = bridge_interpreter_args, args = c("path", "args")),
+    windows_only = kind_field("lgl1", default = FALSE)
+  ))
 }
 
 #' Default argv after the program: the script path, then its arguments
 #' @noRd
-bridge_interpreter_args = function(path, args) {
-  c(path, args)
-}
+bridge_interpreter_args = function(path, args) c(path, args)
 
-#' Git Bash candidates on Windows (never System32\bash.exe, the WSL launcher; architecture 6.7);
-#' paths only, nothing is read at load time
+#' Git Bash candidates on Windows (never System32\bash.exe, the WSL launcher; architecture 6.7)
 #' @noRd
 bridge_git_bash = function() {
-  if (!identical(.Platform$OS.type, "windows")) return(character())
+  if (!is_windows()) return(character())
   la = Sys.getenv("LOCALAPPDATA")
-  roots = c(Sys.getenv("ProgramFiles"), Sys.getenv("ProgramW6432"),
+  roots = c(Sys.getenv(c("ProgramFiles", "ProgramW6432")),
             if (nzchar(la)) file.path(la, "Programs"))
   file.path(roots[nzchar(roots)], "Git", "bin", "bash.exe")
 }
 
-#' The built-in interpreters .sh, .py, .R, .js, .pl, .rb, .jl (contract 7.22), as interpreter
-#' specs; called inside builtin_bridges() after the kind is registered (P02's ext_register()
-#' defines a staged `kind` at once through kind_from_spec(), so gptr_spec("interpreter", ...) works
-#' in the same factory)
+#' The built-in interpreters (04 7.22); programs are looked up when a script runs, never at load
 #' @noRd
 bridge_interpreters = function() {
-  one = function(name, ext, programs) {
-    gptr_spec("interpreter", name, ext = ext, programs = programs,
-              args = bridge_interpreter_args, windows_only = FALSE)
-  }
+  one = function(name, ext, programs) gptr_spec("interpreter", name, ext = ext, programs = programs)
   list(
     one("sh", c("sh", "bash"), c("bash", "sh", bridge_git_bash())),
     one("py", "py", c("python3", "python", "py")),
@@ -997,30 +968,23 @@ bridge_interpreters = function() {
   )
 }
 
-#' The first candidate program found (an existing path, else a PATH lookup); Windows stubs are
-#' skipped: System32\bash.exe (WSL) and the WindowsApps aliases (G5 Windows notes)
+#' The first candidate program found (a path, else on PATH), skipping the Windows stubs
+#' System32\bash.exe (WSL) and the WindowsApps aliases
 #' @noRd
 bridge_program = function(programs) {
-  windows = identical(.Platform$OS.type, "windows")
-  for (cand in programs) {
-    word = bridge_program_word(cand)
+  for (word in programs) {
+    word = bridge_program_word(word)
     path = if (grepl("[/\\\\]", word)) word else unname(Sys.which(word))
-    if (!nzchar(path) || !file.exists(path)) next
     stub = grepl("system32[/\\\\]bash\\.exe$|windowsapps", path, ignore.case = TRUE)
-    if (windows && stub) next
-    return(path)
+    if (file.exists(path) && !stub) return(path)
   }
   NULL
 }
 
-#' argv of a script from an interpreter spec
+#' argv of a script from an interpreter spec; a windows_only one has no program elsewhere
 #' @noRd
 bridge_interpreter_argv = function(spec, path, args) {
-  if (isTRUE(spec$windows_only) && !identical(.Platform$OS.type, "windows")) {
-    gptr_abort(paste0("Interpreter '", spec$name, "' runs only on Windows."), "invalid_argument",
-               arg = "interpreter", expected = "an interpreter available on this platform")
-  }
-  prog = bridge_program(spec$programs)
+  prog = if (!spec$windows_only || is_windows()) bridge_program(spec$programs)
   if (is.null(prog)) {
     gptr_abort(paste0("No program was found for interpreter '", spec$name, "' (tried ",
                       paste(spec$programs, collapse = ", "), ")."),
@@ -1029,45 +993,33 @@ bridge_interpreter_argv = function(spec, path, args) {
   c(prog, spec$args(path, args))
 }
 
-#' argv prefix from a script's #! line, or NULL
+#' argv prefix from a script's #! line (`env` skipped), or NULL
 #' @noRd
 bridge_shebang = function(path) {
   first = tryCatch(readLines(path, n = 1L, warn = FALSE, encoding = "UTF-8"),
                    error = function(e) character())
   if (!length(first) || !startsWith(first, "#!")) return(NULL)
-  words = strsplit(trimws(sub("^#!", "", first)), "\\s+")[[1L]]
-  if (length(words) && identical(basename(words[[1L]]), "env")) words = words[-1L]
+  words = strsplit(trimws(substring(first, 3L)), "[ \t]+")[[1L]]
+  if (identical(basename(words[1L]), "env")) words = words[-1L]
   if (!length(words) || !nzchar(words[[1L]])) return(NULL)
   prog = bridge_program(unique(c(words[[1L]], basename(words[[1L]]))))
-  if (is.null(prog)) return(NULL)
-  c(prog, words[-1L])
+  if (!is.null(prog)) c(prog, words[-1L])
 }
 
-#' The session whose registry records apply: the running run's, else NULL
-#' @noRd
-bridge_session_id = function() {
-  run = run_current()
-  if (is.null(run)) NULL else run$session
-}
-
-#' The argv of a script: interpreter = (a registered name, else a program and its leading
-#' arguments), else the interpreter registered for the extension (one named like the extension
-#' first, so a user record of that name overrides the built-in, IC-69), else the #! line
+#' The argv of a script: `interpreter` (a registered name, else a program and its leading
+#' arguments), else the interpreter of the extension (one named like it first, so a user record
+#' of that name overrides the built-in, IC-69), else the #! line
 #' @noRd
 bridge_script_argv = function(path, args, interpreter = NULL) {
-  sid = bridge_session_id()
-  if (!is.null(interpreter)) {
+  sid = run_current()$session
+  if (length(interpreter)) {
     spec = if (length(interpreter) == 1L) registry_get("interpreter", interpreter, session = sid)
-    if (!is.null(spec)) return(bridge_interpreter_argv(spec, path, args))
-    return(c(interpreter, path, args))
+    if (is.null(spec)) return(c(interpreter, path, args))
+    return(bridge_interpreter_argv(spec, path, args))
   }
   ext = tolower(tools::file_ext(path))
-  if (nzchar(ext)) {
-    specs = registry_all("interpreter", session = sid)
-    named = Filter(function(s) identical(s$name, ext) && ext %in% s$ext, specs)
-    hits = if (length(named)) named else Filter(function(s) ext %in% s$ext, specs)
-    if (length(hits)) return(bridge_interpreter_argv(hits[[1L]], path, args))
-  }
+  hits = Filter(function(s) ext %in% s$ext, registry_all("interpreter", session = sid))
+  if (length(hits)) return(bridge_interpreter_argv(hits[[ext]] %||% hits[[1L]], path, args))
   prefix = bridge_shebang(path)
   if (!is.null(prefix)) return(c(prefix, path, args))
   gptr_abort(c("No interpreter is registered for this script's extension and it has no #! line.",
@@ -1076,47 +1028,27 @@ bridge_script_argv = function(path, args, interpreter = NULL) {
              expected = "a registered interpreter name or a program")
 }
 
-#' Names of the sh options peter$script() forwards through `...`
-#' @noRd
-bridge_sh_option_names = c("input", "wd", "timeout", "env", "merge", "check", "max_tokens")
-
-#' peter$script(): run a script by its interpreter; `...` takes the peter$sh() options
-#'
-#' The options are read one by one with `...elt()`, never collected with `list(...)`: a list
-#' holding the user's `input` object would keep it referenced after the call (architecture 6.4
-#' rule R3).
+#' peter$script(): run a script by its interpreter; `...` takes the named options of peter$sh(),
+#' passed on unevaluated (never list(...), which would keep `input` referenced; rule R3)
 #' @noRd
 bridge_script = function(path, args = character(), interpreter = NULL, ...) {
   check_string(path, "path")
-  script_args = bridge_chr(args %||% character())
+  script_args = bridge_chr(args) %||% character()
   check_strings(script_args, "args")
   interp = bridge_chr(interpreter)
   check_strings(interp, "interpreter", null = TRUE)
-  nms = ...names()
-  if (is.null(nms)) nms = rep("", ...length())
-  nms[is.na(nms)] = ""
-  if (length(setdiff(nms, bridge_sh_option_names))) {
+  opts = setdiff(names(formals(bridge_sh)), "cmd")
+  if (length(...names()) != ...length() || !all(...names() %in% opts)) {
     gptr_abort("`...` of peter$script() takes the named options of peter$sh().",
-               "invalid_argument", arg = "...",
-               expected = paste(bridge_sh_option_names, collapse = ", "))
+               "invalid_argument", arg = "...", expected = paste(opts, collapse = ", "))
   }
-  at = match(bridge_sh_option_names, nms)
-  input = if (is.na(at[[1L]])) NULL else ...elt(at[[1L]])
-  wd = if (is.na(at[[2L]])) NULL else ...elt(at[[2L]])
-  timeout = if (is.na(at[[3L]])) NULL else ...elt(at[[3L]])
-  env = if (is.na(at[[4L]])) NULL else ...elt(at[[4L]])
-  merge = if (is.na(at[[5L]])) NULL else ...elt(at[[5L]])
-  check = if (is.na(at[[6L]])) NULL else ...elt(at[[6L]])
-  max_tokens = if (is.na(at[[7L]])) NULL else ...elt(at[[7L]])
   if (!file.exists(path) || dir.exists(path)) {
     gptr_abort("The script given as `path` does not exist.", "invalid_argument", arg = "path",
                expected = "an existing script file")
   }
-  file = normalizePath(path, winslash = "/", mustWork = TRUE)
-  argv = bridge_script_argv(file, script_args, interp)
-  bridge_exec(argv, input, wd, timeout, bridge_chr(env), merge, check, max_tokens,
-              bridge = "script", label = bridge_label(c(basename(file), script_args)),
-              level = 3L)
+  file = normalizePath(path, winslash = "/")
+  bridge_exec(bridge_script_argv(file, script_args, interp), ..., bridge = "script",
+              label = bridge_label(c(basename(file), script_args)), level = 3L)
 }
 ```
 
@@ -1125,13 +1057,11 @@ Then append the first version of the built-in, which stays the last section of t
 ```r
 # ---- builtin:bridges -----------------------------------------------------------------------------
 
-#' builtin:bridges (contract 7.22), first part: the interpreter kind and the built-in
-#' interpreters (Task 5 adds the members and the <r_session> shell line)
+#' builtin:bridges (04 7.22), first part: the interpreter kind and the built-in interpreters
 #' @noRd
 builtin_bridges = function(gptr) {
   gptr$register(gptr_spec("kind", "interpreter", validate = interpreter_validate,
-                          resolve = "first", fields = bridge_interpreter_fields,
-                          experimental = TRUE))
+                          fields = c("ext", "programs", "args", "windows_only")))
   for (spec in bridge_interpreters()) gptr$register(spec)
   invisible(NULL)
 }
@@ -1995,8 +1925,7 @@ bridge_sh_members = function() {
 #' @noRd
 builtin_bridges = function(gptr) {
   gptr$register(gptr_spec("kind", "interpreter", validate = interpreter_validate,
-                          resolve = "first", fields = bridge_interpreter_fields,
-                          experimental = TRUE))
+                          fields = c("ext", "programs", "args", "windows_only")))
   for (spec in bridge_interpreters()) gptr$register(spec)
   for (spec in bridge_sh_members()) gptr$register(spec)
   gptr$on("tool_call", bridge_block_hook(c("sh", "script", "bg", "jobs")))
@@ -2698,7 +2627,7 @@ git commit -m 'feat(bridge): peter$py() in reticulate __main__ with the provisio
 - Test: `tests/testthat/test-bridge-lang.R` (append)
 
 **Interfaces:**
-- Consumes: `shell_resolve(cmd)` (P04, Windows Git Bash) and `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()`, `clean_terminal()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_status_line()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_session_id()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
+- Consumes: `shell_resolve(cmd)` (P04, Windows Git Bash) and `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()`, `clean_terminal()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_status_line()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
 - Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_cmd_lines(x)`; `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`; `bridge_knit_interpreter(engine)` -> an interpreter spec or `NULL`; `bridge_knit_script(spec, engine, src)` -> `gptr_cmd`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2868,7 +2797,7 @@ bridge_knit_target = function(engine, code) {
 #' @noRd
 bridge_knit_interpreter = function(engine) {
   eng = tolower(engine)
-  for (spec in registry_all("interpreter", session = bridge_session_id())) {
+  for (spec in registry_all("interpreter", session = run_current()$session)) {
     progs = tolower(sub("\\.exe$", "", basename(spec$programs), ignore.case = TRUE))
     if (identical(tolower(spec$name), eng) || eng %in% progs) return(spec)
   }

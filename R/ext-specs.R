@@ -829,11 +829,10 @@ kind_names = function() sort(ls(kinds_env()), method = "radix")
 kind_user_validate = function(validate) {
   force(validate)
   function(spec) {
-    out = tryCatch(validate(spec),
-                   gptr_error_invalid_spec = function(e) stop(e),
-                   error = function(e) {
-                     spec_abort(spec, "(validate)", paste0("was rejected: ", conditionMessage(e)))
-                   })
+    out = tryCatch(validate(spec), error = function(e) {
+      if (inherits(e, "gptr_error_invalid_spec")) stop(e)
+      spec_abort(spec, "(validate)", paste0("was rejected: ", conditionMessage(e)))
+    })
     if (!is.list(out)) spec_abort(spec, "(validate)", "must return the spec")
     out
   }

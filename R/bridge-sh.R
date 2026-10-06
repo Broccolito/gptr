@@ -1,5 +1,6 @@
 # Polyglot bridges, shell side (P22; contract 5.10, 7.22, 9.4, 10.2 row 6, 10.4; architecture
-# 4.2, 6.7): command resolution, budgeted head+tail views, peter$sh() and the gptr_cmd result.
+# 4.2, 6.7): command resolution, budgeted head+tail views, peter$sh() and the gptr_cmd result,
+# the interpreter kind and peter$script().
 
 #' Split a simple command line into words, or NULL when it needs a shell
 #' Words split on space and tab (as sh); quotes group them. A metacharacter or backslash outside
@@ -280,7 +281,7 @@ bridge_exec = function(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL,
   timeout = timeout %||% 120
   merge = merge %||% FALSE
   check = check %||% FALSE
-  env = env %||% character()
+  env = bridge_chr(env) %||% character()
   check_string(wd, "wd")
   check_number(timeout, "timeout", min = 0)
   check_flag(merge, "merge")
@@ -328,7 +329,7 @@ bridge_sh = function(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, mer
                      check = FALSE, max_tokens = NULL) {
   argv = bridge_chr(cmd)
   bridge_check_cmd(argv)
-  bridge_exec(argv, input, wd, timeout, bridge_chr(env), merge, check, max_tokens)
+  bridge_exec(argv, input, wd, timeout, env, merge, check, max_tokens)
 }
 
 #' Print a command result within its budget
@@ -362,3 +363,146 @@ format.gptr_cmd = function(x, ...) {
 as.character.gptr_cmd = function(x, ...) {
   x$stdout
 }
+
+# ---- the interpreter kind and peter$script() -----------------------------------------------------
+
+#' Validator of the interpreter kind (04 10.2 row 6): `ext` lower case without the dot
+#' @noRd
+interpreter_validate = function(spec) {
+  for (field in c("ext", "programs")) {
+    x = spec[[field]]
+    if (!is.character(x) || !length(x) || anyNA(x) || !all(nzchar(x))) {
+      spec_abort(spec, field, "must be a non-empty character vector")
+    }
+  }
+  spec$ext = tolower(sub("^\\.", "", spec$ext))
+  spec_validate(spec, list(
+    args = kind_field("fn", default = bridge_interpreter_args, args = c("path", "args")),
+    windows_only = kind_field("lgl1", default = FALSE)
+  ))
+}
+
+#' Default argv after the program: the script path, then its arguments
+#' @noRd
+bridge_interpreter_args = function(path, args) c(path, args)
+
+#' Git Bash candidates on Windows (never System32\bash.exe, the WSL launcher; architecture 6.7)
+#' @noRd
+bridge_git_bash = function() {
+  if (!is_windows()) return(character())
+  la = Sys.getenv("LOCALAPPDATA")
+  roots = c(Sys.getenv(c("ProgramFiles", "ProgramW6432")),
+            if (nzchar(la)) file.path(la, "Programs"))
+  file.path(roots[nzchar(roots)], "Git", "bin", "bash.exe")
+}
+
+#' The built-in interpreters (04 7.22); programs are looked up when a script runs, never at load
+#' @noRd
+bridge_interpreters = function() {
+  one = function(name, ext, programs) gptr_spec("interpreter", name, ext = ext, programs = programs)
+  list(
+    one("sh", c("sh", "bash"), c("bash", "sh", bridge_git_bash())),
+    one("py", "py", c("python3", "python", "py")),
+    one("r", "r", rscript_path()),
+    one("js", c("js", "mjs", "cjs"), "node"),
+    one("pl", "pl", "perl"),
+    one("rb", "rb", "ruby"),
+    one("jl", "jl", "julia")
+  )
+}
+
+#' The first candidate program found (a path, else on PATH), skipping the Windows stubs
+#' System32\bash.exe (WSL) and the WindowsApps aliases
+#' @noRd
+bridge_program = function(programs) {
+  for (word in programs) {
+    word = bridge_program_word(word)
+    path = if (grepl("[/\\\\]", word)) word else unname(Sys.which(word))
+    stub = grepl("system32[/\\\\]bash\\.exe$|windowsapps", path, ignore.case = TRUE)
+    if (file.exists(path) && !stub) return(path)
+  }
+  NULL
+}
+
+#' argv of a script from an interpreter spec; a windows_only one has no program elsewhere
+#' @noRd
+bridge_interpreter_argv = function(spec, path, args) {
+  prog = if (!spec$windows_only || is_windows()) bridge_program(spec$programs)
+  if (is.null(prog)) {
+    gptr_abort(paste0("No program was found for interpreter '", spec$name, "' (tried ",
+                      paste(spec$programs, collapse = ", "), ")."),
+               "spawn", command = spec$programs[[1L]])
+  }
+  c(prog, spec$args(path, args))
+}
+
+#' argv prefix from a script's #! line (`env` skipped), or NULL
+#' @noRd
+bridge_shebang = function(path) {
+  first = tryCatch(readLines(path, n = 1L, warn = FALSE, encoding = "UTF-8"),
+                   error = function(e) character())
+  if (!length(first) || !startsWith(first, "#!")) return(NULL)
+  words = strsplit(trimws(substring(first, 3L)), "[ \t]+")[[1L]]
+  if (identical(basename(words[1L]), "env")) words = words[-1L]
+  if (!length(words) || !nzchar(words[[1L]])) return(NULL)
+  prog = bridge_program(unique(c(words[[1L]], basename(words[[1L]]))))
+  if (!is.null(prog)) c(prog, words[-1L])
+}
+
+#' The argv of a script: `interpreter` (a registered name, else a program and its leading
+#' arguments), else the interpreter of the extension (one named like it first, so a user record
+#' of that name overrides the built-in, IC-69), else the #! line
+#' @noRd
+bridge_script_argv = function(path, args, interpreter = NULL) {
+  sid = run_current()$session
+  if (length(interpreter)) {
+    spec = if (length(interpreter) == 1L) registry_get("interpreter", interpreter, session = sid)
+    if (is.null(spec)) return(c(interpreter, path, args))
+    return(bridge_interpreter_argv(spec, path, args))
+  }
+  ext = tolower(path_ext(path))
+  hits = Filter(function(s) ext %in% s$ext, registry_all("interpreter", session = sid))
+  if (length(hits)) return(bridge_interpreter_argv(hits[[ext]] %||% hits[[1L]], path, args))
+  prefix = bridge_shebang(path)
+  if (!is.null(prefix)) return(c(prefix, path, args))
+  gptr_abort(c("No interpreter is registered for this script's extension and it has no #! line.",
+               "Pass interpreter = (a registered interpreter name or a program)."),
+             "invalid_argument", arg = "interpreter",
+             expected = "a registered interpreter name or a program")
+}
+
+#' peter$script(): run a script by its interpreter; `...` takes the named options of peter$sh(),
+#' passed on unevaluated (never list(...), which would keep `input` referenced; rule R3)
+#' @noRd
+bridge_script = function(path, args = character(), interpreter = NULL, ...) {
+  check_string(path, "path")
+  script_args = bridge_chr(args) %||% character()
+  check_strings(script_args, "args")
+  interp = bridge_chr(interpreter)
+  check_strings(interp, "interpreter", null = TRUE)
+  opts = setdiff(names(formals(bridge_sh)), "cmd")
+  if (length(...names()) != ...length() || !all(...names() %in% opts)) {
+    gptr_abort("`...` of peter$script() takes the named options of peter$sh().",
+               "invalid_argument", arg = "...", expected = paste(opts, collapse = ", "))
+  }
+  if (!file.exists(path) || dir.exists(path)) {
+    gptr_abort("The script given as `path` does not exist.", "invalid_argument", arg = "path",
+               expected = "an existing script file")
+  }
+  file = normalizePath(path, winslash = "/")
+  bridge_exec(bridge_script_argv(file, script_args, interp), ..., bridge = "script",
+              label = bridge_label(c(basename(file), script_args)), level = 3L)
+}
+
+# ---- builtin:bridges -----------------------------------------------------------------------------
+
+#' builtin:bridges (04 7.22), first part: the interpreter kind and the built-in interpreters
+#' @noRd
+builtin_bridges = function(gptr) {
+  gptr$register(gptr_spec("kind", "interpreter", validate = interpreter_validate,
+                          fields = c("ext", "programs", "args", "windows_only")))
+  for (spec in bridge_interpreters()) gptr$register(spec)
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("bridges", builtin_bridges))

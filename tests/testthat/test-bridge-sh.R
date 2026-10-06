@@ -250,3 +250,90 @@ test_that("a registered value is redacted before the digest label or cmd is cut"
               paste0("--key=", fake)))
   expect_false(grepl("zqFAKE", log$events[[length(log$events)]]$cmd, fixed = TRUE))
 })
+
+test_that("the interpreter validator normalises extensions and rejects bad fields", {
+  sp = interpreter_validate(list(kind = "interpreter", name = "tcl", ext = ".TCL",
+                                 programs = "tclsh"))
+  expect_identical(sp$ext, "tcl")
+  expect_false(sp$windows_only)
+  expect_identical(sp$args("a.tcl", "x"), c("a.tcl", "x"))
+  bad = function(...) interpreter_validate(list(kind = "interpreter", name = "bad", ...))
+  expect_error(bad(ext = 1, programs = "x"), class = "gptr_error_invalid_spec")
+  expect_error(bad(ext = "x", programs = character()), class = "gptr_error_invalid_spec")
+  expect_error(bad(ext = "x", programs = "x", args = function(p) p),
+               class = "gptr_error_invalid_spec")
+  err = expect_error(bad(ext = "x", programs = "x", windows_only = NA),
+                     class = "gptr_error_invalid_spec")
+  expect_identical(err$field, "windows_only")
+})
+
+test_that("builtin:bridges defines the interpreter kind and the seven built-in interpreters", {
+  expect_true("kind.interpreter" %in% gptr_api()$features)
+  expect_true(all(c("sh", "py", "r", "js", "pl", "rb", "jl") %in% registry_names("interpreter")))
+  expect_identical(registry_get("interpreter", "r")$programs, rscript_path())
+  expect_identical(registry_get("interpreter", "js")$ext, c("js", "mjs", "cjs"))
+  sp = gptr_spec("interpreter", "tcl", ext = "tcl", programs = "tclsh",
+                 args = function(path, args) c(path, args), windows_only = FALSE)
+  off = gptr_register(sp)
+  withr::defer(off())
+  expect_identical(registry_get("interpreter", "tcl")$ext, "tcl")
+  expect_identical(tryCatch(gptr_spec("interpreter", "bad", ext = 1, programs = "x",
+                                      args = function(path, args) path, windows_only = FALSE),
+                            gptr_error_invalid_spec = function(e) e$field), "ext")
+})
+
+test_that("scripts run with the interpreter of their extension, a name or a program", {
+  skip_on_cran()
+  d = withr::local_tempdir()
+  f = file.path(d, "c.R")
+  writeLines("cat('R script', commandArgs(TRUE))", f)
+  x = bridge_script(f, c("x", "y z"))
+  expect_identical(x$stdout, "R script x y z")
+  expect_identical(attr(x, "via"), "argv")
+  expect_identical(bridge_script(f, "a", interpreter = "r")$stdout, "R script a")
+  expect_identical(bridge_script(f, "b", interpreter = c(rscript_path(), "--vanilla"))$stdout,
+                   "R script b")
+  expect_identical(bridge_script(f, list("c"), wd = d, timeout = 30)$stdout, "R script c")
+  g = file.path(d, "rev.R")
+  writeLines("cat(rev(readLines(file('stdin'))))", g)
+  expect_identical(bridge_script(g, input = c("1", "2"))$stdout, "2 1")
+  log = local_bridge_events()
+  bridge_script(f, "q")
+  ev = log$events[[length(log$events)]]
+  expect_identical(ev$bridge, "script")
+  expect_identical(ev$digest, "#> script c.R q: exit 0, 1 line")
+  expect_identical(ev$level, 3L)
+})
+
+test_that("a user interpreter named like the extension overrides the built-in one", {
+  skip_on_cran()
+  d = withr::local_tempdir()
+  f = file.path(d, "u.R")
+  writeLines("cat('ran', commandArgs(TRUE))", f)
+  off = gptr_register(gptr_spec("interpreter", "r", ext = "r", programs = rscript_path(),
+                                args = function(path, args) c("--vanilla", path, "via-user"),
+                                windows_only = FALSE))
+  withr::defer(off())
+  expect_identical(bridge_script(f)$stdout, "ran via-user")
+})
+
+test_that("shell scripts and #! lines run on Unix", {
+  skip_on_cran()
+  skip_on_os("windows")
+  d = withr::local_tempdir()
+  writeLines("echo \"sh script args: $@\"", file.path(d, "a.sh"))
+  expect_identical(bridge_script(file.path(d, "a.sh"), c("x", "y z"))$stdout,
+                   "sh script args: x y z\n")
+  writeLines(c("#!/bin/sh", "echo shebang ok"), file.path(d, "tool"))
+  expect_identical(bridge_script(file.path(d, "tool"))$stdout, "shebang ok\n")
+})
+
+test_that("unknown extensions, missing scripts and unknown options are argument errors", {
+  d = withr::local_tempdir()
+  writeLines("x", file.path(d, "a.unknownext"))
+  expect_error(bridge_script(file.path(d, "a.unknownext")), class = "gptr_error_invalid_argument")
+  expect_error(bridge_script(file.path(d, "missing.R")), class = "gptr_error_invalid_argument")
+  writeLines("1", file.path(d, "b.R"))
+  expect_error(bridge_script(file.path(d, "b.R"), shell = "zsh"),
+               class = "gptr_error_invalid_argument")
+})
