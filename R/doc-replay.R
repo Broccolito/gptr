@@ -13,7 +13,7 @@ doc_consent = function(path, ask = TRUE) {
   key = path_key(path)
   b = the$doc_binding
   if (!is.null(b$path) && identical(path_key(b$path), key)) return(TRUE)
-  rec = tryCatch(setting_get("record", default = "ask"), error = function(e) "ask") %||% "ask"
+  rec = doc_setting("record", "ask")
   if (identical(rec, "off")) return(FALSE)
   if (identical(rec, "auto")) return(TRUE)
   pf = doc_project_get()
@@ -25,7 +25,7 @@ doc_consent = function(path, ask = TRUE) {
   if (!is.null(target) && identical(path_key(target), key)) return(TRUE)
   if (!ask || !gptr_can_prompt()) return(FALSE)
   yes = isTRUE(gptr_confirm(paste0("Record gptr blocks into ", rel, "?")))
-  doc_project_remember(rel, if (yes) "auto" else "off")
+  doc_project_update("record", rel, if (yes) "auto" else "off")
   yes
 }
 
@@ -34,7 +34,7 @@ doc_consent = function(path, ask = TRUE) {
 #' @noRd
 doc_consent_possible = function(path) {
   if (doc_consent(path, ask = FALSE)) return(TRUE)
-  rec = tryCatch(setting_get("record", default = "ask"), error = function(e) "ask") %||% "ask"
+  rec = doc_setting("record", "ask")
   if (identical(rec, "off") || !gptr_can_prompt()) return(FALSE)
   remembered = doc_project_entry(doc_project_get(), "record", doc_rel(path))
   !identical(remembered, "off")
@@ -46,7 +46,7 @@ doc_consent_possible = function(path) {
 #' @noRd
 doc_project_entry = function(pf, key, name) {
   obj = if (is.list(pf)) pf[[key]] else NULL
-  if (!is.list(obj) || is.null(names(obj)) || length(name) != 1L || is.na(name)) return(NULL)
+  if (!is.list(obj) || is.null(names(obj)) || !rlang::is_string(name)) return(NULL)
   obj[[name]]
 }
 
@@ -57,10 +57,7 @@ doc_project_entry = function(pf, key, name) {
 #' @noRd
 doc_remembered_target = function(pf = doc_project_get()) {
   target = doc_project_entry(pf, "transcript", "target")
-  if (!is.character(target) || length(target) != 1L || is.na(target) || !nzchar(target) ||
-        identical(target, "off")) {
-    return(NULL)
-  }
+  if (!rlang::is_string(target) || !nzchar(target) || identical(target, "off")) return(NULL)
   full = tryCatch(doc_abs(target), error = function(e) NULL)
   if (is.null(full) || !doc_target_valid(full)) return(NULL)
   full
@@ -202,13 +199,16 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
     if (identical(mode, "live")) regen() else "replay")
 }
 
-#' Skip the old block of a regenerated call in the running driver: the innermost gptr_source()
-#' frame, when it sources this document, skips the block's top-level expressions; knitr (and
-#' Quarto) skip its agent chunk for the rest of the knit (the scoped label hook)
+#' Regenerate a site's block (`regenerate`, `block_id`) and skip the old block in the running
+#' driver: the innermost gptr_source() frame, when it sources this document, skips the block's
+#' top-level expressions; knitr (and Quarto) skip its agent chunk for the rest of the knit (the
+#' scoped label hook). Returns the site.
 #' @noRd
 doc_skip_old = function(site) {
   id = site$block$id
-  if (is.null(id)) return(invisible(NULL))
+  site$regenerate = TRUE
+  site$block_id = id
+  if (is.null(id)) return(site)
   if (identical(site$driver, "gptr_source")) {
     st = doc_state()
     n = length(st$sources)
@@ -220,24 +220,7 @@ doc_skip_old = function(site) {
   } else if (identical(site$driver, "knitr")) {
     doc_knitr_skip(paste0("gptr-", id))
   }
-  invisible(NULL)
-}
-
-#' Body lines of a block as written in the document (empty when it cannot be read)
-#' @noRd
-doc_block_text = function(site, block_id) {
-  tryCatch({
-    text = doc_read(site$path)$lines
-    if (identical(site$format, "ipynb")) {
-      nb = nb_parse(text)
-      k = match(paste0("gptr-", block_id), nb_cell_ids(nb))
-      if (is.na(k)) character() else nb_cell_lines(nb$cells[[k]])
-    } else {
-      b = doc_find_blocks(text)
-      k = which(b$id == block_id)
-      if (length(k)) doc_block_body(text, b[k[1L], , drop = FALSE]) else character()
-    }
-  }, error = function(e) character())
+  site
 }
 
 #' The answer text of an S2 record, or NULL when it has none: a missing, empty or non-text
@@ -245,14 +228,15 @@ doc_block_text = function(site, block_id) {
 #' @noRd
 doc_s2_answer = function(rec) {
   a = if (is.list(rec)) rec[["answer"]] else NULL
-  if (is.character(a) && length(a) == 1L && !is.na(a) && nzchar(a)) a else NULL
+  if (rlang::is_string(a) && nzchar(a)) a else NULL
 }
 
 #' What a replayed session reconstructs its history from (IC-46; P06's `doc` argument):
 #' list(path, format, template, code, output, text)
 #' @noRd
 doc_replay_doc = function(site, call, block_id, text = NULL) {
-  body = doc_block_text(site, block_id)
+  body = tryCatch(doc_block_get(site$format, doc_read(site$path)$lines, block_id)$body,
+                  error = function(e) NULL) %||% character()
   outs = grepl("^[ \t]*#>", body)
   list(path = site$path, format = site$format,
        template = site$template %||% call$template %||% call$prompt,
@@ -298,16 +282,12 @@ doc_run_block_nested = function(call, site, mode) {
   assign("doc", NULL, envir = call)
   if (identical(mode, "live")) return(route_pass())
   rel = doc_rel(site$path)
-  parent = tryCatch({
-    b = doc_find_blocks(doc_read(site$path)$lines)
-    k = which(b$id == site$in_block)
-    if (length(k)) b$header[[k[1L]]] else list()
-  }, error = function(e) list())
+  parent = tryCatch(doc_block_get("r", doc_read(site$path)$lines, site$in_block)$header,
+                    error = function(e) NULL) %||% list()
   rec = s2_get(s2_key(rel, site$in_block, paste0("n", site$ordinal), parent$prompt %||% "",
                       parent$args %||% ""))
   asked = call$prompt %||% call$template %||% site$template
-  if (!is.null(rec$sent) && is.character(asked) && length(asked) == 1L &&
-        !identical(rec$sent, prompt_hash(asked))) {
+  if (!is.null(rec$sent) && rlang::is_string(asked) && !identical(rec$sent, prompt_hash(asked))) {
     rec = NULL
   }
   if (is.null(rec)) {
@@ -374,7 +354,7 @@ doc_replay_team = function(call, site, mode) {
 doc_console_may_record = function(call) {
   mode = tryCatch(replay_mode(call$args$replay), error = function(e) NA_character_)
   if (!isTRUE(mode %in% c("auto", "live", "record"))) return(FALSE)
-  rec = tryCatch(setting_get("record", default = "ask"), error = function(e) "ask") %||% "ask"
+  rec = doc_setting("record", "ask")
   !identical(rec, "off")
 }
 
@@ -434,34 +414,31 @@ doc_skip_undone = function(site) {
   invisible(NULL)
 }
 
+#' Keep `site` in `call$doc` for recording when the call may record: not in replay mode and write
+#' consent can still be given (IC-45); else NULL
+#' @noRd
+doc_keep = function(call, site, mode) {
+  ok = !is.null(site) && !identical(mode, "replay") && doc_consent_possible(site$path)
+  assign("doc", if (ok) site else NULL, envir = call)
+}
+
 #' The route's run(): replay a fresh block (no write consent needed), skip an undone one,
 #' regenerate a stale one, or pass with `call$doc` set when the call may be recorded (IC-45)
 #' @noRd
 doc_route_run = function(call) {
   site = call$doc
   mode = replay_mode(call$args$replay)
-  keep = function(s) {
-    ok = !is.null(s) && !identical(mode, "replay") && doc_consent_possible(s$path)
-    assign("doc", if (ok) s else NULL, envir = call)
-    route_pass()
-  }
-  if (isTRUE(site$console)) return(keep(site))
   if (!is.null(site$in_block)) return(doc_run_block_nested(call, site, mode))
-  if (is.null(site$block)) return(keep(site))
-  decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
+  decision = if (is.null(site$block)) "record" else
+    doc_decide(site, site$prompt_hash, site$args_hash, mode)
   if (identical(decision, "replay")) return(doc_replay_call(call, site, mode))
   if (identical(decision, "skip")) {
     doc_skip_undone(site)
     assign("doc", NULL, envir = call)
     return(invisible(call$session))
   }
-  if (identical(decision, "regenerate")) {
-    site$regenerate = TRUE
-    site$block_id = site$block$id
-    doc_skip_old(site)
-    return(keep(site))
-  }
-  assign("doc", NULL, envir = call)
+  if (identical(decision, "regenerate")) site = doc_skip_old(site)
+  doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
   route_pass()
 }
 
@@ -473,20 +450,16 @@ doc_route_run = function(call) {
 #' as list(path, format), or NULL
 #' @noRd
 doc_site_service = function(session) {
-  if (!is.null(session)) {
-    d = session_data(session)
-    if (!is.null(d$doc$path)) return(list(path = d$doc$path, format = d$doc$format))
-    run = session_live(session)$run
-    site = if (is.null(run)) NULL else run$opts$doc
-    if (!is.null(site$path)) return(list(path = site$path, format = site$format))
-  } else {
-    run = run_current()
-    site = if (is.null(run)) NULL else run$opts$doc
-    if (!is.null(site$path)) return(list(path = site$path, format = site$format))
+  d = if (is.null(session)) NULL else session_data(session)$doc
+  if (is.null(d$path)) {
+    run = if (is.null(session)) run_current() else session_live(session)$run
+    d = run$opts$doc
   }
-  b = the$doc_binding
-  if (is.null(b$path) || !dir.exists(dirname(b$path))) return(NULL)
-  list(path = b$path, format = b$format)
+  if (is.null(d$path)) {
+    d = the$doc_binding
+    if (is.null(d$path) || !dir.exists(dirname(d$path))) return(NULL)
+  }
+  list(path = d$path, format = d$format)
 }
 
 #' Ids of the blocks whose lines an edit's old text touches (`oldText`, or `old_text` as P10's
@@ -499,7 +472,7 @@ doc_edit_blocks = function(lines, blocks, edits) {
   hit = character()
   for (e in edits) {
     old = if (is.list(e)) e[["oldText"]] %||% e[["old_text"]] else NULL
-    if (!is.character(old) || length(old) != 1L || is.na(old) || !nzchar(old)) next
+    if (!rlang::is_string(old) || !nzchar(old)) next
     pos = regexpr(as_utf8(old), joined, fixed = TRUE)
     if (pos < 0L) next
     first = findInterval(as.integer(pos), starts)
@@ -541,14 +514,6 @@ doc_hand_edited = function(lines, blocks = doc_find_blocks(lines)) {
   blocks$id[hand]
 }
 
-#' The body of a block by id (NULL when the text holds no such block)
-#' @noRd
-doc_body_of = function(lines, id) {
-  b = doc_find_blocks(lines)
-  k = which(b$id == id)
-  if (length(k)) doc_block_body(lines, b[k[1L], , drop = FALSE]) else NULL
-}
-
 #' The error result of an edit that would change a hand-edited block
 #' @noRd
 doc_edit_refused = function(path, id) {
@@ -585,7 +550,7 @@ doc_edit_queued = function(path, kind) {
 doc_edit_service = function(path, edits, session) {
   st = doc_state()
   if (isTRUE(st$in_edit)) return(NULL)
-  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) return(NULL)
+  if (!rlang::is_string(path) || !nzchar(path)) return(NULL)
   full = path_norm(path)
   site = doc_site_service(session)
   if (is.null(site) || !identical(path_key(site$path), path_key(full)) || !file.exists(full)) {
@@ -611,7 +576,7 @@ doc_edit_service = function(path, edits, session) {
   if (isTRUE(res$is_error)) return(res)
   after = doc_read(full)
   moved = mine[vapply(mine, function(id) {
-    !identical(doc_body_of(after$lines, id), doc_body_of(before$lines, id))
+    !identical(doc_block_get("r", after$lines, id)$body, doc_block_get("r", before$lines, id)$body)
   }, NA)]
   if (length(moved)) {
     doc_write(after, before$lines)
@@ -697,26 +662,16 @@ doc_replay_service = function(call) {
   if (!top(site)) return(NULL)
   site = doc_touch(call, site, "doc.replay", top)
   mode = replay_mode(call$args$replay)
-  if (is.null(site$block)) {
-    ok = !identical(mode, "replay") && doc_consent_possible(site$path)
-    assign("doc", if (ok) site else NULL, envir = call)
-    return(NULL)
-  }
-  decision = doc_decide(site, site$prompt_hash, site$args_hash, mode)
+  decision = if (is.null(site$block)) "record" else
+    doc_decide(site, site$prompt_hash, site$args_hash, mode)
   if (identical(decision, "replay")) return(doc_replay_team(call, site, mode))
   if (identical(decision, "skip")) {
     team = doc_replay_team(call, site, mode)
     doc_skip_undone(site)
     return(team)
   }
-  if (identical(decision, "regenerate")) {
-    site$regenerate = TRUE
-    site$block_id = site$block$id
-    doc_skip_old(site)
-    assign("doc", if (doc_consent_possible(site$path)) site else NULL, envir = call)
-    return(NULL)
-  }
-  assign("doc", NULL, envir = call)
+  if (identical(decision, "regenerate")) site = doc_skip_old(site)
+  doc_keep(call, if (decision %in% c("record", "regenerate")) site, mode)
   NULL
 }
 
@@ -780,7 +735,7 @@ doc_on_session_tree = function(event, ctx) {
   }, ents)
   field = function(e, name) {
     v = e$data[[name]]
-    if (is.character(v) && length(v) == 1L && !is.na(v)) v else ""
+    if (rlang::is_string(v)) v else ""
   }
   pick = function(ids) {
     Filter(function(e) e$id %in% ids && !identical(field(e, "action"), "undone"), recs)
@@ -836,8 +791,7 @@ doc_on_console_direct = function(event, ctx) {
     c("", "# direct R (no model)", code,
       doc_output_lines(as.character(data$output %||% character())))
   } else {
-    named = is.character(st) && length(st) == 1L && !is.na(st) &&
-      grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
+    named = rlang::is_string(st) && grepl("^[a-z_]{1,20}\\z", st, perl = TRUE)
     c("", paste0("# direct R (no model; ", if (named) st else "failed", ")"), paste0("#~ ", code))
   }
   doc_console_append(lines, ctx$session)
@@ -968,21 +922,26 @@ doc_bind_format = function(full, format) {
 #'              "x = 1 + 1", "# <<< gptr:7f3a21"), f)
 #' gptr_blocks(f)
 gptr_blocks = function(file) {
-  check_string(file, "file")
-  path = path_norm(file)
+  path = doc_file_arg(file, c("r", "rmd", "qmd", "ipynb"),
+                      "an existing .R, .Rmd, .qmd or .ipynb file")
   fmt = doc_format_of(path)
-  if (is.null(fmt)) {
-    gptr_abort("gptr_blocks() reads .R, .Rmd, .qmd or .ipynb documents.", "invalid_argument",
-               arg = "file", expected = "a .R, .Rmd, .qmd or .ipynb file")
-  }
-  if (!file.exists(path) || dir.exists(path)) {
-    gptr_abort(paste0("Document not found: ", path), "invalid_argument", arg = "file",
-               expected = "an existing .R, .Rmd, .qmd or .ipynb file")
-  }
   doc_recover(path)
   text = doc_read(path)$lines
   rows = if (identical(fmt, "ipynb")) doc_blocks_ipynb(text) else doc_blocks_text(text, fmt)
   new_listing(doc_blocks_frame(rows), "gptr_blocks")
+}
+
+#' The normalised path of `file` when it is an existing document of one of `formats`; anything
+#' else is `invalid_argument` (gptr_blocks(), gptr_source())
+#' @noRd
+doc_file_arg = function(file, formats, expected) {
+  check_string(file, "file")
+  path = path_norm(file)
+  if (!isTRUE(doc_format_of(path) %in% formats) || !file.exists(path) || dir.exists(path)) {
+    gptr_abort(paste0("Not ", expected, ": ", path), "invalid_argument", arg = "file",
+               expected = expected)
+  }
+  path
 }
 
 #' One row of a gptr_blocks listing; header fields are read by their exact key and kept only
@@ -1042,7 +1001,7 @@ doc_blocks_text = function(text, fmt) {
 
 #' Rows of gptr_blocks() for a notebook: the top-level calls of a calling cell own the run of
 #' agent cells right after it one to one, as the ipynb format's locator assigns them
-#' (doc_rmd_owner()); an agent cell no call owns is stale
+#' (doc_owner()); an agent cell no call owns is stale
 #' @noRd
 doc_blocks_ipynb = function(text) {
   nb = nb_parse(text)
@@ -1053,25 +1012,18 @@ doc_blocks_ipynb = function(text) {
   prompt = rep(NA_character_, length(cells))
   ph = rep("", length(cells))
   for (i in seq_along(cells)) {
-    if (agent[i] || !identical(cells[[i]][["cell_type"]], "code")) next
-    run = integer()
-    k = i + 1L
-    while (k <= length(cells) && agent[k]) {
-      run = c(run, k)
-      k = k + 1L
-    }
-    if (!length(run)) next
+    run = nb_agent_run(agent, i)
+    if (agent[i] || !identical(cells[[i]][["cell_type"]], "code") || !length(run)) next
     calls = doc_calls(nb_cell_lines(cells[[i]]))
-    calls$chunk = rep(i, nrow(calls))
-    heads = data.frame(cell = run)
-    heads$header = lapply(cells[run], nb_cell_meta)
-    for (j in which(is.na(calls$block) & !calls$nested)) {
-      own = doc_rmd_owner(heads, calls, calls[j, , drop = FALSE], calls$ph[j])
+    top = calls[is.na(calls$block) & !calls$nested, , drop = FALSE]
+    metas = lapply(cells[run], nb_cell_meta)
+    for (j in seq_len(nrow(top))) {
+      own = doc_owner(metas, top, top[j, , drop = FALSE], top$ph[j])
       if (is.null(own) || owned[run[own$index]]) next
       at = run[own$index]
       owned[at] = TRUE
-      prompt[at] = calls$prompt[j]
-      ph[at] = calls$ph[j]
+      prompt[at] = top$prompt[j]
+      ph[at] = top$ph[j]
     }
   }
   lapply(which(agent), function(i) {
@@ -1182,10 +1134,11 @@ doc_cache_remove = function(kind, prune = TRUE) {
 #' @noRd
 doc_s2_live = function(file, memo = new.env(parent = emptyenv())) {
   rec = tryCatch(json_decode(read_utf8(file)$text), error = function(e) NULL)
-  one = function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
   doc = if (is.list(rec)) rec[["doc"]]
   block = if (is.list(rec)) rec[["block"]]
-  if (!one(doc) || !one(block)) return(FALSE)
+  if (!rlang::is_string(doc) || !nzchar(doc) || !rlang::is_string(block) || !nzchar(block)) {
+    return(FALSE)
+  }
   path = tryCatch(doc_abs(doc), error = function(e) NULL)
   if (is.null(path) || dir.exists(path)) return(FALSE)
   key = path_key(path)
@@ -1260,19 +1213,10 @@ doc_catalog_prune = function() {
 gptr_source = function(file, replay = getOption("gptr.replay", "auto"), envir = parent.frame(),
                        echo = FALSE) {
   scoped = !missing(replay)
-  check_string(file, "file")
+  path = doc_file_arg(file, "r", "an existing .R file (knit .Rmd and .qmd documents)")
   replay = check_choice(replay, c("auto", "replay", "live", "record"), "replay")
   check_env(envir, "envir")
   check_flag(echo, "echo")
-  path = path_norm(file)
-  if (!identical(doc_format_of(path), "r")) {
-    gptr_abort("gptr_source() runs .R documents; knit .Rmd and .qmd documents instead.",
-               "invalid_argument", arg = "file", expected = "an .R file")
-  }
-  if (!file.exists(path) || dir.exists(path)) {
-    gptr_abort(paste0("Document not found: ", path), "invalid_argument", arg = "file",
-               expected = "an existing .R file")
-  }
   doc_recover(path)
   # A file that cannot be read, or is not valid UTF-8, is a bad `file` argument, not a failed
   # document write (contract 6.4 lists no doc_write here)

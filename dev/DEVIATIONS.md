@@ -673,15 +673,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   of e8b2d19's 2,216 D-061 level cases change (level changes reported to the maintainer 2026-10-05).
   Evidence: progress/P11.md Task 2b.
 
-## D-062 - P15 block headers: line breaks quoted, quoted values decoded without the R parser, keys matched exactly (2026-10-04)
+## D-062 - P15 block headers: line breaks quoted, quoted values decoded on their bytes, keys matched exactly (2026-10-04)
 - Rule: `doc_format_kv()`, `doc_parse_kv()`, `doc_block_status()` (`R/doc-blocks.R`); the contract 11.5 marker grammar and the interfaces are unchanged:
   1. A value is quoted when it holds any of `[ \t\r\n"=\\]`, so a CR or LF in `value=` or `children=` never splits the one-line `BLOCK_OPEN` marker (11.5 only requires quoting values with spaces).
-  2. Quoted values are decoded by `doc_str_unquote()`, never `str2lang()` (which writes `<U+00E1>` under `LC_ALL=C`; IC-62): exactly the escapes `doc_str_literal()` writes (backslash, quote, `\n`, `\r`, `\t`); any other escaped character stands for itself; text that is not one whole quoted literal is kept as written.
+  2. Quoted values are decoded by `doc_unquote()`, R's parser on the literal's bytes (`str2lang(os_bytes(.))`, exact under `LC_ALL=C`; IC-62); `doc_str_literal()` writes JSON escapes, which R reads back (D-158); text that is not one string literal is kept as written.
   3. `doc_block_status()` reads header keys with `[[` (`shaz=` is not `sha=`, `statusx=` not `status=`).
   IC-74: a local model tag (`ollama/qwen3:8b`) holds no quote-class character and is written unquoted in `model=` (07 section 6, P15 row); no code.
 - Contract-visible: none.
-- Tests: test-doc-blocks.R: 15 expectations (2 for item 1, 1 for the IC-74 tag, "quoted header values are decoded without the R
-  parser, also in a C locale", 2 for item 3); final PASS 59 (plan 44) in UTF-8 and C locales. Evidence: progress/P15.md Task 1.
+- Tests: test-doc-blocks.R: 15 expectations (2 for item 1, 1 for the IC-74 tag, "quoted header values are decoded on their bytes,
+  also in a C locale", 2 for item 3); final PASS 59 (plan 44) in UTF-8 and C locales. Evidence: progress/P15.md Task 1.
 
 ## D-063 - CI hosted fixes: as_utf8() keeps non-UTF-8 bytes in a UTF-8 locale; six-stream wall on the mock's clock (2026-10-04)
 - Rule: fixes beyond test portability for hosted runs 37213342336 (`b40b4d1`) and 37210924368 (`51ba767`), where every R CMD check job failed (P01, P04):
@@ -772,13 +772,12 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none.
 - Tests: test-doc-formats.R: "adaptations (D-070)", 10 blocks (66 expectations), incl. "knitr reports the labels doc_rmd_chunks() gives" (skipped
   without knitr); final PASS 105, also under `LC_ALL=C LANG=C`. Evidence: progress/P15.md Task 5.
-- Open: item 0; simplicity-plan P15-S F15 (`#|` option lines only) narrows item 1.
+- Open: item 0.
 
 ## D-071 - P15 notebook format: Python number repr, big integers kept, nbformat splitting, cells found by metadata (2026-10-04)
 - Rule: `R/doc-formats.R`; listed functions keep names and arguments; `nb_json_num()` is vectorised; `nb_code_cell()` gains `cell_id = TRUE`:
   0. Tests split fixtures with Task 5's test helper, not `doc_read()`/`doc_write()` (as D-070 item 0).
-  1. Doubles are written as Python's shortest round-trip repr, also just below powers of two (`nb_json_shortest()`, `nb_json_next_up()`, `nb_json_back()`); a list's doubles are formatted together, one jsonlite parse per 2,048 numbers; equal to Python 3.14 `json.dumps()` on 39,243 doubles.
-  2. When the text holds a run of 10 or more digits after `[`, `,` or `:`, number tokens outside strings are matched to the parsed numbers in order and integers beyond 32 bits keep their token (attribute `nb_json`, `nb_keep_ints()`), written verbatim; nothing is marked when the counts disagree (contract 11.5: only `source` and `metadata.gptr` change).
+  1-2. Doubles keep the text they were read with (D-158): number tokens outside strings are matched to the parsed numbers in order and each double keeps its token (attribute `nb_json`, `nb_keep_numbers()`), written verbatim, integers as read; nothing is marked when the counts disagree, and an unmarked double is refused (contract 11.5: only `source` and `metadata.gptr` change).
   3. Text that is not an nbformat 4 notebook (unparseable, a JSON scalar, `nbformat` read exactly) signals `gptr_error_doc_write` with `reason = "notebook"`.
   4. `nb_source_split()` follows nbformat's `split_lines()` (Python `splitlines(True)`: also `\r`, `\v`, `\f`, `\x1c`-`\x1e`, U+0085, U+2028, U+2029); `nb_cell_lines()` keeps a final empty line.
   5. A calling cell's top-level calls share its agent-cell run, assigned by `doc_rmd_owner()` (D-070 item 3); a call nested in a function, loop or brace (`top_level = FALSE`) or inside a marker block (`in_block`) owns no cell, and upsert refuses it (`reason = "not found"`).
@@ -790,7 +789,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-doc-formats.R: "Task 6 adaptations (D-071)", 9 blocks (63 expectations); the fixture and written notebooks equal Python's
   `json.dumps(json.loads(x), indent=1, sort_keys=True, ensure_ascii=False, separators=(",", ": ")) + "\n"`; green under
   `LC_ALL=C LANG=C`; final PASS 228. Evidence: progress/P15.md Task 6.
-- Open: item 0; simplicity-plan P15-S F1 (notebook numbers kept as written, `nb_keep_numbers()`) affects items 1-2.
+- Open: item 0.
 
 ## D-072 - P17 shared resource layer: array resource paths, unparseable rDepends version is missing, L0 reuse (2026-10-04)
 - Rule: `R/ext-plugins.R`; signatures and return shapes are unchanged:
@@ -1241,7 +1240,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   1. A block a `document_write` hook patched carries the sha of its body as written (11.5): `doc_patch_sha()` recomputes it in a notebook cell's `metadata.gptr` or in the header of the one marker block with that id (else nothing changes); `doc_header_set_sha()` changes only the value of each `sha=` pair `doc_parse_kv()` reads, keeping the hook's text (10.4); a header without `sha=` gets one after its last `model`/`date`/`prompt` pair, else at the end; the `gptr.doc_block` entry and the result carry the new sha.
   2. A block the transcript fallback wrote after a format error is recorded under the transcript (4.6 `gptr.doc_block` `doc`; 10.2 row 18): `doc_upsert_fallback()` returns the transcript's site (`res$site`, removed before return) and `doc_after_write()` records the entry, the S2 answers and the `gptr_source()` log there.
   3. A child without an answer (NA text, D-068 item 8) is not cached in S2 (IC-47); replaying it is a miss (`auto` runs it, `replay` errors `not_recorded`).
-  4. `doc_upsert()` writes `file` and `transcript` sites and refuses any other backend with `gptr_error_doc_write` (`reason = "backend"`), which the handler turns into a diagnostic and the transcript fallback; writers not yet written are not named (`object_usage_linter`; no suppressions or stubs); Task 10 added `pending`/`deferred` (`doc_pending_add()`, D-109) and Task 11 `rstudio`/`positron`/`vscode` (`doc_ide_upsert()`, D-117) before that refusal.
+  4. `doc_upsert()` writes `file` and `transcript` sites, queues `pending`/`deferred` ones (`doc_pending_add()`, D-109) and sends any other backend to the editor writer (`doc_ide_upsert()`, D-117; D-158).
 - Also (IC-74, 07 section 6): consent is checked first; S2 keeps the model tag of the block and each child (`ollama/qwen3:8b`) and answers redacted by `s2_put()`.
 - Contract-visible: none (`doc_upsert(site, block_lines, block_id = NULL)` -> `list(action, block_id, lines, backend)` unchanged).
 - Tests: test-doc-blocks.R: 6 tests in the "Task 9 adaptations" block (+43 expectations over the plan, on top of D-062 and D-068; final PASS 340). Evidence: progress/P15.md Task 9.
@@ -1260,8 +1259,8 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-gptr-config.R: 9 "Task 7 adaptations" blocks ("a project never relaxes the protected local-only control by gptr_config()" to "a choice setting takes one of its values, never the whole set"). Evidence: progress/P08.md Task 7.
 
 ## D-109 - P15 deferred and pending writes: pid reuse, run locks, live scripts, notebooks, private sidecars (2026-10-04)
-- Rule: Task 10 (`R/doc-io.R`) keeps the plan's produced interfaces; new `@noRd` helpers `doc_sidecar_mine()`, `doc_pending_reconcile()`, `doc_script_running()` and `doc_rscript_running()` (`R/doc-locate.R`, shared with `doc_site_rscript()`); `doc_upsert()` dispatches `deferred` and `pending` sites to `doc_pending_add()` (D-107 item 4 met):
-  1. A sidecar of an earlier process with this pid is a dead one (IC-51): `doc_sidecar_mine()` compares pid and creation time (pid alone when either lacks one); other pids use P04's `pid_alive(pid, create_time)`.
+- Rule: Task 10 (`R/doc-io.R`) keeps the plan's produced interfaces; new `@noRd` helpers `doc_pending_reconcile()`, `doc_script_running()` and `doc_rscript_running()` (`R/doc-locate.R`, shared with `doc_site_rscript()`); `doc_upsert()` dispatches `deferred` and `pending` sites to `doc_pending_add()` (D-107 item 4 met):
+  1. A sidecar of an earlier process with this pid is a dead one (IC-51): P04's `pid_alive(pid, create_time)` decides for every pid (pid alone when the creation time is unknown).
   2. A deferred run's lock is held together with its exit finalizer: `doc_finalizer_ensure()` runs as soon as the lock is held.
   3. The script this process runs under Rscript is never written before exit (IC-51; report 14 section 2.1.2): when `doc_script_running(path)` (run lock held or `Rscript --file=` names it), `doc_recover()` adopts a dead run's upserts into this run's deferred writes and `doc_sync()` adopts, gives a notice and returns 0.
   4. A pending record forgets blocks another R process synced (IC-50): `doc_pending_reconcile()` keeps only the upserts this process's sidecar still holds (none when it is gone) before a pending block is queued or synced; a sidecar another process wrote meanwhile leaves the record as it was.
@@ -1927,3 +1926,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   "live_run_fixture() runs every turn on the fixture's attached objects and preset",
   "live_run_fixture() caps the cost of the whole fixture, not of each turn". Evidence:
   progress/P24.md Task P24-4.
+
+## D-158 - P15 documents: notebook numbers as read, one literal and owner rule (2026-10-05)
+- Rule: a notebook's doubles keep the text they were read with (`nb_keep_numbers()`), and a double
+  without it is refused (`reason = "notebook"`); gptr writes no float of its own, so 04 section 11.5's
+  Python repr holds for notebooks Jupyter wrote, and numbers of other writers are no longer rewritten
+  (D-071 items 1-2 edited).
+- Rule: one literal encoder (JSON escapes, also `\b`, `\f`, `\u00XX`) for headers, code and notebooks,
+  decoded by R's parser on the literal's bytes (D-062 item 2 edited).
+- Rule: the `r` format assigns a statement's blocks one to one like rmd/qmd/ipynb (`doc_owner()`, 11.5),
+  so two calls never own one block; an unnamed backend goes to the editor writer (D-107 item 4 edited).
+- Contract-visible: notebook numbers from non-Python writers are kept; 04 section 11.5 not amended.
+- Tests: test-doc-formats.R "notebook numbers keep their text and strings are written as json.dumps()"
+  (Python repr tests out); test-doc-blocks.R "fax" backend test out.
+  Evidence: progress/simplicity.md P15-S.

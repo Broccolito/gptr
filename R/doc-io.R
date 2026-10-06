@@ -155,39 +155,21 @@ doc_write = function(doc, lines, check = TRUE) {
   invisible(doc)
 }
 
-#' Creation time of this R process in seconds since the epoch (pid-reuse guard, IC-71)
-#' @noRd
-doc_create_time = function() {
-  tryCatch(as.numeric(ps::ps_create_time(ps::ps_handle())), error = function(e) NA_real_)
-}
-
-#' "<pid> <process creation time>" of this process (IC-71)
-#' @noRd
-doc_lock_stamp = function() {
-  paste(Sys.getpid(), format(doc_create_time(), digits = 15))
-}
-
-#' Is a lock directory stale: its pid is dead (pid + creation time, P04's pid_alive()), or it
-#' has had no pid file for 30 s (contract 11.1, IC-71). A lock directory or pid file that
-#' disappears while it is examined belongs to an owner releasing the lock: not stale, the caller
-#' retries (breaking it then could remove a lock another process has just taken; D-091 item 2).
+#' Is a lock directory stale: its pid is dead or reused (P04's pid_alive()), or it has had no pid
+#' file for 30 s (contract 11.1, IC-71). A lock that disappears or whose pid file cannot be read
+#' while it is examined belongs to an owner taking or releasing it: not stale, the caller retries
+#' (D-091 item 2). A run lock is held until exit (IC-51), so a live holder's lock never ages out.
 #' @noRd
 doc_lock_stale = function(dir) {
-  if (!dir.exists(dir)) return(FALSE)
   pf = file.path(dir, "pid")
   if (!file.exists(pf)) {
-    age = as.numeric(difftime(Sys.time(), file.info(dir, extra_cols = FALSE)$mtime,
-                              units = "secs"))
+    age = as.numeric(Sys.time()) - as.numeric(file.info(dir, extra_cols = FALSE)$mtime)
     return(!is.na(age) && age > 30)
   }
   txt = tryCatch(read_utf8(pf)$text, error = function(e) NULL)
   if (is.null(txt)) return(FALSE)
-  parts = strsplit(trimws(txt), " ", fixed = TRUE)[[1L]]
-  pid = suppressWarnings(as.integer(parts[1L]))
-  ct = suppressWarnings(as.numeric(parts[2L]))
-  if (is.na(pid)) return(TRUE)
-  !isTRUE(tryCatch(pid_alive(pid, create_time = if (is.na(ct)) NULL else ct),
-                   error = function(e) FALSE))
+  stamp = suppressWarnings(as.numeric(strsplit(trimws(txt), " ", fixed = TRUE)[[1L]]))
+  !pid_alive(stamp[1L], stamp[2L])
 }
 
 #' Take a mkdir lock; NULL when another live process holds it after `tries` x 100 ms. A lock
@@ -199,7 +181,8 @@ doc_lock_acquire = function(dir, tries = 10L) {
     if (dir.create(dir, showWarnings = FALSE)) {
       stamped = FALSE
       on.exit(if (!stamped) unlink(dir, recursive = TRUE, force = TRUE), add = TRUE)
-      write_atomic(file.path(dir, "pid"), doc_lock_stamp())
+      write_atomic(file.path(dir, "pid"),
+                   paste(Sys.getpid(), format(proc_create_time(Sys.getpid()), digits = 15)))
       stamped = TRUE
       return(dir)
     }
@@ -234,6 +217,30 @@ doc_lock = function(path) {
 doc_unlock = function(lock) {
   if (!is.null(lock) && isTRUE(lock$own)) unlink(lock$dir, recursive = TRUE, force = TRUE)
   invisible(NULL)
+}
+
+#' Rewrite a document under its lock (IC-51): `edit(doc)` gives list(lines, value), and `lines`
+#' (NULL: nothing to write) are written through the md5 check; a conflict reads and edits again,
+#' three times. Returns `value`, NULL when another live process holds the lock, FALSE after three
+#' conflicts.
+#' @noRd
+doc_rewrite = function(path, edit) {
+  lock = doc_lock(path)
+  if (is.null(lock)) return(NULL)
+  on.exit(doc_unlock(lock), add = TRUE)
+  for (attempt in 1:3) {
+    doc = doc_read_or_new(path)
+    r = edit(doc)
+    if (is.null(r$lines) || identical(r$lines, doc$lines)) return(r$value)
+    ok = tryCatch({
+      doc_write(doc, r$lines)
+      TRUE
+    }, gptr_error_doc_write = function(e) {
+      if (identical(e$reason, "conflict")) FALSE else stop(e)
+    })
+    if (ok) return(r$value)
+  }
+  FALSE
 }
 
 #' Hold a document's lock until this process exits (deferred Rscript writes, IC-51): FALSE when
@@ -289,12 +296,6 @@ doc_project_update = function(key, name, value) {
   cur[[name]] = value
   settings_write("user_project", stats::setNames(list(cur), key))
   invisible(value)
-}
-
-#' Remember a per-document record answer ("auto" or "off") in the user-level project file
-#' @noRd
-doc_project_remember = function(rel, answer) {
-  doc_project_update("record", rel, answer)
 }
 
 #' Remember the console transcript target ("off" or a project-relative path)
@@ -373,11 +374,9 @@ doc_sidecar_upsert_ok = function(u, key, fmt) {
   if (!is.list(u) || !is.list(u$site)) return(FALSE)
   id = u$block_id
   sp = u$site$path
-  is.character(id) && length(id) == 1L && !is.na(id) &&
-    grepl("^[0-9a-z]{6,16}\\z", id, perl = TRUE) && is.character(u$lines) &&
-    !anyNA(u$lines) && identical(u$site$format, fmt) &&
-    (is.null(sp) || (is.character(sp) && length(sp) == 1L && !is.na(sp) &&
-                       identical(path_key(sp), key)))
+  rlang::is_string(id) && grepl("^[0-9a-z]{6,16}\\z", id, perl = TRUE) &&
+    is.character(u$lines) && !anyNA(u$lines) && identical(u$site$format, fmt) &&
+    (is.null(sp) || (rlang::is_string(sp) && identical(path_key(sp), key)))
 }
 
 #' Is `rec` a sidecar record for the document `path`? Its `doc` is that document, its kind is
@@ -389,7 +388,7 @@ doc_sidecar_upsert_ok = function(u, key, fmt) {
 doc_sidecar_valid = function(rec, path) {
   if (!is.list(rec) || !is.list(rec$upserts)) return(FALSE)
   doc = rec$doc
-  if (!is.character(doc) || length(doc) != 1L || is.na(doc)) return(FALSE)
+  if (!rlang::is_string(doc)) return(FALSE)
   key = path_key(path)
   fmt = doc_format_of(path)
   identical(path_key(doc), key) && length(rec$kind) == 1L &&
@@ -480,33 +479,12 @@ doc_upserts_drop_call = function(ups, fmt, text, site) {
   ups[!cand]
 }
 
-#' Was a sidecar written by this process? Its pid and its process creation time are this
-#' process's (an earlier process that had the same pid, as in containers, is another process;
-#' without a creation time on either side the pid decides)
-#' @noRd
-doc_sidecar_mine = function(rec) {
-  if (!identical(suppressWarnings(as.integer(rec$pid)), Sys.getpid())) return(FALSE)
-  ct = suppressWarnings(as.numeric(rec$create_time))
-  me = doc_create_time()
-  length(ct) != 1L || is.na(ct) || is.na(me) || abs(ct - me) < 0.01
-}
-
-#' Does a sidecar belong to this process or to another live one (pid and creation time, P04's
-#' pid_alive())?
-#' @noRd
-doc_sidecar_live = function(rec) {
-  if (doc_sidecar_mine(rec)) return(TRUE)
-  pid = suppressWarnings(as.integer(rec$pid))
-  if (length(pid) != 1L || is.na(pid) || identical(pid, Sys.getpid())) return(FALSE)
-  isTRUE(tryCatch(pid_alive(pid, create_time = rec$create_time), error = function(e) FALSE))
-}
-
 #' A new pending record for a document
 #' @noRd
 doc_pending_new = function(path, kind, session_id = NULL) {
   list(doc = path, base_md5 = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_,
        upserts = list(), session = session_id, pid = Sys.getpid(),
-       create_time = doc_create_time(), time = Sys.time(), kind = kind)
+       create_time = proc_create_time(Sys.getpid()), time = Sys.time(), kind = kind)
 }
 
 #' Register the exit finalizer that applies deferred writes (report 14 section 2.1.2: it runs at
@@ -530,7 +508,9 @@ doc_finalizer_ensure = function() {
 doc_pending_reconcile = function(rec) {
   disk = doc_sidecar_read(rec$doc)
   if (is.null(disk) && file.exists(doc_sidecar_path(rec$doc))) return(rec)
-  if (!is.null(disk) && !doc_sidecar_mine(disk)) return(rec)
+  mine = identical(suppressWarnings(as.integer(disk$pid)), Sys.getpid()) &&
+    pid_alive(disk$pid, disk$create_time)
+  if (!is.null(disk) && !mine) return(rec)
   left = if (is.null(disk)) character() else vapply(disk$upserts, function(u) u$block_id, "")
   rec$upserts = Filter(function(u) u$block_id %in% left, rec$upserts)
   rec
@@ -563,7 +543,7 @@ doc_pending_open = function(path, kind, session = NULL) {
     sid = if (is.null(session)) NULL else session_data(session)$id
     rec = doc_pending_new(path, kind, sid)
     old = doc_sidecar_read(path)
-    if (!is.null(old) && identical(old$kind, kind) && !doc_sidecar_live(old)) {
+    if (!is.null(old) && identical(old$kind, kind) && !pid_alive(old$pid, old$create_time)) {
       rec$upserts = doc_upserts_adopt(list(), old$upserts)
     }
   }
@@ -658,12 +638,12 @@ doc_pending_inert = function(path, fmt, ids, inert, kind, session = NULL) {
   TRUE
 }
 
-#' Apply queued upserts to the document under its lock, through the md5 check and re-locate
-#' path (three attempts): a user-edited block or a call that cannot be found is a conflict and
-#' is never overwritten; an upsert whose call already owns a fresh block is superseded (not
-#' written), and so is a rewind's mark (`mark = TRUE`, doc_pending_inert()) whose block is no
-#' longer in the document. Returns list(applied, superseded, conflicts) of block ids, `applied`
-#' being the blocks written, or NULL when another live process holds the lock.
+#' Apply queued upserts to the document through doc_rewrite() (lock, md5 check, re-locate): a
+#' user-edited block or a call that cannot be found is a conflict and is never overwritten; an
+#' upsert whose call already owns a fresh block is superseded (not written), and so is a rewind's
+#' mark (`mark = TRUE`, doc_pending_inert()) whose block is no longer in the document. Returns
+#' list(applied, superseded, conflicts) of block ids, `applied` being the blocks written, or NULL
+#' when another live process holds the lock.
 #' @noRd
 doc_apply_upserts = function(rec) {
   path = rec$doc
@@ -674,52 +654,32 @@ doc_apply_upserts = function(rec) {
   fname = ups[[1L]]$site$format %||% doc_format_of(path)
   fmt = doc_format_get(fname)
   if (is.null(fmt)) return(list(applied = none, superseded = none, conflicts = ids))
-  lock = doc_lock(path)
-  if (is.null(lock)) return(NULL)
-  on.exit(doc_unlock(lock), add = TRUE)
-  for (attempt in 1:3) {
-    doc = doc_read_or_new(path)
+  res = doc_rewrite(path, function(doc) {
     text = doc$lines
-    applied = character()
-    superseded = character()
-    conflicts = character()
+    out = list(applied = none, superseded = none, conflicts = none)
     for (u in ups) {
       status = doc_existing_status(fname, text, u$block_id)
       if (identical(status, "user-edited")) {
-        conflicts = c(conflicts, u$block_id)
+        out$conflicts = c(out$conflicts, u$block_id)
         next
       }
-      if (is.na(status) && isTRUE(u$mark)) {
-        superseded = c(superseded, u$block_id)
+      if (is.na(status) && (isTRUE(u$mark) || identical(
+        tryCatch(fmt$locate(text, u$site), error = function(e) NULL)$owned$status, "fresh"))) {
+        out$superseded = c(out$superseded, u$block_id)
         next
-      }
-      if (is.na(status)) {
-        loc = tryCatch(fmt$locate(text, u$site), error = function(e) NULL)
-        if (!is.null(loc$owned) && identical(loc$owned$status, "fresh")) {
-          superseded = c(superseded, u$block_id)
-          next
-        }
       }
       new = tryCatch(fmt$upsert(text, u$site, u$lines, u$block_id),
                      gptr_error_doc_write = function(e) NULL)
       if (is.null(new)) {
-        conflicts = c(conflicts, u$block_id)
+        out$conflicts = c(out$conflicts, u$block_id)
       } else {
         text = new
-        applied = c(applied, u$block_id)
+        out$applied = c(out$applied, u$block_id)
       }
     }
-    res = list(applied = applied, superseded = superseded, conflicts = conflicts)
-    if (identical(text, doc$lines)) return(res)
-    ok = tryCatch({
-      doc_write(doc, text)
-      TRUE
-    }, gptr_error_doc_write = function(e) {
-      if (identical(e$reason, "conflict")) FALSE else stop(e)
-    })
-    if (ok) return(res)
-  }
-  list(applied = none, superseded = none, conflicts = ids)
+    list(lines = text, value = out)
+  })
+  if (isFALSE(res)) list(applied = none, superseded = none, conflicts = ids) else res
 }
 
 #' Keep only the conflicting upserts of a record in its sidecar (they are never pruned
@@ -774,7 +734,7 @@ doc_script_running = function(path) {
 doc_recover = function(path, defer = FALSE) {
   path = path_norm(path)
   rec = doc_sidecar_read(path)
-  if (is.null(rec) || !identical(rec$kind, "deferred") || doc_sidecar_live(rec)) {
+  if (is.null(rec) || !identical(rec$kind, "deferred") || pid_alive(rec$pid, rec$create_time)) {
     return(invisible(FALSE))
   }
   if (defer || doc_script_running(path)) {
@@ -834,7 +794,7 @@ doc_sync = function(path) {
   }
   rec = rec %||% doc_sidecar_read(path)
   if (is.null(rec) || !length(rec$upserts)) return(invisible(0L))
-  if (identical(rec$kind, "deferred") && doc_sidecar_live(rec)) {
+  if (identical(rec$kind, "deferred") && pid_alive(rec$pid, rec$create_time)) {
     gptr_inform(paste0("An R process that is still running records into ", doc_rel(path),
                        "; its blocks are written when it exits."), "notice")
     return(invisible(0L))
@@ -961,14 +921,14 @@ doc_ide_upsert = function(fmt, site, up) {
   id = if (identical(backend, "positron")) NULL else ctx$id
   doc_ide_modify(doc_ide_edit_range(buffer, new), id)
   if (clean) doc_ide_save(id)
-  rng = doc_block_range(site$format, new, prep$id)
-  if (length(rng)) doc_ide_cursor(rng[2L] + 1L, id)
-  list(action = prep$action, block_id = prep$id, lines = rng, backend = backend, sha = prep$sha,
-       prompt = prep$prompt)
+  b = doc_block_get(site$format, new, prep$id)
+  if (!is.null(b)) doc_ide_cursor(b$end + 1L, id)
+  list(action = prep$action, block_id = prep$id, lines = c(b$start, b$end), backend = backend,
+       sha = prep$sha, prompt = prep$prompt)
 }
 
 #' Append lines to a console transcript (direct R lines, slash commands, rewind notes) under
-#' write consent, the `document_write` event (kind "transcript") and the document lock. Only an
+#' write consent, the `document_write` event (kind "transcript") and doc_rewrite(). Only an
 #' `.R` transcript takes raw lines (contract 11.5): a notebook would no longer be JSON and an
 #' R Markdown or Quarto document would read them as prose, so other paths are refused (FALSE).
 #' The lines are redacted with the persist profile before the event (IC-74).
@@ -981,10 +941,7 @@ doc_transcript_append = function(path, lines, session = NULL) {
   if (isTRUE(ev$block)) return(invisible(FALSE))
   lines = ev$lines %||% lines
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  lock = doc_lock(path)
-  if (is.null(lock)) return(invisible(FALSE))
-  on.exit(doc_unlock(lock), add = TRUE)
-  doc = doc_read_or_new(path)
-  doc_write(doc, c(doc$lines, as.character(lines)))
-  invisible(TRUE)
+  invisible(isTRUE(doc_rewrite(path, function(doc) {
+    list(lines = c(doc$lines, as.character(lines)), value = TRUE)
+  })))
 }

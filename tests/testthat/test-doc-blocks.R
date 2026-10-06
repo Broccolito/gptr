@@ -1,5 +1,14 @@
 # Tests for R/doc-blocks.R (plan P15): grammar, hashes, scanner, ownership, block content, writer.
 
+# The row numbers of the candidate rows doc_call_cands() gives
+cand_rows = function(calls, ph, call0) as.integer(rownames(doc_call_cands(calls, ph, call0)))
+
+# The locate() result of call row `k` of an R text, running with prompt `ph`
+text_loc = function(lines, k, ph) {
+  calls = doc_calls(lines)
+  doc_text_locate(lines, list(anchor = doc_anchor_of(calls, calls[k, ]), prompt_hash = ph))
+}
+
 test_that("header key=value pairs round-trip in contract order with quoting", {
   x = list(turn = 2L, model = "fake/fake-1", prompt = "3b1c9a0e77d2", value = "a b",
            children = "stats:s1,code:s2", date = "2026-09-29", extra = "z")
@@ -20,7 +29,7 @@ test_that("header key=value pairs round-trip in contract order with quoting", {
   expect_identical(doc_parse_kv(nl)$value, "a\nb")
 })
 
-test_that("quoted header values are decoded without the R parser, also in a C locale", {
+test_that("quoted header values are decoded on their bytes, also in a C locale", {
   withr::local_locale(c(LC_CTYPE = "C"))
   x = list(value = "r\u00e9sum\u00e9 x", children = "an\u00e1lisis:s1")
   expect_identical(doc_parse_kv(doc_format_kv(x)), x)
@@ -131,9 +140,9 @@ test_that("calls know their block, block-nested ordinal, prompt hash and identit
   expect_identical(calls$n_in_block, c(NA, 1L, NA, 2L, NA))
   expect_identical(calls$ph[1], prompt_hash("outer"))
   expect_match(calls$th[1], "^[0-9a-f]{12}$")
-  expect_identical(doc_calls_have(calls, prompt_hash("inner"), NULL), 2L)
-  expect_identical(doc_calls_have(calls, NA_character_, quote(peter(paste("dyn", x)))), 5L)
-  expect_identical(doc_calls_have(calls[0, ], prompt_hash("outer"), NULL), integer())
+  expect_identical(cand_rows(calls, prompt_hash("inner"), NULL), 2L)
+  expect_identical(cand_rows(calls, NA_character_, quote(peter(paste("dyn", x)))), 5L)
+  expect_identical(cand_rows(calls[0, ], prompt_hash("outer"), NULL), integer())
 })
 
 test_that("ownership picks the block by prompt, else by call ordinal (stale), else inserts", {
@@ -141,17 +150,15 @@ test_that("ownership picks the block by prompt, else by call ordinal (stale), el
             "# >>> gptr:aaaaaa model=m prompt=52831d1d544e", "a = 1", "# <<< gptr:aaaaaa", "",
             "# >>> gptr:bbbbbb model=m prompt=0000000000ff call=2", "b = 2", "# <<< gptr:bbbbbb",
             "z = 3")
-  calls = doc_calls(lines)
-  one = doc_owned_block(lines, calls[1, ], prompt_hash("step one"))
-  expect_identical(one$block$id, "aaaaaa")
-  expect_false(one$stale)
-  two = doc_owned_block(lines, calls[2, ], prompt_hash("step two"))
-  expect_identical(two$block$id, "bbbbbb")
-  expect_true(two$stale)
+  one = text_loc(lines, 1L, prompt_hash("step one"))
+  expect_identical(one$owned$id, "aaaaaa")
+  expect_identical(one$owned$status, "fresh")
+  two = text_loc(lines, 2L, prompt_hash("step two"))
+  expect_identical(two$owned$id, "bbbbbb")
+  expect_identical(two$owned$status, "stale")
   expect_identical(two$insert_after, 8L)
-  plain = c("peter(\"x\")", "y = 1")
-  none = doc_owned_block(plain, doc_calls(plain)[1, ], prompt_hash("x"))
-  expect_null(none$block)
+  none = text_loc(c("peter(\"x\")", "y = 1"), 1L, prompt_hash("x"))
+  expect_null(none$owned)
   expect_identical(none$insert_after, 1L)
 })
 
@@ -170,8 +177,9 @@ test_that("a prompt repeated in one pipeline never takes another call's block", 
   second = doc_text_locate(lines, list(anchor = doc_anchor_of(calls, calls[2, ]),
                                        prompt_hash = ph))
   expect_identical(second$owned$id, "bbbbbb")
-  expect_null(doc_run_owner(list(list(prompt = ph, call = "2")), ph, 3L, taken = 2L))
-  expect_identical(doc_run_owner(list(list(prompt = ph, call = "2")), ph, 1L)$index, 1L)
+  # without another same-prompt call, a call takes a block of its prompt whatever its call=
+  alone = c("peter(\"improve it\")", lines[5:7])
+  expect_identical(text_loc(alone, 1L, ph)$owned$id, "bbbbbb")
 })
 
 test_that("anchors re-locate a call by content after lines move", {
@@ -238,7 +246,7 @@ test_that("non-ASCII prompts and call texts keep their bytes in a C locale (IC-6
   f = withr::local_tempfile(fileext = ".R")
   writeBin(charToRaw(paste0(paste(lines, collapse = "\n"), "\n")), f)
   exprs = parse(f, keep.source = FALSE)
-  expect_identical(doc_calls_have(calls, NA_character_, exprs[[4L]]), 3L)
+  expect_identical(cand_rows(calls, NA_character_, exprs[[4L]]), 3L)
   expect_identical(doc_stmt_by_expr(lines, exprs[[2L]]), c(2L, 2L))
 })
 
@@ -260,13 +268,13 @@ test_that("the scanner remembers the 16 most recently used long texts and shifts
 })
 
 test_that("ownership matches header keys exactly and never a missing prompt hash", {
-  expect_true(doc_run_owner(list(list(model = "m")), NA_character_)$stale)
+  bare = c("peter(q)", "# >>> gptr:aaaaaa model=m", "a = 1", "# <<< gptr:aaaaaa")
+  expect_identical(text_loc(bare, 1L, NA_character_)$owned$status, "stale")
   lines = c("peter(\"a\") |> peter(\"b\")",
             paste0("# >>> gptr:aaaaaa model=m prompt=", prompt_hash("a"), " callback=2"), "a = 1",
             "# <<< gptr:aaaaaa", "z = 3")
-  calls = doc_calls(lines)
-  own = doc_owned_block(lines, calls[2, ], prompt_hash("b"))
-  expect_null(own$block)
+  own = text_loc(lines, 2L, prompt_hash("b"))
+  expect_null(own$owned)
   expect_identical(own$insert_after, 4L)
 })
 
@@ -291,8 +299,8 @@ test_that("a computed prompt = is the prompt, never a later unnamed literal (con
   expect_identical(calls$prompt, c(NA, "x", "y", NA, "w", "t"))
   # the runtime template is the value of p, or the unnamed literal when p is NULL
   call0 = quote(peter(prompt = p, "context text"))
-  expect_identical(doc_calls_have(calls, prompt_hash("the value of p"), call0), 1L)
-  expect_identical(doc_calls_have(calls, prompt_hash("context text"), call0), 1L)
+  expect_identical(cand_rows(calls, prompt_hash("the value of p"), call0), 1L)
+  expect_identical(cand_rows(calls, prompt_hash("context text"), call0), 1L)
 })
 
 test_that("call texts and long prompt literals are cut right in UTF-8 and C locales (IC-62)", {
@@ -313,9 +321,9 @@ test_that("call texts and long prompt literals are cut right in UTF-8 and C loca
     # pipe passes the first call to the second as its first argument
     f = withr::local_tempfile(fileext = ".R")
     writeBin(charToRaw(paste0(paste(lines, collapse = "\n"), "\n")), f)
-    expect_identical(doc_calls_have(calls, NA_character_, parse(f, keep.source = FALSE)[[1L]]),
-                     2L, info = loc)
-    expect_identical(doc_calls_have(calls, NA_character_, quote(peter(paste("a", y)))), 3L,
+    expect_identical(cand_rows(calls, NA_character_, parse(f, keep.source = FALSE)[[1L]]), 2L,
+                     info = loc)
+    expect_identical(cand_rows(calls, NA_character_, quote(peter(paste("a", y)))), 3L,
                      info = loc)
   }
   check("C")
@@ -365,7 +373,7 @@ test_that("a piped call is found as R calls it; a literal left side is the promp
     source(f, local = env, keep.source = keep)
     expect_length(seen, 7L)
     found = vapply(seq_along(seen), function(i) {
-      k = doc_calls_have(calls, ph[i], seen[[i]])
+      k = cand_rows(calls, ph[i], seen[[i]])
       if (length(k) == 1L) k else NA_integer_
     }, 1L)
     expect_identical(found, c(1L, 2L, 3L, 5L, 4L, 6L, 7L), info = paste("keep.source", keep))
@@ -392,7 +400,7 @@ test_that("calls holding function literals or braces are found under keep.source
   # sys.call() keeps a srcref in each function literal and on each brace
   expect_false(identical(seen[[1L]], str2lang(calls$text[1L])))
   found = vapply(seen, function(cl) {
-    k = doc_calls_have(calls, NA_character_, cl)
+    k = cand_rows(calls, NA_character_, cl)
     if (length(k) == 1L) k else NA_integer_
   }, 1L)
   expect_identical(found, 1:3)
@@ -427,47 +435,11 @@ test_that("a magrittr-piped call is found as magrittr calls it (6.1.1, research 
   ph = vapply(rt, function(p) if (is.na(p)) NA_character_ else prompt_hash(p), "",
               USE.NAMES = FALSE)
   found = vapply(seq_along(seen), function(i) {
-    k = doc_calls_have(calls, ph[i], seen[[i]])
+    k = cand_rows(calls, ph[i], seen[[i]])
     if (length(k) == 1L) k else NA_integer_
   }, 1L)
   expect_identical(found, seq_along(seen))
 })
-
-# A session with recorded turns, built the way P06 records them: the turn counter moves first,
-# then the turn's entries are appended (user messages carry their turn number)
-doc_test_session = function(turns, mode = "auto", kind = "chat", home = new.env()) {
-  s = session_new("fake/fake-1", mode, home = home, kind = kind)
-  d = session_data(s)
-  for (entries in turns) {
-    d$turns = d$turns + 1L
-    for (e in entries) session_append(s, e)
-  }
-  s
-}
-
-# The entries of one turn: the prompt, one r call with its result, the final answer
-doc_test_turn = function(code, note = NULL, outputs = character(), status = "ok", record = TRUE,
-                         prompt = "count rows", answer = "There are 32 rows.", value = NULL,
-                         id = "call_1") {
-  usage = function(i, o) {
-    list(input = i, output = o, cache_read = 0, cache_write_5m = 0, cache_write_1h = 0,
-         cost = list(total = 0))
-  }
-  args = list(code = code)
-  if (!is.null(note)) args$note = note
-  list(
-    list(type = "message", message = msg_user(prompt, source = "prompt")),
-    list(type = "message", message = msg_assistant(
-      list(block_tool_call(id, "r", args)), api = "fake", provider = "fake",
-      model = "fake-1", usage = usage(100, 20), stop_reason = "tool_use")),
-    list(type = "message", message = msg_tool_result(
-      id, "r", "[1] 32", is_error = !identical(status, "ok"),
-      details = list(code = code, record = record, note = note, status = status,
-                     outputs = outputs, value = value))),
-    list(type = "message", message = msg_assistant(
-      answer, api = "fake", provider = "fake", model = "fake-1", usage = usage(150, 10)))
-  )
-}
 
 test_that("recorded code drops gptr_return() and record = FALSE members and rewrites arrows", {
   arrow = paste0("<", "-")
@@ -957,7 +929,7 @@ test_that("a lock held by another live process records nothing", {
   writeLines("peter(\"count rows\")", f)
   dir = doc_lock_dir(f)
   dir.create(dir, recursive = TRUE)
-  writeLines(doc_lock_stamp(), file.path(dir, "pid"))
+  writeLines(as.character(Sys.getpid()), file.path(dir, "pid"))
   res = NULL
   expect_message({
     res = doc_upsert(doc_file_site(f), structure("n = 1", header = list()))
@@ -1062,7 +1034,8 @@ test_that("a block written to the console transcript instead is recorded under t
   expect_identical(res$action, "insert")
   expect_null(res$site)
   tr = readLines(file.path(getwd(), ".gptr", "transcripts", "t.R"))
-  expect_identical(res$lines, doc_block_range("transcript", tr, res$block_id))
+  b = doc_block_get("transcript", tr, res$block_id)
+  expect_identical(res$lines, c(b$start, b$end))
   ents = session_data(s)$entries
   rec = ents[[length(ents)]]$data
   expect_identical(rec$doc, ".gptr/transcripts/t.R")
@@ -1120,26 +1093,4 @@ test_that("a local model keeps its tag in the block and S2, and answers are reda
   expect_length(files, 2L)
   expect_false(any(grepl("FAKEtoken", unlist(lapply(files, readLines, encoding = "UTF-8")),
                          fixed = TRUE)))
-})
-
-test_that("a backend that no writer handles writes nothing and leaves a diagnostic", {
-  local_project()
-  local_gptr_options(record = "auto")
-  f = file.path(getwd(), "a.R")
-  writeLines("peter(\"count rows\")", f)
-  dg = registry_env()$diag
-  old = dg$rows
-  withr::defer(assign("rows", old, envir = dg))
-  assign("rows", list(), envir = dg)
-  site = utils::modifyList(doc_file_site(f), list(backend = "fax"))
-  res = doc_upsert(site, structure("n = 1", header = list(model = "m")))
-  expect_identical(res$action, "failed")
-  expect_identical(res$backend, "fax")
-  expect_null(res$block_id)
-  expect_identical(readLines(f), "peter(\"count rows\")")
-  d = gptr_registry(diagnostics = TRUE)
-  expect_identical(nrow(d), 1L)
-  expect_identical(c(d$source, d$event, d$class),
-                   c("builtin:documents", "document_write", "gptr_error_doc_write"))
-  expect_match(d$message, "\"fax\"", fixed = TRUE)
 })

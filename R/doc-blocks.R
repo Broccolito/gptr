@@ -22,7 +22,8 @@ doc_one_line = function(x) {
   trimws(gsub("[\r\n\t]+", " ", x))
 }
 
-#' An R string literal that keeps non-ASCII characters (encodeString() escapes them in a C locale)
+#' A string literal that both R and JSON read back as `x` (Python's json.dumps(ensure_ascii =
+#' False)); non-ASCII characters are kept, which encodeString() escapes in a C locale
 #' @noRd
 doc_str_literal = function(x) {
   x = as_utf8(as.character(x))
@@ -31,25 +32,21 @@ doc_str_literal = function(x) {
   x = gsub("\n", "\\n", x, fixed = TRUE)
   x = gsub("\r", "\\r", x, fixed = TRUE)
   x = gsub("\t", "\\t", x, fixed = TRUE)
+  x = gsub("\b", "\\b", x, fixed = TRUE)
+  x = gsub("\f", "\\f", x, fixed = TRUE)
+  ctl = gregexpr("[\001-\037]", x, perl = TRUE)
+  regmatches(x, ctl) = lapply(regmatches(x, ctl), function(ch) {
+    vapply(ch, function(c) sprintf("\\u%04x", utf8ToInt(c)), "", USE.NAMES = FALSE)
+  })
   paste0("\"", x, "\"")
 }
 
-#' Undo doc_str_literal(): drop the outer quotes and decode the escapes it writes (backslash,
-#' quote, n, r, t); any other escaped character stands for itself. Text that is not one whole
-#' literal is returned as written. The R parser is not used: in a C locale it rewrites each
-#' non-ASCII character of a literal as "<U+00E1>".
+#' The string an R string literal stands for, parsed on its bytes so that it is exact in any
+#' locale (IC-62); NULL when `text` is not one string literal
 #' @noRd
-doc_str_unquote = function(v) {
-  if (!grepl("^\"(?:[^\"\\\\]|\\\\.)*\"\\z", v, perl = TRUE)) return(v)
-  body = substr(v, 2L, nchar(v) - 1L)
-  parts = regmatches(body, gregexpr("\\\\.", body, perl = TRUE), invert = NA)[[1L]]
-  esc = seq_along(parts) %% 2L == 0L
-  ch = substr(parts[esc], 2L, 2L)
-  map = c(n = "\n", r = "\r", t = "\t")
-  hit = ch %in% names(map)
-  ch[hit] = map[ch[hit]]
-  parts[esc] = ch
-  paste(parts, collapse = "")
+doc_unquote = function(text) {
+  val = tryCatch(str2lang(os_bytes(text)), error = function(e) NULL)
+  if (is.character(val)) as_utf8(val) else NULL
 }
 
 #' Parse the key=value pairs of a block header into a named list of strings
@@ -61,7 +58,7 @@ doc_parse_kv = function(s) {
   keys = sub("=.*$", "", kv)
   vals = sub("^[^=]*=", "", kv)
   quoted = startsWith(vals, "\"")
-  vals[quoted] = vapply(vals[quoted], doc_str_unquote, "", USE.NAMES = FALSE)
+  vals[quoted] = vapply(vals[quoted], function(v) doc_unquote(v) %||% v, "", USE.NAMES = FALSE)
   stats::setNames(as.list(as_utf8(vals)), keys)
 }
 
@@ -131,10 +128,15 @@ doc_find_blocks = function(lines) {
 #' @noRd
 doc_block_body = function(lines, block) {
   if (block$end - block$start < 2L) return(character())
-  body = lines[(block$start + 1L):(block$end - 1L)]
-  ind = block$indent
-  if (nzchar(ind)) body = ifelse(startsWith(body, ind), substring(body, nchar(ind) + 1L), body)
-  body
+  doc_dedent(lines[(block$start + 1L):(block$end - 1L)], block$indent)
+}
+
+#' Lines without their leading `indent` (lines that do not start with it are kept)
+#' @noRd
+doc_dedent = function(lines, indent) {
+  hit = nzchar(indent) & startsWith(lines, indent)
+  lines[hit] = substring(lines[hit], nchar(indent) + 1L)
+  lines
 }
 
 #' First 8 hex of sha256 of the body as written, without steering lines (IC-49)
@@ -227,6 +229,12 @@ doc_state = function() {
     the$doc_pending = st
   }
   st
+}
+
+#' A setting of P08's settings service, `default` when it is unset, NULL or cannot be read
+#' @noRd
+doc_setting = function(key, default) {
+  tryCatch(setting_get(key, default = default), error = function(e) default) %||% default
 }
 
 #' Parse R text so that parse-data columns and getParseText() (which cuts source lines with
@@ -392,8 +400,7 @@ doc_dot_ident = function(pd, call_id, text) {
 #' @noRd
 doc_str_const = function(pd, arg) {
   if (nrow(arg) != 1L || !identical(arg$token, "STR_CONST")) return(NULL)
-  val = tryCatch(str2lang(os_bytes(utils::getParseText(pd, arg$id))), error = function(e) NULL)
-  if (is.character(val)) val else NULL
+  doc_unquote(utils::getParseText(pd, arg$id))
 }
 
 #' The prompt literal of a call (contract 6.1.1 step 2): a given `prompt =` is the prompt, so a
@@ -424,7 +431,7 @@ doc_call_prompt = function(pd, call_id, lhs_id = NA_integer_, magrittr = FALSE) 
   for (k in seq_len(nrow(ch))) {
     tok = ch$token[k]
     if (tok %in% c("SYMBOL_SUB", "STR_CONST")) {
-      pending = doc_arg_name(ch$text[k])
+      pending = doc_unquote(ch$text[k]) %||% sub("^`(.*)`$", "\\1", ch$text[k])
       next
     }
     if (identical(tok, "','")) {
@@ -471,16 +478,6 @@ doc_call_prompt = function(pd, call_id, lhs_id = NA_integer_, magrittr = FALSE) 
   as_utf8(positional %||% NA_character_)
 }
 
-#' The argument name a SYMBOL_SUB or name STR_CONST token binds: backticks removed, a quoted name
-#' decoded
-#' @noRd
-doc_arg_name = function(text) {
-  if (startsWith(text, "`")) return(sub("^`(.*)`$", "\\1", text))
-  if (!startsWith(text, "\"") && !startsWith(text, "'")) return(text)
-  val = tryCatch(str2lang(os_bytes(text)), error = function(e) NULL)
-  if (is.character(val)) as_utf8(val) else text
-}
-
 #' All peter() calls of an R text with their block, ordinal inside the block, prompt hash (`ph`)
 #' and identity hash (`th`, of the identity text `ident`: the identity of calls with a computed
 #' prompt)
@@ -512,21 +509,20 @@ doc_calls = function(lines, blocks = doc_find_blocks(lines)) {
   calls
 }
 
-#' Rows of a call table that contain the call: by prompt hash, else (computed prompts, whose
-#' template is the prompt text) by identity of the call (`call0`, the call R evaluated, as
-#' sys.call() reports it) with the parsed identity text, both without source references
+#' The rows of a call table that may hold a call: those with its prompt hash `ph`, narrowed to
+#' the rows that are the call R evaluated (`call0`, as sys.call() reports it; identity texts
+#' parsed, source references ignored) when any is; rows that are `call0` also win when no
+#' prompt-hash row is (a computed prompt, also one equal to a literal prompt; D-103 items 1, 8)
 #' @noRd
-doc_calls_have = function(calls, ph, call0) {
-  if (!nrow(calls)) return(integer())
-  if (!is.na(ph)) {
-    k = which(calls$ph %in% ph)
-    if (length(k) || is.null(call0)) return(k)
-  }
-  if (is.null(call0)) return(integer())
+doc_call_cands = function(calls, ph, call0) {
+  lit = !is.na(calls$ph) & calls$ph %in% ph
+  if (!nrow(calls) || is.null(call0)) return(calls[lit, , drop = FALSE])
   call0 = doc_call_norm(call0)
-  which(is.na(calls$ph) & vapply(calls$ident, function(t) {
+  same = vapply(calls$ident, function(t) {
     identical(doc_call_norm(tryCatch(str2lang(os_bytes(t)), error = function(e) NULL)), call0)
-  }, NA, USE.NAMES = FALSE))
+  }, NA, USE.NAMES = FALSE)
+  keep = if (any(same & lit)) same & lit else if (any(same)) same else lit
+  calls[keep, , drop = FALSE]
 }
 
 #' A call without source references at any depth, for identity tests. Under keep.source = TRUE
@@ -612,45 +608,42 @@ doc_header_ordinals = function(headers) {
   ord
 }
 
-#' Which block of a statement's run the k-th call owns (contract 11.5): the block whose
-#' `prompt=` matches (preferring `call=k`), else the one with `call=k` (then stale); `headers` is
-#' the list of block headers in run order. `taken` holds the ordinals of the statement's other
-#' calls with the same prompt: their blocks are never matched by prompt alone (a pipeline that
-#' repeats a prompt, `... |> peter("improve it") |> peter("improve it")`). A missing prompt hash
-#' never matches a header without `prompt=`. Returns list(index, stale) or NULL.
+#' Which block of a run (`headers`, in document order) the located call `hit` owns, running with
+#' prompt hash `ph` (contract 11.5). The calls sharing the run (`top`: the top-level calls of the
+#' statement, chunk or cell; the others' prompts are their literals) own its blocks one to one in
+#' document order: by prompt and `call=` ordinal, then by prompt (never a block whose ordinal is
+#' another same-prompt call's of the statement), then by ordinal (stale). list(index, stale) or NULL
 #' @noRd
-doc_run_owner = function(headers, ph, k = 1L, taken = integer()) {
-  if (!length(headers)) return(NULL)
+doc_owner = function(headers, top, hit, ph) {
+  me = which(top$line1 == hit$line1 & top$col1 == hit$col1)
+  if (!length(headers) || !length(me)) return(NULL)
+  phs = top$ph
+  phs[me] = ph %||% NA_character_
   prompts = vapply(headers, function(h) as.character(h[["prompt"]] %||% NA_character_), "")
   ord = doc_header_ordinals(headers)
-  same = !is.na(prompts) & prompts %in% ph
-  exact = which(same & ord == k)
-  if (!length(exact)) exact = which(same & !(ord %in% taken))
-  if (length(exact)) return(list(index = exact[1L], stale = FALSE))
-  pos = which(ord == k)
-  if (length(pos)) return(list(index = pos[1L], stale = TRUE))
-  NULL
-}
-
-#' The block owned by the k-th call of a statement (doc_run_owner() over the run of blocks after
-#' the statement) and where a new block of that call goes: after the run, or after the blocks
-#' of earlier calls of a pipeline; `taken` as in doc_run_owner()
-#' @noRd
-doc_owned_block = function(lines, hit, ph, blocks = doc_find_blocks(lines), taken = integer()) {
-  run = doc_blocks_after(lines, hit$stmt2, blocks)
-  k = hit$n_in_stmt
-  if (!nrow(run)) return(list(block = NULL, stale = FALSE, run = run, insert_after = hit$stmt2))
-  own = doc_run_owner(run$header, ph, k, taken)
-  if (!is.null(own)) {
-    return(list(block = run[own$index, , drop = FALSE], stale = own$stale, run = run,
-                insert_after = run$end[nrow(run)]))
+  owner = rep(NA_integer_, length(headers))
+  stale = rep(FALSE, length(headers))
+  for (pass in 1:3) {
+    for (i in seq_len(nrow(top))) {
+      if (i %in% owner) next
+      free = is.na(owner)
+      same = free & !is.na(prompts) & !is.na(phs[i]) & prompts == phs[i]
+      k = top$n_in_stmt[i]
+      cand = switch(pass,
+                    which(same & ord == k),
+                    which(same & !(ord %in% doc_same_ordinals(top, top[i, , drop = FALSE]))),
+                    which(free & ord == k))
+      if (length(cand)) {
+        owner[cand[1L]] = i
+        stale[cand[1L]] = pass == 3L
+      }
+    }
   }
-  before = which(doc_header_ordinals(run$header) < k)
-  list(block = NULL, stale = FALSE, run = run,
-       insert_after = if (length(before)) run$end[max(before)] else hit$stmt2)
+  b = which(owner == me)
+  if (length(b)) list(index = b[1L], stale = stale[b[1L]]) else NULL
 }
 
-#' Ordinals of the other calls of a hit's statement that share its prompt hash (doc_run_owner())
+#' Ordinals of the other calls of a hit's statement that share its prompt hash (doc_owner())
 #' @noRd
 doc_same_ordinals = function(calls, hit) {
   if (is.na(hit$ph)) return(integer())
@@ -659,19 +652,17 @@ doc_same_ordinals = function(calls, hit) {
   as.integer(calls$n_in_stmt[keep])
 }
 
-#' Locate an anchored call and its owned block in an R text (the `r` and `transcript` formats):
-#' list(stmt, blocks, hit, owned = list(id, header, status, start, end) | NULL, insert_after,
-#' top_level, in_block, ordinal, indent)
+#' A format's locate() result (contract 10.2 row 18) for the located call row `hit` (NULL: not
+#' found) in statement `stmt`: list(stmt, blocks, hit, owned, insert_after, top_level, in_block,
+#' ordinal, indent). A nested or block-nested call owns nothing; `top(out)` adds a top-level
+#' call's run, owned block (doc_owned()) and insertion point.
 #' @noRd
-doc_text_locate = function(text, site, calls = doc_calls(text)) {
-  blocks = attr(calls, "blocks") %||% doc_find_blocks(text)
-  out = list(stmt = NULL, blocks = blocks[0L, , drop = FALSE], hit = NULL, owned = NULL,
-             insert_after = NULL, top_level = FALSE, in_block = NULL, ordinal = 1L, indent = "")
-  hit = doc_match_anchor(calls, site[["anchor"]])
+doc_located = function(hit, stmt, top) {
+  out = list(stmt = NULL, blocks = NULL, hit = NULL, owned = NULL, insert_after = NULL,
+             top_level = FALSE, in_block = NULL, ordinal = 1L, indent = "")
   if (is.null(hit)) return(out)
   out$hit = hit
-  out$stmt = c(hit$stmt1, hit$stmt2)
-  out$indent = sub("^([ \t]*).*$", "\\1", text[hit$stmt1])
+  out$stmt = stmt
   if (isTRUE(hit$nested)) return(out)
   if (!is.na(hit$block)) {
     out$in_block = hit$block
@@ -680,18 +671,39 @@ doc_text_locate = function(text, site, calls = doc_calls(text)) {
   }
   out$ordinal = hit$n_in_stmt
   out$top_level = TRUE
-  ph = site[["prompt_hash"]]
-  own = doc_owned_block(text, hit, ph, blocks, doc_same_ordinals(calls, hit))
-  out$blocks = own$run
-  out$insert_after = own$insert_after
-  if (!is.null(own$block)) {
-    b = own$block
-    status = doc_block_status(b$header[[1L]], doc_block_body(text, b), ph, site[["args_hash"]])
-    if (isTRUE(own$stale) && identical(status, "fresh")) status = "stale"
-    out$owned = list(id = b$id, header = b$header[[1L]], status = status, start = b$start,
-                     end = b$end)
-  }
-  out
+  top(out)
+}
+
+#' The owned block `b` (id, header list column, start, end) of a locate() result, with its status
+#' under the site's prompt and args hashes; stale when only its `call=` ordinal matched
+#' @noRd
+doc_owned = function(b, body, stale, site) {
+  h = b$header[[1L]]
+  status = doc_block_status(h, body, site[["prompt_hash"]], site[["args_hash"]])
+  if (stale && identical(status, "fresh")) status = "stale"
+  list(id = b$id, header = h, status = status, start = b$start, end = b$end)
+}
+
+#' The `r` and `transcript` formats' locate(): the run of blocks after the call's statement, and a
+#' new block after the run or after the blocks of earlier calls of a pipeline
+#' @noRd
+doc_text_locate = function(text, site, calls = doc_calls(text)) {
+  hit = doc_match_anchor(calls, site[["anchor"]])
+  doc_located(hit, c(hit$stmt1, hit$stmt2), function(out) {
+    run = doc_blocks_after(text, hit$stmt2, attr(calls, "blocks") %||% doc_find_blocks(text))
+    top = calls[calls$stmt1 == hit$stmt1 & is.na(calls$block) & !calls$nested, , drop = FALSE]
+    own = doc_owner(run$header, top, hit, site[["prompt_hash"]])
+    before = which(doc_header_ordinals(run$header) < hit$n_in_stmt)
+    out$blocks = run
+    out$indent = sub("^([ \t]*).*$", "\\1", text[hit$stmt1])
+    out$insert_after = if (length(before)) run$end[max(before)] else hit$stmt2
+    if (!is.null(own)) {
+      out$insert_after = run$end[nrow(run)]
+      b = run[own$index, , drop = FALSE]
+      out$owned = doc_owned(b, doc_block_body(text, b), own$stale, site)
+    }
+    out
+  })
 }
 
 #' Line range of the k-th top-level expression identical to `expr` (source() frames)
@@ -959,7 +971,7 @@ doc_history_code = function(lines) {
 doc_max_output_lines = function() {
   opt = getOption("gptr.doc_output_lines")
   if (!is.null(opt)) return(as.integer(opt))
-  doc = tryCatch(setting_get("doc", default = list()), error = function(e) list())
+  doc = doc_setting("doc", list())
   as.integer((if (is.list(doc)) doc$output_lines) %||% gptr_opt("doc_output_lines"))
 }
 
@@ -1271,7 +1283,7 @@ doc_block_lines = function(session, turn, site, call_ordinal) {
   if (d$kind %in% c("team", "fanout")) return(doc_team_block_lines(session, site, call_ordinal))
   ents = doc_turn_entries(session, turn)
   fmt = site$format %||% "r"
-  doc_set = tryCatch(setting_get("doc", default = list()), error = function(e) list())
+  doc_set = doc_setting("doc", list())
   with_out = !fmt %in% c("rmd", "qmd") && !isFALSE(if (is.list(doc_set)) doc_set$outputs)
   plan_mode = identical(d$mode, "plan")
   tb = doc_turn_body(ents, with_out = with_out, plan_mode = plan_mode)
@@ -1371,32 +1383,30 @@ doc_existing_ids = function(format, text) {
   doc_find_blocks(text)$id
 }
 
-#' Status of an existing block by id, ignoring prompts (user-edited or undone detection)
+#' Block `id` of a text: list(header, body, start, end, indent); a notebook's agent cell gives its
+#' metadata.gptr, source lines and cell index. NULL when the text holds no such block.
 #' @noRd
-doc_existing_status = function(format, text, id) {
+doc_block_get = function(format, text, id) {
   if (identical(format, "ipynb")) {
     nb = nb_parse(text)
     k = match(paste0("gptr-", id), nb_cell_ids(nb))
-    if (is.na(k)) return(NA_character_)
+    if (is.na(k)) return(NULL)
     cell = nb[["cells"]][[k]]
-    return(doc_block_status(cell[["metadata"]][["gptr"]] %||% list(), nb_cell_lines(cell)))
+    return(list(header = nb_cell_meta(cell), body = nb_cell_lines(cell), start = k, end = k,
+                indent = ""))
   }
   b = doc_find_blocks(text)
-  k = which(b$id == id)
-  if (!length(k)) return(NA_character_)
-  doc_block_status(b$header[[k[1L]]], doc_block_body(text, b[k[1L], , drop = FALSE]))
+  k = which(b$id == id)[1L]
+  if (is.na(k)) return(NULL)
+  list(header = b$header[[k]], body = doc_block_body(text, b[k, , drop = FALSE]),
+       start = b$start[k], end = b$end[k], indent = b$indent[k])
 }
 
-#' Line range of a block in a text (a cell index for notebooks), or NULL
+#' Status of an existing block by id, ignoring prompts (user-edited or undone detection)
 #' @noRd
-doc_block_range = function(format, text, id) {
-  if (identical(format, "ipynb")) {
-    k = match(paste0("gptr-", id), nb_cell_ids(nb_parse(text)))
-    return(if (is.na(k)) NULL else c(k, k))
-  }
-  b = doc_find_blocks(text)
-  k = which(b$id == id)
-  if (length(k)) c(b$start[k[1L]], b$end[k[1L]]) else NULL
+doc_existing_status = function(format, text, id) {
+  b = doc_block_get(format, text, id)
+  if (is.null(b)) NA_character_ else doc_block_status(b$header, b$body)
 }
 
 #' The sha of a block that a document_write hook patched is that of its body as written (contract
@@ -1490,12 +1500,10 @@ doc_prepare = function(fmt, site, up, text, taken = character()) {
 
 #' Insert or replace a call's block through the site's backend (contract 7.15): checks write
 #' consent first (IC-45; otherwise nothing is written), passes `document_write` (fail closed,
-#' patchable), md5 conflict checks with re-locate and retry. Each backend's writer has its own
-#' branch: `file` and `transcript` sites are written on disk here, `deferred` (Rscript) and
-#' `pending` (Jupyter) sites are queued by doc_pending_add() (IC-50, IC-51), `rstudio`,
-#' `positron` and `vscode` sites go through the editor buffer (doc_ide_upsert()); a backend that
-#' no writer handles is refused (a diagnostic and the transcript fallback), never written to
-#' disk. Returns list(action, block_id, lines, backend) invisibly.
+#' patchable), md5 conflict checks with re-locate and retry. `file` and `transcript` sites are
+#' written on disk here, `deferred` (Rscript) and `pending` (Jupyter) sites are queued by
+#' doc_pending_add() (IC-50, IC-51), the IDE backends go through the editor buffer
+#' (doc_ide_upsert()). Returns list(action, block_id, lines, backend) invisibly.
 #' @noRd
 doc_upsert = function(site, block_lines, block_id = NULL) {
   none = list(action = "none", block_id = NULL, lines = NULL, backend = NULL)
@@ -1513,18 +1521,11 @@ doc_upsert = function(site, block_lines, block_id = NULL) {
             header = attr(block_lines, "header") %||% list(),
             session = attr(block_lines, "session"))
   backend = site$backend %||% "file"
-  res = tryCatch({
-    if (backend %in% c("file", "transcript")) {
-      doc_file_upsert(fmt, site, up)
-    } else if (backend %in% c("pending", "deferred")) {
-      doc_pending_add(fmt, site, up, backend)
-    } else if (backend %in% c("rstudio", "positron", "vscode")) {
-      doc_ide_upsert(fmt, site, up)
-    } else {
-      gptr_abort(paste0("No document writer handles the backend \"", backend, "\"."),
-                 "doc_write", path = site$path, reason = "backend")
-    }
-  }, error = function(e) {
+  res = tryCatch(switch(backend,
+    file = , transcript = doc_file_upsert(fmt, site, up),
+    pending = , deferred = doc_pending_add(fmt, site, up, backend),
+    doc_ide_upsert(fmt, site, up)
+  ), error = function(e) {
     registry_diagnostic("builtin:documents", "document_write", class(e)[1L],
                         conditionMessage(e))
     doc_upsert_fallback(site, up, backend)
@@ -1561,44 +1562,37 @@ doc_upsert_fallback = function(site, up, backend) {
   res
 }
 
-#' Disk upsert under the document lock with md5 conflict checks and three attempts (IC-51)
+#' Disk upsert through doc_rewrite() (the document lock, md5 conflict checks, three attempts; IC-51)
 #' @noRd
 doc_file_upsert = function(fmt, site, up) {
   path = site$path
   backend = if (isTRUE(site$console)) "transcript" else "file"
-  lock = doc_lock(path)
-  if (is.null(lock)) {
+  res = function(action, id = NULL) {
+    list(action = action, block_id = id, lines = NULL, backend = backend)
+  }
+  id = NULL
+  out = doc_rewrite(path, function(doc) {
+    prep = doc_prepare(fmt, site, up, doc$lines)
+    id <<- prep$id
+    if (!is.null(prep$skip)) return(list(value = res(prep$skip, prep$id)))
+    new = fmt$upsert(doc$lines, site, prep$rendered, prep$id)
+    if (identical(new, doc$lines)) return(list(value = res("unchanged", prep$id)))
+    b = doc_block_get(site$format, new, prep$id)
+    list(lines = new, value = list(action = prep$action, block_id = prep$id, backend = backend,
+                                   lines = c(b$start, b$end), sha = prep$sha,
+                                   prompt = prep$prompt))
+  })
+  if (is.null(out)) {
     gptr_inform(paste0("Another R process is writing ", doc_rel(path),
                        "; this block was not recorded."), "notice")
-    return(list(action = "locked", block_id = NULL, lines = NULL, backend = backend))
+    return(res("locked"))
   }
-  on.exit(doc_unlock(lock), add = TRUE)
-  prep = NULL
-  for (attempt in 1:3) {
-    doc = doc_read_or_new(path)
-    prep = doc_prepare(fmt, site, up, doc$lines)
-    if (!is.null(prep$skip)) {
-      return(list(action = prep$skip, block_id = prep$id, lines = NULL, backend = backend))
-    }
-    new = fmt$upsert(doc$lines, site, prep$rendered, prep$id)
-    if (identical(new, doc$lines)) {
-      return(list(action = "unchanged", block_id = prep$id, lines = NULL, backend = backend))
-    }
-    ok = tryCatch({
-      doc_write(doc, new)
-      TRUE
-    }, gptr_error_doc_write = function(e) {
-      if (identical(e$reason, "conflict")) FALSE else stop(e)
-    })
-    if (ok) {
-      return(list(action = prep$action, block_id = prep$id, backend = backend,
-                  lines = doc_block_range(site$format, new, prep$id), sha = prep$sha,
-                  prompt = prep$prompt))
-    }
+  if (isFALSE(out)) {
+    gptr_warn(paste0("The document ", doc_rel(path), " kept changing on disk; block ", id,
+                     " was not written (the session log has it)."), "doc_conflict")
+    return(res("conflict"))
   }
-  gptr_warn(paste0("The document ", doc_rel(path), " kept changing on disk; block ", prep$id,
-                   " was not written (the session log has it)."), "doc_conflict")
-  list(action = "conflict", block_id = NULL, lines = NULL, backend = backend)
+  out
 }
 
 #' After a write: the `gptr.doc_block` entry, the S2 answers (the block's and those of its

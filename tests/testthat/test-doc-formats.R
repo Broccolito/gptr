@@ -102,7 +102,7 @@ test_that("undone blocks become inert in R, Rmd and qmd and can be revived", {
   expect_identical(dead, c(paste0("# >>> gptr:abc123 model=m prompt=p sha=", doc_body_sha(body),
                                   " status=undone"), "#~ x = 1", "#~ y = 2", "# <<< gptr:abc123"))
   expect_identical(doc_inert_marker_lines(dead, FALSE), seg)
-  expect_identical(doc_marker_inert(seg), dead)
+  expect_identical(doc_inert_marker_lines(seg), dead)
   rmd = doc_fixture_lines("report.expected.Rmd")
   rmd_dead = doc_rmd_chunk_eval(rmd, "3fdfa0", TRUE, "rmd")
   expect_true("````{r gptr-3fdfa0, eval=FALSE}" %in% rmd_dead)
@@ -333,8 +333,8 @@ test_that("inert blocks round-trip exactly and only whole blocks change", {
   expect_identical(doc_inert_marker_lines(seg, FALSE), seg)
   b = doc_find_blocks(dead)
   expect_identical(doc_block_status(b$header[[1]], doc_block_body(dead, b)), "undone")
-  expect_identical(doc_marker_inert(seg[-length(seg)]), seg[-length(seg)])
-  expect_identical(doc_marker_inert(seg[-1]), seg[-1])
+  expect_identical(doc_inert_marker_lines(seg[-length(seg)]), seg[-length(seg)])
+  expect_identical(doc_inert_marker_lines(seg[-1]), seg[-1])
 })
 
 test_that("an indented chunk keeps its prefix through insert, rewrite and eval: false", {
@@ -405,16 +405,14 @@ test_that("a transcript with duplicate block ids is not written", {
 
 # ---- the notebook serializer, the ipynb format and the format registry (Task 6) ---------------
 
-test_that("numbers are written as Python's repr() and strings as json.dumps()", {
-  cases = list(list(1 / 3, "0.3333333333333333"), list(2 / 3, "0.6666666666666666"),
-               list(0.1 + 0.7, "0.7999999999999999"), list(1e15, "1000000000000000.0"),
-               list(1e16, "1e+16"), list(1e22, "1e+22"), list(1e-7, "1e-07"),
-               list(1e-4, "0.0001"), list(1e-5, "1e-05"), list(0.5, "0.5"), list(3, "3.0"),
-               list(-0, "-0.0"), list(5L, "5"), list(123456.789, "123456.789"),
-               list(-2.5e-8, "-2.5e-08"))
-  for (cs in cases) expect_identical(nb_json_num(cs[[1]]), cs[[2]])
-  expect_error(nb_json_num(Inf), class = "gptr_error_doc_write")
-  esc = nb_json_escape(paste0("</table> a\tb \"q\" ", "\u00e9", "\001"))
+test_that("notebook numbers keep their text and strings are written as json.dumps()", {
+  text = c("{", " \"a\": [", "  1.50,", "  1E5,", "  3,", "  -0.0,", "  1e-07,", "  0.1", " ],",
+           " \"cells\": [],", " \"nbformat\": 4,", " \"nbformat_minor\": 5", "}")
+  expect_identical(nb_serialize(nb_parse(text)), text)
+  # a double whose text was not kept is refused, never written in another form
+  cnd = expect_error(nb_json_write(list(0.30000000000000004)), class = "gptr_error_doc_write")
+  expect_identical(cnd$reason, "notebook")
+  esc = doc_str_literal(paste0("</table> a\tb \"q\" ", "\u00e9", "\001"))
   expect_identical(charToRaw(esc), charToRaw(paste0("\"</table> a\\tb \\\"q\\\" ", "\u00e9",
                                                     "\\u0001\"")))
 })
@@ -551,20 +549,6 @@ nb_test_block = function(id, site, body, ...) {
   doc_ipynb_render(list(id = id, header = list(model = "m", prompt = site$prompt_hash, ...),
                         body = body), site)
 }
-
-test_that("numbers keep Python's shortest repr at powers of two and are formatted together", {
-  # json.dumps() of the same doubles in Python 3.14
-  x = c(2^-1017, 2^-140, -2^-296, 2^-1074, 2^-1022, .Machine$double.xmax, 1e23, 2^53 + 1,
-        1 / 3, 1e16, 0, -0)
-  py = c("7.120236347223045e-307", "7.174648137343064e-43", "-7.854549544476363e-90", "5e-324",
-         "2.2250738585072014e-308", "1.7976931348623157e+308", "1e+23", "9007199254740992.0",
-         "0.3333333333333333", "1e+16", "0.0", "-0.0")
-  expect_identical(nb_json_num(x), py)
-  expect_identical(vapply(x, nb_json_num, ""), py)
-  expect_error(nb_json_num(c(1, NaN)), class = "gptr_error_doc_write")
-  expect_identical(nb_json_write(list(1L, 0.5, NULL, TRUE, "a", list(), 1e-7, list(b = 2))),
-                   "[\n 1,\n 0.5,\n null,\n true,\n \"a\",\n [],\n 1e-07,\n {\n  \"b\": 2.0\n }\n]")
-})
 
 test_that("integers beyond 32 bits keep the digits they were written with", {
   text = doc_fixture_lines("floats.ipynb")

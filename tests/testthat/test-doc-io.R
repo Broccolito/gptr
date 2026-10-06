@@ -89,8 +89,8 @@ test_that("a held lock is reused by this process and released at the end", {
 test_that("the user-level project file remembers record answers and the transcript target", {
   local_project()
   expect_identical(doc_project_get(), list())
-  doc_project_remember("a.R", "auto")
-  doc_project_remember("b.R", "off")
+  doc_project_update("record", "a.R", "auto")
+  doc_project_update("record", "b.R", "off")
   doc_project_transcript(".gptr/transcripts/gptr-session-1.R")
   pf = doc_project_get()
   expect_identical(pf$record$a.R, "auto")
@@ -190,9 +190,11 @@ test_that("mixed line endings keep the line ending most lines use", {
   expect_identical(readBin(f, "raw", 100), charToRaw("a\r\nb\r\nc\r\nd"))
 })
 
-test_that("a change made while the document is read makes the next write a conflict", {
+test_that("a document's md5 is that of the bytes read; a change while it is read is a conflict", {
   local_project()
   f = file.path(getwd(), "a.R")
+  writeBin(c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\ny = 2")), f)
+  expect_identical(doc_read(f)$md5, unname(tools::md5sum(f)))
   writeLines("x = 1", f)
   doc = testthat::with_mocked_bindings(doc_read(f), utf8_mark = function(x) {
     writeLines("x = 2", f)
@@ -211,7 +213,7 @@ test_that("the project file is P08's user_project file; a record that is no obje
   dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
   writeLines(paste0("{\"version\": 1, \"record\": [\"x\"], ",
                     "\"permissions\": {\"deny\": [\"r(fn:unlink)\"]}}"), f)
-  doc_project_remember("a.R", "auto")
+  doc_project_update("record", "a.R", "auto")
   pf = doc_project_get()
   expect_identical(pf$record, list(a.R = "auto"))
   expect_identical(pf$permissions$deny, list("r(fn:unlink)"))
@@ -219,35 +221,6 @@ test_that("the project file is P08's user_project file; a record that is no obje
 })
 
 # ---- Task 4 review round 1 (dev/DEVIATIONS.md D-096 items 7-10) --------------------------------
-
-test_that("a document's md5 is that of the bytes read, so a change while hashing is a conflict", {
-  local_project()
-  f = file.path(getwd(), "a.R")
-  writeBin(c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\ny = 2")), f)
-  expect_identical(doc_read(f)$md5, unname(tools::md5sum(f)))
-  writeLines("x = 1", f)
-  # a writer appends when the file is first hashed (the plan literal hashed between its stat
-  # and its read, so it kept a truncated text whose md5 matched the grown file)
-  hit = new.env()
-  hit$fired = FALSE
-  append_once = function() {
-    if (!hit$fired) {
-      hit$fired = TRUE
-      cat("y = 2\n", file = f, append = TRUE)
-    }
-  }
-  # as a call holding the closure itself: a bare name would be looked up in md5sum()'s frame
-  suppressMessages(trace("md5sum", where = asNamespace("tools"), print = FALSE,
-                         tracer = as.call(list(append_once))))
-  withr::defer(suppressMessages(untrace("md5sum", where = asNamespace("tools"))))
-  doc = doc_read(f)
-  res = tryCatch({
-    doc_write(doc, c(doc$lines, "z = 3"))
-    "written"
-  }, gptr_error_doc_write = function(e) e$reason)
-  expect_identical(res, "conflict")
-  expect_identical(readLines(f), c("x = 1", "y = 2"))
-})
 
 test_that("a written document's md5 is that of the bytes written, not of a later edit", {
   local_project()
@@ -298,15 +271,15 @@ test_that("record and transcript updates keep other entries and hold a lock besi
     held <<- c(held, dir.exists(lock))
     real(scope, patch)
   })
-  doc_project_remember("a.R", "auto")
+  doc_project_update("record", "a.R", "auto")
   doc_project_transcript("d.R")
   expect_identical(held, c(TRUE, TRUE))
   expect_false(dir.exists(lock))
   # a lock a live process holds delays the update by about a second and is left alone
   dir.create(lock)
-  writeLines(doc_lock_stamp(), file.path(lock, "pid"))
+  writeLines(as.character(Sys.getpid()), file.path(lock, "pid"))
   withr::defer(unlink(lock, recursive = TRUE))
-  doc_project_remember("b.R", "off")
+  doc_project_update("record", "b.R", "off")
   expect_identical(doc_project_get()$record, list(a.R = "auto", b.R = "off"))
   expect_true(dir.exists(lock))
 })
@@ -464,7 +437,7 @@ test_that("a deferred document locked by another live process records nothing", 
   writeLines("peter(\"count rows\")", f)
   dir = doc_lock_dir(f)
   dir.create(dir, recursive = TRUE)
-  writeLines(doc_lock_stamp(), file.path(dir, "pid"))
+  writeLines(as.character(Sys.getpid()), file.path(dir, "pid"))
   withr::defer(unlink(dir, recursive = TRUE))
   res = NULL
   expect_message({
@@ -499,19 +472,19 @@ doc_io_nb_write = function(path, sources) {
 }
 
 test_that("a sidecar of an earlier process that had this pid is a dead one (pid reuse, IC-51)", {
-  skip_if(is.na(doc_create_time()), "no process creation time on this platform")
+  skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
   local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
   f = file.path(getwd(), "job.R")
   writeLines(c("peter(\"first\")", "z = 1"), f)
   rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
-  expect_true(doc_sidecar_live(rec))
+  expect_true(pid_alive(rec$pid, rec$create_time))
   # the same pid, but a process that started an hour before this one (containers reuse pids)
   rec = doc_io_dead_sidecar(f, "first", pid = Sys.getpid())
   rec$create_time = rec$create_time - 3600
   doc_sidecar_write(rec)
-  expect_false(doc_sidecar_live(rec))
+  expect_false(pid_alive(rec$pid, rec$create_time))
   expect_true(doc_recover(f))
   expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
   expect_null(doc_sidecar_read(f))
@@ -525,6 +498,19 @@ test_that("a sidecar of an earlier process that had this pid is a dead one (pid 
                    structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
   expect_identical(vapply(doc_sidecar_read(f)$upserts, function(u) u$block_id, ""),
                    c(res$block_id, "cccccc"))
+})
+
+test_that("a forked child stamps its own creation time, not proc_self()'s inherited one", {
+  skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
+  local_project()
+  f = file.path(getwd(), "a.R")
+  writeLines("x = 1", f)
+  testthat::local_mocked_bindings(proc_self = function() list(pid = 1L, create_time = 1))
+  lock = doc_lock(f)
+  withr::defer(doc_unlock(lock))
+  expect_false(doc_lock_stale(lock$dir))
+  rec = doc_pending_new(path_norm(f), "deferred")
+  expect_true(pid_alive(rec$pid, rec$create_time))
 })
 
 test_that("the lock of a deferred run is released at exit even when no block was queued", {
@@ -904,7 +890,7 @@ test_that("a document's sidecar is found from any working directory (IC-51)", {
 # ---- Task 10 review round 2 (D-109 items 12-15) ------------------------------------------------
 
 test_that("a sync never writes the script of a run that is still alive (IC-51)", {
-  skip_if(is.na(doc_create_time()), "no process creation time on this platform")
+  skip_if(is.na(proc_self()$create_time), "no process creation time on this platform")
   proj = local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   local_doc_pending()
@@ -921,7 +907,7 @@ test_that("a sync never writes the script of a run that is still alive (IC-51)",
   rec = doc_io_dead_sidecar(f, "first", pid = p$get_pid())
   rec$create_time = ct
   doc_sidecar_write(rec)
-  expect_true(doc_sidecar_live(doc_sidecar_read(f)))
+  expect_true(pid_alive(rec$pid, rec$create_time))
   expect_false(dir.exists(doc_lock_dir(f)))
   expect_false(doc_recover(f))
   n = NULL
@@ -933,7 +919,7 @@ test_that("a sync never writes the script of a run that is still alive (IC-51)",
   expect_identical(doc_sidecar_read(f)$pid, p$get_pid())
   # the run is killed before its exit writes the block: the next sync applies it
   p$kill()
-  expect_false(doc_sidecar_live(rec))
+  expect_false(pid_alive(rec$pid, rec$create_time))
   expect_identical(doc_sync(f), 1L)
   expect_identical(doc_find_blocks(readLines(f))$id, "aaaaaa")
   expect_null(doc_sidecar_read(f))
@@ -1169,7 +1155,7 @@ test_that("transcript appends need consent and pass the document_write event", {
 
 # ---- Task 11 adaptations (dev/DEVIATIONS.md D-117) -----------------------------------------------
 
-test_that("a buffer that ends in the empty line after the final newline is clean in RStudio", {
+test_that("an editor's empty line after the final newline is clean unless the file has none", {
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
@@ -1186,12 +1172,7 @@ test_that("a buffer that ends in the empty line after the final newline is clean
   expect_identical(ed$ids, list("doc1"))
   expect_identical(ed$saved, "doc1")
   expect_identical(ed$cursor, 6L)
-})
-
-test_that("a clean Positron buffer that ends in that empty line is written on disk", {
-  local_project()
-  local_gptr_options(record = "auto")
-  f = file.path(getwd(), "a.R")
+  # Positron: such a clean buffer is written on disk
   writeLines(c("peter(\"count rows\")", "z = 2"), f)
   ed = local_fake_editor(path_norm(f), c(readLines(f), ""), id = "")
   res = doc_upsert(doc_ide_site(f, "count rows", "positron"),
@@ -1200,12 +1181,7 @@ test_that("a clean Positron buffer that ends in that empty line is written on di
   expect_identical(res$backend, "file")
   expect_length(ed$ids, 0L)
   expect_identical(readLines(f)[c(1, 3, 5)], c("peter(\"count rows\")", "n = 1", "z = 2"))
-})
-
-test_that("that empty line is an edit when the file on disk has no final newline", {
-  local_project()
-  local_gptr_options(record = "auto")
-  f = file.path(getwd(), "a.R")
+  # the empty line is an edit when the file on disk has no final newline
   writeLines(c("peter(\"count rows\")", "z = 2"), f)
   site = doc_ide_site(f, "count rows", "rstudio")
   writeBin(charToRaw("peter(\"count rows\")\nz = 2"), f)

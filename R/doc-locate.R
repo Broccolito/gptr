@@ -5,14 +5,6 @@
 # hash, ordinal, block), never by stale line numbers. Also the console transcript target (IC-49,
 # IC-52). Layer L4. Adapted from report 14 sections 4.2 and 5.0 (gptr_where, doc_match_call).
 
-#' A call without attributes (srcrefs), for identity tests
-#' @noRd
-doc_strip_call = function(x) {
-  if (is.null(x)) return(NULL)
-  attributes(x) = NULL
-  x
-}
-
 #' The R/ directory of gptr's own sources when they carry srcrefs (pkgload::load_all()), or NULL
 #' @noRd
 doc_own_sources = function() {
@@ -27,8 +19,7 @@ doc_own_sources = function() {
 doc_srcfile_path = function(sf) {
   if (is.null(sf) || !is.environment(sf) || !isTRUE(sf$isFile)) return(NULL)
   fn = sf$filename %||% ""
-  if (!is.character(fn) || length(fn) != 1L || !nzchar(fn) ||
-        identical(basename(fn), ".active-rstudio-document")) {
+  if (!rlang::is_string(fn) || !nzchar(fn) || identical(basename(fn), ".active-rstudio-document")) {
     return(NULL)
   }
   full = if (grepl("^(/|[A-Za-z]:[/\\\\]|~)", fn)) {
@@ -62,8 +53,7 @@ doc_site_srcref = function(call, ph, call0) {
     pl = if (!is.null(sf$lines)) as_utf8(sf$lines) else doc_read(path)$lines
     rng = c(sr[7L], sr[8L])
     if (rng[1L] < 1L || rng[2L] > length(pl)) next
-    k = doc_calls_have(doc_calls(pl[rng[1L]:rng[2L]]), ph, call0)
-    if (!length(k)) next
+    if (!nrow(doc_call_cands(doc_calls(pl[rng[1L]:rng[2L]]), ph, call0))) next
     return(list(kind = "srcref", path = path, stmt_at_parse = rng, lines_at_parse = pl))
   }
   NULL
@@ -74,9 +64,8 @@ doc_site_srcref = function(call, ph, call0) {
 #' the directory they were called from as `owd`: a relative `file` is relative to `owd`.
 #' @noRd
 doc_frame_file = function(file, owd) {
-  if (!is.character(file) || length(file) != 1L || is.na(file) || !nzchar(file)) return(NULL)
-  if (!grepl("^(/|[A-Za-z]:[/\\\\]|~)", file) && is.character(owd) && length(owd) == 1L &&
-        !is.na(owd) && nzchar(owd)) {
+  if (!rlang::is_string(file) || !nzchar(file)) return(NULL)
+  if (!grepl("^(/|[A-Za-z]:[/\\\\]|~)", file) && rlang::is_string(owd) && nzchar(owd)) {
     file = file.path(owd, file)
   }
   if (file.exists(file)) file else NULL
@@ -108,7 +97,7 @@ doc_site_source_frame = function(call, ph, call0) {
     if (identical(basename(file), ".active-rstudio-document")) return(NULL)
     target = exprs[[i]]
     occ = sum(vapply(seq_len(i), function(m) identical(exprs[[m]], target), NA))
-    return(list(kind = "source_frame", path = path_norm(file), expr = doc_strip_call(target),
+    return(list(kind = "source_frame", path = path_norm(file), expr = doc_call_norm(target),
                 occurrence = occ))
   }
   NULL
@@ -163,7 +152,7 @@ doc_command_args = function() {
 #' change, so it is tried first; the working directory is the fallback (Windows, no absolute PWD)
 #' @noRd
 doc_rscript_file = function(f) {
-  if (!is.character(f) || length(f) != 1L || is.na(f) || !nzchar(f)) return(NULL)
+  if (!rlang::is_string(f) || !nzchar(f)) return(NULL)
   cands = f
   pwd = Sys.getenv("PWD")
   if (!grepl("^(/|[A-Za-z]:[/\\\\]|~)", f) && identical(.Platform$OS.type, "unix") &&
@@ -200,7 +189,7 @@ doc_site_ide = function(call, ph, call0) {
   ctx = doc_ide_context()
   if (is.null(ctx) || !nzchar(ctx$path %||% "") || is.null(doc_format_of(ctx$path))) return(NULL)
   contents = as_utf8(as.character(ctx$contents))
-  if (doc_ide_console_focused() && !length(doc_calls_have(doc_calls(contents), ph, call0))) {
+  if (doc_ide_console_focused() && !nrow(doc_call_cands(doc_calls(contents), ph, call0))) {
     return(NULL)
   }
   cursor = tryCatch(ctx$selection[[1L]]$range$start[["row"]], error = function(e) NA_integer_)
@@ -215,54 +204,6 @@ doc_counter_next = function(path, key) {
   k = paste(path_key(path), key)
   st$counters[[k]] = (st$counters[[k]] %||% 0L) + 1L
   st$counters[[k]]
-}
-
-#' The rows of a call table whose identity text is the evaluated call `call0` (as sys.call()
-#' reports it, through doc_calls_have()), whatever their prompt hash
-#' @noRd
-doc_identity_rows = function(calls, call0) {
-  if (!nrow(calls) || is.null(call0)) return(integer())
-  rows = calls
-  rows$ph = rep(NA_character_, nrow(rows))
-  doc_calls_have(rows, NA_character_, call0)
-}
-
-#' Narrow candidate call rows that share a prompt hash to those that are the evaluated call
-#' itself (`call0`, as sys.call() reports it): the steps of a pipeline that repeats a prompt,
-#' `peter("draft") |> peter("again") |> peter("again")`, differ only in their identity (contract
-#' 11.5, plan self-review ambiguity 28). Unchanged without a call or when no row is that call.
-#' @noRd
-doc_by_identity = function(cand, call0) {
-  if (nrow(cand) < 2L || is.null(call0)) return(cand)
-  same = doc_identity_rows(cand, call0)
-  if (length(same)) cand[same, , drop = FALSE] else cand
-}
-
-#' The rows of a call table that may hold the call (doc_calls_have()), except for a computed
-#' prompt whose value equals a literal prompt of the table: doc_calls_have() prefers the rows
-#' with that prompt hash, so `peter(q)` with `q = "count rows"` would be found as
-#' `peter("count rows")`. When rows are the call `call0` itself and none of the prompt-hash rows
-#' is, those rows are taken. A literal-prompt call keeps its rows: they are in both sets.
-#' @noRd
-doc_call_rows = function(calls, ph, call0) {
-  k = doc_calls_have(calls, ph, call0)
-  if (is.na(ph) || is.null(call0)) return(k)
-  id = doc_identity_rows(calls, call0)
-  if (length(id) && !any(k %in% id)) id else k
-}
-
-#' The candidate rows of a call in a call table, the call itself first (doc_call_rows(),
-#' doc_by_identity())
-#' @noRd
-doc_call_cands = function(calls, ph, call0) {
-  doc_by_identity(calls[doc_call_rows(calls, ph, call0), , drop = FALSE], call0)
-}
-
-#' The candidate rows of a call in a statement (line range `rng`)
-#' @noRd
-doc_stmt_calls = function(calls, rng, ph, call0) {
-  doc_call_cands(calls[calls$line1 >= rng[1L] & calls$line2 <= rng[2L], , drop = FALSE], ph,
-                 call0)
 }
 
 #' The calling cell of a notebook call, found as in a script: the cell of the first candidate
@@ -304,51 +245,44 @@ doc_nb_anchor = function(raw, text, ph, call0) {
        block = NA_character_, cell = cell, call0 = call0)
 }
 
-#' The anchor of the located call in the text available at locate time (NULL: not found)
+#' The anchor of the located call in the text available at locate time (NULL: not found): the
+#' first candidate row (doc_call_cands()) of the knitr chunk's label, of the statement of a
+#' srcref or source() frame, of this execution's ordinal under Rscript, or the last at or above
+#' an IDE's cursor
 #' @noRd
 doc_anchor = function(site, raw, text, ph, call0) {
-  if (site$format %in% c("rmd", "qmd")) {
-    calls = doc_rmd_calls(text)
-    cand = calls[doc_call_rows(calls, ph, call0), , drop = FALSE]
-    if (!is.na(raw$label %||% NA_character_)) cand = cand[cand$label %in% raw$label, , drop = FALSE]
-    cand = doc_by_identity(cand, call0)
-    if (identical(raw$kind, "ide") && !is.na(raw$cursor %||% NA)) {
-      above = cand[cand$line1 <= raw$cursor, , drop = FALSE]
-      if (nrow(above)) cand = above[nrow(above), , drop = FALSE]
-    }
-    if (!nrow(cand)) return(NULL)
-    return(doc_anchor_of(calls, cand[1L, , drop = FALSE]))
-  }
   if (identical(site$format, "ipynb")) return(doc_nb_anchor(raw, text, ph, call0))
-  if (identical(raw$kind, "srcref")) {
-    calls = doc_calls(raw$lines_at_parse)
-    t = doc_stmt_calls(calls, raw$stmt_at_parse, ph, call0)
-    return(if (nrow(t)) doc_anchor_of(calls, t[1L, , drop = FALSE]) else NULL)
+  kind = raw$kind
+  styled = site$format %in% c("rmd", "qmd")
+  calls = if (styled) doc_rmd_calls(text) else doc_calls(raw$lines_at_parse %||% text)
+  scope = calls
+  if (styled && !is.na(raw$label %||% NA_character_)) {
+    scope = calls[calls$label %in% raw$label, , drop = FALSE]
   }
-  calls = doc_calls(text)
-  if (identical(raw$kind, "source_frame")) {
+  rng = if (identical(kind, "srcref")) raw$stmt_at_parse
+  if (identical(kind, "source_frame")) {
     rng = doc_stmt_by_expr(text, raw$expr, raw$occurrence %||% 1L)
     if (is.null(rng)) return(NULL)
-    t = doc_stmt_calls(calls, rng, ph, call0)
-    return(if (nrow(t)) doc_anchor_of(calls, t[1L, , drop = FALSE]) else NULL)
   }
-  cand = doc_call_cands(calls, ph, call0)
+  if (!styled && !is.null(rng)) {
+    scope = scope[scope$line1 >= rng[1L] & scope$line2 <= rng[2L], , drop = FALSE]
+  }
+  cand = doc_call_cands(scope, ph, call0)
   if (!nrow(cand)) return(NULL)
-  if (identical(raw$kind, "rscript")) {
+  k = 1L
+  if (!styled && identical(kind, "rscript")) {
     # one counter per candidate set, keyed by the rows' own identity: the same literal prompt (or
     # the same pipeline step) in this file, or the same call text for a computed prompt, whose
     # rows have no prompt hash and whose runtime value differs between executions
     rph = cand$ph[1L]
-    key = paste(c(if (is.na(rph)) "" else rph, sort(unique(cand$th))), collapse = " ")
-    k = doc_counter_next(raw$path, key)
+    k = doc_counter_next(raw$path, paste(c(if (is.na(rph)) "" else rph, sort(unique(cand$th))),
+                                         collapse = " "))
     if (k > nrow(cand)) return(NULL)
-    return(doc_anchor_of(calls, cand[k, , drop = FALSE]))
+  } else if (identical(kind, "ide") && !is.na(raw$cursor %||% NA)) {
+    above = which(cand$line1 <= raw$cursor)
+    if (length(above)) k = max(above)
   }
-  if (identical(raw$kind, "ide") && !is.na(raw$cursor %||% NA)) {
-    above = cand[cand$line1 <= raw$cursor, , drop = FALSE]
-    if (nrow(above)) return(doc_anchor_of(calls, above[nrow(above), , drop = FALSE]))
-  }
-  doc_anchor_of(calls, cand[1L, , drop = FALSE])
+  doc_anchor_of(calls, cand[k, , drop = FALSE])
 }
 
 #' The execution driver of a site, which decides whether a regeneration can skip the old block:
@@ -367,7 +301,7 @@ doc_driver = function(site) {
 #' strictly inside the project root, and not a control, protected, critical or instructions path
 #' @noRd
 doc_target_valid = function(path) {
-  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) return(FALSE)
+  if (!rlang::is_string(path) || !nzchar(path)) return(FALSE)
   if (is.null(doc_format_of(path))) return(FALSE)
   full = tryCatch(path_norm(path), error = function(e) NULL)
   if (is.null(full)) return(FALSE)
@@ -393,7 +327,7 @@ doc_new_transcript = function() {
 doc_active_document = function() {
   if (!doc_ide_available()) return(NULL)
   p = doc_ide_context()$path %||% ""
-  if (is.character(p) && length(p) == 1L && nzchar(p) && doc_target_valid(path_norm(p))) {
+  if (rlang::is_string(p) && nzchar(p) && doc_target_valid(path_norm(p))) {
     path_norm(p)
   } else {
     NULL
@@ -442,9 +376,8 @@ doc_ask_transcript = function() {
 doc_transcript_target = function(ask = FALSE) {
   b = the$doc_binding
   bound = if (is.list(b)) b[["path"]] else NULL
-  if (is.character(bound) && length(bound) == 1L && !is.na(bound)) return(bound)
-  mode = tryCatch(setting_get("transcript", default = "ask"), error = function(e) "ask") %||%
-    "ask"
+  if (rlang::is_string(bound)) return(bound)
+  mode = doc_setting("transcript", "ask")
   if (identical(mode, "off")) return(NULL)
   pf = doc_project_get()
   if (identical(doc_project_entry(pf, "transcript", "target"), "off")) return(NULL)
@@ -530,7 +463,7 @@ doc_context_labels = function(context) {
   labels = vapply(context, function(x) {
     if (!is.list(x) || !identical(x[["kind"]], "symbol")) return("")
     name = x[["name"]]
-    if (is.character(name) && length(name) == 1L && !is.na(name)) name else ""
+    if (rlang::is_string(name)) name else ""
   }, "", USE.NAMES = FALSE)
   labels[nzchar(labels)]
 }
@@ -547,12 +480,8 @@ doc_context_labels = function(context) {
 #' @noRd
 doc_locate = function(call) {
   template = call$template %||% call$prompt
-  ph = if (is.character(template) && length(template) == 1L && !is.na(template)) {
-    prompt_hash(template)
-  } else {
-    NA_character_
-  }
-  call0 = doc_strip_call(call$sys_call)
+  ph = if (rlang::is_string(template)) prompt_hash(template) else NA_character_
+  call0 = doc_call_norm(call$sys_call)
   site = NULL
   nested = FALSE
   finders = list(doc_site_srcref, doc_site_source_frame, doc_site_knitr, doc_site_jupyter,

@@ -1,61 +1,6 @@
 # Tests for R/doc-knitr.R (plan P15): knit_print methods, the scoped label hook, and knitr and
 # Quarto record/replay through the document route with a stand-in peter().
 
-# A session with recorded turns, built the way P06 records them
-doc_test_session = function(turns, kind = "chat") {
-  s = session_new("fake/fake-1", "auto", home = new.env(), kind = kind)
-  d = session_data(s)
-  for (entries in turns) {
-    d$turns = d$turns + 1L
-    for (e in entries) session_append(s, e)
-  }
-  s
-}
-
-# The entries of one turn: the prompt, one r call with its result, the final answer
-doc_test_turn = function(code, prompt = "count rows", answer = "There are 32 rows.") {
-  list(
-    list(type = "message", message = msg_user(prompt, source = "prompt")),
-    list(type = "message", message = msg_assistant(
-      list(block_tool_call("call_1", "r", list(code = code))), api = "fake", provider = "fake",
-      model = "fake-1", stop_reason = "tool_use")),
-    list(type = "message", message = msg_tool_result(
-      "call_1", "r", "ok", details = list(code = code, status = "ok"))),
-    list(type = "message", message = msg_assistant(answer, api = "fake", provider = "fake",
-                                                   model = "fake-1"))
-  )
-}
-
-# The stand-in gateway of a knit: the document route, then a scripted run that evaluates `code`
-# in the caller's frame and writes its block through the agent_end hook
-doc_knit_env = function(code = "n = 32") {
-  e = new.env()
-  e$runs = 0L
-  e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$interp = character()
-    call$context = list()
-    call$session = NULL
-    call$envir = parent.frame()
-    call$args = list(replay = NULL)
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    call$doc = NULL
-    if (doc_route_match(call)) {
-      res = doc_route_run(call)
-      if (!inherits(res, "gptr_route_pass")) return(invisible(res))
-    }
-    e$runs = e$runs + 1L
-    eval(parse(text = code), call$envir)
-    s = doc_test_session(list(doc_test_turn(code, prompt = prompt)))
-    doc_on_agent_end(list(status = "idle", doc = call$doc, turns = 1L), list(session = s))
-    invisible(s)
-  }
-  e
-}
-
 test_that("sessions knit as their answer, plus the code of a live turn", {
   skip_if_not_installed("knitr")
   s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
@@ -97,18 +42,18 @@ test_that("knitr records an agent chunk on the first knit and replays it on the 
   local_gptr_options(record = "auto", replay = "auto")
   rmd = file.path(getwd(), "report.Rmd")
   file.copy(fixture, rmd)
-  e = doc_knit_env(code = "n = nchar(\"count letters in this prompt\")")
+  e = doc_stand_in(code = "n = nchar(\"count letters in this prompt\")")
   e$doc_knitr_skip = doc_knitr_skip
   out = file.path(getwd(), "report.md")
   knitr::knit(rmd, output = out, envir = e, quiet = TRUE)
-  expect_identical(e$runs, 1L)
+  expect_identical(e$log$runs, 1L)
   ch = doc_rmd_chunks(readLines(rmd))
   expect_match(ch$label[3], "^gptr-[0-9a-f]{6}$")
   expect_identical(ch$fence[3], "````")
   md5 = tools::md5sum(rmd)
-  e2 = doc_knit_env()
+  e2 = doc_stand_in()
   knitr::knit(rmd, output = out, envir = e2, quiet = TRUE)
-  expect_identical(e2$runs, 0L)
+  expect_identical(e2$log$runs, 0L)
   expect_identical(e2$n, 28L)
   expect_identical(tools::md5sum(rmd), md5)
 })
@@ -122,9 +67,9 @@ test_that("a stale agent chunk is regenerated during the knit without running th
                "```{r gptr-abc123}",
                paste0("# >>> gptr:abc123 model=m prompt=", prompt_hash("count the letters")),
                "old_ran = TRUE", "# <<< gptr:abc123", "```"), rmd)
-  e = doc_knit_env(code = "n = 7")
+  e = doc_stand_in(code = "n = 7")
   knitr::knit(rmd, output = file.path(getwd(), "report.md"), envir = e, quiet = TRUE)
-  expect_identical(e$runs, 1L)
+  expect_identical(e$log$runs, 1L)
   expect_identical(e$n, 7)
   expect_false(exists("old_ran", envir = e, inherits = FALSE))
   b = doc_find_blocks(readLines(rmd))

@@ -332,3 +332,25 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Reviews: none yet.
 - Deviations: D-036 item 8, D-050 item 4, D-056 item 2 edited in place. Open: only two named tests changed numbers
   (third name lost); D-081's re-estimate after a new elision unchanged.
+
+## P15-S - Documents duplication (2026-10-05)
+- F1 numbers as read; F2 `doc_block_get()`, `doc_dedent()`; F3 `doc_located()`; F4 `doc_rewrite()`; F5 one
+  `doc_call_cands()`; F6 one `doc_owner()`, `nb_agent_run()`; F7 `doc_marker_replace()`; F8 `proc_create_time()`,
+  `pid_alive()`; F9 `doc_setting()`; F10 `doc_keep()`, `doc_file_arg()`, one site lookup; F11 one literal
+  encoder, `doc_unquote()`; F13 switch default; wrappers, is_string; `helper-doc.R`,
+  `doc_record()` with `call_new()`; F12/F17 merged tests (md5, IDE final newline, gptr_source files)
+  (R -475, tests -262; plan ~657).
+- Red: none (refactor); the new notebook-number test fails on HEAD (`1.50` -> `1.5`). Green: `doc-` PASS 1808
+  (1832 before: Python repr, fax and duplicate expectations out), `LC_ALL=C` 1743; token bench `--check` OK.
+  Lint clean. Neighbours: `arch-layers|lint-rules|auth-redact|ext-check|ext-specs|tool-r|utils-options|
+  utils-paths|s1-route|gptr-gateway|gptr-capture|prompt-sections|bench-context|zzz` PASS 2738.
+- Reviews: round 1 changes_required: F15 reverted (knitr labels `//| `/`%%| ` chunks, so `#| `-only shifted
+  later R chunks' unnamed numbers; probe `{dot}` chunk back, red first); an unmarked notebook double is
+  refused (`reason = "notebook"`), regex warnings caught; lock and sidecar stamps use
+  `proc_create_time(Sys.getpid())` (fork; red first); DEVIATIONS other-lane hunks left to the committer.
+- Deviations: D-158 (D-062, D-070, D-071, D-107, D-109 edited). Open: doc locks keep their own rule (IC-71's
+  30 s age would break the Rscript run lock held until exit, D-109 item 2), so no `lock_with()`;
+  `doc_control_guard()` stays (`session_control_check()` is L3, outside IC-33's SDK and helper-arch.R);
+  F15 not adopted (any rule but xfun's comment table shifts knitr's unnamed-chunk numbers);
+  F16 sidecar per-upsert check kept (dropping it applies a sidecar's other-format upsert); computed-prompt
+  locate tests unmerged (three finders' mocks); 04 section 11.5 text.

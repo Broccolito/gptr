@@ -1,14 +1,6 @@
 # Tests for R/doc-replay.R (plan P15): consent, S2, decisions, the route, services, hooks, the
 # exports, and the end-to-end record/replay acceptance of 05 P15.
 
-# Bind a document for the calling test (restores the previous binding)
-local_doc_binding = function(path, format = "r", .env = parent.frame()) {
-  old = the$doc_binding
-  the$doc_binding = list(path = path_norm(path), format = format)
-  withr::defer(assign("doc_binding", old, envir = the), envir = .env)
-  invisible(path)
-}
-
 test_that("write consent comes from the binding, record = auto, a remembered answer or a yes", {
   proj = local_project()
   f = file.path(proj, "a.R")
@@ -30,9 +22,9 @@ test_that("write consent comes from the binding, record = auto, a remembered ans
     local_doc_binding(f)
     expect_true(doc_consent(f))
   })
-  doc_project_remember("a.R", "auto")
+  doc_project_update("record", "a.R", "auto")
   expect_true(doc_consent(f))
-  doc_project_remember("a.R", "off")
+  doc_project_update("record", "a.R", "off")
   expect_false(doc_consent(f))
   t = file.path(proj, ".gptr", "transcripts", "t.R")
   doc_project_transcript(".gptr/transcripts/t.R")
@@ -198,14 +190,7 @@ doc_replay_fixture = function(prompt = "count rows", header = list(), body = "n 
 
 # A call record as P08 builds it (only the bindings P15 reads)
 doc_test_call = function(session = NULL, envir = new.env(), prompt = "count rows") {
-  call = new.env(parent = emptyenv())
-  call$session = session
-  call$envir = envir
-  call$template = prompt
-  call$prompt = prompt
-  call$args = list(replay = NULL)
-  call$doc = NULL
-  call
+  call_new(prompt, session = session, envir = envir, args = list(replay = NULL))
 }
 
 # Give the calling test its own replay table (P06's the$replay_blocks), restored afterwards, so
@@ -438,7 +423,7 @@ test_that("doc_skip_old() marks the old block in the gptr_source() frame of its 
   doc_skip_old(doc_decide_site(driver = "base"))
   expect_identical(doc_state()$sources[[inner]]$skip, "abc123")
   site$block = NULL
-  expect_invisible(doc_skip_old(site))
+  expect_true(doc_skip_old(site)$regenerate)
   expect_identical(doc_state()$sources[[inner]]$skip, "abc123")
 })
 
@@ -451,15 +436,14 @@ test_that("a notebook agent cell gives the code and outputs a replay reconstruct
                "   \"source\": [\"n = nrow(mtcars)\\n\", \"#> [1] 32\"]", "  }", " ],",
                " \"metadata\": {},", " \"nbformat\": 4,", " \"nbformat_minor\": 5", "}"), f)
   site = list(path = path_norm(f), format = "ipynb", template = "count rows")
-  expect_identical(doc_block_text(site, "abc123"), c("n = nrow(mtcars)", "#> [1] 32"))
   doc = doc_replay_doc(site, doc_test_call(), "abc123", "It is 32.")
   expect_identical(doc$code, "n = nrow(mtcars)")
   expect_identical(doc$output, "[1] 32")
   expect_identical(doc$text, "It is 32.")
-  expect_identical(doc_block_text(site, "ffffff"), character())
+  expect_identical(doc_replay_doc(site, doc_test_call(), "ffffff")$code, character())
   site$path = file.path(getwd(), "missing.R")
   site$format = "r"
-  expect_identical(doc_block_text(site, "abc123"), character())
+  expect_identical(doc_replay_doc(site, doc_test_call(), "abc123")$output, character())
 })
 
 test_that("a hand-edited block is overwritten in live or record only after a yes", {
@@ -577,49 +561,13 @@ test_that("children entries without a name or a session id are skipped", {
 
 # ---- Task 13: the document route, the doc.* services and the hooks (IC-45..IC-49) -------------
 
-# A session with recorded turns, built the way P06 records them: the turn counter moves first,
-# then the turn's entries are appended (user messages carry their turn number)
-doc_test_session = function(turns, mode = "auto", kind = "chat", home = new.env()) {
-  s = session_new("fake/fake-1", mode, home = home, kind = kind)
-  d = session_data(s)
-  for (entries in turns) {
-    d$turns = d$turns + 1L
-    for (e in entries) session_append(s, e)
-  }
-  s
-}
-
-# The entries of one turn: the prompt, one r call with its result, the final answer
-doc_test_turn = function(code, outputs = character(), prompt = "count rows",
-                         answer = "There are 32 rows.", id = "call_1") {
-  list(
-    list(type = "message", message = msg_user(prompt, source = "prompt")),
-    list(type = "message", message = msg_assistant(
-      list(block_tool_call(id, "r", list(code = code))), api = "fake", provider = "fake",
-      model = "fake-1", stop_reason = "tool_use")),
-    list(type = "message", message = msg_tool_result(
-      id, "r", "ok", details = list(code = code, status = "ok", outputs = outputs))),
-    list(type = "message", message = msg_assistant(answer, api = "fake", provider = "fake",
-                                                   model = "fake-1"))
-  )
-}
-
 # An environment whose peter() builds the call record as P08 does and runs only the document
 # route: it returns the route's value, or list(pass = TRUE, doc = <call$doc>) when it passes
 doc_route_env = function(session = NULL) {
   e = new.env()
   e$peter = function(prompt, ..., replay = NULL) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$interp = character()
-    call$context = list()
+    call = doc_record(prompt, replay)
     call$session = session
-    call$envir = parent.frame()
-    call$args = list(replay = replay)
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    call$doc = NULL
     if (!doc_route_match(call)) return(list(pass = TRUE, matched = FALSE, doc = NULL))
     res = doc_route_run(call)
     if (inherits(res, "gptr_route_pass")) return(list(pass = TRUE, matched = TRUE, doc = call$doc))
@@ -807,12 +755,7 @@ test_that("doc.s1_block writes one #> line below a top-level System 1 call, idem
                 meta = list(model = "jev-1.13.0", date = "2026-09-29"))
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$args = list(replay = NULL)
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
+    call = doc_record(prompt)
     doc_s1_block_service(call, x)
     x
   }
@@ -844,14 +787,7 @@ test_that("doc.replay returns the replayed team of a fresh block and NULL otherw
               answer = "Two bugs.", session = "s2222222222", turn = 1L))
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$args = list(replay = NULL)
-    call$envir = parent.frame()
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    call$doc = NULL
+    call = doc_record(prompt)
     list(out = doc_replay_service(call), doc = call$doc)
   }
   source(f, local = e, keep.source = TRUE)
@@ -914,18 +850,8 @@ test_that("direct R lines and slash commands of the console enter the transcript
 
 # A call record of a console call (no srcref, no source() frame)
 doc_console_call = function(prompt = "fit a model") {
-  call = new.env(parent = emptyenv())
-  call$template = prompt
-  call$prompt = prompt
-  call$interp = character()
-  call$context = list(list(kind = "symbol", name = "mtcars"))
-  call$session = NULL
-  call$envir = new.env()
-  call$args = list(replay = NULL)
-  call$sys_call = call("peter", prompt, quote(mtcars))
-  call$nframe = 0L
-  call$doc = NULL
-  call
+  call_new(prompt, context = list(list(kind = "symbol", name = "mtcars")), envir = new.env(),
+           args = list(replay = NULL), sys_call = call("peter", prompt, quote(mtcars)), nframe = 0L)
 }
 
 test_that("a console call asks once where to record and keeps the transcript site", {
@@ -1123,14 +1049,7 @@ test_that("an undone team block gives the undone notice and is logged as skipped
   writeLines(doc_inert_text(live, "r", "abc123"), f)
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$args = list(replay = NULL)
-    call$envir = parent.frame()
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    call$doc = NULL
+    call = doc_record(prompt)
     doc_replay_service(call)
   }
   depth = doc_source_push(f)
@@ -1194,12 +1113,7 @@ test_that("a System 1 one-line block is redacted before it is written (IC-74)", 
                 meta = list(model = "jev-1.13.0", date = "2026-09-29"))
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$args = list(replay = NULL)
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
+    call = doc_record(prompt)
     doc_s1_block_service(call, x)
     x
   }
@@ -1287,14 +1201,7 @@ test_that("doc.replay recovers a dead sidecar's team block for its statement fir
               answer = "Two bugs.", session = "s2b3c4d5e6f", turn = 1L))
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$args = list(replay = NULL)
-    call$envir = parent.frame()
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    call$doc = NULL
+    call = doc_record(prompt)
     list(out = doc_replay_service(call), doc = call$doc)
   }
   source(f, local = e, keep.source = TRUE)
@@ -1754,39 +1661,6 @@ test_that("gptr_cache(\"prune\") keeps the answers of queued blocks (IC-50, IC-5
 
 # ---- Task 15: gptr_source() (contract 6.4; report 14 section 4.4.2) -----------------------------
 
-# An environment whose peter() stands in for the gateway: the document route first, then (when it
-# passes) a scripted "run" that evaluates `code` in the caller's frame as the agent's r call and
-# writes the block through the agent_end hook, as the real run does
-doc_source_env = function(code = "n = 99", log = new.env()) {
-  e = new.env()
-  log$runs = 0L
-  e$log = log
-  e$peter = function(prompt, ..., replay = NULL) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$interp = character()
-    call$context = list()
-    call$session = NULL
-    call$envir = parent.frame()
-    call$args = list(replay = replay)
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    call$doc = NULL
-    if (doc_route_match(call)) {
-      res = doc_route_run(call)
-      if (!inherits(res, "gptr_route_pass")) return(res)
-    }
-    log$runs = log$runs + 1L
-    log$site = call$doc
-    eval(parse(text = code), call$envir)
-    s = doc_test_session(list(doc_test_turn(code, prompt = prompt)))
-    doc_on_agent_end(list(status = "idle", doc = call$doc, turns = 1L), list(session = s))
-    s
-  }
-  e
-}
-
 test_that("gptr_source() replays fresh blocks, regenerates stale ones and skips their old code", {
   local_project()
   local_gptr_options(record = "auto")
@@ -1801,7 +1675,7 @@ test_that("gptr_source() replays fresh blocks, regenerates stale ones and skips 
     doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("second step")),
                      "old_ran = TRUE"),
     "after = a + 1"), f)
-  e = doc_source_env(code = "n = 99")
+  e = doc_stand_in(code = "n = 99")
   out = gptr_source(f, replay = "auto", envir = e)
   expect_identical(e$log$runs, 1L)
   expect_identical(e$log$site$kind, "srcref")
@@ -1825,7 +1699,7 @@ test_that("a call without a block runs and is recorded; replay mode refuses a st
   withr::local_options(gptr.replay = NULL)
   f = file.path(getwd(), "analysis.R")
   writeLines(c("x = peter(\"count rows\")", "y = 2"), f)
-  e = doc_source_env(code = "n = nrow(mtcars)")
+  e = doc_stand_in(code = "n = nrow(mtcars)")
   out = gptr_source(f, replay = "auto", envir = e)
   expect_identical(out$action, "ran")
   expect_identical(e$n, 32L)
@@ -1873,7 +1747,7 @@ test_that("gptr_source() keeps UTF-8 literals exact in a non-UTF-8 locale (IC-62
              f, useBytes = TRUE)
   bytes = readBin(f, "raw", n = file.size(f))
   local_name_locale()
-  e = doc_source_env()
+  e = doc_stand_in()
   out = gptr_source(f, replay = "replay", envir = e)
   expect_identical(e$x, word)
   expect_identical(charToRaw(e$x), charToRaw(word))
@@ -1883,14 +1757,24 @@ test_that("gptr_source() keeps UTF-8 literals exact in a non-UTF-8 locale (IC-62
   expect_identical(readBin(f, "raw", n = file.size(f)), bytes)
 })
 
-test_that("gptr_source() of a missing file or a directory is an invalid argument", {
+test_that("gptr_source() of a missing, directory, non-UTF-8 or unreadable file is invalid", {
   local_project()
-  err = expect_error(gptr_source(file.path(getwd(), "missing.R"), envir = new.env()),
-                     class = "gptr_error_invalid_argument")
-  expect_identical(err$arg, "file")
   dir.create(file.path(getwd(), "d.R"))
-  expect_error(gptr_source(file.path(getwd(), "d.R"), envir = new.env()),
-               class = "gptr_error_invalid_argument")
+  f = file.path(getwd(), "latin1.R")
+  writeBin(c(charToRaw("x = \""), as.raw(0xe9), charToRaw("\"\n")), f)
+  e = new.env()
+  for (bad in file.path(getwd(), c("missing.R", "d.R", "latin1.R"))) {
+    err = expect_error(gptr_source(bad, envir = e), class = "gptr_error_invalid_argument")
+    expect_identical(err$arg, "file")
+    expect_false(inherits(err, "gptr_error_doc_write"))
+  }
+  expect_false(exists("x", envir = e, inherits = FALSE))
+  testthat::local_mocked_bindings(doc_read = function(path) {
+    gptr_abort(paste0("Cannot read the document: ", path), "doc_write", path = path,
+               reason = "unreadable")
+  })
+  err = expect_error(gptr_source(f, envir = e), class = "gptr_error_invalid_argument")
+  expect_identical(err$arg, "file")
   expect_length(doc_state()$sources, 0L)
 })
 
@@ -1904,7 +1788,7 @@ test_that("gptr_source() without `replay` keeps GPTR_REPLAY and the replay setti
                doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("count rows")),
                                 "old_ran = TRUE")), f)
   before = readLines(f)
-  e = doc_source_env()
+  e = doc_stand_in()
   expect_error(gptr_source(f, envir = e), class = "gptr_error_stale_block")
   expect_identical(e$log$runs, 0L)
   expect_false(exists("old_ran", envir = e, inherits = FALSE))
@@ -1931,7 +1815,7 @@ test_that("gptr_source() reports a stale call it ran without write consent as `r
                doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("count rows")),
                                 "old_ran = TRUE")), f)
   before = readLines(f)
-  e = doc_source_env(code = "n = 99")
+  e = doc_stand_in(code = "n = 99")
   out = gptr_source(f, replay = "auto", envir = e)
   expect_identical(e$log$runs, 1L)
   expect_identical(e$n, 99)
@@ -1956,7 +1840,7 @@ test_that("gptr_source() skips a regenerated block's old code below a #line comm
     doc_render_block("bbbbbb", list(model = "m", prompt = prompt_hash("second step")),
                      c("old_ran = TRUE", "x = 0")),
     "after = x + 1"), f)
-  e = doc_source_env(code = "n = 99")
+  e = doc_stand_in(code = "n = 99")
   out = gptr_source(f, replay = "auto", envir = e)
   expect_identical(e$log$runs, 1L)
   expect_identical(e$n, 99)
@@ -1966,24 +1850,6 @@ test_that("gptr_source() skips a regenerated block's old code below a #line comm
   b = doc_find_blocks(readLines(f))
   expect_identical(doc_block_body(readLines(f), b[1, ]), "n = 99")
   expect_null(getOption("gptr.replay"))
-})
-
-test_that("gptr_source() of a file it cannot read as UTF-8 is an invalid argument", {
-  local_project()
-  f = file.path(getwd(), "latin1.R")
-  writeBin(c(charToRaw("x = \""), as.raw(0xe9), charToRaw("\"\n")), f)
-  e = new.env()
-  err = expect_error(gptr_source(f, envir = e), class = "gptr_error_invalid_argument")
-  expect_identical(err$arg, "file")
-  expect_false(inherits(err, "gptr_error_doc_write"))
-  expect_false(exists("x", envir = e, inherits = FALSE))
-  testthat::local_mocked_bindings(doc_read = function(path) {
-    gptr_abort(paste0("Cannot read the document: ", path), "doc_write", path = path,
-               reason = "unreadable")
-  })
-  err = expect_error(gptr_source(f, envir = e), class = "gptr_error_invalid_argument")
-  expect_identical(err$arg, "file")
-  expect_length(doc_state()$sources, 0L)
 })
 
 # ---- end to end through peter() and the fake provider (05 P15 acceptance 2-6) --------------------

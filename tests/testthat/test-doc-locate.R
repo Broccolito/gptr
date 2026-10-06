@@ -2,28 +2,30 @@
 # transcript target. A stand-in `peter()` defined in the sourcing environment builds the call
 # record the way P08 does (template, sys_call, nframe) and returns doc_locate()'s site.
 
-# Bind a document for the calling test (restores the previous binding)
-local_doc_binding = function(path, format = "r", .env = parent.frame()) {
-  old = the$doc_binding
-  the$doc_binding = list(path = path_norm(path), format = format)
-  withr::defer(assign("doc_binding", old, envir = the), envir = .env)
-  invisible(path)
-}
-
 doc_probe_env = function() {
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$interp = character()
-    call$context = list()
-    call$session = NULL
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
+    call = doc_record(prompt)
     doc_locate(call)
   }
   e
+}
+
+# A stand-in peter() that locates first and forces a piped session afterwards, so the inner calls
+# of a chain are located from inside the outer call
+doc_pipe_env = function() {
+  e = new.env()
+  e$peter = function(x, prompt = NULL, ...) {
+    call = doc_record(prompt %||% x)
+    site = doc_locate(call)
+    if (is.list(x) && !is.null(x$kind)) c(list(first = x), site) else site
+  }
+  e
+}
+
+# A call record for a call that has no frames to search (console, Jupyter, Rscript)
+doc_bare_call = function(sys_call, template = NULL, prompt = template) {
+  call_new(prompt, template, sys_call = sys_call, nframe = 0L)
 }
 
 # No running document but the test's own: a test process is itself an `Rscript --file=` run (the
@@ -83,17 +85,7 @@ test_that("pipelines, block-nested calls and dynamic prompts are told apart", {
                "dyn = peter(paste(\"dy\", \"n\"))",
                "outer = peter(\"outer\")", paste0("# >>> gptr:abc123 model=m prompt=", ph),
                "nested = peter(\"inner\")", "# <<< gptr:abc123"), f)
-  e = doc_probe_env()
-  e$peter = function(x, prompt = NULL, ...) {
-    if (is.null(prompt)) prompt = x
-    call = new.env(parent = emptyenv())
-    call$template = if (is.character(prompt)) prompt else NULL
-    call$prompt = prompt
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    site = doc_locate(call)
-    if (is.list(x) && !is.null(x$kind)) c(list(first = x), site) else site
-  }
+  e = doc_pipe_env()
   source(f, local = e, keep.source = TRUE)
   expect_identical(e$chain$ordinal, 2L)
   expect_identical(e$chain$first$ordinal, 1L)
@@ -118,10 +110,7 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
   nb = file.path(proj, "analysis.ipynb")
   expect_true(file.copy(fixture, nb))
   withr::local_envvar(JPY_SESSION_NAME = nb)
-  call = new.env(parent = emptyenv())
-  call$template = "summarise the mpg column"
-  call$sys_call = quote(peter("summarise the mpg column"))
-  call$nframe = 0L
+  call = doc_bare_call(quote(peter("summarise the mpg column")), "summarise the mpg column")
   site = doc_locate(call)
   expect_identical(site$kind, "jupyter")
   expect_identical(site$backend, "pending")
@@ -140,10 +129,7 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
 test_that("calls in no document go to the console transcript target, if any", {
   proj = local_project()
   local_no_running_document()
-  call = new.env(parent = emptyenv())
-  call$template = "first prompt"
-  call$sys_call = quote(peter("first prompt"))
-  call$nframe = 0L
+  call = doc_bare_call(quote(peter("first prompt")), "first prompt")
   call$context = list(list(label = "mtcars", kind = "symbol", name = "mtcars"))
   expect_null(doc_locate(call))
   expect_false(call$top_level)
@@ -185,33 +171,6 @@ test_that("an interactive console asks once where to record and remembers the an
 })
 
 # ---- Task 8 additions (contract 7.15, 11.5; IC-52; dev/DEVIATIONS.md D-103) ---------------------
-
-# A stand-in peter() that locates first and forces a piped session afterwards (as the pipeline
-# test above), so the inner calls of a chain are located from inside the outer call
-doc_pipe_env = function() {
-  e = new.env()
-  e$peter = function(x, prompt = NULL, ...) {
-    if (is.null(prompt)) prompt = x
-    call = new.env(parent = emptyenv())
-    call$template = if (is.character(prompt)) prompt else NULL
-    call$prompt = prompt
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
-    site = doc_locate(call)
-    if (is.list(x) && !is.null(x$kind)) c(list(first = x), site) else site
-  }
-  e
-}
-
-# A call record for a call that has no frames to search (console, Jupyter, Rscript)
-doc_bare_call = function(sys_call, template = NULL, prompt = template) {
-  call = new.env(parent = emptyenv())
-  call$template = template
-  call$prompt = prompt
-  call$sys_call = sys_call
-  call$nframe = 0L
-  call
-}
 
 test_that("each step of a pipeline that repeats a prompt is located as itself (ambiguity 28)", {
   proj = local_project()
@@ -454,11 +413,7 @@ test_that("a call nested in a sourced script is no console turn, with or without
   local_doc_binding(f)
   e = new.env()
   e$peter = function(prompt, ...) {
-    call = new.env(parent = emptyenv())
-    call$template = prompt
-    call$prompt = prompt
-    call$sys_call = sys.call()
-    call$nframe = sys.nframe()
+    call = doc_record(prompt)
     doc_locate_both(call)
   }
   for (keep in c(TRUE, FALSE)) {
