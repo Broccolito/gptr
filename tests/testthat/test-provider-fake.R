@@ -396,14 +396,6 @@ test_that("local_gptr_options() prefixes names and restores them", {
   expect_true(getOption("gptr.quiet"))
 })
 
-test_that("local_project() rejects paths escaping its temporary root before writing", {
-  outside = withr::local_tempfile(pattern = "gptr-outside-")
-  rel = file.path("..", basename(outside))
-  expect_error(local_project(files = stats::setNames(list("unsafe"), rel)), "inside")
-  expect_false(file.exists(outside))
-  expect_error(local_project(files = list("unnamed")), "named")
-  expect_error(local_project(files = list("same" = "a", "same" = "b")), "unique")
-})
 mock_handle = function(body, headers, timeout) {
   h = curl::new_handle()
   curl::handle_setopt(h, post = TRUE, postfields = body, followlocation = 0L, timeout = timeout,
@@ -595,18 +587,6 @@ test_that("mock requests bypass configured proxies for loopback only", {
   expect_identical(curl::curl_fetch_memory(srv$url)$status_code, 200L)
 })
 
-test_that("custom mock answers preserve captured values and helper closures", {
-  probability = 0.25
-  answer_for = function(body) list(is_dog = list(type = "noul", noul = probability))
-  answers = function(body) answer_for(body)
-  original = environment(answers)
-  srv = local_mock_server("systemone", answers = answers)
-  result = mock_fetch(paste0(srv$url, "/systemone"), body = "{\"questions\":{}}")
-  expect_identical(result$status_code, 200L)
-  expect_identical(json_decode(result$text)$answers$is_dog$noul, 0.25)
-  expect_identical(environment(answers), original)
-})
-
 test_that("the mock child exits if its parent vanished before startup", {
   skip_on_cran()
   dir = withr::local_tempdir()
@@ -625,69 +605,4 @@ test_that("the mock child exits if its parent vanished before startup", {
   withr::defer(if (proc$is_alive()) proc$kill())
   proc$wait(5000)
   expect_false(proc$is_alive())
-})
-
-test_that("captured mock callbacks share ancestor bindings and omit unrelated state", {
-  probe = local({
-    count = 0L
-    inc = function() count <<- count + 1L
-    read = local(function() count)
-    function(body) {
-      inc()
-      read()
-    }
-  })
-  captured = mock_capture_function(probe)
-  expect_identical(captured(NULL), 1L)
-  expect_identical(captured(NULL), 2L)
-  expect_identical(probe(NULL), 1L)
-
-  nested = local({
-    unrelated = "UNRELATED-TEST-FRAME-CANARY"
-    probability = 0.25
-    handlers = list(answer = function(body) probability)
-    function(body) handlers$answer(body)
-  })
-  captured = mock_capture_function(nested)
-  expect_identical(captured(NULL), 0.25)
-  expect_length(grepRaw("UNRELATED-TEST-FRAME-CANARY", serialize(captured, NULL), fixed = TRUE), 0L)
-})
-
-test_that("malformed HTTP requests are rejected without terminating the fixture", {
-  srv = local_mock_server("json", body = "{}")
-  request = function(bytes) {
-    con = socketConnection("127.0.0.1", port = srv$port, blocking = TRUE, open = "r+b", timeout = 5)
-    on.exit(close(con))
-    writeBin(charToRaw(bytes), con)
-    rawToChar(readBin(con, "raw", 4096L))
-  }
-  bad = c(
-    "\r\n\r\n",
-    "NOT HTTP\r\n\r\n",
-    "POST /wrong HTTP/1.1\r\ninvalid-header\r\n\r\n",
-    "POST /wrong HTTP/1.1\r\nContent-Length: invalid\r\n\r\n",
-    "POST /wrong HTTP/1.1\r\nContent-Length: -1\r\n\r\n",
-    "POST /wrong HTTP/1.1\r\nContent-Length: 2147483648\r\n\r\n",
-    "POST /wrong HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n",
-    "POST /wrong HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\ntest\r\n0\r\n\r\n",
-    paste0("POST /wrong HTTP/1.1\r\nX-Long: ", strrep("a", 65536L), "\r\n\r\n")
-  )
-  for (bytes in bad) expect_match(request(bytes), "^HTTP/1.1 (400|413|431|501) ")
-  expect_identical(mock_fetch(srv$url)$status_code, 200L)
-  expect_identical(nrow(srv$log()), 1L)
-})
-
-test_that("mock callback capture rejects unsupported mutable environment values", {
-  state = new.env(parent = emptyenv())
-  callback = function(body) state$value
-  expect_error(mock_capture_function(callback), "unsupported value", fixed = TRUE)
-})
-
-test_that("mock callback attributes cannot smuggle an enclosing environment", {
-  callback = local({
-    helper = function(body) 0.25
-    attr(helper, "fixture") = environment()
-    function(body) helper(body)
-  })
-  expect_error(mock_capture_function(callback), "unsupported function attributes", fixed = TRUE)
 })

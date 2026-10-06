@@ -216,3 +216,15 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Reviews: none yet.
 - Deviations: D-146. Open: P11 plan text (lane perm) names `control_check()`; 04 section 7.8 rows
   not amended (outside lane).
+
+## P01-T - Test infrastructure (2026-10-05)
+- Mock callbacks sent with `baseenv()` (plan literal; `mock_capture_*()` gone); `parse_request()` in
+  the plan form (per-client error boundary, loopback proxy bypass, parent-vanished exit kept);
+  `mock_records()`; `local_project()` validation, `local_project_trust()` and the get0()/exists()
+  shims gone; `tracemem_loader()` loads the proc-spawn and session-store children (the latter run
+  their body in a child of the namespace, and now also under R CMD check). Tests -223 (plan ~213).
+- Red: none (refactor). Green: plan filter PASS 1431 (1456 before: -25 in the six named tests).
+  Lint clean. Neighbours: other `local_mock_server()` users, `auth-|http-|mcp-client|doc-io|
+  gptr-config`, `local_project(trust = TRUE)` users green. Full suite: coordinator.
+- Reviews: none yet.
+- Deviations: none. Open: none.

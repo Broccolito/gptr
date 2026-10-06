@@ -650,21 +650,14 @@ test_that("an unparsable middle line is skipped and its children re-parented", {
   expect_true(all(vapply(x$entries[-1L], function(e) e$parent_id %in% ids, NA)))
 })
 
-# The package source tree, resolved when testthat sources this file (the working directory is
-# tests/testthat then; local_store() changes it inside the tests). Under R CMD check there are no
-# sources and the two crash tests skip.
-package_src = normalizePath(testthat::test_path("..", ".."), winslash = "/", mustWork = FALSE)
-
-# A child script that loads the package sources (pkgload::load_all() exists only in this
-# generated text, IC-71) and runs `body` against the store of project `dir`.
+# A child script that loads gptr (tracemem_loader()) and runs `body` with the package's internal
+# functions in scope against the store of project `dir`
 child_script = function(dir, body) {
-  skip_if_not(file.exists(file.path(package_src, "DESCRIPTION")), "package sources not found")
-  skip_if_not_installed("pkgload")
   script = tempfile(fileext = ".R")
-  writeLines(c(sprintf("pkgload::load_all(%s, quiet = TRUE)", deparse(package_src)),
+  writeLines(c(tracemem_loader(),
                sprintf(paste0("options(gptr.project_root = %s, gptr.unsafe_no_permissions = TRUE, ",
                               "gptr.quiet = TRUE)"), deparse(dir)),
-               body), script)
+               "local({", body, "}, envir = new.env(parent = asNamespace('gptr')))"), script)
   script
 }
 

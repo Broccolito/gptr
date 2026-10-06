@@ -6,19 +6,6 @@ cat_bytes_code = function(bytes) {
          ", 0x0a))))")
 }
 
-# The line that loads gptr inside a generated child script: the source tree under
-# devtools::test(), the installed package under R CMD check (IC-71: pkgload::load_all()
-# appears only inside generated script text)
-gptr_child_load = function() {
-  path = getNamespaceInfo(asNamespace("gptr"), "path")
-  from_source = length(list.files(file.path(path, "R"), pattern = "[.][Rr]$")) > 0L
-  if (from_source) {
-    sprintf("suppressMessages(pkgload::load_all(%s, quiet = TRUE))", deparse(path))
-  } else {
-    "suppressMessages(library(gptr))"
-  }
-}
-
 wait_until = function(cond, seconds = 5) {
   t0 = reactor_now()
   while (!isTRUE(cond()) && reactor_now() - t0 < seconds) Sys.sleep(0.05)
@@ -199,12 +186,11 @@ test_that("line_reader() drops bytes that are not UTF-8 without a warning", {
 test_that("a parent killed with SIGTERM leaves children that the next load's sweep removes", {
   skip_on_cran()
   skip_on_os("windows")
-  if (!exists("proc_spawn", mode = "function")) stop("proc_spawn is not implemented")
   withr::local_envvar(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
   script = tempfile(fileext = ".R")
   spawn_line = paste0("spawn(rs, c('--vanilla', '-e', 'Sys.sleep(120)'), stdout = NULL, ",
                       "stderr = NULL, supervise = FALSE)")
-  writeLines(c(gptr_child_load(),
+  writeLines(c(tracemem_loader(),
                "spawn = utils::getFromNamespace('proc_spawn', 'gptr')",
                "rs = utils::getFromNamespace('rscript_path', 'gptr')()",
                paste0("p1 = ", spawn_line),

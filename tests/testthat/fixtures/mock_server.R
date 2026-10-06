@@ -339,37 +339,19 @@ srv$k = 0L
 
 sensitive = "authorization|api-key|x-api-key|x-goog-api-key|cookie|token|secret|key"
 
-# Fixture limits, not a general HTTP implementation: 64 KiB headers and 16 MiB bodies.
-# Chunked request uploads are unsupported; response chunking remains supported.
 parse_request = function(buf) {
   head_end = grepRaw("\r\n\r\n", buf, fixed = TRUE)
-  if (!length(head_end)) {
-    if (length(buf) > 65536L) return(list(error = 431L))
-    return(NULL)
-  }
-  if (head_end + 3L > 65536L) return(list(error = 431L))
+  if (!length(head_end)) return(NULL)
   head = strsplit(rawToChar(buf[seq_len(head_end - 1L)]), "\r\n", fixed = TRUE)[[1L]]
-  if (!length(head) || !grepl("^[A-Z]+ [^[:space:]]+ HTTP/1\\.[01]$", head[[1L]])) {
-    return(list(error = 400L))
-  }
   line = strsplit(head[[1L]], " ", fixed = TRUE)[[1L]]
-  headers = head[-1L]
-  if (length(headers) && any(!grepl("^[!#$%&'*+.^_`|~A-Za-z0-9-]+:[^\r\n]*$", headers))) {
-    return(list(error = 400L))
-  }
-  hnames = tolower(sub(":.*$", "", headers))
-  hvalues = trimws(sub("^[^:]*:", "", headers))
-  if (any(hnames == "transfer-encoding")) return(list(error = 501L))
-  lengths = hvalues[hnames == "content-length"]
-  if (length(lengths) > 1L || (length(lengths) && !grepl("^[0-9]+$", lengths))) {
-    return(list(error = 400L))
-  }
-  clen = if (length(lengths)) suppressWarnings(as.numeric(lengths)) else 0
-  if (!is.finite(clen) || clen > 16 * 1024^2) return(list(error = 413L))
+  hnames = tolower(trimws(sub(":.*$", "", head[-1L])))
+  hvalues = trimws(sub("^[^:]*:", "", head[-1L]))
+  clen = suppressWarnings(as.integer(hvalues[hnames == "content-length"][1L]))
+  if (is.na(clen)) clen = 0L
   start = head_end + 4L
   list(
-    method = line[[1L]], target = line[[2L]],
-    names = hnames, values = hvalues, length = as.integer(clen), start = start,
+    method = line[[1L]], target = if (length(line) > 1L) line[[2L]] else "/",
+    names = hnames, values = hvalues, length = clen, start = start,
     complete = length(buf) - start + 1L >= clen,
     expect = any(hnames == "expect" & tolower(hvalues) == "100-continue")
   )
@@ -487,11 +469,7 @@ handle_read = function(key, chunk) {
   }
   if (!identical(cl$state, "read")) return(invisible(NULL))
   cl$buf = c(cl$buf, chunk)
-  req = tryCatch(parse_request(cl$buf), error = function(e) list(error = 400L))
-  if (!is.null(req$error)) {
-    srv$clients[[key]] = schedule(cl, plain(req$error, "invalid or unsupported fixture request"))
-    return(invisible(NULL))
-  }
+  req = parse_request(cl$buf)
   if (!is.null(req) && !req$complete && req$expect && !isTRUE(cl$continued)) {
     writeBin(charToRaw("HTTP/1.1 100 Continue\r\n\r\n"), cl$con)
     cl$continued = TRUE

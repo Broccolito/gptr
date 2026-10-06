@@ -49,24 +49,29 @@ mock_provider = function(scenario, url) {
   )
 }
 
-# The request log as a data frame: one row per request, `disconnected` NA while it is open (the
-# end of a request is logged just after its last byte, so poll before asserting it). Header
-# values are redacted except at the second origin of `redirect` (IC-64). A line the server is
-# still writing is skipped.
-mock_log = function(file) {
-  empty = data.frame(
-    time = as.POSIXct(numeric(), origin = "1970-01-01"), method = character(),
-    path = character(), headers = character(), body = character(), disconnected = logical()
-  )
-  if (!file.exists(file)) return(empty)
+# The JSON records of a mock log; a line the server is still writing is skipped
+mock_records = function(file) {
+  if (!file.exists(file)) return(list())
   lines = readLines(file, encoding = "UTF-8", warn = FALSE)
   records = lapply(lines[nzchar(lines)], function(line) {
     tryCatch(json_decode(line), error = function(e) NULL)
   })
-  records = Filter(Negate(is.null), records)
+  Filter(Negate(is.null), records)
+}
+
+# The request log as a data frame: one row per request, `disconnected` NA while it is open (the
+# end of a request is logged just after its last byte, so poll before asserting it). Header
+# values are redacted except at the second origin of `redirect` (IC-64).
+mock_log = function(file) {
+  records = mock_records(file)
   kinds = vapply(records, function(r) r$kind, "")
   requests = records[kinds == "request"]
-  if (!length(requests)) return(empty)
+  if (!length(requests)) {
+    return(data.frame(
+      time = as.POSIXct(numeric(), origin = "1970-01-01"), method = character(),
+      path = character(), headers = character(), body = character(), disconnected = logical()
+    ))
+  }
   ends = records[kinds == "end"]
   end_ids = vapply(ends, function(r) as.integer(r$id), integer(1))
   out = data.frame(
@@ -87,16 +92,10 @@ mock_log = function(file) {
 # The writes the mock logged when started with `log_writes = TRUE` (DEVIATIONS D-016): one row
 # per response piece, `id` = its request, `time` = wall-clock seconds (Sys.time()) just before the
 # write, `event` = the SSE event the piece starts with ("head" for the response head, "" for other
-# bytes). A line the server is still writing is skipped.
+# bytes).
 mock_writes = function(file) {
-  empty = data.frame(id = integer(), time = numeric(), event = character())
-  if (!file.exists(file)) return(empty)
-  lines = readLines(file, encoding = "UTF-8", warn = FALSE)
-  records = lapply(lines[nzchar(lines)], function(line) {
-    tryCatch(json_decode(line), error = function(e) NULL)
-  })
-  records = Filter(function(r) identical(r$kind, "write"), records)
-  if (!length(records)) return(empty)
+  records = Filter(function(r) identical(r$kind, "write"), mock_records(file))
+  if (!length(records)) return(data.frame(id = integer(), time = numeric(), event = character()))
   data.frame(
     id = vapply(records, function(r) as.integer(r$id), integer(1)),
     time = vapply(records, function(r) as.numeric(r$time), numeric(1)),
@@ -104,65 +103,10 @@ mock_writes = function(file) {
   )
 }
 
-# Copy only referenced bindings while preserving lexical parents and shared binding owners.
-# Capture supports functions, atomic vectors and lists (including their attributes). Explicit
-# environment/connection/S4 captures and custom function attributes are rejected before spawn.
-mock_capture_environment = function(source, cache) {
-  if (identical(source, baseenv()) || identical(source, emptyenv())) return(source)
-  found = which(vapply(cache$sources, identical, logical(1), y = source))
-  if (length(found)) return(cache$targets[[found[[1L]]]])
-  target = new.env(parent = emptyenv())
-  cache$sources = c(cache$sources, list(source))
-  cache$targets = c(cache$targets, list(target))
-  parent.env(target) = mock_capture_environment(parent.env(source), cache)
-  target
-}
-
-mock_capture_value = function(value, cache) {
-  if (is.function(value)) return(mock_capture_function(value, cache))
-  if (isS4(value) || inherits(value, "connection") ||
-      !(is.null(value) || is.atomic(value) || is.list(value))) {
-    stop("mock callbacks capture only functions, atomic vectors and lists; unsupported value")
-  }
-  if (is.list(value)) {
-    for (i in seq_along(value)) value[i] = list(mock_capture_value(value[[i]], cache))
-  }
-  attrs = attributes(value)
-  for (name in names(attrs)) attrs[name] = list(mock_capture_value(attrs[[name]], cache))
-  attributes(value) = attrs
-  value
-}
-
-mock_capture_function = function(fun, cache = new.env(parent = emptyenv())) {
-  testthat::skip_if_not_installed("codetools")
-  if (!is.function(fun)) return(fun)
-  fun = utils::removeSource(fun)
-  if (length(attributes(fun))) stop("mock callbacks have unsupported function attributes")
-  if (is.primitive(fun)) return(fun)
-  source = environment(fun)
-  if (identical(source, baseenv()) || isNamespace(source)) return(fun)
-  target = mock_capture_environment(source, cache)
-  symbols = codetools::findGlobals(fun, merge = TRUE)
-  for (name in symbols) {
-    owner = source
-    while (!identical(owner, emptyenv()) && !exists(name, envir = owner, inherits = FALSE)) {
-      owner = parent.env(owner)
-    }
-    if (identical(owner, emptyenv()) || identical(owner, baseenv())) next
-    binding = mock_capture_environment(owner, cache)
-    if (exists(name, envir = binding, inherits = FALSE)) next
-    assign(name, NULL, envir = binding)
-    value = mock_capture_value(get(name, envir = owner, inherits = FALSE), cache)
-    assign(name, value, envir = binding)
-  }
-  environment(fun) = target
-  fun
-}
-
 # Start the mock server for the calling test; see contract section 12.2 for the scenarios.
 # `...` are scenario arguments (n, interval, delay, status, body, retry_after, answers, headers,
-# chunked, log_writes, ...); function arguments carry only their lexically referenced fixture
-# bindings. Beyond contract 12.2, the result also has `writes()` (mock_writes(), D-016).
+# chunked, log_writes, ...); function arguments are sent to the child without their environment.
+# Beyond contract 12.2, the result also has `writes()` (mock_writes(), D-016).
 local_mock_server = function(scenario, ..., .env = parent.frame()) {
   testthat::skip_on_cran()
   if (!(scenario %in% mock_scenarios)) stop("unknown mock scenario: ", scenario)
@@ -174,7 +118,7 @@ local_mock_server = function(scenario, ..., .env = parent.frame()) {
   withr::local_envvar(proxies, .local_envir = .env)
   args = list(...)
   for (name in names(args)) {
-    if (is.function(args[[name]])) args[[name]] = mock_capture_function(args[[name]])
+    if (is.function(args[[name]])) environment(args[[name]]) = baseenv()
   }
   dir = withr::local_tempdir("gptr-mock-", .local_envir = .env)
   tmp = file.path(dir, "tmp")

@@ -164,22 +164,12 @@ local_fake_renviron = function(.env = parent.frame()) {
   normalizePath(f, winslash = "/")
 }
 
-# Run Rscript (without --vanilla, so R_ENVIRON_USER is honoured) with `env`; returns stdout.
-# Through proc_spawn() once P04 is loaded, else processx directly with the same arguments.
-# Looked up with get0(), so lintr's object_usage_linter has no unknown function to report
-# while P04 is not yet in the package.
+# Run Rscript (without --vanilla, so R_ENVIRON_USER is honoured) with `env`; returns stdout
 run_rscript = function(env, code) {
   out = tempfile()
   err = tempfile()
   on.exit(unlink(c(out, err)), add = TRUE)
-  args = c("-e", code)
-  spawn = get0("proc_spawn", mode = "function")
-  p = if (!is.null(spawn)) {
-    spawn(rscript_path(), args, env = env, stdout = out, stderr = err)
-  } else {
-    processx::process$new(rscript_path(), args, env = env, stdout = out, stderr = err,
-                          encoding = "UTF-8")
-  }
+  p = proc_spawn(rscript_path(), c("-e", code), env = env, stdout = out, stderr = err)
   withr::defer(if (p$is_alive()) p$kill())
   p$wait(60000)
   paste(readLines(out, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
