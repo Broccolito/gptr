@@ -1420,7 +1420,7 @@ The members `sh`, `script`, `bg` and `jobs` are tool specs (04 §9.1, §9.4) wit
 
 Two guards protect the members:
 
-- **No shell tool (S-4).** P06 looks up any registered spec with an `execute` when a model names a tool, so a model could call `sh` directly. A `tool_call` hook registered by the built-in (`gptr$on()`, 04 §10.5; decision event, 04 §10.4) blocks a top-level call that names one of its members before P06's permission check and checkpoints run, so no one is asked to approve a shell tool that does not exist; the model reads `Tool execution was blocked: peter$sh() is an R function, not a tool: call it inside r code (there is no shell tool).` As a second line of defence the `execute` refuses the same call: P06 binds the executing call record as `run$tool_call` (04 §4.4 shape), and when that record names the bridge itself and is not nested, the call is refused with the same sentence.
+- **No shell tool (S-4).** P06 looks up any registered spec with an `execute` when a model names a tool, so a model could call `sh` directly. A `tool_call` hook registered by the built-in (`gptr$on()`, 04 §10.5; decision event, 04 §10.4) blocks a top-level call that names one of its members before P06's permission check and checkpoints run, so no one is asked to approve a shell tool that does not exist; the model reads `Tool execution was blocked: peter$sh() is an R function, not a tool: call it inside r code (there is no shell tool).` As a second line of defence the `execute` refuses the same call: P06 binds the executing top-level call record as `run$tool_call` (04 §4.4 shape), and when that record names the bridge itself, the call is refused with the same sentence.
 - **Computed commands are re-checked at run time** (05 P22 acceptance 3; G5 design 5; 03 §6.8.4). `dispatch_nested()` runs a member without a second check when the outer `r` call's static analysis listed it at a level no higher than the level approved for the outer call; P11 lists a command computed at run time at level 3. The `execute` therefore classifies the actual arguments with the member's own `risk()` and, when they are above the approved level (`run$tool_call$approved_level`, set by P06's dispatcher), passes the call through `perm_check()` (kernel SDK) once more; a refusal is a `gptr_error_permission`, which P06's `dispatch_nested()` turns into an error result and a `gptr_error_tool` in the model's code.
 
 The task also registers the `<r_session>` fragment `shell` (IC-68) and replaces the first version of `builtin_bridges()` (Task 3).
@@ -1431,7 +1431,7 @@ The task also registers the `<r_session>` fragment `shell` (IC-68) and replaces 
 
 **Interfaces:**
 - Consumes: `gptr_tool(name, description, parameters = NULL, execute = NULL, fun = NULL, exposure = c("direct", "r", "deferred", "hidden"), namespace = NULL, execution = c("sequential", "concurrent"), risk = NULL, snippet = NULL, guidelines = NULL, signature = NULL, output_tokens = NULL, record = TRUE, available = NULL, annotations = list())`, `gptr_tool_result(text = NULL, images = NULL, details = NULL, is_error = FALSE, value = NULL)`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `registry_get()` (P02, 04 §6.7-§6.8); the factory API's `gptr$on(event, handler, matcher = NULL)` and the `tool_call` decision event (payload `tool_name`, `tool_call_id`, `input`, `nested`, `parent_tool_call_id`, `risk`; returns `NULL` or `list(decision = "block", reason)`; P02, 04 §10.4-§10.5); `perm_check(call, run)` -> `list(decision, reason, input, risk, rule)` (P06 kernel SDK, 04 §7.6) and the run bindings `tool_call` (with `id`, `name`, `nested`, `risk$flagged`, `approved_level`) and `session`; the service `risk.classify` (P11); tests: `gptr_check(x)`, `registry_env()`, `registry_filters_set(filters, scope)` (P02), `preset_tools(preset, human, ...)`, `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` (P07), `gptr_risk(code, envir = NULL, root = NULL)` (P11), the gateway `peter` with `$`, `[[` and `.DollarNames` (P08 through P10's services), `peter$out()` (P10), `local_project()`, `local_fake_provider()`, `fake_tool()`, `fake_text()`, `local_gptr_options()`, `msg_text()` (P01), the session accessors `$id`, `$status` and `$messages` (P06).
-- Produces: the member specs `sh`, `script`, `bg`, `jobs` (04 §9.4); the `tool_call` hook of `builtin:bridges`; `bridge_block_hook(names)` (reused by Task 9); the prompt section `shell` (`parent = "r_session"`, T0, order 30); `builtin_bridges(gptr)` (final: the `interpreter` kind, the interpreters, the four members, the fragment); `bridge_member(name, description, properties, required, fun, risk, signature)`, `bridge_execute(fun, name)`, `bridge_refuse_direct(name)`, `bridge_recheck(name, input)`, `bridge_summary(name, value)`, `bridge_never_direct(ctx)`, `bridge_prop()`, `bridge_strings()`, `bridge_any()`, `bridge_sh_properties()` (reused by Task 9); `bridge_risk_sh()`, `bridge_risk_script()`, `bridge_risk_bg()`, `bridge_risk_jobs()`; `bridge_shell_fragment`.
+- Produces: the member specs `sh`, `script`, `bg`, `jobs` (04 §9.4); the `tool_call` hook of `builtin:bridges`; `bridge_block_hook(names)` (reused by Task 9); the prompt section `shell` (`parent = "r_session"`, T0, order 30); `builtin_bridges(gptr)` (final: the `interpreter` kind, the interpreters, the four members, the fragment); `bridge_member(name, description, properties, required, fun, risk)`, `bridge_prop()`, `bridge_strings()` (reused by Task 9), `bridge_execute(fun, name)`, `bridge_not_a_tool(name)`, `bridge_recheck(name, input, ctx, run)`; `bridge_risk_sh()`, `bridge_risk_script()`, `bridge_risk_bg()`, `bridge_risk_jobs()`; `bridge_sh_members()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1608,6 +1608,19 @@ test_that("computed commands are re-checked at run time with the actual command"
                               name = "fake2")
   peter("make the file", model = fake2, envir = new.env(), mode = "auto")
   expect_true(file.exists("fine.txt"))
+  # the re-check runs the input a policy's modify approved (IC-53 item 7)
+  local_gptr_options(critical_guard = FALSE)
+  off = gptr_register(gptr_policy("p22_safer", function(call, ctx) {
+    if (identical(call$name, "sh") && any(grepl("marker", unlist(call$input$cmd), fixed = TRUE))) {
+      list(decision = "modify",
+           input = list(cmd = c(rscript_path(), "-e", "file.create('safe.txt')")))
+    }
+  }))
+  withr::defer(off())
+  fake3 = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")), name = "fake3")
+  peter("make the marker", model = fake3, envir = new.env(), mode = "auto")
+  expect_false(file.exists("marker.txt"))
+  expect_true(file.exists("safe.txt"))
 })
 ```
 
@@ -1626,176 +1639,117 @@ Replace the `# ---- builtin:bridges` section of `R/bridge-sh.R` (from that headi
 ```r
 # ---- member specs shared by builtin:bridges and builtin:lang -------------------------------------
 
-#' S-4: a `tool_call` hook (decision event, contract 10.4) that blocks a top-level tool call
-#' naming one of `names` before P06's permission check and checkpoints run, so no one is asked
-#' to approve a shell tool that does not exist; nested calls (model code inside `r`) pass. The
-#' closure holds only the names.
+#' What the model reads when it calls a bridge as a tool (S-4)
+#' @noRd
+bridge_not_a_tool = function(name) {
+  paste0("peter$", name, "() is an R function, not a tool: call it inside r code (there is no ",
+         "shell tool).")
+}
+
+#' S-4: a `tool_call` hook (decision event, contract 10.4) that blocks a top-level call of one of
+#' `names` before P06's permission check and checkpoints, so no one approves a shell tool that does
+#' not exist; nested calls (model code inside `r`) pass
 #' @noRd
 bridge_block_hook = function(names) {
   force(names)
   function(event, ctx) {
-    name = event$tool_name
-    direct = is.character(name) && length(name) == 1L && name %in% names &&
-      !isTRUE(event$nested)
-    if (!direct) return(NULL)
-    list(decision = "block",
-         reason = paste0("peter$", name, "() is an R function, not a tool: call it inside r ",
-                         "code (there is no shell tool)."))
+    if (isTRUE(event$nested) || !isTRUE(event$tool_name %in% names)) return(NULL)
+    list(decision = "block", reason = bridge_not_a_tool(event$tool_name))
   }
 }
 
-#' S-4, second line of defence (after bridge_block_hook()): refuse a bridge called as a top-level
-#' tool. P06's tool lookup accepts any registered spec with an `execute`, so a model could name
-#' `sh` in a tool call; the call record P06 binds while a tool executes (`run$tool_call`) then
-#' names the bridge itself and is not nested.
+#' Re-check a nested call with its actual arguments (05 P22 acceptance 3, architecture 6.8.4)
+#' P06's dispatch_nested() runs a member without perm_check() when the outer `r` call's analysis
+#' listed it at or below the approved level, and P11 lists a command computed at run time at 3.
+#' @return The input to run: a policy's `modify` replaces it (IC-53 item 7).
 #' @noRd
-bridge_refuse_direct = function(name) {
-  run = run_current()
-  outer = if (is.null(run)) NULL else run$tool_call
-  if (identical(outer$name, name) && !isTRUE(outer$nested)) {
-    gptr_abort(paste0("peter$", name, "() is an R function, not a tool: call it inside r code ",
-                      "(there is no shell tool)."),
-               "not_available", member = name, provided_by = "the r tool")
-  }
-  invisible(NULL)
-}
-
-#' Re-check a nested call at run time with its actual arguments (G5 section 5, architecture
-#' 6.8.4)
-#'
-#' P06's dispatch_nested() runs a member without a second prompt when the outer `r` code's static
-#' analysis listed it at a level no higher than the level approved for the outer call; a command
-#' computed at run time is listed at level 3. When the actual arguments classify above the
-#' approved level, the call passes perm_check() once more with the member's own risk().
-#' @noRd
-bridge_recheck = function(name, input) {
-  run = run_current()
-  outer = if (is.null(run)) NULL else run$tool_call
-  if (is.null(outer) || identical(outer$name, name)) return(invisible(NULL))
-  flagged = outer$risk$flagged
-  if (!is.data.frame(flagged) || !nrow(flagged)) return(invisible(NULL))
-  hit = flagged$fn %in% c(name, paste0("peter$", name))
-  if (!any(hit)) return(invisible(NULL))
+bridge_recheck = function(name, input, ctx, run) {
+  outer = run$tool_call
+  fl = outer$risk$flagged
   approved = as.integer(outer$approved_level %||% 0L)
-  if (max(as.integer(flagged$level[hit])) > approved) return(invisible(NULL))
+  listed = if (is.data.frame(fl)) as.integer(fl$level[fl$fn %in% c(name, paste0("peter$", name))])
+  # not listed, or listed above the approved level: dispatch_nested() has run perm_check()
+  if (!length(listed) || !isTRUE(max(listed) <= approved)) return(input)
   spec = registry_get("tool", name, session = run$session)
-  risk = tryCatch(spec$risk(input, NULL),
-                  error = function(e) list(level = 3L, categories = "unknown"))
-  level = as.integer(risk$level %||% 3L)
-  if (level <= approved) return(invisible(NULL))
-  call = list(id = paste0(outer$id, "/", name, "-recheck"), name = name, input = input,
-              raw = NULL, tool = spec, nested = TRUE, parent_id = outer$id,
-              outer_level = approved, risk = NULL)
-  dec = perm_check(call, run)
-  if (identical(dec$decision, "allow")) return(invisible(NULL))
-  gptr_abort(paste0("Permission denied: ", dec$reason %||% "not allowed", ". The arguments of ",
-                    "peter$", name, "() computed at run time are level ", level, "."),
+  level = tryCatch(as.integer(spec$risk(input, ctx)$level), error = function(e) NA_integer_)
+  if (isTRUE(level <= approved)) return(input)
+  dec = perm_check(list(id = paste0(outer$id, "/", name), name = name, input = input, raw = NULL,
+                        tool = spec, nested = TRUE, parent_id = outer$id, outer_level = approved,
+                        risk = NULL), run)
+  if (identical(dec$decision, "allow")) return(dec$input %||% input)
+  gptr_abort(paste0("Permission denied: ", dec$reason, ". peter$", name, "() was re-checked with ",
+                    "its arguments computed at run time."),
              "permission", action = paste0("peter$", name, "()"), tool = name, risk = level,
              how_to_allow = "write the arguments literally so that the call is reviewed",
              session = run$session)
 }
 
-#' A one-line summary of a member value (the text of a nested tool result, which P06 keeps in
-#' the outer result's details$nested)
-#' @noRd
-bridge_summary = function(name, value) {
-  if (inherits(value, "gptr_cmd")) {
-    return(bridge_cmd_digest(value, name, bridge_label(value$cmd)))
-  }
-  if (inherits(value, "gptr_job")) return(paste0("bg ", value$name, " ", value$id, " started"))
-  if (is.data.frame(value)) {
-    return(paste0(name, ": ", nrow(value), " rows x ", ncol(value), " cols"))
-  }
-  paste0(name, ": <", class(value)[[1L]], ">")
-}
-
-#' The `execute` of a bridge member: the form P06's dispatch_nested() runs for model code
-#' (contract 7.6); refuses direct tool calls, re-checks computed arguments, returns the R value
+#' The `execute` of a bridge member, which P06's dispatch_nested() runs for model code (contract
+#' 7.6): refuses a top-level tool call (P06 binds it as `run$tool_call`; second line behind
+#' bridge_block_hook()), re-checks computed arguments, returns the R value
 #' @noRd
 bridge_execute = function(fun, name) {
   force(fun)
   force(name)
   function(input, ctx) {
-    bridge_refuse_direct(name)
-    bridge_recheck(name, input)
+    run = run_current()
+    if (identical(run$tool_call$name, name)) {
+      gptr_abort(bridge_not_a_tool(name), "not_available", member = name,
+                 provided_by = "the r tool")
+    }
+    input = bridge_recheck(name, input, ctx, run)
     value = do.call(fun, as.list(input))
-    gptr_tool_result(bridge_summary(name, value), value = value)
+    gptr_tool_result(paste0(name, ": <", class(value)[[1L]], ">"), value = value)
   }
 }
 
-#' Bridges are never direct tools, whatever a preset lists (S-4, C-26; contract 9.1 available)
+#' A bridge member spec (contract 9.4): exposure "r", no namespace (reserved names, IC-37), the
+#' 04 signature as `fun`, an `execute` for nested calls, never a direct tool (S-4, C-26)
 #' @noRd
-bridge_never_direct = function(ctx) FALSE
-
-#' A bridge member spec (contract 9.4): exposure "r", no namespace (reserved names, IC-37), a
-#' `fun` with the 04 signature and an `execute` for nested calls
-#' @noRd
-bridge_member = function(name, description, properties, required, fun, risk, signature) {
+bridge_member = function(name, description, properties, required, fun, risk) {
   schema = list(type = "object", properties = properties)
   if (length(required)) schema$required = I(required)
-  gptr_tool(name, description, parameters = schema, execute = bridge_execute(fun, name),
-            fun = fun, exposure = "r", execution = "sequential", risk = risk,
-            signature = signature, record = TRUE, available = bridge_never_direct)
+  gptr_tool(name, description, parameters = schema, execute = bridge_execute(fun, name), fun = fun,
+            exposure = "r", risk = risk, available = function(ctx) FALSE)
 }
 
-#' JSON Schema property helpers
+#' A JSON Schema property
 #' @noRd
 bridge_prop = function(type, description) {
   list(type = type, description = description)
 }
 
+#' A property taking one string or an array of strings
 #' @noRd
 bridge_strings = function(description) {
   list(type = c("string", "array"), items = list(type = "string"), description = description)
 }
 
-#' @noRd
-bridge_any = function(description) {
-  list(description = description)
-}
-
-#' The schema properties of the peter$sh() options (also peter$script()'s `...`)
-#' @noRd
-bridge_sh_properties = function() {
-  list(
-    input = bridge_any("stdin: character lines, a data frame (as CSV) or raw bytes."),
-    wd = bridge_prop("string", "Working directory (default \".\")."),
-    timeout = bridge_prop("number", "Seconds (default 120); then the process tree is killed."),
-    env = bridge_any("Named values to set; unnamed values name variables to pass through."),
-    merge = bridge_prop("boolean", "Merge stderr into stdout (default false)."),
-    check = bridge_prop("boolean", "Error on a non-zero exit or a timeout (default false)."),
-    max_tokens = bridge_prop("integer", "Print budget (default gptr.helper_output_tokens).")
-  )
-}
-
-# ---- builtin:bridges members, risks and the <r_session> shell line -------------------------------
+# ---- builtin:bridges -----------------------------------------------------------------------------
 
 #' Risk of peter$sh(): the command classifier on the actual command (G5 levels); passing a
-#' variable through to the child (an unnamed `env` element) is a secret read, level 3
+#' variable through to the child (an unnamed `env` element) reads a secret, level 3
 #' @noRd
 bridge_risk_sh = function(input, ctx) {
   r = bridge_risk(bridge_chr(input$cmd), "command")
   env = bridge_chr(input$env)
-  passed = is.character(env) && any(!nzchar(names(env) %||% rep("", length(env))))
-  if (!passed) return(r)
-  list(level = max(3L, as.integer(r$level %||% 3L)),
-       categories = unique(c(r$categories, "secret")),
-       paths = as.character(r$paths %||% character()))
+  if (all(nzchar(names(env) %||% character(length(env))))) return(r)
+  list(level = max(3L, as.integer(r$level)), categories = unique(c(r$categories, "secret")),
+       paths = as.character(r$paths))
 }
 
-#' Risk of peter$script(): level 3 (contract 9.4; the script body is not trusted)
+#' Risk of peter$script(): 3 (contract 9.4; the script body is not read)
 #' @noRd
 bridge_risk_script = function(input, ctx) {
-  list(level = 3L, categories = "process", paths = as.character(input$path %||% character()))
+  list(level = 3L, categories = "process", paths = as.character(input$path))
 }
 
 #' Risk of peter$bg(): 3, or the command's level when that is higher
 #' @noRd
 bridge_risk_bg = function(input, ctx) {
   r = bridge_risk(bridge_chr(input$cmd), "command")
-  list(level = max(3L, as.integer(r$level %||% 3L)),
-       categories = unique(c("process", r$categories)),
-       paths = as.character(r$paths %||% character()))
+  list(level = max(3L, as.integer(r$level)), categories = unique(c("process", r$categories)),
+       paths = as.character(r$paths))
 }
 
 #' Risk of peter$jobs(): 0 to list, 3 to kill
@@ -1805,17 +1759,19 @@ bridge_risk_jobs = function(input, ctx) {
   list(level = 0L, categories = "read", paths = character())
 }
 
-#' The <r_session> shell line (architecture 7.3 as amended by IC-68, byte for byte)
-#' @noRd
-bridge_shell_fragment = paste0(
-  "- There is no shell tool. Run programs from R: peter$sh(c(\"git\", \"status\")) (argv, no ",
-  "shell) or peter$sh(\"cmd | filter\"); peter$script(path); peter$bg(cmd) for long jobs. Assign ",
-  "results and print only what you need."
-)
-
 #' The member specs sh, script, bg and jobs (contract 9.4)
 #' @noRd
 bridge_sh_members = function() {
+  cmd = bridge_strings("An argv vector, or one command line.")
+  opts = list(
+    input = list(description = "stdin: character lines, a data frame (as CSV) or raw bytes."),
+    wd = bridge_prop("string", "Working directory (default \".\")."),
+    timeout = bridge_prop("number", "Seconds (default 120); then the process tree is killed."),
+    env = list(description = "Named values to set; unnamed values name variables to pass through."),
+    merge = bridge_prop("boolean", "Merge stderr into stdout (default false)."),
+    check = bridge_prop("boolean", "Error on a non-zero exit or a timeout (default false)."),
+    max_tokens = bridge_prop("integer", "Print budget (default gptr.helper_output_tokens).")
+  )
   list(
     bridge_member(
       "sh",
@@ -1824,56 +1780,50 @@ bridge_sh_members = function() {
             "it is a simple command and through the shell otherwise. The process tree is",
             "killed after timeout seconds. The print shows the head and tail within the helper",
             "budget; peter$out(id) returns the rest."),
-      c(list(cmd = bridge_strings("An argv vector, or one command line.")),
-        bridge_sh_properties()),
-      "cmd", bridge_sh, bridge_risk_sh,
-      paste0("peter$sh(cmd, input = NULL, wd = \".\", timeout = 120, env = NULL, merge = FALSE, ",
-             "check = FALSE, max_tokens = NULL)")
+      c(list(cmd = cmd), opts), "cmd", bridge_sh, bridge_risk_sh
     ),
     bridge_member(
       "script",
       paste("Run a script file with the interpreter registered for its extension (.sh, .py, .R,",
-            ".js, .pl, .rb, .jl) or its #! line, or with interpreter =; `...` takes the",
+            ".js, .pl, .rb, .jl) or its shebang line, or with interpreter =; `...` takes the",
             "options of peter$sh(). Returns a gptr_cmd."),
       c(list(path = bridge_prop("string", "The script file."),
              args = bridge_strings("Arguments after the script path."),
              interpreter = bridge_strings("A registered interpreter name, or a program.")),
-        bridge_sh_properties()),
-      "path", bridge_script, bridge_risk_script,
-      "peter$script(path, args = character(), interpreter = NULL, ...)"
+        opts),
+      "path", bridge_script, bridge_risk_script
     ),
     bridge_member(
       "bg",
       paste("Start a program in the background and return a gptr_job with read(stream, n),",
             "wait(timeout, until), write(text), kill() and status(); peter$jobs() lists it."),
-      list(cmd = bridge_strings("An argv vector, or one command line."),
-           name = bridge_prop("string", "Job name (default: the program)."),
+      list(cmd = cmd, name = bridge_prop("string", "Job name (default: the program)."),
            stdin = bridge_prop("boolean", "Open stdin for write() (default false)."),
            merge = bridge_prop("boolean", "Merge stderr into stdout (default true).")),
-      "cmd", bridge_bg, bridge_risk_bg,
-      "peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)"
+      "cmd", bridge_bg, bridge_risk_bg
     ),
     bridge_member(
-      "jobs",
-      "List the background jobs of peter$bg(); kill = TRUE stops the running ones.",
+      "jobs", "List the background jobs of peter$bg(); kill = TRUE stops the running ones.",
       list(kill = bridge_prop("boolean", "Stop every running job (default false).")),
-      character(), bridge_jobs, bridge_risk_jobs, "peter$jobs(kill = FALSE)"
+      character(), bridge_jobs, bridge_risk_jobs
     )
   )
 }
 
-#' builtin:bridges (contract 7.22): the interpreter kind, the built-in interpreters, the members
-#' sh, script, bg, jobs with their S-4 `tool_call` hook and the <r_session> fragment `shell`
-#' (order 30, after P10's `helpers` 10 and `out` 20; IC-68)
+#' builtin:bridges (contract 7.22): the interpreter kind and interpreters, the members sh, script,
+#' bg, jobs with their S-4 `tool_call` hook, and the <r_session> line `shell` (architecture 7.3 as
+#' amended by IC-68, byte for byte; order 30, after P10's `helpers` 10 and `out` 20)
 #' @noRd
 builtin_bridges = function(gptr) {
   gptr$register(gptr_spec("kind", "interpreter", validate = interpreter_validate,
                           fields = c("ext", "programs", "args", "windows_only")))
-  for (spec in bridge_interpreters()) gptr$register(spec)
-  for (spec in bridge_sh_members()) gptr$register(spec)
+  for (spec in c(bridge_interpreters(), bridge_sh_members())) gptr$register(spec)
   gptr$on("tool_call", bridge_block_hook(c("sh", "script", "bg", "jobs")))
-  gptr$register(gptr_prompt_section("shell", bridge_shell_fragment, tier = "T0", order = 30L,
-                                    budget = 300L, parent = "r_session"))
+  gptr$register(gptr_prompt_section("shell", paste0(
+    "- There is no shell tool. Run programs from R: peter$sh(c(\"git\", \"status\")) (argv, no ",
+    "shell) or peter$sh(\"cmd | filter\"); peter$script(path); peter$bg(cmd) for long jobs. ",
+    "Assign results and print only what you need."
+  ), order = 30L, parent = "r_session"))
   invisible(NULL)
 }
 
@@ -1886,7 +1836,7 @@ on_load(ext_declare_builtin("bridges", builtin_bridges))
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 269 ]`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 271 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -2737,7 +2687,7 @@ git commit -m 'feat(bridge): peter$knit() with shell engines on the sh engine an
 - Test: `tests/testthat/test-bridge-lang.R` (append)
 
 **Interfaces:**
-- Consumes: Task 5 (`bridge_member()`, `bridge_block_hook()`, `bridge_prop()`, `bridge_strings()`, `bridge_any()`), Task 2 (`bridge_risk()`, `bridge_chr()`), Task 8 (`bridge_knit_shells`); `gptr_prompt_section()`, `ext_declare_builtin()`, the factory API's `gptr$on()` (P02); `on_load()` (P01); tests: `gptr_check()`, `registry_get()` (P02), `gptr_risk()` (P11), `gptr_prompt()` (P07), the gateway `peter` (P08/P10), `local_project()`, `local_fake_provider()`, `fake_tool()`, `fake_text()` (P01).
+- Consumes: Task 5 (`bridge_member()`, `bridge_block_hook()`, `bridge_prop()`, `bridge_strings()`), Task 2 (`bridge_risk()`, `bridge_chr()`), Task 8 (`bridge_knit_shells`); `gptr_prompt_section()`, `ext_declare_builtin()`, the factory API's `gptr$on()` (P02); `on_load()` (P01); tests: `gptr_check()`, `registry_get()` (P02), `gptr_risk()` (P11), `gptr_prompt()` (P07), the gateway `peter` (P08/P10), `local_project()`, `local_fake_provider()`, `fake_tool()`, `fake_text()` (P01).
 - Produces: the member specs `py`, `sql`, `knit` (04 §9.4); the prompt section `languages` (`parent = "r_session"`, T0, order 40); `builtin_lang(gptr)` declared as `builtin:lang`; `bridge_risk_py()`, `bridge_risk_sql()`, `bridge_risk_knit()`; `bridge_lang_members()`; `bridge_lang_fragment`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2863,9 +2813,9 @@ bridge_lang_members = function() {
             "the last expression is shown with pandas output bounded by max_rows, and $value",
             "converts it to R. name = obj (or a named list) makes R objects Python variables."),
       list(code = bridge_strings("Python code (one string or lines)."),
-           name = bridge_any("An R object by name, or a named list of objects."),
+           name = list(description = "An R object by name, or a named list of objects."),
            max_rows = bridge_prop("integer", "Rows of pandas output (default 10).")),
-      "code", bridge_py, bridge_risk_py, "peter$py(code, name = NULL, max_rows = 10L)"
+      "code", bridge_py, bridge_risk_py
     ),
     bridge_member(
       "sql",
@@ -2874,10 +2824,10 @@ bridge_lang_members = function() {
             "in-memory duckdb under those names; otherwise con = or the one DBI connection in",
             "scope is used."),
       list(query = bridge_strings("The SQL statement."),
-           name = bridge_any("A data frame by name, or a named list of data frames."),
-           con = bridge_any("A DBI connection."),
+           name = list(description = "A data frame by name, or a named list of data frames."),
+           con = list(description = "A DBI connection."),
            n = bridge_prop("integer", "Rows to print (default 10).")),
-      "query", bridge_sql, bridge_risk_sql, "peter$sql(query, name = NULL, con = NULL, n = 10L)"
+      "query", bridge_sql, bridge_risk_sql
     ),
     bridge_member(
       "knit",
@@ -2887,7 +2837,7 @@ bridge_lang_members = function() {
             "scripts like peter$script(), python through peter$py() and sql through peter$sql()."),
       list(engine = bridge_prop("string", "A knitr engine name, for example \"perl\"."),
            code = bridge_strings("The code (one string or lines).")),
-      c("engine", "code"), bridge_knit, bridge_risk_knit, "peter$knit(engine, code)"
+      c("engine", "code"), bridge_knit, bridge_risk_knit
     )
   )
 }
@@ -3188,7 +3138,7 @@ Commands and expected results:
 Rscript --vanilla -e 'devtools::test(filter = "bridge|copy-bridge")'
 ```
 
-Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 364 ]` (`test-bridge-sh.R` 269; `test-bridge-lang.R` 85 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 403 ]`.
+Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 366 ]` (`test-bridge-sh.R` 271; `test-bridge-lang.R` 85 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 405 ]`.
 
 ```bash
 Rscript --vanilla dev/bench/tokens/run.R --check

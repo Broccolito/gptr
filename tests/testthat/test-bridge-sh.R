@@ -421,3 +421,188 @@ test_that("at most two jobs run at once under R CMD check (IC-60)", {
   withr::defer(b$kill())
   expect_error(bridge_bg(r_cmd("Sys.sleep(30)")), class = "gptr_error_spawn")
 })
+
+shell_line = paste0(
+  "- There is no shell tool. Run programs from R: peter$sh(c(\"git\", \"status\")) (argv, no ",
+  "shell) or peter$sh(\"cmd | filter\"); peter$script(path); peter$bg(cmd) for long jobs. Assign ",
+  "results and print only what you need."
+)
+
+# The tool results of one tool in a session, in order
+tool_results = function(s, name) {
+  Filter(function(m) identical(m$role, "tool_result") && identical(m$tool_name, name), s$messages)
+}
+
+test_that("builtin:bridges registers sh, script, bg and jobs as peter$ members only", {
+  for (nm in c("sh", "script", "bg", "jobs")) {
+    spec = registry_get("tool", nm)
+    expect_s3_class(spec, "gptr_tool")
+    expect_identical(spec$exposure, "r")
+    expect_null(spec$namespace)
+    expect_true(is.function(spec$fun))
+    expect_true(is.function(spec$execute))
+    expect_true(spec$record)
+    expect_false(spec$available(NULL))
+    expect_true(all(gptr_check(spec)$ok))
+    expect_true(inherits(peter[[nm]], "gptr_member"))
+  }
+  expect_identical(names(formals(registry_get("tool", "sh")$fun)),
+                   c("cmd", "input", "wd", "timeout", "env", "merge", "check", "max_tokens"))
+  expect_identical(formals(registry_get("tool", "sh")$fun)$timeout, 120)
+  expect_identical(names(formals(registry_get("tool", "script")$fun)),
+                   c("path", "args", "interpreter", "..."))
+  expect_identical(names(formals(registry_get("tool", "bg")$fun)),
+                   c("cmd", "name", "stdin", "merge"))
+  expect_identical(names(formals(registry_get("tool", "jobs")$fun)), "kill")
+  expect_true(all(c("sh", "script", "bg", "jobs") %in% utils::.DollarNames(peter, "")))
+  for (preset in c("minimal", "standard", "readonly", "extended")) {
+    expect_false(any(c("sh", "script", "bg", "jobs") %in% preset_tools(preset, human = TRUE)))
+  }
+  expect_false(grepl("\"name\":\"sh\"", gptr_prompt(preset = "extended")$tools_json,
+                     fixed = TRUE))
+})
+
+test_that("the members run through the gateway with the contract defaults", {
+  skip_on_cran()
+  x = peter$sh(r_cmd("cat('hi')"))
+  expect_s3_class(x, "gptr_cmd")
+  expect_identical(x$stdout, "hi")
+  expect_output(print(x), "^hi$")
+  d = withr::local_tempdir()
+  writeLines("cat('via member')", file.path(d, "m.R"))
+  expect_identical(peter$script(file.path(d, "m.R"))$stdout, "via member")
+  j = peter$bg(r_cmd("Sys.sleep(30)"), name = "sleeper")
+  withr::defer(j$kill())
+  tab = peter$jobs()
+  expect_identical(tab$name[match(j$id, tab$id)], "sleeper")
+  invisible(peter$jobs(kill = TRUE))
+  expect_identical(j$status(), "stopped")
+  long = peter$sh(r_cmd("cat(seq_len(5000), sep = '\\n')"), max_tokens = 100L)
+  expect_output(print(long), paste0("peter$out(\"", long$id, "\")"), fixed = TRUE)
+  expect_length(peter$out(long$id), 5000L)
+})
+
+test_that("member risks follow the command classifier; script and bg are at least 3", {
+  sh = registry_get("tool", "sh")
+  expect_identical(as.integer(sh$risk(list(cmd = "rm -rf data"), NULL)$level), 3L)
+  expect_identical(as.integer(sh$risk(list(cmd = c("git", "status")), NULL)$level), 0L)
+  expect_identical(as.integer(sh$risk(list(cmd = list("git", "status")), NULL)$level), 0L)
+  expect_identical(registry_get("tool", "script")$risk(list(path = "a.sh"), NULL)$level, 3L)
+  expect_identical(registry_get("tool", "bg")$risk(list(cmd = c("git", "status")), NULL)$level,
+                   3L)
+  expect_identical(registry_get("tool", "jobs")$risk(list(kill = FALSE), NULL)$level, 0L)
+  expect_identical(registry_get("tool", "jobs")$risk(list(kill = TRUE), NULL)$level, 3L)
+  passed = sh$risk(list(cmd = c("git", "status"), env = "GITHUB_TOKEN"), NULL)
+  expect_identical(as.integer(passed$level), 3L)
+  expect_true("secret" %in% passed$categories)
+  set_only = sh$risk(list(cmd = c("git", "status"), env = c(GIT_DIR = ".git")), NULL)
+  expect_identical(as.integer(set_only$level), 0L)
+})
+
+test_that("r code calling peter$sh() is classified by the command it runs (acceptance 3)", {
+  expect_identical(gptr_risk("peter$sh(\"rm -rf data\")")$level, 3L)
+  expect_identical(gptr_risk("peter$sh(c(\"git\", \"status\"))")$level, 0L)
+  expect_identical(gptr_risk("x = paste(\"rm\", f); peter$sh(x)")$level, 3L)
+})
+
+test_that("the shell line of <r_session> is registered byte for byte", {
+  frag = registry_get("prompt_section", "shell")
+  expect_identical(frag$text, shell_line)
+  expect_identical(frag$parent, "r_session")
+  expect_identical(frag$tier, "T0")
+  expect_identical(as.integer(frag$order), 30L)
+  expect_true(grepl(shell_line, gptr_prompt(preset = "standard")$system$t0, fixed = TRUE))
+})
+
+test_that("-builtin:bridges removes the shell line from <r_session> and the members", {
+  old = registry_env()$filters[["session"]] %||% character()
+  registry_filters_set(c(old, "-builtin:bridges"), "session")
+  withr::defer(registry_filters_set(old, "session"))
+  t0 = gptr_prompt(preset = "standard")$system$t0
+  expect_false(grepl("There is no shell tool", t0, fixed = TRUE))
+  expect_true(grepl("<r_session>", t0, fixed = TRUE))
+  expect_error(peter$sh("ls"), class = "gptr_error_unknown_member")
+})
+
+test_that("model code runs peter$sh() inside r; the event and the nested record belong to it", {
+  skip_on_cran()
+  local_project()
+  log = local_bridge_events()
+  code = paste0("res = peter$sh(c(", deparse(rscript_path()),
+                ", \"--vanilla\", \"-e\", \"cat('hi')\"))\nres$ok")
+  fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+  e = new.env()
+  s = peter("run it", model = fake, envir = e, mode = "auto")
+  expect_true(e$res$ok)
+  expect_identical(e$res$stdout, "hi")
+  ev = log$events[[length(log$events)]]
+  expect_identical(ev$session, s$id)
+  expect_identical(ev$bridge, "sh")
+  expect_match(ev$digest, "^#> sh .*: exit 0, 1 line$")
+  res = tool_results(s, "r")[[1L]]
+  expect_identical(res$details$nested[[1L]]$tool, "sh")
+  expect_identical(res$details$bridge, ev$digest)
+})
+
+test_that("the tool_call hook blocks top-level bridge calls and lets nested ones pass", {
+  h = bridge_block_hook(c("sh", "bg"))
+  blocked = h(list(tool_name = "sh", nested = FALSE), NULL)
+  expect_identical(blocked$decision, "block")
+  expect_match(blocked$reason, "peter$sh() is an R function, not a tool", fixed = TRUE)
+  expect_null(h(list(tool_name = "sh", nested = TRUE), NULL))
+  expect_null(h(list(tool_name = "r", nested = FALSE), NULL))
+})
+
+test_that("a tool call named sh is refused before the permission check: no shell tool (S-4)", {
+  skip_on_cran()
+  local_project()
+  marker = file.path(getwd(), "direct-marker.txt")
+  script = list(
+    fake_tool("sh", cmd = list(rscript_path(), "-e", "file.create('direct-marker.txt')")),
+    fake_text("done")
+  )
+  fake = local_fake_provider(script)
+  # manual mode without a human: a call that reached the permission check would stop the run
+  # (gptr.noninteractive_ask = "stop"), so finishing idle shows the hook blocked it first
+  s = peter("run it", model = fake, envir = new.env(), mode = "manual")
+  res = tool_results(s, "sh")[[1L]]
+  expect_true(isTRUE(res$is_error))
+  expect_match(msg_text(res), "is an R function, not a tool", fixed = TRUE)
+  expect_false(file.exists(marker))
+  expect_identical(s$status, "idle")
+})
+
+test_that("computed commands are re-checked at run time with the actual command", {
+  skip_on_cran()
+  local_project()
+  local_gptr_options(noninteractive_ask = "deny")
+  testthat::local_mocked_bindings(bridge_risk = function(x, kind) {
+    level = if (any(grepl("marker", x, fixed = TRUE))) 4L else 0L
+    list(level = level, categories = if (level == 4L) "critical" else "read",
+         paths = character())
+  })
+  rs = deparse(rscript_path())
+  code = paste0("cmd = c(", rs, ", \"-e\", \"file.create('marker.txt')\")\nres = peter$sh(cmd)")
+  fake = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")))
+  s = peter("make the marker", model = fake, envir = new.env(), mode = "auto")
+  expect_false(file.exists("marker.txt"))
+  expect_match(msg_text(tool_results(s, "r")[[1L]]), "Permission denied", fixed = TRUE)
+  ok_code = paste0("cmd = c(", rs, ", \"-e\", \"file.create('fine.txt')\")\nres = peter$sh(cmd)")
+  fake2 = local_fake_provider(list(fake_tool("r", code = ok_code), fake_text("done")),
+                              name = "fake2")
+  peter("make the file", model = fake2, envir = new.env(), mode = "auto")
+  expect_true(file.exists("fine.txt"))
+  # the re-check runs the input a policy's modify approved (IC-53 item 7)
+  local_gptr_options(critical_guard = FALSE)
+  off = gptr_register(gptr_policy("p22_safer", function(call, ctx) {
+    if (identical(call$name, "sh") && any(grepl("marker", unlist(call$input$cmd), fixed = TRUE))) {
+      list(decision = "modify",
+           input = list(cmd = c(rscript_path(), "-e", "file.create('safe.txt')")))
+    }
+  }))
+  withr::defer(off())
+  fake3 = local_fake_provider(list(fake_tool("r", code = code), fake_text("done")), name = "fake3")
+  peter("make the marker", model = fake3, envir = new.env(), mode = "auto")
+  expect_false(file.exists("marker.txt"))
+  expect_true(file.exists("safe.txt"))
+})
