@@ -17,12 +17,9 @@ sdk_queued = function(s) {
   length(q$steer) > 0L || length(q$follow_up) > 0L
 }
 
-#' The checks of starting a session's queued input, made before anything is taken or started:
-#' list(run = <run>) for a session with an unsettled run, NULL when nothing is queued, otherwise
-#' list(cur, safety). A root run's protected safety record is taken once, here
-#' (07-local-ollama.md section 5), and the session's egress and replay guards are checked under it
-#' (gateway_guards(); the call's own `replay =` and `.opts$context` for a `.run = FALSE` call). A
-#' refusal signals before the pending call is taken, so it stays in place and no run starts.
+#' Checks before starting a session's queued input: list(run) when running, NULL when nothing is
+#' queued, else list(cur, safety). A root run's safety record is taken once, here (07 section 5),
+#' and the guards run under it; a refusal leaves the pending call in place and starts nothing.
 #' @noRd
 sdk_check = function(s) {
   run = sdk_run_of(s)
@@ -35,12 +32,9 @@ sdk_check = function(s) {
   list(cur = cur, safety = safety)
 }
 
-#' Starts the queued input that sdk_check() cleared (`chk`) under the safety record it took and
-#' returns the run; returns the unsettled run of a running session (also one started since the
-#' check, as for a session named twice in one list); NULL when nothing is queued. The pending run
-#' options of the `.run = FALSE` call are used when there are some; otherwise a session without a
-#' kept home evaluates in `envir` (the verb's caller), held in a call record released when the run
-#' settles (rule R2).
+#' Starts the queued input sdk_check() cleared (`chk`) and returns the run, or the unsettled run
+#' of a running session; NULL when nothing is queued. Without pending run options, a session
+#' without a kept home evaluates in `envir`, held until the run settles (rule R2).
 #' @noRd
 sdk_launch = function(s, chk, envir = NULL) {
   if (is.null(chk)) return(NULL)
@@ -59,9 +53,7 @@ sdk_launch = function(s, chk, envir = NULL) {
   gateway_run_start(s, NULL, opts, chk$cur, chk$safety)
 }
 
-#' Starts the queued input of an idle session (the rendered prompt of `.run = FALSE`, queued steers
-#' and follow-ups) and returns the run: sdk_check(), then sdk_launch(). gptr_wait() runs the two
-#' phases separately, checking every session before it starts any.
+#' Starts the queued input of an idle session and returns the run (sdk_check(), sdk_launch())
 #' @noRd
 sdk_start = function(s, envir = NULL) sdk_launch(s, sdk_check(s), envir)
 
@@ -86,8 +78,7 @@ sdk_until_turns = function(run, counter, turns) {
   function() counter$n() >= turns || run_settled(run)
 }
 
-#' The stop condition of gptr_wait(): no session is running or waiting (a `waiting` session is
-#' resumed by P21 from any blocking pump, so it does not count as settled)
+#' The stop condition of gptr_wait(): no session is running or waiting (P21 resumes `waiting`)
 #' @noRd
 sdk_until_settled = function(ss) {
   force(ss)
@@ -109,9 +100,8 @@ sdk_sessions = function(x, arg = "x") {
   ss
 }
 
-#' The IC-53 control check of a verb acting on sessions: one check per call, made when any of
-#' them is not the running session (gateway_control_other()), so one approved call consumes one
-#' token whatever the number of sessions it names
+#' The IC-53 control check of a verb acting on sessions: one check (one token) per call, made when
+#' any of them is not the running session
 #' @noRd
 sdk_control_other = function(ss, what) {
   cur = run_current()

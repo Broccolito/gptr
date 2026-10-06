@@ -1,18 +1,12 @@
 # gptr-config.R -- settings files and layers, gptr_config(), gptr_init(), gptr_trust(), the egress
-# acknowledgement, replay_mode() and replay_guard() (plan P08; contract sections 6.2, 7.8,
-# 11.1-11.3, 11.8, 11.16; IC-45, IC-52, IC-53, IC-71, IC-74). Layer L6: it calls L0-L3 functions,
-# the kernel SDK and services only.
+# acknowledgement, replay_mode() and replay_guard() (plan P08, layer L6; contract 6.2, 7.8,
+# 11.1-11.3, 11.8, 11.16; IC-45, IC-52, IC-53, IC-71, IC-74).
 
 # ------------------------------------------------------------------ P08 state in `the`
 
-#' P08's process state (`the$gateway`, see the plan's contract ambiguities): parsed settings
-#' files, trust decisions taken in this process (with the fingerprint they were taken for),
-#' trust fingerprints, the answers given in this process about project base URLs, the
-#' gateway_defer() depth, the pending run options of sessions built with `.run = FALSE`, the call
-#' records held for them and the ids of the rank-0 records each session's calls registered (all
-#' three keyed by session id; released by builtin:gateway's agent_end and session_shutdown hooks,
-#' Task 9), and `filters_applied`, the user and project filter lists gateway_filters_sync() last
-#' handed to the registry
+#' P08's process state `the$gateway`: the settings file cache, trust decisions and fingerprints,
+#' base-URL answers, the defer depth, per-session pending run options, held call records and
+#' rank-0 spec ids, and `filters_applied` (gateway_filters_sync())
 #' @noRd
 gateway_state = function() {
   st = the$gateway
@@ -123,9 +117,8 @@ settings_check_object = function(value, name) {
   value
 }
 
-#' Checks the `providers` setting: an object of provider objects in which `local_only`, when
-#' given, is TRUE or FALSE (07-local-ollama.md section 5: `providers$ollama$local_only` is a
-#' scalar non-NA logical; a missing value means TRUE, the stricter policy)
+#' Checks the `providers` setting: an object of provider objects whose `local_only`, when given,
+#' is TRUE or FALSE (07 section 5)
 #' @noRd
 settings_check_providers = function(value, name) {
   settings_check_object(value, name)
@@ -147,11 +140,9 @@ gateway_setting_specs = function() {
   })
 }
 
-#' Core keys that a registered `setting` spec cannot redefine (IC-74, 07-local-ollama.md section
-#' 5: extensions cannot relax `local_only`; contract 11.2: `egress` is read from the user file
-#' only). `providers` holds the protected `local_only` control and the origins provider
-#' credentials go to, `egress` the user's acknowledgements. Their spec is always the core table
-#' entry, and a dotted key below them always resolves inside them (settings_resolve()).
+#' Core keys a registered `setting` spec cannot redefine (IC-74, 07 section 5; contract 11.2):
+#' `providers` (the local-only control, credential origins) and `egress`; a dotted key below them
+#' resolves inside them
 #' @noRd
 settings_protected = function(key) key %in% c("providers", "egress")
 
@@ -186,9 +177,8 @@ settings_keys = function() {
 
 # ------------------------------------------------------------------ settings files
 
-#' Path of a scope's settings file. `user_project` is the user-level project file of IC-52
-#' (`R_user_dir("gptr", "config")/projects/<16 hex>.json`), which gptr_permissions(scope =
-#' "project") writes (P11)
+#' Path of a scope's settings file; `user_project` is IC-52's user-level project file, which
+#' gptr_permissions(scope = "project") writes
 #' @noRd
 settings_path = function(scope, create = FALSE) {
   switch(scope,
@@ -243,10 +233,9 @@ settings_file_read = function(path, fresh = FALSE) {
 #' @noRd
 settings_parse = function(path) json_simplify(settings_decode(path))
 
-#' Decodes one settings file into its unsimplified JSON object (`json_decode()`), which
-#' json_encode() writes back with the same JSON types. A blank file is the empty object. Text that
-#' is not a JSON object is, when `strict` (writers), `gptr_error_workspace` so that a
-#' read-modify-write never replaces a file it could not read; otherwise a diagnostic and empty
+#' Decodes one settings file into its unsimplified JSON object (blank: empty). Not an object:
+#' `gptr_error_workspace` when `strict` (a writer never replaces a file it could not read), else
+#' a diagnostic and empty
 #' @noRd
 settings_decode = function(path, strict = FALSE) {
   txt = read_utf8(path)$text
@@ -343,10 +332,8 @@ lock_stamp = function() {
   paste(Sys.getpid(), format(ct, digits = 15))
 }
 
-#' A lock is stale when its owner is dead (pid and creation time, P04's pid_alive()) or it has
-#' had no pid file for 30 s. A lock directory or pid file that disappears while it is examined
-#' belongs to an owner releasing the lock: not stale, the caller retries (breaking it then could
-#' remove a lock another writer has just taken).
+#' A lock is stale when its owner is dead (pid_alive()) or it has had no pid file for 30 s; one
+#' that disappears while examined is not stale (the caller retries)
 #' @noRd
 lock_stale = function(lock) {
   if (!dir.exists(lock)) return(FALSE)
@@ -376,18 +363,9 @@ settings_read = function(scope) {
   settings_file_read(settings_path(scope, create = FALSE))
 }
 
-#' Merges `patch` at top level into a scope: an atomic file write under a short lock, or the
-#' process layer; NULL values remove keys (contract 7.8). The file is merged in its unsimplified
-#' JSON form, so the keys the patch does not name keep their JSON types (contract 11: unknown
-#' keys are preserved on rewrite), and a file that is not a JSON object is left alone
-#' (`gptr_error_workspace`, settings_file_load()). A write to the settings of a trusted project
-#' keeps the trust that held just before it (read under the lock): a recorded trust gets the new
-#' fingerprint in trust.json, a decision of this process gets it in memory (gptr's own writes
-#' re-fingerprint, IC-52; an in-process decision is never turned into a recorded one, and a trust
-#' a foreign change had already voided is not restored). Only gptr's own change is carried over:
-#' when another gated file changed beside the write, or settings.json no longer holds the bytes
-#' gptr wrote, the trust lapses and the human is asked again (trust_carry()). Returns the
-#' merged value as settings_read() simplifies it.
+#' Merges `patch` at top level into a scope (NULL removes a key; contract 7.8): the process layer,
+#' or the unsimplified file under a short lock, so other keys keep their JSON types. A project
+#' write carries the trust held before it over only for gptr's own change (trust_carry(); IC-52).
 #' @noRd
 settings_write = function(scope, patch) {
   scope = check_choice(scope, c("session", "project", "user", "user_project"), "scope")
@@ -414,11 +392,8 @@ settings_write = function(scope, patch) {
 
 # ------------------------------------------------------------------ control-category check (IC-53)
 
-#' Refuses a configuration change made from model code during a run, unless the dispatcher
-#' approved exactly this call through an ask_human: a one-shot token, the function name appended
-#' to `run$signal$control` by P06's perm_grant_control() (P11's gate), consumed here. P06's
-#' session_control_check() (gptr_fork(), gptr_resume()) and P11's perm_control_guard() read the
-#' same slot.
+#' Refuses a configuration change from model code during a run unless approved: consumes the
+#' one-shot token `what` in `run$signal$control` (IC-53; granted by perm_grant_control())
 #' @noRd
 control_check = function(what) {
   run = run_current()
@@ -456,9 +431,8 @@ trust_read = function(fresh = FALSE) {
   x
 }
 
-#' The trust store for a read-modify-write under its lock: the unsimplified object of
-#' settings_file_load(); a file whose `projects` is not an object is never rewritten
-#' (`gptr_error_workspace`), as settings_file_load() refuses a file that is not an object
+#' The trust store for a read-modify-write under its lock (settings_file_load()); a file whose
+#' `projects` is not an object is never rewritten (`gptr_error_workspace`)
 #' @noRd
 trust_load = function(path) {
   x = settings_file_load(path)
@@ -478,9 +452,7 @@ trust_record = function(root) {
   if (is.list(rec)) rec else NULL
 }
 
-#' Existing trust-gated files of a project (IC-52): .gptr/settings.json, mcp.json, SYSTEM.md,
-#' APPEND_SYSTEM.md, the files under extensions/, plugins/ and agents/, and the .env files that
-#' P03's automatic discovery reads (dotenv_project_files(): .gptr/.env and .env)
+#' Existing trust-gated files of a project (IC-52), including the .env files P03 discovers
 #' @noRd
 trust_gated_paths = function(root) {
   ws = file.path(root, ".gptr")
@@ -511,11 +483,9 @@ trust_file_hash = function(path) {
            warning = function(w) "unreadable", error = function(e) "unreadable")
 }
 
-#' Trust fingerprint (IC-52): sha256 of the canonical JSON object of the gated files' root-relative
-#' paths and content hashes (keys in radix order, so no path can be confused with a hash). Cached
-#' by path, mtime, ctime and size: ctime moves on every write and on every mtime reset, so a
-#' same-size rewrite that restores the old mtime is not served from the cache. Returns
-#' list(fp = chr(1), files = chr of file hashes named by relative path, in radix order).
+#' Trust fingerprint (IC-52): list(fp, files), fp the sha256 of the canonical JSON of the gated
+#' files' relative paths and hashes. Cached by path, mtime, ctime and size (ctime catches a
+#' same-size rewrite that restores mtime).
 #' @noRd
 trust_fingerprint = function(root) {
   paths = trust_gated_paths(root)
@@ -536,10 +506,8 @@ trust_fingerprint = function(root) {
   value
 }
 
-#' Records a trust decision with a fingerprint (atomic, under a short lock): by default the
-#' current one, or `fp` (a trust_fingerprint() value), the state a question was asked about. The
-#' per-file hashes are kept too, so a later mismatch can list the changed files; the other
-#' projects and the entry's other fields (`base_url_confirmed`) are kept.
+#' Records a trust decision with fingerprint `fp` (default the current one) and per-file hashes,
+#' atomically under a short lock, keeping the other projects and the entry's other fields
 #' @noRd
 trust_store = function(root, trusted, fp = NULL) {
   path = trust_file(create = TRUE)
@@ -562,10 +530,8 @@ trust_store = function(root, trusted, fp = NULL) {
   invisible(rec)
 }
 
-#' Remembers a trust decision taken in this process (a `project_trust` handler or the interactive
-#' question) together with the fingerprint it was taken for (`fp`, a trust_fingerprint() value;
-#' default the current one): it holds only while the gated files are unchanged (IC-52: "Control
-#' files modified during the process are not loaded again without confirmation")
+#' Remembers a trust decision taken in this process with the fingerprint it was taken for; it
+#' holds only while the gated files are unchanged (IC-52)
 #' @noRd
 trust_mark = function(root, decision, fp = NULL) {
   fp = fp %||% trust_fingerprint(root)
@@ -574,9 +540,8 @@ trust_mark = function(root, decision, fp = NULL) {
   invisible(decision)
 }
 
-#' Which trust holds for a project root now: `record` (trust.json says trusted and the
-#' fingerprint matches) and `live` (a decision of this process whose fingerprint matches), with
-#' `fp`, the trust_fingerprint() value they were checked against (NULL when neither was trusted)
+#' Which trust holds for a project root now: `record` (trust.json) and `live` (this process), each
+#' only with a matching fingerprint, plus `fp`, the fingerprint checked (NULL when neither)
 #' @noRd
 trust_holds = function(root) {
   key = path_key(root)
@@ -590,10 +555,8 @@ trust_holds = function(root) {
        live = live && identical(hit$fp, fp$fp), fp = fp)
 }
 
-#' TRUE when the only change from fingerprint `before` to `after` (trust_fingerprint() values) is
-#' gptr's own write of the gated file `rel`, which must hold exactly the bytes whose sha256 is
-#' `hash`: every other gated file is unchanged, none appeared or went away (IC-52: gptr's own
-#' writes re-fingerprint; any other change needs the human's confirmation)
+#' TRUE when the only change from fingerprint `before` to `after` is gptr's own write of gated file
+#' `rel` with sha256 `hash` (IC-52: gptr's own writes re-fingerprint)
 #' @noRd
 trust_own_write = function(before, after, rel, hash) {
   if (is.null(before) || is.null(after)) return(FALSE)
@@ -605,13 +568,9 @@ trust_own_write = function(before, after, rel, hash) {
     identical(others(before$files), others(after$files))
 }
 
-#' Keeps the trust that held just before gptr's own write of the gated file `path`, whose bytes
-#' have the sha256 `hash`: `was` is trust_holds(root) taken before the write. A recorded trust
-#' gets the new fingerprint in trust.json, a decision of this process gets it in memory (IC-52:
-#' gptr's own writes re-fingerprint; an in-process decision is never turned into a recorded one).
-#' Nothing changes when neither held, or when anything else changed beside the write
-#' (trust_own_write()). Used by settings_write() and gptr_init(). Returns TRUE when it carried a
-#' trust over, invisibly.
+#' Moves the trust held before gptr's own write of gated file `path` (`was`, trust_holds()) to the
+#' new fingerprint, recorded or in-process as it was, when nothing else changed (IC-52). Returns
+#' TRUE when it carried a trust over, invisibly.
 #' @noRd
 trust_carry = function(root, was, path, hash) {
   if (!isTRUE(was$record) && !isTRUE(was$live)) return(invisible(FALSE))
@@ -622,8 +581,7 @@ trust_carry = function(root, was, path, hash) {
   invisible(TRUE)
 }
 
-#' TRUE only when the project is recorded as trusted, or a `project_trust` handler or the user
-#' accepted it in this process, and the trust fingerprint still matches (the `trust.get`
+#' TRUE when a recorded or in-process trust holds with a matching fingerprint (the `trust.get`
 #' service; IC-33, IC-52)
 #' @noRd
 trust_get = function(path = getwd()) {
@@ -646,9 +604,8 @@ trust_answer = function(res) {
 }
 
 #' Decides trust for a project root once per process and fingerprint: the recorded decision, else
-#' the first decision of `project_trust` handlers, else the interactive question, else untrusted
-#' with one notice per fingerprint. A changed gated file voids an earlier in-process decision and
-#' a recorded trust (IC-52); a recorded "no" stands until gptr_trust() changes it.
+#' `project_trust` handlers, else the question, else untrusted with a notice (IC-52); a recorded
+#' "no" stands until gptr_trust() changes it
 #' @noRd
 trust_resolve = function(root) {
   h = trust_holds(root)
@@ -725,9 +682,8 @@ on_load(ext_service_set("trust.get", trust_get, provided_by = "P08", builtin = "
 
 # ------------------------------------------------------------------ settings layers (contract 11.2)
 
-#' Looks a key up in one layer: a flat key first (plugin keys such as "panel.size"), else a dotted
-#' path into nested objects ("subagents.max_depth"). A flat key present with a JSON null is found:
-#' an explicit null is a value (`compact_at: null` disables the cap, contract 11.2).
+#' Looks a key up in one layer: a flat key first, else a dotted path into nested objects; a key
+#' present with a JSON null is found (an explicit null is a value, contract 11.2)
 #' @noRd
 settings_lookup = function(layer, key) {
   if (!is.list(layer) || !length(layer)) return(list(found = FALSE, value = NULL))
@@ -765,12 +721,9 @@ settings_combine = function(lower, higher) {
   higher
 }
 
-#' What one layer may contribute to a top-level key. In `providers` (IC-74, 07-local-ollama.md
-#' sections 2.1 and 5) `local_only` stays TRUE unless a human layer, the user settings file or
-#' the session layer, sets it to FALSE: there a value that is not TRUE or FALSE counts as TRUE,
-#' and every `local_only` other than TRUE is dropped from what the defaults, a project file or
-#' options() contribute, so they can tighten it and never relax it. A provider entry that held
-#' nothing else is dropped with it.
+#' What one layer may contribute to a top-level key: in `providers`, `local_only` FALSE comes only
+#' from a human layer (user file, session; another value there is TRUE); other layers keep only
+#' TRUE, and an emptied provider entry is dropped (IC-74, 07 sections 2.1 and 5)
 #' @noRd
 settings_guard = function(key, value, human) {
   if (!identical(key, "providers") || !is.list(value)) return(value)
@@ -798,10 +751,9 @@ settings_reaches = function(x, parts) {
   TRUE
 }
 
-#' Applies one layer's contribution `add` to the state `st` (list(value, source)) of the key
-#' `key`, through settings_guard(). A contribution the guard empties is no contribution. The layer
-#' becomes the source when, for a dotted key (`path` below `key`), its contribution reaches the
-#' key or replaces the whole object.
+#' Applies one layer's contribution `add` (none once settings_guard() empties it) to `st`
+#' (list(value, source)); for a dotted key the layer becomes the source only when it reaches
+#' `path` or replaces the whole object
 #' @noRd
 settings_apply = function(st, key, add, layer, human, path = character()) {
   g = settings_guard(key, add, human)
@@ -812,9 +764,8 @@ settings_apply = function(st, key, add, layer, human, path = character()) {
   st
 }
 
-#' Applies the option or session entries of the dotted names from `key` down to `key.<path>` (less
-#' specific first; IC-71: `gptr.subagents.<key>` are the same knobs as the object's keys) to the
-#' state `st` through settings_apply()
+#' Applies the option or session entries of the dotted names from `key` down to `key.<path>`, less
+#' specific first (IC-71), through settings_apply()
 #' @noRd
 settings_dotted = function(st, key, path, layer) {
   ses = the$settings_session %||% list()
@@ -863,10 +814,8 @@ settings_project_value = function(key, spec, current, new, trusted, root) {
   settings_combine(current, new)
 }
 
-#' The `providers` a project settings file contributes (contract 11.2, architecture 6.5, IC-74):
-#' an untrusted project only tightens `local_only`; a trusted one adds its entries, but its
-#' `local_only` only tightens and its `base_url` applies only once the user confirmed that URL
-#' for this project (settings_base_url_ok())
+#' The `providers` a project file contributes (contract 11.2, IC-74): untrusted, only a tighter
+#' `local_only`; trusted, its entries, with a `base_url` only once the user confirmed it
 #' @noRd
 settings_project_providers = function(current, new, trusted, root) {
   if (!is.list(new) || is.null(names(new))) return(current)
@@ -887,11 +836,9 @@ settings_project_providers = function(current, new, trusted, root) {
   settings_combine(current, new)
 }
 
-#' TRUE when a trusted project's `providers.<id>.base_url` may be used: the user confirmed that
-#' URL for this project once (contract 11.2; architecture 6.5: a project base URL decides where
-#' the provider's credentials go). A confirmation is kept in the project's trust.json entry
-#' (`base_url_confirmed`) when the trust is recorded, else for this process; a refusal holds for
-#' this process. Without someone to ask, the URL is not used and a notice says so.
+#' TRUE when a trusted project's `providers.<id>.base_url` may be used (it decides where the
+#' credentials go, architecture 6.5): confirmed once, kept in trust.json when the trust is
+#' recorded, else for this process; without someone to ask, not used
 #' @noRd
 settings_base_url_ok = function(root, id, url) {
   if (!is.character(url) || length(url) != 1L || is.na(url) || !nzchar(url) || !nzchar(id)) {
@@ -972,15 +919,9 @@ settings_local_permissions = function(ws, value) {
 #' @noRd
 settings_at = function(x, path) if (length(path)) settings_dig(x, path) else x
 
-#' A top-level key through every layer, lowest to highest (contract 11.2): defaults < user file <
-#' project file (trust rules) < user-level project file (permissions) < options() < session
-#' layer. With `path`, the key `<key>.<path>` resolves inside the object: the option layer is
-#' options(gptr.<key>) then the options of the dotted names down to the key, and the session
-#' layer likewise (settings_dotted()), so a session object is above a dotted option. A key
-#' without a `setting` spec takes its documented option default (P01's gptr_option_defaults), as
-#' setting_get() does without this service. A `scope = "user"` setting (`egress`) is read from
-#' the user file only. settings_guard() decides what each layer, the defaults included, may
-#' contribute; the source is the highest layer that set or changed the value at the key.
+#' A top-level key through every layer, lowest to highest (contract 11.2); the source is the
+#' highest layer that set or changed it. With `path`, `<key>.<path>` resolves inside the object (a
+#' session object above a dotted option); a `scope = "user"` setting reads the user file only.
 #' @noRd
 settings_layered = function(key, path = character()) {
   spec = settings_spec(key)
@@ -1024,9 +965,8 @@ settings_layered = function(key, path = character()) {
   done(settings_dotted(st, key, path, "session"))
 }
 
-#' A key and the layer it came from (settings_layered()). A dotted key resolves inside its
-#' top-level object when that object is protected (settings_protected()), or is a setting and the
-#' dotted key is not registered itself.
+#' A key and the layer it came from; a dotted key resolves inside a protected top-level object, or
+#' inside a setting when the dotted key is not registered itself
 #' @noRd
 settings_resolve = function(key) {
   parts = strsplit(key, ".", fixed = TRUE)[[1L]]
@@ -1037,21 +977,17 @@ settings_resolve = function(key) {
   settings_layered(parts[1L], parts[-1L])
 }
 
-#' The effective value of a setting through the layers of contract 11.2: the `settings.get`
-#' service behind P01's setting_get(). `session` is accepted for the service signature; settings
-#' are process-wide in 1.0.
+#' The effective value of a setting (the `settings.get` service behind setting_get()); `session`
+#' is accepted for the signature, settings being process-wide
 #' @noRd
 settings_get = function(key, session = NULL) {
   check_string(key, "key")
   settings_resolve(key)$value
 }
 
-#' The protected local-only control of a provider (IC-74, 07-local-ollama.md sections 2.1 and 5):
-#' FALSE only when the user settings file or the session layer sets `providers.<id>.local_only`
-#' to FALSE and no layer above tightens it; the defaults, project files, options() and registered
-#' `setting` specs can only tighten it, and an unset or malformed value is TRUE. Read from the
-#' core `providers` object (never through a registered spec of the dotted name). The value of a
-#' run's protected safety record (`ollama_local_only`).
+#' The protected local-only control of a provider (IC-74, 07 sections 2.1 and 5): FALSE only when
+#' a human layer sets it FALSE and nothing above tightens it; read from the core `providers`
+#' object. The `ollama_local_only` of a run's safety record.
 #' @noRd
 settings_local_only = function(provider = "ollama") {
   check_string(provider, "provider")
@@ -1147,9 +1083,8 @@ replay_mode = function(arg = NULL) {
   "auto"
 }
 
-#' The provider id of a model record, a provider spec or a model reference. A reference is
-#' resolved by model_resolve(strict = FALSE), which never discovers or contacts a provider
-#' (IC-74); an unknown one names the provider before its first `/`, or itself.
+#' The provider id of a model record, a provider spec or a reference (resolved without discovery,
+#' IC-74); an unknown reference names the provider before its first `/`, or itself
 #' @noRd
 replay_provider_id = function(model) {
   if (inherits(model, "gptr_provider")) return(model[["id"]] %||% model[["name"]])
@@ -1165,9 +1100,8 @@ replay_provider_id = function(model) {
              "invalid_argument", arg = "model", expected = "a model record or reference")
 }
 
-#' In replay mode, refuses a request to any provider whose record is not `offline = TRUE`
-#' (gptr_error_not_recorded); `invisible(TRUE)` otherwise. A local server is not offline. Nothing
-#' here discovers, prepares or contacts a provider (07-local-ollama.md sections 2.1 and 4).
+#' In replay mode, refuses a request to a provider whose record is not `offline = TRUE` (a local
+#' server is not); never contacts a provider (07 sections 2.1 and 4)
 #' @noRd
 replay_guard = function(model, what = "model call") {
   check_string(what, "what")
@@ -1183,19 +1117,15 @@ replay_guard = function(model, what = "model call") {
 
 # ------------------------------------------- egress (03 section 6.10; IC-29, IC-43, IC-53, IC-74)
 
-#' Does the local-only policy of IC-74 govern this provider's routes, as P05's
-#' catalog_ollama_route() decides for its models: the Ollama provider, or a provider of native
-#' Ollama decision models?
+#' Does IC-74's local-only policy govern this provider's routes (as catalog_ollama_route())? Ollama,
+#' or a provider of native Ollama decision models
 #' @noRd
 egress_ollama = function(p) {
   catalog_ollama_provider(p) || identical(p[["api"]], "ollama-system-one")
 }
 
-#' The protected safety record an egress decision reads unless its caller passes one: that of
-#' the run executing on this call stack (run_current()), an empty record for a run that holds
-#' none (it fails closed: it cannot ask), NULL outside a run. A caller serving a run that is not
-#' on the stack (P08's router.call, which P06 calls between turns) passes that run's record, the
-#' one P05's preflight reads for the same request (07-local-ollama.md section 5)
+#' The safety record an egress decision reads by default: that of the run on this call stack (an
+#' empty record, failing closed, when it holds none), NULL outside a run (07 section 5)
 #' @noRd
 egress_safety = function() {
   run = run_current()
@@ -1203,24 +1133,16 @@ egress_safety = function() {
   run[["opts"]][["safety"]] %||% list()
 }
 
-#' Is local-only Ollama inference enforced for the next request? Only then does P05's preflight
-#' refuse a cloud model or a remote marker behind a loopback server before anything is sent. It
-#' is, unless the protected user/session control (settings_local_only()) or the frozen safety
-#' record of the run the request serves (`safety`, egress_safety()) relaxes it: an exemption
-#' needs both, so a request is never judged under the weaker of two snapshots.
+#' Is local-only Ollama inference enforced for the next request? Yes unless the protected control
+#' (settings_local_only()) or the run's frozen `safety` record relaxes it: an exemption needs both
 #' @noRd
 egress_local_only = function(safety = egress_safety()) {
   settings_local_only("ollama") && catalog_local_only(safety)
 }
 
-#' Where automatic context sent to provider record `p` goes: `exempt` (no acknowledgement
-#' needed), the effective `origin` (NULL without an HTTP endpoint) and, for a local provider that
-#' is not exempt, `why`. Offline providers are exempt; a local one only when its effective
-#' endpoint (P05's catalog_endpoint(): settings > record > environment) is a loopback address,
-#' and for Ollama routes only while local-only inference is enforced (IC-74, D-020: the `local`
-#' hint and a loopback URL alone exempt neither a remote override nor a cloud model). Task 9's
-#' guards read the same answer for the session's own provider record, under the safety record
-#' (`safety`, egress_safety()) of the run the request serves.
+#' Where automatic context sent to provider record `p` goes: `exempt`, the effective `origin` and,
+#' for a local provider not exempt, `why`. Offline is exempt; local only with a loopback endpoint
+#' and, for Ollama, local-only enforced under `safety` (IC-74, D-020)
 #' @noRd
 egress_state = function(p, safety = egress_safety()) {
   if (!is.list(p)) return(list(exempt = FALSE, origin = NULL, why = NULL))
@@ -1242,11 +1164,8 @@ egress_state = function(p, safety = egress_safety()) {
   out
 }
 
-#' Can the egress question be asked: someone can answer (IC-43) and, for a request of a run,
-#' that run's safety record (`safety`, a list or an environment; egress_safety()) says
-#' `can_prompt = TRUE`. Like P06's gate this fails closed: a background run, a child without a
-#' human, or a snapshot that does not say it can ask never asks (IC-53 item 6: the
-#' acknowledgement is an ask_human).
+#' Can the egress question be asked: someone can answer (IC-43) and the run's `safety` record says
+#' `can_prompt = TRUE`; fails closed like P06's gate (IC-53 item 6)
 #' @noRd
 egress_can_ask = function(safety = egress_safety()) {
   if (!is.null(safety)) {
@@ -1271,10 +1190,8 @@ egress_question = function(id, origin = NULL) {
          " from now on?")
 }
 
-#' Records `egress.<id> = "ack"` in the user settings file: one read-modify-write under the
-#' file's short lock (IC-71), so an acknowledgement another process wrote meanwhile is kept and
-#' the file's other keys keep their JSON form; a file that is not a JSON object is never
-#' rewritten (settings_file_load()). Returns the file path, invisibly.
+#' Records `egress.<id> = "ack"` in the user settings file by one read-modify-write under its
+#' short lock (IC-71); returns the file path, invisibly
 #' @noRd
 egress_record = function(id) {
   path = settings_path("user", create = TRUE)
@@ -1289,12 +1206,8 @@ egress_record = function(id) {
   invisible(path)
 }
 
-#' `invisible(TRUE)` when automatic context may go to `provider_id`: acknowledged in the user
-#' settings (`egress`, read from the user file only), an offline provider, or a local one whose
-#' effective endpoint stays on this machine (egress_state()). With someone to ask it asks once
-#' (an ask_human, IC-53) and records the answer at user scope with an `egress_ack` message;
-#' otherwise gptr_error_egress (13 C-34). Acknowledgements are keyed by the provider's own id
-#' (an alias finds it). The `.opts$context = "none"` exemption is the gateway's (Task 9).
+#' `invisible(TRUE)` when automatic context may go to `provider_id` (acknowledged, offline or a
+#' local endpoint); else asks once (IC-53) and records the answer, or gptr_error_egress (13 C-34)
 #' @noRd
 egress_check = function(provider_id) {
   check_string(provider_id, "provider_id")
@@ -1303,12 +1216,8 @@ egress_check = function(provider_id) {
   egress_require(pid, egress_state(rec))
 }
 
-#' egress_check() for a provider record the caller already holds: `st` is egress_state() of the
-#' record the request will use. Task 9's guards pass the session's own record (a rank-0 spec
-#' included), which can differ from the process-wide record of the same id that egress_check()
-#' reads: a call-level `lmstudio` spec at a LAN address is not the built-in loopback one, so the
-#' global record must never exempt it (IC-29, IC-74; D-099, D-114). `safety` is the record of
-#' the run the request serves (egress_safety()), so whether it may ask is that run's answer.
+#' egress_check() for the record the request uses (`st`, its egress_state()), which can differ
+#' from the process-wide record of the same id (IC-29, IC-74; D-099, D-114); `safety` decides asking
 #' @noRd
 egress_require = function(pid, st, safety = egress_safety()) {
   # the id is pasted into the hint the user is told to run, so it must be a plain provider id
@@ -1345,9 +1254,8 @@ egress_require = function(pid, st, safety = egress_safety()) {
 #' @noRd
 settings_ident_keys = function() c("model", "small_model", "system1", "mode", "preset")
 
-#' Resolves an identifier-valued setting; it must be one name. The key itself is the argument
-#' resolve_identifier() reads (`small_model` and `system1` have the pool of `model`), so a refusal
-#' names the setting that was written
+#' Resolves an identifier-valued setting to one name; the key is resolve_identifier()'s `arg`, so a
+#' refusal names the setting
 #' @noRd
 settings_ident = function(expr, key, envir) {
   v = resolve_identifier(expr, key, envir)
@@ -1361,10 +1269,8 @@ settings_ident = function(expr, key, envir) {
   v
 }
 
-#' Refuses a key that gptr_config() may not set in `scope` and returns its spec: a dotted name
-#' below a protected setting (settings_protected(): `providers`, `egress`; IC-74, contract 11.2),
-#' which the layers never read from a file and which a registered `setting` spec could otherwise
-#' make writable, and a `scope = "user"` setting outside user scope
+#' Refuses a key gptr_config() may not set in `scope` and returns its spec: a dotted name below a
+#' protected setting (IC-74, contract 11.2), or a `scope = "user"` setting outside user scope
 #' @noRd
 settings_config_key = function(key, scope) {
   top = strsplit(key, ".", fixed = TRUE)[[1L]][1L]
@@ -1394,10 +1300,8 @@ settings_relaxed_ids = function(value) {
   out
 }
 
-#' Checks a validated value against what gptr_config() may write in `scope`: `filters` must have
-#' the form P02's registry_filters_set() accepts, checked before anything is written (04 10.1);
-#' a project may not set `providers.<id>.local_only = FALSE`, which only the human's user file and
-#' session layer can relax (IC-74, 07-local-ollama.md section 5; the layers would never apply it)
+#' Checks a validated value before anything is written: `filters` in registry_filters_set()'s form
+#' (04 10.1), and no project `providers.<id>.local_only = FALSE` (IC-74, 07 section 5)
 #' @noRd
 settings_config_value = function(key, value, scope) {
   if (identical(key, "filters") && length(value) &&
@@ -1488,9 +1392,7 @@ gptr_config = function(..., .scope = NULL) {
     i = i + 1L
   }
   settings_write(scope, patch)
-  # 04 10.1: gptr_config(filters =) is a filter path; P02 applies its own refusals (IC-53). The
-  # user and project files go through gateway_filters_sync(), which also applies them after a
-  # restart and honours the trust rule of the project layer
+  # 04 10.1: a filter path (P02 refuses per IC-53); files go through gateway_filters_sync()
   if ("filters" %in% keys) {
     if (identical(scope, "session")) {
       registry_filters_set(as.character(unlist(settings_read(scope)[["filters"]])), scope = scope)
@@ -1501,16 +1403,9 @@ gptr_config = function(..., .scope = NULL) {
   invisible(prev)
 }
 
-#' Applies the `filters` of the user settings file, and of the project settings file while the
-#' project layer is in effect (a trusted project: `filters` is not a tighten-type key, so an
-#' untrusted project contributes none, as in settings_layered()), to P02's registry with
-#' registry_filters_set(scope = "user" / "project") (04 10.1; P02 self-review item 18: only the
-#' settings layer knows which layer a value came from). A scope is applied only when its list
-#' differs from the one applied last (`the$gateway$filters_applied`); the files are read through
-#' the settings cache, which re-reads a changed file, so a file edited (or a project entered)
-#' since the last call is picked up by the next one. Called by gptr_config() for the user and
-#' project scopes and at the start of every top-level gateway_run(). A list that P02 rejects is
-#' a diagnostic and a one-time notice, never an error.
+#' Applies the `filters` of the user settings file and of a trusted project's file to P02's
+#' registry (04 10.1), each scope only when its list changed since last applied; a rejected list
+#' is a diagnostic and a one-time notice, never an error
 #' @noRd
 gateway_filters_sync = function() {
   st = gateway_state()
@@ -1546,9 +1441,8 @@ gateway_filters_sync = function() {
 #' @noRd
 template_file = function(name) system.file("templates", name, package = "gptr")
 
-#' Copies a template from inst/templates unless the target exists (never overwrites). The text is
-#' written with LF line endings and a final newline (contract 11), whatever endings the installed
-#' copy has. Returns the sha256 of the bytes written (NULL when the target existed), invisibly
+#' Copies a template unless the target exists, with LF endings and a final newline (contract 11);
+#' returns the sha256 of the bytes written (NULL when the target existed), invisibly
 #' @noRd
 template_copy = function(name, dest) {
   if (file.exists(dest)) return(invisible(NULL))
@@ -1563,10 +1457,8 @@ template_copy = function(name, dest) {
   invisible(hash_sha256(bytes))
 }
 
-#' Writes .gptr/settings.json from its template unless it exists, under the file's short lock
-#' (IC-71), and keeps the trust that held just before (trust_carry(); IC-52: gptr's own writes
-#' re-fingerprint, as in settings_write()). The new file is trust-gated, so otherwise the write
-#' would void a recorded trust, or a decision of this process, for a project without one.
+#' Writes .gptr/settings.json from its template unless it exists, under its short lock (IC-71),
+#' keeping the trust that held before (trust_carry(); IC-52)
 #' @noRd
 init_settings = function(root, dest) {
   lock = file_lock(dest)
@@ -1661,8 +1553,7 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
   if (gptr_can_prompt()) {
     answer = isTRUE(gptr_confirm(paste0("Trust this project (its settings, extensions and MCP ",
                                         "servers)?")))
-    # `proj` itself: project_root(proj) returns the gptr.project_root / GPTR_PROJECT_ROOT override
-    # whenever one is set (IC-63), which need not be the directory just initialised
+    # `proj` itself: project_root() may return an IC-63 override, not the directory initialised
     trust_store(proj, answer)
   }
   invisible(path_norm(ws))

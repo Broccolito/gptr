@@ -1,8 +1,6 @@
-# R/gptr-gateway.R (Task 8: create)
 # gptr-gateway.R -- peter(): the one gateway (S-1), a classed closure whose `$` reaches the peter$
-# namespace; dispatch steps 1-6 of contract 6.1.1 with routes looked up in the registry; the
-# built-in routes `nested`, `continue` and `new`, the core `setting` specs (builtin:gateway,
-# IC-24), and the router.call service (IC-69). Plan P08, layer L6.
+# namespace; dispatch steps 1-6 of contract 6.1.1, the built-in routes and core `setting` specs
+# (builtin:gateway, IC-24), and the router.call service (IC-69). Plan P08, layer L6.
 
 #' Run an agent in this R session
 #'
@@ -75,10 +73,8 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
                            prompt = NULL, envir = parent.frame(), background = FALSE,
                            budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
                            .stdin = FALSE) {
-  # Capture rules R2-R3 (G3 section 3; IC-41). This frame holds `...` and the caller frame, so it
-  # creates no closure, handler or match.arg() call and never assigns a formal (new locals only).
-  # Plain-symbol dots are read by name through leaves; their promises are never forced. Calls and
-  # forwarded dots reach leaves through ...elt() in a while loop.
+  # Capture rules R2-R3 (IC-41): this frame holds `...` and the caller frame, so it makes no
+  # closure, handler or match.arg() call, never assigns a formal, and never forces a symbol dot
   caller = parent.frame()
   env_given = !missing(envir)
   if (env_given) check_env(envir, "envir")
@@ -86,9 +82,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
   nf = sys.nframe()
   n = ...length()
   exprs = as.list(substitute(list(...)))[-1L]
-  # an empty argument (`peter("x", , big)`) has no value to read: refused before any dot is read,
-  # since ...elt() of it fails with R's "argument is missing" (Task 5's dot_sites() and
-  # dot_labels() already tolerate it)
+  # an empty argument (`peter("x", , big)`) is refused before ...elt() could fail on it
   empty = which(dot_empty(exprs))
   if (length(empty)) {
     gptr_abort(c(paste0("Argument ", empty[1L], " of the dots is empty."),
@@ -147,8 +141,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
         ip = interpolate_prompt(prompt_text, if (env_given) envir else caller)
         prompt_text = ip$prompt
         interp = ip$interp
-        # 04 2.2: the interpolated prompt is echoed at verbosity >= 2 (message class
-        # gptr_message_interpolated; gptr_inform() redacts it and honours gptr.quiet)
+        # 04 2.2: echoed at verbosity >= 2 (gptr_inform() redacts it)
         if (length(interp) && verbosity() >= 2L) {
           gptr_inform(paste0("Interpolated prompt: ", prompt_text), "interpolated")
         }
@@ -181,8 +174,7 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
   id_tools = if (ident_force_needed(e, "tools", caller)) ident_value(tools, "tools", e) else
     resolve_identifier(e, "tools", caller)
   id_agents = resolve_agents(substitute(agents), caller)
-  # an explicit `mode =` changes a continued session; a mode inherited from the running mode
-  # (gateway_dispatch(), IC-53) only tightens the nested run (P06 run_new())
+  # an explicit `mode =` changes a continued session; an inherited one only tightens (IC-53)
   args$mode_given = !is.null(id_mode)
   if (is.null(prompt_text) && !isTRUE(args$stdin) && !gptr_can_prompt()) {
     gptr_abort(c("peter() without a prompt starts the interactive console and needs a human.",
@@ -203,9 +195,8 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
   if (isTRUE(res$visible)) res$value else invisible(res$value)
 }, class = c("gptr_gateway", "function"))
 
-#' For each dot expression, TRUE when the argument was left empty (`peter("x", , big)`) [leaf].
-#' Each expression is read by index and never bound to a local, so the empty argument is never
-#' evaluated (as in dot_sites() and dot_labels())
+#' For each dot expression, TRUE when the argument was left empty (`peter("x", , big)`) [leaf];
+#' read by index, never bound to a local, so it is never evaluated
 #' @noRd
 dot_empty = function(exprs) {
   out = logical(length(exprs))
@@ -217,11 +208,9 @@ dot_empty = function(exprs) {
   out
 }
 
-#' Routes a call (contract 6.1.1 steps 5-6): route records in ascending `order`; the first whose
-#' match() is TRUE runs; run() may return route_pass(). The call record is released on exit.
-#' A call that no route handled is refused: without a prompt the console is missing; with a
-#' decision-only (classifier) model the System 1 route is missing, so the call is never left to
-#' a conversational route (IC-74: routing follows the model-level type)
+#' Routes a call (contract 6.1.1 steps 5-6): the first matching route by `order` runs unless it
+#' returns route_pass(); the call record is released on exit. An unhandled call is refused (a
+#' classifier model is never left to a conversational route, IC-74)
 #' @noRd
 gateway_dispatch = function(call) {
   on.exit(call_release(call), add = TRUE)
@@ -251,9 +240,8 @@ gateway_dispatch = function(call) {
   gptr_abort("No gateway route handled this call.", "internal", detail = "no route matched")
 }
 
-#' A route's match(); an error skips the route with a diagnostic. Both arguments are forced on
-#' entry: the handler closure outlives this frame, and an unforced promise would keep the caller's
-#' frame referenced (G3 fact-check cause 5)
+#' A route's match(); an error skips the route with a diagnostic. Arguments are forced on entry so
+#' the handler closure keeps no caller frame referenced (G3 cause 5)
 #' @noRd
 route_matches = function(route, call) {
   force(route)
@@ -272,12 +260,9 @@ gateway_model_label = function(model) {
   as.character(model)[1L]
 }
 
-#' The model-level type of a call's model (IC-74; 07-local-ollama.md section 2: routing follows
-#' the resolved model's own `type`, not its provider's default, so `ollama/clef-flash` is a
-#' `classifier` although the `ollama` provider serves chat): `"classifier"`, `"chat"`, `"cli"`,
-#' `"router"`, or NA for the configured default (NULL) and for a model that does not resolve.
-#' Deterministic: P05's model_resolve() never discovers, prepares or contacts a provider
-#' (07 section 2.1). Never signals, so a route's match() may call it
+#' The resolved model's own type (IC-74, 07 section 2): `"classifier"`, `"chat"`, `"cli"`,
+#' `"router"`, or NA for the default (NULL) and an unresolved model. Deterministic (07 section
+#' 2.1) and never signals, so a route's match() may call it
 #' @noRd
 gateway_model_type = function(model) {
   if (is.null(model)) return(NA_character_)
@@ -343,8 +328,7 @@ print.gptr_gateway = function(x, ...) {
 #' @noRd
 route_pass = function() structure(list(), class = "gptr_route_pass")
 
-#' Evaluates `expr_fun()` with deferral on: every peter() call made meanwhile behaves as
-#' `.run = FALSE` and returns its unstarted session (used by gptr_parallel(), P19)
+#' Evaluates `expr_fun()` with every peter() call behaving as `.run = FALSE` (gptr_parallel(), P19)
 #' @noRd
 gateway_defer = function(expr_fun) {
   check_function(expr_fun, "expr_fun")
@@ -368,8 +352,7 @@ home_address = function(envir) {
 }
 
 #' The strictest of two modes (plan < manual < edits < auto); NULL means "no constraint", and a
-#' value that is not a mode never loosens the other (the name P06 reserved for P08; P06's own
-#' helper is run_mode_tighter())
+#' value that is not a mode never loosens the other
 #' @noRd
 mode_tighter = function(a, b) {
   if (is.null(a)) return(b)
@@ -381,8 +364,6 @@ mode_tighter = function(a, b) {
   if (is.na(ib)) return(a)
   if (ia <= ib) a else b
 }
-
-# R/gptr-gateway.R (Task 9: append)
 
 # ------------------------------------------------------------------ the default System 2 runner
 
@@ -396,14 +377,9 @@ gateway_list = function(x) {
   list(x)
 }
 
-#' The canonical model reference of a session: `provider/id[:thinking]`, or `router:<name>`
-#' (IC-69). NULL means the settings default, then model_default("chat") (03 section 8.4). A model
-#' id may hold a colon (an Ollama tag such as `qwen3:1.7b`, IC-74), so a reference is resolved
-#' whole by P05's model_resolve(), which reads a trailing thinking level itself and never
-#' discovers or contacts a provider (07-local-ollama.md section 2.1). `router:<name>` must name a
-#' router registered for the process or, on a continuation, for `session` (its rank-0 records);
-#' anything else is gptr_error_unknown_model, as the plan's resolution gave, so a mistyped router
-#' never reaches router.call's default-model fallback
+#' The canonical model reference of a session, `provider/id[:thinking]` or `router:<name>`
+#' (IC-69); NULL means the settings default, then model_default("chat"). Resolved whole (an id
+#' may hold a colon, IC-74); an unregistered `router:<name>` is unknown, never the default model
 #' @noRd
 gateway_model_ref = function(model, thinking = NULL, session = NULL) {
   level = function(th) if (is.null(th)) "" else paste0(":", th)
@@ -439,8 +415,7 @@ gateway_model_ref = function(model, thinking = NULL, session = NULL) {
                suggestions = if (length(routers)) paste0("router:", routers) else character())
   }
   if (!is.null(registry_get("router", model, session = session))) return(paste0("router:", model))
-  # a registered provider named alone means its first model (on a continuation, a provider
-  # registered for the session counts: its rank-0 records)
+  # a registered provider named alone means its first model (rank-0 records included)
   if (!grepl("/", model, fixed = TRUE)) {
     pr = registry_get("provider", model, session = session)
     if (!is.null(pr) && length(pr$models)) {
@@ -464,8 +439,7 @@ gateway_provider = function(s) {
   registry_get("provider", pid, session = d$id) %||% provider_get(pid)
 }
 
-#' The model record of a session's model (NULL when it cannot be found). The whole reference is
-#' tried first: a model id may hold a colon (IC-74)
+#' The model record of a session's model, or NULL; the whole id is tried first (IC-74 colons)
 #' @noRd
 gateway_model_record = function(s) {
   d = session_data(s)
@@ -523,10 +497,9 @@ gateway_session_by_id = function(id) {
   NULL
 }
 
-#' Registers one spec of a call at rank 0 for a session. A spec of the same kind and name that an
-#' earlier call registered for the session is removed first: P02 keeps the first of two records
-#' of equal rank (contract 10.1 "ties: the first registered"), so a continuation's newer spec
-#' would otherwise be ignored. The ids are kept in `the$gateway$specs` until session_shutdown.
+#' Registers one spec of a call at rank 0 for a session, first removing an earlier call's spec of
+#' the same kind and name (ties keep the first registered, contract 10.1); ids are kept in
+#' `the$gateway$specs` until session_shutdown
 #' @noRd
 gateway_register_spec = function(spec, sid) {
   st = gateway_state()
@@ -539,12 +512,9 @@ gateway_register_spec = function(spec, sid) {
   invisible(ids[[key]])
 }
 
-#' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo). P02 has
-#' no per-session filter scope, so they join the R-process layer instead of replacing it: merged
-#' into the session settings key `filters` (shown by gptr_config(), removed with
-#' gptr_config(filters = NULL, .scope = "session")) and applied with registry_filters_set(scope =
-#' "session"). From model code during a run this reconfigures gptr (IC-53 items 3-4): refused
-#' unless approved.
+#' Applies a call's registry filters (`plugins = "-builtin:x"`, `"+builtin:x"` to undo), merged
+#' into the session settings key `filters` (P02 has no per-session filter scope); refused from
+#' model code unless approved (IC-53 items 3-4)
 #' @noRd
 gateway_filters_apply = function(filters) {
   control_check("gptr_config")
@@ -562,9 +532,8 @@ gateway_filters_apply = function(filters) {
   invisible(cur)
 }
 
-#' Registers the call's specs at rank 0 for the session (providers, routers, tools, agents), loads
-#' its extensions session-scoped, applies the call's registry filters and enables named plugins
-#' (IC-69; contract 10.1)
+#' Registers the call's specs at rank 0 for the session, loads its extensions, applies its
+#' registry filters and enables named plugins (IC-69; contract 10.1)
 #' @noRd
 gateway_register = function(call, s) {
   id = session_data(s)$id
@@ -605,9 +574,8 @@ gateway_trust_check = function() {
   invisible(TRUE)
 }
 
-#' Creates the session of a new call: resolved model and mode (tightened to the running mode
-#' inside a run), the evaluation environment as home (P06 keeps it only when it is not a function
-#' frame), kind `child` with depth + 1 and the running session as parent inside a run
+#' Creates the session of a new call: resolved model and mode, the evaluation environment as home;
+#' inside a run, the mode tightened, kind `child` and the running session as parent
 #' @noRd
 gateway_new_session = function(call, cur) {
   nested = !is.null(cur)
@@ -616,10 +584,7 @@ gateway_new_session = function(call, cur) {
   if (nested) mode = mode_tighter(mode, cur$mode)
   if (nested) gateway_child_depth(cur)
   parent = if (nested) gateway_session_by_id(cur$session) else NULL
-  # P06's session_new() reads `thinking` from `opts` and derives the depth from `parent`
-  # (gateway_child_depth() above only enforces gptr.subagents.max_depth); the tool modifiers,
-  # `.opts$system` and the rest reach P06/P07 through `call$args$opts` and the run options
-  # that gateway_run_opts() builds
+  # session_new() derives the depth from `parent`; gateway_child_depth() only enforces the limit
   s = session_new(ref, mode, home = call$envir, kind = if (nested) "child" else "chat",
                   parent = parent, preset = gateway_preset(call),
                   opts = list(thinking = call$args$opts$thinking))
@@ -640,11 +605,9 @@ gateway_continue_envir = function(call, s) {
   invisible(call)
 }
 
-#' Applies a continuation's changes: model changes, an explicit `mode =` (tightened to the
-#' running mode inside a run, IC-53) and tools added through the session.add_tools service
-#' (IC-69). A mode only inherited from the running mode is not written to the session: P06's
-#' run_new() runs a nested run in the stricter of the two modes, and the user's session keeps its
-#' own mode afterwards (IC-53 item 4).
+#' Applies a continuation's changes: model, an explicit `mode =` (tightened inside a run) and tools
+#' through session.add_tools (IC-69). An inherited mode is never written to the session (IC-53
+#' item 4).
 #' @noRd
 gateway_continue_session = function(call, s, cur) {
   d = session_data(s)
@@ -680,8 +643,7 @@ gateway_continue_session = function(call, s, cur) {
 }
 
 #' Fails fast when a context symbol is not the same object in the evaluation environment (IC-40).
-#' A `while` loop: `env` may be a user frame, and a `for` loop calling closures with it pins the
-#' frame (verified with tracemem: the wrapper f(big) copied `big` with a `for` loop here).
+#' A `while` loop: a `for` loop calling closures with a user frame pins it (tracemem-verified).
 #' @noRd
 gateway_check_visible = function(call) {
   env = call$envir
@@ -702,10 +664,8 @@ gateway_check_visible = function(call) {
   invisible(TRUE)
 }
 
-#' The replay guard under the call's replay mode: the call's `replay =` overrides the process
-#' mode (contract 3.1 `gptr.replay`; IC-45 replay_mode(arg)). replay_guard() reads the process
-#' mode, so a call that asks for replay in a process that is not replaying is checked with the
-#' option set for the duration of the check (restored on exit)
+#' The replay guard under the call's `replay =`, which overrides the process mode (contract 3.1,
+#' IC-45); replay_guard() reads the option, so it is set for the check and restored on exit
 #' @noRd
 gateway_replay_guard = function(model, arg = NULL) {
   if (!identical(replay_mode(arg), "replay")) return(invisible(TRUE))
@@ -716,22 +676,17 @@ gateway_replay_guard = function(model, arg = NULL) {
   replay_guard(model)
 }
 
-#' The egress acknowledgement for provider record `pr` (NULL when unknown) under id `pid`: P08's
-#' egress_state() of the record the request uses (its rank-0 record included) decides the
-#' exemption: the effective endpoint and, for Ollama, the protected local-only control, never the
-#' provider's `local` hint (IC-74; D-020, D-099). egress_require() is given that state, so the
-#' process-wide record of the same id can never exempt a session's own spec (D-114). `safety` is
-#' the protected record of the run the request serves (egress_safety() by default; D-114)
+#' The egress acknowledgement for provider record `pr` (NULL when unknown) under id `pid`, judged
+#' by egress_state() of the record the request uses, under the run's `safety` record (IC-74;
+#' D-020, D-099, D-114)
 #' @noRd
 gateway_egress = function(pr, pid, safety = egress_safety()) {
   pid = pr[["id"]] %||% pr[["name"]] %||% pid
   egress_require(pid, egress_state(pr, safety), safety)
 }
 
-#' Egress acknowledgement and replay guard for the session's model (a router session is checked
-#' per request by router_call()). Automatic context is checked unless `.opts$context = "none"`
-#' (gateway_egress(), under `safety`: the record the run will freeze, gateway_run()); the call's
-#' `replay =` decides the replay mode (gateway_replay_guard())
+#' Egress acknowledgement (unless `.opts$context = "none"`, under `safety`) and replay guard for
+#' the session's model; a router session is checked per request by router_call()
 #' @noRd
 gateway_guards = function(call, s, safety = egress_safety()) {
   ref = session_data(s)$model
@@ -815,12 +770,9 @@ gateway_context_blocks = function(s, inp, first) {
   ext_service_get(name)(s, inp) %||% list()
 }
 
-#' Secret-looking text in a prompt (the option gptr.prompt_secrets of 04 3.1, which P03 documents
-#' and leaves to the gateway): the prompt redacted with the `context` profile. P06 redacts every
-#' entry at ingress anyway, so the original can never be sent; what the option chooses is how the
-#' user hears of it: "redact" (the default, and "ask" when nobody can answer, IC-43) sends the
-#' redacted prompt with a notice; "ask" asks first and, on no, stops the call before anything is
-#' sent (gptr_error_invalid_argument, arg `prompt`, never the value).
+#' The prompt redacted with the `context` profile (gptr.prompt_secrets, 04 3.1): "redact" (also
+#' "ask" when nobody can answer, IC-43) sends it with a notice; "ask" asks first and, on no, stops
+#' the call before anything is sent. P06 redacts every entry at ingress anyway.
 #' @noRd
 gateway_prompt_secrets = function(prompt) {
   if (is.null(prompt)) return(prompt)
@@ -843,9 +795,8 @@ gateway_prompt_secrets = function(prompt) {
   red
 }
 
-#' The input of a turn: the `input` event (transform chain), context blocks, skill preloads, the
-#' prompt and images. NULL when an `input` hook handled it. The prompt passes
-#' gateway_prompt_secrets() first, so hooks and the provider see the redacted text.
+#' The input of a turn: the `input` event, context blocks, skill preloads, the prompt (redacted
+#' before hooks see it) and images; NULL when an `input` hook handled it
 #' @noRd
 gateway_input = function(call, s, first, nested) {
   prompt = gateway_prompt_secrets(call$prompt)
@@ -868,8 +819,7 @@ gateway_input = function(call, s, first, nested) {
        source = if (nested) "parent" else if (first) "prompt" else "pipe")
 }
 
-#' Run options of contract 7.6 for this call. The protected safety record is not among them: it
-#' is frozen when the run starts (gateway_run_start())
+#' Run options of contract 7.6 for this call; the safety record is frozen at gateway_run_start()
 #' @noRd
 gateway_run_opts = function(call, s, cur) {
   o = call$args$opts %||% list()
@@ -885,12 +835,9 @@ gateway_run_opts = function(call, s, cur) {
   ropts[!vapply(ropts, is.null, NA)]
 }
 
-#' The protected safety record of a root run (IC-53 item 2; IC-74, 07-local-ollama.md sections
-#' 2.1 and 5): P06's option snapshot plus `ollama_local_only`, which comes only from the human
-#' layers through settings_local_only() (the user settings file and the session layer; project
-#' files, options(), registered specs and call data can only tighten it, D-094), never from
-#' `.opts` (refused by gateway_opts(), D-102). NULL inside a run: a nested run inherits the outer
-#' run's frozen record (P06's run_new()).
+#' The protected safety record of a root run (IC-53 item 2; IC-74, 07 section 5): the option
+#' snapshot plus `ollama_local_only` from the human layers only (D-094, D-102). NULL inside a run,
+#' which inherits the outer run's frozen record.
 #' @noRd
 gateway_run_safety = function(cur = run_current()) {
   if (!is.null(cur)) return(NULL)
@@ -899,10 +846,8 @@ gateway_run_safety = function(cur = run_current()) {
   snap
 }
 
-#' Starts a run of a gateway call with its safety record frozen at the start (a pending run of
-#' `.run = FALSE` gets its record when gptr_step() or gptr_wait() starts it, not when it was
-#' queued). gateway_run() passes the record its guards judged egress under, so the run's
-#' requests are preflighted under the same one (D-114)
+#' Starts a run with its safety record frozen at the start (a `.run = FALSE` run when it starts,
+#' not when queued); callers pass the record their guards judged egress under (D-114)
 #' @noRd
 gateway_run_start = function(s, input, ropts, cur = run_current(),
                              safety = gateway_run_safety(cur)) {
@@ -912,10 +857,8 @@ gateway_run_start = function(s, input, ropts, cur = run_current(),
 
 # ------------------------------------------------------------------ pending runs (.run = FALSE)
 
-#' Keeps the run options of a session built with `.run = FALSE` (its rendered input waits in the
-#' session's follow-up queue) until gptr_step() or gptr_wait() starts it; keyed by session id in
-#' `the$gateway$pending`. A run started elsewhere (P19, P21: `run_start(s, NULL, opts)`) uses its
-#' own options, and the entry is dropped when that run settles (gateway_release_held()).
+#' Keeps the run options of a `.run = FALSE` session until gptr_step() or gptr_wait() starts it
+#' (`the$gateway$pending`, by session id); dropped when any run of the session settles
 #' @noRd
 gateway_pending_set = function(s, opts) {
   assign(session_data(s)$id, opts, envir = gateway_state()$pending)
@@ -935,12 +878,8 @@ gateway_pending_take = function(id) {
 #' @noRd
 gateway_pending_has = function(id) exists(id, envir = gateway_state()$pending, inherits = FALSE)
 
-#' Keeps a call record (and the frame in its `envir` binding) until the session's run settles or
-#' the session shuts down [R2]: the record is listed under the session id in `the$gateway$held`,
-#' and builtin:gateway's process-level `agent_end` and `session_shutdown` hooks
-#' (gateway_release_hooks()) release it. Process-level hooks, so that no listener has to be
-#' registered per session: both P06 events carry the session id (`event$session`), including the
-#' `session_shutdown` that P06's finalizer dispatches when a pending session is collected.
+#' Keeps a call record (and its `envir` frame) in `the$gateway$held` until the session's run
+#' settles or the session shuts down [R2]; gateway_release_hooks() releases it
 #' @noRd
 call_hold = function(call, s) {
   sid = session_data(s)$id
@@ -970,10 +909,8 @@ gateway_release_held = function(sid) {
   invisible(TRUE)
 }
 
-#' builtin:gateway's process-level hooks that release held call records when a run settles
-#' (`agent_end`) or a session shuts down, is collected or the package unloads
-#' (`session_shutdown`, which also forgets the ids of the session's rank-0 records: P02 drops the
-#' records themselves); both payloads carry the session id as `event$session`
+#' builtin:gateway's process-level hooks (no per-session listener): `agent_end` and
+#' `session_shutdown` release held call records; shutdown also forgets the rank-0 record ids
 #' @noRd
 gateway_release_hooks = function() {
   settled = function(event, ctx) {
@@ -993,22 +930,19 @@ gateway_release_hooks = function() {
   list(gptr_hook("agent_end", settled), gptr_hook("session_shutdown", shutdown))
 }
 
-#' The default System 2 runner (contract 7.8) used by the `continue`, `new` and `nested` routes
-#' and by other plans' routes: creates or continues the session, checks egress and replay, builds
-#' the input, then queues it (`.run = FALSE`), starts it in the background, or runs it to
-#' settlement under the interrupt policy and maps a terminal status to its condition
+#' The default System 2 runner (contract 7.8): creates or continues the session, checks egress
+#' and replay, builds the input, then queues it, starts it in the background or runs it to
+#' settlement and signals a terminal status
 #' @noRd
 gateway_run = function(call, s = NULL) {
   cur = run_current()
   first = is.null(s)
   nested = first && !is.null(cur)
-  # IC-40 fails fast: the evaluation environment is fixed and checked before anything changes
-  # (no session created, no spec registered, no model or mode switched)
+  # IC-40 fails fast: the evaluation environment is checked before anything changes
   if (!first) gateway_continue_envir(call, s)
   gateway_check_visible(call)
   if (first && is.null(cur)) gateway_trust_check()
-  # the `filters` of the user and (trusted) project settings files reach the registry before the
-  # session is built (04 10.1; P02 item 18); a no-op unless a file or the project changed
+  # settings-file `filters` reach the registry before the session is built (04 10.1)
   if (is.null(cur)) gateway_filters_sync()
   if (first) {
     s = gateway_new_session(call, cur)
@@ -1016,8 +950,7 @@ gateway_run = function(call, s = NULL) {
     gateway_continue_session(call, s, cur)
   }
   if (is.null(cur)) last_set(s)
-  # a root run's protected record is taken once: egress is judged under the record the run
-  # freezes (a nested run inherits the record of `cur`, which egress_safety() reads)
+  # egress is judged under the record the run freezes (a nested run inherits that of `cur`)
   safety = gateway_run_safety(cur)
   gateway_guards(call, s, safety %||% egress_safety())
   input = gateway_input(call, s, first, nested)
@@ -1044,9 +977,7 @@ gateway_run = function(call, s = NULL) {
   }
   run = gateway_run_start(s, msg, ropts, cur, safety)
   run_foreground(run)
-  # the pause menu's [b]ackground (03 6.2, 04 7.14): P21's bg.register marked the run
-  # `opts$background`, so the call returns the session now and the run goes on under the
-  # background pump; the record is held until the run settles [R2]
+  # sent to the background from the pause menu (04 7.14): hold the record until it settles [R2]
   if (!run_settled(run) && isTRUE(run$opts$background)) {
     call_hold(call, s)
     return(invisible(s))
@@ -1057,9 +988,7 @@ gateway_run = function(call, s = NULL) {
 
 # ------------------------------------------------------------------ pumping runs (6.1.1 step 6)
 
-#' TRUE once a run settled: P06's run_settle() sets `run$settled` and a terminal status (04 7.6:
-#' the active statuses, then a terminal one). A run parked with status `waiting` by P21 is not
-#' settled, so "not an active status" would mislead.
+#' TRUE once a run settled (`run$settled` or a terminal status, 04 7.6); `waiting` is not settled
 #' @noRd
 run_settled = function(run) {
   if (is.null(run) || isTRUE(run$settled)) return(TRUE)
@@ -1087,9 +1016,8 @@ sdk_work = function(runs, until, timeout) {
   function() reactor_pump(until = until, slice_ms = 100L, allow_runs = allow, timeout = timeout)
 }
 
-#' Pumps runs under the console.interrupt_policy service (P14) when it is registered, else
-#' abort-only: an interrupt aborts the runs (the partial turn is recorded) and propagates
-#' unchanged (03 section 6.2)
+#' Pumps runs under the console.interrupt_policy service (P14), else abort-only: an interrupt
+#' aborts the runs and propagates (03 section 6.2)
 #' @noRd
 sdk_pump = function(runs, until = NULL, timeout = Inf) {
   work = sdk_work(runs, until, timeout)
@@ -1103,9 +1031,7 @@ sdk_pump = function(runs, until = NULL, timeout = Inf) {
   invisible(out)
 }
 
-#' Runs one run in the foreground until it settles or is sent to the background: the pause
-#' menu's [b]ackground makes P21 set `run$opts$background`, which ends the wait here as it ends
-#' P06's run_wait_foreground() (03 6.2, 04 7.14)
+#' Runs one run in the foreground until it settles or `run$opts$background` is set (04 7.14)
 #' @noRd
 run_foreground = function(run) {
   force(run)
@@ -1134,11 +1060,9 @@ gateway_last_error = function(d) {
   NULL
 }
 
-#' Signals the condition of a terminal status (contract 6.1.2) with the session attached as
-#' `$session`: the condition P06 stored unsignalled in `session_data(s)$condition` at settlement
-#' (it keeps the precise class, e.g. gptr_error_rate_limit, and the fields status, request_id,
-#' retry_after; a blocked `ask` stores gptr_error_noninteractive, IC-68), else one built from the
-#' session's status and transcript. `run` is accepted for the run's max_turns.
+#' Signals the condition of a terminal status (contract 6.1.2) with the session as `$session`: the
+#' one P06 stored at settlement (precise class kept; IC-68), else one built from the status and
+#' transcript. `run` supplies the run's max_turns.
 #' @noRd
 gateway_signal = function(s, run = NULL) {
   d = session_data(s)
@@ -1184,8 +1108,7 @@ gateway_signal = function(s, run = NULL) {
 # ------------------------------------------------------------------ built-in routes (IC-24, IC-39)
 
 #' Refuses a verb or pipe from model code that acts on a session other than the running one,
-#' unless the dispatcher approved it (IC-53 item 3: gptr_steer()/gptr_cancel() and the pipe into
-#' another running session are control-category actions)
+#' unless approved (IC-53 item 3)
 #' @noRd
 gateway_control_other = function(s, what) {
   cur = run_current()
@@ -1193,10 +1116,8 @@ gateway_control_other = function(s, what) {
   control_check(what)
 }
 
-#' The `continue` route: a running (or waiting) session is steered with the pipe as a user source
-#' (IC-55; the text redacted with the `context` profile through gateway_prompt_secrets(), which
-#' applies gptr.prompt_secrets; from model code only the running session
-#' itself, else an approved gptr_steer, IC-53); any other status continues with a turn
+#' The `continue` route: a running (or waiting) session is steered with the redacted pipe text
+#' (IC-55; from model code only its own session unless approved, IC-53); otherwise a new turn
 #' @noRd
 route_continue = function(call) {
   route_needs_subagents(call)
@@ -1210,9 +1131,8 @@ route_continue = function(call) {
   gateway_run(call, s)
 }
 
-#' Refuses, in the built-in routes, a call that only the sub-agent routes `team` (15) and `fanout`
-#' (16) can serve: they run first when builtin:subagents (P19) is loaded, so reaching here means
-#' it is absent or filtered out
+#' Refuses a call only the sub-agent routes `team` and `fanout` serve; they run first, so here
+#' builtin:subagents (P19) is absent or filtered out
 #' @noRd
 route_needs_subagents = function(call) {
   if (!is.null(call$args$parallel)) {
@@ -1226,9 +1146,8 @@ route_needs_subagents = function(call) {
   invisible(TRUE)
 }
 
-#' Refuses `.opts$system1_images` in the conversational routes: those images belong to the typed
-#' decisions of a System 1 model (IC-74, 07-local-ollama.md section 4) and a conversation would
-#' drop them silently; `.opts$images` attaches images to a conversation
+#' Refuses `.opts$system1_images` in the conversational routes, which would drop them silently
+#' (IC-74, 07 section 4)
 #' @noRd
 route_refuse_s1_images = function(call) {
   if (!length(call$args$opts$system1_images)) return(invisible(TRUE))
@@ -1240,9 +1159,7 @@ route_refuse_s1_images = function(call) {
              expected = "a decision (classifier) model, or .opts$images")
 }
 
-#' TRUE unless the call's model is a decision-only (classifier) model, which the built-in routes
-#' leave to P13's `classifier` route or to the dispatcher's not_available (IC-74, 07 section 2:
-#' routing follows the model-level type)
+#' TRUE unless the call's model is a classifier, left to P13's `classifier` route (IC-74)
 #' @noRd
 route_conversational = function(call) {
   !identical(gateway_model_type(call$ids$model), "classifier")
@@ -1279,8 +1196,7 @@ gateway_routes = function() {
               }))
 }
 
-#' builtin:gateway: the routes nested, continue, new and the core setting specs (IC-24), plus the
-#' two process-level hooks that release held call records [R2]
+#' builtin:gateway: its routes, the core setting specs (IC-24) and the release hooks [R2]
 #' @noRd
 builtin_gateway = function(gptr) {
   for (sp in gateway_routes()) gptr$register(sp)
@@ -1320,11 +1236,8 @@ gateway_last_prompt = function(d) {
 }
 
 #' Calls a router within its timeout; NULL (with a diagnostic) on error, timeout or a bad result.
-#' setTimeLimit() cannot be read back and must be reset to Inf afterwards (report 12: limits are
-#' soft and a leftover limit kills the next request), and that reset would also clear the limit
-#' P09 arms around each top-level expression of an `r` evaluation. So the limit is armed only
-#' outside tool evaluations (`run_current()` is NULL); a nested routed session (a peter() call in
-#' an `r` evaluation) gets a soft timeout: a router that took longer counts as failed.
+#' setTimeLimit() is armed only outside a run: resetting it would clear P09's limit on an `r`
+#' evaluation, so there a router that took longer counts as failed (report 12).
 #' @noRd
 router_invoke = function(spec, request, ctx) {
   timeout = as.numeric(spec$timeout %||% 2)
@@ -1355,14 +1268,9 @@ router_invoke = function(spec, request, ctx) {
   NULL
 }
 
-#' Egress acknowledgement and replay guard for the provider of model record `m`, which a router
-#' chose for the next request of session `s`: the egress_state() of the session's own record of
-#' that provider (rank 0 included; effective endpoint, Ollama local-only control), never its
-#' `local` hint nor the process-wide record of the same id (IC-74; D-099, D-114), judged under
-#' the protected record of the run driving `s` (gateway_run_record(): P06 calls router.call
-#' between turns, where run_current() does not find that run) and skipped when that run's
-#' automatic context is "none" (gateway_run_context(); IC-29, contract 7.8 egress_check()); and
-#' the replay mode under the `replay =` of that run's call (contract 3.1; gateway_run_replay())
+#' Egress acknowledgement and replay guard for the provider a router chose for session `s`: the
+#' session's own provider record, judged under the record, context and `replay =` of the run
+#' driving `s`, which run_current() does not find between turns (IC-29, IC-74; D-099, D-114)
 #' @noRd
 router_guards = function(m, s) {
   sid = session_data(s)$id
@@ -1381,10 +1289,8 @@ gateway_session_run = function(s) {
   if (is.null(live)) NULL else live$run
 }
 
-#' The protected safety record of the run driving session `s`: frozen at a root run's start by
-#' gateway_run_start(), inherited by a nested run (P06's run_new()), and the record P05's
-#' preflight reads for that run's requests (07-local-ollama.md section 5). A run without one
-#' gives an empty record, which fails closed; outside such a run, egress_safety()
+#' The protected safety record of the run driving session `s` (07 section 5); an empty record,
+#' which fails closed, for a run without one; outside a run, egress_safety()
 #' @noRd
 gateway_run_record = function(s) {
   run = gateway_session_run(s)
@@ -1392,9 +1298,7 @@ gateway_run_record = function(s) {
   run$opts$safety %||% list()
 }
 
-#' The automatic context of the run driving session `s`: the `context` run option that
-#' gateway_run_opts() takes from the call's `.opts$context` (contract 7.6), else the `context`
-#' setting, as gateway_guards() reads it for any other session
+#' The automatic context of the run driving session `s`: its `context` run option, else the setting
 #' @noRd
 gateway_run_context = function(s) {
   run = gateway_session_run(s)
@@ -1402,11 +1306,7 @@ gateway_run_context = function(s) {
   ctx %||% setting_get("context", default = "summary")
 }
 
-#' The `replay =` of the peter() call whose run is driving session `s` (P06 keeps the run options
-#' gateway_run_opts() built, the call record among them, on the live session while it runs);
-#' NULL outside a run or when that call gave none. A routed session is checked per request with
-#' it, as gateway_guards() checks any other session (contract 3.1: the call's `replay =`
-#' overrides the process mode).
+#' The `replay =` of the peter() call whose run is driving session `s`, or NULL (contract 3.1)
 #' @noRd
 gateway_run_replay = function(s) {
   run = gateway_session_run(s)
@@ -1416,8 +1316,7 @@ gateway_run_replay = function(s) {
 }
 
 #' Falls back to the default model after a router failure, with a diagnostic; the router's last
-#' state is kept. The `route` event and the `model_change`/`gptr.router` entries of the switch are
-#' P06's (run_route()), like those of every other switch.
+#' state is kept (P06's run_route() records the switch)
 #' @noRd
 router_fallback = function(s, name, why, state = NULL) {
   registry_diagnostic(paste0("router:", name), "router", "fallback", why)
@@ -1436,11 +1335,9 @@ router_fallback = function(s, name, why, state = NULL) {
   list(model = m$ref, thinking = m$thinking, state = state)
 }
 
-#' The model record a router chose: a model of a provider registered for the session (rank 0
-#' included; a provider named alone means its first model, `provider:<level>` with that thinking
-#' level), else the catalog; NULL when unknown. A model id may hold a colon (an Ollama tag,
-#' IC-74), so the whole id is tried first and a `:<suffix>` counts as a thinking level only when
-#' it is one (as P05 and P06 read it)
+#' The model record a router chose: a model of a provider registered for the session (alone: its
+#' first model), else the catalog; NULL when unknown. The whole id is tried first (IC-74 colons);
+#' a `:<suffix>` is a thinking level only when it is one.
 #' @noRd
 router_model = function(ref, sid) {
   pr = registry_get("provider", gateway_provider_id(ref), session = sid)
@@ -1463,12 +1360,9 @@ router_model = function(ref, sid) {
   model_resolve(ref, strict = FALSE)
 }
 
-#' The `router.call` service (IC-69): picks the model of the next request of a session whose model
-#' is `router:<name>` and returns `list(model, thinking, state)`. It builds the router's request
-#' (the state and model of the branch's last `gptr.router` entry), calls the router within its
-#' timeout and checks egress and replay for the chosen provider. It appends nothing and emits
-#' nothing: P06's run_route() appends `model_change` (reason router) and `gptr.router` and emits
-#' `route` for each switch, so doing it here too would record every switch twice.
+#' The `router.call` service (IC-69): the `list(model, thinking, state)` of the next request of a
+#' `router:<name>` session, guarded for egress and replay. It records nothing: P06's run_route()
+#' records each switch.
 #' @noRd
 router_call = function(s, reason = "turn") {
   d = session_data(s)

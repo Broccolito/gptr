@@ -1,11 +1,7 @@
-# gptr-capture.R -- copy-safe base-R capture of peter() calls (rules R2-R3; G3 section 3 "GATEWAY
-# CAPTURE RULES", verified by G3 t2b and t5 and its fact-check; IC-41), {identifier}
-# interpolation (contract 6.1.4), prompt selection, argument validation and the gptr_call record
-# (7.8, IC-13), and identifier resolution (6.1.3, IC-42; the `identifier.resolve` service).
-# Plan P08, layer L6.
-#
-# Every helper that touches a user value is a leaf: it forces its arguments on entry, creates no
-# closure, handler or match.arg() while it holds the value, and returns primitives only.
+# gptr-capture.R -- copy-safe capture of peter() calls (rules R2-R3, G3 section 3; IC-41),
+# interpolation (6.1.4), argument validation, the gptr_call record (7.8, IC-13) and identifier
+# resolution (6.1.3, IC-42). Plan P08, layer L6. Every helper touching a user value is a [leaf]:
+# it forces its arguments on entry, makes no closure, handler or match.arg() and returns primitives.
 
 # ------------------------------------------------------------------ dot facts (leaves)
 
@@ -56,8 +52,7 @@ dot_is_literal = function(e) {
     is.null(attributes(e))
 }
 
-#' Names of peter()'s formals after the dots (contract 6.1; Task 8's test-gptr-gateway.R checks that
-#' they equal `setdiff(names(formals(peter)), "...")`)
+#' Names of peter()'s formals after the dots (contract 6.1)
 #' @noRd
 gateway_formal_names = function() {
   c("model", "mode", "skills", "plugins", "extensions", "tools", "agents", "parallel", "choices",
@@ -65,12 +60,9 @@ gateway_formal_names = function() {
     "replay", ".opts", ".run", ".stdin")
 }
 
-#' For each dot, the symbol written at the call site when the dot is a plain symbol there, else NA.
-#' Forwarded dots (`...`, `..1`) are NA: they are forced through ...elt(), never read by name,
-#' because the caller frame is not where their promises evaluate (IC-41). Arguments named after a
-#' formal of peter() are not dots; with more than one forwarded `...` every dot is NA. An empty
-#' argument (`peter("x", )`) is a dot without a symbol. Each argument is read by index, never bound
-#' to a local, so an empty argument is never evaluated.
+#' For each dot, the symbol written at the call site when the dot is a plain symbol there, else NA;
+#' forwarded dots are NA, forced through ...elt() (IC-41). Arguments are read by index, never bound
+#' to a local, so an empty one is never evaluated.
 #' @noRd
 dot_sites = function(sc, n) {
   sites = rep(NA_character_, n)
@@ -106,10 +98,8 @@ dot_sites = function(sc, n) {
   sites
 }
 
-#' Context labels: the argument name, else the symbol, else the deparsed expression (60 chars);
-#' values spliced in by do.call() and empty arguments (`peter("x", , big)`) are labelled `..i`.
-#' Like dot_sites(), each expression is read by index, never bound to a local, so an empty
-#' argument is never evaluated
+#' Context labels: the argument name, else the symbol, else the deparsed expression (60 chars),
+#' else `..i`; read by index as in dot_sites()
 #' @noRd
 dot_labels = function(exprs, nms) {
   if (!length(exprs)) return(character())
@@ -160,8 +150,7 @@ select_prompt = function(nms, facts, kinds, have_prompt) {
 }
 
 #' Context items of the call record (contract 7.8): label, kind, name (symbols), slot (values and
-#' literals in `values`), address (symbols; IC-40 visibility check) and facts. (Named apart from
-#' P07's context_items() in R/prompt-context.R.)
+#' literals in `values`), address (symbols; IC-40) and facts
 #' @noRd
 gateway_context_items = function(idx, kinds, sites, labels, facts, addrs) {
   out = vector("list", length(idx))
@@ -179,9 +168,8 @@ gateway_context_items = function(idx, kinds, sites, labels, facts, addrs) {
   out
 }
 
-#' Replaces a magrittr mask (an environment whose only binding is `.`) by its parent
-#' (report 12 section 2.B4). Uses the primitive names(): ls(<env>) runs tryCatch() internally, and
-#' its garbage handler would keep a user frame referenced (rule R3; verified with tracemem).
+#' Replaces a magrittr mask (an environment whose only binding is `.`) by its parent. Uses the
+#' primitive names(): ls()'s internal tryCatch() would keep a user frame referenced (rule R3).
 #' @noRd
 unmask_env = function(env) {
   if (!identical(env, globalenv()) && identical(names(env), ".")) return(parent.env(env))
@@ -224,11 +212,9 @@ interp_value = function(name, envir) {
   interp_format(get0(name, envir = envir, inherits = TRUE))
 }
 
-#' `{identifier}` interpolation of a literal prompt (contract 6.1.4). `{{` and `}}` are literal
-#' braces; values are never re-interpolated. Returns list(prompt, interp) where interp holds the
-#' sorted `name=value` pairs used (hashed into the block header's `args=` key by P15). `envir` may
-#' be a user frame: the loop is a `while` loop, because a `for` loop that calls a closure with a
-#' local bound to a frame keeps that frame referenced (G3 cause 2, re-verified for P08).
+#' `{identifier}` interpolation of a literal prompt (contract 6.1.4): list(prompt, interp), interp
+#' the sorted `name=value` pairs used. A `while` loop: a `for` loop calling a closure with a user
+#' frame keeps it referenced (G3 cause 2).
 #' @noRd
 interpolate_prompt = function(template, envir) {
   check_string(template, "template", empty = TRUE)
@@ -284,9 +270,8 @@ gateway_opts_names = function() {
     "preset", "returns", "max_active", "backend", "frontend", "images", "seed", "system1_images")
 }
 
-#' One string out of `choices`. check_choice() alone would take the whole vector of choices as
-#' its first element (the missing-argument convention of match.arg()), which a value given to
-#' peter() must never be
+#' One string out of `choices`; check_choice() would accept the whole choices vector, taking its
+#' first element (match.arg())
 #' @noRd
 gateway_choice = function(x, choices, arg) {
   if (!is.character(x) || length(x) != 1L || is.na(x) || !x %in% choices) {
@@ -300,18 +285,13 @@ gateway_choice = function(x, choices, arg) {
   x
 }
 
-#' TRUE for a name `.opts` never takes as a plugin namespace, whatever is registered under it
-#' (IC-74, 07-local-ollama.md sections 2.1 and 5: per-call options cannot relax `local_only`): the
-#' protected settings (settings_protected(): `providers`, which holds the local-only control, and
-#' `egress`), and `safety`, the run's frozen safety record (run_new()'s `run$opts$safety`, IC-53),
-#' which P05's stream_safety() and P13's s1_request() read as `opts$safety`
+#' TRUE for a name `.opts` never takes as a plugin namespace: the protected settings and `safety`,
+#' the run's frozen record (IC-53; IC-74: per-call options cannot relax `local_only`)
 #' @noRd
 gateway_opts_reserved = function(k) settings_protected(k) || identical(k, "safety")
 
-#' Validates `.opts`: the core switches, and entries named by a plugin namespace, validated by
-#' that plugin's `setting` specs `<namespace>.<field>` (IC-44). A reserved name
-#' (gateway_opts_reserved()) is never a namespace of call options: only a human's user or session
-#' configuration and options may relax what it holds
+#' Validates `.opts`: the core switches, and plugin-namespace entries by that plugin's `setting`
+#' specs `<namespace>.<field>` (IC-44); a reserved name is refused
 #' @noRd
 gateway_opts = function(opts) {
   if (is.null(opts) || (is.list(opts) && !length(opts))) return(list())
@@ -390,8 +370,8 @@ gateway_opt_check = function(k, v) {
     v)
 }
 
-#' `.opts$images`: image file paths (a character vector or a list), ggplot or recordedplot objects
-#' (IC-44). The MIME type of a path is Task 9's (gateway_image_blocks()); a directory is no image
+#' `.opts$images`: image file paths, ggplot or recordedplot objects (IC-44); gateway_image_blocks()
+#' checks a path's type
 #' @noRd
 gateway_images_check = function(v) {
   items = if (is.character(v)) {
@@ -420,13 +400,9 @@ gateway_images_check = function(v) {
 #' @noRd
 gateway_s1_mimes = function() c("image/png", "image/jpeg", "image/webp")
 
-#' `.opts$system1_images` (IC-74, 07-local-ollama.md section 4): a list of image records
-#' `list(data = <raw bytes>, mime = "image/png" | "image/jpeg" | "image/webp")`, applied to every
-#' state of the call. P08 checks the shape only: each record is a plain list with exactly the
-#' fields `data` (non-empty raw) and `mime`; a path, a file name or text never stands in for the
-#' bytes. A single record is taken as a list of one; names of the list are dropped (its order is
-#' the order the images are sent and hashed in). The resolved model and the adapter limits are
-#' P13's checks
+#' `.opts$system1_images` (IC-74, 07 section 4): image records `list(data = <raw>, mime)`, shape
+#' only (P13 checks the model and limits); one record is a list of one, and names are dropped
+#' (order is send and hash order)
 #' @noRd
 gateway_s1_images_check = function(v) {
   expected = paste0("a list of image records list(data = <raw bytes>, mime = ",
@@ -444,10 +420,8 @@ gateway_s1_images_check = function(v) {
   unname(v)
 }
 
-#' Labels of a `choices` value: a factor's levels; a character vector named in full gives its
-#' names (descriptions as values, which may repeat, be empty or NA), otherwise its values. The
-#' same reading as P13's choice question; P13 also refuses logical-looking labels
-#' (`gptr_error_s1_labels`) and applies the model's option limits
+#' Labels of a `choices` value, read as P13 reads them: a factor's levels, the names of a fully
+#' named character vector (descriptions as values), otherwise its values
 #' @noRd
 gateway_choice_labels = function(choices) {
   if (is.factor(choices)) return(levels(choices))
@@ -554,9 +528,8 @@ call_new = function(prompt = NULL, template = NULL, interp = character(), sessio
   call
 }
 
-#' Releases a call record [R2]: rm() of its values, `envir` and `sys_call` set to NULL. Called on
-#' every exit path of peter(). A record whose `hold` flag is set (its run was started for later
-#' pumping) is left alone; the listeners of call_hold() (Task 9) clear the flag and release it.
+#' Releases a call record on every exit of peter() [R2]: values removed, `envir` and `sys_call`
+#' NULL; a held record is left to gateway_release_held()
 #' @noRd
 call_release = function(call) {
   if (!inherits(call, "gptr_call")) return(invisible(FALSE))
@@ -568,9 +541,8 @@ call_release = function(call) {
   invisible(TRUE)
 }
 
-#' The value of context item `i` [leaf]: symbols by name from `envir`, others from `values`.
-#' After call_release() neither is readable: `gptr_error_internal` (a value bound to NULL is
-#' still a value before then)
+#' The value of context item `i` [leaf]: symbols by name from `envir`, others from `values`;
+#' gptr_error_internal after call_release()
 #' @noRd
 call_value = function(call, i) {
   check_class(call, "gptr_call", "call")
@@ -630,9 +602,8 @@ identifier_pool = function(arg) {
   unique(out[!is.na(out) & nzchar(out)])
 }
 
-#' Canonical names matching `name` for `arg`: an exact name is itself; skills, plugins, extensions
-#' and agents otherwise compare after name_norm(), other kinds exactly (IC-42; the alias mask
-#' binds the same way, ident_mask_vals())
+#' Canonical names matching `name` for `arg`: exact, else after name_norm() for skills, plugins,
+#' extensions and agents (IC-42; as ident_mask_vals() binds)
 #' @noRd
 identifier_match = function(name, arg) {
   pool = identifier_pool(arg)
@@ -768,8 +739,7 @@ ident_symbol = function(nm, arg, envir) {
     return(ident_accept(get0(nm, envir = envir, inherits = TRUE), arg, nm))
   }
   ident_decimal_notice(nm, arg)
-  # a literal name is checked like a string (`mode = fast` is gptr_error_invalid_argument here,
-  # not later inside the kernel)
+  # a literal name is checked like a string (`mode = fast` fails here, not in the kernel)
   ident_check_chr(nm, arg)
 }
 
@@ -782,29 +752,17 @@ ident_walk_spent = function(seen) {
   n > 100000L
 }
 
-#' TRUE when the unforced binding `nm` of the frame `env` is the default of an unsupplied formal
-#' (`make_ext = function(level = 1) ...` called as `make_ext()`): R evaluates that promise in
-#' `env` itself, so it reaches only what the walk of `env` already covers. missing() answers
-#' without forcing anything. For an unforced binding it is TRUE for such a default and otherwise
-#' only for an argument forwarded from a frame where it is missing without a default, which fails
-#' when forced whether or not the mask is attached; R does not pass a default's missingness on,
-#' so a forwarded default (`(function(a = k) make_ext(a))()` in the mask) counts as supplied
-#' [leaf]
+#' TRUE when the unforced binding `nm` of frame `env` is the default of an unsupplied formal, which
+#' R evaluates in `env` itself (missing() forces nothing; a forwarded default counts as supplied,
+#' and a forwarded missing argument fails when forced either way) [leaf]
 #' @noRd
 ident_lazy_default = function(nm, env) {
   isTRUE(eval(as.call(list(base::missing, as.name(nm))), env))
 }
 
-#' TRUE when environment `env` can reach the mask `target`. Walks `env` and its parents up to
-#' `stop` (the mask's own parent) or a named environment (the global, base and empty
-#' environments, namespaces, attached packages). An unforced promise counts as reaching the mask:
-#' base R cannot read a promise's environment, and a factory called in the mask holds its
-#' arguments as promises of the mask until they are forced (`tools = list(make_tool(con))`,
-#' D-105). The default of an unsupplied formal is the exception (ident_lazy_default(): it is
-#' evaluated in `env`, never forced here). Non-empty dots (promises too) and active bindings
-#' (never called here) count as reaching it; other bound values are walked by ident_holds_env().
-#' `seen` records the addresses of the environments visited (rule R2: address strings, not
-#' frames) [leaf]
+#' TRUE when environment `env` can reach the mask `target`, walking parents up to `stop` or a named
+#' environment. Unforced promises other than ident_lazy_default() ones, non-empty dots and active
+#' bindings count as reaching it (D-105); `seen` holds visited addresses (rule R2) [leaf]
 #' @noRd
 ident_env_reaches = function(env, target, stop, seen, depth) {
   while (is.environment(env)) {
@@ -835,12 +793,9 @@ ident_env_reaches = function(env, target, stop, seen, depth) {
   FALSE
 }
 
-#' TRUE when a resolved value can reach the mask `target`: through the environment of a closure (a
-#' function written inline in the mask, `extensions = function(gptr) ...` or `tools =
-#' list(gptr_tool(execute = function(input, ctx) ...))`, contract 6.1, or one a factory called
-#' there made), an environment, a list element or an attribute (a formula's `.Environment`),
-#' walked as ident_env_reaches() says. Nesting deeper than 64 or a walk of more than 100000 steps
-#' counts as reaching it [leaf]
+#' TRUE when a resolved value can reach the mask `target` through a closure environment, an
+#' environment, a list element or an attribute (ident_env_reaches()); nesting deeper than 64 or a
+#' walk over 100000 steps counts as reaching it [leaf]
 #' @noRd
 ident_holds_env = function(x, target, stop, seen = NULL, depth = 0L) {
   force(x)
@@ -865,9 +820,7 @@ ident_holds_env = function(x, target, stop, seen = NULL, depth = 0L) {
 }
 
 #' The alias mask's bindings for `arg`: each known identifier bound to itself and, for the kinds
-#' compared after name_norm(), the `_` and `.` spellings of a `-` name bound to that name when the
-#' spelling is not itself a known name and normalises to that one name only (IC-42: a spelling
-#' two names share stays unbound, as it is ambiguous bare)
+#' compared after name_norm(), the unambiguous `_` and `.` spellings of a `-` name (IC-42)
 #' @noRd
 ident_mask_vals = function(arg) {
   pool = identifier_pool(arg)
@@ -882,9 +835,8 @@ ident_mask_vals = function(arg) {
   vals
 }
 
-#' Removes from a kept mask the bindings it was given (`vals`) that still hold their value, so
-#' the functions it scopes see the caller's variables, as after direct evaluation; names the
-#' expression assigned itself stay (D-105)
+#' Removes from a kept mask the bindings it was given (`vals`) that still hold their value, so its
+#' functions see the caller's variables (D-105)
 #' @noRd
 ident_mask_clear = function(mask, vals) {
   nms = names(vals)[names(vals) %in% ls(mask, all.names = TRUE, sorted = FALSE)]
@@ -896,11 +848,9 @@ ident_mask_clear = function(mask, vals) {
   invisible(NULL)
 }
 
-#' Evaluates a call in the alias mask (ident_mask_vals(); parent = the caller). The mask's parent
-#' is reset to emptyenv() afterwards (rule R3), on error too, unless the returned value can reach
-#' the mask (ident_holds_env(): a function written inline in it, or made there by a factory whose
-#' arguments may still be promises of the mask). Such a mask stays the scope of those functions,
-#' as direct evaluation would leave it, with its alias bindings removed (D-105)
+#' Evaluates a call in the alias mask (parent = the caller), detached afterwards (rule R3), on
+#' error too, unless the value can reach it (ident_holds_env()); a kept mask loses its aliases
+#' (D-105)
 #' @noRd
 ident_mask = function(expr, arg, envir) {
   vals = ident_mask_vals(arg)
@@ -962,9 +912,8 @@ resolve_identifier = function(expr, arg, envir) {
   ident_accept(expr, arg, ident_label(expr))
 }
 
-#' TRUE when the gateway must force the formal's promise to resolve it: an unknown symbol bound
-#' where it is called, or an I() call (G3 t2b: forcing evaluates in the promise's own environment,
-#' which is correct for forwarded dots)
+#' TRUE when the gateway must force the formal's promise (evaluated in its own environment, G3
+#' t2b): an unknown symbol bound where it is called, or an I() call
 #' @noRd
 ident_force_needed = function(expr, arg, envir) {
   if (is.symbol(expr)) {
@@ -983,8 +932,7 @@ ident_value = function(x, arg, expr) {
   ident_accept(x, arg, ident_label(label))
 }
 
-#' Session accessor names that agent names may not take (IC-71): P06's own list, so the two
-#' cannot drift apart
+#' Session accessor names that agent names may not take (IC-71; P06's list)
 #' @noRd
 session_accessor_names = function() session_accessors
 
@@ -1015,10 +963,8 @@ agents_is_definition = function(a) {
     identical(h, quote(gptr::gptr_agent))
 }
 
-#' TRUE when an agent definition call names itself: gptr_agent() has no dots and `name` is its
-#' first formal, so R binds to it an argument named `name` or a prefix of it, or else the first
-#' unnamed one wherever it stands (`agent(description = "d", "stats")`); an empty argument
-#' (`agent(, model = opus)`) names nothing [leaf]
+#' TRUE when an agent definition call names itself: an argument named `name` (or a prefix) or a
+#' non-empty unnamed one, which R binds to gptr_agent()'s first formal `name` [leaf]
 #' @noRd
 agents_own_name = function(a) {
   an = names(a)
@@ -1032,10 +978,8 @@ agents_own_name = function(a) {
   FALSE
 }
 
-#' Gives every agent definition call of a literal `list(name = agent(...))` its list name when the
-#' call names none (agents_own_name()): gptr_agent() requires a name (P02 spec_finish), and
-#' contract 6.1 names agents by their list names (`agents = list(stats = agent(model = opus))`,
-#' 02 NS-6)
+#' Gives each agent definition call of a literal `list(name = agent(...))` that names none its list
+#' name (gptr_agent() requires one; contract 6.1)
 #' @noRd
 agents_named_call = function(expr) {
   nms = names(expr)
@@ -1053,11 +997,7 @@ agents_named_call = function(expr) {
 }
 
 #' Evaluates `agents =` in a mask where `agent` is gptr_agent() and resolves each definition's
-#' captured `model` and `skills` expressions (IC-34, IC-71). A literal `list(...)` has its names
-#' checked first and passed into its agent definition calls. The mask is detached afterwards like
-#' the alias mask (rule R3), unless a definition can reach it (an inline tool's `execute`, or a
-#' tool a factory made there, ident_holds_env()); it then stays their scope without its `agent`
-#' binding (D-105).
+#' `model` and `skills` (IC-34, IC-71); the mask is detached or kept as in ident_mask() (D-105)
 #' @noRd
 resolve_agents = function(expr, envir) {
   if (is.null(expr)) return(NULL)

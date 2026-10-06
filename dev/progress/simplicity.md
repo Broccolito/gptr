@@ -167,3 +167,13 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 ## DOC-3 - README trim (2026-10-05)
 - README.md 120 -> 88 lines: one status paragraph, a `peter()` example (exports only, ran offline),
   short development section; peter() and Ollama sections kept.
+
+## P08-C - Trim internal comment narration in gateway files (2026-10-05)
+- Comments only in `R/gptr-*.R` (parse tokens, exported roxygen unchanged), task markers gone:
+  comment lines 1227 -> 943, files 4594 -> 4309 (-285; plan ~150).
+- Red: none (refactor). Green: `gptr-|copy-gateway` PASS 1297. Lint clean. Neighbours:
+  `arch-layers|lint-rules|session-live|s1-route|ext-check` PASS 647.
+- Reviews: r1 clear; 1 minor (capture header lost the leaf rule) + 2 nits (gateway_choice,
+  route_needs_subagents wording) fixed, tokens still equal HEAD.
+- Deviations: none. Open: test-gptr-gateway.R, test-gptr-sdk.R, test-copy-gateway.R keep their
+  "(Task n: create)" markers (outside this package).
