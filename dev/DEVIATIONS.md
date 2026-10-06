@@ -2010,6 +2010,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none.
 - Tests: test-console-render.R "a run's events while a tool executes print nothing (P09 captures that
   output)" (+3), "the status line names an unusual end and sums the usage rows" (+1).
+  Evidence: progress/P14.md Task 2.
 
 ## D-165 - P18 MCP stdio client: stale era re-probed in the handshake; answers re-arm; cancel after unwind (2026-10-06)
 - Rule: `R/mcp-client.R` differs from the plan literal (03 section 6.14, report 16 section 4.5):
@@ -2020,13 +2021,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   3. Any unwind (interrupt, timeout, error) cancels from one `on.exit()`, not the plan's calling handler: an
      interrupt the pause menu resumes keeps the call (03 interrupt policy, G3), and `notifications/cancelled`
      is written once the pump has unwound (inside an outer pump P04 queues it for that pump).
-  4. Task 4 omits the plan's HTTP branches until Task 5 (as D-077 item 5); `mcp_cancel()` sends through
-     `mcp_notify()`; `mcp_ui()` is inlined in `mcp_elicit()`.
+  4. `mcp_ui()` is inlined in `mcp_elicit()` (the HTTP branches Task 4 deferred landed with Task 5, D-171).
 - Contract-visible: none.
-- Tests: test-mcp-client.R "a stale cached era is probed again once, in both directions" (+6), "time spent
+- Tests: test-mcp-client.R "a stale cached era is probed again once, in both directions, ..." (+6), "time spent
   answering a legacy server request does not time the call out" (+1), "an interrupt can be resumed (G3); ..."
   (+1, and waits for the cancel without pumping). Evidence: progress/P18.md Task 4.
-  Evidence: progress/P14.md Task 2.
 
 ## D-166 - P19 gptr_parallel(): the contract example's member name `plan` is an accessor (IC-71) (2026-10-06)
 - Rule: member names equal to a session accessor are refused (IC-71); `plan` is one (04 section 5.1), so 04
@@ -2083,3 +2082,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `options(gptr.checkpoint = 'off')`. The user's next edit after the run still copies nothing.
 - Contract-visible: IC-41's in-run rows expect 0 copies only with checkpoints off (not amended).
 - Tests: test-copy-gateway.R (3 in-run rows); test-copy-ckpt.R c04 rows. Evidence: progress/P16.md Task 6.
+
+## D-171 - P18 MCP Streamable HTTP: the status marks a stale era; one credential check; JSON header values (2026-10-06)
+- Rule: over HTTP a 400 or 404 answer to a request made under a cached era re-probes once, as D-165 item 1's
+  JSON-RPC codes do on stdio: P04 does not hand a non-2xx body to `on_fail`, so its code is never seen.
+- Rule: `mcp_http_auth()` relies on `oauth_access()`'s resource-origin rule (04 section 11.8, IC-64) without a
+  second handle-origin comparison; `mcp_http_auth_retry()` is inlined and the response callbacks live in
+  `mcp_http_send()`; `Mcp-Param-*` values of numbers and logicals are their JSON text (`true`, `42`); an
+  `x-mcp-header` that is not one header-token string drops the tool.
+- Contract-visible: none.
+- Tests: test-mcp-client.R "a stale cached era is probed again once, in both directions, over both
+  transports" (+6), "modern HTTP requests carry the era headers; invalid x-mcp-header tools are dropped" (+4),
+  "Streamable HTTP works in both eras: ..." (+2, a legacy session the server forgot is initialised again).
+  Evidence: progress/P18.md Task 5.

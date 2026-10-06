@@ -516,7 +516,7 @@ mcp_connect = function(spec) {
                       "not support; use its Streamable HTTP endpoint (often the same URL ending ",
                       "in /mcp)."), c("mcp_protocol", "mcp"), server = name, code = NA_integer_)
   }
-  if (!identical(transport, "stdio")) {
+  if (!isTRUE(transport %in% c("stdio", "http"))) {
     gptr_abort(paste0("MCP server ", name, " needs a command (stdio) or a url (Streamable HTTP)."),
                c("mcp_protocol", "mcp"), server = name, code = NA_integer_)
   }
@@ -541,7 +541,7 @@ mcp_connect = function(spec) {
   class(conn) = "gptr_mcp_conn"
   ok = FALSE
   on.exit(if (!ok) mcp_close(conn), add = TRUE)
-  mcp_stdio_start(conn)
+  if (identical(transport, "stdio")) mcp_stdio_start(conn) else mcp_http_setup(conn)
   mcp_handshake(conn)
   ok = TRUE
   conn
@@ -651,13 +651,31 @@ mcp_request = function(conn, method, params = NULL, timeout = NULL, modern = NUL
     rm(list = tok, envir = conn$progress)
   }, add = TRUE)
   msg = list(jsonrpc = "2.0", id = id, method = method, params = params)
-  mcp_stdio_send(conn, msg)
+  if (identical(conn$transport, "stdio")) {
+    mcp_stdio_send(conn, msg)
+  } else {
+    mcp_http_send(conn, msg, st)
+  }
   resp = mcp_await(conn, key, st, id, method, timeout)
+  status = resp$http_status %||% NA_integer_
+  if (identical(status, 401L)) {
+    if (!isTRUE(retried) && !is.null(mcp_http_auth(conn, force = TRUE))) {
+      return(mcp_request(conn, method, params, timeout, modern, raw, on_progress, TRUE))
+    }
+    mcp_auth_required(conn)
+  }
+  # a legacy session the server forgot: initialise again once
+  if (identical(status, 404L) && !is.null(conn$session_id) && !isTRUE(retried)) {
+    conn$session_id = NULL
+    mcp_handshake(conn, use_cache = FALSE)
+    return(mcp_request(conn, method, params, timeout, modern, raw, on_progress, TRUE))
+  }
   if (raw) return(resp)
   if (!is.null(resp$error)) {
     code = suppressWarnings(as.integer(resp$error$code %||% NA_integer_))
+    # over HTTP the status decides: P04 does not hand a non-2xx body (its JSON-RPC code) to on_fail
     stale = isTRUE(conn$era_from_cache) && !isTRUE(retried) &&
-      isTRUE(code %in% c(-32600L, -32601L, -32602L))
+      isTRUE(code %in% c(-32600L, -32601L, -32602L) || status %in% c(400L, 404L))
     if (stale) {
       in_handshake = is.na(conn$era)
       conn$era_from_cache = FALSE
@@ -675,18 +693,19 @@ mcp_request = function(conn, method, params = NULL, timeout = NULL, modern = NUL
   resp$result %||% json_obj()
 }
 
-#' Pump the reactor until the response, a server request, an exit or a deadline
+#' Pump the reactor until the response, a server request, a failed transfer, an exit or a
+#' deadline
 #' @noRd
 mcp_await = function(conn, key, st, id, method, timeout) {
   done = function() {
     exists(key, envir = conn$pending, inherits = FALSE) || length(conn$requests) > 0L ||
-      !isTRUE(conn$alive) || reactor_now() > min(st$deadline, st$hard)
+      !isTRUE(conn$alive) || isTRUE(st$failed) || reactor_now() > min(st$deadline, st$hard)
   }
   # any unwind cancels, after the pump has unwound; an interrupt the pause menu resumes does not
   # unwind (G3)
   reason = "user interrupt"
   settled = FALSE
-  on.exit(if (!settled) mcp_cancel(conn, id, reason), add = TRUE)
+  on.exit(if (!settled) mcp_cancel(conn, id, st, reason), add = TRUE)
   repeat {
     left = min(st$deadline, st$hard) - reactor_now()
     reactor_pump(until = done, slice_ms = 50L, timeout = max(0.05, left))
@@ -700,6 +719,10 @@ mcp_await = function(conn, key, st, id, method, timeout) {
       rm(list = key, envir = conn$pending)
       settled = TRUE
       return(r)
+    }
+    if (isTRUE(st$failed)) {
+      settled = TRUE
+      return(st$failure)
     }
     if (!isTRUE(conn$alive)) {
       settled = TRUE
@@ -715,14 +738,18 @@ mcp_await = function(conn, key, st, id, method, timeout) {
   }
 }
 
-#' Cancel an in-flight request: a late answer is dropped and the server is sent
-#' notifications/cancelled
+#' Cancel an in-flight request: a late answer is dropped; stdio and legacy HTTP send
+#' notifications/cancelled (queued, never awaited); modern HTTP closes the response stream,
+#' which is the cancellation
 #' @noRd
-mcp_cancel = function(conn, id, reason) {
+mcp_cancel = function(conn, id, st, reason) {
   assign(as.character(id), TRUE, envir = conn$cancelled)
-  if (isTRUE(conn$alive)) {
-    try(mcp_notify(conn, "notifications/cancelled", list(requestId = id, reason = reason)),
-        silent = TRUE)
+  if (!is.null(st$transfer)) try(reactor_cancel(st$transfer), silent = TRUE)
+  if (isTRUE(conn$alive) && (identical(conn$transport, "stdio") || identical(conn$era, "legacy"))) {
+    msg = list(jsonrpc = "2.0", method = "notifications/cancelled",
+               params = list(requestId = id, reason = reason))
+    send = if (identical(conn$transport, "stdio")) mcp_stdio_send else mcp_http_send
+    try(send(conn, msg), silent = TRUE)
   }
   invisible(NULL)
 }
@@ -738,7 +765,11 @@ mcp_notify = function(conn, method, params = NULL) {
 #' Send a message that expects no answer (a notification or a response to a server request)
 #' @noRd
 mcp_reply = function(conn, msg) {
-  mcp_stdio_send(conn, msg)
+  if (identical(conn$transport, "stdio")) {
+    mcp_stdio_send(conn, msg)
+  } else {
+    mcp_http_post_quiet(conn, msg)
+  }
   invisible(NULL)
 }
 
@@ -877,10 +908,21 @@ mcp_tools = function(conn, refresh = FALSE) {
     if (is.null(cursor)) break
   }
   tools = lapply(tools, mcp_tool_norm)
+  if (identical(conn$transport, "http") && identical(conn$era, "modern")) {
+    tools = Filter(mcp_tool_headers_ok, tools)
+  }
   conn$tools = tools
   conn$tools_stale = FALSE
   mcp_tools_cache_put(conn$spec, tools, ttl, scope)
   tools
+}
+
+#' HTTP clients drop tools whose x-mcp-header annotations are invalid (2026-07-28)
+#' @noRd
+mcp_tool_headers_ok = function(tool) {
+  h = lapply(tool$input_schema$properties, function(p) if (is.list(p)) p[["x-mcp-header"]])
+  ok = function(x) is.null(x) || (rlang::is_string(x) && grepl("^[A-Za-z0-9-]+$", x))
+  all(vapply(h, ok, NA))
 }
 
 #' The input schema of a tool (listing the tools first when needed)
@@ -921,7 +963,8 @@ mcp_call = function(conn, tool, args, timeout = NULL, on_progress = NULL) {
   mcp_result_parse(res, reactor_now() - t0)
 }
 
-#' Close a connection (contract 7.18): stdin closed, 2 s grace, then kill_all()
+#' Close a connection (contract 7.18): stdin closed, 2 s grace, then kill_all(); a legacy HTTP
+#' session is deleted
 #' @noRd
 mcp_close = function(conn) {
   if (!inherits(conn, "gptr_mcp_conn")) return(invisible(FALSE))
@@ -933,6 +976,8 @@ mcp_close = function(conn) {
       if (p$is_alive()) kill_all(p, grace = 0)
     }
     if (!is.null(conn$watch)) try(reactor_cancel(conn$watch), silent = TRUE)
+  } else if (identical(conn$era, "legacy") && !is.null(conn$session_id)) {
+    try(mcp_http_delete(conn), silent = TRUE)
   }
   if (!is.null(conn$rs)) mcp_log_append(conn$log_path, conn$rs$flush())
   conn$alive = FALSE
@@ -1028,4 +1073,168 @@ mcp_stdio_send = function(conn, msg) {
   }
   write_all(conn$proc, paste0(mcp_json(msg), "\n"))
   invisible(TRUE)
+}
+
+# ---- Streamable HTTP transport ---------------------------------------------------------------
+
+#' HTTP setup: the expanded URL, its origin, the configured headers (values that came from a
+#' placeholder, sit under a secret-like name or look secret travel as handles bound to the
+#' server's origin) and the credential-store key "mcp:<name>"
+#' @noRd
+mcp_http_setup = function(conn) {
+  ex = mcp_expand_spec(conn$spec, conn$project)
+  conn$url = ex$url
+  conn$origin = url_origin(ex$url)
+  raw = mcp_map_chr(conn$spec$headers)
+  hdr = list()
+  for (k in names(ex$headers)) {
+    v = ex$headers[[k]]
+    secret = grepl("${", raw[[k]], fixed = TRUE) || mcp_secret_name(k) || !identical(redact(v), v)
+    hdr[[k]] = if (secret && nzchar(v)) {
+      nm = toupper(gsub("[^A-Za-z0-9]+", "_", paste("MCP", conn$name, k)))
+      secret_register(v, nm, source = "mcp", origin = conn$origin)
+    } else {
+      v
+    }
+  }
+  conn$headers = hdr
+  conn$auth_key = paste0("mcp:", conn$name)
+  invisible(conn)
+}
+
+#' The Authorization value of a connection: a configured header wins; otherwise the credential
+#' store's (oauth_access(): an API key or an OAuth access token, refreshed under a lock, handed
+#' only to the origin of the resource it was issued for), read per request so gptr_logout()
+#' takes effect at once. NULL when there is none or the refresh failed (a registry diagnostic):
+#' the server's 401 then asks the user to sign in again.
+#' @noRd
+mcp_http_auth = function(conn, force = FALSE) {
+  if ("authorization" %in% tolower(names(conn$headers))) return(NULL)
+  tryCatch(oauth_access(conn$auth_key, conn$origin, force = force),
+           gptr_error = function(e) {
+             registry_diagnostic("builtin:mcp", "mcp_auth", class(e)[1L], conditionMessage(e))
+             NULL
+           })
+}
+
+#' Headers of one request: Accept, content type, the configured headers, Authorization, and the
+#' era headers (MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Param-*, or the legacy version
+#' and Mcp-Session-Id)
+#' @noRd
+mcp_http_headers = function(conn, msg) {
+  h = c(list(Accept = "application/json, text/event-stream", `Content-Type` = "application/json"),
+        conn$headers)
+  auth = mcp_http_auth(conn)
+  if (!is.null(auth)) h$Authorization = auth
+  meta_ver = msg$params[["_meta"]][[mcp_k_ver]]
+  if (!is.null(meta_ver)) {
+    h[["MCP-Protocol-Version"]] = meta_ver
+    h[["Mcp-Method"]] = msg$method
+    if (isTRUE(msg$method %in% c("tools/call", "prompts/get"))) {
+      h[["Mcp-Name"]] = mcp_header_value(msg$params$name)
+    }
+    if (identical(msg$method, "resources/read")) h[["Mcp-Name"]] = mcp_header_value(msg$params$uri)
+    if (identical(msg$method, "tools/call")) h = c(h, mcp_param_headers(conn, msg$params))
+  } else if (identical(conn$era, "legacy")) {
+    h[["MCP-Protocol-Version"]] = conn$version
+  }
+  h[["Mcp-Session-Id"]] = conn$session_id
+  h
+}
+
+#' Mcp-Param-<Name> headers for the arguments whose schema property carries x-mcp-header;
+#' numbers and logicals are sent as their JSON text
+#' @noRd
+mcp_param_headers = function(conn, params) {
+  tool = Filter(function(t) identical(t$name, params$name), conn$tools %||% list())
+  if (!length(tool)) return(list())
+  props = tool[[1L]]$input_schema$properties %||% list()
+  out = list()
+  for (p in names(props)) {
+    h = if (is.list(props[[p]])) props[[p]][["x-mcp-header"]]
+    v = params$arguments[[p]]
+    if (is.character(h) && !is.null(v)) {
+      out[[paste0("Mcp-Param-", h)]] = mcp_header_value(mcp_map_chr(v))
+    }
+  }
+  out
+}
+
+#' POST one JSON-RPC message on the reactor (one attempt: a tool call must not run twice). JSON
+#' and SSE bodies are routed through mcp_on_message(); a failed transfer, or a request answered
+#' without its response, marks `st` failed with the HTTP status. The reactor's first-byte and
+#' idle timers are set to the request's hard deadline: MCP keeps its own, progress-aware timer.
+#' @noRd
+mcp_http_send = function(conn, msg, st = new.env(parent = emptyenv())) {
+  st$chunks = list()
+  fail = function(message, status) {
+    st$failure = list(error = list(code = NA_integer_, message = message), http_status = status)
+    st$failed = TRUE
+  }
+  route = function(txt) mcp_on_message(conn, tryCatch(json_decode(txt), error = function(e) NULL))
+  hard = if (is.null(st$hard)) 30 else max(1, st$hard - reactor_now())
+  spec = list(url = conn$url, method = "POST", headers = mcp_http_headers(conn, msg),
+              body = mcp_json(msg), first_byte_timeout = hard, idle_timeout = hard)
+  st$transfer = reactor_http(spec,
+    on_headers = function(status, headers) {
+      ctype = hdr_value(headers, "Content-Type") %||% ""
+      if (grepl("text/event-stream", ctype, fixed = TRUE)) st$sse = sse_splitter()
+      sid = hdr_value(headers, "Mcp-Session-Id")
+      if (identical(msg$method, "initialize")) conn$session_id = sid
+    },
+    on_bytes = function(raw) {
+      if (is.null(st$sse)) {
+        st$chunks[[length(st$chunks) + 1L]] = raw
+      } else {
+        for (ev in st$sse$push(raw)) route(ev$data)
+      }
+    },
+    on_done = function(status, headers) {
+      if (!is.null(st$sse)) {
+        last = st$sse$flush()
+        if (!is.null(last)) route(last$data)
+      } else if (length(st$chunks)) {
+        route(raw_to_utf8(do.call(c, st$chunks)))
+      }
+      st$done = TRUE
+      if (!is.null(msg$id) && !exists(as.character(msg$id), envir = conn$pending)) {
+        fail(paste0("HTTP ", status, " without a JSON-RPC answer"), as.integer(status))
+      }
+    },
+    on_fail = function(cnd) {
+      st$done = TRUE
+      fail(conditionMessage(cnd), suppressWarnings(as.integer(cnd$status %||% NA_integer_)))
+    },
+    retry = list(max_attempts = 1L))
+  invisible(st)
+}
+
+#' POST a notification or a response and wait (at most 10 s) until the server took it
+#' @noRd
+mcp_http_post_quiet = function(conn, msg) {
+  st = mcp_http_send(conn, msg)
+  reactor_pump(until = function() isTRUE(st$done), slice_ms = 50L, timeout = 10)
+  invisible(st)
+}
+
+#' DELETE the legacy session
+#' @noRd
+mcp_http_delete = function(conn) {
+  done = FALSE
+  finish = function(...) done <<- TRUE
+  reactor_http(list(url = conn$url, method = "DELETE", headers = mcp_http_headers(conn, list())),
+               on_bytes = function(raw) NULL, on_done = finish, on_fail = finish,
+               retry = list(max_attempts = 1L))
+  reactor_pump(until = function() done, slice_ms = 50L, timeout = 5)
+  invisible(NULL)
+}
+
+#' The server needs a sign-in. A tool call never opens a browser (architecture 6.14): the
+#' condition names the login call.
+#' @noRd
+mcp_auth_required = function(conn) {
+  login = paste0("gptr_login(\"", conn$auth_key, "\")")
+  gptr_abort(paste0("MCP server ", conn$name, " needs a sign-in. Run ", login,
+                    " at the R prompt, then retry."), c("mcp_auth_required", "mcp"),
+             server = conn$name, login = login)
 }

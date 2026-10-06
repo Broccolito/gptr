@@ -234,10 +234,10 @@ test_that("a legacy stdio server falls back to initialize, and the era is cached
   expect_false("server/discover" %in% again$method)
 })
 
-test_that("a stale cached era is probed again once, in both directions", {
+test_that("a stale cached era is probed again once, in both directions, over both transports", {
   v = c(modern = "2026-07-28", legacy = "2025-11-25")
-  for (era in names(v)) {
-    fx = local_mcp_fixture(era, "stdio")
+  for (era in names(v)) for (transport in c("stdio", "http")) {
+    fx = local_mcp_fixture(era, transport)
     old = setdiff(names(v), era)
     mcp_era_put(fx$spec, old, v[[old]])
     conn = mcp_connect(fx$spec)
@@ -386,4 +386,136 @@ test_that("a .cmd MCP command runs through cmd.exe /d /c call on Windows", {
   conn = mcp_connect(spec)
   expect_identical(mcp_call(conn, "echo", list(text = "via cmd"))$text, "via cmd")
   mcp_close(conn)
+})
+
+test_that("Streamable HTTP works in both eras: probe, fallback, cache, list, call, SSE bodies", {
+  fx = local_mcp_fixture("modern", "http", n_extra = 55L)
+  conn = mcp_connect(fx$spec)
+  expect_identical(conn$era, "modern")
+  expect_length(mcp_tools(conn), 60L)
+  expect_identical(mcp_call(conn, "echo", list(text = "over http"))$text, "over http")
+  seen = new.env()
+  seen$n = 0L
+  res = mcp_call(conn, "slow", list(steps = 2L, step_ms = 50L),
+                 on_progress = function(p) seen$n = seen$n + 1L)
+  expect_identical(res$text, "done")
+  expect_identical(seen$n, 2L)
+  mcp_close(conn)
+
+  fx = local_mcp_fixture("legacy", "http")
+  conn = mcp_connect(fx$spec)
+  expect_identical(conn$era, "legacy")
+  expect_false(is.null(conn$session_id))
+  expect_identical(mcp_call(conn, "add", list(a = 1, b = 41))$text, "42")
+  # a session the server forgot is probed and initialised again, once
+  mcp_http_delete(conn)
+  expect_identical(mcp_call(conn, "add", list(a = 1, b = 2))$text, "3")
+  mcp_close(conn)
+  expect_identical(fx$log()$method[1:3],
+                   c("server/discover", "initialize", "notifications/initialized"))
+  expect_identical(sum(fx$log()$method == "initialize"), 2L)
+  conn = mcp_connect(fx$spec)
+  expect_identical(conn$era, "legacy")
+  mcp_close(conn)
+  expect_identical(sum(fx$log()$method == "server/discover"), 2L)
+})
+
+test_that("an HTTP 401 without stored credentials names the login call and opens no browser", {
+  local_user_dirs()
+  mock = local_oauth_mock()
+  browser = local_browser()
+  spec = list(name = "secure", transport = "http", url = mock$url, protocol = "auto")
+  err = expect_error(mcp_connect(spec), class = "gptr_error_mcp_auth_required")
+  expect_match(conditionMessage(err), "gptr_login(\"mcp:secure\")", fixed = TRUE)
+  expect_identical(err$login, "gptr_login(\"mcp:secure\")")
+  expect_identical(err$server, "secure")
+  expect_length(browser$urls, 0L)
+})
+
+test_that("stored credentials authorise HTTP requests; a 401 refreshes the token once", {
+  local_user_dirs()
+  mock = local_oauth_mock()
+  spec = list(name = "secure", transport = "http", url = mock$url, protocol = "auto")
+  auth_store_set("mcp:secure", list(type = "api_key", key = "manual-token-123"))
+  conn = mcp_connect(spec)
+  expect_identical(mcp_call(conn, "whoami", list())$text, "you are signed in")
+  mcp_close(conn)
+  auth_store_set("mcp:secure", list(type = "oauth", issuer = mock$base, client_id = "client-1",
+                                    token_endpoint = paste0(mock$base, "/token"),
+                                    resource = mock$url, refresh = "refresh-1",
+                                    expires = oauth_now_ms() + 3.6e6))
+  secret_register("stale-access-token", oauth_access_name("mcp:secure"), source = "oauth",
+                  origin = mock$base)
+  conn = mcp_connect(spec)
+  expect_identical(mcp_call(conn, "whoami", list())$text, "you are signed in")
+  mcp_close(conn)
+  log = mock$log()
+  expect_identical(log$what[log$path == "/token"], "refresh_token")
+  expect_identical(secret_value(auth_store_get("mcp:secure")$refresh, mock$base), "refresh-2")
+  expect_true(gptr_logout("mcp:secure"))
+  expect_null(secret_lookup(oauth_access_name("mcp:secure")))
+  conn = mcp_connect(spec)
+  expect_true(conn$era_from_cache)
+  expect_error(mcp_tools(conn, refresh = TRUE), class = "gptr_error_mcp_auth_required")
+  mcp_close(conn)
+})
+
+test_that("a credential bound to another origin is never sent; the 401 asks for a sign-in", {
+  local_user_dirs()
+  mock = local_oauth_mock()
+  auth_store_set("mcp:moved", list(type = "oauth", issuer = "http://127.0.0.1:9",
+                                   client_id = "client-1",
+                                   token_endpoint = "http://127.0.0.1:9/token",
+                                   resource = "http://127.0.0.1:9/mcp", refresh = "refresh-x",
+                                   expires = oauth_now_ms() + 3.6e6))
+  secret_register("access-for-the-old-url", oauth_access_name("mcp:moved"), source = "oauth",
+                  origin = "http://127.0.0.1:9")
+  spec = list(name = "moved", transport = "http", url = mock$url, protocol = "auto")
+  expect_error(mcp_connect(spec), class = "gptr_error_mcp_auth_required")
+  expect_false(any(grepl("access-for-the-old-url", mock$log()$what, fixed = TRUE)))
+  # a hand-entered token of a server whose URL changed is not sent to the new URL either (the
+  # mock would accept it)
+  auth_store_set("mcp:moved2", list(type = "api_key", key = "manual-token-123",
+                                    resource = "http://127.0.0.1:9/mcp"))
+  spec2 = list(name = "moved2", transport = "http", url = mock$url, protocol = "auto")
+  expect_error(mcp_connect(spec2), class = "gptr_error_mcp_auth_required")
+})
+
+test_that("an access token bound to an https origin on the default port is sent", {
+  local_user_dirs()
+  auth_store_set("mcp:web", list(type = "oauth", issuer = "https://as.example", client_id = "c1",
+                                 token_endpoint = "https://as.example/token",
+                                 resource = "https://mcp.example.com/mcp", refresh = "refresh-w",
+                                 expires = oauth_now_ms() + 3.6e6))
+  value = paste0("access-", "web-abcdefghij")
+  secret_register(value, oauth_access_name("mcp:web"), source = "oauth",
+                  origin = "https://mcp.example.com")
+  conn = list2env(list(name = "web", auth_key = "mcp:web", headers = list(),
+                       origin = url_origin("https://mcp.example.com/mcp")))
+  auth = mcp_http_auth(conn)
+  expect_identical(auth[[1L]], "Bearer ")
+  expect_identical(secret_value(auth[[2L]], "https://mcp.example.com/mcp"), value)
+  conn$origin = url_origin("https://other.example.com/mcp")
+  expect_null(mcp_http_auth(conn))
+})
+
+test_that("modern HTTP requests carry the era headers; invalid x-mcp-header tools are dropped", {
+  local_user_dirs()
+  tool = function(h) {
+    list(name = "t", input_schema = list(properties = list(
+      region = list(type = "string", `x-mcp-header` = h), n = list(type = "integer"))))
+  }
+  conn = list2env(list(name = "x", auth_key = "mcp:x", headers = list(), era = "modern",
+                       origin = "http://127.0.0.1:1", tools = list(tool("Region"))))
+  params = list(name = "t", arguments = list(region = "eu", n = 2L),
+                `_meta` = mcp_meta_fields("2026-07-28"))
+  h = mcp_http_headers(conn, list(method = "tools/call", params = params))
+  expect_identical(h[c("MCP-Protocol-Version", "Mcp-Method", "Mcp-Name", "Mcp-Param-Region")],
+                   list(`MCP-Protocol-Version` = "2026-07-28", `Mcp-Method` = "tools/call",
+                        `Mcp-Name` = "t", `Mcp-Param-Region` = "eu"))
+  expect_true(mcp_tool_headers_ok(tool("Region")))
+  expect_false(mcp_tool_headers_ok(tool("Bad Region")))
+  conn$headers = list(Authorization = "Bearer configured")
+  expect_identical(mcp_http_headers(conn, list(method = "ping"))$Authorization,
+                   "Bearer configured")
 })
