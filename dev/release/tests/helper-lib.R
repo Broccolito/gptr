@@ -26,3 +26,22 @@ toy_man = function(pages) {
   for (nm in names(pages)) writeLines(pages[[nm]], file.path(dir, paste0(nm, ".Rd")))
   dir
 }
+
+# The repository root for the test-gptr-*.R files, which skip outside the gptr repository.
+gptr_root = function() {
+  root = normalizePath(file.path("..", "..", ".."), winslash = "/", mustWork = FALSE)
+  desc = file.path(root, "DESCRIPTION")
+  is_gptr = file.exists(desc) && identical(unname(read.dcf(desc)[1L, "Package"]), "gptr")
+  testthat::skip_if_not(is_gptr, "not inside the gptr repository")
+  root
+}
+
+# Passes when `problems` is empty; otherwise fails and lists every problem.
+expect_no_problems = function(problems) {
+  if (length(problems)) {
+    testthat::fail(paste(c("open problems:", paste0("  ", problems)), collapse = "\n"))
+  } else {
+    testthat::succeed()
+  }
+  invisible(problems)
+}

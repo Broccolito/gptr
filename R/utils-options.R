@@ -200,3 +200,168 @@ s3_register = function(generic, class, method = NULL) {
   if (isNamespaceLoaded(package)) register()
   invisible(NULL)
 }
+
+#' Options that control gptr
+#'
+#' gptr reads each option with `getOption()` at the moment it needs it, so options set with
+#' `options()` take effect at the next call. Options marked *settings* have no default of their
+#' own: when unset, the value comes from the settings layers written by [gptr_config()]
+#' (session, project `.gptr/settings.json`, user settings). The safety options (`gptr.ui`,
+#' `gptr.interactive`, the guards, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode`
+#' and `gptr.unsafe_no_permissions`) are copied when a run starts, so code that the model runs
+#' cannot change them for that run.
+#'
+#' @section Interaction and output:
+#' - `gptr.quiet` (logical, `FALSE`): silence notices and progress messages.
+#' - `gptr.interactive` (logical or `NULL`, `NULL`): force the decision whether a person is
+#'   present to answer questions and permission prompts.
+#' - `gptr.verbose` (integer or `NULL`, `NULL`): 0 silent, 1 progress on standard error, 2 the
+#'   streamed console, 3 debugging; `NULL` chooses by context (0 in knitr and testthat, 1 under
+#'   Rscript, 2 at the console).
+#' - `gptr.ui` (character, UI spec or `NULL`, `NULL`): the user-interface backend; `NULL` means
+#'   the console when a person is present, else none.
+#' - `gptr.history` (logical, `TRUE`): add console inputs to the R history.
+#' - `gptr.deprecations` (character, `"warn"`): `"warn"` or `"error"` for deprecated calls.
+#'
+#' @section Settings, models and replay:
+#' - `gptr.model`, `gptr.mode`, `gptr.preset`, `gptr.system1`, `gptr.small_model` (character or
+#'   `NULL`, *settings*): the option layer of the settings of the same names.
+#' - `gptr.project_root` (character or `NULL`, `NULL`): the project root; also the environment
+#'   variable `GPTR_PROJECT_ROOT`.
+#' - `gptr.replay` (character or `NULL`, *settings*, `"auto"`): how recorded document blocks are
+#'   used: `"auto"`, `"replay"`, `"live"` or `"record"`; the `replay` argument of [peter()] wins.
+#' - `gptr.record` (character or `NULL`, *settings*, `"ask"`): whether gptr may write into
+#'   documents: `"auto"`, `"ask"` or `"off"`.
+#' - `gptr.interpolate` (logical, `TRUE`): `{identifier}` interpolation in literal prompts.
+#'
+#' @section Sessions, turns and values:
+#' - `gptr.max_turns` (integer, `50`): turns per programmatic run.
+#' - `gptr.max_turns_console` (integer, `200`): turns per console prompt.
+#' - `gptr.max_nested_calls` (integer, `20`): [peter()] calls per evaluation of model code.
+#' - `gptr.value_copy_max` (bytes, `1048576`): designated result values below this size are
+#'   copied; larger ones are kept by name.
+#' - `gptr.values_max_bytes` (bytes, `67108864`): value copies held per session.
+#' - `gptr.background_tools` (character, `"idle"`): `"idle"` or `"wait"` for experimental
+#'   background sessions.
+#' - `gptr.out_keep` (integer, `20`): results kept per session for `peter$out()`.
+#' - `gptr.spill_days` (number, `7`): age in days after which spill files are pruned.
+#'
+#' @section Concurrency and sub-agents:
+#' - `gptr.max_active` (integer, `8`): concurrent HTTP transfers.
+#' - `gptr.subagents.max_active` (integer, `8`): concurrent inline sub-agents; the default of
+#'   [gptr_parallel()]'s `max_active`.
+#' - `gptr.subagents.max_cli` (integer, `4`): concurrent command-line sub-agents.
+#' - `gptr.subagents.max_workers` (integer or `NULL`, `NULL`): worker processes; `NULL` means
+#'   `min(4, cores - 1)`. Under `R CMD check` every pool of child processes is capped at 2.
+#' - `gptr.subagents.max_tasks` (integer, `8`): children per team or fan-out started by model
+#'   code.
+#' - `gptr.subagents.max_depth` (integer, `1`): nesting depth of child sessions (at most 2).
+#' - `gptr.child_text_max` (bytes, `51200`): text returned per child task.
+#'
+#' @section Transport and processes:
+#' - `gptr.connect_timeout` (seconds, `20`), `gptr.first_byte_timeout` (seconds, `120`) and
+#'   `gptr.idle_timeout` (seconds, `90`): network timeouts.
+#' - `gptr.max_retry_delay` (seconds, `60`): a longer `retry-after` from a provider fails at
+#'   once.
+#' - `gptr.max_attempts` (integer, `4`): transport attempts per request.
+#' - `gptr.wire_log` (logical or path, `FALSE`): write a redacted log of every request and
+#'   response inside the workspace or the session temporary directory.
+#' - `gptr.supervise` (logical or `NULL`, `NULL`): supervise child processes; `NULL` means yes
+#'   except under `R CMD check`.
+#' - `gptr.stdin_timeout` (seconds, `60`): time allowed to write pending input to a child.
+#' - `gptr.cli_path` (named list or `NULL`, `NULL`): explicit paths of the `claude` and `codex`
+#'   command-line tools.
+#' - `gptr.cli_turn_timeout` (seconds, `3600`): wall-clock time per command-line turn.
+#'
+#' @section Evaluation and tools:
+#' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present.
+#' - `gptr.r_output_tokens` (integer, `4000`): estimated tokens of one `r` result.
+#' - `gptr.r_max_images` (integer, `3`): plot images attached to one `r` result.
+#' - `gptr.helper_output_tokens` (integer, `1500`): printed size of `peter$` helper results.
+#' - `gptr.read_max_tokens` (integer, `12000`): size cap of the `read` tool.
+#' - `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res` (integers, `768`, `512`, `120`):
+#'   plots sent to the model.
+#'
+#' @section Permissions:
+#' - `gptr.noninteractive_ask` (character, `"stop"`): what a permission question does when
+#'   nobody can answer: `"stop"` ends the run with status `blocked` and a
+#'   `gptr_error_permission` condition; `"deny"` returns a denial to the model.
+#' - `gptr.critical_guard` (logical, `TRUE`): level-4 actions ask even in `auto` mode.
+#' - `gptr.secret_guard` (logical, `TRUE`): reads of registered secrets ask even in `auto`
+#'   mode.
+#' - `gptr.protect_size` (bytes, `1e8`): overwriting a larger object is a level-3 action.
+#' - `gptr.plan_handoff` (logical, `TRUE`): hand a plan from `plan` mode to the next call.
+#' - `gptr.unsafe_no_permissions` (logical, `FALSE`): turns the permission gate off entirely;
+#'   honored only when set outside a run, for sandboxed continuous integration.
+#'
+#' @section Context, caching and compaction:
+#' - `gptr.compact_at` (tokens or `NULL`, `200000`): the compaction soft cap; `NULL` disables
+#'   the cap.
+#' - `gptr.compact_cold_min` (tokens, `100000`): the size above which a cold cache compacts.
+#' - `gptr.cache_ttl` (character, `"gap"`): prompt-cache lifetime policy: `"gap"`, `"5m"` or
+#'   `"1h"`.
+#' - `gptr.cache_gap` (seconds, `240`): a pause between requests longer than this switches the
+#'   cache lifetime to one hour.
+#' - `gptr.check_prefix` (character, `"event"`): what a broken cache prefix does: `"event"`,
+#'   `"warn"` or `"error"`.
+#' - `gptr.skills_budget` (integer, `1500`) and `gptr.mcp_budget` (integer, `1500`): tokens of
+#'   the skill and MCP tool catalogs.
+#'
+#' @section Checkpoints and undo:
+#' - `gptr.checkpoint` (character, `"on"`): `"on"`, `"files"` or `"off"`.
+#' - `gptr.undo_capture_max` (bytes, `1e8`): objects up to this size are captured by reference
+#'   before a change, even when the change was not predicted.
+#' - `gptr.undo_max_bytes` (bytes, `1e9`): object images held in memory per session.
+#' - `gptr.undo_spill_max` (bytes, `2e9`): the largest object image written to disk.
+#' - `gptr.undo_turns` (integer, `20`): object images older than this many turns are dropped.
+#' - `gptr.checkpoint_disk_bytes` (bytes, `2e9`), `gptr.checkpoint_days` (days, `30`) and
+#'   `gptr.checkpoint_turns` (integer, `100`): retention of the checkpoint store.
+#' - `gptr.checkpoint_track_file_max` (bytes, `1e6`) and `gptr.checkpoint_track_total` (bytes,
+#'   `1e8`): the per-file and total size of tracked project files.
+#' - `gptr.checkpoint_capture_max` (bytes, `5e7`): a larger changed file gets no stored copy.
+#' - `gptr.checkpoint_scan_budget` (seconds, `0.25`): above this walk time the project is
+#'   scanned once per turn.
+#' - `gptr.checkpoint_rng` (logical, `TRUE`): report changes of the random-number state in the
+#'   rewind report (gptr never changes your random seed).
+#' - `gptr.checkpoint_close_devices` (logical, `FALSE`): close graphics devices opened by an
+#'   undone turn.
+#'
+#' @section Secrets:
+#' - `gptr.redact_min_chars` (integer, `8`): the shortest secret value that is redacted.
+#' - `gptr.redact_patterns` (logical, `TRUE`): also redact text that looks like a key; known
+#'   values are always redacted.
+#' - `gptr.stream_hold_max` (integer, `4096`): characters held back while redacting a stream.
+#' - `gptr.env_export` (logical, `TRUE`): the default of `gptr_env(set_env =)`.
+#' - `gptr.prompt_secrets` (character, `"redact"`): secret-looking text in prompts:
+#'   `"redact"` or `"ask"`.
+#'
+#' @section System 1:
+#' - `gptr.s1_max_active` (integer, `8`): concurrent System 1 requests.
+#' - `gptr.s1_rounds` (integer, `3`): retry rounds for failed elements.
+#' - `gptr.s1_state_max` (integer, `2000`): characters of a session's state sent to System 1.
+#' - `gptr.s1_max_elements` (integer, `10000`): elements per System 1 call.
+#'
+#' @section Documents, MCP and artifacts:
+#' - `gptr.doc_output_lines` (integer, `12`): output lines recorded per execution.
+#' - `gptr.doc_source_frames` (logical, `TRUE`): let gptr find the calling line of a script run
+#'   with `source()`.
+#' - `gptr.mcp_timeout` (seconds, `60`) and `gptr.mcp_probe_timeout` (seconds, `5`): MCP
+#'   request and protocol-probe time limits.
+#' - `gptr.mcp_debug` (logical, `FALSE`): keep redacted MCP server logs in the user cache.
+#' - `gptr.artifact_max_bytes` (bytes, `5e8`): the largest artifact data snapshot.
+#'
+#' @section Environment variables:
+#' - `GPTR_REPLAY`: the replay mode below the `gptr.replay` option; `GPTR_REPLAY=replay` proves
+#'   that a script makes no model calls.
+#' - `GPTR_PROJECT_ROOT`: overrides the project root, like `gptr.project_root`.
+#' - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `TYPESAFE_API_KEY` and the other
+#'   provider keys: read at the first use of a provider; see [gptr_env()] for `.env` files.
+#' - `GPTR_WORKER`, `GPTR_SUBAGENT_DEPTH` and `GPTR_MCP_TOKEN`: set by gptr in its own child
+#'   processes only.
+#' - `GPTR_LIVE_TESTS`: `"true"` enables the package's live tests; not used at run time.
+#' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests gptr then
+#'   replays recorded document blocks only and runs at most two child processes at a time.
+#'
+#' @seealso [gptr_config()] for settings stored in files, [gptr_security] and [gptr_egress].
+#' @name gptr_options
+NULL

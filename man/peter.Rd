@@ -113,3 +113,6 @@ s$text
 s |> peter("And how many columns?")
 identical(gptr_last(), s)
 }
+\seealso{
+\link{gptr_security}, \link{gptr_egress} and \link{gptr_options}.
+}

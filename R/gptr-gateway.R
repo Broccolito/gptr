@@ -65,6 +65,7 @@
 #' s$text
 #' s |> peter("And how many columns?")
 #' identical(gptr_last(), s)
+#' @seealso [gptr_security], [gptr_egress] and [gptr_options].
 #' @export
 peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
                            extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,

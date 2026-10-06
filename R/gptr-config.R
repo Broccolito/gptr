@@ -1457,3 +1457,159 @@ gptr_init = function(path, instructions = TRUE, gitignore = TRUE) {
   }
   invisible(path_norm(ws))
 }
+
+#' Security considerations
+#'
+#' gptr runs a language model agent inside your R session. The agent reads files, writes files,
+#' evaluates R code written by the model in the environment you give it and starts processes on
+#' your behalf. This page describes what gptr does to keep those actions under your control and
+#' where its protections end. [gptr_egress] describes what is sent to model providers.
+#'
+#' @section Everything happens because you asked:
+#' Nothing runs when the package is loaded. A model is contacted only when you call [peter()] (or
+#' a function that you give a prompt), and model-written code is evaluated only in the
+#' environment you pass as `envir` (by default the frame that called [peter()]); gptr never
+#' assigns into the global environment by itself. Files are written only inside a `.gptr/`
+#' directory you created with [gptr_init()] or confirmed interactively, inside
+#' `tools::R_user_dir("gptr")`, inside the session temporary directory, into documents you bound
+#' with [gptr_doc()] or confirmed, and by tool calls that the permission mode allowed. In a
+#' non-interactive run without such consent nothing is written outside the session temporary
+#' directory.
+#'
+#' @section Permission modes:
+#' Every tool call passes a permission gate. The default mode is `manual`: only actions that the
+#' classifier knows to be read-only run without asking; every other action, including any change
+#' to a file or an object, asks first with a one-line prompt. `edits` also allows file edits
+#' inside the project and still asks before R code that is not known to be read-only; `auto`
+#' asks only for level-4 actions (for example deleting the project directory, or changing gptr's
+#' own configuration) and for reads of registered secrets; `plan` changes nothing. When nobody
+#' can answer a question (Rscript, knitr, a scheduled job) the run stops with status `blocked`
+#' and a `gptr_error_permission` condition that says how to allow the action, unless you set
+#' `options(gptr.noninteractive_ask = "deny")`. Model code cannot switch the gate off or loosen
+#' it during a run: the safety options are copied when the run starts. Only the option
+#' `gptr.unsafe_no_permissions`, set by you outside a run, removes the gate, and it is meant for
+#' disposable sandboxes.
+#'
+#' @section What the gate cannot do:
+#' The risk levels come from a static classifier ([gptr_risk()]). It is advisory and it is not a
+#' security boundary: R code can compute function names, call compiled code or load packages
+#' whose effects the classifier cannot see, and R has no sandbox for code that runs inside your
+#' session. In `auto` mode a model can delete or overwrite files and objects. Use `auto` only
+#' in projects you can restore (version control, backups, [gptr_rewind()] for recent turns),
+#' and run untrusted prompts or untrusted projects in a disposable container or virtual machine.
+#'
+#' @section Sub-agents, workers and child processes:
+#' Inline sub-agents run in your session and see its objects. The worker backend runs a
+#' sub-agent in a separate R process that starts from gptr's reduced child environment (it does
+#' not read your `~/.Renviron`), but that process runs under your user account with your file
+#' permissions: the worker backend is not an isolation boundary. Its permission requests are
+#' sent to your session and classified again there. MCP servers, the `claude` and `codex`
+#' command-line tools, shell commands started with `peter$sh()` and Shiny artifacts are ordinary
+#' processes of your account as well; artifacts start without any registered secret and listen
+#' on the loopback interface, and each launch gets an access token in its address (on Windows
+#' only when 'openssl' is installed; otherwise gptr says that the artifact has no token).
+#'
+#' @section Untrusted content:
+#' Model replies, tool results, file contents, MCP results and project instruction files
+#' (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`) are treated as data. Text from these sources
+#' is never used as a formatting template, so braces in a reply cannot run R code. A project you
+#' cloned is untrusted until you trust it with `gptr_trust(trust = TRUE)` (see [gptr_trust()]),
+#' or answer yes when [gptr_init()] asks: until then its settings can only tighten
+#' permissions, its extensions, plugins and MCP servers do not run, and its instruction files
+#' are shown to the model as information rather than commands. When trusted files change after a
+#' pull, gptr asks again.
+#'
+#' @section Secrets:
+#' Keys are held in a private vault and appear in sessions, logs and errors only as markers such
+#' as `[secret:ANTHROPIC_API_KEY]`. Values are redacted before anything is written or sent: the
+#' session files, documents, caches, spill files, wire logs and the output of child processes.
+#' gptr never reads the credential files of other tools. Reading a registered secret from model
+#' code asks even in `auto` mode. A key registered after it already appeared in a file (for
+#' example pasted into a prompt) can be removed from the files with [gptr_scrub()]; run
+#' `gptr_scrub(error = TRUE)` before committing to fail when any registered secret remains.
+#'
+#' @section Data at rest and protected health information (PHI):
+#' gptr keeps what it needs to resume and replay work. Review what you commit when the data are
+#' personal or clinical:
+#' - `.gptr/sessions/` (full conversations, including printed results) is excluded from git by
+#'   the `.gptr/.gitignore` that [gptr_init()] writes.
+#' - `.gptr/cache/s1/` holds System 1 answers and is committed by default so that a script
+#'   replays without model calls. It stores a salted hash of each input and a hash of each
+#'   question, never their text, but the answers themselves (a label and its probability)
+#'   remain, and the salt is committed with the cache, so anyone with the repository can test
+#'   guesses of short inputs. For PHI, stop committing it with
+#'   `gptr_config(cache_commit = list(s1 = FALSE, s2 = FALSE), .scope = "project")` (gptr then
+#'   keeps a `.gitignore` in `cache/s1/`), or clear it with `gptr_cache("clear", "s1")` before
+#'   committing.
+#' - `.gptr/cache/s2/` (answer text for replay), `.gptr/transcripts/` (console transcripts),
+#'   `.gptr/checkpoints/` (pre-images of objects and files) and the data snapshots of artifacts
+#'   (`.gptr/artifacts/<id>/v<n>/data/`) are excluded from git by default.
+#' - `.gptr/plans/` (plans proposed in `plan` mode) and the `app.R` of each artifact are
+#'   committed by default; they can quote data values the model saw.
+#' - Documents you record into keep the model's code and up to `gptr.doc_output_lines` lines of
+#'   printed output per step, which can contain data values. Review them before sharing.
+#'
+#' @section Local servers:
+#' [gptr_mcp_serve()] exposes the live session to other agents over HTTP on `127.0.0.1` only,
+#' with a random bearer token and an `Origin` check, and every call passes the permission gate.
+#' Any local process that learns the token can call the served tools while the server runs; stop
+#' it with `gptr_mcp_serve(stop = TRUE)` when you are done.
+#'
+#' @seealso [gptr_egress], [gptr_options], [gptr_permissions()], [gptr_trust()],
+#'   [gptr_scrub()], [gptr_risk()].
+#' @name gptr_security
+NULL
+
+#' Data egress: what gptr sends to model providers
+#'
+#' gptr sends data to a model provider only when you run a prompt with that provider's model.
+#' The package itself collects nothing: there is no telemetry, no usage reporting and no network
+#' access when the package loads. This page lists what a request contains so that you can decide
+#' what may leave your machine.
+#'
+#' @section What a request contains:
+#' - Your prompt and the conversation so far.
+#' - A budgeted description of each object you attach (its class, dimensions, column names and
+#'   types and a few values) instead of its contents; a small object can appear in full.
+#' - Automatic context: a short listing of the objects in the evaluation environment (names,
+#'   classes and sizes), the R version, platform and available packages, and the project
+#'   instruction files (`AGENTS.md`, `CLAUDE.md`, `.gptr/vignette.Rmd`).
+#' - Tool results: the printed output of R code the model ran, the parts of files it read, and
+#'   images of plots it made. In `manual` mode every action that is not known to be read-only
+#'   needs your approval before its result can be sent.
+#'
+#' A System 1 question (a classifier model such as Jev) sends the inputs themselves: each
+#' element of a vector (text up to 100,000 characters), each row of a data frame as a record, a
+#' description of larger objects, and for a piped session its last answer (at most
+#' `gptr.s1_state_max` characters). Do not ask System 1 questions about data that may not leave
+#' your machine.
+#'
+#' Registered secrets are replaced by markers before anything is sent.
+#'
+#' @section Limiting automatic context:
+#' `.opts = list(context = "names")` sends object names only, and `.opts = list(context =
+#' "none")` sends no automatic context at all. Attach only the objects the task needs. The
+#' `plan` mode lets the model inspect without changing anything, which is a cheap way to see
+#' what it would read.
+#'
+#' @section Acknowledgment:
+#' The first time you use a provider (or a command-line route such as `claude_code` or `codex`)
+#' in an interactive session, gptr shows what automatic context is sent and records your
+#' acknowledgment in your user settings. A non-interactive run with a provider that was never
+#' acknowledged stops with a `gptr_error_egress` condition. Record the acknowledgment once with
+#' `gptr_config(egress = list(anthropic = "ack"), .scope = "user")` (this replaces the stored
+#' list, so name every provider you use), or run with `.opts = list(context = "none")`. Offline
+#' providers such as [gptr_fake_provider()] and local providers on a loopback address need no
+#' acknowledgment. An Ollama server can forward requests to cloud models, so Ollama is exempt only
+#' while its local-only inference is on (the default; see `providers` in [gptr_config()]).
+#'
+#' @section Other network use:
+#' gptr contacts nothing else on its own. The model catalog is refreshed only by
+#' `gptr_models(refresh = TRUE)`, reachability checks run only with
+#' `gptr_providers(check = TRUE)`, and MCP servers, sub-agents and command-line tools are
+#' contacted only when a session uses them. The `claude` and `codex` command-line routes send
+#' the conversation through those vendors' tools under their own terms.
+#'
+#' @seealso [gptr_security], [gptr_options], [gptr_providers()], [gptr_config()].
+#' @name gptr_egress
+NULL
