@@ -1750,10 +1750,10 @@ risk_plan_syntax = c("{", "(", risk_arrow, "=", "if", "for", "while", "repeat", 
 risk_quoting_funs = c("quote", "bquote", "expression", "substitute", "~", "alist")
 # Function slots: formals whose argument is called in any call R can match, and the slots of
 # functions whose formal name is ambiguous or whose namespace may not be loaded (formal, position).
-risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else", "rhs")
+risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else")
 risk_hof_args = list(
   Map = c("f", "1"), Reduce = c("f", "1"), Filter = c("f", "1"), Find = c("f", "1"),
-  Position = c("f", "1"), Negate = c("f", "1"), do.call = c("what", "1"), `%>%` = c("rhs", "2"),
+  Position = c("f", "1"), Negate = c("f", "1"), do.call = c("what", "1"),
   map = c(".f", "2"), map2 = c(".f", "3"), pmap = c(".f", "2"), walk = c(".f", "2"),
   walk2 = c(".f", "3"), pwalk = c(".f", "2"), imap = c(".f", "2"), iwalk = c(".f", "2"),
   map_chr = c(".f", "2"), map_lgl = c(".f", "2"), map_dbl = c(".f", "2"), map_int = c(".f", "2"),
@@ -2338,14 +2338,20 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       pc = if (is.null(v)) "unknown" else if (all(v == "")) "console" else
         risk_cmd_worst(vapply(v[nzchar(v)], risk_path_cls, character(1), row$category, root))
       lv = risk_path_level(row$category, row$level, pc)
+      # T1: a read of a secret file is 3
+      sec = row$category == "read" &&
+        any(vapply(v[nzchar(v)], function(x) risk_target(x, "read", root)$secret, logical(1)))
+      if (sec) lv = max(lv, 3L)
       if (!is.null(v) && row$category %in% c("file_write", "file_delete", "network")) {
         add_tg("files", v[nzchar(v)])
       }
-      if (lv > best$level) best = list(level = lv, path = v[1L] %||% NA_character_, pc = pc)
+      if (lv > best$level) {
+        best = list(level = lv, path = v[1L] %||% NA_character_, pc = pc, sec = sec)
+      }
     }
     if (best$level < 0L) best = list(level = row$level, path = NA_character_, pc = NA_character_)
-    add(ctx, label, name, best$level, if (identical(best$pc, "control") &&
-                                          row$category != "read") "control" else row$category,
+    add(ctx, label, name, best$level, if (isTRUE(best$sec)) "secret" else
+      if (identical(best$pc, "control") && row$category != "read") "control" else row$category,
         best$path, best$pc)
   }
 
@@ -2584,6 +2590,17 @@ risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
       ex = if (is.character(txt)) tryCatch(parse(text = txt, keep.source = FALSE),
                                            error = function(err) NULL)
       if (!is.null(ex)) walk(ex, ctx)
+    }
+    # magrittr's pipes call their right side with the left side first, unless braces or a `.`
+    # argument take it (the call R's native pipe would make)
+    if (r$name %in% c("%>%", "%<>%", "%T>%", "%!>%") && length(a) == 2L) {
+      f = a[[2L]]
+      h = if (is.call(f) && is.symbol(f[[1L]])) as.character(f[[1L]]) else ""
+      if (!is.call(f) || h %in% c("(", "function")) {
+        a = list(as.call(list(f, a[[1L]])))
+      } else if (h != "{" && !any(vapply(as.list(f)[-1L], identical, logical(1), quote(.)))) {
+        a = list(as.call(c(f[[1L]], a[1L], as.list(f)[-1L])))
+      }
     }
     inner = ctx
     if (r$name == "function") {

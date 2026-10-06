@@ -1625,12 +1625,15 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   through `risk_gateway`; secrets by risk_secret_scan().
 - Rule: code is parsed as P09's eval_parse() reads it (CR line ends are LF), not by the plan's parse().
 - Rule: the plan's 101-case row `nm = 'mtcars'; get(nm)` is 3, not 1 (a computed lookup, (B)).
-- Rule: known limits: the right side of magrittr's `%>%` is a function slot, so a call there is 3;
-  slots are read by name (also in a generic's `...`), not by a method's position
-  (`aggregate(df, g, system)` is 0).
+- Rule: known limits: slots are read by name (also in a generic's `...`), not by a method's
+  position (`aggregate(df, g, system)` is 0).
+- Rule (Task 3b, D3): magrittr's pipes read as the call they make (left side first unless braces
+  or a `.` argument take it); risk-functions.csv is the plan generator's rows plus 294 read rows
+  (common base/stats/utils functions, `gzfile`/`bzfile`/`xzfile` like `file`, magrittr's `%>%`;
+  `%<>%` stays unlisted, Task 1 pins it): 1786 rows, md5 `338551adf8d13eb92418c608791dc1f6`.
 - Contract-visible: none (04 5.11, 6.6 and 7.0 surface as planned).
 - Tests: test-perm-classify.R: plan Task 3 blocks (one row amended), six "(D-132)" blocks.
-  Evidence: progress/P11.md Task 3.
+  Evidence: progress/P11.md Tasks 3 and 3b.
 
 ## D-133 - P17 template commands follow later registry changes, run only while current; ASCII whitespace (2026-10-05)
 - Rule: Task 6 (`R/skill-templates.R`); the plan's tests, shipped `/review` and `/explain` and produced names are unchanged:

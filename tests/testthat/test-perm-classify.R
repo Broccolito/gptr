@@ -704,10 +704,12 @@ test_that("printing a risk lists the flagged calls; displays escape controls (IC
 })
 
 # Added (D-132): the R classifier follows the classifier standard of D-061.
-test_that("computed calls, slots and lookups are level 3 (D-132)", {
+test_that("computed calls, slots, lookups and secret reads are level 3 (D-132)", {
   root = local_project()
   e = classify_env()
-  for (code in c("do.call(f, args)", "match.fun(nm)(x)", "eval(parse(text = s))",
+  expect_true(gptr_risk("parse(file = '.Renviron')", root = root)$secret)
+  for (code in c("parse(file = '.Renviron')", "con = gzfile('~/.Renviron'); readLines(con)",
+                 "do.call(f, args)", "match.fun(nm)(x)", "eval(parse(text = s))",
                  "x = readRDS('f.rds'); x()", "f = funs[[1]]; f('x')", "(function(g) g(1))(q)",
                  "obj$run()", "R6obj$new()$go()", "rlang::exec(nm, 1)", "f = print(q); f()",
                  "{q}()", "local(q)()", "switch('a', a = q)()", "body(f)[[2]] = quote(q()); f()",
@@ -737,7 +739,9 @@ test_that("direct literal targets and function values whose row is 4 are level 4
                  "writeLines('x', tempfile('x', '.gptr/extensions', '.R'))",
                  "aggregate(x = df, by = list(1), FUN = q)",
                  "peter$knit(eng, 'ls'); unlink('~', recursive = TRUE)",
-                 "file.remove('a', ); unlink('~', recursive = TRUE)", "dput(, '.Rprofile')")) {
+                 "file.remove('a', ); unlink('~', recursive = TRUE)", "dput(, '.Rprofile')",
+                 paste("'~'", mp, "unlink(recursive = TRUE)"),
+                 paste("x", mp, "saveRDS(., '.Rprofile')"), "gzfile('.Rprofile', 'w')")) {
     expect_identical(gptr_risk(code, envir = e, root = root)$level, 4L, label = code)
   }
   f = gptr_risk("peter$knit(eng, 'ls'); unlink('~', recursive = TRUE)", root = root)$flagged
@@ -787,7 +791,8 @@ test_that("common analysis code stays at 0 or 1 (D-132)", {
            "stats::quantile(df$a, 0.9)", "apply(m, 1, max)", "Reduce(`+`, 1:5)",
            "mapply(function(x, y) x + y, 1:3, 4:6)", "invisible(lapply(1:2, print))",
            "format(Sys.Date(), '%Y')", "list.files('data', pattern = 'csv$')",
-           "peter$read('R/a.R')", "peter$grep('TODO', 'R')", "peter$ls()")
+           "peter$read('R/a.R')", "peter$grep('TODO', 'R')", "peter$ls()",
+           "getwd(); tempfile(); new.env()", paste("df", mp, "dplyr::filter(a > 1)", mp, "head(2)"))
   for (code in zero) {
     expect_identical(gptr_risk(code, envir = e, root = root)$level, 0L, label = code)
   }
