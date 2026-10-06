@@ -64,10 +64,6 @@ test_that("the project scope needs a workspace", {
 test_that("file locks are released, and a lock of a dead process is broken (IC-71)", {
   local_gw()
   p = settings_path("user", create = TRUE)
-  lock = file_lock(p)
-  expect_true(dir.exists(lock))
-  file_unlock(lock)
-  expect_false(dir.exists(lock))
   dir.create(paste0(p, ".lock"))
   writeLines("999999999 1", file.path(paste0(p, ".lock"), "pid"))
   settings_write("user", list(preset = "minimal"))
@@ -1003,11 +999,11 @@ test_that("an acknowledgement another process records meanwhile is kept (IC-71)"
   local_gw()
   local_gptr_options(interactive = TRUE)
   local_mocked_bindings(gptr_confirm = function(question, default = FALSE) TRUE)
-  take_lock = file_lock
-  local_mocked_bindings(file_lock = function(path) {
+  take_lock = lock_with
+  local_mocked_bindings(lock_with = function(path, fun) {
     # another R process acknowledges a provider just before this one takes the lock
     writeLines("{\"egress\": {\"anthropic\": \"ack\"}}", path)
-    take_lock(path)
+    take_lock(path, fun)
   })
   expect_invisible(egress_check("corp"))
   expect_identical(settings_read("user")$egress, list(anthropic = "ack", corp = "ack"))

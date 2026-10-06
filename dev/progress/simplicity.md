@@ -283,3 +283,14 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Deviations: D-111 edited in place (FIX-5 closed). Open: P22 Task 3 `tools::file_ext(path)` and P11 Task 3
   (plan line 2981) `tools::file_ext(full)` literals fail the rule; plan text kept (`path_ext()` is in no
   plan: cross-plan undefined_function), implementers use it.
+
+## LOCK - One IC-71 short lock (2026-10-05)
+- `lock_with()`, `lock_stale()` in `R/auth-store.R` lock the credential store, settings and trust files
+  and (P18) the OAuth refresh and `mcp.json`; `auth_lock()`, `auth_lock_stale()`, `file_lock()`,
+  `file_unlock()`, `lock_stamp()`, `oauth_lock_with()` gone (R -94, tests -4; plan ~65).
+- Red: FAIL 3 (`lock_with` missing twice; a live holder's lock older than 30 s not stale). Green:
+  `auth-store|auth-oauth|gptr-config` PASS 606 (-2 duplicate file_lock() expectations). Lint clean.
+  Neighbours (20 filters: `auth-|gptr-|mcp-|doc-`, settings and auth-store users, `arch-layers|
+  lint-rules`) PASS 7626; cross-plan 0 errors, warn 82 (+2 recorded as P18 L1), no lints.
+- Reviews: none yet.
+- Deviations: D-153 (D-091 item 2 edited; 04 IC-71 safe-17 amended). Open: `doc-io.R` adopts it in P15-S.

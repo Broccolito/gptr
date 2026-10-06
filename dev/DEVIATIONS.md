@@ -1041,7 +1041,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 ## D-091 - P08 settings files: local_only validated, released locks not stale, tool named, safe rewrites (2026-10-04)
 - Rule: `R/gptr-config.R` Task 1:
   1. `settings_check_providers()`: every `providers.<id>` is an object and `local_only`, when given, is `TRUE` or `FALSE` (`arg = "providers.<id>.local_only"`; IC-74, 07 section 5); `NULL` is unset (strict `TRUE`). The protected value comes from the user file and the session layer only (D-094 item 1, D-114 item 2).
-  2. `lock_stale()`: an unreadable pid file, a missing lock directory or an unknown age is not stale (the 50 x 100 ms loop retries, IC-71); an empty lock directory older than 30 s is.
+  2. `lock_stale()` (P03's since D-153): an unreadable pid file, a missing lock directory or an unknown age is not stale (the 50 x 100 ms loop retries, IC-71); a lock older than 30 s is.
   3. `control_check()` fills `gptr_error_permission`'s `tool` from `run$tool_call$name` (else `"r"`), as P06's `session_control_check()` does.
   4. `settings_write()` loads the file with `settings_file_load()` (strict): text that is not a JSON object is `gptr_error_workspace` (`path`), signalled under the lock before writing, file and cache entry unchanged (P11 re-signals it unchanged); a blank file is `{}`; layered reads stay lenient (a diagnostic, empty).
   5. `settings_write()` merges into the unsimplified `json_decode()` object, so keys it does not change keep their JSON types; it returns the merged value as `settings_read()` simplifies it.
@@ -1854,3 +1854,17 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   4.6) may hold `NA`; no section amended.
 - Tests: test-subagent-backends.R "usage sums count each request once and keep unknown usage unknown (IC-74)",
   "writes that leave the overlay are found statically, nothing is evaluated". Evidence: progress/P19.md Task 1.
+
+## D-153 - P03/P08/P18 one IC-71 short lock: lock_with() and lock_stale() (2026-10-05)
+- Rule: `lock_with(path, fun, tries = 50L, wait = 0.1)` and `lock_stale(lock)` (`R/auth-store.R`) lock the
+  credential store, settings and trust files and (P18) the OAuth refresh and `mcp.json`; `auth_lock()`,
+  `auth_lock_stale()`, `file_lock()`, `file_unlock()`, `lock_stamp()` and `oauth_lock_with()` go. The pid
+  file is written atomically; one timeout text names the file (`what = "lock"`).
+- Rule: stale when older than 30 s or `pid_alive()` is `FALSE` (dead, reused or unparsable pid); a vanished
+  lock, or a fresh one without a readable pid file, is not (the taker retries). D-091 item 2 edited.
+- Contract-visible: a settings or trust lock older than 30 s is broken even while its holder lives, and an
+  unknown liveness (ps error) keeps a fresh one; `auth.json`'s vanished lock is retried, its unparsable pid
+  is stale and its timeout text changes. 04 IC-71 safe-17 row amended.
+- Tests: test-auth-store.R lock_stale() blocks (vanished flips to `FALSE`); test-auth-oauth.R "lock_with()
+  serialises, ..."; test-gptr-config.R (2 duplicate file_lock() expectations out). Evidence:
+  progress/simplicity.md LOCK.

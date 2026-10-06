@@ -175,7 +175,7 @@ oauth_parse_redirect = function(input, redirect_uri, state, issuer, iss_supporte
   code
 }
 
-# ---- Suggests, randomness, PKCE, locks -----------------------------------------------------
+# ---- Suggests, randomness, PKCE ------------------------------------------------------------
 
 #' Abort with gptr_error_missing_package unless a Suggests package loads; loading never moves
 #' the user's .Random.seed (IC-61)
@@ -204,33 +204,4 @@ pkce_new = function(verifier = NULL) {
   if (is.null(verifier)) verifier = b64url(openssl::rand_bytes(32L))
   list(verifier = verifier, challenge = b64url(openssl::sha256(charToRaw(verifier))),
        method = "S256")
-}
-
-#' Run fun() holding the short mkdir lock `<path>.lock/` (IC-71: pid and process creation time,
-#' `tries` x `wait` seconds, a stale lock is broken with P03's auth_lock_stale()); used for the
-#' OAuth refresh and for gptr's mcp.json
-#' @noRd
-oauth_lock_with = function(path, fun, tries = 50L, wait = 0.1) {
-  lock = paste0(path, ".lock")
-  dir.create(dirname(lock), recursive = TRUE, showWarnings = FALSE)
-  got = FALSE
-  for (i in seq_len(tries)) {
-    if (dir.create(lock, showWarnings = FALSE)) {
-      got = TRUE
-      break
-    }
-    if (auth_lock_stale(lock)) {
-      unlink(lock, recursive = TRUE, force = TRUE)
-      next
-    }
-    Sys.sleep(wait)
-  }
-  if (!got) {
-    gptr_abort(paste0("Could not lock ", basename(path), ": another R process holds the lock."),
-               "timeout", seconds = tries * wait, what = "lock")
-  }
-  on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
-  created = tryCatch(as.numeric(ps::ps_create_time(ps::ps_handle())), error = function(e) NA)
-  writeLines(paste(Sys.getpid(), format(created, digits = 15)), file.path(lock, "pid"))
-  fun()
 }

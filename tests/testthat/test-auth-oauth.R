@@ -95,15 +95,15 @@ test_that("redirects are checked for target, state and iss before the code is us
                class = "gptr_error_untrusted")
 })
 
-test_that("oauth_lock_with() serialises, waits for a live holder and breaks stale locks", {
+test_that("lock_with() serialises, waits for a live holder and breaks stale locks", {
   path = file.path(withr::local_tempdir(), "mcp.json")
   lock = paste0(path, ".lock")
-  expect_true(oauth_lock_with(path, function() dir.exists(lock)))
+  expect_true(lock_with(path, function() dir.exists(lock)))
   expect_false(dir.exists(lock))
   dir.create(lock)
   me = paste(Sys.getpid(), format(as.numeric(ps::ps_create_time(ps::ps_handle())), digits = 15))
   writeLines(me, file.path(lock, "pid"))
-  expect_error(oauth_lock_with(path, function() "ran", tries = 3L, wait = 0.01),
+  expect_error(lock_with(path, function() "ran", tries = 3L, wait = 0.01),
                class = "gptr_error_timeout")
   unlink(lock, recursive = TRUE)
   skip_on_cran()
@@ -112,7 +112,7 @@ test_that("oauth_lock_with() serialises, waits for a live holder and breaks stal
   dead$wait(10000)
   dir.create(lock)
   writeLines(paste(dead$get_pid(), 1), file.path(lock, "pid"))
-  expect_identical(oauth_lock_with(path, function() "ran"), "ran")
+  expect_identical(lock_with(path, function() "ran"), "ran")
   expect_false(dir.exists(lock))
 })
 

@@ -76,53 +76,39 @@ auth_store_read = function() {
   x
 }
 
-#' Is a store lock stale (older than 30 s, or its holder is gone or its pid was reused)?
+#' Is a short lock stale: older than 30 s, or its holder dead or its pid reused (IC-71)?
 #'
-#' A lock whose pid file is not written yet is held (its creator is between dir.create() and
-#' writeLines()); the recorded creation time tells a reused pid from the holder (IC-71).
+#' A vanished lock is not (the taker retries dir.create()), nor a fresh one whose pid file is
+#' missing or unreadable (its holder is writing or releasing it).
 #' @noRd
-auth_lock_stale = function(lock) {
-  mtime = file.info(lock)$mtime
-  if (is.na(mtime)) return(TRUE)
-  if (as.numeric(difftime(Sys.time(), mtime, units = "secs")) > 30) return(TRUE)
-  pid_file = file.path(lock, "pid")
-  holder = if (file.exists(pid_file)) {
-    tryCatch(readLines(pid_file, n = 1L, warn = FALSE, encoding = "UTF-8"),
-             error = function(e) character(), warning = function(w) character())
-  } else {
-    character()
-  }
-  if (!length(holder)) return(FALSE)
-  parts = strsplit(holder, " ", fixed = TRUE)[[1]]
-  pid = suppressWarnings(as.integer(parts[1]))
-  created = suppressWarnings(as.numeric(parts[2]))
-  if (is.na(pid)) return(FALSE)
-  alive = tryCatch({
-    h = ps::ps_handle(pid)
-    ps::ps_is_running(h) &&
-      (is.na(created) || abs(as.numeric(ps::ps_create_time(h)) - created) < 1)
-  }, error = function(e) if (proc_error_absent(e, pid)) FALSE else NA)
-  identical(alive, FALSE)
+lock_stale = function(lock) {
+  age = as.numeric(Sys.time()) - as.numeric(file.info(lock, extra_cols = FALSE)$mtime)
+  if (is.na(age)) return(FALSE)
+  if (age > 30) return(TRUE)
+  txt = tryCatch(read_utf8(file.path(lock, "pid"))$text,
+                 error = function(e) NULL, warning = function(w) NULL)
+  if (is.null(txt)) return(FALSE)
+  stamp = suppressWarnings(as.numeric(strsplit(trimws(txt), " ", fixed = TRUE)[[1L]]))
+  !pid_alive(stamp[1L], stamp[2L])
 }
 
-#' Take the store lock (a directory next to the file); returns its path
+#' Run fun() holding the short mkdir lock `<path>.lock/` (IC-71: pid and creation time, `tries` x
+#' `wait` s, a stale lock is broken); returns fun()'s value
 #' @noRd
-auth_lock = function(path) {
+lock_with = function(path, fun, tries = 50L, wait = 0.1) {
   lock = paste0(path, ".lock")
-  for (attempt in 1:50) {
+  dir.create(dirname(lock), recursive = TRUE, showWarnings = FALSE)
+  for (i in seq_len(tries)) {
     if (dir.create(lock, showWarnings = FALSE)) {
-      created = tryCatch(as.numeric(ps::ps_create_time(ps::ps_handle())), error = function(e) NA)
-      writeLines(paste(Sys.getpid(), created), file.path(lock, "pid"))
-      return(lock)
+      on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
+      write_atomic(file.path(lock, "pid"),
+                   paste(Sys.getpid(), format(proc_create_time(Sys.getpid()), digits = 15)))
+      return(fun())
     }
-    if (auth_lock_stale(lock)) {
-      unlink(lock, recursive = TRUE, force = TRUE)
-      next
-    }
-    Sys.sleep(0.1)
+    if (lock_stale(lock)) unlink(lock, recursive = TRUE, force = TRUE) else Sys.sleep(wait)
   }
-  gptr_abort("The credential store is locked by another R process; try again.", "timeout",
-             seconds = 5, what = "auth.json lock")
+  gptr_abort(paste0("The file ", path, " is locked by another R process; try again."),
+             "timeout", seconds = tries * wait, what = "lock")
 }
 
 #' Read-modify-write the store under its lock: fun(all) -> all
@@ -132,16 +118,14 @@ auth_store_update = function(fun) {
   on.exit(Sys.umask(old), add = TRUE)
   p = auth_store_path(create = TRUE)
   if (.Platform$OS.type == "unix") Sys.chmod(dirname(p), "0700", use_umask = FALSE)
-  lock = auth_lock(p)
-  on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
-  if (.Platform$OS.type == "unix" && file.exists(p)) {
-    Sys.chmod(p, "0600", use_umask = FALSE)
-  }
-  all = fun(auth_store_read())
-  if (!length(all)) all = json_obj()
-  write_atomic(p, json_encode(all, pretty = TRUE))
-  if (.Platform$OS.type == "unix") Sys.chmod(p, "0600", use_umask = FALSE)
-  invisible(all)
+  lock_with(p, function() {
+    if (.Platform$OS.type == "unix" && file.exists(p)) Sys.chmod(p, "0600", use_umask = FALSE)
+    all = fun(auth_store_read())
+    if (!length(all)) all = json_obj()
+    write_atomic(p, json_encode(all, pretty = TRUE))
+    if (.Platform$OS.type == "unix") Sys.chmod(p, "0600", use_umask = FALSE)
+    invisible(all)
+  })
 }
 
 #' The vault name of a stored secret field

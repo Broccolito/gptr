@@ -287,11 +287,11 @@ settings_file_write = function(path, value) {
 #' or NULL to leave the file. Returns list(value, hash), the hash of the bytes written, invisibly.
 #' @noRd
 settings_file_update = function(path, fun) {
-  lock = file_lock(path)
-  on.exit(file_unlock(lock), add = TRUE)
-  value = fun(if (file.exists(path)) settings_decode(path, strict = TRUE) else list())
-  if (is.null(value)) return(invisible(NULL))
-  invisible(list(value = value, hash = settings_file_write(path, value)))
+  lock_with(path, function() {
+    value = fun(if (file.exists(path)) settings_decode(path, strict = TRUE) else list())
+    if (is.null(value)) return(invisible(NULL))
+    invisible(list(value = value, hash = settings_file_write(path, value)))
+  })
 }
 
 #' Merges a patch at top level; a NULL value removes the key
@@ -301,55 +301,6 @@ settings_merge_top = function(cur, patch) {
     if (is.null(patch[[k]])) cur[[k]] = NULL else cur[k] = list(patch[[k]])
   }
   cur
-}
-
-# ------------------------------------------------------------------ short file locks (IC-71)
-
-#' Takes a short `mkdir` lock next to `path` (pid + creation time; 50 x 100 ms retries)
-#' @noRd
-file_lock = function(path) {
-  lock = paste0(path, ".lock")
-  dir.create(dirname(lock), recursive = TRUE, showWarnings = FALSE)
-  for (i in seq_len(50L)) {
-    if (dir.create(lock, showWarnings = FALSE)) {
-      write_atomic(file.path(lock, "pid"), lock_stamp())
-      return(lock)
-    }
-    if (lock_stale(lock)) unlink(lock, recursive = TRUE) else Sys.sleep(0.1)
-  }
-  gptr_abort(paste0("The file ", path, " is locked by another R process; try again."),
-             "timeout", seconds = 5, what = "lock")
-}
-
-#' Releases a lock taken by file_lock()
-#' @noRd
-file_unlock = function(lock) invisible(unlink(lock, recursive = TRUE))
-
-#' "<pid> <process creation time>" of this process
-#' @noRd
-lock_stamp = function() {
-  ct = tryCatch(as.numeric(ps::ps_create_time(ps::ps_handle())), error = function(e) NA_real_)
-  paste(Sys.getpid(), format(ct, digits = 15))
-}
-
-#' A lock is stale when its owner is dead (pid_alive()) or it has had no pid file for 30 s; one
-#' that disappears while examined is not stale (the caller retries)
-#' @noRd
-lock_stale = function(lock) {
-  if (!dir.exists(lock)) return(FALSE)
-  pf = file.path(lock, "pid")
-  if (!file.exists(pf)) {
-    age = as.numeric(difftime(Sys.time(), file.info(lock)$mtime, units = "secs"))
-    return(!is.na(age) && age > 30)
-  }
-  txt = tryCatch(read_utf8(pf)$text, error = function(e) NULL)
-  if (is.null(txt)) return(FALSE)
-  parts = strsplit(trimws(txt), " ", fixed = TRUE)[[1L]]
-  pid = suppressWarnings(as.integer(parts[1L]))
-  ct = suppressWarnings(as.numeric(parts[2L]))
-  if (is.na(pid)) return(TRUE)
-  !isTRUE(tryCatch(pid_alive(pid, create_time = if (is.na(ct)) NULL else ct),
-                   error = function(e) FALSE))
 }
 
 # ------------------------------------------------------------------ settings I/O (contract 7.8)
@@ -1409,12 +1360,12 @@ template_copy = function(name, dest) {
 #' keeping the trust that held before (trust_carry(); IC-52)
 #' @noRd
 init_settings = function(root, dest) {
-  lock = file_lock(dest)
-  on.exit(file_unlock(lock), add = TRUE)
-  was = trust_holds(root)
-  hash = template_copy("settings.json", dest)
-  if (!is.null(hash)) trust_carry(root, was, dest, hash)
-  invisible(!is.null(hash))
+  lock_with(dest, function() {
+    was = trust_holds(root)
+    hash = template_copy("settings.json", dest)
+    if (!is.null(hash)) trust_carry(root, was, dest, hash)
+    invisible(!is.null(hash))
+  })
 }
 
 #' Offers `^\.gptr$` for .Rbuildignore in a package source; never writes it silently (13 2.3)

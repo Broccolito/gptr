@@ -100,15 +100,15 @@ test_that("a lock is stale only when its holder is gone, its pid was reused, or 
   d = withr::local_tempdir()
   lock = file.path(d, "auth.json.lock")
   dir.create(lock)
-  expect_false(auth_lock_stale(lock))               # pid file not written yet: still held
+  expect_false(lock_stale(lock))                    # pid file not written yet: still held
   me = as.numeric(ps::ps_create_time(ps::ps_handle()))
   writeLines(paste(Sys.getpid(), me), file.path(lock, "pid"))
-  expect_false(auth_lock_stale(lock))               # held by this live process
+  expect_false(lock_stale(lock))                    # held by this live process
   writeLines(paste(Sys.getpid(), me - 1000), file.path(lock, "pid"))
-  expect_true(auth_lock_stale(lock))                # same pid, other creation time: reused
+  expect_true(lock_stale(lock))                     # same pid, other creation time: reused
   writeLines("999999999 0", file.path(lock, "pid"))
-  expect_true(auth_lock_stale(lock))                # holder not running
-  expect_true(auth_lock_stale(file.path(d, "missing.lock")))
+  expect_true(lock_stale(lock))                     # holder not running
+  expect_false(lock_stale(file.path(d, "missing.lock")))  # vanished: the taker retries
 })
 
 test_that("Linux missing-process errors release a lock only with confirmed holder absence", {
@@ -126,14 +126,14 @@ test_that("Linux missing-process errors release a lock only with confirmed holde
     ps_pids = function() pids,
     .package = "ps"
   )
-  expect_true(auth_lock_stale(lock))
+  expect_true(lock_stale(lock))
   pids = c(Sys.getpid(), 42L)
-  expect_false(auth_lock_stale(lock))
+  expect_false(lock_stale(lock))
   pids = integer()
-  expect_false(auth_lock_stale(lock))
+  expect_false(lock_stale(lock))
   pids = Sys.getpid()
   code = codes[["EACCES"]]
-  expect_false(auth_lock_stale(lock))
+  expect_false(lock_stale(lock))
 })
 
 test_that("malformed stores and credential fields fail before writing values", {
@@ -199,7 +199,7 @@ test_that("a fresh lock with unknown liveness stays held", {
   testthat::local_mocked_bindings(
     ps_handle = function(...) stop("synthetic permission failure"), .package = "ps"
   )
-  expect_false(auth_lock_stale(lock))
+  expect_false(lock_stale(lock))
   Sys.setFileTime(lock, Sys.time() - 31)
-  expect_true(auth_lock_stale(lock))
+  expect_true(lock_stale(lock))
 })
