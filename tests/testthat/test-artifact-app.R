@@ -732,3 +732,203 @@ test_that("the shiny-bslib skill has its catalog line, house style and a valid e
   skip_if_not_installed("bslib")
   expect_true(artifact_static_check(code)$ok)
 })
+
+test_that("builtin:artifacts registers the types, the member, the section and the checkpointer", {
+  expect_true(is.function(builtin_artifacts))
+  for (kind in c("shiny", "html")) {
+    spec = registry_get("artifact_type", kind)
+    expect_s3_class(spec, "gptr_artifact_type")
+    expect_true(all(vapply(spec[c("build", "check", "launch", "stop")], is.function, NA)))
+  }
+  app = registry_get("tool", "app")
+  expect_identical(app$exposure, "r")
+  expect_true(is.function(app$fun) && is.function(app$execute))
+  expect_identical(names(formals(app$fun)), c("id", "data", "title", "kind", "check", "launch"))
+  fmls = formals(app$fun)
+  expect_identical(fmls$data, quote(character()))
+  expect_null(fmls$title)
+  expect_identical(fmls$kind, "shiny")
+  expect_true(fmls$check)
+  expect_identical(fmls$launch, quote(interactive()))
+  expect_identical(app$risk(list(id = "x"), NULL)$level, 3L)
+  sec = registry_get("prompt_section", "artifacts")
+  expect_identical(sec$tier, "T0")
+  expect_identical(sec$order, 600L)
+  expect_identical(sec$budget, 150L)
+  ck = registry_get("checkpointer", "artifacts")
+  expect_identical(ck$scope, "artifacts")
+})
+
+test_that("the artifacts section is architecture 7.3 verbatim and needs shiny", {
+  expect_identical(artifact_section_text, paste0(
+    "For an interactive view (filters, drill-down, dashboards) build a Shiny app, not HTML/JS: ",
+    "write app.R in <artifacts>/<id>/ (the directory is named in <environment>), one file ",
+    "ending in shinyApp(ui, server) that uses the objects listed in data by name, then launch ",
+    "it in r with peter$app(\"<id>\", data = c(\"obj\")). Read the shiny-bslib skill first. ",
+    "Revise app.R with edit and call peter$app() again; check the returned screenshot and errors ",
+    "before saying it is done."))
+  local_mocked_bindings(artifact_shiny_available = function() TRUE)
+  expect_identical(artifact_section(NULL), artifact_section_text)
+  local_mocked_bindings(artifact_shiny_available = function() FALSE)
+  expect_null(artifact_section(NULL))
+})
+
+test_that("peter$app() refuses reserved ids, unknown kinds and a missing working copy", {
+  local_project()
+  expect_error(peter$app("con"), class = "gptr_error_invalid_argument")
+  cnd = expect_error(peter$app("x", kind = "nope", launch = FALSE),
+                     class = "gptr_error_invalid_argument")
+  expect_identical(cnd$arg, "kind")
+  expect_match(conditionMessage(cnd), "html, shiny|shiny, html")
+  cnd = expect_error(peter$app("nothing-yet", launch = FALSE), class = "gptr_error_artifact")
+  expect_identical(cnd$stage, "parse")
+  expect_match(conditionMessage(cnd), ".gptr/artifacts/nothing-yet/app.R", fixed = TRUE)
+  cnd = expect_error(peter$app("nothing-yet", check = FALSE, launch = FALSE),
+                     class = "gptr_error_artifact")
+  expect_identical(cnd$stage, "parse")
+  expect_match(conditionMessage(cnd), "working copy in .gptr/artifacts/nothing-yet", fixed = TRUE)
+})
+
+test_that("a second peter$app() after an edit creates v002 without touching v001", {
+  skip_if_not_installed("shiny")
+  local_project()
+  markers = data.frame(gene = c("CD14", "LYZ"), p = c(0.01, 0.2))
+  here = environment()
+  here[["a/b"]] = 1:3 # 05 P23 acceptance 5 names the object a/b
+  write_working("explorer", ok_app)
+  h1 = peter$app("explorer", data = c("markers", "a/b"), title = "Explorer", launch = FALSE)
+  expect_s3_class(h1, "gptr_artifact")
+  expect_identical(h1$version, 1L)
+  expect_identical(h1$status, "stopped")
+  expect_identical(h1$checks$parse, TRUE)
+  expect_true(is.na(h1$checks$launch))
+  v1 = artifact_version_dir("explorer", 1L)
+  expect_true(all(file.exists(file.path(v1, c("app.R", "R/gptr_data.R", "data/001.rds",
+                                              "data/002.rds")))))
+  md5_v1 = tools::md5sum(list.files(v1, recursive = TRUE, full.names = TRUE))
+  meta = artifact_meta_read("explorer")
+  expect_identical(meta$title, "Explorer")
+  expect_identical(vapply(meta$versions[[1]]$data, function(d) d$name, ""), c("markers", "a/b"))
+  expect_identical(meta$versions[[1]]$data[[2]]$file, "data/002.rds")
+  expect_identical(meta$versions[[1]]$app_sha,
+                   hash_sha256(readBin(file.path(v1, "app.R"), "raw", 1e5)))
+  write_working("explorer", sub("'Gene'", "'Gene symbol'", ok_app))
+  markers$p = markers$p / 2
+  h2 = peter$app("explorer", data = "markers", launch = FALSE)
+  expect_identical(h2$version, 2L)
+  expect_identical(h2$title, "Explorer")
+  expect_identical(tools::md5sum(names(md5_v1)), md5_v1)
+  expect_true(any(grepl("Gene symbol", readLines(file.path(artifact_version_dir("explorer", 2L),
+                                                           "app.R")))))
+  expect_identical(readRDS(file.path(artifact_version_dir("explorer", 2L), "data", "001.rds")),
+                   markers)
+  expect_identical(as.integer(artifact_meta_read("explorer")$current), 2L)
+})
+
+test_that("failed static checks raise gptr_error_artifact and leave no version", {
+  skip_if_not_installed("shiny")
+  local_project()
+  write_working("bad", c(ok_app[1:5], "setwd('/')", ok_app[6]))
+  cnd = expect_error(peter$app("bad", launch = FALSE), class = "gptr_error_artifact")
+  expect_identical(cnd$id, "bad")
+  expect_identical(cnd$stage, "static")
+  expect_match(cnd$log, "setwd", fixed = TRUE)
+  expect_false(dir.exists(artifact_version_dir("bad", 1L)))
+  expect_false(artifact_exists("bad"))
+  h = peter$app("bad", check = FALSE, launch = FALSE)
+  expect_true(is.na(h$checks$parse))
+})
+
+test_that("a failed snapshot removes the version it claimed", {
+  local_project()
+  write_working("snapfail", ok_app)
+  expect_error(peter$app("snapfail", data = "no_such_object", check = FALSE, launch = FALSE),
+               class = "gptr_error_invalid_argument")
+  expect_false(dir.exists(artifact_version_dir("snapfail", 1L)))
+})
+
+test_that("kind = \"html\" wraps page.html in a Shiny app version", {
+  local_project()
+  markers = data.frame(gene = "CD14")
+  write_working("page", "<html><head></head><body><div id='x'></div></body></html>", "page.html")
+  h = peter$app("page", data = "markers", kind = "html", launch = FALSE)
+  expect_identical(h$kind, "html")
+  expect_identical(basename(h$path), "page.html")
+  vdir = artifact_version_dir("page", 1L)
+  expect_true(all(file.exists(file.path(vdir, c("app.R", "page.html", "data/001.rds")))))
+  expect_identical(artifact_meta_read("page")$kind, "html")
+  expect_identical(artifact_meta_read("page")$versions[[1]]$kind, "html")
+})
+
+test_that("the tool form returns the handle's lines and attaches the screenshot to the r call", {
+  local_project()
+  e = new.env()
+  e$markers = data.frame(gene = "CD14")
+  write_working("tool", ok_app)
+  res = artifact_member_execute(list(id = "tool", data = list("markers"), check = FALSE,
+                                     launch = FALSE),
+                                list(session = NULL, envir = e))
+  expect_s3_class(res, "gptr_tool_result")
+  expect_s3_class(res$value, "gptr_artifact")
+  expect_identical(res$content[[1]]$text, paste(format(res$value), collapse = "\n"))
+  expect_identical(res$details$status, "stopped")
+  expect_identical(res$details$path, ".gptr/artifacts/tool/app.R")
+  expect_identical(length(res$content), 1L)
+  png = file.path(artifact_dir("tool"), "shot.png")
+  writeBin(as.raw(c(0x89, 0x50, 0x4e, 0x47)), png)
+  block = artifact_screenshot_block(list(screenshot = png))
+  expect_identical(block$source, "screenshot")
+  expect_identical(c(block$width, block$height), c(1000L, 700L))
+  expect_false(artifact_attach_image(block))
+  gptr_r_call = structure(new.env(), class = "gptr_r_call")
+  gptr_r_call$images = list()
+  gptr_r_call$dropped = 0L
+  local_gptr_options(r_max_images = 1L)
+  attach_twice = function() c(artifact_attach_image(block), artifact_attach_image(block))
+  expect_identical(attach_twice(), c(TRUE, FALSE))
+  expect_length(gptr_r_call$images, 1L)
+  expect_identical(gptr_r_call$dropped, 1L)
+})
+
+test_that("peter$app() launches through the ladder and keeps .Random.seed (IC-61)", {
+  skip_if_cannot_launch()
+  local_project()
+  withr::defer(artifact_browser_close())
+  markers = data.frame(gene = c("CD14", "LYZ"))
+  write_working("live", ok_app)
+  withr::local_seed(11)
+  seed = get(".Random.seed", envir = globalenv())
+  h = peter$app("live", data = "markers", launch = TRUE, check = TRUE)
+  withr::defer(artifact_stop("live", emit = FALSE))
+  expect_identical(get(".Random.seed", envir = globalenv()), seed)
+  expect_identical(h$status, "running")
+  expect_true(h$checks$parse && h$checks$launch && h$checks$http)
+  expect_match(h$url, "^http://127\\.0\\.0\\.1:[0-9]+/\\?gptr_token=[0-9a-f]{32}$")
+  pid = artifact_proc_get("live")$pid
+  ct = proc_create_time(pid)
+  artifact_stop("live")
+  expect_false(isTRUE(pid_alive(pid, ct)))
+  expect_identical(artifact_handle("live")$status, "stopped")
+})
+
+test_that("undo relaunches the version that was running, on the same port", {
+  skip_if_cannot_launch()
+  local_project()
+  write_working("rew", tiny_app)
+  peter$app("rew", launch = TRUE, check = FALSE)
+  withr::defer(artifact_stop("rew", emit = FALSE))
+  port = artifact_proc_get("rew")$port
+  token = artifact_ckpt_before(list(name = "r"), NULL)
+  write_working("rew", sub("'hi'", "'v2'", tiny_app))
+  peter$app("rew", launch = TRUE, check = FALSE)
+  frag = artifact_ckpt_after(list(name = "r"), NULL, token)
+  expect_identical(frag[[1]][c("current_before", "current_after", "running_before",
+                               "running_after")],
+                   list(current_before = 1L, current_after = 2L, running_before = TRUE,
+                        running_after = TRUE))
+  expect_identical(artifact_ckpt_undo(frag, NULL, FALSE),
+                   "artifact rew: current version 1 (relaunched)")
+  expect_identical(artifact_proc_get("rew")$version, 1L)
+  expect_identical(artifact_proc_get("rew")$port, port)
+  expect_identical(artifact_status("rew"), "running")
+})

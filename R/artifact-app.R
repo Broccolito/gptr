@@ -372,8 +372,9 @@ artifact_version_claim = function(id) {
   n = max(0L, as.integer(substring(list.files(artifact_dir(id), "^v[0-9]{3,}$"), 2L))) + 1L
   while (!dir.create(artifact_version_dir(id, n), showWarnings = FALSE)) {
     if (!dir.exists(artifact_version_dir(id, n))) {
-      gptr_abort(paste0("Could not create a version directory of artifact ", id, "."),
-                 "artifact", id = id, stage = "snapshot", log = character())
+      gptr_abort(paste0("Artifact ", id, " has no working copy in ", path_rel(artifact_dir(id)),
+                        ": write it first."),
+                 "artifact", id = id, stage = "parse", log = character())
     }
     n = n + 1L
   }
@@ -1044,3 +1045,187 @@ artifact_ckpt_describe = function(fragment) {
     paste0("artifact ", r$id, ": ", v(r$current_before), " -> ", v(r$current_after))
   }, character(1))
 }
+
+# ---- peter$app(), the artifacts section and builtin:artifacts ---------------------------------
+
+#' peter$app(): check, snapshot, build and optionally launch one new version (architecture 6.15)
+#'
+#' `envir` is where the objects named in `data` are looked up; it is read only through leaf
+#' functions and never kept [R1][R2]. A version claimed by a call that fails before its build
+#' finished is removed again; a version that fails to launch stays (immutable) with its checks.
+#' @return The `gptr_artifact` handle.
+#' @noRd
+artifact_app = function(id, data, title, kind, check, launch, envir, ctx = NULL) {
+  artifact_id_check(id)
+  check_strings(data, "data")
+  check_string(title, "title", null = TRUE)
+  check_flag(check, "check")
+  check_flag(launch, "launch")
+  type = artifact_type_get(kind, ctx)
+  if (!isTRUE(artifact_state$swept)) artifact_sweep()
+  dir = artifact_dir(id)
+  if (check) {
+    st = type$check(dir, ctx)
+    if (!isTRUE(st$ok)) {
+      msgs = as.character(st$messages)
+      gptr_abort(paste0("Artifact ", id, " failed its static checks:\n",
+                        paste0("- ", msgs, collapse = "\n")),
+                 "artifact", id = id, stage = st$stage %||% "static", log = msgs)
+    }
+  }
+  meta = artifact_meta_read(id) %||% artifact_meta_new(id, title, kind)
+  n = artifact_version_claim(id)
+  vdir = artifact_version_dir(id, n)
+  built = FALSE
+  on.exit(if (!built) unlink(vdir, recursive = TRUE), add = TRUE)
+  records = artifact_snapshot(vdir, data, envir, id = id)
+  type$build(id, vdir, records, ctx)
+  built = TRUE
+  file = artifact_working_file(dir, kind)
+  if (!is.null(title)) meta$title = title
+  meta$kind = kind
+  meta$versions = c(meta$versions, list(list(
+    n = n, created = artifact_time(),
+    app_sha = if (!dir.exists(file)) hash_sha256(readBin(file, "raw", file.size(file))),
+    data = records, session = ctx$session$id,
+    checks = artifact_checks_json(artifact_checks(parse = if (check) TRUE else NA)), kind = kind
+  )))
+  meta$current = n
+  artifact_meta_write(id, meta)
+  if (launch) return(artifact_start(id, n, type, ctx = ctx, session_check = check))
+  artifact_handle(id)
+}
+
+#' The screenshot of a handle as an image block, or NULL
+#' @noRd
+artifact_screenshot_block = function(handle) {
+  png = handle$screenshot
+  if (is.null(png) || !file.exists(png)) return(NULL)
+  block_image(readBin(png, "raw", file.size(png)), source = "screenshot",
+              width = artifact_shot_size[["width"]], height = artifact_shot_size[["height"]])
+}
+
+#' Attach an image block to the result of the innermost running `r` call; FALSE outside one
+#'
+#' P10's r-call marker (the binding `gptr_r_call` of class `gptr_r_call`) is read by data:
+#' tool-namespace.R is an L4 file outside this area (Self-review ambiguity 3). Frames are walked
+#' with sys.frame(k), never sys.frames() (rule R3); the cap is gptr.r_max_images, refusals are
+#' counted in `dropped` (IC-67).
+#' @noRd
+artifact_attach_image = function(block) {
+  k = sys.nframe() - 1L
+  while (k > 0L) {
+    rc = get0("gptr_r_call", envir = sys.frame(k), inherits = FALSE)
+    if (inherits(rc, "gptr_r_call")) {
+      if (length(rc$images) >= as.integer(gptr_opt("r_max_images"))) {
+        rc$dropped = rc$dropped + 1L
+        return(FALSE)
+      }
+      rc$images = c(rc$images, list(block))
+      return(TRUE)
+    }
+    k = k - 1L
+  }
+  FALSE
+}
+
+#' The member's R form, `peter$app()` called by the user (contract 9.4)
+#'
+#' Objects are looked up in the frame that called `peter$app()`: inside P10's member closure (which
+#' evaluates this function in its own frame) the closure's caller, found by frame numbers through
+#' sys.parents(), never sys.frames() (rule R3); called directly, its own caller. The frame is used
+#' during the call only [R2].
+#' @noRd
+artifact_member_fun = function(id, data = character(), title = NULL, kind = "shiny",
+                               check = TRUE, launch = interactive()) {
+  k = sys.parent()
+  envir = if (k > 0L && inherits(sys.function(k), "gptr_member")) {
+    sys.frame(sys.parents()[k])
+  } else {
+    parent.frame()
+  }
+  artifact_app(id, data, title, kind, check, launch, envir = envir)
+}
+
+#' The member's tool form: model code reaches it through P06's dispatch_nested(); objects are
+#' looked up in the run's evaluation environment. Appends the `gptr.artifact` entry (contract 4.6)
+#' and attaches the screenshot to the running `r` result.
+#' @noRd
+artifact_member_execute = function(input, ctx) {
+  envir = run_eval_env(run_current()) %||% ctx$envir %||% globalenv()
+  handle = artifact_app(input$id, as.character(unlist(input$data)), input$title,
+                        input$kind %||% "shiny", input$check %||% TRUE,
+                        input$launch %||% interactive(), envir = envir, ctx = ctx)
+  data = list(id = handle$id, version = handle$version,
+              url = if (!is.na(handle$url)) handle$url, status = handle$status,
+              checks = artifact_checks_json(handle$checks))
+  if (!is.null(ctx$session)) {
+    session_append(ctx$session, list(type = "custom", custom_type = "gptr.artifact", data = data))
+  }
+  block = artifact_screenshot_block(handle)
+  if (!is.null(block)) artifact_attach_image(block)
+  gptr_tool_result(format(handle), images = if (!is.null(block)) list(block),
+                   details = c(data, list(path = path_rel(handle$path))), value = handle)
+}
+
+#' The `app` member spec: `fun` for user calls, `execute` for model code (IC-37); risk level 3,
+#' launching model-written code (architecture 6.15)
+#' @noRd
+artifact_tool_spec = function() {
+  properties = list(
+    id = list(type = "string", description = "Artifact id: lower-case letters, digits and '-'."),
+    data = list(type = "array", items = list(type = "string"),
+                description = "Names of session objects the app uses by name."),
+    title = list(type = "string", description = "Short title."),
+    kind = list(type = "string", description = "A registered artifact type: shiny or html."),
+    check = list(type = "boolean", description = "Run the static and session checks."),
+    launch = list(type = "boolean", description = "Start the app (default: interactive()).")
+  )
+  gptr_tool("app", paste0(
+    "Launch the Shiny app written in <artifacts>/<id>/app.R as a new immutable version, with ",
+    "the session objects named in data snapshotted into it; returns the URL, the validation ",
+    "checks and a screenshot."
+  ), parameters = list(type = "object", required = I("id"), properties = properties),
+  execute = artifact_member_execute, fun = artifact_member_fun, exposure = "r",
+  risk = function(input, ctx) {
+    list(level = 3L, categories = "process",
+         paths = if (rlang::is_string(input$id)) path_rel(artifact_dir(input$id)) else character())
+  })
+}
+
+#' The `artifacts` section text (architecture 7.3, verbatim; IC-68)
+#' @noRd
+artifact_section_text = paste0(
+  "For an interactive view (filters, drill-down, dashboards) build a Shiny app, not HTML/JS: ",
+  "write app.R in <artifacts>/<id>/ (the directory is named in <environment>), one file ending ",
+  "in shinyApp(ui, server) that uses the objects listed in data by name, then launch it in r ",
+  "with peter$app(\"<id>\", data = c(\"obj\")). Read the shiny-bslib skill first. Revise app.R ",
+  "with edit and call peter$app() again; check the returned screenshot and errors before saying ",
+  "it is done."
+)
+
+#' The `artifacts` section: present only when shiny is installed (contract 9.3)
+#' @noRd
+artifact_section = function(ctx) if (artifact_shiny_available()) artifact_section_text
+
+#' builtin:artifacts (contract 7.23): the artifact types `shiny` and `html`, the member `app`, the
+#' `artifacts` section and the `artifacts` checkpointer
+#' @noRd
+builtin_artifacts = function(gptr) {
+  gptr$register(gptr_spec("artifact_type", "shiny", build = artifact_build_shiny,
+                          check = artifact_check_shiny, launch = artifact_launch_shiny,
+                          stop = artifact_stop_handle))
+  gptr$register(gptr_spec("artifact_type", "html", build = artifact_build_html,
+                          check = artifact_check_html, launch = artifact_launch_shiny,
+                          stop = artifact_stop_handle))
+  gptr$register(artifact_tool_spec())
+  gptr$register(gptr_prompt_section("artifacts", artifact_section, tier = "T0", order = 600L,
+                                    budget = 150L))
+  gptr$register(gptr_spec("checkpointer", "artifacts", scope = "artifacts",
+                          before = artifact_ckpt_before, after = artifact_ckpt_after,
+                          undo = artifact_ckpt_undo, redo = artifact_ckpt_redo,
+                          describe = artifact_ckpt_describe))
+  invisible(NULL)
+}
+
+on_load(ext_declare_builtin("artifacts", builtin_artifacts))
