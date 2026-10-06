@@ -2065,3 +2065,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   `image_tokens`, `catalog` and `facts` are unchanged.
 - Contract-visible: none.
 - Tests: token bench `run.R --check`. Evidence: progress/P22.md Task 11.
+
+## D-169 - P16 the rewind note is its own `rewind` context block, not a second `workspace_changes` (2026-10-06)
+- Rule: P07 renders one `context_block` record per name (`prompt_specs()`, IC-69 per-record override), so the
+  plan's second `workspace_changes` record (order 101) shadowed P09's block; `builtin:checkpoints` registers
+  `rewind` (placement `both`, order 101, budget 300), rendered once after a partial rewind as
+  `<rewind since="turn k">` with the not-restored items (04 section 4.1.1: the kind name is the spec name).
+- Contract-visible: 03 section 6.16's `<workspace_changes since=... reason="rewind">` becomes
+  `<rewind since=...>` (not amended); P16 Task 7's block test expects the `rewind` tag.
+- Tests: test-ckpt-rewind.R "builtin:checkpoints registers three checkpointers, ...", "a session's state is
+  found by its shell ..." (block once); test-env-snapshot.R P09 block regression. Evidence: progress/P16.md Task 6.
+
+## D-170 - P16 IC-41's in-run edit copy rows run with checkpoints off (2026-10-06)
+- Rule: with `gptr.checkpoint = "on"` the objects checkpointer holds a by-reference pre-image of every value
+  binding of the home during a mutating call (03 section 6.16), so the agent's in-place edit copies once (G7
+  row c04); the three IC-41 `in_run_edit` rows of test-copy-gateway.R test the gateway's capture and now set
+  `options(gptr.checkpoint = 'off')`. The user's next edit after the run still copies nothing.
+- Contract-visible: IC-41's in-run rows expect 0 copies only with checkpoints off (not amended).
+- Tests: test-copy-gateway.R (3 in-run rows); test-copy-ckpt.R c04 rows. Evidence: progress/P16.md Task 6.

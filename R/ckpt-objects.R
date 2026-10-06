@@ -760,6 +760,14 @@ ckpt_objects_notes = function(fragment) {
   out
 }
 
+#' One line per object of a fragment
+#' @noRd
+ckpt_objects_describe = function(fragment) {
+  vapply(fragment$objects, function(r) {
+    paste0("object ", r$name, ": ", r$status, if (!isTRUE(r$restorable)) " (not restorable)")
+  }, "")
+}
+
 #' Enforce the in-memory budget at the end of a turn (G7 section 3.4 step 6, architecture 6.16):
 #' drop images older than gptr.undo_turns turns, then, while over gptr.undo_max_bytes, spill the
 #' largest image or, when it cannot be spilled, drop the oldest. `envir` is the session home.

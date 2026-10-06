@@ -555,12 +555,6 @@ ckpt_files_undo = function(ck, fragment, session = NULL, force = FALSE, dry = FA
   out
 }
 
-#' Redo one files fragment (ckpt_files_undo() with `redo = TRUE`)
-#' @noRd
-ckpt_files_redo = function(ck, fragment, session = NULL, force = FALSE, dry = FALSE) {
-  ckpt_files_undo(ck, fragment, session, force, dry, redo = TRUE)
-}
-
 #' One line per file of a fragment
 #' @noRd
 ckpt_files_describe = function(fragment) {

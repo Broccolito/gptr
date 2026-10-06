@@ -29,6 +29,10 @@ copy_setup = c(
   "options(gptr.unsafe_no_permissions = TRUE)",
   copy_r_tool)
 
+# The in-run rows test the gateway: with checkpoints on, the objects checkpointer's pre-image makes
+# the agent's in-place edit copy once (D-170; G7 row c04 in test-copy-ckpt.R)
+no_ckpt = "options(gptr.checkpoint = 'off')"
+
 # label = list(extra setup, action, in_run_edit)
 copy_rows = list(
   "top level: peter('describe', big)" =
@@ -84,11 +88,11 @@ copy_rows = list(
          "f = function(d) peter('describe', d, model = fake, tools = list(r_tool)); s = f(big)",
          FALSE),
   "in-run edit: peter('x', big) (IC-41)" =
-    list(character(), "s = peter('x', big, model = fake, tools = list(r_tool))", TRUE),
+    list(no_ckpt, "s = peter('x', big, model = fake, tools = list(r_tool))", TRUE),
   "in-run edit: big |> peter('x') (IC-41)" =
-    list(character(), "s = big |> peter('x', model = fake, tools = list(r_tool))", TRUE),
+    list(no_ckpt, "s = big |> peter('x', model = fake, tools = list(r_tool))", TRUE),
   "in-run edit: s |> peter('x', big) (IC-41)" =
-    list(c("fake0 = gptr_fake_provider(list('ok'), name = 'fake0')",
+    list(c(no_ckpt, "fake0 = gptr_fake_provider(list('ok'), name = 'fake0')",
            "s = peter('a', model = fake0, tools = list(r_tool))"),
          "s |> peter('x', big, model = fake)", TRUE))
 
