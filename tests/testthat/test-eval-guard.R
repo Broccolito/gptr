@@ -28,7 +28,7 @@ test_that("local variables named q, member names and formulas are not flagged", 
   expect_equal(guard("q = quantile(1:10); q[2]")$blocked, character())
   expect_equal(guard("f = function(q) q + 1; f(2)")$blocked, character())
   expect_equal(guard("x = list(q = 1); x$q")$blocked, character())
-  expect_equal(guard("gptr$edit('a.R', list())")$blocked, character())
+  expect_equal(guard("peter$edit('a.R', list())")$blocked, character())
   expect_equal(guard("fit = lm(y ~ q, data = d)")$blocked, character())
   expect_equal(guard("e = quote(q())")$blocked, character())
 })
@@ -132,11 +132,11 @@ test_that("empty arguments and odd calls never make the guard or the targets thr
 })
 
 test_that("gptr_shim keeps every top-level expression, a bare NULL included", {
-  ex = parse(text = "NULL\ngptr('a')\nNULL", keep.source = TRUE)
+  ex = parse(text = "NULL\npeter('a')\nNULL", keep.source = TRUE)
   out = gptr_shim(ex, new.env(parent = baseenv()))
   expect_length(out, 3L)
   expect_null(out[[1]])
-  expect_equal(deparse(out[[2]]), "gptr::gptr(\"a\")")
+  expect_equal(deparse(out[[2]]), "gptr::peter(\"a\")")
   expect_length(attr(out, "srcref"), 3L)
 })
 
@@ -151,27 +151,23 @@ test_that("eval_assign_targets finds assignments, replacements, assign(), := and
   expect_equal(at("for (i in 1:3) total = i"), c("i", "total"))
 })
 
-test_that("gptr_shim rewrites gptr calls only when gptr is not visible", {
-  ex = parse(text = "r = gptr('task', d); gptr$grep('x'); gptr_return(r)", keep.source = FALSE)
+test_that("gptr_shim rewrites peter calls only when peter is not visible", {
+  ex = parse(text = "r = peter('task', d); peter$grep('x'); gptr_return(r)", keep.source = FALSE)
   hidden = new.env(parent = baseenv())
   out = gptr_shim(ex, hidden)
-  expect_equal(deparse(out[[1]]), "r = gptr::gptr(\"task\", d)")
-  expect_equal(deparse(out[[2]]), "gptr::gptr$grep(\"x\")")
+  expect_equal(deparse(out[[1]]), "r = gptr::peter(\"task\", d)")
+  expect_equal(deparse(out[[2]]), "gptr::peter$grep(\"x\")")
   expect_equal(deparse(out[[3]]), "gptr::gptr_return(r)")
-  # the heads are built with call() (R CMD check, CI Task CI-4) and equal the quoted calls
-  expect_identical(out[[1]][[3]][[1]], quote(gptr::gptr))
-  expect_identical(out[[2]][[1]][[2]], quote(gptr::gptr))
-  expect_identical(out[[3]][[1]], quote(gptr::gptr_return))
   expect_equal(ls(hidden), character())
   visible = new.env(parent = baseenv())
-  visible$gptr = function(...) NULL
+  visible$peter = function(...) NULL
   visible$gptr_return = function(x) x
   expect_identical(gptr_shim(ex, visible), ex)
 })
 
 test_that("gptr_shim keeps the source references of the expression vector", {
-  ex = parse(text = "x = 1\ngptr('a')", keep.source = TRUE)
+  ex = parse(text = "x = 1\npeter('a')", keep.source = TRUE)
   out = gptr_shim(ex, new.env(parent = baseenv()))
   expect_false(is.null(attr(out, "srcref")))
-  expect_equal(as.character(attr(out, "srcref")[[2]]), "gptr('a')")
+  expect_equal(as.character(attr(out, "srcref")[[2]]), "peter('a')")
 })

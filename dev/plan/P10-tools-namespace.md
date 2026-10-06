@@ -1,8 +1,8 @@
-# P10 Tools and the `gptr$` namespace Implementation Plan
+# P10 Tools and the `peter$` namespace Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the model-visible tools `r`, `read`, `edit` and `write` (plus Pi's `grep`, `find` and `ls` for the `extended` preset) and the `gptr$` namespace that makes every other capability an ordinary R function the model composes inside one `r` call (S-12).
+**Goal:** Ship the model-visible tools `r`, `read`, `edit` and `write` (plus Pi's `grep`, `find` and `ls` for the `extended` preset) and the `peter$` namespace that makes every other capability an ordinary R function the model composes inside one `r` call (S-12).
 
 **Architecture:** Every capability is one tool spec (IC-37) registered by two built-ins: `builtin:tools` (`R/tool-namespace.R`: `read`, `edit`, `write`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`, their `<rules>` guidelines, the `<r_session>` fragments, the T1 `plugins` section, the `members` search source and the services `ns.resolve`, `ns.names`, `search.sources` behind P08's gateway methods) and `builtin:r` (`R/tool-r.R`: the `r` tool, whose `parameters` is a function giving the four frozen schema variants of IC-68 and whose execute evaluates through P09's evaluator). Member closures are generated from the specs; a member called while an `r` evaluation runs (found through an r-call marker bound in the `r` tool's own frame, never package state) passes P06's `dispatch_nested()`, and a member called by the user runs directly. The file engines (`tool-walk.R`, `tool-diff.R`, `tool-read.R`, `tool-write.R`, `tool-edit.R`, `tool-search.R`) are pure base R ports of Pi's semantics and report 11's verified prototypes.
 
@@ -16,8 +16,8 @@
 
 `dev/plan/00-conventions.md` applies in full (`=` for assignment, never the left arrow; native `|>`; ASCII-only `R/` sources with `\u` escapes; `pkg::fun()` calls; `gptr_abort()`/`gptr_warn()`/`gptr_inform()`; no `:::`; no `.GlobalEnv`; state restored with `on.exit(..., add = TRUE)`; testthat 3e; no network in tests). Plan-specific requirements, copied from the specification:
 
-- Owned options (04 §3.1): `gptr.helper_output_tokens` `int(1)` default `1500L` ("print budget of `gptr$` members", shared with P22); `gptr.read_max_tokens` `int(1)` default `12000L` ("`read` cap (also 2,000 lines and 50 KB)"). Both defaults already live in P01's `gptr_opt()` table; P10 adds no option.
-- Consumed options: `gptr.r_output_tokens` (`4000L`, P09), `gptr.r_max_images` (`3L`, P09: "plot images attached per `r` result (IC-67)"; P10 applies the same cap to the images `gptr$plot()` and `gptr$read()` attach to one `r` result and names the rest in a notice), `gptr.plot_res` (`120L`, P09), `gptr.doc_output_lines` (`12L`, P15), `gptr.unsafe_no_permissions` (`FALSE`, P06; tests only, IC-53).
+- Owned options (04 §3.1): `gptr.helper_output_tokens` `int(1)` default `1500L` ("print budget of `peter$` members", shared with P22); `gptr.read_max_tokens` `int(1)` default `12000L` ("`read` cap (also 2,000 lines and 50 KB)"). Both defaults already live in P01's `gptr_opt()` table; P10 adds no option.
+- Consumed options: `gptr.r_output_tokens` (`4000L`, P09), `gptr.r_max_images` (`3L`, P09: "plot images attached per `r` result (IC-67)"; P10 applies the same cap to the images `peter$plot()` and `peter$read()` attach to one `r` result and names the rest in a notice), `gptr.plot_res` (`120L`, P09), `gptr.doc_output_lines` (`12L`, P15), `gptr.unsafe_no_permissions` (`FALSE`, P06; tests only, IC-53).
 - Member prints are budgeted by `gptr.helper_output_tokens` (1,500), "and at most 0.6x the remaining `r` budget when called inside `r`" (04 §9.4).
 - `read` (03 §7.2, 04 §7.10): "caps at 2,000 lines, 50 KB and 12,000 tokens, with line numbers off"; images by magic bytes (jpg, png, gif, webp, bmp); "16 MiB raw index / streaming index / cached sparse index above 20 MB"; `skill:<name>/<path>` pseudo-paths resolve through P17's `skill.body` service (IC-68).
 - `edit` (03 §7.1, 04 §9.2): Pi's multi-edit semantics; "a diff (at most 400 tokens) is appended only when the fuzzy fallback, EOL or encoding normalisation changed what the model literally asked for"; a pasted `*** Begin Patch` envelope is applied through `patch_apply()`; a bound history document is edited through P15's `doc.edit` service.
@@ -30,13 +30,13 @@
 - IC-37: "One tool spec per capability"; `read`, `edit`, `write`, `grep`, `find`, `ls` carry both `execute` and `fun`; `$.gptr_gateway` "resolves any spec **without** a namespace that has a `fun`, whatever its exposure, except `hidden`"; reserved member and namespace names: every built-in member name, `mcp` and the names of the 04 §9.4 table (`read`, `write`, `edit`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`, `sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`, `app`, `mcp`).
 - IC-48: "`record = FALSE` is set for `out`, `plot`, `help`, `search`, `describe`".
 - IC-68: `<rules>` lines come from the tools' `guidelines` (read: 1 line, r: 3, edit: 4, write: 1); the `<r_session>` fragments of `builtin:tools` are `helpers` (order 10) and `out` (order 20) with `parent = "r_session"`; the `r` schema has `record` and `note` "only when a document is bound at freeze" and `timeout` (described `"Seconds; best effort. Default 3600."`) "only when no human can answer".
-- IC-25 / 04 §9.3: the `plugins` section is T1, order 860, budget 1,500, header text verbatim, one `gptr$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>` line per plugin `r` member.
+- IC-25 / 04 §9.3: the `plugins` section is T1, order 860, budget 1,500, header text verbatim, one `peter$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>` line per plugin `r` member.
 - IC-54: `write`/`edit` risk applies the `control` (level 4) and `instructions` (level 3) path classes of P01's `path_class()`; reads are level 0 in the project, 1 outside, 2 protected (04 §9.4).
-- IC-71: `gptr$find(sort = c("path", "mtime", "size", "relevance"))` ("exact basename > prefix > substring > subsequence, ties by path"); `gptr$grep(output = "files", sort = c("path", "count", "mtime"))`; out ids are `o` + 6 hex and `out_get()` looks in the session, then the process store, then the spill file.
-- IC-67: `gptr$plot(which = NULL, width = 1000L, height = 700L)` attaches the current plot or stored plot `which`.
+- IC-71: `peter$find(sort = c("path", "mtime", "size", "relevance"))` ("exact basename > prefix > substring > subsequence, ties by path"); `peter$grep(output = "files", sort = c("path", "count", "mtime"))`; out ids are `o` + 6 hex and `out_get()` looks in the session, then the process store, then the spill file.
+- IC-67: `peter$plot(which = NULL, width = 1000L, height = 700L)` attaches the current plot or stored plot `which`.
 - IC-73: P10 adds its north-star fixture and baseline row to `dev/bench/tokens/` with P07's runner (`--update <id>`).
 - Copy-safety (03 §6.4, rules R1-R10): a member called by the user passes its arguments to the member function as promises through a call of symbols, never through a list (R1); a member called from model code hands P06's gate the input list that 04 §7.6 fixes (`dispatch_nested(name, input, ctx)`), so P10's own members take only scalar arguments on that path except `describe`, whose gate input is short labels of its argument expressions and whose value is computed locally (a plugin member that receives a user object from model code makes that object copy once on its next in-place edit: the documented cost of the contract's list input, like R9's bridges); the `r` tool resets its binding of the evaluation environment before returning and keeps no value (R2, R8).
-- Lazy plugins (04 §10.8): "A lazy plugin registers placeholders for `extension.provides` and puts `extension.declarations` (signature lines and descriptions of its `r` members and direct tools) into the frozen prompt before activation, so activation never changes the cached prefix. The factory runs on the first `registry_get()` of a provided capability". So the `plugins` catalog, completion, `gptr$search()` and namespace prints read tool specs through `registry_all("tool")` (which returns tool placeholders unactivated) and render placeholders from their declarations; only resolving or calling a member (`registry_get()`) activates a plugin.
+- Lazy plugins (04 §10.8): "A lazy plugin registers placeholders for `extension.provides` and puts `extension.declarations` (signature lines and descriptions of its `r` members and direct tools) into the frozen prompt before activation, so activation never changes the cached prefix. The factory runs on the first `registry_get()` of a provided capability". So the `plugins` catalog, completion, `peter$search()` and namespace prints read tool specs through `registry_all("tool")` (which returns tool placeholders unactivated) and render placeholders from their declarations; only resolving or calling a member (`registry_get()`) activates a plugin.
 - Exception to 00-conventions §7 (named here as that file requires): printed output of member results is tested with exact `utils::capture.output()` expectations instead of `expect_snapshot()`, because the texts are Pi's byte-exact formats and token budgets that a snapshot would only record, not check.
 - Texts from Pi (MIT, Pi `1b347794`) are byte-identical to 04 §9.2 and carry the attribution comment; `read` never deserialises a data file (CVE-2024-27322).
 
@@ -44,7 +44,7 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `R/tool-namespace.R` | create (Tasks 1, 8, 9, 10) | r-call marker and member print budgets; member closures, resolution (`ns.resolve`, `ns.names`), `gptr_ns` nodes and namespace providers; the `plugins` catalog, BM25, `gptr$search()`, `gptr$help()`; the members, direct-tool executes, risk functions, specs and `builtin:tools` |
+| `R/tool-namespace.R` | create (Tasks 1, 8, 9, 10) | r-call marker and member print budgets; member closures, resolution (`ns.resolve`, `ns.names`), `gptr_ns` nodes and namespace providers; the `plugins` catalog, BM25, `peter$search()`, `peter$help()`; the members, direct-tool executes, risk functions, specs and `builtin:tools` |
 | `R/tool-walk.R` | create (Task 2) | path resolution (Pi's `resolveToCwd`), `glob_to_regex()`, the `.gitignore` engine, `walk_files()` |
 | `R/tool-diff.R` | create (Task 3) | `diff_lines()` and `diff_unified()` (trim, patience anchors, Myers capped at D = 256) |
 | `R/tool-read.R` | create (Task 4) | `read_file()`, `read_lines_value()` (`gptr_lines`), encodings, images, windows and indexes |
@@ -65,7 +65,7 @@
 | `dev/bench/tokens/baseline.csv` | modify (Task 13, through P07's runner) | the `ns02b-data-first-pipe` baseline row |
 | `NAMESPACE` | regenerate (Tasks 1, 4, 6, 7, 8) | S3 method registrations through `Rscript --vanilla -e 'devtools::document()'` |
 
-P10 exports no function (its user-facing surface is the `gptr$` members, reached through P08's exported `gptr`), so no `man/` page is generated; its S3 methods (`print.gptr_text`, `print.gptr_member`, `print.gptr_lines`, `print.gptr_patch`, `print.gptr_matches`, `print.gptr_files`, `$.gptr_ns`, `[[.gptr_ns`, `$<-.gptr_ns`, `[[<-.gptr_ns`, `names.gptr_ns`, `print.gptr_ns`, `.DollarNames.gptr_ns`) are registered in `NAMESPACE` through `@export`/`@exportS3Method` with `@noRd`.
+P10 exports no function (its user-facing surface is the `peter$` members, reached through P08's exported `peter`), so no `man/` page is generated; its S3 methods (`print.gptr_text`, `print.gptr_member`, `print.gptr_lines`, `print.gptr_patch`, `print.gptr_matches`, `print.gptr_files`, `$.gptr_ns`, `[[.gptr_ns`, `$<-.gptr_ns`, `[[<-.gptr_ns`, `names.gptr_ns`, `print.gptr_ns`, `.DollarNames.gptr_ns`) are registered in `NAMESPACE` through `@export`/`@exportS3Method` with `@noRd`.
 
 Tasks ("Create `f`" means write a new file with exactly the block shown; "Append to `f`" means add the block at the end of the existing file, separated from the previous content by one blank line, so `R/tool-namespace.R` and `tests/testthat/test-tool-namespace.R` are the concatenation of their four blocks in task order; every block is complete code):
 
@@ -77,7 +77,7 @@ Tasks ("Create `f`" means write a new file with exactly the block shown; "Append
 6. The `edit` engine, the fuzzy fallback and patch envelopes (`R/tool-edit.R`)
 7. `grep`, `find` and `ls` (`R/tool-search.R`)
 8. Member closures, resolution and namespace nodes (`R/tool-namespace.R`, part 2)
-9. The plugin catalog, BM25, `gptr$search()` and `gptr$help()` (`R/tool-namespace.R`, part 3)
+9. The plugin catalog, BM25, `peter$search()` and `peter$help()` (`R/tool-namespace.R`, part 3)
 10. Members, direct-tool executes, risk and `builtin:tools` (`R/tool-namespace.R`, part 4)
 11. The `r` tool and `builtin:r` (`R/tool-r.R`)
 12. Copy-safety rows (`tests/testthat/test-copy-tools.R`)
@@ -87,7 +87,7 @@ Tasks ("Create `f`" means write a new file with exactly the block shown; "Append
 
 **Files:** Create: `R/tool-namespace.R` (part 1 of 4); Test: `tests/testthat/test-tool-namespace.R` (part 1 of 4); Modify: `NAMESPACE` (generated).
 
-Every `gptr$` member prints within `gptr.helper_output_tokens` (1,500), and while an `r` evaluation runs within 0.6 x the **remaining** `r` budget (04 §9.4; G5: "helper defaults take min(option, 0.6 x remaining)"): the marker counts the estimated tokens that member prints have written during this evaluation, and `member_budget()` is `min(gptr.helper_output_tokens, floor(0.6 * (gptr.r_output_tokens - printed)))`, so ten member prints in one loop shrink instead of each taking 1,500 tokens (output the evaluator prints for ordinary values is not counted; P09 cuts the whole result to `gptr.r_output_tokens` anyway). Whether a member runs inside model code is decided by the **r-call marker**: the `r` tool (Task 11) binds a local variable `gptr_r_call` of class `gptr_r_call` in its own execute frame for exactly the dynamic extent of one evaluation; `ns_r_call()` finds the innermost one by walking `sys.frame(k)` outwards (never `sys.frames()`, which would collect every frame in a list, rule R3), so no package-level run state exists (INFRA-15, architecture §2.2 rule 5) and nested sub-agent evaluations see their own marker. The marker holds the tool's `ctx` and collectors for images (`gptr$plot()`, image reads; at most `gptr.r_max_images` per evaluation, the rest counted in `dropped` and named in a notice by Task 11, so a loop over 50 image reads cannot attach 50 images, IC-67), bridge digests and artifact paths; it never holds a user object or frame. The print helpers write plain UTF-8 lines with `writeLines()`: member output is data, never a format string (rule C1), and `cli` output would go to stderr in non-interactive sessions, where P09's sink capture does not see it. `budget_head()` and `budget_head_tail()` (head 40%, tail 60%) keep whole lines only, found by binary search over P01's `est_tokens()`.
+Every `peter$` member prints within `gptr.helper_output_tokens` (1,500), and while an `r` evaluation runs within 0.6 x the **remaining** `r` budget (04 §9.4; G5: "helper defaults take min(option, 0.6 x remaining)"): the marker counts the estimated tokens that member prints have written during this evaluation, and `member_budget()` is `min(gptr.helper_output_tokens, floor(0.6 * (gptr.r_output_tokens - printed)))`, so ten member prints in one loop shrink instead of each taking 1,500 tokens (output the evaluator prints for ordinary values is not counted; P09 cuts the whole result to `gptr.r_output_tokens` anyway). Whether a member runs inside model code is decided by the **r-call marker**: the `r` tool (Task 11) binds a local variable `gptr_r_call` of class `gptr_r_call` in its own execute frame for exactly the dynamic extent of one evaluation; `ns_r_call()` finds the innermost one by walking `sys.frame(k)` outwards (never `sys.frames()`, which would collect every frame in a list, rule R3), so no package-level run state exists (INFRA-15, architecture §2.2 rule 5) and nested sub-agent evaluations see their own marker. The marker holds the tool's `ctx` and collectors for images (`peter$plot()`, image reads; at most `gptr.r_max_images` per evaluation, the rest counted in `dropped` and named in a notice by Task 11, so a loop over 50 image reads cannot attach 50 images, IC-67), bridge digests and artifact paths; it never holds a user object or frame. The print helpers write plain UTF-8 lines with `writeLines()`: member output is data, never a format string (rule C1), and `cli` output would go to stderr in non-interactive sessions, where P09's sink capture does not see it. `budget_head()` and `budget_head_tail()` (head 40%, tail 60%) keep whole lines only, found by binary search over P01's `est_tokens()`.
 
 **Interfaces:**
 - Consumes (P01, 04 §7.1): `gptr_opt(name)`, `est_tokens(x, class)`, `as_utf8(x)`, `` `%||%` ``; test helper `local_gptr_options(..., .env)` (04 §12.2).
@@ -224,11 +224,11 @@ Expected: `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with `could
 Create `R/tool-namespace.R`:
 
 ```r
-# tool-namespace.R -- the `gptr$` namespace (P10): member printing within token budgets, the r-call
+# tool-namespace.R -- the `peter$` namespace (P10): member printing within token budgets, the r-call
 # marker that tells a member it runs inside model code, member closures generated from tool specs,
 # member resolution (the `ns.resolve`, `ns.names` and `search.sources` services behind P08's gateway
 # methods, IC-36), `gptr_ns` nodes for plugin and MCP namespaces, the plugin catalog, BM25 search,
-# `gptr$help()`, `gptr$search()`, `gptr$describe()`, `gptr$plot()`, `gptr$out()`, the specs of
+# `peter$help()`, `peter$search()`, `peter$describe()`, `peter$plot()`, `peter$out()`, the specs of
 # `read`, `edit`, `write`, `grep`, `find`, `ls` (one per capability, direct and member forms,
 # IC-37), their `<rules>` guidelines, the `<r_session>` fragments and `builtin:tools` (IC-68).
 # Sources: dev/research/G5-polyglot-glue-helpers.md (gateway-as-namespace pattern verified by the
@@ -357,7 +357,7 @@ ns_print_lines = function(lines) {
   invisible(NULL)
 }
 
-#' A character result (`gptr$help()`, `gptr$out()`) that prints within the member budget
+#' A character result (`peter$help()`, `peter$out()`) that prints within the member budget
 #' @noRd
 new_gptr_text = function(x) structure(as_utf8(as.character(x)), class = c("gptr_text", "character"))
 
@@ -1520,7 +1520,7 @@ git commit -m "feat(tools): add the unified diff engine"
 
 **Files:** Create: `R/tool-read.R`; Test: `tests/testthat/test-tool-read.R`; Modify: `NAMESPACE` (generated).
 
-`read_file()` is the engine of the direct `read` tool and `read_lines_value()` the value of `gptr$read()` (both wired in Task 10). Ported from report 11 §5.5 (`proto/00-core.R`, `proto/10-read.R`) and report 21 §2.2 (a `grepRaw()` newline index over raw bytes, decoding only the requested window; a streaming chunked index above 16 MiB; a sparse index of every 10,000th line cached per process for files above 20 MB, keyed by path, size and mtime, at most 8 entries of numbers), with Pi's texts from report 01 §2.3 and §3.2 (`[Showing lines a-b of n. Use offset=k to continue.]`, `[n more lines in file. Use offset=k to continue.]`, `Offset n is beyond end of file (m lines total)`, `ENOENT`/`EISDIR`/`EACCES` messages, `Read image file [mime]`). Deviations from Pi are report 11 §3.3's documented ones: no line numbers (03 §7.2: "cat -n costs +19-26%"), the CR of CRLF is not shown, empty and binary files get notices (binary with a loading hint, never deserialised: CVE-2024-27322), a first line above 50 KB is shown in part with a notice, and decoding notices name the source encoding. Verification-log fixes applied (report 11): base64 without jsonlite's 72-character line breaks (row 15), `iconv(sub =)` only on an unmarked byte string (row 9), never `iconv(sub = "Unicode")` (row 8). Images are recognised by magic bytes only (JPEG, PNG without `acTL`, GIF, WebP, BMP; JPEG-LS rejected), sent unchanged when native and within 2,000 px and 4.5 MB of base64 (Pi `image-resize-core.ts`), else converted with magick (Suggests) or omitted with a note. `skill:<name>/<path>` resolves inside the directory P17's `skill.body` service returns (IC-68); without P17 it signals `gptr_error_not_available`. macOS screenshot names are found through Pi's fallbacks (U+202F before AM/PM, NFD, U+2019).
+`read_file()` is the engine of the direct `read` tool and `read_lines_value()` the value of `peter$read()` (both wired in Task 10). Ported from report 11 §5.5 (`proto/00-core.R`, `proto/10-read.R`) and report 21 §2.2 (a `grepRaw()` newline index over raw bytes, decoding only the requested window; a streaming chunked index above 16 MiB; a sparse index of every 10,000th line cached per process for files above 20 MB, keyed by path, size and mtime, at most 8 entries of numbers), with Pi's texts from report 01 §2.3 and §3.2 (`[Showing lines a-b of n. Use offset=k to continue.]`, `[n more lines in file. Use offset=k to continue.]`, `Offset n is beyond end of file (m lines total)`, `ENOENT`/`EISDIR`/`EACCES` messages, `Read image file [mime]`). Deviations from Pi are report 11 §3.3's documented ones: no line numbers (03 §7.2: "cat -n costs +19-26%"), the CR of CRLF is not shown, empty and binary files get notices (binary with a loading hint, never deserialised: CVE-2024-27322), a first line above 50 KB is shown in part with a notice, and decoding notices name the source encoding. Verification-log fixes applied (report 11): base64 without jsonlite's 72-character line breaks (row 15), `iconv(sub =)` only on an unmarked byte string (row 9), never `iconv(sub = "Unicode")` (row 8). Images are recognised by magic bytes only (JPEG, PNG without `acTL`, GIF, WebP, BMP; JPEG-LS rejected), sent unchanged when native and within 2,000 px and 4.5 MB of base64 (Pi `image-resize-core.ts`), else converted with magick (Suggests) or omitted with a note. `skill:<name>/<path>` resolves inside the directory P17's `skill.body` service returns (IC-68); without P17 it signals `gptr_error_not_available`. macOS screenshot names are found through Pi's fallbacks (U+202F before AM/PM, NFD, U+2019).
 
 **Interfaces:**
 - Consumes (P01, 04 §7.1): `as_utf8()`, `utf8_mark()`, `est_tokens()`, `path_key()`, `block_image(data, mime, source, width, height)`, `gptr_opt("read_max_tokens")`, `ext_service_has()`, `ext_service_get("skill.body")` (P17, 04 §7.0: `function(name) list(text, dir)`), the checkers, `gptr_abort()`; Task 1: `lines_fit()`, `budget_head()`, `member_budget()`, `ns_print_lines()`; Task 2: `fs_path()`, `tool_path_norm()`, `tool_path_is_abs()`, `resolve_tool_path()`.
@@ -1717,7 +1717,7 @@ test_that("macOS screenshot names are found through Pi's fallbacks", {
   expect_identical(read_resolve(file.path(td, "Capture d'cran.txt")), tool_path_norm(real))
 })
 
-test_that("gptr$read() gives gptr_lines with the contract attributes and prints within budget", {
+test_that("peter$read() gives gptr_lines with the contract attributes and prints within budget", {
   td = withr::local_tempdir()
   f = put(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
   v = read_lines_value(f, offset = 11, limit = 5)
@@ -1754,7 +1754,7 @@ Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with `coul
 Create `R/tool-read.R`:
 
 ```r
-# tool-read.R -- the `read` tool and `gptr$read()` (P10): Pi's read semantics without line numbers,
+# tool-read.R -- the `read` tool and `peter$read()` (P10): Pi's read semantics without line numbers,
 # images by magic bytes, BOM/UTF-16/UTF-32/CP1252 decoding, line windows over a raw newline index
 # (files up to 16 MiB), a streaming chunked index above that and a cached sparse index above 20 MB,
 # the 2,000-line / 50 KB / gptr.read_max_tokens caps, and `skill:<name>/<path>` pseudo-paths
@@ -2294,7 +2294,7 @@ read_line_prefix = function(line, max_bytes) {
   as_utf8(rawToChar(b))
 }
 
-#' Shared core of read_file() and gptr$read(): kind (text, empty, image, binary), the window and
+#' Shared core of read_file() and peter$read(): kind (text, empty, image, binary), the window and
 #' notices
 #' @noRd
 read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
@@ -2452,7 +2452,7 @@ read_file = function(path, offset = NULL, limit = NULL,
   list(text = as_utf8(text), image = rc$image, details = details)
 }
 
-#' The value of `gptr$read()`: the window's lines as a `gptr_lines` vector (contract section 5.10)
+#' The value of `peter$read()`: the window's lines as a `gptr_lines` vector (contract section 5.10)
 #'
 #' An image file gives its note line, and the image block travels in the attribute `image_block`
 #' until the member attaches it to the running `r` result.
@@ -2471,7 +2471,7 @@ read_lines_value = function(path, offset = NULL, limit = NULL) {
             image_block = rc$image)
 }
 
-#' Print the lines of `gptr$read()` in Pi's read format within the member budget
+#' Print the lines of `peter$read()` in Pi's read format within the member budget
 #'
 #' @param x A `gptr_lines` vector.
 #' @param ... Ignored.
@@ -2517,7 +2517,7 @@ git commit -m "feat(tools): add the read engine with encodings, images and line 
 
 **Files:** Create: `R/tool-write.R`; Test: `tests/testthat/test-tool-write.R`.
 
-`write_file()` backs the direct `write` tool and `gptr$write()` (Task 10) and P23's artifact writes (04 §7.10). Ported from report 11 §5.5 (`proto/20-write.R`) and §2.3: the text is encoded before any file is touched (a character the existing encoding cannot represent fails cleanly), the bytes go through P01's `write_atomic()` (temporary file in the target's directory, rename with retries), parent directories are created, and a symbolic link is resolved first because `file.rename()` would replace the link itself (verified on macOS). An existing text file keeps its dominant line ending, byte-order mark, encoding and permission bits; a new file is written verbatim as in Pi (report 01 §2.4). Pi's message `Successfully wrote to <path>` is produced by the direct tool's execute in Task 10.
+`write_file()` backs the direct `write` tool and `peter$write()` (Task 10) and P23's artifact writes (04 §7.10). Ported from report 11 §5.5 (`proto/20-write.R`) and §2.3: the text is encoded before any file is touched (a character the existing encoding cannot represent fails cleanly), the bytes go through P01's `write_atomic()` (temporary file in the target's directory, rename with retries), parent directories are created, and a symbolic link is resolved first because `file.rename()` would replace the link itself (verified on macOS). An existing text file keeps its dominant line ending, byte-order mark, encoding and permission bits; a new file is written verbatim as in Pi (report 01 §2.4). Pi's message `Successfully wrote to <path>` is produced by the direct tool's execute in Task 10.
 
 **Interfaces:**
 - Consumes (P01): `write_atomic(path, content)`, `as_utf8()`, `utf8_mark()`, `check_string()`, `gptr_abort()`; Task 2: `fs_path()`, `tool_path_is_abs()`, `tool_path_norm()`, `resolve_tool_path()`; Task 4: `read_raw()`, `is_binary_raw()`, `decode_raw()`, `encode_text()`.
@@ -2613,7 +2613,7 @@ Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; the tests error with `could n
 Create `R/tool-write.R`:
 
 ```r
-# tool-write.R -- the `write` tool and `gptr$write()` (P10): an atomic replace through P01's
+# tool-write.R -- the `write` tool and `peter$write()` (P10): an atomic replace through P01's
 # write_atomic() that keeps an existing file's line endings, byte-order mark, encoding and
 # permission bits and writes through symbolic links. Ported from dev/research/11-r-file-tools.md
 # section 5.5 (proto/20-write.R) and section 2.3: the text is encoded before any file is touched,
@@ -2731,7 +2731,7 @@ git commit -m "feat(tools): add the atomic, convention-preserving write engine"
 
 **Files:** Create: `R/tool-edit.R`; Test: `tests/testthat/test-tool-edit.R`; Modify: `NAMESPACE` (generated).
 
-`edit_file()` backs the direct `edit` tool and `gptr$edit()` (Task 10) and P15's routed document edits (04 §7.10). Ported from report 11 §5.5 (`proto/31-edit.R`; §2.4) and report 01 §2.5 and §3.4 (Pi's algorithm and texts): every `oldText` is matched against the **original** file, must be unique and must not overlap another edit; nothing is written unless every edit succeeds; the fuzzy fallback (NFKC through stringi when installed, trailing whitespace, smart quotes, Unicode dashes, special spaces; every class pattern starts with `(*UTF)` so it compiles on all-ASCII input, report 11 P5) rewrites only the touched lines; bytes outside the edited spans are kept exactly (mixed line endings, BOM, CP1252, UTF-16, stray invalid bytes). One deliberate return to Pi over report 11: occurrences are counted in fuzzy-normalised space (Pi `edit-diff.ts:247-251`), so Pi's oracle case `"hello world   \nhello world\n"` reports 2 occurrences. `edit_normalize_args()` is Pi's `prepareEditArguments()` (edits as a JSON string, a single object or a data frame). A pasted Codex `*** Begin Patch` envelope (in `edits` itself, or as the only edit's `newText`/`oldText` with the other text empty, which is how a model pastes one through the direct schema) is applied by `patch_apply()` (`*** Add File`, `*** Update File` with `*** Move to`, `*** Delete File`, `@@` hunks; every operation computed before anything is written). `edit_result_text()` is the model text of acceptance 6: Pi's message alone, or, when the fuzzy fallback, an EOL change, a re-encoding or kept invalid bytes made the result deviate from the literal request, the message, one bracketed reason line and the diff (at most 400 tokens, 03 §7.1). `edit_nested_input()` prepares the gate input of a nested `gptr$edit()` call with an envelope: `edits = list()` plus `patch = <envelope>`, so the input validates against the edit schema (Task 10 tests it through the schema).
+`edit_file()` backs the direct `edit` tool and `peter$edit()` (Task 10) and P15's routed document edits (04 §7.10). Ported from report 11 §5.5 (`proto/31-edit.R`; §2.4) and report 01 §2.5 and §3.4 (Pi's algorithm and texts): every `oldText` is matched against the **original** file, must be unique and must not overlap another edit; nothing is written unless every edit succeeds; the fuzzy fallback (NFKC through stringi when installed, trailing whitespace, smart quotes, Unicode dashes, special spaces; every class pattern starts with `(*UTF)` so it compiles on all-ASCII input, report 11 P5) rewrites only the touched lines; bytes outside the edited spans are kept exactly (mixed line endings, BOM, CP1252, UTF-16, stray invalid bytes). One deliberate return to Pi over report 11: occurrences are counted in fuzzy-normalised space (Pi `edit-diff.ts:247-251`), so Pi's oracle case `"hello world   \nhello world\n"` reports 2 occurrences. `edit_normalize_args()` is Pi's `prepareEditArguments()` (edits as a JSON string, a single object or a data frame). A pasted Codex `*** Begin Patch` envelope (in `edits` itself, or as the only edit's `newText`/`oldText` with the other text empty, which is how a model pastes one through the direct schema) is applied by `patch_apply()` (`*** Add File`, `*** Update File` with `*** Move to`, `*** Delete File`, `@@` hunks; every operation computed before anything is written). `edit_result_text()` is the model text of acceptance 6: Pi's message alone, or, when the fuzzy fallback, an EOL change, a re-encoding or kept invalid bytes made the result deviate from the literal request, the message, one bracketed reason line and the diff (at most 400 tokens, 03 §7.1). `edit_nested_input()` prepares the gate input of a nested `peter$edit()` call with an envelope: `edits = list()` plus `patch = <envelope>`, so the input validates against the edit schema (Task 10 tests it through the schema).
 
 **Interfaces:**
 - Consumes (P01): `as_utf8()`, `utf8_mark()`, `project_root()`, checkers, `gptr_abort()`, `` `%||%` ``; Task 1: `ns_print_lines()`; Task 2: `fs_path()`, `resolve_tool_path(path, cwd)`; Task 3: `diff_lines()`, `diff_split()`, `diff_unified()`; Task 4: `split_lines_js()`, `split_lines_count()`, `detect_eol()`, `normalize_lf()`, `read_raw()`, `is_binary_raw()`, `sniff_bom()`, `decode_raw()`, `encode_text()`, `bom_bytes`, `replacement_sub`; Task 5: `resolve_link_target()`, `write_bytes_keep_mode()`.
@@ -3028,7 +3028,7 @@ Expected: `[ FAIL 23 | WARN 0 | SKIP 0 | PASS 1 ]`; the tests error with `could 
 Create `R/tool-edit.R`:
 
 ```r
-# tool-edit.R -- the `edit` tool and `gptr$edit()` (P10): Pi's multi-edit semantics (every oldText
+# tool-edit.R -- the `edit` tool and `peter$edit()` (P10): Pi's multi-edit semantics (every oldText
 # matched against the original, unique, non-overlapping; nothing written unless every edit
 # succeeds), the fuzzy fallback (NFKC with stringi, trailing whitespace, smart quotes, dashes,
 # special spaces) that rewrites only the touched lines, bytes outside the edited spans kept exactly
@@ -3384,7 +3384,7 @@ edit_envelope_of = function(edits) {
   NULL
 }
 
-#' The input of a nested `gptr$edit()` call for the gate: a patch envelope travels as `patch`, with
+#' The input of a nested `peter$edit()` call for the gate: a patch envelope travels as `patch`, with
 #' an empty `edits` array, so the input validates against the edit schema
 #' @noRd
 edit_nested_input = function(input) {
@@ -3533,7 +3533,7 @@ edit_from_patch = function(envelope) {
                       reasons = character(), encoding = "UTF-8", files = pa$files))
 }
 
-#' The value of `gptr$edit()` (contract section 5.10)
+#' The value of `peter$edit()` (contract section 5.10)
 #' @noRd
 new_gptr_patch = function(path, message, diff, n_edits, fuzzy) {
   structure(list(path = path, message = message, diff = as.character(diff),
@@ -3581,7 +3581,7 @@ git commit -m "feat(tools): add the edit engine with the fuzzy fallback and patc
 
 **Files:** Create: `R/tool-search.R`; Test: `tests/testthat/test-tool-search.R`; Modify: `NAMESPACE` (generated).
 
-The functions behind `gptr$grep()`, `gptr$find()`, `gptr$ls()` and the direct `grep`, `find`, `ls` tools of the `extended` preset (REQ-07, REQ-08; 04 §7.10, §9.2, §9.4). Ported from report 11 §5.5 (`proto/50-search.R`; identical (file, line) sets to ripgrep on 5 patterns, §2.5) and report 21 §2.1 (files read in batches with `readChar(useBytes = TRUE)`, never `readLines()` per file; a whole-file prefilter, fixed bytes or a `(?m)` PCRE, before splitting a file into lines; a NUL that truncates `readChar()` marks a binary file, ripgrep's rule), per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit and radix sorting; Pi's texts from report 01 §3.6-3.8 (`file:line: text`, context lines `file-line- text` with `--` between blocks, `No matches found`, `[100 matches limit reached. Use limit=200 for more, or refine pattern]`, `No files found matching pattern`, `(empty directory)`, the 50 KB notice, long lines cut to 500 characters around the match). Report 11 §7.1 risk 3 is handled: PCRE match-limit warnings are captured and reported as "results may be incomplete". Files larger than 20 MB are skipped with a notice. Sorting (IC-71): `grep(output = "files" | "count", sort = "path" | "count" | "mtime")`; `find(sort = "path" | "mtime" | "size" | "relevance")`, where relevance ranks exact basename (or stem) > prefix > substring > subsequence, ties by path; `ls(sort = "name" | "mtime" | "size")`. UTF-8 BOM, UTF-16 and CP1252 files are decoded before matching; CRLF is matched as LF so `$` anchors work.
+The functions behind `peter$grep()`, `peter$find()`, `peter$ls()` and the direct `grep`, `find`, `ls` tools of the `extended` preset (REQ-07, REQ-08; 04 §7.10, §9.2, §9.4). Ported from report 11 §5.5 (`proto/50-search.R`; identical (file, line) sets to ripgrep on 5 patterns, §2.5) and report 21 §2.1 (files read in batches with `readChar(useBytes = TRUE)`, never `readLines()` per file; a whole-file prefilter, fixed bytes or a `(?m)` PCRE, before splitting a file into lines; a NUL that truncates `readChar()` marks a binary file, ripgrep's rule), per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit and radix sorting; Pi's texts from report 01 §3.6-3.8 (`file:line: text`, context lines `file-line- text` with `--` between blocks, `No matches found`, `[100 matches limit reached. Use limit=200 for more, or refine pattern]`, `No files found matching pattern`, `(empty directory)`, the 50 KB notice, long lines cut to 500 characters around the match). Report 11 §7.1 risk 3 is handled: PCRE match-limit warnings are captured and reported as "results may be incomplete". Files larger than 20 MB are skipped with a notice. Sorting (IC-71): `grep(output = "files" | "count", sort = "path" | "count" | "mtime")`; `find(sort = "path" | "mtime" | "size" | "relevance")`, where relevance ranks exact basename (or stem) > prefix > substring > subsequence, ties by path; `ls(sort = "name" | "mtime" | "size")`. UTF-8 BOM, UTF-16 and CP1252 files are decoded before matching; CRLF is matched as LF so `$` anchors work.
 
 **Interfaces:**
 - Consumes (P01): `as_utf8()`, `utf8_mark()`, checkers, `gptr_abort()`, `` `%||%` ``; Task 1: `ns_print_lines()`, `budget_head()`, `member_budget()`; Task 2: `fs_path()`, `resolve_tool_path()`, `walk_files()`, `glob_to_regex()`; Task 4: `read_raw()`, `sniff_bom()`, `decode_raw()`, `split_lines_count()`, `truncate_lines_head()`, `format_size()`, `tool_max_bytes`.
@@ -3810,7 +3810,7 @@ Expected: `[ FAIL 13 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors with `coul
 Create `R/tool-search.R`:
 
 ```r
-# tool-search.R -- `gptr$grep()`, `gptr$find()`, `gptr$ls()` and the direct `grep`, `find`, `ls`
+# tool-search.R -- `peter$grep()`, `peter$find()`, `peter$ls()` and the direct `grep`, `find`, `ls`
 # tools of the extended preset (P10): batched readChar() reads, a whole-file prefilter (fixed bytes
 # or `(?m)` PCRE), per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit, radix sorting
 # (REQ-08: path, mtime, size, count, relevance), Pi's output texts and notices, and prints within
@@ -3978,7 +3978,7 @@ grep_candidates = function(root, glob = NULL, sort = "path") {
        skipped_big = sum(big), mtime = w$mtime)
 }
 
-#' Search file contents: the function behind `gptr$grep()` and the direct `grep` tool (contract
+#' Search file contents: the function behind `peter$grep()` and the direct `grep` tool (contract
 #' 7.10)
 #'
 #' @param pattern PCRE pattern, or a literal string with `fixed = TRUE`.
@@ -4164,7 +4164,7 @@ find_relevance = function(query, paths) {
   cls
 }
 
-#' Find files by glob: the function behind `gptr$find()` and the direct `find` tool (contract 7.10)
+#' Find files by glob: the function behind `peter$find()` and the direct `find` tool (contract 7.10)
 #'
 #' @param pattern Glob (fd semantics, smart case) or, with `sort = "relevance"`, a name query.
 #' @param path Directory to search.
@@ -4229,7 +4229,7 @@ find_tool_text = function(f) {
   with_notices(paste(tr$lines, collapse = "\n"), notes)
 }
 
-#' List a directory: the function behind `gptr$ls()` and the direct `ls` tool (contract 7.10)
+#' List a directory: the function behind `peter$ls()` and the direct `ls` tool (contract 7.10)
 #'
 #' @param path Directory to list.
 #' @param sort `"name"` (case-insensitive, radix), `"mtime"` (newest first) or `"size"` (largest
@@ -4374,9 +4374,9 @@ git commit -m "feat(tools): add grep, find and ls with radix sorting and Pi's te
 
 **Files:** Modify: `R/tool-namespace.R` (append part 2 of 4); Test: `tests/testthat/test-tool-namespace.R` (append part 2 of 4); Modify: `NAMESPACE` (generated).
 
-The `gptr$` namespace of 04 §5.3 and §7.10. P08 owns every `gptr_gateway` method (IC-36); its `$`/`[[` call the `ns.resolve` service and `.DollarNames` calls `ns.names` (registered in Task 10). `member_closure(spec)` builds a `gptr_member` function whose formals are the spec's `fun` formals (the member's own defaults) or, for an execute-only spec, the schema's properties (required first, optional ones defaulting to `NULL`, 04 §7.10). Its body is one call of an inlined closure on the inlined `base::environment()`, so the member's frame holds only its arguments and an argument named `frame`, `value`, `flags` or `environment` cannot shadow the machinery (G1 §2.8: closures are built by replacing `formals()` and `body()`, never the environment). Called while an `r` evaluation runs (the r-call marker of Task 1 is on the stack), the call passes P06's `dispatch_nested(name, input, ctx)` with only the supplied arguments, which runs the gate, records the call in the outer result's `details$nested` and returns the R value; called by the user, it runs the spec's `fun` directly (04 §9.4: "called by the user it runs directly"). On the user path arguments reach `fun` as promises through a call of symbols, never through a list (copy-safety rule R1); on the nested path the gate's contract is an input list (04 §7.6), so `describe`, the one P10 member that takes a user object, sends the gate only short labels of its argument expressions and computes the description locally, and `edit` sends a patch envelope as `patch` (`edit_nested_input()`, Task 6). Resolution and completion never activate a lazy plugin: names come from `registry_names()` and specs for catalogs and prints from `registry_all("tool")`, which returns tool placeholders unactivated (04 §10.8; `ns_spec_line()` renders a placeholder from its manifest declaration); only resolving a member by name (`registry_get()`) activates its plugin, which is the "first use" of 04 §10.8. A `deferred` spec without a namespace is callable even when it carries only an `execute` (04 §9.1: "found only through `gptr$search()` (still callable)"): its closure takes its formals from the schema. `write` and `plot` return invisibly. The `describe` and `edit` members are defined here because `ns_member_flags()` recognises them; the other members follow in Task 10.
+The `peter$` namespace of 04 §5.3 and §7.10. P08 owns every `gptr_gateway` method (IC-36); its `$`/`[[` call the `ns.resolve` service and `.DollarNames` calls `ns.names` (registered in Task 10). `member_closure(spec)` builds a `gptr_member` function whose formals are the spec's `fun` formals (the member's own defaults) or, for an execute-only spec, the schema's properties (required first, optional ones defaulting to `NULL`, 04 §7.10). Its body is one call of an inlined closure on the inlined `base::environment()`, so the member's frame holds only its arguments and an argument named `frame`, `value`, `flags` or `environment` cannot shadow the machinery (G1 §2.8: closures are built by replacing `formals()` and `body()`, never the environment). Called while an `r` evaluation runs (the r-call marker of Task 1 is on the stack), the call passes P06's `dispatch_nested(name, input, ctx)` with only the supplied arguments, which runs the gate, records the call in the outer result's `details$nested` and returns the R value; called by the user, it runs the spec's `fun` directly (04 §9.4: "called by the user it runs directly"). On the user path arguments reach `fun` as promises through a call of symbols, never through a list (copy-safety rule R1); on the nested path the gate's contract is an input list (04 §7.6), so `describe`, the one P10 member that takes a user object, sends the gate only short labels of its argument expressions and computes the description locally, and `edit` sends a patch envelope as `patch` (`edit_nested_input()`, Task 6). Resolution and completion never activate a lazy plugin: names come from `registry_names()` and specs for catalogs and prints from `registry_all("tool")`, which returns tool placeholders unactivated (04 §10.8; `ns_spec_line()` renders a placeholder from its manifest declaration); only resolving a member by name (`registry_get()`) activates its plugin, which is the "first use" of 04 §10.8. A `deferred` spec without a namespace is callable even when it carries only an `execute` (04 §9.1: "found only through `peter$search()` (still callable)"): its closure takes its formals from the schema. `write` and `plot` return invisibly. The `describe` and `edit` members are defined here because `ns_member_flags()` recognises them; the other members follow in Task 10.
 
-Resolution (IC-37): a name resolves to a member when an un-namespaced tool spec with a `fun` (or a `deferred` one with an `execute`) exists and is not `hidden` (the running session's rank-0 specs included); `"<ns>/<name>"` registry keys form plugin namespaces, reached as `gptr$<ns>$<name>` through lazy `gptr_ns` nodes; a namespace equal to a reserved or existing member name, or to a provider name, is refused with one registry diagnostic (P02 already refuses it at registration; this is the second line of defence for specs registered in the other order). `ns_register_provider(name, fun)` registers a node provider (`mcp` is P18's); providers are configuration, not run state. Unknown names signal `gptr_error_unknown_member` with the sorted member list (acceptance 3). Resolution does no I/O and opens no connection (Task 10 proves it with traced file functions).
+Resolution (IC-37): a name resolves to a member when an un-namespaced tool spec with a `fun` (or a `deferred` one with an `execute`) exists and is not `hidden` (the running session's rank-0 specs included); `"<ns>/<name>"` registry keys form plugin namespaces, reached as `peter$<ns>$<name>` through lazy `gptr_ns` nodes; a namespace equal to a reserved or existing member name, or to a provider name, is refused with one registry diagnostic (P02 already refuses it at registration; this is the second line of defence for specs registered in the other order). `ns_register_provider(name, fun)` registers a node provider (`mcp` is P18's); providers are configuration, not run state. Unknown names signal `gptr_error_unknown_member` with the sorted member list (acceptance 3). Resolution does no I/O and opens no connection (Task 10 proves it with traced file functions).
 
 **Interfaces:**
 - Consumes (P01, P02, P06, P09, P15; 04 §7.1, §7.2, §7.6, §7.9, §7.0): `registry_get(kind, name, session = NULL)` (activates a lazy winner), `registry_all(kind, session = NULL)` (returns `tool` placeholders unactivated: `lazy = TRUE`, `declaration = list(signature, description)`), `registry_names(kind, session = NULL)`, `registry_diagnostic(source, event, class, message)`, `registry_add(spec, source, rank, session = NULL, state = "active")` (default `state = "active"`, which `local_spec()` relies on; tests pass `state = "lazy"` for plugin placeholders) and `ext_placeholder(kind, name, source, declaration = NULL)` (tests), `as_tool_result(x)`, `gptr_tool_result(text, images, details, is_error, value)`, `gptr_tool(...)` (tests), `registry_add()`/`registry_remove()` (tests), `schema_signature(name, schema, description, prefix)`, `first_sentence(text)`, `json_obj()`, `check_class()`, `check_string()`, `check_strings()`, `check_choice()`, `check_function()`, `check_number()`, `dispatch_nested(name, input, ctx)` (P06, kernel SDK), `gptr_describe(x, budget)` (P09), `ext_service_has("doc.edit")`/`ext_service_get("doc.edit")` (P15: `function(path, edits, session) <gptr_tool_result> or NULL`); Task 1: `ns_r_call()`, `budget_head()`, `member_budget()`, `ns_print_lines()`, `new_gptr_text()`; Task 2: `resolve_tool_path()`; Task 6: `edit_file()`, `edit_envelope_of()`, `edit_normalize_args()`, `edit_nested_input()`, `new_gptr_patch()`.
@@ -4407,11 +4407,11 @@ test_that("member_closure() keeps the function's formals and calls it directly o
   expect_identical(names(formals(m)), c("x", "times"))
   expect_identical(m(4), 8)
   expect_identical(m(4, times = 3), 12)
-  expect_error(m(), "gptr$double_it(): argument `x` is missing.", fixed = TRUE,
+  expect_error(m(), "peter$double_it(): argument `x` is missing.", fixed = TRUE,
                class = "gptr_error_invalid_argument")
   expect_identical(attr(m, "tool"), "double_it")
   expect_identical(utils::capture.output(print(m)),
-                   "gptr$double_it(x, times = 2)  # Double a number.")
+                   "peter$double_it(x, times = 2)  # Double a number.")
 })
 
 test_that("inside r a member call passes dispatch_nested() with the supplied arguments only", {
@@ -4474,7 +4474,7 @@ test_that("ns_resolve() finds user members and errors on unknown names listing t
   expect_s3_class(cnd, "gptr_error_unknown_member")
   expect_identical(cnd$name, "nope")
   expect_true("double_it" %in% cnd$available)
-  expect_match(conditionMessage(cnd), "gptr$nope is not a gptr member. Members: ", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "peter$nope is not a peter member. Members: ", fixed = TRUE)
   local_spec(gptr_tool("secret_helper", "Hidden.", fun = function() 1, exposure = "hidden"))
   expect_error(ns_resolve("secret_helper"), class = "gptr_error_unknown_member")
 })
@@ -4495,8 +4495,8 @@ test_that("plugin members live under their namespace; gptr_ns nodes are lazy and
     node$x = 1
   }, class = "gptr_error_readonly")
   out = utils::capture.output(print(node))
-  expect_identical(out, c("<gptr namespace gptr$demo: 1 members>",
-                          "gptr$demo$summarise(x: string)  # Summarise a vector."))
+  expect_identical(out, c("<peter namespace peter$demo: 1 members>",
+                          "peter$demo$summarise(x: string)  # Summarise a vector."))
   expect_error(ns_resolve(c("demo", "nope")), class = "gptr_error_unknown_member")
 })
 
@@ -4512,7 +4512,7 @@ test_that("a plugin r member without a namespace or with a reserved one is refus
   expect_identical(ns_resolve("mine")(), "ok")
 })
 
-test_that("namespace providers resolve their own paths (the hook P18 uses for gptr$mcp)", {
+test_that("namespace providers resolve their own paths (the hook P18 uses for peter$mcp)", {
   withr::defer(rm("mcpx", envir = ns_providers))
   ns_register_provider("mcpx", function(path) {
     if (length(path) == 1L) return(ns_node(path, "mcp", members = function() c("github", "files")))
@@ -4526,7 +4526,7 @@ test_that("namespace providers resolve their own paths (the hook P18 uses for gp
                class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr$describe() returns gptr_describe() of the object", {
+test_that("peter$describe() returns gptr_describe() of the object", {
   d = member_describe(mtcars, budget = 60L)
   expect_s3_class(d, "gptr_text")
   expect_identical(as.character(d), gptr_describe(mtcars, budget = 60L))
@@ -4621,15 +4621,15 @@ ns_schema_formals = function(schema) {
 }
 
 #' One-line signature of a member: the spec's own `signature`; for namespaced (plugin) members the
-#' typed catalog line `gptr$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>`
-#' (contract section 9.3); otherwise the R formals `gptr$<name>(<formals>)  # <first sentence>`
+#' typed catalog line `peter$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>`
+#' (contract section 9.3); otherwise the R formals `peter$<name>(<formals>)  # <first sentence>`
 #' @noRd
 member_signature = function(spec) {
   if (is.character(spec$signature) && length(spec$signature) == 1L) return(spec$signature)
   if (!is.null(spec$namespace)) {
     schema = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
     return(schema_signature(paste0(spec$namespace, "$", spec$name), schema,
-                            description = spec$description, prefix = "gptr$"))
+                            description = spec$description, prefix = "peter$"))
   }
   fun = spec$fun
   if (!is.function(fun) && is.list(spec$parameters)) {
@@ -4640,7 +4640,7 @@ member_signature = function(spec) {
 }
 
 #' Catalog line of a registered spec, or of a lazy plugin's placeholder from its manifest
-#' declaration without activating the plugin (contract section 10.8): `gptr$<ns>$<signature>  #
+#' declaration without activating the plugin (contract section 10.8): `peter$<ns>$<signature>  #
 #' <first sentence>`; NULL for a placeholder that declares no signature
 #' @noRd
 ns_spec_line = function(spec, key) {
@@ -4650,11 +4650,11 @@ ns_spec_line = function(spec, key) {
   if (!is.character(sig) || length(sig) != 1L || !nzchar(sig)) return(NULL)
   sentence = first_sentence(as.character(decl$description %||% ""))
   ns = if (grepl("/", key, fixed = TRUE)) paste0(sub("/.*$", "", key), "$") else ""
-  paste0("gptr$", ns, sig, if (nzchar(sentence)) paste0("  # ", sentence))
+  paste0("peter$", ns, sig, if (nzchar(sentence)) paste0("  # ", sentence))
 }
 
-#' Is an un-namespaced spec a `gptr$` member? A `fun`, or an `execute` when the spec is `deferred`
-#' (contract 9.1: "found only through gptr$search() (still callable)"), and not `hidden` (IC-37)
+#' Is an un-namespaced spec a `peter$` member? A `fun`, or an `execute` when the spec is `deferred`
+#' (contract 9.1: "found only through peter$search() (still callable)"), and not `hidden` (IC-37)
 #' @noRd
 ns_member_ok = function(spec) {
   !is.null(spec) && !isTRUE(spec$lazy) && is.null(spec$namespace) &&
@@ -4662,12 +4662,12 @@ ns_member_ok = function(spec) {
     (is.function(spec$fun) || (identical(spec$exposure, "deferred") && is.function(spec$execute)))
 }
 
-#' `gptr$<name>(<formals>)  # <first sentence>`
+#' `peter$<name>(<formals>)  # <first sentence>`
 #' @noRd
 ns_signature_line = function(name, fun, description, dots = TRUE) {
   sentence = first_sentence(description %||% "")
   comment = if (nzchar(sentence)) paste0("  # ", sentence)
-  paste0("gptr$", name, ns_formals_text(fun, dots), comment)
+  paste0("peter$", name, ns_formals_text(fun, dots), comment)
 }
 
 #' Names of formals without a default (`...` excluded)
@@ -4684,7 +4684,7 @@ ns_check_required = function(frame, required, tool_name) {
   for (nm in required) {
     if (eval(call("missing", as.name(nm)), frame)) {
       shown = sub("/", "$", tool_name, fixed = TRUE)
-      gptr_abort(paste0("gptr$", shown, "(): argument `", nm, "` is missing."),
+      gptr_abort(paste0("peter$", shown, "(): argument `", nm, "` is missing."),
                  "invalid_argument", arg = nm, expected = "a value")
     }
   }
@@ -4748,7 +4748,7 @@ ns_generated_fun = function(fmls, exec, tool_name) {
   f
 }
 
-#' `gptr$describe(x, budget = 150L)`: gptr_describe() of the object (P09), as printable text
+#' `peter$describe(x, budget = 150L)`: gptr_describe() of the object (P09), as printable text
 #'
 #' Copy-safety [R4]: `x` reaches only the describer's leaf functions; nothing keeps it.
 #' @noRd
@@ -4773,7 +4773,7 @@ ns_routed_patch = function(path, res) {
   new_gptr_patch(path, ns_result_text(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
 }
 
-#' `gptr$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`
+#' `peter$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`
 #' @noRd
 member_edit = function(path, edits, replace_all = FALSE) {
   routed = edit_route_document(path, edits)
@@ -4844,7 +4844,7 @@ member_closure = function(spec) {
 #' @export
 #' @noRd
 print.gptr_member = function(x, ...) {
-  ns_print_lines(attr(x, "signature") %||% "<gptr member>")
+  ns_print_lines(attr(x, "signature") %||% "<peter member>")
   invisible(x)
 }
 
@@ -4870,7 +4870,7 @@ ns_refuse = function(name, why) {
   if (exists(name, envir = ns_refused, inherits = FALSE)) return(invisible(NULL))
   assign(name, TRUE, envir = ns_refused)
   registry_diagnostic("builtin:tools", "member_refused", "invalid_spec",
-                      paste0("gptr$", name, " refused: ", why))
+                      paste0("peter$", name, " refused: ", why))
   invisible(NULL)
 }
 
@@ -4911,7 +4911,7 @@ ns_plugin_namespaces = function(sid = NULL, members = ns_member_names(sid)) {
   sort(ns[!(ns %in% taken)], method = "radix")
 }
 
-#' Names completing `gptr$` (the `ns.names` service behind P08's `.DollarNames.gptr_gateway`)
+#' Names completing `peter$` (the `ns.names` service behind P08's `.DollarNames.gptr_gateway`)
 #'
 #' @param pattern A regular expression from the completion engine ("" for all).
 #' @return Sorted chr of member, provider and plugin-namespace names.
@@ -4941,7 +4941,7 @@ ns_node = function(path, kind = "plugin", members = NULL, signatures = NULL) {
 }
 
 #' Register a namespace provider (contract section 7.10): `fun(path)` returns a member closure or a
-#' `gptr_ns` node for `gptr$<name>$...` (P18 registers "mcp")
+#' `gptr_ns` node for `peter$<name>$...` (P18 registers "mcp")
 #' @noRd
 ns_register_provider = function(name, fun) {
   check_string(name, "name")
@@ -4958,12 +4958,13 @@ ns_register_provider = function(name, fun) {
 #' @noRd
 ns_unknown = function(path) {
   avail = ns_names("")
-  gptr_abort(paste0("gptr$", paste(path, collapse = "$"), " is not a gptr member. Members: ",
+  gptr_abort(paste0("peter$", paste(path, collapse = "$"), " is not a peter member. Members: ",
                     paste(avail, collapse = ", "), "."),
              "unknown_member", name = paste(path, collapse = "$"), available = avail)
 }
 
-#' Resolve `gptr$<a>` or `gptr$<a>$<b>...` (the `ns.resolve` service behind P08's `$.gptr_gateway`)
+#' Resolve `peter$<a>` or `peter$<a>$<b>...` (the `ns.resolve` service behind P08's
+#' `$.gptr_gateway`)
 #'
 #' No I/O and no connections: only registry lookups and closure construction.
 #' @param path chr: the member path, e.g. "grep" or c("demo", "summarise").
@@ -5002,14 +5003,14 @@ ns_resolve = function(path) {
 #' @export
 #' @noRd
 `$<-.gptr_ns` = function(x, name, value) {
-  gptr_abort("gptr namespaces are read-only.", "readonly", object = "gptr_ns",
+  gptr_abort("peter namespaces are read-only.", "readonly", object = "gptr_ns",
              field = as.character(name))
 }
 
 #' @export
 #' @noRd
 `[[<-.gptr_ns` = function(x, i, ..., value) {
-  gptr_abort("gptr namespaces are read-only.", "readonly", object = "gptr_ns",
+  gptr_abort("peter namespaces are read-only.", "readonly", object = "gptr_ns",
              field = as.character(i))
 }
 
@@ -5054,13 +5055,13 @@ print.gptr_ns = function(x, ...) {
     vapply(nms, function(n) {
       key = paste0(path[1L], "/", n)
       line = if (is.null(specs[[key]])) NULL else ns_spec_line(specs[[key]], key)
-      line %||% paste0("gptr$", path[1L], "$", n)
+      line %||% paste0("peter$", path[1L], "$", n)
     }, "", USE.NAMES = FALSE)
   } else {
-    paste0("gptr$", paste(path, collapse = "$"), "$", nms)
+    paste0("peter$", paste(path, collapse = "$"), "$", nms)
   }
   shown = budget_head(lines, member_budget())
-  title = paste0("<gptr namespace gptr$", paste(path, collapse = "$"), ": ", length(nms),
+  title = paste0("<peter namespace peter$", paste(path, collapse = "$"), ": ", length(nms),
                  " members>")
   more = if (shown$omitted > 0L) paste0("(+ ", shown$omitted, " more: names(x))")
   ns_print_lines(c(title, shown$lines, more))
@@ -5089,11 +5090,11 @@ git add R/tool-namespace.R tests/testthat/test-tool-namespace.R NAMESPACE
 git commit -m "feat(tools): add member closures, namespace resolution and gptr_ns nodes"
 ```
 
-### Task 9: The plugin catalog, BM25, `gptr$search()` and `gptr$help()`
+### Task 9: The plugin catalog, BM25, `peter$search()` and `peter$help()`
 
 **Files:** Modify: `R/tool-namespace.R` (append part 3 of 4); Test: `tests/testthat/test-tool-namespace.R` (append part 3 of 4).
 
-`ns_catalog()` builds the body of the T1 `plugins` section (IC-25, 04 §9.3; header text verbatim): one `gptr$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>` line per plugin `r` member, sorted by name; over the budget, descriptions are trimmed from the end of the catalog (no usage history exists at freeze, so the last entries count as least recently used), names are always kept. A lazy plugin contributes the signature lines its manifest declares (`extension.declarations`), read from the unactivated placeholders that `registry_all("tool")` returns, so freezing a prompt never runs a plugin's factory (04 §10.8: "activation never changes the cached prefix"; P17's acceptance 3a checks that the package is still not loaded after the first `gptr()` call); `gptr$search()` searches placeholders through their declarations the same way, and only calling the member activates the plugin. `bm25_index()`/`bm25_search()` are the port of Pi's `tool_search` ranker (report 06 §5.7: camelCase splitting, stop words, naive singular stemming, k1 = 1.2, b = 0.75, idf = ln(1 + (N - f + 0.5) / (f + 0.5)), ties in document order); the test reproduces Pi's tokens, ranking and scores on its fixture. `gptr$search(words, limit = 8L)` ranks the documents of every `search_source` record (IC-69: the `members` source of Task 10, kinds `member`, `plugin`, `deferred`, plus any plugin's) together with skills (P17's `skill.catalog` service) and MCP tools (P18's `mcp.catalog` service) parsed from their catalog texts, returning df `name`, `kind`, `signature`, `score` (04 §9.4). `search_sources(session)` is the `search.sources` service (IC-34); a failing source is skipped with a registry diagnostic. `gptr$help(name, package = NULL, budget = 800L)` shows a member's or plugin function's signature, description and arguments (an MCP tool's through the `mcp` provider's member `spec` attribute), else the R help page through `utils::help()`, `tools::Rd_db()` and `tools::Rd2txt()` (report 20 §5.2: no `:::`), cut to the budget with a notice.
+`ns_catalog()` builds the body of the T1 `plugins` section (IC-25, 04 §9.3; header text verbatim): one `peter$<ns>$<name>(<arg>: <type>, <arg>?: <type>)  # <first sentence>` line per plugin `r` member, sorted by name; over the budget, descriptions are trimmed from the end of the catalog (no usage history exists at freeze, so the last entries count as least recently used), names are always kept. A lazy plugin contributes the signature lines its manifest declares (`extension.declarations`), read from the unactivated placeholders that `registry_all("tool")` returns, so freezing a prompt never runs a plugin's factory (04 §10.8: "activation never changes the cached prefix"; P17's acceptance 3a checks that the package is still not loaded after the first `peter()` call); `peter$search()` searches placeholders through their declarations the same way, and only calling the member activates the plugin. `bm25_index()`/`bm25_search()` are the port of Pi's `tool_search` ranker (report 06 §5.7: camelCase splitting, stop words, naive singular stemming, k1 = 1.2, b = 0.75, idf = ln(1 + (N - f + 0.5) / (f + 0.5)), ties in document order); the test reproduces Pi's tokens, ranking and scores on its fixture. `peter$search(words, limit = 8L)` ranks the documents of every `search_source` record (IC-69: the `members` source of Task 10, kinds `member`, `plugin`, `deferred`, plus any plugin's) together with skills (P17's `skill.catalog` service) and MCP tools (P18's `mcp.catalog` service) parsed from their catalog texts, returning df `name`, `kind`, `signature`, `score` (04 §9.4). `search_sources(session)` is the `search.sources` service (IC-34); a failing source is skipped with a registry diagnostic. `peter$help(name, package = NULL, budget = 800L)` shows a member's or plugin function's signature, description and arguments (an MCP tool's through the `mcp` provider's member `spec` attribute), else the R help page through `utils::help()`, `tools::Rd_db()` and `tools::Rd2txt()` (report 20 §5.2: no `:::`), cut to the budget with a notice.
 
 **Interfaces:**
 - Consumes (P01, P02, P06, P17, P18): `registry_all(kind, session = NULL)` (tool placeholders unactivated), `registry_add(spec, source, rank, session = NULL, state = "active")` (tests pass `state = "lazy"` for plugin placeholders), `ext_placeholder(kind, name, source, declaration = NULL)` and `gptr_registry("tool")` (tests), `registry_get()`, `registry_names()`, `registry_diagnostic()`, `est_tokens()`, `schema_signature()`, `first_sentence()`, `check_*()`, `gptr_abort()`, `session_live(s)` (kernel SDK; its `ctx`), `ext_service_has()`/`ext_service_get()` for `skill.catalog` and `mcp.catalog` (`function(session, budget) chr(1)`); Task 1: `budget_head()`, `new_gptr_text()`; Task 4: `split_lines_count()`; Task 8: `member_signature()`, `ns_spec_line()`, `ns_formals_schema()`, `ns_plugin_namespaces()`, `ns_member_spec()`, `ns_current_session()`, `ns_session_id()`, `ns_providers`.
@@ -5118,7 +5119,7 @@ test_that("ns_catalog() lists plugin r members and trims descriptions, never nam
              source = "plugin:demo", rank = 5L)
   full = strsplit(ns_catalog(NULL), "\n")[[1L]]
   expect_identical(length(full), 40L)
-  expect_identical(full[1L], paste("gptr$demo$tool01(x: string, y?: string)",
+  expect_identical(full[1L], paste("peter$demo$tool01(x: string, y?: string)",
                                    " # Does thing number 1 with several words of text."))
   small = strsplit(ns_catalog(NULL, budget = 800L), "\n")[[1L]]
   expect_identical(length(small), 40L)
@@ -5144,7 +5145,7 @@ test_that("a lazy plugin is catalogued, completed and searched through its decla
     reg = gptr_registry("tool")
     reg$state[reg$name == "lazyns/search"]
   }
-  line = "gptr$lazyns$search(condition: string)  # Search recruiting clinical trials."
+  line = "peter$lazyns$search(condition: string)  # Search recruiting clinical trials."
   expect_identical(ns_catalog(NULL), line)
   expect_true("lazyns" %in% ns_names(""))
   node = ns_resolve("lazyns")
@@ -5218,7 +5219,7 @@ test_that("the BM25 port reproduces Pi's tokens, ranking and scores (report 06 s
   expect_error(bm25_index(list()), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr$search() ranks members, plugin tools and search_source documents", {
+test_that("peter$search() ranks members, plugin tools and search_source documents", {
   local_spec(double_spec())
   local_spec(gptr_tool("trial_lookup", "Look up clinical trials by indication.",
                        fun = function(indication) 1,
@@ -5237,19 +5238,19 @@ test_that("gptr$search() ranks members, plugin tools and search_source documents
   expect_named(res, c("name", "kind", "signature", "score"))
   expect_identical(res$name[1], "trials/trial_lookup")
   expect_identical(res$kind[1], "plugin")
-  expect_identical(res$signature[1], paste("gptr$trials$trial_lookup(indication: string)",
+  expect_identical(res$signature[1], paste("peter$trials$trial_lookup(indication: string)",
                                            " # Look up clinical trials by indication."))
   expect_true("glossary/cohort" %in% res$name)
   expect_identical(res$kind[res$name == "glossary/cohort"], "glossary")
   conv = member_search("convert units")
   expect_identical(conv$kind[1], "deferred")
-  expect_identical(conv$signature[1], "gptr$rare_thing()  # Convert units of measurement.")
+  expect_identical(conv$signature[1], "peter$rare_thing()  # Convert units of measurement.")
   expect_identical(ns_resolve("rare_thing")(), "x")
   expect_identical(member_search("double number")$kind[1], "member")
   expect_identical(nrow(member_search("zzzz qqqq")), 0L)
 })
 
-test_that("gptr$help() shows a member's schema, else the R help page, within the budget", {
+test_that("peter$help() shows a member's schema, else the R help page, within the budget", {
   params = list(type = "object", required = I("indication"),
                 properties = list(indication = list(type = "string", description = "Disease"),
                                   phase = list(enum = c("1", "2", "3"))))
@@ -5261,7 +5262,7 @@ test_that("gptr$help() shows a member's schema, else the R help page, within the
   h = member_help("trials/trial_lookup")
   expect_s3_class(h, "gptr_text")
   expect_identical(as.character(h), c(
-    paste("gptr$trials$trial_lookup(indication: string, phase?: any)",
+    paste("peter$trials$trial_lookup(indication: string, phase?: any)",
           " # Look up clinical trials by indication."),
     "",
     "Look up clinical trials by indication. Returns a data frame.",
@@ -5296,7 +5297,7 @@ Append to `R/tool-namespace.R`:
 
 ns_plugins_header = paste(
   "Plugin functions are R functions called inside r. They return R values; assign and summarise",
-  "them before printing. gptr$search(\"words\") finds more and gptr$help(\"<ns>/<name>\") shows",
+  "them before printing. peter$search(\"words\") finds more and peter$help(\"<ns>/<name>\") shows",
   "a full schema."
 )
 
@@ -5538,7 +5539,7 @@ ns_catalog_docs = function(session) {
       }
       tool = regmatches(ln, regexec("^\\s+([A-Za-z0-9_.-]+)\\(", ln))[[1L]]
       if (length(tool) && nzchar(server)) {
-        sig = paste0("gptr$mcp$", server, "$", trimws(ln))
+        sig = paste0("peter$mcp$", server, "$", trimws(ln))
         rows[[length(rows) + 1L]] = data.frame(id = paste0(server, "/", tool[2L]),
                                                text = paste(server, ln), kind = "mcp",
                                                signature = sig, stringsAsFactors = FALSE)
@@ -5554,7 +5555,7 @@ ns_catalog_docs = function(session) {
 
 # ---- member functions (contract section 9.4) -----------------------------------------------------
 
-#' `gptr$search(words, limit = 8L)`: BM25 over members, plugin and deferred tools, `search_source`
+#' `peter$search(words, limit = 8L)`: BM25 over members, plugin and deferred tools, `search_source`
 #' records, skills and MCP tools
 #' @noRd
 member_search = function(words, limit = 8L) {
@@ -5627,7 +5628,7 @@ ns_r_help = function(topic, package = NULL) {
   c(paste0("[help: ", pkg, "::", topic, "]", more), as_utf8(txt))
 }
 
-#' `gptr$help(name, package = NULL, budget = 800L)`: the schema of a member (`"grep"`), a plugin
+#' `peter$help(name, package = NULL, budget = 800L)`: the schema of a member (`"grep"`), a plugin
 #' function (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`), else the R help page; budgeted
 #' @noRd
 member_help = function(name, package = NULL, budget = 800L) {
@@ -5668,19 +5669,19 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 126 ]`.
 
 ```bash
 git add R/tool-namespace.R tests/testthat/test-tool-namespace.R
-git commit -m "feat(tools): add the plugin catalog, BM25 search and gptr\$help()"
+git commit -m "feat(tools): add the plugin catalog, BM25 search and peter\$help()"
 ```
 
 ### Task 10: Members, direct-tool executes, risk and `builtin:tools`
 
 **Files:** Modify: `R/tool-namespace.R` (append part 4 of 4); Test: `tests/testthat/test-tool-namespace.R` (append part 4 of 4).
 
-This task completes `builtin:tools` (04 §7.10 `builtin_tools(gptr)`). **Members** (04 §9.4): `gptr$read()` returns `gptr_lines` and attaches an image block to the running `r` result; `gptr$write()` returns the absolute path invisibly; `gptr$grep()` and `gptr$ls()` also accept the direct tools' argument names (`ignoreCase`, `literal`, `limit`) through `...`: the same spec carries both forms (IC-37) and P02's validator requires `fun`'s formals to cover the schema's properties unless `fun` has `...` (04 §6.8), while the member keeps the R names of 04 §9.4 (`ignore_case`, `fixed`); `gptr$out(id, stream, lines)` returns the stored text through P01's `out_get()` (session store, process store, spill file; IC-71), accepting the `lines` list a validated nested input carries; `gptr$plot(which = NULL, width = 1000L, height = 700L)` attaches the current device's plot through P09's `plot_png()` or stored plot `which` of the last `r` result (the PNGs listed in its `details$plot_files`/`details$plot_index`, IC-67). **Direct-tool executes** return Pi's texts (04 §9.2 "Result texts"; `Successfully wrote to <path>`, `Successfully replaced N block(s) in <path>.`, the read text, `grep`/`find`/`ls` texts of Task 7); called as a nested member call of the same session's running `r` evaluation, the same execute returns the member's R value with a one-line summary instead (that is how `dispatch_nested()` obtains the value). `describe` as a nested call records only the gate (the member computes the value itself, rule R1). **Risk** (04 §9.4, IC-54): reads are level 0 in the project root and for skill pseudo-paths, 1 outside, 2 for protected, critical and control paths; writes are 2 in the project or `tempdir()`, 3 outside, protected or `instructions`, 4 for `control` and critical paths; an envelope's paths count too; `grep`/`find`/`ls` are 0 in the project and at most 1. **Specs**: one spec per capability (IC-37) with Pi's descriptions and schemas byte for byte (04 §9.2), the `<tools>` snippets of 03 §7.3 / 04 §9.3, the `<rules>` `guidelines` of 03 §7.3 (IC-68), `execution = "sequential"` for file tools, `annotations = list(read_only = TRUE)` for read-only ones, and `record = FALSE` for `help`, `search`, `describe`, `plot`, `out` (IC-48). `builtin_tools()` also registers the `<r_session>` fragments `helpers` (order 10) and `out` (order 20), the `plugins` section (T1, order 860, budget 1,500, text `ns_plugins_section`) and the `members` `search_source`; the file ends with the `on_load()` declarations of the built-in and of the services `ns.resolve`, `ns.names` and `search.sources` (owned by `builtin:tools`, IC-34).
+This task completes `builtin:tools` (04 §7.10 `builtin_tools(gptr)`). **Members** (04 §9.4): `peter$read()` returns `gptr_lines` and attaches an image block to the running `r` result; `peter$write()` returns the absolute path invisibly; `peter$grep()` and `peter$ls()` also accept the direct tools' argument names (`ignoreCase`, `literal`, `limit`) through `...`: the same spec carries both forms (IC-37) and P02's validator requires `fun`'s formals to cover the schema's properties unless `fun` has `...` (04 §6.8), while the member keeps the R names of 04 §9.4 (`ignore_case`, `fixed`); `peter$out(id, stream, lines)` returns the stored text through P01's `out_get()` (session store, process store, spill file; IC-71), accepting the `lines` list a validated nested input carries; `peter$plot(which = NULL, width = 1000L, height = 700L)` attaches the current device's plot through P09's `plot_png()` or stored plot `which` of the last `r` result (the PNGs listed in its `details$plot_files`/`details$plot_index`, IC-67). **Direct-tool executes** return Pi's texts (04 §9.2 "Result texts"; `Successfully wrote to <path>`, `Successfully replaced N block(s) in <path>.`, the read text, `grep`/`find`/`ls` texts of Task 7); called as a nested member call of the same session's running `r` evaluation, the same execute returns the member's R value with a one-line summary instead (that is how `dispatch_nested()` obtains the value). `describe` as a nested call records only the gate (the member computes the value itself, rule R1). **Risk** (04 §9.4, IC-54): reads are level 0 in the project root and for skill pseudo-paths, 1 outside, 2 for protected, critical and control paths; writes are 2 in the project or `tempdir()`, 3 outside, protected or `instructions`, 4 for `control` and critical paths; an envelope's paths count too; `grep`/`find`/`ls` are 0 in the project and at most 1. **Specs**: one spec per capability (IC-37) with Pi's descriptions and schemas byte for byte (04 §9.2), the `<tools>` snippets of 03 §7.3 / 04 §9.3, the `<rules>` `guidelines` of 03 §7.3 (IC-68), `execution = "sequential"` for file tools, `annotations = list(read_only = TRUE)` for read-only ones, and `record = FALSE` for `help`, `search`, `describe`, `plot`, `out` (IC-48). `builtin_tools()` also registers the `<r_session>` fragments `helpers` (order 10) and `out` (order 20), the `plugins` section (T1, order 860, budget 1,500, text `ns_plugins_section`) and the `members` `search_source`; the file ends with the `on_load()` declarations of the built-in and of the services `ns.resolve`, `ns.names` and `search.sources` (owned by `builtin:tools`, IC-34).
 
-The tests check the specs against 04 §9.2 and against P07's stand-ins in `tests/testthat/fixtures/bench/prefix-baseline.json` (P07 copied 04's texts there, so P10's texts must reproduce them byte for byte), acceptance 3 (`gptr$nope` lists the members; completion lists `read`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`; member access performs no I/O, measured by tracing base file functions, and opens no connection), acceptance 6 at the tool level (a fuzzy edit returns the message, the reason line and a diff of at most 400 tokens; an exact edit the message only) and nested calls validated against each tool's schema exactly as P06 does (`schema_validate()`).
+The tests check the specs against 04 §9.2 and against P07's stand-ins in `tests/testthat/fixtures/bench/prefix-baseline.json` (P07 copied 04's texts there, so P10's texts must reproduce them byte for byte), acceptance 3 (`peter$nope` lists the members; completion lists `read`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`; member access performs no I/O, measured by tracing base file functions, and opens no connection), acceptance 6 at the tool level (a fuzzy edit returns the message, the reason line and a diff of at most 400 tokens; an exact edit the message only) and nested calls validated against each tool's schema exactly as P06 does (`schema_validate()`).
 
 **Interfaces:**
-- Consumes (P01, P02, P06, P09; 04 §7.1, §7.2, §7.9): `gptr_tool()`, `gptr_prompt_section(name, text, tier, order, budget, parent)`, `gptr_spec("search_source", name, docs =)`, `gptr_tool_result()`, `out_get(id, stream, lines, session)`, `out_put()` (tests), `plot_png(recorded, width, height, res)`, `block_image()`, `session_data(s)`, `session_live(s)`, `describe_binding(name, envir, budget)`, `path_class(path, root)`, `path_key()`, `project_root()`, `gptr_inform()`, `gptr_opt("plot_res")`, `ext_declare_builtin(name, factory)`, `ext_service_set(name, fun, provided_by, builtin)`, `on_load(expr)`, `schema_validate(schema, input)` (tests), `gptr_registry("tool")` (tests), the exported `gptr` gateway (P08, tests), `local_project()` (tests); Tasks 1-9.
+- Consumes (P01, P02, P06, P09; 04 §7.1, §7.2, §7.9): `gptr_tool()`, `gptr_prompt_section(name, text, tier, order, budget, parent)`, `gptr_spec("search_source", name, docs =)`, `gptr_tool_result()`, `out_get(id, stream, lines, session)`, `out_put()` (tests), `plot_png(recorded, width, height, res)`, `block_image()`, `session_data(s)`, `session_live(s)`, `describe_binding(name, envir, budget)`, `path_class(path, root)`, `path_key()`, `project_root()`, `gptr_inform()`, `gptr_opt("plot_res")`, `ext_declare_builtin(name, factory)`, `ext_service_set(name, fun, provided_by, builtin)`, `on_load(expr)`, `schema_validate(schema, input)` (tests), `gptr_registry("tool")` (tests), the exported `peter` gateway (P08, tests), `local_project()` (tests); Tasks 1-9.
 - Produces (04 §7.10, §9.4): `builtin_tools(gptr)`; specs `read`, `edit`, `write` (`exposure = "direct"`), `grep`, `find`, `ls` (`exposure = "r"`, promoted to direct tools by the `extended` preset), each with `execute` and `fun`; members `help`, `search`, `describe`, `plot`, `out` (`exposure = "r"`, `record = FALSE`); prompt sections `helpers`, `out` (`parent = "r_session"`) and `plugins`; the `members` search source; services `ns.resolve`, `ns.names`, `search.sources`; internal for Task 11: `member_plot()`, `ns_last_plots(session)`, `tool_path_risk(path, write = FALSE)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -5688,7 +5689,7 @@ The tests check the specs against 04 §9.2 and against P07's stand-ins in `tests
 Append to `tests/testthat/test-tool-namespace.R`:
 
 ```r
-test_that("gptr$out() returns stored text from the process store and pages it with lines", {
+test_that("peter$out() returns stored text from the process store and pages it with lines", {
   id = out_put(sprintf("line %d", 1:50))
   expect_identical(as.character(member_out(id, lines = 2:3)), c("line 2", "line 3"))
   expect_s3_class(member_out(id), "gptr_text")
@@ -5697,7 +5698,7 @@ test_that("gptr$out() returns stored text from the process store and pages it wi
   expect_error(member_out(id, lines = 0), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr$plot() attaches the current plot or a stored one to the running r result", {
+test_that("peter$plot() attaches the current plot or a stored one to the running r result", {
   expect_null(member_plot())
   withr::local_pdf(NULL)
   grDevices::dev.control(displaylist = "enable")
@@ -5749,7 +5750,7 @@ test_that("file members return R values; an image read inside r is attached", {
   expect_identical(member_ls(td)$path, c("i.png", "x.txt", "y.txt"))
 })
 
-test_that("gptr$grep() and gptr$ls() accept the direct tools' argument names (P02 formals rule)", {
+test_that("peter$grep() and peter$ls() accept the direct tools' argument names (P02 formals)", {
   td = withr::local_tempdir()
   writeBin(charToRaw("Alpha\nbeta\n"), file.path(td, "a.txt"))
   writeBin(charToRaw("x"), file.path(td, "b.txt"))
@@ -5765,7 +5766,7 @@ test_that("gptr$grep() and gptr$ls() accept the direct tools' argument names (P0
   expect_false(grepl("...", attr(ns_resolve("grep"), "signature"), fixed = TRUE))
 })
 
-test_that("gptr$out(lines =) accepts the list that a validated nested input carries", {
+test_that("peter$out(lines =) accepts the list that a validated nested input carries", {
   id = out_put(c("l1", "l2", "l3"))
   expect_identical(as.character(member_out(id, lines = list(1, 3))), c("l1", "l3"))
   expect_identical(as.character(member_out(id, lines = 2L)), "l2")
@@ -5883,13 +5884,13 @@ test_that("builtin:tools registers fragments, the plugins section, a search sour
                 secs)
   expect_identical(unname(vapply(frag, function(s) as.integer(s$order), 0L)), c(10L, 20L))
   helpers = paste(
-    "- Helpers are R functions on the gptr object and return R values: gptr$grep(pattern,",
-    "path), gptr$find(pattern, path, sort), gptr$ls(path), gptr$describe(x).",
-    "gptr$search(\"words\") and gptr$help(name) find more."
+    "- Helpers are R functions on the peter object and return R values: peter$grep(pattern,",
+    "path), peter$find(pattern, path, sort), peter$ls(path), peter$describe(x).",
+    "peter$search(\"words\") and peter$help(name) find more."
   )
   out = paste(
-    "- Long output is cut to its head and tail; the notice names gptr$out(id) for the rest.",
-    "Use gptr$out(), gptr$help(), gptr$search() and gptr$plot() only with record = false."
+    "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest.",
+    "Use peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
   )
   expect_identical(unname(vapply(frag, function(s) s$text, "")), c(helpers, out))
   plugins = Filter(function(s) identical(s$name, "plugins"), secs)[[1L]]
@@ -5919,15 +5920,15 @@ count_io = function(expr_fun) {
   counter$n
 }
 
-test_that("gptr$nope lists the members; completion lists the built-in members (acceptance 3)", {
-  cnd = tryCatch(gptr$nope, error = identity)
+test_that("peter$nope lists the members; completion lists the built-in members (acceptance 3)", {
+  cnd = tryCatch(peter$nope, error = identity)
   expect_s3_class(cnd, "gptr_error_unknown_member")
   expect_identical(cnd$name, "nope")
   expect_true(all(members %in% cnd$available))
-  expect_true(all(members %in% utils::.DollarNames(gptr, "")))
-  expect_identical(utils::.DollarNames(gptr, "^gr"), "grep")
-  expect_s3_class(gptr$grep, "gptr_member")
-  expect_identical(attr(gptr[["read"]], "spec"), registry_get("tool", "read"))
+  expect_true(all(members %in% utils::.DollarNames(peter, "")))
+  expect_identical(utils::.DollarNames(peter, "^gr"), "grep")
+  expect_s3_class(peter$grep, "gptr_member")
+  expect_identical(attr(peter[["read"]], "spec"), registry_get("tool", "read"))
 })
 
 test_that("accessing a member performs no I/O and opens no connection", {
@@ -5935,8 +5936,8 @@ test_that("accessing a member performs no I/O and opens no connection", {
   n = count_io(function() {
     for (m in members) ns_resolve(m)
     ns_names("")
-    gptr$grep
-    gptr[["read"]]
+    peter$grep
+    peter[["read"]]
   })
   expect_identical(n, 0L)
   expect_identical(nrow(showConnections()), cons)
@@ -6067,7 +6068,7 @@ test_that("risk levels follow contract 9.4 and the control and instructions clas
 Rscript --vanilla -e 'devtools::test(filter = "tool-namespace")'
 ```
 
-Expected: `[ FAIL 50 | WARN 0 | SKIP 0 | PASS 129 ]`; the earlier tests pass, and the new ones error with `could not find function "member_out"` (or `"member_plot"`, `"member_read"`, `"member_grep"`, `"tool_write_execute"`, `"tool_risk_read"`) or fail because `registry_get("tool", "read")` is `NULL` and `gptr$nope` signals `gptr_error_not_available` (the `ns.resolve` service is not registered yet).
+Expected: `[ FAIL 50 | WARN 0 | SKIP 0 | PASS 129 ]`; the earlier tests pass, and the new ones error with `could not find function "member_out"` (or `"member_plot"`, `"member_read"`, `"member_grep"`, `"tool_write_execute"`, `"tool_risk_read"`) or fail because `registry_get("tool", "read")` is `NULL` and `peter$nope` signals `gptr_error_not_available` (the `ns.resolve` service is not registered yet).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -6091,9 +6092,9 @@ ns_last_plots = function(session) {
   none
 }
 
-#' `gptr$plot(which = NULL, width = 1000L, height = 700L)`: attach the current device's plot at that
-#' size, or plot `which` of the last `r` result (IC-67: the plots it listed as "not attached"), to
-#' the running `r` result; invisible NULL
+#' `peter$plot(which = NULL, width = 1000L, height = 700L)`: attach the current device's plot at
+#' that size, or plot `which` of the last `r` result (IC-67: the plots it listed as "not
+#' attached"), to the running `r` result; invisible NULL
 #' @noRd
 member_plot = function(which = NULL, width = 1000L, height = 700L) {
   which = check_number(which, "which", min = 1, int = TRUE, null = TRUE)
@@ -6101,7 +6102,7 @@ member_plot = function(which = NULL, width = 1000L, height = 700L) {
   height = check_number(height, "height", min = 64, max = 4000, int = TRUE)
   rc = ns_r_call()
   if (is.null(rc)) {
-    gptr_inform("gptr$plot() attaches a plot to a running r call; there is none here.", "notice")
+    gptr_inform("peter$plot() attaches a plot to a running r call; there is none here.", "notice")
     return(invisible(NULL))
   }
   block = if (is.null(which)) {
@@ -6132,8 +6133,9 @@ member_plot = function(which = NULL, width = 1000L, height = 700L) {
   invisible(NULL)
 }
 
-#' `gptr$out(id, stream = c("stdout", "stderr"), lines = NULL)`: the stored full text of a truncated
-#' result (the session's out store, the process store, then the spill file; P01 out_get())
+#' `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)`: the stored full text of a
+#' truncated result (the session's out store, the process store, then the spill file; P01
+#' out_get())
 #' @noRd
 member_out = function(id, stream = c("stdout", "stderr"), lines = NULL) {
   check_string(id, "id")
@@ -6148,8 +6150,8 @@ member_out = function(id, stream = c("stdout", "stderr"), lines = NULL) {
   new_gptr_text(out_get(id, stream = stream, lines = lines, session = live))
 }
 
-#' `gptr$read(path, offset = NULL, limit = NULL)`: a `gptr_lines` value; an image is attached to the
-#' running `r` result
+#' `peter$read(path, offset = NULL, limit = NULL)`: a `gptr_lines` value; an image is attached to
+#' the running `r` result
 #' @noRd
 member_read = function(path, offset = NULL, limit = NULL) {
   v = read_lines_value(path, offset, limit)
@@ -6159,7 +6161,7 @@ member_read = function(path, offset = NULL, limit = NULL) {
   v
 }
 
-#' `gptr$write(path, content)`: the absolute path written, invisibly
+#' `peter$write(path, content)`: the absolute path written, invisibly
 #' @noRd
 member_write = function(path, content) invisible(write_file(path, content)$details$path)
 
@@ -6170,14 +6172,14 @@ ns_member_dots = function(dots, allowed, member) {
   bad = nms[!(nms %in% allowed)]
   if (length(bad)) {
     shown = if (any(nzchar(bad))) paste(bad[nzchar(bad)], collapse = ", ") else "unnamed"
-    gptr_abort(paste0("gptr$", member, "(): unused argument(s): ", shown, "."),
+    gptr_abort(paste0("peter$", member, "(): unused argument(s): ", shown, "."),
                "invalid_argument", arg = "...",
-               expected = paste0("the arguments of gptr$", member, "()"))
+               expected = paste0("the arguments of peter$", member, "()"))
   }
   dots
 }
 
-#' `gptr$grep()` (contract section 9.4); `ignoreCase` and `literal` (the direct tool's names) are
+#' `peter$grep()` (contract section 9.4); `ignoreCase` and `literal` (the direct tool's names) are
 #' accepted as aliases of `ignore_case` and `fixed`
 #' @noRd
 member_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE,
@@ -6190,14 +6192,14 @@ member_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fi
               context = context, limit = limit, output = output, sort = sort)
 }
 
-#' `gptr$find()` (contract section 9.4)
+#' `peter$find()` (contract section 9.4)
 #' @noRd
 member_find = function(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"),
                        type = "file", limit = 1000L) {
   search_find(pattern, path = path, sort = sort, type = type, limit = limit)
 }
 
-#' `gptr$ls()` (contract section 9.4); `limit` (the direct tool's argument) keeps the first entries
+#' `peter$ls()` (contract section 9.4); `limit` (the direct tool's argument) keeps the first entries
 #' @noRd
 member_ls = function(path = ".", sort = c("name", "mtime", "size"), long = FALSE, ...) {
   dots = ns_member_dots(list(...), "limit", "ls")
@@ -6523,18 +6525,18 @@ tool_write_guidelines = "Use write only for new files or complete rewrites."
 
 # The <r_session> fragments of builtin:tools (architecture section 7.3; IC-68)
 r_session_helpers_text = paste(
-  "- Helpers are R functions on the gptr object and return R values: gptr$grep(pattern, path),",
-  "gptr$find(pattern, path, sort), gptr$ls(path), gptr$describe(x). gptr$search(\"words\") and",
-  "gptr$help(name) find more."
+  "- Helpers are R functions on the peter object and return R values: peter$grep(pattern, path),",
+  "peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search(\"words\") and",
+  "peter$help(name) find more."
 )
 r_session_out_text = paste(
-  "- Long output is cut to its head and tail; the notice names gptr$out(id) for the rest. Use",
-  "gptr$out(), gptr$help(), gptr$search() and gptr$plot() only with record = false."
+  "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest. Use",
+  "peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
 )
 
 # Member-only capabilities: descriptions and schemas
 tool_help_description = paste(
-  "Show the full schema of a gptr member, a plugin function (\"<ns>/<name>\") or an MCP tool",
+  "Show the full schema of a peter member, a plugin function (\"<ns>/<name>\") or an MCP tool",
   "(\"<server>/<tool>\"), or else the R help page of a topic."
 )
 tool_help_schema = tool_obj(
@@ -6544,7 +6546,7 @@ tool_help_schema = tool_obj(
   budget = tool_prop("number", "Token budget (default 800)")
 )
 tool_search_description = paste(
-  "Search gptr members, plugin functions, MCP tools and skills by keywords (BM25). Returns name,",
+  "Search peter members, plugin functions, MCP tools and skills by keywords (BM25). Returns name,",
   "kind, signature and score."
 )
 tool_search_schema = tool_obj(
@@ -6668,19 +6670,19 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 287 ]`.
 
 ```bash
 git add R/tool-namespace.R tests/testthat/test-tool-namespace.R
-git commit -m "feat(tools): add the gptr\$ members, direct tools, risk and builtin:tools"
+git commit -m "feat(tools): add the peter\$ members, direct tools, risk and builtin:tools"
 ```
 
 ### Task 11: The `r` tool and `builtin:r`
 
 **Files:** Create: `R/tool-r.R`; Test: `tests/testthat/test-tool-r.R`.
 
-The `r` tool of 03 §7.2 and 04 §9.2. Its `parameters` is a function evaluated once at freeze with `ctx$input` (IC-68, IC-69): `record` and `note` only when a document is bound (`ctx$input$document` non-NULL, from P15's `doc.site` service), `timeout` (described `"Seconds; best effort. Default 3600."`) only when no human can answer, giving the four measured variants (189 / 170 / 138 / 119 o200k tokens). The execute evaluates `code` through the session's `evaluator` record (setting `evaluator`, default `r`, IC-69; P09's `eval_r()` when no record exists) in the run's evaluation environment (`run_eval_env(run)`: the plan-mode scratch overlay, IC-15; `ctx$envir` outside a run), formats the model text with P09's `format_eval_result()` within `gptr.r_output_tokens`, adds the images `gptr$plot()` and `gptr$read()` attached through the r-call marker (at most `gptr.r_max_images` per call, IC-67; the refused ones are named in a final `[k image(s) from gptr$plot() or gptr$read() not attached: at most n per r call]` line, so a loop over 50 image reads cannot put 50 images into the context), and fills the stable `details` record of 04 §4.4 (`code`, `record`, `note`, `status`, `n_done`, `n_total`, `objects`, `plots`, `warnings` and `error` redacted with the `persist` profile, `changes`, `elapsed`, `out_id`, `spill`, `outputs` (at most `gptr.doc_output_lines` lines of 76 characters per expression, only when recorded), `nested` (filled by P06's `dispatch_nested()`), `bridge`, `artifacts`, `checkpoint`, `value`), plus `plot_files` and `plot_index` for `gptr$plot(which)`. Plan mode never records (IC-48). While the evaluation runs, the execute frame binds the r-call marker `gptr_r_call` (Task 1) and two session hooks collect `bridge_call` digests (P22) and `artifact_start` app paths (P23); both hooks are removed on exit. Copy-safety (R2, R3, R8): the frame binds the evaluation environment only while the call runs and resets it before formatting and on exit, creates no closure over it and keeps no value. The risk of an `r` call comes from P11's `risk.classify` service, level 2 before P11 exists.
+The `r` tool of 03 §7.2 and 04 §9.2. Its `parameters` is a function evaluated once at freeze with `ctx$input` (IC-68, IC-69): `record` and `note` only when a document is bound (`ctx$input$document` non-NULL, from P15's `doc.site` service), `timeout` (described `"Seconds; best effort. Default 3600."`) only when no human can answer, giving the four measured variants (189 / 170 / 138 / 119 o200k tokens). The execute evaluates `code` through the session's `evaluator` record (setting `evaluator`, default `r`, IC-69; P09's `eval_r()` when no record exists) in the run's evaluation environment (`run_eval_env(run)`: the plan-mode scratch overlay, IC-15; `ctx$envir` outside a run), formats the model text with P09's `format_eval_result()` within `gptr.r_output_tokens`, adds the images `peter$plot()` and `peter$read()` attached through the r-call marker (at most `gptr.r_max_images` per call, IC-67; the refused ones are named in a final `[k image(s) from peter$plot() or peter$read() not attached: at most n per r call]` line, so a loop over 50 image reads cannot put 50 images into the context), and fills the stable `details` record of 04 §4.4 (`code`, `record`, `note`, `status`, `n_done`, `n_total`, `objects`, `plots`, `warnings` and `error` redacted with the `persist` profile, `changes`, `elapsed`, `out_id`, `spill`, `outputs` (at most `gptr.doc_output_lines` lines of 76 characters per expression, only when recorded), `nested` (filled by P06's `dispatch_nested()`), `bridge`, `artifacts`, `checkpoint`, `value`), plus `plot_files` and `plot_index` for `peter$plot(which)`. Plan mode never records (IC-48). While the evaluation runs, the execute frame binds the r-call marker `gptr_r_call` (Task 1) and two session hooks collect `bridge_call` digests (P22) and `artifact_start` app paths (P23); both hooks are removed on exit. Copy-safety (R2, R3, R8): the frame binds the evaluation environment only while the call runs and resets it before formatting and on exit, creates no closure over it and keeps no value. The risk of an `r` call comes from P11's `risk.classify` service, level 2 before P11 exists.
 
-The end-to-end tests run `gptr()` on P01's fake provider through P08, P06, P07 and P09. P11 does not exist yet, so they switch the permission gate off with the documented escape hatch `gptr.unsafe_no_permissions` set outside the run (IC-53). They prove acceptance 4 (model code `gptr$grep("x")` evaluated where `gptr` is not visible runs through P09's `gptr::` shim, binds nothing in the environment, and the recorded `details$code` keeps `gptr$grep("needle")`), acceptance 5 (`gptr_return()`: a 12 MB value held by name, a 200 KB value as a copy, an anonymous value boxed; outside a run it returns its argument invisibly), acceptance 6 (a fuzzy edit returns the message and a diff of at most 400 tokens; an exact edit the message only) and acceptance 7 (the `r` schema frozen without a bound document has no `record`/`note`, and with no human it carries the short `timeout` text).
+The end-to-end tests run `peter()` on P01's fake provider through P08, P06, P07 and P09. P11 does not exist yet, so they switch the permission gate off with the documented escape hatch `gptr.unsafe_no_permissions` set outside the run (IC-53). They prove acceptance 4 (model code `peter$grep("x")` evaluated where `peter` is not visible runs through P09's `gptr::` shim, binds nothing in the environment, and the recorded `details$code` keeps `peter$grep("needle")`), acceptance 5 (`gptr_return()`: a 12 MB value held by name, a 200 KB value as a copy, an anonymous value boxed; outside a run it returns its argument invisibly), acceptance 6 (a fuzzy edit returns the message and a diff of at most 400 tokens; an exact edit the message only) and acceptance 7 (the `r` schema frozen without a bound document has no `record`/`note`, and with no human it carries the short `timeout` text).
 
 **Interfaces:**
-- Consumes (P01, P02, P06, P07, P09, P11, P15, P22, P23; 04 §7.1-7.9, §7.0): `gptr_tool()`, `ext_declare_builtin()`, `on_load()`, `registry_get("evaluator", name, session)`, `setting_get("evaluator", session, default = "r")`, `hook_add(event, handler, matcher, rank, source, session)`, `hook_remove(id)`, `run_current()`, `run_eval_env(run)`, `session_data(s)`, `eval_r(code, envir, timeout, plots, tee, budget_tokens, guard, rng, record, max_images)`, `format_eval_result(res, budget_tokens)`, `redact_hook(x, profile)`, `gptr_can_prompt()`, `workspace_root(create = FALSE)`, `path_rel()`, `project_root()`, `gptr_opt()`, `as_utf8()`, `check_string()`, `gptr_abort()`, services `doc.site` (P15: `function(session) list(path, format) or NULL`) and `risk.classify` (P11: `function(code, envir = NULL, root = NULL, kind = "r")`); tests: `gptr()`, `gptr_return()` (P08), `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project()`, `local_gptr_options()` (P01 helpers), `json_encode()`, `schema_validate()`; Task 1: `r_call_new()`; Task 10: `ns_resolve()` (tests).
+- Consumes (P01, P02, P06, P07, P09, P11, P15, P22, P23; 04 §7.1-7.9, §7.0): `gptr_tool()`, `ext_declare_builtin()`, `on_load()`, `registry_get("evaluator", name, session)`, `setting_get("evaluator", session, default = "r")`, `hook_add(event, handler, matcher, rank, source, session)`, `hook_remove(id)`, `run_current()`, `run_eval_env(run)`, `session_data(s)`, `eval_r(code, envir, timeout, plots, tee, budget_tokens, guard, rng, record, max_images)`, `format_eval_result(res, budget_tokens)`, `redact_hook(x, profile)`, `gptr_can_prompt()`, `workspace_root(create = FALSE)`, `path_rel()`, `project_root()`, `gptr_opt()`, `as_utf8()`, `check_string()`, `gptr_abort()`, services `doc.site` (P15: `function(session) list(path, format) or NULL`) and `risk.classify` (P11: `function(code, envir = NULL, root = NULL, kind = "r")`); tests: `peter()`, `gptr_return()` (P08), `local_fake_provider()`, `fake_tool()`, `fake_requests()`, `local_project()`, `local_gptr_options()` (P01 helpers), `json_encode()`, `schema_validate()`; Task 1: `r_call_new()`; Task 10: `ns_resolve()` (tests).
 - Produces (04 §7.10, §9.2, §4.4): `builtin_r(gptr)` registering the direct tool `r` (`execution = "sequential"`, `guidelines` = the three `<rules>` R lines, `snippet` of 04 §9.3); `r_schema(document = FALSE, human = TRUE)`; `r_tool_parameters(ctx)`; `r_tool_execute(input, ctx)` -> `gptr_tool_result` with `out_id`, `spill`, `truncated` set; `r_tool_risk(input, ctx)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -6689,8 +6691,8 @@ Create `tests/testthat/test-tool-r.R`:
 
 ```r
 # Tests for R/tool-r.R: the four schema variants (IC-68), evaluation and the details record
-# (contract 4.4), record and note, plan mode, images from gptr$plot(), bridge and artifact
-# collection, risk, and (below) end-to-end runs through gptr() on the fake provider: the gptr shim,
+# (contract 4.4), record and note, plan mode, images from peter$plot(), bridge and artifact
+# collection, risk, and (below) end-to-end runs through peter() on the fake provider: the gptr shim,
 # the value policy, nested gating and the fuzzy-edit diff (05 P10 acceptance 4-7).
 
 # Bind a service for the calling test only (the entry in the bootstrap table is restored afterwards)
@@ -6801,7 +6803,7 @@ test_that("an error stops the evaluation and is reported; plan mode never record
                class = "gptr_error_internal")
 })
 
-test_that("images attached by gptr$plot() during the evaluation are added to the result", {
+test_that("images attached by peter$plot() during the evaluation are added to the result", {
   local_nested_dispatch()
   e = new.env()
   withr::local_pdf(NULL)
@@ -6830,7 +6832,7 @@ test_that("images beyond gptr.r_max_images are not attached and the result names
   imgs = Filter(function(b) identical(b$type, "image"), res$content)
   expect_identical(length(imgs), 2L)
   expect_identical(res$details$plots, 2L)
-  expect_match(ns_result_text(res), paste0("[3 image(s) from gptr$plot() or gptr$read() not ",
+  expect_match(ns_result_text(res), paste0("[3 image(s) from peter$plot() or peter$read() not ",
                                            "attached: at most 2 per r call]"), fixed = TRUE)
 })
 
@@ -6879,28 +6881,28 @@ test_that("the risk of r comes from the risk.classify service, level 2 before it
   expect_identical(r$kind, "r")
 })
 
-# ---- end to end through gptr() on the fake provider (P08, P06, P09; P11 does not exist yet, so the
-# permission gate is switched off with the documented escape hatch gptr.unsafe_no_permissions,
-# IC-53) ----
+# ---- end to end through peter() on the fake provider (P08, P06, P09; P11 does not exist yet, so
+# the permission gate is switched off with the documented escape hatch
+# gptr.unsafe_no_permissions, IC-53) ----
 
 # The r tool results of a session, in order
 r_results = function(s) {
   Filter(function(m) identical(m$role, "tool_result") && identical(m$tool_name, "r"), s$messages)
 }
 
-test_that("model code gptr$grep() runs through the shim; the recorded code keeps it", {
+test_that("model code peter$grep() runs through the shim; the recorded code keeps it", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_project(files = list("notes.txt" = "a needle here", "other.txt" = "hay"))
   e = new.env(parent = baseenv())
-  fake = local_fake_provider(list(fake_tool("r", code = "m = gptr$grep(\"needle\")"), "Found it."))
-  s = gptr("Find the needle", model = fake, envir = e, mode = "auto")
+  fake = local_fake_provider(list(fake_tool("r", code = "m = peter$grep(\"needle\")"), "Found it."))
+  s = peter("Find the needle", model = fake, envir = e, mode = "auto")
   expect_s3_class(e$m, "gptr_matches")
   expect_identical(e$m$file, "notes.txt")
   res = r_results(s)[[1L]]
-  expect_identical(res$details$code, "m = gptr$grep(\"needle\")")
+  expect_identical(res$details$code, "m = peter$grep(\"needle\")")
   expect_identical(res$details$status, "ok")
   expect_identical(res$details$nested[[1L]]$tool, "grep")
-  expect_false(exists("gptr", envir = e, inherits = FALSE))
+  expect_false(exists("peter", envir = e, inherits = FALSE))
 })
 
 test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed", {
@@ -6913,9 +6915,9 @@ test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value bo
     fake_tool("r", code = "gptr_return(small)"), "Returned small.",
     fake_tool("r", code = "gptr_return(summary(small))"), "Returned a summary."
   ))
-  s = gptr("Return big", model = fake, envir = e, mode = "auto")
-  s |> gptr("Return small")
-  s |> gptr("Return a summary")
+  s = peter("Return big", model = fake, envir = e, mode = "auto")
+  s |> peter("Return small")
+  s |> peter("Return a summary")
   expect_identical(s$values$mode, c("name", "copy", "box"))
   expect_identical(s$values$name[1:2], c("big", "small"))
   expect_identical(vapply(r_results(s)[1:2], function(m) m$details$value, ""), c("big", "small"))
@@ -6935,7 +6937,7 @@ test_that("a fuzzy edit returns the message and a diff; an exact edit the messag
     fake_tool("edit", path = "exact.R", edits = list(list(oldText = "a = 1", newText = "a = 2"))),
     "Edited."
   ))
-  s = gptr("Edit both files", model = fake, envir = new.env(), mode = "auto")
+  s = peter("Edit both files", model = fake, envir = new.env(), mode = "auto")
   reqs = fake_requests(fake)
   fuzzy = reqs[[2L]]$last_results[[1L]]$content[[1L]]$text
   lines = strsplit(fuzzy, "\n")[[1L]]
@@ -6951,7 +6953,7 @@ test_that("a fuzzy edit returns the message and a diff; an exact edit the messag
 test_that("the r schema frozen without a bound document has no record or note (IC-68)", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   fake = local_fake_provider(list("Hello."))
-  s = gptr("Say hello", model = fake, envir = new.env(), mode = "auto")
+  s = peter("Say hello", model = fake, envir = new.env(), mode = "auto")
   tools_json = session_data(s)$frozen$tools_json
   expect_match(tools_json, "\"name\":\"r\"", fixed = TRUE)
   expect_false(grepl("\"record\"", tools_json, fixed = TRUE))
@@ -6977,11 +6979,11 @@ Create `R/tool-r.R`:
 # tool-r.R -- the `r` tool (P10): the frozen schema variants of IC-68 (`record` and `note` only with
 # a bound document, `timeout` only when no human can answer), evaluation through the `evaluator`
 # kind (P09's eval_r() by default, IC-69) in the run's evaluation environment (the plan-mode scratch
-# overlay, IC-15), the model text of format_eval_result() (P09) plus images attached by gptr$plot(),
-# and the `details` record of contract section 4.4. While the evaluation runs, the execute frame
-# binds the r-call marker (`gptr_r_call`, tool-namespace.R) through which member calls reach
-# dispatch_nested() (the nested-call gating hook) and gptr$plot() attaches images. Sources:
-# architecture sections 6.12 and 7.2; contract sections 4.4, 7.9, 9.2;
+# overlay, IC-15), the model text of format_eval_result() (P09) plus images attached by
+# peter$plot(), and the `details` record of contract section 4.4. While the evaluation runs, the
+# execute frame binds the r-call marker (`gptr_r_call`, tool-namespace.R) through which member
+# calls reach dispatch_nested() (the nested-call gating hook) and peter$plot() attaches images.
+# Sources: architecture sections 6.12 and 7.2; contract sections 4.4, 7.9, 9.2;
 # dev/research/14-script-as-harness-history.md section 4.1 (`record`, `note`); the measured variants
 # of dev/research/assets/design-review-resolution/prompt/tools.R.
 
@@ -6989,7 +6991,7 @@ r_tool_description = paste(
   "Run R code in the user's live R session. Objects persist between calls and belong to the user.",
   "Returns printed output, messages, warnings, errors with a traceback, and plots as images.",
   "Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and",
-  "last 60% and names a gptr$out(id) handle for the rest."
+  "last 60% and names a peter$out(id) handle for the rest."
 )
 r_tool_snippet =
   "Run R code in the user's live session (objects persist; plots come back as images)"
@@ -6997,7 +6999,7 @@ r_tool_guidelines = c(
   paste("Use r to inspect and compute on objects in the live session; never reload or recompute",
         "data that is already in memory"),
   paste("In r, assign results to names and print compact summaries (dim(), head(),",
-        "gptr$describe(x)) rather than whole objects"),
+        "peter$describe(x)) rather than whole objects"),
   "Use = for assignment and |> for pipes in all R code you write"
 )
 
@@ -7107,9 +7109,9 @@ r_event_text = function(events, type) {
   as.character(unlist(lapply(ev, function(e) e$message %||% e$text), use.names = FALSE))
 }
 
-#' The r tool result of an evaluation: format_eval_result() text and images, gptr$plot() images, and
-#' the `details` record of contract section 4.4 (plus `plot_files`, the PNGs behind
-#' gptr$plot(which))
+#' The r tool result of an evaluation: format_eval_result() text and images, peter$plot() images,
+#' and the `details` record of contract section 4.4 (plus `plot_files`, the PNGs behind
+#' peter$plot(which))
 #' @noRd
 r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
   events = res$events %||% list()
@@ -7138,8 +7140,8 @@ r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
   text = fmt$text
   dropped = as.integer(rc$dropped %||% 0L)
   if (dropped > 0L) {
-    text = paste0(text, "\n[", dropped, " image(s) from gptr$plot() or gptr$read() not attached: ",
-                  "at most ", as.integer(gptr_opt("r_max_images")), " per r call]")
+    text = paste0(text, "\n[", dropped, " image(s) from peter$plot() or peter$read() not ",
+                  "attached: at most ", as.integer(gptr_opt("r_max_images")), " per r call]")
   }
   out = gptr_tool_result(text, images = if (length(images)) images else NULL, details = details,
                          is_error = !identical(res$status, "ok"))
@@ -7234,12 +7236,12 @@ git commit -m "feat(tools): add the r tool with its frozen schema variants and b
 
 **Files:** Test: `tests/testthat/test-copy-tools.R` (create).
 
-The copy suite of 03 §3.4 (`test-copy-tools.R`: "namespace members and designated values") and 05 P10 acceptance 5: each row runs in a fresh `Rscript --vanilla` through P01's `expect_no_copy()` (04 §12.2), which loads gptr, runs `setup`, starts `tracemem(big)`, runs the gptr `action`, then the user's next in-place edit `big[1] = 0`, and passes when that edit makes no copy (nothing kept a reference). The rows cover the three designated-value modes of `gptr_return()` (by name above `gptr.value_copy_max`, a copy below it, an anonymous value boxed), `gptr_return()` outside a run (IC-48), tool code `n = 1L; length(d)` evaluated in a function-frame home (`f = function(d) gptr(..., d)`; the `gptr()` form moved here from P09, cons-16), and `gptr$describe(big)` at the console and from model code. The permission gate is off through `gptr.unsafe_no_permissions` set before the run (IC-53), because P11 does not exist yet. The last row is a negative control: `keep = list(big)` holds a reference, so exactly one copy is counted, which shows that the zero counts are not vacuous.
+The copy suite of 03 §3.4 (`test-copy-tools.R`: "namespace members and designated values") and 05 P10 acceptance 5: each row runs in a fresh `Rscript --vanilla` through P01's `expect_no_copy()` (04 §12.2), which loads gptr, runs `setup`, starts `tracemem(big)`, runs the gptr `action`, then the user's next in-place edit `big[1] = 0`, and passes when that edit makes no copy (nothing kept a reference). The rows cover the three designated-value modes of `gptr_return()` (by name above `gptr.value_copy_max`, a copy below it, an anonymous value boxed), `gptr_return()` outside a run (IC-48), tool code `n = 1L; length(d)` evaluated in a function-frame home (`f = function(d) peter(..., d)`; the `peter()` form moved here from P09, cons-16), and `peter$describe(big)` at the console and from model code. The permission gate is off through `gptr.unsafe_no_permissions` set before the run (IC-53), because P11 does not exist yet. The last row is a negative control: `keep = list(big)` holds a reference, so exactly one copy is counted, which shows that the zero counts are not vacuous.
 
 These rows guard behaviour implemented in Tasks 8-11 (closures that pass promises, the `r` tool's reset of its environment binding, P06's value policy, P09's evaluator), so they pass as soon as they are written; the negative control is the row that demonstrates the harness detects a copy. This task adds no production code. If a row fails, the fix belongs in the code path the row names, following the rules of 03 §6.4 (R1 never put a user object in a list that becomes garbage, R2 never keep a user frame, R3 never collect frames, R8 clear evaluation results in place).
 
 **Interfaces:**
-- Consumes (P01 helper, 04 §12.2): `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` -> the copy count, invisibly; inside the child: `gptr()`, `gptr_return()`, `gptr_fake_provider()` (P01, P08), the `r` tool (Task 11), `gptr$describe` (Tasks 8 and 10).
+- Consumes (P01 helper, 04 §12.2): `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` -> the copy count, invisibly; inside the child: `peter()`, `gptr_return()`, `gptr_fake_provider()` (P01, P08), the `r` tool (Task 11), `peter$describe` (Tasks 8 and 10).
 - Produces: the P10 rows of the copy suite (no runtime interface).
 
 - [ ] **Step 1: Write the failing test**
@@ -7256,7 +7258,7 @@ Create `tests/testthat/test-copy-tools.R`:
 
 gate_off = "options(gptr.unsafe_no_permissions = TRUE, gptr.quiet = TRUE, gptr.interactive = FALSE)"
 
-go = "s = gptr('go', model = fake, envir = globalenv(), mode = 'auto')"
+go = "s = peter('go', model = fake, envir = globalenv(), mode = 'auto')"
 
 run_r = function(code, call = go) {
   fake = "fake = gptr_fake_provider(list(list(tool = 'r', input = list(code = '%s')), 'done'))"
@@ -7284,15 +7286,15 @@ test_that("gptr_return(big) outside a run leaves the object editable in place (I
 })
 
 test_that("tool code `n = 1L; length(d)` in a function-frame home leaves the object in place", {
-  home = "f = function(d) gptr('count', d, model = fake, mode = 'auto'); s = f(big)"
+  home = "f = function(d) peter('count', d, model = fake, mode = 'auto'); s = f(big)"
   expect_no_copy(setup = "big = runif(1.5e6)", action = run_r("n = 1L; length(d)", call = home),
                  label = "function-frame home")
 })
 
-test_that("gptr$describe(big) at the console and from model code leaves the object in place", {
-  expect_no_copy(setup = "big = runif(1.5e6)", action = "x = gptr$describe(big)",
+test_that("peter$describe(big) at the console and from model code leaves the object in place", {
+  expect_no_copy(setup = "big = runif(1.5e6)", action = "x = peter$describe(big)",
                  label = "describe (user)")
-  expect_no_copy(setup = "big = runif(1.5e6)", action = run_r("x = gptr$describe(big)"),
+  expect_no_copy(setup = "big = runif(1.5e6)", action = run_r("x = peter$describe(big)"),
                  label = "describe (model code)")
 })
 
@@ -7334,7 +7336,7 @@ git commit -m "test(tools): add the copy-safety rows for members and designated 
 
 **Files:** Create: `dev/bench/tokens/fixtures/ns02b-data-first-pipe.json`; Modify: `dev/bench/tokens/baseline.csv` (one row added by P07's runner with `--update`).
 
-IC-73: P10 adds its north-star fixture and baseline row to P07's golden-transcript runner (`dev/bench/tokens/run.R`, a development tool that needs rtiktoken and is excluded from the build). P10's fixture is NS-2's data-first pipe (02 §2: `mice |> gptr("Which columns have missing values, and how should I impute them?")`) run as a script with a small model, which exercises what P10 adds to the token budget: the `minimal` preset (the four direct tools only, `grep`/`find`/`ls` and every helper reachable as R signatures through the `<rules>` lines, 03 §7.1) and one composed `r` call that uses a `gptr$` member (`gptr$describe()`) instead of extra tool calls (S-12). Its result text is the exact output P09's evaluator and P10's `describe` member produce for this code in an English UTF-8 locale (re-checked with `LC_ALL=en_US.UTF-8`; `tapply()` orders the `diet` groups by the locale's collation, so the C locale prints `HF control` instead, with the same tokens; the runner replays the recorded text and does not evaluate the code). The prefix it measures is the IC-68 total of the minimal preset, 615 + 656 = **1,271** o200k tokens.
+IC-73: P10 adds its north-star fixture and baseline row to P07's golden-transcript runner (`dev/bench/tokens/run.R`, a development tool that needs rtiktoken and is excluded from the build). P10's fixture is NS-2's data-first pipe (02 §2: `mice |> peter("Which columns have missing values, and how should I impute them?")`) run as a script with a small model, which exercises what P10 adds to the token budget: the `minimal` preset (the four direct tools only, `grep`/`find`/`ls` and every helper reachable as R signatures through the `<rules>` lines, 03 §7.1) and one composed `r` call that uses a `peter$` member (`peter$describe()`) instead of extra tool calls (S-12). Its result text is the exact output P09's evaluator and P10's `describe` member produce for this code in an English UTF-8 locale (re-checked with `LC_ALL=en_US.UTF-8`; `tapply()` orders the `diet` groups by the locale's collation, so the C locale prints `HF control` instead, with the same tokens; the runner replays the recorded text and does not evaluate the code). The prefix it measures is the IC-68 total of the minimal preset, 615 + 656 = **1,271** o200k tokens.
 
 With P10 loaded, P07's existing rows measure a smaller prefix (2,620 instead of 2,750): the stand-in loader registers no `r_session` fragment stand-ins once a real fragment exists (`prompt_standins_register(only_missing = TRUE)`), so the `shell`, `languages` and `subagents` lines of P22 and P19 are absent until those plans land with byte-identical texts. The runner gates only increases, so the existing baseline rows stay as they are and `--check` passes; P10 updates only its own row.
 
@@ -7350,7 +7352,7 @@ Create `dev/bench/tokens/fixtures/ns02b-data-first-pipe.json`:
 {
   "id": "ns02b-data-first-pipe",
   "north_star": 2,
-  "description": "mice |> gptr(\"Which columns have missing values, and how should I impute them?\") in an Rscript run with a small model: minimal preset, auto mode, no human, no bound document; one composed r call that calls the gptr$describe() member, then the answer.",
+  "description": "mice |> peter(\"Which columns have missing values, and how should I impute them?\") in an Rscript run with a small model: minimal preset, auto mode, no human, no bound document; one composed r call that calls the peter$describe() member, then the answer.",
   "mode": "auto",
   "human": false,
   "preset": "minimal",
@@ -7389,11 +7391,11 @@ Create `dev/bench/tokens/fixtures/ns02b-data-first-pipe.json`:
               "id": "toolu_01",
               "name": "r",
               "input": {
-                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\ngptr$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)"
+                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\npeter$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)"
               },
               "result": "weight \n     3 \n<numeric> length 48, 432 B\n  min 20, median 25, max 29; 6.2% NA\ncontrol      HF \n      2       1 \n+ miss <numeric length 3>",
               "details": {
-                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\ngptr$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)",
+                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\npeter$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)",
                 "status": "ok"
               }
             }
@@ -7483,13 +7485,13 @@ Every acceptance check of 05 P10 (including its review amendments), the task and
 |---|---|---|
 | 1 | `devtools::test(filter = "tool-|copy-tools")` is green | Tasks 1-12 (all nine test files) |
 | 2 | Pi's read/edit/write oracle cases (01) and report 11's grep/find/ls oracles pass; `find` sorts by path, mtime and size; grep respects `.gitignore` | Task 4 `test-tool-read.R` (Pi's read cases), Task 5 `test-tool-write.R`, Task 6 `test-tool-edit.R` (Pi's edit, fuzzy, CRLF/BOM and argument-shim cases), Task 7 `test-tool-search.R` ("grep sorts by path and skips binary and .gitignore'd files", "grep reproduces Pi's limit and context texts", "find sorts by mtime (newest first), size (largest first) and relevance (IC-71)", "grep agrees with ripgrep on (file, line) pairs"), Task 2 `test-tool-walk.R` ("the file set equals git ls-files ...") |
-| 3 | `gptr$nope` errors listing the members; `.DollarNames` completion lists `read`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`; accessing a member performs no I/O | Task 10 "gptr$nope lists the members; completion lists the built-in members (acceptance 3)" and "accessing a member performs no I/O and opens no connection"; Task 8 "ns_resolve() finds user members and errors on unknown names listing the members" |
-| 4 | model code `gptr$grep("x")` evaluated where `gptr` is not visible runs through the shim, and the recorded code keeps `gptr$grep("x")` | Task 11 "model code gptr$grep() runs through the shim; the recorded code keeps it" |
-| 5 | value policy: 12 MB by name, 200 KB as a copy, anonymous boxed; `gptr_return(x)` outside a run returns `x` invisibly and changes nothing (IC-48); the copy rows of all three stay in place, as does tool code `n = 1L` and `length(d)` in `f = function(d) gptr(..., d)` | Task 11 "gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed"; Task 12 all rows (including "gptr_return(big) outside a run ..." and "tool code `n = 1L; length(d)` in a function-frame home ...") |
-| 6 | an edit whose `oldText` matched only through the fuzzy fallback returns the message plus a diff of at most 400 tokens; an exact edit returns the message only | Task 6 "the result text carries a diff only when something deviated (acceptance 6)"; Task 10 "a fuzzy edit returns the message and a diff of at most 400 tokens (acceptance 6)"; Task 11 "a fuzzy edit returns the message and a diff; an exact edit the message only" (end to end through `gptr()`) |
+| 3 | `peter$nope` errors listing the members; `.DollarNames` completion lists `read`, `grep`, `find`, `ls`, `help`, `search`, `describe`, `plot`, `out`; accessing a member performs no I/O | Task 10 "peter$nope lists the members; completion lists the built-in members (acceptance 3)" and "accessing a member performs no I/O and opens no connection"; Task 8 "ns_resolve() finds user members and errors on unknown names listing the members" |
+| 4 | model code `peter$grep("x")` evaluated where `peter` is not visible runs through the shim, and the recorded code keeps `peter$grep("x")` | Task 11 "model code peter$grep() runs through the shim; the recorded code keeps it" |
+| 5 | value policy: 12 MB by name, 200 KB as a copy, anonymous boxed; `gptr_return(x)` outside a run returns `x` invisibly and changes nothing (IC-48); the copy rows of all three stay in place, as does tool code `n = 1L` and `length(d)` in `f = function(d) peter(..., d)` | Task 11 "gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed"; Task 12 all rows (including "gptr_return(big) outside a run ..." and "tool code `n = 1L; length(d)` in a function-frame home ...") |
+| 6 | an edit whose `oldText` matched only through the fuzzy fallback returns the message plus a diff of at most 400 tokens; an exact edit returns the message only | Task 6 "the result text carries a diff only when something deviated (acceptance 6)"; Task 10 "a fuzzy edit returns the message and a diff of at most 400 tokens (acceptance 6)"; Task 11 "a fuzzy edit returns the message and a diff; an exact edit the message only" (end to end through `peter()`) |
 | 7a | a plugin member with `namespace = "grep"` or without a namespace is refused | Task 8 "a plugin r member without a namespace or with a reserved one is refused (IC-37)" (P02 refuses at registration; resolution refuses too) |
-| 7b | `gptr$read` and the direct `read` tool come from one spec | Task 10 "builtin:tools registers one spec per capability, direct and member form (IC-37)" (`attr(ns_resolve(cap), "spec")` is identical to `registry_get("tool", cap)` for `read`, `edit`, `write`, `grep`, `find`, `ls`) |
-| 7c | `gptr$find("tst", sort = "relevance")` ranks `test.R` first | Task 7 "find sorts by mtime (newest first), size (largest first) and relevance (IC-71)" |
+| 7b | `peter$read` and the direct `read` tool come from one spec | Task 10 "builtin:tools registers one spec per capability, direct and member form (IC-37)" (`attr(ns_resolve(cap), "spec")` is identical to `registry_get("tool", cap)` for `read`, `edit`, `write`, `grep`, `find`, `ls`) |
+| 7c | `peter$find("tst", sort = "relevance")` ranks `test.R` first | Task 7 "find sorts by mtime (newest first), size (largest first) and relevance (IC-71)" |
 | 7d | the `r` schema frozen without a document has no `record`/`note` | Task 11 "the r schema is frozen in one of four variants (IC-68)", "the r spec reproduces P07's stand-in in each of its four variants (IC-68)" and "the r schema frozen without a bound document has no record or note (IC-68)" |
 | 7e | P10's NS fixture and baseline rows are added to `dev/bench/tokens/` (IC-73) | Task 13 |
 
@@ -7540,8 +7542,8 @@ Expected: `FAIL 0` (P10 adds no expectation to these two files of P01). P10's so
 | Requirement | Task |
 |---|---|
 | `tool-namespace.R`: gateway services resolving members from tool specs (`ns.resolve`, `ns.names`, IC-36), generated closures from JSON Schema, side-effect-free `$`, `.DollarNames` completion | 8 (closures, resolution, nodes), 10 (service registration, no-I/O test) |
-| `gptr$help()`, `gptr$search()` (BM25 over members, plugin and MCP tools, skills; `search.sources`, IC-69) | 9 |
-| `gptr$describe()`, `gptr$plot(which =)` (IC-67), `gptr$out()` (only owner, IC-36), `builtin:tools` | 8 (`describe`), 10 |
+| `peter$help()`, `peter$search()` (BM25 over members, plugin and MCP tools, skills; `search.sources`, IC-69) | 9 |
+| `peter$describe()`, `peter$plot(which =)` (IC-67), `peter$out()` (only owner, IC-36), `builtin:tools` | 8 (`describe`), 10 |
 | `tool-r.R`: schema of §7.2, `record`/`note`/`timeout`, results through the evaluator, nested-call gating hook (the r-call marker), `builtin:r`; `parameters` as a function giving the four variants (IC-68) | 1 (marker), 11 |
 | `tool-read.R`: encodings, windows, images by magic bytes, large-file index, 12,000-token cap, line numbers off; `skill:<name>/<path>` (IC-68) | 4 |
 | `tool-write.R`: atomic, EOL- and encoding-preserving | 5 |
@@ -7556,30 +7558,30 @@ Expected: `FAIL 0` (P10 adds no expectation to these two files of P01). P10's so
 | Copy-safety suite `test-copy-tools.R`, including the function-frame row moved from P09 | 12 |
 | P10's NS fixture and baseline rows (IC-73) | 13 |
 | Lazy plugins in the `plugins` section, completion and search through manifest `declarations`, never activated (04 §10.8; consumed by P17 under IC-36) | 8 (`ns_spec_line()`, `ns_member_names()`, `print.gptr_ns`), 9 (`ns_catalog()`, `ns_search_docs()`, `member_search()`; test "a lazy plugin is catalogued, completed and searched through its declarations") |
-| At most `gptr.r_max_images` images from `gptr$plot()`/`gptr$read()` per `r` result, the rest named (IC-67) | 1 (`r_call_attach_image()`), 11 (notice; test "images beyond gptr.r_max_images ...") |
+| At most `gptr.r_max_images` images from `peter$plot()`/`peter$read()` per `r` result, the rest named (IC-67) | 1 (`r_call_attach_image()`), 11 (notice; test "images beyond gptr.r_max_images ...") |
 | Member prints within 0.6 x the remaining `r` budget (04 §9.4) | 1 (`member_budget()`, the marker's `printed` count) |
 | Acceptance 1-7 | see the Plan acceptance table |
 
 **Placeholder scan.** The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar to Task", "appropriate error handling" and "handle edge cases": the only hits are the word `TODO` inside the grep fixture data of `test-tool-search.R` (a pattern the tests search for). Every step that changes a file shows the complete code; Task 12 Step 3 states explicitly that the task adds no production code.
 
-**Type and name consistency with 04.** Signatures match 04 §7.10 and §9.4 exactly: `ns_resolve(path)`, `ns_names(pattern)`, `ns_register_provider(name, fun)`, `member_closure(spec)`, `ns_catalog(session, kinds = c("plugin"), budget = 1500L)`, `bm25_index(docs)`, `bm25_search(index, words, limit = 8L)`, `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr_opt("read_max_tokens"))`, `write_file(path, content)`, `edit_file(path, edits, replace_all = FALSE)`, `patch_apply(envelope, root = project_root())`, `diff_lines(old, new, context = 3L, max_tokens = 400L)`, `walk_files(root = ".", type = c("file", "dir", "any"), gitignore = TRUE, hidden = FALSE, max = Inf, prune = NULL)`, `glob_to_regex(glob)`, `search_grep()`, `search_find()`, `search_ls()`, `builtin_tools(gptr)`, `builtin_r(gptr)`; members `gptr$read(path, offset = NULL, limit = NULL)`, `gptr$write(path, content)`, `gptr$edit(path, edits, replace_all = FALSE)`, `gptr$grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE, context = 0L, limit = 100L, output = c("content", "files", "count"), sort = c("path", "count", "mtime"))`, `gptr$find(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"), type = "file", limit = 1000L)`, `gptr$ls(path = ".", sort = c("name", "mtime", "size"), long = FALSE)`, `gptr$help(name, package = NULL, budget = 800L)`, `gptr$search(words, limit = 8L)`, `gptr$describe(x, budget = 150L)`, `gptr$plot(which = NULL, width = 1000L, height = 700L)`, `gptr$out(id, stream = c("stdout", "stderr"), lines = NULL)`. Classes `gptr_member`, `gptr_ns`, `gptr_lines`, `gptr_patch`, `gptr_matches`, `gptr_files`; condition classes `unknown_member`, `readonly`, `invalid_argument`, `not_available`, `tool`, `internal`; services `ns.resolve`, `ns.names`, `search.sources`; options `gptr.helper_output_tokens`, `gptr.read_max_tokens`. Every consumed function exists with the 04 signature in the dependency plans as extracted on 2026-10-01 (`dispatch_nested(name, input, ctx)`, `out_get(id, stream, lines, session)`, `plot_png(recorded, width, height, res)`, `eval_r(...)`, `format_eval_result(res, budget_tokens)`, `describe_binding(name, envir, budget)`, `gptr_describe(x, budget)`, `run_current()`, `run_eval_env(run)`, `session_data()`, `session_live()`, `setting_get(key, session, default)`, `registry_get/names/all/diagnostic()`, `hook_add()`, `hook_remove()`, `schema_signature()`, `first_sentence()`, `est_tokens()`, `block_image()`, `path_class()`, `write_atomic()`, `gptr_tool()`, `gptr_prompt_section()`, `gptr_spec()`, `ext_declare_builtin()`, `ext_service_set/get/has()`, `on_load()`); a script listed every function the P10 sources call and found each defined in P01-P09 or in P10.
+**Type and name consistency with 04.** Signatures match 04 §7.10 and §9.4 exactly: `ns_resolve(path)`, `ns_names(pattern)`, `ns_register_provider(name, fun)`, `member_closure(spec)`, `ns_catalog(session, kinds = c("plugin"), budget = 1500L)`, `bm25_index(docs)`, `bm25_search(index, words, limit = 8L)`, `read_file(path, offset = NULL, limit = NULL, budget_tokens = gptr_opt("read_max_tokens"))`, `write_file(path, content)`, `edit_file(path, edits, replace_all = FALSE)`, `patch_apply(envelope, root = project_root())`, `diff_lines(old, new, context = 3L, max_tokens = 400L)`, `walk_files(root = ".", type = c("file", "dir", "any"), gitignore = TRUE, hidden = FALSE, max = Inf, prune = NULL)`, `glob_to_regex(glob)`, `search_grep()`, `search_find()`, `search_ls()`, `builtin_tools(gptr)`, `builtin_r(gptr)`; members `peter$read(path, offset = NULL, limit = NULL)`, `peter$write(path, content)`, `peter$edit(path, edits, replace_all = FALSE)`, `peter$grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE, context = 0L, limit = 100L, output = c("content", "files", "count"), sort = c("path", "count", "mtime"))`, `peter$find(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"), type = "file", limit = 1000L)`, `peter$ls(path = ".", sort = c("name", "mtime", "size"), long = FALSE)`, `peter$help(name, package = NULL, budget = 800L)`, `peter$search(words, limit = 8L)`, `peter$describe(x, budget = 150L)`, `peter$plot(which = NULL, width = 1000L, height = 700L)`, `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)`. Classes `gptr_member`, `gptr_ns`, `gptr_lines`, `gptr_patch`, `gptr_matches`, `gptr_files`; condition classes `unknown_member`, `readonly`, `invalid_argument`, `not_available`, `tool`, `internal`; services `ns.resolve`, `ns.names`, `search.sources`; options `gptr.helper_output_tokens`, `gptr.read_max_tokens`. Every consumed function exists with the 04 signature in the dependency plans as extracted on 2026-10-01 (`dispatch_nested(name, input, ctx)`, `out_get(id, stream, lines, session)`, `plot_png(recorded, width, height, res)`, `eval_r(...)`, `format_eval_result(res, budget_tokens)`, `describe_binding(name, envir, budget)`, `gptr_describe(x, budget)`, `run_current()`, `run_eval_env(run)`, `session_data()`, `session_live()`, `setting_get(key, session, default)`, `registry_get/names/all/diagnostic()`, `hook_add()`, `hook_remove()`, `schema_signature()`, `first_sentence()`, `est_tokens()`, `block_image()`, `path_class()`, `write_atomic()`, `gptr_tool()`, `gptr_prompt_section()`, `gptr_spec()`, `ext_declare_builtin()`, `ext_service_set/get/has()`, `on_load()`); a script listed every function the P10 sources call and found each defined in P01-P09 or in P10.
 
 Contract readings recorded here (none changes an API of 04):
 
 1. `ns_catalog()`: 04 says "least-recently-used descriptions trimmed first"; at freeze no usage history exists, so descriptions are trimmed from the end of the name-sorted catalog and names are never trimmed.
-2. `gptr$grep()` and `gptr$ls()` carry a trailing `...` that accepts the direct tools' argument names (`ignoreCase`, `literal`, `limit`): the specs carry both forms (IC-37) and P02's validator requires `fun`'s formals to cover the schema's properties unless `fun` has `...` (04 §6.8). The printed signatures omit the `...`; unknown names still fail with `gptr_error_invalid_argument`.
+2. `peter$grep()` and `peter$ls()` carry a trailing `...` that accepts the direct tools' argument names (`ignoreCase`, `literal`, `limit`): the specs carry both forms (IC-37) and P02's validator requires `fun`'s formals to cover the schema's properties unless `fun` has `...` (04 §6.8). The printed signatures omit the `...`; unknown names still fail with `gptr_error_invalid_argument`.
 3. `gptr_lines` carries two attributes beyond 04 §5.10: `notices` (the read notices, printed after the lines) and, transiently, `image_block` (removed by the member after attaching the image to the running `r` result).
-4. The `r` tool's `details` adds `plot_files` and `plot_index` to the 04 §4.4 record so that `gptr$plot(which)` finds the PNGs of plots that were listed as not attached (IC-67 says only "kept in the session's out store"; P09 renders them to files and lists them in its plot events).
-5. `gptr$plot(which = k)` reads the plots of the session's last completed `r` result (the current call's plots are not yet in the transcript); `which = NULL` records the current device's plot.
+4. The `r` tool's `details` adds `plot_files` and `plot_index` to the 04 §4.4 record so that `peter$plot(which)` finds the PNGs of plots that were listed as not attached (IC-67 says only "kept in the session's out store"; P09 renders them to files and lists them in its plot events).
+5. `peter$plot(which = k)` reads the plots of the session's last completed `r` result (the current call's plots are not yet in the transcript); `which = NULL` records the current device's plot.
 6. Risk levels for path classes 04 §9.4 does not name: reads of `critical` and `control` paths are level 2 (as `protected`), except that the project root itself reads at level 0; writes to `tempdir()` are level 2 (as in the project) and writes to `critical` paths level 4 (as `control`); `temp`, `outside`, `url`, `wildcard` and `unknown` paths read at 1, and `instructions`, `protected`, `outside`, `url`, `wildcard` and `unknown` paths write at 3.
 7. The members `help`, `search`, `describe`, `plot` and `out` also carry an `execute`, so a preset may declare them (IC-37: "any spec with an `execute` may be put in the array by a preset"); their default exposure is `r`.
 8. A pasted patch envelope is applied to the files it names and is not routed through `doc.edit` (P15 routes `oldText`/`newText` edits of a bound document; an envelope may touch several files).
 9. `search_grep()` has the `sort` argument of IC-71 in addition to 04 §7.10's argument list.
 10. Dependency-plan observations (04 wins; no effect on P10's code): P02's `gptr_tool()` has no `render` argument although IC-69 adds `render = function(call, result, width)` to tool specs (P10 sets none); P07's stand-in loader registers no `r_session` fragment stand-ins once any real fragment exists, so with P10 loaded the NS-2/NS-3 prefixes measure 2,620 instead of 2,750 until P19 and P22 add their fragments (Task 13).
-11. Cross-plan defect for P06 (found in review, reproduced on the scratch package): 04 §6.8 gives an `r` member that has only a `fun` no generated `execute`, and 04 §7.6 has `dispatch_nested(name, input, ctx)` return "the tool result's `value`", but P06's `dispatch_nested()` aborts with `Tool <name> not found` when the spec has no `execute`. So a plugin member written as `gptr_tool(..., fun = f, exposure = "r", namespace = "pkg")` fails when model code calls it (`gptr$pkg$f()` inside `r`), which P17's acceptance 3a (`gptr$trials$search("asthma")`) and P19's "a plugin r member ... inside a worker" test exercise. P10 follows 04 (`member_closure()` calls `dispatch_nested()` for every nested call); it cannot run such a member around the gate without bypassing the permission check. The fix belongs in P06: when `tool$execute` is `NULL`, run `tool$fun` through P02's `spec_tool_execute(fun, output_tokens)` (the generated execute of 04 §6.8) with the validated input. P10's own built-ins all carry an `execute`, so P10's tests are unaffected.
-12. `ns_catalog()`, completion (`ns_member_names()`), namespace prints and `gptr$search()` read specs with `registry_all("tool")`, which returns lazy tool placeholders unactivated (P02), and render a placeholder from its manifest declaration (`gptr$<ns>$<signature>  # <first sentence>`); only resolving or calling a member by name goes through `registry_get()`, which activates the plugin (04 §10.8: "The factory runs on the first `registry_get()` of a provided capability").
-13. A `deferred` un-namespaced spec that has only an `execute` resolves to a member whose formals come from its schema (04 §9.1: "`deferred`: found only through `gptr$search()` (still callable)"); IC-37 names only specs with a `fun`, so this extends resolution to the one exposure whose specs `gptr$search()` advertises as callable.
-14. `gptr.r_max_images` (IC-67: plots attached per `r` result) also caps the images that `gptr$plot()` and `gptr$read()` attach through the r-call marker, separately from the evaluator's own captured plots (which P09 caps); the refused ones are counted and named in the result text.
+11. Cross-plan defect for P06 (found in review, reproduced on the scratch package): 04 §6.8 gives an `r` member that has only a `fun` no generated `execute`, and 04 §7.6 has `dispatch_nested(name, input, ctx)` return "the tool result's `value`", but P06's `dispatch_nested()` aborts with `Tool <name> not found` when the spec has no `execute`. So a plugin member written as `gptr_tool(..., fun = f, exposure = "r", namespace = "pkg")` fails when model code calls it (`peter$pkg$f()` inside `r`), which P17's acceptance 3a (`peter$trials$search("asthma")`) and P19's "a plugin r member ... inside a worker" test exercise. P10 follows 04 (`member_closure()` calls `dispatch_nested()` for every nested call); it cannot run such a member around the gate without bypassing the permission check. The fix belongs in P06: when `tool$execute` is `NULL`, run `tool$fun` through P02's `spec_tool_execute(fun, output_tokens)` (the generated execute of 04 §6.8) with the validated input. P10's own built-ins all carry an `execute`, so P10's tests are unaffected.
+12. `ns_catalog()`, completion (`ns_member_names()`), namespace prints and `peter$search()` read specs with `registry_all("tool")`, which returns lazy tool placeholders unactivated (P02), and render a placeholder from its manifest declaration (`peter$<ns>$<signature>  # <first sentence>`); only resolving or calling a member by name goes through `registry_get()`, which activates the plugin (04 §10.8: "The factory runs on the first `registry_get()` of a provided capability").
+13. A `deferred` un-namespaced spec that has only an `execute` resolves to a member whose formals come from its schema (04 §9.1: "`deferred`: found only through `peter$search()` (still callable)"); IC-37 names only specs with a `fun`, so this extends resolution to the one exposure whose specs `peter$search()` advertises as callable.
+14. `gptr.r_max_images` (IC-67: plots attached per `r` result) also caps the images that `peter$plot()` and `peter$read()` attach through the r-call marker, separately from the evaluator's own captured plots (which P09 caps); the refused ones are counted and named in the result text.
 
 **Validation executed while writing this plan** (scratch directory `work/plans/P10/v3/`):
 
@@ -7596,18 +7598,18 @@ Adversarial review of 2026-10-01 against 05 (P10), 04 (with §15), 03, 00-conven
 
 | # | Severity | Location | Verdict | What changed, or why rejected |
 |---|---|---|---|---|
-| 1 | blocker | Task 9 `ns_catalog()`, `ns_search_docs()`, `member_search()`; Task 8 `ns_member_names()`, `print.gptr_ns` | applied | They called `registry_get()` for every tool name, which activates every lazy plugin when the prompt freezes (the `plugins` section) and on every `gptr$search()`, against 04 §10.8 ("puts `extension.declarations` ... into the frozen prompt before activation, so activation never changes the cached prefix"); P17's acceptance 3a asserts the toy package is still not loaded after the first `gptr()` call. They now read `registry_all("tool")`, which returns tool placeholders unactivated, and render a placeholder from its declaration through the new `ns_spec_line()`; only resolving a member by name activates its plugin. New test "a lazy plugin is catalogued, completed and searched through its declarations"; Global Constraints, Task 8/9 prose, interfaces, header (§10.8) and Self-review readings 12 updated. |
+| 1 | blocker | Task 9 `ns_catalog()`, `ns_search_docs()`, `member_search()`; Task 8 `ns_member_names()`, `print.gptr_ns` | applied | They called `registry_get()` for every tool name, which activates every lazy plugin when the prompt freezes (the `plugins` section) and on every `peter$search()`, against 04 §10.8 ("puts `extension.declarations` ... into the frozen prompt before activation, so activation never changes the cached prefix"); P17's acceptance 3a asserts the toy package is still not loaded after the first `peter()` call. They now read `registry_all("tool")`, which returns tool placeholders unactivated, and render a placeholder from its declaration through the new `ns_spec_line()`; only resolving a member by name activates its plugin. New test "a lazy plugin is catalogued, completed and searched through its declarations"; Global Constraints, Task 8/9 prose, interfaces, header (§10.8) and Self-review readings 12 updated. |
 | 2 | major | Task 1 `member_budget()` | applied | Inside `r` it capped member prints at 0.6 x the whole `r` budget, so ten prints in one loop could each take 1,500 tokens; 04 §9.4 says "at most 0.6x the remaining `r` budget". The r-call marker now counts the estimated tokens member prints wrote (`printed`, updated by `ns_print_lines()`), and the cap is `floor(0.6 * (gptr.r_output_tokens - printed))`; new test "member prints inside one r call shrink the budget". |
-| 3 | major | Task 1 `r_call_attach_image()`; Task 11 `r_tool_result()` | applied | Images attached by `gptr$plot()` and `gptr$read()` were unbounded (a loop over 50 image reads attached 50 images), although IC-67 caps attached images per `r` result at `gptr.r_max_images` (3). The marker now refuses images beyond the cap and counts them in `dropped`, and the `r` result text ends with `[k image(s) from gptr$plot() or gptr$read() not attached: at most n per r call]`; tests in Tasks 1 and 11 ("images beyond gptr.r_max_images ..."); the option is listed under consumed options; Self-review reading 14. |
+| 3 | major | Task 1 `r_call_attach_image()`; Task 11 `r_tool_result()` | applied | Images attached by `peter$plot()` and `peter$read()` were unbounded (a loop over 50 image reads attached 50 images), although IC-67 caps attached images per `r` result at `gptr.r_max_images` (3). The marker now refuses images beyond the cap and counts them in `dropped`, and the `r` result text ends with `[k image(s) from peter$plot() or peter$read() not attached: at most n per r call]`; tests in Tasks 1 and 11 ("images beyond gptr.r_max_images ..."); the option is listed under consumed options; Self-review reading 14. |
 | 4 | major | Task 2 `walk_tree()`/`walk_files()` | applied | `max` was applied to the walker's breadth-first entry count of every kind, so `walk_files(type = "file", max = 5)` on a tree of directories returned no file at all, and `truncated` was set even when nothing was left out. The walker now counts only rows of the requested type (`max_rows`, `count`) and keeps the 500,000-entry safety cap for all entries; `truncated` is `TRUE` exactly when rows were left out. New test "max counts only rows of the requested type". |
-| 5 | major | Task 8 `member_closure()` with a `fun`-only plugin member; P06 `dispatch_nested()` | applied | Reproduced on the scratch package: `gptr$wdemo$hello()` called from model code fails with `Tool wdemo/hello not found`, because P06's `dispatch_nested()` requires `tool$execute`, while 04 §6.8 gives `fun`-only `r` members no generated `execute` and 04 §7.6 promises the tool result's value. P10 already follows 04 (every nested call goes through `dispatch_nested()`); calling `fun` around the gate would bypass the permission check, so no P10 code changes. Recorded as Self-review item 11 with the P06 fix (run `fun` through P02's `spec_tool_execute()` when `execute` is `NULL`); it affects P17 acceptance 3a and P19's worker test, not P10's tests. |
+| 5 | major | Task 8 `member_closure()` with a `fun`-only plugin member; P06 `dispatch_nested()` | applied | Reproduced on the scratch package: `peter$wdemo$hello()` called from model code fails with `Tool wdemo/hello not found`, because P06's `dispatch_nested()` requires `tool$execute`, while 04 §6.8 gives `fun`-only `r` members no generated `execute` and 04 §7.6 promises the tool result's value. P10 already follows 04 (every nested call goes through `dispatch_nested()`); calling `fun` around the gate would bypass the permission check, so no P10 code changes. Recorded as Self-review item 11 with the P06 fix (run `fun` through P02's `spec_tool_execute()` when `execute` is `NULL`); it affects P17 acceptance 3a and P19's worker test, not P10's tests. |
 | 6 | minor | Tasks 1, 2, 8, 9, 10, 11 Steps 2 and 4; Plan acceptance; Self-review validation | applied | The red/green counts no longer matched the tests (the resumed fixes added tests). All re-derived on the scratch package: Task 1 `FAIL 8` / `PASS 28`; Task 2 `FAIL 11` / `PASS 48`; Task 8 `FAIL 11 \| PASS 28` / `PASS 79`; Task 9 `FAIL 5 \| PASS 79` / `PASS 126`; Task 10 `FAIL 50 \| PASS 129` / `PASS 287`; Task 11 `FAIL 23 \| PASS 9` / `PASS 79`; acceptance 1 `PASS 1077`, acceptance 2 `PASS 283`, `tool-namespace` `PASS 287`, `tool-r$\|copy-tools` `PASS 88`. Tasks 3-7 and 12 were unchanged and re-confirmed. |
 | 7 | minor | Global Constraints (copy-safety line); Task 8 prose | applied | The plan claimed member arguments never travel in a list (R1), but a member called from model code hands `dispatch_nested(name, input, ctx)` the input list that 04 §7.6 fixes. The text now says so, keeps the promise path for user calls, explains that `describe` (the one P10 member that takes a user object) sends labels and computes locally, and documents the one-copy cost for a plugin member that receives a user object from model code. |
 | 8 | minor | Global Constraints | applied | The consumed option `gptr.r_max_images` (`3L`, P09) was missing; added with its contract text. |
 | 9 | minor | Global Constraints; all test files | applied | 00-conventions §7 requires `expect_snapshot()` for printed output and wins unless a plan names the exception; the plan tests prints with exact `capture.output()` expectations. The exception is now named in Global Constraints with its reason (byte-exact Pi formats and budgets). |
 | 10 | minor | Task 8 `ns_names()`, Task 9 `ns_catalog()`, `bm25_search()` | applied | Signatures differed from 04 §7.10 (`ns_names(pattern = "")`, `ns_catalog(session = NULL, ...)`, `bm25_search(index, words, limit = 8L, k1 = 1.2, b = 0.75)`). Now exactly `ns_names(pattern)`, `ns_catalog(session, kinds = c("plugin"), budget = 1500L)`, `bm25_search(index, words, limit = 8L)` (k1 and b are constants `bm25_k1`, `bm25_b`); every caller passes the arguments. |
-| 11 | minor | Task 8 `ns_member_spec()`, `member_signature()`; Task 9 test | applied | `gptr$search()` listed a `deferred` spec that has only an `execute` (kind `deferred`, signature `gptr$rare_thing()`), but `ns_resolve()` refused it, although 04 §9.1 says deferred tools are "still callable". `ns_member_ok()` now admits deferred `execute`-only specs (closure formals from the schema, as `member_closure()` already supports) and `member_signature()` uses those formals; the search test calls the member. Self-review reading 13. |
-| 12 | minor | Task 11 test "images attached by gptr$plot() ..." | applied | Vacuous: the evaluator's own captured plot satisfied `length(imgs) >= 1` even if `gptr$plot()` attached nothing. It now asserts an 800-pixel-wide image, which only `gptr$plot(width = 800L)` produces (P09's captures are 768 wide). |
+| 11 | minor | Task 8 `ns_member_spec()`, `member_signature()`; Task 9 test | applied | `peter$search()` listed a `deferred` spec that has only an `execute` (kind `deferred`, signature `peter$rare_thing()`), but `ns_resolve()` refused it, although 04 §9.1 says deferred tools are "still callable". `ns_member_ok()` now admits deferred `execute`-only specs (closure formals from the schema, as `member_closure()` already supports) and `member_signature()` uses those formals; the search test calls the member. Self-review reading 13. |
+| 12 | minor | Task 11 test "images attached by peter$plot() ..." | applied | Vacuous: the evaluator's own captured plot satisfied `length(imgs) >= 1` even if `peter$plot()` attached nothing. It now asserts an 800-pixel-wide image, which only `peter$plot(width = 800L)` produces (P09's captures are 768 wide). |
 | 13 | minor | Task 13 prose | applied | The fixture's result text was called "the exact output" of the code; re-running it shows `tapply()` orders the `diet` groups by collation (`HF control` in the C locale). Re-checked with `LC_ALL=en_US.UTF-8` (identical to the fixture) and the claim now names the locale; tokens are the same and the runner replays the recorded text. |
 | 14 | minor | Task 10 `member_plot()` | applied | When `plot_png()` returns `NULL` (the device could not render) a `NULL` block was attached to the result's content. It now signals `gptr_error_invalid_argument` instead. |
 | 15 | minor | Task 10 risk (`tempdir()` writes at level 2) | rejected | 04 §9.4 lists "2 in project, 3 outside/protected", but P01's `path_class()` has a separate `temp` class and 03 P9 lists `tempdir()` among the places gptr may write; level 2 for scratch files is the reading the plan already records (Self-review reading 6), not a defect. |

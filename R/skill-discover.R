@@ -346,7 +346,7 @@ skills_budget = function() {
 #' The verbatim header line, then one `- name: description [skill:name/SKILL.md]` line per
 #' visible skill in name order. Over `budget` estimated tokens, descriptions of the least
 #' recently used skills are dropped first, then whole entries, which a closing line points to
-#' `gptr$search()`. Returns `""` when there is no skill.
+#' `peter$search()`. Returns `""` when there is no skill.
 #' @noRd
 skill_catalog = function(session = NULL, budget = skills_budget()) {
   specs = skill_visible_specs(session)
@@ -371,7 +371,7 @@ skill_catalog = function(session = NULL, budget = skills_budget()) {
     lines[i] = bare[i]
     cost[i] = cost_bare[i]
   }
-  more_cost = est_tokens("(999 more skills: gptr$search(\"words\") finds them)", "prose")
+  more_cost = est_tokens("(999 more skills: peter$search(\"words\") finds them)", "prose")
   if (total() > budget) {
     for (i in lru) {
       if (head_cost + sum(cost[keep]) + sum(keep) + more_cost <= budget) break
@@ -380,7 +380,7 @@ skill_catalog = function(session = NULL, budget = skills_budget()) {
   }
   out = c(skills_catalog_header, lines[keep])
   if (any(!keep)) {
-    out = c(out, paste0("(", sum(!keep), " more skills: gptr$search(\"words\") finds them)"))
+    out = c(out, paste0("(", sum(!keep), " more skills: peter$search(\"words\") finds them)"))
   }
   paste(out, collapse = "\n")
 }

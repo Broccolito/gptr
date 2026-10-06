@@ -642,7 +642,7 @@ eval_session = function() {
 
 #' Render the captured plots; attach the first ones and store the rest in one out entry
 #' At most `max_images`, fewer when image tokens would pass 60% of the budget (IC-67); the others'
-#' paths go to the session's out store for `gptr$plot(k)`.
+#' paths go to the session's out store for `peter$plot(k)`.
 #' @noRd
 eval_plots_done = function(st) {
   if (is.null(st$ps) || !st$ps$n) return(invisible())

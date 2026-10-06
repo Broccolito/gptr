@@ -13,7 +13,7 @@ tool_name_table = c(read = "read", write = "write", edit = "edit", multiedit = "
 #'
 #' `Read` -> `read`, `Write` -> `write`, `Edit`/`MultiEdit` -> `edit`, `Bash`/`PowerShell` -> `r`,
 #' `Grep` -> `grep`, `Glob` -> `find`, `LS` -> `ls`, `AskUserQuestion` -> `ask` (report 15 section
-#' 4.10); `Task`/`Agent` are dropped (sub-agents are `gptr()` calls); `mcp__<s>__<t>` is kept;
+#' 4.10); `Task`/`Agent` are dropped (sub-agents are `peter()` calls); `mcp__<s>__<t>` is kept;
 #' `Bash(git diff *)` maps by its head; gptr's own names pass through. Unknown names (for example
 #' `WebFetch`, `NotebookEdit`) are dropped and listed in the attribute `unknown`.
 #' @noRd

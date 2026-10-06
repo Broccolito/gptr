@@ -28,7 +28,7 @@
 `dev/plan/00-conventions.md` applies in full: `=` for assignment (never the left arrow), the native `|>` (never the magrittr pipe), ASCII-only sources, lines of at most 100 characters, testthat 3e, no network or real keys in tests, every command run from `/Users/wanjun/Desktop/gptr` with `Rscript --vanilla`, one commit per task ending with the attribution line the harness specifies. Plan-specific requirements, with the exact values of the spec:
 
 - **DESCRIPTION** (05 P25, IC-72): P25 changes exactly two fields: `VignetteBuilder: knitr` (added together with the first vignette, Task 5; "a named exception to 'Version is the only DESCRIPTION field P25 may change'") and `Version: 1.0.0` (Task 13; P01 wrote `Version: 0.99.0.9000`). Every other field is P01's and is only checked: `Title: Language Model Agents Inside the Live 'R' Session`, `Depends: R (>= 4.2.0)`, knitr and rmarkdown in Suggests, none of httr2, R6, S7, evaluate, digest, glue, promises, coro, mirai, fs, magrittr or an R LLM package in Imports or Suggests (conventions section 8).
-- **Exports** (03 section 4.4, IC-01, IC-36): 63 names, `gptr` plus 62 `gptr_*` names, in eight groups: The gateway (1), Setup and status (10), Discovery and MCP (7), Documents and artifacts (5), Session SDK (14), Agent-side and introspection (7), Extension API (8), Spec constructors (11).
+- **Exports** (03 section 4.4, IC-01, IC-36): 63 names, `peter` plus 62 `gptr_*` names, in eight groups: The gateway (1), Setup and status (10), Discovery and MCP (7), Documents and artifacts (5), Session SDK (14), Agent-side and introspection (7), Extension API (8), Spec constructors (11).
 - **Shared Rd pages** (04 section 6: "Related exports share Rd pages with `@rdname` (P25 groups them as in section 4.4 of `03`)"): the five multi-name headings of 04 section 6 each have one page named after the first member: `gptr_login` (`gptr_login`, `gptr_logout`), `gptr_skills` (`gptr_skills`, `gptr_agents`), `gptr_mcp_add` (`gptr_mcp_add`, `gptr_mcp_remove`), `gptr_sessions` (`gptr_sessions`, `gptr_resume`, `gptr_last`), `gptr_rewind` (`gptr_rewind`, `gptr_checkpoints`).
 - **Every export** has `@param`, `@return` and examples (conventions section 4; 04 section 6: "an `@examples` block that runs offline on CRAN: examples use `gptr_fake_provider()`, `envir = new.env()`, `tempfile()` directories and never keys, network, processes or servers").
 - **Examples policy (decided by this plan).**
@@ -37,7 +37,7 @@
   3. No `\dontrun{}` and no `\donttest{}` anywhere in the manual.
   4. Exactly two pages have only conditional examples: `gptr_login` (a person must type a key or finish an OAuth sign-in) and `gptr_mcp_serve` (it starts a loopback server, which 04 section 6 forbids in examples). `cran-comments.md` explains both.
   5. This replaces the three "roxygen wraps it in `\dontrun{}`" comments of 04 sections 6.2-6.3: `gptr_login()` keeps `@examplesIf interactive()`, `gptr_mcp_add()` gets an offline example in a temporary project, and `gptr_mcp_serve()` gets `@examplesIf interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))`.
-- **Help topics written by P25**: `?gptr_options` (every option of 04 section 3.1, 90 names, and the variables of section 3.2; 04 section 3.1: "P25 assembles the page"), `?gptr_security` (the "Security considerations" page of 03 section 13; it covers PHI in committed caches, IC-70: "The Security considerations page mentions PHI", and the worker backend that "is documented as not an isolation boundary", IC-53) and `?gptr_egress` (data egress, 03 section 6.10). The `?gptr` page links all three.
+- **Help topics written by P25**: `?gptr_options` (every option of 04 section 3.1, 90 names, and the variables of section 3.2; 04 section 3.1: "P25 assembles the page"), `?gptr_security` (the "Security considerations" page of 03 section 13; it covers PHI in committed caches, IC-70: "The Security considerations page mentions PHI", and the worker backend that "is documented as not an isolation boundary", IC-53) and `?gptr_egress` (data egress, 03 section 6.10). The `?peter` page links all three.
 - **Roxygen-only edits outside the owned files.** The roxygen review of 05 P25 edits the roxygen of other plans' files. The only changed lines in `R/` are `#'` lines, added `NULL` lines and blank lines; Tasks 2 and 3 verify this with a `git diff` guard before committing. No function, default or behavior changes.
 - **roxygen2 7.3.3** (P01's `RoxygenNote: 7.3.3`). `devtools::document()` with another roxygen2 version rewrites `RoxygenNote`, a DESCRIPTION field P25 may not change (IC-72); the guards of Tasks 2 and 3 check that `DESCRIPTION` is unchanged, and if it is not, the step stops for the maintainer (conventions section 1: nothing is installed from a plan step).
 - **Vignettes**: `getting-started`, `system-one`, `script-as-history`, `extending-gptr`, `token-efficiency`. Sources are `vignettes/<name>.Rmd.orig` (excluded from the build by P01's `.Rbuildignore` line `^vignettes/.*\.Rmd\.orig$`); the shipped `vignettes/<name>.Rmd` is static Markdown with no executable chunk, produced by `dev/release/precompute.R` with the package installed in a temporary library, no keys, home and user directories redirected and every proxy pointed at a closed local port. Knitting all five takes under 60 s (05 P25 acceptance 4). Every gptr call in a vignette uses `gptr_fake_provider()`; code that needs a real model is an `{r, eval = FALSE}` chunk, never a bare code fence (the staleness check compares chunk code with knitted code blocks).
@@ -71,8 +71,8 @@ Files P25 owns (05 P25: `README.Rmd`, `README.md`, `NEWS.md`, `cran-comments.md`
 | `dev/release/tests/test-gptr-release.R` | create, extend | the finished state of gptr's release files | 5-13, 15 |
 | `R/utils-options.R` (P01) | modify, roxygen only | appends the `?gptr_options` topic | 2 |
 | `R/gptr-config.R` (P08) | modify, roxygen only | appends the `?gptr_security` and `?gptr_egress` topics | 2 |
-| `R/gptr-gateway.R` (P08) | modify, roxygen only | one `@seealso` line in the block of `gptr()` | 2 |
-| `R/session-object.R`, `R/session-budget.R`, `R/session-store.R`, `R/session-live.R` (P06) | modify, roxygen only | interim `@examplesIf exists("gptr", ...)` removed; `gptr_sessions`/`gptr_resume`/`gptr_last` share one page | 3 |
+| `R/gptr-gateway.R` (P08) | modify, roxygen only | one `@seealso` line in the block of `peter()` | 2 |
+| `R/session-object.R`, `R/session-budget.R`, `R/session-store.R`, `R/session-live.R` (P06) | modify, roxygen only | interim `@examplesIf exists("peter", ...)` removed; `gptr_sessions`/`gptr_resume`/`gptr_last` share one page | 3 |
 | `R/ckpt-rewind.R` (P16) | modify, roxygen only | `gptr_rewind`/`gptr_checkpoints` share one page | 3 |
 | `R/mcp-config.R`, `R/mcp-server.R` (P18) | modify, roxygen only | offline `gptr_mcp_add()` example; `gptr_mcp_serve()` predicate | 3 |
 | `man/*.Rd`, `NAMESPACE` | regenerate | `devtools::document()` (the merged pages drop `man/gptr_resume.Rd`, `man/gptr_last.Rd`, `man/gptr_checkpoints.Rd`) | 2, 3 |
@@ -117,7 +117,7 @@ through its `\alias` entries and reports: a missing `\value`; missing examples; 
 examples never run unconditionally (except the two pages of the examples policy);
 `\dontrun{}`/`\donttest{}`; an `@examplesIf` predicate outside the allowed grammar; example code
 that uses the arrow assignments or the magrittr pipe (S-9); a multi-name group split over
-several pages; a missing help topic or a required phrase missing from it; and a `?gptr` page
+several pages; a missing help topic or a required phrase missing from it; and a `?peter` page
 that does not link the three topics. This task writes the library, the script and their
 self-tests on toy Rd pages; Tasks 2 and 3 make gptr's own manual pass it.
 
@@ -286,15 +286,15 @@ test_that("docs_problems() reports each kind of documentation defect", {
   expect_true(any(grepl("^f: an export's page has @keywords internal", audit(p))))
 })
 
-test_that("docs_problems() requires ?gptr to link every help topic", {
+test_that("docs_problems() requires ?peter to link every help topic", {
   p = clean_pages()
-  p$gptr = rd_page("gptr", examples = "gptr_fake_provider(list(\"hi\"))")
-  out = docs_problems(write_db(p), exports = c("f", "g", "gptr"), groups = list(f = c("f", "g")),
+  p$peter = rd_page("peter", examples = "gptr_fake_provider(list(\"hi\"))")
+  out = docs_problems(write_db(p), exports = c("f", "g", "peter"), groups = list(f = c("f", "g")),
                       topics = list(t1 = c("PHI")), exceptions = character())
-  expect_true(any(grepl("gptr: @seealso does not link [t1]", out, fixed = TRUE)))
-  p$gptr = rd_page("gptr", examples = "gptr_fake_provider(list(\"hi\"))",
+  expect_true(any(grepl("peter: @seealso does not link [t1]", out, fixed = TRUE)))
+  p$peter = rd_page("peter", examples = "gptr_fake_provider(list(\"hi\"))",
                    extra = "\\seealso{\\link{t1}}")
-  out = docs_problems(write_db(p), exports = c("f", "g", "gptr"), groups = list(f = c("f", "g")),
+  out = docs_problems(write_db(p), exports = c("f", "g", "peter"), groups = list(f = c("f", "g")),
                       topics = list(t1 = c("PHI")), exceptions = character())
   expect_identical(out, character())
 })
@@ -328,7 +328,7 @@ rel_or = function(x, y) if (is.null(x)) y else x
 # 03 section 4.4 (export summary): 63 exports in eight groups.
 rel_export_groups = function() {
   list(
-    "The gateway" = "gptr",
+    "The gateway" = "peter",
     "Setup and status" = c("gptr_init", "gptr_config", "gptr_env", "gptr_trust", "gptr_login",
                            "gptr_logout", "gptr_providers", "gptr_models", "gptr_permissions",
                            "gptr_scrub"),
@@ -646,12 +646,12 @@ docs_problems = function(db, exports = rel_exports(), groups = rel_rd_groups(),
     found = topic_mentions(rd_flat(db[[t]]), topics[[t]])
     out = c(out, sprintf("%s: does not mention %s", rep(t, sum(!found)), topics[[t]][!found]))
   }
-  gateway = unname(amap["gptr"])
+  gateway = unname(amap["peter"])
   if (!is.na(gateway)) {
     see = rd_section_text(db[[gateway]], "\\seealso")
     for (t in names(topics)) {
       if (is.na(see) || !grepl(t, see, fixed = TRUE)) {
-        out = c(out, sprintf("gptr: @seealso does not link [%s]", t))
+        out = c(out, sprintf("peter: @seealso does not link [%s]", t))
       }
     }
   }
@@ -685,19 +685,19 @@ a stub package carrying the roxygen of those plans):
 
 ```text
   gptr_mcp_add: no example runs unconditionally (use the fake provider)
-  gptr_fork: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_sessions: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_resume: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_last: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_usage: @examplesIf predicate not allowed: exists("gptr", mode = "function")
+  gptr_fork: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_sessions: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_resume: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_last: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_usage: @examplesIf predicate not allowed: exists("peter", mode = "function")
   gptr_sessions: gptr_sessions, gptr_resume, gptr_last must share the Rd page gptr_sessions (@rdname gptr_sessions)
   gptr_rewind: gptr_rewind, gptr_checkpoints must share the Rd page gptr_rewind (@rdname gptr_rewind)
   gptr_security: topic page missing
   gptr_egress: topic page missing
   gptr_options: topic page missing
-  gptr: @seealso does not link [gptr_security]
-  gptr: @seealso does not link [gptr_egress]
-  gptr: @seealso does not link [gptr_options]
+  peter: @seealso does not link [gptr_security]
+  peter: @seealso does not link [gptr_egress]
+  peter: @seealso does not link [gptr_options]
 check-docs: 14 problems
 ```
 
@@ -723,19 +723,19 @@ in `Options` sections of their own pages, which point here). Its block lives in
 `?gptr_security` is the "Security considerations" page of 03 section 13 and 05 P25: it covers
 PHI in committed caches (IC-70) and the worker backend that is not an isolation boundary
 (IC-53). `?gptr_egress` is the data-egress page of 03 section 6.10. Both live in
-`R/gptr-config.R`, the P08 file that owns trust and the egress acknowledgement. `?gptr` links
+`R/gptr-config.R`, the P08 file that owns trust and the egress acknowledgement. `?peter` links
 all three. Every change is a roxygen comment or a `NULL` anchor.
 
 **Files:**
 - Modify: `R/utils-options.R` (append one roxygen block and `NULL`)
 - Modify: `R/gptr-config.R` (append two roxygen blocks, each followed by `NULL`)
-- Modify: `R/gptr-gateway.R` (one `@seealso` line in the block that documents `gptr`)
-- Regenerate: `man/gptr_options.Rd`, `man/gptr_security.Rd`, `man/gptr_egress.Rd`, `man/gptr.Rd`
+- Modify: `R/gptr-gateway.R` (one `@seealso` line in the block that documents `peter`)
+- Regenerate: `man/gptr_options.Rd`, `man/gptr_security.Rd`, `man/gptr_egress.Rd`, `man/peter.Rd`
 - Test: `dev/release/tests/helper-lib.R` (append), `dev/release/tests/test-gptr-man.R` (create)
 
 **Interfaces:**
 - Consumes: `docs_problems()`, `rd_read_dir()` (Task 1); the options and variables of 04
-  sections 3.1-3.2; the exports linked from the pages (`gptr()`, `gptr_init()`, `gptr_doc()`,
+  sections 3.1-3.2; the exports linked from the pages (`peter()`, `gptr_init()`, `gptr_doc()`,
   `gptr_config()`, `gptr_env()`, `gptr_trust()`, `gptr_scrub()`, `gptr_risk()`,
   `gptr_rewind()`, `gptr_permissions()`, `gptr_mcp_serve()`, `gptr_parallel()`,
   `gptr_providers()`, `gptr_fake_provider()`; 04 section 6), the error classes
@@ -774,9 +774,9 @@ Create `dev/release/tests/test-gptr-man.R`:
 
 ```r
 # Checks gptr's own manual (plan P25, Tasks 2 and 3). A failure lists the open problems.
-test_that("gptr's help topics exist and ?gptr links them (Task 2)", {
+test_that("gptr's help topics exist and ?peter links them (Task 2)", {
   db = rd_read_dir(file.path(gptr_root(), "man"))
-  expect_no_problems(grep("^(gptr_options|gptr_security|gptr_egress): |^gptr: @seealso",
+  expect_no_problems(grep("^(gptr_options|gptr_security|gptr_egress): |^peter: @seealso",
                           docs_problems(db), value = TRUE))
 })
 ```
@@ -792,9 +792,9 @@ open problems:
   gptr_security: topic page missing
   gptr_egress: topic page missing
   gptr_options: topic page missing
-  gptr: @seealso does not link [gptr_security]
-  gptr: @seealso does not link [gptr_egress]
-  gptr: @seealso does not link [gptr_options]
+  peter: @seealso does not link [gptr_security]
+  peter: @seealso does not link [gptr_egress]
+  peter: @seealso does not link [gptr_options]
 ```
 
 - [ ] **Step 3: Write the implementation**
@@ -832,7 +832,7 @@ documents a topic named `gptr_options`):
 #' - `gptr.project_root` (character or `NULL`, `NULL`): the project root; also the environment
 #'   variable `GPTR_PROJECT_ROOT`.
 #' - `gptr.replay` (character or `NULL`, *settings*, `"auto"`): how recorded document blocks are
-#'   used: `"auto"`, `"replay"`, `"live"` or `"record"`; the `replay` argument of [gptr()] wins.
+#'   used: `"auto"`, `"replay"`, `"live"` or `"record"`; the `replay` argument of [peter()] wins.
 #' - `gptr.record` (character or `NULL`, *settings*, `"ask"`): whether gptr may write into
 #'   documents: `"auto"`, `"ask"` or `"off"`.
 #' - `gptr.interpolate` (logical, `TRUE`): `{identifier}` interpolation in literal prompts.
@@ -840,13 +840,13 @@ documents a topic named `gptr_options`):
 #' @section Sessions, turns and values:
 #' - `gptr.max_turns` (integer, `50`): turns per programmatic run.
 #' - `gptr.max_turns_console` (integer, `200`): turns per console prompt.
-#' - `gptr.max_nested_calls` (integer, `20`): [gptr()] calls per evaluation of model code.
+#' - `gptr.max_nested_calls` (integer, `20`): [peter()] calls per evaluation of model code.
 #' - `gptr.value_copy_max` (bytes, `1048576`): designated result values below this size are
 #'   copied; larger ones are kept by name.
 #' - `gptr.values_max_bytes` (bytes, `67108864`): value copies held per session.
 #' - `gptr.background_tools` (character, `"idle"`): `"idle"` or `"wait"` for experimental
 #'   background sessions.
-#' - `gptr.out_keep` (integer, `20`): results kept per session for `gptr$out()`.
+#' - `gptr.out_keep` (integer, `20`): results kept per session for `peter$out()`.
 #' - `gptr.spill_days` (number, `7`): age in days after which spill files are pruned.
 #'
 #' @section Concurrency and sub-agents:
@@ -880,7 +880,7 @@ documents a topic named `gptr_options`):
 #' - `gptr.r_timeout` (seconds, `3600`): time limit of the `r` tool when nobody is present.
 #' - `gptr.r_output_tokens` (integer, `4000`): estimated tokens of one `r` result.
 #' - `gptr.r_max_images` (integer, `3`): plot images attached to one `r` result.
-#' - `gptr.helper_output_tokens` (integer, `1500`): printed size of `gptr$` helper results.
+#' - `gptr.helper_output_tokens` (integer, `1500`): printed size of `peter$` helper results.
 #' - `gptr.read_max_tokens` (integer, `12000`): size cap of the `read` tool.
 #' - `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res` (integers, `768`, `512`, `120`):
 #'   plots sent to the model.
@@ -983,9 +983,9 @@ Append these two blocks to the end of `R/gptr-config.R`, after one blank line:
 #' where its protections end. [gptr_egress] describes what is sent to model providers.
 #'
 #' @section Everything happens because you asked:
-#' Nothing runs when the package is loaded. A model is contacted only when you call [gptr()] (or
+#' Nothing runs when the package is loaded. A model is contacted only when you call [peter()] (or
 #' a function that you give a prompt), and model-written code is evaluated only in the
-#' environment you pass as `envir` (by default the frame that called [gptr()]); gptr never
+#' environment you pass as `envir` (by default the frame that called [peter()]); gptr never
 #' assigns into the global environment by itself. Files are written only inside a `.gptr/`
 #' directory you created with [gptr_init()] or confirmed interactively, inside
 #' `tools::R_user_dir("gptr")`, inside the session temporary directory, into documents you bound
@@ -1021,7 +1021,7 @@ Append these two blocks to the end of `R/gptr-config.R`, after one blank line:
 #' not read your `~/.Renviron`), but that process runs under your user account with your file
 #' permissions: the worker backend is not an isolation boundary. Its permission requests are
 #' sent to your session and classified again there. MCP servers, the `claude` and `codex`
-#' command-line tools, shell commands started with `gptr$sh()` and Shiny artifacts are ordinary
+#' command-line tools, shell commands started with `peter$sh()` and Shiny artifacts are ordinary
 #' processes of your account as well; artifacts start without any registered secret and listen
 #' on the loopback interface, and each launch gets an access token in its address (on Windows
 #' only when 'openssl' is installed; otherwise gptr says that the artifact has no token).
@@ -1130,8 +1130,8 @@ NULL
 NULL
 ```
 
-In `R/gptr-gateway.R`, in the roxygen block that documents `gptr` (the block directly above
-`gptr = structure(function(`), replace the last example line and the `@export` line
+In `R/gptr-gateway.R`, in the roxygen block that documents `peter` (the block directly above
+`peter = structure(function(`), replace the last example line and the `@export` line
 
 ```r
 #' identical(gptr_last(), s)
@@ -1151,7 +1151,7 @@ before it, so it warns about the three new topics):
 
 Run: `Rscript --vanilla -e 'devtools::document()'`
 
-Expected: `Writing 'gptr_security.Rd'`, `Writing 'gptr_egress.Rd'`, `Writing 'gptr.Rd'` and
+Expected: `Writing 'gptr_security.Rd'`, `Writing 'gptr_egress.Rd'`, `Writing 'peter.Rd'` and
 `Writing 'gptr_options.Rd'`, plus `Could not resolve link to topic` messages naming only
 `gptr_security`, `gptr_egress` and `gptr_options`.
 
@@ -1188,7 +1188,7 @@ its lines are at most 100 characters, and no function was added).
 - [ ] **Step 5: Commit**
 
 ```sh
-git add R/utils-options.R R/gptr-config.R R/gptr-gateway.R man/gptr_options.Rd man/gptr_security.Rd man/gptr_egress.Rd man/gptr.Rd dev/release/tests/helper-lib.R dev/release/tests/test-gptr-man.R
+git add R/utils-options.R R/gptr-config.R R/gptr-gateway.R man/gptr_options.Rd man/gptr_security.Rd man/gptr_egress.Rd man/peter.Rd dev/release/tests/helper-lib.R dev/release/tests/test-gptr-man.R
 git commit -m "docs: add the options, security considerations and data egress help pages"
 ```
 
@@ -1251,18 +1251,20 @@ lists:
 ```text
 open problems:
   gptr_mcp_add: no example runs unconditionally (use the fake provider)
-  gptr_fork: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_sessions: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_resume: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_last: @examplesIf predicate not allowed: exists("gptr", mode = "function")
-  gptr_usage: @examplesIf predicate not allowed: exists("gptr", mode = "function")
+  gptr_fork: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_sessions: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_resume: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_last: @examplesIf predicate not allowed: exists("peter", mode = "function")
+  gptr_usage: @examplesIf predicate not allowed: exists("peter", mode = "function")
   gptr_sessions: gptr_sessions, gptr_resume, gptr_last must share the Rd page gptr_sessions (@rdname gptr_sessions)
   gptr_rewind: gptr_rewind, gptr_checkpoints must share the Rd page gptr_rewind (@rdname gptr_rewind)
 ```
 
-P06 guarded its gptr-based examples with `@examplesIf exists("gptr", mode = "function")`
-because `gptr()` arrives in P08; at release that predicate is always true and outside the
+P06 guarded its gptr-based examples with `@examplesIf exists("peter", mode = "function")`
+because `peter()` arrives in P08; at release that predicate is always true and outside the
 grammar of the examples policy, so the examples become unconditional.
+D-135 item 5: REN-1 already removed these guards and examples; on the real tree the five
+`@examplesIf` lines do not appear (here or in Task 1 Step 4) and edit A has nothing to replace.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1279,7 +1281,7 @@ replace
 #'   f = gptr_fork(s)
 #'   f$turns
 #' }
-#' @examplesIf exists("gptr", mode = "function")
+#' @examplesIf exists("peter", mode = "function")
 #' fake = gptr_fake_provider(list("A", "B"))
 ```
 
@@ -1295,8 +1297,8 @@ with
 ```r
 #' @examples
 #' gptr_usage()
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_usage(s)
 ```
 
@@ -1304,7 +1306,7 @@ with
 
 ```r
 #' @examples
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_usage(s)
 #' gptr_usage()
 ```
@@ -1324,8 +1326,8 @@ with
 #'   `status`, `title` (the first prompt, 60 characters), `live`.
 #' @examples
 #' gptr_sessions()
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_sessions()
 #' @export
 ```
@@ -1348,7 +1350,7 @@ with
 #'   session of this process, or `NULL` when no session was created in this process.
 #' @order 1
 #' @examples
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_last(), s)
 #' gptr_sessions()
 #' identical(gptr_resume(s$id), s)
@@ -1375,8 +1377,8 @@ In `R/session-store.R`, replace the whole roxygen block above `gptr_resume = fun
 #' @examples
 #' s = gptr_last()
 #' if (!is.null(s)) identical(gptr_resume(s$id), s)
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_resume(s$id), s)
 #' @export
 ```
@@ -1412,8 +1414,8 @@ In `R/session-live.R`, replace the whole roxygen block above `gptr_last = functi
 #' @examples
 #' s = gptr_last()
 #' is.null(s) || inherits(s, "gptr_session")
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_last(), s)
 #' @export
 ```
@@ -1480,7 +1482,7 @@ Replace the whole roxygen block above `gptr_checkpoints = function(`
 #' @export
 #' @examples
 #' fake = gptr_fake_provider(list("done"))
-#' s = gptr("step", model = fake, envir = new.env())
+#' s = peter("step", model = fake, envir = new.env())
 #' gptr_checkpoints(s)
 ```
 
@@ -1561,7 +1563,7 @@ fix, always in the roxygen block of the owner file of 04 section 14.1:
 Table R, the `@return` of every export whose page is not in parts B-C (from 04 section 6):
 
 ```r
-# Export gptr, file R/gptr-gateway.R:
+# Export peter, file R/gptr-gateway.R:
 #' @return For a generative model, the `gptr_session` (the same object when a session was piped
 #'   in), invisibly when its answer was streamed to the console. For a System 1 model, a typed
 #'   vector: `gptr_decision` (logical), `gptr_choice` (character) or `gptr_score` (double), with
@@ -1655,7 +1657,7 @@ Table R, the `@return` of every export whose page is not in parts B-C (from 04 s
 #' @return A `gptr_check` data frame with columns `target`, `check`, `ok` and `message`.
 # Export gptr_fake_provider, file R/provider-fake.R:
 #' @return A provider spec of class `c("gptr_provider", "gptr_spec")` with `offline = TRUE`,
-#'   usable as `model =` in [gptr()] or with [gptr_register()].
+#'   usable as `model =` in [peter()] or with [gptr_register()].
 # Export gptr_tool_result, file R/ext-specs.R:
 #' @return A `gptr_tool_result`.
 # Export gptr_spec, file R/ext-specs.R:
@@ -2040,7 +2042,7 @@ with the vignettes") and the first vignette, which follows NS-2, NS-3 and NS-12 
 - Consumes: `rel_child_env()`, `rel_dirs()`, `rel_install()`, `rel_files()`, `rel_exe()`
   (Task 4), `code_style_problems()`, `rel_ascii_problems()`, `rel_vignettes()` (Task 1);
   `knitr::knit()`, `rmarkdown::render()`; from the package (vignette code only):
-  `gptr()` (04 section 6.1), `gptr_fake_provider()` (04 section 12.1, the reply forms
+  `peter()` (04 section 6.1), `gptr_fake_provider()` (04 section 12.1, the reply forms
   `chr(1)` and `list(tool, input)`), `gptr_usage()`, `gptr_fork()`, the session accessors
   `$text`, `$status`, `$turns` (04 section 5.1) and the condition `gptr_error_permission` with
   field `session` (04 sections 2.2 and 6.1.2); P01's DESCRIPTION test in
@@ -2442,7 +2444,7 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 gptr runs a language model agent inside your R session. The agent works on the objects that are
 already in memory: it inspects them, runs R code on them and leaves its results in your
 workspace, so a large object is loaded once and a mistake costs one re-evaluation instead of a
-fresh run of the whole script. The same function, `gptr()`, is an interactive chat at the
+fresh run of the whole script. The same function, `peter()`, is an interactive chat at the
 console and a programmable call in scripts, loops and `if` statements.
 
 This vignette runs without a network connection or a key. Every call uses
@@ -2453,7 +2455,7 @@ reproducible. With a real model the calls are the same; only the `model` argumen
 ## A first call
 
 A fake provider plays a script in which each element is one model reply. A reply can call a
-tool: the `r` tool runs R code in the environment you give to `gptr()`.
+tool: the `r` tool runs R code in the environment you give to `peter()`.
 
 ```{r}
 library(gptr)
@@ -2464,7 +2466,7 @@ fake = gptr_fake_provider(list(
 ))
 
 work = new.env()
-s = gptr("How does fuel economy depend on weight in mtcars?", model = fake, envir = work,
+s = peter("How does fuel economy depend on weight in mtcars?", model = fake, envir = work,
          mode = auto)
 s$text
 ```
@@ -2481,7 +2483,7 @@ ls(work)
 coef(work$fit)
 ```
 
-`gptr()` returned a session object. It holds the conversation, the model, the status and the
+`peter()` returned a session object. It holds the conversation, the model, the status and the
 token usage:
 
 ```{r}
@@ -2492,7 +2494,7 @@ gptr_usage(s)
 
 ## The pipe steers one session
 
-Piping a session into `gptr()` adds a turn to the same session: the same history, the same
+Piping a session into `peter()` adds a turn to the same session: the same history, the same
 model and the same workspace. Nothing is copied and no new conversation starts.
 
 ```{r}
@@ -2503,9 +2505,9 @@ fake2 = gptr_fake_provider(list(
   "Four."
 ))
 
-s2 = gptr("Compute the mean mpg for each number of cylinders.", model = fake2, envir = work,
+s2 = peter("Compute the mean mpg for each number of cylinders.", model = fake2, envir = work,
           mode = auto)
-s3 = s2 |> gptr("Which group is the most economical?")
+s3 = s2 |> peter("Which group is the most economical?")
 identical(s2, s3)
 s2$turns
 s2$text
@@ -2516,7 +2518,7 @@ workspace sees the original objects without copying them and keeps its own chang
 
 ```{r}
 branch = gptr_fork(s2)
-branch |> gptr("Answer in one word.")
+branch |> peter("Answer in one word.")
 c(original = s2$turns, branch = branch$turns)
 ```
 
@@ -2532,7 +2534,7 @@ careful = gptr_fake_provider(list(
   "Added the column kpl."
 ))
 res = tryCatch(
-  gptr("Add fuel economy in km per liter to mtcars.", model = careful, envir = new.env(),
+  peter("Add fuel economy in km per liter to mtcars.", model = careful, envir = new.env(),
        mode = manual),
   gptr_error_permission = function(e) e
 )
@@ -2546,12 +2548,12 @@ low-risk code without a question.
 
 ## At the console
 
-Called without a prompt, `gptr()` opens a chat in the console. Piping a session into it
+Called without a prompt, `peter()` opens a chat in the console. Piping a session into it
 continues that session interactively, and `/exit` returns the session.
 
 ```{r, eval = FALSE}
-gptr()
-s |> gptr()
+peter()
+s |> peter()
 ```
 
 ## Connecting a real model
@@ -2565,7 +2567,7 @@ gptr_providers()
 gptr_models("sonnet")
 gptr_config(model = "anthropic/claude-sonnet-5-5", .scope = "user")
 
-res = gptr("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
+res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
 res$value
 ```
 
@@ -2649,7 +2651,7 @@ NS-4 and NS-5 of `02-north-star-examples.md`: System 1 decisions returned as typ
 - Test: `dev/release/tests/test-gptr-release.R` (append)
 
 **Interfaces:**
-- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr()` with `choices`, `levels`, `min_confidence` (04 section 6.1), `gptr_prob(x, what = c("prob", "confidence", "probabilities"))` (04 section 6.6), `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` called with `type = "classifier"` (04 section 12.1), the System 1 vectors of 04 section 5.2, and the piped-session route (`classifier`, 04 section 6.1.1: "a piped session becomes the state through `as_state()`, no turn").
+- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `peter()` with `choices`, `levels`, `min_confidence` (04 section 6.1), `gptr_prob(x, what = c("prob", "confidence", "probabilities"))` (04 section 6.6), `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` called with `type = "classifier"` (04 section 12.1), the System 1 vectors of 04 section 5.2, and the piped-session route (`classifier`, 04 section 6.1.1: "a piped session becomes the state through `as_state()`, no turn").
 - Produces: the shipped vignette `vignettes/system-one.Rmd` (listed in `_pkgdown.yml` by Task 12).
 
 - [ ] **Step 1: Write the failing test**
@@ -2733,7 +2735,7 @@ abstracts = c(
   cohort = "We followed 5000 nurses for 20 years and recorded incident diabetes.",
   pilot = "A pilot study of 30 patients; the allocation method is not reported."
 )
-is_rct = gptr("Is this abstract about a randomized controlled trial?", abstracts,
+is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts,
               model = judge)
 is_rct
 gptr_prob(is_rct)
@@ -2749,7 +2751,7 @@ A single input gives a single value, which `if` accepts:
 ```{r}
 included = character()
 for (id in names(abstracts)) {
-  if (gptr("Is this abstract about a randomized controlled trial?", abstracts[[id]],
+  if (peter("Is this abstract about a randomized controlled trial?", abstracts[[id]],
            model = judge)) {
     included = c(included, id)
   }
@@ -2770,7 +2772,7 @@ given), `TRUE`, `FALSE`, `"stop"` (an error) or a function that escalates, for e
 System 2 model.
 
 ```{r}
-gptr("Is this abstract about a randomized controlled trial?", abstracts, model = judge,
+peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge,
      min_confidence = 0.8)
 ```
 
@@ -2780,12 +2782,12 @@ gptr("Is this abstract about a randomized controlled trial?", abstracts, model =
 samples = c(s1 = "Biopsy of the right lower lobe",
             s2 = "Hepatocytes from a resected liver segment",
             s3 = "Cortex from an epilepsy resection")
-tissue = gptr("Which tissue does this sample description refer to?", samples,
+tissue = peter("Which tissue does this sample description refer to?", samples,
               model = judge, choices = c("liver", "lung", "brain", "other"))
 tissue
 gptr_prob(tissue, "probabilities")
 
-severity = gptr("How severe is this adverse event?",
+severity = peter("How severe is this adverse event?",
                 c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
                 model = judge, levels = c("mild", "moderate", "severe"))
 severity
@@ -2802,9 +2804,9 @@ fast = gptr_fake_provider(list("A quick answer from the fast model."), name = "f
 tasks = c("Rename the column mpg to miles_per_gallon.",
           "Decide whether a mixed model or a GEE suits these repeated measures.")
 for (task in tasks) {
-  hard = gptr("Is this task subtle enough to need the strongest model?", task, model = judge)
+  hard = peter("Is this task subtle enough to need the strongest model?", task, model = judge)
   chosen = if (hard) strong else fast
-  answer = gptr(task, model = chosen, envir = new.env())
+  answer = peter(task, model = chosen, envir = new.env())
   print(answer$text)
 }
 ```
@@ -2815,10 +2817,10 @@ Piping a System 2 session into a System 1 question asks about the session's last
 turn is added to the session.
 
 ```{r}
-analysis = gptr("Summarize mtcars in one sentence.",
+analysis = peter("Summarize mtcars in one sentence.",
                 model = gptr_fake_provider(list("The summary succeeded: 32 cars, 11 variables.")),
                 envir = new.env())
-analysis |> gptr("Did the analysis succeed?", model = judge)
+analysis |> peter("Did the analysis succeed?", model = judge)
 analysis$turns
 ```
 
@@ -2830,7 +2832,7 @@ file and maps them to it.
 
 ```{r, eval = FALSE}
 gptr_env("jev-key.env")
-is_rct = gptr("Is this abstract about a randomized controlled trial?", abstracts, model = jev)
+is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = jev)
 table(is_rct)
 ```
 
@@ -2920,7 +2922,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE)
 old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 ```
 
-A script that calls `gptr()` is both the program and the record of the agent's work. After each
+A script that calls `peter()` is both the program and the record of the agent's work. After each
 call, gptr writes the code the agent ran into the script, directly below the prompt, between two
 marker comments. Running the script again replays that code as ordinary R without asking a
 model; the same works in R Markdown, Quarto and Jupyter documents, where the recorded code
@@ -2949,7 +2951,7 @@ script = file.path(proj, "analysis.R")
 writeLines(c(
   "library(gptr)",
   "",
-  "res = gptr(\"Find the three most fuel-efficient cars\", model = fake, mode = auto)",
+  "res = peter(\"Find the three most fuel-efficient cars\", model = fake, mode = auto)",
   "top"
 ), script)
 
@@ -2958,7 +2960,7 @@ first = gptr_source(script, envir = new.env())
 first
 ```
 
-`gptr_source()` runs the script expression by expression. The `gptr()` call had no recorded
+`gptr_source()` runs the script expression by expression. The `peter()` call had no recorded
 block yet, so it asked the model, ran the code it wrote and recorded it. The script now reads:
 
 ```{r}
@@ -3014,9 +3016,9 @@ recorded code of each step follows the chain. A console session without a bound 
 recorded as a transcript that re-sources as one steered session.
 
 ```{r, eval = FALSE}
-prep = gptr("Normalize pbmc, find variable features and run PCA", pbmc) |>
-  gptr("Regress out percent.mt while scaling") |>
-  gptr("Keep 30 PCs; tell me if the elbow suggests fewer")
+prep = peter("Normalize pbmc, find variable features and run PCA", pbmc) |>
+  peter("Regress out percent.mt while scaling") |>
+  peter("Keep 30 PCs; tell me if the elbow suggests fewer")
 ```
 
 ## A whole workflow that reads like R
@@ -3031,18 +3033,18 @@ library(Seurat)
 
 pbmc = readRDS("pbmc.rds")
 
-prep = gptr("Normalize pbmc, find variable features and run PCA", pbmc) |>
-  gptr("Keep 30 PCs; tell me if the elbow suggests fewer")
+prep = peter("Normalize pbmc, find variable features and run PCA", pbmc) |>
+  peter("Keep 30 PCs; tell me if the elbow suggests fewer")
 
 pbmc = FindNeighbors(pbmc, dims = 1:30) |> FindClusters(resolution = 0.8)
 
 for (cl in levels(Idents(pbmc))) {
   markers = FindMarkers(pbmc, ident.1 = cl, only.pos = TRUE)
   top = paste(head(rownames(markers), 10), collapse = ", ")
-  cell_type = gptr("Which immune cell type do these marker genes indicate?", top, model = jev,
+  cell_type = peter("Which immune cell type do these marker genes indicate?", top, model = jev,
                    choices = c("T cell", "B cell", "NK cell", "monocyte", "unclear"))
   if (cell_type == "unclear") {
-    gptr("Cluster {cl} has ambiguous markers ({top}). Propose a label.", pbmc)
+    peter("Cluster {cl} has ambiguous markers ({top}). Propose a label.", pbmc)
   }
 }
 ```
@@ -3094,7 +3096,7 @@ git commit -m "docs(vignettes): add the script-as-history vignette"
 
 ### Task 8: The extending-gptr vignette
 
-NS-10 and S-11 ("everything a plugin"): a tool reached as `gptr$demo$add()` (an `r` member with a namespace, 04 section 9.4), a permission policy that denies a call even in `auto` mode, a session hook, prompt sections, context blocks and commands, `gptr_spec()` for the other kinds, and the plugin manifest of 04 section 11.12.
+NS-10 and S-11 ("everything a plugin"): a tool reached as `peter$demo$add()` (an `r` member with a namespace, 04 section 9.4), a permission policy that denies a call even in `auto` mode, a session hook, prompt sections, context blocks and commands, `gptr_spec()` for the other kinds, and the plugin manifest of 04 section 11.12.
 
 **Files:**
 - Create: `vignettes/extending-gptr.Rmd.orig`; generated: `vignettes/extending-gptr.Rmd`
@@ -3154,7 +3156,7 @@ head(grep("^kind[.]", gptr_api()$features, value = TRUE))
 
 ## A tool the model calls as an R function
 
-Most capabilities are members of the `gptr$` namespace rather than separate model-visible tools:
+Most capabilities are members of the `peter$` namespace rather than separate model-visible tools:
 the model calls them from R code, which costs a few tokens per tool instead of a full schema.
 `gptr_check()` runs the conformance checks on a spec before you register it.
 
@@ -3168,23 +3170,23 @@ add_tool = gptr_tool(
 )
 gptr_check(add_tool)
 off_tool = gptr_register(add_tool)
-gptr$demo$add(2, 3)
+peter$demo$add(2, 3)
 ```
 
 Model code calls it the same way:
 
 ```{r}
 fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "gptr$demo$add(40, 2)")),
+  list(tool = "r", input = list(code = "peter$demo$add(40, 2)")),
   "The sum is 42."
 ))
-s = gptr("What is 40 plus 2? Use the demo tools.", model = fake, envir = new.env(), mode = auto)
+s = peter("What is 40 plus 2? Use the demo tools.", model = fake, envir = new.env(), mode = auto)
 s$text
 off_tool()
 ```
 
 `gptr_register()` returns a function that unregisters the record. To add a tool to one session
-only, pass it as `gptr(..., tools = list(add_tool))`.
+only, pass it as `peter(..., tools = list(add_tool))`.
 
 ## A permission policy
 
@@ -3205,7 +3207,7 @@ eager = gptr_fake_provider(list(
   list(tool = "r", input = list(code = "install.packages(\"fortunes\")")),
   "I was not allowed to install the package."
 ))
-s = gptr("Install the fortunes package.", model = eager, envir = new.env(), mode = auto)
+s = peter("Install the fortunes package.", model = eager, envir = new.env(), mode = auto)
 result = eager$log$requests[[2]]$last_results[[1]]
 result$is_error
 s$text
@@ -3221,7 +3223,7 @@ installed, even in `auto` mode.
 `gptr_register()` apply to every session.
 
 ```{r}
-s = gptr("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
 seen = new.env()
 seen$roles = character()
 off_hook = gptr_on(s, "message_end", function(event, ctx) {
@@ -3270,7 +3272,7 @@ A provider for an OpenAI-compatible endpoint is data:
 gptr_register(gptr_provider("corp", api = "openai-completions",
                             base_url = "https://llm.corp.example/v1", auth = "CORP_LLM_KEY",
                             models = list(list(id = "corp-large", context = 128000))))
-gptr("Summarize this table", mtcars, model = "corp/corp-large")
+peter("Summarize this table", mtcars, model = "corp/corp-large")
 ```
 
 ## Extensions and plugins
@@ -3284,7 +3286,7 @@ lab_rules = function(gptr) {
   gptr$register(gptr_prompt_section("lab_rules", "Report concentrations in mmol/L.",
                                     tier = "T1", order = 790L))
 }
-gptr("Summarize the assay results", assay, extensions = lab_rules)
+peter("Summarize the assay results", assay, extensions = lab_rules)
 ```
 
 A plugin is an R package (or a directory) with a manifest in `inst/gptr/plugin.json`. Its skills,
@@ -3304,7 +3306,7 @@ its tools to the model without loading anything.
 ```
 
 Its `DESCRIPTION` adds `Config/gptr/plugin: true` and `Config/gptr/api: >= 1.0, < 2`. Use the
-plugin with `gptr(..., plugins = gptrpanel)` or list the installed ones with
+plugin with `peter(..., plugins = gptrpanel)` or list the installed ones with
 `gptr_plugins(installed = TRUE)`. Packages can also teach gptr about their classes by
 registering methods for `gptr_describe()` (compact descriptions for the model) and
 `gptr_preimage()` (how to undo changes to an object) as delayed S3 methods.
@@ -3319,7 +3321,7 @@ Knit it:
 Run: `Rscript --vanilla dev/release/precompute.R extending-gptr`
 
 Expected: `precompute: 1 vignette(s) knitted in <s> s` and `precompute: 0 problems`. Read
-`vignettes/extending-gptr.Rmd`: `gptr$demo$add(2, 3)` is 5 and the model's call answers "The sum is 42."; the policy's denial gives `result$is_error` `TRUE` and nothing is installed; the hook collects the roles of the messages the run ended (at least `"assistant"`); the registry rows show the three records with source `user`. A knitting failure prints the tail of the child's output; fix
+`vignettes/extending-gptr.Rmd`: `peter$demo$add(2, 3)` is 5 and the model's call answers "The sum is 42."; the policy's denial gives `result$is_error` `TRUE` and nothing is installed; the hook collects the roles of the messages the run ended (at least `"assistant"`); the registry rows show the three records with source `user`. A knitting failure prints the tail of the child's output; fix
 the vignette (or, when the output shows a deviation of the package from 04, the owning plan's
 code) and knit again.
 
@@ -3344,14 +3346,14 @@ git commit -m "docs(vignettes): add the extending-gptr vignette"
 
 ### Task 9: The token-efficiency vignette
 
-S-12 and REQ-42 (architecture section 12): the frozen prefix (`gptr_prompt()`), budgeted object descriptions (`gptr_describe()`), the usage table and the per-component ledger (`gptr_usage()`), budgets that stop a run before a request (P06's `budget_check()` adds the estimate of the next request, so a 500-token budget stops before the first one), and the benchmark. The figures quoted are the measured o200k totals of 03 section 12.1 (1,271 / 2,360 / 2,844 / 2,987) and the System 1 comparison of 03 section 12.3.
+S-12 and REQ-42 (architecture section 12): the frozen prefix (`gptr_prompt()`), budgeted object descriptions (`gptr_describe()`), the usage table and the per-component ledger (`gptr_usage()`), budgets that stop a run before a request (P06's `budget_check()` adds the estimate of the next request, so a 500-token budget stops before the first one), and the benchmark. The figures quoted are the measured o200k totals of 03 section 12.1 (1,262 / 2,335 / 2,813 / 2,956) and the System 1 comparison of 03 section 12.3.
 
 **Files:**
 - Create: `vignettes/token-efficiency.Rmd.orig`; generated: `vignettes/token-efficiency.Rmd`
 - Test: `dev/release/tests/test-gptr-release.R` (append)
 
 **Interfaces:**
-- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` (04 section 6.6; the `gptr_prompt_view` fields `sections`, `total_tokens` and attribute `tool_names`, 04 section 5.11), `gptr_describe(x, budget = 150L, ...)`, `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` (the ledger columns `request_id`, `component`, `tokens`, `cached`, 04 section 4.3), `gptr(..., budget = list(tokens =))` and the condition class `gptr_error_budget` with its child `gptr_error_budget_tokens` (04 section 2.2).
+- Consumes: `vig_committed_problems()`, `precompute.R` (Task 5); from the package: `gptr_prompt(x = NULL, preset = NULL, tokens = TRUE)` (04 section 6.6; the `gptr_prompt_view` fields `sections`, `total_tokens` and attribute `tool_names`, 04 section 5.11), `gptr_describe(x, budget = 150L, ...)`, `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` (the ledger columns `request_id`, `component`, `tokens`, `cached`, 04 section 4.3), `peter(..., budget = list(tokens =))` and the condition class `gptr_error_budget` with its child `gptr_error_budget_tokens` (04 section 2.2).
 - Produces: the shipped vignette `vignettes/token-efficiency.Rmd` (listed in `_pkgdown.yml` by Task 12).
 
 - [ ] **Step 1: Write the failing test**
@@ -3424,7 +3426,7 @@ view$total_tokens
 Printing the view shows the full text of every section. The `standard` preset, the default for
 interactive and programmatic sessions, has four model-visible tools (`r`, `read`, `edit`,
 `write`, plus `ask` when a person is present) and describes everything else as R functions in
-the `gptr$` namespace. Measured with an o200k tokenizer, the static prefix is about 1,300 tokens
+the `peter$` namespace. Measured with an o200k tokenizer, the static prefix is about 1,300 tokens
 for the `minimal` preset used by sub-agents, 2,400 for `standard` without optional sections and
 2,850 to 3,000 with every section. After the first request that prefix is read from the
 provider's cache.
@@ -3450,7 +3452,7 @@ fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = code)),
   "The weight slope is steepest for four-cylinder cars."
 ))
-s = gptr("Fit mpg on weight separately for each number of cylinders and compare the slopes.",
+s = peter("Fit mpg on weight separately for each number of cylinders and compare the slopes.",
          mtcars, model = fake, envir = new.env(), mode = auto)
 gptr_usage(s)
 ledger = gptr_usage(s, detail = TRUE)
@@ -3470,7 +3472,7 @@ with a classed condition and keeps the partial transcript.
 ```{r}
 small = gptr_fake_provider(list("Done."))
 res = tryCatch(
-  gptr("Summarize mpg.", model = small, envir = new.env(), budget = list(tokens = 500)),
+  peter("Summarize mpg.", model = small, envir = new.env(), budget = list(tokens = 500)),
   gptr_error_budget = function(e) e
 )
 class(res)[1]
@@ -3494,7 +3496,7 @@ answered in parallel. See `vignette("system-one", package = "gptr")`.
 - `{identifier}` in a literal prompt inserts a short value (about 10 tokens) instead of attaching
   an object.
 - Long `r` results keep their first 40% and last 60% within about 4,000 tokens; the full text
-  stays available through `gptr$out(id)`.
+  stays available through `peter$out(id)`.
 
 ## The benchmark
 
@@ -3559,7 +3561,7 @@ section 2.13).
 **Interfaces:**
 - Consumes: `rmd_chunks()`, `md_code_blocks()`, `rel_code_lines()`, `stale_problems()`,
   `readme_render_code()`, `vig_precompute(readme = TRUE)`, `rel_read()` (Task 5),
-  `code_style_problems()`, `rel_ascii_problems()` (Task 1); from the package: `gptr()`,
+  `code_style_problems()`, `rel_ascii_problems()` (Task 1); from the package: `peter()`,
   `gptr_fake_provider()` (chat and classifier scripts, 04 section 12.1), `gptr_prob()`.
 - Produces: `readme_problems(rmd_lines, md_lines)`, `files_readme(root, args)`
   (`check-files.R readme`).
@@ -3652,12 +3654,12 @@ options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 gptr runs language model agents inside your live R session. The agent works on the objects
 that are already in memory: it inspects them, runs R code on them and leaves its results in
 your workspace, so a 5 GB object is loaded once and a mistake costs one re-evaluation instead of
-a fresh run of the whole script. One function, `gptr()`, is an interactive chat in the console
+a fresh run of the whole script. One function, `peter()`, is an interactive chat in the console
 and a programmable call that you put in scripts, loops and `if` statements.
 
-- **One gateway.** `gptr()` with no prompt opens a chat at the console; with a prompt it runs
+- **One gateway.** `peter()` with no prompt opens a chat at the console; with a prompt it runs
   the agent and returns the session, which the pipe steers:
-  `gptr("...") |> gptr("...")`.
+  `peter("...") |> peter("...")`.
 - **System 1 and System 2.** Generative models (Anthropic, OpenAI, Google Gemini, any
   OpenAI-compatible endpoint, and the Claude and ChatGPT plans through the `claude` and `codex`
   command-line tools) work next to typed decision models such as TypeSafe AI's Jev, whose
@@ -3691,11 +3693,11 @@ fake = gptr_fake_provider(list(
   "Four-cylinder cars are the most economical."
 ))
 work = new.env()
-s = gptr("How does fuel economy depend on weight?", model = fake, envir = work, mode = auto)
+s = peter("How does fuel economy depend on weight?", model = fake, envir = work, mode = auto)
 s$text
 ls(work)
 
-s |> gptr("Which cylinder group is the most economical?")
+s |> peter("Which cylinder group is the most economical?")
 s$turns
 ```
 
@@ -3707,7 +3709,7 @@ judge = gptr_fake_provider(function(state, question) {
 }, name = "judge", type = "classifier")
 abstracts = c(a = "We randomized 200 adults to drug or placebo.",
               b = "We followed a cohort of nurses for 20 years.")
-is_rct = gptr("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
+is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
 is_rct
 gptr_prob(is_rct)
 ```
@@ -3717,12 +3719,12 @@ gptr_prob(is_rct)
 ```{r, eval = FALSE}
 gptr_env("~/keys/.env")          # ANTHROPIC_API_KEY, OPENAI_API_KEY, TYPESAFE_API_KEY, ...
 gptr_providers()                 # what is configured
-gptr()                           # chat in the console
+peter()                           # chat in the console
 
-res = gptr("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
+res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
 res$value                        # the object the agent designated as its result
 
-if (gptr("Is this abstract about a randomized controlled trial?", abstract, model = jev)) {
+if (peter("Is this abstract about a randomized controlled trial?", abstract, model = jev)) {
   included = c(included, id)
 }
 ```
@@ -3740,7 +3742,7 @@ if (gptr("Is this abstract about a randomized controlled trial?", abstract, mode
 ## Upgrading from gptr 0.7.0
 
 gptr 1.0.0 is a complete rewrite. `get_response()` and `dataframe_to_text()` were removed:
-use `gptr("your prompt")$text` instead of `get_response()`, and pass a data frame to `gptr()`
+use `peter("your prompt")$text` instead of `get_response()`, and pass a data frame to `peter()`
 as context instead of converting it to text. See `NEWS.md`.
 
 ## Acknowledgments
@@ -3812,7 +3814,7 @@ test_that("news_problems() requires the 1.0.0 breaking changes", {
   good = c("# gptr 1.0.0", "", "Intro.", "", "## Breaking changes", "",
            "* `get_response()` was removed.",
            "* `dataframe_to_text()` was removed; nothing of the 0.7.0 API is kept.", "",
-           "## New features", "", "* `gptr()`.", "", "# gptr 0.7.0", "", "* Old.")
+           "## New features", "", "* `peter()`.", "", "# gptr 0.7.0", "", "* Old.")
   expect_identical(news_problems(good), character())
   expect_match(news_problems(good[-7]), "must name get_response()", fixed = TRUE)
   expect_match(news_problems(sub("0.7.0 API", "old API", good, fixed = TRUE)),
@@ -3890,7 +3892,7 @@ Create `NEWS.md`:
 # gptr 1.0.0
 
 gptr 1.0.0 is a complete rewrite. gptr is now an agent harness that runs inside the live R
-session: `gptr()` is an interactive chat at the console and a programmable function in
+session: `peter()` is an interactive chat at the console and a programmable function in
 scripts, loops and `if` statements, and the agent works on the objects already in memory.
 Nothing from the 0.x API is kept.
 
@@ -3900,14 +3902,14 @@ Nothing from the 0.x API is kept.
   `get_response()` and `dataframe_to_text()`, are gone, and no 0.x name is kept as a shim or an
   alias. Code written for 0.7.0 is rewritten as follows.
 * `get_response()` has been removed, without a deprecation shim. Use
-  `gptr("your prompt", model = "openai/gpt-6-sol")`, which returns a session object; its
-  answer is `s$text`, and `s |> gptr("next prompt")` continues the conversation. The key comes
+  `peter("your prompt", model = "openai/gpt-6-sol")`, which returns a session object; its
+  answer is `s$text`, and `s |> peter("next prompt")` continues the conversation. The key comes
   from `OPENAI_API_KEY` (or a `.env` file read with `gptr_env()`) instead of the `api_key`
   argument, instructions that went into `system_specification` go into the prompt or the
   project instructions file `.gptr/vignette.Rmd`, and answers stream to the console when a
   person is present instead of through `print_response`.
 * `dataframe_to_text()` has been removed, without a deprecation shim. Pass the data frame to
-  `gptr()` as context, for example `gptr("Which variables are correlated?", mtcars)`: gptr
+  `peter()` as context, for example `peter("Which variables are correlated?", mtcars)`: gptr
   describes the object compactly and the model computes on it in your session.
 * Providers and models are chosen with the `model` argument (for example
   `model = "openai/gpt-6-sol"`) or with `gptr_config()`; the `OPENAI_API_KEY` environment
@@ -3917,26 +3919,26 @@ Nothing from the 0.x API is kept.
 
 ## New features
 
-* `gptr()` is the single entry point. Without a prompt it opens a chat in the console; with a
+* `peter()` is the single entry point. Without a prompt it opens a chat in the console; with a
   prompt it runs the agent loop and returns the session. The pipe steers one session:
-  `gptr("...") |> gptr("...")` adds turns to the same object. `gptr_fork()` is the only way to
+  `peter("...") |> peter("...")` adds turns to the same object. `gptr_fork()` is the only way to
   branch.
 * The agent evaluates R code in the environment you pass (by default the caller's frame), so
   objects it creates stay in your workspace. It reads, writes and edits files, and searches
-  them with `gptr$grep()`, `gptr$find()` and `gptr$ls()`; shell, Python, SQL and knitr engines
-  are reached through `gptr$sh()`, `gptr$py()`, `gptr$sql()` and `gptr$knit()`.
+  them with `peter$grep()`, `peter$find()` and `peter$ls()`; shell, Python, SQL and knitr engines
+  are reached through `peter$sh()`, `peter$py()`, `peter$sql()` and `peter$knit()`.
 * Providers are implemented in R: Anthropic, OpenAI, Google Gemini and OpenAI-compatible
   endpoints, with streaming, tool calls, images, reasoning controls, prompt caching and cost
   accounting. The Claude plan (through the `claude` command-line tool, experimental) and the
   ChatGPT plan (through `codex`) are supported without keys. See `gptr_providers()` and
   `gptr_models()`.
-* System 1 decisions: with a typed decision model such as TypeSafe AI's Jev, `gptr()` returns
+* System 1 decisions: with a typed decision model such as TypeSafe AI's Jev, `peter()` returns
   logical, choice or score vectors with calibrated probabilities (`gptr_prob()`) that work
   inside `if`, `for` and `while`, one element per input.
 * Permission modes `manual` (default), `edits`, `auto` and `plan`, rules with
   `gptr_permissions()`, and an advisory risk classifier, `gptr_risk()`. A permission question
   without a person present stops the run with a classed condition.
-* Scripts and notebooks are the history: code the agent ran is recorded below each `gptr()`
+* Scripts and notebooks are the history: code the agent ran is recorded below each `peter()`
   call in `.R`, `.Rmd`, `.qmd` and `.ipynb` documents and replays without model calls
   (`gptr_doc()`, `gptr_source()`, `gptr_blocks()`, `gptr_cache()`).
 * `gptr_init()` creates a `.gptr/` project workspace with the project instructions file
@@ -4028,12 +4030,12 @@ test_that("pkgdown_yaml() lists every page once, secondary group members never",
   expect_false(any(c("gptr_logout", "gptr_agents", "gptr_mcp_remove", "gptr_resume",
                      "gptr_last", "gptr_checkpoints") %in% listed))
   expect_length(listed, 63L - 6L + 3L)
-  expect_true(all(c("gptr", "gptr_login", "gptr_sessions", "gptr_security") %in% listed))
+  expect_true(all(c("peter", "gptr_login", "gptr_sessions", "gptr_security") %in% listed))
   expect_setequal(unlist(lapply(parsed$articles, `[[`, "contents")), rel_vignettes())
 })
 
 test_that("pkgdown_extra() and pkgdown_problems() keep the index complete", {
-  db = write_db(list(gptr = rd_page("gptr"), print.gptr_session = rd_page("print.gptr_session"),
+  db = write_db(list(peter = rd_page("peter"), print.gptr_session = rd_page("print.gptr_session"),
                      hidden = rd_page("hidden", keywords = "internal")))
   expect_identical(pkgdown_extra(db), "print.gptr_session")
   expect_identical(pkgdown_problems(pkgdown_yaml(extra = "print.gptr_session"), db),
@@ -4466,7 +4468,7 @@ removal is documented in the "Breaking changes" section of NEWS.md.
   documents the user named with `gptr_doc()`, inside `tools::R_user_dir("gptr")` (small and
   pruned by `gptr_cache("prune")`), or under a permission mode the user selected. Without that
   consent nothing is written outside `tempdir()` in a non-interactive session.
-* Model-generated R code is evaluated only in the environment the user passes to `gptr()` (by
+* Model-generated R code is evaluated only in the environment the user passes to `peter()` (by
   default the caller's frame). In the default `manual` permission mode only code that the
   package's static classifier knows to be read-only runs without asking; code that creates or
   changes objects or files, starts processes or reads outside the project runs only after the
@@ -5089,7 +5091,7 @@ explicit fix.
 - Exports, groups and options are copied from 03 section 4.4 and 04 section 3.1; the option list
   was checked against the contract table (90 names, same order).
 - Every exported signature the vignettes, examples and edited roxygen use is 04 section 6's:
-  `gptr(..., model, mode, choices, levels, min_confidence, envir, budget, .run)`,
+  `peter(..., model, mode, choices, levels, min_confidence, envir, budget, .run)`,
   `gptr_fake_provider(script, name = "fake", type = c("chat", "classifier"))` with the reply
   forms of 04 section 12.1, `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`,
   `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)`,
@@ -5132,7 +5134,7 @@ explicit fix.
    admits `interactive()`, `requireNamespace(..., quietly = TRUE)` and `rlang::is_installed()`,
    which research 13 (C-08, C-46) prescribes for interactive-only and Suggests-gated examples.
    There is no `gptr_has_key()` (IC-72), so the brief's example predicate is not used.
-4. P06 guarded its gptr-based examples with `@examplesIf exists("gptr", mode = "function")`,
+4. P06 guarded its gptr-based examples with `@examplesIf exists("peter", mode = "function")`,
    needed before P08 existed; at release the predicate is always true and outside the policy's
    grammar, so Task 3 makes those examples unconditional.
 5. 04 section 6 groups `gptr_sessions`/`gptr_resume`/`gptr_last` and
@@ -5261,7 +5263,7 @@ Validation run for this review (scratch directory `work/plans/review-P25/`, R 4.
   `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 119 ]` (docs 45, examples 16, precompute 14, description 6,
   readme 4, news 5, pkgdown 8, cran-comments 11, live 10), also with `NO_COLOR=1 LANGUAGE=fr` in
   the parent environment.
-- The roxygen of Tasks 2 and 3 (the three help topics, the `@seealso` line of `gptr()` and the
+- The roxygen of Tasks 2 and 3 (the three help topics, the `@seealso` line of `peter()` and the
   merged `gptr_sessions` page) was documented with roxygen2 7.3.3 in a toy package:
   `docs_problems()` returned no problem for those pages (every required phrase found),
   `tools::checkRd()` was clean, and the merged page carried the three aliases, the three usage

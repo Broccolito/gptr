@@ -15,7 +15,7 @@ A \code{gptr_plugins} data frame with columns \code{name}, \code{version}, \code
 \code{disabled}, \code{failed}), \code{provides}, \code{tokens} and \code{path}.
 }
 \description{
-Lists the plugins gptr can see: plugins enabled through \code{gptr(plugins = )} or the \code{plugins}
+Lists the plugins gptr can see: plugins enabled through \code{peter(plugins = )} or the \code{plugins}
 setting (a settings plugin not enabled yet shows as \code{lazy}), attached packages that ship
 \verb{inst/gptr/}, the project's \verb{.gptr/plugins/} directories and installed Claude Code plugins.
 With \code{installed = TRUE} it also scans every installed package for \verb{inst/gptr/}. Nothing is

@@ -325,6 +325,9 @@ Prefix every R command with `R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library` (
 9. **Verify** (all must pass):
    - Zero hits expected except lines containing `peter` (D-135 notes):
      `git grep -n -P '(?<![\w.$/\-\[])gptr(?=\(|\[\[|\\\\[($])|gptr:::?gptr(?!\w)' -- R tests inst DESCRIPTION dev/bench 'dev/spec/0*.md' dev/plan`
+   - Only the entry field `` `gptr` object `` expected (P01, P06, contract 421):
+     ``git grep -n -E '(gateway|closure|export|exported|visible|object) `gptr`|`gptr` (gateway|closure|object|is not visible)' -- 'dev/spec/0*.md' dev/plan``
+   - None expected: `git grep -n -E 'gptr\[\$\]|gptr\\\$' -- R tests inst 'dev/spec/0*.md' dev/plan`
    - Only `R/ext-check.R:46` expected:
      `git grep -n -P '(?<![\w.$/\-\[])gptr\$(?!(register\w*|on|state|require|has|name|dir|turn|reason|blocks)\b)' -- R tests inst`
    - None expected: `git grep -n -E 'exists\("gptr"|with_gptr|copy_exports|fun = "gptr"|\^gptr\(_\|\$\)|identical\(nm, "gptr"\)' -- R tests`

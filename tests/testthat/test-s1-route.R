@@ -1,5 +1,5 @@
 # Tests for R/s1-route.R (plan P13): states and the batch rule (Task 7), the classifier route
-# core (Task 8), INFRA-18's acceptance tests through gptr() (Task 9; architecture 6.18) and the
+# core (Task 8), INFRA-18's acceptance tests through peter() (Task 9; architecture 6.18) and the
 # jev-router example (Task 11) (contract 6.1.1, 7.13; architecture 4.1.5; IC-47, IC-66, IC-69,
 # IC-71).
 
@@ -704,9 +704,9 @@ test_that("a value from an uncertain() function must be a value of the question"
                class = "gptr_error_invalid_argument")
 })
 
-# ---- Task 9: INFRA-18 acceptance through gptr() (architecture 6.18; P24's INFRA suite) ----------
+# ---- Task 9: INFRA-18 acceptance through peter() (architecture 6.18; P24's INFRA suite) ----------
 
-test_that("INFRA-18: against a mocked /systemone: if (gptr(\"q\", x, model = jev)) works", {
+test_that("INFRA-18: against a mocked /systemone: if (peter(\"q\", x, model = jev)) works", {
   # the server starts before s1_fresh() moves the working directory into a temporary project
   srv = local_mock_server("systemone", answers = function(body) {
     p = if (grepl("puppy", unlist(body$state), fixed = TRUE)) 0.97 else 0.04
@@ -723,7 +723,7 @@ test_that("INFRA-18: against a mocked /systemone: if (gptr(\"q\", x, model = jev
   withr::defer(off())
   x = "A puppy fetched the ball."
   hit = FALSE
-  if (gptr("Does the text describe a dog?", x, model = jev)) hit = TRUE
+  if (peter("Does the text describe a dog?", x, model = jev)) hit = TRUE
   expect_true(hit)
   log = srv$log()
   expect_identical(nrow(log), 1L)
@@ -743,7 +743,7 @@ test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay wi
   p = srv$provider
   item = "item 1"
   hit = FALSE
-  if (gptr("Is it fine?", item, model = p)) hit = TRUE
+  if (peter("Is it fine?", item, model = p)) hit = TRUE
   expect_true(hit)
   x = paste("item", 1:100)
   real = s1_http
@@ -763,13 +763,13 @@ test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay wi
            on_fail(cnd)
          })
   })
-  d = gptr("Is it fine?", x, model = p)
+  d = peter("Is it fine?", x, model = p)
   expect_length(d, 100L)
   expect_identical(sum(!d), sum(grepl("7", x, fixed = TRUE)))
   expect_lte(seen$max, 8L)
   expect_gt(seen$max, 1L)
   n_before = nrow(srv$log())
-  d2 = gptr("Is it fine?", x, model = p)
+  d2 = peter("Is it fine?", x, model = p)
   expect_identical(nrow(srv$log()), n_before)
   expect_true(all(attr(d2, "meta")$cached))
 })
@@ -780,15 +780,15 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
     switch(state$x, sure = 0.95, unsure = 0.55, no = 0.02)
   }, name = "band", type = "classifier")
   x = c("sure", "unsure", "no")
-  na = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6)
+  na = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6)
   expect_identical(as.logical(na), c(TRUE, NA, FALSE))
   expect_identical(attr(na, "prob"), c(0.95, 0.55, 0.02))
-  err = expect_error(gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6,
+  err = expect_error(peter("Q?", x, model = "band/band-s1", min_confidence = 0.6,
                           uncertain = "stop"), class = "gptr_error_s1_uncertain")
   expect_identical(err$prob, 0.55)
   expect_identical(err$min_confidence, 0.6)
   seen = new.env()
-  esc = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6,
+  esc = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6,
              uncertain = function(state, answer) {
                seen$state = state
                seen$p = gptr_prob(answer)
@@ -797,7 +797,7 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
   expect_identical(as.logical(esc), c(TRUE, FALSE, FALSE))
   expect_identical(seen$state, list(x = "unsure"))
   expect_identical(unname(seen$p), 0.55)
-  yes = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6, uncertain = TRUE)
+  yes = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6, uncertain = TRUE)
   expect_identical(as.logical(yes), c(TRUE, TRUE, FALSE))
 })
 
@@ -818,22 +818,22 @@ test_that("INFRA-18: choices give a classed character with a plain ==; a factor 
   s1_fresh()
   tissue_model = srv$provider
   x = c(s1 = "hepatocytes from the liver", s2 = "a blood sample")
-  tissue = gptr("Which tissue?", x, model = tissue_model,
+  tissue = peter("Which tissue?", x, model = tissue_model,
                 choices = c("liver", "lung", "other"))
   expect_identical(class(tissue), c("gptr_choice", "gptr_s1", "character"))
   eq = tissue == "liver"
   expect_identical(eq, c(s1 = TRUE, s2 = FALSE))
   expect_false(is.object(eq))
-  f = gptr("Which tissue?", x, model = tissue_model,
+  f = peter("Which tissue?", x, model = tissue_model,
            choices = factor(c("liver", "lung", "other")))
   expect_s3_class(f, "factor")
   expect_identical(levels(f), c("liver", "lung", "other"))
   expect_identical(as.character(f), c("liver", "other"))
-  o = gptr("Which tissue?", x, model = tissue_model, choices = c("liver", "lung", "other"),
+  o = peter("Which tissue?", x, model = tissue_model, choices = c("liver", "lung", "other"),
            .opts = list(output = "factor"))
   expect_s3_class(o, "factor")
   n = nrow(srv$log())
-  expect_error(gptr("Which tissue?", x, model = tissue_model, choices = c("TRUE", "maybe")),
+  expect_error(peter("Which tissue?", x, model = tissue_model, choices = c("TRUE", "maybe")),
                class = "gptr_error_s1_labels")
   expect_identical(nrow(srv$log()), n)
 })
@@ -927,7 +927,7 @@ test_that("the example loads with extensions = for that session only (IC-69)", {
   s1_fresh()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list("Hello."), name = "fhost")
-  s = gptr("Say hello.", model = "fhost/fhost-1", extensions = jev_router_path(),
+  s = peter("Say hello.", model = "fhost/fhost-1", extensions = jev_router_path(),
            envir = new.env())
   expect_s3_class(registry_get("router", "jev-auto", session = session_data(s)$id), "gptr_router")
   expect_null(registry_get("router", "jev-auto"))
@@ -942,7 +942,7 @@ test_that("a complex request plans on the strong model and switches once after t
   )
   local_stub_tool("lookup")
   local_stub_tool("edit")
-  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), c("fstrong-1", "fstrong-1", "fimpl-1"))
   expect_identical(router_phases(s), c("planning", "implementation"))
   # one routed session: the planning model chosen once, then exactly one model change, after the
@@ -964,7 +964,7 @@ test_that("an ordinary request plans on the standard model; a failed edit does n
   )
   local_stub_tool("edit", fails = TRUE)
   local_stub_tool("write")
-  s = gptr("Add a verbose flag.", model = router_spec(), envir = new.env())
+  s = peter("Add a verbose flag.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), c("fstd-1", "fstd-1", "fimpl-1"))
   expect_identical(router_phases(s), c("planning", "implementation"))
   expect_identical(model_changes(s), c("fstd/fstd-1", "fimpl/fimpl-1"))
@@ -977,7 +977,7 @@ test_that("without a System 1 model the router plans on the standard model", {
                           implement = list("done"), complex = 0.9)
   local_gptr_options(system1 = NULL)
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
-  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), "fstd-1")
   expect_length(fake_requests(m$strong), 0L)
 })
@@ -1034,8 +1034,8 @@ test_that("a compaction right after the first edit moves the router to implement
     n$k == 2L
   })
   local_router_service("compact.run", function(s, reason, focus = NULL) invisible(s))
-  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
-  s = gptr(s, "Now add the tests.")
+  s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = peter(s, "Now add the tests.")
   expect_identical(n$k, 3L)
   expect_identical(dispatched(s), c("fstrong-1", "fimpl-1", "fimpl-1"))
   # the compaction's switch records the implementation phase, because P06 records the state of a
@@ -1076,7 +1076,7 @@ test_that("a System 1 rating slower than 2 s still chooses the planner", {
   fdef = local_fake_provider(list("default reply"), name = "fdef")
   local_gptr_options(model = "fdef/fdef-1")
   expect_identical(router_spec()$timeout, 120)
-  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), "fstrong-1")
   expect_identical(router_phases(s), "planning")
   expect_length(fake_requests(fdef), 0L)

@@ -11,11 +11,11 @@
 # 1. As an extension. Copy the file into .gptr/extensions/ of a trusted project, or into the
 #    extensions/ folder of `tools::R_user_dir("gptr", "config")`. Its last expression is the
 #    factory, which registers the router "jev-auto", so that a later call selects it by name,
-#    as in `gptr("Refactor the cache layer.", model = "jev-auto")` for example. The file also
+#    as in `peter("Refactor the cache layer.", model = "jev-auto")` for example. The file also
 #    loads with `extensions = path`, which registers "jev-auto" for that one session only.
 # 2. Registered by hand for this R session. Source the file into a new environment `env` with
 #    `sys.source(path, envir = env)`, register the router with
-#    `gptr_register(env$jev_router_spec())` and then call gptr() with `model = "jev-auto"`.
+#    `gptr_register(env$jev_router_spec())` and then call peter() with `model = "jev-auto"`.
 # 3. With other models, passing the router itself as the model, for example as in
 #    `model = env$jev_router_spec(strong = "opus", standard = "sonnet", implement = "haiku")`.
 #

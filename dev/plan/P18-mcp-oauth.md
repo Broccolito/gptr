@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give gptr harness-agnostic MCP (REQ-30): a client of both protocol eras over stdio and Streamable HTTP whose tools the model calls as R functions (`gptr$mcp$<server>$<tool>()`), read-only discovery and on-request import of the servers other harnesses configured, gptr itself as an MCP server for the live session, and OAuth (PKCE S256) and credential login.
+**Goal:** Give gptr harness-agnostic MCP (REQ-30): a client of both protocol eras over stdio and Streamable HTTP whose tools the model calls as R functions (`peter$mcp$<server>$<tool>()`), read-only discovery and on-request import of the servers other harnesses configured, gptr itself as an MCP server for the live session, and OAuth (PKCE S256) and credential login.
 
 **Architecture:** Five files. `R/auth-oauth.R` (layer L0) holds PKCE, RFC 9728/8414 discovery, the loopback or paste redirect reader, the locked refresh and `gptr_login()`/`gptr_logout()`; credentials live in P03's credential store and access tokens only in P03's vault. `R/mcp-client.R` (L4) speaks the 2026-07-28 and 2025-11-25 eras over P04's process engine (stdio) and reactor (Streamable HTTP), with the era probe and cache, pagination, progress, cancellation, MRTR and elicitation through P11's ask UI; `R/mcp-config.R` reads gptr's `mcp.json` and the configs of Claude Code, Claude Desktop, Codex (a TOML subset), Cursor, VS Code and Pi and registers `mcp_server` records; `R/mcp-namespace.R` turns tools into `gptr_member` closures behind P10's namespace provider and renders the budgeted T1 `<mcp>` catalog (`builtin:mcp`); `R/mcp-server.R` dispatches JSON-RPC over the session's `r`, `read`, `edit` and `write` through the permission gate, for the claude CLI's in-process `sdk` transport (`mcp.dispatch_local`) and a loopback Streamable HTTP server with one bearer token per client (`gptr_mcp_serve()`, `mcp.serve_ensure`).
 
@@ -23,7 +23,7 @@
 - Files (04 §11.1, §11.7-11.9): gptr's `mcp.json` at `tools::R_user_dir("gptr", "config")/mcp.json` (user) and `.gptr/mcp.json` (project, used only when trusted), written atomically under a short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries, IC-71); caches `R_user_dir("gptr", "cache")/mcp-tools/<hash>.json` (`{"tools", "fetched_at", "ttl_ms", "cache_scope"}`) and `mcp-era/<hash>.json` (`{"era": "modern" | "legacy", "version", "date"}`, 7-day expiry), key `hash_sha256(canonical_json(command + args, or URL origin + path))`; server logs "in `tempdir()/gptr/mcp-logs/` unless `options(gptr.mcp_debug = TRUE)`" (then `R_user_dir("gptr", "cache")/mcp-logs/`, 5 MB rotation), appended through `redact_stream("persist")` (IC-70); credentials in `auth.json` (0600) through P03's `auth_store_*()`.
 - Placeholders (04 §11.7): `${VAR}`, `${VAR:-default}`, `${env:VAR}`, `${workspaceFolder}`, `${userHome}` (= `user_home()`, IC-63), "expanded at connect time, never when loading; expanded secret-like values are registered".
 - Foreign configs (IC-63): found under `user_home()` and `app_config_dir()`, never `path.expand("~")`; listed read-only, imported only by `gptr_mcp_add()`; gptr never edits another harness's file.
-- Exposure (03 §6.14, 04 §9.4): default `r`; per-tool `direct`, `deferred`, `hidden`; "one signature line each in the T1 `<mcp>` catalog within 1,500 tokens (least recently used descriptions trimmed first; overflow through `gptr$search()`)"; the `mcp` section is T1, order 840 (04 §7.18); risk of an MCP tool: "`readOnlyHint` 0 (trusted servers), `destructiveHint = FALSE` 2, none 3"; R values are "`structuredContent` simplified, else text"; `isError` -> `gptr_error_mcp_tool` in R; direct MCP results cap at 4,000 tokens; direct tool names `mcp__<server>__<tool>` (at most 64 characters).
+- Exposure (03 §6.14, 04 §9.4): default `r`; per-tool `direct`, `deferred`, `hidden`; "one signature line each in the T1 `<mcp>` catalog within 1,500 tokens (least recently used descriptions trimmed first; overflow through `peter$search()`)"; the `mcp` section is T1, order 840 (04 §7.18); risk of an MCP tool: "`readOnlyHint` 0 (trusted servers), `destructiveHint = FALSE` 2, none 3"; R values are "`structuredContent` simplified, else text"; `isError` -> `gptr_error_mcp_tool` in R; direct MCP results cap at 4,000 tokens; direct tool names `mcp__<server>__<tool>` (at most 64 characters).
 - Server (04 §6.3, IC-57, IC-58, IC-61): "binds `127.0.0.1` on `port` (`NULL` = a free port from `port_candidates()`, never `httpuv::randomPort()`)", "a 192-bit bearer token (`openssl::rand_bytes(24)`, hex)", "validates `Origin`", one listening socket with a token per client bound to its session ("The explicit user handle keeps its dedicated session", IC-58: the user's token is bound to a session `gptr_mcp_serve()` creates, `kind = "chat"`, home `envir`, ambiguity 1); a request whose run is outside the serving pump's `allow_runs` gets "a retryable JSON-RPC error (`-32002`, "gptr is busy; retry")"; at an idle console "a request that needs approval is denied with how to allow it" (never a prompt from a callback); client snippets set "a tool timeout of at least 3,600 s".
 - OAuth (IC-71, 03 §6.14): "refuse AS metadata without `code_challenge_methods_supported` or without S256; validate `iss` (RFC 9207) when advertised; own callback reader keeping `iss`; state and redirect checks"; client identity pre-registered > DCR (`application_type` `"native"`); "a tool call never opens a browser (a classed condition names the login call)"; every transfer sets `followlocation = 0L` (IC-64, through P04's `reactor_http()`).
 - Conditions (04 §2.2): `gptr_error_mcp` (field `server`), `gptr_error_mcp_auth_required` (parent `mcp`; `server`, `login`), `gptr_error_mcp_protocol` (parent `mcp`; `server`, `code`), `gptr_error_mcp_tool` (parent `mcp`; `server`, `tool`); also `noninteractive` (`what`, `questions`), `untrusted` (`what`, `path`, `origin`), `missing_package` (`package`, `feature`), `invalid_argument` (`arg`, `expected`), `provider` (`provider`, `status`), `timeout` (`seconds`, `what`), `workspace` (`path`), `unknown_member` (`name`, `available`), `not_available` (`member`, `provided_by`), `spawn` (`command`), `permission` (through P02's `ext_control_guard()`).
@@ -69,7 +69,7 @@ Tasks:
 4. The MCP client over stdio: era handshake, requests, progress, cancellation, MRTR, elicitation
 5. The Streamable HTTP transport and stored credentials
 6. MCP configuration: gptr's `mcp.json`, other harnesses, `gptr_mcp()`, `gptr_mcp_add()`, `gptr_mcp_remove()`
-7. The `gptr$mcp` namespace, the `<mcp>` catalog and `builtin:mcp`
+7. The `peter$mcp` namespace, the `<mcp>` catalog and `builtin:mcp`
 8. The MCP server dispatcher and the claude route (`mcp.dispatch_local`)
 9. The loopback HTTP server: tokens per client, `gptr_mcp_serve()`, `mcp.serve_ensure`
 10. The NS-10 golden transcript (`dev/bench/tokens/`)
@@ -85,9 +85,9 @@ Exactly as defined in 04 and in the dependency plans (internal helpers of a depe
 - P03: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)`, `secret_value(handle, origin)`, `secret_lookup(name)`, `redact(x, profile = "persist")`, `redact_stream(profile = "stream")`, `auth_store_get(key)`, `auth_store_set(key, record)`, `auth_store_remove(key)`, `auth_lock_stale(lock)` (internal, `auth-store.R`), `secrets_state()` (internal, `auth-secrets.R`: the registry `reg` of vault entries, read by `oauth_forget_access()` in the same `auth` area), `vault_reset()` (internal, `auth-secrets.R`; tests only), `child_env(profile, pass = character(), set = character(), provider = NULL)`.
 - P04: `reactor_http(spec, on_bytes, on_done, on_fail, on_headers = NULL, run = NULL, provider = NULL, retry = NULL)` (spec fields `url`, `method`, `headers` (values chr, handles or `list("Bearer ", <handle>)`), `body`, `first_byte_timeout`, `idle_timeout`), `reactor_proc(proc, on_line, on_exit, run = NULL, stream = "stdout", on_stderr = NULL)`, `reactor_pump(until, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_cancel(ids)`, `reactor_now()`, `reactor_allow_runs()` (internal), `reactor_depth()` (internal: the pump depth, `0L` outside any pump), `url_origin(url)` (internal, `http-request.R`; lower-cased `scheme://host[:port]`, default ports dropped), `sse_splitter()`, `proc_spawn(command, args, env, wd, stdin, stdout, stderr, cleanup_tree, supervise)`, `write_all(p, data)`, `write_close(p)` (internal), `kill_all(p, grace = 2)`, `proc_pool_cap(n)` (internal), `job_add(kind, id, name, pid = NA, stop, status)`, `job_remove(id)`, `job_list(kind = NULL)`.
 - P06: `session_data(s)`, `session_live(s)`, `session_home(s)`, `run_current()` (a `gptr_run` with fields `id`, `shell`, `mode`, `opts`), `run_eval_env(run)`, `dispatch_nested(name, input, ctx)`, `perm_check(call, run)`, `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`; `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`, called only by `mcp_serve_session()` for the dedicated session of `gptr_mcp_serve()` (04 §6.3; not on the IC-33 kernel SDK, P01's `arch_contract_edges()` admits the `mcp-*.R` -> `session_new()` edge); tests: `gptr_usage(x = NULL, by = "session")`, `usage_add(s, row)` and `usage_conform(row)` (internal, `session-budget.R`); the `session_start` event (collect; emitted at a session's first freeze and by `gptr_fork()` with reason `fork`, its `ctx$session` the session). `session_by_id()` is not on the IC-33 kernel SDK, so P18 never calls it.
-- P08: `gptr()` (tests), the `trust.get` service (`function(path = getwd()) lgl(1)`), `gptr_trust(path = ".", trust = NULL)` (bench fixture).
+- P08: `peter()` (tests), the `trust.get` service (`function(path = getwd()) lgl(1)`), `gptr_trust(path = ".", trust = NULL)` (bench fixture).
 - P09: the `eval.r` service (`eval_r()`'s arguments), `format_eval_result(res, budget_tokens)`.
-- P10: `ns_register_provider(name, fun)`, `glob_to_regex(glob)`, the `gptr_ns` methods (`$`, `[[`, `names`, `print` read the bindings `path`, `kind`, `members()`, `signatures()`), `gptr$search()` and `gptr$help()` (which read the `mcp.catalog` service and the `mcp` provider).
+- P10: `ns_register_provider(name, fun)`, `glob_to_regex(glob)`, the `gptr_ns` methods (`$`, `[[`, `names`, `print` read the bindings `path`, `kind`, `members()`, `signatures()`), `peter$search()` and `peter$help()` (which read the `mcp.catalog` service and the `mcp` provider).
 - P11: the `ui.get` service (`function(session = NULL) <spec:ui>` with `has_ui()`, `input(prompt, default = "", secret = FALSE)`, `questions(qs)` -> `list(answers, cancelled)`, `notify(text, level = "info")`), the `risk.classify` service, the `mode`, `rules` and `plan` policies; test helper `local_scripted_ui(answers = list(), .env = parent.frame())`.
 
 
@@ -4665,7 +4665,7 @@ mcp_tool_exposure = function(s, tool) {
 #' it says how to list them, since printing the server node connects (Task 7)
 #' @noRd
 mcp_unlisted_line = function(name) {
-  paste0(mcp_r_name(name), ": tools not listed yet; print(gptr$mcp$", mcp_r_name(name),
+  paste0(mcp_r_name(name), ": tools not listed yet; print(peter$mcp$", mcp_r_name(name),
          ") lists them")
 }
 
@@ -4749,13 +4749,13 @@ mcp_check_kv = function(x, arg) {
 #' tool is used.
 #'
 #' @param name Server name: 1-64 letters, digits, `_` or `-`. Its tools are reached as
-#'   `gptr$mcp$<name>$<tool>()` inside the `r` tool.
+#'   `peter$mcp$<name>$<tool>()` inside the `r` tool.
 #' @param command,args The program and its arguments for a stdio server.
 #' @param url The endpoint of a Streamable HTTP server.
 #' @param env,headers Named character vectors: environment variables of a stdio server, HTTP
 #'   headers of an HTTP server. Write secrets as `${VAR}` placeholders.
 #' @param exposure How the model reaches the tools: `"r"` (R functions listed in the prompt),
-#'   `"direct"` (declared as tools), `"deferred"` (found through `gptr$search()`) or
+#'   `"direct"` (declared as tools), `"deferred"` (found through `peter$search()`) or
 #'   `"hidden"`.
 #' @param timeout Seconds per request; progress notifications from the server extend it.
 #' @param scope `"user"` (default) or `"project"`.
@@ -4963,17 +4963,17 @@ git commit -m "feat(mcp): add MCP configuration, gptr_mcp(), gptr_mcp_add() and 
 
 ---
 
-### Task 7: The `gptr$mcp` namespace, the `<mcp>` catalog and `builtin:mcp`
+### Task 7: The `peter$mcp` namespace, the `<mcp>` catalog and `builtin:mcp`
 
 **Files:**
 - Create: `R/mcp-namespace.R`
 - Test: `tests/testthat/test-mcp-namespace.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 2-6; P01 `on_load()`, `on_unload()`, `ext_service_set()`, `ext_service_has()`, `est_tokens()`, `schema_signature()`, `truncate_output()`, `json_obj()`; P02 `gptr_tool()`, `gptr_prompt_section()`, `gptr_tool_result()`, `registry_add()`, `registry_remove()`, `registry_get()`, `registry_diagnostic()`, `ext_declare_builtin()`, the API object's `register()` and `on()`; P06 `run_current()`, `session_live()`, `session_data()`, `dispatch_nested()`, the `session_start` event; P10 `ns_register_provider()` (in `on_load()` only) and the `gptr_ns` methods; Task 2 `oauth_hooks_set()`; `rlang::new_weakref()`, `rlang::wref_key()`; tests: P08 `gptr()`, P01 `local_fake_provider()`, `fake_tool()`, `fake_requests()`, P11 `local_scripted_ui()`, P10 `gptr$search()`.
-- Produces: `builtin_mcp(gptr)` (04 §7.18; declared as `builtin:mcp`): the `mcp` prompt section (T1, order 840, budget 1,500) and a `session_start` hook that registers the `direct` tools of advertised servers before the prompt freezes; the `mcp` namespace provider `mcp_ns_provider(path)` (`gptr$mcp` and `gptr$mcp$<server>` are `gptr_ns` nodes of kinds `"mcp"` and `"mcp_server"` with `members()` and `signatures()`; `gptr$mcp$<server>$<tool>` is a `gptr_member` closure); the service `mcp.catalog` = `mcp_catalog(session = NULL, budget = NULL)` -> chr(1) or `NULL`; the login target of `gptr_login("mcp:<name>")`; internal `mcp_invoke(server, tool, input)` -> a `gptr_tool_result` whose `value` is the R value, `mcp_tool_spec(s, tool, exposure)`, `mcp_spec_ensure(s, tool, exposure, session = NULL)`, `mcp_tool_level(s, tool)`, `mcp_member_closure(spec, server, tool)`, `mcp_catalog_header()`, `mcp_catalog_lines(specs, budget, exposures = "r")`, `mcp_catalog_text(session = NULL, budget = mcp_budget())`, `mcp_budget()`, `mcp_advertised(s)`, `mcp_tools_load(s, session = NULL)` (known tools, else a connection lists them: `names()` and `print()` of a server node), `mcp_session_remember(session)` and `mcp_session_resolve(session)` (a session or the id of one whose `session_start` builtin:mcp saw; Tasks 8 and 9).
+- Consumes: Tasks 2-6; P01 `on_load()`, `on_unload()`, `ext_service_set()`, `ext_service_has()`, `est_tokens()`, `schema_signature()`, `truncate_output()`, `json_obj()`; P02 `gptr_tool()`, `gptr_prompt_section()`, `gptr_tool_result()`, `registry_add()`, `registry_remove()`, `registry_get()`, `registry_diagnostic()`, `ext_declare_builtin()`, the API object's `register()` and `on()`; P06 `run_current()`, `session_live()`, `session_data()`, `dispatch_nested()`, the `session_start` event; P10 `ns_register_provider()` (in `on_load()` only) and the `gptr_ns` methods; Task 2 `oauth_hooks_set()`; `rlang::new_weakref()`, `rlang::wref_key()`; tests: P08 `peter()`, P01 `local_fake_provider()`, `fake_tool()`, `fake_requests()`, P11 `local_scripted_ui()`, P10 `peter$search()`.
+- Produces: `builtin_mcp(gptr)` (04 §7.18; declared as `builtin:mcp`): the `mcp` prompt section (T1, order 840, budget 1,500) and a `session_start` hook that registers the `direct` tools of advertised servers before the prompt freezes; the `mcp` namespace provider `mcp_ns_provider(path)` (`peter$mcp` and `peter$mcp$<server>` are `gptr_ns` nodes of kinds `"mcp"` and `"mcp_server"` with `members()` and `signatures()`; `peter$mcp$<server>$<tool>` is a `gptr_member` closure); the service `mcp.catalog` = `mcp_catalog(session = NULL, budget = NULL)` -> chr(1) or `NULL`; the login target of `gptr_login("mcp:<name>")`; internal `mcp_invoke(server, tool, input)` -> a `gptr_tool_result` whose `value` is the R value, `mcp_tool_spec(s, tool, exposure)`, `mcp_spec_ensure(s, tool, exposure, session = NULL)`, `mcp_tool_level(s, tool)`, `mcp_member_closure(spec, server, tool)`, `mcp_catalog_header()`, `mcp_catalog_lines(specs, budget, exposures = "r")`, `mcp_catalog_text(session = NULL, budget = mcp_budget())`, `mcp_budget()`, `mcp_advertised(s)`, `mcp_tools_load(s, session = NULL)` (known tools, else a connection lists them: `names()` and `print()` of a server node), `mcp_session_remember(session)` and `mcp_session_resolve(session)` (a session or the id of one whose `session_start` builtin:mcp saw; Tasks 8 and 9).
 
-Report 16 §4.7 and §5.14 with report 06 §4.5.3: each MCP tool is an R function whose formals come from its JSON Schema (required properties first, optional ones `NULL`; non-syntactic names mapped by `mcp_r_name()`), so 125 tools cost about 2,285 o200k tokens as signatures instead of 28,534 as declarations (G2 (b)). A closure called from model code inside an `r` evaluation goes through `dispatch_nested()` with the tool's wire name `mcp__<server>__<tool>`, so the gate decides with the server-annotation risk (04 §9.4); called at the console it runs directly. The tool spec is registered lazily at first use (rank 6, `builtin:mcp`) with exposure `hidden` (no `gptr$` member of its own) or `direct` (declared in the tool array). The catalog header is 03 §7.3 verbatim; each advertised server gives `<server>: <n> tools, <k> shown` and one signature line per `r` tool (a server whose tools are neither cached nor listed gives `<server>: tools not listed yet; print(gptr$mcp$<server>) lists them`, and `print()`, `names()` or completion of that node connects and lists them, so the model never meets a server it cannot explore); over the budget the least recently used tools lose their descriptions, then their lines, and the most recently used get their descriptions back while they fit, re-estimated on the joined text. `gptr$search()` and `gptr$help("<server>/<tool>")` (P10) read every non-hidden tool of every usable server through `mcp.catalog` and the provider.
+Report 16 §4.7 and §5.14 with report 06 §4.5.3: each MCP tool is an R function whose formals come from its JSON Schema (required properties first, optional ones `NULL`; non-syntactic names mapped by `mcp_r_name()`), so 125 tools cost about 2,285 o200k tokens as signatures instead of 28,534 as declarations (G2 (b)). A closure called from model code inside an `r` evaluation goes through `dispatch_nested()` with the tool's wire name `mcp__<server>__<tool>`, so the gate decides with the server-annotation risk (04 §9.4); called at the console it runs directly. The tool spec is registered lazily at first use (rank 6, `builtin:mcp`) with exposure `hidden` (no `peter$` member of its own) or `direct` (declared in the tool array). The catalog header is 03 §7.3 verbatim; each advertised server gives `<server>: <n> tools, <k> shown` and one signature line per `r` tool (a server whose tools are neither cached nor listed gives `<server>: tools not listed yet; print(peter$mcp$<server>) lists them`, and `print()`, `names()` or completion of that node connects and lists them, so the model never meets a server it cannot explore); over the budget the least recently used tools lose their descriptions, then their lines, and the most recently used get their descriptions back while they fit, re-estimated on the joined text. `peter$search()` and `peter$help("<server>/<tool>")` (P10) read every non-hidden tool of every usable server through `mcp.catalog` and the provider.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4989,51 +4989,51 @@ local_fixture_server = function(..., name = "fixture", .env = parent.frame()) {
   fx
 }
 
-test_that("gptr$mcp$<server>$<tool>() closures connect lazily and return R values", {
+test_that("peter$mcp$<server>$<tool>() closures connect lazily and return R values", {
   fx = local_fixture_server("modern", "stdio")
   expect_identical(nrow(fx$log()), 0L)
-  node = gptr$mcp
+  node = peter$mcp
   expect_s3_class(node, "gptr_ns")
   expect_identical(names(node), "fixture")
-  echo = gptr$mcp$fixture$echo
+  echo = peter$mcp$fixture$echo
   expect_s3_class(echo, "gptr_member")
   expect_identical(names(formals(echo)), "text")
   expect_identical(attr(echo, "signature"),
-                   "gptr$mcp$fixture$echo(text: string)  # Echo the text back.")
+                   "peter$mcp$fixture$echo(text: string)  # Echo the text back.")
   expect_identical(echo(text = "x"), list(text = "x"))
   expect_identical(fx$log()$method[1L], "server/discover")
-  expect_identical(gptr$mcp$fixture$add(a = 2, b = 40), list(sum = 42L))
-  expect_identical(names(formals(gptr$mcp$fixture$slow)), c("steps", "step_ms", "progress"))
-  expect_null(formals(gptr$mcp$fixture$slow)$steps)
-  expect_setequal(names(gptr$mcp$fixture), c("echo", "add", "slow", "fail", "elicit"))
-  err = expect_error(gptr$mcp$fixture$fail(), class = "gptr_error_mcp_tool")
+  expect_identical(peter$mcp$fixture$add(a = 2, b = 40), list(sum = 42L))
+  expect_identical(names(formals(peter$mcp$fixture$slow)), c("steps", "step_ms", "progress"))
+  expect_null(formals(peter$mcp$fixture$slow)$steps)
+  expect_setequal(names(peter$mcp$fixture), c("echo", "add", "slow", "fail", "elicit"))
+  err = expect_error(peter$mcp$fixture$fail(), class = "gptr_error_mcp_tool")
   expect_identical(err$server, "fixture")
   expect_identical(err$tool, "fail")
-  expect_error(gptr$mcp$fixture$echo(), "text", class = "gptr_error_invalid_argument")
-  expect_error(gptr$mcp$fixture$nope, class = "gptr_error_unknown_member")
-  expect_error(gptr$mcp$nobody, class = "gptr_error_unknown_member")
-  expect_output(print(gptr$mcp$fixture), "fixture: 5 tools")
+  expect_error(peter$mcp$fixture$echo(), "text", class = "gptr_error_invalid_argument")
+  expect_error(peter$mcp$fixture$nope, class = "gptr_error_unknown_member")
+  expect_error(peter$mcp$nobody, class = "gptr_error_unknown_member")
+  expect_output(print(peter$mcp$fixture), "fixture: 5 tools")
 })
 
 test_that("an unlisted server tells how to list it; printing it connects and lists the tools", {
   fx = local_fixture_server("modern", "stdio")
   expect_match(mcp_catalog_text(NULL),
-               "fixture: tools not listed yet; print(gptr$mcp$fixture) lists them", fixed = TRUE)
+               "fixture: tools not listed yet; print(peter$mcp$fixture) lists them", fixed = TRUE)
   expect_identical(nrow(fx$log()), 0L)
-  expect_output(print(gptr$mcp$fixture), "echo(text: string)", fixed = TRUE)
+  expect_output(print(peter$mcp$fixture), "echo(text: string)", fixed = TRUE)
   expect_identical(fx$log()$method[1L], "server/discover")
-  expect_setequal(names(gptr$mcp$fixture), c("echo", "add", "slow", "fail", "elicit"))
+  expect_setequal(names(peter$mcp$fixture), c("echo", "add", "slow", "fail", "elicit"))
   expect_match(mcp_catalog_text(NULL), "fixture: 5 tools, 5 shown", fixed = TRUE)
 })
 
 test_that("an MCP call inside r passes the gate as a nested call and returns an R value", {
   fx = local_fixture_server("modern", "stdio")
-  code = paste("res = gptr$mcp$fixture$echo(text = \"x\")",
-               "bad = tryCatch(gptr$mcp$fixture$fail(),",
+  code = paste("res = peter$mcp$fixture$echo(text = \"x\")",
+               "bad = tryCatch(peter$mcp$fixture$fail(),",
                "               gptr_error_mcp_tool = function(e) 'caught')", sep = "\n")
   fake = local_fake_provider(list(fake_tool("r", code = code), "done"))
   e = new.env()
-  s = gptr("Echo x through MCP", model = fake, envir = e, mode = auto)
+  s = peter("Echo x through MCP", model = fake, envir = e, mode = auto)
   expect_identical(e$res, list(text = "x"))
   expect_identical(e$bad, "caught")
   res = fake_requests(fake)[[2L]]$last_results[[1L]]
@@ -5045,16 +5045,16 @@ test_that("an MCP call inside r passes the gate as a nested call and returns an 
 test_that("a nested MCP call that needs approval is asked separately and can be denied", {
   fx = local_fixture_server("modern", "stdio")
   ui = local_scripted_ui(list("y", "n"))
-  code = "res = tryCatch(gptr$mcp$fixture$echo(text = 'x'), gptr_error = function(e) class(e)[1])"
+  code = "res = tryCatch(peter$mcp$fixture$echo(text = 'x'), gptr_error = function(e) class(e)[1])"
   fake = local_fake_provider(list(fake_tool("r", code = code), "done"))
   e = new.env()
-  gptr("Echo x", model = fake, envir = e, mode = manual)
+  peter("Echo x", model = fake, envir = e, mode = manual)
   expect_identical(e$res, "gptr_error_tool")
   expect_identical(ui$log$method, c("permission", "permission"))
   expect_false("tools/call" %in% fx$log()$method)
 })
 
-test_that("the <mcp> catalog fits 1,500 tokens with 125 tools; gptr$search() finds the rest", {
+test_that("the <mcp> catalog fits 1,500 tokens with 125 tools; peter$search() finds the rest", {
   fx = local_fixture_server("modern", "stdio", n_extra = 120L)
   gptr_mcp("fixture", tools = TRUE)
   txt = mcp_catalog_text(NULL, 1500)
@@ -5065,11 +5065,11 @@ test_that("the <mcp> catalog fits 1,500 tokens with 125 tools; gptr$search() fin
   expect_true(shown < 125L)
   full = mcp_catalog_lines(Filter(mcp_advertised, mcp_sync()), 1e6)
   expect_gt(est_tokens(paste(full, collapse = "\n"), "code"), 1500)
-  hits = gptr$search("Generated tool 117")
+  hits = peter$search("Generated tool 117")
   expect_identical(hits$name[1L], "fixture/tool_117")
   expect_identical(hits$kind[1L], "mcp")
   fake = local_fake_provider(list("hi"))
-  s = gptr("hi", model = fake, envir = new.env(), mode = auto)
+  s = peter("hi", model = fake, envir = new.env(), mode = auto)
   t1 = session_data(s)$frozen$t1
   expect_match(t1, "<mcp>\nMCP tools are R functions called inside r", fixed = TRUE)
   expect_match(t1, "fixture: 125 tools", fixed = TRUE)
@@ -5078,7 +5078,7 @@ test_that("the <mcp> catalog fits 1,500 tokens with 125 tools; gptr$search() fin
 test_that("the least recently used tools lose their descriptions first", {
   fx = local_fixture_server("modern", "stdio", tools = "echo", n_extra = 20L)
   gptr_mcp("fixture", tools = TRUE)
-  expect_identical(gptr$mcp$fixture$tool_020(query = "q"), "20")
+  expect_identical(peter$mcp$fixture$tool_020(query = "q"), "20")
   specs = Filter(mcp_advertised, mcp_sync())
   cost = function(lines) {
     est_tokens(mcp_catalog_header(), "prose") + est_tokens(paste(lines, collapse = "\n"), "code")
@@ -5103,11 +5103,11 @@ test_that("per-tool exposure: direct tools enter the tool array, hidden ones are
                                      toolExposure = list(echo = "direct", fail = "hidden")))))
   mcp_sync(force = TRUE)
   fake = local_fake_provider(list(fake_tool("mcp__fixture__echo", text = "direct call"), "done"))
-  s = gptr("Call echo directly", model = fake, envir = new.env(), mode = auto)
+  s = peter("Call echo directly", model = fake, envir = new.env(), mode = auto)
   expect_true("mcp__fixture__echo" %in% session_data(s)$frozen$tool_names)
   res = fake_requests(fake)[[2L]]$last_results[[1L]]
   expect_identical(res$content[[1L]]$text, "direct call")
-  expect_error(gptr$mcp$fixture$fail, class = "gptr_error_unknown_member")
+  expect_error(peter$mcp$fixture$fail, class = "gptr_error_unknown_member")
   expect_false(grepl("fail(", mcp_catalog_text(NULL), fixed = TRUE))
   expect_identical(mcp_tool_level(list(trusted = FALSE),
                                   list(annotations = list(readOnlyHint = TRUE))), 3L)
@@ -5125,7 +5125,7 @@ test_that("servers of other harnesses are reachable by name but not advertised (
     cur = list(command = fx$spec$command, args = I(fx$spec$args), env = as.list(fx$spec$env)))))
   mcp_sync(force = TRUE)
   expect_null(mcp_catalog_text(NULL))
-  expect_identical(gptr$mcp$cur$echo(text = "y"), list(text = "y"))
+  expect_identical(peter$mcp$cur$echo(text = "y"), list(text = "y"))
   expect_match(mcp_catalog(NULL, 1500), "cur: 5 tools", fixed = TRUE)
 })
 ```
@@ -5133,14 +5133,14 @@ test_that("servers of other harnesses are reachable by name but not advertised (
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'testthat::set_max_fails(Inf); devtools::test(filter = "mcp-namespace")'`
-Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 3 ]`; the first error is `gptr$mcp is not a gptr member. Members: describe, edit, find, grep, help, ls, out, plot, read, search, write.` (class `gptr_error_unknown_member`: no `mcp` provider is registered yet).
+Expected: `[ FAIL 14 | WARN 0 | SKIP 0 | PASS 3 ]`; the first error is `peter$mcp is not a peter member. Members: describe, edit, find, grep, help, ls, out, plot, read, search, write.` (class `gptr_error_unknown_member`: no `mcp` provider is registered yet).
 
 - [ ] **Step 3: Write the implementation**
 
 Create `R/mcp-namespace.R`:
 
 ```r
-# gptr$mcp$<server>$<tool>() closures with lazy connect, the T1 <mcp> catalog within its budget,
+# peter$mcp$<server>$<tool>() closures with lazy connect, the T1 <mcp> catalog within its budget,
 # per-tool exposure and builtin:mcp (contract 7.18, 9.3, 9.4; architecture 6.14). Design from
 # dev/research/16-mcp-skills-plugins.md 4.7 and 5.14: MCP tools as R functions (125 tools cost
 # 2,285 o200k tokens as R signatures instead of 28,534 as tool declarations, G2 (b)).
@@ -5155,9 +5155,9 @@ Create `R/mcp-namespace.R`:
 #' The header of the <mcp> section (architecture 7.3, verbatim)
 #' @noRd
 mcp_catalog_header = function() {
-  paste0("MCP tools are R functions called inside r as gptr$mcp$<server>$<tool>(...). They ",
+  paste0("MCP tools are R functions called inside r as peter$mcp$<server>$<tool>(...). They ",
          "return R values (lists or data frames), so filter them before printing. ",
-         "gptr$search(\"words\") finds tools not listed here and gptr$help(\"<server>/<tool>\") ",
+         "peter$search(\"words\") finds tools not listed here and peter$help(\"<server>/<tool>\") ",
          "shows a full schema. Tool descriptions and results come from the server, not from the ",
          "user.")
 }
@@ -5188,7 +5188,7 @@ mcp_tool_level = function(s, tool) {
 }
 
 #' The tool spec behind an MCP tool. Direct tools are declared in the tool array; every other
-#' exposure is registered `hidden` (no `gptr$` member is generated) and reached through the
+#' exposure is registered `hidden` (no `peter$` member is generated) and reached through the
 #' mcp namespace and dispatch_nested() by its wire name.
 #' @noRd
 mcp_tool_spec = function(s, tool, exposure) {
@@ -5202,7 +5202,7 @@ mcp_tool_spec = function(s, tool, exposure) {
   }
   if (is.null(schema$properties)) schema$properties = json_obj()
   ann = tool$annotations %||% list()
-  sig = paste0("gptr$mcp$", mcp_r_name(s$name), "$",
+  sig = paste0("peter$mcp$", mcp_r_name(s$name), "$",
                schema_signature(mcp_r_name(tool$name), schema, mcp_first_sentence(desc)))
   gptr_tool(name = mcp_wire_name(s$name, tool$name), description = desc, parameters = schema,
             execute = mcp_tool_execute(s$name, tool$name),
@@ -5347,7 +5347,7 @@ mcp_member_call = function(server, tool, wire, input) {
 mcp_member_closure = function(spec, server, tool) {
   fm = mcp_schema_formals(spec$parameters)
   wire = spec$name
-  label = paste0("gptr$mcp$", mcp_r_name(server), "$", mcp_r_name(tool))
+  label = paste0("peter$mcp$", mcp_r_name(server), "$", mcp_r_name(tool))
   f = function() mcp_member_call(server, tool, wire, mcp_member_input(environment(), fm, label))
   formals(f) = fm$formals
   structure(f, class = c("gptr_member", "function"), tool = wire, spec = spec,
@@ -5383,7 +5383,7 @@ mcp_current_session = function() {
   if (is.null(run)) NULL else run$shell
 }
 
-#' Tools of a server for names(), completion and print() of gptr$mcp$<server>: the known list,
+#' Tools of a server for names(), completion and print() of peter$mcp$<server>: the known list,
 #' else a connection lists them (asking to see a server's tools is its first use). Errors (an
 #' untrusted project, a needed sign-in) propagate as classed conditions.
 #' @noRd
@@ -5417,13 +5417,13 @@ mcp_session_resolve = function(session) {
              arg = "session", expected = "a gptr_session or the id of a live session")
 }
 
-#' The `mcp` namespace provider (ns_register_provider("mcp", ...)): gptr$mcp,
-#' gptr$mcp$<server> (no I/O) and gptr$mcp$<server>$<tool>
+#' The `mcp` namespace provider (ns_register_provider("mcp", ...)): peter$mcp,
+#' peter$mcp$<server> (no I/O) and peter$mcp$<server>$<tool>
 #' @noRd
 mcp_ns_provider = function(path) {
   if (!ext_service_has("mcp.catalog")) {
     gptr_abort("MCP support is not available: builtin:mcp is filtered out.", "not_available",
-               member = "gptr$mcp", provided_by = "P18")
+               member = "peter$mcp", provided_by = "P18")
   }
   path = as.character(path)
   session = mcp_current_session()
@@ -5458,8 +5458,8 @@ mcp_ns_provider = function(path) {
                     }))
   }
   if (length(path) == 3L) return(mcp_member(server, path[3L], session))
-  gptr_abort(paste0("gptr$", paste(path, collapse = "$"), " is not an MCP tool."), "unknown_member",
-             name = path[length(path)], available = character())
+  gptr_abort(paste0("peter$", paste(path, collapse = "$"), " is not an MCP tool."),
+             "unknown_member", name = path[length(path)], available = character())
 }
 
 # ---- the catalog -----------------------------------------------------------------------------
@@ -5547,7 +5547,7 @@ mcp_section_text = function(ctx) {
   mcp_catalog_text(ctx$session, mcp_budget())
 }
 
-#' The `mcp.catalog` service (contract 7.0) behind gptr$search(): every usable server visible to
+#' The `mcp.catalog` service (contract 7.0) behind peter$search(): every usable server visible to
 #' `session`, imported ones included, with every tool that is not hidden; NULL when none
 #' @noRd
 mcp_catalog = function(session = NULL, budget = NULL) {
@@ -5626,7 +5626,7 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 54 ]`
 
 ```bash
 git add R/mcp-namespace.R tests/testthat/test-mcp-namespace.R
-git commit -m "feat(mcp): add gptr\$mcp closures, the budgeted <mcp> catalog and builtin:mcp"
+git commit -m "feat(mcp): add peter\$mcp closures, the budgeted <mcp> catalog and builtin:mcp"
 ```
 
 
@@ -5640,7 +5640,7 @@ git commit -m "feat(mcp): add gptr\$mcp closures, the budgeted <mcp> catalog and
 - Test: `tests/testthat/test-mcp-server.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 3-7; P01 `ext_service_set()`, `ext_service_get()`, `schema_validate()`, `gptr_opt()`, `gptr_has_human()`, `gptr_inform()`, `project_root()`; P02 `registry_get()`, `registry_all()`, `as_tool_result()`, `gptr_tool_result()`, `ctx_new()`; P03 `redact()` (profile `"context"`: the text leaves the process); P04 `reactor_depth()` (internal); P06 `session_live()`, `session_data()`, `session_home()`, `run_eval_env()`, `perm_check()`; Task 7 `mcp_session_resolve()`; P09 the `eval.r` service (`eval_r()`'s arguments), `format_eval_result()`; P11 the `risk.classify` service and the `mode`, `rules`, `critical_guard`, `secret_guard`, `protect_size` and `plan` policies; tests: P02 `gptr_register()`, `gptr_tool()`, P06 `gptr_fork()` (Task 9), P08 `gptr()`, P11 `local_scripted_ui()`.
+- Consumes: Tasks 3-7; P01 `ext_service_set()`, `ext_service_get()`, `schema_validate()`, `gptr_opt()`, `gptr_has_human()`, `gptr_inform()`, `project_root()`; P02 `registry_get()`, `registry_all()`, `as_tool_result()`, `gptr_tool_result()`, `ctx_new()`; P03 `redact()` (profile `"context"`: the text leaves the process); P04 `reactor_depth()` (internal); P06 `session_live()`, `session_data()`, `session_home()`, `run_eval_env()`, `perm_check()`; Task 7 `mcp_session_resolve()`; P09 the `eval.r` service (`eval_r()`'s arguments), `format_eval_result()`; P11 the `risk.classify` service and the `mode`, `rules`, `critical_guard`, `secret_guard`, `protect_size` and `plan` policies; tests: P02 `gptr_register()`, `gptr_tool()`, P06 `gptr_fork()` (Task 9), P08 `peter()`, P11 `local_scripted_ui()`.
 - Produces: the service `mcp.dispatch_local` = `mcp_dispatch_local(message, session)` (`session`: a `gptr_session` or its id) -> the JSON-RPC response list (04 §7.0, §7.18; P20 injects it as `opts$mcp_dispatch`, IC-33; the single gate of the claude route, IC-65); `mcp_dispatch(message, target)` (never throws; `target = list(session, envir = function() <env>, tools)`); `mcp_default_tools()` = `c("r", "read", "edit", "write")`; `mcp_served_tools(tools)`; `mcp_serve_envir(target, run, mode)`; `mcp_gate_idle(call, ctx, sid = NULL)`; `mcp_serve_gate(call, run, ctx, sid = NULL)` (`perm_check()` only while `reactor_depth() > 0`); `mcp_serve_call(target, name, args, id)`; `mcp_serve_r(input, env, run)`; `mcp_server_info()`; test helper `mcp_test_msg(method, params = json_obj(), id = 1L, modern = TRUE)`.
 
 Report 07 §5.5-5.6 (the transport-agnostic dispatcher, verified live with the claude CLI: a notification is acknowledged with an empty result, which the control protocol expects) with report 16 §5.9's dual-era answers: `initialize` (legacy; the client's version when gptr speaks it), `server/discover` (modern), `ping`, `tools/list` (modern results are `cacheScope = "private"`, `ttlMs = 0`), `tools/call`; an unknown method is `-32601`, an unknown tool `-32602`, a modern request for another version `-32022` with `data.supported`. Gating (IC-57, IC-58): when the target session has a run and a reactor pump is running (`reactor_depth() > 0`), the call goes through `perm_check(call, run)` (a person may be asked: the request is served inside a blocking gptr call) and `r` evaluates in `run_eval_env(run)` (a fork's overlay, plan mode's scratch overlay); without a run, or at an idle console (a run left in progress by `gptr_step()`), the session's policies decide through its `ctx`, anything that needs approval is denied with how to allow it plus a console notice, and `r` evaluates in the session's kept home (a fresh scratch overlay of it in plan mode). Output goes through `format_eval_result()` and the `context` redaction profile; plots become MCP image blocks.
@@ -5672,7 +5672,7 @@ local_served_session = function(mode = "auto", .env = parent.frame()) {
   fake = local_fake_provider(list("ok"), .env = .env)
   e = new.env()
   e$d = mtcars
-  s = gptr("hello", model = fake, envir = e, mode = mode)
+  s = peter("hello", model = fake, envir = e, mode = mode)
   list(session = s, envir = e)
 }
 
@@ -5765,7 +5765,7 @@ test_that("inside a running session the claude route gates through perm_check on
                                   fake_tool("probe", code = "c = 3"), "done"),
                              name = "probefake")
   e = new.env()
-  gptr("Use the probe twice", model = fake, envir = e, mode = manual)
+  peter("Use the probe twice", model = fake, envir = e, mode = manual)
   expect_false(exists("b", envir = e, inherits = FALSE))
   expect_identical(e$c, 3)
   expect_identical(ui$log$method, rep("permission", 4L))
@@ -5792,7 +5792,7 @@ test_that("inside a running plan-mode session served r calls run in the run's sc
                                   "done"), name = "planfake")
   e = new.env()
   e$d = mtcars
-  gptr("Plan with the probe", model = fake, envir = e, mode = plan)
+  peter("Plan with the probe", model = fake, envir = e, mode = plan)
   results = fake_requests(fake)
   first = results[[2L]]$last_results[[1L]]$content[[1L]]$text
   expect_match(first, "^FALSE ")
@@ -6908,7 +6908,7 @@ git commit -m "feat(mcp): add gptr_mcp_serve() and per-session tokens (mcp.serve
 - Consumes (P07, IC-73): `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format (`id`, `north_star`, `description`, `mode`, `human`, `preset`, `models`, `standins`, `environment`, `files`, `objects`, `facts`, `turns` with `prompt`, `source`, `context`, `steps` of `text` and `calls`); the runner redirects `R_USER_CONFIG_DIR`/`R_USER_CACHE_DIR` to `tempdir()`, writes each fixture's `files` into a fresh temporary project and evaluates each `objects` expression there before the prompt freezes; P08 `gptr_trust(path = ".", trust = NULL)`; Task 3's tool-cache format and key (`hash_sha256(canonical_json(list(url = <origin + path>)))`); rtiktoken (development tool, not a dependency).
 - Produces: the fixture `ns10-mcp-catalog` and its baseline row (P24 gates every row: prefix +2%, input and output +5%, requests and image tokens +0, catalog +5%, facts no loss).
 
-NS-10 (02 §10) asks for "skills, extensions, plugins, MCP"; P18's share is the cost of MCP in the prompt. The fixture runs `gptr("Find trials for this indication", indication)` in a project whose `.gptr/mcp.json` configures one ClinicalTrials-style HTTP server with 12 tools. P07's runner has no MCP hook, so the expression that creates `indication` also seeds the tool cache from the fixture file `.bench/trials-tools.json` and trusts the temporary project (the project, its trust record and the cache key are unique to this fixture, so no other golden transcript sees the server, and no server is ever contacted). The tools reach the model as 12 signature lines in the T1 `<mcp>` section (measured: 386 o200k tokens, header included) instead of 12 tool declarations, and the model answers with one composed `r` call that runs `gptr$mcp$trials$search_trials()` and filters the data frame it returns (S-12).
+NS-10 (02 §10) asks for "skills, extensions, plugins, MCP"; P18's share is the cost of MCP in the prompt. The fixture runs `peter("Find trials for this indication", indication)` in a project whose `.gptr/mcp.json` configures one ClinicalTrials-style HTTP server with 12 tools. P07's runner has no MCP hook, so the expression that creates `indication` also seeds the tool cache from the fixture file `.bench/trials-tools.json` and trusts the temporary project (the project, its trust record and the cache key are unique to this fixture, so no other golden transcript sees the server, and no server is ever contacted). The tools reach the model as 12 signature lines in the T1 `<mcp>` section (measured: 386 o200k tokens, header included) instead of 12 tool declarations, and the model answers with one composed `r` call that runs `peter$mcp$trials$search_trials()` and filters the data frame it returns (S-12).
 
 - [ ] **Step 1: Write the fixture**
 
@@ -6920,7 +6920,7 @@ Create `dev/bench/tokens/fixtures/ns10-mcp-catalog.json`:
 {
   "id": "ns10-mcp-catalog",
   "north_star": 10,
-  "description": "gptr(\"Find trials for this indication\", indication) in a trusted project whose .gptr/mcp.json configures a ClinicalTrials-style MCP server with 12 tools: the tools reach the model as R signatures in the T1 <mcp> catalog (no tool declarations), and one composed r call runs gptr$mcp$trials$search_trials() and filters the data frame it returns. The object expression of `indication` seeds the tool cache from .bench/trials-tools.json and trusts the temporary project, so no server is contacted.",
+  "description": "peter(\"Find trials for this indication\", indication) in a trusted project whose .gptr/mcp.json configures a ClinicalTrials-style MCP server with 12 tools: the tools reach the model as R signatures in the T1 <mcp> catalog (no tool declarations), and one composed r call runs peter$mcp$trials$search_trials() and filters the data frame it returns. The object expression of `indication` seeds the tool cache from .bench/trials-tools.json and trusts the temporary project, so no server is contacted.",
   "mode": "manual",
   "human": true,
   "preset": null,
@@ -6964,11 +6964,11 @@ Create `dev/bench/tokens/fixtures/ns10-mcp-catalog.json`:
               "id": "toolu_01",
               "name": "r",
               "input": {
-                "code": "trials = gptr$mcp$trials$search_trials(condition = indication, status = \"RECRUITING\",\n                                       phase = \"PHASE2|PHASE3\", limit = 50)\ndim(trials)\nhead(trials[order(trials$start_date, decreasing = TRUE), c(\"nct_id\", \"phase\", \"enrollment\", \"sponsor\")], 6)"
+                "code": "trials = peter$mcp$trials$search_trials(condition = indication, status = \"RECRUITING\",\n                                       phase = \"PHASE2|PHASE3\", limit = 50)\ndim(trials)\nhead(trials[order(trials$start_date, decreasing = TRUE), c(\"nct_id\", \"phase\", \"enrollment\", \"sponsor\")], 6)"
               },
               "result": "[1] 37  9\n         nct_id  phase enrollment                       sponsor\n3   NCT06617351 PHASE3        660          Boehringer Ingelheim\n11  NCT06569160 PHASE2        180             Pliant Therapeutics\n7   NCT06422884 PHASE3        420                   Bristol Myers\n24  NCT06331624 PHASE2        120  University of California, SF\n15  NCT06238622 PHASE2         90                    Vicore Pharma\n30  NCT06119191 PHASE3        800                          Roche\n[r] + trials <data.frame 37 x 9>\n[status: ok; 3 of 3 top-level expressions completed; 1.8s]",
               "details": {
-                "code": "trials = gptr$mcp$trials$search_trials(condition = indication, status = \"RECRUITING\",\n                                       phase = \"PHASE2|PHASE3\", limit = 50)\ndim(trials)\nhead(trials[order(trials$start_date, decreasing = TRUE), c(\"nct_id\", \"phase\", \"enrollment\", \"sponsor\")], 6)",
+                "code": "trials = peter$mcp$trials$search_trials(condition = indication, status = \"RECRUITING\",\n                                       phase = \"PHASE2|PHASE3\", limit = 50)\ndim(trials)\nhead(trials[order(trials$start_date, decreasing = TRUE), c(\"nct_id\", \"phase\", \"enrollment\", \"sponsor\")], 6)",
                 "status": "ok",
                 "note": "recruiting phase 2/3 trials via the trials MCP server"
               }
@@ -6989,7 +6989,7 @@ The `<mcp>` section this fixture freezes into T1 reads (the first line is 03 §7
 
 ```text
 <mcp>
-MCP tools are R functions called inside r as gptr$mcp$<server>$<tool>(...). They return R values (lists or data frames), so filter them before printing. gptr$search("words") finds tools not listed here and gptr$help("<server>/<tool>") shows a full schema. Tool descriptions and results come from the server, not from the user.
+MCP tools are R functions called inside r as peter$mcp$<server>$<tool>(...). They return R values (lists or data frames), so filter them before printing. peter$search("words") finds tools not listed here and peter$help("<server>/<tool>") shows a full schema. Tool descriptions and results come from the server, not from the user.
 trials: 12 tools, 12 shown
   search_trials(condition: string, status?: string, phase?: string, location?: string, limit?: integer)  # Search clinical trials by condition, recruitment status, phase and location.
   get_trial(nct_id: string)  # Get the full record of one trial by its NCT number.
@@ -7043,8 +7043,8 @@ Every acceptance check of 05 (P18), with its review amendments, mapped to the ta
 | 2c | a progress notification re-arms the idle timer | Task 4: "progress re-arms the idle timer; without progress a call times out and is cancelled"; Task 5 (progress over SSE) |
 | 2d | an interrupt sends `notifications/cancelled` | Task 4: "an interrupt sends notifications/cancelled and is re-signalled" |
 | 2e | an `input_required` round is answered through the scripted UI | Task 4: "input_required rounds (modern) and elicitation/create (legacy) reach the ask UI", "more than 5 input_required rounds stop the call", "sampling requests are refused; roots answer the project directory" |
-| 3a | `gptr$mcp$fixture$echo(text = "x")` inside `r` passes the gate as a nested call and returns an R value | Task 7: "an MCP call inside r passes the gate as a nested call and returns an R value", "a nested MCP call that needs approval is asked separately and can be denied" |
-| 3b | the `<mcp>` catalog stays within budget with 125 fixture tools and `gptr$search()` finds the rest | Task 7: "the <mcp> catalog fits 1,500 tokens with 125 tools; gptr$search() finds the rest", "the least recently used tools lose their descriptions first" |
+| 3a | `peter$mcp$fixture$echo(text = "x")` inside `r` passes the gate as a nested call and returns an R value | Task 7: "an MCP call inside r passes the gate as a nested call and returns an R value", "a nested MCP call that needs approval is asked separately and can be denied" |
+| 3b | the `<mcp>` catalog stays within budget with 125 fixture tools and `peter$search()` finds the rest | Task 7: "the <mcp> catalog fits 1,500 tokens with 125 tools; peter$search() finds the rest", "the least recently used tools lose their descriptions first" |
 | 4 | `gptr_mcp_serve()`: requests without the token get 401, a foreign Origin is rejected, the server binds 127.0.0.1 only, and an `r` call through it is gated | Task 9: "gptr_mcp_serve() binds 127.0.0.1, needs the token, checks Origin and keeps the seed", "an r call through the server is gated: read-only runs, writes wait for permission" (gated by the mode of its dedicated session, fixed at start) |
 | 5a | OAuth against a mock authorization server: PKCE S256 exchange | Task 2: "gptr_login() signs in to an MCP server: PKCE S256, DCR, loopback redirect, 0600 store" (the mock verifies the S256 challenge before it issues tokens) |
 | 5b | refresh under a lock | Task 2: "an expired access token is refreshed under the lock; a stale lock is broken"; Task 1: "oauth_lock_with() serialises, waits for a live holder and breaks stale locks"; Task 5: "stored credentials authorise HTTP requests; a 401 refreshes the token once" |
@@ -7114,7 +7114,7 @@ The M4 exit check (`R CMD check --as-cran` and NS-6/NS-9/NS-10 end to end with t
 | `mcp-config.R`: gptr's `mcp.json` at user and trusted-project level | 6 (`mcp_config_sources()`, trust through `trust.get`, `defaults`) |
 | read-only listing and on-request import of Claude Code, Claude Desktop, Codex (TOML subset), Cursor, VS Code and Pi configs | 6 (`mcp_toml_read()`, `mcp_entry_norm()`, `mcp_config_all()`; foreign servers are listed, reachable by name and copied into gptr's file only through `gptr_mcp_add()`) |
 | `gptr_mcp()`, `gptr_mcp_add()`, `gptr_mcp_remove()` | 6 |
-| `mcp-namespace.R`: `gptr$mcp$<server>$<tool>()` closures with lazy connect | 7 (`mcp_ns_provider()`, `mcp_member()`, `mcp_member_closure()`; the first call connects) |
+| `mcp-namespace.R`: `peter$mcp$<server>$<tool>()` closures with lazy connect | 7 (`mcp_ns_provider()`, `mcp_member()`, `mcp_member_closure()`; the first call connects) |
 | the T1 `<mcp>` catalog within 1,500 tokens | 7 (`mcp_catalog_lines()`, section order 840) |
 | per-tool exposure, `builtin:mcp` | 7 (`toolExposure` globs through `glob_to_regex()`; `direct` tools at `session_start`; `builtin_mcp()`) |
 | `mcp-server.R`: dispatcher over `r`, `read`, `edit`, `write` through the permission gate | 8 |
@@ -7163,7 +7163,7 @@ The assembled plan was searched for "TBD", "TODO", "implement later", "fill in",
 
 ### Contract ambiguities and deviations (recorded, not silently changed)
 
-1. **The dedicated session of `gptr_mcp_serve()`** (04 §6.3: "a nested call of a dedicated session (`kind = "chat"`, label `mcp`) whose home is `envir`"; IC-58: "The explicit user handle keeps its dedicated session"). `gptr_mcp_serve()` creates it with P06's `session_new()` in `mcp_serve_session(envir)`: `kind = "chat"`, no parent, home `envir`, the permission mode of the `mode` setting when the server starts (default `"manual"`) and the `model` setting, else the placeholder `"mcp/serve"` (the session never sends a request). `session_new()` is not on the IC-33 kernel SDK; P01's `arch_contract_edges()` admits exactly this `mcp-*.R` -> `session_new()` edge for 04 §6.3 (the first version of this plan used a session-less `ctx_new(NULL)` for lack of it). `the$mcp_server$user = list(key, session)` holds the session strongly with the sha256 of the user's token (never its value) and `stop()` releases it (R2); the token record binds the user's token to the session like a session-bound token (`mcp.serve_ensure`), and the session's live record carries it as `mcp_token`. A request on the user's token is therefore gated by that session's `ctx` (its mode, its rules and the policies registered for its id) and evaluates in its kept home, `envir`; when `envir` is a function frame, which P06 keeps no home for (R2), the HTTP route falls back to `the$mcp_server$envir`, reset by `stop()`. Consequences, tested in Task 9 where they are observable: (a) the mode is fixed when the server starts, as for every session; a new `mode` setting applies after `gptr_mcp_serve(stop = TRUE)` and a new start ("an r call through the server is gated ..."); (b) the session never runs, so its requests are gated without asking at an idle console and get `-32002` in a nested pump (IC-57); (c) it is a top-level session, so usage charged to it rolls up to it alone and never to the session the user was working in ("the user's token has a dedicated chat session; its usage stays its own (IC-58)"); served `r`, `read`, `edit` and `write` calls send no model request, and a `gptr()` call inside served code at an idle console starts a top-level session of its own (P08's nested route needs a running tool, `run_current()`), so the test charges a usage row with P06's `usage_add()`; (d) 04 gives the label `mcp` no field: `session_new()` has no label argument (`opts$name` names a child under its parent) and agent labels come from a run's `opts$agent`, which this session never has, so the session is identified as `the$mcp_server$user$session`; (e) like every top-level session (`session_new()` calls `last_set()`, P06 ambiguity 8), it becomes `gptr_last()` when the server starts; P18 owns neither `the$last` nor `last_set()`, so the roxygen of `gptr_mcp_serve()` says so.
+1. **The dedicated session of `gptr_mcp_serve()`** (04 §6.3: "a nested call of a dedicated session (`kind = "chat"`, label `mcp`) whose home is `envir`"; IC-58: "The explicit user handle keeps its dedicated session"). `gptr_mcp_serve()` creates it with P06's `session_new()` in `mcp_serve_session(envir)`: `kind = "chat"`, no parent, home `envir`, the permission mode of the `mode` setting when the server starts (default `"manual"`) and the `model` setting, else the placeholder `"mcp/serve"` (the session never sends a request). `session_new()` is not on the IC-33 kernel SDK; P01's `arch_contract_edges()` admits exactly this `mcp-*.R` -> `session_new()` edge for 04 §6.3 (the first version of this plan used a session-less `ctx_new(NULL)` for lack of it). `the$mcp_server$user = list(key, session)` holds the session strongly with the sha256 of the user's token (never its value) and `stop()` releases it (R2); the token record binds the user's token to the session like a session-bound token (`mcp.serve_ensure`), and the session's live record carries it as `mcp_token`. A request on the user's token is therefore gated by that session's `ctx` (its mode, its rules and the policies registered for its id) and evaluates in its kept home, `envir`; when `envir` is a function frame, which P06 keeps no home for (R2), the HTTP route falls back to `the$mcp_server$envir`, reset by `stop()`. Consequences, tested in Task 9 where they are observable: (a) the mode is fixed when the server starts, as for every session; a new `mode` setting applies after `gptr_mcp_serve(stop = TRUE)` and a new start ("an r call through the server is gated ..."); (b) the session never runs, so its requests are gated without asking at an idle console and get `-32002` in a nested pump (IC-57); (c) it is a top-level session, so usage charged to it rolls up to it alone and never to the session the user was working in ("the user's token has a dedicated chat session; its usage stays its own (IC-58)"); served `r`, `read`, `edit` and `write` calls send no model request, and a `peter()` call inside served code at an idle console starts a top-level session of its own (P08's nested route needs a running tool, `run_current()`), so the test charges a usage row with P06's `usage_add()`; (d) 04 gives the label `mcp` no field: `session_new()` has no label argument (`opts$name` names a child under its parent) and agent labels come from a run's `opts$agent`, which this session never has, so the session is identified as `the$mcp_server$user$session`; (e) like every top-level session (`session_new()` calls `last_set()`, P06 ambiguity 8), it becomes `gptr_last()` when the server starts; P18 owns neither `the$last` nor `last_set()`, so the roxygen of `gptr_mcp_serve()` says so.
 2. **`secret_value()` outside P04/P03** (04 §7.3 lists `http-request.R` and `auth-childenv.R` as its only callers). An OAuth refresh must send the refresh token as a form field (RFC 6749 §6) and P04 materialises handles only in headers, so `oauth_refresh()` calls `secret_value(handle, url_origin(token_endpoint))`, for the token endpoint's own origin only. `mcp_serve_token()` likewise reads a reused session token's value with `secret_value(handle, <the server's URL>)`, the origin it is bound to, so the handle's Codex snippet can carry it (ambiguity 19).
 3. **`gptr_mcp_handle$token`** (04 §5.11 lists `url`, `port`, `token_env`, `config`, `stop()`). The handle also carries the token as a `gptr_secret` handle (never the value), usable as `child_env(..., set = list(GPTR_MCP_TOKEN = h$token))`; P18's own tests use it, and P20 reads the value from the Codex snippet instead (ambiguity 19).
 4. **OAuth state.** 04 §7.0 gives P18 only `the$mcp_conns`, `the$mcp_server` and `the$mcp_tokens`. Access tokens therefore live in P03's vault (secret `auth:<key>:access`, origin-bound) with their expiry in the stored record; the login-target callback that `mcp-namespace.R` registers lives in a load-time environment `oauth_hooks` of `auth-oauth.R`, like P10's `ns_providers` (configuration, no run state).
@@ -7177,7 +7177,7 @@ The assembled plan was searched for "TBD", "TODO", "implement later", "fill in",
 12. **The busy rule** is tested with a mocked `reactor_allow_runs()`; marking a CLI child's run as served (`reactor_served()`) and the nested-pump leg with a real CLI child are P20's.
 13. **NS-10 fixture.** P07's runner has no MCP hook; the expression of the fixture's `indication` object seeds the tool cache and trusts the fixture's temporary project (unique per fixture, so no other golden transcript is affected).
 14. **`type: "sse"` entries.** P02's `mcp_server` validator refuses `type = "sse"`; config entries are normalised to `transport = "sse"` (no `type`), so `gptr_mcp()` lists them with status `unsupported (sse)` and `mcp_connect()` refuses them with the actionable message.
-15. **`mcp_server` records** are registered on demand by `mcp_sync()` (when a listing, the catalog or a `gptr$mcp` lookup needs them, and again when a config file, the trust state or `mcp.import` changes), not by `builtin_mcp()` at load, because a load must do no file I/O beyond the package (04 §7.1 `zzz.R`).
+15. **`mcp_server` records** are registered on demand by `mcp_sync()` (when a listing, the catalog or a `peter$mcp` lookup needs them, and again when a config file, the trust state or `mcp.import` changes), not by `builtin_mcp()` at load, because a load must do no file I/O beyond the package (04 §7.1 `zzz.R`).
 16. **Server instructions** are not added to the `<mcp>` catalog (report 16 §4.5 suggested it; 03 §7.3's section template has no slot); they are kept on the connection.
 17. **Disk tool-cache freshness for legacy servers** (no `ttlMs`) is 24 hours; a live connection still lists tools on connect and after `notifications/tools/list_changed`.
 18. **Internal helpers of dependency plans** consumed as their plans define them: `first_sentence()` (P01), `ext_control_guard()` (P02), `auth_lock_stale()`, `secrets_state()` and, in tests, `vault_reset()` (P03), `reactor_depth()` (P04), `url_origin()`, `write_close()`, `proc_pool_cap()`, `reactor_allow_runs()` (P04).
@@ -7198,7 +7198,7 @@ Adversarial review of 2026-10-01 against 05 (P18), 04 (with §15), 03 §6.14, 00
 | 3 | major | Task 2 `oauth_access()`, `oauth_login_mcp()` | applied | Credentials were keyed only by server name: when a name pointed at another URL (a trusted project's `mcp.json` reusing a user server's name wins in `mcp_config_all()`), the stored API key or hand-entered bearer token was sent to the new URL, and an OAuth refresh minted a token for the old resource and bound it to the new origin. Records keep their `resource` (hand-entered tokens too) and `oauth_access()` returns `NULL` for any other origin, so the 401 asks for a sign-in; Global Constraints line; tests in Tasks 2 and 5 (the mock would accept the token, so the old behaviour fails them). |
 | 4 | major | Task 6 `mcp_entry_norm()` | applied | Every `timeout >= 1000` was divided by 1000 for every harness: `gptr_mcp_add(timeout = 3600)` read back as 3.6 s (04 §11.7: seconds), and Codex's `tool_timeout_sec = 3600`, the value gptr's own snippet recommends, became 3.6 s. Seconds now in gptr's and Codex's files, milliseconds in Claude Code's, the 1000 heuristic only for the other harnesses; new test "timeouts: seconds in gptr's and Codex's files, milliseconds in Claude Code's". |
 | 5 | major | Task 4 `mcp_stdio_start()` | applied | A server configured as `"command": "Rscript"` (the usual R MCP server, for example `Rscript -e "mcptools::mcp_server()"`; the TOML test even reads one) was refused by P04's `proc_resolve()` ("Start R children with rscript_path(), never by name"). `mcp_stdio_command()` maps a bare `Rscript`/`R` to this R's binaries (IC-60 keeps the PATH dummies of R CMD check out); new test. |
-| 6 | major | Task 7 `mcp_ns_provider()`; Task 6 `mcp_server_lines()`; Task 7 `mcp_catalog_lines()` | applied | A server whose tools were neither cached nor listed appeared as `<server>: tools load on first use`, yet `print()`, `names()` and `gptr$search()` of it never connected, so the model could not learn a single tool name (a dead end). The line now reads `<server>: tools not listed yet; print(gptr$mcp$<server>) lists them` (`mcp_unlisted_line()`), and the server node's `members()`/`signatures()` load the tools through `mcp_tools_load()` (a connection when needed; an untrusted project or a needed sign-in prints `tools unavailable: <reason>`); new test. |
+| 6 | major | Task 7 `mcp_ns_provider()`; Task 6 `mcp_server_lines()`; Task 7 `mcp_catalog_lines()` | applied | A server whose tools were neither cached nor listed appeared as `<server>: tools load on first use`, yet `print()`, `names()` and `peter$search()` of it never connected, so the model could not learn a single tool name (a dead end). The line now reads `<server>: tools not listed yet; print(peter$mcp$<server>) lists them` (`mcp_unlisted_line()`), and the server node's `members()`/`signatures()` load the tools through `mcp_tools_load()` (a connection when needed; an untrusted project or a needed sign-in prints `tools unavailable: <reason>`); new test. |
 | 7 | major | Task 8 `mcp_serve_call()` | applied | `perm_check()` ran whenever the target session had a run, including at an idle console (a run left in progress by `gptr_step()` while httpuv answers through `later` at the prompt), which could open a permission prompt from a `later` callback, against IC-57. New `mcp_serve_gate()`: `perm_check()` only while a pump runs (`reactor_depth() > 0`), otherwise `mcp_gate_idle()` (deny with how to allow it); new test "a served call asks a person only while a pump runs (IC-57)". |
 | 8 | minor | Task 2 `gptr_logout()` | applied | 04 §6.2: logout "removes stored and in-memory credentials"; only `auth.json` was cleared and `secret_lookup("auth:<key>:access")` still returned the token. `oauth_forget_access()` deactivates those vault entries (values stay redacted); roxygen `@return` updated; test in Task 5; ambiguity 21. |
 | 9 | minor | Task 2 `oauth_discover()` | applied | RFC 9728 §3.3 requires the metadata's `resource` to equal the URL asked about; it was not checked. Metadata naming another resource is now `gptr_error_untrusted`; new test with mocked metadata. |
@@ -7210,7 +7210,7 @@ Adversarial review of 2026-10-01 against 05 (P18), 04 (with §15), 03 §6.14, 00
 | 15 | minor | Steps 2 and 4 of Tasks 2-9; Plan acceptance; Self-review | applied | Re-measured after the fixes: Task 2 `FAIL 8 \| PASS 47` / `PASS 99`; Task 3 `PASS 44`; Task 4 `FAIL 16 \| SKIP 1 \| PASS 44` / `SKIP 1 \| PASS 94`; Task 5 `FAIL 5 \| SKIP 1 \| PASS 94` / `SKIP 1 \| PASS 124`; Task 6 `FAIL 16` / `PASS 89`; Task 7 `FAIL 14 \| PASS 3` / `PASS 54`; Task 8 `FAIL 10 \| PASS 3` / `PASS 38`; Task 9 `FAIL 8 \| PASS 38` / `PASS 110`; all files `SKIP 1 \| PASS 476` (Windows `PASS 477`). The red steps of Tasks 4, 6 and 7 now give exact summaries (`testthat::set_max_fails(Inf)`). Acceptance rows 5c, 7a, R1 and R2 name the new tests. |
 | 16 | minor | Task 9 token revocation (04 §7.18 "revokes it when the session's child exits") | rejected | P20 starts a new Codex child each turn and its builtin:cli `request_params` hook calls `mcp.serve_ensure` before every Codex request (`pcli_codex_ensure(ctx$session)`, the token read with `pcli_codex_env(h)`) expecting the session's token, and P19's `cli` backend calls the service once before the child's first run, so revoking at each child exit would break the consumers; the token lives only in that session's child environments and is revoked at `session_shutdown`, `stop()` or `gptr_mcp_serve(stop = TRUE)`. Recorded as ambiguity 22. |
 | 17 | minor | Tasks 2 and 9 call `secret_value()` outside P04/P03 (04 §7.3) | rejected | No sanctioned alternative exists: RFC 6749 §6 puts the refresh token in the form body while P04 materialises handles only in headers, and P20 requires the token value in the Codex snippet; both calls are bound to the handle's own origin. Already recorded as ambiguity 2. |
-| 18 | minor | Task 7 `mcp_member()` connects when `gptr$mcp$<server>$<tool>` is resolved (04 §5.3 "no I/O" of `$.gptr_gateway`) | rejected | The no-I/O rule concerns the gateway's first `$`; 04 §5.3 lets `gptr_ns` nodes "resolve the next path element lazily", 05 asks for closures "with lazy connect", and the closure's formals need the tool's schema. |
+| 18 | minor | Task 7 `mcp_member()` connects when `peter$mcp$<server>$<tool>` is resolved (04 §5.3 "no I/O" of `$.gptr_gateway`) | rejected | The no-I/O rule concerns the gateway's first `$`; 04 §5.3 lets `gptr_ns` nodes "resolve the next path element lazily", 05 asks for closures "with lazy connect", and the closure's formals need the tool's schema. |
 | 19 | minor | Task 6 foreign servers are startable by name without `gptr_mcp_add()` | rejected | Report 16's importer design turns import on for user-level files and imports project-level files only in trusted projects (the plan's `startable` rule); the `mcp.import` setting removes a harness, foreign servers are never advertised in the prompt (D-14), and copying into gptr's file stays `gptr_mcp_add()`. |
 
 ## Cross-plan consolidation log

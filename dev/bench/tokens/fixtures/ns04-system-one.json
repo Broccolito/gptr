@@ -1,7 +1,7 @@
 {
   "id": "ns04-system-one",
   "north_star": 4,
-  "description": "res = gptr(\"Screen the abstracts for randomised controlled trials ...\", abstracts) at the console: the agent delegates the twenty judgements to System 1 inside one r call (is_rct = gptr(..., abstracts, model = jev)) and reports the table instead of judging each abstract itself; standard preset, manual mode, a human present, no bound document.",
+  "description": "res = peter(\"Screen the abstracts for randomised controlled trials ...\", abstracts) at the console: the agent delegates the twenty judgements to System 1 inside one r call (is_rct = peter(..., abstracts, model = jev)) and reports the table instead of judging each abstract itself; standard preset, manual mode, a human present, no bound document.",
   "mode": "manual",
   "human": true,
   "preset": null,
@@ -42,11 +42,11 @@
               "id": "toolu_01",
               "name": "r",
               "input": {
-                "code": "is_rct = gptr(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)"
+                "code": "is_rct = peter(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)"
               },
               "result": "is_rct\nFALSE  TRUE \n   10    10 \n[1] 0.04 0.97\n[r] + is_rct <gptr_decision 20>\n[status: ok; 3 of 3 top-level expressions completed; 0.5s]",
               "details": {
-                "code": "is_rct = gptr(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)",
+                "code": "is_rct = peter(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)",
                 "status": "ok",
                 "note": "System 1 screening; probabilities kept in attr(is_rct, \"prob\")"
               }

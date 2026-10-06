@@ -966,8 +966,8 @@ spec_missing = function(kind, name, field) {
 #' Define a tool
 #'
 #' A tool is one capability the model can use: declared directly in the request's tool array
-#' (`exposure = "direct"`), callable from R code as `gptr$<namespace>$<name>()` (`"r"`, one
-#' signature line in the prompt), found through `gptr$search()` (`"deferred"`) or callable only by
+#' (`exposure = "direct"`), callable from R code as `peter$<namespace>$<name>()` (`"r"`, one
+#' signature line in the prompt), found through `peter$search()` (`"deferred"`) or callable only by
 #' gptr code (`"hidden"`). Give `execute` (`function(input, ctx)`, the direct-tool form), `fun` (an
 #' R function whose formals match the schema properties, the member form), or both. A direct tool
 #' with only `fun` gets a generated `execute` that prints the value within `output_tokens`; an `r`
@@ -1162,7 +1162,7 @@ gptr_policy = function(name, check, description = NULL) {
 
 #' Define a sub-agent
 #'
-#' An agent definition names a specialist for `gptr(agents = ...)`: its model, tools, skills,
+#' An agent definition names a specialist for `peter(agents = ...)`: its model, tools, skills,
 #' system text, backend, preset and limits. `model` and `skills` may be bare identifiers; they are
 #' stored unevaluated (as written) and resolved by the gateway. `gptr_agent("name")` alone (or
 #' with only `file`) loads a saved definition. Package code should pass strings.

@@ -1807,8 +1807,8 @@ spec_missing = function(kind, name, field) {
 #' Define a tool
 #'
 #' A tool is one capability the model can use: declared directly in the request's tool array
-#' (`exposure = "direct"`), callable from R code as `gptr$<namespace>$<name>()` (`"r"`, one
-#' signature line in the prompt), found through `gptr$search()` (`"deferred"`) or callable only by
+#' (`exposure = "direct"`), callable from R code as `peter$<namespace>$<name>()` (`"r"`, one
+#' signature line in the prompt), found through `peter$search()` (`"deferred"`) or callable only by
 #' gptr code (`"hidden"`). Give `execute` (`function(input, ctx)`, the direct-tool form), `fun` (an
 #' R function whose formals match the schema properties, the member form), or both. A direct tool
 #' with only `fun` gets a generated `execute` that prints the value within `output_tokens`; an `r`
@@ -2000,7 +2000,7 @@ gptr_policy = function(name, check, description = NULL) {
 
 #' Define a sub-agent
 #'
-#' An agent definition names a specialist for `gptr(agents = ...)`: its model, tools, skills,
+#' An agent definition names a specialist for `peter(agents = ...)`: its model, tools, skills,
 #' system text, backend, preset and limits. `model` and `skills` may be bare identifiers; they are
 #' stored unevaluated (as written) and resolved by the gateway. `gptr_agent("name")` alone (or
 #' with only `file`) loads a saved definition. Package code should pass strings.
@@ -2566,7 +2566,7 @@ spec_tokens = function(spec) {
                                     input_schema = params)), "json")
       } else if (identical(spec[["exposure"]], "r")) {
         ns = spec[["namespace"]]
-        prefix = if (is.null(ns)) "gptr$" else paste0("gptr$", ns, "$")
+        prefix = if (is.null(ns)) "peter$" else paste0("peter$", ns, "$")
         sig = spec[["signature"]] %||%
           schema_signature(spec$name, params, spec[["description"]], prefix = prefix)
         est_tokens(sig, "code")
@@ -2593,7 +2593,7 @@ ext_reserved_members = c("read", "write", "edit", "grep", "find", "ls", "help", 
                          "describe", "plot", "out", "sh", "script", "bg", "jobs", "py", "sql",
                          "knit", "app", "mcp")
 
-#' Names of un-namespaced, non-hidden tool records with a `fun` (the gptr$ members, IC-37)
+#' Names of un-namespaced, non-hidden tool records with a `fun` (the peter$ members, IC-37)
 #' @noRd
 registry_member_names = function(reg) {
   recs = registry_recs(reg, get0("tool", envir = reg$by_kind, inherits = FALSE))
@@ -2622,7 +2622,7 @@ registry_admit = function(spec, source, rank, reg) {
     if (!is.null(ns)) {
       if (ns %in% ext_reserved_members) spec_abort(spec, "namespace", "is a reserved member name")
       if (ns %in% registry_member_names(reg)) {
-        spec_abort(spec, "namespace", "equals an existing gptr$ member name")
+        spec_abort(spec, "namespace", "equals an existing peter$ member name")
       }
     }
   }
@@ -3106,7 +3106,7 @@ git commit -m "feat(ext): add registry records, resolution, gptr_register() and 
 - Consumes: Task 4 (`registry_rec_filtered()`, `registry_protected_builtins()`, `registry_source_protected()`, `registry_recs()`, `registry_diagnostic()`), `kind_names()`; `the$builtins` (Task 10 fills it).
 - Produces: `registry_filters_set(filters, scope = c("session", "user", "project"))` -> the effective filter keys invisibly with attribute `refused` (04 §7.2, IC-53); `registry_filters_effective(filters)`; `registry_drops_guard(reg, eff)` -> `lgl(1)` (would `eff` disable a `policy` or `hook` record that is enabled now?); `registry_source_filtered(source)` -> `lgl(1)` (a whole `builtin:`/`plugin:` source disabled; used by `ext_load()` and `ext_load_builtins()`).
 
-Scopes apply in the order user, project, session; `+<key>` in a later scope removes a key an earlier scope set. A `+builtin:<name>` filter calls `ext_load_builtins()` (Task 10) when built-ins are declared, so a built-in skipped at load comes back. Setting a scope replaces its filters, so inside a run two paths could remove a policy or hook: a new `-` filter (refused per filter) and dropping a `+` filter that undid an earlier scope's `-` (the dropped `+` is kept and reported in `refused`; IC-53). A malformed filter is `gptr_error_invalid_argument`; a well-formed filter whose prefix is neither `builtin`, `plugin` nor a registered kind is kept with a `filter_unknown_kind` diagnostic, because a kind that a lazy plugin defines on activation does not exist yet when the settings layer applies the user's filters (an error there would break every `gptr()` call of that user).
+Scopes apply in the order user, project, session; `+<key>` in a later scope removes a key an earlier scope set. A `+builtin:<name>` filter calls `ext_load_builtins()` (Task 10) when built-ins are declared, so a built-in skipped at load comes back. Setting a scope replaces its filters, so inside a run two paths could remove a policy or hook: a new `-` filter (refused per filter) and dropping a `+` filter that undid an earlier scope's `-` (the dropped `+` is kept and reported in `refused`; IC-53). A malformed filter is `gptr_error_invalid_argument`; a well-formed filter whose prefix is neither `builtin`, `plugin` nor a registered kind is kept with a `filter_unknown_kind` diagnostic, because a kind that a lazy plugin defines on activation does not exist yet when the settings layer applies the user's filters (an error there would break every `peter()` call of that user).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6486,8 +6486,8 @@ test_that("installed plugin packages: manifest, API, provides and bare identifie
   }
   objects = list(
     gptr_plugin = factory,
-    panel_review = function(file) gptr::gptr(paste("Review", file), model = opus),
-    with_arg = function(m, file) gptr(file, model = m, mode = "auto"),
+    panel_review = function(file) gptr::peter(paste("Review", file), model = opus),
+    with_arg = function(m, file) peter(file, model = m, mode = "auto"),
     with_local = function(file) {
       judge = "jev"
       gptr_agent("judge", description = "Judge", model = judge)
@@ -6509,7 +6509,7 @@ test_that("installed plugin packages: manifest, API, provides and bare identifie
   expect_false(ok[["code.identifiers"]])
   msg = res$message[res$check == "code.identifiers"]
   expect_match(msg, "panel_review: model = opus", fixed = TRUE)
-  # gptr() forces a local in its caller's frame; gptr_agent() stores it unevaluated (IC-34)
+  # peter() forces a local in its caller's frame; gptr_agent() stores it unevaluated (IC-34)
   expect_match(msg, "with_local: model = judge", fixed = TRUE)
   expect_false(grepl("with_arg", msg, fixed = TRUE))
   local_mocked_bindings(ext_pkg_path = function(pkg, ...) "")
@@ -6569,7 +6569,7 @@ test_that("checks see the live registry's records and services but never change 
     gptr$register(gptr_tool("x", "X", fun = function() 1, exposure = "r", namespace = "panel"))
   })
   expect_false(clash$ok[clash$check == "factory.load"])
-  expect_match(clash$message[clash$check == "factory.load"], "existing gptr$ member",
+  expect_match(clash$message[clash$check == "factory.load"], "existing peter$ member",
                fixed = TRUE)
   expect_identical(gptr_registry(), before)
   expect_identical(registry_env(), reg)
@@ -6579,9 +6579,9 @@ test_that("checks see the live registry's records and services but never change 
 test_that("the identifier scan knows arrow assignments and for-loop variables (IC-42)", {
   arrowed = function(file) NULL
   body(arrowed) = call("{", call(ext_binding_heads[[2]], as.name("judge"), "jev"),
-                       quote(gptr(file, model = judge)))
+                       quote(peter(file, model = judge)))
   looped = function(files) {
-    for (m in c("a", "b")) gptr(files, model = m)
+    for (m in c("a", "b")) peter(files, model = m)
   }
   bare = function(file) gptr_agent("x", description = "d", skills = statistics)
   expect_equal(ext_bare_identifiers(list(arrowed = arrowed, looped = looped)), character())
@@ -7018,14 +7018,14 @@ ext_local_names = function(f) {
 #' Bare identifiers passed to gptr's identifier arguments in package code (IC-42): a symbol that
 #' is neither local nor a binding of the package or base makes R CMD check report "no visible
 #' binding" and should be a string. gptr_agent() stores `model` and `skills` unevaluated (IC-34)
-#' and the gateway resolves them in the frame of a later gptr() call, where the package
+#' and the gateway resolves them in the frame of a later peter() call, where the package
 #' function's locals and objects are not visible, so every bare symbol there is reported (use a
 #' string, or I(x) for a variable's value)
 #' @noRd
 ext_bare_identifiers = function(objects) {
   args = c("model", "mode", "preset", "skills", "agents", "tools", "plugins", "extensions",
            "backend")
-  heads = c("gptr", "gptr_agent", "gptr_parallel")
+  heads = c("peter", "gptr_agent", "gptr_parallel")
   known = names(objects)
   acc = new.env(parent = emptyenv())
   acc$found = character()
@@ -7200,7 +7200,7 @@ Every acceptance check of 05 P02, including its review amendments, with the task
 | 3 | `gptr_check()` passes a valid spec of every kind, names the failing field of an invalid one, and fails a direct tool description over 400 tokens | Task 11, `test-ext-check.R` "gptr_check() passes a valid spec of every kind (acceptance 3)", "an invalid spec fails and names the failing field; error = TRUE signals", "a direct tool description over 400 tokens fails (acceptance 3)" | as row 1 |
 | 4 | registering 100 lazy manifests takes under 50 ms (G1 measured 8-16 ms) | Task 9 "100 lazy manifests register quickly" (the test bound is 5 s, conventions §7) and this benchmark (a warm-up pass, then a fresh registry): `Rscript --vanilla -e 'devtools::load_all(quiet = TRUE); m = function(i) list(name = paste0("p", i), extension = list(activation = "lazy", provides = list(tool = list(paste0("t", i))), declarations = stats::setNames(list(list(signature = paste0("t", i, "(x)"), description = "A tool.")), paste0("t", i)))); run = function() { old = registry_swap(registry_scratch()); on.exit(registry_swap(old)); system.time(for (i in 1:100) ext_load(function(gptr) NULL, paste0("plugin:p", i), 5L, manifest = m(i), lazy = TRUE))[["elapsed"]] }; invisible(run()); cat(sprintf("100 lazy manifests: %.0f ms\n", 1000 * run()))'` | prints `100 lazy manifests: <t> ms` with t below 50 (measured 13-14 ms; 11-12 ms with the installed, byte-compiled package; the first, cold pass under `load_all()` also compiles the functions and took 48-51 ms, which is why the benchmark warms up) |
 | 5a | every §6.8 example of the contract runs (IC-35) | Task 3 "every example of contract 6.8 runs and returns its class (IC-35)"; the roxygen examples | as row 1; `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'` finishes without an error |
-| 5b | a user `read` override leaves `edit` and the `gptr$grep` member working | Task 4 and Task 10 (rows 2c) | as row 1 |
+| 5b | a user `read` override leaves `edit` and the `peter$grep` member working | Task 4 and Task 10 (rows 2c) | as row 1 |
 | 5c | a factory loaded with `session = <id>` is invisible to another session and removed at its shutdown | Task 9 "a factory loaded with session = <id> is invisible to other sessions (IC-69)"; Task 8 "session_shutdown drops the session's records after its handlers ran (IC-69)" | as row 1 |
 | 5d | a `-builtin:permissions` filter from user settings, a call and `gptr_config()` is refused | Task 5 "no filter from user settings, a call or gptr_config() disables the kernel (IC-53)" (scopes `user`, `session` and `project`; P08's `gptr_config(filters =)` and call arguments reach the registry only through `registry_filters_set()`); Task 10 "non-replaceable built-ins cannot be filtered out (IC-53)" | as row 1 |
 | 5e | a plugin `service` record replaces a built-in service and disappears with its plugin | Task 9 "a plugin service record replaces a built-in service and leaves with its plugin"; Task 7 "a service record replaces the bootstrap service of the same name (IC-34)" | as row 1 |
@@ -7269,7 +7269,7 @@ Every acceptance check of 05 P02 maps to a named test in "Plan acceptance".
 22. `request_params` (IC-69): only the emitter knows the adapter's declared `capabilities$request_params`, and P06's `run_request_params()` sends only the declared keys that are set. P02 therefore lets handlers patch `params` only (other top-level fields are ignored with a `patch_ignored` diagnostic) and merges its keys, so a handler can add a declared key that is unset (`metadata`, `user`); P06 drops undeclared keys with its own `ignored_patch` diagnostic. Dropping keys absent from the payload in P02 made those params impossible to set.
 23. Filters naming a kind that is not registered yet are kept with a `filter_unknown_kind` diagnostic: a kind defined by a lazy plugin's factory does not exist when the settings layer applies user filters at session start.
 24. `gptr_check()`'s scratch registry mirrors the live registry's enabled, active process-level records as well as its plugin kinds: with an otherwise empty scratch, P01's `service_builtin_active()` reports every built-in-owned bootstrap service as filtered out.
-25. IC-42's bare-identifier scan treats `gptr_agent()`'s `model` and `skills` differently from `gptr()`'s identifier arguments: `gptr_agent()` stores them unevaluated (IC-34) for a later `gptr()` call to resolve in its own frame, so even a local symbol there is reported (use a string or `I(x)`).
+25. IC-42's bare-identifier scan treats `gptr_agent()`'s `model` and `skills` differently from `peter()`'s identifier arguments: `gptr_agent()` stores them unevaluated (IC-34) for a later `peter()` call to resolve in its own frame, so even a local symbol there is reported (use a string or `I(x)`).
 26. IC-53 point 3 names `gptr_register()`; the unregister function it returns is guarded the same way, because users keep it in the environment model code evaluates in and removing a policy reconfigures gptr as much as adding one. The unregister functions of `gptr$register()` (plugin code) are not guarded.
 27. Policy decisions: 04 §10.2 row 12 lists `allow`, `deny`, `ask`, `modify`; 04 §7.6 (`perm_check()` combines every policy's answer as deny > ask_human > ask > modify > allow) and §15 IC-53 item 6 (the `ask_human` tier of the guards), which win, add `ask_human`, and P11's built-in policies (`mode`, `critical_guard`, `secret_guard`, `plan`) answer it. `ext_policy_ok()` therefore accepts the five decisions, `ext_policy_decide()` returns an `ask_human` unchanged, and `gptr_check()`'s `policy.matrix` passes a policy that answers it.
 28. Tests of a "not available" fallback (the `ctx` members, `gptr_agent(name)`, `gptr_check()` without `check.adapter`) hide P01's bootstrap service table for their duration (`local_no_bootstrap_services()`, or the same three lines inline in `test-ext-check.R`), as P01's `local_services()` does: later plans register `ctx.kernel`, `session.add_tools`, `describe`, `eval.r`, `risk.classify`, `s1.decide`, `agent_def.get` and `check.adapter` there from `on_load()`, and with the empty scratch registry of `local_registry()` P01's `service_builtin_active()` counts every built-in as active, so without the isolation these tests fail in the full suite from P06 on (P06 review row 14).
@@ -7306,15 +7306,15 @@ Adversarial review against `dev/plan/00-conventions.md`, 04 (with §15), 05 P02,
 | F3 | major | Task 8 `ev_params_patch()` | `request_params` kept only keys already in the payload, but P06's `run_request_params()` sends only the declared keys that are set, so a hook could never set an unset declared param (`service_tier`, `metadata`, `user`), the event's purpose (IC-69) | applied | Handlers patch `params` only (other top-level fields ignored with `patch_ignored`); its keys merge; undeclared keys are dropped by the emitter, which alone knows `capabilities$request_params`; test rewritten; item 22 |
 | F4 | major | Task 4 `registry_unregister_fn()` | The `off()` closure returned by `gptr_register()` removed records without the IC-53 guard; users keep it in the environment model code evaluates in (`off = gptr_register(gptr_policy(...))`), so model code could remove a user policy mid-run | applied | The closure calls `ext_control_guard("gptr_register")`; roxygen and Interfaces updated; test expectations added; item 26 |
 | F5 | minor | Task 7 `ctx_call_plugin()`, Interfaces, item 4 | The plan passed the stripped plugin name and described P06's argument as `name`/`plugin`; the current P06 plan names it `extension`, documents "P02 passes `extension = ctx_source(ctx)`" and strips the prefix itself (`ctx_ext_label()`) | applied | The handler's source is passed positionally; `ctx_plugin()` removed; the test's mock kernel now mirrors P06's signatures; texts updated |
-| F6 | minor | Task 5 `registry_filters_set()` | A filter on a kind not registered yet was `gptr_error_invalid_argument`; kinds defined by lazy plugins do not exist when the settings layer applies user filters, so every `gptr()` call would fail | applied | Kept with a `filter_unknown_kind` diagnostic; malformed filters still error; new test; item 23 |
+| F6 | minor | Task 5 `registry_filters_set()` | A filter on a kind not registered yet was `gptr_error_invalid_argument`; kinds defined by lazy plugins do not exist when the settings layer applies user filters, so every `peter()` call would fail | applied | Kept with a `filter_unknown_kind` diagnostic; malformed filters still error; new test; item 23 |
 | F7 | minor | Task 4 `registry_all()` | First-resolving kinds returned lazy placeholders without the kind's fields for every kind; P05's `catalog_model_specs()` (`registry_all("model")`) would read placeholders as models | applied | Only `tool` placeholders (whose declarations feed catalogs, 04 §10.8) stay unactivated; every other kind activates first; Task 9 test "registry_all() activates lazy records of every kind but tool"; item 5 |
-| F8 | minor | Task 11 `ext_bare_identifiers()` | IC-42's scan exempted local symbols passed to `gptr_agent(model =, skills =)`, which `gptr_agent()` stores unevaluated (IC-34) for a later `gptr()` frame where the local does not exist | applied | Every bare symbol in those two arguments of `gptr_agent()` is reported (strings or `I(x)` pass); tests extended; item 25 |
+| F8 | minor | Task 11 `ext_bare_identifiers()` | IC-42's scan exempted local symbols passed to `gptr_agent(model =, skills =)`, which `gptr_agent()` stores unevaluated (IC-34) for a later `peter()` frame where the local does not exist | applied | Every bare symbol in those two arguments of `gptr_agent()` is reported (strings or `I(x)` pass); tests extended; item 25 |
 | F9 | minor | Task 8 `ext_policy_decide()` docs | Described as "the evaluation step of P06's `perm_check()`", but P06's `perm_policies()` evaluates policies itself | applied | Docs say what it is (the 04 §10.2 row 12 single-policy evaluator behind the G1 check) and that no later plan depends on it |
 | F10 | minor | Step 2/4 counts, Plan acceptance, Executed validation | Counts changed with the fixes | applied | Re-run red and green: Task 4 80, Task 5 red `FAIL 9 PASS 81` / green 124, Task 8 117, Task 9 103, Task 11 223, total 975 |
 | R1 | minor | Tests of `print()` methods | Conventions §7 say printed output is tested with `expect_snapshot()` | rejected | Snapshot files under `tests/testthat/_snaps/` are not among P02's owned files (05), a first run records "Adding new snapshot" warnings that contradict the `WARN 0` lines, and fixed-substring `expect_output()` checks of these short headers are deterministic |
 | R2 | minor | Task 5 scopes | Call-level filters (`plugins = "-builtin:x"`) reach the process-wide `session` scope | rejected | 04 §7.2 defines `registry_filters_set(filters, scope)` without a session; P08 records the same reading (its ambiguity 9); per-session filters would be a contract change |
 | R3 | minor | Test files | `local_registry()` is repeated in each test file | rejected | P02 owns no `helper-*.R` file (05 "Owns"), and testthat evaluates each test file in its own environment |
-| R4 | minor | Task 4 `registry_admit()` | Reserved-namespace check also applies to built-in sources and might block P18 | rejected | `gptr$mcp$<server>$<tool>` is the `mcp` member resolved by P18 (04 §9.4), not tool records with `namespace = "mcp"`; built-ins register un-namespaced members |
+| R4 | minor | Task 4 `registry_admit()` | Reserved-namespace check also applies to built-in sources and might block P18 | rejected | `peter$mcp$<server>$<tool>` is the `mcp` member resolved by P18 (04 §9.4), not tool records with `namespace = "mcp"`; built-ins register un-namespaced members |
 | R5 | minor | Task 11 `tool.empty_input` | The check calls a tool's `execute()` with empty input, which may have side effects | rejected | 04 §6.7 requires "empty-input handling for tools"; tools with required properties are checked through schema validation only, never executed |
 | R6 | major | P06 `perm_policies()` (not a P02 file) | A policy returning a non-list (for example `"yes"`) makes `res$decision` error outside P06's `tryCatch()`, so `perm_check()` throws instead of denying | rejected (out of scope) | P02 may edit only its own plan; P02's own evaluator `ext_policy_decide()` already denies malformed answers; reported for P06's review |
 

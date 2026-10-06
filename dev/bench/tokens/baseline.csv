@@ -1,6 +1,6 @@
 "case","requests","prefix","input_total","output_total","image_tokens","catalog","facts","est_prefix","est_input_total"
-"ns02-mixed-model",2,2750,6088,140,0,542,1,2930,6410
-"ns02b-data-first-pipe",2,1271,3280,130,0,0,4,1638,4014
-"ns03-pipe-steering",6,2750,19700,337,532,542,0,2930,20500
-"ns04-system-one",2,2439,5544,119,0,494,1,2669,6068
-"ns07-script-history",2,2676,6180,144,0,494,3,2946,6692
+"ns02-mixed-model",2,2277,5426,140,0,351,4,2544,5938
+"ns02b-data-first-pipe",2,1262,3262,130,0,0,4,1641,4020
+"ns03-pipe-steering",6,2277,16958,337,532,351,0,2544,18358
+"ns04-system-one",2,2277,5219,118,0,351,1,2544,5818
+"ns07-script-history",2,2511,5850,143,0,351,3,2822,6444

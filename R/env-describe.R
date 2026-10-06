@@ -5,7 +5,7 @@
 
 #' Compact, budgeted description of an R object
 #'
-#' An S3 generic used for the `<attached>` and `<workspace>` context blocks, `gptr$describe()`
+#' An S3 generic used for the `<attached>` and `<workspace>` context blocks, `peter$describe()`
 #' and console mentions. Methods return successively richer levels of detail and the richest
 #' level whose estimated size fits `budget` is returned. Methods never force promises, never do
 #' I/O (no `dbListTables()`, no `collect()`) and never call `str()` on the object. Packages add

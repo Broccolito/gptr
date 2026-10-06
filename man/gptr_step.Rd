@@ -13,7 +13,7 @@ gptr_step(s, turns = 1L)
 }
 \value{
 \code{s}, invisibly. A run that settles in status \code{error}, \code{blocked}, \code{budget} or
-\code{max_turns} signals the condition documented in \code{\link[=gptr]{gptr()}}.
+\code{max_turns} signals the condition documented in \code{\link[=peter]{peter()}}.
 }
 \description{
 Starts the queued input of an idle session (built with \code{.run = FALSE}, or given a follow-up
@@ -21,7 +21,7 @@ with \code{\link[=gptr_steer]{gptr_steer()}}) and pumps it until \code{turns} mo
 running session is advanced the same way.
 }
 \examples{
-s = gptr("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
+s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
          envir = new.env())
 gptr_step(s)
 s$turns

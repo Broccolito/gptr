@@ -229,7 +229,7 @@ test_that("a member listed by the outer call's analysis at an approved level ski
     "ok"
   }, risk = function(input, ctx) {
     list(level = 2L, categories = character(), paths = character(),
-         flagged = data.frame(call = "gptr$inner()", fn = "gptr$inner", level = 1L, category = "",
+         flagged = data.frame(call = "peter$inner()", fn = "peter$inner", level = 1L, category = "",
                               path = NA_character_, path_class = NA_character_,
                               stringsAsFactors = FALSE))
   })
@@ -252,7 +252,7 @@ test_that("a member listed without a numeric level passes the gate", {
     "ok"
   }, risk = function(input, ctx) {
     list(level = 2L, categories = character(), paths = character(),
-         flagged = data.frame(call = "gptr$inner()", fn = "gptr$inner", level = NA_integer_,
+         flagged = data.frame(call = "peter$inner()", fn = "peter$inner", level = NA_integer_,
                               category = "", path = NA_character_, path_class = NA_character_,
                               stringsAsFactors = FALSE))
   })

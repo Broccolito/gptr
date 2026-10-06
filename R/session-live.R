@@ -26,7 +26,7 @@ live_new = function(s, home) {
   live$adapter = new.env(parent = emptyenv())
   live$background = NULL
   live$lock = NULL
-  # the session's gptr$out() store (IC-71): NULL until P01's out_store(live) creates it
+  # the session's peter$out() store (IC-71): NULL until P01's out_store(live) creates it
   live$out = NULL
   live$mcp_token = NULL
   live$ext = new.env(parent = emptyenv())
@@ -114,8 +114,7 @@ last_set = function(s) {
 #' @examples
 #' s = gptr_last()
 #' is.null(s) || inherits(s, "gptr_session")
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_last(), s)
 #' @export
 gptr_last = function() the$last

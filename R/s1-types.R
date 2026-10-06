@@ -435,7 +435,7 @@ Summary.gptr_s1 = function(...) {
 
 #' Probabilities and confidence of System 1 answers
 #'
-#' System 1 calls (`gptr(question, x, model = jev)`) return typed vectors: a `gptr_decision`
+#' System 1 calls (`peter(question, x, model = jev)`) return typed vectors: a `gptr_decision`
 #' (logical), a `gptr_choice` (character) or a `gptr_score` (double, the expected 0-based level).
 #' They work in `if()`, `while()`, `ifelse()`, `table()`, `sum()` and comparisons like the bare
 #' vectors, and carry the model's probabilities as attributes. `gptr_prob()` reads them.
@@ -461,8 +461,7 @@ Summary.gptr_s1 = function(...) {
 #' @export
 #' @examples
 #' judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
-#' @examplesIf exists("gptr", mode = "function")
-#' d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
+#' d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
 #' gptr_prob(d)
 gptr_prob = function(x, what = c("prob", "confidence", "probabilities")) {
   check_class(x, "gptr_s1", "x")

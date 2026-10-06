@@ -1,7 +1,7 @@
 {
   "id": "ns02-mixed-model",
   "north_star": 2,
-  "description": "res = gptr(\"Fit a mixed model ...\", mice) at the console: standard preset, manual mode, a human present, no bound document; one composed r call, then the answer.",
+  "description": "res = peter(\"Fit a mixed model ...\", mice) at the console: standard preset, manual mode, a human present, no bound document; one composed r call, then the answer.",
   "mode": "manual",
   "human": true,
   "preset": null,

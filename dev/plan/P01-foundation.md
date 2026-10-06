@@ -32,10 +32,10 @@
 - Conditions (04 §2): `gptr_abort(message, class, ..., .data = NULL, call = NULL)` gives class `c(paste0("gptr_error_", class), "gptr_error", "error", "condition")`; `gptr_warn()` gives `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`; `gptr_inform()` gives `c("gptr_message_<cls>", "gptr_message", "message", "condition")` and is silent under `options(gptr.quiet = TRUE)`. Messages are pasted with `paste(message, collapse = "\n")`, never interpolated, and pass `redact_hook(x, profile = "persist")`. Checkers signal `gptr_error_invalid_argument` with fields `arg` and `expected` and never print the value. `ext_service_get()` signals `gptr_error_not_available` with fields `member` and `provided_by`. Warning classes owned here: `locale`, `deprecated`.
 - Options owned by P01 (04 §3.1): `gptr.quiet` (`FALSE`), `gptr.interactive` (`NULL`), `gptr.project_root` (`NULL`), `gptr.verbose` (`NULL`; 0 under knitr/testthat, 1 without a human, 2 with one), `gptr.out_keep` (`20L`). `gptr_opt(name)` returns `getOption(paste0("gptr.", name), <default>)` for every option of §3.1 (`NULL` for settings-backed options).
 - Environment read by P01: `GPTR_PROJECT_ROOT` (`project_root()`), `_R_CHECK_PACKAGE_NAME_` (`check_running()`), `TESTTHAT`, the option `jupyter.in_kernel`, `QUARTO_DOCUMENT_PATH`, `QUARTO_DOCUMENT_FILE`, `JPY_SESSION_NAME`, `RSTUDIO`, `POSITRON`, `TERM_PROGRAM` (`front_end()`).
-- Identifiers (IC-20, IC-61): `id_new(prefix, n)` = `substr(cli::hash_sha256(paste(<time with microseconds>, Sys.getpid(), <process counter>, <salt>)), 1, n)`; session ids `s` + 10 hex, entry ids 8 hex, block ids 6-16 hex with at least one letter, request ids `q` + 12 hex, `gptr$out()` ids `o` + 6 hex. Nothing touches `.Random.seed` except `with_seed_preserved()`; ports come from `port_candidates()` in 49152-65535.
+- Identifiers (IC-20, IC-61): `id_new(prefix, n)` = `substr(cli::hash_sha256(paste(<time with microseconds>, Sys.getpid(), <process counter>, <salt>)), 1, n)`; session ids `s` + 10 hex, entry ids 8 hex, block ids 6-16 hex with at least one letter, request ids `q` + 12 hex, `peter$out()` ids `o` + 6 hex. Nothing touches `.Random.seed` except `with_seed_preserved()`; ports come from `port_candidates()` in 49152-65535.
 - Paths (04 §7.1, §11.1, IC-51, IC-54, IC-60, IC-63): `project_root()` honours `options(gptr.project_root)`, then `GPTR_PROJECT_ROOT`, then the nearest ancestor holding `.gptr/`, `DESCRIPTION`, `.git`, `*.Rproj` or `_quarto.yml`; the workspace root is `.gptr/` when it exists, else `file.path(tempdir(), "gptr")`; spill files live in `<workspace root>/cache/tmp/`; `gptr_user_dir(which)` = `tools::R_user_dir("gptr", which)`; `rscript_path()` = `file.path(R.home("bin"), "Rscript")` (`Rscript.exe` on Windows); `write_atomic()` retries `file.rename()` 3 times with 100 ms sleeps, then writes in place after an md5 re-check; `save_rds()`/`serialize_leaf()` always pass `ascii = FALSE` (rule R7).
 - Estimator (03 §12.5, G2): characters per o200k token prose 4.36, code 3.24, r_output 2.13, str 2.01, csv 1.57, json 2.90, error 2.98, describe 2.39; CJK 0.848 tokens per character, other non-ASCII 0.35; EWMA of the log ratio with alpha 0.5, ratio clamped to 0.5-3, updated only when the estimate is at least 150 tokens; `est_tokens()` median absolute error at most 15% on `fixtures/tokens/`.
-- Truncation (03 §6.12, G5 fact-check 13-15, IC-71): keep the first 40% and the last 60% of the lines that fit the budget, with the notice `[... <n> lines omitted; all: gptr$out("<id>")]`; the store keeps the last `gptr.out_keep` entries per session (the process store when `session = NULL`).
+- Truncation (03 §6.12, G5 fact-check 13-15, IC-71): keep the first 40% and the last 60% of the lines that fit the budget, with the notice `[... <n> lines omitted; all: peter$out("<id>")]`; the store keeps the last `gptr.out_keep` entries per session (the process store when `session = NULL`).
 - Fake provider (04 §12.1): class `c("gptr_provider", "gptr_spec")`, `id = name`, `api` `"fake"` or `"fake-classifier"`, one model `"<name>/<name>-1"` (chat) or `"<name>/<name>-s1"` (classifier) with context 200000, max_output 8192, reasoning `TRUE`, input `c("text", "image")`, tool_call `TRUE`, zero prices; `local = TRUE`, `offline = TRUE`, `api_version = "1.0"`, a shared `log` environment with `requests`; classifier `model_version = "<name>-s1-1.0"`, engine `"fake"`, `calibrated = TRUE`.
 - Records (04 §4, IC-10): unclassed named lists, every field present (`NULL` when unset); JSON uses Pi v3 names at top level, the §4.8 mapping table, gptr-only fields in a `gptr` object, `NULL` fields omitted.
 - Test environment (04 §3.2, §12.2, IC-63): `tests/testthat/setup.R` redirects `R_USER_CONFIG_DIR`, `R_USER_DATA_DIR`, `R_USER_CACHE_DIR`, `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME` to temporary directories, sets `GPTR_PROJECT_ROOT` to a temporary project, blanks every provider key unless `GPTR_LIVE_TESTS=true`, sets `GPTR_REPLAY=replay`, `OMP_THREAD_LIMIT=2` and `options(gptr.interactive = FALSE, gptr.quiet = TRUE)`. `R_TESTS` needs no entry: `R CMD check` sets it to the relative path `startup.Rs`, which R's base profile sources in every R process, but testthat's `test_dir()`/`test_check()` set it to `""` for the whole run (testthat >= 2.0.0, `local_test_directory()`), so `Rscript` children started by tests and helpers never source it; the Task 1 environment test asserts `Sys.getenv("R_TESTS") == ""` so that a change in testthat would show at once.
@@ -328,7 +328,7 @@ Authors@R: c(
 Description: Runs large language model agents inside the running 'R'
     session, so that models inspect and modify objects that are already in
     memory instead of re-running scripts from scratch. A single function,
-    gptr(), opens an interactive chat in the console or, given a prompt,
+    peter(), opens an interactive chat in the console or, given a prompt,
     runs the agent loop and returns a value that can be piped into further
     prompts. Supports the 'Anthropic', 'OpenAI' and 'Google Gemini'
     application programming interfaces, 'OpenAI'-compatible endpoints, the
@@ -3586,7 +3586,7 @@ test_that("truncation keeps 40% head and 60% tail by lines and returns an out id
   expect_identical(res$omitted, 1000L - n_head - n_tail)
   expect_identical(
     kept[notice],
-    paste0("[... ", res$omitted, " lines omitted; all: gptr$out(\"", res$out_id, "\")]")
+    paste0("[... ", res$omitted, " lines omitted; all: peter$out(\"", res$out_id, "\")]")
   )
   expect_lte(est_tokens(res$text, "r_output"), 1000)
   expect_identical(out_get(res$out_id), lines)
@@ -3680,7 +3680,7 @@ Expected: the summary line `[ FAIL 8 | WARN 0 | SKIP 0 | PASS 0 ]`. All eight te
 Create `R/utils-text.R`:
 
 ```r
-# Output budgets: head/tail truncation, the gptr$out() store, spill files, terminal cleanup and
+# Output budgets: head/tail truncation, the peter$out() store, spill files, terminal cleanup and
 # listing data frames (contract sections 5.12, 7.1; IC-71; report G5 and its fact-check 13-15).
 
 #' Split text (a character vector of lines or one string) into UTF-8 lines
@@ -3696,7 +3696,7 @@ text_lines = function(text) {
 #'
 #' When the text fits, it is returned unchanged. Otherwise the full text is stored in the out
 #' store (its id starts with `id_prefix`) and in a spill file, and the kept lines surround the
-#' notice `[... n lines omitted; all: gptr$out("<id>")]`.
+#' notice `[... n lines omitted; all: peter$out("<id>")]`.
 #' @noRd
 truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4,
                            id_prefix = "o") {
@@ -3747,7 +3747,7 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4,
 #' The truncation notice (about 26 tokens; G5 fact-check 13)
 #' @noRd
 truncation_notice = function(omitted, id) {
-  paste0("[... ", omitted, " lines omitted; all: gptr$out(\"", id, "\")]")
+  paste0("[... ", omitted, " lines omitted; all: peter$out(\"", id, "\")]")
 }
 
 #' A new, empty out store keeping the last `keep` entries
@@ -3784,7 +3784,7 @@ out_store = function(session = NULL) {
   arg_abort(session, "session", "NULL, an out store or a session's live record")
 }
 
-#' Store text for gptr$out(id); returns the id ("o" + 6 hex)
+#' Store text for peter$out(id); returns the id ("o" + 6 hex)
 #'
 #' `meta$stderr` (a character vector), when given with `stream = "stdout"`, is stored as the
 #' entry's stderr stream.
@@ -4527,7 +4527,7 @@ test_that("schema_signature() renders one line with optional markers and the fir
     )
   )
   expect_identical(
-    schema_signature("grep", list(type = "object"), prefix = "gptr$"), "gptr$grep()"
+    schema_signature("grep", list(type = "object"), prefix = "peter$"), "peter$grep()"
   )
 })
 
@@ -8993,14 +8993,14 @@ Decisions where 04 is silent or inconsistent (followed the reading most consiste
 1. IC-32 places `ext_service_set()`, `ext_service_get()` and `ext_service_has()` in `aaa-state.R`, while IC-09 and §7.0 still say `utils-options.R`; the plan follows IC-32 (§15 wins) and keeps `setting_get()` in `utils-options.R`.
 2. IC-34 says a service is unavailable when its owning built-in is filtered out, but no P02 function reports filter state. P01 reads `gptr_registry()` (by name, once P02 exists): a built-in counts as filtered out when the registry lists records but none of source `builtin:<name>` is in a state other than `disabled`; before P02, or while the registry is empty, every built-in counts as active. A `service` registry record always wins (`registry_get("service", name)`). P02 should keep `gptr_registry()` cheap, since `setting_get()` passes through this check.
 3. Conventions §6 says parse with `jsonlite::fromJSON(x, simplifyVector = FALSE)`; `json_decode()` uses `jsonlite::parse_json(text, simplifyVector = FALSE)`, which is the same parser with the same result but never treats its input as a file name or URL.
-4. 04 writes the truncation notice as `gptr$out(<id>)`; the plan quotes the id (`gptr$out("o1a2b3c")`) so the notice is a valid R call.
+4. 04 writes the truncation notice as `peter$out(<id>)`; the plan quotes the id (`peter$out("o1a2b3c")`) so the notice is a valid R call.
 5. 05 acceptance 3 is written as a bare `lintr::lint_package()`; for an uninstalled package lintr cannot see internal functions, so the plan loads the namespace first (item 3 above).
 6. 04 §7.1 says OpenAI and Gemini image formulas come "from the catalog", which P05 builds later; `est_image_tokens()` selects G2 §3.1's formulas by `api`, with G2's Anthropic resize-and-cap prototype.
 7. `the` gets P01-private fields beyond §7.0's list: `load_errors`, `id_count`, `id_salt`, `fakes`. The fake model record carries an extra `fake` field (its log environment), and `fake_classify()` returns `engine` and `calibrated` next to `answers`, `usage` and `model_version`.
 8. `check_running()` reads only `_R_CHECK_PACKAGE_NAME_` (§7.1), although §3.2 also lists `_R_CHECK_LIMIT_CORES_` under it.
 9. 05 names no test file for `helper-tracemem.R`, `helper-fake.R` and `helper-mock-server.R`; their self-tests live in `test-utils-hash.R` and `test-provider-fake.R` so that the acceptance filter runs them.
 10. `imports_used()` (in `zzz.R`) references one function of every Imports package so that `R CMD check` reports no unused Imports before P04, P09, P16, P17 and P19 use them.
-11. 04 §7.1 gives `truncate_output()` no `session` argument, while IC-71 keeps `gptr$out()` results per session. The plan keeps the 04 signature (P02, P06 and P09 call it): truncated output is stored in the process store and in the spill file, and `out_get(id, session = <live record>)` finds it there because it searches the session store, then the process store, then the spill file (IC-71). Callers that need the session store call `out_put(..., session = )` directly.
+11. 04 §7.1 gives `truncate_output()` no `session` argument, while IC-71 keeps `peter$out()` results per session. The plan keeps the 04 signature (P02, P06 and P09 call it): truncated output is stored in the process store and in the spill file, and `out_get(id, session = <live record>)` finds it there because it searches the session store, then the process store, then the spill file (IC-71). Callers that need the session store call `out_put(..., session = )` directly.
 12. 04 §12.2 asks for a `redirect` second origin "that logs any key bytes", and the same row asks for a redacted request log. The plan redacts sensitive header values at the first origin and logs them raw at the second origin, which stands for a foreign server: a key a client carried across origins is then visible to the test (IC-64).
 13. The red-phase commands add `testthat::set_max_fails(Inf)` to the command of conventions §2: without it testthat's progress reporter stops after 10 failures and prints no summary line, so the red summaries of Tasks 2, 4, 6, 8 and 15 would never appear.
 14. IC-33's kernel SDK omits two calls that 04 itself prescribes: P16's `ckpt_predict()` wraps P11's `code_targets()` (IC-31, §7.11, §7.16), and P19's sub-agents (a §7.6 consumer of `session_new()`) and the dedicated session of P18's `gptr_mcp_serve()` (§6.3) create sessions with `session_new()`; both cross an L4 area boundary that `arch_edge_ok()` otherwise refuses. 04 §12.2 says `arch_kernel_sdk()` returns the IC-33 allowlist, so that function stays exactly IC-33's list, and `arch_contract_edges()` admits the three edges for the named caller area only (`ckpt`, `subagent`, `mcp`); the negative controls show `session_new()` and `code_targets()` still refused from any other area. Adding the two names to the SDK itself would also have let every L3-L6 file call them.
@@ -9037,7 +9037,7 @@ Adversarial review of this plan against 00-conventions, 04 (with §15), 05 P01, 
 | R9 | minor | Task 18, `redirect` scenario | the second origin redacted sensitive header values, so it could not "log any key bytes" (04 §12.2, IC-64): a key carried across origins would have been invisible in its log row | applied | `log_headers(redact = !second)` logs raw header values at the second origin only; the test (renamed "... logs any key bytes it receives (IC-64)") shows a carried test key at the second origin and `[redacted]` at the first; self-review decision 12 |
 | R10 | minor | expected summaries of Tasks 4, 5, 6, 11 and 18, acceptance A2, A8, A10, A16, self-review | counts were stale after R1-R5 (Task 4 green 45, Task 5 red `FAIL 7` and green 39, Task 6 red `PASS 9` and green 70) and after R6 and R9 (Task 11 565, Task 18 153, total 1240) | applied | recomputed from the re-run: Task 4 green 48; Task 5 red `FAIL 8 \| ... \| PASS 9`, green 40; Task 6 red `FAIL 13 \| ... \| PASS 10`, green 73; Task 11 red `FAIL 7` ("All seven tests"), green 626; Task 18 green 156; A2 1310 |
 | R11 | minor | Task 10 test "listings print at most 20 rows, a count line and the footer" | conventions §7 say printed output is tested with `expect_snapshot()`; the test uses `capture.output()` with exact-line expectations | rejected | snapshot files under `tests/testthat/_snaps/` are not among P01's owned files (05); a first run records "Adding new snapshot" warnings that contradict the `WARN 0` summaries; the exact-line checks run inside `local_reproducible_output(width = 80)` and are deterministic (P02's review rejected the same point for the same reasons) |
-| R12 | minor | Task 10, `truncate_output()` | IC-71 keeps `gptr$out()` results per session, but the 04 signature has no `session` argument, so truncated tool output lands in the process store | rejected | changing the 04 signature would break the callers in P02, P06 and P09 that use it as written; `out_get(id, session = )` searches the session store, then the process store, then the spill file (IC-71), so the output stays reachable; recorded as self-review decision 11 |
+| R12 | minor | Task 10, `truncate_output()` | IC-71 keeps `peter$out()` results per session, but the 04 signature has no `session` argument, so truncated tool output lands in the process store | rejected | changing the 04 signature would break the callers in P02, P06 and P09 that use it as written; `out_get(id, session = )` searches the session store, then the process store, then the spill file (IC-71), so the output stays reachable; recorded as self-review decision 11 |
 | R13 | minor | Task 2 test "as_utf8() keeps valid UTF-8 bytes under LC_ALL=C where enc2utf8() does not (IC-62)" | the `enc2utf8()` contrast is verified on macOS and Linux only; Windows' C locale was not tried | rejected | any re-encoding of the bytes (ASCII or a code page) differs from the input, which is all the expectation asserts; the acceptance item is the `as_utf8()` byte check, and the Windows CI job runs the test |
 
 ## Cross-plan consolidation log

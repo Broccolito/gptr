@@ -1,7 +1,8 @@
-# `gptr$grep()`, `gptr$find()`, `gptr$ls()` and the direct `grep`, `find`, `ls` tools (P10; research
-# 11 section 5.5, research 21 section 2.1): batched readChar() reads, a whole-file prefilter,
-# per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit, radix sorting (REQ-08) and Pi's texts;
-# PCRE match-limit warnings are reported as incomplete results (report 11 section 7.1).
+# `peter$grep()`, `peter$find()`, `peter$ls()` and the direct `grep`, `find`, `ls` tools (P10;
+# research 11 section 5.5, research 21 section 2.1): batched readChar() reads, a whole-file
+# prefilter, per-line PCRE with `(*UTF)(*UCP)`, early stop at the limit, radix sorting (REQ-08)
+# and Pi's texts; PCRE match-limit warnings are reported as incomplete results (report 11 section
+# 7.1).
 
 grep_default_limit = 100L
 find_default_limit = 1000L
@@ -196,7 +197,7 @@ grep_candidates = function(root, glob = NULL, sort = "path") {
        skipped_big = sum(big), mtime = w$mtime)
 }
 
-#' Search file contents: behind `gptr$grep()` and the direct `grep` tool (contract 7.10)
+#' Search file contents: behind `peter$grep()` and the direct `grep` tool (contract 7.10)
 #' Returns `gptr_matches` (`file`, `line`, `text`), `gptr_files` or a `file`, `n` data frame by
 #' `output`; attributes `truncated`, `limit`, `root`, `skipped_big`, `binary_skipped`, `incomplete`.
 #' @noRd
@@ -370,7 +371,7 @@ find_relevance = function(query, paths) {
   cls
 }
 
-#' Find files by glob: behind `gptr$find()` and the direct `find` tool (contract 7.10)
+#' Find files by glob: behind `peter$find()` and the direct `find` tool (contract 7.10)
 #' A glob has fd semantics (smart case); `sort = "relevance"` takes a name query instead. Returns
 #' `gptr_files` (`path` relative to the root, `size`, `mtime`, `type`).
 #' @noRd
@@ -428,7 +429,7 @@ find_tool_text = function(f) {
   with_notices(paste(tr$lines, collapse = "\n"), notes)
 }
 
-#' List a directory: behind `gptr$ls()` and the direct `ls` tool (contract 7.10)
+#' List a directory: behind `peter$ls()` and the direct `ls` tool (contract 7.10)
 #' Dot-files included, entries that cannot be stat-ed dropped (Pi), names that are not valid UTF-8
 #' skipped and counted in attribute `invalid_names`, as the walker does.
 #' @noRd

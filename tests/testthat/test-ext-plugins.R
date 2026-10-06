@@ -688,14 +688,14 @@ test_that("named extensions resolve from .gptr/extensions of a trusted project",
   expect_identical(registry_get("command", "p17-named", session = sid)$handler("", NULL), "named")
 })
 
-test_that("a plugin passed with plugins = is invisible to the next gptr() call (IC-69)", {
+test_that("a plugin passed with plugins = is invisible to the next peter() call (IC-69)", {
   d = withr::local_tempdir()
   write_file(file.path(d, "plugin.json"), '{"name": "scoped-plug"}')
   write_file(file.path(d, "skills", "scoped-skill", "SKILL.md"),
              c("---", "name: scoped-skill", "description: Only for one session.", "---", "x"))
   fake = local_fake_provider(list("ok"))
-  gptr("hello", plugins = d, model = fake, envir = new.env())
-  s2 = gptr("hello again", model = fake, envir = new.env())
+  peter("hello", plugins = d, model = fake, envir = new.env())
+  s2 = peter("hello again", model = fake, envir = new.env())
   reqs = fake_requests(fake)
   expect_match(reqs[[1]]$system$t1, "scoped-skill", fixed = TRUE)
   expect_false(grepl("scoped-skill", reqs[[2]]$system$t1, fixed = TRUE))
@@ -760,9 +760,9 @@ test_that("NS-10: skills = c(single_cell, plotting) and plugins = clinical_trial
   e = new.env()
   e$pbmc = data.frame(cluster = 1:3)
   e$indication = "asthma"
-  s1 = local(gptr("Annotate these clusters", pbmc, skills = c(single_cell, plotting),
+  s1 = local(peter("Annotate these clusters", pbmc, skills = c(single_cell, plotting),
                   model = fake, envir = e), envir = e)
-  s2 = local(gptr("Find trials for this indication", indication, plugins = clinical_trials,
+  s2 = local(peter("Find trials for this indication", indication, plugins = clinical_trials,
                   model = fake, envir = e), envir = e)
   reqs = fake_requests(fake)
   expect_match(reqs[[1]]$system$t1,
@@ -786,7 +786,7 @@ test_that("a ~ extension path is expanded with user_home() (IC-63)", {
   expect_identical(ext$path, path_norm(file.path(alt, "p17_home.R")))
   expect_identical(ext$scope, "user")
   fake = local_fake_provider(list("ok"))
-  expect_error(gptr("hi", extensions = "~/p17_bad.R", model = fake, envir = new.env()),
+  expect_error(peter("hi", extensions = "~/p17_bad.R", model = fake, envir = new.env()),
                "p17_bad.R", fixed = TRUE, class = "gptr_error_invalid_argument")
 })
 
@@ -864,7 +864,7 @@ toy_package = function(root) {
   write_file(file.path(pkg, "inst", "gptr", "plugin.json"), manifest)
   skill = c("---", "name: clinical-trials",
             "description: Find and appraise clinical trials for an indication.", "---",
-            "Call gptr$trials$search(condition) inside r.")
+            "Call peter$trials$search(condition) inside r.")
   write_file(file.path(pkg, "inst", "gptr", "skills", "clinical-trials", "SKILL.md"), skill)
   pkg
 }
@@ -1002,15 +1002,15 @@ test_that("declarations reach the frozen prompt before activation; first use act
   # no P11 mode policy yet: the IC-53 escape hatch, as in test-tool-r.R
   local_gptr_options(unsafe_no_permissions = TRUE)
   fake = local_fake_provider(list("Two trials found."))
-  gptr("Find trials", plugins = "gptrpanel", model = fake, envir = new.env())
+  peter("Find trials", plugins = "gptrpanel", model = fake, envir = new.env())
   t1 = fake_requests(fake)[[1]]$system$t1
   expect_match(t1, "search(condition: string)", fixed = TRUE)
   expect_match(t1, "clinical-trials", fixed = TRUE)
   expect_false("gptrpanel" %in% loadedNamespaces())
   e = new.env()
-  script = list(fake_tool("r", code = "res = gptr$trials$search(\"asthma\")"), "Done.")
+  script = list(fake_tool("r", code = "res = peter$trials$search(\"asthma\")"), "Done.")
   fake2 = local_fake_provider(script, name = "fake2")
-  gptr("Look up asthma trials", plugins = "gptrpanel", model = fake2, envir = e, mode = "auto")
+  peter("Look up asthma trials", plugins = "gptrpanel", model = fake2, envir = e, mode = "auto")
   expect_true("gptrpanel" %in% loadedNamespaces())
   expect_identical(e$res$condition, "asthma")
 })
@@ -1109,7 +1109,7 @@ test_that("session start enables settings plugins and syncs skills (e2e)", {
   write_file(file.path(p, ".gptr", "skills", "hook-skill", "SKILL.md"),
              c("---", "name: hook-skill", "description: Synced at session start.", "---", "x"))
   fake = local_fake_provider(list("ok"))
-  gptr("hello", model = fake, envir = new.env())
+  peter("hello", model = fake, envir = new.env())
   t1 = fake_requests(fake)[[1]]$system$t1
   expect_match(t1, "- start-skill: Enabled at session start.", fixed = TRUE)
   expect_match(t1, "- hook-skill: Synced at session start.", fixed = TRUE)

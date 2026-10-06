@@ -183,7 +183,7 @@ spec_tokens = function(spec) {
                                     input_schema = params)), "json")
       } else if (identical(spec[["exposure"]], "r")) {
         ns = spec[["namespace"]]
-        prefix = if (is.null(ns)) "gptr$" else paste0("gptr$", ns, "$")
+        prefix = if (is.null(ns)) "peter$" else paste0("peter$", ns, "$")
         sig = spec[["signature"]] %||%
           schema_signature(spec$name, params, spec[["description"]], prefix = prefix)
         est_tokens(sig, "code")
@@ -210,7 +210,7 @@ ext_reserved_members = c("read", "write", "edit", "grep", "find", "ls", "help", 
                          "describe", "plot", "out", "sh", "script", "bg", "jobs", "py", "sql",
                          "knit", "app", "mcp")
 
-#' Names of un-namespaced, non-hidden tool records with a `fun` (the gptr$ members, IC-37)
+#' Names of un-namespaced, non-hidden tool records with a `fun` (the peter$ members, IC-37)
 #' @noRd
 registry_member_names = function(reg) {
   recs = registry_recs(reg, get0("tool", envir = reg$by_kind, inherits = FALSE))
@@ -239,7 +239,7 @@ registry_admit = function(spec, source, rank, reg) {
     if (!is.null(ns)) {
       if (ns %in% ext_reserved_members) spec_abort(spec, "namespace", "is a reserved member name")
       if (ns %in% registry_member_names(reg)) {
-        spec_abort(spec, "namespace", "equals an existing gptr$ member name")
+        spec_abort(spec, "namespace", "equals an existing peter$ member name")
       }
     }
   }

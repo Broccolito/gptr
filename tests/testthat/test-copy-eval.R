@@ -2,7 +2,7 @@
 # rules R1-R8; IC-67). Each row runs in a fresh Rscript through P01's expect_no_copy(): the
 # user's next in-place edit after the action must not copy the 40 MB object. The child loads
 # gptr without exporting internals, so internal functions are fetched from the namespace. The
-# gptr() form of the function-frame case is P10's (test-copy-tools.R).
+# peter() form of the function-frame case is P10's (test-copy-tools.R).
 
 ns_get = function(name) sprintf("%s = get('%s', envir = asNamespace('gptr'))", name, name)
 with_ev = function(setup) paste(setup, ns_get("eval_r"), sep = "; ")

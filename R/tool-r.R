@@ -1,13 +1,13 @@
 # The `r` tool (P10; architecture 6.12, 7.2; contract 4.4, 7.9, 9.2): IC-68 schema variants,
 # evaluation through the `evaluator` kind (IC-69) in the run's evaluation environment (IC-15), and
-# format_eval_result() text with gptr$plot() and gptr$read() images in one budget (IC-67). The
+# format_eval_result() text with peter$plot() and peter$read() images in one budget (IC-67). The
 # execute frame binds the r-call marker `gptr_r_call` through which member calls are gated.
 
 r_tool_description = paste(
   "Run R code in the user's live R session. Objects persist between calls and belong to the user.",
   "Returns printed output, messages, warnings, errors with a traceback, and plots as images.",
   "Execution stops at the first error. Output beyond about 4000 tokens keeps the first 40% and",
-  "last 60% and names a gptr$out(id) handle for the rest."
+  "last 60% and names a peter$out(id) handle for the rest."
 )
 r_tool_snippet =
   "Run R code in the user's live session (objects persist; plots come back as images)"
@@ -15,7 +15,7 @@ r_tool_guidelines = c(
   paste("Use r to inspect and compute on objects in the live session; never reload or recompute",
         "data that is already in memory"),
   paste("In r, assign results to names and print compact summaries (dim(), head(),",
-        "gptr$describe(x)) rather than whole objects"),
+        "peter$describe(x)) rather than whole objects"),
   "Use = for assignment and |> for pipes in all R code you write"
 )
 
@@ -125,7 +125,7 @@ r_event_text = function(events, type) {
 }
 
 #' The r tool result: format_eval_result() text and images, and the contract 4.4 `details`
-#' (plus `plot_files`, the PNGs behind gptr$plot(which))
+#' (plus `plot_files`, the PNGs behind peter$plot(which))
 #' @noRd
 r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
   events = res$events %||% list()
@@ -154,8 +154,8 @@ r_tool_result = function(code, record, note, res, fmt, rc, session, n_values) {
   text = fmt$text
   dropped = as.integer(rc$dropped %||% 0L)
   if (dropped > 0L) {
-    text = paste0(text, "\n[", dropped, " image(s) from gptr$plot() or gptr$read() not attached: ",
-                  "at most ", as.integer(gptr_opt("r_max_images")), " per r call]")
+    text = paste0(text, "\n[", dropped, " image(s) from peter$plot() or peter$read() not ",
+                  "attached: at most ", as.integer(gptr_opt("r_max_images")), " per r call]")
   }
   out = gptr_tool_result(text, images = if (length(images)) images else NULL, details = details,
                          is_error = !identical(res$status, "ok"))
@@ -199,7 +199,7 @@ r_tool_execute = function(input, ctx) {
   res = evaluate(code, envir, timeout = timeout, budget_tokens = budget, rng = opts$rng_state,
                  record = record)
   envir = NULL
-  # images attached by gptr$plot() and gptr$read() count against the budget too (IC-67)
+  # images attached by peter$plot() and peter$read() count against the budget too (IC-67)
   res$images = c(res$images, gptr_r_call$images)
   fmt = format_eval_result(res, budget)
   r_tool_result(code, record, note, res, fmt, gptr_r_call, session, n_values)

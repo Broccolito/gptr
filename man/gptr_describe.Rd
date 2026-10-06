@@ -65,7 +65,7 @@ give more detail).}
 A character vector of lines; the first is a header \verb{<class> shape, size}.
 }
 \description{
-An S3 generic used for the \verb{<attached>} and \verb{<workspace>} context blocks, \code{gptr$describe()}
+An S3 generic used for the \verb{<attached>} and \verb{<workspace>} context blocks, \code{peter$describe()}
 and console mentions. Methods return successively richer levels of detail and the richest
 level whose estimated size fits \code{budget} is returned. Methods never force promises, never do
 I/O (no \code{dbListTables()}, no \code{collect()}) and never call \code{str()} on the object. Packages add

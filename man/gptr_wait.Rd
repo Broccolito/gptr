@@ -22,8 +22,8 @@ and no condition is raised.
 }
 \examples{
 fake = gptr_fake_provider(list("a"))
-runs = list(a = gptr("one", model = fake, .run = FALSE, envir = new.env()),
-            b = gptr("two", model = fake, .run = FALSE, envir = new.env()))
+runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
+            b = peter("two", model = fake, .run = FALSE, envir = new.env()))
 gptr_wait(runs, timeout = 10)
 vapply(runs, function(x) x$status, "")
 }

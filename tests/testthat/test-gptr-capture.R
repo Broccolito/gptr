@@ -120,7 +120,7 @@ test_that("unmask_env() replaces a magrittr mask by its parent", {
   expect_identical(unmask_env(globalenv()), globalenv())
 })
 
-test_that("gateway_args() validates the value arguments of gptr()", {
+test_that("gateway_args() validates the value arguments of peter()", {
   a = gateway_args(NULL, c("x", "y"), NULL, 0.5, NULL, NA, FALSE, list(cost = 1), "live",
                    list(max_turns = 3), TRUE, FALSE)
   expect_identical(a$replay, "live")
@@ -182,8 +182,8 @@ test_that("the capture leaves read call-site symbols by name and label each dot"
   expect_identical(dot_labels(list(), character()), character())
 })
 
-test_that("dot_sites() skips gptr()'s own formals; the leaves tolerate an empty argument", {
-  sc = quote(gptr(big, prompt = p, model = m, envir = e, small, k = y))
+test_that("dot_sites() skips peter()'s own formals; the leaves tolerate an empty argument", {
+  sc = quote(peter(big, prompt = p, model = m, envir = e, small, k = y))
   expect_identical(dot_sites(sc, 3L), c("big", "small", "y"))
   g = function(...) dot_sites(sys.call(), ...length())
   expect_identical(g("x", , big), c(NA, NA, "big"))

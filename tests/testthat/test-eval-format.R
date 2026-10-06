@@ -47,7 +47,7 @@ test_that("plots, object changes and session changes are listed after the events
   out = format_eval_result(fake_result(plots, changes = changes), 4000L)
   expect_equal(strsplit(out$text, "\n")[[1]], c(
     "[plot 1 attached]", "[plot 2 attached]", "[plot 3 attached]",
-    "[plots 4-5 not attached: gptr$plot(k)]", "+ m <data.frame 4,211 x 7>",
+    "[plots 4-5 not attached: peter$plot(k)]", "+ m <data.frame 4,211 x 7>",
     "~ pbmc <Seurat> modified", "[working directory changed: /a -> /b]",
     "[options changed: digits]", "[environment variables changed: X]",
     "[attached: package:stats4]"
@@ -72,14 +72,14 @@ test_that("blocked and empty results have short texts", {
   expect_equal(format_eval_result(fake_result(list()), 4000L)$text, "[no output]")
 })
 
-test_that("long output keeps head and tail with a gptr$out() notice", {
+test_that("long output keeps head and tail with a peter$out() notice", {
   res = eval_r("invisible(lapply(1:5000, function(i) cat('line', i, '\\n')))", new.env())
   out = format_eval_result(res, 400L)
   expect_true(out$truncated)
   expect_true(is.character(out$out_id))
   expect_match(out$text, "^line 1 ")
   expect_match(out$text, "line 5000\\s*$")
-  expect_match(out$text, "gptr$out(", fixed = TRUE)
+  expect_match(out$text, "peter$out(", fixed = TRUE)
   expect_lte(est_tokens(out$text, "r_output"), 420)
   expect_length(out_get(out$out_id), 5000L)
 })
@@ -115,7 +115,7 @@ test_that("a 50-plot evaluation lists 3 attached plots and the stored rest", {
   out = format_eval_result(res, 4000L)
   lines = strsplit(out$text, "\n", fixed = TRUE)[[1]]
   expect_equal(lines[1:3], c("[plot 1 attached]", "[plot 2 attached]", "[plot 3 attached]"))
-  expect_true("[plots 4-50 not attached: gptr$plot(k)]" %in% lines)
+  expect_true("[plots 4-50 not attached: peter$plot(k)]" %in% lines)
   expect_length(out$images, 3L)
 })
 
@@ -194,7 +194,7 @@ test_that("one stored plot, unrendered plots and many object changes are summari
                                 removed = character(), lines = obj))
   out = format_eval_result(fake_result(plots, changes = changes), 4000L)
   expect_equal(strsplit(out$text, "\n", fixed = TRUE)[[1]], c(
-    "[plot 1 attached]", "[plot 2 not attached: gptr$plot(2)]", "[2 plots not rendered]",
+    "[plot 1 attached]", "[plot 2 not attached: peter$plot(2)]", "[2 plots not rendered]",
     obj[1:12], "(+ 3 more object changes)"
   ))
 })

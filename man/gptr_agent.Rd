@@ -54,7 +54,7 @@ gptr_agent(
 A spec of class \code{c("gptr_agent", "gptr_spec")}.
 }
 \description{
-An agent definition names a specialist for \code{gptr(agents = ...)}: its model, tools, skills,
+An agent definition names a specialist for \code{peter(agents = ...)}: its model, tools, skills,
 system text, backend, preset and limits. \code{model} and \code{skills} may be bare identifiers; they are
 stored unevaluated (as written) and resolved by the gateway. \code{gptr_agent("name")} alone (or
 with only \code{file}) loads a saved definition. Package code should pass strings.

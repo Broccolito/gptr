@@ -10,14 +10,15 @@ These tools checked the 25 implementation plans for cross-plan consistency and r
 | `check_r.R` | Checks that every R block in `./blocks/` parses and has no `<-`, `->`, `%>%` or non-ASCII byte. |
 | `lint_all.R` | Lints a directory of `.R` files with P01's `.lintr` linters (`indentation_linter = NULL`). |
 
-The full check, exactly as last run (2026-10-01):
+The full check, run from the repository root:
 
 ```bash
-python3 dev/research/assets/consolidation-tools/build_index.py --quiet
-cd "$(mktemp -d)" && python3 ~/Desktop/gptr/dev/research/assets/consolidation-tools/extract.py
-Rscript --vanilla ~/Desktop/gptr/dev/research/assets/consolidation-tools/check_r.R
+T="$PWD/dev/research/assets/consolidation-tools"
+python3 "$T/build_index.py" --quiet
+cd "$(mktemp -d)" && python3 "$T/extract.py"
+Rscript --vanilla "$T/check_r.R"
 mkdir lint && for f in blocks/*_r_d0.txt; do cp "$f" "lint/$(basename "$f" _r_d0.txt).R"; done
-Rscript --vanilla ~/Desktop/gptr/dev/research/assets/consolidation-tools/lint_all.R lint
+Rscript --vanilla "$T/lint_all.R" lint
 ```
 
 Expected: `25 plans, 1440 blocks, ... findings (info 812, warn 74)` with no `error` findings; `764 R blocks; 0 with
@@ -28,6 +29,5 @@ findings, 0 parse errors, 0 `<-`, 0 `%>%`, 0 lints. The 74 remaining warnings ar
 "Cross-plan consolidation log" sections (recorded exceptions, call-shaped Interfaces lines, research-prototype
 names in prose).
 
-`extract.py` reads the plans from `/Users/wanjun/Desktop/gptr/dev/plan` (edit `plan_dir` at its top to move the
-repository). `consolidation-lint-results.csv`
-(one directory up) is the lint report that drove the last fixes.
+`build_index.py` and `extract.py` read the plans of the repository that holds them.
+`consolidation-lint-results.csv` (one directory up) is the lint report that drove the last fixes.

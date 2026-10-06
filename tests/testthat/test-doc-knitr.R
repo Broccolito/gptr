@@ -1,5 +1,5 @@
 # Tests for R/doc-knitr.R (plan P15): knit_print methods, the scoped label hook, and knitr and
-# Quarto record/replay through the document route with a stand-in gptr().
+# Quarto record/replay through the document route with a stand-in peter().
 
 # A session with recorded turns, built the way P06 records them
 doc_test_session = function(turns, kind = "chat") {
@@ -31,7 +31,7 @@ doc_test_turn = function(code, prompt = "count rows", answer = "There are 32 row
 doc_knit_env = function(code = "n = 32") {
   e = new.env()
   e$runs = 0L
-  e$gptr = function(prompt, ...) {
+  e$peter = function(prompt, ...) {
     call = new.env(parent = emptyenv())
     call$template = prompt
     call$prompt = prompt
@@ -118,7 +118,7 @@ test_that("a stale agent chunk is regenerated during the knit without running th
   local_project()
   local_gptr_options(record = "auto", replay = "auto")
   rmd = file.path(getwd(), "report.Rmd")
-  writeLines(c("```{r ask}", "gptr(\"count the letters, reworded\")", "```", "",
+  writeLines(c("```{r ask}", "peter(\"count the letters, reworded\")", "```", "",
                "```{r gptr-abc123}",
                paste0("# >>> gptr:abc123 model=m prompt=", prompt_hash("count the letters")),
                "old_ran = TRUE", "# <<< gptr:abc123", "```"), rmd)
@@ -282,9 +282,9 @@ test_that("knitr's generic dispatches to the lazily registered methods", {
   expect_identical(as.character(knitr::knit_print(x)), "`gptr_score: mean 1.5 (m, 2026-10-05)`\n")
 })
 
-# ---- knitr and Quarto through gptr() and the fake provider (05 P15 acceptance 2) ---------------
+# ---- knitr and Quarto through peter() and the fake provider (05 P15 acceptance 2) ---------------
 
-test_that("knitr records an agent chunk through gptr() and replays it on the next knit", {
+test_that("knitr records an agent chunk through peter() and replays it on the next knit", {
   skip_if_not_installed("knitr")
   # test_path() is relative to tests/testthat, which local_project() leaves: resolve it first
   fixture = normalizePath(testthat::test_path("fixtures", "docs", "report.Rmd"))
@@ -324,7 +324,7 @@ test_that("quarto render records a #| label agent chunk and the next render repl
     paste0("fake = gptr_fake_provider(list(list(tool = \"r\", input = list(code = \"n = 28L\")),",
            " \"Counted.\"))"),
     "invisible(gptr_register(fake))", "```", "", "```{r}", "#| label: ask",
-    "gptr(\"count letters in this prompt\")", "```", "",
+    "peter(\"count letters in this prompt\")", "```", "",
     "Requests: `r length(fake$log$requests)`"), qmd)
   render = function(replay) {
     processx::run(quarto, c("render", "report.qmd"), wd = root,

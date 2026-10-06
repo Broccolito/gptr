@@ -1,5 +1,5 @@
 # doc-blocks.R -- history-document blocks (plan P15; contract 7.15, 11.5; IC-45..IC-49): the block
-# grammar, prompt and args hashes, the gptr() call scanner, block ownership, stale and user-edited
+# grammar, prompt and args hashes, the peter() call scanner, block ownership, stale and user-edited
 # detection, the recorded block content and the writer doc_upsert(). Layer L4: it calls L0
 # helpers, the record constructors, the kernel SDK (session_data(), session_append()) and its
 # own area only. Adapted from report 14 section 5.0 (proto/gptrdoc.R: doc_find_blocks,
@@ -203,7 +203,7 @@ doc_splice = function(lines, from, to, new) {
   c(lines[seq_len(from - 1L)], new, if (to < length(lines)) lines[(to + 1L):length(lines)])
 }
 
-# ---- the gptr() call scanner, anchors and block ownership (report 14 sections 3.1 and 4.2) ----
+# ---- the peter() call scanner, anchors and block ownership (report 14 sections 3.1 and 4.2) ----
 
 #' P15's process state `the$doc_pending` (contract 7.0): deferred and pending upserts by
 #' document key (`docs`), document locks held until exit (`held`), whether the exit finalizer is
@@ -253,23 +253,23 @@ doc_calls_empty = function() {
              stringsAsFactors = FALSE)
 }
 
-#' The gptr() calls of an R text: positions, statement range, nesting, prompt literal, ordinal
+#' The peter() calls of an R text: positions, statement range, nesting, prompt literal, ordinal
 #' within the statement (report 14 doc_scan_calls, with `prompt =` and named-argument handling),
 #' the call's text and its identity text (`ident`: the text that parses to the call R evaluates,
 #' the whole pipe for the right-hand side of `|>`, the call with `.` inserted as magrittr calls
 #' it for the right-hand side of a magrittr pipe, else the call's text). A text that does not
 #' parse gives no calls and the attribute `parse_error`. Texts of 20 lines or more are remembered
-#' (the 16 most recently used), so every gptr() call of a long script locates through one parse.
+#' (the 16 most recently used), so every peter() call of a long script locates through one parse.
 #' @noRd
-doc_scan_calls = function(lines, fun = "gptr", line_offset = 0L) {
+doc_scan_calls = function(lines, line_offset = 0L) {
   lines = as_utf8(as.character(lines))
   if (!length(lines)) return(doc_calls_empty())
-  if (length(lines) < 20L) return(doc_scan_parse(lines, fun, line_offset))
+  if (length(lines) < 20L) return(doc_scan_parse(lines, line_offset))
   st = doc_state()
-  key = hash_sha256(paste(c(fun, line_offset, lines), collapse = "\n"))
+  key = hash_sha256(paste(c(line_offset, lines), collapse = "\n"))
   res = get0(key, envir = st$scan, inherits = FALSE)
   if (is.null(res)) {
-    res = doc_scan_parse(lines, fun, line_offset)
+    res = doc_scan_parse(lines, line_offset)
     assign(key, res, envir = st$scan)
   }
   st$scan_keys = c(setdiff(st$scan_keys, key), key)
@@ -283,13 +283,13 @@ doc_scan_calls = function(lines, fun = "gptr", line_offset = 0L) {
 #' The parse behind doc_scan_calls(): ids are looked up through vectors indexed by parse-data id.
 #' Parse data carries the text of terminal tokens only (the default); getParseText() reads the
 #' text of a call back from the source, which keeps a long script's parse cheap. The parser
-#' rewrites `lhs |> gptr(q)` into `gptr(lhs, q)`, which is what sys.call() reports, so a call
+#' rewrites `lhs |> peter(q)` into `peter(lhs, q)`, which is what sys.call() reports, so a call
 #' that is the right-hand operand of a pipe takes the pipe's text as its identity and its
 #' left-hand side as an argument (doc_call_prompt()). magrittr (not a dependency, but users pipe
-#' into gptr() with it: contract 6.1, research 12 D3) runs `lhs %>% gptr(q)` as `gptr(., q)`
+#' into peter() with it: contract 6.1, research 12 D3) runs `lhs %>% peter(q)` as `peter(., q)`
 #' with `.` bound to the left-hand side (doc_dot_ident()).
 #' @noRd
-doc_scan_parse = function(lines, fun, line_offset) {
+doc_scan_parse = function(lines, line_offset) {
   empty = doc_calls_empty()
   exprs = tryCatch(doc_parse_text(lines), error = function(e) e)
   if (inherits(exprs, "error")) {
@@ -298,7 +298,7 @@ doc_scan_parse = function(lines, fun, line_offset) {
   }
   pd = utils::getParseData(exprs)
   if (is.null(pd) || !nrow(pd)) return(empty)
-  sym = which(pd$token == "SYMBOL_FUNCTION_CALL" & pd$text == fun)
+  sym = which(pd$token == "SYMBOL_FUNCTION_CALL" & pd$text == "peter")
   if (!length(sym)) return(empty)
   parent = integer(max(pd$id))
   parent[pd$id] = pd$parent
@@ -376,8 +376,8 @@ doc_is_dot = function(arg) {
 
 #' The identity text of the right-hand call of a magrittr pipe (call text `text`): magrittr
 #' calls it with `.` as its first argument unless an argument (named or not) is `.` itself, so
-#' `x %>% gptr(q)` runs `gptr(., q)` and `x %>% gptr(q, .)` runs `gptr(q, .)`. The first `(` of
-#' the text opens the argument list (the function part is `gptr` or `pkg::gptr`).
+#' `x %>% peter(q)` runs `peter(., q)` and `x %>% peter(q, .)` runs `peter(q, .)`. The first `(` of
+#' the text opens the argument list (the function part is `peter` or `pkg::peter`).
 #' @noRd
 doc_dot_ident = function(pd, call_id, text) {
   ch = pd[pd$parent == call_id & !(pd$token %in% c("'('", "')'", "COMMENT")), , drop = FALSE]
@@ -402,12 +402,12 @@ doc_str_const = function(pd, arg) {
 #' (the default is NULL). Argument names are read as R binds them: `prompt`, `` `prompt` `` or
 #' `"prompt"` (a name token is a direct child of the call; a value is wrapped in an `expr`). The
 #' left-hand side `lhs_id` of a native pipe is the call's first unnamed argument, or the value of
-#' the argument holding the placeholder `_` (`"Summarise" |> gptr()` and
-#' `"Summarise" |> gptr(prompt = _)` both prompt "Summarise"). Under a magrittr pipe
+#' the argument holding the placeholder `_` (`"Summarise" |> peter()` and
+#' `"Summarise" |> peter(prompt = _)` both prompt "Summarise"). Under a magrittr pipe
 #' (`magrittr = TRUE`) the left-hand side is the value of `.`, a symbol and never a literal: a
 #' string-literal left side is the prompt as `prompt = .`, or when no unnamed literal is given
 #' and `.` is the first unnamed argument (inserted or written), as the first length-1 character
-#' value (`"S" %>% gptr(q)` prompts "S", `"S" %>% gptr("more")` prompts "more").
+#' value (`"S" %>% peter(q)` prompts "S", `"S" %>% peter("more")` prompts "more").
 #' @noRd
 doc_call_prompt = function(pd, call_id, lhs_id = NA_integer_, magrittr = FALSE) {
   ch = pd[pd$parent == call_id, , drop = FALSE]
@@ -481,7 +481,7 @@ doc_arg_name = function(text) {
   if (is.character(val)) as_utf8(val) else text
 }
 
-#' All gptr() calls of an R text with their block, ordinal inside the block, prompt hash (`ph`)
+#' All peter() calls of an R text with their block, ordinal inside the block, prompt hash (`ph`)
 #' and identity hash (`th`, of the identity text `ident`: the identity of calls with a computed
 #' prompt)
 #' @noRd
@@ -616,7 +616,7 @@ doc_header_ordinals = function(headers) {
 #' `prompt=` matches (preferring `call=k`), else the one with `call=k` (then stale); `headers` is
 #' the list of block headers in run order. `taken` holds the ordinals of the statement's other
 #' calls with the same prompt: their blocks are never matched by prompt alone (a pipeline that
-#' repeats a prompt, `... |> gptr("improve it") |> gptr("improve it")`). A missing prompt hash
+#' repeats a prompt, `... |> peter("improve it") |> peter("improve it")`). A missing prompt hash
 #' never matches a header without `prompt=`. Returns list(index, stale) or NULL.
 #' @noRd
 doc_run_owner = function(headers, ph, k = 1L, taken = integer()) {
@@ -709,10 +709,10 @@ doc_stmt_by_expr = function(lines, expr, k = 1L) {
 
 # ---- recorded block content (contract 11.5 body; IC-47, IC-48, IC-49) --------------------------
 
-# gptr$ members that are never recorded when no tool spec says otherwise (IC-48)
+# peter$ members that are never recorded when no tool spec says otherwise (IC-48)
 doc_unrecorded_members = c("out", "plot", "help", "search", "describe")
 
-#' Is a gptr$ member recorded? The tool spec's `record` field, else the IC-48 default list
+#' Is a peter$ member recorded? The tool spec's `record` field, else the IC-48 default list
 #' @noRd
 doc_member_recorded = function(name) {
   spec = tryCatch(registry_get("tool", name), error = function(e) NULL)
@@ -721,19 +721,17 @@ doc_member_recorded = function(name) {
 }
 
 #' Should a top-level expression of recorded code be dropped: gptr_return() or a call of a
-#' `record = FALSE` gptr$ member (IC-48). The `gptr::` forms are built with eval_guard_ns_call(),
-#' not quoted: R CMD check reads a literal `gptr::name` as a use of an export (CI Task CI-4).
+#' `record = FALSE` peter$ member (IC-48), bare or `gptr::`-qualified
 #' @noRd
 doc_drop_expr = function(e) {
   if (!is.call(e)) return(FALSE)
   head = e[[1L]]
-  if (identical(head, quote(gptr_return)) ||
-      identical(head, eval_guard_ns_call("gptr_return"))) {
+  if (identical(head, quote(gptr_return)) || identical(head, quote(gptr::gptr_return))) {
     return(TRUE)
   }
   if (is.call(head) && length(head) == 3L &&
       (identical(head[[1L]], as.name("$")) || identical(head[[1L]], as.name("[["))) &&
-      (identical(head[[2L]], quote(gptr)) || identical(head[[2L]], eval_guard_ns_call("gptr")))) {
+      (identical(head[[2L]], quote(peter)) || identical(head[[2L]], quote(gptr::peter)))) {
     return(!doc_member_recorded(as.character(head[[3L]])))
   }
   FALSE
@@ -1084,7 +1082,7 @@ doc_turn_children = function(session, ents) {
   kids[keep[order(created[keep], method = "radix")]]
 }
 
-#' S2 parts of the children a turn created (IC-47): the k-th direct gptr() call of the block body
+#' S2 parts of the children a turn created (IC-47): the k-th direct peter() call of the block body
 #' (not inside a loop, function or braces) owns part "n<k>" and the first unused child whose first
 #' prompt has that call's prompt hash; a computed or interpolated prompt takes the next unused
 #' child that no literal call claims. Children of deeper calls get no part (those calls run live

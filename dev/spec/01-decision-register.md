@@ -11,7 +11,7 @@ Requirements referenced as `REQ-nn` are in `00-vision-brief.md`.
 
 | ID | Decision |
 |----|----------|
-| S-1 | **`gptr(...)` is the single gateway.** No prompt → interactive console session. Prompt → the function that receives it and runs the agent. One variadic function, not a family of entry points. |
+| S-1 | **`peter(...)` is the single gateway.** No prompt → interactive console session. Prompt → the function that receives it and runs the agent. One variadic function, not a family of entry points. |
 | S-2 | **Prompts are always quoted strings.** Bare names are for identifiers only (models, skills, extensions, plugins, session objects). |
 | S-3 | **R only, with a narrow Rcpp exception** for benchmark-proven hot paths, each with a pure-R reference implementation (REQ-01). |
 | S-4 | **No bash tool.** The execution tool evaluates R in the live session; shell access goes through R. |
@@ -22,7 +22,7 @@ Requirements referenced as `REQ-nn` are in `00-vision-brief.md`.
 | S-11 | **Everything can be a plugin** (REQ-41). One public, documented, versioned extension API covers every capability category (providers, routers, tools, MCP servers, skills, prompts, commands, hooks, permission policies, context describers, compaction, document writers, artifact types, sub-agent backends, agent definitions, front ends). Built-ins are implemented on that API. R packages ship plugins, and third parties can build agentic layers on gptr's public API. |
 | S-12 | **Token efficiency is a first-class, measured design criterion** (REQ-42): R/Shiny semantic compression, in-memory compute referenced by name, composition of many operations in one R evaluation, R as polyglot glue (shell, Python, SQL, knitr engines) through compact helpers, lean and cache-friendly context, System 1 for cheap decisions, calibrated token accounting, budgets and a token-efficiency benchmark suite. Every design choice with a token cost states it. |
 | S-10 | **Own LLM infrastructure, superseding the R LLM ecosystem** (REQ-40). gptr implements its own transport, streaming, provider adapters, message/tool-call model, sessions and concurrency, designed for agents. No R LLM package (ellmer, tidyllm, chattr, gptstudio, mall, btw, mcptools, corteza, aisdk, ...) is a dependency (neither Imports nor Suggests), and v1 ships no bridge to them. Their designs may inspire gptr, with attribution where code ideas are ported. This settles D-01. |
-| S-8 | **`|>` is the steering operator on one session object** (REQ-18). `gptr()` returns an object that *is* (or directly carries) the agent session; piping it into `gptr("...")` appends a steering message or follow-up prompt to that same session. Continuing never silently forks; forking is an explicit call. The `.R` file must read like ordinary R: prompts, R code, control flow and Jev typed outputs interleaved, with `|>` chains recording how the agent was steered. |
+| S-8 | **`|>` is the steering operator on one session object** (REQ-18). `peter()` returns an object that *is* (or directly carries) the agent session; piping it into `peter("...")` appends a steering message or follow-up prompt to that same session. Continuing never silently forks; forking is an explicit call. The `.R` file must read like ordinary R: prompts, R code, control flow and Jev typed outputs interleaved, with `|>` chains recording how the agent was steered. |
 
 ## Verified facts that constrain the design
 
@@ -38,16 +38,16 @@ Executed on R 4.4.3 (`dev/research/assets/lead/gateway.R`):
 - Subsetting a classed vector with `[` **drops** class and attributes unless a
   `[` method is defined. Vectorised decisions need `[`, `[[`, `c`, `rev`,
   `format`, `print` methods that carry the probabilities along.
-- One variadic `gptr(...)` can distinguish all call shapes by inspecting the
+- One variadic `peter(...)` can distinguish all call shapes by inspecting the
   dots: no arguments → interactive; unnamed plain character → prompt; a
   `gptr_result`/`gptr_session` → continuation (this is what makes
-  `gptr("a") |> gptr("b")` work); any other unnamed object → attached context,
-  labelled with its deparsed expression (`mtcars |> gptr("describe")` yields
+  `peter("a") |> peter("b")` work); any other unnamed object → attached context,
+  labelled with its deparsed expression (`mtcars |> peter("describe")` yields
   the label `mtcars`).
 - Bare identifiers resolve via `match.call()` without rlang:
   `model = jev`, `skills = c(seurat, plotting)`, while `model = "opus"` still
   works.
-- `parent.frame()` of a top-level `gptr()` call is `globalenv()`; inside a
+- `parent.frame()` of a top-level `peter()` call is `globalenv()`; inside a
   function it is that function's frame. Evaluating in `parent.frame()` gives
   the in-memory behaviour without the package ever naming `.GlobalEnv`.
 
@@ -95,45 +95,45 @@ reachable as ordinary R functions from the `r` tool rather than as separate
 model-visible tools. Proposals must justify every tool beyond the first four.
 
 ### D-04 Evaluation environment
-Preliminary: `envir = parent.frame()` captured at the `gptr()` call, explicit
+Preliminary: `envir = parent.frame()` captured at the `peter()` call, explicit
 `envir =` argument to override. Inline sub-agents get
 `new.env(parent = caller)` so reads fall through without copying and writes
 stay local.
 
 ### D-05 Return value and pipe semantics (constrained by S-8)
-Preliminary: `gptr("...")` returns the **session object itself** — an
+Preliminary: `peter("...")` returns the **session object itself** — an
 environment-backed S3 object (reference semantics), so every variable bound to
 it sees the same, growing session. Printing it shows the latest answer;
 `$text`, `$value` (the R object the agent designated as its result), `$usage`,
-`$history` expose the rest. Piping it into `gptr("...")` appends a turn to the
+`$history` expose the rest. Piping it into `peter("...")` appends a turn to the
 same session and returns the same object, so
 
 ```r
-s = gptr("load and clean the counts")
-s |> gptr("use TPM, not CPM")         # steers s itself
+s = peter("load and clean the counts")
+s |> peter("use TPM, not CPM")         # steers s itself
 s$value                               # reflects the steered state
 ```
 
 Open sub-questions each proposal must answer:
 - Steering a **running** session: for a background/worker session
-  (`gptr(..., background = TRUE)`), piping a prompt into it while it is still
+  (`peter(..., background = TRUE)`), piping a prompt into it while it is still
   working should enqueue a Pi-style *steering* message (delivered at the next
   turn boundary); piping into an idle session is a *follow-up* turn. Is this
   unified behaviour feasible and worth it in v1?
 - Explicit fork: name and semantics (e.g. `gptr_fork(s)`), and how a fork is
   recorded in the script-as-history document.
-- How a data-first pipe (`df |> gptr("...")`) is told apart from a session pipe
+- How a data-first pipe (`df |> peter("...")`) is told apart from a session pipe
   (dispatch on the class of the first argument).
 - The canonical operator is the native pipe `|>` (maintainer, 2026-09-29).
-  Because gptr dispatches on its first argument, magrittr's `%>%` works the
+  Because `peter()` dispatches on its first argument, magrittr's `%>%` works the
   same way at no cost; docs and examples use `|>` only.
 - How System 1 calls (`model = jev`) fit: they return typed vectors, not a
   session, so they are used inside conditions rather than in steering chains.
-Interactive `gptr()` returns the session invisibly on exit, so
-`s = gptr()` keeps the conversation for later piping.
+Interactive `peter()` returns the session invisibly on exit, so
+`s = peter()` keeps the conversation for later piping.
 
 ### D-06 System One API shape
-Preliminary: `gptr("question", x, model = jev, type = ...)` returns typed
+Preliminary: `peter("question", x, model = jev, type = ...)` returns typed
 vectors: `gptr_decision` (logical + `prob`), a factor-like choice with a
 probability matrix, numeric score with confidence. Vectorised over inputs with
 concurrent HTTP. Abstention policy when confidence is below a threshold:
@@ -150,7 +150,7 @@ needed; a variable holding a model name is passed as `model = I(var)` or via
 (what happens when `jev` is also a variable in scope).
 
 ### D-08 Document harness
-Preliminary: generated code goes directly below the originating `gptr()` call
+Preliminary: generated code goes directly below the originating `peter()` call
 in a delimited block with a stable id; outputs as `#>` comments; rationale as
 comments. Replay modes `live` / `replay` / `record`; non-interactive runs
 default to `replay` when a recorded block exists.
@@ -235,10 +235,10 @@ ending the session; `!` prefix evaluates R directly; slash commands.
 
 ### D-27 knitr / Quarto integration
 Open: whether to register a `gptr` chunk engine in addition to plain
-`gptr()` calls inside R chunks.
+`peter()` calls inside R chunks.
 
 ### D-28 Exported API naming
-Preliminary: `gptr()` is the gateway (S-1). Supporting functions carry a
+Preliminary: `peter()` is the gateway (S-1). Supporting functions carry a
 `gptr_` prefix (`gptr_init()`, `gptr_config()`, `gptr_tool()`,
 `gptr_models()`), which avoids collisions with other packages.
 
@@ -267,7 +267,7 @@ fact-check); G3 measured 5.5 KB vs 21 KB serialised sessions; System 1 values mu
 (04). Unanimous. (§5)
 
 **D-03 Model-visible tools.** Direct tools `r`, `read`, `edit`, `write`, plus `ask` only when a human is
-present (trimmed schema, 145 tokens). `grep`, `find`, `ls` and every other capability are `gptr$` namespace
+present (trimmed schema, 145 tokens). `grep`, `find`, `ls` and every other capability are `peter$` namespace
 members; the `extended` preset promotes grep/find/ls per model. No shell tool, not even opt-in (S-4; G5 §8); no
 todo tool (20 §4); `edit` accepts `*** Begin Patch` envelopes and `apply_patch` is v1.x. Measured: 675 tokens
 for the four schemas vs 1,199 for seven (G4 §2.8); about 36 vs 328 tokens per tool as an R signature
@@ -279,7 +279,7 @@ for the four schemas vs 1,199 for seven (G4 §2.8); about 36 vs 328 tokens per t
 edit copy (judge checks, PB-E1, P-A experiment), which was P-C's fatal flaw. A function-frame home is held only
 during a run, in an environment binding reset at settlement (G3; rule R2). (§6.4)
 
-**D-05 Return value and pipe semantics.** `gptr()` returns the session environment for every System 2 shape;
+**D-05 Return value and pipe semantics.** `peter()` returns the session environment for every System 2 shape;
 teams, fan-outs, children and replayed sessions are session kinds (P-C; P-B's `gptr_group` broke S-8).
 Piping into an idle session starts a follow-up turn on the same object and file; piping into a running one
 enqueues a steer and returns at once; it never forks. One queue per session is fed by the pipe, the pause
@@ -292,7 +292,7 @@ idea and G3 verified it end to end in terminal R; J-cran and J-impl preferred de
 isolated and excluded from examples and CRAN tests. System 1 accepts a piped session through `as_state()`.
 (§4.1, §5.1, §6.2)
 
-**D-06 System 1 API.** `gptr(q, x, model = jev, choices =, levels =, threshold = 0.5, min_confidence =,
+**D-06 System 1 API.** `peter(q, x, model = jev, choices =, levels =, threshold = 0.5, min_confidence =,
 uncertain =)` returns `gptr_decision` (logical), `gptr_choice` (classed character; a factor only on request)
 or `gptr_score` (double) with probabilities as attributes, vectorised on the reactor (at most 8 active, 3
 bounded rounds). A factor is truthy in `if()` and `switch()` uses its integer code (04 §2.15). Abstention is
@@ -312,7 +312,7 @@ are literal names; calls are evaluated in an alias mask. (§4.1.3, §6.4 R3)
 
 **D-08 Document harness.** Report 14's block grammar below top-level calls, with header keys `model`, `date`,
 `prompt`, `args` (review), `sha`, `call`, `tokens`, `cost`, `session`, `turn`, `value`, `fork`, `plan`, `kind`,
-`children` (review), `status`; replay modes `auto`/`replay`/`live`/`record`; `gptr()` never executes a recorded
+`children` (review), `status`; replay modes `auto`/`replay`/`live`/`record`; `peter()` never executes a recorded
 block; under base `source()`/Rscript `live` downgrades to replay with a warning; replay forced under R CMD check
 outside testthat, i.e. in examples (review, IC-45). (review) Replay needs no write consent (the route matches a
 located block); a piped session is advanced in place; forks are bound by block id; teams, fan-outs and
@@ -363,7 +363,7 @@ servers and experimental background sessions (review, IC-57). No coro or promise
 
 **D-14 MCP.** Own client for both protocol eras (probe, era cached per server), stdio through the G5 process
 engine (`.cmd` shims via `cmd.exe /d /c call` with metacharacter refusal) and Streamable HTTP on the reactor;
-default exposure `r` as `gptr$mcp$<server>$<tool>()` with a 1,500-token signature catalog; other harnesses'
+default exposure `r` as `peter$mcp$<server>$<tool>()` with a 1,500-token signature catalog; other harnesses'
 configs listed read-only and imported on request; project configs only when trusted. gptr as a server: the
 in-process `sdk` transport for the claude CLI, and a loopback HTTP server (`gptr_mcp_serve()`: 127.0.0.1, an
 RNG-free port, one 192-bit token per client bound to its session (review, IC-58), Origin check, permission gate,
@@ -387,7 +387,7 @@ commands, agents and MCP. Every built-in is a `builtin_<name>()` factory using o
 a codetools layering test (P-B). (G1 §4.4; §11)
 
 **D-17 Artifacts.** Shiny apps: the model writes `<root>/artifacts/<id>/app.R` (a 124-token section and the
-`shiny-bslib` skill instead of an artifact tool) and launches it with `gptr$app(id, data =)`; immutable `vNNN/`
+`shiny-bslib` skill instead of an artifact tool) and launches it with `peter$app(id, data =)`; immutable `vNNN/`
 snapshots with data through the leaf `saveRDS(ascii = FALSE)` wrapper; a supervised `callr::r_bg` child with a
 secret-free environment, a random loopback port and a parent-PID watchdog; validation ladder parse, launch,
 HTTP 200, optional chromote check and screenshot. `.gptr/artifacts/marker-explorer/app.R` is literal (NS-8).
@@ -401,7 +401,7 @@ with ETag; canonical quoted ids written into documents; default model from the f
 **D-19 Context management.** Provider usage plus G2's class-aware estimator (median error 11.4% vs 43% for
 chars/4) with an EWMA provider multiplier; compaction at `min(G4 threshold, window - max(16384, max_output +
 2 * r_cap), 200k)` with the cold rule, an in-conversation checkpoint and no in-place micro-compaction (+32% in
-G4); `r` results capped at about 4,000 tokens (head 40% / tail 60%, spill file, `gptr$out(id)`); read line
+G4); `r` results capped at about 4,000 tokens (head 40% / tail 60%, spill file, `peter$out(id)`); read line
 numbers off; the tail TTL switches to 1 h after an inter-request gap over 240 s (G4's adaptive rule was 33%
 worse in the fast loop per its fact-check). (§6.11, §12)
 
@@ -447,15 +447,15 @@ pipe, with an abort-only fallback where unverified; `!` and `!!`; slash commands
 `/rewind`, `/context`; UI backends `console`, `none`, `scripted`, `rstudio`; never `askYesNo()` for
 permissions. (18 §4; §6.17)
 
-**D-27 knitr / Quarto.** No `{gptr}` chunk engine in v1 (it relaxes S-2; 14 §4.6); `gptr()` in R chunks with
+**D-27 knitr / Quarto.** No `{gptr}` chunk engine in v1 (it relaxes S-2; 14 §4.6); `peter()` in R chunks with
 `knit_print` is the supported path; replay forced in R CMD check's examples (review: not in its tests, and
 vignettes are precomputed, IC-45). J-cran and J-impl
 deferred it; J-req's opt-in plugin becomes v1.x. (§6.9.3)
 
 **D-28 Exported API naming.** 63 exports (IC-01 added `gptr_preimage()`; review: `gptr_map()` is internal because
-S-1 keeps one gateway, and `gptr_scrub()` is new, IC-36, IC-70): `gptr` plus `gptr_*` (P-A's small surface plus the
+S-1 keeps one gateway, and `gptr_scrub()` is new, IC-36, IC-70): `peter` plus `gptr_*` (P-A's small surface plus the
 SDK verbs and constructors needed for S-11), none colliding (G1 §4.7). The tools-as-functions dispatcher is the classed-closure
-gateway namespace `gptr$...` (passes R CMD check, G5; one name for gateway, tools, bridges and MCP); `agent()`
+gateway namespace `peter$...` (passes R CMD check, G5; one name for gateway, tools, bridges and MCP); `agent()`
 exists only in the `agents =` mask; no `tools`, `mcp`, `decide` or unprefixed exports. Other kinds use
 `gptr_spec(kind, ...)` and the factory API's `register_<kind>()` sugar. (§4)
 
@@ -480,15 +480,15 @@ escapes. 09's and 05's "bound variable wins" rules are rejected because attached
 
 **C-5 Evaluator and plot capture.** Hand-rolled evaluator (12 §2.A2: evaluate's sink, device and
 sticky-reference defects); evaluate is not a dependency. Plots for the model at 768x512 res 120 (532 tokens,
-legible per G2); larger views on request with `gptr$plot()`; artifact screenshots at 1000x700.
+legible per G2); larger views on request with `peter$plot()`; artifact screenshots at 1000x700.
 
 **C-6 Tool surface, R tool name, todo, edit result.** Four direct tools plus `ask`; the tool is `r`; no todo
 tool; `apply_patch` v1.x with patch envelopes accepted by `edit`; edit results are Pi's message, with a diff of
 at most 400 tokens only when the fuzzy fallback or normalisation changed the match. (D-03)
 
-**C-7 Dispatcher and MCP naming.** The gateway namespace `gptr$...`; MCP tools under `gptr$mcp$<server>$<tool>()`;
+**C-7 Dispatcher and MCP naming.** The gateway namespace `peter$...`; MCP tools under `peter$mcp$<server>$<tool>()`;
 no `tools` object (base package name) and no `mcp` export (collision with mcptools); member access has no side
-effects; an evaluator shim resolves `gptr` for model code when the package is not attached. (D-28)
+effects; an evaluator shim resolves `peter` for model code when the package is not attached. (D-28)
 
 **C-8 Default sub-agent backend and limits.** `auto` = inline except CLI-only models; worker via callr with a
 scrubbed environment; limits and depth of D-12; naming "worker". (15)
@@ -562,7 +562,7 @@ evaluates level-1 R in a scratch environment, denies writes, ends with a `<propo
 multiplier; Pi's 16,384 reserve and chars/4 are superseded. (D-19)
 
 **C-24 Skill catalog budget and activation.** Compact catalog (descriptions at most 160 characters, 33-50
-tokens per skill) within 1,500 tokens with least-recently-used trimming and `gptr$search()` beyond it;
+tokens per skill) within 1,500 tokens with least-recently-used trimming and `peter$search()` beyond it;
 activation through `read` (no skill tool whose enum would change the cached tool array); `skills =` preloads
 bodies as `<skill_content>`. (G2 (b), 16; §7.3)
 
@@ -570,11 +570,11 @@ bodies as `<skill_content>`. (G2 (b), 16; §7.3)
 (15, 16, G5; S-4), never to a shell tool; directories read: `.gptr/agents`, `.claude/agents`, `.codex/agents`
 (markdown), `.pi/agents`, user-level equivalents and packages' `inst/gptr/agents`. (§11.1)
 
-**C-26 Opt-in shell tool vs S-4.** No shell tool in gptr, not even opt-in; `gptr$sh()` and the other bridges
+**C-26 Opt-in shell tool vs S-4.** No shell tool in gptr, not even opt-in; `peter$sh()` and the other bridges
 cover the need (G5 §8: 22.9x fewer tokens R-composed than a bash tool); a third-party plugin may add one only by
-routing through `gptr$sh()` and the `r` pipeline. (D-03)
+routing through `peter$sh()` and the `r` pipeline. (D-03)
 
-**C-27 Exported names vs collisions.** Only `gptr` and `gptr_*` (D-28); report 16's `mcp_*`, 17's `artifact*`,
+**C-27 Exported names vs collisions.** Only `peter` and `gptr_*` (D-28); report 16's `mcp_*`, 17's `artifact*`,
 04's `decide/classify/rate/judge` and 06's `tools` become namespace members, `gptr_*` exports or internal.
 
 **C-28 knitr chunk engine.** Not in v1 (D-27); replay-only behaviour would be required if it is added in v1.x.
@@ -618,7 +618,7 @@ decisions that changed, with their contract ids (`04-interface-contract.md` §15
 | Build | `R/aaa-state.R` holds `the`, `on_load()` and the service table and collates first, because top-level package code runs at install time in collation order | IC-32 |
 | Layering | a function-level kernel SDK allowlist; L1 adapters use injected callbacks; the layering test parses `R/` | IC-33 |
 | Services | complete service list, owned by built-ins, replaceable through an experimental `service` kind | IC-34 |
-| Ownership | `gptr_prob()` to P13, gateway methods to P08, `gptr$out()` to P10 only, `gptr_jobs()` to P04, `gptr_map()` internal, `gptr_scrub()` new; 63 exports | IC-36, IC-70 |
+| Ownership | `gptr_prob()` to P13, gateway methods to P08, `peter$out()` to P10 only, `gptr_jobs()` to P04, `gptr_map()` internal, `gptr_scrub()` new; 63 exports | IC-36, IC-70 |
 | Tools | one spec per capability with direct and member forms; reserved member names; required plugin namespaces | IC-37 |
 | Context | placement `both` so `<attached>` reaches the first message; unchanged turn blocks skipped | IC-38 |
 | Gateway | team and fan-out before nested; `max_tasks` only for model-issued fan-outs; continuation environment precedence; symbol dots not forced; normalised skill, plugin and agent names; namespaced `.opts` | IC-39..IC-44 |
@@ -628,7 +628,7 @@ decisions that changed, with their contract ids (`04-interface-contract.md` §15
 | CLI routes | claude and codex argv corrected (single gate, `--skip-git-repo-check`, `-m`, `-C`, approved MCP), read-only sandbox except `auto`, billing checks, discovery beyond PATH | IC-65 |
 | Budgets | default ceiling per top-level call, hierarchical budgets, nested-call and System 1 element caps | IC-66 |
 | Evaluator | `withVisible()` results cleared; `pdf(NULL)` capture; at most 3 images per result; no `str()` in prompts | IC-67 |
-| Tokens | prompt text composed by owners; `r` schema variants; skill pseudo-paths; new measured baselines (1,271 / 2,360 / 2,844 / 2,987); CI token ratchet from M1; release live calibration | IC-68, IC-73 |
+| Tokens | prompt text composed by owners; `r` schema variants; skill pseudo-paths; new measured baselines (1,262 / 2,335 / 2,813 / 2,956); CI token ratchet from M1; release live calibration | IC-68, IC-73 |
 | Extension API | router contract and dispatch; `ctx$set_model()`, `add_tools()`, `tokens()`, `eval()`, `describe()`; tool `render`; kinds `preset`, `risk_rule`, `renderer`, `search_source`, `store`, `evaluator`, `service` (38 in all); per-record overrides; session-scoped extensions; workers inherit the registry | IC-69 |
 | Release | DESCRIPTION authors with `cph`, `Copyright`, `VignetteBuilder` added by P25; no NOTE expected apart from the maintainer line; lint configuration and conventions corrected | IC-72 |
 

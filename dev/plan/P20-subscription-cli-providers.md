@@ -75,11 +75,11 @@ Exact signatures (04 and the dependency plans); the tasks call nothing else.
 | P03 | `child_env(profile, pass = character(), set = character(), provider = NULL)` (profiles `cli-claude`, `cli-codex`; warning `gptr_warning_billing_env` with field `variables`); `redact(x, profile = "persist")` | probe environments, redaction of the wire log and of error text |
 | P04 | `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)`; `write_all(p, data)`; `write_close(p)`; `kill_all(p, grace = 2)`; `reactor_now()`; `reactor_timer(at, fn, run = NULL)`; `reactor_cancel(ids)`; `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`; `reactor_enqueue_tool(run, fn)`; `reactor_served(run, served = TRUE)` (P04 plan); `wire_log_path(session)`, `wire_log_append(path, line)` (P04 plan); `proc_pool_cap(n)`; `pid_alive(pid, create_time = NULL)` | probes, the stdin writer, timers, the FIFO, the wire log |
 | P05 | `provider_stream(model, context, opts, emit, done, run = NULL)` with the `process_jsonl` transport: `build()` returns `list(start = list(command, args, env_profile, env = named chr, wd) \| NULL, send = list(...), close_stdin = lgl(1))`; the child lives in `opts$state$process` (a new `start` kills the old child); lines arrive as `list(data, obj)`; `opts$send(obj)` writes one JSON line; `usage_new(...)`; `model_resolve(ref, strict = TRUE)`; `gptr_providers(check = FALSE)` calls `status(check = check)` | the transport, usage records, model ids |
-| P06 | events (04 §10.4): `request_params` (patch chain; payload `provider`, `model`, `params` limited to the adapter's `capabilities$request_params`), `usage` (`row`), `agent_end` (`status`, `reason`, ...), `session_shutdown` (`reason`); `ctx` members (04 §10.6) `ctx$session`, `ctx$run`, `ctx$mode()`, `ctx$state()`, `ctx$get(kind, name)`; the injected `opts$gate`, `opts$mcp_dispatch`, `opts$signal`, `opts$run`, `opts$session` (04 §8.1); in tests `gptr()`, `gptr_wait(x, timeout = Inf)`, `gptr_cancel(x)` and the session accessors `$text`, `$status`, `$id`, `$messages`, `$cost`, `$kind` | hooks and end-to-end tests |
+| P06 | events (04 §10.4): `request_params` (patch chain; payload `provider`, `model`, `params` limited to the adapter's `capabilities$request_params`), `usage` (`row`), `agent_end` (`status`, `reason`, ...), `session_shutdown` (`reason`); `ctx` members (04 §10.6) `ctx$session`, `ctx$run`, `ctx$mode()`, `ctx$state()`, `ctx$get(kind, name)`; the injected `opts$gate`, `opts$mcp_dispatch`, `opts$signal`, `opts$run`, `opts$session` (04 §8.1); in tests `peter()`, `gptr_wait(x, timeout = Inf)`, `gptr_cancel(x)` and the session accessors `$text`, `$status`, `$id`, `$messages`, `$cost`, `$kind` | hooks and end-to-end tests |
 | P11 tests | `local_scripted_ui(answers = list(), .env = parent.frame())` (log column `method`, value `"permission"`) | the gated-once test |
 | P12 | `anthropic_normaliser(model, opts)` -> `list(push, push_parsed, finish, fail, message)` | claude `stream_event` lines |
 | P18 | services `mcp.dispatch_local` `function(message, session) list` (reached through the injected `opts$mcp_dispatch`, IC-33) and `mcp.serve_ensure` `function(session) <gptr_mcp_handle>` (`session` is the `gptr_session` object: P18's `mcp_serve_ensure()` checks its class, so builtin:cli's `request_params` hook calls it with `ctx$session`; fields `url`, `port`, `token_env`, `config` with `config$codex$env[[token_env]]` = the token, `stop()`, 04 §5.11); `gptr_mcp_serve(..., stop = FALSE)` in tests | live R for both routes |
-| P19 | `subagent_backend(agent, model)` (the `auto` rule); `gptr_agent(..., model = NULL, ..., backend = c("auto", "inline", "worker", "cli"), ...)`; teams through `gptr(agents = list(...))` | the `cli` backend tests (IC-36) |
+| P19 | `subagent_backend(agent, model)` (the `auto` rule); `gptr_agent(..., model = NULL, ..., backend = c("auto", "inline", "worker", "cli"), ...)`; teams through `peter(agents = list(...))` | the `cli` backend tests (IC-36) |
 
 ## Interfaces this plan produces
 
@@ -3993,10 +3993,10 @@ git commit -m "feat(cli): cli-codex adapter with sandbox mapping, MCP overrides 
 - Test: `tests/testthat/test-cli-common.R` (append), `tests/testthat/test-cli-claude.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-7 (among them `pcli_codex_ensure(session)` and, in tests, `local_mcp_stub()`, `pcli_codex_mcp()`, `pcli_codex_forget()` of Task 7); `on_load(expr)` (P01), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_provider(...)`, `gptr_adapter(...)`, the factory API `gptr$register(spec)` and `gptr$on(event, handler, matcher = NULL)` (P02); `setting_get(key, session = NULL, default = NULL)` (P01; the `budget` setting); the `request_params` patch chain and the `usage` event of P06 (04 §10.4: a `request_params` handler returns `list(params)` and may patch only the fields in the adapter's `capabilities$request_params`); `ctx$get(kind, name)`, `ctx$mode()`, `ctx$run`, `ctx$state()`, `ctx$session` (04 §10.6); in tests `gptr()`, `gptr_wait()`, the session accessors (P06/P08), `local_scripted_ui()` (P11), `gptr_registry()`, `registry_get()` (P02), `proc_pool_cap(n)` (P04). The `mcp_message` round trip needs P18's `mcp.dispatch_local` (injected by P06 as `opts$mcp_dispatch`).
+- Consumes: Tasks 1-7 (among them `pcli_codex_ensure(session)` and, in tests, `local_mcp_stub()`, `pcli_codex_mcp()`, `pcli_codex_forget()` of Task 7); `on_load(expr)` (P01), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, `gptr_provider(...)`, `gptr_adapter(...)`, the factory API `gptr$register(spec)` and `gptr$on(event, handler, matcher = NULL)` (P02); `setting_get(key, session = NULL, default = NULL)` (P01; the `budget` setting); the `request_params` patch chain and the `usage` event of P06 (04 §10.4: a `request_params` handler returns `list(params)` and may patch only the fields in the adapter's `capabilities$request_params`); `ctx$get(kind, name)`, `ctx$mode()`, `ctx$run`, `ctx$state()`, `ctx$session` (04 §10.6); in tests `peter()`, `gptr_wait()`, the session accessors (P06/P08), `local_scripted_ui()` (P11), `gptr_registry()`, `registry_get()` (P02), `proc_pool_cap(n)` (P04). The `mcp_message` round trip needs P18's `mcp.dispatch_local` (injected by P06 as `opts$mcp_dispatch`).
 - Produces: `builtin_cli(gptr)` (04 §7.20; here the `claude-cli` provider, the `cli-claude` adapter and two hooks; Tasks 9 and 10 complete it), `pcli_capabilities()`, `pcli_used(ctx)`, `pcli_hook_usage(event, ctx)`, `pcli_hook_params(event, ctx)` -> `list(params = list(cli_mode, cli_budget = list(turns, cost)))` for `cli-*` providers, else `NULL`; for a `cli-codex` provider it first calls Task 7's `pcli_codex_ensure(ctx$session)` (the session object `mcp.serve_ensure` needs). Test support: `local_cli_cleanup(s, .env = parent.frame())`, `wait_fake_log(fake, kind, n, runs, timeout = 20)`.
 
-An L1 adapter receives no mode and no budget in `opts` (04 §8.1; P06 passes `signal`, `state`, `memo`, `run`, `session`, `gate`, `tool_result`, `mcp_dispatch`), and IC-33 forbids it to call the session kernel. builtin:cli therefore declares the request parameters `cli_mode` and `cli_budget` in both adapters' `capabilities$request_params` and patches them in with a `request_params` hook: the mode is `ctx$mode()`, the remaining budget is the `budget` setting (default `{tokens: 2000000, cost: 5, turns: null}`, IC-66) minus the cost and request count of the current run, which a `usage` hook accumulates in the session's plugin state (`ctx$state()`, inside an environment so P06 never persists it as a `gptr.ext` entry). Under the default budget the claude argv therefore ends with `--max-budget-usd 5` (and no `--max-turns`, whose budget is `null`), and each top-level call starts its own claude child that resumes the CLI session (Task 5). P06's own budget check stays authoritative between requests. The same hook is where a codex request gets gptr's MCP server: `ctx$session` is the session object that P18's `mcp.serve_ensure` takes, so the hook calls `pcli_codex_ensure(ctx$session)` and the adapter, which holds only the session id, reads the result (Task 7). The end-to-end tests drive `gptr()` with the fake CLI through P05's `process_jsonl` transport.
+An L1 adapter receives no mode and no budget in `opts` (04 §8.1; P06 passes `signal`, `state`, `memo`, `run`, `session`, `gate`, `tool_result`, `mcp_dispatch`), and IC-33 forbids it to call the session kernel. builtin:cli therefore declares the request parameters `cli_mode` and `cli_budget` in both adapters' `capabilities$request_params` and patches them in with a `request_params` hook: the mode is `ctx$mode()`, the remaining budget is the `budget` setting (default `{tokens: 2000000, cost: 5, turns: null}`, IC-66) minus the cost and request count of the current run, which a `usage` hook accumulates in the session's plugin state (`ctx$state()`, inside an environment so P06 never persists it as a `gptr.ext` entry). Under the default budget the claude argv therefore ends with `--max-budget-usd 5` (and no `--max-turns`, whose budget is `null`), and each top-level call starts its own claude child that resumes the CLI session (Task 5). P06's own budget check stays authoritative between requests. The same hook is where a codex request gets gptr's MCP server: `ctx$session` is the session object that P18's `mcp.serve_ensure` takes, so the hook calls `pcli_codex_ensure(ctx$session)` and the adapter, which holds only the session id, reads the result (Task 7). The end-to-end tests drive `peter()` with the fake CLI through P05's `process_jsonl` transport.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4164,14 +4164,14 @@ Append to `tests/testthat/test-cli-claude.R`:
 ```r
 # ---- the claude route end to end (Task 8) -------------------------------------------------------
 
-test_that("a claude turn through gptr() streams the answer; the next call resumes the session", {
+test_that("a claude turn through peter() streams the answer; the next call resumes the session", {
   skip_on_cran()
   f = local_fake_cli("claude", "text")
-  s = gptr("Say hello", model = f$model, envir = new.env(), mode = "auto")
+  s = peter("Say hello", model = f$model, envir = new.env(), mode = "auto")
   local_cli_cleanup(s)
   expect_identical(s$text, "Hello from the fake claude CLI.")
   expect_identical(s$status, "idle")
-  s |> gptr("Again")
+  s |> peter("Again")
   expect_identical(s$text, "Hello from the fake claude CLI.")
   argv = fake_argv(f)
   expect_length(argv, 2L)
@@ -4184,10 +4184,10 @@ test_that("a claude turn through gptr() streams the answer; the next call resume
   expect_all_dead(fake_pids(f)[1L])
 })
 
-test_that("the claude argv of a gptr() call equals architecture 8.3", {
+test_that("the claude argv of a peter() call equals architecture 8.3", {
   skip_on_cran()
   f = local_fake_cli("claude", "text")
-  s = gptr("Say hello", model = f$model, envir = new.env())
+  s = peter("Say hello", model = f$model, envir = new.env())
   local_cli_cleanup(s)
   st = pcli_tracked(s$id)
   expect_identical(fake_argv(f)[[1]],
@@ -4202,7 +4202,7 @@ test_that("usage fields are populated and the rate-limit event becomes plan stat
   pcli_cache_clear()
   withr::defer(pcli_cache_clear())
   f = local_fake_cli("claude", "call2", models = "claude-haiku-4-5")
-  s = gptr("Compute", model = f$model, envir = new.env())
+  s = peter("Compute", model = f$model, envir = new.env())
   local_cli_cleanup(s)
   expect_identical(s$text, "24")
   msgs = s$messages
@@ -4222,7 +4222,7 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
   ui = local_scripted_ui(answers = list("y"))
   e = new.env()
   e$big_vector = c(2, 4, 6, 8, 40)
-  s = gptr("Compute twice the mean of big_vector", model = f$model, envir = e, mode = "manual")
+  s = peter("Compute twice the mean of big_vector", model = f$model, envir = e, mode = "manual")
   local_cli_cleanup(s)
   expect_identical(e$answer, 24)
   expect_identical(sum(ui$log$method == "permission"), 1L)
@@ -4234,7 +4234,7 @@ test_that("an mcp_message round trip evaluates R in the live session and is gate
 test_that("an init line with apiKeySource ANTHROPIC_API_KEY stops the turn: gptr_error_billing", {
   skip_on_cran()
   f = local_fake_cli("claude", "apikey")
-  err = expect_error(gptr("hi", model = f$model, envir = new.env()), class = "gptr_error_billing")
+  err = expect_error(peter("hi", model = f$model, envir = new.env()), class = "gptr_error_billing")
   expect_match(conditionMessage(err), "apiKeySource ANTHROPIC_API_KEY", fixed = TRUE)
   expect_all_dead(fake_pids(f))
 })
@@ -4249,7 +4249,7 @@ test_that("billing and enclosing-agent variables never reach the claude child", 
   seen$vars = character()
   seen$text = character()
   s = withCallingHandlers(
-    gptr("Say hello", model = f$model, envir = new.env()),
+    peter("Say hello", model = f$model, envir = new.env()),
     gptr_warning_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
       seen$text = c(seen$text, conditionMessage(w))
@@ -4265,13 +4265,13 @@ test_that("billing and enclosing-agent variables never reach the claude child", 
   expect_false(any(grepl("p20fake", seen$text, fixed = TRUE)))
 })
 
-test_that("a .cmd claude is refused with the install hint through gptr()", {
+test_that("a .cmd claude is refused with the install hint through peter()", {
   skip_on_cran()
   f = local_fake_cli("claude", "text")
   shim = file.path(withr::local_tempdir(), "claude.cmd")
   writeLines("@echo off", shim)
   withr::local_options(gptr.cli_path = list(claude = shim))
-  expect_error(gptr("hi", model = f$model, envir = new.env()), "install.ps1", fixed = TRUE)
+  expect_error(peter("hi", model = f$model, envir = new.env()), "install.ps1", fixed = TRUE)
 })
 
 test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)", {
@@ -4279,7 +4279,7 @@ test_that("three concurrent fake-CLI agents stream into one reactor (INFRA-19)",
   n = proc_pool_cap(3L)
   f = local_fake_cli("claude", "slow")
   runs = lapply(seq_len(n), function(i) {
-    gptr(paste("Count", i), model = f$model, envir = new.env(), .run = FALSE)
+    peter(paste("Count", i), model = f$model, envir = new.env(), .run = FALSE)
   })
   for (s in runs) local_cli_cleanup(s)
   t0 = Sys.time()
@@ -4304,7 +4304,7 @@ Expected: `[ FAIL 12 | WARN 0 | SKIP 0 | PASS 142 ]`; the registration test reco
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-claude")'`
 
-Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 106 ]`; every `gptr()` call ends with ``No adapter is registered for the api cli-claude.`` (seven tests error; the INFRA-19 test, whose sessions are started by `gptr_wait()`, records three failed expectations and passes its time bound).
+Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 106 ]`; every `peter()` call ends with ``No adapter is registered for the api cli-claude.`` (seven tests error; the INFRA-19 test, whose sessions are started by `gptr_wait()`, records three failed expectations and passes its time bound).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4482,7 +4482,7 @@ Append to `tests/testthat/test-cli-claude.R`:
 test_that("gptr_cancel() sends the interrupt control request, then kill_all()", {
   skip_on_cran()
   f = local_fake_cli("claude", "hang")
-  s = gptr("Wait for it", model = f$model, envir = new.env(), .run = FALSE)
+  s = peter("Wait for it", model = f$model, envir = new.env(), .run = FALSE)
   local_cli_cleanup(s)
   expect_identical(wait_fake_log(f, "turn", 1L, s), 1L)
   expect_identical(s$status, "running")
@@ -4498,7 +4498,7 @@ test_that("an abort of three running CLI agents leaves no process tree (INFRA-19
   n = proc_pool_cap(3L)
   f = local_fake_cli("claude", "hang")
   runs = lapply(seq_len(n), function(i) {
-    gptr(paste("Wait", i), model = f$model, envir = new.env(), .run = FALSE)
+    peter(paste("Wait", i), model = f$model, envir = new.env(), .run = FALSE)
   })
   for (s in runs) local_cli_cleanup(s)
   expect_identical(wait_fake_log(f, "turn", n, runs), n)
@@ -4615,7 +4615,7 @@ git commit -m "feat(cli): interrupt then kill a CLI child whose run ends mid-tur
 - Test: `tests/testthat/test-cli-common.R` (append), `tests/testthat/test-cli-codex.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 3, 7 and 8; `gptr_providers(check = FALSE)` (P05); in tests Task 7's `local_mcp_stub()` (a user-rank `service` record replaces P18's built-in `mcp.serve_ensure`, IC-34, so neither the request hook nor P19's `backend_cli_start()` starts a real server), `gptr_mcp_serve(stop = TRUE)` (P18), `subagent_backend(agent, model)`, `gptr_agent(...)` and teams through `gptr(agents = list(...))` (P19), `gptr_fake_provider(script, name = "fake", type = "chat")` with the `delay` modifier (P01, 04 §12.1), `model_resolve()` (P05), `path_norm()` (P01).
+- Consumes: Tasks 3, 7 and 8; `gptr_providers(check = FALSE)` (P05); in tests Task 7's `local_mcp_stub()` (a user-rank `service` record replaces P18's built-in `mcp.serve_ensure`, IC-34, so neither the request hook nor P19's `backend_cli_start()` starts a real server), `gptr_mcp_serve(stop = TRUE)` (P18), `subagent_backend(agent, model)`, `gptr_agent(...)` and teams through `peter(agents = list(...))` (P19), `gptr_fake_provider(script, name = "fake", type = "chat")` with the `delay` modifier (P01, 04 §12.1), `model_resolve()` (P05), `path_norm()` (P01).
 - Produces: the complete `builtin_cli(gptr)` of 04 §7.20 (providers `claude-cli` and `codex`, adapters `cli-claude` and `cli-codex`, four hooks). Test support: `skip_without_installed_gptr()`.
 
 The `cli` backend is P19's code; its tests are P20's (IC-36): the `auto` rule ("inline, except `cli` for CLI-only models", 03 §6.13) and a team in which a fake codex agent joins two inline agents and two workers on one reactor (INFRA-16, 03 §6.18 row 16: "the CLI leg (a fake CLI joining them) in `test-cli-codex.R` (P20)"). Each of the five agents takes about 3 s, so a sequential run takes at least 15 s; the test asks for under 13 s. Worker children load the installed gptr through callr, so that test runs under `R CMD check` (which installs the package) and skips under `devtools::test()` unless the version under test is installed; conventions §1 forbid installing from a plan step. The MCP round trip uses P18's real server (httpuv, later and openssl are Suggests; the test skips without them).
@@ -4699,7 +4699,7 @@ test_that("a codex turn: exact argv, a 50 KB prompt on stdin intact, the token o
   seen = new.env()
   seen$vars = character()
   s = withCallingHandlers(
-    gptr(big, model = f$model, envir = new.env(), mode = "edits"),
+    peter(big, model = f$model, envir = new.env(), mode = "edits"),
     gptr_warning_billing_env = function(w) {
       seen$vars = c(seen$vars, w$variables)
       invokeRestart("muffleWarning")
@@ -4731,8 +4731,8 @@ test_that("the next turn resumes the Codex thread with -c sandbox_mode=", {
   skip_on_cran()
   f = local_fake_cli("codex", "text")
   local_mcp_stub()
-  s = gptr("First", model = f$model, envir = new.env(), mode = "auto")
-  s |> gptr("Second")
+  s = peter("First", model = f$model, envir = new.env(), mode = "auto")
+  s |> peter("Second")
   argv = fake_argv(f)
   expect_length(argv, 2L)
   expect_identical(argv[[1]][match("--sandbox", argv[[1]]) + 1L], "workspace-write")
@@ -4753,7 +4753,7 @@ test_that("a fake codex evaluates R in the live session through gptr's MCP serve
   withr::defer(gptr_mcp_serve(stop = TRUE))
   f = local_fake_cli("codex", "mcp")
   e = new.env()
-  s = gptr("Compute the sum of 1 to 10 in R", model = f$model, envir = e, mode = "auto")
+  s = peter("Compute the sum of 1 to 10 in R", model = f$model, envir = e, mode = "auto")
   expect_identical(e$live_answer, 55L)
   expect_identical(fake_log(f, "mcp")[[1]]$status, 200L)
   expect_match(s$text, "55", fixed = TRUE)
@@ -4778,7 +4778,7 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   work1 = slow("fakec")
   work2 = slow("faked")
   t0 = Sys.time()
-  team = gptr("Review the analysis", envir = new.env(), agents = list(
+  team = peter("Review the analysis", envir = new.env(), agents = list(
     a1 = agent(model = inline1), a2 = agent(model = inline2),
     w1 = agent(model = work1, backend = "worker"), w2 = agent(model = work2, backend = "worker"),
     code = agent(model = "fakecodex/gpt-6-sol")))
@@ -4800,7 +4800,7 @@ Expected: `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 174 ]`; `registry_get("provider", 
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-codex")'`
 
-Expected (the current gptr not installed): `[ FAIL 3 | WARN 0 | SKIP 1 | PASS 72 ]`; the `gptr()` calls end with ``No adapter is registered for the api cli-codex.``; the auto-rule test already passes (the fake provider has `type = "cli"` since Task 3); the INFRA-16 test is skipped with "worker children need this version of gptr installed".
+Expected (the current gptr not installed): `[ FAIL 3 | WARN 0 | SKIP 1 | PASS 72 ]`; the `peter()` calls end with ``No adapter is registered for the api cli-codex.``; the auto-rule test already passes (the fake provider has `type = "cli"` since Task 3); the INFRA-16 test is skipped with "worker children need this version of gptr installed".
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4856,7 +4856,7 @@ git commit -m "feat(cli): codex route end to end and the CLI leg of INFRA-16"
 - Test: `tests/testthat/test-live-cli.R` (create)
 
 **Interfaces:**
-- Consumes: everything above; `pcli_find()`, `pcli_hook_shutdown()`; `gptr()`, `gptr_mcp_serve(stop = TRUE)` (P08, P18); the real `claude` and `codex` CLIs, signed in by the user.
+- Consumes: everything above; `pcli_find()`, `pcli_hook_shutdown()`; `peter()`, `gptr_mcp_serve(stop = TRUE)` (P08, P18); the real `claude` and `codex` CLIs, signed in by the user.
 - Produces: `test-live-cli.R` (03 §3.4: "gated; real `claude`/`codex`"); each test makes one small model call through the user's own plan.
 
 05 P20 acceptance 3: "the gated live test runs Codex in a non-git temporary directory and requires a call of the gptr `r` tool"; IC-65: "Live tests (`GPTR_LIVE_TESTS=true`) run Codex in a non-git temporary directory and require it to call the gptr MCP `r` tool". `tests/testthat/setup.R` (P01) moves `HOME` and `USERPROFILE` to a temporary directory for every test, where neither CLI finds its sign-in, so the live tests also need `GPTR_LIVE_HOME` (the real home directory) and point `HOME`/`USERPROFILE` back at it for the duration of each test; they never read a credential file themselves. `setup.R` also sets `GPTR_REPLAY=replay`, under which P08's `replay_guard()` refuses every provider that is not `offline = TRUE` (`gptr_error_not_recorded`), and runs non-interactively, where P08's `egress_check()` stops a provider without a recorded acknowledgement (`gptr_error_egress`): the helper sets `GPTR_REPLAY=live` for the test, and the calls pass `.opts = list(context = "none")` (P08's documented egress exemption; the prompts are self-contained). The helper also unsets the billing variables, so a developer's own API keys (setup.R keeps them when `GPTR_LIVE_TESTS=true`) neither reach the CLIs nor add a `billing_env` warning.
@@ -4902,7 +4902,7 @@ test_that("the claude plan route evaluates R in the live session", {
   skip_live_cli("claude")
   skip_if_not(ext_service_has("mcp.dispatch_local"), "P18's mcp.dispatch_local is not loaded")
   e = new.env()
-  s = gptr(paste("Use the gptr r tool to run exactly `live_answer = 6 * 7`, then reply with",
+  s = peter(paste("Use the gptr r tool to run exactly `live_answer = 6 * 7`, then reply with",
                  "the number only."),
            model = "claude-cli/claude-haiku-4-5", envir = e, mode = "auto",
            .opts = list(context = "none"))
@@ -4925,7 +4925,7 @@ test_that("Codex in a non-git temporary directory calls the gptr r tool", {
   withr::local_dir(dir)
   expect_false(dir.exists(file.path(dir, ".git")))
   e = new.env()
-  s = gptr(paste("Call the gptr MCP tool `r` with the code `live_answer = sum(1:10);",
+  s = peter(paste("Call the gptr MCP tool `r` with the code `live_answer = sum(1:10);",
                  "live_answer`, then reply with the result only."),
            model = "codex/default", envir = e, mode = "auto", .opts = list(context = "none"))
   expect_identical(e$live_answer, 55L)
@@ -4969,7 +4969,7 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 | # | Check (05 P20) | Proven by | Command and expected result |
 |---|---|---|---|
 | 1 | "`devtools::test(filter = "cli-")` is green; the live test skips unless `GPTR_LIVE_TESTS=true`" | Tasks 1-10 (`test-cli-common.R`, `test-cli-claude.R`, `test-cli-codex.R`); Task 11 (`test-live-cli.R`) | `Rscript --vanilla -e 'devtools::test(filter = "cli-")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 1 \| PASS 427 ]` (184 + 150 + 93; the INFRA-16 leg skips unless the version under test is installed, else `SKIP 0 \| PASS 433`; without httpuv, later or openssl the codex MCP round trip skips too: `SKIP 2 \| PASS 424`); `Rscript --vanilla -e 'devtools::test(filter = "live-cli")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 2 \| PASS 0 ]` |
-| 2a | "the claude argv equals §8.3 exactly" | Task 5 "the claude argv equals architecture 8.3 exactly, plus budget, opt-out, resume", "build() starts a child once, then reuses it for the next turn", "a budgeted child serves one run; an unbudgeted child lives across runs"; Task 8 "the claude argv of a gptr() call equals architecture 8.3" | `devtools::test(filter = "cli-claude")` green |
+| 2a | "the claude argv equals §8.3 exactly" | Task 5 "the claude argv equals architecture 8.3 exactly, plus budget, opt-out, resume", "build() starts a child once, then reuses it for the next turn", "a budgeted child serves one run; an unbudgeted child lives across runs"; Task 8 "the claude argv of a peter() call equals architecture 8.3" | `devtools::test(filter = "cli-claude")` green |
 | 2b | "an `mcp_message` round trip evaluates R in the live session and is gated once (no second prompt from `can_use_tool`)" | Task 6 "mcp_message requests go to opts$mcp_dispatch; tools/call through the tool FIFO", "can_use_tool allows gptr's own tools without a second gate; others ask the gate"; Task 8 "an mcp_message round trip evaluates R in the live session and is gated once" (one `permission` row in the scripted UI, `e$answer == 24`) | as 2a |
 | 2c | "a Ctrl-C sends the interrupt control request then `kill_all()`" | Task 4 "stopping a claude child mid-turn sends the interrupt, then kill_all()"; Task 9 "gptr_cancel() sends the interrupt control request, then kill_all()" and "agent_end stops a child whose turn is open; session_shutdown always" (Ctrl-C reaches the same `run_abort()` -> `agent_end` path through P14's interrupt policy) | as 2a; `devtools::test(filter = "cli-common")` green |
 | 2d | "three concurrent fake-CLI agents stream into the reactor and an abort leaves no process tree (INFRA-19)" | Task 8 "three concurrent fake-CLI agents stream into one reactor (INFRA-19)" (every fake's turn starts before any ends, so the children streamed at the same time also when R CMD check caps the pool at 2; under 8 s); Task 9 "an abort of three running CLI agents leaves no process tree (INFRA-19)" (`pid_alive()` false for every fake) | as 2a |
@@ -4980,7 +4980,7 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 | 3b | "the resume form uses `-c sandbox_mode=`; `edits` maps to `read-only`" | Task 7 (argv and "plan, manual and edits run read-only; auto workspace-write; Windows falls back"); Task 10 "the next turn resumes the Codex thread with -c sandbox_mode=" and the 50 KB test (`mode = "edits"` -> `--sandbox read-only`) | as 3a |
 | 3c | "`ANTHROPIC_API_KEY`, `ANTHROPIC_PROFILE`, `CLAUDECODE`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_SANDBOX` are absent from the children's environment and a warning names the billing ones" | Task 8 "billing and enclosing-agent variables never reach the claude child"; Task 10 "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env" (the fake logs the variable names it saw; `gptr_warning_billing_env$variables` names the billing ones, not `CLAUDECODE`/`CODEX_SANDBOX`) | as 2a and 3a |
 | 3d | "`gptr_providers()` spawns no process with `check = FALSE`" | Task 3 "status() never starts a process without check = TRUE"; Task 10 "gptr_providers() lists both plan routes without starting a process" | `devtools::test(filter = "cli-common")` green |
-| 3e | "a `.cmd` fake claude is refused with the install hint" | Task 1 "a .cmd claude is refused with the install hint"; Task 8 "a .cmd claude is refused with the install hint through gptr()" | as 3d and 2a |
+| 3e | "a `.cmd` fake claude is refused with the install hint" | Task 1 "a .cmd claude is refused with the install hint"; Task 8 "a .cmd claude is refused with the install hint through peter()" | as 3d and 2a |
 | 3f | "the gated live test runs Codex in a non-git temporary directory and requires a call of the gptr `r` tool" | Task 11 "Codex in a non-git temporary directory calls the gptr r tool" (and the claude counterpart; `GPTR_REPLAY=live` and `.opts = list(context = "none")` so P08's replay guard and egress check let the real CLIs run) | `GPTR_LIVE_TESTS=true GPTR_LIVE_HOME="$HOME" Rscript --vanilla -e 'devtools::test(filter = "live-cli")'` -> `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 7 ]` (maintainer only; spends plan quota) |
 | 4 | "**M4 exit** (once P18-P21 are complete): NS-6 (two inline fakes, one worker and fake codex on one reactor), NS-9 (`gptr_config(model = sonnet, mode = manual)` writing project defaults after `gptr_init()`, and `gptr_providers(check = TRUE)` with the fake CLIs) and NS-10 MCP pass; `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean" | Milestone gate steps 1-4 below, run at the end of this plan (they need P18-P20 only); step 5 (the R CMD check) is P21's Plan acceptance command 5, run once P18-P21 are complete | the commands of Milestone gate steps 1 and 3, with the results stated there |
 | R1 | Review amendment: "claude argv with `--permission-mode default`, `--allowedTools mcp__gptr__*` and, under a budget, `--max-turns`/`--max-budget-usd`" | Task 5 argv test; Task 8 argv test (default budget -> `--max-budget-usd 5`); Task 8 "request_params gives CLI routes the mode and the remaining budget" | as 2a, 3d |
@@ -4996,7 +4996,7 @@ Run from the repository root after Task 11, with P01-P19 in place. Every check o
 | R11 | "per-session MCP tokens (IC-58)" | Task 7 "the MCP record of a session reaches only its own codex exec", "a tokenless MCP server leaves the exec on files only" and the build test (`GPTR_MCP_TOKEN` only in `start$env`); Task 8 "request_params ensures gptr's MCP server for a codex session, not for claude" (`mcp.serve_ensure(ctx$session)` before every codex request); Task 10 50 KB test (the token's name in the child's environment, not in argv) and the live-server round trip | as 3a |
 | R12 | "fake CLIs run through `rscript_path()` with `offline = TRUE` records (IC-60, IC-45)" | Task 2 (`pcli_fake_command()`), Task 3 "the plan routes list `default` and full ids; fake CLI records are offline" | as 3d |
 | R13 | "the CLI leg of INFRA-16 (IC-36)" | as 2f | as 2f |
-| - | 05 Scope: "one-time notice", "cached `status()` data", "session continuity", "usage as plan estimate", "resume when supported", "overhead notice" | Task 2 notice test; Task 3 status tests; Task 4 "a CLI sees only the turns after the last one its own provider answered"; Task 5 "a restarted child resumes the CLI session; a fresh one gets the history" and "a budgeted child serves one run; an unbudgeted child lives across runs"; Task 8 "a claude turn through gptr() streams the answer; the next call resumes the session"; Task 6 call-2 usage and "a reused child's turn costs the increase of the CLI's total_cost_usd"; Task 7 build test (`resume` only when the probe lists it) and the notice text (19-38K tokens) | as above |
+| - | 05 Scope: "one-time notice", "cached `status()` data", "session continuity", "usage as plan estimate", "resume when supported", "overhead notice" | Task 2 notice test; Task 3 status tests; Task 4 "a CLI sees only the turns after the last one its own provider answered"; Task 5 "a restarted child resumes the CLI session; a fresh one gets the history" and "a budgeted child serves one run; an unbudgeted child lives across runs"; Task 8 "a claude turn through peter() streams the answer; the next call resumes the session"; Task 6 call-2 usage and "a reused child's turn costs the increase of the CLI's total_cost_usd"; Task 7 build test (`resume` only when the probe lists it) and the notice text (19-38K tokens) | as above |
 
 ## Milestone gate (M4 exit, 05 P20 acceptance 4)
 
@@ -5087,7 +5087,7 @@ The plan contains no "TBD", "TODO", "implement later", "similar to Task N" or st
 - Integration through P05's `provider_stream()` and P04's reactor with the fake CLI (scratch script, not part of the plan): claude, two requests of one run on one child, then a request of a new run under `cli_budget = list(cost = 5)`: a second child whose argv ends `--max-budget-usd 5 --resume 11111111-1111-4111-8111-111111111111`, the first child dead (stdin closed, 0.3 s), and the resumed child receiving only the new input; `pcli_stop_child()` on a hanging turn: the fake logged and acknowledged the interrupt and was gone after 0.06 s (stdin closed); codex with the MCP record that `pcli_codex_ensure()` keeps for the session: the argv carries the `mcp_servers.gptr.url` override, `GPTR_MCP_TOKEN` is in the child's environment and not in its argv, and an `error` event (`Reconnecting... 1/5`) followed by `turn.completed` ends the exec with `done` and the text `Recovered.`. The original writer's integration run (50 KB prompt with a non-ASCII character under the C locale received intact, the resume argv, `status(check = TRUE)` `ready` for both fakes) was not affected by the review's changes.
 - `claude-call2.ndjson` is identical to the 07 §3.14 capture (`diff`) except that the R code the model wrote inside two JSON strings uses `=` instead of `<-` (conventions §4: "every code block in the plans"); `codex-call1.jsonl` is identical to the 08 §5.2 capture.
 - Probes run: the fake receives empty-string arguments intact (`--tools ""`, `--setting-sources ""`); an Rscript child blocked in `readLines()` on stdin survives SIGINT, which is why `pcli_stop_child()` closes stdin before `kill_all()`.
-- Not executed: `gptr()` end to end (needs P06-P19), worker children, P18's real MCP server, Windows, the live CLIs.
+- Not executed: `peter()` end to end (needs P06-P19), worker children, P18's real MCP server, Windows, the live CLIs.
 
 ## Plan review log
 

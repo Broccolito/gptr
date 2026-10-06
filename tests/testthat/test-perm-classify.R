@@ -2065,7 +2065,7 @@ test_that("a bare SQL literal naming a link reads its target's class (D-061)", {
   expect_identical(flags_level(risk_sql("SELECT 'v1.0' AS x")), 2L)
 })
 
-# Added (D-061, review round 10): gptr$py runs in R's process, so Python setting or unsetting
+# Added (D-061, review round 10): peter$py runs in R's process, so Python setting or unsetting
 # GPTR_*, a provider key or R's profile variables is Sys.setenv() of them: level 4 control.
 test_that("Python writes to gptr's and R's environment variables are control (D-061)", {
   root = local_project()

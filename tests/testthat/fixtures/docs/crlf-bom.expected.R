@@ -1,5 +1,5 @@
 ﻿x = 1
-gptr("hi été")
+peter("hi été")
 # >>> gptr:abc123 model=m
 z = 3
 # <<< gptr:abc123

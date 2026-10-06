@@ -8,7 +8,7 @@ x = 1
 
 ````{r ask}
 cat("```not a fence end```\n")
-gptr("count letters in this prompt")
+peter("count letters in this prompt")
 ````
 
 ````{r gptr-3fdfa0}

@@ -1,5 +1,5 @@
 import re, os, glob, json, sys
-plan_dir = "/Users/wanjun/Desktop/gptr/dev/plan"
+plan_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../plan")
 out = "blocks"; os.makedirs(out, exist_ok=True)
 for f in glob.glob(out + "/*"): os.remove(f)
 plans = sorted(glob.glob(plan_dir + "/P[0-2][0-9]-*.md"))

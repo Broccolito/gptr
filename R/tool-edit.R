@@ -1,4 +1,4 @@
-# The `edit` tool and `gptr$edit()` (P10; research 11 section 5.5, research 01 sections 2.5, 3.4):
+# The `edit` tool and `peter$edit()` (P10; research 11 section 5.5, research 01 sections 2.5, 3.4):
 # Pi's all-or-nothing multi-edit, the fuzzy fallback that rewrites only touched lines, other bytes
 # kept exactly, `replace_all`, and Codex `*** Begin Patch` envelopes. Occurrences are counted in
 # fuzzy space as in Pi; patch paths are compared by the file system, never by spelling.
@@ -387,7 +387,7 @@ edit_envelope_of = function(edits) {
   NULL
 }
 
-#' The input of a nested `gptr$edit()` call for the gate: a patch envelope travels as `patch`, with
+#' The input of a nested `peter$edit()` call for the gate: a patch envelope travels as `patch`, with
 #' an empty `edits` array, so the input validates against the edit schema
 #' @noRd
 edit_nested_input = function(input) {
@@ -661,7 +661,7 @@ edit_from_patch = function(envelope) {
                       reasons = reasons, encoding = "UTF-8", files = pa$files))
 }
 
-#' The value of `gptr$edit()` (contract section 5.10)
+#' The value of `peter$edit()` (contract section 5.10)
 #' @noRd
 new_gptr_patch = function(path, message, diff, n_edits, fuzzy) {
   structure(list(path = path, message = message, diff = as.character(diff),

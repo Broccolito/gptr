@@ -29,7 +29,7 @@ local_once_reset = function(keys, kind = "message", .env = parent.frame()) {
 }
 
 # A gptr_call record (P08's call_new()) for the classifier route: every named argument in `...`
-# becomes a context object read by name from a fresh environment, as gptr() records symbols
+# becomes a context object read by name from a fresh environment, as peter() records symbols
 s1_test_call = function(prompt, ..., model, args = list(), session = NULL) {
   objs = list(...)
   env = new.env(parent = globalenv())

@@ -23,7 +23,7 @@ was killed are applied first (never over your edits).
 }
 \examples{
 f = tempfile(fileext = ".R")
-writeLines(c('gptr("add one")',
+writeLines(c('peter("add one")',
              "# >>> gptr:7f3a21 model=fake/fake-1 date=2026-09-29 prompt=3b1c9a0e77d2",
              "x = 1 + 1", "# <<< gptr:7f3a21"), f)
 gptr_blocks(f)

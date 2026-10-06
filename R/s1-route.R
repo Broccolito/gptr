@@ -371,7 +371,7 @@ s1_zip = function(parts) {
   if (!length(parts)) {
     gptr_abort(c("A System 1 call needs an input to judge.",
                  paste0("Pass it after the question, for example ",
-                        "gptr(\"Is it urgent?\", ticket, model = jev).")),
+                        "peter(\"Is it urgent?\", ticket, model = jev).")),
                "invalid_argument", arg = "...", expected = "an input to judge")
   }
   ns = vapply(parts, function(p) length(p$states), 1L)

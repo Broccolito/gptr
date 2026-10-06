@@ -48,9 +48,9 @@ eval_tail_lines = function(res) {
   if (any(stored)) {
     k = vapply(plots[stored], function(e) as.integer(e$index), 1L)
     out = c(out, if (length(k) == 1L) {
-      sprintf("[plot %d not attached: gptr$plot(%d)]", k, k)
+      sprintf("[plot %d not attached: peter$plot(%d)]", k, k)
     } else {
-      sprintf("[plots %d-%d not attached: gptr$plot(k)]", min(k), max(k))
+      sprintf("[plots %d-%d not attached: peter$plot(k)]", min(k), max(k))
     })
   }
   lost = vapply(plots, function(e) is.null(e$path), NA)

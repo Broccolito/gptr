@@ -36,7 +36,7 @@ test_that("quoted header values are decoded without the R parser, also in a C lo
 })
 
 test_that("blocks are found with ids, ranges, indentation and headers; bad markers flagged", {
-  lines = c("x = 1", "gptr(\"a\")", "# >>> gptr:7f3a21 model=m date=d prompt=p", "y = 2",
+  lines = c("x = 1", "peter(\"a\")", "# >>> gptr:7f3a21 model=m date=d prompt=p", "y = 2",
             "# <<< gptr:7f3a21", "  # >>> gptr:0b1c2d model=m", "  z = 3", "  # <<< gptr:0b1c2d")
   b = doc_find_blocks(lines)
   expect_identical(b$id, c("7f3a21", "0b1c2d"))
@@ -97,14 +97,14 @@ test_that("rendering indents body lines, keeps empty lines and splices in place"
 })
 
 test_that("the scanner finds top-level and nested calls, prompts and pipeline ordinals", {
-  lines = c("x = 1:3", "gptr(\"count the letters\")", "res = gptr(", "  \"a multi-line",
-            "   prompt\"", ")", "x |> gptr(\"piped prompt\")",
-            "gptr(\"step one\") |> gptr(\"step two\")",
-            "f = function() gptr(\"inside a function\")", "for (i in 1:2) gptr(\"in a loop\")",
-            "if (TRUE) {", "  gptr(\"inside if braces\")", "}", "g = \\(x) gptr(\"lambda\")",
-            "gptr::gptr(\"ns\")", "gptr(model = \"m\", \"the prompt\")",
-            "gptr(prompt = \"named\", x)", "gptr(paste(\"dyn\", x))", "while (FALSE) gptr(\"w\")",
-            "repeat {", "  gptr(\"r\")", "  break", "}")
+  lines = c("x = 1:3", "peter(\"count the letters\")", "res = peter(", "  \"a multi-line",
+            "   prompt\"", ")", "x |> peter(\"piped prompt\")",
+            "peter(\"step one\") |> peter(\"step two\")",
+            "f = function() peter(\"inside a function\")", "for (i in 1:2) peter(\"in a loop\")",
+            "if (TRUE) {", "  peter(\"inside if braces\")", "}", "g = \\(x) peter(\"lambda\")",
+            "gptr::peter(\"ns\")", "peter(model = \"m\", \"the prompt\")",
+            "peter(prompt = \"named\", x)", "peter(paste(\"dyn\", x))",
+            "while (FALSE) peter(\"w\")", "repeat {", "  peter(\"r\")", "  break", "}")
   calls = doc_scan_calls(lines)
   top = calls$prompt[!calls$nested]
   expect_identical(top, c("count the letters", "a multi-line\n   prompt", "piped prompt",
@@ -116,28 +116,28 @@ test_that("the scanner finds top-level and nested calls, prompts and pipeline or
   expect_identical(unique(pipe$stmt1), 8L)
   ml = calls[calls$prompt %in% "a multi-line\n   prompt", ]
   expect_identical(c(ml$stmt1, ml$stmt2), c(3L, 6L))
-  bad = doc_scan_calls(c("gptr(\"x\"", ""))
+  bad = doc_scan_calls(c("peter(\"x\"", ""))
   expect_identical(nrow(bad), 0L)
   expect_true(nzchar(attr(bad, "parse_error")))
   expect_identical(nrow(doc_scan_calls(character())), 0L)
 })
 
 test_that("calls know their block, block-nested ordinal, prompt hash and identity", {
-  lines = c("gptr(\"outer\")", "# >>> gptr:7f3a21 model=m prompt=p", "sub = gptr(\"inner\")",
-            "for (i in 1) gptr(\"deep\")", "sub2 = gptr(\"inner two\")", "# <<< gptr:7f3a21",
-            "gptr(paste(\"dyn\", x))")
+  lines = c("peter(\"outer\")", "# >>> gptr:7f3a21 model=m prompt=p", "sub = peter(\"inner\")",
+            "for (i in 1) peter(\"deep\")", "sub2 = peter(\"inner two\")", "# <<< gptr:7f3a21",
+            "peter(paste(\"dyn\", x))")
   calls = doc_calls(lines)
   expect_identical(calls$block, c(NA, "7f3a21", "7f3a21", "7f3a21", NA))
   expect_identical(calls$n_in_block, c(NA, 1L, NA, 2L, NA))
   expect_identical(calls$ph[1], prompt_hash("outer"))
   expect_match(calls$th[1], "^[0-9a-f]{12}$")
   expect_identical(doc_calls_have(calls, prompt_hash("inner"), NULL), 2L)
-  expect_identical(doc_calls_have(calls, NA_character_, quote(gptr(paste("dyn", x)))), 5L)
+  expect_identical(doc_calls_have(calls, NA_character_, quote(peter(paste("dyn", x)))), 5L)
   expect_identical(doc_calls_have(calls[0, ], prompt_hash("outer"), NULL), integer())
 })
 
 test_that("ownership picks the block by prompt, else by call ordinal (stale), else inserts", {
-  lines = c("gptr(\"step one\") |> gptr(\"step two\")",
+  lines = c("peter(\"step one\") |> peter(\"step two\")",
             "# >>> gptr:aaaaaa model=m prompt=52831d1d544e", "a = 1", "# <<< gptr:aaaaaa", "",
             "# >>> gptr:bbbbbb model=m prompt=0000000000ff call=2", "b = 2", "# <<< gptr:bbbbbb",
             "z = 3")
@@ -149,7 +149,7 @@ test_that("ownership picks the block by prompt, else by call ordinal (stale), el
   expect_identical(two$block$id, "bbbbbb")
   expect_true(two$stale)
   expect_identical(two$insert_after, 8L)
-  plain = c("gptr(\"x\")", "y = 1")
+  plain = c("peter(\"x\")", "y = 1")
   none = doc_owned_block(plain, doc_calls(plain)[1, ], prompt_hash("x"))
   expect_null(none$block)
   expect_identical(none$insert_after, 1L)
@@ -157,7 +157,7 @@ test_that("ownership picks the block by prompt, else by call ordinal (stale), el
 
 test_that("a prompt repeated in one pipeline never takes another call's block", {
   ph = prompt_hash("improve it")
-  lines = c("gptr(\"draft\") |> gptr(\"improve it\") |> gptr(\"improve it\")",
+  lines = c("peter(\"draft\") |> peter(\"improve it\") |> peter(\"improve it\")",
             paste0("# >>> gptr:aaaaaa model=m prompt=", prompt_hash("draft")), "a = 1",
             "# <<< gptr:aaaaaa",
             paste0("# >>> gptr:bbbbbb model=m prompt=", ph, " call=2"), "b = 2",
@@ -175,7 +175,7 @@ test_that("a prompt repeated in one pipeline never takes another call's block", 
 })
 
 test_that("anchors re-locate a call by content after lines move", {
-  lines = c("x = 1", "gptr(\"same\")", "gptr(\"same\")", "gptr(\"other\")")
+  lines = c("x = 1", "peter(\"same\")", "peter(\"same\")", "peter(\"other\")")
   calls = doc_calls(lines)
   a = doc_anchor_of(calls, calls[2, ])
   expect_identical(a$j, 2L)
@@ -195,9 +195,9 @@ test_that("anchors re-locate a call by content after lines move", {
 test_that("doc_text_locate() reports the owned block's status and block-nested calls", {
   ph = prompt_hash("count rows")
   body = "n = nrow(mtcars)"
-  lines = c("  gptr(\"count rows\")",
+  lines = c("  peter(\"count rows\")",
             paste0("  # >>> gptr:abc123 model=m prompt=", ph, " sha=", doc_body_sha(body)),
-            paste0("  ", body), "  sub = gptr(\"inner\")", "  # <<< gptr:abc123")
+            paste0("  ", body), "  sub = peter(\"inner\")", "  # <<< gptr:abc123")
   calls = doc_calls(lines)
   site = list(anchor = doc_anchor_of(calls, calls[1, ]), prompt_hash = ph, args_hash = NULL)
   loc = doc_text_locate(lines, site)
@@ -209,7 +209,7 @@ test_that("doc_text_locate() reports the owned block's status and block-nested c
   expect_identical(loc2$in_block, "abc123")
   expect_identical(loc2$ordinal, 1L)
   expect_false(loc2$top_level)
-  looped = c(lines[1:4], "  for (i in 1:2) gptr(\"deep\")", lines[5])
+  looped = c(lines[1:4], "  for (i in 1:2) peter(\"deep\")", lines[5])
   calls3 = doc_calls(looped)
   deep = list(anchor = doc_anchor_of(calls3, calls3[3, ]), prompt_hash = prompt_hash("deep"))
   loc3 = doc_text_locate(looped, deep)
@@ -218,18 +218,18 @@ test_that("doc_text_locate() reports the owned block's status and block-nested c
 })
 
 test_that("doc_stmt_by_expr() finds the k-th identical top-level expression", {
-  lines = c("x = 1", "gptr(\"a\")", "y = 2", "gptr(\"a\")")
-  expect_identical(doc_stmt_by_expr(lines, quote(gptr("a")), 2L), c(4L, 4L))
-  expect_null(doc_stmt_by_expr(lines, quote(gptr("b"))))
+  lines = c("x = 1", "peter(\"a\")", "y = 2", "peter(\"a\")")
+  expect_identical(doc_stmt_by_expr(lines, quote(peter("a")), 2L), c(4L, 4L))
+  expect_null(doc_stmt_by_expr(lines, quote(peter("b"))))
   expect_null(doc_stmt_by_expr("x = (", quote(x)))
 })
 
 test_that("non-ASCII prompts and call texts keep their bytes in a C locale (IC-62)", {
   withr::local_locale(c(LC_CTYPE = "C"))
   p = "caf\u00e9 \u00e1"
-  call_text = paste0("gptr(", doc_str_literal(p), ")")
-  lines = c("x = 1", paste0("y = ", call_text), "gptr(\"\\u00e9t\\u00e9\")",
-            paste0("gptr(paste(", doc_str_literal("na\u00efve"), ", x))"))
+  call_text = paste0("peter(", doc_str_literal(p), ")")
+  lines = c("x = 1", paste0("y = ", call_text), "peter(\"\\u00e9t\\u00e9\")",
+            paste0("peter(paste(", doc_str_literal("na\u00efve"), ", x))"))
   calls = doc_calls(lines)
   expect_identical(calls$prompt, c(p, "\u00e9t\u00e9", NA))
   expect_identical(calls$ph[1:2], c(prompt_hash(p), prompt_hash("\u00e9t\u00e9")))
@@ -246,7 +246,7 @@ test_that("the scanner remembers the 16 most recently used long texts and shifts
   old = the$doc_pending
   withr::defer(assign("doc_pending", old, envir = the))
   the$doc_pending = NULL
-  long = function(i) c(paste0("gptr(\"p", i, "\")"), rep("x = 1", 19L))
+  long = function(i) c(paste0("peter(\"p", i, "\")"), rep("x = 1", 19L))
   first = doc_scan_calls(long(1L))
   for (i in 2:17) doc_scan_calls(long(i))
   st = doc_state()
@@ -261,7 +261,7 @@ test_that("the scanner remembers the 16 most recently used long texts and shifts
 
 test_that("ownership matches header keys exactly and never a missing prompt hash", {
   expect_true(doc_run_owner(list(list(model = "m")), NA_character_)$stale)
-  lines = c("gptr(\"a\") |> gptr(\"b\")",
+  lines = c("peter(\"a\") |> peter(\"b\")",
             paste0("# >>> gptr:aaaaaa model=m prompt=", prompt_hash("a"), " callback=2"), "a = 1",
             "# <<< gptr:aaaaaa", "z = 3")
   calls = doc_calls(lines)
@@ -272,11 +272,11 @@ test_that("ownership matches header keys exactly and never a missing prompt hash
 
 test_that("the scanner keeps parse data where the caller turned it off (sys.source())", {
   withr::local_options(keep.parse.data = FALSE)
-  expect_identical(doc_scan_calls(c("x = 1", "gptr(\"kept\")"))$prompt, "kept")
+  expect_identical(doc_scan_calls(c("x = 1", "peter(\"kept\")"))$prompt, "kept")
   expect_false(getOption("keep.parse.data"))
   withr::local_options(keep.parse.data = TRUE)
   f = withr::local_tempfile(fileext = ".R")
-  writeLines("res = doc_calls(c(\"x = 1\", \"gptr('sourced')\"))$prompt", f)
+  writeLines("res = doc_calls(c(\"x = 1\", \"peter('sourced')\"))$prompt", f)
   env = new.env(parent = environment())
   sys.source(f, envir = env)
   expect_identical(env$res, "sourced")
@@ -284,13 +284,13 @@ test_that("the scanner keeps parse data where the caller turned it off (sys.sour
 })
 
 test_that("a computed prompt = is the prompt, never a later unnamed literal (contract 6.1.1)", {
-  lines = c("gptr(prompt = p, \"context text\")", "gptr(\"x\", prompt = NULL)",
-            "gptr(prompt = , q, \"y\")", "gptr(`prompt` = p, \"z\")",
-            "gptr(\"v\", \"prompt\" = \"w\")", "gptr(\"u\", prompt = \"t\")")
+  lines = c("peter(prompt = p, \"context text\")", "peter(\"x\", prompt = NULL)",
+            "peter(prompt = , q, \"y\")", "peter(`prompt` = p, \"z\")",
+            "peter(\"v\", \"prompt\" = \"w\")", "peter(\"u\", prompt = \"t\")")
   calls = doc_calls(lines)
   expect_identical(calls$prompt, c(NA, "x", "y", NA, "w", "t"))
   # the runtime template is the value of p, or the unnamed literal when p is NULL
-  call0 = quote(gptr(prompt = p, "context text"))
+  call0 = quote(peter(prompt = p, "context text"))
   expect_identical(doc_calls_have(calls, prompt_hash("the value of p"), call0), 1L)
   expect_identical(doc_calls_have(calls, prompt_hash("context text"), call0), 1L)
 })
@@ -298,11 +298,11 @@ test_that("a computed prompt = is the prompt, never a later unnamed literal (con
 test_that("call texts and long prompt literals are cut right in UTF-8 and C locales (IC-62)", {
   e = "\u00e9"
   long = strrep(paste0("d", e, "j\u00e0 vu "), 150L)
-  lines = c(paste0("gptr(\"r", e, "sum", e, "\") |> gptr(paste(\"next\", x))"),
-            paste0("y = \"", e, "\"; gptr(paste(\"a\", y))"),
-            paste0("z = \"\u00f6\"; gptr(", doc_str_literal(long), ")"))
-  texts = c(paste0("gptr(\"r", e, "sum", e, "\")"), "gptr(paste(\"next\", x))",
-            "gptr(paste(\"a\", y))", paste0("gptr(", doc_str_literal(long), ")"))
+  lines = c(paste0("peter(\"r", e, "sum", e, "\") |> peter(paste(\"next\", x))"),
+            paste0("y = \"", e, "\"; peter(paste(\"a\", y))"),
+            paste0("z = \"\u00f6\"; peter(", doc_str_literal(long), ")"))
+  texts = c(paste0("peter(\"r", e, "sum", e, "\")"), "peter(paste(\"next\", x))",
+            "peter(paste(\"a\", y))", paste0("peter(", doc_str_literal(long), ")"))
   check = function(loc) {
     withr::local_locale(c(LC_CTYPE = loc))
     calls = doc_calls(lines)
@@ -315,7 +315,7 @@ test_that("call texts and long prompt literals are cut right in UTF-8 and C loca
     writeBin(charToRaw(paste0(paste(lines, collapse = "\n"), "\n")), f)
     expect_identical(doc_calls_have(calls, NA_character_, parse(f, keep.source = FALSE)[[1L]]),
                      2L, info = loc)
-    expect_identical(doc_calls_have(calls, NA_character_, quote(gptr(paste("a", y)))), 3L,
+    expect_identical(doc_calls_have(calls, NA_character_, quote(peter(paste("a", y)))), 3L,
                      info = loc)
   }
   check("C")
@@ -332,20 +332,21 @@ test_that("call texts and long prompt literals are cut right in UTF-8 and C loca
 
 test_that("a piped call is found as R calls it; a literal left side is the prompt (6.1.1)", {
   lines = c("x = 1; y = \"a\"; q = \"count rows\"; d = data.frame(a = 1)",
-            "x |> gptr(paste(\"dyn\", y))", "d |> gptr(q)", "\"Summarise mtcars\" |> gptr()",
-            "x |> gptr(q) |> gptr(paste(\"next\", y))", "\"ctx\" |> gptr(\"p\", ctx = _)",
-            "\"lit\" |> gptr(prompt = _)")
+            "x |> peter(paste(\"dyn\", y))", "d |> peter(q)", "\"Summarise mtcars\" |> peter()",
+            "x |> peter(q) |> peter(paste(\"next\", y))", "\"ctx\" |> peter(\"p\", ctx = _)",
+            "\"lit\" |> peter(prompt = _)")
   calls = doc_calls(lines)
   expect_identical(calls$prompt, c(NA, NA, "Summarise mtcars", NA, NA, "p", "lit"))
   # the left side is the first argument, so a literal there wins over a later unnamed literal
-  expect_identical(doc_calls(c("\"S\" |> gptr(\"more\")", "x |> gptr(\"lit after\")"))$prompt,
+  expect_identical(doc_calls(c("\"S\" |> peter(\"more\")", "x |> peter(\"lit after\")"))$prompt,
                    c("S", "lit after"))
   # the call's own text is kept; its identity is the pipe R rewrites into the call
-  expect_identical(calls$text[c(1L, 5L)], c("gptr(paste(\"dyn\", y))", "gptr(paste(\"next\", y))"))
+  expect_identical(calls$text[c(1L, 5L)],
+                   c("peter(paste(\"dyn\", y))", "peter(paste(\"next\", y))"))
   expect_identical(calls$ident[c(1L, 4L, 5L)],
-                   c("x |> gptr(paste(\"dyn\", y))", "x |> gptr(q)",
-                     "x |> gptr(q) |> gptr(paste(\"next\", y))"))
-  expect_identical(calls$th[4L], substr(hash_sha256("x |> gptr(q)"), 1L, 12L))
+                   c("x |> peter(paste(\"dyn\", y))", "x |> peter(q)",
+                     "x |> peter(q) |> peter(paste(\"next\", y))"))
+  expect_identical(calls$th[4L], substr(hash_sha256("x |> peter(q)"), 1L, 12L))
   f = withr::local_tempfile(fileext = ".R")
   writeLines(lines, f)
   # the runtime prompts in the order the calls run (a chain runs its outer call first)
@@ -354,7 +355,7 @@ test_that("a piped call is found as R calls it; a literal left side is the promp
   for (keep in c(FALSE, TRUE)) {
     seen = list()
     env = new.env(parent = environment())
-    env$gptr = function(...) {
+    env$peter = function(...) {
       cl = sys.call()
       attributes(cl) = NULL
       seen[[length(seen) + 1L]] <<- cl
@@ -372,15 +373,15 @@ test_that("a piped call is found as R calls it; a literal left side is the promp
 })
 
 test_that("calls holding function literals or braces are found under keep.source = TRUE", {
-  lines = c("gptr(paste(\"a\", sapply(1:2, function(i) i)))",
-            "gptr(paste(\"b\", sapply(1:2, \\(i) i), m[, 1]))",
-            "x |> gptr(paste(\"c\", local({ 1 })))")
+  lines = c("peter(paste(\"a\", sapply(1:2, function(i) i)))",
+            "peter(paste(\"b\", sapply(1:2, \\(i) i), m[, 1]))",
+            "x |> peter(paste(\"c\", local({ 1 })))")
   calls = doc_calls(lines)
   f = withr::local_tempfile(fileext = ".R")
   writeLines(lines, f)
   seen = list()
   env = new.env(parent = environment())
-  env$gptr = function(...) {
+  env$peter = function(...) {
     cl = sys.call()
     attributes(cl) = NULL
     seen[[length(seen) + 1L]] <<- cl
@@ -399,28 +400,28 @@ test_that("calls holding function literals or braces are found under keep.source
 })
 
 test_that("a magrittr-piped call is found as magrittr calls it (6.1.1, research 12 D3)", {
-  lines = c("x %>% gptr(q1)", "\"S1\" %>% gptr()", "\"S2\" %>% gptr(\"more\")",
-            "x %>% gptr(paste(\"a\", q2)) %>% gptr(q3, .)", "\"S3\" %T>% gptr(ctx = .)",
-            "\"S4\" %>% gptr(prompt = .)", "\"S5\" %!>% gptr(q4)", "x %$% gptr(q5)",
-            "x %>%", "  gptr( # the question", "    q6", "  )", "\"S6\" %>% gptr( # none", ")",
-            "z %<>% gptr(q7)", "\"S7\" %>% gptr(., q8)", "\"S8\" %>% gptr(q9, .)")
+  lines = c("x %>% peter(q1)", "\"S1\" %>% peter()", "\"S2\" %>% peter(\"more\")",
+            "x %>% peter(paste(\"a\", q2)) %>% peter(q3, .)", "\"S3\" %T>% peter(ctx = .)",
+            "\"S4\" %>% peter(prompt = .)", "\"S5\" %!>% peter(q4)", "x %$% peter(q5)",
+            "x %>%", "  peter( # the question", "    q6", "  )", "\"S6\" %>% peter( # none", ")",
+            "z %<>% peter(q7)", "\"S7\" %>% peter(., q8)", "\"S8\" %>% peter(q9, .)")
   calls = doc_calls(lines)
   # `.` holds the left side: a literal there is the prompt when no unnamed literal is given and
   # `.` is the first unnamed argument (6.1.1 step 2, the first length-1 character value)
   expect_identical(calls$prompt,
                    c(NA, "S1", "more", NA, NA, NA, "S4", "S5", NA, NA, "S6", NA, "S7", NA))
-  expect_identical(calls$text[c(1L, 2L, 5L)], c("gptr(q1)", "gptr()", "gptr(q3, .)"))
+  expect_identical(calls$text[c(1L, 2L, 5L)], c("peter(q1)", "peter()", "peter(q3, .)"))
   expect_identical(calls$ident[1:9],
-                   c("gptr(., q1)", "gptr(.)", "gptr(., \"more\")", "gptr(., paste(\"a\", q2))",
-                     "gptr(q3, .)", "gptr(ctx = .)", "gptr(prompt = .)", "gptr(., q4)",
-                     "gptr(q5)"))
+                   c("peter(., q1)", "peter(.)", "peter(., \"more\")", "peter(., paste(\"a\", q2))",
+                     "peter(q3, .)", "peter(ctx = .)", "peter(prompt = .)", "peter(., q4)",
+                     "peter(q5)"))
   # what sys.call() reports under magrittr 2.0.5 (not a dependency; checked with keep.source
   # FALSE and TRUE): `.` goes first unless an argument is `.`, and %$% calls the right side as
   # written
-  seen = list(quote(gptr(., q1)), quote(gptr(.)), quote(gptr(., "more")),
-              quote(gptr(., paste("a", q2))), quote(gptr(q3, .)), quote(gptr(ctx = .)),
-              quote(gptr(prompt = .)), quote(gptr(., q4)), quote(gptr(q5)), quote(gptr(., q6)),
-              quote(gptr(.)), quote(gptr(., q7)), quote(gptr(., q8)), quote(gptr(q9, .)))
+  seen = list(quote(peter(., q1)), quote(peter(.)), quote(peter(., "more")),
+              quote(peter(., paste("a", q2))), quote(peter(q3, .)), quote(peter(ctx = .)),
+              quote(peter(prompt = .)), quote(peter(., q4)), quote(peter(q5)), quote(peter(., q6)),
+              quote(peter(.)), quote(peter(., q7)), quote(peter(., q8)), quote(peter(q9, .)))
   expect_identical(lapply(calls$ident, str2lang), seen)
   rt = c("v1", "S1", "more", "a v2", "v3", NA, "S4", "S5", "v5", "v6", "S6", "v7", "S7", "v9")
   ph = vapply(rt, function(p) if (is.na(p)) NA_character_ else prompt_hash(p), "",
@@ -471,14 +472,14 @@ doc_test_turn = function(code, note = NULL, outputs = character(), status = "ok"
 test_that("recorded code drops gptr_return() and record = FALSE members and rewrites arrows", {
   arrow = paste0("<", "-")
   code = c(paste("fit", arrow, "lm(mpg ~ wt, data = mtcars)"), "gptr_return(fit)",
-           "gptr$out(\"o1a2b3\")", "hits = gptr$grep(\"mtcars\")",
+           "peter$out(\"o1a2b3\")", "hits = peter$grep(\"mtcars\")",
            paste0("x ", arrow, " \"a ", arrow, " b\"; gptr::gptr_return(x)"),
            paste0("f(y ", arrow, " 1)"), "{", paste0("  z ", arrow, " 2"), "}",
            paste0("g = function() { w ", arrow, " 3 }"), paste0("a <", arrow, " 1"), "dt[, b := 2]",
            paste("p", arrow, "q", arrow, "4"), paste0("if (TRUE) v ", arrow, " 5"))
   out = doc_code_clean(code)
   expect_identical(as.character(out), c(
-    "fit = lm(mpg ~ wt, data = mtcars)", "hits = gptr$grep(\"mtcars\")",
+    "fit = lm(mpg ~ wt, data = mtcars)", "hits = peter$grep(\"mtcars\")",
     paste0("x = \"a ", arrow, " b\""), paste0("f(y ", arrow, " 1)"), "{", "  z = 2", "}",
     paste0("g = function() { w ", arrow, " 3 }"), paste0("a <", arrow, " 1"), "dt[, b := 2]",
     paste("p = q", arrow, "4"), paste0("if (TRUE) v ", arrow, " 5")))
@@ -490,38 +491,16 @@ test_that("recorded code drops gptr_return() and record = FALSE members and rewr
   expect_identical(as.character(doc_code_clean(c("", "x = 1", ""))), "x = 1")
 })
 
-test_that("the scanner builds gptr::gptr and gptr::gptr_return without a literal gptr:: (FIX-2)", {
-  # R CMD check reads a literal `gptr::name` in package code, quoted or not, as a use of an export
-  # and warns while P08's gptr() and gptr_return() are unexported (CI Task CI-4). doc_drop_expr()
-  # compares with heads built by call(), which must stay identical to the quoted calls.
-  expect_identical(eval_guard_ns_call("gptr_return"), quote(gptr::gptr_return))
-  expect_identical(eval_guard_ns_call("gptr"), quote(gptr::gptr))
-  ns_refs = function(e) {
-    if (is.function(e)) return(c(ns_refs(formals(e)), ns_refs(body(e))))
-    if (!is.call(e) && !is.pairlist(e)) return(character())
-    out = character()
-    if (is.call(e) && identical(e[[1L]], as.name("::")) && identical(e[[2L]], as.name("gptr"))) {
-      out = as.character(e[[3L]])
-    }
-    for (i in seq_along(e)) {
-      el = e[[i]]
-      if (!missing(el)) out = c(out, ns_refs(el))
-    }
-    out
-  }
-  # negative control: the walker sees a quoted gptr:: call
-  expect_identical(ns_refs(function() quote(gptr::gptr_return)), "gptr_return")
-  expect_identical(ns_refs(doc_drop_expr), character())
-  # the namespace-qualified forms are dropped like the bare ones, and only those
+test_that("doc_drop_expr() drops the gptr::-qualified forms like the bare ones (FIX-2)", {
   expect_true(doc_drop_expr(quote(gptr::gptr_return(x))))
   expect_true(doc_drop_expr(quote(gptr_return(x))))
-  expect_true(doc_drop_expr(quote(gptr::gptr$out("o1a2b3"))))
-  expect_true(doc_drop_expr(quote(gptr::gptr[["out"]]("o1a2b3"))))
-  expect_false(doc_drop_expr(quote(gptr::gptr$grep("mtcars"))))
-  expect_false(doc_drop_expr(quote(gptr::gptr("task"))))
+  expect_true(doc_drop_expr(quote(gptr::peter$out("o1a2b3"))))
+  expect_true(doc_drop_expr(quote(gptr::peter[["out"]]("o1a2b3"))))
+  expect_false(doc_drop_expr(quote(gptr::peter$grep("mtcars"))))
+  expect_false(doc_drop_expr(quote(gptr::peter("task"))))
   expect_false(doc_drop_expr(quote(other::gptr_return(x))))
-  expect_false(doc_drop_expr(quote(other::gptr$out("o1a2b3"))))
-  expect_identical(as.character(doc_code_clean("gptr::gptr$out(\"o1a2b3\"); y = 1")), "y = 1")
+  expect_false(doc_drop_expr(quote(other::peter$out("o1a2b3"))))
+  expect_identical(as.character(doc_code_clean("gptr::peter$out(\"o1a2b3\"); y = 1")), "y = 1")
 })
 
 test_that("printed output becomes at most gptr.doc_output_lines #> lines of 76 characters", {
@@ -573,7 +552,7 @@ test_that("a turn's block holds recorded code, outputs, decision, value and head
 })
 
 test_that("the output of a dropped expression is dropped with it when outputs are per expression", {
-  code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\ngptr$out(\"o1a2b3c\", lines = 1)"
+  code = "fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\npeter$out(\"o1a2b3c\", lines = 1)"
   s = doc_test_session(list(doc_test_turn(code, outputs = list(character(), character(),
                                                                 "[1] \"line\""))))
   lines = doc_block_lines(s, 1L, list(format = "r", template = "count rows"), 1L)
@@ -586,9 +565,9 @@ test_that("the output of a dropped expression is dropped with it when outputs ar
                    c("fit = lm(mpg ~ wt, data = mtcars)", "#> [1] \"line\""))
 })
 
-test_that("child answers map to the block's direct gptr() calls by prompt, not creation order", {
-  code = paste0("subs = lapply(1:2, function(i) gptr(paste(\"part\", i)))\n",
-                "total = gptr(\"Summarise the parts\")")
+test_that("child answers map to the block's direct peter() calls by prompt, not creation order", {
+  code = paste0("subs = lapply(1:2, function(i) peter(paste(\"part\", i)))\n",
+                "total = peter(\"Summarise the parts\")")
   s = doc_test_session(list(doc_test_turn(code)))
   kid = function(prompt, text) {
     k = doc_test_session(list(doc_test_turn("x = 1", prompt = prompt, answer = text)))
@@ -705,7 +684,7 @@ test_that("dropped code is cut by characters in UTF-8 and C locales, never by sr
     withr::local_locale(c(LC_CTYPE = loc))
     out = doc_code_clean(paste0("x ", arrow, " \"", e, e, "\"; gptr_return(x)"))
     expect_identical(as.character(out), paste0("x = \"", e, e, "\""), info = loc)
-    out = doc_code_clean(paste0("y = \"", e, "\"; gptr$out(\"o1\"); z ", arrow, " 2"))
+    out = doc_code_clean(paste0("y = \"", e, "\"; peter$out(\"o1\"); z ", arrow, " 2"))
     expect_identical(as.character(out), paste0("y = \"", e, "\"; z = 2"), info = loc)
     expect_identical(attr(out, "kept"), c(TRUE, FALSE, TRUE), info = loc)
     out = doc_code_clean(paste0("m ", arrow, " \"", emoji, "\t", e, "\"; gptr_return(m); n ",
@@ -734,7 +713,7 @@ test_that("a cut takes its own separator, keeps literals and runs without parse 
                                                  paste0("  x); y ", arrow, " 2")))),
                    "x = 1; y = 2")
   expect_identical(as.character(doc_code_clean(c("x = 1; gptr_return(x) # done",
-                                                 "gptr$out('o1') # gone"))),
+                                                 "peter$out('o1') # gone"))),
                    "x = 1 # done")
   # sys.source() turns parse data off while the sourced code runs
   withr::local_options(keep.parse.data = FALSE)
@@ -750,17 +729,17 @@ test_that("only a literal that is exactly a secret marker becomes Sys.getenv() (
 })
 
 test_that("an emptied chunk drops all its output, even flat; digests and paths stay", {
-  s = doc_test_session(list(doc_test_turn("gptr$out(\"o1a2b3c\", lines = 1)", note = "show it",
+  s = doc_test_session(list(doc_test_turn("peter$out(\"o1a2b3c\", lines = 1)", note = "show it",
                                           outputs = "[1] \"line\"")))
   site = list(format = "r", template = "count rows")
   expect_identical(as.character(doc_block_lines(s, 1L, site, 1L)), "## Decision: show it")
-  turn = doc_test_turn("st = gptr$sh(\"git status --porcelain\")", note = "check the tree")
+  turn = doc_test_turn("st = peter$sh(\"git status --porcelain\")", note = "check the tree")
   turn[[3L]]$message$details$bridge = c("#> sh git status --porcelain: exit 0, 6 lines",
                                         "py import pandas: ok")
   turn[[3L]]$message$details$artifacts = c(".gptr/artifacts/qc-app/app.R", "plots/p1.png")
   b = doc_test_session(list(turn))
   expect_identical(as.character(doc_block_lines(b, 1L, site, 1L)),
-                   c("st = gptr$sh(\"git status --porcelain\")",
+                   c("st = peter$sh(\"git status --porcelain\")",
                      "#> sh git status --porcelain: exit 0, 6 lines", "#> py import pandas: ok",
                      "#> [app] .gptr/artifacts/qc-app/app.R", "#> [plot] plots/p1.png",
                      "## Decision: check the tree"))
@@ -816,17 +795,17 @@ test_that("dropped expressions that share a line with each other are cut, not ke
   e = "\u00e9"
   check = function(loc) {
     withr::local_locale(c(LC_CTYPE = loc))
-    out = doc_code_clean(c("a = 1; gptr$out(", "  'o1'); gptr$plot()"))
+    out = doc_code_clean(c("a = 1; peter$out(", "  'o1'); peter$plot()"))
     expect_identical(as.character(out), "a = 1", info = loc)
     expect_identical(attr(out, "kept"), c(TRUE, FALSE, FALSE), info = loc)
-    out = doc_code_clean(c("gptr_return(x); gptr$plot(", "  'a'); b = 2"))
+    out = doc_code_clean(c("gptr_return(x); peter$plot(", "  'a'); b = 2"))
     expect_identical(as.character(out), "b = 2", info = loc)
     expect_identical(attr(out, "kept"), c(FALSE, FALSE, TRUE), info = loc)
-    out = doc_code_clean(c(paste0("x = \"", e, "\"; gptr$out("), "  'o1'); gptr$plot(\"p\") # p",
+    out = doc_code_clean(c(paste0("x = \"", e, "\"; peter$out("), "  'o1'); peter$plot(\"p\") # p",
                            paste0("gptr_return(x); y = \"", e, "\"")))
     expect_identical(as.character(out), c(paste0("x = \"", e, "\""), paste0("y = \"", e, "\"")),
                      info = loc)
-    out = doc_code_clean(c("a = 1", "gptr$out(1); gptr$plot(", "  2) # gone", "b = 2"))
+    out = doc_code_clean(c("a = 1", "peter$out(1); peter$plot(", "  2) # gone", "b = 2"))
     expect_identical(as.character(out), c("a = 1", "b = 2"), info = loc)
   }
   check("C")
@@ -871,13 +850,13 @@ doc_file_site = function(path, prompt = "count rows") {
 test_that("doc_upsert() writes nothing without consent and inserts, replaces and is idempotent", {
   local_project()
   f = file.path(getwd(), "a.R")
-  writeLines(c("library(gptr)", "gptr(\"count rows\")", "z = 1"), f)
+  writeLines(c("library(gptr)", "peter(\"count rows\")", "z = 1"), f)
   site = doc_file_site(f)
   hdr = list(model = "fake/fake-1", date = "2026-09-29", prompt = prompt_hash("count rows"))
   lines = structure(c("n = nrow(mtcars)", "#> [1] 32"), header = hdr)
   local_gptr_options(record = "off")
   expect_identical(doc_upsert(site, lines)$action, "none")
-  expect_identical(readLines(f), c("library(gptr)", "gptr(\"count rows\")", "z = 1"))
+  expect_identical(readLines(f), c("library(gptr)", "peter(\"count rows\")", "z = 1"))
   local_gptr_options(record = "auto")
   res = doc_upsert(site, lines)
   expect_identical(res$action, "insert")
@@ -909,7 +888,7 @@ test_that("a hand-edited block is kept unless regenerating, and hooks can block 
   body = "n = 1"
   head = paste0("# >>> gptr:abc123 model=m prompt=", prompt_hash("count rows"), " sha=",
                 doc_body_sha(body))
-  writeLines(c("gptr(\"count rows\")", head, "n = 1 # edited by hand", "# <<< gptr:abc123"), f)
+  writeLines(c("peter(\"count rows\")", head, "n = 1 # edited by hand", "# <<< gptr:abc123"), f)
   site = doc_file_site(f)
   lines = structure("n = 2", header = list(model = "m", prompt = prompt_hash("count rows")))
   expect_identical(doc_upsert(site, lines, block_id = "abc123")$action, "user-edited")
@@ -934,7 +913,7 @@ test_that("a successful write appends gptr.doc_block and caches the answers in S
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
   site = doc_file_site(f)
   lines = doc_block_lines(s, 1L, site, 1L)
@@ -959,7 +938,7 @@ test_that("a document that keeps changing gives up after three attempts with a w
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   site = doc_file_site(f)
   testthat::local_mocked_bindings(doc_write = function(doc, lines, check = TRUE) {
     gptr_abort("changed", "doc_write", path = doc$path, reason = "conflict")
@@ -975,7 +954,7 @@ test_that("a lock held by another live process records nothing", {
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   dir = doc_lock_dir(f)
   dir.create(dir, recursive = TRUE)
   writeLines(doc_lock_stamp(), file.path(dir, "pid"))
@@ -984,20 +963,20 @@ test_that("a lock held by another live process records nothing", {
     res = doc_upsert(doc_file_site(f), structure("n = 1", header = list()))
   }, class = "gptr_message_notice")
   expect_identical(res$action, "locked")
-  expect_identical(readLines(f), "gptr(\"count rows\")")
+  expect_identical(readLines(f), "peter(\"count rows\")")
 })
 
 test_that("a format error writes nothing and falls back to the console transcript", {
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m"), f)
+  writeLines(c("peter(\"count rows\")", "# >>> gptr:aaaaaa model=m"), f)
   doc_project_transcript(".gptr/transcripts/t.R")
   s = doc_test_session(list(doc_test_turn("n = 1")))
   lines = doc_block_lines(s, 1L, doc_file_site(f), 1L)
   res = doc_upsert(doc_file_site(f), lines)
   expect_identical(res$backend, "transcript")
-  expect_identical(readLines(f), c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m"))
+  expect_identical(readLines(f), c("peter(\"count rows\")", "# >>> gptr:aaaaaa model=m"))
   tr = readLines(file.path(getwd(), ".gptr", "transcripts", "t.R"))
   expect_true("n = 1" %in% tr)
 })
@@ -1008,7 +987,7 @@ test_that("a block a document_write hook patched carries the sha of its body as 
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   off = gptr_register(gptr_hook("document_write", function(event, ctx) {
     list(lines = c(event$lines[1], "# reviewed", event$lines[-1]))
   }))
@@ -1058,7 +1037,7 @@ test_that("a patched header keeps the hook's text and only its sha changes (11.5
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   off = gptr_register(gptr_hook("document_write", function(event, ctx) {
     list(lines = c(paste(event$lines[1], "(reviewed by bob)"), "# reviewed", event$lines[-1]))
   }))
@@ -1075,7 +1054,7 @@ test_that("a block written to the console transcript instead is recorded under t
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m"), f)
+  writeLines(c("peter(\"count rows\")", "# >>> gptr:aaaaaa model=m"), f)
   doc_project_transcript(".gptr/transcripts/t.R")
   s = doc_test_session(list(doc_test_turn("n = 1")))
   site = doc_file_site(f)
@@ -1099,7 +1078,7 @@ test_that("a child without an answer is not cached in S2", {
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   s = doc_test_session(list(doc_test_turn("n = nrow(mtcars)")))
   site = doc_file_site(f)
   lines = doc_block_lines(s, 1L, site, 1L)
@@ -1119,7 +1098,7 @@ test_that("a local model keeps its tag in the block and S2, and answers are reda
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   ph = prompt_hash("count rows")
   secret = "Authorization: Bearer FAKEtoken1234567890abcdef"
   lines = structure("n = 1", header = list(model = "ollama/qwen3:8b", date = "2026-10-04",
@@ -1147,7 +1126,7 @@ test_that("a backend that no writer handles writes nothing and leaves a diagnost
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   dg = registry_env()$diag
   old = dg$rows
   withr::defer(assign("rows", old, envir = dg))
@@ -1157,7 +1136,7 @@ test_that("a backend that no writer handles writes nothing and leaves a diagnost
   expect_identical(res$action, "failed")
   expect_identical(res$backend, "fax")
   expect_null(res$block_id)
-  expect_identical(readLines(f), "gptr(\"count rows\")")
+  expect_identical(readLines(f), "peter(\"count rows\")")
   d = gptr_registry(diagnostics = TRUE)
   expect_identical(nrow(d), 1L)
   expect_identical(c(d$source, d$event, d$class),

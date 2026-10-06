@@ -1,4 +1,4 @@
-# Output budgets: head/tail truncation, the gptr$out() store, spill files, terminal cleanup and
+# Output budgets: head/tail truncation, the peter$out() store, spill files, terminal cleanup and
 # listing data frames (contract sections 5.12, 7.1; IC-71; report G5 and its fact-check 13-15).
 
 #' Split text (a character vector of lines or one string) into UTF-8 lines
@@ -14,7 +14,7 @@ text_lines = function(text) {
 #'
 #' When the text fits, it is returned unchanged. Otherwise the full text is stored in the out
 #' store and in a spill file, and the kept lines surround the notice
-#' `[... n lines omitted; all: gptr$out("<id>")]`.
+#' `[... n lines omitted; all: peter$out("<id>")]`.
 #' @noRd
 truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) {
   budget = check_number(budget_tokens, "budget_tokens", min = 1)
@@ -63,7 +63,7 @@ truncate_output = function(text, budget_tokens, class = "r_output", head = 0.4) 
 #' The truncation notice (about 26 tokens; G5 fact-check 13)
 #' @noRd
 truncation_notice = function(omitted, id) {
-  paste0("[... ", omitted, " lines omitted; all: gptr$out(\"", id, "\")]")
+  paste0("[... ", omitted, " lines omitted; all: peter$out(\"", id, "\")]")
 }
 
 #' A new, empty out store keeping the last `keep` entries
@@ -100,7 +100,7 @@ out_store = function(session = NULL) {
   arg_abort(session, "session", "NULL, an out store or a session's live record")
 }
 
-#' Store text for gptr$out(id); returns the id ("o" + 6 hex)
+#' Store text for peter$out(id); returns the id ("o" + 6 hex)
 #'
 #' `meta$stderr` (a character vector), when given with `stream = "stdout"`, is stored as the
 #' entry's stderr stream.

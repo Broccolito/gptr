@@ -18,7 +18,7 @@ processes stopped, the partial turn recorded as aborted, queued items moved to \
 the status set to \code{aborted}. Idle sessions are left alone.
 }
 \examples{
-s = gptr("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+s = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
          envir = new.env())
 gptr_cancel(s)
 }

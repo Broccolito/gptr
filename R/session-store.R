@@ -630,8 +630,7 @@ sessions_dir = function() file.path(workspace_root(create = FALSE), "sessions")
 #'   `status`, `title` (the first prompt, 60 characters), `live`.
 #' @examples
 #' gptr_sessions()
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_sessions()
 #' @export
 gptr_sessions = function(project = TRUE) {
@@ -759,10 +758,7 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 #'   that block in this process, or `gptr_error_replay_unbound`; never a fallback to `envir`.
 #' @return A `gptr_session`.
 #' @examples
-#' s = gptr_last()
-#' if (!is.null(s)) identical(gptr_resume(s$id), s)
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_resume(s$id), s)
 #' @export
 gptr_resume = function(x = NULL, envir = parent.frame(), block = NULL, child = NULL) {

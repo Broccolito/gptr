@@ -26,7 +26,7 @@
 - `gptr_eval_result` (04 section 5.8): `structure(list(status, events, n_done, n_total, changes, elapsed, images, assigned, outputs, spill, out_id, interrupted_after), class = "gptr_eval_result")`; `status` in `ok`, `error`, `timeout`, `interrupt`, `blocked`, `parse_error`; `events` ordered `list(type = "source"|"output"|"message"|"warning"|"error"|"interrupt"|"plot", ...)`, "`plot` events carry the PNG path, never the recorded plot"; `changes` = `list(wd = chr(2)|NULL, options = chr, envvars = chr, attached = chr, loaded = chr, devices = list(from, to))` "names only"; "The value of an evaluation is never kept (R8)".
 - Options owned (04 section 3.1): `gptr.r_timeout` (`3600`, "seconds for `r` when no human is present"), `gptr.r_output_tokens` (`4000L`, "`r` result budget (estimated tokens, images included)"), `gptr.r_max_images` (`3L`, "plot images attached per `r` result (IC-67)"), `gptr.plot_width`, `gptr.plot_height`, `gptr.plot_res` (`768L`, `512L`, `120L`, "PNG sent to the model"). Read through P01's `gptr_opt()`; their defaults live in P01's `gptr_option_defaults`.
 - Evaluator rules (04 section 7.9, IC-67): parse with `srcfilecopy("<gptr>", code)`; "calling handlers created in a frame that does not hold `envir` [R2][R3]"; "per-expression `setTimeLimit(elapsed = timeout, transient = TRUE)` (`timeout = NULL`: none with a human present, else `gptr.r_timeout`)"; "symbols printed with `print(<sym>)` in `envir` and every `withVisible()` result cleared in place (`res[1L] = list(NULL)`)"; plots "on `pdf(NULL)` with the display list enabled when no device is open and no human sees one; the prior device restored" and "replayed to PNG, at most `max_images` attached (the rest kept in the session's out store)"; "stops at the first error"; `q` and `quit` "flagged in any position (a value, a `FUN` argument, `match.fun`, `get`, `do.call`, `base::`)"; "a literal `[secret:` marker is blocked with the `Sys.getenv()` hint".
-- Model text (03 section 6.12, 04 section 7.9): "output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `gptr$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold"; later plots "listed as `[plots 4-50 not attached: gptr$plot(k)]`" (IC-67).
+- Model text (03 section 6.12, 04 section 7.9): "output, messages, warnings, error + trimmed traceback, `[plot N attached]`, state-change lines (`~ pbmc <Seurat> modified`, `+ markers <data.frame 4,211 x 7>`), a status line, head 40% / tail 60% truncation with the `peter$out(<id>)` notice; halves the budget when the session's context exceeds half the compaction threshold"; later plots "listed as `[plots 4-50 not attached: peter$plot(k)]`" (IC-67).
 - RNG (IC-61): `rng_swap()` "saves `get0(".Random.seed", globalenv(), inherits = FALSE)`, assigns the agent's `c(10407L, <6 seeds>)`, evaluates, keeps the advanced vector in the agent's state, then restores the saved value or removes the variable. The six seeds come from 24 bytes of `sha256(<agent id>)` reduced modulo m1 = 4294967087 (three) and m2 = 4294944443 (three), stored as R integers (two's complement), or from an explicit `.opts$seed` hashed with the agent label". gptr never calls `set.seed()`, `RNGkind()`, `sample()` or `runif()`.
 - Workspace texts (03 sections 7.4-7.5, 12.2): `<workspace>` "one line per object from `env_snapshot()` (name, class, shape, size), largest first, at most 12 lines and 600 tokens", then `(+ n smaller objects: use ls())`, never forcing promises or active bindings ("reported as `<promise>`/`<active>`"); `<workspace_changes>` "`+ name class shape size`, `~ name`, `- name`, `user ran: <expr>` from the task-callback log, last 20; only when non-empty; ... budget 300"; `<attached>` "`gptr_describe(x, budget = 150)` per context object (at most 300)"; `<skill_content>` "5,000 per skill, 10,000 re-injected after compaction"; `<r_env>` (T1) "about 399 [G4] | 450".
 - `builtin:workspace` (04 section 7.9, IC-38): "registers context blocks `workspace` (`first`, order 500), `workspace_changes` (`turn`, order 100), `attached` (`both`, order 600), `skill_content` preloads (`both`, order 700) (IC-38), the prompt section `r_env` (T1, order 900), the `evaluator` record `r` and the `describe` and `eval.r` services"; declared with `on_load(ext_declare_builtin("workspace", builtin_workspace))`; services registered with `on_load(ext_service_set(<name>, <fun>, provided_by = "P09", builtin = "workspace"))` (IC-34). Service signatures (04 section 7.0): `eval.r` = "`eval_r()` through the `evaluator` kind (IC-69)", `describe` = `function(x, budget) chr`.
@@ -79,7 +79,7 @@ Tasks:
 
 **Files:** Create: `R/eval-guard.R`; Test: `tests/testthat/test-eval-guard.R`.
 
-Adapted from report 12 section 5.1 (`.gptr_guard_rules`, `gptr_called_functions()`) with its verification log item 25 (`g = q; g()` was not blocked) and IC-67 (the symbols `q` and `quit` are flagged in any position). The guard walks the parsed code once and never evaluates anything. A local binding never hides a blocked call: R skips non-function bindings when it looks a function up, so `q = 1; q("no")` still calls `base::q()` and ends the user's session. A called name is therefore exempt only when the code defines a function of that name (`menu = function(...) 1`) or an enclosing function binds it (a formal or a local variable); `pkg::name` is always refused; a string passed to `do.call()`, `match.fun()`, `get()` and friends is exempt only for a function the code defines; and `q`/`quit` used as a value are exempt only when the code assigns a variable of that name (`q = quantile(x); q[2]`). `stdin()` calls count as standard-input reads. `eval_assign_targets()` is the static half of the state diff (04 section 5.8 `assigned`: replacement functions, `assign()`, `:=`, `set*()`, `<<-`; architecture section 6.12). `gptr_shim()` rewrites `gptr(...)`, `gptr$member(...)` and `gptr_return(...)` to `gptr::` when the symbols are not visible from the evaluation environment (for example a `new.env(parent = baseenv())` home), binding nothing there; the caller records the code the model sent, so recorded code keeps `gptr$grep("x")` (P10 acceptance 4). The left arrow is spelled `paste0("<", "-")`, as P01's `helper-arch.R` does, so the sources and this plan stay free of the literal.
+Adapted from report 12 section 5.1 (`.gptr_guard_rules`, `gptr_called_functions()`) with its verification log item 25 (`g = q; g()` was not blocked) and IC-67 (the symbols `q` and `quit` are flagged in any position). The guard walks the parsed code once and never evaluates anything. A local binding never hides a blocked call: R skips non-function bindings when it looks a function up, so `q = 1; q("no")` still calls `base::q()` and ends the user's session. A called name is therefore exempt only when the code defines a function of that name (`menu = function(...) 1`) or an enclosing function binds it (a formal or a local variable); `pkg::name` is always refused; a string passed to `do.call()`, `match.fun()`, `get()` and friends is exempt only for a function the code defines; and `q`/`quit` used as a value are exempt only when the code assigns a variable of that name (`q = quantile(x); q[2]`). `stdin()` calls count as standard-input reads. `eval_assign_targets()` is the static half of the state diff (04 section 5.8 `assigned`: replacement functions, `assign()`, `:=`, `set*()`, `<<-`; architecture section 6.12). `gptr_shim()` rewrites `peter(...)`, `peter$member(...)` and `gptr_return(...)` to `gptr::` when the symbols are not visible from the evaluation environment (for example a `new.env(parent = baseenv())` home), binding nothing there; the caller records the code the model sent, so recorded code keeps `peter$grep("x")` (P10 acceptance 4). The left arrow is spelled `paste0("<", "-")`, as P01's `helper-arch.R` does, so the sources and this plan stay free of the literal.
 
 **Interfaces:**
 - Consumes (P01, 04 section 7.1): `` `%||%` `` (`aaa-state.R`).
@@ -120,7 +120,7 @@ test_that("local variables named q, member names and formulas are not flagged", 
   expect_equal(guard("q = quantile(1:10); q[2]")$blocked, character())
   expect_equal(guard("f = function(q) q + 1; f(2)")$blocked, character())
   expect_equal(guard("x = list(q = 1); x$q")$blocked, character())
-  expect_equal(guard("gptr$edit('a.R', list())")$blocked, character())
+  expect_equal(guard("peter$edit('a.R', list())")$blocked, character())
   expect_equal(guard("fit = lm(y ~ q, data = d)")$blocked, character())
   expect_equal(guard("e = quote(q())")$blocked, character())
 })
@@ -163,25 +163,25 @@ test_that("eval_assign_targets finds assignments, replacements, assign(), := and
   expect_equal(at("for (i in 1:3) total = i"), c("i", "total"))
 })
 
-test_that("gptr_shim rewrites gptr calls only when gptr is not visible", {
-  ex = parse(text = "r = gptr('task', d); gptr$grep('x'); gptr_return(r)", keep.source = FALSE)
+test_that("gptr_shim rewrites peter calls only when peter is not visible", {
+  ex = parse(text = "r = peter('task', d); peter$grep('x'); gptr_return(r)", keep.source = FALSE)
   hidden = new.env(parent = baseenv())
   out = gptr_shim(ex, hidden)
-  expect_equal(deparse(out[[1]]), "r = gptr::gptr(\"task\", d)")
-  expect_equal(deparse(out[[2]]), "gptr::gptr$grep(\"x\")")
+  expect_equal(deparse(out[[1]]), "r = gptr::peter(\"task\", d)")
+  expect_equal(deparse(out[[2]]), "gptr::peter$grep(\"x\")")
   expect_equal(deparse(out[[3]]), "gptr::gptr_return(r)")
   expect_equal(ls(hidden), character())
   visible = new.env(parent = baseenv())
-  visible$gptr = function(...) NULL
+  visible$peter = function(...) NULL
   visible$gptr_return = function(x) x
   expect_identical(gptr_shim(ex, visible), ex)
 })
 
 test_that("gptr_shim keeps the source references of the expression vector", {
-  ex = parse(text = "x = 1\ngptr('a')", keep.source = TRUE)
+  ex = parse(text = "x = 1\npeter('a')", keep.source = TRUE)
   out = gptr_shim(ex, new.env(parent = baseenv()))
   expect_false(is.null(attr(out, "srcref")))
-  expect_equal(as.character(attr(out, "srcref")[[2]]), "gptr('a')")
+  expect_equal(as.character(attr(out, "srcref")[[2]]), "peter('a')")
 })
 ```
 
@@ -486,10 +486,10 @@ eval_guard_shim_rewrite = function(e, need_g, need_r) {
   head = e[[1L]]
   if (is.symbol(head)) {
     nm = as.character(head)
-    if (need_g && identical(nm, "gptr")) e[[1L]] = quote(gptr::gptr)
+    if (need_g && identical(nm, "peter")) e[[1L]] = quote(gptr::peter)
     if (need_r && identical(nm, "gptr_return")) e[[1L]] = quote(gptr::gptr_return)
-    if (need_g && nm %in% c("$", "[[") && length(e) >= 2L && identical(e[[2L]], quote(gptr))) {
-      e[[2L]] = quote(gptr::gptr)
+    if (need_g && nm %in% c("$", "[[") && length(e) >= 2L && identical(e[[2L]], quote(peter))) {
+      e[[2L]] = quote(gptr::peter)
     }
   } else {
     e[[1L]] = eval_guard_shim_rewrite(head, need_g, need_r)
@@ -508,9 +508,9 @@ eval_guard_shim_all = function(exprs, need_g, need_r) {
   exprs
 }
 
-#' Reach gptr() and gptr_return() through gptr:: when they are not visible from `envir`
+#' Reach peter() and gptr_return() through gptr:: when they are not visible from `envir`
 #'
-#' Rewrites calls headed by `gptr`, `gptr$member(...)`, `gptr[["member"]](...)` and
+#' Rewrites calls headed by `peter`, `peter$member(...)`, `peter[["member"]](...)` and
 #' `gptr_return` to `gptr::` when the symbol is not visible from `envir` (for example a
 #' `new.env(parent = baseenv())` home, or a session where gptr is loaded but not attached).
 #' Binds nothing in `envir`; `exists()` never forces a promise. The caller records the code as
@@ -520,7 +520,7 @@ eval_guard_shim_all = function(exprs, need_g, need_r) {
 #' @return The expression vector, rewritten where needed; attributes (srcref) are kept.
 #' @noRd
 gptr_shim = function(exprs, envir) {
-  need_g = !exists("gptr", envir = envir)
+  need_g = !exists("peter", envir = envir)
   need_r = !exists("gptr_return", envir = envir)
   if (!need_g && !need_r) return(exprs)
   eval_guard_shim_all(exprs, need_g, need_r)
@@ -744,7 +744,7 @@ Create `tests/testthat/test-copy-eval.R`:
 # rules R1-R8; IC-67). Each row runs in a fresh Rscript through P01's expect_no_copy(): the
 # user's next in-place edit after the action must not copy the 40 MB object. The child loads
 # gptr without exporting internals, so internal functions are fetched from the namespace. The
-# gptr() form of the function-frame case is P10's (test-copy-tools.R).
+# peter() form of the function-frame case is P10's (test-copy-tools.R).
 
 ns_get = function(name) sprintf("%s = get('%s', envir = asNamespace('gptr'))", name, name)
 with_ev = function(setup) paste(setup, ns_get("eval_r"), sep = "; ")
@@ -1429,7 +1429,7 @@ Create `R/env-describe.R`:
 
 #' Compact, budgeted description of an R object
 #'
-#' An S3 generic used for the `<attached>` and `<workspace>` context blocks, `gptr$describe()`
+#' An S3 generic used for the `<attached>` and `<workspace>` context blocks, `peter$describe()`
 #' and console mentions. Methods return successively richer levels of detail and the richest
 #' level whose estimated size fits `budget` is returned. Methods never force promises, never do
 #' I/O (no `dbListTables()`, no `collect()`) and never call `str()` on the object. Packages add
@@ -2142,7 +2142,7 @@ git commit -m "feat(env): add gptr_describe() and the level-based describers"
 
 **Files:** Create: `R/env-history.R`; Test: `tests/testthat/test-env-history.R`.
 
-The `user ran: <expr>` lines of `<workspace_changes>` (architecture section 7.4) come from a task callback (report 12 section 2.C5, `exp_c19_taskcb.R`: the callback sees each successful top-level expression and does not copy the value it is handed; verification log item 18: the registering `gptr()` call is logged first, so `gptr()` calls are filtered). The callback is added while a session with a kept home is live (Task 10 starts it from the `workspace` block) and removed with the last such session or at unload. The log is process-level (the user's own typing, not run state) and keeps the last 20 entries of at most 120 characters.
+The `user ran: <expr>` lines of `<workspace_changes>` (architecture section 7.4) come from a task callback (report 12 section 2.C5, `exp_c19_taskcb.R`: the callback sees each successful top-level expression and does not copy the value it is handed; verification log item 18: the registering `peter()` call is logged first, so `peter()` calls are filtered). The callback is added while a session with a kept home is live (Task 10 starts it from the `workspace` block) and removed with the last such session or at unload. The log is process-level (the user's own typing, not run state) and keeps the last 20 entries of at most 120 characters.
 
 **Interfaces:**
 - Consumes (P01): `check_number()`, `on_load(expr)`, `on_unload(fun)`.
@@ -2158,12 +2158,12 @@ local_history = function(.env = parent.frame()) {
   withr::defer(user_log_stop(), envir = .env)
 }
 
-test_that("the callback logs successful user expressions and skips gptr() calls", {
+test_that("the callback logs successful user expressions and skips peter() calls", {
   local_history()
   user_log_callback(str2lang("x = 1"), 1, TRUE, FALSE)
   user_log_callback(str2lang("stop('no')"), NULL, FALSE, FALSE)
-  user_log_callback(str2lang("s = gptr('prompt', mtcars)"), NULL, TRUE, FALSE)
-  user_log_callback(str2lang("mtcars |> gptr::gptr('again')"), NULL, TRUE, FALSE)
+  user_log_callback(str2lang("s = peter('prompt', mtcars)"), NULL, TRUE, FALSE)
+  user_log_callback(str2lang("mtcars |> gptr::peter('again')"), NULL, TRUE, FALSE)
   user_log_callback(str2lang("m[6000, 5000] = -1"), NULL, TRUE, FALSE)
   expect_equal(user_expr_log(), c("x = 1", "m[6000, 5000] = -1"))
 })
@@ -2223,7 +2223,7 @@ Create `R/env-history.R`:
 # and does not copy the value it is handed) registered while a session with a kept home is live
 # and removed when the last such session shuts down or the package unloads. The callback never
 # touches `value` (no closure or tryCatch in its frame). The first entry after registration is
-# the registering gptr() call itself (verifier note), so calls of gptr() are filtered out.
+# the registering peter() call itself (verifier note), so calls of peter() are filtered out.
 
 #' Process-level log of the user's top-level expressions (not run state: the user's own
 #' typing history, the last 20 entries)
@@ -2234,12 +2234,12 @@ user_log_state$time = numeric()
 user_log_state$sessions = character()
 user_log_state$active = FALSE
 
-#' Does an expression call gptr() (as `gptr(...)`, `gptr::gptr(...)` or through the pipe)?
+#' Does an expression call peter() (as `peter(...)`, `gptr::peter(...)` or through the pipe)?
 #' @noRd
 user_log_is_gptr = function(expr) {
   if (!is.call(expr)) return(FALSE)
   head = expr[[1L]]
-  if (identical(head, quote(gptr)) || identical(head, quote(gptr::gptr))) return(TRUE)
+  if (identical(head, quote(peter)) || identical(head, quote(gptr::peter))) return(TRUE)
   for (i in seq_along(expr)) {
     el = expr[[i]]
     if (!missing(el) && is.call(el) && user_log_is_gptr(el)) return(TRUE)
@@ -2581,7 +2581,7 @@ git commit -m "feat(env): add the r_env capability probe"
 
 **Files:** Create: `R/eval-plots.R`; Test: `tests/testthat/test-eval-plots.R`.
 
-Adapted from report 12 section 5.1 (device-following capture; evaluate 1.0.5's `non_visual_calls` and display-list prefix heuristics, verification log item 6) with IC-67: when no device is open and no human can see one, plots go to `grDevices::pdf(NULL)` with `dev.control(displaylist = "enable")`, so no `Rplots.pdf` appears in `getwd()` and no screen device opens under `_R_CHECK_SCREEN_DEVICE_=stop`; the prior device is restored. Recorded plots are replayed to 768x512 PNGs at res 120 (532 Anthropic tokens, G2 (g)) through ragg when installed, else `grDevices::png()` (cairo on Linux), and dropped once rendered. Low-level additions in later top-level expressions (`plot(x)`, then `abline(...)`, then `lines(...)`) replace the recording of the page this evaluation already captured, as knitr's default `fig.keep = "high"` does with evaluate's per-expression snapshots: the model sees the finished page as one image instead of every intermediate state, each costing 532 tokens, with the finished page past the `max_images` cut. Task 8 wires the capture into `eval_r()`; `plot_png()` is also used by `gptr$plot()` (P10).
+Adapted from report 12 section 5.1 (device-following capture; evaluate 1.0.5's `non_visual_calls` and display-list prefix heuristics, verification log item 6) with IC-67: when no device is open and no human can see one, plots go to `grDevices::pdf(NULL)` with `dev.control(displaylist = "enable")`, so no `Rplots.pdf` appears in `getwd()` and no screen device opens under `_R_CHECK_SCREEN_DEVICE_=stop`; the prior device is restored. Recorded plots are replayed to 768x512 PNGs at res 120 (532 Anthropic tokens, G2 (g)) through ragg when installed, else `grDevices::png()` (cairo on Linux), and dropped once rendered. Low-level additions in later top-level expressions (`plot(x)`, then `abline(...)`, then `lines(...)`) replace the recording of the page this evaluation already captured, as knitr's default `fig.keep = "high"` does with evaluate's per-expression snapshots: the model sees the finished page as one image instead of every intermediate state, each costing 532 tokens, with the finished page past the `max_images` cut. Task 8 wires the capture into `eval_r()`; `plot_png()` is also used by `peter$plot()` (P10).
 
 **Interfaces:**
 - Consumes (P01): `block_image(data, mime = "image/png", source = "plot", width = NULL, height = NULL)` (raw data is base64-encoded without newlines), `ws_path(..., create_parent = TRUE)`, `id_new(prefix, n)`, `gptr_opt()`, `check_class()`, `check_number()`.
@@ -2758,7 +2758,7 @@ plot_file = function() {
 
 #' Render a recorded plot to a PNG image block
 #'
-#' Used by the evaluator and by `gptr$plot()` (P10) and `.opts$images` (P08, IC-44).
+#' Used by the evaluator and by `peter$plot()` (P10) and `.opts$images` (P08, IC-44).
 #' @param recorded A `recordedplot` (grDevices::recordPlot()).
 #' @param width,height Pixels (defaults `gptr.plot_width`, `gptr.plot_height`).
 #' @param res Resolution in pixels per inch (default `gptr.plot_res`).
@@ -3110,7 +3110,7 @@ The hand-rolled evaluator of architecture section 6.12, adapted from report 12 s
 - Frame layout for copy safety. `eval_r()` binds `envir` but creates no closure, no `tryCatch()` and no loop; it stores `envir` in the state environment `st` and resets `st$envir` to `NULL` on exit inside `suspendInterrupts()` [R2]. `eval_run()`, `eval_loop()` and `eval_one()` hold only `st` and force their arguments on entry; `eval_one()` creates the calling handlers and the `gptr_stop` restart [R3]. `eval_top()` and `eval_frame()` reach `envir` through `st$envir`; a symbol is printed as `print(<sym>)` in `envir`, assignments and other invisible heads never pass through `withVisible()`, and every `withVisible()` result is cleared in place with `res[1L] = list(NULL)` before the frame returns [R8, IC-67]. The object snapshots use Task 2's box pattern.
 - Capture. Output goes to an anonymous-file sink (`file("", "w+b")`, split to the console when `tee`), messages and warnings are recorded by the calling handlers in order and muffled unless teed (under `options(warn = 2)` R turns the warning into an error), errors stop at the first failing expression with a traceback of the user frames between `eval_frame()` and the handler, cut to 20 frames of 120 characters with `at <gptr>#<line>` locations. The traceback is computed as text (`eval_traceback()`), so no call object that `do.call()` may have filled with values stays in the frame the restart unwinds. An infinite recursion leaves a calling handler almost no stack (measured: a `tryCatch()` inside the handler fails again with "evaluation nested too deeply", and the error escaped `eval_r()`), so a condition of class `stackOverflowError` (R >= 4.2.0) unwinds through the restart first and is recorded afterwards by `eval_overflow()`, without a traceback. CR LF and CR line ends are normalised before parsing (the parser rejects a bare CR).
 - Session hygiene. Harness options (`max.print`, `width`, `rlang_interactive`, `cli.dynamic`, `cli.num_colors`, and an `askYesNo` trap for package code) are set and restored; hooks, sinks, the time limit and the plot device are restored on every path; outside a run an interrupt is caught and gives status `interrupt` (inside a run it propagates to the run's interrupt policy). Changes of the working directory, options, environment variables (names only), attached and loaded packages and devices are reported by name; a newly set `TZDIR` is not, because R sets it itself the first time a time is formatted on macOS (gptr's own ids do that while rendering plots). Only calls that are always invisible skip `withVisible()`: `options("digits")`, `library()` and `suppressPackageStartupMessages(x)` print their visible values as at the console.
-- Plots. Task 6's capture; at most `max_images` plots are attached, fewer when their image tokens would take more than 60% of the budget; the paths of the others go into one entry of the running session's out store (the process store outside a run) for `gptr$plot(k)` (P10). The session is found through the run: 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK has no id-to-session accessor, so `eval_session()` reads the run's `shell` binding defensively and falls back to the process store (see the self-review).
+- Plots. Task 6's capture; at most `max_images` plots are attached, fewer when their image tokens would take more than 60% of the budget; the paths of the others go into one entry of the running session's out store (the process store outside a run) for `peter$plot(k)` (P10). The session is found through the run: 04 section 7.6 types `gptr_run$session` as an id and the kernel SDK has no id-to-session accessor, so `eval_session()` reads the run's `shell` binding defensively and falls back to the process store (see the self-review).
 - Known limit (R itself): an error unwinds the frames between the failing call and the restart without releasing what they reference, so an object that failing code passed through a function (or a function-frame home it forced) copies once on its next in-place edit, exactly as after `try()` in user code. An error at top level after reading an object leaves it in place (copy row below).
 
 Measured in scratch (fresh `Rscript --vanilla` per row, 40 MB vector): all 13 copy rows of this task report 0 copies (the S4 row 1 copy, the same as R's own `x@v[1] = 0` without gptr); removing `res[1L] = list(NULL)` makes the `(x)` row copy once (negative control).
@@ -4029,7 +4029,7 @@ eval_out_target = function() {
 #'
 #' At most `max_images` plots are attached, and fewer when their image tokens would take more
 #' than 60% of the output budget (IC-67); the paths of the others are kept in the session's out
-#' store for `gptr$plot(k)` (P10), one entry for the whole evaluation.
+#' store for `peter$plot(k)` (P10), one entry for the whole evaluation.
 #' @noRd
 eval_plots_done = function(st) {
   if (is.null(st$ps) || !st$ps$n) return(invisible())
@@ -4144,7 +4144,7 @@ git commit -m "feat(eval): add the hand-rolled evaluator eval_r()"
 
 **Files:** Create: `R/eval-format.R`; Test: `tests/testthat/test-eval-format.R`.
 
-The layout of report 12 section 3.4 with the contract's notices (04 section 7.9, IC-67): the events in order (output and messages cleaned by P01's `clean_terminal()`, `Warning in <call>: ...`, `Error in <call>: ...  [expression at line n]` with `Traceback (outermost first):`, `[interrupted by the user after s s; side effects may have occurred]` (the wording of architecture section 6.12), `[plot N attached]`), then `[plots 4-50 not attached: gptr$plot(k)]`, at most 12 object-change lines (`+ markers <data.frame 4,211 x 7>`, `~ pbmc <Seurat> modified`, `- x removed`), the session changes by name and, unless the status is `ok`, a status line. The text is cut by P01's `truncate_output()` (head 40% / tail 60% by lines, the full text in the out store and a spill file, the notice `[... n lines omitted; all: gptr$out("<id>")]`) to the budget minus the image tokens; the budget is halved (at least 200) when the running session's last request is above half the compaction threshold, asked through P07's `compact.should` service (G4 section 4.4.5).
+The layout of report 12 section 3.4 with the contract's notices (04 section 7.9, IC-67): the events in order (output and messages cleaned by P01's `clean_terminal()`, `Warning in <call>: ...`, `Error in <call>: ...  [expression at line n]` with `Traceback (outermost first):`, `[interrupted by the user after s s; side effects may have occurred]` (the wording of architecture section 6.12), `[plot N attached]`), then `[plots 4-50 not attached: peter$plot(k)]`, at most 12 object-change lines (`+ markers <data.frame 4,211 x 7>`, `~ pbmc <Seurat> modified`, `- x removed`), the session changes by name and, unless the status is `ok`, a status line. The text is cut by P01's `truncate_output()` (head 40% / tail 60% by lines, the full text in the out store and a spill file, the notice `[... n lines omitted; all: peter$out("<id>")]`) to the budget minus the image tokens; the budget is halved (at least 200) when the running session's last request is above half the compaction threshold, asked through P07's `compact.should` service (G4 section 4.4.5).
 
 **Interfaces:**
 - Consumes: Task 8's `eval_session()` and `eval_r()` (tests); P01: `check_class()`, `check_number()`, `clean_terminal()`, `est_image_tokens()`, `truncate_output(text, budget_tokens, class = "r_output", head = 0.4, id_prefix = "o")`, `ext_service_has()`, `ext_service_get()`, `out_get()` (tests); P06 kernel SDK: `session_data(s)` (`$usage`, the 04 section 4.3 rows); P07 service `compact.should` = `function(s, tokens, idle_s) lgl(1)` (absent: no halving).
@@ -4204,7 +4204,7 @@ test_that("plots, object changes and session changes are listed after the events
   out = format_eval_result(fake_result(plots, changes = changes), 4000L)
   expect_equal(strsplit(out$text, "\n")[[1]], c(
     "[plot 1 attached]", "[plot 2 attached]", "[plot 3 attached]",
-    "[plots 4-5 not attached: gptr$plot(k)]", "+ m <data.frame 4,211 x 7>",
+    "[plots 4-5 not attached: peter$plot(k)]", "+ m <data.frame 4,211 x 7>",
     "~ pbmc <Seurat> modified", "[working directory changed: /a -> /b]",
     "[options changed: digits]", "[environment variables changed: X]",
     "[attached: package:stats4]"
@@ -4229,14 +4229,14 @@ test_that("blocked and empty results have short texts", {
   expect_equal(format_eval_result(fake_result(list()), 4000L)$text, "[no output]")
 })
 
-test_that("long output keeps head and tail with a gptr$out() notice", {
+test_that("long output keeps head and tail with a peter$out() notice", {
   res = eval_r("invisible(lapply(1:5000, function(i) cat('line', i, '\\n')))", new.env())
   out = format_eval_result(res, 400L)
   expect_true(out$truncated)
   expect_true(is.character(out$out_id))
   expect_match(out$text, "^line 1 ")
   expect_match(out$text, "line 5000\\s*$")
-  expect_match(out$text, "gptr$out(", fixed = TRUE)
+  expect_match(out$text, "peter$out(", fixed = TRUE)
   expect_lte(est_tokens(out$text, "r_output"), 420)
   expect_length(out_get(out$out_id), 5000L)
 })
@@ -4272,7 +4272,7 @@ test_that("a 50-plot evaluation lists 3 attached plots and the stored rest", {
   out = format_eval_result(res, 4000L)
   lines = strsplit(out$text, "\n", fixed = TRUE)[[1]]
   expect_equal(lines[1:3], c("[plot 1 attached]", "[plot 2 attached]", "[plot 3 attached]"))
-  expect_true("[plots 4-50 not attached: gptr$plot(k)]" %in% lines)
+  expect_true("[plots 4-50 not attached: peter$plot(k)]" %in% lines)
   expect_length(out$images, 3L)
 })
 
@@ -4299,9 +4299,9 @@ Create `R/eval-format.R`:
 #
 # The format of report 12 section 3.4 with the contract's notices (04 section 7.9, IC-67):
 # output, messages, warnings, the error with its trimmed traceback, `[plot N attached]`,
-# `[plots 4-50 not attached: gptr$plot(k)]`, state-change lines (`~ pbmc <Seurat> modified`,
+# `[plots 4-50 not attached: peter$plot(k)]`, state-change lines (`~ pbmc <Seurat> modified`,
 # `+ markers <data.frame 4,211 x 7>`), a status line, then head 40% / tail 60% truncation
-# through P01's truncate_output() with the `gptr$out(<id>)` notice (about 26 tokens, G5
+# through P01's truncate_output() with the `peter$out(<id>)` notice (about 26 tokens, G5
 # fact-check 13). Image tokens count against the budget, and the budget is halved once the
 # session's context passes half the compaction threshold (G4 section 4.4.5).
 
@@ -4358,9 +4358,9 @@ eval_tail_lines = function(res) {
   if (any(stored)) {
     k = vapply(plots[stored], function(e) as.integer(e$index), 1L)
     out = c(out, if (length(k) == 1L) {
-      sprintf("[plot %d not attached: gptr$plot(%d)]", k, k)
+      sprintf("[plot %d not attached: peter$plot(%d)]", k, k)
     } else {
-      sprintf("[plots %d-%d not attached: gptr$plot(k)]", min(k), max(k))
+      sprintf("[plots %d-%d not attached: peter$plot(k)]", min(k), max(k))
     })
   }
   lost = vapply(plots, function(e) is.null(e$path), NA)
@@ -4462,7 +4462,7 @@ git commit -m "feat(eval): add the budgeted model text of an evaluation"
 
 **Files:** Modify: `R/env-snapshot.R` (append), `tests/testthat/test-env-snapshot.R` (append).
 
-The built-in of 04 section 7.9 and section 10.3 as amended by IC-38 (`attached` and `skill_content` have `placement = "both"`, so `gptr("x", mtcars)` sends `<attached name="mtcars">` after `<workspace>` in its first request) and IC-69/IC-34 (the `evaluator` record `r`; the `eval.r` and `describe` services owned by `builtin:workspace`, so filtering the built-in removes them). Block providers follow the `context_block` contract (04 section 10.2 kind 13): `provide(ctx, budget)` returns `NULL`, a string or `list(text, attrs)`; `ctx$input` is `list(call, turn, prompt, placement, last_hash, opts)`; `.opts$context` `"names"` lists names only and `"none"` omits the blocks. The workspace snapshot of the last block is kept in an environment inside `ctx$state()` (an environment is never JSON-able, so it is not persisted: snapshot addresses mean nothing in another process); an `agent_end` hook refreshes it (only once the workspace block has run, so a `.opts$context = "none"` session pays for no snapshot) so the next `<workspace_changes>` shows only what the user changed between requests; without a session label the `env` attribute is `globalenv` for the global environment and `<environment>` otherwise (04 section 5.1 `home_label`); `session_shutdown` releases the session's history log. Context items are read with P08's `call_value()` [leaf]; a failing describer becomes a one-line note.
+The built-in of 04 section 7.9 and section 10.3 as amended by IC-38 (`attached` and `skill_content` have `placement = "both"`, so `peter("x", mtcars)` sends `<attached name="mtcars">` after `<workspace>` in its first request) and IC-69/IC-34 (the `evaluator` record `r`; the `eval.r` and `describe` services owned by `builtin:workspace`, so filtering the built-in removes them). Block providers follow the `context_block` contract (04 section 10.2 kind 13): `provide(ctx, budget)` returns `NULL`, a string or `list(text, attrs)`; `ctx$input` is `list(call, turn, prompt, placement, last_hash, opts)`; `.opts$context` `"names"` lists names only and `"none"` omits the blocks. The workspace snapshot of the last block is kept in an environment inside `ctx$state()` (an environment is never JSON-able, so it is not persisted: snapshot addresses mean nothing in another process); an `agent_end` hook refreshes it (only once the workspace block has run, so a `.opts$context = "none"` session pays for no snapshot) so the next `<workspace_changes>` shows only what the user changed between requests; without a session label the `env` attribute is `globalenv` for the global environment and `<environment>` otherwise (04 section 5.1 `home_label`); `session_shutdown` releases the session's history log. Context items are read with P08's `call_value()` [leaf]; a failing describer becomes a one-line note.
 
 **Interfaces:**
 - Consumes: Tasks 2-5 and 8 (`env_snapshot()`, `env_diff()`, `workspace_lines()`, `changes_lines()`, `env_tokens()`, `gptr_describe()`, `describe_value()`, `dsc_fit()`, `user_expr_log()`, `user_log_start()`, `user_log_release()`, `r_env_probe()`, `eval_r()`); P01: `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`, `ext_service_get(name)`, `setting_get(key, session = NULL, default = NULL)`; P02 (04 sections 6.8, 7.2, 10.5): `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `gptr_spec(kind, name, ...)`, `registry_get(kind, name, session = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's `gptr$register(spec)` and `gptr$on(event, handler, matcher = NULL)`, `gptr_registry(kind = NULL, diagnostics = FALSE)` (tests); P06 kernel SDK: `session_home(s)`, `session_data(s)` (`$id`, `$home_label`); P08 kernel SDK: `call_value(call, i)` on the `gptr_call` bindings `context` (items `list(label, kind, name, slot, facts)`), `envir`, `values`, `ids$skills`; P17 service `skill.body` = `function(name) list(text, dir)` (absent before P17: no block).
@@ -5009,10 +5009,10 @@ Run from the repository root after Task 11. Each check of 05 P09 (including its 
 | 5a | `env-probe` leaves `loadedNamespaces()` unchanged | `test-env-probe.R` "r_env_probe leaves loadedNamespaces() unchanged and is cached" |
 | 5b | `<workspace>` for six objects is at most 600 tokens and never forces a promise or an active binding | `test-env-snapshot.R` "six objects cost at most 600 tokens and promises stay unforced", "env_snapshot lists bindings with facts and never forces promises"; copy rows "snapshots of globalenv and of a function frame leave the object in place (R4)" |
 | 6a | a plotting `r` call under Rscript leaves no `Rplots.pdf` in `getwd()` | `test-eval-core.R` "a plotting evaluation under Rscript leaves no Rplots.pdf in the working directory" (a fresh `Rscript --vanilla` with the working directory at a temporary directory) |
-| 6b | a 50-plot loop attaches 3 images and lists the rest | `test-eval-core.R` "a 50-plot loop attaches 3 images and keeps the rest in one out entry"; `test-eval-format.R` "a 50-plot evaluation lists 3 attached plots and the stored rest" (`[plots 4-50 not attached: gptr$plot(k)]`) |
+| 6b | a 50-plot loop attaches 3 images and lists the rest | `test-eval-core.R` "a 50-plot loop attaches 3 images and keeps the rest in one out entry"; `test-eval-format.R` "a 50-plot evaluation lists 3 attached plots and the stored rest" (`[plots 4-50 not attached: peter$plot(k)]`) |
 | 6c | `.Random.seed` identical before and after an evaluation with an agent stream | `test-eval-core.R` "an evaluation with an agent stream leaves .Random.seed identical (IC-61)", "rng_swap keeps the user's .Random.seed and advances the agent's stream", "rng_swap removes .Random.seed again when the user had none", "rng_swap leaves R's generator kind as it found it when the user had no seed" (the user's next `set.seed()` draws the same numbers) |
 | 6d | `g = q; g()` is blocked | `test-eval-guard.R` "q and quit are flagged in any value position (IC-67)"; `test-eval-core.R` "q(), readline() and g = q; g() are refused without evaluation" |
-| RA | review amendments: R8 in place (IC-67); `pdf(NULL)` with the prior device restored; at most `gptr.r_max_images` images, the rest stored for `gptr$plot(k)`, image tokens in the budget (IC-67); `rng_swap()` with hash-derived L'Ecuyer seeds (IC-61); `q`/`quit` in any position (IC-67); describers outside Suggests use slots and base generics only (IC-71); `attached` and preloaded `skill_content` with `placement = "both"` (IC-38); the `evaluator` record `r` and the `eval.r` and `describe` services (IC-69, IC-34) | 3b and the negative control of Task 8; `test-eval-plots.R` "offscreen capture uses pdf(NULL), writes no Rplots.pdf and restores the device"; 6b and `test-eval-format.R` "image tokens count against the budget"; 6c; 6d; `test-env-describe.R` "describer methods call no package outside Imports (IC-71)" and "ggplot, DBI, Arrow and SingleCellExperiment describers need no package calls"; `test-env-snapshot.R` "builtin_workspace registers the blocks, the section, the evaluator and two hooks", "the eval.r and describe services are registered by builtin:workspace", "the loaded registry holds the workspace records (P02)" |
+| RA | review amendments: R8 in place (IC-67); `pdf(NULL)` with the prior device restored; at most `gptr.r_max_images` images, the rest stored for `peter$plot(k)`, image tokens in the budget (IC-67); `rng_swap()` with hash-derived L'Ecuyer seeds (IC-61); `q`/`quit` in any position (IC-67); describers outside Suggests use slots and base generics only (IC-71); `attached` and preloaded `skill_content` with `placement = "both"` (IC-38); the `evaluator` record `r` and the `eval.r` and `describe` services (IC-69, IC-34) | 3b and the negative control of Task 8; `test-eval-plots.R` "offscreen capture uses pdf(NULL), writes no Rplots.pdf and restores the device"; 6b and `test-eval-format.R` "image tokens count against the budget"; 6c; 6d; `test-env-describe.R` "describer methods call no package outside Imports (IC-71)" and "ggplot, DBI, Arrow and SingleCellExperiment describers need no package calls"; `test-env-snapshot.R` "builtin_workspace registers the blocks, the section, the evaluator and two hooks", "the eval.r and describe services are registered by builtin:workspace", "the loaded registry holds the workspace records (P02)" |
 
 Commands and expected results:
 
@@ -5036,9 +5036,9 @@ Expected, in order: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 457 ]`; `[ FAIL 0 | WARN 
 |---|---|
 | `eval-core.R`: parse with `srcfilecopy()`, sink capture cleaned up in `suspendInterrupts()`, per-expression `setTimeLimit()` (none with a human), calling handlers created outside the frame holding the home, interruptions recorded, symbols printed by name, state diff | 8 |
 | `eval-core.R`: `rng_swap()` with hash-derived L'Ecuyer seeds (IC-61) | 7 (and `rng =` in 8) |
-| `eval-plots.R`: recorded device, PNG 768x512 res 120, ragg when installed, `pdf(NULL)` without a device and a human, prior device restored, `gptr$plot()` support (`plot_png()`) | 6; attachment and storage in 8 |
+| `eval-plots.R`: recorded device, PNG 768x512 res 120, ragg when installed, `pdf(NULL)` without a device and a human, prior device restored, `peter$plot()` support (`plot_png()`) | 6; attachment and storage in 8 |
 | `eval-guard.R`: forbidden calls, interactive traps (the static list plus the `askYesNo` option trap of Task 8), `q`/`quit` anywhere, secret markers, the `gptr::` shim | 1 (trap in 8) |
-| `eval-format.R`: 4,000-token budget, head 40% / tail 60%, state-change lines, `gptr$out(id)` notices, tighter budget above half the compaction threshold, image tokens in the budget | 9 |
+| `eval-format.R`: 4,000-token budget, head 40% / tail 60%, state-change lines, `peter$out(id)` notices, tighter budget above half the compaction threshold, image tokens in the budget | 9 |
 | `env-snapshot.R`: names, addresses, fingerprints, diff | 2 |
 | `env-snapshot.R`: `builtin:workspace` with `workspace`, `workspace_changes`, `attached`, `skill_content` (IC-38), `r_env`, the `evaluator` record `r`, services `eval.r` and `describe` (IC-69, IC-34) | 10 |
 | `env-describe.R`: `gptr_describe()` generic, level-based methods of 03 section 7.5, IC-71 | 3 (export and registration in 11) |

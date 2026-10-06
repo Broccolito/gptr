@@ -581,7 +581,7 @@ test_that("older images are elided above the model's image limit, once (IC-67)",
   img = function(k) block_image(strrep(as.character(k), 40))
   msgs = list(msg_user(list(img(1), img(2), img(3), block_text("look"))))
   out = images_elide(s, msgs, list(max_images = 2))
-  expect_match(out[[1L]]$content[[1L]]$text, "^\\[image omitted: gptr\\$plot\\(")
+  expect_match(out[[1L]]$content[[1L]]$text, "^\\[image omitted: peter\\$plot\\(")
   expect_identical(out[[1L]]$content[[2L]]$type, "image")
   d = session_data(s)
   expect_identical(d$entries[[length(d$entries)]]$custom_type, "gptr.image_elision")
@@ -1138,7 +1138,7 @@ test_that("a nested run tightens the mode, inherits the snapshot and links to th
   expect_identical(nrow(s$usage), 3L)
 })
 
-test_that("gptr.max_nested_calls caps gptr() calls of one evaluation; a group counts once", {
+test_that("gptr.max_nested_calls caps peter() calls of one evaluation; a group counts once", {
   local_permissive()
   local_gptr_options(max_nested_calls = 2L)
   box = new.env()

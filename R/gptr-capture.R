@@ -1,4 +1,4 @@
-# gptr-capture.R -- copy-safe base-R capture of gptr() calls (rules R2-R3; G3 section 3 "GATEWAY
+# gptr-capture.R -- copy-safe base-R capture of peter() calls (rules R2-R3; G3 section 3 "GATEWAY
 # CAPTURE RULES", verified by G3 t2b and t5 and its fact-check; IC-41), {identifier}
 # interpolation (contract 6.1.4), prompt selection, argument validation and the gptr_call record
 # (7.8, IC-13), and identifier resolution (6.1.3, IC-42; the `identifier.resolve` service).
@@ -56,8 +56,8 @@ dot_is_literal = function(e) {
     is.null(attributes(e))
 }
 
-#' Names of gptr()'s formals after the dots (contract 6.1; Task 8's test-gptr-gateway.R checks that
-#' they equal `setdiff(names(formals(gptr)), "...")`)
+#' Names of peter()'s formals after the dots (contract 6.1; Task 8's test-gptr-gateway.R checks that
+#' they equal `setdiff(names(formals(peter)), "...")`)
 #' @noRd
 gateway_formal_names = function() {
   c("model", "mode", "skills", "plugins", "extensions", "tools", "agents", "parallel", "choices",
@@ -68,8 +68,8 @@ gateway_formal_names = function() {
 #' For each dot, the symbol written at the call site when the dot is a plain symbol there, else NA.
 #' Forwarded dots (`...`, `..1`) are NA: they are forced through ...elt(), never read by name,
 #' because the caller frame is not where their promises evaluate (IC-41). Arguments named after a
-#' formal of gptr() are not dots; with more than one forwarded `...` every dot is NA. An empty
-#' argument (`gptr("x", )`) is a dot without a symbol. Each argument is read by index, never bound
+#' formal of peter() are not dots; with more than one forwarded `...` every dot is NA. An empty
+#' argument (`peter("x", )`) is a dot without a symbol. Each argument is read by index, never bound
 #' to a local, so an empty argument is never evaluated.
 #' @noRd
 dot_sites = function(sc, n) {
@@ -107,7 +107,7 @@ dot_sites = function(sc, n) {
 }
 
 #' Context labels: the argument name, else the symbol, else the deparsed expression (60 chars);
-#' values spliced in by do.call() and empty arguments (`gptr("x", , big)`) are labelled `..i`.
+#' values spliced in by do.call() and empty arguments (`peter("x", , big)`) are labelled `..i`.
 #' Like dot_sites(), each expression is read by index, never bound to a local, so an empty
 #' argument is never evaluated
 #' @noRd
@@ -286,7 +286,7 @@ gateway_opts_names = function() {
 
 #' One string out of `choices`. check_choice() alone would take the whole vector of choices as
 #' its first element (the missing-argument convention of match.arg()), which a value given to
-#' gptr() must never be
+#' peter() must never be
 #' @noRd
 gateway_choice = function(x, choices, arg) {
   if (!is.character(x) || length(x) != 1L || is.na(x) || !x %in% choices) {
@@ -460,7 +460,7 @@ gateway_choice_labels = function(choices) {
   unname(choices)
 }
 
-#' Validates the value arguments of gptr(); forces each on entry [leaf]
+#' Validates the value arguments of peter(); forces each on entry [leaf]
 #' @noRd
 gateway_args = function(parallel, choices, lvls, threshold, min_confidence, uncertain, background,
                         budget, replay, opts, run, stdin) {
@@ -529,7 +529,7 @@ gateway_args = function(parallel, choices, lvls, threshold, min_confidence, unce
 
 #' Builds the gptr_call record (IC-13): an environment with the bindings of contract 7.8, plus
 #' `interp` (the sorted `name=value` pairs of 6.1.4) and `hold` (TRUE while a started run still
-#' needs the record after gptr() returned)
+#' needs the record after peter() returned)
 #' @noRd
 call_new = function(prompt = NULL, template = NULL, interp = character(), session = NULL,
                     context = list(), values = NULL, envir = NULL, ids = list(), args = list(),
@@ -555,7 +555,7 @@ call_new = function(prompt = NULL, template = NULL, interp = character(), sessio
 }
 
 #' Releases a call record [R2]: rm() of its values, `envir` and `sys_call` set to NULL. Called on
-#' every exit path of gptr(). A record whose `hold` flag is set (its run was started for later
+#' every exit path of peter(). A record whose `hold` flag is set (its run was started for later
 #' pumping) is left alone; the listeners of call_hold() (Task 9) clear the flag and release it.
 #' @noRd
 call_release = function(call) {

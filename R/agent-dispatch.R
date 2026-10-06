@@ -377,7 +377,7 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 
 # ---------------------------------------------------------------------------- nested calls
 
-#' Nested `gptr$...` calls made while an `r` evaluation runs (04 section 7.6)
+#' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
 #' A member listed by the outer call's analysis at or below its approved level runs without a
 #' second prompt; others pass perm_check(). Recorded in `details$nested` (at most 20).
 #' @noRd
@@ -475,8 +475,8 @@ nested_listed_level = function(outer, name) {
     return(NULL)
   }
   short = sub("^.*/", "", name)
-  hit = flagged$fn %in% c(name, short, paste0("gptr$", short),
-                          paste0("gptr$", sub("/", "$", name, fixed = TRUE)))
+  hit = flagged$fn %in% c(name, short, paste0("peter$", short),
+                          paste0("peter$", sub("/", "$", name, fixed = TRUE)))
   if (!any(hit)) return(NULL)
   lv = suppressWarnings(as.integer(flagged$level[hit]))
   if (anyNA(lv)) return(NULL)

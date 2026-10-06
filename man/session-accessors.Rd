@@ -40,7 +40,7 @@ The member's value; \code{names()} and \code{.DollarNames()} return the member n
 \code{$} and \code{[[} read a session: \code{text}, \code{value}, \code{values}, \code{usage}, \code{cost}, \code{history},
 \code{messages}, \code{model}, \code{mode}, \code{status}, \code{reason}, \code{id}, \code{kind}, \code{file}, \code{turns}, \code{envir},
 \code{children}, \code{ext}, \code{plan}, \code{last_rewind}, \code{editor_text}, and the names of child sessions.
-Sessions are changed only through \code{gptr()} and the \verb{gptr_*()} verbs, so \verb{$<-} and \verb{[[<-}
+Sessions are changed only through \code{peter()} and the \verb{gptr_*()} verbs, so \verb{$<-} and \verb{[[<-}
 signal \code{gptr_error_readonly}. Usage a provider did not report stays unknown: \code{cost} is \code{NA}
 when the cost of any request is unknown.
 }

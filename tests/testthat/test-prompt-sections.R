@@ -371,7 +371,7 @@ test_that("the r schema is frozen in the variant for the document and the human 
 
 test_that("{s1} is replaced by the configured System 1 alias", {
   fr = compose_case("standard_all")
-  expect_match(fr$t0, "System 1 decisions are gptr(..., model = jev)", fixed = TRUE)
+  expect_match(fr$t0, "System 1 decisions are peter(..., model = jev)", fixed = TRUE)
   expect_false(grepl("{s1}", fr$t0, fixed = TRUE))
 })
 
@@ -841,16 +841,16 @@ test_that("without tool_addition the tools become namespaced r members with a no
   expect_true(is.function(reg$fun))
   q = pending_of(s)
   expect_null(q[[1]]$tool_add)
-  expect_match(msg_text(q[[1]]), "gptr$tools$trials(condition: string)", fixed = TRUE)
+  expect_match(msg_text(q[[1]]), "peter$tools$trials(condition: string)", fixed = TRUE)
 })
 
-test_that("a spec that already is a gptr$ member keeps its name when added", {
+test_that("a spec that already is a peter$ member keeps its name when added", {
   s = p07_session()
   prompt_freeze(s, list(interactive = FALSE))
   local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
   session_add_tools(s, gptr_tool("rows_of", "Rows of a data frame.", fun = function(name) 1L))
   q = pending_of(s)
-  expect_match(msg_text(q[[1]]), "gptr$rows_of(name: string)", fixed = TRUE)
+  expect_match(msg_text(q[[1]]), "peter$rows_of(name: string)", fixed = TRUE)
   expect_null(registry_get("tool", "tools/rows_of", session = session_data(s)$id))
 })
 
@@ -918,7 +918,7 @@ test_that("hidden specs are never announced; namespaced and fun-only members sta
   expect_identical(vapply(q[[1]]$tool_add, function(x) x$name, ""), "trials")
   expect_identical(msg_text(q[[1]]), "New tools are available from now on: trials.")
   expect_null(q[[2]]$tool_add)
-  expect_match(msg_text(q[[2]]), "gptr$p07lab$p07_cohort(id: string)", fixed = TRUE)
+  expect_match(msg_text(q[[2]]), "peter$p07lab$p07_cohort(id: string)", fixed = TRUE)
   s2 = p07_session()
   prompt_freeze(s2, list(interactive = FALSE))
   local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
@@ -999,9 +999,9 @@ test_that("tools added before the freeze that it does not declare are announced"
   q = pending_of(s)
   expect_length(q, 1L)
   expect_null(q[[1]]$tool_add)
-  lines = c("gptr$p07lab$p07_nsd()  # Namespaced direct.",
-            "gptr$p07_mem(a: string)  # Plain member.",
-            "gptr$p07lab$p07_cat(id: string)  # Catalogued.")
+  lines = c("peter$p07lab$p07_nsd()  # Namespaced direct.",
+            "peter$p07_mem(a: string)  # Plain member.",
+            "peter$p07lab$p07_cat(id: string)  # Catalogued.")
   expect_identical(msg_text(q[[1]]),
                    sprintf(prompt_text("members_added"), paste(lines, collapse = "\n")))
   fr = prompt_freeze(s, list(interactive = FALSE))
@@ -1054,7 +1054,7 @@ test_that("a tool the model already has is not declared again; a changed one is 
                                  exposure = "r"))
   q = pending_of(s)
   expect_length(q, 4L)
-  expect_match(msg_text(q[[4]]), "gptr$p07_m(a: string, b: string)  # Member two.", fixed = TRUE)
+  expect_match(msg_text(q[[4]]), "peter$p07_m(a: string, b: string)  # Member two.", fixed = TRUE)
   expect_identical(registry_get("tool", "p07_m", session = sid)$description, "Member two.")
   # after the queue is flushed into the transcript, what it announced still counts: trials is not
   # declared again (while the model takes tool additions, review round 2 finding 3), and the
@@ -1070,7 +1070,7 @@ test_that("a tool the model already has is not declared again; a changed one is 
   session_add_tools(s, m1)
   q = pending_of(s)
   expect_length(q, 1L)
-  expect_match(msg_text(q[[1]]), "gptr$p07_m(a: string)  # Member one.", fixed = TRUE)
+  expect_match(msg_text(q[[1]]), "peter$p07_m(a: string)  # Member one.", fixed = TRUE)
   expect_identical(registry_get("tool", "p07_m", session = sid)$description, "Member one.")
 })
 
@@ -1116,19 +1116,19 @@ test_that("a tool another rank-0 record of the session already provides is annou
   expect_identical(vapply(q[[1]]$tool_add, function(x) x$name, ""), "p07_plug1")
   expect_identical(msg_text(q[[2]]),
                    sprintf(prompt_text("members_added"),
-                           "gptr$p07x$p07_plugm1(id: string)  # Plugin member."))
+                           "peter$p07x$p07_plugm1(id: string)  # Plugin member."))
   expect_length(registry_candidates("tool", "p07_plug1", sid), 1L)
   expect_length(registry_candidates("tool", "p07x/p07_plugm1", sid), 1L)
   expect_identical(tool_lookup("p07_plug1", sid)$execute(list(), NULL), "plug")
-  # without tool additions the plugin's direct tool becomes the member gptr$tools$<name>()
+  # without tool additions the plugin's direct tool becomes the member peter$tools$<name>()
   s2 = p07_session()
   prompt_freeze(s2, list(interactive = FALSE))
   local_mocked_bindings(prompt_tool_addition = function(s) FALSE)
   session_add_tools(s2, plug(s2, "2"))
   q2 = pending_of(s2)
   expect_length(q2, 1L)
-  lines = c("gptr$tools$p07_plug2()  # From a plugin.",
-            "gptr$p07x$p07_plugm2(id: string)  # Plugin member.")
+  lines = c("peter$tools$p07_plug2()  # From a plugin.",
+            "peter$p07x$p07_plugm2(id: string)  # Plugin member.")
   expect_identical(msg_text(q2[[1]]),
                    sprintf(prompt_text("members_added"), paste(lines, collapse = "\n")))
   msg = gptr_registry(diagnostics = TRUE)$message
@@ -1148,7 +1148,7 @@ test_that("namespaced members added before the freeze are announced under any pr
   expect_length(q, 1L)
   expect_identical(msg_text(q[[1]]),
                    sprintf(prompt_text("members_added"),
-                           "gptr$p07min$p07_min(id: string)  # Catalogued."))
+                           "peter$p07min$p07_min(id: string)  # Catalogued."))
   fr = prompt_freeze(s, list(interactive = FALSE))
   expect_identical(fr$preset, "minimal")
   expect_false("plugins" %in% fr$sections$name)
@@ -1173,7 +1173,7 @@ test_that("after a switch to a model without tool additions, re-added tools beco
   q = pending_of(s)
   expect_length(q, 1L)
   expect_null(q[[1]]$tool_add)
-  expect_match(msg_text(q[[1]]), "gptr$tools$trials(condition: string)", fixed = TRUE)
+  expect_match(msg_text(q[[1]]), "peter$tools$trials(condition: string)", fixed = TRUE)
   expect_false(is.null(registry_get("tool", "tools/trials", session = sid)))
 })
 
@@ -1191,7 +1191,7 @@ test_that("a member whose signature cannot be built is not registered", {
   expect_null(registry_get("tool", "tools/p07_badsig", session = sid))
   q = pending_of(s)
   expect_length(q, 1L)
-  line = "gptr$tools$trials(condition: string)  # Search ClinicalTrials.gov by condition."
+  line = "peter$tools$trials(condition: string)  # Search ClinicalTrials.gov by condition."
   expect_identical(msg_text(q[[1]]), sprintf(prompt_text("members_added"), line))
   msg = gptr_registry(diagnostics = TRUE)$message
   expect_true(any(grepl("Tool 'p07_badsig' was not added: ", msg, fixed = TRUE)))

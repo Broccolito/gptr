@@ -1,6 +1,6 @@
 # The user's top-level expressions between agent turns (P09; report 12 section 2.C5).
 # A task callback registered while a session with a kept home is live; it never touches `value`.
-# R drops a callback that throws, so nothing it runs may throw on parser output (D-045). gptr()
+# R drops a callback that throws, so nothing it runs may throw on parser output (D-045). peter()
 # calls, the registering one included, are not logged.
 
 #' Process-level log of the user's top-level expressions (not run state: the user's own
@@ -18,16 +18,16 @@ user_log_is_name = function(x, name) {
     identical(as.character(x), name)
 }
 
-#' Is a call head the function gptr() (`gptr`, `gptr::gptr` or `gptr:::gptr`)?
+#' Is a call head the function peter() (`peter`, `gptr::peter` or `gptr:::peter`)?
 #' @noRd
 user_log_gptr_head = function(head) {
-  if (user_log_is_name(head, "gptr")) return(TRUE)
+  if (user_log_is_name(head, "peter")) return(TRUE)
   is.call(head) && length(head) == 3L &&
     (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::"))) &&
-    user_log_is_name(head[[2L]], "gptr") && user_log_is_name(head[[3L]], "gptr")
+    user_log_is_name(head[[2L]], "gptr") && user_log_is_name(head[[3L]], "peter")
 }
 
-#' Classify an expression: "gptr" (calls gptr() anywhere), "deep" (nests past 5,000 calls), "show"
+#' Classify an expression: "gptr" (calls peter() anywhere), "deep" (nests past 5,000 calls), "show"
 #' Breadth-first and linear; children are joined without names (a child named `recursive` would
 #' bind to c()'s formal) and `function` formals join the same level (D-045).
 #' @noRd

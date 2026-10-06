@@ -890,7 +890,7 @@ prompt_tool_addition = function(s) {
   isTRUE(ad$capabilities$tool_addition) && !isFALSE(cap)
 }
 
-#' A tool spec as a namespaced `r` member (`gptr$<namespace>$<name>()`, default `tools`)
+#' A tool spec as a namespaced `r` member (`peter$<namespace>$<name>()`, default `tools`)
 #' P02's validator generates `fun` from `execute` (IC-37); other fields are kept.
 #' @noRd
 prompt_member_spec = function(sp) {
@@ -927,11 +927,11 @@ prompt_frozen_now = function(s) {
 #' @noRd
 prompt_decl_json = function(decl) json_encode(json_decode(json_encode(decl)))
 
-#' The registry key of a member signature line (`gptr$<name>(` or `gptr$<namespace>$<name>(`),
+#' The registry key of a member signature line (`peter$<name>(` or `peter$<namespace>$<name>(`),
 #' or NA
 #' @noRd
 prompt_member_key = function(line) {
-  m = regmatches(line, regexec("^gptr\\$([^$( ]+)(?:\\$([^$( ]+))?\\(", line, perl = TRUE))[[1L]]
+  m = regmatches(line, regexec("^peter\\$([^$( ]+)(?:\\$([^$( ]+))?\\(", line, perl = TRUE))[[1L]]
   if (length(m) < 3L) return(NA_character_)
   if (nzchar(m[3L])) paste0(m[2L], "/", m[3L]) else m[2L]
 }
@@ -1042,7 +1042,7 @@ prompt_add_one = function(sp, sid, frozen, direct, ctx, input, known) {
   if (declared && !identical(prompt_decl_json(decl), known$decls[[sp$name]])) changed()
   line = NULL
   if (!quiet && !declared && !by_value) {
-    prefix = if (is.null(reg$namespace)) "gptr$" else paste0("gptr$", reg$namespace, "$")
+    prefix = if (is.null(reg$namespace)) "peter$" else paste0("peter$", reg$namespace, "$")
     line = reg$signature %||%
       schema_signature(reg$name, decl$input_schema, reg$description, prefix = prefix)
   }

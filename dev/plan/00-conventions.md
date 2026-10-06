@@ -62,8 +62,8 @@ Area prefixes (the `<area>` in file names), final: `utils`, `json`, `ext`,
 `auth`, `proc`, `http`, `provider`, `catalog`, `s1`, `agent`, `session`,
 `prompt`, `eval`, `env`, `tool`, `bridge`, `perm`, `ckpt`, `skill`, `mcp`,
 `subagent`, `cli`, `doc`, `artifact`, `console`, `gptr`, plus `zzz.R`. `proc` is
-the process engine and supervision; `bridge` the polyglot helpers (`gptr$sh`,
-`gptr$py`, ...); `ckpt` checkpoints and rewind; `cli` means the subscription-CLI
+the process engine and supervision; `bridge` the polyglot helpers (`peter$sh`,
+`peter$py`, ...); `ckpt` checkpoints and rewind; `cli` means the subscription-CLI
 providers (claude, codex), never the cli package. The complete file list, with the
 plan that owns each file, is `dev/spec/03-architecture.md` section 3.2.
 
@@ -138,7 +138,7 @@ plan that owns each file, is `dev/spec/03-architecture.md` section 3.2.
   `options(gptr.quiet = TRUE)`.
 - Never write to `.GlobalEnv` by name. Evaluate user-requested code only in the
   environment the user supplied or the caller's frame captured at the
-  `gptr()` call.
+  `peter()` call.
 - Never change `options()`, `par()`, the working directory, the random seed, or
   environment variables without restoring them. In `R/` restore with
   `on.exit(..., add = TRUE)` placed right after the change; withr is a Suggests

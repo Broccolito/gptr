@@ -34,7 +34,7 @@ test_that("truncation keeps 40% head and 60% tail by lines and returns an out id
   expect_identical(res$omitted, 1000L - n_head - n_tail)
   expect_identical(
     kept[notice],
-    paste0("[... ", res$omitted, " lines omitted; all: gptr$out(\"", res$out_id, "\")]")
+    paste0("[... ", res$omitted, " lines omitted; all: peter$out(\"", res$out_id, "\")]")
   )
   expect_lte(est_tokens(res$text, "r_output"), 1000)
   expect_identical(out_get(res$out_id), lines)

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give `gptr()` its interactive face (REQ-16, REQ-38): a REPL with slash commands, `!expr` passthrough and a Ctrl-C pause menu that steers, queues, continues, aborts or backgrounds a run, plus event-driven front ends (a streaming markdown renderer and a JSONL event sink, INFRA-27).
+**Goal:** Give `peter()` its interactive face (REQ-16, REQ-38): a REPL with slash commands, `!expr` passthrough and a Ctrl-C pause menu that steers, queues, continues, aborts or backgrounds a run, plus event-driven front ends (a streaming markdown renderer and a JSONL event sink, INFRA-27).
 
-**Architecture:** Five layer-L5 files in area `console` (architecture section 3.2). `console-render.R` turns events into console output through process-wide notify hooks that render only foreground sessions (a chunk-invariant markdown stream renderer, tool lines, a status line, a spinner ticked from the reactor); `console-interrupt.R` is the `console.interrupt_policy` service every blocking gptr call runs under; `console-repl.R` is `builtin:console` (the `console` frontend and route, the REPL, the `user_ran` and `user_files` context blocks); `console-commands.R` holds the slash commands as `command` specs; `console-jsonl.R` is `builtin:jsonl` (the JSONL sink and the `jsonl` frontend). Every REPL prompt is an ordinary gateway call, `gptr::gptr(<session>, <@objects>, prompt = "...", envir = <env>, .opts = list(max_turns = ...))`, so routing, documents (P15 transcripts), budgets and the interrupt policy are exactly those of a typed call.
+**Architecture:** Five layer-L5 files in area `console` (architecture section 3.2). `console-render.R` turns events into console output through process-wide notify hooks that render only foreground sessions (a chunk-invariant markdown stream renderer, tool lines, a status line, a spinner ticked from the reactor); `console-interrupt.R` is the `console.interrupt_policy` service every blocking gptr call runs under; `console-repl.R` is `builtin:console` (the `console` frontend and route, the REPL, the `user_ran` and `user_files` context blocks); `console-commands.R` holds the slash commands as `command` specs; `console-jsonl.R` is `builtin:jsonl` (the JSONL sink and the `jsonl` frontend). Every REPL prompt is an ordinary gateway call, `gptr::peter(<session>, <@objects>, prompt = "...", envir = <env>, .opts = list(max_turns = ...))`, so routing, documents (P15 transcripts), budgets and the interrupt policy are exactly those of a typed call.
 
 **Tech Stack:** base R (>= 4.2.0); cli (`num_ansi_colors()`, `is_dynamic_tty()`, `is_utf8_output()`, `console_width()`, `code_highlight()`, `ansi_strtrim()`, `col_*()`); jsonlite through P01's `json_encode()`; testthat 3e, withr and processx in tests; P01's fake provider, mock server and helpers, P11's `local_scripted_ui()`.
 
@@ -18,8 +18,8 @@
 
 `dev/plan/00-conventions.md` applies in full: `=` for assignment (never `<-`; `<<-` only for closure state), the native `|>` (never `%>%`), ASCII-only R sources (non-ASCII as `\u` escapes), `pkg::fun()` calls, `gptr_abort()`/`gptr_warn()`/`gptr_inform()` for conditions, no `:::` in `R/`, no `.GlobalEnv`, no `withr::` in `R/`, every changed option restored with `on.exit(..., add = TRUE)` placed right after the change, testthat 3e, no network in tests, `Rscript --vanilla` from the repository root `/Users/wanjun/Desktop/gptr`, one commit per task whose message ends with the attribution line the executing harness specifies. Plan-specific requirements, copied from the specification:
 
-- Owned files (05 P14): `R/console-repl.R`, `R/console-render.R`, `R/console-interrupt.R`, `R/console-commands.R`, `R/console-jsonl.R` and one test file each: `tests/testthat/test-console-repl.R`, `test-console-render.R`, `test-console-interrupt.R`, `test-console-commands.R`, `test-console-jsonl.R`; plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`. P14 has **no exports** (04 section 14.1); its one roxygen page section is merged into `?gptr` (Task 7).
-- Layer (03 section 2.2, 3.2): the five files are L5. They call L0 functions, L5 functions (including P11's `console-ui.R`: `ui_escape()`, `ui_permission_lines()`, `ui_permission_detail()`, `ui_parse_choice()`, `ui_questions_via()`, `ui_can_remember()`), the kernel SDK of IC-33 (`session_data()`, `session_live()`, `session_home()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `run_abort()`, `run_current()`, `interpolate_prompt()`, `describe_binding()`, `eval_r()` (the fallback of the `eval.r` service, which 04 section 7.0 names for P14's `!expr`), `format_eval_result()`, `rule_parse()`, `setting_get()`), the SDK verbs of `gptr-sdk.R` (`gptr_wait()`), the services of 04 section 7.0, and registry lookups. Exported functions of earlier plans that live in other layers (`gptr()`, `gptr_last()`, `gptr_usage()`, `gptr_sessions()`, `gptr_resume()`, `gptr_fork()`, `gptr_permissions()`) are called as `gptr::<name>()`, the way a user calls them (03 section 2.2: "L5 (`console`) | SDK verbs, ..."); exports of later plans (`gptr_doc()` P15, `gptr_rewind()` P16, `gptr_skills()` P17, `gptr_mcp()` P18) are reached through P01's documented late binding `ns_fun("<name>")` with a "not available" answer while absent.
+- Owned files (05 P14): `R/console-repl.R`, `R/console-render.R`, `R/console-interrupt.R`, `R/console-commands.R`, `R/console-jsonl.R` and one test file each: `tests/testthat/test-console-repl.R`, `test-console-render.R`, `test-console-interrupt.R`, `test-console-commands.R`, `test-console-jsonl.R`; plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`. P14 has **no exports** (04 section 14.1); its one roxygen page section is merged into `?peter` (Task 7).
+- Layer (03 section 2.2, 3.2): the five files are L5. They call L0 functions, L5 functions (including P11's `console-ui.R`: `ui_escape()`, `ui_permission_lines()`, `ui_permission_detail()`, `ui_parse_choice()`, `ui_questions_via()`, `ui_can_remember()`), the kernel SDK of IC-33 (`session_data()`, `session_live()`, `session_home()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `run_abort()`, `run_current()`, `interpolate_prompt()`, `describe_binding()`, `eval_r()` (the fallback of the `eval.r` service, which 04 section 7.0 names for P14's `!expr`), `format_eval_result()`, `rule_parse()`, `setting_get()`), the SDK verbs of `gptr-sdk.R` (`gptr_wait()`), the services of 04 section 7.0, and registry lookups. Exported functions of earlier plans that live in other layers (`peter()`, `gptr_last()`, `gptr_usage()`, `gptr_sessions()`, `gptr_resume()`, `gptr_fork()`, `gptr_permissions()`) are called as `gptr::<name>()`, the way a user calls them (03 section 2.2: "L5 (`console`) | SDK verbs, ..."); exports of later plans (`gptr_doc()` P15, `gptr_rewind()` P16, `gptr_skills()` P17, `gptr_mcp()` P18) are reached through P01's documented late binding `ns_fun("<name>")` with a "not available" answer while absent.
 - Contract signatures (04 section 7.14), exactly: `builtin_console(gptr)`; `console_run(s, envir, stdin = FALSE)` ("the REPL of 18 section 4.3 on `s` (a new session when `NULL`); returns `s` invisibly on `/exit`"); `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service `console.interrupt_policy` = `function(expr_fun, runs, mode = c("call", "repl")) value`, provided by P14, owned by `builtin:console`); `render_markdown_stream(width = cli::console_width())` ("environment with `write(delta)`, `finish()`, `reset_line()`; chunk-invariant; untrusted text never used as a format string"); `builtin_jsonl(gptr)`; `jsonl_sink(session, con)` ("subscribes to the session's events and writes one redacted JSON object per line in the section 4.5 JSON form (event names verbatim)").
 - Built-ins (04 section 10.3): `builtin:console` and `builtin:jsonl` ("frontends, route `console`, renderer hooks, commands"; replaceable), declared with `on_load(ext_declare_builtin(...))`.
 - Route (04 section 6.1.1, IC-39): `console`, order `30`, match "no prompt (`gptr_can_prompt()` or `.stdin`)", result "the `console` frontend on the piped session or a new one; returns it invisibly on `/exit`". The frontend is chosen by `.opts$frontend`, then setting `frontend` (default `null` = `console`), validated against `registry_names("frontend")` (IC-69). P08 already registers the `frontend` setting spec; P14 registers none.
@@ -31,7 +31,7 @@
 - Conditions (04 section 2.2): warning `gptr_warning_readline_limit`; message `gptr_message_progress` ("P14, verbosity 1"); errors `gptr_error_invalid_argument` (fields `arg`, `expected`), `gptr_error_not_available` (`member`, `provided_by`).
 - Readline limit (03 section 6.17, report 18 fact-check): "4,095 bytes on R < 4.5, 8,190 on R >= 4.5"; a longer line is warned about and not sent.
 - `!expr` (03 section 6.17, IC-73): "evaluated in `envir`, added to the next prompt's context within 300 tokens"; `!!expr` is not added.
-- Transcripts (04 section 11.5, IC-49): REPL prompts are recorded by P15 as `s_<6 hex> = gptr("...")` / `s_<6 hex> |> gptr("...")`; P14 supplies them as ordinary gateway calls and announces direct R (the `input` event with source `passthrough` first, which may handle or transform the code; then the `console:direct` channel with the output, which P15's `doc_on_console_direct()` records) and slash commands (the `input` event with source `repl` first; then the `console:command` channel, which P15's `doc_on_console_command()` records as a comment).
+- Transcripts (04 section 11.5, IC-49): REPL prompts are recorded by P15 as `s_<6 hex> = peter("...")` / `s_<6 hex> |> peter("...")`; P14 supplies them as ordinary gateway calls and announces direct R (the `input` event with source `passthrough` first, which may handle or transform the code; then the `console:direct` channel with the output, which P15's `doc_on_console_direct()` records) and slash commands (the `input` event with source `repl` first; then the `console:command` channel, which P15's `doc_on_console_command()` records as a comment).
 - Rendering (03 section 6.17): "colours only when `cli::num_ansi_colors() > 1`; `\r` only on dynamic TTYs; spinner ticked from the reactor; `flush.console()` after deltas". Untrusted text (model, tool, file and user text) is escaped with `console_escape()` (C0/C1 controls except TAB, bidi and zero-width characters as `<U+XXXX>`, IC-53 item 8) and written with `cat()` or `msg_verbatim()`; it is never the first argument of a `cli_*()` call (rule C1).
 - IC-59: "the `.stdin` REPL connection (closed on `/exit` and by `on.exit()`)"; the JSONL sink "writes to a connection its caller owns" and opens none.
 - Copy safety (03 section 6.4 R2): the REPL keeps the evaluation environment only in the binding `rs$envir`, reset to `NULL` when the REPL ends; the prompt mask's bindings are removed and its parent reset to `emptyenv()` after each prompt.
@@ -43,7 +43,7 @@
 |---|---|---|
 | `R/console-render.R` | create (Task 1), extend (Task 2) | escaping, plain output and notices, the markdown stream renderer, the spinner; the console state, foreground test, tool, result, status and artifact lines, custom-entry renderers and the renderer hooks |
 | `R/console-interrupt.R` | create (Task 3) | `with_interrupt_policy()`, the pause menu, deferred steering, abort and re-signal; the `console.interrupt_policy` service |
-| `R/console-repl.R` | create (Task 4), extend (Tasks 5, 7) | REPL state and the input layer (readers, grammar, readline limit, history); `!expr`, notes, `@mentions`, the `user_ran` and `user_files` providers and `console_send()`; the loop, banner, stdin UI, `console_run()`, the frontend and route, `builtin:console`, the `?gptr` console section |
+| `R/console-repl.R` | create (Task 4), extend (Tasks 5, 7) | REPL state and the input layer (readers, grammar, readline limit, history); `!expr`, notes, `@mentions`, the `user_ran` and `user_files` providers and `console_send()`; the loop, banner, stdin UI, `console_run()`, the frontend and route, `builtin:console`, the `?peter` console section |
 | `R/console-commands.R` | create (Task 6) | the slash commands as `command` specs and their dispatcher |
 | `R/console-jsonl.R` | create (Task 8) | the JSON form of events, `jsonl_sink()`, the `jsonl` frontend, `builtin:jsonl` |
 | `tests/testthat/test-console-render.R` | create (Task 1), extend (Tasks 2, 7, 8) | renderer, escaping, hooks, end-to-end rendering (acceptance 3, 7); INFRA-27, rendering decoupled from transport (acceptance 4, the file 03 section 6.18 names; Task 8) |
@@ -51,7 +51,7 @@
 | `tests/testthat/test-console-repl.R` | create (Task 4), extend (Tasks 5, 7) | input grammar, passthrough and notes, scripted `.stdin` sessions (acceptance 2), IRkernel (acceptance 7) |
 | `tests/testthat/test-console-commands.R` | create (Task 6) | every command |
 | `tests/testthat/test-console-jsonl.R` | create (Task 8) | JSON form, event order, secrets (acceptance 6), the frontend |
-| `NAMESPACE`, `man/gptr.Rd` | regenerated (Task 7) | `Rscript --vanilla -e 'devtools::document()'` (the console section of `?gptr`; no new exports) |
+| `NAMESPACE`, `man/peter.Rd` | regenerated (Task 7) | `Rscript --vanilla -e 'devtools::document()'` (the console section of `?peter`; no new exports) |
 
 ## Tasks (overview)
 
@@ -621,10 +621,10 @@ git commit -m "feat(console): add escaping, the markdown stream renderer and the
 - Test: `tests/testthat/test-console-render.R` (append)
 
 **Interfaces:**
-- Consumes: Task 1; P01 `the`, `ev_new(type, ...)`, `json_encode(x)`, `gptr_inform(message, class, ...)` (class `progress`, 04 section 2.2), `verbosity()`; P02 `gptr_hook(event, handler, matcher = NULL)`, `registry_get(kind, name, session = NULL)` (kinds `tool` with field `render` = `function(call, result, width)`, and `renderer` with `render(entry, width, ctx)` -> chr, IC-69); P04 `reactor_task(fn, run = NULL)` (a number returned by `fn` means "call me again after that many seconds"), `reactor_cancel(ids)`; P06 kernel SDK `session_data(s)` (`.d$id`, `depth`, `entries`), `session_live(s)` (live record: `ctx`, `background`), `run_current()` (the innermost run whose tool is executing on this call stack, or `NULL`; 04 section 7.6); the event payloads of 04 section 10.4 (`agent_start`; `before_request`: `provider`, `model`, `request_id`, `tokens_est`; `message_update`: `index`, `kind`, `delta`; `message_end`: `role`, `message`; `tool_execution_start`: `tool_call_id`, `tool_name`, `input`; `tool_execution_end`: `is_error`, `elapsed`; `agent_end`: `status`, `reason`, `usage`, `turns`; `artifact_start`: `id`, `url`, `version`; `retry_start`: `attempt`, `delay`, `class`; `permission_request`; `session_shutdown`). Tests: P01 `gptr_fake_provider()`, `msg_assistant()`, `msg_tool_result()`, `local_project()`, `local_gptr_options()`; P02 `gptr_spec()`, `gptr_register()`; P06 `session_append(s, entry)`; P08 `gptr(..., .run = FALSE)`.
+- Consumes: Task 1; P01 `the`, `ev_new(type, ...)`, `json_encode(x)`, `gptr_inform(message, class, ...)` (class `progress`, 04 section 2.2), `verbosity()`; P02 `gptr_hook(event, handler, matcher = NULL)`, `registry_get(kind, name, session = NULL)` (kinds `tool` with field `render` = `function(call, result, width)`, and `renderer` with `render(entry, width, ctx)` -> chr, IC-69); P04 `reactor_task(fn, run = NULL)` (a number returned by `fn` means "call me again after that many seconds"), `reactor_cancel(ids)`; P06 kernel SDK `session_data(s)` (`.d$id`, `depth`, `entries`), `session_live(s)` (live record: `ctx`, `background`), `run_current()` (the innermost run whose tool is executing on this call stack, or `NULL`; 04 section 7.6); the event payloads of 04 section 10.4 (`agent_start`; `before_request`: `provider`, `model`, `request_id`, `tokens_est`; `message_update`: `index`, `kind`, `delta`; `message_end`: `role`, `message`; `tool_execution_start`: `tool_call_id`, `tool_name`, `input`; `tool_execution_end`: `is_error`, `elapsed`; `agent_end`: `status`, `reason`, `usage`, `turns`; `artifact_start`: `id`, `url`, `version`; `retry_start`: `attempt`, `delay`, `class`; `permission_request`; `session_shutdown`). Tests: P01 `gptr_fake_provider()`, `msg_assistant()`, `msg_tool_result()`, `local_project()`, `local_gptr_options()`; P02 `gptr_spec()`, `gptr_register()`; P06 `session_append(s, entry)`; P08 `peter(..., .run = FALSE)`.
 - Produces: `console_hooks()` -> the list of hook specs builtin_console() registers (Task 7); the console state `console_state()` (`the$console`, owned by P14) with `active`: run id -> record (session, markdown stream, spinner, pending tool calls) between `agent_start` and `agent_end`, read by the interrupt policy (Task 3) through `console_track(run_id, session)`, `console_record(event)`, `console_drop(run_id)`; `console_foreground(rec)`, `console_render_pause()`; the line builders `console_tool_line(call, result = NULL, session = NULL, width = cli::console_width())`, `console_artifact_line(id, url)`, `console_status_line(status, reason = NULL, usage = NULL, turns = NULL)`; the NS-8 queue helpers `console_artifact_emit(lines)` and `console_artifact_flush()` (field `artifacts` of the console state); the handlers `console_on_*()`.
 
-The hooks follow 04 section 7.14: process-wide notify hooks that render only foreground sessions (depth 0, live, not handed to P21's background pump) when `verbosity() >= 2`; at verbosity 1 tool calls and run ends become progress messages on stderr (class `gptr_message_progress`); at verbosity 3 thinking deltas and request lines are shown too. A run is tracked from `agent_start` at any verbosity because the interrupt policy needs the session of each run it is given (04 gives no accessor from a `gptr_run` to its session object). Answers stream through Task 1's renderer; a reply that arrived without deltas is printed whole at `message_end`. A tool call gets one line at `tool_execution_start`, "  * r  <first line>  (+N more lines)" (NS-1), and its result lines come from the tool-result message at `message_end`: errors, the object changes of `r`, the diff of `edit`, the path of `write`. A tool spec's `render(call, result, width)` replaces both (IC-69: `call` = `list(id, name, input)`, `result` = `NULL` at the start and the tool-result message plus `elapsed` at the end); custom entries appended during the run are shown at `agent_end` through `renderer` records. `artifact_start` prints the NS-8 line `artifact  <id>  ->  <url>   (running in background)` (IC-71). The event usually fires inside the model's `r` code (`gptr$app()`, P23), whose stdout and messages P09's evaluator captures into the tool result; printed there, the line (with its tokenised URL) would reach the model a second time next to the handle's own print (P23 ambiguity 14). So while a tool executes (`run_current()` non-`NULL`) the line is queued in the console state and printed by the `tool_execution_end` hook once no tool executes on the stack (a nested `gptr$<tool>()` call ending inside the `r` code keeps it queued), or at `agent_end` after an interrupted tool; outside a tool it prints at once. `permission_request` only ends partial lines (the UI of P11 asks next); it returns `NULL` and cannot fail, because a failing `permission_request` handler denies. The spinner is a reactor task ticking every 0.1 s from `before_request` to the first delta (03 section 6.17: "spinner ticked from the reactor").
+The hooks follow 04 section 7.14: process-wide notify hooks that render only foreground sessions (depth 0, live, not handed to P21's background pump) when `verbosity() >= 2`; at verbosity 1 tool calls and run ends become progress messages on stderr (class `gptr_message_progress`); at verbosity 3 thinking deltas and request lines are shown too. A run is tracked from `agent_start` at any verbosity because the interrupt policy needs the session of each run it is given (04 gives no accessor from a `gptr_run` to its session object). Answers stream through Task 1's renderer; a reply that arrived without deltas is printed whole at `message_end`. A tool call gets one line at `tool_execution_start`, "  * r  <first line>  (+N more lines)" (NS-1), and its result lines come from the tool-result message at `message_end`: errors, the object changes of `r`, the diff of `edit`, the path of `write`. A tool spec's `render(call, result, width)` replaces both (IC-69: `call` = `list(id, name, input)`, `result` = `NULL` at the start and the tool-result message plus `elapsed` at the end); custom entries appended during the run are shown at `agent_end` through `renderer` records. `artifact_start` prints the NS-8 line `artifact  <id>  ->  <url>   (running in background)` (IC-71). The event usually fires inside the model's `r` code (`peter$app()`, P23), whose stdout and messages P09's evaluator captures into the tool result; printed there, the line (with its tokenised URL) would reach the model a second time next to the handle's own print (P23 ambiguity 14). So while a tool executes (`run_current()` non-`NULL`) the line is queued in the console state and printed by the `tool_execution_end` hook once no tool executes on the stack (a nested `peter$<tool>()` call ending inside the `r` code keeps it queued), or at `agent_end` after an interrupted tool; outside a tool it prints at once. `permission_request` only ends partial lines (the UI of P11 asks next); it returns `NULL` and cannot fail, because a failing `permission_request` handler denies. The spinner is a reactor task ticking every 0.1 s from `before_request` to the first delta (03 section 6.17: "spinner ticked from the reactor").
 
 - [ ] **Step 1: Write the failing test**
 
@@ -636,7 +636,7 @@ Append to `tests/testthat/test-console-render.R`:
 # A real, idle session that never ran (its prompt waits in the queue): the hooks only read it
 render_session = function(.env = parent.frame()) {
   local_project(.env = .env)
-  gptr("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
 }
 
 # Run events through the handlers that console_hooks() registers, capturing stdout
@@ -786,11 +786,11 @@ test_that("an artifact_start fired while a tool executes prints after tool_execu
   invisible(utils::capture.output({
     console_on_agent_start(hook_event("agent_start", s), ctx)
     console_on_tool_start(hook_event("tool_execution_start", s, tool_call_id = "c1",
-                                     tool_name = "r", input = list(code = "a = gptr$app()")),
+                                     tool_name = "r", input = list(code = "a = peter$app()")),
                           ctx)
   }))
   # inside the model's r code (run_current() non-NULL; P09 captures this output): queued; a
-  # nested tool call (gptr$<tool>() in that code) ends while the r tool still runs
+  # nested tool call (peter$<tool>() in that code) ends while the r tool still runs
   inside = local({
     local_mocked_bindings(run_current = function() in_tool)
     utils::capture.output({
@@ -1371,7 +1371,7 @@ console_on_agent_end = function(event, ctx) {
 
 #' artifact_start: the NS-8 line at verbosity >= 1 (stdout at 2, progress on stderr at 1)
 #'
-#' The event usually fires inside the model's `r` code (`gptr$app()`), whose stdout and messages
+#' The event usually fires inside the model's `r` code (`peter$app()`), whose stdout and messages
 #' P09's evaluator captures into the tool result, which already shows the handle. While a tool
 #' executes (`run_current()` non-NULL) the line is therefore queued in `console_state()` and
 #' printed by the tool_execution_end hook (or at agent_end) once no tool executes on the stack.
@@ -1535,7 +1535,7 @@ stand_in_run = function(id = "u0000run1", status = "streaming", background = FAL
 
 policy_session = function(.env = parent.frame()) {
   local_project(.env = .env)
-  gptr("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
 }
 
 local_tracked = function(run, s, .env = parent.frame()) {
@@ -2075,7 +2075,7 @@ git commit -m "feat(console): add the interrupt policy and the pause menu"
 - Consumes: Task 1 (`console_escape()`); P01 `check_class()`, `check_env()`, `check_flag()`, `as_utf8()`, `gptr_readline(prompt = "")` (the one readline wrapper, IC-43), `gptr_warn(message, class)`, `%||%`; P06 kernel SDK `session_home(s)`, `setting_get(key, session = NULL, default = NULL)`; the `gptr_session` bindings `$mode`, `$model` (04 section 5.1); P08's `gptr_call` record (04 section 7.8): `ids` (`model`, `mode`, `skills`, `tools`, `plugins`, `extensions`), `args` (`budget`, `opts`, `stdin`, and `envir_given`, the flag P08's capture sets when `envir =` was passed), `context` (items with `kind` and `name`). Tests: P01 `local_gptr_options()`; testthat `local_mocked_bindings()`.
 - Produces: `repl_state(session, envir, stdin = FALSE, call = NULL)` -> environment (`session`, `envir`, `envir_given`, `stdin`, `reader`, `render`, `model`, `mode`, `skills`, `tools`, `plugins`, `extensions`, `budget`, `opts`, `attach`, `pending_call` (TRUE until the console call's identifiers and objects reached a prompt, also on a piped session), `notes`, `files`, `next_skills`, `sending`, `mask`, `exit`, `interrupts`, `waiting`); `repl_eval_env(rs)`; `repl_prompt(rs)`, `repl_mode(rs)`, `repl_model(rs)`, `console_model_label(x)`; `console_stdin_open()` (the one place that opens `file("stdin")`; tests mock it); `readline_limit()`; `console_reader(stdin = FALSE, echo = stdin)` -> environment with `read(prompt = "", stream = "stdout")`, `close()`, `flag`; `r_incomplete(code)`; `repl_read_logical(rd, prompt)`; `console_history_add(x)`.
 
-The input layer is report 18's (sections 2.1.2-2.1.3, 4.3, Appendix A.7) with its verified facts: readline() delivers 4,095 bytes on R < 4.5 and 8,190 on R >= 4.5 and silently splits or truncates longer lines, so a line that reaches the limit is warned about (`gptr_warning_readline_limit`) and dropped rather than sent half; under `.stdin = TRUE` one persistent `file("stdin")` connection serves the whole REPL, because a fresh connection per read loses buffered lines, and it is closed on `/exit` and on exit (IC-59). The stdin reader echoes the prompt and the escaped line, so a piped session reads like a terminal session. The grammar (03 section 6.17): a `"""` block is one multi-line prompt, a fenced block is R code (returned as `!code`), `!code` and `!!code` continue with `+ ` while the code is incomplete (detected locale-independently: the parse error of incomplete input points at column 0 of the line after the last, or is an `INCOMPLETE_STRING`), a trailing backslash continues a line, and the end of piped input ends every block. The REPL state takes the console call's resolved identifiers, budget and `.opts` (minus `frontend`) for its first prompt and the call's plain-symbol context objects as attachments (`pending_call`), also when a session was piped in, so `s |> gptr(mode = auto)` changes the mode at the first prompt as `s |> gptr("...", mode = auto)` would; prompts and `!code` evaluate in the call's explicit `envir`, else the session's kept home, else the call's environment (IC-40).
+The input layer is report 18's (sections 2.1.2-2.1.3, 4.3, Appendix A.7) with its verified facts: readline() delivers 4,095 bytes on R < 4.5 and 8,190 on R >= 4.5 and silently splits or truncates longer lines, so a line that reaches the limit is warned about (`gptr_warning_readline_limit`) and dropped rather than sent half; under `.stdin = TRUE` one persistent `file("stdin")` connection serves the whole REPL, because a fresh connection per read loses buffered lines, and it is closed on `/exit` and on exit (IC-59). The stdin reader echoes the prompt and the escaped line, so a piped session reads like a terminal session. The grammar (03 section 6.17): a `"""` block is one multi-line prompt, a fenced block is R code (returned as `!code`), `!code` and `!!code` continue with `+ ` while the code is incomplete (detected locale-independently: the parse error of incomplete input points at column 0 of the line after the last, or is an `INCOMPLETE_STRING`), a trailing backslash continues a line, and the end of piped input ends every block. The REPL state takes the console call's resolved identifiers, budget and `.opts` (minus `frontend`) for its first prompt and the call's plain-symbol context objects as attachments (`pending_call`), also when a session was piped in, so `s |> peter(mode = auto)` changes the mode at the first prompt as `s |> peter("...", mode = auto)` would; prompts and `!code` evaluate in the call's explicit `envir`, else the session's kept home, else the call's environment (IC-40).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2102,18 +2102,18 @@ stdin_reader = function(lines, echo = FALSE, .env = parent.frame()) {
 
 test_that("the stdin reader reads one line per call and NA at the end", {
   rd = stdin_reader(c("first", "second"))
-  expect_identical(rd$read("gptr> "), "first")
-  expect_identical(rd$read("gptr> "), "second")
-  expect_identical(rd$read("gptr> "), NA_character_)
+  expect_identical(rd$read("peter> "), "first")
+  expect_identical(rd$read("peter> "), "second")
+  expect_identical(rd$read("peter> "), NA_character_)
 })
 
 test_that("the stdin reader echoes the prompt and the escaped line when asked", {
   rd = stdin_reader("hello \033", echo = TRUE)
   got = NULL
   out = utils::capture.output({
-    got = rd$read("gptr> ")
+    got = rd$read("peter> ")
   })
-  expect_identical(out, "gptr> hello <U+001B>")
+  expect_identical(out, "peter> hello <U+001B>")
   expect_identical(got, "hello \033")
 })
 
@@ -2130,28 +2130,28 @@ test_that("close() closes the stdin connection once (IC-59)", {
 
 test_that("a triple-quote block is one prompt", {
   rd = stdin_reader(c('"""', "line one", "line two", '"""', "next"))
-  expect_identical(repl_read_logical(rd, "gptr> "), "line one\nline two")
-  expect_identical(repl_read_logical(rd, "gptr> "), "next")
+  expect_identical(repl_read_logical(rd, "peter> "), "line one\nline two")
+  expect_identical(repl_read_logical(rd, "peter> "), "next")
   rd = stdin_reader(c('"""one line"""'))
-  expect_identical(repl_read_logical(rd, "gptr> "), "one line")
+  expect_identical(repl_read_logical(rd, "peter> "), "one line")
 })
 
 test_that("a fenced block is R code and ! code continues while incomplete", {
   rd = stdin_reader(c("```r", "x = 1", "y = 2", "```", "!for (i in 1:2) {", "  print(i)", "}",
                       "!!z = 3"))
-  expect_identical(repl_read_logical(rd, "gptr> "), "!x = 1\ny = 2")
-  expect_identical(repl_read_logical(rd, "gptr> "), "!for (i in 1:2) {\n  print(i)\n}")
-  expect_identical(repl_read_logical(rd, "gptr> "), "!!z = 3")
+  expect_identical(repl_read_logical(rd, "peter> "), "!x = 1\ny = 2")
+  expect_identical(repl_read_logical(rd, "peter> "), "!for (i in 1:2) {\n  print(i)\n}")
+  expect_identical(repl_read_logical(rd, "peter> "), "!!z = 3")
 })
 
 test_that("a trailing backslash continues a line; end of input ends every block", {
   rd = stdin_reader(c("first part \\", "second part"))
-  expect_identical(repl_read_logical(rd, "gptr> "), "first part \nsecond part")
+  expect_identical(repl_read_logical(rd, "peter> "), "first part \nsecond part")
   rd = stdin_reader(c('"""', "unterminated"))
-  expect_identical(repl_read_logical(rd, "gptr> "), "unterminated")
-  expect_identical(repl_read_logical(rd, "gptr> "), NA_character_)
+  expect_identical(repl_read_logical(rd, "peter> "), "unterminated")
+  expect_identical(repl_read_logical(rd, "peter> "), NA_character_)
   rd = stdin_reader("!f = function() {")
-  expect_identical(repl_read_logical(rd, "gptr> "), "!f = function() {")
+  expect_identical(repl_read_logical(rd, "peter> "), "!f = function() {")
 })
 
 test_that("r_incomplete() recognises incomplete code in any locale", {
@@ -2167,7 +2167,7 @@ test_that("a line at the readline limit is warned about and dropped", {
   rd = console_reader(stdin = FALSE)
   out = NULL
   expect_warning({
-    out = repl_read_logical(rd, "gptr> ")
+    out = repl_read_logical(rd, "peter> ")
   }, class = "gptr_warning_readline_limit")
   expect_identical(out, "")
   expect_identical(readline_limit(), if (getRversion() >= "4.5.0") 8190L else 4095L)
@@ -2189,11 +2189,11 @@ test_that("repl_state() takes the console call's identifiers, options and object
   expect_identical(rs$attach, "mtcars")
   expect_identical(rs$budget, list(cost = 1))
   expect_identical(repl_eval_env(rs), e)
-  expect_identical(repl_prompt(rs), "gptr[auto]> ")
+  expect_identical(repl_prompt(rs), "peter[auto]> ")
   expect_identical(repl_model(rs), "fake/fake-1")
   rs$mode = NULL
   local_gptr_options(mode = "manual")
-  expect_identical(repl_prompt(rs), "gptr> ")
+  expect_identical(repl_prompt(rs), "peter> ")
   expect_error(repl_state(NULL, "not an env"), class = "gptr_error_invalid_argument")
 })
 
@@ -2216,7 +2216,7 @@ Create `R/console-repl.R`:
 
 ```r
 # console-repl.R -- P14 Console and front ends (layer L5, area console).
-# The `console` built-in (contract 7.14, 10.3): the REPL behind `gptr()` with no prompt (report
+# The `console` built-in (contract 7.14, 10.3): the REPL behind `peter()` with no prompt (report
 # 18 section 4.3), its input grammar (architecture 6.17), the `user_ran` and `user_files` context
 # blocks, the `console` frontend and route (order 30) and builtin_console(). Task 4: REPL state
 # and the input layer; Task 5: `!expr`, notes, `@mentions` and console_send(); Task 7: the loop,
@@ -2309,18 +2309,18 @@ repl_model = function(rs) {
   console_model_label(rs$model) %||% setting_get("model") %||% "the default model"
 }
 
-#' The prompt: "gptr> " in manual mode, "gptr[auto]> " otherwise
+#' The prompt: "peter> " in manual mode, "peter[auto]> " otherwise
 #' @noRd
 repl_prompt = function(rs) {
   mode = repl_mode(rs)
-  if (identical(mode, "manual")) "gptr> " else paste0("gptr[", mode, "]> ")
+  if (identical(mode, "manual")) "peter> " else paste0("peter[", mode, "]> ")
 }
 
 # ---------------------------------------------------------------------------------------------
 # Input layer (report 18 sections 2.1.2-2.1.3, 4.3 and Appendix A.7)
 # ---------------------------------------------------------------------------------------------
 
-#' The persistent stdin connection of `gptr(.stdin = TRUE)` (tests mock this function)
+#' The persistent stdin connection of `peter(.stdin = TRUE)` (tests mock this function)
 #'
 #' One connection for the whole REPL: a fresh file("stdin") per read loses buffered lines
 #' (report 18 2.1.3). The reader closes it on `/exit` and on exit (IC-59).
@@ -2485,10 +2485,10 @@ git commit -m "feat(console): add the REPL state and the input layer"
 - Test: `tests/testthat/test-console-repl.R` (append)
 
 **Interfaces:**
-- Consumes: Tasks 1-4 (`console_escape()`, `console_notice()`, `console_write()`, `console_repl_find()`, `policy_active()`, `repl_state()`, `repl_eval_env()`); P01 `est_tokens(x, class)` (classes `r_output`, `code`), `clean_terminal()`, `project_root()`, `path_rel()`, `as_utf8()`, `gptr_opt()`, `verbosity()`, `ev_new()`; P02 `ev_dispatch()`, `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `registry_names()`; P03 `redact(x, profile = "context")`; P06 kernel SDK `session_live(s)` (`run`), `run_abort(run, reason = "user")`, `session_home(s)`; P08 kernel SDK `interpolate_prompt(template, envir)` (`$prompt`), the export `gptr()` (called as `gptr::gptr()`: a context dot that is a plain symbol is read by name from `envir`, never forced, IC-41; `envir =`; `.opts = list(max_turns =)`; the condition field `$session` of a failed call) and `gptr_last()`; the `gptr_call` binding `sys_call` (04 section 7.8), reached from a context block's `ctx$input$call`; P09's service `eval.r` = `function(code, envir, ...)` (04 section 7.0: "`eval_r()` through the `evaluator` kind (IC-69)", consumers "P14 `!expr`"), fetched with P01 `ext_service_has()`/`ext_service_get()`, else the kernel SDK `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` (a `gptr_eval_result`: `status`, `events`, `outputs`; P14 passes `plots = "auto", tee = TRUE, guard = FALSE`), `format_eval_result(res, budget_tokens)` (`$text`); P09's `attached` context block (it describes the objects a call attaches). Tests: P01 `gptr_fake_provider()`, `fake_requests()` (each request's `messages` and `last_user`), `local_project()`, `local_gptr_options()`, `the$services` and `ext_service_set()` (a replaced `eval.r` service, restored on exit); P02 `gptr_hook()`, `gptr_register()`; P08 `gptr()` (`.run = FALSE`).
+- Consumes: Tasks 1-4 (`console_escape()`, `console_notice()`, `console_write()`, `console_repl_find()`, `policy_active()`, `repl_state()`, `repl_eval_env()`); P01 `est_tokens(x, class)` (classes `r_output`, `code`), `clean_terminal()`, `project_root()`, `path_rel()`, `as_utf8()`, `gptr_opt()`, `verbosity()`, `ev_new()`; P02 `ev_dispatch()`, `gptr_context_block(name, provide, placement = c("turn", "first", "both"), authority = c("data", "operator"), budget = 300L, order = 650L)`, `registry_names()`; P03 `redact(x, profile = "context")`; P06 kernel SDK `session_live(s)` (`run`), `run_abort(run, reason = "user")`, `session_home(s)`; P08 kernel SDK `interpolate_prompt(template, envir)` (`$prompt`), the export `peter()` (called as `gptr::peter()`: a context dot that is a plain symbol is read by name from `envir`, never forced, IC-41; `envir =`; `.opts = list(max_turns =)`; the condition field `$session` of a failed call) and `gptr_last()`; the `gptr_call` binding `sys_call` (04 section 7.8), reached from a context block's `ctx$input$call`; P09's service `eval.r` = `function(code, envir, ...)` (04 section 7.0: "`eval_r()` through the `evaluator` kind (IC-69)", consumers "P14 `!expr`"), fetched with P01 `ext_service_has()`/`ext_service_get()`, else the kernel SDK `eval_r(code, envir, timeout = NULL, plots = c("auto", "capture", "none"), tee = gptr_has_human(), budget_tokens = gptr_opt("r_output_tokens"), guard = TRUE, rng = NULL, record = TRUE, max_images = gptr_opt("r_max_images"))` (a `gptr_eval_result`: `status`, `events`, `outputs`; P14 passes `plots = "auto", tee = TRUE, guard = FALSE`), `format_eval_result(res, budget_tokens)` (`$text`); P09's `attached` context block (it describes the objects a call attaches). Tests: P01 `gptr_fake_provider()`, `fake_requests()` (each request's `messages` and `last_user`), `local_project()`, `local_gptr_options()`, `the$services` and `ext_service_set()` (a replaced `eval.r` service, restored on exit); P02 `gptr_hook()`, `gptr_register()`; P08 `peter()` (`.run = FALSE`).
 - Produces: `repl_mentions(text, env)` -> `list(files, objects)`, `repl_file_block(path, shown, max_lines = 40L)`, `console_object_visible(name, env)`, `attr_escape(x)`; `repl_note(code, res)`, `console_notes_text(notes, budget = 300L)`, `console_files_text(files, budget = 2000L)`; the context blocks `console_blocks()` (`user_ran`: budget 300, order 550; `user_files`: budget 2000, order 560; placement `both`, authority `data`) with `console_notes_provide(ctx, budget)`, `console_files_provide(ctx, budget)`, `repl_sending(ctx)`; `repl_passthrough(rs, text)` (the `input` event with `source = "passthrough"`, the `console:direct` channel); `console_abort_stray(s)`; `console_call(rs, text)`, `console_call_release(rs)`, `console_send(rs, text)` -> `list(status = "ok" | "error" | "interrupt", value, error)`.
 
-`!code` is the user's own R (report 18 section 4.3): it runs through the `eval.r` service (the evaluator selected by the `evaluator` setting, so a plugin evaluator also serves `!code`; P09's `eval_r()` when the service is absent) in the REPL's environment, shown as it runs, without the permission gate or the code guard, and P14 never classifies it. `!code` leaves a note (the code and its output as `#>` lines, redacted with the `context` profile) that the `user_ran` block adds to the next prompt within 300 tokens, the newest notes first and one over-long note cut from its end (IC-73); `!!code` leaves none. The `input` event may handle or transform the code first (source `"passthrough"`), and the `console:direct` channel tells P15 what ran. `@path` mentions add the first 40 lines of a file (a one-line note for a binary file) to the `user_files` block; `@name` mentions of objects bound in the evaluation environment (up to the global environment, never namespaces) are passed to the gateway as plain symbols, so P09's `attached` block describes them by name and nothing is copied. A prompt is an ordinary gateway call, `gptr::gptr(.gptr_session, <@objects>, prompt = "<text>", envir = .gptr_env, .opts = list(max_turns = <gptr.max_turns_console>))`, evaluated in a mask whose parent is the evaluation environment; the first prompt also passes the console call's model, mode, tools, plugins, extensions and budget, and `/skill:<name>` adds `skills =` for one prompt. The two blocks answer only that call: the gateway record's `sys_call` is the call `console_send()` built. `console_call()` binds the evaluation environment but creates no closure (rule R3); after each prompt the mask's bindings are removed and its parent reset to `emptyenv()` (R2). A failed call keeps its session (the condition's `$session`, else a new `gptr_last()`), and an interrupt that hit before the policy did aborts the session's stray run.
+`!code` is the user's own R (report 18 section 4.3): it runs through the `eval.r` service (the evaluator selected by the `evaluator` setting, so a plugin evaluator also serves `!code`; P09's `eval_r()` when the service is absent) in the REPL's environment, shown as it runs, without the permission gate or the code guard, and P14 never classifies it. `!code` leaves a note (the code and its output as `#>` lines, redacted with the `context` profile) that the `user_ran` block adds to the next prompt within 300 tokens, the newest notes first and one over-long note cut from its end (IC-73); `!!code` leaves none. The `input` event may handle or transform the code first (source `"passthrough"`), and the `console:direct` channel tells P15 what ran. `@path` mentions add the first 40 lines of a file (a one-line note for a binary file) to the `user_files` block; `@name` mentions of objects bound in the evaluation environment (up to the global environment, never namespaces) are passed to the gateway as plain symbols, so P09's `attached` block describes them by name and nothing is copied. A prompt is an ordinary gateway call, `gptr::peter(.gptr_session, <@objects>, prompt = "<text>", envir = .gptr_env, .opts = list(max_turns = <gptr.max_turns_console>))`, evaluated in a mask whose parent is the evaluation environment; the first prompt also passes the console call's model, mode, tools, plugins, extensions and budget, and `/skill:<name>` adds `skills =` for one prompt. The two blocks answer only that call: the gateway record's `sys_call` is the call `console_send()` built. `console_call()` binds the evaluation environment but creates no closure (rule R3); after each prompt the mask's bindings are removed and its parent reset to `emptyenv()` (R2). A failed call keeps its session (the condition's `$session`, else a new `gptr_last()`), and an interrupt that hit before the policy did aborts the session's stray run.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2682,7 +2682,7 @@ test_that("!code runs through the eval.r service (the evaluator kind, IC-69)", {
 
 test_that("the console call's arguments reach the first prompt, also on a piped session", {
   local_project()
-  s = gptr("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   call = list(ids = list(mode = "auto"), args = list(), context = list())
   rs = repl_state(s, new.env(), call = call)
   cl = console_call(rs, "go")
@@ -2940,7 +2940,7 @@ console_abort_stray = function(s) {
 #' Build the gateway call of one prompt (no closure or handler is created in this frame, which
 #' binds the evaluation environment; rule R3)
 #'
-#' Returns `gptr::gptr(.gptr_session, <@objects>, prompt = "<text>", envir = .gptr_env, .opts =
+#' Returns `gptr::peter(.gptr_session, <@objects>, prompt = "<text>", envir = .gptr_env, .opts =
 #' ...)` (on the first prompt of a new or piped-in session also the console call's model, mode,
 #' tools, plugins, extensions, skills and context objects). `.gptr_session` and `.gptr_env` are
 #' bound in the mask `rs$mask`, whose parent is the evaluation environment, so @objects reach
@@ -2953,7 +2953,7 @@ console_call = function(rs, text) {
   men = repl_mentions(text, env)
   first = is.null(rs$session)
   # the console call's identifiers and objects go with the first prompt of a new session and
-  # with the first prompt on a piped-in session (`s |> gptr(mode = auto)`)
+  # with the first prompt on a piped-in session (`s |> peter(mode = auto)`)
   extras = first || isTRUE(rs$pending_call)
   rs$pending_call = FALSE
   objs = unique(c(if (extras) rs$attach else character(), men$objects))
@@ -2965,7 +2965,7 @@ console_call = function(rs, text) {
   mask = new.env(parent = env)
   assign(".gptr_env", env, envir = mask)
   rs$mask = mask
-  head = list(quote(gptr::gptr))
+  head = list(quote(gptr::peter))
   if (!first) {
     assign(".gptr_session", rs$session, envir = mask)
     head = c(head, list(quote(.gptr_session)))
@@ -3056,7 +3056,7 @@ git commit -m "feat(console): add !expr passthrough, notes, mentions and console
 - Test: `tests/testthat/test-console-commands.R` (create)
 
 **Interfaces:**
-- Consumes: Tasks 1-5 (`console_escape()`, `console_notice()`, `console_out()`, `console_interrupt_key()`, `console_repl_find()`, `with_interrupt_policy()`, `repl_model()`, `repl_mode()`, `repl_eval_env()`); P01 `ns_fun(name)`, `ext_service_has()`, `ext_service_get()`, `ev_new()`, `%||%`; P02 `gptr_command(name, handler, description = NULL, complete = NULL)` (kind `command`: `handler(args, ctx)` returns `NULL`, a chr printed verbatim, or `list(prompt = chr(1))` sent as a prompt; an error is reported and the input counts as handled), `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `ev_dispatch()`, `ctx_new(session, run = NULL)`; P06 kernel SDK `session_data(s)` (`id`, `status`, `turns`, `model`, `mode`, `queue$steer`, `queue$follow_up`, `file`, `frozen$tool_names`), `session_live(s)` (`ctx`), `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `setting_get()`; P09 `describe_binding(name, envir, budget = 150L)`; P11 `rule_parse(rule)` (kernel SDK); the services `compact.run` = `function(s, reason, focus = NULL)` (P07), `doc.site` = `function(session)` -> `list(path, format, ...)` or `NULL` (P15), `skill.body` (P17, presence only); exports of earlier plans called as `gptr::<name>()`: `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` (P06; the detail ledger has `request_id`, `component`, `tokens`, `cached`), `gptr_sessions(project = TRUE)`, `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`, `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))` (P06), `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))` (P11); exports of later plans through `ns_fun()`: `gptr_doc(path = NULL, format = NULL, sync = FALSE)` (P15), `gptr_rewind(s, turn = -1L, ...)` (P16; the rewound session's `editor_text` holds the removed prompt), `gptr_skills(scope = ...)` (P17), `gptr_mcp(server = NULL, tools = FALSE, refresh = FALSE)` (P18). Tests: P01 `the$services`, `ext_service_set()`; P08 `gptr()` (with `.run = FALSE`); P11 `local_permission_rules()`.
+- Consumes: Tasks 1-5 (`console_escape()`, `console_notice()`, `console_out()`, `console_interrupt_key()`, `console_repl_find()`, `with_interrupt_policy()`, `repl_model()`, `repl_mode()`, `repl_eval_env()`); P01 `ns_fun(name)`, `ext_service_has()`, `ext_service_get()`, `ev_new()`, `%||%`; P02 `gptr_command(name, handler, description = NULL, complete = NULL)` (kind `command`: `handler(args, ctx)` returns `NULL`, a chr printed verbatim, or `list(prompt = chr(1))` sent as a prompt; an error is reported and the input counts as handled), `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `ev_dispatch()`, `ctx_new(session, run = NULL)`; P06 kernel SDK `session_data(s)` (`id`, `status`, `turns`, `model`, `mode`, `queue$steer`, `queue$follow_up`, `file`, `frozen$tool_names`), `session_live(s)` (`ctx`), `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `setting_get()`; P09 `describe_binding(name, envir, budget = 150L)`; P11 `rule_parse(rule)` (kernel SDK); the services `compact.run` = `function(s, reason, focus = NULL)` (P07), `doc.site` = `function(session)` -> `list(path, format, ...)` or `NULL` (P15), `skill.body` (P17, presence only); exports of earlier plans called as `gptr::<name>()`: `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)` (P06; the detail ledger has `request_id`, `component`, `tokens`, `cached`), `gptr_sessions(project = TRUE)`, `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`, `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))` (P06), `gptr_permissions(allow = NULL, ask = NULL, deny = NULL, remove = NULL, scope = c("session", "project", "user"))` (P11); exports of later plans through `ns_fun()`: `gptr_doc(path = NULL, format = NULL, sync = FALSE)` (P15), `gptr_rewind(s, turn = -1L, ...)` (P16; the rewound session's `editor_text` holds the removed prompt), `gptr_skills(scope = ...)` (P17), `gptr_mcp(server = NULL, tools = FALSE, refresh = FALSE)` (P18). Tests: P01 `the$services`, `ext_service_set()`; P08 `peter()` (with `.run = FALSE`); P11 `local_permission_rules()`.
 - Produces: `console_commands()` -> the 22 `command` specs (`help`, `exit`, `quit`, `q`, `model`, `mode`, `plan`, `tools`, `env`, `compact`, `cost`, `context`, `status`, `clear`, `resume`, `fork`, `doc`, `skills`, `skill`, `mcp`, `permissions`, `retry`); `console_register_commands(gptr)`; `command_parse(text)` -> `list(name, args, full, rest)` or `NULL` (`full` is the whole first token, so a command registered as `<plugin>:<cmd>` (04 section 11.12, P17's Claude plugin commands) wins over the `/skill:<name>` split); `console_command(text, session = NULL, send = NULL)` -> invisibly `"unknown"`, `"error"`, `"prompt"` or `"done"` (the `input` event with `source = "repl"` first: a hook may handle or transform it; then a line that is still a command goes out on the notify channel `console:command` with `data = list(text)`, which P15's `doc_on_console_command()` records); `console_ctx(s)`; the handlers `cmd_*()`.
 
 The commands are those of 03 section 6.17 that the console owns. `/undo`, `/redo`, `/rewind` and `/checkpoints` are registered by P16, prompt templates as `/<name>` by P17 (IC-31); the console only dispatches them, so every command, built-in or not, goes through the `command` registry. Handlers find the REPL state on the call stack (`console_repl_find()`) and otherwise act on `ctx$session`, so they also run from other front ends. Before the first prompt, `/model` and `/mode` set the first prompt's arguments; on a session they call `session_set_model()` and `session_set_mode()`, whose entries take effect at the next request or turn. `/compact` runs under the interrupt policy (mode `"repl"`). `/skill:<name> [request]` preloads the skill for the next prompt (the call's `skills =`) and sends the request. `/permissions allow|ask|deny|remove <rule>` changes the rules of this R session through `gptr_permissions(scope = "session")` after `rule_parse()`; changing project or user rules stays with the R function. `/retry` rewinds one turn with `gptr_rewind()` and sends the removed prompt again. Commands of later plans answer "not available" while their plan is absent. A handler's text is printed escaped, so model or file text in it cannot inject terminal sequences. Each command line first passes the `input` event with `source = "repl"` (04 section 10.4; a transform chain): a hook may handle it (nothing else happens) or transform it (the new text is dispatched as a command, or sent as a prompt when it is no longer a command). A line that is still a command is then announced on the notify channel `console:command` (`data = list(text)`, the text after any transform), which P15's `doc_on_console_command()` records as a comment in the console transcript (03 section 6.17, 04 section 11.5); a handled line and a line sent as a prompt are not announced (P15 records the prompt as a gateway call). A command name is looked up first as the whole first token, so Claude plugin commands registered as `<plugin>:<cmd>` by P17 (04 section 11.12) are found, then as the part before `:` with the rest as arguments (`/skill:<name> request`).
@@ -3098,7 +3098,7 @@ run_command = function(rs, text, send = NULL) {
 
 idle_session = function(.env = parent.frame()) {
   local_project(.env = .env)
-  gptr("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
 }
 
 test_that("command_parse() splits names, sub-names and arguments", {
@@ -3264,7 +3264,7 @@ test_that("/clear starts a new conversation and keeps model and mode", {
 test_that("/cost, /context, /fork and /resume work on a session that ran", {
   local_console_commands()
   local_project()
-  s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+  s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
   rs = repl_state(s, new.env())
   cost = run_command(rs, "/cost")$out
   expect_match(cost[[length(cost)]], "^Total: \\$")
@@ -3355,7 +3355,7 @@ console_commands = function() {
     cmd("model", cmd_model, "Show or switch the model: /model [provider/model or alias]"),
     cmd("mode", cmd_mode, "Show or switch the permission mode: /mode [plan|manual|edits|auto]"),
     cmd("plan", cmd_plan, "Switch to plan mode (read-only exploration, then a plan)"),
-    cmd("tools", cmd_tools, "List the direct tools and the gptr$ members"),
+    cmd("tools", cmd_tools, "List the direct tools and the peter$ members"),
     cmd("env", cmd_env, "List objects of the console environment: /env [pattern]"),
     cmd("compact", cmd_compact, "Compact the conversation now: /compact [focus]"),
     cmd("cost", cmd_cost, "Tokens and cost of this session"),
@@ -3587,11 +3587,11 @@ cmd_tools = function(args, ctx) {
   for (nm in sort(registry_names("tool", session = sid), method = "radix")) {
     spec = registry_get("tool", nm, session = sid)
     if (is.null(spec) || !is.function(spec$fun) || identical(spec$exposure, "hidden")) next
-    members = c(members, paste0("gptr$", gsub("/", "$", nm, fixed = TRUE)))
+    members = c(members, paste0("peter$", gsub("/", "$", nm, fixed = TRUE)))
   }
   shown = if (length(direct)) paste(direct, collapse = ", ") else "(fixed at the first prompt)"
   c(paste0("Direct tools: ", shown),
-    paste0("gptr$ members: ", if (length(members)) paste(members, collapse = ", ") else "(none)"))
+    paste0("peter$ members: ", if (length(members)) paste(members, collapse = ", ") else "(none)"))
 }
 
 #' @noRd
@@ -3812,11 +3812,11 @@ git commit -m "feat(console): add the slash commands"
 **Files:**
 - Modify: `R/console-repl.R` (append)
 - Test: `tests/testthat/test-console-repl.R` (append), `tests/testthat/test-console-render.R` (append), `tests/testthat/test-console-interrupt.R` (append)
-- Regenerate: `NAMESPACE`, `man/gptr.Rd` (`Rscript --vanilla -e 'devtools::document()'`)
+- Regenerate: `NAMESPACE`, `man/peter.Rd` (`Rscript --vanilla -e 'devtools::document()'`)
 
 **Interfaces:**
-- Consumes: Tasks 1-6 (`console_write()`, `console_notice()`, `console_escape()`, `console_print_text()`, `console_out()`, `console_interrupt_key()`, `console_hooks()`, `console_blocks()`, `console_register_commands()`, `console_command()`, `repl_state()`, `console_reader()`, `repl_read_logical()`, `repl_passthrough()`, `console_send()`, `console_abort_stray()`, `console_history_add()`, `repl_prompt()`, `repl_model()`, `repl_mode()`, `repl_eval_env()`); P01 `on_load()`, `workspace_dir()`, `gptr_is_interactive()`, `gptr_can_prompt()` (IC-43), `gptr_opt()`, `gptr_abort()`, `verbosity()`; P02 `gptr_spec(kind, name, ...)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` and the factory's `gptr$register(spec)`, `registry_get()`, `ev_dispatch()`, `ev_new()`; P04 `job_list(kind = NULL)` (P21's rows of kind `session` with status `waiting`, IC-57); P06 `session_data()`, `session_home()`, `run_current()` (the route does not match inside a run), `setting_get("frontend")`; P08's route loop (routes in `order`; a route's `run(call)` value is returned with its visibility; with no prompt and no matching route, `gptr_error_not_available` "gptr() without a prompt opens the console, which is not loaded.") and the `gptr_call` bindings `prompt`, `session`, `envir`, `args$stdin`, `args$opts$frontend`; P09 `describe_binding(name, envir, budget = 150L)`; P11 `ui_escape()`, `ui_permission_lines(request)`, `ui_permission_detail(request)`, `ui_parse_choice(ans, labels, multiple = FALSE)`, `ui_questions_via(select, input, qs)`, `ui_can_remember(request)`, the `ui` kind (04 section 10.2 kind 22: `has_ui`, `select`, `input`, `questions`, `notify`, `permission`) and the option `gptr.ui`. Tests: P01 `local_mock_server(scenario, ..., .env = parent.frame())` (scenarios `ttft` and `stream`, fields `provider` and `log()` with `disconnected`), `tracemem_loader()`, `gptr_fake_provider()`, `fake_requests()`; P02 `registry_all(kind)`; P11 `local_scripted_ui()`; processx.
-- Produces (04 section 7.14): `builtin_console(gptr)` (hooks, context blocks, the `console` frontend, the `console` route with `order = 30`, the commands), declared with `on_load(ext_declare_builtin("console", builtin_console))`; `console_run(s, envir, stdin = FALSE)`; the frontend's `console_frontend_run(session, ..., call = NULL, envir = NULL, stdin = NULL)`; `console_route_match(call)`, `console_route_run(call)`; `console_stdin_ui(rd)` (a `ui` spec named `console_stdin`); `repl_main(rs)`, `repl_banner(rs)`, `repl_workspace_lines(env, n = 6L)`, `repl_waiting_notice(rs)`, `repl_read(rs)`, `repl_dispatch(rs, line)`, `repl_turn(rs, text)`, `repl_error(e)`, `repl_close(rs)`, `repl_history_on(rs)`; the `?gptr` section "The interactive console".
+- Consumes: Tasks 1-6 (`console_write()`, `console_notice()`, `console_escape()`, `console_print_text()`, `console_out()`, `console_interrupt_key()`, `console_hooks()`, `console_blocks()`, `console_register_commands()`, `console_command()`, `repl_state()`, `console_reader()`, `repl_read_logical()`, `repl_passthrough()`, `console_send()`, `console_abort_stray()`, `console_history_add()`, `repl_prompt()`, `repl_model()`, `repl_mode()`, `repl_eval_env()`); P01 `on_load()`, `workspace_dir()`, `gptr_is_interactive()`, `gptr_can_prompt()` (IC-43), `gptr_opt()`, `gptr_abort()`, `verbosity()`; P02 `gptr_spec(kind, name, ...)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` and the factory's `gptr$register(spec)`, `registry_get()`, `ev_dispatch()`, `ev_new()`; P04 `job_list(kind = NULL)` (P21's rows of kind `session` with status `waiting`, IC-57); P06 `session_data()`, `session_home()`, `run_current()` (the route does not match inside a run), `setting_get("frontend")`; P08's route loop (routes in `order`; a route's `run(call)` value is returned with its visibility; with no prompt and no matching route, `gptr_error_not_available` "peter() without a prompt opens the console, which is not loaded.") and the `gptr_call` bindings `prompt`, `session`, `envir`, `args$stdin`, `args$opts$frontend`; P09 `describe_binding(name, envir, budget = 150L)`; P11 `ui_escape()`, `ui_permission_lines(request)`, `ui_permission_detail(request)`, `ui_parse_choice(ans, labels, multiple = FALSE)`, `ui_questions_via(select, input, qs)`, `ui_can_remember(request)`, the `ui` kind (04 section 10.2 kind 22: `has_ui`, `select`, `input`, `questions`, `notify`, `permission`) and the option `gptr.ui`. Tests: P01 `local_mock_server(scenario, ..., .env = parent.frame())` (scenarios `ttft` and `stream`, fields `provider` and `log()` with `disconnected`), `tracemem_loader()`, `gptr_fake_provider()`, `fake_requests()`; P02 `registry_all(kind)`; P11 `local_scripted_ui()`; processx.
+- Produces (04 section 7.14): `builtin_console(gptr)` (hooks, context blocks, the `console` frontend, the `console` route with `order = 30`, the commands), declared with `on_load(ext_declare_builtin("console", builtin_console))`; `console_run(s, envir, stdin = FALSE)`; the frontend's `console_frontend_run(session, ..., call = NULL, envir = NULL, stdin = NULL)`; `console_route_match(call)`, `console_route_run(call)`; `console_stdin_ui(rd)` (a `ui` spec named `console_stdin`); `repl_main(rs)`, `repl_banner(rs)`, `repl_workspace_lines(env, n = 6L)`, `repl_waiting_notice(rs)`, `repl_read(rs)`, `repl_dispatch(rs, line)`, `repl_turn(rs, text)`, `repl_error(e)`, `repl_close(rs)`, `repl_history_on(rs)`; the `?peter` section "The interactive console".
 
 The loop is report 18's `gptr_repl()` (Appendix A.7) on gptr's gateway: each logical input is a slash command, `!code`/`!!code`, or a prompt sent with `console_send()`; Ctrl-C at the prompt prints a hint and twice in a row leaves; an error is printed on stderr after `Error: `, escaped (its line feeds kept, every other control character shown as `<U+XXXX>`), and the REPL goes on; `/exit`, two Ctrl-C at the prompt and the end of piped input return the session invisibly. The banner is NS-1's first line, `gptr <version> | model ... | mode ... | .gptr/ found`, then up to six objects of the evaluation environment described without forcing promises, then the keys. A notice tells when background sessions wait for approval; P21 asks at the next blocking call (IC-57). Under `.stdin = TRUE` the console is a person at a pipe: when unset, `gptr.interactive` is `TRUE` and `gptr.ui` is a stdin UI that answers questions and approvals from the same connection with P11's escaped displays (IC-53), both restored on exit; inputs go to the console history (`gptr.history`) only in interactive consoles. A session the console created gets `session_shutdown` (reason `"exit"`) when the REPL ends; a piped-in session stays the caller's. The `console` route matches a call without a prompt when `gptr_can_prompt()` holds or `.stdin = TRUE`, never while a run's tool executes (model code cannot open a REPL); it runs the frontend named by `.opts$frontend`, then the `frontend` setting, then `console` (IC-69). In IRkernel `gptr_can_prompt()` is `TRUE` and `gptr_readline()` reads the notebook's input box, so the console works there (acceptance 7).
 
@@ -3883,7 +3883,7 @@ test_that("a scripted .stdin console session (acceptance 2)", {
   n0 = nrow(showConnections())
   res = NULL
   out = utils::capture.output({
-    res = withVisible(gptr(.stdin = TRUE, model = fake, envir = e))
+    res = withVisible(peter(.stdin = TRUE, model = fake, envir = e))
   })
   expect_false(res$visible)
   s = res$value
@@ -3901,7 +3901,7 @@ test_that("a scripted .stdin console session (acceptance 2)", {
   expect_true("mode" %in% names(blocks))
   types = vapply(session_data(s)$entries, function(e) e$custom_type %||% "", "")
   expect_true("gptr.mode_change" %in% types)
-  expect_true("gptr> hello there" %in% out)
+  expect_true("peter> hello there" %in% out)
   expect_true("first answer" %in% out)
   expect_true("second answer" %in% out)
   expect_true("[1] 2 3" %in% out)
@@ -3913,13 +3913,13 @@ test_that("the end of piped input leaves the REPL like /exit", {
   local_console_stdin("only line")
   res = NULL
   utils::capture.output({
-    res = gptr(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env())
+    res = peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")), envir = new.env())
   })
   expect_s3_class(res, "gptr_session")
   expect_identical(res$text, "ok")
 })
 
-test_that("in IRkernel gptr() without a prompt starts the console on gptr_readline() (acc. 7)", {
+test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
   local_console_test()
   withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE)
   box = new.env(parent = emptyenv())
@@ -3934,7 +3934,7 @@ test_that("in IRkernel gptr() without a prompt starts the console on gptr_readli
     })
   res = NULL
   out = utils::capture.output({
-    res = withVisible(gptr(envir = new.env()))
+    res = withVisible(peter(envir = new.env()))
   })
   expect_false(res$visible)
   expect_null(res$value)
@@ -3982,7 +3982,7 @@ test_that("an error is printed on stderr and the REPL goes on", {
   local_console_stdin(c("first", "second", "/exit"))
   res = NULL
   err = utils::capture.output(invisible(utils::capture.output({
-    res = gptr(.stdin = TRUE, model = fake, envir = new.env())
+    res = peter(.stdin = TRUE, model = fake, envir = new.env())
   })), type = "message")
   expect_true(any(startsWith(err, "Error: ")))
   expect_identical(res$text, "recovered")
@@ -3996,7 +3996,7 @@ test_that("approvals of a .stdin session are answered from the same stdin", {
   local_console_stdin(c("make y", "y", "/exit"))
   res = NULL
   out = utils::capture.output({
-    res = gptr(.stdin = TRUE, model = fake, envir = e, mode = manual)
+    res = peter(.stdin = TRUE, model = fake, envir = e, mode = manual)
   })
   expect_identical(e$y, 2)
   expect_identical(res$text, "made y")
@@ -4009,11 +4009,11 @@ test_that("the frontend comes from .opts$frontend or the setting frontend (IC-69
   local_console_test()
   off = gptr_register(gptr_spec("frontend", "probe", run = function(session, ...) "probe ran"))
   withr::defer(off())
-  res = withVisible(gptr(.stdin = TRUE, .opts = list(frontend = "probe")))
+  res = withVisible(peter(.stdin = TRUE, .opts = list(frontend = "probe")))
   expect_identical(res$value, "probe ran")
   expect_false(res$visible)
   local_gptr_options(frontend = "probe")
-  expect_identical(gptr(.stdin = TRUE), "probe ran")
+  expect_identical(peter(.stdin = TRUE), "probe ran")
 })
 
 test_that("the console echoes an interpolated prompt at verbosity 2", {
@@ -4024,7 +4024,7 @@ test_that("the console echoes an interpolated prompt at verbosity 2", {
   e = new.env(parent = globalenv())
   e$cl = 4L
   local_console_stdin(c("describe cluster {cl}", "/exit"))
-  out = utils::capture.output(gptr(.stdin = TRUE, model = gptr_fake_provider(list("ok")),
+  out = utils::capture.output(peter(.stdin = TRUE, model = gptr_fake_provider(list("ok")),
                                    envir = e))
   expect_true("> describe cluster 4" %in% out)
 })
@@ -4043,7 +4043,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
   fake = gptr_fake_provider(list("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care."))
   res = NULL
   out = utils::capture.output({
-    res = withVisible(gptr("hi", model = fake, envir = new.env()))
+    res = withVisible(peter("hi", model = fake, envir = new.env()))
   })
   expect_true("Use {Sys.setenv(GPTR_PWNED = \"1\")} with care." %in% out)
   expect_identical(Sys.getenv("GPTR_PWNED"), "")
@@ -4054,7 +4054,7 @@ test_that("a streamed reply is printed verbatim and never evaluated (acceptance 
 test_that("nothing is rendered at verbosity 0 (knitr, testthat)", {
   local_project()
   local_gptr_options(verbose = 0L, record = "off")
-  out = utils::capture.output(invisible(gptr("hi", model = gptr_fake_provider(list("quiet")),
+  out = utils::capture.output(invisible(peter("hi", model = gptr_fake_provider(list("quiet")),
                                              envir = new.env())))
   expect_false(any(grepl("quiet", out, fixed = TRUE)))
 })
@@ -4066,7 +4066,7 @@ test_that("tool calls of a run show escaped previews and results (acceptance 7)"
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 1 # \033[31mred")),
                                  "done"))
   e = new.env(parent = globalenv())
-  out = utils::capture.output(gptr("go", model = fake, envir = e, mode = auto))
+  out = utils::capture.output(peter("go", model = fake, envir = e, mode = auto))
   expect_true("  * r  z = 1 # <U+001B>[31mred" %in% out)
   expect_true("    -> + z" %in% out)
   expect_false(any(grepl("\033", out, fixed = TRUE)))
@@ -4138,13 +4138,13 @@ infra03_child = function(providers) {
     "               function(b) b$text, ''), collapse = '')",
     "}, '')",
     "step_ttft = function() {",
-    "  s = gptr('first', model = prov$ttft, envir = e, mode = auto)",
+    "  s = peter('first', model = prov$ttft, envir = e, mode = auto)",
     "  cat('STATUS-TTFT', s$status, '\\n')",
     "}",
     "step_tool = function() {",
     "  fake = gptr_fake_provider(list(",
     "    list(tool = 'r', input = list(code = 'Sys.sleep(3); 1')), 'after the tool'))",
-    "  gptr('tool', model = fake, envir = e, mode = auto)",
+    "  peter('tool', model = fake, envir = e, mode = auto)",
     "  req = fake$log$requests[[2L]]$messages",
     "  roles = vapply(req, function(m) m$role, '')",
     "  steer = which(grepl('use base R only', msg_texts(req), fixed = TRUE))",
@@ -4153,7 +4153,7 @@ infra03_child = function(providers) {
     "  cat('STEER-AFTER-TOOL', ok, '\\n')",
     "}",
     "step_abort = function() {",
-    "  res = tryCatch(gptr('stream', model = prov$stream, envir = e, mode = auto),",
+    "  res = tryCatch(peter('stream', model = prov$stream, envir = e, mode = auto),",
     "                 interrupt = function(i) 'INTERRUPTED')",
     "  s = gptr_last()",
     "  m = s$messages[[length(s$messages)]]",
@@ -4245,7 +4245,7 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
 Rscript --vanilla -e 'devtools::test(filter = "^console-(repl|render|interrupt)$")'
 ```
 
-Expected: a non-zero FAIL count with `SKIP 1` (INFRA-03 off CI) and a PASS count of at least 186 (the expectations of Tasks 1-5 still pass). The new console-repl tests error with `could not find function "console_stdin_ui"` (and `repl_waiting_notice`, `console_run`, `console_route_match`) or with `gptr() without a prompt opens the console, which is not loaded.` (class `gptr_error_not_available`), and the registration test fails; the new console-render tests fail because no renderer hook is registered yet (nothing is printed).
+Expected: a non-zero FAIL count with `SKIP 1` (INFRA-03 off CI) and a PASS count of at least 186 (the expectations of Tasks 1-5 still pass). The new console-repl tests error with `could not find function "console_stdin_ui"` (and `repl_waiting_notice`, `console_run`, `console_route_match`) or with `peter() without a prompt opens the console, which is not loaded.` (class `gptr_error_not_available`), and the registration test fails; the new console-render tests fail because no renderer hook is registered yet (nothing is printed).
 
 - [ ] **Step 3: Write the implementation and regenerate the documentation**
 
@@ -4552,7 +4552,7 @@ builtin_console = function(gptr) {
   gptr$register(gptr_spec("frontend", "console", run = console_frontend_run))
   gptr$register(gptr_spec("route", "console", order = 30, match = console_route_match,
                           run = console_route_run,
-                          description = paste("gptr() with no prompt: the console on the",
+                          description = paste("peter() with no prompt: the console on the",
                                               "piped session or a new one")))
   console_register_commands(gptr)
   invisible(NULL)
@@ -4561,11 +4561,11 @@ builtin_console = function(gptr) {
 on_load(ext_declare_builtin("console", builtin_console))
 
 #' @section The interactive console:
-#' `gptr()` without a prompt starts a console when someone can answer (an interactive R
-#' session or IRkernel); `gptr(.stdin = TRUE)` reads the console's input from standard input,
-#' one line at a time. `s |> gptr()` opens the console on `s`. Each line is one of:
+#' `peter()` without a prompt starts a console when someone can answer (an interactive R
+#' session or IRkernel); `peter(.stdin = TRUE)` reads the console's input from standard input,
+#' one line at a time. `s |> peter()` opens the console on `s`. Each line is one of:
 #'
-#' * a prompt, sent as `s |> gptr("...")` (with `{name}` interpolation); `@file` adds the head of
+#' * a prompt, sent as `s |> peter("...")` (with `{name}` interpolation); `@file` adds the head of
 #'   a file and `@object` attaches an object by name;
 #' * `!code` runs R code in the session's environment and adds the code and its output to the
 #'   next prompt (at most 300 tokens); `!!code` runs it without telling the model;
@@ -4578,23 +4578,23 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' Ctrl-C (Esc in RStudio and Rgui) while an answer runs opens a pause menu in terminal R:
 #' `[s]teer` (delivered after the current tool results), `[f]ollow-up`, `[c]ontinue`, `[a]bort`
 #' and, with the later package, `[b]ackground`; a second Ctrl-C aborts. Elsewhere Ctrl-C aborts.
-#' `/exit` (or Ctrl-C twice at the prompt) returns the session invisibly, so `s = gptr()` keeps
+#' `/exit` (or Ctrl-C twice at the prompt) returns the session invisibly, so `s = peter()` keeps
 #' the conversation.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress on stderr, 2 streamed console, 3 debug; by
 #' default 0 in knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`
 #' (turns per console prompt, default 200), `gptr.history` (add console inputs to R's history,
 #' default `TRUE`).
-#' @name gptr
-#' @rdname gptr
+#' @name peter
+#' @rdname peter
 NULL
 ```
 
-Then regenerate `NAMESPACE` and `man/gptr.Rd` (the console section joins `?gptr`; P14 adds no export):
+Then regenerate `NAMESPACE` and `man/peter.Rd` (the console section joins `?peter`; P14 adds no export):
 
 ```bash
 Rscript --vanilla -e 'devtools::document()'
-grep -c "The interactive console" man/gptr.Rd
+grep -c "The interactive console" man/peter.Rd
 git diff --stat NAMESPACE
 ```
 
@@ -4613,7 +4613,7 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 247 ]` (console-render 72, console-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add R/console-repl.R tests/testthat/test-console-repl.R tests/testthat/test-console-render.R tests/testthat/test-console-interrupt.R NAMESPACE man/gptr.Rd
+git add R/console-repl.R tests/testthat/test-console-repl.R tests/testthat/test-console-render.R tests/testthat/test-console-interrupt.R NAMESPACE man/peter.Rd
 git commit -m "feat(console): add the REPL loop, the console frontend and route, builtin:console"
 ```
 
@@ -4627,10 +4627,10 @@ git commit -m "feat(console): add the REPL loop, the console frontend and route,
 - Test: `tests/testthat/test-console-render.R` (append the INFRA-27 test, acceptance 4: 03 section 6.18 row 27 names `test-console-render.R` as its acceptance file, and P24's INFRA suite runs `console-render`)
 
 **Interfaces:**
-- Consumes: Tasks 4-7 (`repl_state()`, `console_reader()`, `console_send()`, `repl_close()`, the `.gptr_repl` frame binding); P01 `json_encode(x)`, `json_decode(text)`, `json_obj()`, `msg_to_json(msg)`, `block_to_json(block)` (the JSON shapes of 04 sections 4.1-4.2 and the one mapping table of 4.8), `as_utf8()`, `check_class()`, `gptr_abort()`, `on_load()`; P02 `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`, `hook_remove(id)`, `ev_catalogue()` (column `event`), `ev_new()`, `gptr_spec()`, `ext_declare_builtin()`; P03 `redact_tree(x, profile = "persist", structural = FALSE)`, `redact(x, profile = "persist")`; P06 `session_data()`; P08 SDK verb `gptr_wait(x, timeout = Inf)` (`gptr-sdk.R`). Tests: P01 `msg_assistant()`, `gptr_fake_provider()`, `fake_requests()`, `local_project()`, `local_gptr_options()`; P03 `vault_reset()`, `secret_register(value, name, source = "user", active = TRUE, origin = NULL)`; P08 `gptr()` (`.run = FALSE`), `gptr_step(s, turns = 1L)`.
+- Consumes: Tasks 4-7 (`repl_state()`, `console_reader()`, `console_send()`, `repl_close()`, the `.gptr_repl` frame binding); P01 `json_encode(x)`, `json_decode(text)`, `json_obj()`, `msg_to_json(msg)`, `block_to_json(block)` (the JSON shapes of 04 sections 4.1-4.2 and the one mapping table of 4.8), `as_utf8()`, `check_class()`, `gptr_abort()`, `on_load()`; P02 `hook_add(event, handler, matcher = NULL, rank = 3L, source = "user", session = NULL)`, `hook_remove(id)`, `ev_catalogue()` (column `event`), `ev_new()`, `gptr_spec()`, `ext_declare_builtin()`; P03 `redact_tree(x, profile = "persist", structural = FALSE)`, `redact(x, profile = "persist")`; P06 `session_data()`; P08 SDK verb `gptr_wait(x, timeout = Inf)` (`gptr-sdk.R`). Tests: P01 `msg_assistant()`, `gptr_fake_provider()`, `fake_requests()`, `local_project()`, `local_gptr_options()`; P03 `vault_reset()`, `secret_register(value, name, source = "user", active = TRUE, origin = NULL)`; P08 `peter()` (`.run = FALSE`), `gptr_step(s, turns = 1L)`.
 - Produces (04 section 7.14): `jsonl_sink(session, con)` -> a detach function, invisibly (session hooks of rank 0, dropped by P02 at the session's `session_shutdown`; with `session = NULL`, process-level hooks of rank 3 for every session); `builtin_jsonl(gptr)` (the `jsonl` frontend), declared with `on_load(ext_declare_builtin("jsonl", builtin_jsonl))`; `jsonl_frontend_run(session, ..., call = NULL, envir = NULL, stdin = NULL, con = stdout())`; `jsonl_events()`, `jsonl_write(con, event)`, `jsonl_line(event)`, `jsonl_event(event)`, `jsonl_ts(ts)`, `jsonl_value(x)`, `jsonl_msg(m)`, `jsonl_block(b)`, `jsonl_is_msg(x)`, `jsonl_is_block(x)`, `jsonl_prompt_text(line)`, `jsonl_error_event(e, session = NULL)`.
 
-The sink writes every catalogued event (04 section 10.4, names verbatim; channels are not catalogued and not written) as one JSON object per line in the 04 section 4.5 JSON form: the payload's field names, `ts` as ISO 8601 UTC with milliseconds, messages and content blocks in their JSON shapes; functions, environments and other live objects are dropped. Each line passes the `persist` redaction profile (tree, then text) on top of the `stream` profile that `ev_dispatch()` applied (04 section 1.4), so no registered secret reaches it (acceptance 6), and a writing error never fails the run (fail-closed events would otherwise deny). The sink writes to a connection its caller owns and opens none (IC-59), flushing each line so a reading parent sees it at once (P19's worker children write it, IC-28). Rendering never touches the sink, so the transcript of a run is the same at every verbosity (INFRA-27, acceptance 4; the test is appended to `test-console-render.R`, the file 03 section 6.18 names for INFRA-27 "rendering decoupled from transport", with its own file-local helpers). The `jsonl` frontend streams the events of a piped session until it settles (`s |> gptr(.opts = list(frontend = "jsonl"))` at a console: a no-prompt call needs someone to answer or `.stdin`, 04 section 6.1.1 step 4; P19's workers call the frontend's `run()` from the registry); with `.stdin = TRUE` it reads one prompt per line (plain text or `{"type":"prompt","text":...}`; `/exit` ends), sends each through `console_send()` like a console prompt, writes the events of every session and prints nothing else (`gptr.verbose` is 0 for the duration).
+The sink writes every catalogued event (04 section 10.4, names verbatim; channels are not catalogued and not written) as one JSON object per line in the 04 section 4.5 JSON form: the payload's field names, `ts` as ISO 8601 UTC with milliseconds, messages and content blocks in their JSON shapes; functions, environments and other live objects are dropped. Each line passes the `persist` redaction profile (tree, then text) on top of the `stream` profile that `ev_dispatch()` applied (04 section 1.4), so no registered secret reaches it (acceptance 6), and a writing error never fails the run (fail-closed events would otherwise deny). The sink writes to a connection its caller owns and opens none (IC-59), flushing each line so a reading parent sees it at once (P19's worker children write it, IC-28). Rendering never touches the sink, so the transcript of a run is the same at every verbosity (INFRA-27, acceptance 4; the test is appended to `test-console-render.R`, the file 03 section 6.18 names for INFRA-27 "rendering decoupled from transport", with its own file-local helpers). The `jsonl` frontend streams the events of a piped session until it settles (`s |> peter(.opts = list(frontend = "jsonl"))` at a console: a no-prompt call needs someone to answer or `.stdin`, 04 section 6.1.1 step 4; P19's workers call the frontend's `run()` from the registry); with `.stdin = TRUE` it reads one prompt per line (plain text or `{"type":"prompt","text":...}`; `/exit` ends), sends each through `console_send()` like a console prompt, writes the events of every session and prints nothing else (`gptr.verbose` is 0 for the duration).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4645,7 +4645,7 @@ jsonl_run = function(verbose, script = NULL) {
   local_gptr_options(verbose = verbose, quiet = TRUE, record = "off")
   script = script %||% list(list(tool = "r", input = list(code = "z = 1")), "The answer is 42.")
   fake = gptr_fake_provider(script)
-  s = gptr("compute", model = fake, .run = FALSE, envir = new.env(parent = globalenv()),
+  s = peter("compute", model = fake, .run = FALSE, envir = new.env(parent = globalenv()),
            mode = auto)
   file = tempfile(fileext = ".jsonl")
   on.exit(unlink(file), add = TRUE)
@@ -4686,7 +4686,7 @@ test_that("jsonl_value() keeps data and drops live objects", {
 
 test_that("jsonl_sink() needs an open connection and subscribes to every catalogued event", {
   local_project()
-  s = gptr("hi", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  s = peter("hi", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
   expect_error(jsonl_sink(s, "stdout"), class = "gptr_error_invalid_argument")
   expect_setequal(jsonl_events(), ev_catalogue()$event)
 })
@@ -4723,7 +4723,7 @@ test_that("no registered secret reaches the sink (acceptance 6)", {
 test_that("the jsonl frontend streams a piped session until it settles", {
   local_project()
   local_gptr_options(record = "off")
-  s = gptr("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+  s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
   file = withr::local_tempfile(fileext = ".jsonl")
   con = file(file, open = "wb")
   res = jsonl_frontend_run(s, con = con)
@@ -4736,7 +4736,7 @@ test_that("the jsonl frontend streams a piped session until it settles", {
   expect_error(jsonl_frontend_run(NULL, con = stdout()), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr(.stdin = TRUE, .opts = list(frontend = 'jsonl')) reads prompts and writes events", {
+test_that("peter(.stdin = TRUE, .opts = list(frontend = 'jsonl')) reads prompts, writes events", {
   local_project()
   local_gptr_options(record = "off")
   lines = c("hello", "{\"type\":\"prompt\",\"text\":\"again\"}", "/exit")
@@ -4744,7 +4744,7 @@ test_that("gptr(.stdin = TRUE, .opts = list(frontend = 'jsonl')) reads prompts a
   fake = gptr_fake_provider(list("one", "two"))
   res = NULL
   out = utils::capture.output({
-    res = gptr(.stdin = TRUE, model = fake, .opts = list(frontend = "jsonl"),
+    res = peter(.stdin = TRUE, model = fake, .opts = list(frontend = "jsonl"),
                envir = new.env())
   })
   expect_identical(res$turns, 2L)
@@ -4798,7 +4798,7 @@ infra27_run = function(verbose) {
   local_gptr_options(verbose = verbose, quiet = TRUE, record = "off")
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 1")),
                                  "The answer is 42."))
-  s = gptr("compute", model = fake, .run = FALSE, envir = new.env(parent = globalenv()),
+  s = peter("compute", model = fake, .run = FALSE, envir = new.env(parent = globalenv()),
            mode = auto)
   file = tempfile(fileext = ".jsonl")
   on.exit(unlink(file), add = TRUE)
@@ -5005,7 +5005,7 @@ jsonl_error_event = function(e, session = NULL) {
 #' run() of the `jsonl` frontend
 #'
 #' Without `stdin`: the events of `session` (with queued input or running) as JSON lines until it
-#' settles. With `stdin` (`gptr(.stdin = TRUE, .opts = list(frontend = "jsonl"))`): each line of
+#' settles. With `stdin` (`peter(.stdin = TRUE, .opts = list(frontend = "jsonl"))`): each line of
 #' standard input is a prompt (plain text or `{"type":"prompt","text":...}`; `/exit` ends) sent
 #' through the gateway like a console prompt; the events of every session go to `con` and nothing
 #' else is printed (gptr.verbose is 0 for the duration).
@@ -5016,10 +5016,10 @@ jsonl_frontend_run = function(session, ..., call = NULL, envir = NULL, stdin = N
   if (!isTRUE(stdin)) {
     if (!inherits(session, "gptr_session")) {
       gptr_abort(c("The jsonl frontend streams the events of a session; pipe one in:",
-                   paste0("s = gptr(\"...\", .run = FALSE); ",
-                          "s |> gptr(.opts = list(frontend = \"jsonl\")) at a console."),
+                   paste0("s = peter(\"...\", .run = FALSE); ",
+                          "s |> peter(.opts = list(frontend = \"jsonl\")) at a console."),
                    paste0("From a script, read prompts from standard input: ",
-                          "gptr(.stdin = TRUE, .opts = list(frontend = \"jsonl\")).")),
+                          "peter(.stdin = TRUE, .opts = list(frontend = \"jsonl\")).")),
                  "invalid_argument", arg = "session", expected = "a gptr_session")
     }
     off = jsonl_sink(session, con)
@@ -5094,14 +5094,14 @@ Every check of 05 P14, including its review amendments, with the task and test t
 | # | Acceptance check (05, P14) | Proved by |
 |---|---|---|
 | 1 | `devtools::test(filter = "console")` is green (SIGINT tests skip on CRAN) | Tasks 1-8 Step 4. Command: `Rscript --vanilla -e 'devtools::test(filter = "console")'`. Expected: `[ FAIL 0 | WARN 0 | SKIP 1 | PASS 401 ]` (P14's 340 expectations and the 61 of P11's `test-console-ui.R`, which the filter also selects; the skip is INFRA-03 off CI). `LC_ALL=C`: `[ FAIL 0 | WARN 0 | SKIP 2 | PASS 397 ]`. `CI=true` (Linux, macOS): `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 417 ]`. The SIGINT test calls `skip_on_cran()` first, so `NOT_CRAN=false` reports it as `On CRAN`. |
-| 2 | `gptr(.stdin = TRUE)` with a scripted UI: a prompt, `!dim(x)` (added to the next prompt's context), `!!x` (not added), `/mode auto` (mode entry at the next turn), `"""` input, `/exit` returning the session invisibly | Task 7, `test-console-repl.R` "a scripted .stdin console session (acceptance 2)": two requests; request 2's last user text is `line one\nline two`, its `user_ran` block holds `> dim(x)` and `#> [1] 2 3` and not `> x`, it carries the `mode` block, the session has a `gptr.mode_change` entry and mode `auto`; the value is invisible and a `gptr_session` with 2 turns; the stdin connection is closed (IC-59). Supporting: Task 4 grammar tests, Task 5 "!code runs in the REPL environment and leaves a note; !!code does not", Task 6 "/mode on a session appends the mode change for the next turn". Command: the `console-repl` line. |
-| 3 | The renderer gives identical output over 200 random chunkings (UTF-8 locale); a reply containing `{Sys.setenv(GPTR_PWNED = "1")}` is printed verbatim and nothing is evaluated | Task 1, "the output does not depend on chunking, plain and styled (acceptance 3)" (200 random chunkings, colours off and on) and "untrusted braces are printed verbatim and never evaluated (rule C1)"; Task 7, "a streamed reply is printed verbatim and never evaluated (acceptance 3, rule C1)" (a full `gptr()` run at verbosity 2 through `builtin:console`; `GPTR_PWNED` stays unset). Command: the `console-render` line in a UTF-8 locale (chunk invariance also holds in the C locale). |
+| 2 | `peter(.stdin = TRUE)` with a scripted UI: a prompt, `!dim(x)` (added to the next prompt's context), `!!x` (not added), `/mode auto` (mode entry at the next turn), `"""` input, `/exit` returning the session invisibly | Task 7, `test-console-repl.R` "a scripted .stdin console session (acceptance 2)": two requests; request 2's last user text is `line one\nline two`, its `user_ran` block holds `> dim(x)` and `#> [1] 2 3` and not `> x`, it carries the `mode` block, the session has a `gptr.mode_change` entry and mode `auto`; the value is invisible and a `gptr_session` with 2 turns; the stdin connection is closed (IC-59). Supporting: Task 4 grammar tests, Task 5 "!code runs in the REPL environment and leaves a note; !!code does not", Task 6 "/mode on a session appends the mode change for the next turn". Command: the `console-repl` line. |
+| 3 | The renderer gives identical output over 200 random chunkings (UTF-8 locale); a reply containing `{Sys.setenv(GPTR_PWNED = "1")}` is printed verbatim and nothing is evaluated | Task 1, "the output does not depend on chunking, plain and styled (acceptance 3)" (200 random chunkings, colours off and on) and "untrusted braces are printed verbatim and never evaluated (rule C1)"; Task 7, "a streamed reply is printed verbatim and never evaluated (acceptance 3, rule C1)" (a full `peter()` run at verbosity 2 through `builtin:console`; `GPTR_PWNED` stays unset). Command: the `console-render` line in a UTF-8 locale (chunk invariance also holds in the C locale). |
 | 4 | INFRA-27: the same fake-provider run gives byte-identical JSONL transcripts at verbosity 0, 1 and 2 | Task 8, `test-console-render.R` (the INFRA-27 acceptance file of 03 section 6.18, run by P24's INFRA suite) "the transcript is the same at verbosity 0, 1 and 2 (INFRA-27, acceptance 4)": the three transcripts (more than 10 lines each, an `r` tool call and an answer) are identical after the volatile fields of 04 section 12.3 (`ts`, `session`, `run`, `request_id`) and the other clock and id fields are removed (ambiguity 15). Command: `Rscript --vanilla -e 'devtools::test(filter = "^console-render$")'` (the `console-render` line). |
 | 5 | INFRA-03 (processx-driven `R --interactive`, CI only): SIGINT during TTFT then "continue" completes the request; mid-tool "steer" delivers after the tool result; "abort" closes the mock socket and the partial equals what was received | Task 7, `test-console-interrupt.R` "INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)": status `idle` and the last token after `c`; the steer message follows the tool result in request 2; after `a` the last message has `stop_reason` `aborted`, its text is a proper prefix of the streamed tokens and the mock server logs the disconnect. Simulated-interrupt counterparts run everywhere: Task 3 "continue resumes the interrupted computation", "steer and follow-up queue the text with source pause_menu (IC-55)", "abort in mode call re-signals the interrupt so loops stop". Command: `CI=true Rscript --vanilla -e 'devtools::test(filter = "^console-interrupt$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 52 ]` (Linux, macOS). |
 | 6 | The JSONL sink contains no registered secret (fake key) | Task 8, "no registered secret reaches the sink (acceptance 6)": a fake Anthropic-shaped key registered with `secret_register()` and echoed by the fake provider appears in no line, nor does its 24-character prefix. Command: the `console-jsonl` line. |
 | 7a | `artifact_start` prints `artifact  <id>  ->  <url>   (running in background)` | Task 2, "artifact_start prints the NS-8 line (acceptance 7)" and "an artifact_start fired while a tool executes prints after tool_execution_end" (the line never lands in the model's `r` output, P23 ambiguity 14); Task 7, "artifact_start events print the NS-8 line through builtin:console (acceptance 7)" (the registered hook, through `ev_dispatch()`). Command: the `console-render` line. |
 | 7b | An ESC sequence in a tool preview is escaped | Task 2, "tool lines escape the preview and summarise the result (acceptance 7)"; Task 7, "tool calls of a run show escaped previews and results (acceptance 7)" (a full run: the preview line shows `<U+001B>[31mred` and no output line contains ESC); Task 1, "control, bidi and zero-width characters are escaped (IC-53 item 8)". Command: the `console-render` line. |
-| 7c | With `jupyter.in_kernel = TRUE` mocked, `gptr()` with no prompt starts the console on a mocked `gptr_readline()` | Task 7, "in IRkernel gptr() without a prompt starts the console on gptr_readline() (acc. 7)": the banner is printed, `/status` answers, `/exit` returns invisibly, every mocked line was read. Command: the `console-repl` line. |
+| 7c | With `jupyter.in_kernel = TRUE` mocked, `peter()` with no prompt starts the console on a mocked `gptr_readline()` | Task 7, "in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)": the banner is printed, `/status` answers, `/exit` returns invisibly, every mocked line was read. Command: the `console-repl` line. |
 | IC-69 | The renderer uses tool `render` functions and `renderer` records; `frontend` selectable by setting | Task 2, "a tool's render() function replaces the default lines (IC-69)" and "custom entries of a run are shown through renderer records (IC-69)"; Task 7, "the frontend comes from .opts$frontend or the setting frontend (IC-69)". |
 | IC-71 | NS-8 line on `artifact_start` | rows 7a. |
 | IC-53 | Approval displays are sanitised and list every flagged call | The console's approvals are P11's displays (`ui_permission_lines()`, proved by P11's `test-console-ui.R`, selected by the same `console` filter); the `.stdin` UI reuses them: Task 7, "the stdin UI answers selections and approvals from the reader" and "approvals of a .stdin session are answered from the same stdin". Everything P14 prints itself is escaped: Tasks 1, 2, 6 ("a command's text is printed escaped ..."). |
@@ -5121,7 +5121,7 @@ Further commands:
 
 1. `Rscript --vanilla -e 'devtools::test()'`
    Expected: a summary line with `FAIL 0 | WARN 0` (the whole suite).
-2. `grep -c "The interactive console" man/gptr.Rd`
+2. `grep -c "The interactive console" man/peter.Rd`
    Expected: `1`.
 3. The M3 exit check runs once P14-P17 are complete (05 milestone M3): `Rscript --vanilla -e 'devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")'`. Expected: 0 errors and 0 warnings.
 
@@ -5135,7 +5135,7 @@ x = matrix(1:6, 2)
 fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = "Sys.sleep(5); y = sum(x)")),
   "Done: y is 21.", "The second answer."))
-s = gptr(model = fake, mode = auto)
+s = peter(model = fake, mode = auto)
 # In the console: type "compute y". While the tool sleeps press Ctrl-C: "[gptr] paused ..." and
 # "[s]teer, [f]ollow-up, [c]ontinue, [a]bort" appear; answer s, then type "use base R only" at
 # steer>. The answer streams once the tool returns. Then try !dim(x) and !!x, @x, /status,
@@ -5152,7 +5152,7 @@ Expected: `s` is the console's `gptr_session` and `y` is 21; in RStudio, Positro
 
 ### Spec coverage (05 P14 scope and review amendments -> tasks)
 
-- `console-repl.R`: `readline()` through `gptr_readline()` or one persistent `file("stdin")` under `.stdin = TRUE`, the input grammar of 03 section 6.17, the long-line warning, the optional `timestamp()` history -> Task 4; `!expr` passthrough, notes, `@mentions`, prompts as gateway calls -> Task 5; banner, the REPL loop, the "no prompt" route, the `console` frontend, `builtin:console` and the `?gptr` section -> Task 7.
+- `console-repl.R`: `readline()` through `gptr_readline()` or one persistent `file("stdin")` under `.stdin = TRUE`, the input grammar of 03 section 6.17, the long-line warning, the optional `timestamp()` history -> Task 4; `!expr` passthrough, notes, `@mentions`, prompts as gateway calls -> Task 5; banner, the REPL loop, the "no prompt" route, the `console` frontend, `builtin:console` and the `?peter` section -> Task 7.
 - `console-render.R`: the chunk-invariant markdown stream renderer and rule C1 -> Task 1; tool lines, the status line, the spinner ticked from the reactor, verbosity levels, tool `render` functions and `renderer` records, the NS-8 artifact line -> Task 2; the end-to-end checks -> Task 7.
 - `console-interrupt.R`: the pause menu through the `resume` restart with steer, follow-up, continue, abort and background, the second Ctrl-C, the menu on stderr, the abort-only fallback -> Task 3; INFRA-03 with real SIGINTs -> Task 7.
 - `console-commands.R`: the slash commands of 03 section 6.17 as `command` specs; templates as `/<name>` are P17's `command` specs, dispatched by the same code -> Task 6.
@@ -5174,11 +5174,11 @@ The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar 
 
 ### Contract ambiguities and deviations (recorded, with the reading chosen)
 
-1. **Which exports L5 may call.** 03 section 2.2 lets L5 call "SDK verbs"; P01's `arch_edge_ok()` lets L5 call L0, L5, the kernel SDK of IC-33 and `gptr-sdk.R` only. Exports that live in L3, L4 or L6 files (`gptr()`, `gptr_last()`, `gptr_usage()`, `gptr_sessions()`, `gptr_resume()`, `gptr_fork()`, `gptr_permissions()`) are called as `gptr::<name>()`, as a user calls them; `codetools::findGlobals()` reports such a call as `::`, so the layer test sees no edge (verified). Exports of later plans (`gptr_doc()`, `gptr_rewind()`, `gptr_skills()`, `gptr_mcp()`) are reached through P01's `ns_fun()` with a "not available" answer.
+1. **Which exports L5 may call.** 03 section 2.2 lets L5 call "SDK verbs"; P01's `arch_edge_ok()` lets L5 call L0, L5, the kernel SDK of IC-33 and `gptr-sdk.R` only. Exports that live in L3, L4 or L6 files (`peter()`, `gptr_last()`, `gptr_usage()`, `gptr_sessions()`, `gptr_resume()`, `gptr_fork()`, `gptr_permissions()`) are called as `gptr::<name>()`, as a user calls them; `codetools::findGlobals()` reports such a call as `::`, so the layer test sees no edge (verified). Exports of later plans (`gptr_doc()`, `gptr_rewind()`, `gptr_skills()`, `gptr_mcp()`) are reached through P01's `ns_fun()` with a "not available" answer.
 2. **The banner's workspace lines.** 04 section 7.9 names P14 as a consumer of `workspace_lines(snapshot, budget = 600L)`, which lives in an L4 service file that L5 may not call and needs a snapshot. The banner describes up to six objects with the kernel SDK's `describe_binding()` (never forcing promises) and points to `/env`.
 3. **`input` source `repl`.** 04 section 10.4 lists `prompt`, `pipe`, `repl`, `passthrough` and `steer`. A console prompt is an ordinary gateway call, so P08 already emits its `input` event (source `prompt` or `pipe`); a second event for the same prompt would run transform hooks twice and make P11's plan hand-off count one console prompt as two calls. P14 emits `repl` for slash-command lines only, `passthrough` for `!code` and `steer` for pause-menu text. Transcripts are not written from the `input` event (it fires before a direct line runs, and a later hook may still handle or transform a command): P15's `doc_on_console_command()` records slash commands from the `console:command` channel and `doc_on_console_direct()` records direct R from the `console:direct` channel (ambiguity 4).
 4. **Transcript events.** IC-49 and 04 section 11.5 have P15 record console prompts (they are gateway calls), direct R lines "with `#>` output" and slash commands as comments, but name no event for the last two. P15's plan (its ambiguity 11) subscribes `doc_on_console_command()` to the notify channel `console:command` and `doc_on_console_direct()` to `console:direct`, so P14 dispatches exactly those: `console:command` (`data = list(text)`) for a slash command line that passed the `input` event (source `repl`) unhandled and is still a command after any transform, and `console:direct` (`data = list(code, output, status, noted)`) after a direct R line ran. The `input` events with sources `repl` and `passthrough` are still emitted first (04 section 10.4), so hooks can handle or transform the line; they are not the transcript's source.
-5. **`session_shutdown` at `/exit`.** P14 emits it only for a session the console created; a session piped in with `s |> gptr()` stays the caller's, and P02 would drop its session-scoped hooks at `session_shutdown`.
+5. **`session_shutdown` at `/exit`.** P14 emits it only for a session the console created; a session piped in with `s |> peter()` stays the caller's, and P02 would drop its session-scoped hooks at `session_shutdown`.
 6. **Steering while a tool runs.** P06's `session_enqueue()` refuses an enqueue from the session's own `r` tool frames, which are on the stack when the interrupt arrives during a tool. The pause menu then queues the text from a reactor timer as soon as `run_current()` is `NULL`, which is still before the next request (INFRA-12); the INFRA-03 test checks the order.
 7. **From a run to its session.** The policy receives runs (P14 also accepts sessions), and 04 gives no accessor from a `gptr_run` to its session. P14 records run id -> session at `agent_start` (`the$console$active`, a new field of P01's `the`, created lazily by `console_state()`); a run without a record can be continued or aborted but not steered.
 8. **Answers in a `.stdin` console.** 04 does not say who answers approvals in a piped console. When the options are unset, P14 sets `gptr.interactive = TRUE` and `gptr.ui` to a stdin UI spec (named `console_stdin`, not registered) for the duration of the REPL and restores both; P11's scripted UI and an explicit `gptr.ui` win.
@@ -5194,19 +5194,19 @@ The plan was searched for "TBD", "TODO", "implement later", "fill in", "similar 
 18. **P11's private helpers.** The stdin UI uses `console-ui.R` helpers that are not contract entries (`ui_permission_lines()`, `ui_permission_detail()`, `ui_parse_choice()`, `ui_questions_via()`, `ui_can_remember()`, `ui_escape()`); same area and layer, so allowed, but a rename in P11 must follow here.
 19. **`cli_verbatim()` (05 scope).** 05 names `cli_verbatim()` for untrusted text; P14 escapes untrusted text and writes it with `cat()` or P01's `msg_verbatim()`, which interpolate nothing either and keep the console output on stdout and notices on stderr (rule C1 forbids untrusted text as a format string; 04 section 7.14 says the same).
 20. **Whether `envir =` was given.** IC-40 lets an explicit `envir` win over a session's kept home, but the `gptr_call` record of 04 section 7.8 has no binding for it; P14 reads `call$args$envir_given`, which P08's capture sets.
-21. **Slash commands and the pending plan.** P11's `plan_on_input()` counts only `input` events of source `prompt` or `pipe` as a `gptr()` call (IC-56; P11's cross-plan consolidation, its log row 2), so a slash command sent as `repl` between a plan and the next prompt (for example `/mode auto`) does not discard the pending plan; a console prompt still counts once, through P08's gateway event. 04 section 10.4 lists `repl` among the sources P14 emits (transcripts are written from the `console:command` channel, ambiguity 4).
+21. **Slash commands and the pending plan.** P11's `plan_on_input()` counts only `input` events of source `prompt` or `pipe` as a `peter()` call (IC-56; P11's cross-plan consolidation, its log row 2), so a slash command sent as `repl` between a plan and the next prompt (for example `/mode auto`) does not discard the pending plan; a console prompt still counts once, through P08's gateway event. 04 section 10.4 lists `repl` among the sources P14 emits (transcripts are written from the `console:command` channel, ambiguity 4).
 22. **INFRA-03 starts `R`, not `rscript_path()`.** Conventions section 7 asks for `rscript_path()`; an interactive console needs `R --interactive` (report 18 Appendix A.8), started by its absolute path `file.path(R.home("bin"), "R")`, so R CMD check's dummy `R` on `PATH` is never used (the reason for the IC-60 rule); the child's environment is complete (no `NA`, IC-60) and drops `RSTUDIO`, `POSITRON`, `TERM_PROGRAM`, `JPY_SESSION_NAME` and the Quarto variables so `front_end()` is `terminal`.
 23. **Printed output is compared with `expect_identical()`.** Conventions section 7 names `expect_snapshot()` inside `local_reproducible_output(width = 80)`; P14 keeps the reproducible output and compares the captured lines exactly, so no `_snaps/` files (which no plan owns and which fail on CI when absent) are needed.
 24. **Other questions in a `.stdin` console.** The stdin UI answers what goes through the `ui` kind (approvals, `ask`). Questions that P08 and P15 ask through `gptr_confirm()` (project trust, the egress acknowledgement, transcript consent) read `readline()`, which under Rscript returns `""` at once, so they take their defaults; a piped session acknowledges egress and trust beforehand (`gptr_init()`, settings).
-25. **The `console` route inside a run.** 04 section 6.1.1 gives the route's match as "no prompt (`gptr_can_prompt()` or `.stdin`)". P14 also requires `run_current()` to be `NULL`: a `gptr()` without a prompt evaluated by model code (a continuation, which the `nested` route does not take) would otherwise open a REPL inside the tool that reads the user's input or the rest of a piped stdin and sets `gptr.ui`/`gptr.interactive` (IC-53 item 3 counts `options()` with `gptr.*` names as `control`).
-26. **The console call's arguments on a piped session.** 04 section 6.1 says a continuation "may only keep or change" the mode explicitly; `s |> gptr(mode = auto)` opening the console therefore passes the console call's model, mode, tools, plugins, extensions, skills and context objects with the first prompt (`rs$pending_call`), exactly as `s |> gptr("...", mode = auto)` would.
+25. **The `console` route inside a run.** 04 section 6.1.1 gives the route's match as "no prompt (`gptr_can_prompt()` or `.stdin`)". P14 also requires `run_current()` to be `NULL`: a `peter()` without a prompt evaluated by model code (a continuation, which the `nested` route does not take) would otherwise open a REPL inside the tool that reads the user's input or the rest of a piped stdin and sets `gptr.ui`/`gptr.interactive` (IC-53 item 3 counts `options()` with `gptr.*` names as `control`).
+26. **The console call's arguments on a piped session.** 04 section 6.1 says a continuation "may only keep or change" the mode explicitly; `s |> peter(mode = auto)` opening the console therefore passes the console call's model, mode, tools, plugins, extensions, skills and context objects with the first prompt (`rs$pending_call`), exactly as `s |> peter("...", mode = auto)` would.
 
 ### Validation executed while writing this plan
 
-- A scratch package was assembled from the five R files of this plan (exactly the code blocks, except that calls written `gptr::<name>()` were plain calls there) and stand-ins for the functions of P01-P11 they call (registry, events, services, reactor, session data and queue, `eval_r()`, the P11 UI helpers). Every test that does not need the real gateway was run from this plan's test blocks: 217 expectations passed in `en_US.UTF-8` with no failure, and 213 passed with 1 skip (the width test) in the C locale. The tests that need `gptr()` (P06-P10) were parse-checked and their counts taken statically; the Step 2 and Step 4 summaries add those counts to the measured ones.
+- A scratch package was assembled from the five R files of this plan (exactly the code blocks, except that calls written `gptr::<name>()` were plain calls there) and stand-ins for the functions of P01-P11 they call (registry, events, services, reactor, session data and queue, `eval_r()`, the P11 UI helpers). Every test that does not need the real gateway was run from this plan's test blocks: 217 expectations passed in `en_US.UTF-8` with no failure, and 213 passed with 1 skip (the width test) in the C locale. The tests that need `peter()` (P06-P10) were parse-checked and their counts taken statically; the Step 2 and Step 4 summaries add those counts to the measured ones.
 - `lintr` with the repository's settings (`=` and `<<-` only, 100 characters): no lints in the five R files; no line over 100 characters in any code block; every code block is ASCII.
 - A layering check: all 152 external call edges of the 146 P14 functions (`codetools::findGlobals()`) were mapped to the files the other plans define them in and checked with P01's `arch_edge_ok()` rules and kernel SDK list: no violation and no unmapped callee.
-- roxygen2 7.3.3 merged the `@section The interactive console:` block (`@name gptr`, `@rdname gptr`, `NULL`) into the `gptr` page of a scratch package.
+- roxygen2 7.3.3 merged the `@section The interactive console:` block (`@name peter`, `@rdname peter`, `NULL`) into the `peter` page of a scratch package.
 - A probe showed that `identical(sys.call(), cl)` holds inside a function reached by `eval(cl, envir)`, the identity the context blocks rely on.
 - Every fenced `r` block of this plan was extracted and parsed with `parse(file =)`; the plan contains no left-arrow assignment and no magrittr pipe in code.
 
@@ -5223,7 +5223,7 @@ Adversarial review of 2026-10-01 against `00-conventions.md`, 03 (sections 2.2, 
 | 2 | major | Task 6 `console_command()`; Global Constraints "Events emitted"; ambiguities 3-4 | Slash commands were announced on a private channel `console:command`, but P15's written plan records console commands from the `input` event with `source = "repl"` (`doc_on_input()`), the source 04 section 10.4 lists with P14 as an emitter; 03 section 6.17 requires "Commands are recorded as comments in transcripts", which would silently not happen. | applied | Each command line now passes `ev_dispatch("input", ev_new("input", text, source = "repl"))` first, honouring the transform chain (`handled` stops, `transform` re-dispatches or sends the text as a prompt); `console:command` is gone, `console:direct` stays (P15 ambiguity 11 asks for a post-evaluation hook). New test "commands pass the input event (source repl): recorded, handled or transformed". Ambiguities 3, 4 rewritten; new ambiguity 21 records that P11's `plan_on_input()` then counts a slash command as a call (the fail-safe direction of IC-56). Superseded in part by the cross-plan consolidation log, items 1-2: P15 later replaced `doc_on_input()` with `doc_on_console_command()`, so `console:command` is dispatched again after the `input` event. |
 | 3 | major | Task 6 `command_parse()`/`console_command()` | `/<plugin>:<cmd>` commands (04 section 11.12; P17 registers Claude plugin commands under that name) could never be dispatched: the parser always split at `:` and looked up only the part before it. | applied | `command_parse()` returns `list(name, args, full, rest)`; the whole token is looked up first (with `rest` as arguments), then the `/skill:<name>` split. Test "a command named <plugin>:<cmd> wins over the /skill:<name> split (04 11.12)"; the `command_parse()` test checks the new fields; unknown-command notices name the whole token. |
 | 4 | major | Task 5 `repl_passthrough()` | `!code` called `eval_r()` directly, but 04 section 7.0 names "P14 `!expr`" as a consumer of the `eval.r` service ("`eval_r()` through the `evaluator` kind", IC-69), so an evaluator selected by the `evaluator` setting (S-11) was bypassed. | applied | `!code` evaluates through `ext_service_get("eval.r")` when the service exists (owned by `builtin:workspace`), else `eval_r()`; Interfaces and prose updated; new test "!code runs through the eval.r service (the evaluator kind, IC-69)". |
-| 5 | minor | Tasks 4-5 `repl_state()`/`console_call()` | The console call's model, mode, tools, plugins, extensions, skills and context objects were used only when no session existed, so `s \|> gptr(mode = auto)` (console on a piped session) silently ignored them. | applied | New state field `pending_call`; the first prompt of a new or piped-in session carries them (as `s \|> gptr("...", mode = auto)` would). Test "the console call's arguments reach the first prompt, also on a piped session"; ambiguity 26. |
+| 5 | minor | Tasks 4-5 `repl_state()`/`console_call()` | The console call's model, mode, tools, plugins, extensions, skills and context objects were used only when no session existed, so `s \|> peter(mode = auto)` (console on a piped session) silently ignored them. | applied | New state field `pending_call`; the first prompt of a new or piped-in session carries them (as `s \|> peter("...", mode = auto)` would). Test "the console call's arguments reach the first prompt, also on a piped session"; ambiguity 26. |
 | 6 | minor | Task 6 `cmd_clear()`, `cmd_model()`, `cmd_mode()` | `/clear` replaced the model with the old session's model string; a model given as a spec (the fake provider, any `model = <spec>`) is registered for that session only, so the next prompt could not resolve it. | applied | `/clear` keeps `rs$model %||% s$model`; `/model` and `/mode` on a session also record the choice in the REPL state. |
 | 7 | minor | Task 6 `cmd_fork()`, `cmd_resume()` | With an explicit console `envir`, `repl_eval_env()` kept returning that environment after `/fork`, so the fork's prompts and `!code` wrote into the original environment instead of the fork's overlay (IC-40). | applied | Both commands reset `rs$envir_given` so the new session's kept home decides. |
 | 8 | minor | Task 6 `cmd_compact()` | It printed "Conversation compacted." even after an abort from the pause menu (mode `"repl"` returns `NULL`). | applied | The handler reports "Compaction was interrupted." when the policy returned `NULL`. |
@@ -5231,7 +5231,7 @@ Adversarial review of 2026-10-01 against `00-conventions.md`, 03 (sections 2.2, 
 | 10 | minor | Task 7 INFRA-03 test | The child inherited `RSTUDIO`, `POSITRON` or `TERM_PROGRAM` from the parent, which makes `front_end()` report an IDE (abort-only: no menu) when the suite runs from an IDE; the use of `R` instead of `rscript_path()` was not justified. | applied | The child gets a complete environment (no `NA`, IC-60) without the IDE and Quarto variables; a comment and ambiguity 22 justify `file.path(R.home("bin"), "R") --interactive`. |
 | 11 | minor | Task 7 `console_stdin_ui()` `input()` | The default value (from the model's `ask` questions) was written into the prompt unescaped (IC-53 item 8). | applied | The whole shown prompt is escaped, as P11's `ui_console_input()` does. |
 | 12 | minor | Task 7 prose, `repl_error()` title, test name | "printed in one line" did not match the code, which keeps line feeds of multi-line messages. | applied | Wording changed to "printed escaped on stderr" (the code was already safe: other controls are shown as `<U+XXXX>`). |
-| 13 | minor | Task 8 `jsonl_frontend_run()` error and prose; Task 8 Step 2 | The error suggested `s \|> gptr(.opts = list(frontend = "jsonl"))`, which fails non-interactively (P08 raises `gptr_error_noninteractive` for a no-prompt call without a human or `.stdin`); Step 2 named the wrong red-phase error for the `.stdin` test (P08 validates `.opts$frontend` before routing). | applied | The message also names `gptr(.stdin = TRUE, .opts = list(frontend = "jsonl"))` for scripts; prose explains the 6.1.1 step 4 rule; Step 2 names P08's `gptr_error_invalid_argument`. |
+| 13 | minor | Task 8 `jsonl_frontend_run()` error and prose; Task 8 Step 2 | The error suggested `s \|> peter(.opts = list(frontend = "jsonl"))`, which fails non-interactively (P08 raises `gptr_error_noninteractive` for a no-prompt call without a human or `.stdin`); Step 2 named the wrong red-phase error for the `.stdin` test (P08 validates `.opts$frontend` before routing). | applied | The message also names `peter(.stdin = TRUE, .opts = list(frontend = "jsonl"))` for scripts; prose explains the 6.1.1 step 4 rule; Step 2 names P08's `gptr_error_invalid_argument`. |
 | 14 | minor | Self-review | Deviations from conventions section 7 (`expect_snapshot()`) and the `.stdin` behaviour of questions asked through `gptr_confirm()` were not recorded. | applied | Ambiguities 23 and 24. |
 | 15 | major (claimed) | Task 7 `repl_main()` `session_shutdown` at `/exit` | Emitting `session_shutdown` drops the session's rank-0 records (P02) although `/exit` returns the session for further use. | rejected | 03 section 10.1 (NS-1 walkthrough, step 9) specifies "`/exit` fires `session_shutdown`, releases the store's lock ... and returns the session invisibly", and 04 section 10.4 lists P14 with reason `exit`; the plan already limits it to sessions the console created (ambiguity 5). |
 | 16 | major (claimed) | File Structure | No `test-copy-console.R` although P14 touches user frames. | rejected | 03 section 3.4 lists the copy suites and their owners (P08, P09, P10, P13, P16, P19, P22, P23) and 05 P14's "Owns" names none; adding one would create an unowned file. The console's frame handling is covered by `test-copy-gateway.R` (prompts are gateway calls) and Task 5's mask-release checks. |
@@ -5257,7 +5257,7 @@ Cross-plan consistency pass of 2026-10-01 (lenses: interfaces, shared names, obl
 |---|---|---|---|---|---|
 | 1 | interfaces | minor | Global Constraints "Events emitted" and "Transcripts"; Task 6 prose; acceptance row IC-49/IC-55; ambiguity 4 | applied (corrected) | The stale `doc_on_input()` mentions are gone. The issue's replacement names (`doc_on_console_input()`, slash commands "through `input` with source `repl`") do not match P15 either: P15 defines `doc_on_console_command()` on the channel `console:command` and `doc_on_console_direct()` on `console:direct` (P15 L6948-6949). The plan now names those two handlers and channels everywhere (applied together with item 2). |
 | 2 | shared-names | major | Task 6 `console_command()` and its test; Global Constraints; Task 6 Interfaces and prose; acceptance row IC-49/IC-55; ambiguities 3, 4, 21; self-review "Events and channels" | applied | No plan recorded slash commands: P15 listens only on `console:command`, which P14 had dropped. `console_command()` now dispatches `ev_dispatch("console:command", list(data = list(text = text)), session = session)` once the line has passed the `input` event (source `repl`, still emitted as 04 section 10.4 lists) and is still a command, so a handled line returns before it, a transformed command is recorded as it ran, and a line transformed into a prompt is not recorded twice (P15 records the prompt as a gateway call). The test "commands pass the input event (source repl): recorded, handled or transformed" registers a `console:command` hook and checks `c("/mode auto", "/mode plan", "/model opus")` (with `/swallow` handled and `/p` sent as the prompt `summarise x` left out); 4 more expectations, console-commands 54 -> 58. Review-log row 2 is annotated as superseded in part. |
-| 3 | obligations | minor | Task 2 `console_on_artifact_start()` | applied | 04 section 7.14 only requires the hook to print the NS-8 line, so when it is printed is open. While a tool executes (`run_current()` non-NULL, 04 section 7.6) the line is now queued in `console_state()$artifacts`. `console_on_tool_end()` prints it through the new `console_artifact_flush()`/`console_artifact_emit()` once no tool executes on the stack: a nested `gptr$<tool>()` end inside the `r` code keeps it queued. `console_on_agent_end()` flushes on exit after an interrupted tool. Outside a tool the line prints at once, as before. The line therefore never reaches P09's evaluator capture or the model's `r` output. P23's NS-8 test still passes: it re-dispatches the payload after the run, and the `r` result shows the line through the handle's own print. New Task 2 test "an artifact_start fired while a tool executes prints after tool_execution_end" (4 expectations; Task 2 red `FAIL 14`, green 62 / C locale 58; Task 7 green 247 / 243, at least 186 in red). The two new function names collide with no other plan. |
+| 3 | obligations | minor | Task 2 `console_on_artifact_start()` | applied | 04 section 7.14 only requires the hook to print the NS-8 line, so when it is printed is open. While a tool executes (`run_current()` non-NULL, 04 section 7.6) the line is now queued in `console_state()$artifacts`. `console_on_tool_end()` prints it through the new `console_artifact_flush()`/`console_artifact_emit()` once no tool executes on the stack: a nested `peter$<tool>()` end inside the `r` code keeps it queued. `console_on_agent_end()` flushes on exit after an interrupted tool. Outside a tool the line prints at once, as before. The line therefore never reaches P09's evaluator capture or the model's `r` output. P23's NS-8 test still passes: it re-dispatches the payload after the run, and the `r` result shows the line through the handle's own print. New Task 2 test "an artifact_start fired while a tool executes prints after tool_execution_end" (4 expectations; Task 2 red `FAIL 14`, green 62 / C locale 58; Task 7 green 247 / 243, at least 186 in red). The two new function names collide with no other plan. |
 | 4 | trace | minor | Task 8 INFRA-27 test; acceptance row 4; File Structure | applied | 03 section 6.18 row 27 names `test-console-render.R`, and P24's `infra-time.R` runs `console-render`. Task 8 now appends the INFRA-27 test to `test-console-render.R` with its own file-local helpers (`infra27_volatile`, `infra27_norm_value()`, `infra27_normalise()`, `infra27_run()`), because 05 gives P14 no helper file. It removes the test and the now unused normalisation helpers from `test-console-jsonl.R`, where `jsonl_run()` stays for two tests. Task 8 Step 2 runs `^console-(jsonl\|render)$` (`FAIL 9 \| PASS 72`), Step 4 runs both files (32 and 75), and Step 5 adds `test-console-render.R`. Acceptance row 4 points at the `console-render` command. Per-file lines: console-render 68 -> 75 (C locale 64 -> 71), console-jsonl 35 -> 32. |
 
 Totals after this pass: P14 has 340 expectations (console-render 75, console-interrupt 36, console-repl 139, console-commands 58, console-jsonl 32). Acceptance row 1 is `PASS 401` (C locale 397, `CI=true` 417).

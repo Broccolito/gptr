@@ -18,9 +18,8 @@ session (pure R, CRAN-bound). The design (specs) and 25 implementation plans (30
 coordinator-added work (the IC-74 local Ollama System 1 adapter, follow-up fixes FIX-1..6, CI
 repair rounds CI-1..6, the first simplicity packages). P01-P10, P12 and P13 are complete locally
 (plan acceptance recorded). Two maintainer decisions now govern everything (D-135): the user-facing
-entry point is renamed **`peter()`** (not yet applied in code), and **simplicity first** (Occam's
-razor; conventions section 11) - a retrospective simplicity review produced an execution plan
-that is partly applied.
+entry point is renamed **`peter()`**, and **simplicity first** (Occam's razor; conventions section
+11) - a retrospective simplicity review produced an execution plan that is partly applied.
 
 ## 1. Read first (in order)
 
@@ -42,8 +41,8 @@ that is partly applied.
    `P05-*.md`, `P06-loop.md`), `dev/progress/ci-hosted.md` (CI rounds), `dev/progress/fixes.md`
    (FIX-1..6), `dev/progress/simplicity.md` (simplicity packages).
 7. **Simplicity execution plan:** `dev/progress/simplicity-plan.md` (44 work packages, stages, shared
-   decisions, defects, record formats). **Rename inventory and tools:** `dev/progress/rename-inventory.md`,
-   `dev/progress/rename/rename.py` (mechanical pass, 7 regex rules), `build_index_peter.py`, `tokdelta.R`.
+   decisions, defects, record formats); rename inventory (done, D-135):
+   `dev/progress/rename-inventory.md`.
 8. Orchestration scripts used so far: `dev/ci/orchestration/` (section 7).
 
 ## 2. Maintainer decisions in force (D-135)
@@ -54,7 +53,7 @@ that is partly applied.
   `gptr.*` options, `.gptr/`, `GPTR_*` env vars, `gptr_error_*` classes, file names `R/gptr-*.R`,
   `gptr::` qualifiers (`gptr::gptr` -> `gptr::peter`). Extension factories keep `function(gptr)`
   (package extension API). The agent persona in the system prompt is "Peter" and the P14 console
-  prompt is `peter> `. **Not yet applied in code** (REN-1/REN-2, section 6). The maintainer
+  prompt is `peter> `. Applied by REN-1/REN-2. The maintainer
   confirmed both naming calls (namespace renamed; `gptr_` prefix kept).
 - **Why "Peter"** (must appear in `?peter` and the README, already in README/vision brief/D-135):
   Peter Cathcart **Wason** (1924-2003), whose reasoning research with Jonathan Evans framed the
@@ -152,12 +151,10 @@ free D-number is **D-139** (check with `grep -o '^## D-[0-9]*' dev/DEVIATIONS.md
    P13-S, P01-S), LOCK, URL, CI-1a, TEST-H, P02-S, P04-S, P06-S1/S2, CI-1b, FIX5-LINT (the last
    `tools::file_ext()` calls: `R/ext-specs.R:~1330`, `R/gptr-gateway.R:~796`; `R/doc-io.R` is
    already fixed). Respect the shared-file chains in plan section 5.
-4. **Stage B freeze** (no lane running): **REN-1** (code/tests/fixtures/man/baselines rename, one
-   commit; follow `rename-inventory.md` steps; re-record token baselines with
-   `dev/bench/tokens/run.R` then `--update` then `--check`; `?peter` with the naming rationale;
-   DESCRIPTION text), **REN-2** (specs/plans/CLAUDE.md/HANDOFF), **DOC-1** (condense
-   `DEVIATIONS.md`, keep every D-id and contract-visible statement), **DOC-2** (condense progress
-   logs; merge lane files), **DOC-3** (README trim; keep the `peter()` and Ollama sections).
+4. **Stage B freeze** (no lane running): REN-1 and REN-2 (the `peter()` rename) are done
+   (`progress/simplicity.md`); **DOC-1** (condense `DEVIATIONS.md`, keep every D-id and
+   contract-visible statement), **DOC-2** (condense progress logs; merge lane files), **DOC-3**
+   (README trim; keep the `peter()` and Ollama sections).
 5. **Stage C**: P11-A, P11-B1..B3 (tell the maintainer the level changes first), then P11 Tasks 3-11
    (**Task 8 `ui.get` + scripted UI unblocks P14 and P18 Tasks 2/4/5**); P10-C/S, P09-C/S, P15-S, P17-S
    (after P17 Task 12), P20-S (before P20 Task 8), P18-S (before P18 Task 2).
@@ -264,8 +261,8 @@ work-in-progress cannot contaminate the result. Raw logs go to the ignored `dev/
   (One P05 probe once made read-only loopback metadata requests to a local Ollama; recorded as
   non-evidence.)
 - Session scratchpad paths in old logs (`/private/tmp/claude-501/...`) are gone after the session;
-  everything needed was copied into the repo (simplicity plan, rename tools, orchestration scripts,
-  WIP patches under `dev/.validation/`).
+  everything needed was copied into the repo (simplicity plan, rename inventory, orchestration
+  scripts, WIP patches under `dev/.validation/`).
 
 ## 9. Maintainer-only actions (ask first)
 

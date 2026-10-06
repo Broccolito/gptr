@@ -757,7 +757,7 @@ image_id = function(b) {
 #' The text an elided image is projected as (IC-67)
 #' @noRd
 image_omitted_text = function(id) {
-  paste0("[image omitted: gptr$plot(\"", id, "\")]")
+  paste0("[image omitted: peter$plot(\"", id, "\")]")
 }
 
 #' The image blocks of a message list: position, id (8 hex of the data's sha256) and bytes
@@ -991,7 +991,7 @@ run_resignal_interrupt = function() {
 }
 
 #' Start a run without blocking: attach a detached copy, refuse a running session (`busy`), count
-#' nested gptr() calls (IC-66), freeze the prompt, append the input, register with the reactor
+#' nested peter() calls (IC-66), freeze the prompt, append the input, register with the reactor
 #' @return A `gptr_run` held by the reactor until it settles.
 #' @noRd
 run_start = function(s, input, opts = list()) {
@@ -1085,7 +1085,7 @@ run_wire = function(run) {
   invisible(run)
 }
 
-#' Count gptr() calls made from one `r` evaluation (gptr.max_nested_calls, IC-66); the children of
+#' Count peter() calls made from one `r` evaluation (gptr.max_nested_calls, IC-66); the children of
 #' one team or fan-out share `opts$nested_group` and count once
 #' @noRd
 run_count_nested = function(outer, opts) {
@@ -1097,7 +1097,7 @@ run_count_nested = function(outer, opts) {
   outer$nested_count = counts
   cap = gptr_opt("max_nested_calls")
   if (length(keys) > cap) {
-    gptr_abort(paste0("too many gptr() calls in one evaluation (limit ", cap,
+    gptr_abort(paste0("too many peter() calls in one evaluation (limit ", cap,
                       ", option gptr.max_nested_calls)"),
                "budget", kind = "nested_calls", budget = cap, used = length(keys),
                session = outer$session)

@@ -11,9 +11,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `gptr()` itself (copy-safe base-R capture, identifier resolution, `{identifier}` interpolation, routing through registry `route` records) together with the settings layers, trust, egress and replay controls and the session SDK verbs, so that the whole S-8 session contract of milestone M1 runs offline on the fake provider.
+**Goal:** Build `peter()` itself (copy-safe base-R capture, identifier resolution, `{identifier}` interpolation, routing through registry `route` records) together with the settings layers, trust, egress and replay controls and the session SDK verbs, so that the whole S-8 session contract of milestone M1 runs offline on the fake provider.
 
-**Architecture:** Four layer-L6 files. `gptr-config.R` owns the settings layers of contract 11.2 (package defaults < user file < project file under the trust rules < user-level project file < `options(gptr.*)` < the session layer), `gptr_config()`, `gptr_init()`, `gptr_trust()` with trust fingerprints, the egress acknowledgement, `replay_mode()`/`replay_guard()` and the `settings.get`/`trust.get` services. `gptr-capture.R` turns one `gptr(...)` call into a `gptr_call` record without ever forcing a plain-symbol dot (rules R2-R3, IC-41), resolves bare identifiers (contract 6.1.3, IC-42) and interpolates literal prompts; `gptr-gateway.R` holds the classed closure `gptr`, walks the `route` records in `order` and registers the `builtin:gateway` routes `nested` (20), `continue` (60) and `new` (70), the core `setting` specs and the `router.call` service; `gptr-sdk.R` holds the verbs `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()` and `gptr_return()`. P08 reaches the kernel only through the kernel SDK of IC-33 and later plans only through services of contract 7.0 with their documented fallbacks.
+**Architecture:** Four layer-L6 files. `gptr-config.R` owns the settings layers of contract 11.2 (package defaults < user file < project file under the trust rules < user-level project file < `options(gptr.*)` < the session layer), `gptr_config()`, `gptr_init()`, `gptr_trust()` with trust fingerprints, the egress acknowledgement, `replay_mode()`/`replay_guard()` and the `settings.get`/`trust.get` services. `gptr-capture.R` turns one `peter(...)` call into a `gptr_call` record without ever forcing a plain-symbol dot (rules R2-R3, IC-41), resolves bare identifiers (contract 6.1.3, IC-42) and interpolates literal prompts; `gptr-gateway.R` holds the classed closure `peter`, walks the `route` records in `order` and registers the `builtin:gateway` routes `nested` (20), `continue` (60) and `new` (70), the core `setting` specs and the `router.call` service; `gptr-sdk.R` holds the verbs `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()` and `gptr_return()`. P08 reaches the kernel only through the kernel SDK of IC-33 and later plans only through services of contract 7.0 with their documented fallbacks.
 
 **Tech Stack:** base R (>= 4.2.0); rlang (`obj_address()` only; no quosures, rule R3); jsonlite through P01's `json_encode()`/`json_decode()`; ps (lock owner creation times); grDevices (PNG rendering of `.opts$images` plots); testthat 3e, withr and processx in tests only.
 
@@ -30,14 +30,14 @@
 - Owned files (05 P08): `R/gptr-gateway.R`, `R/gptr-capture.R`, `R/gptr-sdk.R`, `R/gptr-config.R`, their tests `tests/testthat/test-gptr-gateway.R`, `test-gptr-capture.R`, `test-gptr-sdk.R`, `test-gptr-config.R`, the copy suite `tests/testthat/test-copy-gateway.R`, and `inst/templates/` (`vignette.Rmd`, `settings.json`, `gitignore`); plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`.
 - Layers (03 §3.2): all four files are L6. They call L0-L3 functions, the kernel SDK of IC-33 (`session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`, `run_current()`, `last_set()`, ...) and services only; P08 never calls a function of P09-P25 by name.
 - Exports (04 §14.1: P08's 10 names), exact signatures:
-  `gptr(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL, extensions = NULL, tools = NULL, agents = NULL, parallel = NULL, choices = NULL, levels = NULL, threshold = 0.5, min_confidence = NULL, uncertain = NULL, prompt = NULL, envir = parent.frame(), background = FALSE, budget = NULL, replay = NULL, .opts = list(), .run = TRUE, .stdin = FALSE)`;
+  `peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL, extensions = NULL, tools = NULL, agents = NULL, parallel = NULL, choices = NULL, levels = NULL, threshold = 0.5, min_confidence = NULL, uncertain = NULL, prompt = NULL, envir = parent.frame(), background = FALSE, budget = NULL, replay = NULL, .opts = list(), .run = TRUE, .stdin = FALSE)`;
   `gptr_init(path, instructions = TRUE, gitignore = TRUE)`; `gptr_config(..., .scope = NULL)`; `gptr_trust(path = ".", trust = NULL)`;
   `gptr_step(s, turns = 1L)`; `gptr_wait(x, timeout = Inf)`; `gptr_steer(s, text, as = c("steer", "follow_up"))`; `gptr_cancel(x)`; `gptr_on(s, event, handler, matcher = NULL)`; `gptr_return(x)`.
-- Classes: `gptr` has `class(gptr) == c("gptr_gateway", "function")` with methods `$`, `[[`, `$<-`, `[[<-` (refuse, `gptr_error_readonly`), `.DollarNames` and `print` (04 §5.3); `gptr_config` is "named list of effective settings with attribute `sources` (named chr: key -> layer); `print` shows value and source per key" (04 §5.11); `gptr_call` is an environment (04 §5.13, §7.8).
+- Classes: `peter` has `class(peter) == c("gptr_gateway", "function")` with methods `$`, `[[`, `$<-`, `[[<-` (refuse, `gptr_error_readonly`), `.DollarNames` and `print` (04 §5.3); `gptr_config` is "named list of effective settings with attribute `sources` (named chr: key -> layer); `print` shows value and source per key" (04 §5.11); `gptr_call` is an environment (04 §5.13, §7.8).
 - The `gptr_call` record (IC-13, 04 §7.8): bindings `id` (`c` + 8 hex), `prompt`, `template`, `session`, `context` (one `list(label, kind = "symbol" | "value" | "literal", name, slot, facts = list(class, dim, length, bytes, is_chr1))` per context dot), `values` (env, `.v1`, `.v2`, ...), `envir` (reset to `NULL` by `call_release()` [R2]), `ids` (`model`, `mode`, `skills`, `plugins`, `extensions`, `tools`, `agents`), `args` (`parallel`, `choices`, `levels`, `threshold`, `min_confidence`, `uncertain`, `background`, `budget`, `replay`, `opts`, `run`, `stdin`), `sys_call`, `nframe`, `top_level` (`NA` until P15's locator), `doc`; plus `interp` ("the sorted `name=value` pairs used", 04 §6.1.4).
 - Internal functions with contract signatures (04 §7.8): `call_new(...)`, `call_release(call)`, `call_value(call, i)`, `route_pass()`, `gateway_defer(expr_fun)`, `gateway_run(call, s = NULL)`, `dot_facts(x)`, `resolve_identifier(expr, arg, envir)`, `identifier_known(name, arg)`, `interpolate_prompt(template, envir)`, `settings_get(key, session = NULL)`, `settings_effective()`, `settings_write(scope, patch)`, `trust_get(path = getwd())`, `home_address(envir)`, `replay_mode(arg = NULL)`, `replay_guard(model, what = "model call")`, `egress_check(provider_id)`.
 - Services provided (04 §7.0): `settings.get` = `function(key, session = NULL) value`; `trust.get` = `function(path = getwd()) lgl(1)` (fallback `FALSE`); `identifier.resolve` = `function(expr, arg, envir) chr or spec`; `router.call` = `function(s, reason) list(model, thinking, state)`. Each is registered with `on_load(ext_service_set(<name>, <fun>, provided_by = "P08", builtin = "gateway"))`.
-- Services consumed, with the fallback each consumer documents: `ns.resolve` (`$`/`[[` of `gptr`; `gptr_error_not_available` before P10), `ns.names` (`.DollarNames`; `character(0)` before P10), `context.first`/`context.turn`/`session.add_tools` (P07), `console.interrupt_policy` (P14; abort-only fallback), `skill.body` and `plugin.enable` (P17; `gptr_error_not_available`), `bg.register` (P21; `gptr_error_not_available`).
+- Services consumed, with the fallback each consumer documents: `ns.resolve` (`$`/`[[` of `peter`; `gptr_error_not_available` before P10), `ns.names` (`.DollarNames`; `character(0)` before P10), `context.first`/`context.turn`/`session.add_tools` (P07), `console.interrupt_policy` (P14; abort-only fallback), `skill.body` and `plugin.enable` (P17; `gptr_error_not_available`), `bg.register` (P21; `gptr_error_not_available`).
 - Built-in (04 §10.3): `builtin:gateway` registers "routes `nested` (20), `continue` (60), `new` (70); core `setting` specs", not replaceable. Route orders (IC-39): `classifier` 10, `team` 15, `fanout` 16, `nested` 20, `console` 30, `document` 50, `continue` 60, `new` 70.
 - Settings (04 §11.2): layers "package defaults < user `settings.json` < project `.gptr/settings.json` < the user-level project file `projects/<hash>.json` (IC-52) < `options(gptr.*)` < `gptr_config(.scope = "session")` < call arguments"; "An **untrusted** project contributes only changes that tighten `tighten`-type settings"; `egress` "is read only from the user file". Core keys and defaults exactly as the 04 §11.2 table (`version` 1, `model` null, `small_model` null, `system1` null, `mode` `"manual"` with tighten order `plan, manual, edits, auto`, `preset` `"standard"`, `tools` `{}`, `permissions` `{}`, `context` `"summary"` (`none, names, summary`), `record` `"ask"` (`off, ask, auto`), `replay` `"auto"`, `transcript` `"ask"`, `plugins` `[]`, `filters` `[]`, `skills` `{budget: 1500}`, `mcp` `{exposure: "r", budget: 1500, import: [...]}`, `subagents` `{max_depth: 1, max_active: 8, max_workers: null, max_cli: 4, max_tasks: 8}`, `output_tokens` null, `plot` `{width: 768, height: 512, res: 120}`, `budget` `{tokens: 2000000, cost: 5, turns: null}`, `cache` `{ttl: "gap"}`, `compactor` `"checkpoint"`, `compact_at` `200000`, `checkpoint` `"on"`, `doc` `{outputs: true, output_lines: 12}`, `cache_commit` `{s1: true, s2: false}`, `ui` null, `frontend` null, `store` `"jsonl"`, `evaluator` `"r"`, `providers` `{}`, `egress` `{}` user file only).
 - Files: user settings `tools::R_user_dir("gptr", "config")/settings.json`; project settings `.gptr/settings.json`; user-level project file `R_user_dir("gptr", "config")/projects/<first 16 hex of sha256(path_key(project root))>.json` (`{"version": 1, "root": ..., "permissions": {...}, "transcript": {...}, "record": {...}}`); `trust.json` = `{"version": 1, "projects": {"<path_key of the project root>": {"trusted": true, "date": "2026-09-29", "fingerprint": "<sha256 of the trust-gated files>", "base_url_confirmed": {...}}}}`; trust-gated files (IC-52) `.gptr/settings.json`, `mcp.json`, `extensions/`, `plugins/`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `agents/`, an auto-discovered `.env`. All JSON "UTF-8 without BOM, LF, written atomically (`write_atomic()`)", "Unknown keys are preserved on rewrite"; read-modify-write "under a short `mkdir` lock (`<file>.lock/`, pid + creation time, 50 x 100 ms retries)" (IC-71).
@@ -47,7 +47,7 @@
 - Egress (IC-29, 03 §6.10): `egress_check(provider_id)` is "`invisible(TRUE)` if acknowledged (user settings `egress`), local or offline, or `.opts$context = "none"`; when `gptr_can_prompt()`: shows what automatic context is sent and records the acknowledgement at user scope (an `ask_human`, IC-53); otherwise `gptr_error_egress`" (fields `provider`, `how_to_ack`); the recorded acknowledgement is announced with the message class `egress_ack`.
 - Control category (IC-53 item 3): `gptr_config`, `gptr_trust`, `gptr_init`, `gptr_on`, and `gptr_steer`/`gptr_cancel` "on a session other than the running one" (the pipe into another running session included) check `run_current()`: "called from model code during a run they signal `gptr_error_permission` unless the dispatcher approved exactly that call through an `ask_human` (a one-shot token on the run)". The token is the function name appended to `run$signal$control`, the slot P06's `perm_grant_control()` and P11's gate grant (see contract ambiguities). P08's check is `control_check(what)`, the name P06 and P11 cite for it ("the slot P08's `control_check()` consumes"); P06 named its own session-level check `session_control_check(what, s = NULL)` and P11 its `perm_control_guard(what)` so that the three never collide.
 - Internal names unique across plans: P06 reserved `mode_tighter()` and `control_check()` for P08 (its own helpers are `run_mode_tighter()` and `session_control_check()`); P07 owns `context_items()`, so P08's context-item builder is `gateway_context_items()`. Two top-level definitions of one name in one package silently override each other, so every P08 helper name was checked against every plan in `dev/plan/` (P01-P07, P09-P11, P14, P17, P21): none is defined twice.
-- Human predicates (IC-43): every question uses `gptr_can_prompt()` and `gptr_confirm()`; `gptr()` with no prompt, nobody to prompt and `.stdin = FALSE` signals `gptr_error_noninteractive` (fields `what`, `questions`).
+- Human predicates (IC-43): every question uses `gptr_can_prompt()` and `gptr_confirm()`; `peter()` with no prompt, nobody to prompt and `.stdin = FALSE` signals `gptr_error_noninteractive` (fields `what`, `questions`).
 - Conditions used (04 §2.2): `gptr_error_invalid_argument` (`arg`, `expected`; never the argument's value), `gptr_error_invalid_identifier` (parent `invalid_argument`; `arg`, `class`), `gptr_error_noninteractive`, `gptr_error_not_available` (`member`, `provided_by`), `gptr_error_readonly` (`object`, `field`), `gptr_error_unknown_member`, `gptr_error_workspace` (`path`), `gptr_error_egress` (`provider`, `how_to_ack`), `gptr_error_not_recorded` (`document`, `prompt`), `gptr_error_permission` (`action`, `tool`, `risk`, `how_to_allow`, `session`), `gptr_error_provider` (`provider`, `model`, `status`, `request_id`, `error_type`, `session`), `gptr_error_budget_<kind>` (`kind`, `budget`, `used`, `session`), `gptr_error_max_turns` (`max_turns`, `session`), `gptr_error_missing_package` (`package`, `feature`), `gptr_error_internal` (`detail`); warning `gptr_warning_two_prompts`; messages `gptr_message_alias_shadowed`, `gptr_message_egress_ack`, `gptr_message_interpolated`, `gptr_message_notice`. Terminal statuses (04 §6.1.2): "`error` signals `gptr_error_provider`; `blocked` signals `gptr_error_permission`; `budget` signals `gptr_error_budget_<kind>`; `max_turns` signals `gptr_error_max_turns`. Each condition carries the session as `cnd$session`"; R's `interrupt` is re-signalled unchanged.
 - Events emitted (04 §6.1.5, §10.4): `route` (`route`, `router`, `model`, `reason`), `model_select` (`from`, `to`, `reason`), `input` (transform chain; `text`, `source`), `project_trust` (first decision; `cwd`, `changed`). `session_start` is P06's; so are the per-switch `model_change`/`gptr.router` entries and `route` events of router sessions (P06 `run_route()` records what P08's `router.call` returns).
 - Terminal conditions: P06 stores the unsignalled condition of a terminal status in `session_data(s)$condition` ("read by P08", P06 self-review item 7); `gateway_signal()` signals that object with `$session` set to the session, and builds one only when none is stored.
@@ -61,14 +61,14 @@
 | `R/gptr-config.R` | create (Task 1), extend (Tasks 2-4, 7) | settings files, scopes and short locks; the core `setting` specs; the control-category check; trust store, fingerprints and `gptr_trust()`; settings layers, `settings_get()`, `settings_effective()`, `print.gptr_config()`; `gptr_config()`; `gptr_init()`; `replay_mode()`, `replay_guard()`, `egress_check()`; services `settings.get`, `trust.get` |
 | `inst/templates/vignette.Rmd`, `inst/templates/settings.json`, `inst/templates/gitignore` | create (Task 7) | the files `gptr_init()` writes |
 | `R/gptr-capture.R` | create (Task 5), extend (Task 6) | dot facts and call-site symbols (leaves), labels, prompt selection, interpolation, `.opts` and value-argument validation, the `gptr_call` record; identifier resolution, alias masks, agents; service `identifier.resolve` |
-| `R/gptr-gateway.R` | create (Task 8), extend (Task 9) | the classed closure `gptr` and its methods; route dispatch, `route_pass()`, `gateway_defer()`, `home_address()`; `gateway_run()` with session creation and continuation, input building, `.run = FALSE` queuing and pending run options, pumping and terminal conditions; `builtin:gateway`; service `router.call` |
+| `R/gptr-gateway.R` | create (Task 8), extend (Task 9) | the classed closure `peter` and its methods; route dispatch, `route_pass()`, `gateway_defer()`, `home_address()`; `gateway_run()` with session creation and continuation, input building, `.run = FALSE` queuing and pending run options, pumping and terminal conditions; `builtin:gateway`; service `router.call` |
 | `R/gptr-sdk.R` | create (Task 10) | `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_return()` |
 | `tests/testthat/test-gptr-config.R` | create (Task 1), extend (Tasks 2-4, 7) | settings, trust, `gptr_config()`, `gptr_init()`, replay, egress |
 | `tests/testthat/test-gptr-capture.R` | create (Task 5), extend (Task 6) | capture leaves, prompt selection, interpolation, call record, identifiers |
-| `tests/testthat/test-gptr-gateway.R`, `tests/testthat/_snaps/gptr-gateway.md` | create (Task 8), extend (Task 9) | capture through the gateway, call shapes on the fake provider, routes, methods, visibility, terminal conditions, routers; the `print(gptr)` snapshot |
+| `tests/testthat/test-gptr-gateway.R`, `tests/testthat/_snaps/gptr-gateway.md` | create (Task 8), extend (Task 9) | capture through the gateway, call shapes on the fake provider, routes, methods, visibility, terminal conditions, routers; the `print(peter)` snapshot |
 | `tests/testthat/test-gptr-sdk.R` | create (Task 10) | the six verbs, steering order, control checks |
 | `tests/testthat/test-copy-gateway.R` | create (Task 11) | the fresh-process tracemem rows of G3 t5 and IC-41 |
-| `NAMESPACE`, `man/gptr.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`, `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`, `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` | generated (Task 12) | `Rscript --vanilla -e 'devtools::document()'` |
+| `NAMESPACE`, `man/peter.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`, `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`, `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` | generated (Task 12) | `Rscript --vanilla -e 'devtools::document()'` |
 
 ## Tasks (overview)
 
@@ -590,7 +590,7 @@ control_check = function(what) {
                       "during a run."),
                "Only you can make this change: run it outside the run, or approve it when asked."),
              "permission", action = what, tool = "r", risk = 4L,
-             how_to_allow = "call it yourself outside gptr(), or approve the r call when asked",
+             how_to_allow = "call it yourself outside peter(), or approve the r call when asked",
              session = run$session)
 }
 ```
@@ -1594,7 +1594,7 @@ git commit -m "feat(gateway): add replay_mode(), replay_guard() and the egress a
 This task writes the copy-safe capture machinery of G3 (§3 "GATEWAY CAPTURE RULES", t2b, t5 and the verification
 log) with IC-41 applied: a dot whose expression at the call site (`sys.call()`) is a plain symbol is read **by name**
 from the caller frame through the leaf `dot_get()` (`get0()`), so its promise is never forced; literals are taken
-from the expression; every other dot (a call such as the inner `gptr()` of a pipe, a forwarded `...`/`..n`, a value
+from the expression; every other dot (a call such as the inner `peter()` of a pipe, a forwarded `...`/`..n`, a value
 spliced in by `do.call()`) is forced exactly once through `...elt(i)` in the gateway's `while` loop and parked in the
 call record's `values` environment, which `call_release()` empties at settlement [R2]. `dot_sites()` maps each dot
 to the symbol written at the call site, skipping arguments named after a formal that follows the dots; with more
@@ -1731,7 +1731,7 @@ test_that("unmask_env() replaces a magrittr mask by its parent", {
   expect_identical(unmask_env(globalenv()), globalenv())
 })
 
-test_that("gateway_args() validates the value arguments of gptr()", {
+test_that("gateway_args() validates the value arguments of peter()", {
   a = gateway_args(NULL, c("x", "y"), NULL, 0.5, NULL, NA, FALSE, list(cost = 1), "live",
                    list(max_turns = 3), TRUE, FALSE)
   expect_identical(a$replay, "live")
@@ -1783,7 +1783,7 @@ Create `R/gptr-capture.R`:
 
 ```r
 # R/gptr-capture.R (Task 5: create)
-# gptr-capture.R -- copy-safe base-R capture of gptr() calls (rules R2-R3; G3 section 3 "GATEWAY
+# gptr-capture.R -- copy-safe base-R capture of peter() calls (rules R2-R3; G3 section 3 "GATEWAY
 # CAPTURE RULES", verified by G3 t2b and t5 and its fact-check; IC-41), identifier resolution
 # (contract 6.1.3, IC-42), {identifier} interpolation (6.1.4), prompt selection, argument
 # validation and the gptr_call record (7.8, IC-13). Plan P08, layer L6.
@@ -1839,8 +1839,8 @@ dot_is_literal = function(e) {
     is.null(attributes(e))
 }
 
-#' Names of gptr()'s formals after the dots (contract 6.1; test-gptr-gateway.R checks that they
-#' equal `setdiff(names(formals(gptr)), "...")`)
+#' Names of peter()'s formals after the dots (contract 6.1; test-gptr-gateway.R checks that they
+#' equal `setdiff(names(formals(peter)), "...")`)
 #' @noRd
 gateway_formal_names = function() {
   c("model", "mode", "skills", "plugins", "extensions", "tools", "agents", "parallel", "choices",
@@ -2151,7 +2151,7 @@ gateway_images_check = function(v) {
   items
 }
 
-#' Validates the value arguments of gptr(); forces each on entry [leaf]
+#' Validates the value arguments of peter(); forces each on entry [leaf]
 #' @noRd
 gateway_args = function(parallel, choices, lvls, threshold, min_confidence, uncertain, background,
                         budget, replay, opts, run, stdin) {
@@ -2218,7 +2218,7 @@ gateway_args = function(parallel, choices, lvls, threshold, min_confidence, unce
 
 #' Builds the gptr_call record (IC-13): an environment with the bindings of contract 7.8, plus
 #' `interp` (the sorted `name=value` pairs of 6.1.4) and `hold` (TRUE while a started run still
-#' needs the record after gptr() returned)
+#' needs the record after peter() returned)
 #' @noRd
 call_new = function(prompt = NULL, template = NULL, interp = character(), session = NULL,
                     context = list(), values = NULL, envir = NULL, ids = list(), args = list(),
@@ -2244,7 +2244,7 @@ call_new = function(prompt = NULL, template = NULL, interp = character(), sessio
 }
 
 #' Releases a call record [R2]: rm() of its values, `envir` and `sys_call` set to NULL. Called on
-#' every exit path of gptr(). A record whose `hold` flag is set (its run was started for later
+#' every exit path of peter(). A record whose `hold` flag is set (its run was started for later
 #' pumping) is left alone; the listeners of call_hold() (Task 9) clear the flag and release it.
 #' @noRd
 call_release = function(call) {
@@ -3313,9 +3313,9 @@ git commit -m "feat(gateway): add gptr_config(), gptr_init() and the workspace t
 
 **Interfaces:**
 - Consumes: Tasks 5-6 (capture leaves, `select_prompt()`, `gateway_args()`, `interpolate_prompt()`, `resolve_identifier()`, `ident_force_needed()`, `ident_value()`, `resolve_agents()`, `call_new()`, `call_release()`), Task 1 `gateway_state()`; P01 `gptr_can_prompt()`, `gptr_warn()`, `gptr_inform()` and `verbosity()` (the `interpolated` echo of 04 §2.2 at verbosity >= 2), `ev_new()`, `ext_service_get()`, `ext_service_has()`; P02 `registry_all(kind, session = NULL)` (route records ordered by `order`), `registry_diagnostic()`, `ev_dispatch()`; P06 `run_current()` (the `gptr_run` field `mode`); P10 services `ns.resolve` (`function(path)`) and `ns.names` (`function(pattern)`).
-- Produces: the export `gptr` (class `c("gptr_gateway", "function")`, 04 §6.1, §5.3) with the S3 methods `$.gptr_gateway`, `[[.gptr_gateway`, `$<-.gptr_gateway`, `[[<-.gptr_gateway`, `.DollarNames.gptr_gateway`, `print.gptr_gateway`; `route_pass()` (the sentinel for P13, P14, P15, P19), `gateway_defer(expr_fun)` (P19's `gptr_parallel()`), `home_address(envir)` -> chr(1) (P11), `mode_tighter(a, b)` (the name P06 reserved for P08; P06's own is `run_mode_tighter()`), `gateway_dispatch(call)`.
+- Produces: the export `peter` (class `c("gptr_gateway", "function")`, 04 §6.1, §5.3) with the S3 methods `$.gptr_gateway`, `[[.gptr_gateway`, `$<-.gptr_gateway`, `[[<-.gptr_gateway`, `.DollarNames.gptr_gateway`, `print.gptr_gateway`; `route_pass()` (the sentinel for P13, P14, P15, P19), `gateway_defer(expr_fun)` (P19's `gptr_parallel()`), `home_address(envir)` -> chr(1) (P11), `mode_tighter(a, b)` (the name P06 reserved for P08; P06's own is `run_mode_tighter()`), `gateway_dispatch(call)`.
 
-`gptr()` is dispatch steps 1-5 of contract 6.1.1. Its frame holds `...` and the caller frame, so it follows the
+`peter()` is dispatch steps 1-5 of contract 6.1.1. Its frame holds `...` and the caller frame, so it follows the
 capture rules literally: no closure, handler or `match.arg()` in the frame, no assignment to a formal (new locals
 only), plain-symbol dots read by name through leaves, every other dot forced once through `...elt(i)` in a `while`
 loop. Identifier formals are resolved with `resolve_identifier()` on `substitute(<formal>)`, except that the
@@ -3337,7 +3337,7 @@ Create `tests/testthat/test-gptr-gateway.R`:
 
 ```r
 # tests/testthat/test-gptr-gateway.R (Task 8: create)
-# test-gptr-gateway.R -- the gptr() gateway: capture, routing, the classed closure and its methods,
+# test-gptr-gateway.R -- the peter() gateway: capture, routing, the classed closure and its methods,
 # the built-in routes on the fake provider, terminal statuses and routers (plan P08).
 
 # A temporary project (P01's local_project(): working directory and project root) with a private
@@ -3387,15 +3387,15 @@ fake_run = function(session = "s0000000000", mode = "manual", depth = 0L) {
   run
 }
 
-test_that("gptr('a', mice) and mice |> gptr('a') capture mice by name", {
+test_that("peter('a', mice) and mice |> peter('a') capture mice by name", {
   local_gw()
   box = local_probe()
   mice = data.frame(weight = c(20, 22, 25))
-  expect_identical(gptr("a", mice), "probed")
+  expect_identical(peter("a", mice), "probed")
   expect_identical(box$prompt, "a")
   expect_identical(box$labels, "mice")
   expect_identical(box$kinds, "symbol")
-  expect_identical(mice |> gptr("a"), "probed")
+  expect_identical(mice |> peter("a"), "probed")
   expect_identical(box$labels, "mice")
   expect_identical(box$classes, "data.frame")
 })
@@ -3404,18 +3404,18 @@ test_that("named context, call values and do.call() values", {
   local_gw()
   box = local_probe()
   mice = data.frame(weight = 1:3)
-  gptr("compare", a = mice, b = head(mtcars))
+  peter("compare", a = mice, b = head(mtcars))
   expect_identical(box$labels, c("a", "b"))
   expect_identical(box$kinds, c("symbol", "value"))
   expect_identical(box$classes, c("data.frame", "data.frame"))
-  do.call(gptr, list("p", mtcars))
+  do.call(peter, list("p", mtcars))
   expect_identical(box$labels, "..2")
 })
 
 test_that("forwarded dots are forced once and keep their label", {
   local_gw()
   box = local_probe()
-  w = function(...) gptr(...)
+  w = function(...) peter(...)
   mice = data.frame(weight = 1:3)
   w("describe", mice)
   expect_identical(box$prompt, "describe")
@@ -3426,14 +3426,14 @@ test_that("forwarded dots are forced once and keep their label", {
 test_that("prompt selection: literal first, then a character value; two literals warn", {
   local_gw()
   box = local_probe()
-  expect_warning(gptr("first", "second"), class = "gptr_warning_two_prompts")
+  expect_warning(peter("first", "second"), class = "gptr_warning_two_prompts")
   expect_identical(box$prompt, "first")
   expect_identical(box$labels, "\"second\"")
   task = "Summarise it"
-  gptr(task)
+  peter(task)
   expect_identical(box$prompt, "Summarise it")
   expect_identical(box$template, "Summarise it")
-  gptr(prompt = "explicit", "context string")
+  peter(prompt = "explicit", "context string")
   expect_identical(box$prompt, "explicit")
 })
 
@@ -3442,11 +3442,11 @@ test_that("literal prompts are interpolated from envir unless switched off (cont
   box = local_probe()
   cl = 4L
   top = c("CD3E", "CD4")
-  gptr("Cluster {cl}: {top}")
+  peter("Cluster {cl}: {top}")
   expect_identical(box$prompt, "Cluster 4: CD3E, CD4")
   expect_identical(box$template, "Cluster {cl}: {top}")
   expect_identical(box$interp, c("cl=4", "top=CD3E, CD4"))
-  gptr("Cluster {cl}", .opts = list(interpolate = FALSE))
+  peter("Cluster {cl}", .opts = list(interpolate = FALSE))
   expect_identical(box$prompt, "Cluster {cl}")
 })
 
@@ -3455,12 +3455,12 @@ test_that("an interpolated prompt is echoed at verbosity 2 (gptr_message_interpo
   box = local_probe()
   local_gptr_options(verbose = 2L, quiet = FALSE)
   v = 7L
-  cnd = expect_message(gptr("x is {v}"), class = "gptr_message_interpolated")
+  cnd = expect_message(peter("x is {v}"), class = "gptr_message_interpolated")
   expect_match(conditionMessage(cnd), "Interpolated prompt: x is 7", fixed = TRUE)
   expect_identical(box$prompt, "x is 7")
-  expect_no_message(gptr("no braces here"), class = "gptr_message_interpolated")
+  expect_no_message(peter("no braces here"), class = "gptr_message_interpolated")
   local_gptr_options(verbose = 1L)
-  expect_no_message(gptr("x is {v}"), class = "gptr_message_interpolated")
+  expect_no_message(peter("x is {v}"), class = "gptr_message_interpolated")
 })
 
 test_that("identifiers through the gateway, including a wrapper with a local m (G3 t2b)", {
@@ -3468,26 +3468,26 @@ test_that("identifiers through the gateway, including a wrapper with a local m (
   box = local_probe()
   m = "haiku"
   hard = TRUE
-  gptr("p", model = opus)
+  peter("p", model = opus)
   expect_identical(box$ids$model, "opus")
-  gptr("p", model = m)
+  peter("p", model = m)
   expect_identical(box$ids$model, "haiku")
-  gptr("p", model = !!m)
+  peter("p", model = !!m)
   expect_identical(box$ids$model, "haiku")
-  gptr("p", model = I(m))
+  peter("p", model = I(m))
   expect_identical(box$ids$model, "haiku")
   w = function(...) {
     m = "WRONG-LOCAL"
-    gptr("x", ...)
+    peter("x", ...)
   }
   w(model = m)
   expect_identical(box$ids$model, "haiku")
-  gptr("p", model = if (hard) opus else haiku, mode = plan, tools = c(+grep, -write))
+  peter("p", model = if (hard) opus else haiku, mode = plan, tools = c(+grep, -write))
   expect_identical(box$ids$model, "opus")
   expect_identical(box$ids$mode, "plan")
   expect_identical(box$ids$tools, c("+grep", "-write"))
   mice = data.frame(a = 1)
-  expect_error(gptr("p", model = mice), class = "gptr_error_invalid_identifier")
+  expect_error(peter("p", model = mice), class = "gptr_error_invalid_identifier")
 })
 
 test_that("a leading session is the continuation target; a named session is context", {
@@ -3495,10 +3495,10 @@ test_that("a leading session is the continuation target; a named session is cont
   box = local_probe()
   s0 = session_new("fake/fake-1", "manual", home = new.env())
   mice = data.frame(a = 1)
-  s0 |> gptr("go on", mice)
+  s0 |> peter("go on", mice)
   expect_identical(box$session, s0)
   expect_identical(box$labels, "mice")
-  gptr("compare", earlier = s0)
+  peter("compare", earlier = s0)
   expect_null(box$session)
   expect_identical(box$labels, "earlier")
 })
@@ -3508,47 +3508,47 @@ test_that("calls made during a run inherit the running mode, only tightened (IC-
   box = local_probe()
   run = fake_run(mode = "plan")
   local_mocked_bindings(run_current = function() run)
-  gptr("x", mode = auto)
+  peter("x", mode = auto)
   expect_identical(box$ids$mode, "plan")
-  gptr("x")
+  peter("x")
   expect_identical(box$ids$mode, "plan")
 })
 
-test_that("gateway_defer() makes gptr() calls unstarted (.run = FALSE)", {
+test_that("gateway_defer() makes peter() calls unstarted (.run = FALSE)", {
   local_gw()
   box = local_probe()
-  gateway_defer(function() gptr("q"))
+  gateway_defer(function() peter("q"))
   expect_false(box$args$run)
-  gptr("q")
+  peter("q")
   expect_true(box$args$run)
 })
 
-test_that("gptr() without a prompt needs a human", {
+test_that("peter() without a prompt needs a human", {
   local_gw()
-  expect_error(gptr(), class = "gptr_error_noninteractive")
+  expect_error(peter(), class = "gptr_error_noninteractive")
 })
 
 test_that("with a human but no console route, a no-prompt call is not_available", {
   skip_if(!is.null(registry_get("route", "console")), "the console route (P14) is loaded")
   local_gw()
   local_gptr_options(interactive = TRUE)
-  expect_error(gptr(), class = "gptr_error_not_available")
+  expect_error(peter(), class = "gptr_error_not_available")
 })
 
 test_that("unknown .opts names and a non-environment envir are refused", {
   local_gw()
   local_probe()
-  expect_error(gptr("x", .opts = list(nope = 1)), class = "gptr_error_invalid_argument")
-  expect_error(gptr("x", envir = list()), class = "gptr_error_invalid_argument")
+  expect_error(peter("x", .opts = list(nope = 1)), class = "gptr_error_invalid_argument")
+  expect_error(peter("x", envir = list()), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr is a classed closure whose members come from the ns services (IC-36)", {
-  expect_identical(class(gptr), c("gptr_gateway", "function"))
+test_that("peter is a classed closure whose members come from the ns services (IC-36)", {
+  expect_identical(class(peter), c("gptr_gateway", "function"))
   expect_error({
-    gptr$x = 1
+    peter$x = 1
   }, class = "gptr_error_readonly")
   expect_error({
-    gptr[["x"]] = 1
+    peter[["x"]] = 1
   }, class = "gptr_error_readonly")
   local_mocked_bindings(
     ext_service_get = function(name) {
@@ -3556,24 +3556,24 @@ test_that("gptr is a classed closure whose members come from the ns services (IC
              ns.names = function(pattern) c("read", "grep"))
     },
     ext_service_has = function(name) TRUE)
-  expect_identical(gptr$read, "member read")
-  expect_identical(gptr[["grep"]], "member grep")
-  expect_identical(utils::.DollarNames(gptr, ""), c("read", "grep"))
+  expect_identical(peter$read, "member read")
+  expect_identical(peter[["grep"]], "member grep")
+  expect_identical(utils::.DollarNames(peter, ""), c("read", "grep"))
 })
 
 test_that("before the namespace services exist, $ is not_available and completion is empty", {
   skip_if(ext_service_has("ns.resolve"), "P10 registers ns.resolve")
-  expect_error(gptr$read, class = "gptr_error_not_available")
-  expect_identical(utils::.DollarNames(gptr, ""), character(0))
+  expect_error(peter$read, class = "gptr_error_not_available")
+  expect_identical(utils::.DollarNames(peter, ""), character(0))
 })
 
-test_that("print(gptr) shows the usage and the members hint", {
+test_that("print(peter) shows the usage and the members hint", {
   local_reproducible_output(width = 80)
-  expect_snapshot(print(gptr))
+  expect_snapshot(print(peter))
 })
 
-test_that("the capture helpers know gptr()'s formals after the dots", {
-  expect_identical(gateway_formal_names(), setdiff(names(formals(gptr)), "..."))
+test_that("the capture helpers know peter()'s formals after the dots", {
+  expect_identical(gateway_formal_names(), setdiff(names(formals(peter)), "..."))
 })
 
 test_that("routes run in order; route_pass() hands on; a failing match() is skipped", {
@@ -3591,7 +3591,7 @@ test_that("routes run in order; route_pass() hands on; a failing match() is skip
               gptr_register(mk("test_a", 2, route_pass())),
               gptr_register(mk("test_bad", 1, "never", match = function(call) stop("boom"))))
   withr::defer(for (off in offs) off())
-  expect_identical(gptr("x"), "B")
+  expect_identical(peter("x"), "B")
   expect_identical(seen$order, c("test_a", "test_b"))
 })
 
@@ -3614,15 +3614,15 @@ test_that("a shadowed alias wins with a notice; skill names normalise (IC-42)", 
   # (which runs first in the same process) already used the `sonnet` key
   gemini = "my-own-model"
   local_gptr_options(quiet = FALSE)
-  expect_message(gptr("p", model = gemini), class = "gptr_message_alias_shadowed")
+  expect_message(peter("p", model = gemini), class = "gptr_message_alias_shadowed")
   expect_identical(box$ids$model, "gemini")
-  gptr("p", model = !!gemini)
+  peter("p", model = !!gemini)
   expect_identical(box$ids$model, "my-own-model")
   d = withr::local_tempdir()
   off = gptr_register(gptr_spec("skill", "single-cell", description = "Single-cell analysis",
                                 path = file.path(d, "SKILL.md"), dir = d, source = "user"))
   withr::defer(off())
-  gptr("p", skills = single_cell)
+  peter("p", skills = single_cell)
   expect_identical(box$ids$skills, "single-cell")
 })
 ```
@@ -3633,7 +3633,7 @@ test_that("a shadowed alias wins with a notice; skill names normalise (IC-42)", 
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected: every test fails with `could not find function "gptr"` (or `object 'gptr' not found`).
+Expected: every test fails with `could not find function "peter"` (or `object 'peter' not found`).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -3641,14 +3641,14 @@ Create `R/gptr-gateway.R`:
 
 ```r
 # R/gptr-gateway.R (Task 8: create)
-# gptr-gateway.R -- gptr(): the one gateway (S-1), a classed closure whose `$` reaches the gptr$
+# gptr-gateway.R -- peter(): the one gateway (S-1), a classed closure whose `$` reaches the peter$
 # namespace; dispatch steps 1-6 of contract 6.1.1 with routes looked up in the registry; the
 # built-in routes `nested`, `continue` and `new`, the core `setting` specs (builtin:gateway,
 # IC-24), and the router.call service (IC-69). Plan P08, layer L6.
 
 #' Run an agent in this R session
 #'
-#' `gptr()` is the single entry point. Give it a quoted prompt and, optionally, the objects the
+#' `peter()` is the single entry point. Give it a quoted prompt and, optionally, the objects the
 #' agent should work on; it returns the agent session, which you can print, query (`$text`,
 #' `$value`, `$usage`) and continue with the pipe. Models, modes, skills, plugins, extensions and
 #' tools may be written as bare names.
@@ -3664,11 +3664,11 @@ Create `R/gptr-gateway.R`:
 #'
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
 #' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
-#' and `max_turns` `gptr_error_max_turns`. `gptr()` with no prompt opens the console when someone
+#' and `max_turns` `gptr_error_max_turns`. `peter()` with no prompt opens the console when someone
 #' can answer, and signals `gptr_error_noninteractive` otherwise.
 #'
 #' @usage
-#' gptr(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
+#' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 #'      extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
 #'      choices = NULL, levels = NULL, threshold = 0.5,
 #'      min_confidence = NULL, uncertain = NULL,
@@ -3700,12 +3700,12 @@ Create `R/gptr-gateway.R`:
 #'   console), or a typed System 1 vector for classifier models.
 #' @examples
 #' fake = gptr_fake_provider(list("The data has 32 rows."))
-#' s = gptr("How many rows does the data have?", mtcars, model = fake, envir = new.env())
+#' s = peter("How many rows does the data have?", mtcars, model = fake, envir = new.env())
 #' s$text
-#' s |> gptr("And how many columns?")
+#' s |> peter("And how many columns?")
 #' identical(gptr_last(), s)
 #' @export
-gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
+peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
                           extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
                           choices = NULL, levels = NULL, threshold = 0.5,
                           min_confidence = NULL, uncertain = NULL,
@@ -3784,7 +3784,7 @@ gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins
     }
   }
   if (isTRUE(sel$two)) {
-    gptr_warn(c("gptr() got two unnamed strings: the first is the prompt, the second is context.",
+    gptr_warn(c("peter() got two unnamed strings: the first is the prompt, the second is context.",
                 "Name the prompt (prompt = \"...\") to make this explicit."), "two_prompts")
   }
   e = substitute(model)
@@ -3813,9 +3813,9 @@ gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins
   # (gateway_dispatch(), IC-53) only tightens the nested run (P06 run_new())
   args$mode_given = !is.null(id_mode)
   if (is.null(prompt_text) && !isTRUE(args$stdin) && !gptr_can_prompt()) {
-    gptr_abort(c("gptr() without a prompt starts the interactive console and needs a human.",
-                 paste("In scripts pass a prompt, gptr(\"...\"); to drive the console from piped",
-                       "input use gptr(.stdin = TRUE).")),
+    gptr_abort(c("peter() without a prompt starts the interactive console and needs a human.",
+                 paste("In scripts pass a prompt, peter(\"...\"); to drive the console from piped",
+                       "input use peter(.stdin = TRUE).")),
                "noninteractive", what = "console", questions = character())
   }
   labels = dot_labels(exprs, nms)
@@ -3848,8 +3848,8 @@ gateway_dispatch = function(call) {
     return(res)
   }
   if (is.null(call$prompt)) {
-    gptr_abort(c("gptr() without a prompt opens the console, which is not loaded.",
-                 "Pass a prompt, as in gptr(\"...\")."), "not_available",
+    gptr_abort(c("peter() without a prompt opens the console, which is not loaded.",
+                 "Pass a prompt, as in peter(\"...\")."), "not_available",
                member = "route:console", provided_by = "builtin:console")
   }
   gptr_abort("No gateway route handled this call.", "internal", detail = "no route matched")
@@ -3890,10 +3890,10 @@ gateway_model_label = function(model) {
 #' Refuses assignment into the gateway
 #' @noRd
 gateway_readonly = function(field) {
-  gptr_abort(c("`gptr` is read-only.",
+  gptr_abort(c("`peter` is read-only.",
                paste("Add members by registering a tool:",
                      "gptr_register(gptr_tool(..., exposure = \"r\", namespace = \"<pkg>\")).")),
-             "readonly", object = "gptr", field = as.character(field)[1L])
+             "readonly", object = "peter", field = as.character(field)[1L])
 }
 
 #' @export
@@ -3910,8 +3910,9 @@ gateway_readonly = function(field) {
 
 #' @export
 print.gptr_gateway = function(x, ...) {
-  cat("<gptr gateway> gptr(\"prompt\", objects..., model =, mode =) runs an agent in this session",
-      "members: gptr$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)",
+  cat(paste("<peter gateway> peter(\"prompt\", objects..., model =, mode =) runs an agent in",
+            "this session"),
+      "members: peter$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)",
       sep = "\n")
   invisible(x)
 }
@@ -3922,7 +3923,7 @@ print.gptr_gateway = function(x, ...) {
 #' @noRd
 route_pass = function() structure(list(), class = "gptr_route_pass")
 
-#' Evaluates `expr_fun()` with deferral on: every gptr() call made meanwhile behaves as
+#' Evaluates `expr_fun()` with deferral on: every peter() call made meanwhile behaves as
 #' `.run = FALSE` and returns its unstarted session (used by gptr_parallel(), P19)
 #' @noRd
 gateway_defer = function(expr_fun) {
@@ -3968,13 +3969,13 @@ mode_tighter = function(a, b) {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected on the first run: `[ FAIL 0 | WARN 1 | SKIP 0 | PASS 74 ]`, the warning being testthat's "Adding new snapshot" for `print(gptr)`, which writes `tests/testthat/_snaps/gptr-gateway.md` with the two lines `<gptr gateway> gptr("prompt", objects..., model =, mode =) runs an agent in this session` and `members: gptr$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)`. Run it again: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 74 ]` (testthat 3.3 counts the new snapshot as a pass on the first run, together with its warning; on CI, where `on_ci()` is true, a missing snapshot fails instead, so commit the `_snaps` file in this task). (Once P10 registers `ns.resolve`, the test "before the namespace services exist" skips.)
+Expected on the first run: `[ FAIL 0 | WARN 1 | SKIP 0 | PASS 74 ]`, the warning being testthat's "Adding new snapshot" for `print(peter)`, which writes `tests/testthat/_snaps/gptr-gateway.md` with the two lines `<peter gateway> peter("prompt", objects..., model =, mode =) runs an agent in this session` and `members: peter$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)`. Run it again: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 74 ]` (testthat 3.3 counts the new snapshot as a pass on the first run, together with its warning; on CI, where `on_ci()` is true, a missing snapshot fails instead, so commit the `_snaps` file in this task). (Once P10 registers `ns.resolve`, the test "before the namespace services exist" skips.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add R/gptr-gateway.R tests/testthat/test-gptr-gateway.R tests/testthat/_snaps/gptr-gateway.md
-git commit -m "feat(gateway): add the gptr() closure, route dispatch and its methods"
+git commit -m "feat(gateway): add the peter() closure, route dispatch and its methods"
 ```
 
 ---
@@ -4014,7 +4015,7 @@ for the background pump (`bg.register`, P21), or run it to settlement under the 
 (`console.interrupt_policy` of P14, else abort-only) and signal the terminal status (contract 6.1.2) from the
 condition P06 stored in `session_data(s)$condition`. A foreground run that the pause menu's `[b]ackground` hands
 to P21 (`run$opts$background = TRUE`, 03 §6.2, 04 §7.14) ends the foreground wait as it does in P06's
-`run_wait_foreground()`: `gptr()` then returns the still-running session invisibly and signals nothing. The call record is held past `gptr()` only for pending and
+`run_wait_foreground()`: `peter()` then returns the still-running session invisibly and signals nothing. The call record is held past `peter()` only for pending and
 background runs, and released by `builtin:gateway`'s process-level `agent_end` and `session_shutdown` hooks when
 the run settles, the session shuts down or it is garbage-collected [R2]. The `continue` route steers a running
 session with the pipe as a user source (IC-55) and returns it invisibly at once; from model code it may steer only
@@ -4088,15 +4089,15 @@ test_that("call-level filters join the session filter layer instead of replacing
     })
   fake = local_fake_provider(list("ok"))
   settings_write("session", list(filters = "-builtin:checkpoints"))
-  gptr("x", model = fake, plugins = "-builtin:mcp", envir = new.env())
+  peter("x", model = fake, plugins = "-builtin:mcp", envir = new.env())
   expect_identical(box$filters, c("-builtin:checkpoints", "-builtin:mcp"))
   expect_identical(box$scope, "session")
   expect_identical(settings_read("session")$filters, c("-builtin:checkpoints", "-builtin:mcp"))
-  gptr("y", model = fake, plugins = "+builtin:mcp", envir = new.env())
+  peter("y", model = fake, plugins = "+builtin:mcp", envir = new.env())
   expect_identical(box$filters, c("-builtin:checkpoints", "+builtin:mcp"))
 })
 
-test_that("a top-level gptr() applies the filters of the user settings file (04 10.1)", {
+test_that("a top-level peter() applies the filters of the user settings file (04 10.1)", {
   local_gw(workspace = FALSE)
   st = gateway_state()
   old = st$filters_applied
@@ -4114,9 +4115,9 @@ test_that("a top-level gptr() applies the filters of the user settings file (04 
   # as after a restart: the file holds filters that no gptr_config() call of this process set
   settings_file_write(settings_path("user", create = TRUE), list(filters = "-builtin:x"))
   fake = local_fake_provider(list("ok", "again"))
-  gptr("x", model = fake, envir = new.env())
+  peter("x", model = fake, envir = new.env())
   expect_identical(box$calls, list(list(filters = "-builtin:x", scope = "user")))
-  gptr("y", model = fake, envir = new.env())
+  peter("y", model = fake, envir = new.env())
   expect_length(box$calls, 1L)
 })
 
@@ -4124,21 +4125,21 @@ test_that("a continuation's newer spec replaces the session's older spec of the 
   local_gw()
   old = gptr_fake_provider(list("old answer"))
   new = gptr_fake_provider(list("new answer"))
-  s = gptr("a", model = old, envir = new.env())
-  s |> gptr("b", model = new)
+  s = peter("a", model = old, envir = new.env())
+  s |> peter("b", model = new)
   expect_identical(s$text, "new answer")
 })
 
-test_that("gptr('a', mice) and mice |> gptr('a') create sessions labelled mice", {
+test_that("peter('a', mice) and mice |> peter('a') create sessions labelled mice", {
   local_gw()
   local_labels_block()
   fake = local_fake_provider(list("ok"))
   e = new.env()
   mice = data.frame(weight = c(20, 22, 25))
-  s1 = gptr("a", mice, model = fake, envir = e)
+  s1 = peter("a", mice, model = fake, envir = e)
   expect_s3_class(s1, "gptr_session")
   expect_identical(s1$text, "ok")
-  s2 = mice |> gptr("a", model = fake, envir = e)
+  s2 = mice |> peter("a", model = fake, envir = e)
   expect_false(identical(s1, s2))
   expect_identical(gptr_last(), s2)
   req = fake_requests(fake)
@@ -4152,8 +4153,8 @@ test_that("a pipe chain returns the same session and a model switch appends mode
   f2 = local_fake_provider(list("three"), name = "fake2")
   local_gptr_options(model = "fake1/fake1-1")
   e = new.env()
-  s = gptr("a", envir = e)
-  r = s |> gptr("b") |> gptr("c", model = f2)
+  s = peter("a", envir = e)
+  r = s |> peter("b") |> peter("c", model = f2)
   expect_identical(r, s)
   expect_identical(s$turns, 3L)
   expect_identical(s$model, "fake2/fake2-1")
@@ -4166,11 +4167,11 @@ test_that("a tool that pipes into its own running session enqueues a steer after
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   pipe_self = test_tool("pipe_self", function(ctx) {
-    res = ctx$session |> gptr("use TPM")
+    res = ctx$session |> peter("use TPM")
     if (identical(res, ctx$session)) "piped" else "not piped"
   })
   fake = local_fake_provider(list(fake_tool("pipe_self"), "done"))
-  s = gptr("normalise", model = fake, tools = list(pipe_self), envir = new.env())
+  s = peter("normalise", model = fake, tools = list(pipe_self), envir = new.env())
   expect_identical(s$text, "done")
   msgs = s$messages
   roles = vapply(msgs, function(m) m$role, "")
@@ -4187,11 +4188,11 @@ test_that("a tool that pipes into its own running session enqueues a steer after
 test_that("a continuation evaluates in the kept home and fails fast on a hidden symbol (IC-40)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("start", model = fake, envir = globalenv())
-  f = function(s, d) s |> gptr("filter d", d)
+  s = peter("start", model = fake, envir = globalenv())
+  f = function(s, d) s |> peter("filter d", d)
   cnd = expect_error(f(s, mtcars), class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "d")
-  g = function(s, d) s |> gptr("filter d", d, envir = environment())
+  g = function(s, d) s |> peter("filter d", d, envir = environment())
   expect_identical(g(s, mtcars), s)
   expect_identical(s$turns, 2L)
 })
@@ -4201,8 +4202,8 @@ test_that("a first remote use without an acknowledgement is refused, then replay
   withr::local_envvar(GPTR_REPLAY = "replay")
   corp = gptr_provider("corp", api = "fake",
                        models = list(list(id = "corp-1", ref = "corp/corp-1")))
-  expect_error(gptr("x", model = corp, envir = new.env()), class = "gptr_error_egress")
-  expect_error(gptr("x", model = corp, envir = new.env(), .opts = list(context = "none")),
+  expect_error(peter("x", model = corp, envir = new.env()), class = "gptr_error_egress")
+  expect_error(peter("x", model = corp, envir = new.env(), .opts = list(context = "none")),
                class = "gptr_error_not_recorded")
 })
 
@@ -4220,7 +4221,7 @@ test_that(".opts entries named by a plugin namespace reach ctx$input$opts (IC-44
                             })))
   withr::defer(for (off in offs) off())
   fake = local_fake_provider(list("ok"))
-  gptr("Review analysis.R", model = fake, envir = new.env(),
+  peter("Review analysis.R", model = fake, envir = new.env(),
        .opts = list(panel = list(size = 3)))
   expect_identical(box$panel, list(size = 3L))
 })
@@ -4231,7 +4232,7 @@ test_that("a secret-looking prompt is sent redacted, with a notice (gptr.prompt_
   key = paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA")
   txt = paste("Use the key", key, "for the API")
   fake = local_fake_provider(list("ok"))
-  msgs = testthat::capture_messages(gptr(txt, model = fake, envir = new.env()))
+  msgs = testthat::capture_messages(peter(txt, model = fake, envir = new.env()))
   expect_true(any(grepl("replaced by a [secret:...] marker", msgs, fixed = TRUE)))
   expect_false(any(grepl(key, msgs, fixed = TRUE)))
   sent = blocks_text(fake_requests(fake)[[1L]]$messages[[1L]])
@@ -4252,7 +4253,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   })
   local_gptr_options(prompt_secrets = "ask", interactive = TRUE)
   fake = local_fake_provider(list("ok"))
-  cnd = expect_error(gptr(txt, model = fake, envir = new.env()),
+  cnd = expect_error(peter(txt, model = fake, envir = new.env()),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "prompt")
   expect_false(grepl(key, conditionMessage(cnd), fixed = TRUE))
@@ -4260,7 +4261,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   expect_true(box$default)
   expect_length(fake_requests(fake), 0L)
   box$answer = TRUE
-  s = gptr(txt, model = fake, envir = new.env())
+  s = peter(txt, model = fake, envir = new.env())
   expect_identical(s$text, "ok")
   sent = blocks_text(fake_requests(fake)[[1L]]$messages[[1L]])
   expect_match(sent, "[secret:anthropic-key]", fixed = TRUE)
@@ -4268,7 +4269,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   box$question = NULL
   local_gptr_options(interactive = FALSE)
   fake2 = local_fake_provider(list("ok"), name = "fake2")
-  gptr(txt, model = fake2, envir = new.env())
+  peter(txt, model = fake2, envir = new.env())
   expect_null(box$question)
   expect_length(fake_requests(fake2), 1L)
 })
@@ -4276,7 +4277,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
 test_that("a provider failure signals gptr_error_provider carrying the session", {
   local_gw()
   fake = local_fake_provider(list(fake_error("bad request", status = 400L)))
-  cnd = expect_error(gptr("x", model = fake, envir = new.env()), class = "gptr_error_provider")
+  cnd = expect_error(peter("x", model = fake, envir = new.env()), class = "gptr_error_provider")
   expect_s3_class(cnd$session, "gptr_session")
   expect_identical(cnd$session, gptr_last())
   expect_identical(cnd$session$status, "error")
@@ -4296,13 +4297,13 @@ test_that("the condition P06 stored is the one signalled, with the session attac
   expect_identical(cnd$retry_after, 30)
 })
 
-test_that("gptr() leaves no connection open when it returns, errors or is interrupted (IC-59)", {
+test_that("peter() leaves no connection open when it returns, errors or is interrupted (IC-59)", {
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   n0 = nrow(showConnections())
   fake = local_fake_provider(list("ok", fake_error("bad request", status = 400L)))
-  s = gptr("a", model = fake, envir = new.env())
-  expect_error(s |> gptr("b"), class = "gptr_error_provider")
+  s = peter("a", model = fake, envir = new.env())
+  expect_error(s |> peter("b"), class = "gptr_error_provider")
   expect_identical(nrow(showConnections()), n0)
   spin = test_tool("spin", function(ctx) {
     signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
@@ -4310,7 +4311,7 @@ test_that("gptr() leaves no connection open when it returns, errors or is interr
   })
   fake2 = local_fake_provider(list(fake_tool("spin"), "never"), name = "spinner")
   res = tryCatch({
-    gptr("go", model = fake2, tools = list(spin), envir = new.env())
+    peter("go", model = fake2, tools = list(spin), envir = new.env())
     "returned"
   }, interrupt = function(cnd) "interrupted")
   expect_identical(res, "interrupted")
@@ -4321,15 +4322,15 @@ test_that("gptr() leaves no connection open when it returns, errors or is interr
 test_that("model code may not pipe into another running session without approval (IC-53)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  other = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  other = peter("x", model = fake, .run = FALSE, envir = new.env())
   d = session_data(other)
   d$status = "running"
   run = fake_run(session = "s9999999999")
   local_mocked_bindings(run_current = function() run)
-  expect_error(other |> gptr("change course"), class = "gptr_error_permission")
+  expect_error(other |> peter("change course"), class = "gptr_error_permission")
   expect_length(d$queue$steer, 0L)
   run$signal$control = "gptr_steer"
-  expect_identical(other |> gptr("change course"), other)
+  expect_identical(other |> peter("change course"), other)
   expect_length(d$queue$steer, 1L)
   d$status = "idle"
 })
@@ -4337,12 +4338,12 @@ test_that("model code may not pipe into another running session without approval
 test_that("a pending session collected without running releases its call record [R2]", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   sid = s$id
   call = get0(sid, envir = gateway_state()$pending, inherits = FALSE)$call
   expect_true(isTRUE(call$hold))
   rm(s)
-  invisible(gptr("y", model = fake, envir = new.env()))
+  invisible(peter("y", model = fake, envir = new.env()))
   invisible(gc())
   expect_false(isTRUE(call$hold))
   expect_null(call$envir)
@@ -4354,7 +4355,7 @@ test_that("a run that reaches max_turns signals gptr_error_max_turns", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   again = test_tool("again", function(ctx) "again")
   fake = local_fake_provider(list(fake_tool("again")))
-  cnd = expect_error(gptr("loop", model = fake, tools = list(again), envir = new.env(),
+  cnd = expect_error(peter("loop", model = fake, tools = list(again), envir = new.env(),
                           .opts = list(max_turns = 2L)), class = "gptr_error_max_turns")
   expect_identical(cnd$session$status, "max_turns")
 })
@@ -4381,8 +4382,8 @@ test_that("the session is visible, invisible when streamed; .run = FALSE keeps t
   local_gw()
   fake = local_fake_provider(list("ok"))
   e = new.env()
-  expect_visible(gptr("x", model = fake, envir = e))
-  s = expect_invisible(gptr("later", model = fake, envir = e, .run = FALSE))
+  expect_visible(peter("x", model = fake, envir = e))
+  s = expect_invisible(peter("later", model = fake, envir = e, .run = FALSE))
   expect_identical(s$status, "idle")
   expect_identical(s$turns, 0L)
   expect_true(gateway_pending_has(s$id))
@@ -4390,20 +4391,20 @@ test_that("the session is visible, invisible when streamed; .run = FALSE keeps t
   expect_length(queued, 1L)
   expect_identical(queued[[1L]]$text, "later")
   local_gptr_options(verbose = 2L)
-  expect_invisible(gptr("x", model = fake, envir = e))
+  expect_invisible(peter("x", model = fake, envir = e))
 })
 
-test_that("a gptr() call made during a run becomes a child session (route nested)", {
+test_that("a peter() call made during a run becomes a child session (route nested)", {
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   sub = local_fake_provider(list("child answer"), name = "sub")
   box = new.env()
   spawn = test_tool("spawn", function(ctx) {
-    box$child = gptr("sub task", model = sub, mode = auto)
+    box$child = peter("sub task", model = sub, mode = auto)
     box$child$text
   })
   fake = local_fake_provider(list(fake_tool("spawn"), "parent done"), name = "main")
-  s = gptr("delegate", model = fake, tools = list(spawn), envir = new.env(), mode = plan)
+  s = peter("delegate", model = fake, tools = list(spawn), envir = new.env(), mode = plan)
   child = box$child
   expect_identical(s$text, "parent done")
   expect_identical(session_data(child)$kind, "child")
@@ -4418,7 +4419,7 @@ test_that("a router model is stored as router:<name> and picks each request's mo
   local_fake_provider(list("routed"), name = "fake2")
   off = gptr_register(gptr_router("pick", route = function(request, ctx) "fake2/fake2-1"))
   withr::defer(off())
-  s = gptr("x", model = pick, envir = new.env())
+  s = peter("x", model = pick, envir = new.env())
   expect_identical(session_data(s)$model, "router:pick")
   expect_identical(s$text, "routed")
   ents = session_data(s)$entries
@@ -4451,7 +4452,7 @@ test_that("a failing router falls back to the default model", {
   local_gptr_options(model = "fake2/fake2-1")
   off = gptr_register(gptr_router("broken", route = function(request, ctx) stop("no")))
   withr::defer(off())
-  s = gptr("x", model = broken, envir = new.env())
+  s = peter("x", model = broken, envir = new.env())
   expect_identical(s$text, "fallback")
 })
 
@@ -4460,7 +4461,7 @@ test_that("background = TRUE needs the bg.register service (P21)", {
   skip_if(ext_service_has("bg.register"), "P21 registers bg.register")
   local_gw()
   fake = local_fake_provider(list("ok"))
-  expect_error(gptr("x", model = fake, envir = new.env(), background = TRUE),
+  expect_error(peter("x", model = fake, envir = new.env(), background = TRUE),
                class = "gptr_error_not_available")
   expect_identical(gptr_last()$status, "idle")
 })
@@ -4477,7 +4478,7 @@ test_that("a run sent to the background returns the session at once (pause menu 
     NULL
   })
   withr::defer(reactor_cancel(tid))
-  s = gptr("x", model = fake, envir = new.env())
+  s = peter("x", model = fake, envir = new.env())
   expect_identical(s$status, "running")
   run = session_live(s)$run
   expect_true(isTRUE(run$opts$background))
@@ -4493,7 +4494,7 @@ test_that(".opts$images sends image blocks with the first message (IC-44)", {
   graphics::plot.new()
   grDevices::dev.off()
   fake = local_fake_provider(list("a red square"))
-  gptr("What is this?", model = fake, envir = new.env(), .opts = list(images = list(png)))
+  peter("What is this?", model = fake, envir = new.env(), .opts = list(images = list(png)))
   first = fake_requests(fake)[[1L]]$messages[[1L]]
   types = vapply(first$content, function(b) b$type, "")
   expect_true("image" %in% types)
@@ -4515,7 +4516,7 @@ test_that("the gateway emits route, model_select and input (contract 6.1.5)", {
               gptr_register(gptr_hook("input", hook)))
   withr::defer(for (off in offs) off())
   fake = local_fake_provider(list("ok"))
-  gptr("x", model = fake, envir = new.env())
+  peter("x", model = fake, envir = new.env())
   expect_true(all(c("route", "model_select", "input") %in% seen$events))
 })
 
@@ -4524,9 +4525,9 @@ test_that("parallel = and agents = need the sub-agent routes (P19)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
   cohorts = list(a = 1, b = 2)
-  expect_error(gptr("Summarise", cohorts, model = fake, parallel = 2, envir = new.env()),
+  expect_error(peter("Summarise", cohorts, model = fake, parallel = 2, envir = new.env()),
                class = "gptr_error_not_available")
-  expect_error(gptr("Review", model = fake, envir = new.env(),
+  expect_error(peter("Review", model = fake, envir = new.env(),
                     agents = list(stats = agent(description = "Statistics"))),
                class = "gptr_error_not_available")
 })
@@ -4538,7 +4539,7 @@ test_that("parallel = and agents = need the sub-agent routes (P19)", {
 Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'
 ```
 
-Expected: the new tests fail: `builtin:gateway` registers no routes yet, so every `gptr()` call ends in `gptr_error_internal` ("No gateway route handled this call."), and `gateway_signal` / `gateway_pending_has` are not found.
+Expected: the new tests fail: `builtin:gateway` registers no routes yet, so every `peter()` call ends in `gptr_error_internal` ("No gateway route handled this call."), and `gateway_signal` / `gateway_pending_has` are not found.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4657,7 +4658,7 @@ gateway_child_depth = function(cur) {
   max_depth = min(as.integer(setting_get("subagents.max_depth", default = 1L)), 2L)
   depth = as.integer(cur$depth %||% 0L) + 1L
   if (depth > max_depth) {
-    gptr_abort(paste0("gptr() calls made from model code may nest at most ", max_depth,
+    gptr_abort(paste0("peter() calls made from model code may nest at most ", max_depth,
                       " level(s) deep (gptr.subagents.max_depth)."), "invalid_argument",
                arg = "depth", expected = paste("at most", max_depth, "nested levels"))
   }
@@ -4719,8 +4720,8 @@ gateway_filters_apply = function(filters) {
   settings_write("session", list(filters = cur))
   registry_filters_set(cur, scope = "session")
   gptr_inform(paste0("The filters ", paste(filters, collapse = ", "), " apply to every later ",
-                     "gptr() call of this R session; remove them with gptr_config(filters = NULL, ",
-                     ".scope = \"session\")."), "notice",
+                     "peter() call of this R session; remove them with ",
+                     "gptr_config(filters = NULL, .scope = \"session\")."), "notice",
               .once = paste0("call_filters:", paste(cur, collapse = ",")))
   invisible(cur)
 }
@@ -4855,7 +4856,7 @@ gateway_check_visible = function(call) {
     gptr_abort(c(paste0("`", it$name, "` is not visible from the environment this session ",
                         "evaluates in."),
                  paste0("Pass envir = the environment that holds `", it$name, "`, or pass it as ",
-                        "a named value: gptr(..., ", it$name, " = force(", it$name, ")).")),
+                        "a named value: peter(..., ", it$name, " = force(", it$name, ")).")),
                "invalid_argument", arg = it$name,
                expected = "an object visible from the session's environment")
   }
@@ -5334,7 +5335,7 @@ route_needs_subagents = function(call) {
 gateway_routes = function() {
   list(
     gptr_spec("route", "nested", order = 20,
-              description = "A gptr() call made while a run is active becomes a child session.",
+              description = "A peter() call made while a run is active becomes a child session.",
               match = function(call) {
                 !is.null(run_current()) && is.null(call$session) && !is.null(call$prompt)
               },
@@ -5399,7 +5400,7 @@ gateway_last_prompt = function(d) {
 #' setTimeLimit() cannot be read back and must be reset to Inf afterwards (report 12: limits are
 #' soft and a leftover limit kills the next request), and that reset would also clear the limit
 #' P09 arms around each top-level expression of an `r` evaluation. So the limit is armed only
-#' outside tool evaluations (`run_current()` is NULL); a nested routed session (a gptr() call in
+#' outside tool evaluations (`run_current()` is NULL); a nested routed session (a peter() call in
 #' an `r` evaluation) gets a soft timeout: a router that took longer counts as failed.
 #' @noRd
 router_invoke = function(spec, request, ctx) {
@@ -5601,7 +5602,7 @@ test_tool = function(name, fun) {
 test_that("gptr_step() starts a pending session; with nothing queued it is a no-op", {
   local_gw()
   fake = local_fake_provider(list("Plan: ..."))
-  s = gptr("Plan the analysis", model = fake, .run = FALSE, envir = new.env())
+  s = peter("Plan the analysis", model = fake, .run = FALSE, envir = new.env())
   expect_identical(s$turns, 0L)
   expect_invisible(gptr_step(s))
   expect_identical(s$turns, 1L)
@@ -5619,7 +5620,7 @@ test_that("gptr_step(turns = 1) stops after one turn; turns = Inf runs to settle
   local_gptr_options(unsafe_no_permissions = TRUE)
   noop = test_tool("noop", function(ctx) "ok")
   fake = local_fake_provider(list(fake_tool("noop"), fake_tool("noop"), "done"))
-  s = gptr("go", model = fake, tools = list(noop), .run = FALSE, envir = new.env())
+  s = peter("go", model = fake, tools = list(noop), .run = FALSE, envir = new.env())
   gptr_step(s, turns = 1L)
   expect_identical(s$turns, 1L)
   expect_identical(s$status, "running")
@@ -5631,7 +5632,7 @@ test_that("gptr_step(turns = 1) stops after one turn; turns = Inf runs to settle
 test_that("the call record of a pending session is held until its run settles [R2]", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   call = get0(s$id, envir = gateway_state()$pending, inherits = FALSE)$call
   expect_true(isTRUE(call$hold))
   expect_true(is.environment(call$envir))
@@ -5643,8 +5644,8 @@ test_that("the call record of a pending session is held until its run settles [R
 test_that("gptr_wait() starts queued sessions and waits for all of them", {
   local_gw()
   fake = local_fake_provider(list("a"))
-  runs = list(a = gptr("one", model = fake, .run = FALSE, envir = new.env()),
-              b = gptr("two", model = fake, .run = FALSE, envir = new.env()))
+  runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
+              b = peter("two", model = fake, .run = FALSE, envir = new.env()))
   expect_invisible(gptr_wait(runs, timeout = 10))
   expect_identical(vapply(runs, function(x) x$status, ""), c(a = "idle", b = "idle"))
   expect_identical(vapply(runs, function(x) x$turns, 0L), c(a = 1L, b = 1L))
@@ -5653,7 +5654,7 @@ test_that("gptr_wait() starts queued sessions and waits for all of them", {
 test_that("gptr_wait() on one failed session signals its condition", {
   local_gw()
   fake = local_fake_provider(list(fake_error("bad request", status = 400L)))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   cnd = expect_error(gptr_wait(s), class = "gptr_error_provider")
   expect_identical(cnd$session, s)
 })
@@ -5661,7 +5662,7 @@ test_that("gptr_wait() on one failed session signals its condition", {
 test_that("gptr_wait() returns at the timeout; gptr_cancel() then aborts the run", {
   local_gw()
   fake = local_fake_provider(list(list(hang = TRUE)))
-  s = gptr("long task", model = fake, .run = FALSE, envir = new.env())
+  s = peter("long task", model = fake, .run = FALSE, envir = new.env())
   expect_invisible(gptr_cancel(s))
   expect_identical(s$status, "idle")
   gptr_wait(s, timeout = 0.2)
@@ -5673,7 +5674,7 @@ test_that("gptr_wait() returns at the timeout; gptr_cancel() then aborts the run
 test_that("gptr_steer() queues a follow-up delivered when the agent would stop", {
   local_gw()
   fake = local_fake_provider(list("first", "second"))
-  s = gptr("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
+  s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
   expect_invisible(gptr_steer(s, "Use only the mpg column", as = "follow_up"))
   gptr_wait(s)
   users = Filter(function(m) identical(m$role, "user"), s$messages)
@@ -5684,7 +5685,7 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
 test_that("gptr_steer() redacts with the context profile and queues an api_user item", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   box = new.env()
   local_mocked_bindings(redact = function(x, profile = "persist") {
     box$profile = profile
@@ -5702,7 +5703,7 @@ test_that("gptr_steer() redacts with the context profile and queues an api_user 
 test_that("the verbs validate their arguments", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   expect_error(gptr_steer(s, 1), class = "gptr_error_invalid_argument")
   expect_error(gptr_steer(s, "x", as = "later"), class = "gptr_error_invalid_argument")
   expect_error(gptr_steer("s", "x"), class = "gptr_error_invalid_argument")
@@ -5716,7 +5717,7 @@ test_that("the verbs validate their arguments", {
 test_that("model code may not steer or cancel another session, nor add listeners (IC-53)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   run = fake_run(session = "s9999999999")
   local_mocked_bindings(run_current = function() run)
   expect_error(gptr_steer(s, "x"), class = "gptr_error_permission")
@@ -5731,7 +5732,7 @@ test_that("gptr_on() registers a session listener and returns its remover", {
   # bound first: a local_*() helper called inside the `model =` expression would attach its
   # cleanup to the gateway's alias mask (it is evaluated there), not to this test
   fake = local_fake_provider(list("hello"))
-  s = gptr("hi", model = fake, .run = FALSE, envir = new.env())
+  s = peter("hi", model = fake, .run = FALSE, envir = new.env())
   log = new.env()
   log$roles = character()
   off = gptr_on(s, "message_end", function(event, ctx) {
@@ -5743,7 +5744,7 @@ test_that("gptr_on() registers a session listener and returns its remover", {
   expect_true("assistant" %in% log$roles)
   off()
   n = length(log$roles)
-  s |> gptr("again")
+  s |> peter("again")
   expect_length(log$roles, n)
   expect_error(gptr_on(s, "PreToolUse", function(event, ctx) NULL),
                class = "gptr_error_invalid_argument")
@@ -5765,7 +5766,7 @@ test_that("gptr_return() designates the run's value from R code during a run", {
     "designated"
   })
   fake = local_fake_provider(list(fake_tool("designate"), "done"))
-  s = gptr("designate it", model = fake, tools = list(designate), envir = new.env())
+  s = peter("designate it", model = fake, tools = list(designate), envir = new.env())
   expect_identical(s$value, c(a = 1, b = 2))
 })
 ```
@@ -5873,9 +5874,9 @@ sdk_sessions = function(x, arg = "x") {
 #' @param s A session.
 #' @param turns The number of turns to advance (`Inf` for all).
 #' @return `s`, invisibly. A run that settles in status `error`, `blocked`, `budget` or
-#'   `max_turns` signals the condition documented in [gptr()].
+#'   `max_turns` signals the condition documented in [peter()].
 #' @examples
-#' s = gptr("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
+#' s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
 #'          envir = new.env())
 #' gptr_step(s)
 #' s$turns
@@ -5907,8 +5908,8 @@ gptr_step = function(s, turns = 1L) {
 #' @return `x`, invisibly. For a single session, a terminal status signals its condition.
 #' @examples
 #' fake = gptr_fake_provider(list("a"))
-#' runs = list(a = gptr("one", model = fake, .run = FALSE, envir = new.env()),
-#'             b = gptr("two", model = fake, .run = FALSE, envir = new.env()))
+#' runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
+#'             b = peter("two", model = fake, .run = FALSE, envir = new.env()))
 #' gptr_wait(runs, timeout = 10)
 #' vapply(runs, function(x) x$status, "")
 #' @export
@@ -5943,7 +5944,7 @@ gptr_wait = function(x, timeout = Inf) {
 #' @param as `"steer"` or `"follow_up"`.
 #' @return `s`, invisibly, at once.
 #' @examples
-#' s = gptr("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE,
+#' s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE,
 #'          envir = new.env())
 #' gptr_steer(s, "Use only the mpg column", as = "follow_up")
 #' @export
@@ -5965,7 +5966,7 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 #' @param x A session or a list of sessions.
 #' @return `x`, invisibly.
 #' @examples
-#' s = gptr("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+#' s = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
 #'          envir = new.env())
 #' gptr_cancel(s)
 #' @export
@@ -5991,7 +5992,7 @@ gptr_cancel = function(x) {
 #' @param matcher `NULL`, a tool-name glob for tool events, or `function(event)` returning a flag.
 #' @return A function of no arguments that removes the hook, invisibly.
 #' @examples
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
 #' log = new.env()
 #' log$roles = character()
 #' off = gptr_on(s, "message_end", function(event, ctx) {
@@ -6087,7 +6088,7 @@ rows (top level, pipe, continuation with context, wrapper with forwarded dots, a
 `$value` reads, print/summary/str/format of a session, fork, `saveRDS`), the G3 verification-log row for tool code
 run in a function-frame home, the SDK paths added by this plan (`.run = FALSE` then `gptr_step()`/`gptr_wait()`,
 `gptr_return()` outside a run, an interpolated prompt with `tools = c(...)` in a wrapper) and the three in-run edit
-rows of IC-41 (`gptr("x", big)`, `big |> gptr("x")`, `s |> gptr("x", big)` with `in_run_edit = TRUE`). System 1,
+rows of IC-41 (`peter("x", big)`, `big |> peter("x")`, `s |> peter("x", big)` with `in_run_edit = TRUE`). System 1,
 parallel and background rows belong to `test-copy-s1.R` (P13), `test-copy-subagent.R` (P19) and P21. Before P10
 there is no `r` tool, so the rows register a stand-in `r` spec through `tools = list(r_tool)`; it evaluates in
 `ctx$envir`, the run's evaluation environment (P06).
@@ -6137,66 +6138,66 @@ copy_setup = c(
 
 # label = list(extra setup, action, in_run_edit)
 copy_rows = list(
-  "top level: gptr('describe', big)" =
-    list(character(), "s = gptr('describe', big, model = fake)", FALSE),
-  "data-first pipe: big |> gptr('describe')" =
-    list(character(), "s = big |> gptr('describe', model = fake)", FALSE),
-  "continuation with context: s |> gptr('b', big)" =
-    list(character(), "s = gptr('a', model = fake); s |> gptr('b', big)", FALSE),
-  "named context: gptr('describe', data = big)" =
-    list(character(), "s = gptr('describe', data = big, model = fake)", FALSE),
+  "top level: peter('describe', big)" =
+    list(character(), "s = peter('describe', big, model = fake)", FALSE),
+  "data-first pipe: big |> peter('describe')" =
+    list(character(), "s = big |> peter('describe', model = fake)", FALSE),
+  "continuation with context: s |> peter('b', big)" =
+    list(character(), "s = peter('a', model = fake); s |> peter('b', big)", FALSE),
+  "named context: peter('describe', data = big)" =
+    list(character(), "s = peter('describe', data = big, model = fake)", FALSE),
   "wrapper with forwarded dots: w('describe', big)" =
-    list(character(), "w = function(...) gptr(...); s = w('describe', big, model = fake)", FALSE),
+    list(character(), "w = function(...) peter(...); s = w('describe', big, model = fake)", FALSE),
   "session created inside a function: f(big)" =
-    list(character(), "f = function(d) gptr('describe', d, model = fake); s = f(big)", FALSE),
+    list(character(), "f = function(d) peter('describe', d, model = fake); s = f(big)", FALSE),
   "wrapper with a registered model name: model = fake" =
     list("invisible(gptr_register(fake))",
-         "f = function(d) gptr('describe', d, model = fake); s = f(big)", FALSE),
+         "f = function(d) peter('describe', d, model = fake); s = f(big)", FALSE),
   "wrapper with model = if (TRUE) fake else haiku" =
     list(character(),
-         "f = function(d) gptr('describe', d, model = if (TRUE) fake else haiku); s = f(big)",
+         "f = function(d) peter('describe', d, model = if (TRUE) fake else haiku); s = f(big)",
          FALSE),
   "wrapper with tools = c(grep, write) and an interpolated prompt" =
     list(character(),
-         paste0("f = function(d) { cl = 3; gptr('cluster {cl}', d, model = fake, ",
+         paste0("f = function(d) { cl = 3; peter('cluster {cl}', d, model = fake, ",
                 "tools = c(grep, write)) }; s = f(big)"), FALSE),
   "$value read, printed and assigned (gptr_return(big) by name)" =
     list(copy_keep_tool,
-         paste0("s = gptr('designate big', model = fake_keep, tools = list(keep)); ",
+         paste0("s = peter('designate big', model = fake_keep, tools = list(keep)); ",
                 "print(head(s$value, 2)); x = s$value; rm(x)"), FALSE),
   "print, summary, str and format of a session" =
     list(character(),
-         paste0("s = gptr('describe', big, model = fake); print(s); invisible(summary(s)); ",
+         paste0("s = peter('describe', big, model = fake); print(s); invisible(summary(s)); ",
                 "str(s); invisible(format(s))"), FALSE),
   "gptr_fork(s) and a fork turn" =
     list(character(),
-         paste0("s = gptr('describe', big, model = fake, envir = globalenv()); ",
-                "f = gptr_fork(s); f |> gptr('read big')"), FALSE),
+         paste0("s = peter('describe', big, model = fake, envir = globalenv()); ",
+                "f = gptr_fork(s); f |> peter('read big')"), FALSE),
   "saveRDS(s) and readRDS()" =
     list(character(),
-         paste0("s = gptr('describe', big, model = fake); p = tempfile(); saveRDS(s, p); ",
+         paste0("s = peter('describe', big, model = fake); p = tempfile(); saveRDS(s, p); ",
                 "r = readRDS(p)"), FALSE),
   ".run = FALSE, then gptr_step()" =
-    list(character(), "s = gptr('describe', big, model = fake, .run = FALSE); gptr_step(s)",
+    list(character(), "s = peter('describe', big, model = fake, .run = FALSE); gptr_step(s)",
          FALSE),
   ".run = FALSE, then gptr_wait() on a list" =
-    list(character(), "a = gptr('one', big, model = fake, .run = FALSE); gptr_wait(list(a))",
+    list(character(), "a = peter('one', big, model = fake, .run = FALSE); gptr_wait(list(a))",
          FALSE),
   "gptr_return(big) outside a run" =
     list(character(), "invisible(gptr_return(big))", FALSE),
   "tool code run in a function-frame home (G3 verification log)" =
     list(paste0("fake = gptr_fake_provider(list(list(tool = 'r', ",
                 "input = list(code = 'n = length(d)')), 'done'))"),
-         "f = function(d) gptr('describe', d, model = fake, tools = list(r_tool)); s = f(big)",
+         "f = function(d) peter('describe', d, model = fake, tools = list(r_tool)); s = f(big)",
          FALSE),
-  "in-run edit: gptr('x', big) (IC-41)" =
-    list(character(), "s = gptr('x', big, model = fake, tools = list(r_tool))", TRUE),
-  "in-run edit: big |> gptr('x') (IC-41)" =
-    list(character(), "s = big |> gptr('x', model = fake, tools = list(r_tool))", TRUE),
-  "in-run edit: s |> gptr('x', big) (IC-41)" =
+  "in-run edit: peter('x', big) (IC-41)" =
+    list(character(), "s = peter('x', big, model = fake, tools = list(r_tool))", TRUE),
+  "in-run edit: big |> peter('x') (IC-41)" =
+    list(character(), "s = big |> peter('x', model = fake, tools = list(r_tool))", TRUE),
+  "in-run edit: s |> peter('x', big) (IC-41)" =
     list(c("fake0 = gptr_fake_provider(list('ok'), name = 'fake0')",
-           "s = gptr('a', model = fake0, tools = list(r_tool))"),
-         "s |> gptr('x', big, model = fake)", TRUE))
+           "s = peter('a', model = fake0, tools = list(r_tool))"),
+         "s |> peter('x', big, model = fake)", TRUE))
 
 for (label in names(copy_rows)) {
   row = copy_rows[[label]]
@@ -6236,7 +6237,7 @@ gateway_check_visible = function(call) {
     gptr_abort(c(paste0("`", it$name, "` is not visible from the environment this session ",
                         "evaluates in."),
                  paste0("Pass envir = the environment that holds `", it$name, "`, or pass it as ",
-                        "a named value: gptr(..., ", it$name, " = force(", it$name, ")).")),
+                        "a named value: peter(..., ", it$name, " = force(", it$name, ")).")),
                "invalid_argument", arg = it$name,
                expected = "an object visible from the session's environment")
   }
@@ -6264,7 +6265,7 @@ git commit -m "test(gateway): add the gateway copy-safety suite"
 ### Task 12: Documentation, NAMESPACE, plan acceptance and the M1 exit check
 
 **Files:**
-- Modify: `NAMESPACE`, `man/gptr.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`, `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`, `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` (all generated by roxygen2)
+- Modify: `NAMESPACE`, `man/peter.Rd`, `man/gptr_init.Rd`, `man/gptr_config.Rd`, `man/gptr_trust.Rd`, `man/gptr_step.Rd`, `man/gptr_wait.Rd`, `man/gptr_steer.Rd`, `man/gptr_cancel.Rd`, `man/gptr_on.Rd`, `man/gptr_return.Rd` (all generated by roxygen2)
 - Test: `tests/testthat/test-gptr-gateway.R` (append)
 
 **Interfaces:**
@@ -6272,8 +6273,8 @@ git commit -m "test(gateway): add the gateway copy-safety suite"
 - Produces: the NAMESPACE entries of P08's 10 exports (04 §14.1) and its 7 S3 methods, the Rd pages, and the M1 exit evidence (05 P08 acceptance 7).
 
 roxygen2 turns `@export` on the S3 methods into `S3method()` lines (no `export()`), `@exportS3Method
-utils::.DollarNames` into the delayed-free registration of the `utils` generic, and the explicit `@usage` of `gptr`
-keeps the Rd usage identical to the formals although `gptr` is built with `structure(function(...), class = ...)`
+utils::.DollarNames` into the delayed-free registration of the `utils` generic, and the explicit `@usage` of `peter`
+keeps the Rd usage identical to the formals although `peter` is built with `structure(function(...), class = ...)`
 (the pattern G5's toy package passed `R CMD check --as-cran` with, codoc included). Every example runs offline: the
 fake provider is local and `offline = TRUE`, so neither the egress acknowledgement nor the replay mode that
 `replay_mode()` forces while R CMD check runs examples (IC-45) stops it, sessions are stored under
@@ -6291,7 +6292,7 @@ test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {
   nsfile = testthat::test_path("..", "..", "NAMESPACE")
   skip_if_not(file.exists(nsfile), "the source NAMESPACE is not reachable from here")
   ns = readLines(nsfile, encoding = "UTF-8")
-  exports = c("gptr", "gptr_init", "gptr_config", "gptr_trust", "gptr_step", "gptr_wait",
+  exports = c("peter", "gptr_init", "gptr_config", "gptr_trust", "gptr_step", "gptr_wait",
               "gptr_steer", "gptr_cancel", "gptr_on", "gptr_return")
   expect_true(all(paste0("export(", exports, ")") %in% ns))
   methods = c("\"\\$\"", "\"\\$<-\"", "\"\\[\\[\"", "\"\\[\\[<-\"", "print",
@@ -6317,7 +6318,7 @@ Regenerate NAMESPACE and the Rd pages, then list P08's entries:
 
 ```bash
 Rscript --vanilla -e 'devtools::document()'
-grep -E "gptr_gateway|gptr_config\)|export\(gptr(_init|_config|_trust|_step|_wait|_steer|_cancel|_on|_return)?\)" NAMESPACE
+grep -E "gptr_gateway|gptr_config\)|export\((peter|gptr_(init|config|trust|step|wait|steer|cancel|on|return))\)" NAMESPACE
 ```
 
 Expected output of the `grep` (the order is roxygen's):
@@ -6330,7 +6331,6 @@ S3method("[[<-",gptr_gateway)
 S3method(print,gptr_config)
 S3method(print,gptr_gateway)
 S3method(utils::.DollarNames,gptr_gateway)
-export(gptr)
 export(gptr_cancel)
 export(gptr_config)
 export(gptr_init)
@@ -6340,6 +6340,7 @@ export(gptr_step)
 export(gptr_steer)
 export(gptr_trust)
 export(gptr_wait)
+export(peter)
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -6382,17 +6383,17 @@ command with its expected result. Run from the repository root after Task 12.
 | # | Check (05 P08) | Proved by | Command | Expected |
 |---|---|---|---|---|
 | 1 | `devtools::test(filter = "gptr-\|copy-gateway")` is green (copy tests skip on CRAN and without profmem) | Tasks 1-12 (all four test files and the copy suite) | `Rscript --vanilla -e 'devtools::test(filter = "gptr-\|copy-gateway")'` | `[ FAIL 0 \| WARN 0 \| SKIP 1 \| PASS 506 ]` (skip: the P11 leg of the `gptr_permissions()` test; one more skip without later) |
-| 2a | `gptr("a", mice)` and `mice \|> gptr("a")` create sessions with a `mice` context label | Task 9, test "gptr('a', mice) and mice \|> gptr('a') create sessions labelled mice" (the label reaches P07's context assembly through `ctx$input$call$context`); Task 8, test "gptr('a', mice) and mice \|> gptr('a') capture mice by name" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'` | green |
-| 2b | `gptr("a") \|> gptr("b") \|> gptr("c", model = <second fake>)` returns the same object with three turns and a `model_change` entry | Task 9, test "a pipe chain returns the same session and a model switch appends model_change" | same | green |
+| 2a | `peter("a", mice)` and `mice \|> peter("a")` create sessions with a `mice` context label | Task 9, test "peter('a', mice) and mice \|> peter('a') create sessions labelled mice" (the label reaches P07's context assembly through `ctx$input$call$context`); Task 8, test "peter('a', mice) and mice \|> peter('a') capture mice by name" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'` | green |
+| 2b | `peter("a") \|> peter("b") \|> peter("c", model = <second fake>)` returns the same object with three turns and a `model_change` entry | Task 9, test "a pipe chain returns the same session and a model switch appends model_change" | same | green |
 | 2c | a test tool that pipes into its own running session enqueues a steer delivered after the tool result | Task 9, test "a tool that pipes into its own running session enqueues a steer after the result" (the relay `The user sent this message while you were working: use TPM` is the message right after the tool result) | same | green |
-| 2d | `gptr()` non-interactively errors with `gptr_error_noninteractive` | Task 8, test "gptr() without a prompt needs a human" | same | green |
-| 3 | identifier table: every row of 04 §6.1.3 including the wrapper `w = function(...) gptr("x", ...)` with a local `m` resolving to the caller's value (G3 t2b), an alias shadowed by a character variable (notice), `!!m`, `I(m)`, `if (hard) a else b` | Task 6, tests "resolve_identifier() follows the table of contract 6.1.3", "an alias shadowed by a character variable wins, with a message", "skill names compare after name_norm()", "an ambiguous normalised match lists the candidates"; Task 8, tests "identifiers through the gateway, including a wrapper with a local m (G3 t2b)" and "a shadowed alias wins with a notice; skill names normalise (IC-42)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-capture\|gptr-gateway")'` | green |
-| 4 | copy suite: every gateway row of G3 t5 (top level, pipe, continuation with context, wrapper with forwarded dots, alias and if/else models, `$value` reads, print/summary/str of a session, fork, `saveRDS`) and the in-run edit rows of IC-41 (`gptr("x", big)`, `big \|> gptr("x")`, `s \|> gptr("x", big)` with `in_run_edit = TRUE`) report 0 copies | Task 11 (`test-copy-gateway.R`, 20 rows) | `Rscript --vanilla -e 'devtools::test(filter = "copy-gateway")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 20 ]` (every row `SKIP` on CRAN or without `capabilities("profmem")`) |
+| 2d | `peter()` non-interactively errors with `gptr_error_noninteractive` | Task 8, test "peter() without a prompt needs a human" | same | green |
+| 3 | identifier table: every row of 04 §6.1.3 including the wrapper `w = function(...) peter("x", ...)` with a local `m` resolving to the caller's value (G3 t2b), an alias shadowed by a character variable (notice), `!!m`, `I(m)`, `if (hard) a else b` | Task 6, tests "resolve_identifier() follows the table of contract 6.1.3", "an alias shadowed by a character variable wins, with a message", "skill names compare after name_norm()", "an ambiguous normalised match lists the candidates"; Task 8, tests "identifiers through the gateway, including a wrapper with a local m (G3 t2b)" and "a shadowed alias wins with a notice; skill names normalise (IC-42)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-capture\|gptr-gateway")'` | green |
+| 4 | copy suite: every gateway row of G3 t5 (top level, pipe, continuation with context, wrapper with forwarded dots, alias and if/else models, `$value` reads, print/summary/str of a session, fork, `saveRDS`) and the in-run edit rows of IC-41 (`peter("x", big)`, `big \|> peter("x")`, `s \|> peter("x", big)` with `in_run_edit = TRUE`) report 0 copies | Task 11 (`test-copy-gateway.R`, 20 rows) | `Rscript --vanilla -e 'devtools::test(filter = "copy-gateway")'` | `[ FAIL 0 \| WARN 0 \| SKIP 0 \| PASS 20 ]` (every row `SKIP` on CRAN or without `capabilities("profmem")`) |
 | 5a | `gptr_init()` without `path` errors non-interactively | Task 7, test "gptr_init() without a path needs someone to answer" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'` | green |
 | 5b | with a path it creates the template files and does not touch `.Rbuildignore` | Task 7, tests "gptr_init(path) writes the templates once and never overwrites them" and "gptr_init() in a package source offers the .Rbuildignore line, never writes it" | same | green |
 | 5c | a project without `gptr_trust()` ignores project settings beyond tightening | Task 3, test "an untrusted project only tightens (IC-52)"; Task 2, test "a changed trust-gated file makes the project untrusted again" | same | green |
 | 5d | a non-interactive first use of a provider without an acknowledgement raises `gptr_error_egress` | Task 4, test "a first non-interactive use without an acknowledgement is gptr_error_egress"; Task 9, test "a first remote use without an acknowledgement is refused, then replay guards" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-config\|gptr-gateway")'` | green |
-| 6a | `f = function(s, d) s \|> gptr("filter d", d)` with `s` homed in `globalenv()` evaluates where `d` is visible or fails fast naming `d` | Task 9, test "a continuation evaluates in the kept home and fails fast on a hidden symbol (IC-40)" (`cnd$arg == "d"`; with `envir = environment()` it runs) | `Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'` | green |
+| 6a | `f = function(s, d) s \|> peter("filter d", d)` with `s` homed in `globalenv()` evaluates where `d` is visible or fails fast naming `d` | Task 9, test "a continuation evaluates in the kept home and fails fast on a hidden symbol (IC-40)" (`cnd$arg == "d"`; with `envir = environment()` it runs) | `Rscript --vanilla -e 'devtools::test(filter = "gptr-gateway")'` | green |
 | 6b | `skills = single_cell` resolves to `single-cell` | Task 6, test "skill names compare after name_norm() (IC-42)"; Task 8, test "a shadowed alias wins with a notice; skill names normalise (IC-42)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-capture\|gptr-gateway")'` | green |
 | 6c | `gptr_return(x)` outside a run returns `x` invisibly | Task 10, test "gptr_return() outside a run returns its argument invisibly (IC-48)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-sdk")'` | green |
 | 6d | `gptr_config(mode = manual)` writes the project file when a workspace exists | Task 7, test "gptr_config(.scope = NULL) writes the project file when a workspace exists (IC-71)" | `Rscript --vanilla -e 'devtools::test(filter = "gptr-config")'` | green |
@@ -6405,10 +6406,10 @@ The contract's other P08 obligations are covered as well: route orders and route
 registers the routes ..." and "the gateway emits route, model_select and input"), terminal statuses (Task 9,
 "a provider failure signals gptr_error_provider carrying the session", "a run that reaches max_turns ...",
 "blocked and budget statuses map to their conditions"), visibility and `.run = FALSE` (Task 9), nested calls
-(Task 9, "a gptr() call made during a run becomes a child session (route nested)"), routers (Task 9, two tests),
+(Task 9, "a peter() call made during a run becomes a child session (route nested)"), routers (Task 9, two tests),
 `.opts$images` (Task 9), the refusal of `parallel =`/`agents =` before P19 (Task 9), the SDK verbs (Task 10), trust fingerprints and `project_trust` (Task 2, including "a trust decision taken in this process lapses when a gated file changes"), the four services once `builtin:gateway` is loaded and call-level filters (Task 9, "with builtin:gateway loaded, P08's four services are served" and "call-level filters join the session filter layer instead of replacing it"), the
 `filters` of the user and project settings files (Task 7, "user and trusted project filters reach the registry once
-per change (04 10.1)"; Task 9, "a top-level gptr() applies the filters of the user settings file (04 10.1)"),
+per change (04 10.1)"; Task 9, "a top-level peter() applies the filters of the user settings file (04 10.1)"),
 `gptr.prompt_secrets` (Task 9, "a secret-looking prompt is sent redacted, with a notice" and the `"ask"` test, "...
 asks first; a no sends nothing"), the `interpolated` echo (Task 8, "an interpolated prompt is echoed at
 verbosity 2"), the pause menu's `[b]ackground` (Task 9, "a run sent to the background returns the session at
@@ -6422,7 +6423,7 @@ once"), and the `gptr_gateway` methods (Task 8).
 
 | Scope item (05 P08, 04) | Task |
 |---|---|
-| `gptr-gateway.R`: classed closure `gptr` with `$`, `[[`, `.DollarNames`, `$<-` refusal and `print` through `ns.resolve`/`ns.names` (IC-36) | 8 |
+| `gptr-gateway.R`: classed closure `peter` with `$`, `[[`, `.DollarNames`, `$<-` refusal and `print` through `ns.resolve`/`ns.names` (IC-36) | 8 |
 | dispatch steps 1-5 of 03 §4.1.1 with routes looked up in the registry; return visibility; registration point for routes of later plans (`route_pass()`, `gateway_run()`, `gateway_defer()`) | 8, 9 |
 | `gptr-capture.R`: base-R capture under R2-R3, prompt selection, identifier resolution incl. `!!` and `I()`, `{identifier}` interpolation | 5, 6 |
 | `gptr-sdk.R`: `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()`, `gptr_on()`, `gptr_return()` (`gptr_prob()` is P13's) | 10 |
@@ -6438,7 +6439,7 @@ once"), and the `gptr_gateway` methods (Task 8).
 | 04 §10.1 settings key `filters` of the user and project files applied to the registry (P02 self-review item 18) | 7 (`gateway_filters_sync()`), 9 (top-level `gateway_run()`) |
 | 04 §3.1 `gptr.prompt_secrets` (owner P03, applied by the gateway) | 9 (`gateway_prompt_secrets()` in `gateway_input()` and the `continue` route's steer) |
 | 04 §2.2 message `interpolated` (echo of the interpolated prompt at verbosity >= 2) | 8 |
-| 03 §6.2, 04 §7.14 the pause menu's `[b]ackground` returns the foreground `gptr()` call (P21 marks `run$opts$background`) | 9 (`run_foreground()`, `gateway_run()`) |
+| 03 §6.2, 04 §7.14 the pause menu's `[b]ackground` returns the foreground `peter()` call (P21 marks `run$opts$background`) | 9 (`run_foreground()`, `gateway_run()`) |
 | IC-69 router models stored as `router:<name>`; the `router.call` service | 9 |
 | IC-43 `gptr_can_prompt()` for the human check and questions | 2, 4, 7, 8 |
 | IC-48 `gptr_return()` returns `invisible(x)` outside a run | 10 |
@@ -6460,7 +6461,7 @@ in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17
 ### Type and name consistency with 04
 
 - Exports and signatures match 04 §6.1, §6.2, §6.5, §6.6 exactly (checked against the Global Constraints list):
-  `gptr(...)` with all 21 formals after the dots (Task 8 test "the capture helpers know gptr()'s formals after the
+  `peter(...)` with all 21 formals after the dots (Task 8 test "the capture helpers know peter()'s formals after the
   dots" guards the capture copy of the list), `gptr_init(path, instructions = TRUE, gitignore = TRUE)`,
   `gptr_config(..., .scope = NULL)`, `gptr_trust(path = ".", trust = NULL)`, `gptr_step(s, turns = 1L)`,
   `gptr_wait(x, timeout = Inf)`, `gptr_steer(s, text, as = c("steer", "follow_up"))`, `gptr_cancel(x)`,
@@ -6507,7 +6508,7 @@ in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17
    to this first input of a session that has never run (nested `.run = FALSE` calls made by model code).
 6. **Scope name of the user-level project file.** `settings_write()`/`settings_read()` call it `"user_project"`
    (04 names only session, project and user); P11's `gptr_permissions(scope = "project")` uses it.
-7. **Holding a call record past `gptr()`.** `call_release(call)` keeps its one-argument signature; a record needed
+7. **Holding a call record past `peter()`.** `call_release(call)` keeps its one-argument signature; a record needed
    by a pending or background run carries `hold = TRUE` (`call_hold()`) and is released by `builtin:gateway`'s
    process-level `agent_end` and `session_shutdown` hooks, which see only the session id of the event.
 8. **`interpolate_prompt()` returns `list(prompt, interp)`**; 04 fixes no return shape.
@@ -6595,7 +6596,7 @@ in this plan or listed in 04 for P01-P07 (and the late services of P10, P14, P17
 - First draft: the package code and tests of Tasks 1-10 were extracted and run with testthat 3e in a scratch
   harness (the P01 draft sources plus contract-shaped stand-ins of P02-P07, including a mini session kernel that
   plays fake-provider scripts): `test-gptr-config.R` 124 expectations and 1 skip, `test-gptr-capture.R` 90,
-  `test-gptr-gateway.R` 136 (the `print(gptr)` snapshot included), `test-gptr-sdk.R` 53, all passing. (The
+  `test-gptr-gateway.R` 136 (the `print(peter)` snapshot included), `test-gptr-sdk.R` 53, all passing. (The
   counts stated in the tasks are the current ones; see the 2026-10-01 entry below.)
 - The 20 rows of `test-copy-gateway.R` were run in fresh `Rscript --vanilla` processes against the same harness
   with tracemem: every row whose behaviour P08 owns reported 0 copies, including the three in-run edit rows of
@@ -6648,9 +6649,9 @@ and 12 and in the Plan acceptance were recomputed (and re-run for `test-gptr-con
 | 8 | minor | Task 9 `run_settled()` | Settlement was "status not in the active list", so a run parked as `waiting` (P21, IC-57) counted as settled and `gptr_step()`/`gptr_wait()` would signal or stop early. | applied | `run_settled()` reads P06's `run$settled` flag or a terminal status. Contract ambiguity 22. |
 | 9 | minor | Task 9 `gateway_register()` | A continuation passing a newer spec with the name of one the session already had (`model = gptr_fake_provider(...)` twice, a revised tool) added a second rank-0 record; P02 keeps the first of equal rank, so the stale spec silently won. | applied | `gateway_register_spec()` removes the session's earlier record of the same kind and name (ids in `the$gateway$specs`, forgotten at `session_shutdown`); test "a continuation's newer spec replaces the session's older spec of the same name". Contract ambiguity 23. |
 | 10 | minor | Tasks 4, 7 (`egress_question()`, `gptr_init()`, `init_rbuildignore()`) | Every question ended with `[y/N]` although P01's `gptr_confirm()` appends ` [y/N] ` itself: the prompts read `... [y/N]  [y/N]`. | applied | The question texts end with `?`; Task 7 Consumes notes the hint. |
-| 11 | minor | Task 8 `gptr()` | `envir` was never validated (04 §1.1: every export validates its arguments); `gptr("x", envir = 1)` failed later with an unrelated error. | applied | `check_env(envir, "envir")` when `envir` is given (a formal, not a dot, so forcing it is copy-safe); test added. |
+| 11 | minor | Task 8 `peter()` | `envir` was never validated (04 §1.1: every export validates its arguments); `peter("x", envir = 1)` failed later with an unrelated error. | applied | `check_env(envir, "envir")` when `envir` is given (a formal, not a dot, so forcing it is copy-safe); test added. |
 | 12 | minor | Task 6 `ident_symbol()`; Task 8 `mode_tighter()` | An unknown, unbound symbol such as `mode = fast` was returned unchecked, reaching `mode_tighter()` (where `match()` gives `NA` and `if (NA)` errors) or the kernel. | applied | The literal name goes through `ident_check_chr()` (invalid modes are `gptr_error_invalid_argument` at resolution); `mode_tighter()` never loosens on a non-mode. Test added in Task 6. |
-| 13 | minor | Task 10 test "gptr_on() registers a session listener" | `model = local_fake_provider(...)` inside the `gptr()` call is evaluated in the gateway's alias mask, so withr attached the helper's cleanup to that evaluation and unregistered the provider at once; the test passed only because the spec was also registered at rank 0. | applied | The provider is bound first (`fake = local_fake_provider(...)`). |
+| 13 | minor | Task 10 test "gptr_on() registers a session listener" | `model = local_fake_provider(...)` inside the `peter()` call is evaluated in the gateway's alias mask, so withr attached the helper's cleanup to that evaluation and unregistered the provider at once; the test passed only because the spec was also registered at rank 0. | applied | The provider is bound first (`fake = local_fake_provider(...)`). |
 | 14 | minor | Task 9 `gateway_new_session()` | `session_new(opts = list(tools, depth, thinking, system, frontend, background))`: P06 reads only `thinking`; the rest suggested behaviour that does not happen (`.opts$system` reaches P07 through `call$args$opts`). | applied | `opts = list(thinking = ...)` with a comment saying where the other values travel. |
 | 15 | minor | Self-review (ambiguities 2, 3, 7, 15, 18), `call_hold()` roxygen | Stale statements: the token check named `control_check()` while the code used another name; `gateway_signal()` said to read `run$signal$condition` (it reads `session_data(s)$condition`); held records "released by session listeners" (they are process-level hooks); `$turns` "one per `turn_end`" (P06 counts one per run); "P01, P02, P07 absent"; "P06's finalizer dispatches `session_shutdown` with `session = NULL`" (it passes the id). | applied | Each statement corrected; ambiguities 19-23 added; "Executed validation" records this review's runs. |
 | 16 | minor | Tasks 2, 3, 6 tests | Three new test lines exceeded the 100-character lint limit. | applied | Wrapped. |
@@ -6674,9 +6675,9 @@ when the `background` test skips); Task 12 red phase `PASS 167` -> `PASS 192`; T
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| C1 | shared-names | minor | Task 8 `gptr()` interpolation block; Global Constraints (conditions) | applied | Valid: 04 §2.2 assigns `interpolated` to P08 ("echo of the interpolated prompt at verbosity >= 2") and no plan raised it. After `interp = ip$interp` the closure now calls `gptr_inform(paste0("Interpolated prompt: ", prompt_text), "interpolated")` when `length(interp) && verbosity() >= 2L` (no closure or handler in the frame, rule R3; the message passes P01's redaction hook and honours `gptr.quiet`). New Task 8 test "an interpolated prompt is echoed at verbosity 2 (gptr_message_interpolated, 04 2.2)" (5 expectations: the class, the text, the prompt, no echo without braces, none at verbosity 1). The test sits in Task 8 because the interpolation code is in Task 8's `gptr()`, not Task 6. P14's own stdout echo (`console_call()`) stays as P14 wrote it; the double echo at verbosity 2 in the console is recorded as contract ambiguity 25 for P14 (drop its echo or muffle the class). Task 8 Consumes, prose, self-review (message classes, spec coverage) updated |
+| C1 | shared-names | minor | Task 8 `peter()` interpolation block; Global Constraints (conditions) | applied | Valid: 04 §2.2 assigns `interpolated` to P08 ("echo of the interpolated prompt at verbosity >= 2") and no plan raised it. After `interp = ip$interp` the closure now calls `gptr_inform(paste0("Interpolated prompt: ", prompt_text), "interpolated")` when `length(interp) && verbosity() >= 2L` (no closure or handler in the frame, rule R3; the message passes P01's redaction hook and honours `gptr.quiet`). New Task 8 test "an interpolated prompt is echoed at verbosity 2 (gptr_message_interpolated, 04 2.2)" (5 expectations: the class, the text, the prompt, no echo without braces, none at verbosity 1). The test sits in Task 8 because the interpolation code is in Task 8's `peter()`, not Task 6. P14's own stdout echo (`console_call()`) stays as P14 wrote it; the double echo at verbosity 2 in the console is recorded as contract ambiguity 25 for P14 (drop its echo or muffle the class). Task 8 Consumes, prose, self-review (message classes, spec coverage) updated |
 | C2 | shared-names | minor | Task 9 `gateway_input()` | applied (in part) | Valid: nothing read `gptr.prompt_secrets`, although P03 leaves it to the gateway. New `gateway_prompt_secrets(prompt)` redacts with the `context` profile; on a change, `"redact"` (and `"ask"` with nobody to answer, IC-43) sends the redacted prompt with a `notice`, and `"ask"` with a human asks through `gptr_confirm(..., default = TRUE)`. Rejected part: "keep the original only on an explicit no". P06 redacts every entry at ingress (`session_append()`, `persist` profile) and every queued item (`session_enqueue()`, `context` profile), so the original can never reach the provider; keeping it would promise what cannot happen. A no therefore stops the call before anything is sent (as C5 proposes). The check runs before the `input` event, so hooks see the redacted text, and also on the `continue` route's steer. `.once = "prompt_secrets"` was not used: a notice per prompt that carried a secret is the "redact (with a message)" of G6. Tests in Task 9 use a pattern key built with `paste0()` (P03's convention), so no vault state is involved |
-| C3 | obligations | major | Task 7 `gptr_config()`; Task 9 `gateway_run()`; contract ambiguity 9 | applied | Valid: 04 §10.1 makes the settings key `filters` a filter path, and P02 (self-review item 18) relies on P08 to pass the user and project lists with their scope; only `gptr_config()` reached the registry, so a `"filters": ["-builtin:mcp"]` in `settings.json` was ignored after a restart. New `gateway_filters_sync()` in `gptr-config.R` (Task 7): the user file's list with `scope = "user"`, the project file's list with `scope = "project"` only while the project is trusted (the rule `settings_layered()` applies to a non-tighten key, IC-52), each re-applied only when it differs from `the$gateway$filters_applied[[scope]]`; a list P02 rejects becomes a diagnostic and a one-time notice. `gptr_config(filters =)` uses it for the user and project scopes (the session scope still goes straight to `registry_filters_set()`), and `gateway_run()` calls it at the start of every top-level call, after the trust question of a new session and before the session is built. "After each settings-file cache reload" is met by that per-call comparison (the cache re-reads a changed file) rather than a hook inside `settings_file_read()`, which would give a read function a registry side effect. Ambiguity 9 now says P08 applies all three scopes. Tests: Task 7 "user and trusted project filters reach the registry once per change (04 10.1)" (5 expectations); Task 9 "a top-level gptr() applies the filters of the user settings file (04 10.1)" (2), both with `registry_filters_set()` mocked and `the$gateway$filters_applied` restored |
+| C3 | obligations | major | Task 7 `gptr_config()`; Task 9 `gateway_run()`; contract ambiguity 9 | applied | Valid: 04 §10.1 makes the settings key `filters` a filter path, and P02 (self-review item 18) relies on P08 to pass the user and project lists with their scope; only `gptr_config()` reached the registry, so a `"filters": ["-builtin:mcp"]` in `settings.json` was ignored after a restart. New `gateway_filters_sync()` in `gptr-config.R` (Task 7): the user file's list with `scope = "user"`, the project file's list with `scope = "project"` only while the project is trusted (the rule `settings_layered()` applies to a non-tighten key, IC-52), each re-applied only when it differs from `the$gateway$filters_applied[[scope]]`; a list P02 rejects becomes a diagnostic and a one-time notice. `gptr_config(filters =)` uses it for the user and project scopes (the session scope still goes straight to `registry_filters_set()`), and `gateway_run()` calls it at the start of every top-level call, after the trust question of a new session and before the session is built. "After each settings-file cache reload" is met by that per-call comparison (the cache re-reads a changed file) rather than a hook inside `settings_file_read()`, which would give a read function a registry side effect. Ambiguity 9 now says P08 applies all three scopes. Tests: Task 7 "user and trusted project filters reach the registry once per change (04 10.1)" (5 expectations); Task 9 "a top-level peter() applies the filters of the user settings file (04 10.1)" (2), both with `registry_filters_set()` mocked and `the$gateway$filters_applied` restored |
 | C4 | obligations | minor | Task 9 `run_foreground()`, `gateway_run()` | applied | Valid: P21 marks `run$opts$background` for the pause menu's `[b]ackground` and P06's `run_wait_foreground()` honours it, but `run_foreground()` waited for settlement through `run_wait()`. It now pumps with `until = function() run_settled(run) \|\| isTRUE(run$opts$background)`; `gateway_run()` then, for a run that is not settled and is marked background, holds the call record (`call_hold()`, released at `agent_end` [R2], as the `background = TRUE` path does; the fix as proposed omitted this, and `gateway_dispatch()`'s `on.exit()` would otherwise release a record the still-running run uses) and returns the session invisibly without `gateway_signal()`. New Task 9 test "a run sent to the background returns the session at once (pause menu [b]ackground)" (4 expectations; a reactor timer marks the run during a slow fake stream; the run is drained with `run_wait()`). Ambiguity 26 added (P21 A3/A17) |
 | C5 | obligations | minor | Task 9 `gateway_input()`; Global Constraints options | applied (merged with C2) | Same defect as C2; its semantics are the ones applied: `"redact"` notifies, `"ask"` asks and a no aborts with `gptr_error_invalid_argument` (`arg = "prompt"`), no human means `"redact"`. The option is now listed under "Options consumed" in the Global Constraints. The test is in Task 9 (where `gateway_input()` lives), not Task 8: "a secret-looking prompt is sent redacted, with a notice (gptr.prompt_secrets)" (4 expectations) and the `"ask"` test (10 expectations). Ambiguity 24 records the reading |
 | C6 | obligations | minor | Task 12 Step 4 acceptance commands | applied | Valid: a bare `lintr::lint_package()` on the uninstalled tree reports every internal call (P01 decision 5, A3). Replaced with `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`, expected `No lints found.` and exit 0 |

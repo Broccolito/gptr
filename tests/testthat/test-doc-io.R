@@ -4,16 +4,16 @@
 test_that("CRLF, BOM and a missing final newline survive a read-modify-write", {
   local_project()
   f = file.path(getwd(), "crlf.R")
-  writeBin(c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\ngptr(\"hi\")\r\ny = 2")), f)
+  writeBin(c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw("x = 1\r\npeter(\"hi\")\r\ny = 2")), f)
   doc = doc_read(f)
-  expect_identical(doc$lines, c("x = 1", "gptr(\"hi\")", "y = 2"))
+  expect_identical(doc$lines, c("x = 1", "peter(\"hi\")", "y = 2"))
   expect_identical(doc$eol, "\r\n")
   expect_true(doc$bom)
   expect_false(doc$final_nl)
   doc_write(doc, append(doc$lines, c("# >>> gptr:abc123 model=m", "z = 3", "# <<< gptr:abc123"),
                         after = 2L))
   expect_identical(readBin(f, "raw", 200), c(as.raw(c(0xef, 0xbb, 0xbf)), charToRaw(paste0(
-    "x = 1\r\ngptr(\"hi\")\r\n# >>> gptr:abc123 model=m\r\nz = 3\r\n# <<< gptr:abc123\r\n",
+    "x = 1\r\npeter(\"hi\")\r\n# >>> gptr:abc123 model=m\r\nz = 3\r\n# <<< gptr:abc123\r\n",
     "y = 2"))))
   g = file.path(getwd(), "plain.R")
   writeLines(c("a", "b"), g)
@@ -344,13 +344,13 @@ test_that("deferred blocks wait in a sidecar and are written when the process ex
   local_gptr_options(record = "auto")
   st = local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines(c("library(gptr)", "gptr(\"count rows\")", "z = 1"), f)
+  writeLines(c("library(gptr)", "peter(\"count rows\")", "z = 1"), f)
   site = doc_io_site(f, "count rows", backend = "deferred")
   res = doc_upsert(site, structure("n = nrow(mtcars)", header = list(
     model = "fake/fake-1", date = "2026-09-29", prompt = prompt_hash("count rows"))))
   expect_identical(res$action, "insert")
   expect_identical(res$backend, "deferred")
-  expect_identical(readLines(f), c("library(gptr)", "gptr(\"count rows\")", "z = 1"))
+  expect_identical(readLines(f), c("library(gptr)", "peter(\"count rows\")", "z = 1"))
   side = doc_sidecar_path(f)
   expect_match(side, "[.]gptr/cache/tmp/pending-[0-9a-f]{40}[.]rds$")
   rec = readRDS(side)
@@ -376,8 +376,9 @@ test_that("a dead process's sidecar is recovered without overwriting a user edit
   local_doc_pending()
   f = file.path(getwd(), "job.R")
   ph1 = prompt_hash("first")
-  writeLines(c("gptr(\"first\")", paste0("# >>> gptr:aaaaaa model=m prompt=", ph1, " sha=0000aaaa"),
-               "edited = TRUE", "# <<< gptr:aaaaaa", "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")",
+               paste0("# >>> gptr:aaaaaa model=m prompt=", ph1, " sha=0000aaaa"),
+               "edited = TRUE", "# <<< gptr:aaaaaa", "peter(\"second\")"), f)
   s1 = doc_io_site(f, "first")
   s2 = doc_io_site(f, "second")
   rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
@@ -405,14 +406,14 @@ test_that("a run of the same document under Rscript adopts a dead sidecar until 
   local_gptr_options(record = "auto")
   st = local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")", "peter(\"second\")"), f)
   rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
   rec$pid = 999999999L
   rec$upserts = list(list(block_id = "aaaaaa", lines = doc_render_block("aaaaaa", list(
     model = "m", prompt = prompt_hash("first")), "x = 1"), site = doc_io_site(f, "first")))
   doc_sidecar_write(rec)
   expect_true(doc_recover(f, defer = TRUE))
-  expect_identical(readLines(f), c("gptr(\"first\")", "gptr(\"second\")"))
+  expect_identical(readLines(f), c("peter(\"first\")", "peter(\"second\")"))
   expect_identical(doc_sidecar_read(f)$pid, Sys.getpid())
   res = doc_upsert(doc_io_site(f, "second", backend = "deferred"),
                    structure("y = 2", header = list(model = "m", prompt = prompt_hash("second"))))
@@ -460,7 +461,7 @@ test_that("a deferred document locked by another live process records nothing", 
   local_gptr_options(record = "auto", quiet = FALSE)
   local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   dir = doc_lock_dir(f)
   dir.create(dir, recursive = TRUE)
   writeLines(doc_lock_stamp(), file.path(dir, "pid"))
@@ -503,7 +504,7 @@ test_that("a sidecar of an earlier process that had this pid is a dead one (pid 
   local_gptr_options(record = "auto")
   local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines(c("gptr(\"first\")", "z = 1"), f)
+  writeLines(c("peter(\"first\")", "z = 1"), f)
   rec = doc_pending_new(path_norm(f), "deferred", "s0123456789")
   expect_true(doc_sidecar_live(rec))
   # the same pid, but a process that started an hour before this one (containers reuse pids)
@@ -516,7 +517,7 @@ test_that("a sidecar of an earlier process that had this pid is a dead one (pid 
   expect_null(doc_sidecar_read(f))
   # a later Rscript run with that pid adopts such a sidecar in its first deferred upsert (this
   # run's own upserts are queued before adopted ones, D-109 item 9)
-  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")", "peter(\"second\")"), f)
   rec = doc_io_dead_sidecar(f, "first", id = "cccccc", pid = Sys.getpid())
   rec$create_time = rec$create_time - 3600
   doc_sidecar_write(rec)
@@ -531,7 +532,7 @@ test_that("the lock of a deferred run is released at exit even when no block was
   local_gptr_options(record = "auto")
   local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   site = doc_io_site(f, "count rows", backend = "deferred")
   writeLines("x = 1", f)
   ensured = 0L
@@ -551,7 +552,7 @@ test_that("the script this Rscript process runs is never written before it exits
   local_gptr_options(record = "auto", quiet = FALSE)
   local_doc_pending()
   f = file.path(getwd(), "job.R")
-  before = c("gptr(\"first\")", "gptr(\"second\")")
+  before = c("peter(\"first\")", "peter(\"second\")")
   writeLines(before, f)
   doc_io_dead_sidecar(f, "first")
   testthat::local_mocked_bindings(doc_command_args = function() {
@@ -587,7 +588,7 @@ test_that("a pending notebook block another R process synced is not queued again
   local_gptr_options(record = "auto")
   local_doc_pending()
   nb = file.path(proj, "analysis.ipynb")
-  doc_io_nb_write(nb, c("a = gptr(\"one\")", "b = gptr(\"two\")"))
+  doc_io_nb_write(nb, c("a = peter(\"one\")", "b = peter(\"two\")"))
   withr::local_options(jupyter.in_kernel = TRUE)
   withr::local_envvar(JPY_SESSION_NAME = nb)
   up = function(prompt, code) {
@@ -654,7 +655,7 @@ test_that("a document path given relative to the working directory is kept absol
   proj = local_project()
   local_gptr_options(record = "auto")
   local_doc_pending()
-  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), file.path(proj, "job.R"))
+  writeLines(c("peter(\"first\")", "peter(\"second\")"), file.path(proj, "job.R"))
   doc_io_dead_sidecar(file.path(proj, "job.R"), "first")
   expect_true(doc_recover("job.R", defer = TRUE))
   dir.create(file.path(proj, "sub"))
@@ -669,7 +670,7 @@ test_that("a deferred block needs write consent and keeps a local model's tag (I
   local_project()
   local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   site = doc_io_site(f, "count rows", backend = "deferred")
   hdr = list(model = "ollama/qwen3:8b", prompt = prompt_hash("count rows"))
   local_gptr_options(record = "off")
@@ -689,7 +690,7 @@ test_that("a sidecar is replaced whole, so a write cut short keeps the earlier u
   local_gptr_options(record = "auto")
   local_doc_pending()
   f = file.path(getwd(), "job.R")
-  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")", "peter(\"second\")"), f)
   r1 = doc_upsert(doc_io_site(f, "first", backend = "deferred"),
                   structure("x = 1", header = list(model = "m", prompt = prompt_hash("first"))))
   # the next flush of the sidecar stops halfway (the process is killed or the disk is full)
@@ -732,7 +733,7 @@ test_that("a sidecar is used only for the document it is named for (IC-51, IC-52
   local_gptr_options(record = "auto")
   local_doc_pending()
   f = file.path(proj, "analysis.R")
-  before = c("gptr(\"first\")", "z = 1")
+  before = c("peter(\"first\")", "z = 1")
   writeLines(before, f)
   victim = file.path(withr::local_tempdir(), "victim.Rprofile")
   good = doc_io_dead_sidecar(f, "first")
@@ -787,7 +788,7 @@ test_that("a sidecar that is not this user's private file is never read (IC-52)"
   local_gptr_options(record = "auto")
   local_doc_pending()
   f = file.path(proj, "job.R")
-  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")", "peter(\"second\")"), f)
   doc_io_dead_sidecar(f, "first")
   side = doc_sidecar_path(f)
   expect_identical(format(file.info(side)$mode), "600")
@@ -812,7 +813,7 @@ test_that("a sidecar that is not this user's private file is never read (IC-52)"
                    res$block_id)
   # a kernel keeps its pending blocks when its sidecar cannot be read (it was not synced)
   nb = file.path(proj, "analysis.ipynb")
-  doc_io_nb_write(nb, c("a = gptr(\"one\")", "b = gptr(\"two\")"))
+  doc_io_nb_write(nb, c("a = peter(\"one\")", "b = peter(\"two\")"))
   withr::local_options(jupyter.in_kernel = TRUE)
   withr::local_envvar(JPY_SESSION_NAME = nb)
   up = function(prompt, code) {
@@ -835,7 +836,7 @@ test_that("this run's block wins over a dead run's block for the same call (IC-5
   local_gptr_options(record = "auto")
   st = local_doc_pending()
   f = file.path(proj, "job.R")
-  script = c("gptr(\"first\")", "y = x + 1")
+  script = c("peter(\"first\")", "y = x + 1")
   rerun = function() {
     doc_upsert(doc_io_site(f, "first", backend = "deferred"),
                structure("x = 100", header = list(model = "m", prompt = prompt_hash("first"))))
@@ -881,7 +882,7 @@ test_that("a document's sidecar is found from any working directory (IC-51)", {
   withr::local_options(gptr.project_root = NULL)
   withr::local_envvar(GPTR_PROJECT_ROOT = NA)
   f = file.path(proj, "job.R")
-  writeLines(c("gptr(\"first\")", "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")", "peter(\"second\")"), f)
   side = doc_sidecar_path(f)
   expect_identical(path_key(dirname(side)), path_key(file.path(proj, ".gptr", "cache", "tmp")))
   r1 = doc_upsert(doc_io_site(f, "first", backend = "deferred"),
@@ -908,7 +909,7 @@ test_that("a sync never writes the script of a run that is still alive (IC-51)",
   local_gptr_options(record = "auto", quiet = FALSE)
   local_doc_pending()
   f = file.path(proj, "job.R")
-  before = c("gptr(\"first\")", "z = 1")
+  before = c("peter(\"first\")", "z = 1")
   writeLines(before, f)
   # an Rscript run of job.R that is still running and queued a block; cron started it from
   # $HOME, so its run lock is in another workspace root and this project's lock is free
@@ -943,7 +944,7 @@ test_that("a notebook cell run again keeps only the block shown last (IC-50)", {
   local_gptr_options(record = "auto")
   local_doc_pending()
   nb = file.path(proj, "analysis.ipynb")
-  doc_io_nb_write(nb, c("a = gptr(\"one\")", "b = gptr(\"two\"); w = gptr(\"three\")"))
+  doc_io_nb_write(nb, c("a = peter(\"one\")", "b = peter(\"two\"); w = peter(\"three\")"))
   withr::local_options(jupyter.in_kernel = TRUE)
   withr::local_envvar(JPY_SESSION_NAME = nb)
   up = function(prompt, code) {
@@ -979,8 +980,8 @@ test_that("a sync counts only the blocks it writes (IC-50, IC-51)", {
   f = file.path(proj, "job.R")
   ph = prompt_hash("first")
   # the call already owns a fresh block, so the dead run's block for it is superseded
-  writeLines(c("gptr(\"first\")", doc_render_block("bbbbbb", list(
-    model = "m", prompt = ph, sha = doc_body_sha("x = 0")), "x = 0"), "gptr(\"second\")"), f)
+  writeLines(c("peter(\"first\")", doc_render_block("bbbbbb", list(
+    model = "m", prompt = ph, sha = doc_body_sha("x = 0")), "x = 0"), "peter(\"second\")"), f)
   rec = doc_io_dead_sidecar(f, "first")
   rec$upserts[[2]] = list(block_id = "cccccc", lines = doc_render_block("cccccc", list(
     model = "m", prompt = prompt_hash("second")), "y = 2"), site = doc_io_site(f, "second"))
@@ -1012,7 +1013,7 @@ test_that("a kernel keeps its notebook open after setwd() and opens no script (I
   expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
   # a dead Rscript run's sidecar for a script in the kernel's working directory is synced
   f = file.path(proj, "data", "job.R")
-  writeLines("gptr(\"first\")", f)
+  writeLines("peter(\"first\")", f)
   expect_false(doc_notebook_attached(f))
   doc_io_dead_sidecar(f, "first")
   expect_identical(doc_sync(f), 1L)
@@ -1099,7 +1100,7 @@ test_that("RStudio buffers are edited by id, saved when clean, the cursor moved 
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("x = 1", "gptr(\"count rows\")", "z = 2"), f)
+  writeLines(c("x = 1", "peter(\"count rows\")", "z = 2"), f)
   ed = local_fake_editor(path_norm(f), readLines(f))
   res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"),
                    structure("n = nrow(mtcars)", header = list(model = "m")))
@@ -1118,7 +1119,7 @@ test_that("Positron writes a clean buffer on disk and edits only the active edit
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  writeLines(c("peter(\"count rows\")", "z = 2"), f)
   ed = local_fake_editor(path_norm(f), readLines(f), id = "")
   res = doc_upsert(doc_ide_site(f, "count rows", "positron"),
                    structure("n = 1", header = list(model = "m")))
@@ -1139,7 +1140,7 @@ test_that("a console-focused or foreign editor is never edited", {
   local_project()
   local_gptr_options(record = "auto", quiet = FALSE)
   f = file.path(getwd(), "a.R")
-  writeLines("gptr(\"count rows\")", f)
+  writeLines("peter(\"count rows\")", f)
   ed = local_fake_editor(path_norm(f), readLines(f), id = "#console")
   res = NULL
   expect_message({
@@ -1147,7 +1148,7 @@ test_that("a console-focused or foreign editor is never edited", {
   }, class = "gptr_message_notice")
   expect_identical(res$action, "none")
   expect_length(ed$ids, 0L)
-  expect_identical(readLines(f), "gptr(\"count rows\")")
+  expect_identical(readLines(f), "peter(\"count rows\")")
 })
 
 test_that("transcript appends need consent and pass the document_write event", {
@@ -1172,13 +1173,13 @@ test_that("a buffer that ends in the empty line after the final newline is clean
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("x = 1", "gptr(\"count rows\")", "z = 2"), f)
+  writeLines(c("x = 1", "peter(\"count rows\")", "z = 2"), f)
   # Ace (RStudio) and Monaco (Positron) show a file's final newline as an empty last line
   ed = local_fake_editor(path_norm(f), c(readLines(f), ""))
   res = doc_upsert(doc_ide_site(f, "count rows", "rstudio"),
                    structure("n = 1", header = list(model = "ollama/qwen3:8b")))
   expect_identical(res$action, "insert")
-  expect_identical(ed$buffer, c("x = 1", "gptr(\"count rows\")",
+  expect_identical(ed$buffer, c("x = 1", "peter(\"count rows\")",
                                 paste0("# >>> gptr:", res$block_id, " model=ollama/qwen3:8b sha=",
                                        doc_body_sha("n = 1")),
                                 "n = 1", paste0("# <<< gptr:", res$block_id), "z = 2", ""))
@@ -1191,30 +1192,30 @@ test_that("a clean Positron buffer that ends in that empty line is written on di
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  writeLines(c("peter(\"count rows\")", "z = 2"), f)
   ed = local_fake_editor(path_norm(f), c(readLines(f), ""), id = "")
   res = doc_upsert(doc_ide_site(f, "count rows", "positron"),
                    structure("n = 1", header = list(model = "m")))
   expect_identical(res$action, "insert")
   expect_identical(res$backend, "file")
   expect_length(ed$ids, 0L)
-  expect_identical(readLines(f)[c(1, 3, 5)], c("gptr(\"count rows\")", "n = 1", "z = 2"))
+  expect_identical(readLines(f)[c(1, 3, 5)], c("peter(\"count rows\")", "n = 1", "z = 2"))
 })
 
 test_that("that empty line is an edit when the file on disk has no final newline", {
   local_project()
   local_gptr_options(record = "auto")
   f = file.path(getwd(), "a.R")
-  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  writeLines(c("peter(\"count rows\")", "z = 2"), f)
   site = doc_ide_site(f, "count rows", "rstudio")
-  writeBin(charToRaw("gptr(\"count rows\")\nz = 2"), f)
-  ed = local_fake_editor(path_norm(f), c("gptr(\"count rows\")", "z = 2", ""))
+  writeBin(charToRaw("peter(\"count rows\")\nz = 2"), f)
+  ed = local_fake_editor(path_norm(f), c("peter(\"count rows\")", "z = 2", ""))
   res = doc_upsert(site, structure("n = 1", header = list(model = "m")))
   expect_identical(res$action, "insert")
   expect_identical(ed$ids, list("doc1"))
   expect_length(ed$saved, 0L)
   expect_identical(ed$buffer[c(3, 5, 6)], c("n = 1", "z = 2", ""))
-  expect_identical(readBin(f, "raw", n = 100L), charToRaw("gptr(\"count rows\")\nz = 2"))
+  expect_identical(readBin(f, "raw", n = 100L), charToRaw("peter(\"count rows\")\nz = 2"))
 })
 
 test_that("transcript lines are appended only to an .R transcript", {
@@ -1262,7 +1263,7 @@ test_that("an editor showing another file or an untitled buffer is never edited"
   local_gptr_options(record = "auto", quiet = FALSE)
   a = file.path(getwd(), "a.R")
   b = file.path(getwd(), "b.R")
-  src = c("gptr(\"count rows\")", "z = 2")
+  src = c("peter(\"count rows\")", "z = 2")
   writeLines(src, a)
   writeLines(src, b)
   ed = local_fake_editor(path_norm(b), readLines(b))
@@ -1293,7 +1294,7 @@ test_that("an editor buffer is never edited without write consent (IC-45, IC-74)
   local_project()
   local_gptr_options(record = "off")
   f = file.path(getwd(), "a.R")
-  writeLines(c("gptr(\"count rows\")", "z = 2"), f)
+  writeLines(c("peter(\"count rows\")", "z = 2"), f)
   for (backend in c("rstudio", "positron", "vscode")) {
     ed = local_fake_editor(path_norm(f), readLines(f))
     res = doc_upsert(doc_ide_site(f, "count rows", backend),
@@ -1302,7 +1303,7 @@ test_that("an editor buffer is never edited without write consent (IC-45, IC-74)
     expect_length(ed$ids, 0L)
     expect_length(ed$saved, 0L)
   }
-  expect_identical(readLines(f), c("gptr(\"count rows\")", "z = 2"))
+  expect_identical(readLines(f), c("peter(\"count rows\")", "z = 2"))
 })
 
 # ---- FIX-5 (CI-5, D-111): document formats are read without tools::file_ext() ----------------
@@ -1360,9 +1361,9 @@ test_that("an Rscript run writes its blocks only at exit and the next run replay
   doc_child_script(f, doc_two_steps, c(
     "path = sub('^--file=', '', grep('^--file=', commandArgs(FALSE), value = TRUE))",
     "md5 = unname(tools::md5sum(path))",
-    "a = gptr('first step')",
+    "a = peter('first step')",
     "cat('UNCHANGED', identical(unname(tools::md5sum(path)), md5), '\\n')",
-    "b = gptr('second step')",
+    "b = peter('second step')",
     "cat('REQUESTS', length(fake$log$requests), 'N2', n2, '\\n')"))
   res = doc_child_run(root, f)
   expect_identical(res$status, 0L)
@@ -1382,7 +1383,7 @@ test_that("SIGTERM leaves a sidecar that the next touch applies around user edit
   skip_on_os("windows")
   root = local_project()
   f = file.path(root, "job.R")
-  doc_child_script(f, doc_two_steps, c("a = gptr('first step')", "b = gptr('second step')",
+  doc_child_script(f, doc_two_steps, c("a = peter('first step')", "b = peter('second step')",
                                        "cat('READY\\n')", "Sys.sleep(300)"))
   before = readLines(f)
   p = processx::process$new(rscript_path(), c("--vanilla", f), wd = root,
@@ -1411,7 +1412,7 @@ test_that("SIGTERM leaves a sidecar that the next touch applies around user edit
   expect_null(doc_sidecar_read(f))
 })
 
-test_that("gptr_return() and gptr$out() calls re-source cleanly under Rscript and source() (6)", {
+test_that("gptr_return() and peter$out() calls re-source cleanly under Rscript and source() (6)", {
   skip_on_cran()
   root = local_project()
   f = file.path(root, "fit.R")
@@ -1423,14 +1424,14 @@ test_that("gptr_return() and gptr$out() calls re-source cleanly under Rscript an
   if (request$n == 2L) {
     txt = paste(unlist(lapply(request$last_results[[1L]]$content, function(b) b$text)),
                 collapse = "\n")
-    id = regmatches(txt, regexec('gptr[$]out[(]"(o[0-9a-f]{6})"', txt))[[1L]][2L]
-    code = paste0("fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\ngptr$out(\"", id,
+    id = regmatches(txt, regexec('peter[$]out[(]"(o[0-9a-f]{6})"', txt))[[1L]][2L]
+    code = paste0("fit = lm(mpg ~ wt, data = mtcars)\ngptr_return(fit)\npeter$out(\"", id,
                   "\", lines = 1)")
     return(list(tool = "r", input = list(code = code)))
   }
   "Fitted."
 }))---"
-  doc_child_script(f, fake, c("res = gptr('Fit mpg on weight')",
+  doc_child_script(f, fake, c("res = peter('Fit mpg on weight')",
                               "stopifnot(inherits(res$value, 'lm'))",
                               "cat('REQUESTS', length(fake$log$requests), '\\n')"))
   rec = doc_child_run(root, f)

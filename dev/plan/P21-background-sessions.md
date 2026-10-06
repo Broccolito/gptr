@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let `gptr(..., background = TRUE)` return a running session at once and keep it progressing at the idle R console, so that `s |> gptr("...")` steers a running session (S-8, REQ-18, REQ-38).
+**Goal:** Let `peter(..., background = TRUE)` return a running session at once and keep it progressing at the idle R console, so that `s |> peter("...")` steers a running session (S-8, REQ-18, REQ-38).
 
 **Architecture:** One new L3 file, `R/agent-background.R`, provides `bg_register()` (the `bg.register` service that P08's gateway and P14's pause menu call), a `later` timer that runs one non-blocking iteration of P04's process reactor every 50 ms while no reactor pump is on the call stack, and bookkeeping that adds `session` rows to P04's job table. Asks never prompt from a `later` callback: during an idle tick, session-scoped wrappers of every `ui` record (and a `tool_call` hook for the `ask` tool) answer that approval is pending, the sweep after the tick stops the run and parks the session with status `waiting`, and the next blocking gptr call continues it from the denied call, so the model repeats the call and the normal gate asks the user. A `tool_result` hook of the new `builtin:background` prints one notice when an idle-tick `r` call changed workspace bindings.
 
@@ -22,13 +22,13 @@ Plan-specific requirements (values copied from the spec):
 
 - File and layer: `agent-background.R` | L3 | "experimental background runs serviced by `later`; session rows of the job table" | P21 (03 §3.2). Test file: `tests/testthat/test-agent-background.R` (05 P21).
 - Contract row (04 §7.21): `bg_register(s)` (service `bg.register`) | `agent-background.R` | "requires later (`gptr_error_missing_package`); marks the run background, adds a `session` job, ensures the `later` pump (50 ms timer calling `reactor_pump(slice_ms = 0)`, a no-op while the reactor is on the stack, IC-57); R tools of background runs run at idle ticks (`gptr.background_tools = "idle"`) or wait for `gptr_wait()`; an ask moves the run to `waiting` and is shown at the next blocking gptr call; a tool that changed bindings at an idle tick prints one notice" | consumers P08, P14 (`[b]ackground`).
-- Service table (04 §7.0): `bg.register` | P21 | `gptr(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)`. Every service is owned by a built-in (IC-34): this plan declares `builtin:background`.
+- Service table (04 §7.0): `bg.register` | P21 | `peter(background = TRUE)` (P08), the pause menu (P14) | `function(session) invisible(session)`. Every service is owned by a built-in (IC-34): this plan declares `builtin:background`.
 - Package state (04 §7.0): `the$bg` | P21 | background pump state.
 - Option (04 §3.1): `gptr.background_tools` | `chr(1)` | `"idle"` | P21 | `"idle"` or `"wait"`; read with `gptr_opt("background_tools")`.
 - Session status (04 §5.1): `waiting` = "a background or served run with an ask pending, IC-57". Live record field (04 §5.1): `background` (list or `NULL`); this plan stores `list(id, run, since, ui, dropped_n, ask, waiting, opts)` there (ids, numbers, flags and a whitelisted copy of the run options; never a session, run, frame or user object).
 - Permission answers (04 §10.2 kind 22; P06 `perm_ask()`): an ask raised during an idle tick is answered `list(decision = "deny", remember = NULL, feedback = <pending text>)`, never `"abort"`: P06 turns `"abort"` into the tool result "Permission denied: the user aborted the run. The run stops here.", which the resumed run would show the model. The pending text is `bg_pending_text()`.
 - Hooks (04 §10.4): `tool_call` ("decision, error = block"; a handler returns `NULL` or `list(decision = "block", reason)`; payload `tool_name`, `tool_call_id`, `input`, `nested`, `parent_tool_call_id`, `risk` plus `session`) and `tool_result` ("patch chain"; `NULL` = no patch; payload `tool_name`, `tool_call_id`, `input`, `content`, `details`, `is_error`). The `r` tool's `details$objects` is `list(added, modified, removed)` of chr (04 §4.4).
-- IC-57: "The background pump is a no-op while the reactor is on the stack (depth > 0)."; "Asks raised outside a blocking gptr call (background runs, ...) never prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it) and the ask is shown at the next `gptr_wait()`, `gptr()` or console turn"; "A background R tool that changed bindings in the user's environment at an idle tick prints one notice."
+- IC-57: "The background pump is a no-op while the reactor is on the stack (depth > 0)."; "Asks raised outside a blocking gptr call (background runs, ...) never prompt from a `later` callback: a background run moves to status `waiting` (a notice; `gptr_jobs()` shows it) and the ask is shown at the next `gptr_wait()`, `peter()` or console turn"; "A background R tool that changed bindings in the user's environment at an idle tick prints one notice."
 - 03 §6.2: "timer polling every 50 ms; ... no `later_fd`, which LIKELY cannot watch processx pipes on Windows"; "A SIGINT inside a later callback reaches the same calling handler, so the pause menu works"; "Under Rscript there is no idle console: background runs progress only inside blocking gptr calls"; "Support matrix documented: terminal R verified [G3 t9]; RStudio, Positron, Jupyter and Windows consoles unverified. Requires `later`; never used in examples or CRAN tests."
 - Job table (04 §7.4, §5.12, IC-36): `job_add(kind, id, name, pid = NA, stop, status = function() "running")`; `gptr_jobs()` (P04) lists columns `id`, `kind` (`session`, `bg`, `artifact`, `mcp_serve`, `worker`, `cli`), `name`, `pid`, `status`, `started`; P21 adds `kind = "session"` rows with `status` `running` or `waiting`.
 - Condition (04 §2.2, §6.1.5): `gptr_error_missing_package` with fields `package`, `feature` ("background without later").
@@ -63,7 +63,7 @@ Exact signatures from `04`; the tasks call nothing else.
 | P02 | `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`; `registry_add(spec, source, rank, session = NULL, state = "active")`; `registry_remove(id)`; `registry_get(kind, name, session = NULL)`; `registry_names(kind, session = NULL)`; `registry_diagnostic(source, event, class, message)`; `gptr_spec(kind, name, ...)`; `gptr_register(spec)`; `gptr_registry(kind = NULL, diagnostics = FALSE)`; API object `gptr$on(event, handler, matcher = NULL)` | built-in, UI wrappers, hook, diagnostics |
 | P04 | `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`; `job_add(kind, id, name, pid = NA, stop, status = function() "running")`; `job_remove(id)`; `job_list(kind = NULL)`; `gptr_jobs(kill = FALSE)` | the tick, job rows |
 | P06 | `session_data(s)` (`.d`: `id`, `status`, `reason`, `mode`, `turns`, `entries`, `queue`, `dropped`); `session_live(s)` (live: `run`, `background`); `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`; `run_start(s, input, opts = list())` (run options of 04 §7.6: `max_turns`, `budget`, `returns`, `context`, `timeout`, `interactive`, `depth`, `parent_run`, `agent`, `background`, `rng_state`, `preset`, `tools`, `call`, `safety`, `root`); `run_abort(run, reason = "user")`; `run_current()`; `gptr_run` fields `id`, `opts` | kernel SDK (IC-33) |
-| P08 | `gptr(..., background = FALSE, ...)` (calls `ext_service_get("bg.register")(s)`); `gptr_wait(x, timeout = Inf)`; `gptr_cancel(x)`; `gptr_steer(s, text, as = c("steer", "follow_up"))` | entry points, tests |
+| P08 | `peter(..., background = FALSE, ...)` (calls `ext_service_get("bg.register")(s)`); `gptr_wait(x, timeout = Inf)`; `gptr_cancel(x)`; `gptr_steer(s, text, as = c("steer", "follow_up"))` | entry points, tests |
 | P11 | kind `ui` fields `has_ui`, `select(title, choices, default = NULL, details = NULL, multiple = FALSE, allow_other = FALSE)`, `input(prompt, default = "", secret = FALSE)`, `questions(qs)`, `notify(text, level = "info")`, `permission(request)` -> `list(decision = "allow" \| "deny" \| "abort", remember, feedback)`; the `ui.get` service; test helper `local_scripted_ui(answers = list(), .env = parent.frame())` | UI wrappers, waiting tests |
 | P14 | service `console.interrupt_policy` `function(expr_fun, runs, mode = c("call", "repl"))`; the pause menu's `[b]ackground` calls `bg.register` | idle ticks under the pause menu |
 
@@ -72,7 +72,7 @@ What this plan produces for later plans: the `bg.register` service (`function(se
 ## How the pieces fit
 
 ```text
-gptr("job", background = TRUE)                                   (P08 gateway)
+peter("job", background = TRUE)                                   (P08 gateway)
   run_start(s, input, opts(background = TRUE)) -> ext_service_get("bg.register")(s)
 bg_register(s)        later? -> mark run -> hold s in the$bg -> job row -> ui wrappers -> timer
 later timer (50 ms) -> bg_callback()                            (re-armed on exit, always)
@@ -200,7 +200,7 @@ Create `R/agent-background.R`:
 ```r
 # agent-background.R -- experimental background sessions (P21; contract 04 section 7.21, IC-57).
 #
-# gptr(..., background = TRUE) returns a running session at once. A `later` timer pumps the
+# peter(..., background = TRUE) returns a running session at once. A `later` timer pumps the
 # process reactor every 50 ms while the console is idle: one non-blocking reactor iteration per
 # tick, and nothing at all while any reactor pump is on the call stack (IC-57). There is no
 # later_fd(): it LIKELY cannot watch processx pipes on Windows (report 15 section 2.5 and its
@@ -369,7 +369,7 @@ git commit -m "feat(agent): add background-session state and helpers"
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `gptr_spec(kind, name, ...)`, `gptr_register(spec)` (P02); `session_live(s)` (P06); `gptr_abort()` (P01); in tests `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06), `gptr()` with `.run = FALSE` (P08) and `gptr_fake_provider()` (P01).
+- Consumes: `registry_get(kind, name, session = NULL)`, `registry_names(kind, session = NULL)`, `registry_add(spec, source, rank, session = NULL, state = "active")`, `registry_remove(id)`, `gptr_spec(kind, name, ...)`, `gptr_register(spec)` (P02); `session_live(s)` (P06); `gptr_abort()` (P01); in tests `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06), `peter()` with `.run = FALSE` (P08) and `gptr_fake_provider()` (P01).
 - Produces (internal): `bg_pending_text(what = "approval")` (the text the model reads when an ask could not be shown), `bg_park(id, what, summary)` (records `live$background$ask = list(what, summary, t)`; the first ask wins; it never stops the run), `bg_ui_target(name)`, `bg_ui_spec(name, id)` (a `gptr_ui` spec with the six `ui` methods of 04 §10.2 kind 22), `bg_install_ui(id)` (-> chr of registry record ids).
 
 How it works: `ui.get` (P11) resolves the run's UI by name through the registry, and `registry_get(kind, name, session)` lets a rank-0 record scoped to one session shadow the global record of the same name for that session only (04 §7.2, §10.1). `bg_install_ui()` registers such a wrapper for every registered `ui` name. Outside an idle tick every method delegates to the global record, so a background session asks exactly like a foreground one inside blocking calls. During an idle tick (`the$bg$ticking`) no method prompts: `permission()` records the ask and answers `list(decision = "deny", remember = NULL, feedback = bg_pending_text("approval"))`; `questions()`, `select()` and `input()` record the ask and return a cancelled answer. The answer is a denial, never `"abort"`: P06's `perm_ask()` turns `"abort"` into the tool result "Permission denied: the user aborted the run. The run stops here." and the tool-call message stays complete (only a streaming partial is marked aborted), so a resumed run would tell the model that the user aborted, the model would not repeat the call, and the user would never be asked. The pending text tells the model that nothing ran, that nobody declined, and to call the tool again when the session continues. The wrappers never stop the run themselves (they run inside P06's dispatcher, in the middle of a call); the sweep after the tick does (Task 4), and Task 5 turns the stopped run into a `waiting` session.
@@ -380,7 +380,7 @@ Append to `tests/testthat/test-agent-background.R`:
 
 ```r
 bg_fixture = function(.env = parent.frame()) {
-  s = gptr("background fixture", model = gptr_fake_provider(list("ok")), .run = FALSE,
+  s = peter("background fixture", model = gptr_fake_provider(list("ok")), .run = FALSE,
            envir = new.env())
   id = s$id
   assign(id, s, envir = bg_state()$sessions)
@@ -606,12 +606,12 @@ git commit -m "feat(agent): add session-scoped UI wrappers that never prompt at 
 - Test: `tests/testthat/test-agent-background.R` (append)
 
 **Interfaces:**
-- Consumes: `on_load(expr)`, `on_unload(fun)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`, `ext_service_get(name)` and the rule of P01's `service_builtin_active()` (a built-in that has no record in a non-empty registry counts as filtered out, so its bootstrap services are hidden), `check_class(x, class, arg, null = FALSE)`, `gptr_inform()`, `msg_text(msg)` (P01); `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's `gptr$on(event, handler, matcher = NULL)` with the `tool_call` event (04 §10.4: "decision, error = block"; a handler returns `NULL` or `list(decision = "block", reason)`), and in tests `gptr_registry()`, `registry_get(kind, name, session = NULL)` (P02); `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)`, `job_list(kind = NULL)`, `gptr_jobs(kill = FALSE)` (P04); `session_data(s)`, `session_live(s)`, `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06); `gptr(..., background = TRUE)` (P08, which calls the service).
+- Consumes: `on_load(expr)`, `on_unload(fun)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`, `ext_service_has(name)`, `ext_service_get(name)` and the rule of P01's `service_builtin_active()` (a built-in that has no record in a non-empty registry counts as filtered out, so its bootstrap services are hidden), `check_class(x, class, arg, null = FALSE)`, `gptr_inform()`, `msg_text(msg)` (P01); `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the API object's `gptr$on(event, handler, matcher = NULL)` with the `tool_call` event (04 §10.4: "decision, error = block"; a handler returns `NULL` or `list(decision = "block", reason)`), and in tests `gptr_registry()`, `registry_get(kind, name, session = NULL)` (P02); `job_add(kind, id, name, pid = NA, stop, status = function() "running")`, `job_remove(id)`, `job_list(kind = NULL)`, `gptr_jobs(kill = FALSE)` (P04); `session_data(s)`, `session_live(s)`, `run_start(s, input, opts = list())`, `run_abort(run, reason = "user")` (P06); `peter(..., background = TRUE)` (P08, which calls the service).
 - Produces: service `bg.register` = `bg_register(s)` -> `invisible(s)` (04 §7.0, §7.21); `builtin:background` (declared with `ext_declare_builtin("background", builtin_background)`; it owns the service, IC-34, and from this task on its factory registers the `tool_call` hook `gptr$on("tool_call", bg_on_tool_call, matcher = "ask")`, so a record of source `builtin:background` exists whenever the built-in is loaded and P01's `service_builtin_active()` keeps `bg.register` visible; the service itself stays a bootstrap entry, never a `service` record, so a test stub set with `ext_service_set()`, as P14's pause-menu test does, still replaces it); `bg_on_tool_call(event, ctx)` (during an idle tick a background session's `ask` call is blocked with `bg_pending_text("answers")` and the ask is recorded; Task 5 parks the session); internal `bg_has_queued(d)`, `bg_keep_opts` (chr), `bg_run_opts(run)` (the whitelisted run options plus `background = TRUE`), `bg_mark(run)` (sets `run$opts$background = TRUE`), `bg_track(s, run, title)`, `bg_job_fns(id)`, `bg_job_status(id)`, `bg_title(s)`, `bg_stop(id)`, `bg_release(id, notice)`, `bg_notice_done(s)`, `bg_shutdown()` (registered with `on_unload()`); job rows `kind = "session"`, `id` = the session id, `name` = the first prompt (40 characters), `status` = the session status.
 
 Behaviour of `bg_register(s)`, in order: a non-session or a detached copy is `gptr_error_invalid_argument`; without later it signals `gptr_error_missing_package` (`package = "later"`, `feature = "background sessions"`) and first aborts a run that P08 started for the background (`run$opts$background` already `TRUE`), so nothing is left unpumped; a live run (P08's background start, or a foreground run sent to the background from the pause menu) is marked with `run$opts$background = TRUE`, which is what lets P06's foreground wait return for `[b]ackground`; an idle session with queued input (the `.run = FALSE` example of 04 §7.21) is started with `run_start(s, NULL, opts = list(background = TRUE))`; an idle session with nothing queued is `gptr_error_invalid_argument`. It then holds the session in `the$bg$sessions` (a running session is held by the reactor anyway; P21 releases it at settlement), records `live$background` (including `opts = bg_run_opts(run)`: `max_turns`, `budget`, `returns`, `context`, `timeout`, `preset`, `tools`, `root`, `agent` and `depth` of the background run, so a run resumed after waiting keeps the call's limits; never `call`, which holds the caller's frame [R2], nor `safety`, which is snapshotted again at resume, IC-53), adds the job row, installs the UI wrappers and prints the one-time experimental notice. Task 4 adds the timer.
 
-Why the factory registers a record already in this task: P01's `service_builtin_active()` treats a built-in without any record in a non-empty registry as filtered out (every built-in of 04 §10.3 registers at least one record), so a factory that registered nothing would hide `bg.register` (`ext_service_has()` FALSE, `ext_service_get()` signalling `gptr_error_not_available`, and `gptr(background = TRUE)` failing with that class instead of `gptr_error_missing_package`). The record is the `ask` hook that the final built-in has anyway (04 §10.3 reading A6), not a `service` record: built-ins own their services through the bootstrap table (IC-34), and a built-in `service` record would shadow the stub that P14's test "[b]ackground hands a foreground run to bg.register (P21) and resumes" sets with `ext_service_set()`. Until Task 5 parks sessions, the Task 4 sweep stops a run whose `ask` call was blocked, as it stops any run with a recorded ask.
+Why the factory registers a record already in this task: P01's `service_builtin_active()` treats a built-in without any record in a non-empty registry as filtered out (every built-in of 04 §10.3 registers at least one record), so a factory that registered nothing would hide `bg.register` (`ext_service_has()` FALSE, `ext_service_get()` signalling `gptr_error_not_available`, and `peter(background = TRUE)` failing with that class instead of `gptr_error_missing_package`). The record is the `ask` hook that the final built-in has anyway (04 §10.3 reading A6), not a `service` record: built-ins own their services through the bootstrap table (IC-34), and a built-in `service` record would shadow the stub that P14's test "[b]ackground hands a foreground run to bg.register (P21) and resumes" sets with `ext_service_set()`. Until Task 5 parks sessions, the Task 4 sweep stops a run whose `ask` call was blocked, as it stops any run with a recorded ask.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -647,12 +647,12 @@ test_that("without later, background runs fail with gptr_error_missing_package",
   skip_on_cran()
   local_mocked_bindings(bg_has_later = function() FALSE)
   fake = gptr_fake_provider(list("ok"))
-  s = gptr("idle job", model = fake, .run = FALSE, envir = new.env())
+  s = peter("idle job", model = fake, .run = FALSE, envir = new.env())
   cnd = expect_error(bg_register(s), class = "gptr_error_missing_package")
   expect_identical(cnd$package, "later")
   expect_identical(cnd$feature, "background sessions")
   expect_identical(s$status, "idle")
-  expect_error(gptr("x", model = fake, envir = new.env(), background = TRUE),
+  expect_error(peter("x", model = fake, envir = new.env(), background = TRUE),
                class = "gptr_error_missing_package")
   expect_false(bg_has(s$id))
 })
@@ -671,7 +671,7 @@ test_that("bg_register() starts a queued session in the background (contract 7.2
   skip_on_cran()
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
-  s = gptr("long job", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+  s = peter("long job", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
            envir = new.env())
   res = withVisible(ext_service_get("bg.register")(s))
   expect_false(res$visible)
@@ -693,7 +693,7 @@ test_that("bg_register() marks a running foreground run (the pause menu's [b]ack
   skip_on_cran()
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
-  s = gptr("foreground", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+  s = peter("foreground", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
            envir = new.env())
   run = run_start(s, NULL, opts = list())
   expect_false(isTRUE(run$opts$background))
@@ -705,7 +705,7 @@ test_that("bg_register() marks a running foreground run (the pause menu's [b]ack
 test_that("an idle session without queued input cannot run in the background", {
   skip_on_cran()
   skip_if_not_installed("later")
-  s = gptr("done already", model = gptr_fake_provider(list("ok")), envir = new.env())
+  s = peter("done already", model = gptr_fake_provider(list("ok")), envir = new.env())
   expect_identical(s$status, "idle")
   expect_error(bg_register(s), class = "gptr_error_invalid_argument")
   expect_error(bg_register("not a session"), class = "gptr_error_invalid_argument")
@@ -716,8 +716,8 @@ test_that("gptr_jobs(kill = TRUE) and bg_shutdown() stop background sessions", {
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
   hang = gptr_fake_provider(list(list(hang = TRUE)))
-  a = gptr("first", model = hang, .run = FALSE, envir = new.env())
-  b = gptr("second", model = hang, .run = FALSE, envir = new.env())
+  a = peter("first", model = hang, .run = FALSE, envir = new.env())
+  b = peter("second", model = hang, .run = FALSE, envir = new.env())
   bg_register(a)
   bg_register(b)
   gptr_jobs(kill = TRUE)
@@ -725,7 +725,7 @@ test_that("gptr_jobs(kill = TRUE) and bg_shutdown() stop background sessions", {
   expect_false(bg_has(a$id))
   expect_false(a$id %in% gptr_jobs()$id)
   expect_identical(b$status, "aborted")
-  c1 = gptr("third", model = hang, .run = FALSE, envir = new.env())
+  c1 = peter("third", model = hang, .run = FALSE, envir = new.env())
   bg_register(c1)
   bg_shutdown()
   expect_identical(c1$status, "aborted")
@@ -785,7 +785,7 @@ bg_register = function(s) {
     if (!is.null(run) && isTRUE(run$opts$background)) run_abort(run, reason = "missing_package")
     gptr_abort(c("Background sessions need the 'later' package.",
                  "Install it with install.packages(\"later\"),",
-                 "or call gptr() without background = TRUE."),
+                 "or call peter() without background = TRUE."),
                "missing_package", package = "later", feature = "background sessions")
   }
   title = bg_title(s)
@@ -1018,7 +1018,7 @@ test_that("a background run progresses while the test pumps later::run_now()", {
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "x = 1"), delay = 0.1),
                                  list(text = "done", delay = 0.1)))
   e = new.env()
-  s = gptr("long job", model = fake, mode = "auto", envir = e, background = TRUE)
+  s = peter("long job", model = fake, mode = "auto", envir = e, background = TRUE)
   expect_s3_class(s, "gptr_session")
   expect_identical(s$status, "running")
   expect_true(s$id %in% gptr_jobs()$id)
@@ -1036,7 +1036,7 @@ test_that("the background tick is a no-op while a reactor pump is on the stack",
   skip_on_cran()
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
-  s = gptr("hang", model = gptr_fake_provider(list(list(hang = TRUE))), envir = new.env(),
+  s = peter("hang", model = gptr_fake_provider(list(list(hang = TRUE))), envir = new.env(),
            background = TRUE)
   st = bg_state()
   before = st$ticks
@@ -1057,11 +1057,11 @@ test_that("a pipe into a running background session steers it after the tool res
   local_gptr_options(background_tools = "wait")
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "y = 2")), "used TPM"))
   e = new.env()
-  s = gptr("normalise the counts", model = fake, mode = "auto", envir = e, background = TRUE)
+  s = peter("normalise the counts", model = fake, mode = "auto", envir = e, background = TRUE)
   expect_true(bg_pump_until(function() bg_has_assistant(s)))
   expect_identical(s$status, "running")
   expect_null(e$y)
-  res = withVisible(s |> gptr("Use TPM, not CPM"))
+  res = withVisible(s |> peter("Use TPM, not CPM"))
   expect_false(res$visible)
   expect_identical(res$value, s)
   expect_identical(s$status, "running")
@@ -1086,7 +1086,7 @@ test_that("gptr_cancel() aborts a background session and releases its job", {
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
   fake = gptr_fake_provider(list(list(hang = TRUE)))
-  s = gptr("long task", model = fake, envir = new.env(), background = TRUE)
+  s = peter("long task", model = fake, envir = new.env(), background = TRUE)
   expect_true(bg_pump_until(function() length(fake$log$requests) >= 1L))
   gptr_cancel(s)
   expect_identical(s$status, "aborted")
@@ -1098,13 +1098,13 @@ test_that("an unreferenced settled background session is collected", {
   skip_on_cran()
   skip_if_not_installed("later")
   withr::defer(bg_shutdown())
-  s = gptr("short job", model = gptr_fake_provider(list("done")), envir = new.env(),
+  s = peter("short job", model = gptr_fake_provider(list("done")), envir = new.env(),
            background = TRUE)
   w = rlang::new_weakref(s)
   id = s$id
   expect_true(bg_pump_until(function() !bg_has(id)))
   expect_identical(rlang::wref_key(w)$status, "idle")
-  gptr("replace the last session", model = gptr_fake_provider(list("ok")), envir = new.env())
+  peter("replace the last session", model = gptr_fake_provider(list("ok")), envir = new.env())
   rm(s)
   invisible(gc())
   invisible(gc())
@@ -1138,7 +1138,7 @@ bg_register = function(s) {
     if (!is.null(run) && isTRUE(run$opts$background)) run_abort(run, reason = "missing_package")
     gptr_abort(c("Background sessions need the 'later' package.",
                  "Install it with install.packages(\"later\"),",
-                 "or call gptr() without background = TRUE."),
+                 "or call peter() without background = TRUE."),
                "missing_package", package = "later", feature = "background sessions")
   }
   title = bg_title(s)
@@ -1285,7 +1285,7 @@ git commit -m "feat(agent): pump background sessions from a later timer at the i
 - Consumes: `session_data(s)` (writes `status` and `reason` for the `waiting` transition that 04 §7.21 and IC-57 assign to P21), `session_live(s)`, `session_enqueue(s, text, as = "follow_up", source, blocks)`, `run_start(s, input, opts = list())`, `run_abort()`, `run_current()` (P06); `gptr_inform()` (P01); `registry_diagnostic()` (P02); Task 3's `bg_on_tool_call()` (the `tool_call` hook that `builtin:background` registers with matcher `ask`); test helpers `local_scripted_ui(answers = list(), .env = parent.frame())` (P11) and `bg_fixture()` (Task 2).
 - Produces (internal): `bg_sweep(idle, resume)`, `bg_wait_label(ask)`, `bg_park_session(s)`, `bg_resume(s)` (`builtin:background` keeps Task 3's factory, whose `tool_call` hook records an idle-tick `ask` call that this task now parks); the session status `waiting` with `reason = "waiting for approval: <tool>: <first line>"` (or `"waiting for an answer: ..."` for `ask`, `select`, `input` and `questions`); job status `waiting`.
 
-How it works: during an idle tick a UI wrapper (Task 2) answered a denial with the pending text and recorded the ask; an `ask` tool call is blocked earlier, by Task 3's `tool_call` hook, with the same text (P06 shows it as "Tool execution was blocked: ..."), because a cancelled `questions()` answer would only tell the model that the user dismissed the questions. Right after the tick, `bg_sweep()` aborts the run with reason `"waiting"` (whichever run of the session asked: the background run, or a run that `gptr_wait()` or `gptr_step()` started on it), so the model never sees the denial at an idle tick and makes no further request. `bg_park_session()` then re-queues as follow-ups the queue items that this abort moved to `.d$dropped` (so a steer piped in meanwhile is not lost; items without text are skipped), sets `.d$status = "waiting"` and `.d$reason`, and prints one notice. Idle ticks never resume a waiting session. When a blocking gptr call pumps the reactor (`gptr()`, `gptr_wait()`, `gptr_step()`, a console turn), P04's outermost pump calls `later::run_now(0)`, `bg_callback()` sees the pump on the stack and, when no run is executing a tool (`run_current()` is `NULL`), `bg_resume()` starts a run with `run_start(s, NULL, opts = <kept options>)`. P06 continues from the leaf: the transcript ends with the denied (or blocked) call and its result, so the model reads the pending text and repeats the call, and the gate now asks through the real UI inside the blocking call (one more model request). A run that `gptr_wait()` or `gptr_step()` starts on a waiting session with queued input supersedes the ask; a pipe into a waiting session queues a steer (P08 treats `waiting` like `running`), which that run or the resumed run receives; a session whose status someone else changed is released; `gptr_jobs(kill = TRUE)` sets a waiting session to `aborted`. A waiting session that cannot continue (for example a transcript that ends with a final answer, so `run_start()` has nothing to run) is set to `aborted` with one diagnostic and released, never left waiting.
+How it works: during an idle tick a UI wrapper (Task 2) answered a denial with the pending text and recorded the ask; an `ask` tool call is blocked earlier, by Task 3's `tool_call` hook, with the same text (P06 shows it as "Tool execution was blocked: ..."), because a cancelled `questions()` answer would only tell the model that the user dismissed the questions. Right after the tick, `bg_sweep()` aborts the run with reason `"waiting"` (whichever run of the session asked: the background run, or a run that `gptr_wait()` or `gptr_step()` started on it), so the model never sees the denial at an idle tick and makes no further request. `bg_park_session()` then re-queues as follow-ups the queue items that this abort moved to `.d$dropped` (so a steer piped in meanwhile is not lost; items without text are skipped), sets `.d$status = "waiting"` and `.d$reason`, and prints one notice. Idle ticks never resume a waiting session. When a blocking gptr call pumps the reactor (`peter()`, `gptr_wait()`, `gptr_step()`, a console turn), P04's outermost pump calls `later::run_now(0)`, `bg_callback()` sees the pump on the stack and, when no run is executing a tool (`run_current()` is `NULL`), `bg_resume()` starts a run with `run_start(s, NULL, opts = <kept options>)`. P06 continues from the leaf: the transcript ends with the denied (or blocked) call and its result, so the model reads the pending text and repeats the call, and the gate now asks through the real UI inside the blocking call (one more model request). A run that `gptr_wait()` or `gptr_step()` starts on a waiting session with queued input supersedes the ask; a pipe into a waiting session queues a steer (P08 treats `waiting` like `running`), which that run or the resumed run receives; a session whose status someone else changed is released; `gptr_jobs(kill = TRUE)` sets a waiting session to `aborted`. A waiting session that cannot continue (for example a transcript that ends with a final answer, so `run_start()` has nothing to run) is set to `aborted` with one diagnostic and released, never left waiting.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1311,7 +1311,7 @@ test_that("an ask at an idle tick parks the run as waiting until a blocking pump
   reply = list(tool = "r", input = list(code = "z = 3"))
   fake = gptr_fake_provider(list(reply, reply, "done"))
   e = new.env()
-  s = gptr("set z", model = fake, mode = "manual", envir = e, background = TRUE)
+  s = peter("set z", model = fake, mode = "manual", envir = e, background = TRUE)
   expect_true(bg_pump_until(function() identical(s$status, "waiting")))
   expect_identical(nrow(ui$log), 0L)
   expect_null(e$z)
@@ -1336,7 +1336,7 @@ test_that("gptr_jobs(kill = TRUE) cancels a waiting background session", {
   ui = local_scripted_ui(answers = list())
   local_gptr_options(background_tools = "idle", record = "off", verbose = 0L)
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "w = 1")), "done"))
-  s = gptr("set w", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+  s = peter("set w", model = fake, mode = "manual", envir = new.env(), background = TRUE)
   expect_true(bg_pump_until(function() identical(s$status, "waiting")))
   gptr_jobs(kill = TRUE)
   expect_identical(s$status, "aborted")
@@ -1352,7 +1352,7 @@ test_that("parking prints one waiting notice naming the action", {
   local_gptr_options(background_tools = "idle", record = "off", verbose = 0L, quiet = FALSE)
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "v = 1")), "done"))
   notes = bg_capture_notices(function() {
-    s = gptr("set v", model = fake, mode = "manual", envir = new.env(), background = TRUE)
+    s = peter("set v", model = fake, mode = "manual", envir = new.env(), background = TRUE)
     bg_pump_until(function() identical(s$status, "waiting"))
   })
   expect_length(grep("is waiting for approval: r", notes, fixed = TRUE), 1L)
@@ -1360,7 +1360,7 @@ test_that("parking prints one waiting notice naming the action", {
 
 test_that("a waiting session that cannot continue is aborted and released", {
   skip_on_cran()
-  s = gptr("finished", model = gptr_fake_provider(list("ok")), envir = new.env())
+  s = peter("finished", model = gptr_fake_provider(list("ok")), envir = new.env())
   assign(s$id, s, envir = bg_state()$sessions)
   withr::defer({
     the$bg = NULL
@@ -1496,7 +1496,7 @@ bg_park_session = function(s) {
   d$reason = paste0("waiting for ", label, ": ", bg$ask$summary)
   gptr_inform(c(paste0("Background session ", d$id, " is waiting for ", label, ": ",
                        bg$ask$summary, "."),
-                "It continues at your next gptr_wait(), gptr() call or console turn;",
+                "It continues at your next gptr_wait(), peter() call or console turn;",
                 "gptr_jobs() lists it."),
               "notice")
   invisible(s)
@@ -1573,14 +1573,14 @@ test_that("an r tool that changed bindings at an idle tick prints one notice", {
   fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "made_in_bg = 1")), "ok"))
   e = new.env()
   notes = bg_capture_notices(function() {
-    s = gptr("make it", model = fake, mode = "auto", envir = e, background = TRUE)
+    s = peter("make it", model = fake, mode = "auto", envir = e, background = TRUE)
     bg_pump_until(function() !bg_has(s$id))
   })
   expect_identical(e$made_in_bg, 1)
   expect_length(grep("changed made_in_bg in your workspace", notes, fixed = TRUE), 1L)
   fg = gptr_fake_provider(list(list(tool = "r", input = list(code = "made_fg = 2")), "ok"))
   notes2 = bg_capture_notices(function() {
-    gptr("make it here", model = fg, mode = "auto", envir = e)
+    peter("make it here", model = fg, mode = "auto", envir = e)
   })
   expect_identical(e$made_fg, 2)
   expect_length(grep("made_fg", notes2, fixed = TRUE), 0L)
@@ -1730,7 +1730,8 @@ test_that("a settled background run leaves the caller's object editable in place
   skip_if_not_installed("later")
   wait_loop = paste0("while (identical(s$status, 'running') && ",
                      "as.numeric(Sys.time() - t0, units = 'secs') < 20) later::run_now(0.05)")
-  start = "s = gptr('describe big', big, model = gptr_fake_provider(list('ok')), background = TRUE)"
+  start = paste("s = peter('describe big', big, model = gptr_fake_provider(list('ok')),",
+                "background = TRUE)")
   action = paste(start, "t0 = Sys.time()", wait_loop, "for (i in 1:5) later::run_now(0.06)",
                  sep = "\n")
   expect_no_copy(setup = "big = runif(5e6)", action = action,
@@ -1752,10 +1753,10 @@ Insert this block into `R/agent-background.R` directly after the file's header c
 #' Background sessions (experimental)
 #'
 #' @description
-#' \code{gptr(..., background = TRUE)} returns the session at once while its run keeps going.
+#' \code{peter(..., background = TRUE)} returns the session at once while its run keeps going.
 #' A timer from the \pkg{later} package advances the run every 50 ms while the R console is
 #' idle, so you can keep working. Piping into the running session,
-#' \code{s |> gptr("...")}, queues a steer that the agent receives after its current tool
+#' \code{s |> peter("...")}, queues a steer that the agent receives after its current tool
 #' result; \code{\link{gptr_wait}()} waits for the session, \code{\link{gptr_cancel}()}
 #' aborts its run and \code{\link{gptr_jobs}()} lists it. Background sessions are
 #' \strong{experimental}: they need the \pkg{later} package, and they are never used in
@@ -1764,7 +1765,7 @@ Insert this block into `R/agent-background.R` directly after the file's header c
 #' @section How a background run behaves:
 #' \itemize{
 #'   \item Streams progress at every idle tick. While a blocking gptr call runs
-#'     (\code{gptr()}, \code{gptr_wait()}, \code{gptr_step()} or a console turn), that call
+#'     (\code{peter()}, \code{gptr_wait()}, \code{gptr_step()} or a console turn), that call
 #'     advances the background runs as well and the background timer does nothing.
 #'   \item R tools of a background run execute at an idle tick when
 #'     \code{options(gptr.background_tools = "idle")} (the default). The console is busy
@@ -1773,7 +1774,7 @@ Insert this block into `R/agent-background.R` directly after the file's header c
 #'   \item A background run never asks a question at the idle console. When it needs an
 #'     approval or an answer at an idle tick, the action is not performed: the agent is told
 #'     that the user will be asked, its run stops, and the session moves to status
-#'     \code{"waiting"} with a notice. At your next \code{gptr_wait()}, \code{gptr()} call or
+#'     \code{"waiting"} with a notice. At your next \code{gptr_wait()}, \code{peter()} call or
 #'     console turn the session continues with one more model request, the agent repeats the
 #'     call, and you are asked as usual. A message piped into a waiting session is delivered
 #'     when it continues.
@@ -1847,11 +1848,11 @@ Every acceptance check of P21 in `05-plan-decomposition.md` (P21 has no separate
 |---|---|---|
 | 1 | `devtools::test(filter = "agent-background")` is green; tests skip without later and on CRAN | Task 7 Step 4 (all 30 tests, 158 expectations); every test calls `skip_on_cran()`; the 14 tests that need later call `skip_if_not_installed("later")` |
 | 2a | A background run on the fake provider progresses while the test pumps `later::run_now()` | Task 4, "a background run progresses while the test pumps later::run_now()" |
-| 2b | `s \|> gptr("x")` returns invisibly at once and the steer is delivered after the current tool result | Task 4, "a pipe into a running background session steers it after the tool result" (invisible, same object, still running, one queued steer; in request 2 the relay is the message right after the tool result) |
+| 2b | `s \|> peter("x")` returns invisibly at once and the steer is delivered after the current tool result | Task 4, "a pipe into a running background session steers it after the tool result" (invisible, same object, still running, one queued steer; in request 2 the relay is the message right after the tool result) |
 | 2c | `gptr_wait(s)` settles it | the same Task 4 test (`gptr_wait(s, timeout = 20)` then status `idle`) |
 | 2d | `gptr_cancel(s)` aborts it | Task 4, "gptr_cancel() aborts a background session and releases its job" |
 | 2e | An unreferenced settled background session is collected | Task 4, "an unreferenced settled background session is collected" (weak reference key is `NULL` after `gc()`) |
-| 3a | `background = TRUE` without later errors with `gptr_error_missing_package` | Task 3, "without later, background runs fail with gptr_error_missing_package" (direct service call and `gptr(background = TRUE)`, fields `package`, `feature`) |
+| 3a | `background = TRUE` without later errors with `gptr_error_missing_package` | Task 3, "without later, background runs fail with gptr_error_missing_package" (direct service call and `peter(background = TRUE)`, fields `package`, `feature`) |
 | 3b | It is never used in examples | Task 7, "no example uses background = TRUE" (scans the `\examples` sections of every `man/*.Rd`) |
 | IC-57 | Background pump is a no-op while the reactor is on the stack | Task 1 (`bg_reactor_busy()` inside `reactor_pump()`), Task 4 ("the background tick is a no-op while a reactor pump is on the stack") |
 | IC-57 | Asks never prompt from a `later` callback; the run moves to `waiting`; `gptr_jobs()` shows it; shown at the next blocking call | Task 2 ("a session UI wrapper delegates outside idle ticks and never prompts during them": a denial with the pending text, never `abort`), Task 3 ("an ask tool call at an idle tick is blocked and recorded, never shown"), Task 5 ("an ask at an idle tick parks the run as waiting until a blocking pump": no UI call at idle ticks, job status `waiting`, request 2 carries the pending text, one `permission` prompt inside the blocking pump; "gptr_jobs(kill = TRUE) cancels a waiting background session"; "parking prints one waiting notice naming the action"; "a waiting session that cannot continue is aborted and released") |
@@ -1885,16 +1886,16 @@ Commands and expected results, run from `/Users/wanjun/Desktop/gptr` after Task 
 fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = "Sys.sleep(3); counts = matrix(1:20, 4)"), delay = 0.5),
   list(text = "Normalised.", delay = 0.5)))
-s = gptr("Load and normalise the counts", model = fake, mode = "auto", background = TRUE)
+s = peter("Load and normalise the counts", model = fake, mode = "auto", background = TRUE)
 s$status                          # "running": the prompt came back at once
 gptr_jobs()                       # one row: kind "session", status "running"
-s |> gptr("Use TPM, not CPM")     # type it during the 3 s tool: returns at once, prints nothing
+s |> peter("Use TPM, not CPM")     # type it during the 3 s tool: returns at once, prints nothing
 # press Ctrl-C while the tool sleeps: the pause menu appears on stderr; answer c
 s$status                          # "idle" a few seconds later; notices said what changed
 exists("counts")                  # TRUE
 fake2 = gptr_fake_provider(list(list(tool = "r", input = list(code = "z = 3")),
                                 list(tool = "r", input = list(code = "z = 3")), "done"))
-w = gptr("set z", model = fake2, mode = "manual", background = TRUE)
+w = peter("set z", model = fake2, mode = "manual", background = TRUE)
 w$status                          # "waiting" after a moment: a notice, and no prompt at the console
 gptr_wait(w)                      # the approval prompt appears inside the blocking call; answer y
 c(w$status, z)                    # "idle" and 3
@@ -1958,7 +1959,7 @@ Searched the plan for the placeholder phrases of the writing-plans standard (to-
 - A14. **Gateway order.** Reading (P08 implements it): P08 starts the run with its own run options plus `background = TRUE`, then calls `bg.register` (so budgets and `max_turns` of the call are kept, and copied into the live handle for a resume); `bg_register()` also accepts an unstarted session and starts it with `background = TRUE` only (a `.run = FALSE` call's pending options live inside P08's gateway, which P21 must not call).
 - A15. **Interrupt mode of idle ticks.** 04 does not say which mode of `console.interrupt_policy` background ticks use. Reading: `"repl"` (an abort does not re-signal the interrupt inside a `later` callback).
 - A16. **`gptr_cancel()` on a waiting session.** P08's `gptr_cancel()` aborts only a session's run, and a waiting session has none. Reading: documented in the topic (`gptr_jobs(kill = TRUE)` stops it); P21's sweep releases any waiting session whose status another plan changes, so a later P08 change that sets `aborted` for waiting sessions needs nothing from P21.
-- A17. **Returning from `[b]ackground`.** P06's `session_run()` stops its foreground wait when `run$opts$background` is `TRUE`, but P08's `run_foreground()` pumps through `run_wait()`, which waits for settlement only. Reading: P21 marks the run (its contract); whether the interrupted foreground `gptr()` call returns at once is P08/P14 behaviour (P14 is not yet written in full), and the manual check of Task 7 covers it.
+- A17. **Returning from `[b]ackground`.** P06's `session_run()` stops its foreground wait when `run$opts$background` is `TRUE`, but P08's `run_foreground()` pumps through `run_wait()`, which waits for settlement only. Reading: P21 marks the run (its contract); whether the interrupted foreground `peter()` call returns at once is P08/P14 behaviour (P14 is not yet written in full), and the manual check of Task 7 covers it.
 - A18. **A `gptr.ui` spec object.** P11's `ui_get()` uses a `gptr_ui` spec given as the `gptr.ui` option directly, without a registry lookup, so session wrappers cannot shadow it. Reading: documented limitation; with such an option a background ask at an idle tick reaches that UI.
 - A19. **Asks of sub-agents.** A child session started by a background run's R tool at an idle tick resolves its own UI (its id has no wrappers). Reading: documented limitation; such children run inside the tool's evaluation, while the console is busy, as for any background tool.
 - A20. **`"wait"` mode inside unrelated blocking calls.** P04/P06/P08 pumps at depth 1 default `allow_runs` to `NULL`, so a background run's queued R tool also runs inside a blocking call on another session, not only inside `gptr_wait()`. Reading: accepted; 03 §6.2 says such tools are deferred to a blocking call, and the help text says "a blocking gptr call such as `gptr_wait()`".
@@ -2005,8 +2006,8 @@ Adversarial review of 2026-10-01 against 00-conventions, 03, 04 (§15 included),
 
 ## Cross-plan consolidation log
 
-Consolidation of 2026-10-01 against 04 (IC-34; §10.3; §10.4 `tool_call`), 03 and 05 (P21), and the related plans P01 (`service_lookup()`, `service_builtin_active()`), P02 (`ext_load_builtins()` at rank 6, the factory API's `gptr$on()`, `registry_get()`), P08 (`gptr(background = TRUE)` calls `ext_service_get("bg.register")`) and P14 (the pause menu's `[b]ackground`, and its test that stubs the service with `ext_service_set()`).
+Consolidation of 2026-10-01 against 04 (IC-34; §10.3; §10.4 `tool_call`), 03 and 05 (P21), and the related plans P01 (`service_lookup()`, `service_builtin_active()`), P02 (`ext_load_builtins()` at rank 6, the factory API's `gptr$on()`, `registry_get()`), P08 (`peter(background = TRUE)` calls `ext_service_get("bg.register")`) and P14 (the pause menu's `[b]ackground`, and its test that stubs the service with `ext_service_set()`).
 
 | # | Lens | Severity | Location | Verdict | Change or reason |
 |---|---|---|---|---|---|
-| 1 | interfaces | major | Task 3 `builtin_background()` (registered nothing), `ext_service_set("bg.register", ..., builtin = "background")`, Task 3 tests | applied, with a different record | Confirmed: P01's `service_builtin_active()` hides a bootstrap service whose built-in has no record in a non-empty registry, so through Tasks 3-4 `ext_service_has("bg.register")` was FALSE, `ext_service_get()` signalled `gptr_error_not_available` and `gptr(background = TRUE)` failed with that class, and Task 3's `PASS 87` could not be reached. The suggested `service` record was not used: P01's `service_lookup()` consults the registry before the bootstrap table, so a built-in `service` record for `bg.register` would shadow the stub that P14's test "[b]ackground hands a foreground run to bg.register (P21) and resumes" installs with `ext_service_set()`, and that test would fail in acceptance command 4 (`devtools::test()`). No other built-in registers its services as records. Instead, the `tool_call` hook (matcher `ask`) that the final built-in already registers, and its handler `bg_on_tool_call()`, now arrive in Task 3. `builtin_background()` registers the hook from Task 3 on, and the Task 6 version keeps it. Its unit test "an ask tool call at an idle tick is blocked and recorded, never shown" moved from Task 5 to Task 3. The first Task 3 test now also asserts `"builtin:background" %in% gptr_registry()$source` and `expect_null(registry_get("service", "bg.register"))`, so the service must stay a bootstrap entry. Updates: the Task 3 Interfaces, Behaviour and Step 2; Task 5's Files, Interfaces, How it works, Step 2 and Step 3 (no factory replacement, no `bg_on_tool_call()`); Task 6's Produces, Step 2 and Step 3 (it replaces the Task 3 version); the acceptance and spec-coverage rows; and A6. Counts: Task 3 `PASS 94` (was 87); Task 4 127 (was 120); Task 5 147 (was 145); Task 6 152 (was 150); Task 7 and acceptance 158 (was 156). There are still 30 tests: 14 need later and `SKIP 30` on CRAN. Between Tasks 3 and 5, the Task 4 sweep stops a run whose `ask` call was blocked at an idle tick, as it does for any recorded ask. Every `r` block was re-extracted and parses under `Rscript --vanilla`, with no `<-` or `%>%`. |
+| 1 | interfaces | major | Task 3 `builtin_background()` (registered nothing), `ext_service_set("bg.register", ..., builtin = "background")`, Task 3 tests | applied, with a different record | Confirmed: P01's `service_builtin_active()` hides a bootstrap service whose built-in has no record in a non-empty registry, so through Tasks 3-4 `ext_service_has("bg.register")` was FALSE, `ext_service_get()` signalled `gptr_error_not_available` and `peter(background = TRUE)` failed with that class, and Task 3's `PASS 87` could not be reached. The suggested `service` record was not used: P01's `service_lookup()` consults the registry before the bootstrap table, so a built-in `service` record for `bg.register` would shadow the stub that P14's test "[b]ackground hands a foreground run to bg.register (P21) and resumes" installs with `ext_service_set()`, and that test would fail in acceptance command 4 (`devtools::test()`). No other built-in registers its services as records. Instead, the `tool_call` hook (matcher `ask`) that the final built-in already registers, and its handler `bg_on_tool_call()`, now arrive in Task 3. `builtin_background()` registers the hook from Task 3 on, and the Task 6 version keeps it. Its unit test "an ask tool call at an idle tick is blocked and recorded, never shown" moved from Task 5 to Task 3. The first Task 3 test now also asserts `"builtin:background" %in% gptr_registry()$source` and `expect_null(registry_get("service", "bg.register"))`, so the service must stay a bootstrap entry. Updates: the Task 3 Interfaces, Behaviour and Step 2; Task 5's Files, Interfaces, How it works, Step 2 and Step 3 (no factory replacement, no `bg_on_tool_call()`); Task 6's Produces, Step 2 and Step 3 (it replaces the Task 3 version); the acceptance and spec-coverage rows; and A6. Counts: Task 3 `PASS 94` (was 87); Task 4 127 (was 120); Task 5 147 (was 145); Task 6 152 (was 150); Task 7 and acceptance 158 (was 156). There are still 30 tests: 14 need later and `SKIP 30` on CRAN. Between Tasks 3 and 5, the Task 4 sweep stops a run whose `ask` call was blocked at an idle tick, as it does for any recorded ask. Every `r` block was re-extracted and parses under `Rscript --vanilla`, with no `<-` or `%>%`. |

@@ -434,7 +434,7 @@ control_check = function(what) {
                       "during a run."),
                "Only you can make this change: run it outside the run, or approve it when asked."),
              "permission", action = what, tool = run$tool_call[["name"]] %||% "r", risk = 4L,
-             how_to_allow = "call it yourself outside gptr(), or approve the r call when asked",
+             how_to_allow = "call it yourself outside peter(), or approve the r call when asked",
              session = run$session)
 }
 

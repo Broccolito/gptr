@@ -15,7 +15,7 @@ A \code{gptr_jobs} data frame with the columns \code{id}, \code{kind} (\code{ses
 \code{artifact}, \code{mcp_serve}, \code{worker}, \code{cli}), \code{name}, \code{pid}, \code{status} and \code{started}.
 }
 \description{
-Lists the job table of this R process: background sessions, \code{gptr$bg()} jobs, Shiny
+Lists the job table of this R process: background sessions, \code{peter$bg()} jobs, Shiny
 artifacts, the MCP server started by \code{gptr_mcp_serve()}, sub-agent workers and
 subscription-CLI children. A finished job whose stop was requested reads \code{stopped} or
 \code{aborted}, never \code{error}. Unavailable status information is shown as \code{unknown}.

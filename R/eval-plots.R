@@ -52,7 +52,7 @@ plot_file = function() {
 }
 
 #' Render a recorded plot to a PNG image block (04 section 4.1), or NULL without a PNG device
-#' Also used by `gptr$plot()` (P10) and `.opts$images` (P08, IC-44); the PNG is always removed and
+#' Also used by `peter$plot()` (P10) and `.opts$images` (P08, IC-44); the PNG is always removed and
 #' a replay error is not caught (D-049).
 #' @noRd
 plot_png = function(recorded, width = gptr_opt("plot_width"), height = gptr_opt("plot_height"),

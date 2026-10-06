@@ -1,7 +1,7 @@
 {
   "id": "ns03-pipe-steering",
   "north_star": 3,
-  "description": "gptr(\"Load the counts ...\") |> gptr(\"Now run a PCA ...\") |> gptr(\"Plot PC1 against PC2 ...\", model = opus): one session steered by the pipe, a model switch on the third prompt, one plot image.",
+  "description": "peter(\"Load the counts ...\") |> peter(\"Now run a PCA ...\") |> peter(\"Plot PC1 against PC2 ...\", model = opus): one session steered by the pipe, a model switch on the third prompt, one plot image.",
   "mode": "manual",
   "human": true,
   "preset": null,

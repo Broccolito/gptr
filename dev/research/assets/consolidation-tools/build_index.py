@@ -11,7 +11,7 @@ the R half is embedded below as R_ANALYZER and written next to the outputs on ev
 Usage:
     python3 build_index.py [--plan-dir DIR] [--spec-dir DIR] [--repo DIR] [--out DIR] [--quiet]
 
-Defaults: the gptr repository at /Users/wanjun/Desktop/gptr and the directory of this script as --out.
+Defaults: the repository that holds this script as --repo and a new temporary directory as --out.
 Nothing outside --out is written. Spec and plan files are only read.
 """
 
@@ -26,8 +26,8 @@ import re
 import subprocess
 import sys
 
-DEFAULT_REPO = "/Users/wanjun/Desktop/gptr"
 HERE = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_REPO = os.path.normpath(os.path.join(HERE, "../../../.."))
 
 # --------------------------------------------------------------------------------------------
 # R half (written to <out>/build_index_rparse.R and run with Rscript --vanilla)
@@ -583,7 +583,7 @@ DEP_PKGS = ["jsonlite", "curl", "processx", "callr", "rlang", "cli", "yaml", "ps
             "keyring", "codetools", "R6", "pkgload", "devtools", "roxygen2", "lintr", "styler"]
 QUOTERS = {"quote", "bquote", "expression", "substitute", "alist", "expr", "exprs", "quo", "quos", "~",
            "enquote", "deparse_call"}
-DSL_HOSTS = {"gptr"}
+DSL_HOSTS = {"peter"}
 DELIBERATE_MISSING_RE = re.compile(r"(not_exist|nonexist|no_such|does_not|undefined|bogus|nope|missing_fn|"
                                    r"not_a_|unknown_fn|fake_missing)")
 TYPE_NOTATION = {"chr", "lgl", "int", "num", "dbl", "df", "fn", "env", "raw", "cpl", "tbl", "vec", "list",

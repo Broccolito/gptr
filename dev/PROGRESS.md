@@ -92,6 +92,8 @@ Resume log (newest last):
 - 2026-10-05 (resume): hosted CI green on `2823b07` (run 37351073211, 13/13 jobs). P11 Task 3 WIP
   reverted (patch kept). Lanes: s1 (P13-S), prompt (P07-C, P07-S), core (P01-S, P05-C, P05-S, K-CLS),
   p17 (Tasks 10-12, acceptance), p15 (FIX-7, Tasks 17-18, acceptance); then the Stage B freeze.
+- 2026-10-05 (Stage B): REN-1/REN-2 renamed the entry point to `peter()` / `peter$` (D-135) in code,
+  tests, man, token baselines, specs and plans (`progress/simplicity.md`).
 
 - Active milestone: **M0**, finishing foundation integration across **P01–P04**.
 - Completed implementation plans: **0 / 25**. Original task baseline: 307;

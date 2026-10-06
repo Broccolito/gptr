@@ -26,16 +26,9 @@ fork's workspace is an overlay of the source's kept home: it reads every object 
 at zero cost, and its writes stay in the overlay.
 }
 \examples{
-s = gptr_last()
-if (!is.null(s)) {
-  f = gptr_fork(s)
-  f$turns
-}
-\dontshow{if (exists("gptr", mode = "function")) withAutoprint(\{ # examplesIf}
 fake = gptr_fake_provider(list("A", "B"))
-s = gptr("first", model = fake, envir = new.env())
+s = peter("first", model = fake, envir = new.env())
 f = gptr_fork(s)
-f |> gptr("branch")
+f |> peter("branch")
 c(s$turns, f$turns)
-\dontshow{\}) # examplesIf}
 }

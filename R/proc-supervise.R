@@ -477,7 +477,7 @@ job_list = function(kind = NULL) {
 
 #' List or stop gptr's background jobs and child processes
 #'
-#' Lists the job table of this R process: background sessions, `gptr$bg()` jobs, Shiny
+#' Lists the job table of this R process: background sessions, `peter$bg()` jobs, Shiny
 #' artifacts, the MCP server started by `gptr_mcp_serve()`, sub-agent workers and
 #' subscription-CLI children. A finished job whose stop was requested reads `stopped` or
 #' `aborted`, never `error`. Unavailable status information is shown as `unknown`.

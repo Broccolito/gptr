@@ -49,9 +49,9 @@ uses `=` and `|>` (S-9).
 | req-3 | blocker | 04 §11.4; 03 §5.8, §6.12, §9.1; conventions §8; lint | applied (alternative for `parallel`) | `ps` joins Imports (closure unchanged) behind `pid_alive()`; `parallel` is not imported: `rng_swap()` assigns an L'Ecuyer `.Random.seed` from hash-derived seeds without `set.seed()`, and the lint allows `.Random.seed` assignment only there and in `with_seed_preserved()` (IC-59, IC-61) |
 | req-4 | major | 04 §6.1.1, §1.3, §12.2; 03 §6.4 | applied | plain-symbol dots are read through a `get0()` leaf and never forced; calls and forwarded dots are forced (one in-run copy documented); `expect_no_copy(in_run_edit = TRUE)` rows for the three shapes (IC-41) |
 | req-5 | major | 04 route 50, §7.6, §7.15; 03 §6.9.3 | applied | a piped session is advanced in place by `session_replay_apply()`; otherwise `session_replay_new()` rebuilds from the JSONL or reconstructs the history from the document (`history_source = "reconstructed"`); fresh-clone test (IC-46) |
-| req-6 | major | 04 §6.1.1, §11.5; 03 §6.9.3, §7.3 | applied | top-level team and fan-out statements own one block (`kind=`, `children=`, one line per child, export wrappers, S2 text per child); block-nested `gptr()` statements replay from S2 by (block, ordinal); System 1 in blocks uses its cache; zero-request replay tests (IC-47) |
+| req-6 | major | 04 §6.1.1, §11.5; 03 §6.9.3, §7.3 | applied | top-level team and fan-out statements own one block (`kind=`, `children=`, one line per child, export wrappers, S2 text per child); block-nested `peter()` statements replay from S2 by (block, ordinal); System 1 in blocks uses its cache; zero-request replay tests (IC-47) |
 | req-7 | major | 04 route 50, §6.4, §11.2-11.3; 03 §4.1.1, §6.9.3; 05 P15 | applied | the route matches a located document that holds a block for the call, and replay needs no consent; write consent (`gptr_doc()` for every call of the process, the `record` option or user setting, an interactive yes) is checked only in `doc_upsert()`; the "trusted `record = auto`" wording is deleted because `record` only tightens (IC-45) |
-| req-8 | major | 04 §11.5; 03 §6.9.3 | applied | transcripts record `s_<hex> = gptr("...")` then `s_<hex> \|> gptr("...")`; `## Steer:`/`## Follow-up:` lines inside blocks, excluded from hashes; P15 test (IC-49) |
+| req-8 | major | 04 §11.5; 03 §6.9.3 | applied | transcripts record `s_<hex> = peter("...")` then `s_<hex> \|> peter("...")`; `## Steer:`/`## Follow-up:` lines inside blocks, excluded from hashes; P15 test (IC-49) |
 | req-9 | major | 04 §7.7, §7.8, §7.9; 03 §7.4 | applied | context placement `both`; `attached` and preloaded skills use it; P07 acceptance checks `<attached name="mtcars">` in the first request (IC-38) |
 | req-10 | major | 04 §6.1, §7.6, §7.8; 03 §5.1 | applied | precedence explicit `envir` (by `missing()`) > kept home > caller frame; a context symbol invisible from the evaluation environment fails fast; P08 test (IC-40) |
 | req-11 | major | 04 §7.1, §6.1.1, §7.7, §7.8, §6.2, §11.5 | applied (alternative predicate) | instead of making `gptr_has_human()` TRUE in IRkernel, a separate `gptr_can_prompt()` (TRUE with `jupyter.in_kernel`) decides every question (cran-6's split keeps streaming decisions separate); Jupyter blocks are shown as cell output and kept pending; `gptr_doc(path, sync = TRUE)` writes them (IC-43, IC-50) |
@@ -73,7 +73,7 @@ uses `=` and `|>` (S-9).
 | req-27 | minor | 04 §7.1; 03 §2.2 | applied | the `out` store is per session, with a spill-file fallback and RNG-free `o` + 6 hex ids (IC-71) |
 | req-28 | minor | S-9; 04 §11.5 | applied | best-effort rewrite of top-level `LEFT_ASSIGN` to `=` (never inside call arguments) (IC-48) |
 | req-29 | minor | 04 §6.5; S-1 | applied | `gptr_map()` is internal (behind `parallel =`); the export count stays 63 with `gptr_scrub()` (IC-36) |
-| req-30 | minor | 04 §9.4 | applied | `gptr$find(sort = "relevance")`; `gptr$grep(sort =)` for files and counts (IC-71) |
+| req-30 | minor | 04 §9.4 | applied | `peter$find(sort = "relevance")`; `peter$grep(sort =)` for files and counts (IC-71) |
 | req-31 | minor | 05 P19, P20 | applied | the fake CLI and the CLI leg of INFRA-16 move to P20 (IC-36) |
 | req-32 | minor | 03 §2.2; 04 §12.2 | applied | `helper-arch.R` parses `R/` (`test_path()` or `00_pkg_src`) and skips with a message when sources are missing (IC-33) |
 | req-33 | minor | 04 §8.5; 03 §8.3 | applied | `--allowedTools mcp__gptr__*` so the gate runs once, in `mcp_message`; `--permission-mode default`; per-session wire logs (IC-65) |
@@ -119,7 +119,7 @@ uses `=` and `|>` (S-9).
 | cons-5 | major | 04 §6.7, §6.8; IC-21, IC-22 | applied | signatures unified; `build = NULL` with a per-transport validator; provider fields `status`, `aliases`, `local`, `offline`, `rate`; P02 acceptance: every §6.8 example runs (IC-35) |
 | cons-6 | major | 04 §6.6; 05 P08 | applied | `gptr_prob()` moves to P13 (`s1-types.R`), so the M1 examples need no later plan (IC-36) |
 | cons-7 | major | 04 §5.3; 05 P08, P10; 03 §3.2 | applied | P08 owns every `gptr_gateway` method; P10 provides `ns.resolve`/`ns.names` (IC-36) |
-| cons-8 | major | 04 §9.4, §7.22; 03 §3.2; 05 P22 | applied | `gptr$out()` is P10's only (IC-36) |
+| cons-8 | major | 04 §9.4, §7.22; 03 §3.2; 05 P22 | applied | `peter$out()` is P10's only (IC-36) |
 | cons-9 | major | 04 §9.1, §9.4, §10.1-10.2, §7.10, §5.3 | applied | exposure is a default visibility; one spec per capability with `execute` and `fun`; presets choose direct tools from any spec with an `execute`; `$` resolves any un-namespaced spec with a `fun` (IC-37) |
 | cons-10 | major | 04 §7.9, §10.3, §7.7; 03 §7.4; 05 P07 | applied | placement `both` (IC-38; same fix as req-9) |
 | cons-11 | major | 04 §6.1.1; 03 §4.1.1 | applied | route order: `team` 15 and `fanout` 16 before `nested` 20, with nesting inherited (IC-39) |
@@ -127,7 +127,7 @@ uses `=` and `|>` (S-9).
 | cons-13 | major | 05 P01; conventions §4; 04 §12.3 | applied | `.lintr` with `operator = c("=", "<<-")` and an S3-method regex; `<-` found through parse tokens (IC-72) |
 | cons-14 | major | 05 P01, P25; 03 §3.5 | applied | P25 adds `VignetteBuilder: knitr` with the vignettes, a named exception (IC-72) |
 | cons-15 | major | 05 P19, P20; 03 §6.13, §6.18 | applied | the CLI leg of INFRA-16 and the fake CLI are P20's; P19 tests inline and worker (IC-36) |
-| cons-16 | minor | 05 P17, P09, P07 | applied | P17 depends on P10; P09 acceptance 3 uses `eval_r()` and the `gptr()` form moves to P10; P07 baselines use a fixed T1 fixture and compare only P07's texts byte for byte (IC-36, IC-68) |
+| cons-16 | minor | 05 P17, P09, P07 | applied | P17 depends on P10; P09 acceptance 3 uses `eval_r()` and the `peter()` form moves to P10; P07 baselines use a fixed T1 fixture and compare only P07's texts byte for byte (IC-36, IC-68) |
 | cons-17 | minor | 04 §7.1, §7.8, §5.3, §6.7, §7.12; 03 §2.2 | applied | `setting_get()` is the only reader; `ns.resolve`; `check_adapter()`; `registry_all("route")`; `fake_classify(model, state, questions, opts)` (IC-71) |
 | cons-18 | minor | 03 §5-§11 vs 04 | applied | 03's signature blocks now point to 04; the listed drifts fixed (reactor and evaluator signatures, tool-result fields, `detached`, queue `blocks`, `tool_call` error = block, doc-format fields, project-settings wording, `gptr_warning_deprecated`, experimental kinds incl. `route`, the manifest's `trials/search`, `tools.presets`) (IC-71) |
 | cons-19 | minor | register D-28; conventions §3-§5 | applied | D-28 = 63; the example predicate, the class-list pointer, `on.exit()`, the `:::` wording, the layout (`aaa-state.R`, `inst/templates/`, `inst/extdata/`) and `LICENSE.md` ownership fixed (IC-72) |
@@ -140,7 +140,7 @@ uses `=` and `|>` (S-9).
 
 | # | Sev. | Location | Verdict | What changed (or why a sub-proposal was declined) |
 |---|---|---|---|---|
-| fid-1 | major | 03 §7.3; 04 §9.3 | applied | no shipped text recommends `str()`; `gptr$describe(x)`, `dim()`, `head()` instead; a P07 test forbids `str(` in texts and skills; the skill states the cost (IC-67) |
+| fid-1 | major | 03 §7.3; 04 §9.3 | applied | no shipped text recommends `str()`; `peter$describe(x)`, `dim()`, `head()` instead; a P07 test forbids `str(` in texts and skills; the skill states the cost (IC-67) |
 | fid-2 | major | 03 §6.4 R8, §6.12; 04 §2 R8; 05 P09 | applied | the evaluator clears every `withVisible()` result in place; rows `L$a`, `(x)`, `get("x")`, `x@slot`, `x[["a"]]` (IC-67; re-ran wv4/wv6: 1 copy before, 0 after) |
 | fid-3 | major | 03 §5.1, §6.9.2 | applied | same fix as cran-1 (IC-59) |
 | fid-4 | major | 04 §7.3, §7.4; 03 §6.5 | applied | `child_env()` returns the complete vector; `child_env_callr()` gives callr's `NA` form; P03 test (IC-60; re-verified that processx rejects `NA`) |
@@ -155,7 +155,7 @@ uses `=` and `|>` (S-9).
 | fid-13 | minor | 04 §8.2; 05 P04 | applied | a locale-independent `parse_http_date()` with backoff fallback; tests under `de_DE` and `retry-after: soon` (IC-64) |
 | fid-14 | minor | 03 §6.18; 04 §8.1 | applied | model capability `forced_tool_choice`; `returns =` through `output_config.format` on Anthropic; `gptr_check()` rejects list `tool_choice` where unsupported (IC-71) |
 | fid-15 | minor | 04 §7.9; 03 §6.12 | applied | `q`/`quit` flagged in any position; alias tests (IC-67) |
-| fid-16 | minor | 03 §4.2; 05 P22 | applied | knitr shell engines run through `gptr$sh()` with the helper environment and a timeout (IC-67) |
+| fid-16 | minor | 03 §4.2; 05 P22 | applied | knitr shell engines run through `peter$sh()` with the helper environment and a timeout (IC-67) |
 | fid-17 | minor | 03 §6.14; 04 §7.18; 05 P18 | applied | refuse metadata without S256 PKCE; `iss` validation with gptr's own reader; state and redirect checks; negative mock cases (IC-71) |
 | fid-18 | minor | 04 §7.4 | applied | non-blocking buffered stdin drained by the reactor with a deadline; 4 MB echo test (IC-60) |
 | fid-19 | minor | 05 P17; conventions §4 | applied | string frontmatter keys keep their source text; `%||%` defined internally (IC-71, IC-32) |
@@ -171,9 +171,9 @@ uses `=` and `|>` (S-9).
 | plug-3 | major | 04 §7.0; 03 §2.2 | applied | services are owned by built-ins and filtered with them; a `service` kind for third parties; literal `ext_service_get()` calls visible to the layering test; `ctx$eval()`, `ctx$describe()`, `ctx$tokens()`; a `search_source` kind (IC-34, IC-69) |
 | plug-4 | major | 04 §11.11, §7.19 | applied | the worker spec carries rank-0 and user records, plugins and filters, re-registered by `worker_main()`; the serialisability rule; P19 test (IC-69) |
 | plug-5 | major | 03 §12.7, §3.5; 05 P01, P07, P24, P25 | applied | a CI `bench` job; the runner and NS-2/NS-3 in P07 (M1); per-plan fixtures; every gate in P24; a live release calibration with tolerances in P25 (IC-73) |
-| plug-6 | major | 03 §6.12, §12.2, §12.4; 04 §5.8, §7.9, §3.1 | applied | `gptr.r_max_images` = 3; later plots stored for `gptr$plot(k)`; image tokens in the budget; elision above provider limits; P09 test (IC-67) |
-| plug-7 | major | 04 §1.1, §6.1, §6.8, §7.7, §9.3, §9.4; 03 §11.1; 05 P24 | applied in part | `backend`, `gptr$app(kind =)`, `frontend` and `preset` are validated against the registry; a `preset` kind; a `frontend` setting; P24's `test-s11-conformance.R`. Declined: making `mode` a registry kind, because the permission model (levels x modes, `ask_human`, plan allowlist) is defined on the four modes; plugins extend it through `policy` records (IC-69) |
-| plug-8 | major | 04 §6.1, §7.8; 03 §11.1 | applied | `.opts` entries named by a plugin namespace, validated by its settings; named `gptr()` arguments documented as context (IC-44) |
+| plug-6 | major | 03 §6.12, §12.2, §12.4; 04 §5.8, §7.9, §3.1 | applied | `gptr.r_max_images` = 3; later plots stored for `peter$plot(k)`; image tokens in the budget; elision above provider limits; P09 test (IC-67) |
+| plug-7 | major | 04 §1.1, §6.1, §6.8, §7.7, §9.3, §9.4; 03 §11.1; 05 P24 | applied in part | `backend`, `peter$app(kind =)`, `frontend` and `preset` are validated against the registry; a `preset` kind; a `frontend` setting; P24's `test-s11-conformance.R`. Declined: making `mode` a registry kind, because the permission model (levels x modes, `ask_human`, plan allowlist) is defined on the four modes; plugins extend it through `policy` records (IC-69) |
+| plug-8 | major | 04 §6.1, §7.8; 03 §11.1 | applied | `.opts` entries named by a plugin namespace, validated by its settings; named `peter()` arguments documented as context (IC-44) |
 | plug-9 | major | 04 §10.6, §10.4, §4.9; 03 §6.11 | applied | `ctx$set_model()`, `ctx$add_tools()` with `session_add_tools()` (also for continuations with `tools =`), tool `render`, a `renderer` kind, the `request_params` patch event (IC-69) |
 | plug-10 | minor | 03 §7.2, §12.3-12.4; 04 §9.2 | applied | four frozen `r` schema variants (198 -> 189/170/138/119 tokens, measured) (IC-68) |
 | plug-11 | minor | 04 §5.3, §7.10, §9.1, §9.4, §7.22; 03 §3.2 | applied | reserved member and namespace names; plugin members require a namespace; `out` has one owner (IC-37, IC-36) |
@@ -222,7 +222,7 @@ uses `=` and `|>` (S-9).
 | cran-18 | running the SSE mock on httpuv | httpuv cannot stream a response without promises, which the conventions exclude; the mock keeps `serverSocket()` with token paths and one-test lifetime under `skip_on_cran()` |
 | plug-7 | a registry kind for permission modes | the permission model (levels x modes, `ask_human`, the plan allowlist) is defined on the four modes; plugins extend behaviour with `policy` records |
 | safe-8 | answering MCP-server requests asynchronously by queuing them | synchronous httpuv handlers can only defer through promises (excluded); the pump-depth rule and a retryable busy error give the same isolation |
-| safe-19 | handing a plan only to interactive calls or pipes from the plan session | NS-12 runs `gptr("...", mode = plan)` and `gptr("Go ahead ...", mode = auto)` as two script statements; the next-top-level-call rule keeps that working |
+| safe-19 | handing a plan only to interactive calls or pipes from the plan session | NS-12 runs `peter("...", mode = plan)` and `peter("Go ahead ...", mode = auto)` as two script statements; the next-top-level-call rule keeps that working |
 
 ## Files changed
 

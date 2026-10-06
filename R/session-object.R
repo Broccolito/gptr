@@ -270,7 +270,7 @@ final_text = function(path) {
 #' `$` and `[[` read a session: `text`, `value`, `values`, `usage`, `cost`, `history`,
 #' `messages`, `model`, `mode`, `status`, `reason`, `id`, `kind`, `file`, `turns`, `envir`,
 #' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
-#' Sessions are changed only through `gptr()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
+#' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
 #' signal `gptr_error_readonly`. Usage a provider did not report stays unknown: `cost` is `NA`
 #' when the cost of any request is unknown.
 #'
@@ -329,7 +329,7 @@ names.gptr_session = function(x) c(session_accessors, names(session_data(x)$chil
 session_readonly = function(field) {
   field = paste(as.character(field), collapse = "")
   gptr_abort(paste0("sessions are read-only: `", field, "` cannot be assigned; change a session ",
-                    "only through gptr() and the gptr_*() verbs"),
+                    "only through peter() and the gptr_*() verbs"),
              "readonly", object = "gptr_session", field = field)
 }
 
@@ -791,16 +791,10 @@ session_root_id = function(s) {
 #'   `"shared"`: the same home.
 #' @return A new idle `gptr_session`.
 #' @examples
-#' s = gptr_last()
-#' if (!is.null(s)) {
-#'   f = gptr_fork(s)
-#'   f$turns
-#' }
-#' @examplesIf exists("gptr", mode = "function")
 #' fake = gptr_fake_provider(list("A", "B"))
-#' s = gptr("first", model = fake, envir = new.env())
+#' s = peter("first", model = fake, envir = new.env())
 #' f = gptr_fork(s)
-#' f |> gptr("branch")
+#' f |> peter("branch")
 #' c(s$turns, f$turns)
 #' @export
 gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
@@ -830,7 +824,7 @@ gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   home = if (is.null(live)) NULL else live$home
   if (is.null(home)) {
     gptr_inform(paste0("session ", d$id, " has no kept workspace, so each turn of the fork ",
-                       "evaluates in the caller of that gptr() call"), "notice")
+                       "evaluates in the caller of that peter() call"), "notice")
   }
   new_home = home
   if (!is.null(home) && identical(envir, "overlay")) new_home = overlay_new(home, d$id)

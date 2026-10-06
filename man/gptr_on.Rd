@@ -24,7 +24,7 @@ Registers a session-scoped hook (rank 0) for one catalogued event (such as \code
 \verb{function(event, ctx)} and returns what the event allows. Forks never copy listeners.
 }
 \examples{
-s = gptr("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
 log = new.env()
 log$roles = character()
 off = gptr_on(s, "message_end", function(event, ctx) {

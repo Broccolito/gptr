@@ -4538,7 +4538,7 @@ risk_cmd_simple = function(w, root, cwd = root, depth = 0L, reserved = TRUE) {
       guarded(a)
     }
     # the code another interpreter runs may read the environment or a secret file; Python's is
-    # classified as gptr$py code is (its subprocess command lines included)
+    # classified as peter$py code is (its subprocess command lines included)
     if (!p %in% risk_cmd_shells) {
       code = risk_cmd_opt_values(a, c("--eval", "-Command", "-EncodedCommand"),
                                  c("-c", "-e", "-E", if (identical(p, "php")) "-r"))
@@ -6219,7 +6219,7 @@ risk_py_import_list = paste0("(?:\\((?:(?!\\bfrom\\b)(?:[^()#]|#[^\\n]*+))*|",
                              "(?:(?!\\bfrom\\b)(?:[^\\n\\\\]|\\\\[\\s\\S]))*)")
 
 risk_py_rules = list(
-  # gptr$py runs in R's own process: ending, aborting, replacing or killing it (or its parent,
+  # peter$py runs in R's own process: ending, aborting, replacing or killing it (or its parent,
   # its process group, every process) is q() (level 4, critical)
   list(4L, "critical", paste0("\\b_exit\\s*\\(|\\b(os|posix)\\.(abort|exec[a-z]*)\\s*\\(|",
                               "\\b(raise_signal|pthread_kill)\\s*\\(|",
@@ -6441,7 +6441,7 @@ risk_control_env = c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "G
                      "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE")
 risk_control_env_re = "^GPTR_|_BASE_URL$"
 
-#' Python's writes to the process environment, which is R's own (gptr$py runs in R's process,
+#' Python's writes to the process environment, which is R's own (peter$py runs in R's process,
 #' as its q()-equivalents are 4): an assignment to `environ[NAME]` (augmented, chained or in a
 #' tuple), `del environ[NAME]`, environ's pop(), setdefault(), __setitem__(), __delitem__(),
 #' update(), `|=`, clear() and popitem(), and putenv() and unsetenv() (`environb` too). A

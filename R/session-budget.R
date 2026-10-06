@@ -345,8 +345,7 @@ budget_near = function(run) {
 #' @return A `gptr_usage` or `gptr_ledger` data frame.
 #' @examples
 #' gptr_usage()
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_usage(s)
 #' @export
 gptr_usage = function(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE) {

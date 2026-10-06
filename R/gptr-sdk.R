@@ -131,9 +131,9 @@ sdk_control_other = function(ss, what) {
 #' @param s A session.
 #' @param turns The number of turns to advance (`Inf` for all).
 #' @return `s`, invisibly. A run that settles in status `error`, `blocked`, `budget` or
-#'   `max_turns` signals the condition documented in [gptr()].
+#'   `max_turns` signals the condition documented in [peter()].
 #' @examples
-#' s = gptr("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
+#' s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
 #'          envir = new.env())
 #' gptr_step(s)
 #' s$turns
@@ -166,8 +166,8 @@ gptr_step = function(s, turns = 1L) {
 #' @return `x`, invisibly. For a single session, a terminal status signals its condition.
 #' @examples
 #' fake = gptr_fake_provider(list("a"))
-#' runs = list(a = gptr("one", model = fake, .run = FALSE, envir = new.env()),
-#'             b = gptr("two", model = fake, .run = FALSE, envir = new.env()))
+#' runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
+#'             b = peter("two", model = fake, .run = FALSE, envir = new.env()))
 #' gptr_wait(runs, timeout = 10)
 #' vapply(runs, function(x) x$status, "")
 #' @export
@@ -210,7 +210,7 @@ gptr_wait = function(x, timeout = Inf) {
 #' @param as `"steer"` or `"follow_up"`.
 #' @return `s`, invisibly, at once.
 #' @examples
-#' s = gptr("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE,
+#' s = peter("Summarise mtcars", model = gptr_fake_provider(list("ok")), .run = FALSE,
 #'          envir = new.env())
 #' gptr_steer(s, "Use only the mpg column", as = "follow_up")
 #' @export
@@ -232,7 +232,7 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 #' @param x A session or a list of sessions.
 #' @return `x`, invisibly.
 #' @examples
-#' s = gptr("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
+#' s = peter("long task", model = gptr_fake_provider(list(list(hang = TRUE))), .run = FALSE,
 #'          envir = new.env())
 #' gptr_cancel(s)
 #' @export
@@ -258,7 +258,7 @@ gptr_cancel = function(x) {
 #' @param matcher `NULL`, a tool-name glob for tool events, or `function(event)` returning a flag.
 #' @return A function of no arguments that removes the hook, invisibly.
 #' @examples
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
 #' log = new.env()
 #' log$roles = character()
 #' off = gptr_on(s, "message_end", function(event, ctx) {

@@ -25,7 +25,8 @@ overrides its body.
   delete what is not needed. Unnecessary complexity is a defect in review (conventions section 11).
 - **Naming.** The package is `gptr`; the main entry point users call is `peter()` (in scripts and at
   the console), and its member namespace is `peter$...`. Other exports keep the `gptr_` prefix.
-  Older spec/plan text that says `gptr()` or `gptr$` means `peter()` / `peter$` (rename: D-135).
+  `dev/research`, `dev/spec/proposals`, `dev/progress` and DEVIATIONS predate D-135; there
+  `gptr()`/`gptr$` mean `peter()`/`peter$`.
   The name honours Peter Wason (System 1 / System 2 reasoning) and Peter Naur (Backus-Naur form;
   sessions recorded as runnable documents); keep that rationale in the README and `?peter`.
 - R style: assign with `=`, never `<-`; pipe with `|>`, never `%>%`. `.lintr` (created by P01 Task 1) enforces it.

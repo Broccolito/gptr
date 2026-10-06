@@ -789,7 +789,7 @@ test_that("tool additions and section patches are re-announced after a compactio
   prompt_freeze(s, list(interactive = FALSE))
   msg_entry(s, msg_user("hi"))
   target = model_resolve("fake/fake-1")
-  # one tool declared by value (tool_addition), one announced as a gptr$ member (without it)
+  # one tool declared by value (tool_addition), one announced as a peter$ member (without it)
   direct = new.env()
   direct$on = TRUE
   local_mocked_bindings(prompt_tool_addition = function(s) direct$on)
@@ -814,7 +814,7 @@ test_that("tool additions and section patches are re-announced after a compactio
     adds = unlist(lapply(o, function(m) vapply(m$tool_add %||% list(), function(t) t$name, "")))
     expect_identical(adds, "p07_probe")
     txt = vapply(o, msg_text, "")
-    expect_identical(sum(grepl("gptr$p07_rows(", txt, fixed = TRUE)), 1L)
+    expect_identical(sum(grepl("peter$p07_rows(", txt, fixed = TRUE)), 1L)
     expect_identical(sum(grepl("NEW RULE: always say banana", txt, fixed = TRUE)), 1L)
     expect_false(any(grepl("OLD RULE", txt, fixed = TRUE)))
     expect_identical(sum(txt == "Removed system prompt section \"mcp\"."), 1L)

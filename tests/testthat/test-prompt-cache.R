@@ -247,7 +247,7 @@ test_that("images elided on the path are projected and estimated as sent (IC-67)
   k = length(sent)
   expect_identical(unname(later$view[[paste("message", k)]]),
                    as.character(hash_sha256(prompt_message_json(sent[[k]]))))
-  expect_match(prompt_message_json(sent[[k]]), "[image omitted: gptr$plot(", fixed = TRUE)
+  expect_match(prompt_message_json(sent[[k]]), "[image omitted: peter$plot(", fixed = TRUE)
 })
 
 # ---- Task 11: the prefix guard ------------------------------------------------------------------

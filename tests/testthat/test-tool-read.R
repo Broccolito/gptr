@@ -184,7 +184,7 @@ test_that("macOS screenshot names are found through Pi's fallbacks", {
   expect_identical(read_resolve(file.path(td, "Capture d'cran.txt")), tool_path_norm(real))
 })
 
-test_that("gptr$read() gives gptr_lines with the contract attributes and prints within budget", {
+test_that("peter$read() gives gptr_lines with the contract attributes and prints within budget", {
   td = withr::local_tempdir()
   f = put(td, "hundred.txt", paste(sprintf("Line %d", 1:100), collapse = "\n"))
   v = read_lines_value(f, offset = 11, limit = 5)

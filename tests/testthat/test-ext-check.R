@@ -421,8 +421,8 @@ test_that("installed plugin packages: manifest, API, provides and bare identifie
   }
   objects = list(
     gptr_plugin = factory,
-    panel_review = function(file) gptr::gptr(paste("Review", file), model = opus),
-    with_arg = function(m, file) gptr(file, model = m, mode = "auto"),
+    panel_review = function(file) gptr::peter(paste("Review", file), model = opus),
+    with_arg = function(m, file) peter(file, model = m, mode = "auto"),
     with_local = function(file) {
       judge = "jev"
       gptr_agent("judge", description = "Judge", model = judge)
@@ -444,7 +444,7 @@ test_that("installed plugin packages: manifest, API, provides and bare identifie
   expect_false(ok[["code.identifiers"]])
   msg = res$message[res$check == "code.identifiers"]
   expect_match(msg, "panel_review: model = opus", fixed = TRUE)
-  # gptr() forces a local in its caller's frame; gptr_agent() stores it unevaluated (IC-34)
+  # peter() forces a local in its caller's frame; gptr_agent() stores it unevaluated (IC-34)
   expect_match(msg, "with_local: model = judge", fixed = TRUE)
   expect_false(grepl("with_arg", msg, fixed = TRUE))
   local_mocked_bindings(ext_pkg_path = function(pkg, ...) "")
@@ -504,7 +504,7 @@ test_that("checks see the live registry's records and services but never change 
     gptr$register(gptr_tool("x", "X", fun = function() 1, exposure = "r", namespace = "panel"))
   })
   expect_false(clash$ok[clash$check == "factory.load"])
-  expect_match(clash$message[clash$check == "factory.load"], "existing gptr$ member",
+  expect_match(clash$message[clash$check == "factory.load"], "existing peter$ member",
                fixed = TRUE)
   expect_identical(gptr_registry(), before)
   expect_identical(registry_env(), reg)
@@ -533,9 +533,9 @@ test_that("a session finalized during a check keeps its deferred shutdown (D-085
 test_that("the identifier scan knows arrow assignments and for-loop variables (IC-42)", {
   arrowed = function(file) NULL
   body(arrowed) = call("{", call(ext_binding_heads[[2]], as.name("judge"), "jev"),
-                       quote(gptr(file, model = judge)))
+                       quote(peter(file, model = judge)))
   looped = function(files) {
-    for (m in c("a", "b")) gptr(files, model = m)
+    for (m in c("a", "b")) peter(files, model = m)
   }
   bare = function(file) gptr_agent("x", description = "d", skills = statistics)
   expect_equal(ext_bare_identifiers(list(arrowed = arrowed, looped = looped)), character())

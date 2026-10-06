@@ -1,4 +1,4 @@
-# The `read` tool and `gptr$read()` (P10; research 11 section 5.5, research 21 section 2.2): Pi's
+# The `read` tool and `peter$read()` (P10; research 11 section 5.5, research 21 section 2.2): Pi's
 # read without line numbers, images by magic bytes, BOM/UTF-16/UTF-32/CP1252 decoding, line windows
 # over a raw newline index (sparse above 16 MiB), the 2,000-line/50 KB/token caps and `skill:` paths
 # (IC-68). Data files are never deserialised for a preview (CVE-2024-27322).
@@ -679,7 +679,7 @@ read_line_prefix = function(line, max_bytes) {
   as_utf8(rawToChar(utf8_trim_partial(b[seq_len(min(max_bytes, length(b)))])))
 }
 
-#' Shared core of read_file() and gptr$read(): kind (text, empty, image, binary), the window and
+#' Shared core of read_file() and peter$read(): kind (text, empty, image, binary), the window and
 #' notices
 #' @noRd
 read_core = function(path, offset = NULL, limit = NULL, budget_tokens = Inf) {
@@ -844,7 +844,7 @@ read_file = function(path, offset = NULL, limit = NULL,
   list(text = as_utf8(text), image = rc$image, details = details, value = value)
 }
 
-#' The value of `gptr$read()`: the window's lines as a `gptr_lines` vector (contract section 5.10)
+#' The value of `peter$read()`: the window's lines as a `gptr_lines` vector (contract section 5.10)
 #' An image file gives its note line; its block travels in attribute `image_block` until the member
 #' attaches it to the running `r` result.
 #' @noRd
@@ -852,7 +852,7 @@ read_lines_value = function(path, offset = NULL, limit = NULL) {
   read_lines_of(read_core(path, offset, limit, budget_tokens = Inf), path)
 }
 
-#' The `gptr_lines` of a read_core() window (shared by gptr$read() and the direct `read` value)
+#' The `gptr_lines` of a read_core() window (shared by peter$read() and the direct `read` value)
 #' @noRd
 read_lines_of = function(rc, path) {
   lines = switch(rc$kind,
@@ -867,7 +867,7 @@ read_lines_of = function(rc, path) {
             image_block = rc$image)
 }
 
-#' Print the lines of `gptr$read()` in Pi's read format within the member budget
+#' Print the lines of `peter$read()` in Pi's read format within the member budget
 #'
 #' @param x A `gptr_lines` vector.
 #' @param ... Ignored.

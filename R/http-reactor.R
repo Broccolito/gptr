@@ -191,7 +191,7 @@ reactor_run_remove = function(run) {
 #'
 #' later::run_now() rethrows the first error of a callback; like every other callback error in
 #' the pump it becomes a registry diagnostic, so a failing httpuv handler or background tick
-#' cannot abort the caller's gptr() call. Interrupts still propagate.
+#' cannot abort the caller's peter() call. Interrupts still propagate.
 #' @noRd
 later_run_now = function() {
   if (!isNamespaceLoaded("later")) return(invisible(FALSE))
@@ -299,7 +299,7 @@ reactor_wait_ms = function(r, allow_runs, slice_ms, t_end) {
 #' A task that asked to run again in the next iteration (it returned TRUE or NULL) counts as due
 #' 5 ms from now, not now: tasks run once per iteration, but they never shorten the wait to
 #' zero. P06's `run_drive()` and P05's abort watcher return TRUE for the whole of a request, so
-#' a zero wait would make every gptr() call spin a CPU core while it waits for the model. A task
+#' a zero wait would make every peter() call spin a CPU core while it waits for the model. A task
 #' whose call is still running (a pump nested inside it) is not due at all.
 #' @noRd
 reactor_next_due = function(r) {

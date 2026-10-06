@@ -1,4 +1,4 @@
-# The `write` tool and `gptr$write()` (P10; research 11 section 5.5): an atomic replace that keeps
+# The `write` tool and `peter$write()` (P10; research 11 section 5.5): an atomic replace that keeps
 # an existing file's line endings, BOM, encoding and mode bits. A symlink is resolved first because
 # rename() would replace the link; new files are written verbatim with the umask's mode, and an
 # existing file the process may not write is refused with EACCES, as in Pi.

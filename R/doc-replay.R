@@ -86,7 +86,7 @@ doc_control_guard = function(what) {
                       "during a run."),
                "Only you can make this change: call it yourself outside the run."),
              "permission", action = what, tool = run$tool_call[["name"]] %||% "r", risk = 4L,
-             how_to_allow = "call it yourself outside gptr(), or approve the r call when asked",
+             how_to_allow = "call it yourself outside peter(), or approve the r call when asked",
              session = run$session)
 }
 
@@ -171,7 +171,7 @@ doc_decide = function(site, prompt_hash, args_hash, mode) {
   switch(state,
     none = {
       if (identical(mode, "replay")) {
-        gptr_abort(c(paste0("The gptr() call in ", rel, " has no recorded block and replay mode ",
+        gptr_abort(c(paste0("The peter() call in ", rel, " has no recorded block and replay mode ",
                             "is on."), "Run it once with replay = \"auto\" to record it."),
                    "not_recorded", document = site$path,
                    prompt = substr(site$template %||% "", 1L, 60L))
@@ -290,7 +290,7 @@ doc_replay_call = function(call, site, mode = "replay") {
   s
 }
 
-#' A gptr() statement directly inside an agent block (IC-47): replayed from S2 under (document,
+#' A peter() statement directly inside an agent block (IC-47): replayed from S2 under (document,
 #' block, "n<ordinal>") in `auto`, `record` and `replay` (a miss under `replay` errors
 #' `not_recorded`), run live otherwise; it is never recorded. A cached answer whose `sent`
 #' prompt hash differs from this call's prompt is a miss.
@@ -313,7 +313,7 @@ doc_run_block_nested = function(call, site, mode) {
   }
   if (is.null(rec)) {
     if (identical(mode, "replay")) {
-      gptr_abort(c(paste0("The gptr() call inside block ", site$in_block, " of ", rel,
+      gptr_abort(c(paste0("The peter() call inside block ", site$in_block, " of ", rel,
                           " has no cached answer and replay mode is on."),
                    "Run the document once with replay = \"auto\" to cache it."), "not_recorded",
                  document = site$path, prompt = substr(site$template %||% "", 1L, 60L))
@@ -380,7 +380,7 @@ doc_console_may_record = function(call) {
 }
 
 #' Recover a dead process's deferred writes for the document of a located call (IC-51: the next
-#' gptr() touching that document), as the route and doc.replay both do before they decide. A
+#' peter() touching that document), as the route and doc.replay both do before they decide. A
 #' failing recovery is a diagnostic under `where`, so it never turns a replay into a live call. A
 #' recovery written to disk may hold this very call's block, so the call is then located again
 #' and that site is returned when `keep(site)` still holds: its recovered block is replayed
@@ -469,7 +469,7 @@ doc_route_run = function(call) {
 # ---- services (contract 7.0; owned by builtin:documents, IC-34) --------------------------------
 
 #' doc.site: the document a session records into (its replayed block's document, the site of
-#' its current run; without a session, as P10's gptr$edit() member calls it, the site of the
+#' its current run; without a session, as P10's peter$edit() member calls it, the site of the
 #' innermost running call), else the process binding of gptr_doc() while its directory exists,
 #' as list(path, format), or NULL
 #' @noRd
@@ -868,7 +868,7 @@ doc_console_append = function(lines, session = NULL) {
 
 #' Bind this R process to a history document
 #'
-#' `gptr_doc(path)` binds every `gptr()` call of this R process, at the console and in scripts,
+#' `gptr_doc(path)` binds every `peter()` call of this R process, at the console and in scripts,
 #' to a history document, and is your explicit consent that gptr writes agent blocks into it.
 #' Nothing is written until a block is recorded. `gptr_doc(FALSE)` removes the binding and
 #' `gptr_doc()` shows it. `sync = TRUE` writes the blocks that were recorded while the document
@@ -964,7 +964,7 @@ doc_bind_format = function(full, format) {
 #' @export
 #' @examples
 #' f = tempfile(fileext = ".R")
-#' writeLines(c('gptr("add one")',
+#' writeLines(c('peter("add one")',
 #'              "# >>> gptr:7f3a21 model=fake/fake-1 date=2026-09-29 prompt=3b1c9a0e77d2",
 #'              "x = 1 + 1", "# <<< gptr:7f3a21"), f)
 #' gptr_blocks(f)
@@ -1236,7 +1236,7 @@ doc_catalog_prune = function() {
 #' Source a history document, regenerating stale blocks without running the old code
 #'
 #' Evaluates `file` top-level expression by expression in `envir`, like [source()] with
-#' `keep.source = TRUE`. A `gptr()` call whose block is fresh replays without calling a model
+#' `keep.source = TRUE`. A `peter()` call whose block is fresh replays without calling a model
 #' and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
 #' values interpolated into it changed), or every call under `replay = "live"`, asks the model
 #' again and rewrites its block in place, and the old block is skipped, which base `source()`
@@ -1245,7 +1245,7 @@ doc_catalog_prune = function() {
 #' @param file Path of an `.R` document.
 #' @param replay Replay mode for the calls in the file: `"auto"`, `"replay"`, `"live"` or
 #'   `"record"`. A call's own `replay =` argument wins. Left missing, each call resolves its
-#'   mode as `gptr()` does: the `gptr.replay` option, then the `GPTR_REPLAY` environment
+#'   mode as `peter()` does: the `gptr.replay` option, then the `GPTR_REPLAY` environment
 #'   variable, then the `replay` setting, then `"auto"`.
 #' @param envir Environment in which the expressions are evaluated.
 #' @param echo `TRUE` prints each expression before it is evaluated.

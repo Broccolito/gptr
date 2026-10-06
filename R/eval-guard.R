@@ -349,11 +349,6 @@ eval_assign_targets = function(exprs) {
   unique(acc$out)
 }
 
-#' The call `gptr::<name>`, built with call()
-#' R CMD check reads a literal `gptr::name`, even quoted, as a use of an export (CI-4).
-#' @noRd
-eval_guard_ns_call = function(name) call("::", as.symbol("gptr"), as.symbol(name))
-
 #' Rewrite one expression for gptr_shim()
 #' @noRd
 eval_guard_shim_rewrite = function(e, need_g, need_r) {
@@ -361,10 +356,10 @@ eval_guard_shim_rewrite = function(e, need_g, need_r) {
   head = e[[1L]]
   if (is.symbol(head)) {
     nm = as.character(head)
-    if (need_g && identical(nm, "gptr")) e[[1L]] = eval_guard_ns_call("gptr")
-    if (need_r && identical(nm, "gptr_return")) e[[1L]] = eval_guard_ns_call("gptr_return")
-    if (need_g && nm %in% c("$", "[[") && length(e) >= 2L && identical(e[[2L]], quote(gptr))) {
-      e[[2L]] = eval_guard_ns_call("gptr")
+    if (need_g && identical(nm, "peter")) e[[1L]] = quote(gptr::peter)
+    if (need_r && identical(nm, "gptr_return")) e[[1L]] = quote(gptr::gptr_return)
+    if (need_g && nm %in% c("$", "[[") && length(e) >= 2L && identical(e[[2L]], quote(peter))) {
+      e[[2L]] = quote(gptr::peter)
     }
   } else {
     e[[1L]] = eval_guard_shim_rewrite(head, need_g, need_r)
@@ -386,12 +381,12 @@ eval_guard_shim_all = function(exprs, need_g, need_r) {
   exprs
 }
 
-#' Reach gptr() and gptr_return() through gptr:: when they are not visible from `envir`
-#' Rewrites calls headed by `gptr`, `gptr$m`, `gptr[["m"]]` and `gptr_return`; binds nothing,
+#' Reach peter() and gptr_return() through gptr:: when they are not visible from `envir`
+#' Rewrites calls headed by `peter`, `peter$m`, `peter[["m"]]` and `gptr_return`; binds nothing,
 #' forces no promise and keeps srcrefs; recorded code keeps the model's text (04 section 7.9).
 #' @noRd
 gptr_shim = function(exprs, envir) {
-  need_g = !exists("gptr", envir = envir)
+  need_g = !exists("peter", envir = envir)
   need_r = !exists("gptr_return", envir = envir)
   if (!need_g && !need_r) return(exprs)
   eval_guard_shim_all(exprs, need_g, need_r)

@@ -1,4 +1,4 @@
-# The `gptr$` namespace (P10; IC-36, IC-37, IC-68; research G5, G1 sections 2.5, 2.8, 06 section
+# The `peter$` namespace (P10; IC-36, IC-37, IC-68; research G5, G1 sections 2.5, 2.8, 06 section
 # 5.7): member prints within token budgets, the r-call marker, member closures built from tool specs
 # by replacing formals() (never the environment), resolution services, plugin and MCP `gptr_ns`
 # nodes, BM25 search, help, the file-tool specs, their `<rules>` and `builtin:tools`.
@@ -116,7 +116,7 @@ ns_print_lines = function(lines) {
   invisible(NULL)
 }
 
-#' A character result (`gptr$help()`, `gptr$out()`) that prints within the member budget
+#' A character result (`peter$help()`, `peter$out()`) that prints within the member budget
 #' @noRd
 new_gptr_text = function(x) structure(as_utf8(as.character(x)), class = c("gptr_text", "character"))
 
@@ -213,7 +213,7 @@ member_signature = function(spec) {
       return(ns_signature_line(qualified, function(...) NULL, spec$description))
     }
     schema = if (is.list(spec$parameters)) spec$parameters else ns_formals_schema(spec$fun)
-    return(schema_signature(qualified, schema, description = spec$description, prefix = "gptr$"))
+    return(schema_signature(qualified, schema, description = spec$description, prefix = "peter$"))
   }
   fun = spec$fun
   if (!is.function(fun)) {
@@ -233,11 +233,11 @@ ns_spec_line = function(spec, key) {
   if (!is.character(sig) || length(sig) != 1L || !nzchar(sig)) return(NULL)
   sentence = first_sentence(as.character(decl$description %||% ""))
   ns = if (grepl("/", key, fixed = TRUE)) paste0(sub("/.*$", "", key), "$") else ""
-  paste0("gptr$", ns, sig, if (nzchar(sentence)) paste0("  # ", sentence))
+  paste0("peter$", ns, sig, if (nzchar(sentence)) paste0("  # ", sentence))
 }
 
-#' Is an un-namespaced spec a `gptr$` member? A `fun`, or an `execute` when the spec is `deferred`
-#' (contract 9.1: "found only through gptr$search() (still callable)"), and not `hidden` (IC-37)
+#' Is an un-namespaced spec a `peter$` member? A `fun`, or an `execute` when the spec is `deferred`
+#' (contract 9.1: "found only through peter$search() (still callable)"), and not `hidden` (IC-37)
 #' @noRd
 ns_member_ok = function(spec) {
   !is.null(spec) && !isTRUE(spec$lazy) && is.null(spec$namespace) &&
@@ -245,12 +245,12 @@ ns_member_ok = function(spec) {
     (is.function(spec$fun) || (identical(spec$exposure, "deferred") && is.function(spec$execute)))
 }
 
-#' `gptr$<name>(<formals>)  # <first sentence>`
+#' `peter$<name>(<formals>)  # <first sentence>`
 #' @noRd
 ns_signature_line = function(name, fun, description, dots = TRUE) {
   sentence = first_sentence(description %||% "")
   comment = if (nzchar(sentence)) paste0("  # ", sentence)
-  paste0("gptr$", name, ns_formals_text(fun, dots), comment)
+  paste0("peter$", name, ns_formals_text(fun, dots), comment)
 }
 
 #' Names of formals without a default (`...` excluded)
@@ -269,7 +269,7 @@ ns_check_required = function(frame, required, tool_name) {
   for (nm in required) {
     if (eval(as.call(list(base::missing, as.name(nm))), frame)) {
       shown = sub("/", "$", tool_name, fixed = TRUE)
-      gptr_abort(paste0("gptr$", shown, "(): argument `", nm, "` is missing."),
+      gptr_abort(paste0("peter$", shown, "(): argument `", nm, "` is missing."),
                  "invalid_argument", arg = nm, expected = "a value")
     }
   }
@@ -338,7 +338,7 @@ ns_generated_fun = function(fmls, exec, tool_name) {
   f
 }
 
-#' `gptr$describe(x, budget = 150L)`: gptr_describe() of the object as printable text
+#' `peter$describe(x, budget = 150L)`: gptr_describe() of the object as printable text
 #' Copy safety R4: `x` reaches only the describer's leaf functions; nothing keeps it.
 #' @noRd
 member_describe = function(x, budget = 150L) {
@@ -362,7 +362,7 @@ ns_routed_patch = function(path, res) {
   new_gptr_patch(path, ns_result_text(res), d$diff %||% character(), d$n_edits %||% 1L, d$fuzzy)
 }
 
-#' `gptr$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`; an edit the document backend
+#' `peter$edit(path, edits, replace_all = FALSE)`: a `gptr_patch`; an edit the document backend
 #' refused (an error result, e.g. a block the user edited by hand) signals gptr_error_tool
 #' @noRd
 member_edit = function(path, edits, replace_all = FALSE) {
@@ -435,7 +435,7 @@ member_closure = function(spec) {
 #' @export
 #' @noRd
 print.gptr_member = function(x, ...) {
-  ns_print_lines(attr(x, "signature") %||% "<gptr member>")
+  ns_print_lines(attr(x, "signature") %||% "<peter member>")
   invisible(x)
 }
 
@@ -486,7 +486,7 @@ ns_refuse = function(name, why) {
   if (exists(name, envir = ns_refused, inherits = FALSE)) return(invisible(NULL))
   assign(name, TRUE, envir = ns_refused)
   registry_diagnostic("builtin:tools", "member_refused", "invalid_spec",
-                      paste0("gptr$", name, " refused: ", why))
+                      paste0("peter$", name, " refused: ", why))
   invisible(NULL)
 }
 
@@ -538,7 +538,7 @@ ns_plugin_namespaces = function(sid = NULL, members = ns_member_names(sid)) {
   sort(ns[!(ns %in% taken)], method = "radix")
 }
 
-#' Names completing `gptr$` (the `ns.names` service behind P08's `.DollarNames.gptr_gateway`)
+#' Names completing `peter$` (the `ns.names` service behind P08's `.DollarNames.gptr_gateway`)
 #' Sorted member, provider and plugin-namespace names matching completion `pattern` ("" for all).
 #' @noRd
 ns_names = function(pattern) {
@@ -567,7 +567,7 @@ ns_node = function(path, kind = "plugin", members = NULL, signatures = NULL) {
 }
 
 #' Register a namespace provider (contract section 7.10): `fun(path)` returns a member closure or a
-#' `gptr_ns` node for `gptr$<name>$...` (P18 registers "mcp")
+#' `gptr_ns` node for `peter$<name>$...` (P18 registers "mcp")
 #' @noRd
 ns_register_provider = function(name, fun) {
   check_string(name, "name")
@@ -584,13 +584,14 @@ ns_register_provider = function(name, fun) {
 #' @noRd
 ns_unknown = function(path) {
   avail = ns_names("")
-  gptr_abort(paste0("gptr$", paste(path, collapse = "$"), " is not a gptr member. Members: ",
+  gptr_abort(paste0("peter$", paste(path, collapse = "$"), " is not a peter member. Members: ",
                     paste(avail, collapse = ", "), "."),
              "unknown_member", name = paste(path, collapse = "$"), available = avail)
 }
 
-#' Resolve `gptr$<a>` or `gptr$<a>$<b>...` (the `ns.resolve` service behind P08's `$.gptr_gateway`)
-#' Registry lookups and closure construction only, no I/O: a member closure or a `gptr_ns` node.
+#' Resolve `peter$<a>` or `peter$<a>$<b>...` (the `ns.resolve` service behind P08's
+#' `$.gptr_gateway`). Registry lookups and closure construction only, no I/O: a member closure
+#' or a `gptr_ns` node.
 #' @noRd
 ns_resolve = function(path) {
   check_strings(path, "path")
@@ -625,14 +626,14 @@ ns_resolve = function(path) {
 #' @export
 #' @noRd
 `$<-.gptr_ns` = function(x, name, value) {
-  gptr_abort("gptr namespaces are read-only.", "readonly", object = "gptr_ns",
+  gptr_abort("peter namespaces are read-only.", "readonly", object = "gptr_ns",
              field = as.character(name))
 }
 
 #' @export
 #' @noRd
 `[[<-.gptr_ns` = function(x, i, ..., value) {
-  gptr_abort("gptr namespaces are read-only.", "readonly", object = "gptr_ns",
+  gptr_abort("peter namespaces are read-only.", "readonly", object = "gptr_ns",
              field = as.character(i))
 }
 
@@ -678,13 +679,13 @@ print.gptr_ns = function(x, ...) {
     vapply(nms, function(n) {
       key = paste0(path[1L], "/", n)
       line = if (is.null(specs[[key]])) NULL else ns_spec_line(specs[[key]], key)
-      line %||% paste0("gptr$", path[1L], "$", n)
+      line %||% paste0("peter$", path[1L], "$", n)
     }, "", USE.NAMES = FALSE)
   } else {
-    paste0("gptr$", paste(path, collapse = "$"), "$", nms)
+    paste0("peter$", paste(path, collapse = "$"), "$", nms)
   }
   shown = budget_head(lines, member_budget())
-  title = paste0("<gptr namespace gptr$", paste(path, collapse = "$"), ": ", length(nms),
+  title = paste0("<peter namespace peter$", paste(path, collapse = "$"), ": ", length(nms),
                  " members>")
   more = if (shown$omitted > 0L) paste0("(+ ", shown$omitted, " more: names(x))")
   ns_print_lines(c(title, shown$lines, more))
@@ -695,7 +696,7 @@ print.gptr_ns = function(x, ...) {
 
 ns_plugins_header = paste(
   "Plugin functions are R functions called inside r. They return R values; assign and summarise",
-  "them before printing. gptr$search(\"words\") finds more and gptr$help(\"<ns>/<name>\") shows",
+  "them before printing. peter$search(\"words\") finds more and peter$help(\"<ns>/<name>\") shows",
   "a full schema."
 )
 
@@ -946,7 +947,7 @@ ns_catalog_docs = function(session) {
       }
       tool = regmatches(ln, regexec("^\\s+([A-Za-z0-9_.-]+)\\(", ln))[[1L]]
       if (length(tool) && nzchar(server)) {
-        sig = paste0("gptr$mcp$", server, "$", trimws(ln))
+        sig = paste0("peter$mcp$", server, "$", trimws(ln))
         rows[[length(rows) + 1L]] = data.frame(id = paste0(server, "/", tool[2L]),
                                                text = paste(server, ln), kind = "mcp",
                                                signature = sig, stringsAsFactors = FALSE)
@@ -962,7 +963,7 @@ ns_catalog_docs = function(session) {
 
 # ---- member functions (contract section 9.4) -----------------------------------------------------
 
-#' `gptr$search(words, limit = 8L)`: BM25 over members, tools, sources, skills and MCP tools
+#' `peter$search(words, limit = 8L)`: BM25 over members, tools, sources, skills and MCP tools
 #' Documents are indexed by row, so sources sharing an id keep their kind and signature; a tool's
 #' signature is its catalog line (a lazy plugin's declared one), any other document's its id.
 #' @noRd
@@ -1053,7 +1054,7 @@ ns_plugin_spec = function(key, sid = NULL) {
   spec
 }
 
-#' `gptr$help(name, package = NULL, budget = 800L)`: the schema of a member, a plugin function
+#' `peter$help(name, package = NULL, budget = 800L)`: the schema of a member, a plugin function
 #' (`"<ns>/<name>"`) or an MCP tool (`"<server>/<tool>"`) that resolves (IC-37), else R help
 #' @noRd
 member_help = function(name, package = NULL, budget = 800L) {
@@ -1098,8 +1099,8 @@ ns_last_plots = function(session) {
   none
 }
 
-#' `gptr$plot(which = NULL, width = 1000L, height = 700L)`: attach the device's plot, or stored plot
-#' `which` of the last `r` result (IC-67), to the running `r` result; invisible NULL
+#' `peter$plot(which = NULL, width = 1000L, height = 700L)`: attach the device's plot, or stored
+#' plot `which` of the last `r` result (IC-67), to the running `r` result; invisible NULL
 #' @noRd
 member_plot = function(which = NULL, width = 1000L, height = 700L) {
   which = check_number(which, "which", min = 1, int = TRUE, null = TRUE)
@@ -1107,7 +1108,7 @@ member_plot = function(which = NULL, width = 1000L, height = 700L) {
   height = check_number(height, "height", min = 64, max = 4000, int = TRUE)
   rc = ns_r_call()
   if (is.null(rc)) {
-    gptr_inform("gptr$plot() attaches a plot to a running r call; there is none here.", "notice")
+    gptr_inform("peter$plot() attaches a plot to a running r call; there is none here.", "notice")
     return(invisible(NULL))
   }
   block = if (is.null(which)) {
@@ -1138,8 +1139,9 @@ member_plot = function(which = NULL, width = 1000L, height = 700L) {
   invisible(NULL)
 }
 
-#' `gptr$out(id, stream = c("stdout", "stderr"), lines = NULL)`: the stored full text of a truncated
-#' result (the session's out store, the process store, then the spill file; P01 out_get())
+#' `peter$out(id, stream = c("stdout", "stderr"), lines = NULL)`: the stored full text of a
+#' truncated result (the session's out store, the process store, then the spill file; P01
+#' out_get())
 #' @noRd
 member_out = function(id, stream = c("stdout", "stderr"), lines = NULL) {
   check_string(id, "id")
@@ -1154,8 +1156,8 @@ member_out = function(id, stream = c("stdout", "stderr"), lines = NULL) {
   new_gptr_text(out_get(id, stream = stream, lines = lines, session = live))
 }
 
-#' `gptr$read(path, offset = NULL, limit = NULL)`: a `gptr_lines` value; an image is attached to the
-#' running `r` result
+#' `peter$read(path, offset = NULL, limit = NULL)`: a `gptr_lines` value; an image is attached to
+#' the running `r` result
 #' @noRd
 member_read = function(path, offset = NULL, limit = NULL) {
   v = read_lines_value(path, offset, limit)
@@ -1165,7 +1167,7 @@ member_read = function(path, offset = NULL, limit = NULL) {
   v
 }
 
-#' `gptr$write(path, content)`: the absolute path written, invisibly
+#' `peter$write(path, content)`: the absolute path written, invisibly
 #' @noRd
 member_write = function(path, content) invisible(write_file(path, content)$details$path)
 
@@ -1176,14 +1178,14 @@ ns_member_dots = function(dots, allowed, member) {
   bad = nms[!(nms %in% allowed)]
   if (length(bad)) {
     shown = if (any(nzchar(bad))) paste(bad[nzchar(bad)], collapse = ", ") else "unnamed"
-    gptr_abort(paste0("gptr$", member, "(): unused argument(s): ", shown, "."),
+    gptr_abort(paste0("peter$", member, "(): unused argument(s): ", shown, "."),
                "invalid_argument", arg = "...",
-               expected = paste0("the arguments of gptr$", member, "()"))
+               expected = paste0("the arguments of peter$", member, "()"))
   }
   dots
 }
 
-#' `gptr$grep()` (contract section 9.4); `ignoreCase` and `literal` (the direct tool's names) are
+#' `peter$grep()` (contract section 9.4); `ignoreCase` and `literal` (the direct tool's names) are
 #' accepted as aliases of `ignore_case` and `fixed`
 #' @noRd
 member_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE,
@@ -1196,14 +1198,14 @@ member_grep = function(pattern, path = ".", glob = NULL, ignore_case = FALSE, fi
               context = context, limit = limit, output = output, sort = sort)
 }
 
-#' `gptr$find()` (contract section 9.4)
+#' `peter$find()` (contract section 9.4)
 #' @noRd
 member_find = function(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"),
                        type = "file", limit = 1000L) {
   search_find(pattern, path = path, sort = sort, type = type, limit = limit)
 }
 
-#' `gptr$ls()` (contract section 9.4); `limit` (the direct tool's argument) keeps the first entries
+#' `peter$ls()` (contract section 9.4); `limit` (the direct tool's argument) keeps the first entries
 #' @noRd
 member_ls = function(path = ".", sort = c("name", "mtime", "size"), long = FALSE, ...) {
   dots = ns_member_dots(list(...), "limit", "ls")
@@ -1368,7 +1370,7 @@ tool_describe_execute = function(input, ctx) {
 tool_plot_execute = function(input, ctx) {
   if (!member_nested(ctx)) {
     return(gptr_tool_result(paste("plot attaches a plot to the result of a running r call; call",
-                                  "gptr$plot() inside r."), is_error = TRUE))
+                                  "peter$plot() inside r."), is_error = TRUE))
   }
   member_plot(input$which, input$width %||% 1000L, input$height %||% 700L)
   gptr_tool_result("plot attached to the r result", value = NULL)
@@ -1555,18 +1557,18 @@ tool_write_guidelines = "Use write only for new files or complete rewrites."
 
 # The <r_session> fragments of builtin:tools (architecture section 7.3; IC-68)
 r_session_helpers_text = paste(
-  "- Helpers are R functions on the gptr object and return R values: gptr$grep(pattern, path),",
-  "gptr$find(pattern, path, sort), gptr$ls(path), gptr$describe(x). gptr$search(\"words\") and",
-  "gptr$help(name) find more."
+  "- Helpers are R functions on the peter object and return R values: peter$grep(pattern, path),",
+  "peter$find(pattern, path, sort), peter$ls(path), peter$describe(x). peter$search(\"words\") and",
+  "peter$help(name) find more."
 )
 r_session_out_text = paste(
-  "- Long output is cut to its head and tail; the notice names gptr$out(id) for the rest. Use",
-  "gptr$out(), gptr$help(), gptr$search() and gptr$plot() only with record = false."
+  "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest. Use",
+  "peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
 )
 
 # Member-only capabilities: descriptions and schemas
 tool_help_description = paste(
-  "Show the full schema of a gptr member, a plugin function (\"<ns>/<name>\") or an MCP tool",
+  "Show the full schema of a peter member, a plugin function (\"<ns>/<name>\") or an MCP tool",
   "(\"<server>/<tool>\"), or else the R help page of a topic."
 )
 tool_help_schema = tool_obj(
@@ -1576,7 +1578,7 @@ tool_help_schema = tool_obj(
   budget = tool_prop("number", "Token budget (default 800)")
 )
 tool_search_description = paste(
-  "Search gptr members, plugin functions, MCP tools and skills by keywords (BM25). Returns name,",
+  "Search peter members, plugin functions, MCP tools and skills by keywords (BM25). Returns name,",
   "kind, signature and score."
 )
 tool_search_schema = tool_obj(

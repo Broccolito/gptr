@@ -515,14 +515,14 @@ ext_local_names = function(f) {
 #' Bare identifiers passed to gptr's identifier arguments in package code (IC-42): a symbol that
 #' is neither local nor a binding of the package or base makes R CMD check report "no visible
 #' binding" and should be a string. gptr_agent() stores `model` and `skills` unevaluated (IC-34)
-#' and the gateway resolves them in the frame of a later gptr() call, where the package
+#' and the gateway resolves them in the frame of a later peter() call, where the package
 #' function's locals and objects are not visible, so every bare symbol there is reported (use a
 #' string, or I(x) for a variable's value)
 #' @noRd
 ext_bare_identifiers = function(objects) {
   args = c("model", "mode", "preset", "skills", "agents", "tools", "plugins", "extensions",
            "backend")
-  heads = c("gptr", "gptr_agent", "gptr_parallel")
+  heads = c("peter", "gptr_agent", "gptr_parallel")
   known = names(objects)
   acc = new.env(parent = emptyenv())
   acc$found = character()

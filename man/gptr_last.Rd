@@ -16,8 +16,6 @@ Returns the most recently active session of this R process. It is held strongly 
 \examples{
 s = gptr_last()
 is.null(s) || inherits(s, "gptr_session")
-\dontshow{if (exists("gptr", mode = "function")) withAutoprint(\{ # examplesIf}
-s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 identical(gptr_last(), s)
-\dontshow{\}) # examplesIf}
 }

@@ -11,7 +11,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Typed, vectorised System 1 decisions (`gptr(question, x, model = jev)`) that drop into `if`, `for` and `while`, answered by the TypeSafe Jev API (or an opt-in, uncalibrated emulation) on gptr's own reactor, cached per element and reachable from plugins and routers through `ctx$decide()` (REQ-20, INFRA-18).
+**Goal:** Typed, vectorised System 1 decisions (`peter(question, x, model = jev)`) that drop into `if`, `for` and `while`, answered by the TypeSafe Jev API (or an opt-in, uncalibrated emulation) on gptr's own reactor, cached per element and reachable from plugins and routers through `ctx$decide()` (REQ-20, INFRA-18).
 
 **Architecture:** One L1 file, `s1-types.R`, holds the three classed vectors (`gptr_decision`, `gptr_choice`, `gptr_score`), `gptr_prob()`, the delayed vctrs methods and the only wrappers through which the s1 area reaches the model layer (P05). Four L4 files make up the `builtin:system1` capability: `s1-client.R` (questions with the wire type `noul`, the `typesafe-system-one` adapter, bounded concurrent rounds on P04's reactor, the built-in factory), `s1-route.R` (the gateway route `classifier` of order 10: batch rule, `as_state()`, thresholds, abstention and escalation, records, the `s1.decide` service), `s1-cache.R` (the salted per-element cache) and `s1-emulate.R` (opt-in emulation through a chat model's structured output). P08's gateway hands the route a `gptr_call`; the route reads context objects by name through `call_value()`, never keeps them, creates no session and returns a typed vector visibly.
 
@@ -32,7 +32,7 @@
 - Options (04 §3.1): `gptr.s1_max_active` `8L` (concurrent System 1 requests), `gptr.s1_rounds` `3L` (bounded retry rounds), `gptr.s1_state_max` `2000L` (characters of `as_state(<session>)`), `gptr.s1_max_elements` `10000L` (elements per System 1 call, IC-66; "error with a hint to chunk").
 - Conditions (04 §2.2): `gptr_error_s1` (fields `status`, `error_type`, `request_id`, `model`) with children `s1_auth`, `s1_validation`, `s1_rate_limit`, `s1_overloaded`, `s1_connection`, `s1_response` ("scalar calls; vectorised calls give `NA` + one warning"); `s1_uncertain` (`prob`, `min_confidence`); `s1_labels` (`labels`); warning `s1_errors` (field `errors`); message `s1_split` ("once per session when a data frame is split into several states, naming `I(x)`"); message `notice` for uncalibrated emulation.
 - Built-in (04 §7.13, §10.3): `builtin_system1(gptr)` registers "the provider `typesafe` (base URL `https://api.typesafe.ai/v1/`, key `TYPESAFE_API_KEY`, model alias `jev` -> `jev-latest`, `type = "classifier"`, `rate = list(requests_per_s = 40, tokens_per_s = 1e5)`, IC-64), gateway records of 04 §4, the adapter `typesafe-system-one` (`transport = "http_json"`, `classify`), the adapter `s1-emulate`, the route `classifier` (order 10), the `system1` prompt section (IC-68) and the service `s1.decide`"; declared with `on_load(ext_declare_builtin("system1", builtin_system1))`.
-- Service (04 §7.0): `s1.decide` = `function(question, x, ...) <gptr_s1>`, behind `ctx$decide(question, x, ...)` ("a System 1 vector, as `gptr(question, x, model = <configured System 1>, ...)`").
+- Service (04 §7.0): `s1.decide` = `function(question, x, ...) <gptr_s1>`, behind `ctx$decide(question, x, ...)` ("a System 1 vector, as `peter(question, x, model = <configured System 1>, ...)`").
 - Prompt section (04 §9.3): `system1`, tier `T0`, order `650`, budget `150`, included when "a System 1 provider is usable (`model_default("system1")` non-NULL: key found or emulation configured)"; text: architecture §7.3 verbatim, `{s1}` replaced by P07.
 - Wire (report 04a): `POST {base}/systemone` with `{model, state, questions}`; question types exactly `noul`, `choice`, `score` ("`"type": "bool"` is rejected with HTTP 400"); a score's `criteria` is a JSON array; choice probabilities are re-keyed by name ("key order is not the request order"); errors `{"detail": {"error_type", "message"}}`; request id header `x-typesafe-request-id`; no rate-limit headers.
 - Requests (04 §7.13): "deduplicates states, sends at most `gptr.s1_max_active` concurrent reactor requests, `gptr.s1_rounds` bounded rounds resubmitting only failures (408, 429, 5xx, network; `retry-after` capped at 60 s), parses answers by name"; IC-64: "System 1 admission is process-wide"; IC-57: a nested pump never runs another run's FIFO tool.
@@ -55,10 +55,10 @@
 | `R/s1-emulate.R` | create (Task 6) | opt-in emulation through structured output |
 | `R/s1-route.R` | create (Task 7), extend (Task 8) | states, the batch rule, `as_state()` (Task 7); the `classifier` route core and `s1_decide()` (Task 8) |
 | `tests/testthat/test-s1-types.R`, `tests/testthat/_snaps/s1-types.md` | create (Task 1), extend (Task 2) | vector methods, `gptr_prob()`, wrappers; the print snapshots |
-| `tests/testthat/test-s1-client.R` | create (Task 3), extend (Tasks 4, 9) | wire fixtures, parsing, rounds, the built-in and `gptr()` end to end (NS-4, NS-5) |
+| `tests/testthat/test-s1-client.R` | create (Task 3), extend (Tasks 4, 9) | wire fixtures, parsing, rounds, the built-in and `peter()` end to end (NS-4, NS-5) |
 | `tests/testthat/test-s1-cache.R` | create (Task 5) | cache tests (IC-70) |
 | `tests/testthat/test-s1-emulate.R` | create (Task 6), extend (Task 9) | emulation tests |
-| `tests/testthat/test-s1-route.R` | create (Task 7), extend (Tasks 8, 9, 11) | batch rule, route core, INFRA-18's acceptance tests through `gptr()` (Task 9; architecture §6.18, run by P24's INFRA suite), the router example |
+| `tests/testthat/test-s1-route.R` | create (Task 7), extend (Tasks 8, 9, 11) | batch rule, route core, INFRA-18's acceptance tests through `peter()` (Task 9; architecture §6.18, run by P24's INFRA suite), the router example |
 | `tests/testthat/fixtures/jev/*.json`, `tests/testthat/fixtures/jev/harness.R` | create (Task 3) | the 04a wire fixtures (04 §12.4) and the helpers the P13 test files source |
 | `tests/testthat/test-copy-s1.R` | create (Task 10) | copy-safety rows |
 | `inst/gptr/examples/jev-router.R` | create (Task 11) | the Jev complexity router (IC-69) |
@@ -78,7 +78,7 @@ The harness lives under `fixtures/jev/` (owned by P13) rather than in a `helper-
 6. Opt-in emulation through structured output (`s1-emulate.R`)
 7. States and the batch rule (`s1-route.R`)
 8. The classifier route core and `ctx$decide()` (`s1-route.R`)
-9. `builtin:system1` and `gptr()` end to end (`s1-client.R`)
+9. `builtin:system1` and `peter()` end to end (`s1-client.R`)
 10. Copy-safety rows (`test-copy-s1.R`)
 11. The Jev router example (`inst/gptr/examples/jev-router.R`)
 12. The live Jev test (`test-live-jev.R`)
@@ -714,7 +714,7 @@ Summary.gptr_s1 = function(..., na.rm = FALSE) { # nolint: object_name_linter.
 
 #' Probabilities and confidence of System 1 answers
 #'
-#' System 1 calls (`gptr(question, x, model = jev)`) return typed vectors: a `gptr_decision`
+#' System 1 calls (`peter(question, x, model = jev)`) return typed vectors: a `gptr_decision`
 #' (logical), a `gptr_choice` (character) or a `gptr_score` (double, the expected 0-based level).
 #' They work in `if()`, `while()`, `ifelse()`, `table()`, `sum()` and comparisons like the bare
 #' vectors, and carry the model's probabilities as attributes. `gptr_prob()` reads them.
@@ -732,7 +732,7 @@ Summary.gptr_s1 = function(..., na.rm = FALSE) { # nolint: object_name_linter.
 #' @export
 #' @examples
 #' judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
-#' d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
+#' d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
 #' gptr_prob(d)
 gptr_prob = function(x, what = c("prob", "confidence", "probabilities")) {
   check_class(x, "gptr_s1", "x")
@@ -1284,7 +1284,7 @@ local_once_reset = function(keys, kind = "message", .env = parent.frame()) {
 }
 
 # A gptr_call record (P08's call_new()) for the classifier route: every named argument in `...`
-# becomes a context object read by name from a fresh environment, as gptr() records symbols
+# becomes a context object read by name from a fresh environment, as peter() records symbols
 s1_test_call = function(prompt, ..., model, args = list(), session = NULL) {
   objs = list(...)
   env = new.env(parent = globalenv())
@@ -1333,7 +1333,7 @@ Create `tests/testthat/test-s1-client.R`:
 ```r
 # Tests for R/s1-client.R (plan P13): questions, the typesafe-system-one adapter and its wire
 # fixtures (Task 3), requests on the reactor (Task 4), builtin:system1 and the classifier route
-# through gptr() (Task 9) (contract 7.13, 8.1, 9.3; reports 04 and 04a).
+# through peter() (Task 9) (contract 7.13, 8.1, 9.3; reports 04 and 04a).
 
 source(testthat::test_path("fixtures", "jev", "harness.R"), local = TRUE)
 
@@ -3062,7 +3062,7 @@ Create `tests/testthat/test-s1-route.R`:
 
 ```r
 # Tests for R/s1-route.R (plan P13): states and the batch rule (Task 7), the classifier route
-# core (Task 8), INFRA-18's acceptance tests through gptr() (Task 9; architecture 6.18) and the
+# core (Task 8), INFRA-18's acceptance tests through peter() (Task 9; architecture 6.18) and the
 # jev-router example (Task 11) (contract 6.1.1, 7.13; architecture 4.1.5; IC-47, IC-66, IC-69,
 # IC-71).
 
@@ -3498,7 +3498,7 @@ s1_zip = function(parts) {
   if (!length(parts)) {
     gptr_abort(c("A System 1 call needs an input to judge.",
                  paste0("Pass it after the question, for example ",
-                        "gptr(\"Is it urgent?\", ticket, model = jev).")),
+                        "peter(\"Is it urgent?\", ticket, model = jev).")),
                "invalid_argument", arg = "...", expected = "an input to judge")
   }
   ns = vapply(parts, function(p) length(p$states), 1L)
@@ -4145,19 +4145,19 @@ git commit -m "feat(s1): add the classifier route core and the s1.decide impleme
 
 ---
 
-### Task 9: `builtin:system1` and `gptr()` end to end
+### Task 9: `builtin:system1` and `peter()` end to end
 
 **Files:**
 - Modify: `R/s1-client.R` (append)
 - Test: `tests/testthat/test-s1-client.R` (append), `tests/testthat/test-s1-route.R` (append: the four `INFRA-18:` acceptance tests of architecture §6.18), `tests/testthat/test-s1-emulate.R` (append)
 
 **Interfaces:**
-- Consumes: P02 `gptr_adapter(api, transport = c("http_sse", "http_ndjson", "http_json", "process_jsonl", "inprocess"), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())` (classifier adapters need `classify`: `build` and `parse` for `http_json`, `run` for `inprocess`; IC-35), `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)`, `gptr_spec(kind, name, ...)` (kind `route`: `order`, `match(call)`, `run(call)`, `description`), `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the factory API object's `gptr$register(spec)`; P01 `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`; P08's gateway (`gptr()` walks the `route` records by `order` and returns the route's value visibly; `model = jev` resolves to the catalog alias `"jev"`, `model = <spec>` to the spec itself) and `gptr_config(..., .scope = NULL)`; P05's catalog (`jev` -> `typesafe/jev-latest`); P04 `ratelimit_static(provider)` and `ratelimit_set(provider, rate)` (tests). Tests also use `gptr_hook()`, `registry_all()` (P02), `live_all()` (P06), `local_mock_server()` (P01) and the stand-in texts of P07's `tests/testthat/fixtures/bench/prefix-baseline.json` (`standins$sections`).
+- Consumes: P02 `gptr_adapter(api, transport = c("http_sse", "http_ndjson", "http_json", "process_jsonl", "inprocess"), build = NULL, parse = NULL, stream = NULL, classify = NULL, capabilities = list())` (classifier adapters need `classify`: `build` and `parse` for `http_json`, `run` for `inprocess`; IC-35), `gptr_provider(id, api, base_url = NULL, auth = NULL, models = NULL, compat = list(), type = c("chat", "classifier", "cli"), headers = list(), discover = NULL, status = NULL, aliases = character(), local = FALSE, offline = FALSE, rate = NULL)`, `gptr_spec(kind, name, ...)` (kind `route`: `order`, `match(call)`, `run(call)`, `description`), `gptr_prompt_section(name, text, tier = c("T0", "T1"), order = 500L, budget = 300L, parent = NULL)`, `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)`, the factory API object's `gptr$register(spec)`; P01 `on_load(expr)`, `ext_service_set(name, fun, provided_by, builtin = NULL)`; P08's gateway (`peter()` walks the `route` records by `order` and returns the route's value visibly; `model = jev` resolves to the catalog alias `"jev"`, `model = <spec>` to the spec itself) and `gptr_config(..., .scope = NULL)`; P05's catalog (`jev` -> `typesafe/jev-latest`); P04 `ratelimit_static(provider)` and `ratelimit_set(provider, rate)` (tests). Tests also use `gptr_hook()`, `registry_all()` (P02), `live_all()` (P06), `local_mock_server()` (P01) and the stand-in texts of P07's `tests/testthat/fixtures/bench/prefix-baseline.json` (`standins$sections`).
 - Produces (04 §7.13, §10.3): `builtin_system1(gptr)` registering the adapters `typesafe-system-one` and `s1-emulate`, the provider records `typesafe` (with `rate = list(requests_per_s = 40, tokens_per_s = 1e5)`), `openrouter-jev` and `vercel-jev`, the route `classifier` (order 10), the prompt section `system1` (T0, 650, 150); the service `s1.decide` (owned by `builtin:system1`); private `s1_section_body`, `s1_section_text(ctx)`, `s1_jev_model()`, `s1_provider_records()`.
 
 The provider records are data (architecture §8.2): `typesafe` serves `jev-latest`, `jev-preview` and the pinned `jev-1.13.0` at $0.042 per million input tokens (report 04 section 2.5); the two gateway records of report 04 section 4.4 speak the same protocol through OpenRouter (`https://openrouter.ai/api/v1/systemone`, model `typesafe/jev-1.13`) and the Vercel AI Gateway (`https://ai-gateway.vercel.sh/typesafe/v1/systemone`, model `typesafe-ai/jev`), each with its own key variable and a 32k context. The static rate of the `typesafe` record feeds P04's per-provider token bucket (Jev sends no rate-limit headers, report 04a), so 40 requests per second hold for every System 1 call of the process (IC-64). The `system1` section text is architecture §7.3's verbatim (the test compares it with P07's stand-in copy of the same text).
 
-This task proves NS-4 and NS-5 (02-north-star-examples.md §4-5) on the fake classifier and the mock `/systemone` server. Architecture §6.18 names `test-s1-route.R` as the file of INFRA-18's acceptance tests (`if (gptr(..., model = jev))` on the mocked `/systemone`; 100 items capped by `max_active`; `min_confidence` + `uncertain`; classed `choices`), and P24's `dev/bench/perf/infra-time.R` runs that file as part of the INFRA suite, so those four tests go to `test-s1-route.R` with titles starting `INFRA-18:`; the other end-to-end tests stay in `test-s1-client.R`. The four tests call only the shared harness (`s1_fresh()`), P01's helpers (`local_fake_provider()`, `local_mock_server()`) and package functions, so no file-local helper moves with them.
+This task proves NS-4 and NS-5 (02-north-star-examples.md §4-5) on the fake classifier and the mock `/systemone` server. Architecture §6.18 names `test-s1-route.R` as the file of INFRA-18's acceptance tests (`if (peter(..., model = jev))` on the mocked `/systemone`; 100 items capped by `max_active`; `min_confidence` + `uncertain`; classed `choices`), and P24's `dev/bench/perf/infra-time.R` runs that file as part of the INFRA suite, so those four tests go to `test-s1-route.R` with titles starting `INFRA-18:`; the other end-to-end tests stay in `test-s1-client.R`. The four tests call only the shared harness (`s1_fresh()`), P01's helpers (`local_fake_provider()`, `local_mock_server()`) and package functions, so no file-local helper moves with them.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4165,7 +4165,7 @@ Append to `tests/testthat/test-s1-client.R`:
 
 ```r
 
-# ---- Task 9: builtin:system1 and gptr() end to end (NS-4, NS-5) --------------------------------
+# ---- Task 9: builtin:system1 and peter() end to end (NS-4, NS-5) --------------------------------
 # INFRA-18's acceptance tests (architecture 6.18) are in test-s1-route.R, the file P24's INFRA
 # suite runs.
 
@@ -4241,13 +4241,13 @@ test_that("the system1 section is architecture 7.3 verbatim and shown only when 
   expect_identical(s1_section_text(NULL), s1_section_body)
 })
 
-test_that("NS-4: if (gptr(..., model = judge)) works and creates no session", {
+test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
   s1_fresh()
   judge = rct_judge()
   abstract = abstracts20()[["a01"]]
   before = length(live_all())
   included = character()
-  if (gptr("Is this abstract about a randomised controlled trial?", abstract, model = judge)) {
+  if (peter("Is this abstract about a randomised controlled trial?", abstract, model = judge)) {
     included = c(included, "a01")
   }
   expect_identical(included, "a01")
@@ -4262,7 +4262,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
   s1_fresh()
   judge = rct_judge()
   abstracts = abstracts20()
-  is_rct = gptr("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
+  is_rct = peter("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
   expect_identical(class(is_rct), c("gptr_decision", "gptr_s1", "logical"))
   expect_identical(names(is_rct), names(abstracts))
   expect_identical(sum(is_rct), 10L)
@@ -4270,7 +4270,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
   expect_identical(unname(attr(is_rct, "prob")[1:2]), c(0.93, 0.07))
   expect_identical(attr(is_rct, "meta")$model, "judge-s1-1.0")
   expect_length(fake_requests(judge), 20L)
-  again = gptr("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
+  again = peter("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
   expect_length(fake_requests(judge), 20L)
   expect_true(all(attr(again, "meta")$cached))
   expect_identical(as.logical(again), as.logical(is_rct))
@@ -4279,7 +4279,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
 test_that("levels give a gptr_score of expected 0-based levels", {
   s1_fresh()
   local_fake_provider(list(c(0, 0.02, 0.98)), name = "rater", type = "classifier")
-  mood = gptr("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
+  mood = peter("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
               levels = c("negative", "neutral", "positive"))
   expect_identical(class(mood), c("gptr_score", "gptr_s1", "numeric"))
   expect_equal(as.double(mood), c(r1 = 1.98))
@@ -4292,13 +4292,13 @@ test_that("NS-4: a data frame split into rows prints the once-per-session s1_spl
   local_once_reset("s1_split")
   local_fake_provider(list(0.9), name = "rows", type = "classifier")
   diagnostics = data.frame(check = c("normality", "variance"), ok = c(TRUE, TRUE))
-  msg = expect_message(gptr("Is the residual plot acceptable?", diagnostics,
+  msg = expect_message(peter("Is the residual plot acceptable?", diagnostics,
                             model = "rows/rows-s1"),
                        class = "gptr_message_s1_split")
   expect_match(conditionMessage(msg), "I(diagnostics)", fixed = TRUE)
-  expect_no_message(gptr("Is the residual plot acceptable?", diagnostics, model = "rows/rows-s1"))
+  expect_no_message(peter("Is the residual plot acceptable?", diagnostics, model = "rows/rows-s1"))
   n = 0L
-  while (gptr("Is the residual plot acceptable?", I(diagnostics), model = "rows/rows-s1")) {
+  while (peter("Is the residual plot acceptable?", I(diagnostics), model = "rows/rows-s1")) {
     n = n + 1L
     if (n == 2L) break
   }
@@ -4310,9 +4310,9 @@ test_that("a piped session gives one state: no turn, a gptr.decision entry, at m
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list(strrep("The fit converged and the residuals look fine. ", 100)))
   judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
-  s = gptr("Fit the model", model = "fake/fake-1", envir = new.env())
+  s = peter("Fit the model", model = "fake/fake-1", envir = new.env())
   turns = s$turns
-  done = s |> gptr("done?", model = judge)
+  done = s |> peter("done?", model = judge)
   expect_s3_class(done, "gptr_decision")
   expect_true(done)
   expect_identical(s$turns, turns)
@@ -4344,7 +4344,7 @@ test_that("System 1 emits a decision event and writes one summary line at top le
     lines$summary = c(lines$summary, summary)
     invisible(NULL)
   })
-  d = gptr("Q?", c(a = "x", b = "y"), model = "judge/judge-s1")
+  d = peter("Q?", c(a = "x", b = "y"), model = "judge/judge-s1")
   expect_length(events$list, 1L)
   expect_identical(events$list[[1]]$n, 2L)
   # `type` stays the event name (contract 4.5); the question type travels as question_type
@@ -4363,10 +4363,10 @@ test_that("failures: a scalar call signals, a vector gives NA and one s1_errors 
   }, name = "flaky", type = "classifier")
   local_gptr_options(s1_rounds = 1L)
   one = "bad"
-  expect_error(gptr("Q?", one, model = "flaky/flaky-s1"), class = "gptr_error_s1_overloaded")
+  expect_error(peter("Q?", one, model = "flaky/flaky-s1"), class = "gptr_error_s1_overloaded")
   seen = new.env()
   out = withCallingHandlers(
-    gptr("Q?", c("ok", "bad"), model = "flaky/flaky-s1"),
+    peter("Q?", c("ok", "bad"), model = "flaky/flaky-s1"),
     gptr_warning_s1_errors = function(w) {
       seen$w = w
       invokeRestart("muffleWarning")
@@ -4382,7 +4382,7 @@ test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
   s1_fresh()
   local_fake_provider(list(0.5), name = "judge", type = "classifier")
   local_gptr_options(s1_max_elements = 5L)
-  err = expect_error(gptr("Q?", as.character(1:6), model = "judge/judge-s1"),
+  err = expect_error(peter("Q?", as.character(1:6), model = "judge/judge-s1"),
                      class = "gptr_error_invalid_argument")
   expect_match(conditionMessage(err), "chunks", fixed = TRUE)
 })
@@ -4395,11 +4395,11 @@ test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
   off = gptr_register(spec)
   withr::defer(off())
   withr::local_envvar(GPTR_REPLAY = "live")
-  gptr("Q?", c(a = "x"), model = "remote/remote-s1")
+  peter("Q?", c(a = "x"), model = "remote/remote-s1")
   withr::local_envvar(GPTR_REPLAY = "replay")
-  again = gptr("Q?", c(a = "x"), model = "remote/remote-s1")
+  again = peter("Q?", c(a = "x"), model = "remote/remote-s1")
   expect_true(all(attr(again, "meta")$cached))
-  expect_error(gptr("Q?", c(b = "new"), model = "remote/remote-s1"),
+  expect_error(peter("Q?", c(b = "new"), model = "remote/remote-s1"),
                class = "gptr_error_not_recorded")
 })
 
@@ -4410,15 +4410,15 @@ test_that("jev without a key fails cleanly: egress first, then no_key; nothing i
                       R_USER_CONFIG_DIR = withr::local_tempdir())
   local_mocked_bindings(secret_lookup = function(name) NULL)
   ticket = "The printer is on fire."
-  expect_error(gptr("Is it urgent?", ticket, model = jev), class = "gptr_error_egress")
+  expect_error(peter("Is it urgent?", ticket, model = jev), class = "gptr_error_egress")
   gptr_config(egress = list(typesafe = "ack"), .scope = "user")
-  expect_error(gptr("Is it urgent?", ticket, model = jev), class = "gptr_error_no_key")
+  expect_error(peter("Is it urgent?", ticket, model = jev), class = "gptr_error_no_key")
 })
 
 test_that("the gptr_prob() example runs", {
   s1_fresh()
   judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
-  d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
+  d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
   expect_identical(gptr_prob(d), c(a = 0.9, b = 0.2))
   expect_identical(as.logical(d), c(a = TRUE, b = FALSE))
 })
@@ -4435,9 +4435,9 @@ test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model
   tasks = c("Fix the subtle race in the cache.", "Rename a variable.")
   answers = character()
   for (task in tasks) {
-    hard = gptr("Is this task subtle enough to need the strongest model?", task,
+    hard = peter("Is this task subtle enough to need the strongest model?", task,
                 model = "hardness/hardness-s1")
-    res = gptr(task, model = if (hard) strong else cheap, mode = auto, envir = new.env())
+    res = peter(task, model = if (hard) strong else cheap, mode = auto, envir = new.env())
     answers = c(answers, res$text)
   }
   expect_identical(answers, c("strong answer", "cheap answer"))
@@ -4455,7 +4455,7 @@ test_that("a provider's static rate of 40 requests per second caps System 1 admi
   off = gptr_register(spec)
   withr::defer(off())
   withr::defer(ratelimit_set("ratetest", NULL))
-  d = gptr("Is it fine?", paste("abstract", 1:100), model = "ratetest/ratetest-s1")
+  d = peter("Is it fine?", paste("abstract", 1:100), model = "ratetest/ratetest-s1")
   expect_length(d, 100L)
   log = srv$log()
   expect_identical(nrow(log), 100L)
@@ -4470,13 +4470,13 @@ test_that("a provider's static rate of 40 requests per second caps System 1 admi
 })
 ```
 
-Append to `tests/testthat/test-s1-route.R` (INFRA-18's acceptance tests, architecture §6.18: `gptr()` through the classifier route on the mocked `/systemone` and the fake classifier; `s1_fresh()` comes from the harness the file already sources):
+Append to `tests/testthat/test-s1-route.R` (INFRA-18's acceptance tests, architecture §6.18: `peter()` through the classifier route on the mocked `/systemone` and the fake classifier; `s1_fresh()` comes from the harness the file already sources):
 
 ```r
 
-# ---- Task 9: INFRA-18 acceptance through gptr() (architecture 6.18; P24's INFRA suite) ----------
+# ---- Task 9: INFRA-18 acceptance through peter() (architecture 6.18; P24's INFRA suite) ----------
 
-test_that("INFRA-18: against a mocked /systemone: if (gptr(\"q\", x, model = jev)) works", {
+test_that("INFRA-18: against a mocked /systemone: if (peter(\"q\", x, model = jev)) works", {
   s1_fresh()
   srv = local_mock_server("systemone", answers = function(body) {
     p = if (grepl("puppy", unlist(body$state), fixed = TRUE)) 0.97 else 0.04
@@ -4492,7 +4492,7 @@ test_that("INFRA-18: against a mocked /systemone: if (gptr(\"q\", x, model = jev
   withr::defer(off())
   x = "A puppy fetched the ball."
   hit = FALSE
-  if (gptr("Does the text describe a dog?", x, model = jev)) hit = TRUE
+  if (peter("Does the text describe a dog?", x, model = jev)) hit = TRUE
   expect_true(hit)
   log = srv$log()
   expect_identical(nrow(log), 1L)
@@ -4511,7 +4511,7 @@ test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay wi
   p = srv$provider
   item = "item 1"
   hit = FALSE
-  if (gptr("Is it fine?", item, model = p)) hit = TRUE
+  if (peter("Is it fine?", item, model = p)) hit = TRUE
   expect_true(hit)
   x = paste("item", 1:100)
   real = s1_http
@@ -4531,13 +4531,13 @@ test_that("INFRA-18: against a mocked /systemone: if() works; 100 states stay wi
            on_fail(cnd)
          })
   })
-  d = gptr("Is it fine?", x, model = p)
+  d = peter("Is it fine?", x, model = p)
   expect_length(d, 100L)
   expect_identical(sum(!d), sum(grepl("7", x, fixed = TRUE)))
   expect_lte(seen$max, 8L)
   expect_gt(seen$max, 1L)
   n_before = nrow(srv$log())
-  d2 = gptr("Is it fine?", x, model = p)
+  d2 = peter("Is it fine?", x, model = p)
   expect_identical(nrow(srv$log()), n_before)
   expect_true(all(attr(d2, "meta")$cached))
 })
@@ -4548,15 +4548,15 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
     switch(state$x, sure = 0.95, unsure = 0.55, no = 0.02)
   }, name = "band", type = "classifier")
   x = c("sure", "unsure", "no")
-  na = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6)
+  na = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6)
   expect_identical(as.logical(na), c(TRUE, NA, FALSE))
   expect_identical(attr(na, "prob"), c(0.95, 0.55, 0.02))
-  err = expect_error(gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6,
+  err = expect_error(peter("Q?", x, model = "band/band-s1", min_confidence = 0.6,
                           uncertain = "stop"), class = "gptr_error_s1_uncertain")
   expect_identical(err$prob, 0.55)
   expect_identical(err$min_confidence, 0.6)
   seen = new.env()
-  esc = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6,
+  esc = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6,
              uncertain = function(state, answer) {
                seen$state = state
                seen$p = gptr_prob(answer)
@@ -4565,7 +4565,7 @@ test_that("INFRA-18: min_confidence with uncertain NA, \"stop\" or a function fo
   expect_identical(as.logical(esc), c(TRUE, FALSE, FALSE))
   expect_identical(seen$state, list(x = "unsure"))
   expect_identical(unname(seen$p), 0.55)
-  yes = gptr("Q?", x, model = "band/band-s1", min_confidence = 0.6, uncertain = TRUE)
+  yes = peter("Q?", x, model = "band/band-s1", min_confidence = 0.6, uncertain = TRUE)
   expect_identical(as.logical(yes), c(TRUE, TRUE, FALSE))
 })
 
@@ -4579,21 +4579,21 @@ test_that("INFRA-18: choices give a classed character with a plain ==; a factor 
     }
   }, name = "tissue", type = "classifier")
   x = c(s1 = "hepatocytes from the liver", s2 = "a blood sample")
-  tissue = gptr("Which tissue?", x, model = "tissue/tissue-s1",
+  tissue = peter("Which tissue?", x, model = "tissue/tissue-s1",
                 choices = c("liver", "lung", "other"))
   expect_identical(class(tissue), c("gptr_choice", "gptr_s1", "character"))
   eq = tissue == "liver"
   expect_identical(eq, c(s1 = TRUE, s2 = FALSE))
   expect_false(is.object(eq))
-  f = gptr("Which tissue?", x, model = "tissue/tissue-s1",
+  f = peter("Which tissue?", x, model = "tissue/tissue-s1",
            choices = factor(c("liver", "lung", "other")))
   expect_s3_class(f, "factor")
   expect_identical(levels(f), c("liver", "lung", "other"))
   expect_identical(as.character(f), c("liver", "other"))
-  o = gptr("Which tissue?", x, model = "tissue/tissue-s1", choices = c("liver", "lung", "other"),
+  o = peter("Which tissue?", x, model = "tissue/tissue-s1", choices = c("liver", "lung", "other"),
            .opts = list(output = "factor"))
   expect_s3_class(o, "factor")
-  expect_error(gptr("Which tissue?", x, model = "tissue/tissue-s1", choices = c("TRUE", "maybe")),
+  expect_error(peter("Which tissue?", x, model = "tissue/tissue-s1", choices = c("TRUE", "maybe")),
                class = "gptr_error_s1_labels")
 })
 ```
@@ -4602,25 +4602,25 @@ Append to `tests/testthat/test-s1-emulate.R`:
 
 ```r
 
-# ---- Task 9: emulation through gptr() is opt-in only --------------------------------------------
+# ---- Task 9: emulation through peter() is opt-in only --------------------------------------------
 
 test_that("emulation happens only with gptr_config(system1 = \"emulate:<model>\")", {
   s1_fresh()
   chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")
   review = "Loved every page."
-  expect_error(gptr("Is the review positive?", review, model = "emulate:emu/emu-1"),
+  expect_error(peter("Is the review positive?", review, model = "emulate:emu/emu-1"),
                class = "gptr_error_invalid_argument")
   expect_length(fake_requests(chat), 0L)
   old = gptr_config(system1 = "emulate:emu/emu-1", .scope = "session")
   withr::defer(gptr_config(system1 = old$system1, .scope = "session"))
-  d = gptr("Is the review positive?", review, model = "emulate:emu/emu-1")
+  d = peter("Is the review positive?", review, model = "emulate:emu/emu-1")
   expect_true(d)
   expect_false(attr(d, "meta")$calibrated)
   expect_identical(attr(d, "meta")$engine, "emulated:structured")
   expect_identical(format(d), "TRUE (p=0.80)")
   expect_length(fake_requests(chat), 1L)
   hated = "Hated it."
-  j = gptr("Is the review positive?", hated, model = jev)
+  j = peter("Is the review positive?", hated, model = jev)
   expect_identical(attr(j, "meta")$engine, "emulated:structured")
   expect_length(fake_requests(chat), 2L)
 })
@@ -4635,7 +4635,7 @@ test_that("a missing Jev key never falls back to emulation", {
   gptr_config(egress = list(typesafe = "ack"), .scope = "user")
   local_mocked_bindings(secret_lookup = function(name) NULL)
   review = "Loved every page."
-  expect_error(gptr("Is the review positive?", review, model = jev), class = "gptr_error_no_key")
+  expect_error(peter("Is the review positive?", review, model = jev), class = "gptr_error_no_key")
   expect_length(fake_requests(chat), 0L)
 })
 ```
@@ -4644,7 +4644,7 @@ test_that("a missing Jev key never falls back to emulation", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "s1-client|s1-emulate|s1-route")'`
 
-Expected: the new tests fail. The first failure is the built-in test: `Expected `tp$api` to be identical to "typesafe-system-one"` (no `typesafe` provider is registered); the `gptr()` tests fail because no `classifier` route exists, so `gptr()` with a classifier model falls through to P08's `new` route and returns a session instead of a typed vector (for example `Expected `class(is_rct)` to be identical to c("gptr_decision", "gptr_s1", "logical")`); the four `INFRA-18:` tests of `test-s1-route.R` fail for the same reason (no `classifier` route; for example `Expected `class(tissue)` to be identical to c("gptr_choice", "gptr_s1", "character")`). The 300 earlier expectations still pass (test-s1-client.R 165, test-s1-emulate.R 32, test-s1-route.R 103).
+Expected: the new tests fail. The first failure is the built-in test: `Expected `tp$api` to be identical to "typesafe-system-one"` (no `typesafe` provider is registered); the `peter()` tests fail because no `classifier` route exists, so `peter()` with a classifier model falls through to P08's `new` route and returns a session instead of a typed vector (for example `Expected `class(is_rct)` to be identical to c("gptr_decision", "gptr_s1", "logical")`); the four `INFRA-18:` tests of `test-s1-route.R` fail for the same reason (no `classifier` route; for example `Expected `class(tissue)` to be identical to c("gptr_choice", "gptr_s1", "character")`). The 300 earlier expectations still pass (test-s1-client.R 165, test-s1-emulate.R 32, test-s1-route.R 103).
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4659,7 +4659,7 @@ Append to `R/s1-client.R`:
 #' @noRd
 s1_section_body = paste0(
   "For fast typed judgements call a System 1 model from R instead of reasoning over each item ",
-  "yourself: gptr(\"Is this abstract about a randomised trial?\", abstracts, model = {s1}) ",
+  "yourself: peter(\"Is this abstract about a randomised trial?\", abstracts, model = {s1}) ",
   "returns a logical vector with attr(, \"prob\"); with choices = c(\"a\", \"b\", \"c\") it ",
   "returns one choice per input. Calls are vectorised, so pass all items at once. Use them ",
   "inside if, for and while, and check items with probabilities near 0.5 yourself. Keep ",
@@ -4740,7 +4740,7 @@ Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 419 ]` (test-s1-client.R 244, test-
 Also run the example of `gptr_prob()` as R CMD check will (forced replay outside testthat, IC-45):
 
 ```bash
-Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); Sys.setenv("_R_CHECK_PACKAGE_NAME_" = "gptr"); judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier"); d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge); print(gptr_prob(d))'
+Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); Sys.setenv("_R_CHECK_PACKAGE_NAME_" = "gptr"); judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier"); d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge); print(gptr_prob(d))'
 ```
 
 Expected output:
@@ -4765,7 +4765,7 @@ git commit -m "feat(s1): register builtin:system1 with the classifier route, pro
 - Create: `tests/testthat/test-copy-s1.R`
 
 **Interfaces:**
-- Consumes: P01 `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` (a fresh `Rscript --vanilla` through `rscript_path()` with only the exports visible; skips on CRAN and without `capabilities("profmem")`); the exports `gptr()`, `gptr_fake_provider()`; everything of Tasks 1-9.
+- Consumes: P01 `expect_no_copy(setup, action, edit = "big[1] = 0", object = "big", allow = 0L, label = NULL, in_run_edit = FALSE)` (a fresh `Rscript --vanilla` through `rscript_path()` with only the exports visible; skips on CRAN and without `capabilities("profmem")`); the exports `peter()`, `gptr_fake_provider()`; everything of Tasks 1-9.
 - Produces: the System 1 rows of the copy suite (architecture §6.4 "System 1 on data and on a session", 04 §12.3).
 
 Each row creates the user object in the child's global environment, starts `tracemem()` on it, runs the System 1 call and then the user's next in-place edit; a `tracemem[` line after the action means P13 kept a reference. The rows cover a vector (one state per element), a large matrix and a large named list (one described state each, through P09's `describe_binding()`), and a piped session whose home holds a 40 MB vector. A data frame row is deliberately absent: base R's `df$x[1] = 0` copies the data frame whatever gptr does (`$<-.data.frame`, checked while writing this plan), so it cannot show a reference.
@@ -4784,8 +4784,8 @@ test_that("System 1 over a vector leaves the vector editable in place", {
   expect_no_copy(
     setup = "big = runif(200)",
     action = paste("judge = gptr_fake_provider(list(0.7), name = 'judge', type = 'classifier')",
-                   "d = gptr('Is it above one half?', big, model = judge)", sep = "\n"),
-    label = "gptr(question, big, model = judge)"
+                   "d = peter('Is it above one half?', big, model = judge)", sep = "\n"),
+    label = "peter(question, big, model = judge)"
   )
 })
 
@@ -4793,8 +4793,8 @@ test_that("a large matrix is one described state and stays editable in place", {
   expect_no_copy(
     setup = "big = matrix(runif(4e6), 2000)",
     action = paste("judge = gptr_fake_provider(list(0.7), name = 'judge', type = 'classifier')",
-                   "d = gptr('Is the matrix plausible?', big, model = judge)", sep = "\n"),
-    label = "gptr(question, matrix, model = judge)"
+                   "d = peter('Is the matrix plausible?', big, model = judge)", sep = "\n"),
+    label = "peter(question, matrix, model = judge)"
   )
 })
 
@@ -4802,9 +4802,9 @@ test_that("a large named list is described, not held", {
   expect_no_copy(
     setup = "lst = list(a = runif(2e5), b = 'x')",
     action = paste("judge = gptr_fake_provider(list(0.7), name = 'judge', type = 'classifier')",
-                   "d = gptr('Is the list fine?', lst, model = judge)", sep = "\n"),
+                   "d = peter('Is the list fine?', lst, model = judge)", sep = "\n"),
     edit = "lst$a[1] = 0", object = "lst",
-    label = "gptr(question, named list, model = judge)"
+    label = "peter(question, named list, model = judge)"
   )
 })
 
@@ -4813,9 +4813,9 @@ test_that("a piped session is judged without touching the objects of its home", 
     setup = "big = runif(5e6)",
     action = paste("fake = gptr_fake_provider(list('The fit converged.'))",
                    "judge = gptr_fake_provider(list(0.9), name = 'judge', type = 'classifier')",
-                   "s = gptr('Summarise the fit', model = fake, envir = globalenv())",
-                   "d = s |> gptr('Did it work?', model = judge)", sep = "\n"),
-    label = "s |> gptr(question, model = judge)"
+                   "s = peter('Summarise the fit', model = fake, envir = globalenv())",
+                   "d = s |> peter('Did it work?', model = judge)", sep = "\n"),
+    label = "s |> peter(question, model = judge)"
   )
 })
 ```
@@ -4826,7 +4826,7 @@ This task adds regression rows for behaviour Tasks 7-9 already implement, so the
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "copy-s1")'`
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 4 ]` (four fresh processes, under a minute). To see the rows catch a regression (the red phase of this test-only task), temporarily insert `the$s1_last_input = values` as the first line of the body of `s1_states_at()` in `R/s1-route.R` (a held reference to the user's object, rule R1) and run the command again: three rows fail, for example `gptr(question, big, model = judge): 1 copies of `big` (allowed 0)`. Remove the line again.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 4 ]` (four fresh processes, under a minute). To see the rows catch a regression (the red phase of this test-only task), temporarily insert `the$s1_last_input = values` as the first line of the body of `s1_states_at()` in `R/s1-route.R` (a held reference to the user's object, rule R1) and run the command again: three rows fail, for example `peter(question, big, model = judge): 1 copies of `big` (allowed 0)`. Remove the line again.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -4958,7 +4958,7 @@ test_that("the example loads with extensions = for that session only (IC-69)", {
   s1_fresh()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list("Hello."), name = "fhost")
-  s = gptr("Say hello.", model = "fhost/fhost-1", extensions = jev_router_path(),
+  s = peter("Say hello.", model = "fhost/fhost-1", extensions = jev_router_path(),
            envir = new.env())
   expect_s3_class(registry_get("router", "jev-auto", session = session_data(s)$id), "gptr_router")
   expect_null(registry_get("router", "jev-auto"))
@@ -4973,7 +4973,7 @@ test_that("a complex request plans on the strong model and switches once after t
   )
   local_stub_tool("lookup")
   local_stub_tool("edit")
-  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), c("fstrong-1", "fstrong-1", "fimpl-1"))
   expect_identical(router_phases(s), c("planning", "implementation"))
   # one routed session: the planning model chosen once, then exactly one model change, after the
@@ -4995,7 +4995,7 @@ test_that("an ordinary request plans on the standard model; a failed edit does n
   )
   local_stub_tool("edit", fails = TRUE)
   local_stub_tool("write")
-  s = gptr("Add a verbose flag.", model = router_spec(), envir = new.env())
+  s = peter("Add a verbose flag.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), c("fstd-1", "fstd-1", "fimpl-1"))
   expect_identical(router_phases(s), c("planning", "implementation"))
   expect_identical(model_changes(s), c("fstd/fstd-1", "fimpl/fimpl-1"))
@@ -5008,7 +5008,7 @@ test_that("without a System 1 model the router plans on the standard model", {
                           implement = list("done"), complex = 0.9)
   local_gptr_options(system1 = NULL)
   local_mocked_bindings(model_key_present = function(id, vars) FALSE)
-  s = gptr("Refactor the cache layer.", model = router_spec(), envir = new.env())
+  s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
   expect_identical(dispatched(s), "fstd-1")
   expect_length(fake_requests(m$strong), 0L)
 })
@@ -5039,14 +5039,14 @@ Create `inst/gptr/examples/jev-router.R`:
 # 1. As an extension: copy the file into .gptr/extensions/ of a trusted project, or into the
 #    extensions/ folder of tools::R_user_dir("gptr", "config"). Its last expression is the
 #    factory, which registers the router "jev-auto"; then
-#      s = gptr("Refactor the cache layer.", model = "jev-auto")
+#      s = peter("Refactor the cache layer.", model = "jev-auto")
 # 2. Registered by hand for this R session:
 #      env = new.env()
 #      sys.source(path, envir = env)
 #      gptr_register(env$jev_router_spec())
-#      s = gptr("Refactor the cache layer.", model = "jev-auto")
+#      s = peter("Refactor the cache layer.", model = "jev-auto")
 # 3. With other models, passing the router itself as the model:
-#      s = gptr("Refactor the cache layer.",
+#      s = peter("Refactor the cache layer.",
 #               model = env$jev_router_spec(strong = "opus", standard = "sonnet",
 #                                           implement = "haiku"))
 # nolint end
@@ -5150,7 +5150,7 @@ Create `tests/testthat/test-live-jev.R`:
 # the path with GPTR_JEV_KEY_FILE) and is never printed. About ten requests of about 300 input
 # tokens at $0.042 per million: well below a cent.
 
-test_that("live: Jev answers decisions, choices and scores through gptr()", {
+test_that("live: Jev answers decisions, choices and scores through peter()", {
   skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))
   skip_on_cran()
   key_file = Sys.getenv("GPTR_JEV_KEY_FILE", test_path("..", "..", ".secrets", "jev-key.env"))
@@ -5167,12 +5167,12 @@ test_that("live: Jev answers decisions, choices and scores through gptr()", {
   gptr_config(egress = list(typesafe = "ack"), .scope = "user")
 
   text = "A golden retriever puppy fetched the ball and wagged its tail."
-  hit = if (gptr("Does this text describe a dog?", text, model = jev)) "dog" else "other"
+  hit = if (peter("Does this text describe a dog?", text, model = jev)) "dog" else "other"
   expect_identical(hit, "dog")
 
   texts = c(dog = "A puppy chewed my shoe.", wolf = "A wolf howled at the moon.",
             car = "The car would not start.")
-  d = gptr("Does this text describe a dog?", texts, model = jev)
+  d = peter("Does this text describe a dog?", texts, model = jev)
   expect_identical(class(d), c("gptr_decision", "gptr_s1", "logical"))
   expect_identical(names(d), names(texts))
   expect_true(d[["dog"]])
@@ -5182,15 +5182,15 @@ test_that("live: Jev answers decisions, choices and scores through gptr()", {
   expect_identical(attr(d, "meta")$engine, "typesafe")
   expect_true(all(nzchar(attr(d, "meta")$request_ids)))
 
-  animal = gptr("Which animal does the text describe?", texts, model = jev,
+  animal = peter("Which animal does the text describe?", texts, model = jev,
                 choices = c("dog", "wolf", "none"))
   expect_identical(unname(animal[["dog"]] == "dog"), TRUE)
   expect_identical(colnames(gptr_prob(animal, "probabilities")), c("dog", "wolf", "none"))
-  mood = gptr("How positive is the text?", texts, model = jev,
+  mood = peter("How positive is the text?", texts, model = jev,
               levels = c("negative", "neutral", "positive"))
   expect_true(all(as.double(mood) >= 0 & as.double(mood) <= 2))
 
-  again = gptr("Does this text describe a dog?", texts, model = jev)
+  again = peter("Does this text describe a dog?", texts, model = jev)
   expect_true(all(attr(again, "meta")$cached))
 
   key = Sys.getenv("TYPESAFE_API_KEY")
@@ -5238,7 +5238,7 @@ git commit -m "test(s1): add the gated live Jev test"
 - Consumes: P07's runner `Rscript --vanilla dev/bench/tokens/run.R [--check] [--update [ids]]` and its fixture format (`id`, `north_star`, `mode`, `human`, `preset`, `models`, `standins`, `environment`, `files`, `objects`, `facts`, `turns` with `prompt`, `source`, `context`, `steps` of `text` and `calls`); `rtiktoken` (development tool, not a dependency).
 - Produces: the fixture `ns04-system-one` and its baseline row (05 P13 acceptance 4b, IC-73).
 
-The fixture is NS-4 seen from a System 2 session (02-north-star-examples.md §4; architecture §12.3 "System 1 for judgements"): the user asks the agent to screen twenty abstracts; the agent makes one `r` call that delegates the twenty judgements to System 1 (`is_rct = gptr(..., abstracts, model = jev)`) and reports the table, instead of reasoning over each abstract in its own context. It uses the same preset, mode, human flag and stand-ins as `ns02-mixed-model`, so the two rows share their `prefix` and `catalog` in every run. The rows are measured with `TYPESAFE_API_KEY` unset: the `system1` section is shown only when a System 1 is usable (key-dependent), and the baseline must not depend on the maintainer's shell.
+The fixture is NS-4 seen from a System 2 session (02-north-star-examples.md §4; architecture §12.3 "System 1 for judgements"): the user asks the agent to screen twenty abstracts; the agent makes one `r` call that delegates the twenty judgements to System 1 (`is_rct = peter(..., abstracts, model = jev)`) and reports the table, instead of reasoning over each abstract in its own context. It uses the same preset, mode, human flag and stand-ins as `ns02-mixed-model`, so the two rows share their `prefix` and `catalog` in every run. The rows are measured with `TYPESAFE_API_KEY` unset: the `system1` section is shown only when a System 1 is usable (key-dependent), and the baseline must not depend on the maintainer's shell.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5250,7 +5250,7 @@ Create `dev/bench/tokens/fixtures/ns04-system-one.json`:
 {
   "id": "ns04-system-one",
   "north_star": 4,
-  "description": "res = gptr(\"Screen the abstracts for randomised controlled trials ...\", abstracts) at the console: the agent delegates the twenty judgements to System 1 inside one r call (is_rct = gptr(..., abstracts, model = jev)) and reports the table instead of judging each abstract itself; standard preset, manual mode, a human present, no bound document.",
+  "description": "res = peter(\"Screen the abstracts for randomised controlled trials ...\", abstracts) at the console: the agent delegates the twenty judgements to System 1 inside one r call (is_rct = peter(..., abstracts, model = jev)) and reports the table instead of judging each abstract itself; standard preset, manual mode, a human present, no bound document.",
   "mode": "manual",
   "human": true,
   "preset": null,
@@ -5291,11 +5291,11 @@ Create `dev/bench/tokens/fixtures/ns04-system-one.json`:
               "id": "toolu_01",
               "name": "r",
               "input": {
-                "code": "is_rct = gptr(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)"
+                "code": "is_rct = peter(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)"
               },
               "result": "is_rct\nFALSE  TRUE \n   10    10 \n[1] 0.04 0.97\n[r] + is_rct <gptr_decision 20>\n[status: ok; 3 of 3 top-level expressions completed; 0.5s]",
               "details": {
-                "code": "is_rct = gptr(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)",
+                "code": "is_rct = peter(\"Is this abstract about a randomised controlled trial?\", abstracts, model = jev)\ntable(is_rct)\nround(range(gptr_prob(is_rct)), 2)",
                 "status": "ok",
                 "note": "System 1 screening; probabilities kept in attr(is_rct, \"prob\")"
               }
@@ -5348,14 +5348,14 @@ Every acceptance check of 05 P13, including its review amendments, with the task
 | # | Check (05 P13) | Proved by |
 |---|---|---|
 | 1 | `devtools::test(filter = "s1-\|copy-s1")` is green; the live test skips unless `GPTR_LIVE_TESTS=true` and reads the key only through `gptr_env()` | Tasks 1-11 (all P13 test files); Task 12 (`test-live-jev.R`: `skip_if_not(...)`, `gptr_env(key_file, quiet = TRUE)`) |
-| 2a | against a mocked `/systemone`: `if (gptr("q", x, model = jev))` works | Task 9, `test-s1-route.R` "INFRA-18: against a mocked /systemone: if (gptr(\"q\", x, model = jev)) works" (a user-rank `typesafe` record points `jev` at the mock); also `test-s1-route.R` "INFRA-18: against a mocked /systemone: if() works; 100 states stay within 8 active" and `test-s1-client.R` "NS-4: if (gptr(..., model = judge)) works and creates no session" |
+| 2a | against a mocked `/systemone`: `if (peter("q", x, model = jev))` works | Task 9, `test-s1-route.R` "INFRA-18: against a mocked /systemone: if (peter(\"q\", x, model = jev)) works" (a user-rank `typesafe` record points `jev` at the mock); also `test-s1-route.R` "INFRA-18: against a mocked /systemone: if() works; 100 states stay within 8 active" and `test-s1-client.R` "NS-4: if (peter(..., model = judge)) works and creates no session" |
 | 2b | a 100-element vector issues concurrent requests never exceeding 8 active | Task 9, `test-s1-route.R` "INFRA-18: against a mocked /systemone: if() works; 100 states stay within 8 active" (`seen$max <= 8`, `> 1`); Task 4, "at most gptr.s1_max_active requests are in flight" |
 | 2c | cached elements make zero requests | Task 9, the same `INFRA-18:` 100-state test (`nrow(srv$log())` unchanged, `meta$cached` all TRUE); Task 9 "NS-4: a vector ... repeats come from the cache"; Task 8 "s1_call() ... caches per element" |
 | 2d | `choices` returns a classed character whose `==` gives a plain logical; `choices = factor(...)` returns a factor | Task 9, `test-s1-route.R` "INFRA-18: choices give a classed character with a plain ==; a factor stays a factor"; Task 1 "Ops, Math and Summary return bare vectors" |
 | 2e | a label `"TRUE"` is rejected | Task 3, "labels that if() reads as logical are rejected before any request"; Task 9, the `INFRA-18:` choices test (`choices = c("TRUE", "maybe")` -> `gptr_error_s1_labels`) |
 | 2f | `min_confidence` with `uncertain = NA`, `"stop"` and a function behave as specified | Task 9, `test-s1-route.R` "INFRA-18: min_confidence with uncertain NA, \"stop\" or a function follows the policy"; Task 8, "s1_build() and s1_abstain() ..." |
-| 2g | splitting a data frame into several states prints the once-per-session `s1_split` message naming `I()` | Task 9, "NS-4: a data frame split into rows prints the once-per-session s1_split message" (also a `while (gptr(..., I(df), ...))` loop) |
-| 3 | `s \|> gptr("done?", model = jev)` adds no turn and appends a `gptr.decision` entry; the state sent is at most 2,000 characters | Task 9, "a piped session gives one state: no turn, a gptr.decision entry, at most 2,000 chars"; Task 7, "a session becomes at most gptr.s1_state_max characters ..." |
+| 2g | splitting a data frame into several states prints the once-per-session `s1_split` message naming `I()` | Task 9, "NS-4: a data frame split into rows prints the once-per-session s1_split message" (also a `while (peter(..., I(df), ...))` loop) |
+| 3 | `s \|> peter("done?", model = jev)` adds no turn and appends a `gptr.decision` entry; the state sent is at most 2,000 characters | Task 9, "a piped session gives one state: no turn, a gptr.decision entry, at most 2,000 chars"; Task 7, "a session becomes at most gptr.s1_state_max characters ..." |
 | 4 | emulation never happens without `gptr_config(system1 = "emulate:<model>")` | Task 8, "s1_target() ... emulation is opt-in"; Task 9, "emulation happens only with gptr_config(...)" and "a missing Jev key never falls back to emulation" |
 | 4b-1 | the `gptr_prob()` example runs | Task 9, "the gptr_prob() example runs" and the forced-replay command of its Step 4; R CMD check below runs it |
 | 4b-2 | a fake-classifier router loaded from the example switches models after the first successful `edit`, with exactly one `model_change` | Task 11, "a complex request plans on the strong model and switches once after the first edit" and "an ordinary request ... a failed edit does not switch"; "the example loads with extensions = for that session only (IC-69)" |
@@ -5425,7 +5425,7 @@ Commands and expected results:
 | `s1-client.R`: concurrent requests on the reactor, at most 8 active, 3 bounded rounds | 4 |
 | `s1-client.R`: `builtin:system1` registering providers and the classifier route | 9 |
 | `s1-route.R`: batch rule | 7 |
-| `s1-route.R`: `as_state()` for piped sessions with a `gptr.decision` entry | 7 (state), 8 (entry), 9 (through `gptr()`) |
+| `s1-route.R`: `as_state()` for piped sessions with a `gptr.decision` entry | 7 (state), 8 (entry), 9 (through `peter()`) |
 | `s1-route.R`: threshold, `min_confidence`/`uncertain` including function escalation | 8, 9 |
 | `s1-route.R`: logical-label rejection | 3 (`s1_question_choice()`), 9 |
 | `s1-route.R`: top-level one-line document summary through `doc.s1_block` | 8 (`s1_doc_block()`; P15 provides the service) |
@@ -5462,7 +5462,7 @@ None of the placeholder phrases forbidden by the writing-plans standard occurs i
 2. `ctx$decide()` without a configured System 1: 04 names no condition. `s1_decide()` signals `gptr_error_no_key` (provider `typesafe`, variables `TYPESAFE_API_KEY`), the class 04 §2.2 gives to "no credential found for a provider", rather than `not_available` (whose meaning is "the service's plan is not loaded").
 3. The document summary: 04 §11.5 shows `#> gptr_decision: 14 TRUE / 6 FALSE (...)`, and 04 §7.0 says `doc.s1_block(call, summary)` "writes the one-line block". P13 passes the summary without the `#> ` marker (the same text goes into the `gptr.decision` entry and the `decision` event), as a string whose `meta` attribute is `list(model = <physical id>, date)`; P15 adds the marker, decides whether the statement is top level and writes the block header's `model=` and `date=` from `attr(summary, "meta")` (P15's `doc_s1_block_service()` falls back to `model=unknown` for a bare string). P13 skips the service only while a run executes model code (`run_current()`), whose code is recorded by its `r` block.
 4. "Exactly one `model_change`" (05 4b, IC-69): P06's `run_route()` appends a `model_change` for the first routed request of a run as well as for each switch. The test therefore asserts the session's model-change references are exactly `c(<planning model>, <implementation model>)`: one change of model, after the first successful edit, and no duplicate record of it.
-5. "Loadable with `extensions =`" (IC-69): P08 resolves the session's model (`gateway_model_ref()`) before `gateway_register()` loads `extensions =`, and resolves router names without the session's rank-0 records, so `gptr(..., model = "jev-auto", extensions = <path>)` cannot select the router in the same call. The example stays a valid extension file (its last expression is the factory; usable from a trusted `.gptr/extensions/` or the user's extensions folder) and documents `gptr_register(jev_router_spec())` and `model = jev_router_spec(...)`; the test loads it with `sys.source()` and passes the spec as the model.
+5. "Loadable with `extensions =`" (IC-69): P08 resolves the session's model (`gateway_model_ref()`) before `gateway_register()` loads `extensions =`, and resolves router names without the session's rank-0 records, so `peter(..., model = "jev-auto", extensions = <path>)` cannot select the router in the same call. The example stays a valid extension file (its last expression is the factory; usable from a trusted `.gptr/extensions/` or the user's extensions folder) and documents `gptr_register(jev_router_spec())` and `model = jev_router_spec(...)`; the test loads it with `sys.source()` and passes the spec as the model.
 6. Live mode and the cache: 04 is silent; architecture §6.9.3 says `options(gptr.replay = "live")` "asks the model afresh". `s1_run()` skips cache reads when `replay_mode(args$replay)` is `"live"` and still writes new answers. The replay guard follows P08's `replay_guard()`, which reads only the global mode (as P08's own `gateway_guards()` does).
 7. Egress and `.opts$context = "none"`: P08 skips the egress check for System 2 calls with `context = "none"`; a System 1 state is always the user's data, so P13 checks egress for every non-local, non-offline System 1 provider regardless of `.opts$context`.
 8. "Gateway records of 04 §4" (04 §7.13) is read as report 04 section 4.4's registry entries: `openrouter-jev` (`https://openrouter.ai/api/v1/`, `OPENROUTER_API_KEY`, model `typesafe/jev-1.13`) and `vercel-jev` (`https://ai-gateway.vercel.sh/typesafe/v1/`, `AI_GATEWAY_API_KEY`, model `typesafe-ai/jev`); their provider ids are not fixed by 04 (`openrouter` is already P05's chat provider). Cloudflare needs a different envelope and is left out, as the report recommends.
@@ -5487,7 +5487,7 @@ None of the placeholder phrases forbidden by the writing-plans standard occurs i
 - Copy safety, in fresh `Rscript --vanilla` processes with `tracemem()` on the scratch package: `s1_call()` over a 200-element vector, a 40,000-cell matrix and a list holding a 200,000-element vector left the object editable in place (0 copies); inserting `the$s1_last_input = values` into `s1_states_at()` made each of those rows report 1 copy (Task 10's red phase); a data frame copies under base R's own `df$x[1] = 0` (2 copies with no gptr call at all), so it is not a usable row.
 - The router example's `route()` was exercised with stand-in requests: complex rating -> strong model with state `planning`; failing `ctx$decide()` -> standard; a `lookup` result or a failed `edit` keeps the planner; a successful `write` switches to the implementation model; a compaction request gets the implementation model; the factory registers `jev-auto`.
 - The fixture JSON files and `ns04-system-one.json` parse with jsonlite; the fixture's `objects$abstracts` evaluates to 20 named abstracts in an environment whose parent is `baseenv()`, as P07's runner evaluates it.
-- Not executed (they need the full stack of P01-P12): the `gptr()` end-to-end tests of Tasks 9 and 11, the mock-server and rate tests, `test-copy-s1.R` through `expect_no_copy()`, the live test and the benchmark runner. Their expected counts (test-s1-client.R 244, test-s1-emulate.R 43, test-s1-route.R 154, test-copy-s1.R 4, test-live-jev.R 14; the client and route figures after the cross-plan consolidation moved Task 9's four INFRA-18 tests, 29 expectations, into `test-s1-route.R`) are counted from the code.
+- Not executed (they need the full stack of P01-P12): the `peter()` end-to-end tests of Tasks 9 and 11, the mock-server and rate tests, `test-copy-s1.R` through `expect_no_copy()`, the live test and the benchmark runner. Their expected counts (test-s1-client.R 244, test-s1-emulate.R 43, test-s1-route.R 154, test-copy-s1.R 4, test-live-jev.R 14; the client and route figures after the cross-plan consolidation moved Task 9's four INFRA-18 tests, 29 expectations, into `test-s1-route.R`) are counted from the code.
 
 ## Plan review log
 
@@ -5499,7 +5499,7 @@ Adversarial review of 2026-10-01 against 00-conventions.md, 03, 04 (with §15), 
 | 2 | major | Task 8, `s1_record()`; Task 9, "System 1 emits a decision event ..." | applied | `ev_new("decision", ..., type = q$type)` overwrote the event's own `type` (P01's `ev_new()` assigns payload fields after `type`; 04 §4.5 makes `type` the event name), so hooks and P14's JSONL sink received an event named `noul`. The question type now travels as `question_type`; the test asserts `type == "decision"` and `question_type == "noul"`. Global Constraints, Task 8 prose and the self-review were updated; ambiguity 16 records the 04 §10.4 / §4.5 collision. |
 | 3 | major | Task 8, `s1_record()` -> `doc.s1_block` | applied | P15's `doc_s1_block_service(call, summary)` writes the block header's `model=` and `date=` from `attr(summary, "meta")` and falls back to `model=unknown` for a bare string, losing the physical model 04 §11.5 requires in the header. P13 now passes the summary string with `meta = list(model, date)`; the Task 8 doc-block test asserts the attribute; ambiguity 3 amended. |
 | 4 | minor | Task 6, `s1_emu_question()` | applied | The port of the adapter's schema (report 04 §5.3, `emu_question_schema()`) dropped the `True criteria:` / `False criteria:` lines of a `noul` question that has criteria (04 §7.13's example passes them to `s1_request()`). Restored, with a schema-test expectation. |
-| 5 | minor | Plan acceptance 2a; Task 9 tests | applied | 05's literal check `if (gptr("q", x, model = jev))` against a mocked `/systemone` was only approximated (`model = <mock spec>`, `model = judge`). Added "against a mocked /systemone: if (gptr(\"q\", x, model = jev)) works": a user-rank `typesafe` record (per-record override, IC-69) points `jev` at `local_mock_server("systemone")`; the test checks the decision and the request body. |
+| 5 | minor | Plan acceptance 2a; Task 9 tests | applied | 05's literal check `if (peter("q", x, model = jev))` against a mocked `/systemone` was only approximated (`model = <mock spec>`, `model = judge`). Added "against a mocked /systemone: if (peter(\"q\", x, model = jev)) works": a user-rank `typesafe` record (per-record override, IC-69) points `jev` at `local_mock_server("systemone")`; the test checks the decision and the request body. |
 | 6 | minor | Task 11; IC-69 "loadable with `extensions =`" | applied | No test loaded the example through `extensions =`. Added "the example loads with extensions = for that session only (IC-69)": `jev-auto` is registered for the new session and invisible without its id (P08's `gateway_register()` loads file paths with `ext_load(..., rank = 0L, session = id)`). Task 11 interfaces and prose updated. |
 | 7 | minor | Task 4 prose; `s1_typesafe_parse()` error branch | applied (documentation) | P04 sends every non-2xx response to `on_fail()` with a condition classified by `retry_classify()` and no body, and P04's `retry_body_error()` parses only `{"error": {...}}`; over HTTP the System 1 class follows the status and TypeSafe's `detail.message` is lost, while the fixture tests exercise the parser directly. Documented in Task 4 and as ambiguity 17 (the fix belongs to P04's file). |
 | 8 | minor | Task 9 rate test; acceptance 4b-3 | applied (documentation) | P04's bucket (capacity 40, refill 40 per second) admits up to 80 requests in a first one-second window; the test asserts the bucket schedule. The reading is stated in the test comment, the acceptance row and ambiguity 18. |
@@ -5516,7 +5516,7 @@ Validation run during this review (in a scratch directory outside the repository
 - With P01's code blocks extracted from `P01-foundation.md`, P08's `call_new()`/`call_value()` from `P08-gateway-sdk.md`, and stand-ins for the registry, the model layer, usage accounting, sessions, replay and egress: test-s1-types.R (Task 1, 86), test-s1-client.R (Task 3, 126), test-s1-cache.R (32), test-s1-route.R (Tasks 7-8, 103 with the new doc-block expectation) and test-s1-emulate.R (Task 6, 32, with `provider_stream()` played synchronously over P01's `fake_stream()`) all pass.
 - `s1_record()` checked directly: the dispatched payload has `type == "decision"`, `question_type == "noul"`, `cached == 1L`; the doc-block summary carries `meta = list(model, date)`, `c()` of it gives the bare string, and P15's reading (`as.character(summary)[1L]`, `attr(summary, "meta")`) yields the text and the physical model.
 - The `system1` section body of Task 9 is byte-identical to the `<system1>` text of architecture §7.3 (compared in R).
-- Not run here: the end-to-end `gptr()` tests of Tasks 9 and 11 (including the two added tests), the mock-server and rate tests, the copy rows, the live test and the benchmark; their counts are counted from the code.
+- Not run here: the end-to-end `peter()` tests of Tasks 9 and 11 (including the two added tests), the mock-server and rate tests, the copy rows, the live test and the benchmark; their counts are counted from the code.
 
 ## Cross-plan consolidation log
 
@@ -5527,4 +5527,4 @@ Cross-plan consistency pass of 2026-10-01 against 04 (with §15), 03, 05 and the
 | 1 | obligations | minor | Plan acceptance command 3 (`lintr::lint_package()`) | applied | Valid: P01 acceptance A3 (and its note) loads the namespace first because, on the uninstalled tree, `object_usage_linter` reports every internal call; P13's own validation had that linter off. The command is now `Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); lints = lintr::lint_package(); print(lints); stopifnot(length(lints) == 0L)'`, expected `No lints found.` and exit 0 (merged with issue 3, same command block). |
 | 2 | trace | major | Task 13 Step 2, Step 4; Plan acceptance command 4 | applied | Valid: P07's runner prints `OK: <k> static prefixes and <n> golden transcripts within the baseline tolerances` (P07 `bench_main()`), and by P13 the fixtures directory holds four files (P07's `ns02-mixed-model`, `ns03-pipe-steering`; P10's `ns02b-data-first-pipe`; P13's `ns04-system-one`; P08, P09, P11 and P12 add none). Step 2 now expects the static-prefix table, the four rows and `4 golden transcripts in <t> s; ...` before the `ns04-system-one: no baseline row` failure; Step 4 and command 4 expect `OK: 4 static prefixes and 4 golden transcripts within the baseline tolerances`, noting that the second number is the count of files in `dev/bench/tokens/fixtures/` once later plans add fixtures. |
 | 3 | trace | minor | Plan acceptance command 3 (`devtools::test(filter = "arch\|lint")`, bare `lintr::lint_package()`) | applied | Valid: checked with `testthat:::filter_test_scripts()`: `"arch\|lint"` selects `test-arch-layers.R`, `test-lint-rules.R` and P10's `test-tool-search.R`; `"^(arch-layers\|lint-rules)$"` selects only the first two (P12's acceptance row H uses the same anchored filter). The first command is now `Rscript --vanilla -e 'devtools::test(filter = "^(arch-layers\|lint-rules)$")'`; the lint command as in issue 1. |
-| 4 | trace | minor | Task 9 tests for INFRA-18 (`test-s1-client.R`); Task 4 "at most gptr.s1_max_active requests are in flight" | applied | Valid: 03 §6.18 row 18 names `test-s1-route.R` (P13) for INFRA-18, and P24's `dev/bench/perf/infra-time.R` runs `s1-route` only; 04 is silent on the file, 05 lists both files as P13's. Task 9 now appends the four tests to `test-s1-route.R` (new Step 1 block) with titles prefixed `INFRA-18:` (`if (gptr("q", x, model = jev))` and the 100-state/8-active mock tests, the `min_confidence`/`uncertain` test, the `choices` test; two titles shortened to stay within 100 characters), and removes them from `test-s1-client.R`. They call only the harness (`s1_fresh()`), P01's helpers and package functions, so no file-local helper moved. Task 4's `s1_request()` unit test stays in `test-s1-client.R` (it tests `s1-client.R` code; INFRA-18's `gptr()`-level max-active check is the moved mock test). Updated: Task 9 Files, prose, Step 2/4 filter `s1-client\|s1-emulate\|s1-route` (red phase: 300 earlier expectations; green `PASS 419` = client 244, emulate 43, route 132), the commit's `git add`; Task 11 red `[ FAIL 5 \| WARN 0 \| SKIP 0 \| PASS 132 ]`, green `PASS 154`; File Structure; test-file header comments; acceptance rows 2a-2f; acceptance command 1 per-file counts (client 244, route 154; total `PASS 586` unchanged); self-review counts and a spec-coverage row for 03 §6.18. |
+| 4 | trace | minor | Task 9 tests for INFRA-18 (`test-s1-client.R`); Task 4 "at most gptr.s1_max_active requests are in flight" | applied | Valid: 03 §6.18 row 18 names `test-s1-route.R` (P13) for INFRA-18, and P24's `dev/bench/perf/infra-time.R` runs `s1-route` only; 04 is silent on the file, 05 lists both files as P13's. Task 9 now appends the four tests to `test-s1-route.R` (new Step 1 block) with titles prefixed `INFRA-18:` (`if (peter("q", x, model = jev))` and the 100-state/8-active mock tests, the `min_confidence`/`uncertain` test, the `choices` test; two titles shortened to stay within 100 characters), and removes them from `test-s1-client.R`. They call only the harness (`s1_fresh()`), P01's helpers and package functions, so no file-local helper moved. Task 4's `s1_request()` unit test stays in `test-s1-client.R` (it tests `s1-client.R` code; INFRA-18's `peter()`-level max-active check is the moved mock test). Updated: Task 9 Files, prose, Step 2/4 filter `s1-client\|s1-emulate\|s1-route` (red phase: 300 earlier expectations; green `PASS 419` = client 244, emulate 43, route 132), the commit's `git add`; Task 11 red `[ FAIL 5 \| WARN 0 \| SKIP 0 \| PASS 132 ]`, green `PASS 154`; File Structure; test-file header comments; acceptance rows 2a-2f; acceptance command 1 per-file counts (client 244, route 154; total `PASS 586` unchanged); self-review counts and a spec-coverage row for 03 §6.18. |

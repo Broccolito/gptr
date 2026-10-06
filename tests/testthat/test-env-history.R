@@ -25,12 +25,12 @@ local_utf8_ctype = function(.env = parent.frame()) {
   TRUE
 }
 
-test_that("the callback logs successful user expressions and skips gptr() calls", {
+test_that("the callback logs successful user expressions and skips peter() calls", {
   local_history()
   user_log_callback(str2lang("x = 1"), 1, TRUE, FALSE)
   user_log_callback(str2lang("stop('no')"), NULL, FALSE, FALSE)
-  user_log_callback(str2lang("s = gptr('prompt', mtcars)"), NULL, TRUE, FALSE)
-  user_log_callback(str2lang("mtcars |> gptr::gptr('again')"), NULL, TRUE, FALSE)
+  user_log_callback(str2lang("s = peter('prompt', mtcars)"), NULL, TRUE, FALSE)
+  user_log_callback(str2lang("mtcars |> gptr::peter('again')"), NULL, TRUE, FALSE)
   user_log_callback(str2lang("m[6000, 5000] = -1"), NULL, TRUE, FALSE)
   expect_equal(user_expr_log(), c("x = 1", "m[6000, 5000] = -1"))
 })
@@ -112,19 +112,19 @@ test_that("multi-line expressions are logged on one line, not as their first lin
   for (i in seq_along(ifs)) expect_identical(str2lang(log[i]), str2lang(ifs[i]))
 })
 
-test_that("every way of naming gptr() is filtered and other gptr functions are logged", {
+test_that("every way of naming peter() is filtered and other gptr functions are logged", {
   local_history()
-  user_log_push(quote(gptr:::gptr("p")))
-  user_log_push(str2lang("\"gptr\"::\"gptr\"(\"p\")"))
-  user_log_push(quote(print(gptr("p"))))
-  user_log_push(quote(x[, 1] |> gptr("p")))
+  user_log_push(quote(gptr:::peter("p")))
+  user_log_push(str2lang("\"gptr\"::\"peter\"(\"p\")"))
+  user_log_push(quote(print(peter("p"))))
+  user_log_push(quote(x[, 1] |> peter("p")))
   # Review round 2: argument names that are formals of c() do not end the walk
-  user_log_push(str2lang("f(recursive = g(gptr(\"p\")))"))
-  user_log_push(str2lang("h(use.names = k(gptr(\"p\")))"))
+  user_log_push(str2lang("f(recursive = g(peter(\"p\")))"))
+  user_log_push(str2lang("h(use.names = k(peter(\"p\")))"))
   user_log_push(quote(gptr::gptr_last()))
-  user_log_push(str2lang("f = gptr"))
+  user_log_push(str2lang("f = peter"))
   user_log_push(quote(x[, 1]))
-  expect_equal(user_expr_log(), c("gptr::gptr_last()", "f = gptr", "x[, 1]"))
+  expect_equal(user_expr_log(), c("gptr::gptr_last()", "f = peter", "x[, 1]"))
 })
 
 test_that("wide and deep expressions are logged quickly and never make the callback throw", {
@@ -192,17 +192,17 @@ test_that("a call chain that exhausts deparse()'s C stack check does not make th
 # Added in review round 3: the formals of function() are a pairlist, not a call, and their
 # defaults are walked too.
 
-test_that("default arguments are walked for gptr() calls and for depth", {
+test_that("default arguments are walked for peter() calls and for depth", {
   local_history()
-  expect_equal(user_log_scan(str2lang("g = function(x = gptr('p')) x")), "gptr")
-  expect_equal(user_log_scan(str2lang("function(a, b = function(c = gptr::gptr('p')) c) a")),
+  expect_equal(user_log_scan(str2lang("g = function(x = peter('p')) x")), "gptr")
+  expect_equal(user_log_scan(str2lang("function(a, b = function(c = gptr::peter('p')) c) a")),
                "gptr")
   expect_equal(user_log_scan(str2lang("h = function(x, y = 2) x")), "show")
   expect_equal(user_log_scan(quote(x[, 1])), "show")
   body = paste(rep("a", 6000L), collapse = " + ")
   deep = str2lang(sprintf("f = function(x = %s) 1", body))
   expect_true(user_log_callback(deep, NULL, TRUE, TRUE))
-  expect_true(user_log_callback(str2lang("g = function(x = gptr('p')) x"), NULL, TRUE, TRUE))
+  expect_true(user_log_callback(str2lang("g = function(x = peter('p')) x"), NULL, TRUE, TRUE))
   expect_true(user_log_callback(str2lang("h = function(x, y = 2) x"), NULL, TRUE, TRUE))
   expect_equal(user_expr_log(), c(
     "<expression nested more than 5000 calls deep>", "h = function(x, y = 2) x"
@@ -242,14 +242,14 @@ test_that("the registered callback logs real top-level expressions in a fresh R 
     "ns = asNamespace('gptr')",
     "user_log_start = get('user_log_start', ns)",
     "user_expr_log = get('user_expr_log', ns)",
-    "gptr = function(...) invisible(NULL)",
+    "peter = function(...) invisible(NULL)",
     "user_log_start('s0000000001')",
     "x = 1",
     if (!is.na(loc)) "w = list(`\\xfe` = 1)",
     "for (i in 1:2) {", "  y = i", "}",
     "if (x > 0) {", "  if (x > 1) 'a' else 'b'", "}",
-    "s = gptr('prompt', mtcars)",
-    "mtcars |> gptr('again')",
+    "s = peter('prompt', mtcars)",
+    "mtcars |> peter('again')",
     paste0("f = function() ", paste(rep("a", 6000), collapse = " + ")),
     "z = 2",
     "cat(paste0('LOG: ', user_expr_log()), sep = '\\n')",

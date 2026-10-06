@@ -333,7 +333,7 @@ test_that("a match-limit failure is reported without rows and loses only the lin
 
 # Added (D-057, review round 3): a file larger than 20 MB is skipped with a notice (the plan). The
 # notice must also reach a search with no rows and both prints, through which model code in `r`
-# sees gptr$grep(). The fixture is sparse: only its last byte is written.
+# sees peter$grep(). The fixture is sparse: only its last byte is written.
 test_that("a skipped file over 20 MB is reported with or without rows, in the text and prints", {
   td = withr::local_tempdir()
   put(td, "small.txt", "needle one\n")

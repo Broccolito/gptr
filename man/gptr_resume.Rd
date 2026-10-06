@@ -26,10 +26,6 @@ detached copy (from \code{saveRDS()}, a knitr cache or callr) is attached under 
 rules. \verb{block =} returns the session that a document replay bound to that block.
 }
 \examples{
-s = gptr_last()
-if (!is.null(s)) identical(gptr_resume(s$id), s)
-\dontshow{if (exists("gptr", mode = "function")) withAutoprint(\{ # examplesIf}
-s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 identical(gptr_resume(s$id), s)
-\dontshow{\}) # examplesIf}
 }

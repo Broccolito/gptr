@@ -51,8 +51,8 @@ reconciled where the amendment changes their assumptions before implementation.
 | Milestone | Plans | Ships | Exit test (last plan of the milestone) |
 |---|---|---|---|
 | M0 Foundation | P01-P04 | skeleton, utilities, registry and extension API, secrets, reactor and process engine | `R CMD INSTALL` succeeds with top-level `on_load()` calls in later-collating files (IC-32); reactor INFRA-01/05/06/21/23 on the mock server; registry conformance; redaction properties; no connection left open; `--as-cran` clean on macOS, Windows, Linux, oldrel-4, no-suggests, `LC_ALL=C` |
-| M1 Offline S-8 kernel | P05-P08 | model layer, sessions, loop, dispatcher, store, prompt and context, `gptr()` and the SDK | NS-2/NS-3 shapes on the fake provider; pipe steering of a running session; overlay fork; resume; 20-turn byte-prefix test; gateway copy suite |
-| M2 Live R agent and System 1 | P09-P13 | evaluator and workspace, tools and `gptr$`, permissions and plan mode, native adapters, System 1 | NS-2..NS-5 against the fake provider and mock servers; permission matrix; adapter conformance; evaluator copy suite |
+| M1 Offline S-8 kernel | P05-P08 | model layer, sessions, loop, dispatcher, store, prompt and context, `peter()` and the SDK | NS-2/NS-3 shapes on the fake provider; pipe steering of a running session; overlay fork; resume; 20-turn byte-prefix test; gateway copy suite |
+| M2 Live R agent and System 1 | P09-P13 | evaluator and workspace, tools and `peter$`, permissions and plan mode, native adapters, System 1 | NS-2..NS-5 against the fake provider and mock servers; permission matrix; adapter conformance; evaluator copy suite |
 | M3 Interactive, recorded, reversible | P14-P17 | console, documents and replay, checkpoints and rewind, skills/templates/agents/plugins | NS-1 through the scripted console; NS-7 in `.R`, Rmd, qmd, ipynb; `/undo` and rewind; NS-10 skills and plugins; NS-12 |
 | M4 Interop and scale-out | P18-P21 | MCP client and server, OAuth, sub-agents, CLI providers, background sessions | NS-6 (inline + worker + fake CLI on one reactor; the CLI leg in P20, IC-36) and its replay with zero requests, NS-9, NS-10 MCP; INFRA-16/19 |
 | M5 Polyglot, apps, measured release | P22-P25 | bridges, artifacts, benchmark suite and end-to-end acceptance, release | NS-8, NS-11; token baselines committed; secrets and injection end-to-end; CRAN submission check |
@@ -80,7 +80,7 @@ P01..P23 -> P24 -> P25
 | P07 | Prompt, context, caching and compaction | M1 | P06 | 5 |
 | P08 | Gateway and SDK | M1 | P03, P07 | 4 |
 | P09 | Evaluator and workspace | M2 | P08 | 8 |
-| P10 | Tools and the `gptr$` namespace | M2 | P09 | 8 |
+| P10 | Tools and the `peter$` namespace | M2 | P09 | 8 |
 | P11 | Permissions, UI and plan mode | M2 | P10 | 6 |
 | P12 | Native provider adapters | M2 | P05, P07 | 4 |
 | P13 | System 1 | M2 | P08, P09, P12 | 5 |
@@ -120,12 +120,12 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 | REQ-13 Jev System 1, `.env` aliases, key hygiene | P13, P03, P24 (`test-secrets-e2e.R`) | REQ-34 cross-LLM collaboration | P19, P05 (hand-off), P20 |
 | REQ-14 routing, model switches, hand-off | P05, P06 (router calls), P08, P13 (`jev-router.R`) | REQ-35 workflows as R control flow | P08, P13, P15, P19, P24 (NS-11) |
 | REQ-15 provider setup from R | P08 (`gptr_config()`), P03 (`gptr_env()`), P05 (`gptr_providers()`, `gptr_models()`), P18 (`gptr_login()`) | REQ-36 ask the user | P11 |
-| REQ-16 `gptr()` interactive console | P14, P08 | REQ-37 permission modes | P11, P06 (`perm_check()`) |
-| REQ-17 programmatic `gptr()` | P08, P06 | REQ-38 interrupt, abort, steer | P14, P06 (queues), P21 |
+| REQ-16 `peter()` interactive console | P14, P08 | REQ-37 permission modes | P11, P06 (`perm_check()`) |
+| REQ-17 programmatic `peter()` | P08, P06 | REQ-38 interrupt, abort, steer | P14, P06 (queues), P21 |
 | REQ-18 pipe steers one session | P06, P08, P21, P15 (pipe-chain transcripts) | REQ-39 Shiny artifacts | P23 |
 | REQ-19 bare identifiers | P08 | REQ-40 own LLM infrastructure | P04, P05, P06, P12, P01 (dependency lists) |
 | REQ-20 typed, vectorised System 1 | P13 | REQ-41 everything a plugin | P02, P17, every built-in plan, P24 (`test-s11-conformance.R`) |
-| REQ-21 inspect the session cheaply | P09, P10 (`gptr$describe()`) | REQ-42 token efficiency, measured | P01 (estimator, truncation), P07, P10, P13, P22, P24 |
+| REQ-21 inspect the session cheaply | P09, P10 (`peter$describe()`) | REQ-42 token efficiency, measured | P01 (estimator, truncation), P07, P10, P13, P22, P24 |
 | S-1 single gateway, S-2 quoted prompts | P08 | S-7 old API gone | P01, P25 |
 | S-3 R only, narrow Rcpp exception | P01, P24 | S-8 pipe steering on one session object | P06, P08, P21 |
 | S-4 no bash tool | P10, P22 | S-9 `=` and `\|>` house style | P01 (`.lintr`, `test-lint-rules.R`), P15 (recorded code) |
@@ -290,7 +290,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      failing field for an invalid one; a direct tool description over 400 tokens fails.
   4. Registering 100 lazy manifests takes under 50 ms (G1 measured 8-16 ms).
   5. Review additions: every §6.8 example of the contract runs; a user `read` override leaves `edit` and the
-     `gptr$grep` member working; a factory loaded with `session = <id>` is invisible to another session and removed
+     `peter$grep` member working; a factory loaded with `session = <id>` is invisible to another session and removed
      at its shutdown; a `-builtin:permissions` filter from user settings, a call and `gptr_config()` is refused; a
      plugin `service` record replaces a built-in service and disappears with its plugin; an `operator` context block
      registered at rank 1 is refused.
@@ -487,7 +487,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   7. G3 analogues: `identical(s |> step, s)`; `$<-` refused; an unreferenced settled session is finalised and
      its lock removed (except the one `gptr_last()` holds); a same-process duplicate continues with
      `gptr_error_split_brain`.
-  8. Review additions: `nrow(showConnections())` is unchanged after `gptr()` returns, errors or is interrupted, and
+  8. Review additions: `nrow(showConnections())` is unchanged after `peter()` returns, errors or is interrupted, and
      after 300 sessions kept in a list; SIGKILL mid-append, resume, three appends: all present and the tree
      connected; `gptr_last()` survives `gc()`; with no policy registered a mutating tool asks (and is `blocked`
      without a UI); a hook answering allow to an `ask_human` is ignored; an option changed by model code mid-run
@@ -528,7 +528,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   2. P07-owned rendered sections are byte-identical to architecture §7.3 as amended (the other owners' texts are
      compared in their plans and composed in P24); each section is within its budget; with a fixed T1 fixture
      (`<r_env>` plus the two built-in skills, 542 tokens) standing in for P09's and P17's sections, the preset
-     estimates are within 5% of `prefix-baseline.json` (initial values: 1,271 / 2,360 / 2,844 / 2,987 measured
+     estimates are within 5% of `prefix-baseline.json` (initial values: 1,262 / 2,335 / 2,813 / 2,956 measured
      o200k tokens, stored with the estimator's figures; IC-68); no shipped text mentions `str(` (IC-67).
   3. The 20-turn scenario: all same-target consecutive request pairs (33 of 33 in G4's scenario) are byte
      prefixes across turns, model switches and returns, tool and skill activation, steering and mode changes;
@@ -537,7 +537,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   4. INFRA-26: a mock overflow triggers exactly one compaction entry and one retry; a second overflow surfaces
      as an error.
   5. The tail TTL switches to 1 h after a simulated 241 s gap and not after 239 s.
-  6. Review additions: the first request of `gptr("x", mtcars)` contains `<attached name="mtcars">` after
+  6. Review additions: the first request of `peter("x", mtcars)` contains `<attached name="mtcars">` after
      `<workspace>` (with a stub `attached` block until P09); an unchanged plugin turn block is sent once; the
      `readonly` preset has no edit or write rules; a session in an untrusted project renders
      `<project_instructions trusted="false">`; a model with an 8K window and a large project block is refused for
@@ -546,9 +546,9 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 
 ### P08 Gateway and SDK
 
-- **Goal.** `gptr()` itself: copy-safe capture, identifier resolution, routing through the registry, and the
+- **Goal.** `peter()` itself: copy-safe capture, identifier resolution, routing through the registry, and the
   SDK verbs; M1's offline S-8 contract.
-- **Scope.** `gptr-gateway.R` (the classed closure `gptr` with `$`, `[[`, `.DollarNames`, `$<-` refusal and
+- **Scope.** `gptr-gateway.R` (the classed closure `peter` with `$`, `[[`, `.DollarNames`, `$<-` refusal and
   `print` methods, `$`/`[[`/`.DollarNames` through the `ns.resolve`/`ns.names` services of P10 (IC-36); dispatch
   steps 1-5 of architecture §4.1.1 with routes looked up in the registry; return visibility; the registration point
   for routes contributed by later plans); `gptr-capture.R` (base-R capture under rules R2-R3, prompt selection,
@@ -579,22 +579,22 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 - **Acceptance.**
   1. `Rscript --vanilla -e 'devtools::test(filter = "gptr-|copy-gateway")'` is green (copy tests skip on CRAN
      and without profmem).
-  2. Call shapes on the fake provider: `gptr("a", mice)` and `mice |> gptr("a")` create sessions with a
-     `mice` context label; `gptr("a") |> gptr("b") |> gptr("c", model = <second fake>)` returns the same
+  2. Call shapes on the fake provider: `peter("a", mice)` and `mice |> peter("a")` create sessions with a
+     `mice` context label; `peter("a") |> peter("b") |> peter("c", model = <second fake>)` returns the same
      object with three turns and a `model_change` entry; a test tool that pipes into its own running session
-     enqueues a steer delivered after the tool result; `gptr()` non-interactively errors with
+     enqueues a steer delivered after the tool result; `peter()` non-interactively errors with
      `gptr_error_noninteractive`.
-  3. Identifier table: each row of §4.1.3 including a wrapper `w = function(...) gptr("x", ...)` with a local
+  3. Identifier table: each row of §4.1.3 including a wrapper `w = function(...) peter("x", ...)` with a local
      `m` resolving to the caller's value (G3 t2b), an alias shadowed by a character variable (notice), `!!m`,
      `I(m)`, `if (hard) a else b`.
   4. Copy suite: every gateway row of G3 t5 (top level, pipe, continuation with context, wrapper with forwarded
      dots, alias and if/else models, `$value` reads, print/summary/str of a session, fork, `saveRDS`) is in
-     place, and the in-run edit rows of IC-41 (`gptr("x", big)`, `big |> gptr("x")`, `s |> gptr("x", big)` with
+     place, and the in-run edit rows of IC-41 (`peter("x", big)`, `big |> peter("x")`, `s |> peter("x", big)` with
      `in_run_edit = TRUE`) report 0 copies.
   5. `gptr_init()` without `path` errors non-interactively; with a path it creates the template files and does
      not touch `.Rbuildignore`; a project without `gptr_trust()` ignores project settings beyond tightening;
      a non-interactive first use of a provider without an acknowledgement raises `gptr_error_egress`.
-  6. Review additions: `f = function(s, d) s |> gptr("filter d", d)` with `s` homed in `globalenv()` either
+  6. Review additions: `f = function(s, d) s |> peter("filter d", d)` with `s` homed in `globalenv()` either
      evaluates where `d` is visible or fails fast naming `d`; `skills = single_cell` resolves to `single-cell`;
      `gptr_return(x)` outside a run returns `x` invisibly; `gptr_config(mode = manual)` writes the project file when a
      workspace exists; under `_R_CHECK_PACKAGE_NAME_` with `TESTTHAT=true` replay is not forced; a model-code call of
@@ -616,16 +616,16 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   capture cleaned up in `suspendInterrupts()`, per-expression `setTimeLimit()` with no timeout when a human is
   present, calling handlers created outside the frame holding the home, interruption recorded with
   `on.exit()`, symbols printed by name, state diff); `eval-plots.R` (recorded device, PNG at 768x512 res 120,
-  ragg when installed, `gptr$plot()` support); `eval-guard.R` (forbidden calls, interactive traps, the
+  ragg when installed, `peter$plot()` support); `eval-guard.R` (forbidden calls, interactive traps, the
   `gptr::` shim when `gptr` is not attached); `eval-format.R` (model text within the 4,000-token budget, head
-  40% / tail 60%, state-change lines, `gptr$out(id)` notices, tighter budget above half the compaction
+  40% / tail 60%, state-change lines, `peter$out(id)` notices, tighter budget above half the compaction
   threshold); `env-snapshot.R` (names, addresses, fingerprints, diff; `builtin:workspace` registering the
   `workspace`, `workspace_changes`, `attached` and `r_env` context blocks); `env-describe.R` (`gptr_describe()`
   generic, level-based methods listed in architecture §7.5); `env-history.R` (task-callback log, last 20);
   `env-probe.R` (capability probe for `<r_env>` without loading packages).
 - **Review amendments (contract §15).** R8 clears every `withVisible()` result in place (IC-67); plots on
   `pdf(NULL)` when no device is open and no human sees one, the prior device restored; at most
-  `gptr.r_max_images` images per result, the rest stored for `gptr$plot(k)`, image tokens in the budget, image
+  `gptr.r_max_images` images per result, the rest stored for `peter$plot(k)`, image tokens in the budget, image
   elision above provider limits (IC-67); `rng_swap()` with hash-derived L'Ecuyer seeds (IC-61); `eval_guard()`
   flags `q`/`quit` in any position (IC-67); describers for packages outside Suggests use slots and base generics
   only (IC-71); `attached` and preloaded `skill_content` blocks with `placement = "both"` (IC-38); the `evaluator`
@@ -646,7 +646,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   3. Copy suite: evaluation at top level, in `globalenv()` from a function, and **in a function-frame home**
      (`eval_r("n = 1L; length(d)", <the frame of f>)` called inside `f = function(d) ...`) leaves the caller's 40 MB
      object editable in place; the rows `L$a`, `(x)`, `get("x")`, `x@slot` and `x[["a"]]` evaluated at top level
-     leave it in place (IC-67). The `gptr()` form of the function-frame case is in `test-copy-tools.R` (P10).
+     leave it in place (IC-67). The `peter()` form of the function-frame case is in `test-copy-tools.R` (P10).
   4. Describers keep at least 90% of G2's 98 facts at a 150-token budget, including Seurat-like
      `meta.data` dimensions and columns, Dates, dgCMatrix dims and nnz, formula text and nested names; ALTREP
      `1:1e9` is described without materialising.
@@ -656,27 +656,27 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      attaches 3 images and lists the rest; `.Random.seed` is identical before and after an evaluation with an agent
      stream; `g = q; g()` is blocked.
 
-### P10 Tools and the `gptr$` namespace
+### P10 Tools and the `peter$` namespace
 
 - **Goal.** The model-visible tools `r`, `read`, `edit`, `write` and the namespace that makes every other
   capability an R function (S-12 composition).
 - **Scope.** `tool-namespace.R` (gateway methods resolving members from `exposure = "r"` tool specs, generated
-  closures from JSON Schema, side-effect-free `$`, `.DollarNames` completion, `gptr$help()`, `gptr$search()`
-  (BM25 over members, plugin and MCP tools, skills), `gptr$describe()`, `gptr$plot()`, `gptr$out()`,
+  closures from JSON Schema, side-effect-free `$`, `.DollarNames` completion, `peter$help()`, `peter$search()`
+  (BM25 over members, plugin and MCP tools, skills), `peter$describe()`, `peter$plot()`, `peter$out()`,
   `builtin:tools`); `tool-r.R` (`r` tool schema of §7.2, record/note/timeout, results through the evaluator,
   nested-call gating hook, `builtin:r`); `tool-read.R` (encodings, windows, images by magic bytes, large-file
   index, 12,000-token cap, line numbers off); `tool-write.R` (atomic, EOL- and encoding-preserving); `tool-edit.R`
   (multi-edit, fuzzy fallback, `*** Begin Patch` envelopes, diff only on deviation, routing to the document
   backend when the path is a bound document); `tool-diff.R`; `tool-walk.R` (pruned walker, gitignore engine,
-  glob to PCRE, Pi's `**/` prefix rule); `tool-search.R` (`gptr$grep/find/ls` with raw prefilters, radix
+  glob to PCRE, Pi's `**/` prefix rule); `tool-search.R` (`peter$grep/find/ls` with raw prefilters, radix
   sorting, early stop, 1,500-token prints).
-- **Review amendments (contract §15).** P10 is the only owner of `gptr$out()` (IC-36); the gateway methods are
+- **Review amendments (contract §15).** P10 is the only owner of `peter$out()` (IC-36); the gateway methods are
   P08's and P10 provides `ns.resolve`, `ns.names` and `search.sources` (IC-36, IC-69); one spec per capability for
   `read`, `edit`, `write`, `grep`, `find`, `ls` with both forms, reserved member names and required plugin
   namespaces (IC-37); `record = FALSE` for `out`, `plot`, `help`, `search`, `describe` (IC-48); the tools'
   `guidelines` for `<rules>` and the `r_session` fragments for helpers and `out` (IC-68); the `r` tool's
-  `parameters` as a function giving the four schema variants (IC-68); `gptr$find(sort = "relevance")`,
-  `gptr$grep(sort =)` (IC-71); `gptr$plot(which =)` (IC-67); `read` resolves `skill:<name>/<path>` pseudo-paths
+  `parameters` as a function giving the four schema variants (IC-68); `peter$find(sort = "relevance")`,
+  `peter$grep(sort =)` (IC-71); `peter$plot(which =)` (IC-67); `read` resolves `skill:<name>/<path>` pseudo-paths
   (IC-68); `edit`/`write` apply the `control` and `instructions` path classes (IC-54).
 - **Owns.** The eight R files and tests; `test-copy-tools.R`.
 - **Test files.** One per owned R file: `test-tool-namespace.R`, `test-tool-r.R`, `test-tool-read.R`, `test-tool-write.R`, `test-tool-edit.R`, `test-tool-diff.R`, `test-tool-walk.R`, `test-tool-search.R` (plus the extra test files named under Owns).
@@ -689,17 +689,17 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   1. `Rscript --vanilla -e 'devtools::test(filter = "tool-|copy-tools")'` is green.
   2. Pi's read/edit/write oracle cases (01) and report 11's grep/find/ls oracles pass; `find` sorts by path,
      mtime and size; grep respects `.gitignore`.
-  3. `gptr$nope` errors listing the members; `.DollarNames` completion lists `read`, `grep`, `find`, `ls`,
+  3. `peter$nope` errors listing the members; `.DollarNames` completion lists `read`, `grep`, `find`, `ls`,
      `help`, `search`, `describe`, `plot`, `out`; accessing a member performs no I/O.
-  4. Model code `gptr$grep("x")` evaluated in an environment where `gptr` is not visible runs through the
-     shim, and the recorded code keeps `gptr$grep("x")`.
+  4. Model code `peter$grep("x")` evaluated in an environment where `peter` is not visible runs through the
+     shim, and the recorded code keeps `peter$grep("x")`.
   5. Value policy: a 12 MB bound object is held by name, a 200 KB one as a copy, an anonymous value boxed;
      `gptr_return(x)` outside a run returns `x` invisibly and changes nothing (IC-48); the copy rows for all three
-     stay in place, as does tool code `n = 1L` and `length(d)` in `f = function(d) gptr(..., d)` (moved from P09).
+     stay in place, as does tool code `n = 1L` and `length(d)` in `f = function(d) peter(..., d)` (moved from P09).
   6. An edit whose `oldText` matched only through the fuzzy fallback returns the message plus a diff of at most
      400 tokens; an exact edit returns the message only.
-  7. Review additions: a plugin member with `namespace = "grep"` or without a namespace is refused; `gptr$read` and
-     the direct `read` tool come from one spec; `gptr$find("tst", sort = "relevance")` ranks `test.R` first; the
+  7. Review additions: a plugin member with `namespace = "grep"` or without a namespace is refused; `peter$read` and
+     the direct `read` tool come from one spec; `peter$find("tst", sort = "relevance")` ranks `test.R` first; the
      `r` schema frozen without a document has no `record`/`note`; P10's NS fixture and baseline rows are added to
      `dev/bench/tokens/` (IC-73).
 
@@ -748,7 +748,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      `options(gptr.critical_guard = FALSE)` or writing `.gptr/extensions/x.R` needs a human (`blocked` without one);
      an ESC or bidi payload in code is escaped in the prompt; a cloned fixture with `settings.local.json` allow
      rules and an AGENTS.md instruction still asks; the pending plan is not handed to a call inside a loop or to a
-     call after an intervening `gptr()`; with `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an
+     call after an intervening `peter()`; with `jupyter.in_kernel = TRUE` mocked and a mocked `gptr_readline()`, an
      ask is answered.
 
 ### P12 Native provider adapters
@@ -812,13 +812,13 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 - **Acceptance.**
   1. `Rscript --vanilla -e 'devtools::test(filter = "s1-|copy-s1")'` is green; the live test skips unless
      `GPTR_LIVE_TESTS=true` and reads the key only through `gptr_env()`.
-  2. Against a mocked `/systemone`: `if (gptr("q", x, model = jev))` works; a 100-element vector issues
+  2. Against a mocked `/systemone`: `if (peter("q", x, model = jev))` works; a 100-element vector issues
      concurrent requests never exceeding 8 active; cached elements make zero requests; `choices` returns a
      classed character whose `==` gives a plain logical; `choices = factor(...)` returns a factor; a label
      `"TRUE"` is rejected; `min_confidence` with `uncertain = NA`, `"stop"` and a function behave as
      specified; splitting a data frame into several states prints the once-per-session `s1_split` message naming
      `I()` (a function cannot see that it is a condition; IC-71).
-  3. `s |> gptr("done?", model = jev)` adds no turn and appends a `gptr.decision` entry; the state sent is at
+  3. `s |> peter("done?", model = jev)` adds no turn and appends a `gptr.decision` entry; the state sent is at
      most 2,000 characters.
   4. Emulation never happens without `gptr_config(system1 = "emulate:<model>")`.
   4b. Review additions: the `gptr_prob()` example runs; a fake-classifier router loaded from the example switches
@@ -835,7 +835,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 
 ### P14 Console and front ends
 
-- **Goal.** The interactive face of `gptr()` (REQ-16, REQ-38) and the event-driven front ends (INFRA-27).
+- **Goal.** The interactive face of `peter()` (REQ-16, REQ-38) and the event-driven front ends (INFRA-27).
 - **Scope.** `console-repl.R` (the `console` frontend: `readline()` or one persistent `file("stdin")` under
   `.stdin = TRUE`, input grammar of architecture §6.17, long-line warning, optional `timestamp()` history,
   banner, route "no prompt" registration, `builtin:console`); `console-render.R` (chunk-invariant markdown
@@ -859,7 +859,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 - **Milestone.** M3.
 - **Acceptance.**
   1. `Rscript --vanilla -e 'devtools::test(filter = "console")'` is green (SIGINT tests skip on CRAN).
-  2. Through `gptr(.stdin = TRUE)` with a scripted UI: a prompt, `!dim(x)` (added to the next prompt's
+  2. Through `peter(.stdin = TRUE)` with a scripted UI: a prompt, `!dim(x)` (added to the next prompt's
      context), `!!x` (not added), `/mode auto` (mode entry at the next turn), `"""` multi-line input and `/exit`
      returning the session invisibly.
   3. The renderer gives identical output over 200 random chunkings (UTF-8 locale); a reply containing
@@ -870,7 +870,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      equals what was received.
   6. The JSONL sink contains no registered secret (fake key).
   7. Review additions: `artifact_start` prints `artifact  <id>  ->  <url>   (running in background)`; an ESC
-     sequence in a tool preview is escaped; with `jupyter.in_kernel = TRUE` mocked, `gptr()` with no prompt starts the
+     sequence in a tool preview is escaped; with `jupyter.in_kernel = TRUE` mocked, `peter()` with no prompt starts the
      console on a mocked `gptr_readline()`.
 
 ### P15 Documents and replay
@@ -920,7 +920,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   5. No document is written without `gptr_doc()`, `options(gptr.record = "auto")` or user-scope `record =
      "auto"`, or an interactive yes; a project `record = "auto"` is ignored (tighten-only); a fresh clone without
      any consent replays with zero model calls and executes no block twice (IC-45).
-  6. Review additions: a block whose code called `gptr_return(fit)` and `gptr$out("o1")` re-sources cleanly under
+  6. Review additions: a block whose code called `gptr_return(fit)` and `peter$out("o1")` re-sources cleanly under
      `source()` and Rscript and `$value` resolves `fit` (IC-48); re-sourcing NS-3 twice leaves the main-line
      `qc_flags` and `qc$value` unchanged and the fork's objects only in its overlay (IC-46); a replayed pipe chain
      returns one object; in a fresh clone without `sessions/` a continuation replays from the reconstructed history;
@@ -1002,7 +1002,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
      is ignored until `gptr_trust()`.
   4b. Review additions: `skills = single_cell` resolves to `single-cell` and `skills = high_performance_r` to the
      built-in; a SKILL.md with `name: on` and `version: 1.0` keeps both as strings; a plugin passed with `plugins =`
-     is invisible to the next `gptr()` call; an untrusted project's skill is not in the catalog.
+     is invisible to the next `peter()` call; an untrusted project's skill is not in the catalog.
   5. **M3 exit** (once P14-P17 are complete): NS-1 through the scripted console (P14), NS-7 in `.R`, Rmd, qmd and ipynb (P15), `/undo`
      and rewind (P16), NS-10 skills and plugins and NS-12 (P11) all pass on the fake provider;
      `devtools::check(args = c("--as-cran", "--no-manual"), error_on = "warning")` clean.
@@ -1019,7 +1019,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   pagination, progress, cancel, MRTR at most 5 rounds, elicitation to the ask UI); `mcp-config.R` (gptr's
   `mcp.json` at user and trusted-project level, read-only listing and on-request import of Claude Code, Claude
   Desktop, Codex (TOML subset), Cursor, VS Code and Pi configs, `gptr_mcp()`, `gptr_mcp_add()`,
-  `gptr_mcp_remove()`); `mcp-namespace.R` (`gptr$mcp$<server>$<tool>()` closures with lazy connect, the T1
+  `gptr_mcp_remove()`); `mcp-namespace.R` (`peter$mcp$<server>$<tool>()` closures with lazy connect, the T1
   `<mcp>` catalog within 1,500 tokens, per-tool exposure, `builtin:mcp`); `mcp-server.R` (dispatcher over
   `r`, `read`, `edit`, `write` through the permission gate; the claude `sdk` transport helpers; loopback
   Streamable HTTP with bearer token and Origin validation; `gptr_mcp_serve()`); `auth-oauth.R` (PKCE S256,
@@ -1045,8 +1045,8 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   2. The fixture server in each era: probe then fallback, era cached, tools listed and called over stdio and
      HTTP, a progress notification re-arms the idle timer, an interrupt sends `notifications/cancelled`, an
      `input_required` round is answered through the scripted UI.
-  3. `gptr$mcp$fixture$echo(text = "x")` inside `r` passes the gate as a nested call and returns an R value; the
-     `<mcp>` catalog stays within budget with 125 fixture tools and `gptr$search()` finds the rest.
+  3. `peter$mcp$fixture$echo(text = "x")` inside `r` passes the gate as a nested call and returns an R value; the
+     `<mcp>` catalog stays within budget with 125 fixture tools and `peter$search()` finds the rest.
   4. `gptr_mcp_serve()`: requests without the token get 401, a foreign Origin is rejected, the server binds
      127.0.0.1 only, and an `r` call through it is gated.
   5. OAuth against a mock authorization server: PKCE S256 exchange, refresh under a lock, tokens only in the
@@ -1089,12 +1089,12 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   2. INFRA-16 shape: two inline fake agents and two workers interleave on one reactor within about the slowest
      agent's wall time; R tools never overlap (the fake-CLI leg is P20's acceptance 2, IC-36).
   3. Team and fan-out results are sessions: `res$stats` is a child session, `res$text` joins reports,
-     `res |> gptr("...")` continues the team with `<agent_reports>`.
+     `res |> peter("...")` continues the team with `<agent_reports>`.
   4. Inline children read a 40 MB parent object at the same address with no copy (copy row) and their writes
      stay in the overlay; code with `<<-` is denied in parallel runs.
   5. A worker started with a fake key in a temporary `~/.Renviron` does not see it; at most 2 workers run when
      `_R_CHECK_PACKAGE_NAME_` is set; `gptr_cancel()` leaves no process.
-  6. Review additions: `gptr("Summarise", x, parallel = 4)` over 20 elements runs all 20, four at a time; a team
+  6. Review additions: `peter("Summarise", x, parallel = 4)` over 20 elements runs all 20, four at a time; a team
      and a fan-out started inside an `r` evaluation become children of the running session; a plugin `r` member and
      a `gptr_fake_provider()` spec work inside a worker; an inline agent calling System 1 while a sibling has a
      queued tool does not run the sibling's tool inside its evaluation (IC-57); a worker whose parent is killed exits
@@ -1152,7 +1152,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 
 ### P21 Background sessions (experimental)
 
-- **Goal.** Console pipe-steering of a running session (S-8) through `gptr(..., background = TRUE)`.
+- **Goal.** Console pipe-steering of a running session (S-8) through `peter(..., background = TRUE)`.
 - **Scope.** `agent-background.R`: registration of a running session with a `later`-driven pump (50 ms timer
   polling, no `later_fd`; a no-op while the reactor is on the stack, IC-57), idle-tick execution of R tools
   (`gptr.background_tools = "idle" | "wait"`, with a notice when a tool changed user bindings at an idle tick),
@@ -1168,7 +1168,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 - **Acceptance.**
   1. `Rscript --vanilla -e 'devtools::test(filter = "agent-background")'` is green; tests skip without later
      and on CRAN.
-  2. A background run on the fake provider progresses while the test pumps `later::run_now()`; `s |> gptr("x")`
+  2. A background run on the fake provider progresses while the test pumps `later::run_now()`; `s |> peter("x")`
      returns invisibly at once and the steer is delivered after the current tool result; `gptr_wait(s)` settles
      it; `gptr_cancel(s)` aborts it; an unreferenced settled background session is collected.
   3. `background = TRUE` without later errors with `gptr_error_missing_package`; it is never used in examples.
@@ -1181,12 +1181,12 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 
 - **Goal.** R as token-efficient glue for shell programs, scripts, Python, SQL and knitr engines, with no shell
   tool (S-4, REQ-42).
-- **Scope.** `bridge-sh.R` (`gptr$sh`, `gptr$script`, `gptr$bg`, `gptr$jobs` on the process engine (`gptr$out` is
+- **Scope.** `bridge-sh.R` (`peter$sh`, `peter$script`, `peter$bg`, `peter$jobs` on the process engine (`peter$out` is
   P10's, IC-36);
   the `interpreter` kind registered through `kind` and the built-in interpreters; budgeted head+tail prints;
-  `bridge_call` events and `#>` digests; `builtin:bridges`); `bridge-lang.R` (`gptr$py` with reticulate's
-  persistent `__main__` and uv-provisioning guard, `gptr$sql` with duckdb registration or the DBI connection in
-  scope, `gptr$knit` for other engines, whose shell engines run through `gptr$sh()` with the `helper` environment
+  `bridge_call` events and `#>` digests; `builtin:bridges`); `bridge-lang.R` (`peter$py` with reticulate's
+  persistent `__main__` and uv-provisioning guard, `peter$sql` with duckdb registration or the DBI connection in
+  scope, `peter$knit` for other engines, whose shell engines run through `peter$sh()` with the `helper` environment
   and a timeout (IC-67); `builtin:lang`).
 - **Review amendments (contract §15).** The shell and languages `r_session` fragments (IC-68); bridge children
   through `proc_spawn()` with `encoding = "UTF-8"`, the complete `helper` environment and non-blocking stdin
@@ -1200,14 +1200,14 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   1. `Rscript --vanilla -e 'devtools::test(filter = "bridge|copy-bridge")'` is green (Python, duckdb and knitr
      engine cases skip when unavailable).
   2. G5's behaviours: argv without a shell, a simple command line run directly and pipelines through the
-     resolved shell; C-locale UTF-8 output correct; timeout kills the process tree and suggests `gptr$bg`; a
-     background job's `$wait(until = "ready")`; truncation notice `gptr$out(<id>)` returns the full output; the
+     resolved shell; C-locale UTF-8 output correct; timeout kills the process tree and suggests `peter$bg`; a
+     background job's `$wait(until = "ready")`; truncation notice `peter$out(<id>)` returns the full output; the
      print budget of 1,500 tokens holds with stderr floors.
-  3. Classifier hooks: `gptr$sh("rm -rf data")` is level 3, `gptr$sh(c("git", "status"))` level 0,
-     `gptr$sql("select ...")` level 0 and `drop table` level 3; computed commands are re-checked at run time.
-  4. The copy row documents exactly one copy after `gptr$sql(name = df)` (duckdb registration) and none for
-     `gptr$sh()`.
-  5. Review additions: `gptr$knit("bash", "sleep 999")` times out and kills the process, and its environment lacks a
+  3. Classifier hooks: `peter$sh("rm -rf data")` is level 3, `peter$sh(c("git", "status"))` level 0,
+     `peter$sql("select ...")` level 0 and `drop table` level 3; computed commands are re-checked at run time.
+  4. The copy row documents exactly one copy after `peter$sql(name = df)` (duckdb registration) and none for
+     `peter$sh()`.
+  5. Review additions: `peter$knit("bash", "sleep 999")` times out and kills the process, and its environment lacks a
      registered fake key; `-builtin:bridges` removes the shell line from `<r_session>`; P22's NS fixtures are added to
      `dev/bench/tokens/` (IC-73).
 
@@ -1215,7 +1215,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
 
 - **Goal.** Artifacts are Shiny apps (S-5, REQ-39) launched from the live session in supervised background
   processes.
-- **Scope.** `artifact-app.R` (`gptr$app()`: static checks, immutable `vNNN/` snapshots with the leaf `saveRDS`
+- **Scope.** `artifact-app.R` (`peter$app()`: static checks, immutable `vNNN/` snapshots with the leaf `saveRDS`
   wrapper and size cap, callr child with the `artifact` environment, random port file, parent-PID watchdog,
   HTTP 200 check, optional chromote session check and 1000x700 screenshot, `html` kind, `artifact_start/stop`
   events, the artifacts `checkpointer`, `builtin:artifacts`); `artifact-registry.R` (`gptr_artifacts()`, open,
@@ -1224,7 +1224,7 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   refused and numbered data files with the mapping in `artifact.json` (IC-63); a per-launch access token in the URL
   (IC-71); ports from `port_candidates()` and `with_seed_preserved()` around chromote and shiny in the parent
   (IC-61); logs read and redacted by the parent (IC-70); `supervise_default()`, `encoding = "UTF-8"`,
-  `child_env_callr()` and `stopped` (not `error`) after a requested stop (IC-60); `gptr$app(kind =)` accepts any
+  `child_env_callr()` and `stopped` (not `error`) after a requested stop (IC-60); `peter$app(kind =)` accepts any
   registered `artifact_type` (IC-69); static checks flag reads of secret files (IC-71).
 - **Owns.** The two R files and tests; `test-copy-artifact.R`; `inst/gptr/skills/shiny-bslib/`.
 - **Test files.** One per owned R file: `test-artifact-app.R`, `test-artifact-registry.R` (plus the extra test files named under Owns).
@@ -1238,12 +1238,12 @@ transcripts check the requirements end to end. INFRA-01..28 map to plans and tes
   2. The validation ladder on a fixture app: parse, launch, HTTP 200, session check; a broken app returns the
      child's error to the model; the child's environment contains no registered secret; the port is random and
      loopback; `gptr_artifacts(id, stop = TRUE)` leaves no process.
-  3. A second `gptr$app()` after an edit creates `v002` without touching `v001`; the snapshot leaves the source
+  3. A second `peter$app()` after an edit creates `v002` without touching `v001`; the snapshot leaves the source
      object editable in place (copy row).
   4. NS-8 on the fake provider writes `.gptr/artifacts/marker-explorer/app.R` and P14's renderer prints the NS-8
      line `artifact  marker-explorer  ->  <url>   (running in background)` on `artifact_start` (IC-71).
-  5. Review additions: `gptr$app("con")` is refused; a data object named `a/b` snapshots as `data/001.rds`; a request
-     without the token is rejected; `.Random.seed` is unchanged by `gptr$app(check = TRUE)`; a stopped artifact's
+  5. Review additions: `peter$app("con")` is refused; a data object named `a/b` snapshots as `data/001.rds`; a request
+     without the token is rejected; `.Random.seed` is unchanged by `peter$app(check = TRUE)`; a stopped artifact's
      status is `stopped`; P23's NS-8 fixture is added to `dev/bench/tokens/` (IC-73).
 
 ### P24 Token benchmark and end-to-end acceptance

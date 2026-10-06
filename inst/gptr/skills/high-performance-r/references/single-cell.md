@@ -2,7 +2,7 @@
 
 The Seurat or SingleCellExperiment object in the session may have taken minutes to load.
 Never reload it, never `as.matrix()` its counts, and never `print()` it whole. Check with
-`dim(obj)`, `Assays(obj)`, `Layers(obj)`, `object.size(obj)` and `gptr$describe(obj)`.
+`dim(obj)`, `Assays(obj)`, `Layers(obj)`, `object.size(obj)` and `peter$describe(obj)`.
 
 ## Seurat v5
 

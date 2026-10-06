@@ -20,7 +20,7 @@
 
 - Owned files (05 P06): `R/session-object.R`, `R/session-live.R`, `R/session-store.R`, `R/session-budget.R`, `R/agent-loop.R`, `R/agent-run.R`, `R/agent-dispatch.R`, their test files `tests/testthat/test-session-object.R`, `test-session-live.R`, `test-session-store.R`, `test-session-budget.R`, `test-agent-loop.R`, `test-agent-run.R`, `test-agent-dispatch.R`, and `tests/testthat/fixtures/oracles/report02/` ("the 24 loop, 42 store and 26 recovery checks of report 02, converted to R test data"); plus `NAMESPACE` and `man/` through `Rscript --vanilla -e 'devtools::document()'`, and the snapshot file `tests/testthat/_snaps/session-object.md` of P06's own `expect_snapshot()` calls.
 - Layers (03 §2.2, §3.2): `agent-loop.R` and `agent-dispatch.R` are L2; `session-*.R` and `agent-run.R` are L3. L2 "may call L0, L1 types" and, by P01's `arch_edge_ok()`, its own `agent` area, so the L2 files never call a `session-*.R` function: the dispatcher reaches the session through agent-area helpers of `agent-run.R` (`run_data()`, `run_ctx()`, `run_append_message()`, ...), and P01's `test-arch-layers.R` checks every edge. L3 "never call an L4 capability by function name" (registry lookups only); nothing below L5 prints except `print()` methods of P06's own classes.
-- Exports (04 §14.1, §6.5), exact signatures: `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`, `gptr_sessions(project = TRUE)`, `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`, `gptr_last()`, `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)`. Their examples run offline: the parts that need `gptr()` (P08) are in `@examplesIf exists("gptr", mode = "function")` blocks. S3 methods of `gptr_session` (04 §5.1): `$`, `[[`, `$<-`, `[[<-`, `names`, `.DollarNames` (utils), `print`, `format`, `as.character`, `summary`, `str` (utils); `print.gptr_session_summary`.
+- Exports (04 §14.1, §6.5), exact signatures: `gptr_fork(s, at = NULL, envir = c("overlay", "shared"))`, `gptr_sessions(project = TRUE)`, `gptr_resume(x = NULL, envir = parent.frame(), block = NULL, child = NULL)`, `gptr_last()`, `gptr_usage(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE)`. Their examples run offline: the parts that need `peter()` (P08) are in `@examplesIf exists("peter", mode = "function")` blocks. S3 methods of `gptr_session` (04 §5.1): `$`, `[[`, `$<-`, `[[<-`, `names`, `.DollarNames` (utils), `print`, `format`, `as.character`, `summary`, `str` (utils); `print.gptr_session_summary`.
 - Kernel SDK owned here (IC-33): `session_data()`, `session_live()`, `session_home()`, `session_append()`, `session_set_model()`, `session_set_mode()`, `session_enqueue()`, `session_value_set()`, `session_value_get()`, `session_replay_apply()`, `session_replay_new()`, `session_replay_bind()`, `replay_lookup()`, `session_run()`, `run_start()`, `run_wait()`, `run_abort()`, `run_current()`, `run_eval_env()`, `run_emit()`, `dispatch_nested()`, `perm_check()`, `tool_result_message()`, `store_read()`, `store_rebuild()`, `last_set()`.
 - Internal signatures (04 §7.6): `session_new(model, mode, home = NULL, kind = "chat", parent = NULL, preset = NULL, opts = list())`, `session_set_model(s, ref, reason = "user")`, `session_set_mode(s, mode, source = "user")`, `session_enqueue(s, text, as = c("steer", "follow_up"), source = "api_user", blocks = list())`, `session_value_set(s, label, value, name = NULL, forced_home = NULL)`, `session_value_get(s, turn = NULL)`, `live_all()`, `last_set(s)`, `store_open(s)`, `store_append(store, entries)`, `store_read(path)`, `store_close(store)`, `store_fork(s, cut, new)`, `store_rebuild(path, home)`, `store_heartbeat(store)`, `session_replay_apply(s, block, header, text = NULL)`, `session_replay_new(block, header, envir, doc)`, `session_replay_bind(block, s, child = NULL)`, `replay_lookup(block, child = NULL)`, `budget_check(s, estimate = 0)`, `ledger_add(s, request_id, components)`, `session_run(s, input, opts = list())`, `run_start(s, input, opts = list())`, `run_wait(runs, timeout = Inf)`, `run_abort(run, reason = "user")`, `run_current()`, `run_eval_env(run)`, `run_emit(run, type, ...)`, `dispatch_tools(run, calls)`, `dispatch_nested(name, input, ctx)`, `tool_validate(tool, input)`, `perm_check(call, run)`, `tool_result_message(result, call)`.
 - Classes (04 §5.1, §5.12, §5.13): `gptr_session` (shell), `gptr_session_summary`, `gptr_usage`, `gptr_ledger`, `gptr_sessions` (listings through P01's `new_listing()`), `gptr_run`, `gptr_loop`, `gptr_store`.
@@ -31,7 +31,7 @@
 - Options owned (04 §3.1): `gptr.unsafe_no_permissions` (`FALSE`; "set outside a run only: no permission gate (sandboxed CI); snapshotted at run start (IC-53)"), `gptr.value_copy_max` (`1048576` bytes), `gptr.values_max_bytes` (`67108864` bytes), `gptr.max_turns` (`50L`), `gptr.max_nested_calls` (`20L`), `gptr.noninteractive_ask` (`"stop"` or `"deny"`; default `"stop"`). All read with `gptr_opt()`.
 - Safety snapshot (IC-53 item 2): `run_start()` snapshots `gptr.ui`, `gptr.interactive`, `gptr.critical_guard`, `gptr.secret_guard`, `gptr.noninteractive_ask`, `gptr.protect_size`, `gptr.mode` and `gptr.unsafe_no_permissions`; "the run's gate reads only the snapshot".
 - Gate (IC-04, IC-53, 03 §6.8.2): `perm_check(call, run)` returns `list(decision = "allow" | "deny" | "ask" | "ask_human" | "modify", reason, input, risk, rule)`; policies combine "deny > ask_human > ask > modify > allow; a throwing policy denies; no active `mode` policy = ask"; "a `modify` is re-classified and re-checked once (a second modify denies)"; `ask` goes to `permission_request` hooks (first decision; error = deny) then the UI; "an `ask_human` skips the hooks"; without a human `"stop"` stops the run with status `blocked` (stored condition `gptr_error_permission`, or `gptr_error_noninteractive` with `what = "ask"` and the questions when the blocked call is the `ask` tool, IC-68) and `"deny"` returns a denial; a policy answer that is not `NULL`, a list or one known decision denies (fail closed, as a throwing policy).
-- Budgets (IC-66): settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level call; `budget_near` at 80%; reaching it "asks to extend by the same amount (`ask_human`) interactively and stops with status `budget` otherwise"; "`null` set explicitly disables a limit"; every request charges the root (the live runs of a session's ancestors, and the session named by the run option `root`, "the root session id for budgets" of 04 §7.6: its run, or one shared pool when it has no run, as a top-level team or fan-out container); `gptr.max_nested_calls` = 20 `gptr()` calls per `r` evaluation.
+- Budgets (IC-66): settings default `budget = {cost: 5, tokens: 2000000, turns: null}` per top-level call; `budget_near` at 80%; reaching it "asks to extend by the same amount (`ask_human`) interactively and stops with status `budget` otherwise"; "`null` set explicitly disables a limit"; every request charges the root (the live runs of a session's ancestors, and the session named by the run option `root`, "the root session id for budgets" of 04 §7.6: its run, or one shared pool when it has no run, as a top-level team or fan-out container); `gptr.max_nested_calls` = 20 `peter()` calls per `r` evaluation.
 - Store (IC-59, 04 §11.4): `<workspace root>/sessions/<YYYYmmddTHHMMSS>_<session id>.jsonl`; header §4.7 (`"type":"session","version":3`); entries §4.6; each append is `file(path, "ab")` opened, written, flushed and closed through `on.exit()` inside `suspendInterrupts()`; a resume on a file whose last byte is not LF first appends `"\n"` and a `gptr.recovered` entry `{from, to}`; readers skip unparsable lines with a diagnostic and re-parent children of missing ids; lock directory `<file>.lock/` with file `pid` holding the pid and the process creation time, touched every 10 minutes, stale when `pid_alive()` is `FALSE` or its heartbeat is older than 24 h.
 - Custom entries written here (04 §4.6): `gptr.mode_change` `{from, to, source}`, `gptr.value` `{turn, mode, name, address, class, bytes}` (never the value), `gptr.recovered` `{from, to}`, `gptr.router` `{router, state, model, reason}`, `gptr.image_elision` `{images: [ids]}`, `gptr.budget` `{kind, budget, used}`, `gptr.replay` `{doc, block, mode, turn, value}`; plus, on behalf of other owners, `gptr.frozen` (only the fallback freeze before P07), `gptr.checkpoint` (the container of checkpointer fragments) and `gptr.ext` (`ctx$state()` persistence).
 - Texts (04 §4.2, IC-55): the steering relay is exactly `The user sent this message while you were working: <text>` (user sources `pipe`, `pause_menu`, `repl`, `api_user` only); extension items are user-role `Extension <name> sent this note (not from the user): <text>`; agent items are user-role `<agent_report from="<name>">` data; the unknown tool text is `Tool <name> not found` (04 §7.6).
@@ -1577,7 +1577,7 @@ live_new = function(s, home) {
   live$adapter = new.env(parent = emptyenv())
   live$background = NULL
   live$lock = NULL
-  # the session's gptr$out() store (IC-71): NULL until P01's out_store(live) creates it on the
+  # the session's peter$out() store (IC-71): NULL until P01's out_store(live) creates it on the
   # first out_put(..., session = live); P01 accepts NULL or a gptr_out_store, never a bare env
   live$out = NULL
   live$mcp_token = NULL
@@ -1667,8 +1667,8 @@ last_set = function(s) {
 #' @examples
 #' s = gptr_last()
 #' is.null(s) || inherits(s, "gptr_session")
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_last(), s)
 #' @export
 gptr_last = function() the$last
@@ -2362,7 +2362,7 @@ Append to `R/session-object.R`:
 #' `$` and `[[` read a session: `text`, `value`, `values`, `usage`, `cost`, `history`,
 #' `messages`, `model`, `mode`, `status`, `reason`, `id`, `kind`, `file`, `turns`, `envir`,
 #' `children`, `ext`, `plan`, `last_rewind`, `editor_text`, and the names of child sessions.
-#' Sessions are changed only through `gptr()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
+#' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
 #' signal `gptr_error_readonly`.
 #'
 #' @param x A `gptr_session`.
@@ -2410,7 +2410,7 @@ names.gptr_session = function(x) c(session_accessors, names(session_data(x)$chil
 session_readonly = function(field) {
   field = paste(as.character(field), collapse = "")
   gptr_abort(paste0("sessions are read-only: `", field, "` cannot be assigned; change a session ",
-                    "only through gptr() and the gptr_*() verbs"),
+                    "only through peter() and the gptr_*() verbs"),
              "readonly", object = "gptr_session", field = field)
 }
 
@@ -3626,7 +3626,7 @@ Produces:
 
 - `dispatch_tools(run, calls)` -> `list(results = list(<gptr_tool_result>), terminate = lgl(1), messages = list(<tool_result message>))` (04 §7.6's two fields plus the appended tool-result messages, which the engine of Task 10 passes to the loop and to `turn_end` so that no tool `value` enters an event or the loop state, rule R1; never throws; a `length`/`refusal` stop fails every call unrun); `call_record(run, block)` (04 §4.4 call records); `tool_validate(tool, input)`; `tool_lookup(name, session_id = NULL)`, `tool_schema(tool)`, `tool_error(text)`.
 - `perm_check(call, run)` -> `list(decision, reason, input, risk, rule)` (IC-04, IC-53; a policy answer that is not `NULL`, a list or one known decision denies); `perm_request_record(call, run, out, risk, tier)` (04 §7.11), `risk_level(risk)`; `perm_ask_questions(input)` (the question texts of a blocked `ask` call, stored in `gptr_error_noninteractive`, IC-68; a remembered UI answer is stored by P11 through `permissions:remember`, never by the kernel); `perm_grant_control(run, risk)` (the one-shot tokens of an approved `ask_human`: the flagged control exports appended to `run$signal$control`, the slot P08's `control_check()` reads, plus P02's `ext_control_grant()`; cleared when the call ends).
-- `tool_result_message(result, call)` (redaction with the `context` profile, truncation to `gptr.r_output_tokens`, `details$value_ref`, never the value); `dispatch_nested(name, input, ctx)` (nested `gptr$` calls: skips the gate for members listed by the outer analysis at an approved level, records at most 20 `details$nested`, signals `gptr_error_tool` inside model code; an `r` member declared with `fun` only runs through P02's generated `execute`, 04 §6.8).
+- `tool_result_message(result, call)` (redaction with the `context` profile, truncation to `gptr.r_output_tokens`, `details$value_ref`, never the value); `dispatch_nested(name, input, ctx)` (nested `peter$` calls: skips the gate for members listed by the outer analysis at an approved level, records at most 20 `details$nested`, signals `gptr_error_tool` inside model code; an `r` member declared with `fun` only runs through P02's generated `execute`, 04 §6.8).
 - Checkpointer calls `checkpoint_before()`/`checkpoint_after()` gathered into one `gptr.checkpoint` entry.
 
 - [ ] **Step 1: Write the failing test**
@@ -3894,7 +3894,7 @@ test_that("a member listed by the outer call's analysis at an approved level ski
     "ok"
   }, risk = function(input, ctx) {
     list(level = 2L, categories = character(), paths = character(),
-         flagged = data.frame(call = "gptr$inner()", fn = "gptr$inner", level = 1L, category = "",
+         flagged = data.frame(call = "peter$inner()", fn = "peter$inner", level = 1L, category = "",
                               path = NA_character_, path_class = NA_character_,
                               stringsAsFactors = FALSE))
   })
@@ -4445,7 +4445,7 @@ checkpoint_after = function(run, call, ctx, tokens, res) {
 
 # ---------------------------------------------------------------------------- nested calls
 
-#' Nested `gptr$...` calls made while an `r` evaluation runs (04 section 7.6)
+#' Nested `peter$...` calls made while an `r` evaluation runs (04 section 7.6)
 #'
 #' A function the outer call's static analysis listed at a level no higher than the level approved
 #' for the outer call runs without a second prompt; otherwise the call passes perm_check(). The
@@ -4523,8 +4523,8 @@ nested_listed_level = function(outer, name) {
   flagged = outer$risk$flagged
   if (!is.data.frame(flagged) || !nrow(flagged)) return(NULL)
   short = sub("^.*/", "", name)
-  hit = flagged$fn %in% c(name, short, paste0("gptr$", short),
-                          paste0("gptr$", sub("/", "$", name, fixed = TRUE)))
+  hit = flagged$fn %in% c(name, short, paste0("peter$", short),
+                          paste0("peter$", sub("/", "$", name, fixed = TRUE)))
   if (!any(hit)) return(NULL)
   max(as.integer(flagged$level[hit]))
 }
@@ -5354,7 +5354,7 @@ test_that("older images are elided above the model's image limit, once (IC-67)",
   img = function(k) block_image(strrep(as.character(k), 40))
   msgs = list(msg_user(list(img(1), img(2), img(3), block_text("look"))))
   out = images_elide(s, msgs, list(max_images = 2))
-  expect_match(out[[1L]]$content[[1L]]$text, "^\\[image omitted: gptr\\$plot\\(")
+  expect_match(out[[1L]]$content[[1L]]$text, "^\\[image omitted: peter\\$plot\\(")
   expect_identical(out[[1L]]$content[[2L]]$type, "image")
   d = session_data(s)
   expect_identical(d$entries[[length(d$entries)]]$custom_type, "gptr.image_elision")
@@ -5698,7 +5698,7 @@ images_elide = function(s, messages, target) {
                                                   list(images = I(unique(new)))))
   for (r in which(!keep)) {
     messages[[info$msg[r]]]$content[[info$block[r]]] =
-      block_text(paste0("[image omitted: gptr$plot(\"", info$id[r], "\")]"))
+      block_text(paste0("[image omitted: peter$plot(\"", info$id[r], "\")]"))
   }
   messages
 }
@@ -6517,7 +6517,7 @@ test_that("a nested run tightens the mode, inherits the snapshot and links to th
   expect_identical(nrow(s$usage), 3L)
 })
 
-test_that("gptr.max_nested_calls caps gptr() calls of one evaluation; a group counts once", {
+test_that("gptr.max_nested_calls caps peter() calls of one evaluation; a group counts once", {
   local_permissive()
   local_gptr_options(max_nested_calls = 2L)
   box = new.env()
@@ -7198,7 +7198,7 @@ run_resignal_interrupt = function() {
 #' Start a run without blocking
 #'
 #' Attaches a detached copy first (split-brain rules), refuses a running session
-#' (`gptr_error_busy`), counts nested `gptr()` calls against `gptr.max_nested_calls` (IC-66),
+#' (`gptr_error_busy`), counts nested `peter()` calls against `gptr.max_nested_calls` (IC-66),
 #' freezes the prompt at the first run, appends the input and registers the run with the reactor.
 #' @return A `gptr_run` held by the reactor until it settles.
 #' @noRd
@@ -7293,7 +7293,7 @@ run_wire = function(run) {
   invisible(run)
 }
 
-#' Count gptr() calls made from one `r` evaluation (gptr.max_nested_calls, IC-66); the children of
+#' Count peter() calls made from one `r` evaluation (gptr.max_nested_calls, IC-66); the children of
 #' one team or fan-out share `opts$nested_group` and count once
 #' @noRd
 run_count_nested = function(outer, opts) {
@@ -7305,7 +7305,7 @@ run_count_nested = function(outer, opts) {
   outer$nested_count = counts
   cap = gptr_opt("max_nested_calls")
   if (length(keys) > cap) {
-    gptr_abort(paste0("too many gptr() calls in one evaluation (limit ", cap,
+    gptr_abort(paste0("too many peter() calls in one evaluation (limit ", cap,
                       ", option gptr.max_nested_calls)"),
                "budget", kind = "nested_calls", budget = cap, used = length(keys),
                session = outer$session)
@@ -7944,8 +7944,8 @@ Append to `R/session-budget.R`:
 #' @return A `gptr_usage` or `gptr_ledger` data frame.
 #' @examples
 #' gptr_usage()
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_usage(s)
 #' @export
 gptr_usage = function(x = NULL, by = c("session", "agent", "model", "route"), detail = FALSE) {
@@ -8313,11 +8313,11 @@ Append to `R/session-object.R`:
 #'   f = gptr_fork(s)
 #'   f$turns
 #' }
-#' @examplesIf exists("gptr", mode = "function")
+#' @examplesIf exists("peter", mode = "function")
 #' fake = gptr_fake_provider(list("A", "B"))
-#' s = gptr("first", model = fake, envir = new.env())
+#' s = peter("first", model = fake, envir = new.env())
 #' f = gptr_fork(s)
-#' f |> gptr("branch")
+#' f |> peter("branch")
 #' c(s$turns, f$turns)
 #' @export
 gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
@@ -8343,7 +8343,7 @@ gptr_fork = function(s, at = NULL, envir = c("overlay", "shared")) {
   home = if (is.null(live)) NULL else live$home
   if (is.null(home)) {
     gptr_inform(paste0("session ", d$id, " has no kept workspace, so each turn of the fork ",
-                       "evaluates in the caller of that gptr() call"), "notice")
+                       "evaluates in the caller of that peter() call"), "notice")
   }
   new_home = home
   if (!is.null(home) && identical(envir, "overlay")) new_home = overlay_new(home, d$id)
@@ -9318,8 +9318,8 @@ sessions_dir = function() file.path(workspace_root(create = FALSE), "sessions")
 #'   `status`, `title` (the first prompt, 60 characters), `live`.
 #' @examples
 #' gptr_sessions()
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' gptr_sessions()
 #' @export
 gptr_sessions = function(project = TRUE) {
@@ -9450,8 +9450,8 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 #' @examples
 #' s = gptr_last()
 #' if (!is.null(s)) identical(gptr_resume(s$id), s)
-#' @examplesIf exists("gptr", mode = "function")
-#' s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' @examplesIf exists("peter", mode = "function")
+#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 #' identical(gptr_resume(s$id), s)
 #' @export
 gptr_resume = function(x = NULL, envir = parent.frame(), block = NULL, child = NULL) {
@@ -10322,7 +10322,7 @@ export(gptr_sessions)
 export(gptr_usage)
 ```
 
-Then run every example offline: `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'` finishes without error. Before P08 exists the `@examplesIf exists("gptr", mode = "function")` sections of the five P06 exports are skipped, `gptr_last()` returns `NULL`, and `gptr_sessions()` and `gptr_usage()` print empty listings.
+Then run every example offline: `Rscript --vanilla -e 'devtools::run_examples(document = FALSE)'` finishes without error. Before P08 exists the `@examplesIf exists("peter", mode = "function")` sections of the five P06 exports are skipped, `gptr_last()` returns `NULL`, and `gptr_sessions()` and `gptr_usage()` print empty listings.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -10363,7 +10363,7 @@ Every command runs from `/Users/wanjun/Desktop/gptr` after Task 16. The counts a
 | 5 | INFRA-13: SIGKILL during a streamed turn, then `gptr_resume()`: the file parses, the last complete message is present, nothing is duplicated; `.Random.seed` unchanged over 1,000 appends; a forked file replays to the source path's context | "SIGKILL mid-stream: resume parses, keeps the last complete message, no duplicate" (Task 13); S02 (Task 3); S24 (Task 13) | `Rscript --vanilla -e 'devtools::test(filter = "^session-store$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 156 ]` |
 | 6 | INFRA-14/15: a listener on `gptr_fork(s)` never fires for `s`; overlay writes do not reach `s$envir`; two concurrent sessions keep separate usage | "a listener on the fork never fires for the source; nothing live is shared" and "an overlay fork reads the source home and writes to its own overlay" (Task 12); "two concurrent sessions keep separate usage and tool context (INFRA-15)" (Task 10) | `Rscript --vanilla -e 'devtools::test(filter = "^(session-object|agent-run)$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 481 ]` |
 | 7 | G3 analogues: `identical(s |> step, s)`; `$<-` refused; an unreferenced settled session is finalised and its lock removed (except the one `gptr_last()` holds); a same-process duplicate continues with `gptr_error_split_brain` | "session_run() returns the identical session; each run is one prompt turn" (Task 10: `expect_identical(s |> session_run(msg_user("b")), s)`; `gptr_step()` is P08's and repeats the check on the gateway); "$<- and [[<- are refused (gptr_error_readonly)" (Task 4); "an unreferenced session is finalised and its lock removed, except gptr_last()'s" (Task 3); "a same-process duplicate cannot attach: gptr_error_split_brain" (Task 3) and "continuing a same-process duplicate with a run is split brain" (Task 13); a settled (aborted) session with nothing left in the reactor is collected: "an abort while a tool waits in the FIFO cancels the job; the session can be collected" (Task 10, `test-agent-run.R`, run by acceptance 1) | `Rscript --vanilla -e 'devtools::test(filter = "^session-(object|live)$")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 225 ]` |
-| 8 | Review additions: `nrow(showConnections())` unchanged after a run returns, errors or is interrupted and after 300 sessions kept in a list; SIGKILL mid-append, resume, three appends: all present and the tree connected; `gptr_last()` survives `gc()`; with no policy a mutating tool asks (and is `blocked` without a UI); a hook answering allow to an `ask_human` is ignored; an option changed by model code mid-run does not change the run's gate; a budget of 5 USD on a root stops its children (a top-level container without a run still caps its children, IC-66); `session_replay_apply()` keeps `identical()` along a replayed pipe chain | "no connection is left open after a run returns or errors (IC-59)" and "an interrupt aborts the run and is re-signalled; no connection is left open" (Task 10; `gptr()` is P08's and repeats them on the gateway); "300 sessions kept in a list leave no connection open (IC-59)" and "gptr_last() holds the most recent session strongly and survives gc()" (Task 3); "SIGKILL mid-append, resume, three appends: all present and the tree connected (IC-59)" (Task 13); "with no mode policy a mutating tool asks and is blocked without a UI (NS-12)", "a hook answering allow to an ask_human is ignored (IC-53)", "an option changed by model code mid-run does not change the run's gate (IC-53)" (Task 7) and "with no policy a mutating tool asks and the run ends blocked without a human" (Task 10); "a budget of 5 USD on a root stops its children (root charging, IC-66)" (Task 10) and, for a top-level container without a run, "children of a root without a run share one budget through opts$root (IC-66)" (Task 5); "session_replay_apply() advances the piped session in place; identical() holds" (Task 14) | `Rscript --vanilla -e 'devtools::test(filter = "session|agent")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` |
+| 8 | Review additions: `nrow(showConnections())` unchanged after a run returns, errors or is interrupted and after 300 sessions kept in a list; SIGKILL mid-append, resume, three appends: all present and the tree connected; `gptr_last()` survives `gc()`; with no policy a mutating tool asks (and is `blocked` without a UI); a hook answering allow to an `ask_human` is ignored; an option changed by model code mid-run does not change the run's gate; a budget of 5 USD on a root stops its children (a top-level container without a run still caps its children, IC-66); `session_replay_apply()` keeps `identical()` along a replayed pipe chain | "no connection is left open after a run returns or errors (IC-59)" and "an interrupt aborts the run and is re-signalled; no connection is left open" (Task 10; `peter()` is P08's and repeats them on the gateway); "300 sessions kept in a list leave no connection open (IC-59)" and "gptr_last() holds the most recent session strongly and survives gc()" (Task 3); "SIGKILL mid-append, resume, three appends: all present and the tree connected (IC-59)" (Task 13); "with no mode policy a mutating tool asks and is blocked without a UI (NS-12)", "a hook answering allow to an ask_human is ignored (IC-53)", "an option changed by model code mid-run does not change the run's gate (IC-53)" (Task 7) and "with no policy a mutating tool asks and the run ends blocked without a human" (Task 10); "a budget of 5 USD on a root stops its children (root charging, IC-66)" (Task 10) and, for a top-level container without a run, "children of a root without a run share one budget through opts$root (IC-66)" (Task 5); "session_replay_apply() advances the piped session in place; identical() holds" (Task 14) | `Rscript --vanilla -e 'devtools::test(filter = "session|agent")'` -> `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 974 ]` |
 
 Review amendments of 05 P06 and where they are implemented: open-append-close appends, torn-line recovery at resume, unparsable lines skipped, locks with pid, creation time and 10-minute heartbeat (IC-59): Tasks 3, 10 (`run_heartbeat()`), 13; `the$last` strong (IC-71): Task 3; the replay functions and `gptr_resume(block =, child =)` with fresh overlays (IC-46): Tasks 13, 14; `perm_check()` with `ask_human`, one modify re-check, the safety snapshot and mode inheritance for every call made during a run (IC-53): Tasks 5, 7; relays and queue items by source (IC-55): Tasks 1, 6, 15; budgets with the default ceiling, root charging and `gptr.max_nested_calls` (IC-66): Tasks 4, 5, 10; router calls before each request (IC-69): Tasks 9, 10; `ctx.kernel` (IC-34): Task 15; per-session `out` stores (IC-71): Task 3 (`live$out`); image elision entries (IC-67): Task 9; the `store` kind's built-in record (IC-69): Task 13; re-classification of worker-forwarded permission requests (IC-53): Task 7 ("a forwarded request is re-classified from its raw input (IC-53)").
 
@@ -10416,7 +10416,7 @@ The plan was searched (case-sensitive `grep`) for every placeholder phrase that 
 8. `the$last` is set when a top-level session is created as well as when it runs (IC-71 "the most recently active session ... including one whose call was interrupted before assignment").
 9. `str()` prints `<gptr_session s... | chat | idle | 1 turns | fake/fake-1>`: the 04 §5.1 template with "turns" kept literal for every count.
 10. A replayed `value=` name that is not bound yet is recorded by name only (`gptr.value` with `turn`, `mode = "name"`, `name`; no `address`, `class`, `bytes`); the value resolves when first read.
-11. 05 acceptance 7 and 8 name `s |> step` and `gptr()`; both are P08's. This plan proves the kernel form (`session_run()`), and P08's acceptance repeats the checks on the gateway.
+11. 05 acceptance 7 and 8 name `s |> step` and `peter()`; both are P08's. This plan proves the kernel form (`session_run()`), and P08's acceptance repeats the checks on the gateway.
 12. P05's plan also defines `usage_rollup(rows)` (roll-up to root sessions for an aggregated view). P06 charges every request to the session and each live ancestor at write time (`usage_add()`, IC-66) and aggregates with request de-duplication in `gptr_usage()`; it does not call `usage_rollup()`. The two agree on totals.
 13. `turn_end`'s `results` (04 §10.4: "tool results") are the tool-result messages of the turn (Pi's `toolResults`), not `gptr_tool_result` objects: a result's `value` may be a user object, which must not sit in the loop state or pass `redact_tree()` in an event payload (rule R1). `dispatch_tools()` therefore returns 04 §7.6's `results` and `terminate` plus `messages`.
 14. `gptr.max_nested_calls` (IC-66: "a team or fan-out counts as one"): 04 names no run option for the grouping, so the children of one team or fan-out pass the same `opts$nested_group` (P19 sets it) and count once; the error is `gptr_error_budget` with `kind = "nested_calls"`, `budget` (the cap) and `used`, the IC-66 budget class with a kind outside the three `budget_<kind>` subclasses.

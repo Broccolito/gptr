@@ -35,8 +35,9 @@ test_that("Rmd chunks are parsed with labels, prefixes and long fences", {
   expect_identical(calls$line1, 11L)
   expect_identical(calls$label, "ask")
   # knitr labels unlabelled chunks unnamed-chunk-<k>, counting every engine
-  un = doc_rmd_chunks(c("```{r}", "gptr(\"a\")", "```", "```{python}", "x = 1", "```",
-                        "```{r named}", "y = 2", "```", "```{r, echo=FALSE}", "gptr(\"b\")", "```"))
+  un = doc_rmd_chunks(c("```{r}", "peter(\"a\")", "```", "```{python}", "x = 1", "```",
+                        "```{r named}", "y = 2", "```", "```{r, echo=FALSE}", "peter(\"b\")",
+                        "```"))
   expect_identical(un$label, c("unnamed-chunk-1", "unnamed-chunk-2", "named", "unnamed-chunk-3"))
 })
 
@@ -60,7 +61,7 @@ test_that("Rmd agent chunks follow the owning chunk and keep the fence", {
 })
 
 test_that("the same prompt in two chunks is anchored within its own chunk", {
-  text = c("```{r one}", "gptr(\"same\")", "```", "", "```{r two}", "gptr(\"same\")", "```")
+  text = c("```{r one}", "peter(\"same\")", "```", "", "```{r two}", "peter(\"same\")", "```")
   calls = doc_rmd_calls(text)
   a = doc_anchor_of(calls, calls[2, ])
   expect_identical(a$label, "two")
@@ -81,16 +82,16 @@ test_that("qmd agent chunks carry a #| label line", {
 })
 
 test_that("the r format inserts below the statement with its indentation and replaces by id", {
-  text = c("f = 1", "  gptr(\"count rows\")", "z = 2")
+  text = c("f = 1", "  peter(\"count rows\")", "z = 2")
   site = doc_test_site("a.R", text, "count rows", "r")
   block = doc_render_block("abc123", list(model = "m"), "n = 1")
   new = doc_r_upsert(text, site, block, "abc123")
-  expect_identical(new, c("f = 1", "  gptr(\"count rows\")", "  # >>> gptr:abc123 model=m",
+  expect_identical(new, c("f = 1", "  peter(\"count rows\")", "  # >>> gptr:abc123 model=m",
                           "  n = 1", "  # <<< gptr:abc123", "z = 2"))
   again = doc_r_upsert(new, site, doc_render_block("abc123", list(model = "m"), "n = 2"), "abc123")
   expect_identical(again[4], "  n = 2")
   expect_error(doc_r_upsert(c("x = 1"), site, block, "def456"), class = "gptr_error_doc_write")
-  bad = c("gptr(\"count rows\")", "# >>> gptr:aaaaaa model=m")
+  bad = c("peter(\"count rows\")", "# >>> gptr:aaaaaa model=m")
   expect_error(doc_r_upsert(bad, site, block, "abc123"), class = "gptr_error_doc_write")
 })
 
@@ -121,18 +122,18 @@ test_that("console transcripts record the first prompt as an assignment and late
   expect_match(t1[1], "^# gptr session sab12cd3456 -- started ")
   expect_identical(t1[2], "# machine log: .gptr/sessions/20260929T183000_sab12cd3456.jsonl")
   expect_identical(t1[5], "library(gptr)")
-  expect_identical(t1[6:7], c("", "s_ab12cd = gptr(\"fit mpg on weight\")"))
+  expect_identical(t1[6:7], c("", "s_ab12cd = peter(\"fit mpg on weight\")"))
   site2 = utils::modifyList(site, list(template = "add \"predictions\"\nnow",
                                        context_labels = "mtcars"))
   t2 = doc_transcript_upsert(t1, site2, doc_render_block("d4e5f6", list(model = "m"), "p = 1"),
                              "d4e5f6")
   expect_identical(t2[length(t1) + 2L],
-                   "s_ab12cd |> gptr(\"add \\\"predictions\\\"\\nnow\", mtcars)")
+                   "s_ab12cd |> peter(\"add \\\"predictions\\\"\\nnow\", mtcars)")
   expect_identical(sum(grepl("^# gptr session", t2)), 1L)
   expect_identical(parse(text = t2, keep.source = FALSE)[[2]][[1]], as.name("="))
   expect_identical(doc_transcript_locate(t2, site)$insert_after, length(t2))
   rmd = doc_rmd_upsert_fn("rmd")(c("# Notes"), site, block, "a1b2c3")
-  expect_identical(rmd[1:6], c("# Notes", "", "```{r}", "s_ab12cd = gptr(\"fit mpg on weight\")",
+  expect_identical(rmd[1:6], c("# Notes", "", "```{r}", "s_ab12cd = peter(\"fit mpg on weight\")",
                                "```", ""))
   expect_identical(rmd[7], "```{r gptr-a1b2c3}")
 })
@@ -155,7 +156,7 @@ doc_knitr_probe = c(
   "```{r}", "#|label: nospace", "6", "```",
   "```{r}", "#| echo: false", "#| label: \"yq\"", "7", "```",
   "```{r}", "#| echo=FALSE, label='csvq'", "8", "```",
-  "```{r}", "x = '", "````", "'", "gptr(\"q\")", "```",
+  "```{r}", "x = '", "````", "'", "peter(\"q\")", "```",
   "````{r four}", "```", "x", "````",
   "```{r}", "a = 1", "```{r inner}", "b", "```",
   "  ```{r}", "  #| label: indented", "  z = 1", "  ```",
@@ -207,7 +208,7 @@ test_that("chunks are divided and labelled as knitr does", {
   four = ch[ch$label == "four", ]
   expect_identical(four$end - four$start, 3L)
   calls = doc_rmd_calls(doc_knitr_probe)
-  expect_identical(calls$line1, which(doc_knitr_probe == "gptr(\"q\")"))
+  expect_identical(calls$line1, which(doc_knitr_probe == "peter(\"q\")"))
   expect_identical(calls$label, "unnamed-chunk-7")
 })
 
@@ -236,7 +237,7 @@ test_that("option labels keep YAML quoting and non-ASCII text in any locale", {
 })
 
 test_that("an unterminated chunk is never written into or after", {
-  text = c("```{r ask}", "gptr(\"go\")", "```{r other}", "x = 1", "```")
+  text = c("```{r ask}", "peter(\"go\")", "```{r other}", "x = 1", "```")
   expect_identical(doc_rmd_chunks(text)$closed, c(FALSE, TRUE))
   site = doc_test_site("a.Rmd", text, "go", "rmd")
   expect_true(doc_rmd_locate(text, site)$top_level)
@@ -244,7 +245,7 @@ test_that("an unterminated chunk is never written into or after", {
   cnd = expect_error(doc_rmd_upsert_fn("rmd")(text, site, block, "abc123"),
                      class = "gptr_error_doc_write")
   expect_identical(cnd$reason, "malformed")
-  open = c("```{r ask}", "gptr(\"go\")", "```", "", "```{r gptr-abc123}", block)
+  open = c("```{r ask}", "peter(\"go\")", "```", "", "```{r gptr-abc123}", block)
   site = doc_test_site("a.Rmd", open, "go", "rmd")
   expect_identical(doc_rmd_locate(open, site)$owned$id, "abc123")
   for (id in c("abc123", "def456")) {
@@ -259,8 +260,8 @@ test_that("an unterminated chunk is never written into or after", {
   expect_identical(cnd$reason, "malformed")
 })
 
-test_that("each gptr() statement of a chunk owns its own agent chunk", {
-  text = c("```{r ask}", "gptr(\"load data\")", "gptr(\"plot it\")", "```", "",
+test_that("each peter() statement of a chunk owns its own agent chunk", {
+  text = c("```{r ask}", "peter(\"load data\")", "peter(\"plot it\")", "```", "",
            "```{r gptr-aaa111}", doc_test_block("aaa111", "load data", "d = 1"), "```", "",
            "```{r gptr-bbb222}", doc_test_block("bbb222", "plot it", "plot(d)"), "```")
   own = function(text, prompt) {
@@ -275,7 +276,7 @@ test_that("each gptr() statement of a chunk owns its own agent chunk", {
   expect_identical(own(edited, "load data")[c("id", "status")],
                    list(id = "aaa111", status = "fresh"))
   # a prompt repeated in two statements: the second call does not replay the first one's block
-  dup = c("```{r ask}", "gptr(\"same\")", "gptr(\"same\")", "```", "",
+  dup = c("```{r ask}", "peter(\"same\")", "peter(\"same\")", "```", "",
           "```{r gptr-aaa111}", doc_test_block("aaa111", "same", "x = 1"), "```")
   calls = doc_rmd_calls(dup)
   site = function(k) {
@@ -285,8 +286,8 @@ test_that("each gptr() statement of a chunk owns its own agent chunk", {
   expect_identical(doc_rmd_locate(dup, site(1L))$owned$id, "aaa111")
   expect_null(doc_rmd_locate(dup, site(2L))$owned)
   # a pipeline that repeats a prompt keeps one block per step (ambiguity 28)
-  pipe = c("```{r ask}", "gptr(\"draft\") |> gptr(\"improve it\") |> gptr(\"improve it\")", "```",
-           "", "```{r gptr-aaa111}", doc_test_block("aaa111", "draft", "a = 1"), "```", "",
+  pipe = c("```{r ask}", "peter(\"draft\") |> peter(\"improve it\") |> peter(\"improve it\")",
+           "```", "", "```{r gptr-aaa111}", doc_test_block("aaa111", "draft", "a = 1"), "```", "",
            "```{r gptr-bbb222}", doc_test_block("bbb222", "improve it", "b = 1", call = 2L), "```")
   calls = doc_rmd_calls(pipe)
   ph = prompt_hash("improve it")
@@ -337,7 +338,7 @@ test_that("inert blocks round-trip exactly and only whole blocks change", {
 })
 
 test_that("an indented chunk keeps its prefix through insert, rewrite and eval: false", {
-  text = c("1. Step one", "", "    ```{r ask}", "    gptr(\"count rows\")", "    ```", "",
+  text = c("1. Step one", "", "    ```{r ask}", "    peter(\"count rows\")", "    ```", "",
            "2. Next")
   site = doc_test_site("a.Rmd", text, "count rows", "rmd")
   lines = doc_test_block("abc123", "count rows", c("n = 1", "", "n"))
@@ -347,7 +348,7 @@ test_that("an indented chunk keeps its prefix through insert, rewrite and eval: 
   expect_identical(doc_rmd_upsert_fn("rmd")(new, site, lines, "abc123"), new)
   expect_identical(doc_rmd_locate(new, site)$owned[c("id", "status")],
                    list(id = "abc123", status = "fresh"))
-  qtext = c("- item", "", "  ```{r}", "  #| label: ask", "  gptr(\"count rows\")", "  ```")
+  qtext = c("- item", "", "  ```{r}", "  #| label: ask", "  peter(\"count rows\")", "  ```")
   qsite = doc_test_site("a.qmd", qtext, "count rows", "qmd")
   q = doc_rmd_upsert_fn("qmd")(qtext, qsite, lines, "abc123")
   expect_identical(doc_rmd_chunks(q)$label, c("ask", "gptr-abc123"))
@@ -395,8 +396,8 @@ test_that("a qmd chunk's eval option is read and written only among its leading 
 
 test_that("a transcript with duplicate block ids is not written", {
   site = list(console = TRUE, session_id = "sab12cd3456", template = "c", path = "t.R")
-  t = c("library(gptr)", "", "s_ab12cd = gptr(\"a\")", doc_test_block("a1b2c3", "a", "x = 1"),
-        "", "s_ab12cd |> gptr(\"b\")", doc_test_block("a1b2c3", "b", "y = 2"))
+  t = c("library(gptr)", "", "s_ab12cd = peter(\"a\")", doc_test_block("a1b2c3", "a", "x = 1"),
+        "", "s_ab12cd |> peter(\"b\")", doc_test_block("a1b2c3", "b", "y = 2"))
   cnd = expect_error(doc_transcript_upsert(t, site, doc_test_block("a1b2c3", "c", "z = 1"),
                                            "a1b2c3"), class = "gptr_error_doc_write")
   expect_identical(cnd$reason, "malformed")
@@ -474,7 +475,7 @@ test_that("notebook anchors follow content, so an agent cell inserted above does
   nb = nb_parse(text)
   extra = list(cell_type = "code", execution_count = NULL, id = "abcd0001",
                metadata = structure(list(), names = character()), outputs = list(),
-               source = list("gptr(\"summarise the mpg column\")"))
+               source = list("peter(\"summarise the mpg column\")"))
   nb$cells = append(nb$cells, list(extra), after = 3L)
   two = nb_serialize(nb)
   ph = prompt_hash("summarise the mpg column")
@@ -506,9 +507,9 @@ test_that("notebook blocks become inert through metadata and #~ lines", {
 
 test_that("doc_inert_text() handles transcripts, Rmd and qmd", {
   seg = doc_render_block("abc123", list(model = "m", prompt = "p"), c("x = 1", "y = 2"))
-  tr = c("library(gptr)", "", "s_ab12cd = gptr(\"first\")", seg)
+  tr = c("library(gptr)", "", "s_ab12cd = peter(\"first\")", seg)
   tr_dead = doc_inert_text(tr, "r", "abc123", TRUE, transcript = TRUE)
-  expect_identical(tr_dead[3], "#~ s_ab12cd = gptr(\"first\")")
+  expect_identical(tr_dead[3], "#~ s_ab12cd = peter(\"first\")")
   expect_identical(tr_dead[5], "#~ x = 1")
   expect_identical(doc_inert_text(tr_dead, "r", "abc123", FALSE, transcript = TRUE), tr)
   rmd = doc_fixture_lines("report.expected.Rmd")
@@ -530,7 +531,7 @@ test_that("doc_format_get() returns the registered specs, else the built-ins", {
 
 # ---- Task 6 adaptations (dev/DEVIATIONS.md D-071) ------------------------------------------------
 
-# A notebook site for the first code cell calling gptr() with this prompt (the anchor's cell is
+# A notebook site for the first code cell calling peter() with this prompt (the anchor's cell is
 # informational only)
 nb_test_site = function(prompt, j = 1L) {
   ph = prompt_hash(prompt)
@@ -606,8 +607,8 @@ test_that("cell source is split as nbformat splits it and read back line for lin
   expect_identical(doc_ipynb_locate(new, site)$owned$status, "fresh")
 })
 
-test_that("each gptr() call of a calling cell owns its own agent cell; nested calls own none", {
-  text = nb_test_text(c("a = gptr(\"load data\")\n", "b = gptr(\"plot it\")"))
+test_that("each peter() call of a calling cell owns its own agent cell; nested calls own none", {
+  text = nb_test_text(c("a = peter(\"load data\")\n", "b = peter(\"plot it\")"))
   sa = nb_test_site("load data")
   sb = nb_test_site("plot it")
   t1 = doc_ipynb_upsert(text, sa, nb_test_block("aaaaaa", sa, "a = 1"), "aaaaaa")
@@ -616,7 +617,7 @@ test_that("each gptr() call of a calling cell owns its own agent cell; nested ca
   expect_identical(doc_ipynb_locate(t2, sb)$owned$id, "bbbbbb")
   # the second prompt is edited: its call owns its own (now stale) cell, never the first one's
   nb = nb_parse(t2)
-  nb$cells[[3]]$source = list("a = gptr(\"load data\")\n", "b = gptr(\"plot it again\")")
+  nb$cells[[3]]$source = list("a = peter(\"load data\")\n", "b = peter(\"plot it again\")")
   t3 = nb_serialize(nb)
   sc = nb_test_site("plot it again")
   expect_identical(doc_ipynb_locate(t3, sc)$owned[c("id", "status")],
@@ -626,7 +627,7 @@ test_that("each gptr() call of a calling cell owns its own agent cell; nested ca
   t4 = doc_ipynb_upsert(t3, sc, nb_test_block("bbbbbb", sc, "b = 3"), "bbbbbb")
   expect_identical(nb_parse(t4)$cells[-5], nb_parse(t3)$cells[-5])
   # a call inside a function definition owns no agent cell (contract 11.5)
-  inner = nb_test_text(c("f = function() gptr(\"inside\")\n", "f()"))
+  inner = nb_test_text(c("f = function() peter(\"inside\")\n", "f()"))
   si = nb_test_site("inside")
   loc = doc_ipynb_locate(inner, si)
   expect_identical(loc$stmt, c(3L, 3L))
@@ -760,13 +761,13 @@ test_that("the documents section is the text of architecture 7.3 and needs a bou
   txt = doc_section_text(list(input = list(document = list(path = "a.R", format = "r"))))
   expect_identical(txt, paste0(
     "Code from successful r calls is written into the user's document (named in <environment>) ",
-    "in a block below the gptr() call that asked for it, so the document re-runs from top to ",
+    "in a block below the peter() call that asked for it, so the document re-runs from top to ",
     "bottom. Therefore:\n- Make recorded code the clean final version: named objects, no ",
     "exploratory prints. Pass record = false for throwaway checks (head(), summaries, tests).\n",
     "- Record key modelling decisions with note (one line, written as \"## Decision: ...\"); key ",
     "printed outputs are added as #> comments automatically.\n- To change code you wrote earlier, ",
     "edit that block in the document instead of appending a second version.\n- In the document, ",
-    "prompts are quoted strings in gptr(\"...\"), and System 1 decisions are gptr(..., model = ",
+    "prompts are quoted strings in peter(\"...\"), and System 1 decisions are peter(..., model = ",
     "{s1}) inside if, for or while. Add such calls only when the user asks for an agent step in ",
     "the script."))
 })
@@ -776,7 +777,7 @@ test_that("blocks are made inert on disk and revived, through the document_write
   f = file.path(getwd(), "a.R")
   body = "x = 1"
   seg = doc_render_block("abc123", list(model = "m", prompt = "p", sha = doc_body_sha(body)), body)
-  writeLines(c("gptr(\"p\")", seg), f)
+  writeLines(c("peter(\"p\")", seg), f)
   local_gptr_options(record = "off")
   expect_false(doc_set_inert(f, "abc123"))
   local_gptr_options(record = "auto")
@@ -790,14 +791,14 @@ test_that("blocks are made inert on disk and revived, through the document_write
   expect_identical(readLines(f)[3], "#~ x = 1")
   expect_match(readLines(f)[2], "status=undone")
   expect_true(doc_set_inert(f, "abc123", inert = FALSE))
-  expect_identical(readLines(f), c("gptr(\"p\")", seg))
+  expect_identical(readLines(f), c("peter(\"p\")", seg))
   off()
   expect_identical(hits$kinds, c("inert", "inert"))
   # a console transcript kept in an ordinary .R file: its s_<hex> statement goes inert too
   g = file.path(getwd(), "console.R")
-  writeLines(c("s_ab12cd = gptr(\"p\")", seg), g)
+  writeLines(c("s_ab12cd = peter(\"p\")", seg), g)
   expect_true(doc_set_inert(g, "abc123", transcript = TRUE))
-  expect_identical(readLines(g)[1], "#~ s_ab12cd = gptr(\"p\")")
+  expect_identical(readLines(g)[1], "#~ s_ab12cd = peter(\"p\")")
 })
 
 # ---- Task 13 adaptations (dev/DEVIATIONS.md D-122) ----------------------------------------------
@@ -833,7 +834,7 @@ test_that("an open notebook and the running script are never written; inert mark
   f = file.path(proj, "a.R")
   body = "x = 1"
   seg = doc_render_block("abc123", list(model = "m", prompt = "p", sha = doc_body_sha(body)), body)
-  live = c("gptr(\"p\")", seg, "z = 2")
+  live = c("peter(\"p\")", seg, "z = 2")
   writeLines(live, f)
   testthat::local_mocked_bindings(doc_rscript_running = function() path_norm(f))
   expect_true(doc_set_inert(f, "abc123"))
@@ -843,8 +844,8 @@ test_that("an open notebook and the running script are never written; inert mark
   expect_identical(readLines(f)[3], "#~ x = 1")
   # a queued mark whose block is gone by the exit is dropped, not kept as a conflict
   expect_true(doc_set_inert(f, "abc123", inert = FALSE))
-  writeLines(c("gptr(\"p\")", "z = 2"), f)
+  writeLines(c("peter(\"p\")", "z = 2"), f)
   expect_no_warning(doc_pending_flush_all())
-  expect_identical(readLines(f), c("gptr(\"p\")", "z = 2"))
+  expect_identical(readLines(f), c("peter(\"p\")", "z = 2"))
   expect_null(doc_sidecar_read(f))
 })

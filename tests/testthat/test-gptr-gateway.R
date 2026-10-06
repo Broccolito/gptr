@@ -1,5 +1,5 @@
 # tests/testthat/test-gptr-gateway.R (Task 8: create)
-# test-gptr-gateway.R -- the gptr() gateway: capture, routing, the classed closure and its methods,
+# test-gptr-gateway.R -- the peter() gateway: capture, routing, the classed closure and its methods,
 # the built-in routes on the fake provider, terminal statuses and routers (plan P08).
 
 # A temporary project (P01's local_project(): working directory and project root) with a private
@@ -49,15 +49,15 @@ fake_run = function(session = "s0000000000", mode = "manual", depth = 0L) {
   run
 }
 
-test_that("gptr('a', mice) and mice |> gptr('a') capture mice by name", {
+test_that("peter('a', mice) and mice |> peter('a') capture mice by name", {
   local_gw()
   box = local_probe()
   mice = data.frame(weight = c(20, 22, 25))
-  expect_identical(gptr("a", mice), "probed")
+  expect_identical(peter("a", mice), "probed")
   expect_identical(box$prompt, "a")
   expect_identical(box$labels, "mice")
   expect_identical(box$kinds, "symbol")
-  expect_identical(mice |> gptr("a"), "probed")
+  expect_identical(mice |> peter("a"), "probed")
   expect_identical(box$labels, "mice")
   expect_identical(box$classes, "data.frame")
 })
@@ -66,18 +66,18 @@ test_that("named context, call values and do.call() values", {
   local_gw()
   box = local_probe()
   mice = data.frame(weight = 1:3)
-  gptr("compare", a = mice, b = head(mtcars))
+  peter("compare", a = mice, b = head(mtcars))
   expect_identical(box$labels, c("a", "b"))
   expect_identical(box$kinds, c("symbol", "value"))
   expect_identical(box$classes, c("data.frame", "data.frame"))
-  do.call(gptr, list("p", mtcars))
+  do.call(peter, list("p", mtcars))
   expect_identical(box$labels, "..2")
 })
 
 test_that("forwarded dots are forced once and keep their label", {
   local_gw()
   box = local_probe()
-  w = function(...) gptr(...)
+  w = function(...) peter(...)
   mice = data.frame(weight = 1:3)
   w("describe", mice)
   expect_identical(box$prompt, "describe")
@@ -88,14 +88,14 @@ test_that("forwarded dots are forced once and keep their label", {
 test_that("prompt selection: literal first, then a character value; two literals warn", {
   local_gw()
   box = local_probe()
-  expect_warning(gptr("first", "second"), class = "gptr_warning_two_prompts")
+  expect_warning(peter("first", "second"), class = "gptr_warning_two_prompts")
   expect_identical(box$prompt, "first")
   expect_identical(box$labels, "\"second\"")
   task = "Summarise it"
-  gptr(task)
+  peter(task)
   expect_identical(box$prompt, "Summarise it")
   expect_identical(box$template, "Summarise it")
-  gptr(prompt = "explicit", "context string")
+  peter(prompt = "explicit", "context string")
   expect_identical(box$prompt, "explicit")
 })
 
@@ -104,11 +104,11 @@ test_that("literal prompts are interpolated from envir unless switched off (cont
   box = local_probe()
   cl = 4L
   top = c("CD3E", "CD4")
-  gptr("Cluster {cl}: {top}")
+  peter("Cluster {cl}: {top}")
   expect_identical(box$prompt, "Cluster 4: CD3E, CD4")
   expect_identical(box$template, "Cluster {cl}: {top}")
   expect_identical(box$interp, c("cl=4", "top=CD3E, CD4"))
-  gptr("Cluster {cl}", .opts = list(interpolate = FALSE))
+  peter("Cluster {cl}", .opts = list(interpolate = FALSE))
   expect_identical(box$prompt, "Cluster {cl}")
 })
 
@@ -117,12 +117,12 @@ test_that("an interpolated prompt is echoed at verbosity 2 (gptr_message_interpo
   box = local_probe()
   local_gptr_options(verbose = 2L, quiet = FALSE)
   v = 7L
-  cnd = expect_message(gptr("x is {v}"), class = "gptr_message_interpolated")
+  cnd = expect_message(peter("x is {v}"), class = "gptr_message_interpolated")
   expect_match(conditionMessage(cnd), "Interpolated prompt: x is 7", fixed = TRUE)
   expect_identical(box$prompt, "x is 7")
-  expect_no_message(gptr("no braces here"), class = "gptr_message_interpolated")
+  expect_no_message(peter("no braces here"), class = "gptr_message_interpolated")
   local_gptr_options(verbose = 1L)
-  expect_no_message(gptr("x is {v}"), class = "gptr_message_interpolated")
+  expect_no_message(peter("x is {v}"), class = "gptr_message_interpolated")
 })
 
 test_that("identifiers through the gateway, including a wrapper with a local m (G3 t2b)", {
@@ -130,26 +130,26 @@ test_that("identifiers through the gateway, including a wrapper with a local m (
   box = local_probe()
   m = "haiku"
   hard = TRUE
-  gptr("p", model = opus)
+  peter("p", model = opus)
   expect_identical(box$ids$model, "opus")
-  gptr("p", model = m)
+  peter("p", model = m)
   expect_identical(box$ids$model, "haiku")
-  gptr("p", model = !!m)
+  peter("p", model = !!m)
   expect_identical(box$ids$model, "haiku")
-  gptr("p", model = I(m))
+  peter("p", model = I(m))
   expect_identical(box$ids$model, "haiku")
   w = function(...) {
     m = "WRONG-LOCAL"
-    gptr("x", ...)
+    peter("x", ...)
   }
   w(model = m)
   expect_identical(box$ids$model, "haiku")
-  gptr("p", model = if (hard) opus else haiku, mode = plan, tools = c(+grep, -write))
+  peter("p", model = if (hard) opus else haiku, mode = plan, tools = c(+grep, -write))
   expect_identical(box$ids$model, "opus")
   expect_identical(box$ids$mode, "plan")
   expect_identical(box$ids$tools, c("+grep", "-write"))
   mice = data.frame(a = 1)
-  expect_error(gptr("p", model = mice), class = "gptr_error_invalid_identifier")
+  expect_error(peter("p", model = mice), class = "gptr_error_invalid_identifier")
 })
 
 test_that("a leading session is the continuation target; a named session is context", {
@@ -157,10 +157,10 @@ test_that("a leading session is the continuation target; a named session is cont
   box = local_probe()
   s0 = session_new("fake/fake-1", "manual", home = new.env())
   mice = data.frame(a = 1)
-  s0 |> gptr("go on", mice)
+  s0 |> peter("go on", mice)
   expect_identical(box$session, s0)
   expect_identical(box$labels, "mice")
-  gptr("compare", earlier = s0)
+  peter("compare", earlier = s0)
   expect_null(box$session)
   expect_identical(box$labels, "earlier")
 })
@@ -170,47 +170,47 @@ test_that("calls made during a run inherit the running mode, only tightened (IC-
   box = local_probe()
   run = fake_run(mode = "plan")
   local_mocked_bindings(run_current = function() run)
-  gptr("x", mode = auto)
+  peter("x", mode = auto)
   expect_identical(box$ids$mode, "plan")
-  gptr("x")
+  peter("x")
   expect_identical(box$ids$mode, "plan")
 })
 
-test_that("gateway_defer() makes gptr() calls unstarted (.run = FALSE)", {
+test_that("gateway_defer() makes peter() calls unstarted (.run = FALSE)", {
   local_gw()
   box = local_probe()
-  gateway_defer(function() gptr("q"))
+  gateway_defer(function() peter("q"))
   expect_false(box$args$run)
-  gptr("q")
+  peter("q")
   expect_true(box$args$run)
 })
 
-test_that("gptr() without a prompt needs a human", {
+test_that("peter() without a prompt needs a human", {
   local_gw()
-  expect_error(gptr(), class = "gptr_error_noninteractive")
+  expect_error(peter(), class = "gptr_error_noninteractive")
 })
 
 test_that("with a human but no console route, a no-prompt call is not_available", {
   skip_if(!is.null(registry_get("route", "console")), "the console route (P14) is loaded")
   local_gw()
   local_gptr_options(interactive = TRUE)
-  expect_error(gptr(), class = "gptr_error_not_available")
+  expect_error(peter(), class = "gptr_error_not_available")
 })
 
 test_that("unknown .opts names and a non-environment envir are refused", {
   local_gw()
   local_probe()
-  expect_error(gptr("x", .opts = list(nope = 1)), class = "gptr_error_invalid_argument")
-  expect_error(gptr("x", envir = list()), class = "gptr_error_invalid_argument")
+  expect_error(peter("x", .opts = list(nope = 1)), class = "gptr_error_invalid_argument")
+  expect_error(peter("x", envir = list()), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr is a classed closure whose members come from the ns services (IC-36)", {
-  expect_identical(class(gptr), c("gptr_gateway", "function"))
+test_that("peter is a classed closure whose members come from the ns services (IC-36)", {
+  expect_identical(class(peter), c("gptr_gateway", "function"))
   expect_error({
-    gptr$x = 1
+    peter$x = 1
   }, class = "gptr_error_readonly")
   expect_error({
-    gptr[["x"]] = 1
+    peter[["x"]] = 1
   }, class = "gptr_error_readonly")
   local_mocked_bindings(
     ext_service_get = function(name) {
@@ -218,24 +218,24 @@ test_that("gptr is a classed closure whose members come from the ns services (IC
              ns.names = function(pattern) c("read", "grep"))
     },
     ext_service_has = function(name) TRUE)
-  expect_identical(gptr$read, "member read")
-  expect_identical(gptr[["grep"]], "member grep")
-  expect_identical(utils::.DollarNames(gptr, ""), c("read", "grep"))
+  expect_identical(peter$read, "member read")
+  expect_identical(peter[["grep"]], "member grep")
+  expect_identical(utils::.DollarNames(peter, ""), c("read", "grep"))
 })
 
 test_that("before the namespace services exist, $ is not_available and completion is empty", {
   skip_if(ext_service_has("ns.resolve"), "P10 registers ns.resolve")
-  expect_error(gptr$read, class = "gptr_error_not_available")
-  expect_identical(utils::.DollarNames(gptr, ""), character(0))
+  expect_error(peter$read, class = "gptr_error_not_available")
+  expect_identical(utils::.DollarNames(peter, ""), character(0))
 })
 
-test_that("print(gptr) shows the usage and the members hint", {
+test_that("print(peter) shows the usage and the members hint", {
   local_reproducible_output(width = 80)
-  expect_snapshot(print(gptr))
+  expect_snapshot(print(peter))
 })
 
-test_that("the capture helpers know gptr()'s formals after the dots", {
-  expect_identical(gateway_formal_names(), setdiff(names(formals(gptr)), "..."))
+test_that("the capture helpers know peter()'s formals after the dots", {
+  expect_identical(gateway_formal_names(), setdiff(names(formals(peter)), "..."))
 })
 
 test_that("routes run in order; route_pass() hands on; a failing match() is skipped", {
@@ -253,7 +253,7 @@ test_that("routes run in order; route_pass() hands on; a failing match() is skip
               gptr_register(mk("test_a", 2, route_pass())),
               gptr_register(mk("test_bad", 1, "never", match = function(call) stop("boom"))))
   withr::defer(for (off in offs) off())
-  expect_identical(gptr("x"), "B")
+  expect_identical(peter("x"), "B")
   expect_identical(seen$order, c("test_a", "test_b"))
 })
 
@@ -280,15 +280,15 @@ test_that("a shadowed alias wins with a notice; skill names normalise (IC-42)", 
   withr::defer(rm(list = intersect(key, names(the$once)), envir = the$once))
   gemini = "my-own-model"
   local_gptr_options(quiet = FALSE)
-  expect_message(gptr("p", model = gemini), class = "gptr_message_alias_shadowed")
+  expect_message(peter("p", model = gemini), class = "gptr_message_alias_shadowed")
   expect_identical(box$ids$model, "gemini")
-  gptr("p", model = !!gemini)
+  peter("p", model = !!gemini)
   expect_identical(box$ids$model, "my-own-model")
   d = withr::local_tempdir()
   off = gptr_register(gptr_spec("skill", "single-cell", description = "Single-cell analysis",
                                 path = file.path(d, "SKILL.md"), dir = d, source = "user"))
   withr::defer(off())
-  gptr("p", skills = single_cell)
+  peter("p", skills = single_cell)
   expect_identical(box$ids$skills, "single-cell")
 })
 
@@ -298,17 +298,17 @@ test_that("an empty argument is refused before any dot is read (Task 5 obligatio
   local_gw()
   box = local_probe()
   big = data.frame(a = 1:3)
-  cnd = expect_error(gptr("x", , big), class = "gptr_error_invalid_argument")
+  cnd = expect_error(peter("x", , big), class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "...")
   expect_match(conditionMessage(cnd), "Argument 2 of the dots is empty", fixed = TRUE)
-  expect_error(gptr("x", ), class = "gptr_error_invalid_argument")
-  w = function(...) gptr(...)
+  expect_error(peter("x", ), class = "gptr_error_invalid_argument")
+  w = function(...) peter(...)
   expect_error(w("x", , big), class = "gptr_error_invalid_argument")
   expect_null(box$prompt)
-  expect_identical(gptr("x", big), "probed")
+  expect_identical(peter("x", big), "probed")
 })
 
-test_that("the call record is released when gptr() returns and when a route fails [R2]", {
+test_that("the call record is released when peter() returns and when a route fails [R2]", {
   local_gw()
   box = new.env()
   off = gptr_register(gptr_spec("route", "test_keep", order = 1,
@@ -321,7 +321,7 @@ test_that("the call record is released when gptr() returns and when a route fail
                                 }))
   withr::defer(off())
   mice = data.frame(a = 1)
-  expect_identical(gptr("ok", mice, head(mtcars)), "kept")
+  expect_identical(peter("ok", mice, head(mtcars)), "kept")
   expect_s3_class(box$call, "gptr_call")
   expect_null(box$call$envir)
   expect_null(box$call$sys_call)
@@ -329,7 +329,7 @@ test_that("the call record is released when gptr() returns and when a route fail
   expect_error(call_value(box$call, 1L), class = "gptr_error_internal")
   expect_error(call_value(box$call, 2L), class = "gptr_error_internal")
   box$call = NULL
-  expect_error(gptr("fail", mice), "route failed")
+  expect_error(peter("fail", mice), "route failed")
   expect_null(box$call$envir)
   expect_identical(names(box$call$values), character())
 })
@@ -344,12 +344,12 @@ test_that("each route that runs is announced by a route event (contract 6.1.5)",
     NULL
   }))
   withr::defer(off())
-  gptr("p", model = opus)
+  peter("p", model = opus)
   expect_length(seen$events, 1L)
   expect_identical(seen$events[[1L]]$route, "test_probe")
   expect_identical(seen$events[[1L]]$model, "opus")
   expect_identical(seen$events[[1L]]$reason, "gateway")
-  gptr("p")
+  peter("p")
   expect_true(is.na(seen$events[[2L]]$model))
 })
 
@@ -389,8 +389,8 @@ test_that("routes select by the model-level type, without discovery (IC-74, 07 s
                                   "decided"
                                 }))
   withr::defer(off())
-  expect_identical(gptr("Is it ok?", model = "ollama/clef-flash"), "decided")
-  expect_identical(gptr("Is it ok?", model = judge), "decided")
+  expect_identical(peter("Is it ok?", model = "ollama/clef-flash"), "decided")
+  expect_identical(peter("Is it ok?", model = judge), "decided")
   expect_identical(seen$models[[1L]], "ollama/clef-flash")
   expect_s3_class(seen$models[[2L]], "gptr_provider")
 })
@@ -411,14 +411,14 @@ test_that("without the classifier route a decision-only model is not_available (
                                   "chatted"
                                 }))
   withr::defer(off())
-  cnd = expect_error(gptr("Is it ok?", model = "ollama/clef-flash"),
+  cnd = expect_error(peter("Is it ok?", model = "ollama/clef-flash"),
                      class = "gptr_error_not_available")
   expect_identical(cnd$member, "route:classifier")
   expect_identical(cnd$provided_by, "builtin:system1")
   expect_match(conditionMessage(cnd), "decision-only", fixed = TRUE)
-  expect_error(gptr("Is it ok?", model = jev), class = "gptr_error_not_available")
+  expect_error(peter("Is it ok?", model = jev), class = "gptr_error_not_available")
   expect_identical(seen$n, 0L)
-  expect_identical(gptr("Hello", model = "ollama/qwen3:1.7b"), "chatted")
+  expect_identical(peter("Hello", model = "ollama/qwen3:1.7b"), "chatted")
 })
 
 # ---- Task 9: gateway_run(), terminal conditions, builtin:gateway, router.call ---------------
@@ -477,15 +477,15 @@ test_that("call-level filters join the session filter layer instead of replacing
     })
   fake = local_fake_provider(list("ok"))
   settings_write("session", list(filters = "-builtin:checkpoints"))
-  gptr("x", model = fake, plugins = "-builtin:mcp", envir = new.env())
+  peter("x", model = fake, plugins = "-builtin:mcp", envir = new.env())
   expect_identical(box$filters, c("-builtin:checkpoints", "-builtin:mcp"))
   expect_identical(box$scope, "session")
   expect_identical(settings_read("session")$filters, c("-builtin:checkpoints", "-builtin:mcp"))
-  gptr("y", model = fake, plugins = "+builtin:mcp", envir = new.env())
+  peter("y", model = fake, plugins = "+builtin:mcp", envir = new.env())
   expect_identical(box$filters, c("-builtin:checkpoints", "+builtin:mcp"))
 })
 
-test_that("a top-level gptr() applies the filters of the user settings file (04 10.1)", {
+test_that("a top-level peter() applies the filters of the user settings file (04 10.1)", {
   local_gw(workspace = FALSE)
   st = gateway_state()
   old = st$filters_applied
@@ -503,9 +503,9 @@ test_that("a top-level gptr() applies the filters of the user settings file (04 
   # as after a restart: the file holds filters that no gptr_config() call of this process set
   settings_file_write(settings_path("user", create = TRUE), list(filters = "-builtin:x"))
   fake = local_fake_provider(list("ok", "again"))
-  gptr("x", model = fake, envir = new.env())
+  peter("x", model = fake, envir = new.env())
   expect_identical(box$calls, list(list(filters = "-builtin:x", scope = "user")))
-  gptr("y", model = fake, envir = new.env())
+  peter("y", model = fake, envir = new.env())
   expect_length(box$calls, 1L)
 })
 
@@ -513,21 +513,21 @@ test_that("a continuation's newer spec replaces the session's older spec of the 
   local_gw()
   old = gptr_fake_provider(list("old answer"))
   new = gptr_fake_provider(list("new answer"))
-  s = gptr("a", model = old, envir = new.env())
-  s |> gptr("b", model = new)
+  s = peter("a", model = old, envir = new.env())
+  s |> peter("b", model = new)
   expect_identical(s$text, "new answer")
 })
 
-test_that("gptr('a', mice) and mice |> gptr('a') create sessions labelled mice", {
+test_that("peter('a', mice) and mice |> peter('a') create sessions labelled mice", {
   local_gw()
   local_labels_block()
   fake = local_fake_provider(list("ok"))
   e = new.env()
   mice = data.frame(weight = c(20, 22, 25))
-  s1 = gptr("a", mice, model = fake, envir = e)
+  s1 = peter("a", mice, model = fake, envir = e)
   expect_s3_class(s1, "gptr_session")
   expect_identical(s1$text, "ok")
-  s2 = mice |> gptr("a", model = fake, envir = e)
+  s2 = mice |> peter("a", model = fake, envir = e)
   expect_false(identical(s1, s2))
   expect_identical(gptr_last(), s2)
   req = fake_requests(fake)
@@ -541,8 +541,8 @@ test_that("a pipe chain returns the same session and a model switch appends mode
   f2 = local_fake_provider(list("three"), name = "fake2")
   local_gptr_options(model = "fake1/fake1-1")
   e = new.env()
-  s = gptr("a", envir = e)
-  r = s |> gptr("b") |> gptr("c", model = f2)
+  s = peter("a", envir = e)
+  r = s |> peter("b") |> peter("c", model = f2)
   expect_identical(r, s)
   expect_identical(s$turns, 3L)
   expect_identical(s$model, "fake2/fake2-1")
@@ -555,11 +555,11 @@ test_that("a tool that pipes into its own running session enqueues a steer after
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   pipe_self = test_tool("pipe_self", function(ctx) {
-    res = ctx$session |> gptr("use TPM")
+    res = ctx$session |> peter("use TPM")
     if (identical(res, ctx$session)) "piped" else "not piped"
   })
   fake = local_fake_provider(list(fake_tool("pipe_self"), "done"))
-  s = gptr("normalise", model = fake, tools = list(pipe_self), envir = new.env())
+  s = peter("normalise", model = fake, tools = list(pipe_self), envir = new.env())
   expect_identical(s$text, "done")
   msgs = s$messages
   roles = vapply(msgs, function(m) m$role, "")
@@ -576,11 +576,11 @@ test_that("a tool that pipes into its own running session enqueues a steer after
 test_that("a continuation evaluates in the kept home and fails fast on a hidden symbol (IC-40)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("start", model = fake, envir = globalenv())
-  f = function(s, d) s |> gptr("filter d", d)
+  s = peter("start", model = fake, envir = globalenv())
+  f = function(s, d) s |> peter("filter d", d)
   cnd = expect_error(f(s, mtcars), class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "d")
-  g = function(s, d) s |> gptr("filter d", d, envir = environment())
+  g = function(s, d) s |> peter("filter d", d, envir = environment())
   expect_identical(g(s, mtcars), s)
   expect_identical(s$turns, 2L)
 })
@@ -590,8 +590,8 @@ test_that("a first remote use without an acknowledgement is refused, then replay
   withr::local_envvar(GPTR_REPLAY = "replay")
   corp = gptr_provider("corp", api = "fake",
                        models = list(list(id = "corp-1", ref = "corp/corp-1")))
-  expect_error(gptr("x", model = corp, envir = new.env()), class = "gptr_error_egress")
-  expect_error(gptr("x", model = corp, envir = new.env(), .opts = list(context = "none")),
+  expect_error(peter("x", model = corp, envir = new.env()), class = "gptr_error_egress")
+  expect_error(peter("x", model = corp, envir = new.env(), .opts = list(context = "none")),
                class = "gptr_error_not_recorded")
 })
 
@@ -609,7 +609,7 @@ test_that(".opts entries named by a plugin namespace reach ctx$input$opts (IC-44
                             })))
   withr::defer(for (off in offs) off())
   fake = local_fake_provider(list("ok"))
-  gptr("Review analysis.R", model = fake, envir = new.env(),
+  peter("Review analysis.R", model = fake, envir = new.env(),
        .opts = list(panel = list(size = 3)))
   expect_identical(box$panel, list(size = 3L))
 })
@@ -620,7 +620,7 @@ test_that("a secret-looking prompt is sent redacted, with a notice (gptr.prompt_
   key = paste0("sk-", "ant-api03-", strrep("FAKEant0", 11), "xxxxxAA")
   txt = paste("Use the key", key, "for the API")
   fake = local_fake_provider(list("ok"))
-  msgs = testthat::capture_messages(gptr(txt, model = fake, envir = new.env()))
+  msgs = testthat::capture_messages(peter(txt, model = fake, envir = new.env()))
   expect_true(any(grepl("replaced by a [secret:...] marker", msgs, fixed = TRUE)))
   expect_false(any(grepl(key, msgs, fixed = TRUE)))
   sent = blocks_text(fake_requests(fake)[[1L]]$messages[[1L]])
@@ -641,7 +641,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   })
   local_gptr_options(prompt_secrets = "ask", interactive = TRUE)
   fake = local_fake_provider(list("ok"))
-  cnd = expect_error(gptr(txt, model = fake, envir = new.env()),
+  cnd = expect_error(peter(txt, model = fake, envir = new.env()),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, "prompt")
   expect_false(grepl(key, conditionMessage(cnd), fixed = TRUE))
@@ -649,7 +649,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   expect_true(box$default)
   expect_length(fake_requests(fake), 0L)
   box$answer = TRUE
-  s = gptr(txt, model = fake, envir = new.env())
+  s = peter(txt, model = fake, envir = new.env())
   expect_identical(s$text, "ok")
   sent = blocks_text(fake_requests(fake)[[1L]]$messages[[1L]])
   expect_match(sent, "[secret:anthropic-key]", fixed = TRUE)
@@ -657,7 +657,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
   box$question = NULL
   local_gptr_options(interactive = FALSE)
   fake2 = local_fake_provider(list("ok"), name = "fake2")
-  gptr(txt, model = fake2, envir = new.env())
+  peter(txt, model = fake2, envir = new.env())
   expect_null(box$question)
   expect_length(fake_requests(fake2), 1L)
 })
@@ -665,7 +665,7 @@ test_that("gptr.prompt_secrets = \"ask\" asks first; a no sends nothing", {
 test_that("a provider failure signals gptr_error_provider carrying the session", {
   local_gw()
   fake = local_fake_provider(list(fake_error("bad request", status = 400L)))
-  cnd = expect_error(gptr("x", model = fake, envir = new.env()), class = "gptr_error_provider")
+  cnd = expect_error(peter("x", model = fake, envir = new.env()), class = "gptr_error_provider")
   expect_s3_class(cnd$session, "gptr_session")
   expect_identical(cnd$session, gptr_last())
   expect_identical(cnd$session$status, "error")
@@ -685,13 +685,13 @@ test_that("the condition P06 stored is the one signalled, with the session attac
   expect_identical(cnd$retry_after, 30)
 })
 
-test_that("gptr() leaves no connection open when it returns, errors or is interrupted (IC-59)", {
+test_that("peter() leaves no connection open when it returns, errors or is interrupted (IC-59)", {
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   n0 = nrow(showConnections())
   fake = local_fake_provider(list("ok", fake_error("bad request", status = 400L)))
-  s = gptr("a", model = fake, envir = new.env())
-  expect_error(s |> gptr("b"), class = "gptr_error_provider")
+  s = peter("a", model = fake, envir = new.env())
+  expect_error(s |> peter("b"), class = "gptr_error_provider")
   expect_identical(nrow(showConnections()), n0)
   spin = test_tool("spin", function(ctx) {
     signalCondition(structure(class = c("interrupt", "condition"), list(message = "", call = NULL)))
@@ -699,7 +699,7 @@ test_that("gptr() leaves no connection open when it returns, errors or is interr
   })
   fake2 = local_fake_provider(list(fake_tool("spin"), "never"), name = "spinner")
   res = tryCatch({
-    gptr("go", model = fake2, tools = list(spin), envir = new.env())
+    peter("go", model = fake2, tools = list(spin), envir = new.env())
     "returned"
   }, interrupt = function(cnd) "interrupted")
   expect_identical(res, "interrupted")
@@ -710,15 +710,15 @@ test_that("gptr() leaves no connection open when it returns, errors or is interr
 test_that("model code may not pipe into another running session without approval (IC-53)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  other = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  other = peter("x", model = fake, .run = FALSE, envir = new.env())
   d = session_data(other)
   d$status = "running"
   run = fake_run(session = "s9999999999")
   local_mocked_bindings(run_current = function() run)
-  expect_error(other |> gptr("change course"), class = "gptr_error_permission")
+  expect_error(other |> peter("change course"), class = "gptr_error_permission")
   expect_length(d$queue$steer, 0L)
   run$signal$control = "gptr_steer"
-  expect_identical(other |> gptr("change course"), other)
+  expect_identical(other |> peter("change course"), other)
   expect_length(d$queue$steer, 1L)
   d$status = "idle"
 })
@@ -726,12 +726,12 @@ test_that("model code may not pipe into another running session without approval
 test_that("a pending session collected without running releases its call record [R2]", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   sid = s$id
   call = get0(sid, envir = gateway_state()$pending, inherits = FALSE)$call
   expect_true(isTRUE(call$hold))
   rm(s)
-  invisible(gptr("y", model = fake, envir = new.env()))
+  invisible(peter("y", model = fake, envir = new.env()))
   invisible(gc())
   # D-085: the finalizer defers session_shutdown to the next safe point (a registry lookup,
   # a dispatch, a new session); ev_drain() is that safe point here
@@ -746,7 +746,7 @@ test_that("a run that reaches max_turns signals gptr_error_max_turns", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   again = test_tool("again", function(ctx) "again")
   fake = local_fake_provider(list(fake_tool("again")))
-  cnd = expect_error(gptr("loop", model = fake, tools = list(again), envir = new.env(),
+  cnd = expect_error(peter("loop", model = fake, tools = list(again), envir = new.env(),
                           .opts = list(max_turns = 2L)), class = "gptr_error_max_turns")
   expect_identical(cnd$session$status, "max_turns")
 })
@@ -773,8 +773,8 @@ test_that("the session is visible, invisible when streamed; .run = FALSE keeps t
   local_gw()
   fake = local_fake_provider(list("ok"))
   e = new.env()
-  expect_visible(gptr("x", model = fake, envir = e))
-  s = expect_invisible(gptr("later", model = fake, envir = e, .run = FALSE))
+  expect_visible(peter("x", model = fake, envir = e))
+  s = expect_invisible(peter("later", model = fake, envir = e, .run = FALSE))
   expect_identical(s$status, "idle")
   expect_identical(s$turns, 0L)
   expect_true(gateway_pending_has(s$id))
@@ -782,20 +782,20 @@ test_that("the session is visible, invisible when streamed; .run = FALSE keeps t
   expect_length(queued, 1L)
   expect_identical(queued[[1L]]$text, "later")
   local_gptr_options(verbose = 2L)
-  expect_invisible(gptr("x", model = fake, envir = e))
+  expect_invisible(peter("x", model = fake, envir = e))
 })
 
-test_that("a gptr() call made during a run becomes a child session (route nested)", {
+test_that("a peter() call made during a run becomes a child session (route nested)", {
   local_gw()
   local_gptr_options(unsafe_no_permissions = TRUE)
   sub = local_fake_provider(list("child answer"), name = "sub")
   box = new.env()
   spawn = test_tool("spawn", function(ctx) {
-    box$child = gptr("sub task", model = sub, mode = auto)
+    box$child = peter("sub task", model = sub, mode = auto)
     box$child$text
   })
   fake = local_fake_provider(list(fake_tool("spawn"), "parent done"), name = "main")
-  s = gptr("delegate", model = fake, tools = list(spawn), envir = new.env(), mode = plan)
+  s = peter("delegate", model = fake, tools = list(spawn), envir = new.env(), mode = plan)
   child = box$child
   expect_identical(s$text, "parent done")
   expect_identical(session_data(child)$kind, "child")
@@ -810,7 +810,7 @@ test_that("a router model is stored as router:<name> and picks each request's mo
   local_fake_provider(list("routed"), name = "fake2")
   off = gptr_register(gptr_router("pick", route = function(request, ctx) "fake2/fake2-1"))
   withr::defer(off())
-  s = gptr("x", model = pick, envir = new.env())
+  s = peter("x", model = pick, envir = new.env())
   expect_identical(session_data(s)$model, "router:pick")
   expect_identical(s$text, "routed")
   ents = session_data(s)$entries
@@ -843,7 +843,7 @@ test_that("a failing router falls back to the default model", {
   local_gptr_options(model = "fake2/fake2-1")
   off = gptr_register(gptr_router("broken", route = function(request, ctx) stop("no")))
   withr::defer(off())
-  s = gptr("x", model = broken, envir = new.env())
+  s = peter("x", model = broken, envir = new.env())
   expect_identical(s$text, "fallback")
 })
 
@@ -852,7 +852,7 @@ test_that("background = TRUE needs the bg.register service (P21)", {
   skip_if(ext_service_has("bg.register"), "P21 registers bg.register")
   local_gw()
   fake = local_fake_provider(list("ok"))
-  expect_error(gptr("x", model = fake, envir = new.env(), background = TRUE),
+  expect_error(peter("x", model = fake, envir = new.env(), background = TRUE),
                class = "gptr_error_not_available")
   expect_identical(gptr_last()$status, "idle")
 })
@@ -869,7 +869,7 @@ test_that("a run sent to the background returns the session at once (pause menu 
     NULL
   })
   withr::defer(reactor_cancel(tid))
-  s = gptr("x", model = fake, envir = new.env())
+  s = peter("x", model = fake, envir = new.env())
   expect_identical(s$status, "running")
   run = session_live(s)$run
   expect_true(isTRUE(run$opts$background))
@@ -885,7 +885,7 @@ test_that(".opts$images sends image blocks with the first message (IC-44)", {
   graphics::plot.new()
   grDevices::dev.off()
   fake = local_fake_provider(list("a red square"))
-  gptr("What is this?", model = fake, envir = new.env(), .opts = list(images = list(png)))
+  peter("What is this?", model = fake, envir = new.env(), .opts = list(images = list(png)))
   first = fake_requests(fake)[[1L]]$messages[[1L]]
   types = vapply(first$content, function(b) b$type, "")
   expect_true("image" %in% types)
@@ -907,7 +907,7 @@ test_that("the gateway emits route, model_select and input (contract 6.1.5)", {
               gptr_register(gptr_hook("input", hook)))
   withr::defer(for (off in offs) off())
   fake = local_fake_provider(list("ok"))
-  gptr("x", model = fake, envir = new.env())
+  peter("x", model = fake, envir = new.env())
   expect_true(all(c("route", "model_select", "input") %in% seen$events))
 })
 
@@ -916,9 +916,9 @@ test_that("parallel = and agents = need the sub-agent routes (P19)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
   cohorts = list(a = 1, b = 2)
-  expect_error(gptr("Summarise", cohorts, model = fake, parallel = 2, envir = new.env()),
+  expect_error(peter("Summarise", cohorts, model = fake, parallel = 2, envir = new.env()),
                class = "gptr_error_not_available")
-  expect_error(gptr("Review", model = fake, envir = new.env(),
+  expect_error(peter("Review", model = fake, envir = new.env(),
                     agents = list(stats = agent(description = "Statistics"))),
                class = "gptr_error_not_available")
 })
@@ -960,7 +960,7 @@ test_that("a root run freezes ollama_local_only from human settings only; childr
   })
   run_once = function() {
     fake = gptr_fake_provider(list(fake_tool("probe_safety"), "done"))
-    gptr("check", model = fake, tools = list(probe), envir = new.env())
+    peter("check", model = fake, tools = list(probe), envir = new.env())
   }
   run_once()
   expect_identical(box$seen[[1L]]$ollama_local_only, TRUE)
@@ -974,17 +974,17 @@ test_that("a root run freezes ollama_local_only from human settings only; childr
   settings_write("session", list(providers = list(ollama = list(local_only = FALSE))))
   run_once()
   expect_identical(box$seen[[3L]]$ollama_local_only, FALSE)
-  # a child run of a gptr() call made by a tool inherits its parent's frozen record (IC-53),
+  # a child run of a peter() call made by a tool inherits its parent's frozen record (IC-53),
   # even when the human layer is relaxed after the parent started (07 section 5)
   sub = gptr_fake_provider(list(fake_tool("probe_safety"), "child done"), name = "sub")
   spawn = test_tool("spawn", function(ctx) {
     box$parent = run_current()$opts$safety
     settings_write("session", list(providers = list(ollama = list(local_only = FALSE))))
-    gptr("sub task", model = sub, tools = list(probe))$text
+    peter("sub task", model = sub, tools = list(probe))$text
   })
   main = gptr_fake_provider(list(fake_tool("spawn"), "parent done"), name = "main")
   settings_write("session", list(providers = list(ollama = list(local_only = TRUE))))
-  s = gptr("delegate", model = main, tools = list(spawn), envir = new.env())
+  s = peter("delegate", model = main, tools = list(spawn), envir = new.env())
   expect_identical(s$text, "parent done")
   expect_identical(box$parent$ollama_local_only, TRUE)
   expect_identical(box$seen[[4L]]$ollama_local_only, TRUE)
@@ -995,7 +995,7 @@ test_that("the guards follow the effective endpoint, never the local hint (Task 
   local_gw()
   lan = gptr_provider("lan", api = "fake", local = TRUE, base_url = "http://192.168.1.20:8080/v1",
                       models = list(list(id = "lan-1", ref = "lan/lan-1")))
-  cnd = expect_error(gptr("x", model = lan, envir = new.env()), class = "gptr_error_egress")
+  cnd = expect_error(peter("x", model = lan, envir = new.env()), class = "gptr_error_egress")
   expect_identical(cnd$provider, "lan")
   # a router that picks it is refused the same way by router.call
   off = list(gptr_register(lan),
@@ -1011,13 +1011,13 @@ test_that("the call's replay = overrides the process replay mode (contract 3.1, 
   live$offline = FALSE
   opts = list(context = "none")
   local_gptr_options(replay = "replay")
-  expect_error(gptr("x", model = live, envir = new.env(), .opts = opts),
+  expect_error(peter("x", model = live, envir = new.env(), .opts = opts),
                class = "gptr_error_not_recorded")
-  s = gptr("x", model = live, envir = new.env(), .opts = opts, replay = "auto")
+  s = peter("x", model = live, envir = new.env(), .opts = opts, replay = "auto")
   expect_identical(s$text, "live answer")
   local_gptr_options(replay = "auto")
   withr::local_envvar(GPTR_REPLAY = "auto")
-  expect_error(gptr("y", model = live, envir = new.env(), .opts = opts, replay = "replay"),
+  expect_error(peter("y", model = live, envir = new.env(), .opts = opts, replay = "replay"),
                class = "gptr_error_not_recorded")
   expect_length(fake_requests(live), 1L)
 })
@@ -1026,7 +1026,7 @@ test_that(".opts$system1_images is refused on a conversational route (IC-74 sect
   local_gw()
   fake = local_fake_provider(list("ok"))
   img = list(list(data = as.raw(c(0x89, 0x50, 0x4e, 0x47)), mime = "image/png"))
-  cnd = expect_error(gptr("Is it ok?", model = fake, envir = new.env(),
+  cnd = expect_error(peter("Is it ok?", model = fake, envir = new.env(),
                           .opts = list(system1_images = img)),
                      class = "gptr_error_invalid_argument")
   expect_identical(cnd$arg, ".opts$system1_images")
@@ -1081,7 +1081,7 @@ test_that("egress reads the session's own provider record, never the global one 
   lm$offline = FALSE
   lm$base_url = "http://192.168.1.20:1234/v1"
   expect_true(egress_state(provider_get("lmstudio"))$exempt)
-  cnd = expect_error(gptr("x", model = lm, envir = new.env()), class = "gptr_error_egress")
+  cnd = expect_error(peter("x", model = lm, envir = new.env()), class = "gptr_error_egress")
   expect_identical(cnd$provider, "lmstudio")
   expect_match(conditionMessage(cnd), "192.168.1.20", fixed = TRUE)
   # a remote vLLM declared inline (not local) under the built-in's id
@@ -1089,7 +1089,7 @@ test_that("egress reads the session's own provider record, never the global one 
   vl$offline = FALSE
   vl$local = FALSE
   vl$base_url = "https://gpu.example.org/v1"
-  cnd = expect_error(gptr("x", model = vl, envir = new.env()), class = "gptr_error_egress")
+  cnd = expect_error(peter("x", model = vl, envir = new.env()), class = "gptr_error_egress")
   expect_identical(cnd$provider, "vllm")
   # router.call checks the session's record of the provider its router picks
   off = gptr_register(gptr_router("to_lm", route = function(request, ctx) "lmstudio/lmstudio-1"))
@@ -1122,13 +1122,13 @@ test_that("a routed session's guards honour the call's replay = (contract 3.1, I
   local_gptr_options(replay = "auto")
   withr::local_envvar(GPTR_REPLAY = "auto")
   n = refused()
-  tryCatch(gptr("y", model = "router:to_live", envir = new.env(), replay = "replay"),
+  tryCatch(peter("y", model = "router:to_live", envir = new.env(), replay = "replay"),
            error = function(e) NULL)
   expect_length(fake_requests(live), 0L)
   expect_identical(refused(), n + 1L)
   # replay = "auto" in a replaying process: the router's live choice answers
   local_gptr_options(replay = "replay")
-  s = gptr("z", model = "router:to_live", envir = new.env(), replay = "auto")
+  s = peter("z", model = "router:to_live", envir = new.env(), replay = "auto")
   expect_identical(s$text, "live answer")
   expect_length(fake_requests(live), 1L)
 })
@@ -1146,7 +1146,7 @@ test_that("a routed session's egress check honours .opts$context = \"none\" (IC-
              gptr_register(gptr_router("to_corp", route = function(request, ctx) "corp/corp-1")))
   withr::defer(for (o in off) o())
   # no automatic context is sent, so the unacknowledged provider the router picks answers
-  s = gptr("x", model = "router:to_corp", envir = new.env(), .opts = list(context = "none"))
+  s = peter("x", model = "router:to_corp", envir = new.env(), .opts = list(context = "none"))
   expect_identical(s$text, "corp answer")
   expect_length(fake_requests(corp), 1L)
   expect_length(fake_requests(fallback), 0L)
@@ -1192,14 +1192,14 @@ test_that("router.call judges egress under the frozen record of the run it serve
     settings_write("session", list(providers = list(ollama = list(local_only = TRUE))))
   }
   n = refused()
-  s = gptr("x", model = "router:to_ollama", envir = new.env())
+  s = peter("x", model = "router:to_ollama", envir = new.env())
   expect_identical(box$frozen$ollama_local_only, FALSE)
   expect_identical(s$text, "fallback answer")
   expect_identical(refused(), n + 1L)
   # a run frozen without anyone to ask never asks, even when someone could answer later
   settings_write("session", list(providers = list(ollama = list(local_only = FALSE))))
   box$change = function() options(gptr.interactive = TRUE)
-  s = gptr("y", model = "router:to_ollama", envir = new.env())
+  s = peter("y", model = "router:to_ollama", envir = new.env())
   expect_false(box$frozen$can_prompt)
   expect_null(box$asked)
   expect_identical(s$text, "fallback again")
@@ -1212,11 +1212,11 @@ test_that("router.call judges egress under the frozen record of the run it serve
 test_that("a continuation names a provider registered for the session by its bare id", {
   local_gw()
   corpx = gptr_fake_provider(list("one", "two", "three"), name = "corpx")
-  s = gptr("a", model = corpx, envir = new.env())
+  s = peter("a", model = corpx, envir = new.env())
   sid = session_data(s)$id
   expect_identical(gateway_model_ref("corpx", session = sid), "corpx/corpx-1")
   expect_identical(gateway_model_ref("corpx", "low", session = sid), "corpx/corpx-1:low")
-  s = s |> gptr("b", model = "corpx")
+  s = s |> peter("b", model = "corpx")
   expect_identical(s$text, "two")
   expect_error(gateway_model_ref("corpx"), class = "gptr_error_unknown_model")
 })
@@ -1230,17 +1230,17 @@ test_that("router:<name> names a registered router; an unknown one is refused", 
   withr::defer(off())
   expect_identical(gateway_model_ref("router:pick3"), "router:pick3")
   expect_identical(gateway_model_ref("pick3"), "router:pick3")
-  cnd = expect_error(gptr("x", model = "router:typo", envir = new.env()),
+  cnd = expect_error(peter("x", model = "router:typo", envir = new.env()),
                      class = "gptr_error_unknown_model")
   expect_identical(cnd$ref, "router:typo")
   expect_length(fake_requests(fake), 0L)
   # a router registered for one session only is found on that session's continuation
   r4 = gptr_router("pick4", route = function(request, ctx) "fake2/fake2-1")
-  s = gptr("x", model = r4, envir = new.env())
+  s = peter("x", model = r4, envir = new.env())
   expect_identical(s$text, "first")
   expect_error(gateway_model_ref("router:pick4"), class = "gptr_error_unknown_model")
   expect_identical(gateway_model_ref("router:pick4", session = s$id), "router:pick4")
-  s = s |> gptr("again", model = "router:pick4")
+  s = s |> peter("again", model = "router:pick4")
   expect_identical(c(s$model, s$text), c("router:pick4", "second"))
 })
 
@@ -1250,7 +1250,7 @@ test_that("NAMESPACE exports P08's ten names and registers its S3 methods", {
   nsfile = testthat::test_path("..", "..", "NAMESPACE")
   skip_if_not(file.exists(nsfile), "the source NAMESPACE is not reachable from here")
   ns = readLines(nsfile, encoding = "UTF-8")
-  exports = c("gptr", "gptr_init", "gptr_config", "gptr_trust", "gptr_step", "gptr_wait",
+  exports = c("peter", "gptr_init", "gptr_config", "gptr_trust", "gptr_step", "gptr_wait",
               "gptr_steer", "gptr_cancel", "gptr_on", "gptr_return")
   expect_true(all(paste0("export(", exports, ")") %in% ns))
   methods = c("\"\\$\"", "\"\\$<-\"", "\"\\[\\[\"", "\"\\[\\[<-\"", "print",

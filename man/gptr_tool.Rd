@@ -63,8 +63,8 @@ A spec of class \code{c("gptr_tool", "gptr_spec")}.
 }
 \description{
 A tool is one capability the model can use: declared directly in the request's tool array
-(\code{exposure = "direct"}), callable from R code as \verb{gptr$<namespace>$<name>()} (\code{"r"}, one
-signature line in the prompt), found through \code{gptr$search()} (\code{"deferred"}) or callable only by
+(\code{exposure = "direct"}), callable from R code as \verb{peter$<namespace>$<name>()} (\code{"r"}, one
+signature line in the prompt), found through \code{peter$search()} (\code{"deferred"}) or callable only by
 gptr code (\code{"hidden"}). Give \code{execute} (\verb{function(input, ctx)}, the direct-tool form), \code{fun} (an
 R function whose formals match the schema properties, the member form), or both. A direct tool
 with only \code{fun} gets a generated \code{execute} that prints the value within \code{output_tokens}; an \code{r}

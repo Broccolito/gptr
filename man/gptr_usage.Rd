@@ -37,8 +37,6 @@ a session, agent, model or route (process-level System 1 calls) form the \code{N
 }
 \examples{
 gptr_usage()
-\dontshow{if (exists("gptr", mode = "function")) withAutoprint(\{ # examplesIf}
-s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 gptr_usage(s)
-\dontshow{\}) # examplesIf}
 }

@@ -1,12 +1,12 @@
 # R/gptr-gateway.R (Task 8: create)
-# gptr-gateway.R -- gptr(): the one gateway (S-1), a classed closure whose `$` reaches the gptr$
+# gptr-gateway.R -- peter(): the one gateway (S-1), a classed closure whose `$` reaches the peter$
 # namespace; dispatch steps 1-6 of contract 6.1.1 with routes looked up in the registry; the
 # built-in routes `nested`, `continue` and `new`, the core `setting` specs (builtin:gateway,
 # IC-24), and the router.call service (IC-69). Plan P08, layer L6.
 
 #' Run an agent in this R session
 #'
-#' `gptr()` is the single entry point. Give it a quoted prompt and, optionally, the objects the
+#' `peter()` is the single entry point. Give it a quoted prompt and, optionally, the objects the
 #' agent should work on; it returns the agent session, which you can print, query (`$text`,
 #' `$value`, `$usage`) and continue with the pipe. Models, modes, skills, plugins, extensions and
 #' tools may be written as bare names.
@@ -22,17 +22,22 @@
 #'
 #' Terminal statuses become conditions carrying the session as `$session`: `error` signals
 #' `gptr_error_provider`, `blocked` `gptr_error_permission`, `budget` `gptr_error_budget_<kind>`
-#' and `max_turns` `gptr_error_max_turns`. `gptr()` with no prompt opens the console when someone
+#' and `max_turns` `gptr_error_max_turns`. `peter()` with no prompt opens the console when someone
 #' can answer, and signals `gptr_error_noninteractive` otherwise.
 #'
+#' The name honours Peter Cathcart Wason, whose work on reasoning framed the dual-process (System 1
+#' / System 2) view that gptr unifies, and Peter Naur of the Backus-Naur form, in the spirit of
+#' recording sessions as readable, replayable documents. A user object named `peter` hides the
+#' gateway; call `gptr::peter()` then.
+#'
 #' @usage
-#' gptr(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
-#'      extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
-#'      choices = NULL, levels = NULL, threshold = 0.5,
-#'      min_confidence = NULL, uncertain = NULL,
-#'      prompt = NULL, envir = parent.frame(), background = FALSE,
-#'      budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
-#'      .stdin = FALSE)
+#' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
+#'       extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
+#'       choices = NULL, levels = NULL, threshold = 0.5,
+#'       min_confidence = NULL, uncertain = NULL,
+#'       prompt = NULL, envir = parent.frame(), background = FALSE,
+#'       budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
+#'       .stdin = FALSE)
 #' @param ... A session to continue, the prompt, and context objects.
 #' @param model A model name (`sonnet`, `"anthropic/claude-sonnet-5-5"`), a provider or router spec
 #'   such as [gptr_fake_provider()], or `NULL` for the configured default.
@@ -58,18 +63,18 @@
 #'   console), or a typed System 1 vector for classifier models.
 #' @examples
 #' fake = gptr_fake_provider(list("The data has 32 rows."))
-#' s = gptr("How many rows does the data have?", mtcars, model = fake, envir = new.env())
+#' s = peter("How many rows does the data have?", mtcars, model = fake, envir = new.env())
 #' s$text
-#' s |> gptr("And how many columns?")
+#' s |> peter("And how many columns?")
 #' identical(gptr_last(), s)
 #' @export
-gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
-                          extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
-                          choices = NULL, levels = NULL, threshold = 0.5,
-                          min_confidence = NULL, uncertain = NULL,
-                          prompt = NULL, envir = parent.frame(), background = FALSE,
-                          budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
-                          .stdin = FALSE) {
+peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
+                           extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
+                           choices = NULL, levels = NULL, threshold = 0.5,
+                           min_confidence = NULL, uncertain = NULL,
+                           prompt = NULL, envir = parent.frame(), background = FALSE,
+                           budget = NULL, replay = NULL, .opts = list(), .run = TRUE,
+                           .stdin = FALSE) {
   # Capture rules R2-R3 (G3 section 3; IC-41). This frame holds `...` and the caller frame, so it
   # creates no closure, handler or match.arg() call and never assigns a formal (new locals only).
   # Plain-symbol dots are read by name through leaves; their promises are never forced. Calls and
@@ -81,13 +86,13 @@ gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins
   nf = sys.nframe()
   n = ...length()
   exprs = as.list(substitute(list(...)))[-1L]
-  # an empty argument (`gptr("x", , big)`) has no value to read: refused before any dot is read,
+  # an empty argument (`peter("x", , big)`) has no value to read: refused before any dot is read,
   # since ...elt() of it fails with R's "argument is missing" (Task 5's dot_sites() and
   # dot_labels() already tolerate it)
   empty = which(dot_empty(exprs))
   if (length(empty)) {
     gptr_abort(c(paste0("Argument ", empty[1L], " of the dots is empty."),
-                 "Remove the extra comma from the gptr() call."),
+                 "Remove the extra comma from the peter() call."),
                "invalid_argument", arg = "...", expected = "a value for every argument")
   }
   nms = ...names()
@@ -151,7 +156,7 @@ gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins
     }
   }
   if (isTRUE(sel$two)) {
-    gptr_warn(c("gptr() got two unnamed strings: the first is the prompt, the second is context.",
+    gptr_warn(c("peter() got two unnamed strings: the first is the prompt, the second is context.",
                 "Name the prompt (prompt = \"...\") to make this explicit."), "two_prompts")
   }
   e = substitute(model)
@@ -180,9 +185,9 @@ gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins
   # (gateway_dispatch(), IC-53) only tightens the nested run (P06 run_new())
   args$mode_given = !is.null(id_mode)
   if (is.null(prompt_text) && !isTRUE(args$stdin) && !gptr_can_prompt()) {
-    gptr_abort(c("gptr() without a prompt starts the interactive console and needs a human.",
-                 paste("In scripts pass a prompt, gptr(\"...\"); to drive the console from piped",
-                       "input use gptr(.stdin = TRUE).")),
+    gptr_abort(c("peter() without a prompt starts the interactive console and needs a human.",
+                 paste("In scripts pass a prompt, peter(\"...\"); to drive the console from piped",
+                       "input use peter(.stdin = TRUE).")),
                "noninteractive", what = "console", questions = character())
   }
   labels = dot_labels(exprs, nms)
@@ -198,7 +203,7 @@ gptr = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins
   if (isTRUE(res$visible)) res$value else invisible(res$value)
 }, class = c("gptr_gateway", "function"))
 
-#' For each dot expression, TRUE when the argument was left empty (`gptr("x", , big)`) [leaf].
+#' For each dot expression, TRUE when the argument was left empty (`peter("x", , big)`) [leaf].
 #' Each expression is read by index and never bound to a local, so the empty argument is never
 #' evaluated (as in dot_sites() and dot_labels())
 #' @noRd
@@ -232,13 +237,13 @@ gateway_dispatch = function(call) {
     return(res)
   }
   if (is.null(call$prompt)) {
-    gptr_abort(c("gptr() without a prompt opens the console, which is not loaded.",
-                 "Pass a prompt, as in gptr(\"...\")."), "not_available",
+    gptr_abort(c("peter() without a prompt opens the console, which is not loaded.",
+                 "Pass a prompt, as in peter(\"...\")."), "not_available",
                member = "route:console", provided_by = "builtin:console")
   }
   if (identical(gateway_model_type(call$ids$model), "classifier")) {
     gptr_abort(c(paste0("Model ", gateway_model_label(call$ids$model), " is a decision-only ",
-                        "(System 1) model: gptr() sends it to the classifier route, which is not ",
+                        "(System 1) model: peter() sends it to the classifier route, which is not ",
                         "loaded."),
                  "Enable builtin:system1, or choose a conversational model for agent work."),
                "not_available", member = "route:classifier", provided_by = "builtin:system1")
@@ -305,10 +310,10 @@ gateway_model_type = function(model) {
 #' Refuses assignment into the gateway
 #' @noRd
 gateway_readonly = function(field) {
-  gptr_abort(c("`gptr` is read-only.",
+  gptr_abort(c("`peter` is read-only.",
                paste("Add members by registering a tool:",
                      "gptr_register(gptr_tool(..., exposure = \"r\", namespace = \"<pkg>\")).")),
-             "readonly", object = "gptr", field = as.character(field)[1L])
+             "readonly", object = "peter", field = as.character(field)[1L])
 }
 
 #' @export
@@ -325,8 +330,9 @@ gateway_readonly = function(field) {
 
 #' @export
 print.gptr_gateway = function(x, ...) {
-  cat("<gptr gateway> gptr(\"prompt\", objects..., model =, mode =) runs an agent in this session",
-      "members: gptr$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)",
+  cat(paste("<peter gateway> peter(\"prompt\", objects..., model =, mode =) runs an agent in",
+            "this session"),
+      "members: peter$<tab> (read, edit, write, grep, find, ls, ... when the tools are loaded)",
       sep = "\n")
   invisible(x)
 }
@@ -337,7 +343,7 @@ print.gptr_gateway = function(x, ...) {
 #' @noRd
 route_pass = function() structure(list(), class = "gptr_route_pass")
 
-#' Evaluates `expr_fun()` with deferral on: every gptr() call made meanwhile behaves as
+#' Evaluates `expr_fun()` with deferral on: every peter() call made meanwhile behaves as
 #' `.run = FALSE` and returns its unstarted session (used by gptr_parallel(), P19)
 #' @noRd
 gateway_defer = function(expr_fun) {
@@ -503,7 +509,7 @@ gateway_child_depth = function(cur) {
   max_depth = min(as.integer(setting_get("subagents.max_depth", default = 1L)), 2L)
   depth = as.integer(cur$depth %||% 0L) + 1L
   if (depth > max_depth) {
-    gptr_abort(paste0("gptr() calls made from model code may nest at most ", max_depth,
+    gptr_abort(paste0("peter() calls made from model code may nest at most ", max_depth,
                       " level(s) deep (gptr.subagents.max_depth)."), "invalid_argument",
                arg = "depth", expected = paste("at most", max_depth, "nested levels"))
   }
@@ -550,8 +556,8 @@ gateway_filters_apply = function(filters) {
   settings_write("session", list(filters = cur))
   registry_filters_set(cur, scope = "session")
   gptr_inform(paste0("The filters ", paste(filters, collapse = ", "), " apply to every later ",
-                     "gptr() call of this R session; remove them with gptr_config(filters = NULL, ",
-                     ".scope = \"session\")."), "notice",
+                     "peter() call of this R session; remove them with ",
+                     "gptr_config(filters = NULL, .scope = \"session\")."), "notice",
               .once = paste0("call_filters:", paste(cur, collapse = ",")))
   invisible(cur)
 }
@@ -689,7 +695,7 @@ gateway_check_visible = function(call) {
     gptr_abort(c(paste0("`", it$name, "` is not visible from the environment this session ",
                         "evaluates in."),
                  paste0("Pass envir = the environment that holds `", it$name, "`, or pass it as ",
-                        "a named value: gptr(..., ", it$name, " = force(", it$name, ")).")),
+                        "a named value: peter(..., ", it$name, " = force(", it$name, ")).")),
                "invalid_argument", arg = it$name,
                expected = "an object visible from the session's environment")
   }
@@ -1247,7 +1253,7 @@ route_conversational = function(call) {
 gateway_routes = function() {
   list(
     gptr_spec("route", "nested", order = 20,
-              description = "A gptr() call made while a run is active becomes a child session.",
+              description = "A peter() call made while a run is active becomes a child session.",
               match = function(call) {
                 !is.null(run_current()) && is.null(call$session) && !is.null(call$prompt) &&
                   route_conversational(call)
@@ -1317,7 +1323,7 @@ gateway_last_prompt = function(d) {
 #' setTimeLimit() cannot be read back and must be reset to Inf afterwards (report 12: limits are
 #' soft and a leftover limit kills the next request), and that reset would also clear the limit
 #' P09 arms around each top-level expression of an `r` evaluation. So the limit is armed only
-#' outside tool evaluations (`run_current()` is NULL); a nested routed session (a gptr() call in
+#' outside tool evaluations (`run_current()` is NULL); a nested routed session (a peter() call in
 #' an `r` evaluation) gets a soft timeout: a router that took longer counts as failed.
 #' @noRd
 router_invoke = function(spec, request, ctx) {
@@ -1396,7 +1402,7 @@ gateway_run_context = function(s) {
   ctx %||% setting_get("context", default = "summary")
 }
 
-#' The `replay =` of the gptr() call whose run is driving session `s` (P06 keeps the run options
+#' The `replay =` of the peter() call whose run is driving session `s` (P06 keeps the run options
 #' gateway_run_opts() built, the call record among them, on the live session while it runs);
 #' NULL outside a run or when that call gave none. A routed session is checked per request with
 #' it, as gateway_guards() checks any other session (contract 3.1: the call's `replay =`

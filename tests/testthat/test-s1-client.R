@@ -1,6 +1,6 @@
 # Tests for R/s1-client.R (plan P13): questions, the typesafe-system-one adapter and its wire
 # fixtures (Task 3), requests on the reactor (Task 4), builtin:system1 and the classifier route
-# through gptr() (Task 9) (contract 7.13, 8.1, 9.3; reports 04 and 04a; IC-74: classify$parse
+# through peter() (Task 9) (contract 7.13, 8.1, 9.3; reports 04 and 04a; IC-74: classify$parse
 # takes the ordered questions and returns canonical answers, 07-local-ollama.md section 3).
 
 source(testthat::test_path("fixtures", "jev", "harness.R"), local = TRUE)
@@ -756,7 +756,7 @@ test_that("a System 1 call inside a pump never runs another run's FIFO tool (IC-
   expect_null(seen$res$errors)
 })
 
-# ---- Task 9: builtin:system1 and gptr() end to end (NS-4, NS-5) --------------------------------
+# ---- Task 9: builtin:system1 and peter() end to end (NS-4, NS-5) --------------------------------
 # INFRA-18's acceptance tests (architecture 6.18) are in test-s1-route.R, the file P24's INFRA
 # suite runs.
 
@@ -841,17 +841,17 @@ test_that("the system1 section is architecture 7.3 verbatim and shown only when 
   expect_identical(s1_section_text(NULL), s1_section_body)
 })
 
-test_that("NS-4: if (gptr(..., model = judge)) works and creates no session", {
+test_that("NS-4: if (peter(..., model = judge)) works and creates no session", {
   s1_fresh()
   judge = rct_judge()
   abstract = abstracts20()[["a01"]]
-  before = length(live_all())
+  before = names(live_all())
   included = character()
-  if (gptr("Is this abstract about a randomised controlled trial?", abstract, model = judge)) {
+  if (peter("Is this abstract about a randomised controlled trial?", abstract, model = judge)) {
     included = c(included, "a01")
   }
   expect_identical(included, "a01")
-  expect_identical(length(live_all()), before)
+  expect_length(setdiff(names(live_all()), before), 0L)
   req = fake_requests(judge)[[1]]
   expect_identical(req$state, list(abstract = abstract))
   expect_identical(req$question$type, "noul")
@@ -862,7 +862,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
   s1_fresh()
   judge = rct_judge()
   abstracts = abstracts20()
-  is_rct = gptr("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
+  is_rct = peter("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
   expect_identical(class(is_rct), c("gptr_decision", "gptr_s1", "logical"))
   expect_identical(names(is_rct), names(abstracts))
   expect_identical(sum(is_rct), 10L)
@@ -870,7 +870,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
   expect_identical(unname(attr(is_rct, "prob")[1:2]), c(0.93, 0.07))
   expect_identical(attr(is_rct, "meta")$model, "judge-s1-1.0")
   expect_length(fake_requests(judge), 20L)
-  again = gptr("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
+  again = peter("Is this abstract about a randomised controlled trial?", abstracts, model = judge)
   expect_length(fake_requests(judge), 20L)
   expect_true(all(attr(again, "meta")$cached))
   expect_identical(as.logical(again), as.logical(is_rct))
@@ -879,7 +879,7 @@ test_that("NS-4: a vector gives a named decision vector; repeats come from the c
 test_that("levels give a gptr_score of expected 0-based levels", {
   s1_fresh()
   local_fake_provider(list(c(0, 0.02, 0.98)), name = "rater", type = "classifier")
-  mood = gptr("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
+  mood = peter("How positive is the review?", c(r1 = "Loved it."), model = "rater/rater-s1",
               levels = c("negative", "neutral", "positive"))
   expect_identical(class(mood), c("gptr_score", "gptr_s1", "numeric"))
   expect_equal(as.double(mood), c(r1 = 1.98))
@@ -892,13 +892,13 @@ test_that("NS-4: a data frame split into rows prints the once-per-session s1_spl
   local_once_reset("s1_split")
   local_fake_provider(list(0.9), name = "rows", type = "classifier")
   diagnostics = data.frame(check = c("normality", "variance"), ok = c(TRUE, TRUE))
-  msg = expect_message(gptr("Is the residual plot acceptable?", diagnostics,
+  msg = expect_message(peter("Is the residual plot acceptable?", diagnostics,
                             model = "rows/rows-s1"),
                        class = "gptr_message_s1_split")
   expect_match(conditionMessage(msg), "I(diagnostics)", fixed = TRUE)
-  expect_no_message(gptr("Is the residual plot acceptable?", diagnostics, model = "rows/rows-s1"))
+  expect_no_message(peter("Is the residual plot acceptable?", diagnostics, model = "rows/rows-s1"))
   n = 0L
-  while (gptr("Is the residual plot acceptable?", I(diagnostics), model = "rows/rows-s1")) {
+  while (peter("Is the residual plot acceptable?", I(diagnostics), model = "rows/rows-s1")) {
     n = n + 1L
     if (n == 2L) break
   }
@@ -910,9 +910,9 @@ test_that("a piped session gives one state: no turn, a gptr.decision entry, at m
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_fake_provider(list(strrep("The fit converged and the residuals look fine. ", 100)))
   judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
-  s = gptr("Fit the model", model = "fake/fake-1", envir = new.env())
+  s = peter("Fit the model", model = "fake/fake-1", envir = new.env())
   turns = s$turns
-  done = s |> gptr("done?", model = judge)
+  done = s |> peter("done?", model = judge)
   expect_s3_class(done, "gptr_decision")
   expect_true(done)
   expect_identical(s$turns, turns)
@@ -944,7 +944,7 @@ test_that("System 1 emits a decision event and writes one summary line at top le
     lines$summary = c(lines$summary, summary)
     invisible(NULL)
   })
-  d = gptr("Q?", c(a = "x", b = "y"), model = "judge/judge-s1")
+  d = peter("Q?", c(a = "x", b = "y"), model = "judge/judge-s1")
   expect_length(events$list, 1L)
   expect_identical(events$list[[1]]$n, 2L)
   # `type` stays the event name (contract 4.5); the question type travels as question_type
@@ -963,10 +963,10 @@ test_that("failures: a scalar call signals, a vector gives NA and one s1_errors 
   }, name = "flaky", type = "classifier")
   local_gptr_options(s1_rounds = 1L)
   one = "bad"
-  expect_error(gptr("Q?", one, model = "flaky/flaky-s1"), class = "gptr_error_s1_overloaded")
+  expect_error(peter("Q?", one, model = "flaky/flaky-s1"), class = "gptr_error_s1_overloaded")
   seen = new.env()
   out = withCallingHandlers(
-    gptr("Q?", c("ok", "bad"), model = "flaky/flaky-s1"),
+    peter("Q?", c("ok", "bad"), model = "flaky/flaky-s1"),
     gptr_warning_s1_errors = function(w) {
       seen$w = w
       invokeRestart("muffleWarning")
@@ -982,7 +982,7 @@ test_that("calls above gptr.s1_max_elements fail with a hint to chunk", {
   s1_fresh()
   local_fake_provider(list(0.5), name = "judge", type = "classifier")
   local_gptr_options(s1_max_elements = 5L)
-  err = expect_error(gptr("Q?", as.character(1:6), model = "judge/judge-s1"),
+  err = expect_error(peter("Q?", as.character(1:6), model = "judge/judge-s1"),
                      class = "gptr_error_invalid_argument")
   expect_match(conditionMessage(err), "chunks", fixed = TRUE)
 })
@@ -999,11 +999,11 @@ test_that("replay mode serves cached answers and refuses a miss (IC-47)", {
   withr::defer(off())
   # the process mode is the gptr.replay option (setup.R sets it, and it wins over GPTR_REPLAY)
   local_gptr_options(replay = "live")
-  gptr("Q?", c(a = "x"), model = "remote/remote-s1")
+  peter("Q?", c(a = "x"), model = "remote/remote-s1")
   local_gptr_options(replay = "replay")
-  again = gptr("Q?", c(a = "x"), model = "remote/remote-s1")
+  again = peter("Q?", c(a = "x"), model = "remote/remote-s1")
   expect_true(all(attr(again, "meta")$cached))
-  expect_error(gptr("Q?", c(b = "new"), model = "remote/remote-s1"),
+  expect_error(peter("Q?", c(b = "new"), model = "remote/remote-s1"),
                class = "gptr_error_not_recorded")
 })
 
@@ -1016,15 +1016,15 @@ test_that("jev without a key fails cleanly: egress first, then no_key; nothing i
   local_gptr_options(replay = "live")
   local_mocked_bindings(secret_lookup = function(name) NULL)
   ticket = "The printer is on fire."
-  expect_error(gptr("Is it urgent?", ticket, model = jev), class = "gptr_error_egress")
+  expect_error(peter("Is it urgent?", ticket, model = jev), class = "gptr_error_egress")
   gptr_config(egress = list(typesafe = "ack"), .scope = "user")
-  expect_error(gptr("Is it urgent?", ticket, model = jev), class = "gptr_error_no_key")
+  expect_error(peter("Is it urgent?", ticket, model = jev), class = "gptr_error_no_key")
 })
 
 test_that("the gptr_prob() example runs", {
   s1_fresh()
   judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
-  d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
+  d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
   expect_identical(gptr_prob(d), c(a = 0.9, b = 0.2))
   expect_identical(as.logical(d), c(a = TRUE, b = FALSE))
 })
@@ -1041,9 +1041,9 @@ test_that("NS-5: System 1 routes each task to a strong or a cheap System 2 model
   tasks = c("Fix the subtle race in the cache.", "Rename a variable.")
   answers = character()
   for (task in tasks) {
-    hard = gptr("Is this task subtle enough to need the strongest model?", task,
+    hard = peter("Is this task subtle enough to need the strongest model?", task,
                 model = "hardness/hardness-s1")
-    res = gptr(task, model = if (hard) strong else cheap, mode = auto, envir = new.env())
+    res = peter(task, model = if (hard) strong else cheap, mode = auto, envir = new.env())
     answers = c(answers, res$text)
   }
   expect_identical(answers, c("strong answer", "cheap answer"))
@@ -1062,7 +1062,7 @@ test_that("a provider's static rate of 40 requests per second caps System 1 admi
   off = gptr_register(spec)
   withr::defer(off())
   withr::defer(ratelimit_set("ratetest", NULL))
-  d = gptr("Is it fine?", paste("abstract", 1:100), model = "ratetest/ratetest-s1")
+  d = peter("Is it fine?", paste("abstract", 1:100), model = "ratetest/ratetest-s1")
   expect_length(d, 100L)
   log = srv$log()
   expect_identical(nrow(log), 100L)

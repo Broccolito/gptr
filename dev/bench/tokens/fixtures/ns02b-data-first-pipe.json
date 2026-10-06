@@ -1,7 +1,7 @@
 {
   "id": "ns02b-data-first-pipe",
   "north_star": 2,
-  "description": "mice |> gptr(\"Which columns have missing values, and how should I impute them?\") in an Rscript run with a small model: minimal preset, auto mode, no human, no bound document; one composed r call that calls the gptr$describe() member, then the answer.",
+  "description": "mice |> peter(\"Which columns have missing values, and how should I impute them?\") in an Rscript run with a small model: minimal preset, auto mode, no human, no bound document; one composed r call that calls the peter$describe() member, then the answer.",
   "mode": "auto",
   "human": false,
   "preset": "minimal",
@@ -40,11 +40,11 @@
               "id": "toolu_01",
               "name": "r",
               "input": {
-                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\ngptr$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)"
+                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\npeter$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)"
               },
               "result": "weight \n     3 \n<numeric> length 48, 432 B\n  min 20, median 25, max 29; 6.2% NA\ncontrol      HF \n      2       1 \n+ miss <numeric length 3>",
               "details": {
-                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\ngptr$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)",
+                "code": "miss = colSums(is.na(mice))\nmiss[miss > 0]\npeter$describe(mice$weight, budget = 60)\ntapply(is.na(mice$weight), mice$diet, sum)",
                 "status": "ok"
               }
             }

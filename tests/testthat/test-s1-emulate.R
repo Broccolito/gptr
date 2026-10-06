@@ -391,25 +391,25 @@ test_that("the usage of a reply that was refused still counts (IC-74)", {
   expect_identical(res2$usage[c("input", "output")], list(input = 12, output = 3))
 })
 
-# ---- Task 9: emulation through gptr() is opt-in only --------------------------------------------
+# ---- Task 9: emulation through peter() is opt-in only --------------------------------------------
 
 test_that("emulation happens only with gptr_config(system1 = \"emulate:<model>\")", {
   s1_fresh()
   chat = local_fake_provider(list(list(json = list(answers = list(answer = 0.8)))), name = "emu")
   review = "Loved every page."
-  expect_error(gptr("Is the review positive?", review, model = "emulate:emu/emu-1"),
+  expect_error(peter("Is the review positive?", review, model = "emulate:emu/emu-1"),
                class = "gptr_error_invalid_argument")
   expect_length(fake_requests(chat), 0L)
   old = gptr_config(system1 = "emulate:emu/emu-1", .scope = "session")
   withr::defer(gptr_config(system1 = old$system1, .scope = "session"))
-  d = gptr("Is the review positive?", review, model = "emulate:emu/emu-1")
+  d = peter("Is the review positive?", review, model = "emulate:emu/emu-1")
   expect_true(d)
   expect_false(attr(d, "meta")$calibrated)
   expect_identical(attr(d, "meta")$engine, "emulated:structured")
   expect_identical(format(d), "TRUE (p=0.80)")
   expect_length(fake_requests(chat), 1L)
   hated = "Hated it."
-  j = gptr("Is the review positive?", hated, model = jev)
+  j = peter("Is the review positive?", hated, model = jev)
   expect_identical(attr(j, "meta")$engine, "emulated:structured")
   expect_length(fake_requests(chat), 2L)
 })
@@ -426,6 +426,6 @@ test_that("a missing Jev key never falls back to emulation", {
   gptr_config(egress = list(typesafe = "ack"), .scope = "user")
   local_mocked_bindings(secret_lookup = function(name) NULL)
   review = "Loved every page."
-  expect_error(gptr("Is the review positive?", review, model = jev), class = "gptr_error_no_key")
+  expect_error(peter("Is the review positive?", review, model = jev), class = "gptr_error_no_key")
   expect_length(fake_requests(chat), 0L)
 })

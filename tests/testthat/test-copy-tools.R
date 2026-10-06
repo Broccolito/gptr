@@ -7,7 +7,7 @@
 
 gate_off = "options(gptr.unsafe_no_permissions = TRUE, gptr.quiet = TRUE, gptr.interactive = FALSE)"
 
-go = "s = gptr('go', model = fake, envir = globalenv(), mode = 'auto')"
+go = "s = peter('go', model = fake, envir = globalenv(), mode = 'auto')"
 
 run_r = function(code, call = go) {
   fake = "fake = gptr_fake_provider(list(list(tool = 'r', input = list(code = '%s')), 'done'))"
@@ -35,15 +35,15 @@ test_that("gptr_return(big) outside a run leaves the object editable in place (I
 })
 
 test_that("tool code `n = 1L; length(d)` in a function-frame home leaves the object in place", {
-  home = "f = function(d) gptr('count', d, model = fake, mode = 'auto'); s = f(big)"
+  home = "f = function(d) peter('count', d, model = fake, mode = 'auto'); s = f(big)"
   expect_no_copy(setup = "big = runif(1.5e6)", action = run_r("n = 1L; length(d)", call = home),
                  label = "function-frame home")
 })
 
-test_that("gptr$describe(big) at the console and from model code leaves the object in place", {
-  expect_no_copy(setup = "big = runif(1.5e6)", action = "x = gptr$describe(big)",
+test_that("peter$describe(big) at the console and from model code leaves the object in place", {
+  expect_no_copy(setup = "big = runif(1.5e6)", action = "x = peter$describe(big)",
                  label = "describe (user)")
-  expect_no_copy(setup = "big = runif(1.5e6)", action = run_r("x = gptr$describe(big)"),
+  expect_no_copy(setup = "big = runif(1.5e6)", action = run_r("x = peter$describe(big)"),
                  label = "describe (model code)")
 })
 

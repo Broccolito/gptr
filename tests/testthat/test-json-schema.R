@@ -69,7 +69,7 @@ test_that("schema_signature() renders one line with optional markers and the fir
     )
   )
   expect_identical(
-    schema_signature("grep", list(type = "object"), prefix = "gptr$"), "gptr$grep()"
+    schema_signature("grep", list(type = "object"), prefix = "peter$"), "peter$grep()"
   )
 })
 

@@ -20,8 +20,6 @@ without a workspace), newest first. Reads only the header and the last lines of 
 }
 \examples{
 gptr_sessions()
-\dontshow{if (exists("gptr", mode = "function")) withAutoprint(\{ # examplesIf}
-s = gptr("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
 gptr_sessions()
-\dontshow{\}) # examplesIf}
 }

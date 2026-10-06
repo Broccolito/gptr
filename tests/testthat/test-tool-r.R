@@ -1,6 +1,6 @@
 # Tests for R/tool-r.R: the four schema variants (IC-68), evaluation and the details record
-# (contract 4.4), record and note, plan mode, images from gptr$plot(), bridge and artifact
-# collection, risk, and (below) end-to-end runs through gptr() on the fake provider: the gptr shim,
+# (contract 4.4), record and note, plan mode, images from peter$plot(), bridge and artifact
+# collection, risk, and (below) end-to-end runs through peter() on the fake provider: the gptr shim,
 # the value policy, nested gating and the fuzzy-edit diff (05 P10 acceptance 4-7).
 
 # Bind a service for the calling test only (the entry in the bootstrap table is restored afterwards)
@@ -111,7 +111,7 @@ test_that("an error stops the evaluation and is reported; plan mode never record
                class = "gptr_error_internal")
 })
 
-test_that("images attached by gptr$plot() during the evaluation are added to the result", {
+test_that("images attached by peter$plot() during the evaluation are added to the result", {
   local_nested_dispatch()
   e = new.env()
   withr::local_pdf(NULL)
@@ -140,7 +140,7 @@ test_that("images beyond gptr.r_max_images are not attached and the result names
   imgs = Filter(function(b) identical(b$type, "image"), res$content)
   expect_identical(length(imgs), 2L)
   expect_identical(res$details$plots, 2L)
-  expect_match(ns_result_text(res), paste0("[3 image(s) from gptr$plot() or gptr$read() not ",
+  expect_match(ns_result_text(res), paste0("[3 image(s) from peter$plot() or peter$read() not ",
                                            "attached: at most 2 per r call]"), fixed = TRUE)
 })
 
@@ -194,8 +194,8 @@ test_that("the risk of r comes from the risk.classify service, level 2 before it
   expect_identical(seen$envir, scratch)
 })
 
-# ---- end to end through gptr() on the fake provider (P08, P06, P09; P11 does not exist yet, so the
-# permission gate is switched off with the documented escape hatch gptr.unsafe_no_permissions,
+# ---- end to end through peter() on the fake provider (P08, P06, P09; P11 does not exist yet, so
+# the permission gate is switched off with the documented escape hatch gptr.unsafe_no_permissions,
 # IC-53) ----
 
 # The r tool results of a session, in order
@@ -203,19 +203,19 @@ r_results = function(s) {
   Filter(function(m) identical(m$role, "tool_result") && identical(m$tool_name, "r"), s$messages)
 }
 
-test_that("model code gptr$grep() runs through the shim; the recorded code keeps it", {
+test_that("model code peter$grep() runs through the shim; the recorded code keeps it", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_project(files = list("notes.txt" = "a needle here", "other.txt" = "hay"))
   e = new.env(parent = baseenv())
-  fake = local_fake_provider(list(fake_tool("r", code = "m = gptr$grep(\"needle\")"), "Found it."))
-  s = gptr("Find the needle", model = fake, envir = e, mode = "auto")
+  fake = local_fake_provider(list(fake_tool("r", code = "m = peter$grep(\"needle\")"), "Found it."))
+  s = peter("Find the needle", model = fake, envir = e, mode = "auto")
   expect_s3_class(e$m, "gptr_matches")
   expect_identical(e$m$file, "notes.txt")
   res = r_results(s)[[1L]]
-  expect_identical(res$details$code, "m = gptr$grep(\"needle\")")
+  expect_identical(res$details$code, "m = peter$grep(\"needle\")")
   expect_identical(res$details$status, "ok")
   expect_identical(res$details$nested[[1L]]$tool, "grep")
-  expect_false(exists("gptr", envir = e, inherits = FALSE))
+  expect_false(exists("peter", envir = e, inherits = FALSE))
 })
 
 test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value boxed", {
@@ -228,9 +228,9 @@ test_that("gptr_return(): 12 MB by name, 200 KB as a copy, an anonymous value bo
     fake_tool("r", code = "gptr_return(small)"), "Returned small.",
     fake_tool("r", code = "gptr_return(summary(small))"), "Returned a summary."
   ))
-  s = gptr("Return big", model = fake, envir = e, mode = "auto")
-  s |> gptr("Return small")
-  s |> gptr("Return a summary")
+  s = peter("Return big", model = fake, envir = e, mode = "auto")
+  s |> peter("Return small")
+  s |> peter("Return a summary")
   expect_identical(s$values$mode, c("name", "copy", "box"))
   expect_identical(s$values$name[1:2], c("big", "small"))
   expect_identical(vapply(r_results(s)[1:2], function(m) m$details$value, ""), c("big", "small"))
@@ -250,7 +250,7 @@ test_that("a fuzzy edit returns the message and a diff; an exact edit the messag
     fake_tool("edit", path = "exact.R", edits = list(list(oldText = "a = 1", newText = "a = 2"))),
     "Edited."
   ))
-  s = gptr("Edit both files", model = fake, envir = new.env(), mode = "auto")
+  s = peter("Edit both files", model = fake, envir = new.env(), mode = "auto")
   reqs = fake_requests(fake)
   fuzzy = reqs[[2L]]$last_results[[1L]]$content[[1L]]$text
   lines = strsplit(fuzzy, "\n")[[1L]]
@@ -266,7 +266,7 @@ test_that("a fuzzy edit returns the message and a diff; an exact edit the messag
 test_that("the r schema frozen without a bound document has no record or note (IC-68)", {
   local_gptr_options(unsafe_no_permissions = TRUE)
   fake = local_fake_provider(list("Hello."))
-  s = gptr("Say hello", model = fake, envir = new.env(), mode = "auto")
+  s = peter("Say hello", model = fake, envir = new.env(), mode = "auto")
   tools_json = session_data(s)$frozen$tools_json
   expect_match(tools_json, "\"name\":\"r\"", fixed = TRUE)
   expect_false(grepl("\"record\"", tools_json, fixed = TRUE))
@@ -277,7 +277,7 @@ test_that("the r schema frozen without a bound document has no record or note (I
 
 # ---- added by the implementation (P10 Task 11; dev/DEVIATIONS.md D-136) ----
 
-test_that("images from gptr$plot() count against gptr.r_output_tokens too (IC-67)", {
+test_that("images from peter$plot() count against gptr.r_output_tokens too (IC-67)", {
   local_nested_dispatch()
   local_gptr_options(r_output_tokens = 1500L)
   withr::local_pdf(NULL)
@@ -292,6 +292,6 @@ test_that("images from gptr$plot() count against gptr.r_output_tokens too (IC-67
   res = r_tool_execute(list(code = code), list(envir = e, session = NULL))
   expect_identical(res$details$plots, 1L)
   expect_true(res$truncated)
-  expect_match(ns_result_text(res), "gptr$out(", fixed = TRUE)
+  expect_match(ns_result_text(res), "peter$out(", fixed = TRUE)
   expect_identical(res$details$out_id, res$out_id)
 })

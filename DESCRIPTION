@@ -10,7 +10,7 @@ Authors@R: c(
 Description: Runs large language model agents inside the running 'R'
     session, so that models inspect and modify objects that are already in
     memory instead of re-running scripts from scratch. A single function,
-    gptr(), opens an interactive chat in the console or, given a prompt,
+    peter(), opens an interactive chat in the console or, given a prompt,
     runs the agent loop and returns a value that can be piped into further
     prompts. Supports the 'Anthropic', 'OpenAI' and 'Google Gemini'
     application programming interfaces, 'OpenAI'-compatible endpoints, the

@@ -11,7 +11,7 @@ referenced by the design spec and the implementation plans for coverage checks.
 It is an ordinary CRAN package: `install.packages("gptr")` and it works on any
 machine that runs R (Windows, macOS, Linux). The agent operates **on the live R
 session** — the objects already in memory — instead of writing a script and
-re-running it from scratch. The same `gptr()` function is both an interactive
+re-running it from scratch. The same `peter()` function is both an interactive
 chat in the R console and a programmable function you put in scripts, loops and
 `if` statements. It unifies slow "System 2" LLMs (Claude, GPT, Gemini, ...) with
 fast "System 1" typed-decision models (hosted Jev and local Ollama Clef/Clef Flash). The script/notebook
@@ -115,22 +115,22 @@ and its namespace `peter$...`; other exports keep the `gptr_` prefix. The name h
 Cathcart Wason, whose work on reasoning with Jonathan Evans framed the dual-process ("System 1"
 and "System 2") view that gptr combines in one agent flow, and Peter Naur of the Backus-Naur
 form, in the spirit of recording agent sessions as readable, replayable R scripts, R Markdown,
-Quarto documents and Jupyter notebooks. Below, `gptr()` reads as `peter()`.
+Quarto documents and Jupyter notebooks.
 
-`gptr(...)` is the **single gateway** to the harness (maintainer decision,
+`peter(...)` is the **single gateway** to the harness (maintainer decision,
 2026-09-29): one variadic function that either launches the interactive
 session or acts as the function that receives a prompt. **Prompts are always
 quoted strings**; an unquoted natural-language prompt is not valid R syntax and
 is not supported.
-- **REQ-16** `gptr()` with no prompt (or in interactive use) starts an
+- **REQ-16** `peter()` with no prompt (or in interactive use) starts an
   **interactive chat session in the R console**.
-- **REQ-17** `gptr("prompt", model =, skills =, extensions =, plugins =, ...)`
+- **REQ-17** `peter("prompt", model =, skills =, extensions =, plugins =, ...)`
   is a **programmatic prompting function** that runs the agent loop and returns
   a value.
 - **REQ-18** **The pipe is the steering operator** (maintainer, restated
-  2026-09-29 as a core idea): `gptr("prompt 1") |> gptr("steering prompt") |>
-  gptr("prompt 3")`. What flows through `|>` is **the one object that
-  represents the agent session**, and each piped `gptr("...")` adds a steering
+  2026-09-29 as a core idea): `peter("prompt 1") |> peter("steering prompt") |>
+  peter("prompt 3")`. What flows through `|>` is **the one object that
+  represents the agent session**, and each piped `peter("...")` adds a steering
   message or an additional prompt **to that same session object** (same
   history, same model state, same workspace), not a new, loosely linked
   conversation. Forking a session into a separate branch must be explicit.
@@ -144,7 +144,7 @@ is not supported.
   identifiers only; the prompt itself stays a quoted string.
 - **REQ-20** System 1 calls return **typed R values** (logical, factor/choice,
   numeric, with calibrated probabilities as attributes) and are **vectorised**,
-  so they work as conditions: `if (gptr(model = jev, ...))`, inside `for` /
+  so they work as conditions: `if (peter(model = jev, ...))`, inside `for` /
   `while`, and over a vector of inputs.
 
 ### In-memory / environment integration
@@ -161,11 +161,11 @@ is not supported.
   `.qmd`, or `.ipynb`. Re-running it replays the workflow (modulo model
   non-determinism).
 - **REQ-25** The harness maintains that document **in real time** during an
-  interactive session, and also works when a script containing `gptr()` calls is
+  interactive session, and also works when a script containing `peter()` calls is
   sourced / rendered non-interactively.
 - **REQ-26** Documents mix three kinds of content: (a) concrete R code
   (ggplot, servers, data steps) written by the agent; (b) natural-language
-  prompts wrapped in `gptr()`; (c) System 1 decisions wrapped in control flow.
+  prompts wrapped in `peter()`; (c) System 1 decisions wrapped in control flow.
   Key outputs are recorded as comments; key modelling decisions are documented
   in the file. The agent can go back and edit earlier code in the document.
 - **REQ-27** Workspace directory `.gptr/` created on initialisation, holding

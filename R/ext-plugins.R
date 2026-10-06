@@ -1324,7 +1324,7 @@ plugin_candidates = function(installed = FALSE) {
 
 #' Plugins known to this session
 #'
-#' Lists the plugins gptr can see: plugins enabled through `gptr(plugins = )` or the `plugins`
+#' Lists the plugins gptr can see: plugins enabled through `peter(plugins = )` or the `plugins`
 #' setting (a settings plugin not enabled yet shows as `lazy`), attached packages that ship
 #' `inst/gptr/`, the project's `.gptr/plugins/` directories and installed Claude Code plugins.
 #' With `installed = TRUE` it also scans every installed package for `inst/gptr/`. Nothing is
@@ -1427,5 +1427,5 @@ plugins_sync = function() {
 }
 
 # Owned by builtin:skills (IC-34; contract 7.17 lists it with the skills, prompts and agents
-# built-ins): filtering `-builtin:skills` makes `gptr(plugins =)` signal not_available.
+# built-ins): filtering `-builtin:skills` makes `peter(plugins =)` signal not_available.
 on_load(ext_service_set("plugin.enable", plugin_enable, provided_by = "P17", builtin = "skills"))

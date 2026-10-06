@@ -143,11 +143,11 @@ test_that("member_closure() keeps the function's formals and calls it directly o
   expect_identical(names(formals(m)), c("x", "times"))
   expect_identical(m(4), 8)
   expect_identical(m(4, times = 3), 12)
-  expect_error(m(), "gptr$double_it(): argument `x` is missing.", fixed = TRUE,
+  expect_error(m(), "peter$double_it(): argument `x` is missing.", fixed = TRUE,
                class = "gptr_error_invalid_argument")
   expect_identical(attr(m, "tool"), "double_it")
   expect_identical(utils::capture.output(print(m)),
-                   "gptr$double_it(x, times = 2)  # Double a number.")
+                   "peter$double_it(x, times = 2)  # Double a number.")
 })
 
 test_that("inside r a member call passes dispatch_nested() with the supplied arguments only", {
@@ -210,7 +210,7 @@ test_that("ns_resolve() finds user members and errors on unknown names listing t
   expect_s3_class(cnd, "gptr_error_unknown_member")
   expect_identical(cnd$name, "nope")
   expect_true("double_it" %in% cnd$available)
-  expect_match(conditionMessage(cnd), "gptr$nope is not a gptr member. Members: ", fixed = TRUE)
+  expect_match(conditionMessage(cnd), "peter$nope is not a peter member. Members: ", fixed = TRUE)
   local_spec(gptr_tool("secret_helper", "Hidden.", fun = function() 1, exposure = "hidden"))
   expect_error(ns_resolve("secret_helper"), class = "gptr_error_unknown_member")
 })
@@ -231,8 +231,8 @@ test_that("plugin members live under their namespace; gptr_ns nodes are lazy and
     node$x = 1
   }, class = "gptr_error_readonly")
   out = utils::capture.output(print(node))
-  expect_identical(out, c("<gptr namespace gptr$demo: 1 members>",
-                          "gptr$demo$summarise(x: string)  # Summarise a vector."))
+  expect_identical(out, c("<peter namespace peter$demo: 1 members>",
+                          "peter$demo$summarise(x: string)  # Summarise a vector."))
   expect_error(ns_resolve(c("demo", "nope")), class = "gptr_error_unknown_member")
 })
 
@@ -248,7 +248,7 @@ test_that("a plugin r member without a namespace or with a reserved one is refus
   expect_identical(ns_resolve("mine")(), "ok")
 })
 
-test_that("namespace providers resolve their own paths (the hook P18 uses for gptr$mcp)", {
+test_that("namespace providers resolve their own paths (the hook P18 uses for peter$mcp)", {
   withr::defer(rm("mcpx", envir = ns_providers))
   ns_register_provider("mcpx", function(path) {
     if (length(path) == 1L) return(ns_node(path, "mcp", members = function() c("github", "files")))
@@ -262,7 +262,7 @@ test_that("namespace providers resolve their own paths (the hook P18 uses for gp
                class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr$describe() returns gptr_describe() of the object", {
+test_that("peter$describe() returns gptr_describe() of the object", {
   d = member_describe(mtcars, budget = 60L)
   expect_s3_class(d, "gptr_text")
   expect_identical(as.character(d), gptr_describe(mtcars, budget = 60L))
@@ -335,7 +335,7 @@ test_that("a hidden plugin member is neither listed nor resolved (IC-37)", {
   expect_identical(names(node), "shown")
   expect_identical(utils::.DollarNames(node, ""), "shown")
   expect_identical(utils::capture.output(print(node))[1L],
-                   "<gptr namespace gptr$demo8: 1 members>")
+                   "<peter namespace peter$demo8: 1 members>")
   expect_error(node$secret, class = "gptr_error_unknown_member")
   expect_false("hiddenonly" %in% ns_names(""))
   expect_error(ns_resolve("hiddenonly"), class = "gptr_error_unknown_member")
@@ -366,11 +366,11 @@ test_that("a member whose schema is a function of ctx takes `...` (contract 9.1)
   expect_identical(names(formals(m)), "...")
   expect_identical(m(a = "x"), list(a = "x"))
   expect_identical(seen$input, list(a = "x"))
-  expect_identical(utils::capture.output(print(m)), "gptr$dyn(...)  # Dyn.")
+  expect_identical(utils::capture.output(print(m)), "peter$dyn(...)  # Dyn.")
   local_spec(gptr_tool("dynd", "Dyn direct.", exposure = "direct", namespace = "pq",
                        parameters = params, execute = exec), source = "plugin:pq", rank = 5L)
   expect_identical(utils::capture.output(print(ns_resolve("pq")))[2L],
-                   "gptr$pq$dynd(...)  # Dyn direct.")
+                   "peter$pq$dynd(...)  # Dyn direct.")
   expect_identical(ns_resolve(c("pq", "dynd"))(a = "y"), list(a = "y"))
   gated = new.env()
   local_mocked_bindings(dispatch_nested = function(name, input, ctx) {
@@ -387,7 +387,7 @@ test_that("a primitive fun keeps the formals that args() gives it", {
   expect_identical(m(1, 2), 3)
   expect_identical(m(1, NA, na.rm = TRUE), 1)
   expect_identical(utils::capture.output(print(m)),
-                   "gptr$total(..., na.rm = FALSE)  # Sum numbers.")
+                   "peter$total(..., na.rm = FALSE)  # Sum numbers.")
 })
 
 test_that("arguments named member_fun, missing, substitute or list cannot shadow the machinery", {
@@ -399,7 +399,7 @@ test_that("arguments named member_fun, missing, substitute or list cannot shadow
   m = member_closure(spec)
   expect_identical(m(1, member_fun = mean, missing = identity, list = identity, k = 2),
                    list(x = 1, mf = TRUE, mi = TRUE, li = TRUE, dots = list(k = 2)))
-  expect_error(m(missing = identity), "gptr$clash2(): argument `x` is missing.", fixed = TRUE,
+  expect_error(m(missing = identity), "peter$clash2(): argument `x` is missing.", fixed = TRUE,
                class = "gptr_error_invalid_argument")
   seen = new.env()
   local_mocked_bindings(dispatch_nested = function(name, input, ctx) {
@@ -427,7 +427,7 @@ test_that("a plugin namespace registered before a member of that name is refused
   })
   refusals = function() {
     d = gptr_registry(diagnostics = TRUE)
-    sum(d$event == "member_refused" & startsWith(d$message, "gptr$mine2$ refused"))
+    sum(d$event == "member_refused" & startsWith(d$message, "peter$mine2$ refused"))
   }
   local_spec(gptr_tool("t1", "From the plugin.", fun = function() "plugin", exposure = "r",
                        namespace = "mine2"), source = "plugin:mine2", rank = 5L)
@@ -454,7 +454,7 @@ test_that("ns_catalog() lists plugin r members and trims descriptions, never nam
              source = "plugin:demo", rank = 5L)
   full = strsplit(ns_catalog(NULL), "\n")[[1L]]
   expect_identical(length(full), 40L)
-  expect_identical(full[1L], paste("gptr$demo$tool01(x: string, y?: string)",
+  expect_identical(full[1L], paste("peter$demo$tool01(x: string, y?: string)",
                                    " # Does thing number 1 with several words of text."))
   small = strsplit(ns_catalog(NULL, budget = 800L), "\n")[[1L]]
   expect_identical(length(small), 40L)
@@ -480,7 +480,7 @@ test_that("a lazy plugin is catalogued, completed and searched through its decla
     reg = gptr_registry("tool")
     reg$state[reg$name == "lazyns/search"]
   }
-  line = "gptr$lazyns$search(condition: string)  # Search recruiting clinical trials."
+  line = "peter$lazyns$search(condition: string)  # Search recruiting clinical trials."
   expect_identical(ns_catalog(NULL), line)
   expect_true("lazyns" %in% ns_names(""))
   node = ns_resolve("lazyns")
@@ -554,7 +554,7 @@ test_that("the BM25 port reproduces Pi's tokens, ranking and scores (report 06 s
   expect_error(bm25_index(list()), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr$search() ranks members, plugin tools and search_source documents", {
+test_that("peter$search() ranks members, plugin tools and search_source documents", {
   local_spec(double_spec())
   local_spec(gptr_tool("trial_lookup", "Look up clinical trials by indication.",
                        fun = function(indication) 1,
@@ -573,19 +573,19 @@ test_that("gptr$search() ranks members, plugin tools and search_source documents
   expect_named(res, c("name", "kind", "signature", "score"))
   expect_identical(res$name[1], "trials/trial_lookup")
   expect_identical(res$kind[1], "plugin")
-  expect_identical(res$signature[1], paste("gptr$trials$trial_lookup(indication: string)",
+  expect_identical(res$signature[1], paste("peter$trials$trial_lookup(indication: string)",
                                            " # Look up clinical trials by indication."))
   expect_true("glossary/cohort" %in% res$name)
   expect_identical(res$kind[res$name == "glossary/cohort"], "glossary")
   conv = member_search("convert units")
   expect_identical(conv$kind[1], "deferred")
-  expect_identical(conv$signature[1], "gptr$rare_thing()  # Convert units of measurement.")
+  expect_identical(conv$signature[1], "peter$rare_thing()  # Convert units of measurement.")
   expect_identical(ns_resolve("rare_thing")(), "x")
   expect_identical(member_search("double number")$kind[1], "member")
   expect_identical(nrow(member_search("zzzz qqqq")), 0L)
 })
 
-test_that("gptr$help() shows a member's schema, else the R help page, within the budget", {
+test_that("peter$help() shows a member's schema, else the R help page, within the budget", {
   params = list(type = "object", required = I("indication"),
                 properties = list(indication = list(type = "string", description = "Disease"),
                                   phase = list(enum = c("1", "2", "3"))))
@@ -597,7 +597,7 @@ test_that("gptr$help() shows a member's schema, else the R help page, within the
   h = member_help("trials/trial_lookup")
   expect_s3_class(h, "gptr_text")
   expect_identical(as.character(h), c(
-    paste("gptr$trials$trial_lookup(indication: string, phase?: any)",
+    paste("peter$trials$trial_lookup(indication: string, phase?: any)",
           " # Look up clinical trials by indication."),
     "",
     "Look up clinical trials by indication. Returns a data frame.",
@@ -614,7 +614,7 @@ test_that("gptr$help() shows a member's schema, else the R help page, within the
                "No help found for 'no_such_topic_xyz'", fixed = TRUE)
 })
 
-test_that("gptr$search() offers only what resolves; documents sharing an id keep their own kind", {
+test_that("peter$search() offers only what resolves; documents sharing an id keep their own kind", {
   withr::defer(if (exists("taken9$", envir = ns_refused, inherits = FALSE)) {
     rm("taken9$", envir = ns_refused)
   })
@@ -631,7 +631,7 @@ test_that("gptr$search() offers only what resolves; documents sharing an id keep
   expect_identical(sort(res$kind[res$name == "trials9/trial_lookup"]), c("note", "plugin"))
   expect_identical(res$signature[res$kind == "note"], "trials9/trial_lookup")
   expect_identical(res$signature[res$kind == "plugin"],
-                   paste("gptr$trials9$trial_lookup(indication: string)",
+                   paste("peter$trials9$trial_lookup(indication: string)",
                          " # Look up clinical trials by indication."))
   local_spec(gptr_tool("t1", "Frobnicate the widgets.", fun = function() "plugin", exposure = "r",
                        namespace = "taken9"), source = "plugin:taken9", rank = 5L)
@@ -674,7 +674,7 @@ test_that("skills and MCP tools are searched from their catalog texts", {
   })
   local_service("mcp.catalog", function(session, budget) {
     paste(c("<mcp>",
-            "MCP tools are R functions called inside r as gptr$mcp$<server>$<tool>(...).",
+            "MCP tools are R functions called inside r as peter$mcp$<server>$<tool>(...).",
             "github: 2 tools, 2 shown",
             "  search_issues(query: string, perPage?: integer)  # Search issues and pull requests.",
             "  create_issue(title: string, body?: string)  # Open a new issue in a repository.",
@@ -691,7 +691,7 @@ test_that("skills and MCP tools are searched from their catalog texts", {
   expect_identical(mcp$name[1L], "github/search_issues")
   expect_identical(mcp$kind[1L], "mcp")
   expect_identical(mcp$signature[1L], paste(
-    "gptr$mcp$github$search_issues(query: string, perPage?: integer)",
+    "peter$mcp$github$search_issues(query: string, perPage?: integer)",
     " # Search issues and pull requests."
   ))
   local_service("skill.catalog", function(session, budget) stop("no skills"))
@@ -701,7 +701,7 @@ test_that("skills and MCP tools are searched from their catalog texts", {
   expect_identical(nrow(member_search("bslib cards")), 0L)
 })
 
-test_that("gptr$help() shows only members that resolve, a primitive's arguments, and no error", {
+test_that("peter$help() shows only members that resolve, a primitive's arguments, and no error", {
   local_spec(gptr_tool("hush9", "Secret internals of the plugin.", fun = function(x) x,
                        exposure = "hidden", namespace = "trials9"),
              source = "plugin:trials9", rank = 5L)
@@ -711,7 +711,7 @@ test_that("gptr$help() shows only members that resolve, a primitive's arguments,
   expect_identical(as.character(member_help("trials9/hush9")),
                    "No help found for 'trials9/hush9'.")
   expect_identical(as.character(member_help("trials9/shown9"))[1L],
-                   "gptr$trials9$shown9(x: string)  # Shown member.")
+                   "peter$trials9$shown9(x: string)  # Shown member.")
   local_spec(gptr_tool("total9", "Sum numbers.", fun = sum, exposure = "r"))
   expect_identical(utils::tail(as.character(member_help("total9")), 2L),
                    c("Arguments:", "  na.rm (string)"))
@@ -721,7 +721,7 @@ test_that("gptr$help() shows only members that resolve, a primitive's arguments,
                    "[help: stats::median]")
 })
 
-test_that("gptr$search() indexes text that is not valid UTF-8 instead of failing", {
+test_that("peter$search() indexes text that is not valid UTF-8 instead of failing", {
   e9 = rawToChar(as.raw(0xe9))
   bad = paste0("caf", e9)
   local_spec(gptr_spec("search_source", "bytes9", docs = function(ctx) {
@@ -747,7 +747,7 @@ test_that("gptr$search() indexes text that is not valid UTF-8 instead of failing
   expect_true(all(validUTF8(c(cv$name[1L], cv$signature[1L]))))
 })
 
-test_that("gptr$out() returns stored text from the process store and pages it with lines", {
+test_that("peter$out() returns stored text from the process store and pages it with lines", {
   id = out_put(sprintf("line %d", 1:50))
   expect_identical(as.character(member_out(id, lines = 2:3)), c("line 2", "line 3"))
   expect_s3_class(member_out(id), "gptr_text")
@@ -756,7 +756,7 @@ test_that("gptr$out() returns stored text from the process store and pages it wi
   expect_error(member_out(id, lines = 0), class = "gptr_error_invalid_argument")
 })
 
-test_that("gptr$plot() attaches the current plot or a stored one to the running r result", {
+test_that("peter$plot() attaches the current plot or a stored one to the running r result", {
   expect_null(member_plot())
   withr::local_pdf(NULL)
   grDevices::dev.control(displaylist = "enable")
@@ -808,7 +808,7 @@ test_that("file members return R values; an image read inside r is attached", {
   expect_identical(member_ls(td)$path, c("i.png", "x.txt", "y.txt"))
 })
 
-test_that("gptr$grep() and gptr$ls() accept the direct tools' argument names (P02 formals rule)", {
+test_that("peter$grep() and peter$ls() accept the direct tools' argument names (P02 formals)", {
   td = withr::local_tempdir()
   writeBin(charToRaw("Alpha\nbeta\n"), file.path(td, "a.txt"))
   writeBin(charToRaw("x"), file.path(td, "b.txt"))
@@ -824,7 +824,7 @@ test_that("gptr$grep() and gptr$ls() accept the direct tools' argument names (P0
   expect_false(grepl("...", attr(ns_resolve("grep"), "signature"), fixed = TRUE))
 })
 
-test_that("gptr$out(lines =) accepts the list that a validated nested input carries", {
+test_that("peter$out(lines =) accepts the list that a validated nested input carries", {
   id = out_put(c("l1", "l2", "l3"))
   expect_identical(as.character(member_out(id, lines = list(1, 3))), c("l1", "l3"))
   expect_identical(as.character(member_out(id, lines = 2L)), "l2")
@@ -942,13 +942,13 @@ test_that("builtin:tools registers fragments, the plugins section, a search sour
                 secs)
   expect_identical(unname(vapply(frag, function(s) as.integer(s$order), 0L)), c(10L, 20L))
   helpers = paste(
-    "- Helpers are R functions on the gptr object and return R values: gptr$grep(pattern,",
-    "path), gptr$find(pattern, path, sort), gptr$ls(path), gptr$describe(x).",
-    "gptr$search(\"words\") and gptr$help(name) find more."
+    "- Helpers are R functions on the peter object and return R values: peter$grep(pattern,",
+    "path), peter$find(pattern, path, sort), peter$ls(path), peter$describe(x).",
+    "peter$search(\"words\") and peter$help(name) find more."
   )
   out = paste(
-    "- Long output is cut to its head and tail; the notice names gptr$out(id) for the rest.",
-    "Use gptr$out(), gptr$help(), gptr$search() and gptr$plot() only with record = false."
+    "- Long output is cut to its head and tail; the notice names peter$out(id) for the rest.",
+    "Use peter$out(), peter$help(), peter$search() and peter$plot() only with record = false."
   )
   expect_identical(unname(vapply(frag, function(s) s$text, "")), c(helpers, out))
   plugins = Filter(function(s) identical(s$name, "plugins"), secs)[[1L]]
@@ -978,15 +978,15 @@ count_io = function(expr_fun) {
   counter$n
 }
 
-test_that("gptr$nope lists the members; completion lists the built-in members (acceptance 3)", {
-  cnd = tryCatch(gptr$nope, error = identity)
+test_that("peter$nope lists the members; completion lists the built-in members (acceptance 3)", {
+  cnd = tryCatch(peter$nope, error = identity)
   expect_s3_class(cnd, "gptr_error_unknown_member")
   expect_identical(cnd$name, "nope")
   expect_true(all(members %in% cnd$available))
-  expect_true(all(members %in% utils::.DollarNames(gptr, "")))
-  expect_identical(utils::.DollarNames(gptr, "^gr"), "grep")
-  expect_s3_class(gptr$grep, "gptr_member")
-  expect_identical(attr(gptr[["read"]], "spec"), registry_get("tool", "read"))
+  expect_true(all(members %in% utils::.DollarNames(peter, "")))
+  expect_identical(utils::.DollarNames(peter, "^gr"), "grep")
+  expect_s3_class(peter$grep, "gptr_member")
+  expect_identical(attr(peter[["read"]], "spec"), registry_get("tool", "read"))
 })
 
 test_that("accessing a member performs no I/O and opens no connection", {
@@ -994,8 +994,8 @@ test_that("accessing a member performs no I/O and opens no connection", {
   n = count_io(function() {
     for (m in members) ns_resolve(m)
     ns_names("")
-    gptr$grep
-    gptr[["read"]]
+    peter$grep
+    peter[["read"]]
   })
   expect_identical(n, 0L)
   expect_identical(nrow(showConnections()), cons)

@@ -16,7 +16,7 @@ gptr_source(
 
 \item{replay}{Replay mode for the calls in the file: \code{"auto"}, \code{"replay"}, \code{"live"} or
 \code{"record"}. A call's own \verb{replay =} argument wins. Left missing, each call resolves its
-mode as \code{gptr()} does: the \code{gptr.replay} option, then the \code{GPTR_REPLAY} environment
+mode as \code{peter()} does: the \code{gptr.replay} option, then the \code{GPTR_REPLAY} environment
 variable, then the \code{replay} setting, then \code{"auto"}.}
 
 \item{envir}{Environment in which the expressions are evaluated.}
@@ -31,7 +31,7 @@ is \code{ran} and keeps its status.
 }
 \description{
 Evaluates \code{file} top-level expression by expression in \code{envir}, like \code{\link[=source]{source()}} with
-\code{keep.source = TRUE}. A \code{gptr()} call whose block is fresh replays without calling a model
+\code{keep.source = TRUE}. A \code{peter()} call whose block is fresh replays without calling a model
 and the block's code then runs as ordinary R. A call whose block is stale (its prompt or the
 values interpolated into it changed), or every call under \code{replay = "live"}, asks the model
 again and rewrites its block in place, and the old block is skipped, which base \code{source()}

@@ -122,9 +122,9 @@ lower-numbered plans. "Depends on" lists 05's direct dependencies.
 | 5 | [P05 Model layer core](P05-model-layer-core.md) | M1 | P02, P03, P04 | 12 | provider records, `provider_stream()`, transcript projection and hand-off, usage and cost, offline catalog |
 | 6 | [P06 Session kernel and agent loop](P06-session-kernel-agent-loop.md) | M1 | P04, P05 | 16 | S-8 session object, JSONL store (fork, resume, replay), agent loop, tool dispatcher, permission kernel |
 | 7 | [P07 Prompt, context, caching, compaction](P07-prompt-context-caching-compaction.md) | M1 | P06 | 16 | frozen cache-anchored context, system prompt, compaction, token baselines in `dev/bench/tokens/` |
-| 8 | [P08 Gateway and SDK](P08-gateway-sdk.md) | M1 | P03, P07 | 12 | `gptr()` capture and routing, identifiers, settings, trust, egress and replay controls, SDK verbs |
+| 8 | [P08 Gateway and SDK](P08-gateway-sdk.md) | M1 | P03, P07 | 12 | `peter()` capture and routing, identifiers, settings, trust, egress and replay controls, SDK verbs |
 | 9 | [P09 Evaluator and workspace](P09-evaluator-workspace.md) | M2 | P08 | 11 | evaluate model R code in the live session (output, conditions, plots) and describe the workspace without copies |
-| 10 | [P10 Tools and the `gptr$` namespace](P10-tools-namespace.md) | M2 | P09 | 13 | `r`, `read`, `edit`, `write` (+ `grep`, `find`, `ls`) and the `gptr$` namespace |
+| 10 | [P10 Tools and the `peter$` namespace](P10-tools-namespace.md) | M2 | P09 | 13 | `r`, `read`, `edit`, `write` (+ `grep`, `find`, `ls`) and the `peter$` namespace |
 | 11 | [P11 Permissions, UI and plan mode](P11-permissions-ui-plan-mode.md) | M2 | P10 | 11 | `gptr_risk()`, rules and policies, UI backends and approval prompt, `ask` tool, plan mode |
 | 12 | [P12 Native provider adapters](P12-native-provider-adapters.md) | M2 | P05, P07 | 10 | Anthropic, OpenAI Responses and Completions, Google adapters with byte-exact replay |
 | 13 | [P13 System 1](P13-system-one.md) | M2 | P08, P09, P12 | 13 | typed, vectorised Jev decisions for `if`/`for`/`while`, cached per element |
@@ -136,7 +136,7 @@ lower-numbered plans. "Depends on" lists 05's direct dependencies.
 | 19 | [P19 Sub-agents](P19-sub-agents.md) | M4 | P11, P14, P15, P17 | 12 | teams, fan-outs, `gptr_parallel()`; inline, worker and CLI backends on one reactor |
 | 20 | [P20 Subscription CLI providers](P20-subscription-cli-providers.md) | M4 | P12, P18, P19 | 11 | `claude-cli` (alias `claude_code`) and `codex` routes with live R through gptr's gate |
 | 21 | [P21 Background sessions (experimental)](P21-background-sessions.md) | M4 | P06, P14 | 7 | `background = TRUE`; pipe steering of a running session at the idle console |
-| 22 | [P22 Polyglot bridges](P22-polyglot-bridges.md) | M5 | P10, P11 | 11 | `gptr$sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`; no shell tool |
+| 22 | [P22 Polyglot bridges](P22-polyglot-bridges.md) | M5 | P10, P11 | 11 | `peter$sh`, `script`, `bg`, `jobs`, `py`, `sql`, `knit`; no shell tool |
 | 23 | [P23 Artifacts](P23-artifacts.md) | M5 | P10, P11, P14, P16 | 12 | Shiny apps in supervised background R processes, validation ladder, `gptr_artifacts()` |
 | 24 | [P24 Token benchmark and e2e acceptance](P24-token-benchmark-acceptance.md) | M5 | P01-P23 | 13 | `dev/bench/` suites; secrets, injection, north-star and S-11 end-to-end tests |
 | 25 | [P25 Release](P25-release.md) | M5 | P24 | 15 | manual for 63 exports, vignettes, README, NEWS, cran-comments, pkgdown, live calibration, CRAN submission |
@@ -305,7 +305,7 @@ once P24 writes it) needs:
 | Item | Status | Pointer |
 |---|---|---|
 | Claude-plan route vs Anthropic's terms | policy UNCERTAIN; ships experimental and opt-in with a one-time notice; ask Anthropic before advertising it | 01 D-15, 03 §13, research 07 §2.18, P20 |
-| `{gptr}` knitr chunk engine | deferred; maintainer decision pending; v1 uses `gptr("...")` in R chunks with `knit_print` | 03 §1.3, research 14 §4.6 |
+| `{gptr}` knitr chunk engine | deferred; maintainer decision pending; v1 uses `peter("...")` in R chunks with `knit_print` | 03 §1.3, research 14 §4.6 |
 | Sign in with ChatGPT; Codex app-server | deferred to v1.x plugins; v1 uses `codex exec --json` | 03 §1.3, research 08 |
 | Other v1.x deferrals | nested-call cassettes, `apply_patch` tool, fork backend and mirai, Bedrock/Vertex/Copilot, provider-native compaction, Claude plugin hooks and `.codex` agents, file-inbox steering | 03 §1.3 |
 | Windows | untested locally; relies on CI (Windows release and oldrel-4) and win-builder; some process tests skip on Windows; the Codex Windows sandbox probe is UNCERTAIN; worker stdin polling verified on macOS only | 03 §13, P20 ambiguity 9, P19 ambiguity 23(d), P25 Task 15 |

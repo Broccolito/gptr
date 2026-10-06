@@ -1,3 +1,3 @@
 ﻿x = 1
-gptr("hi été")
+peter("hi été")
 y = 2

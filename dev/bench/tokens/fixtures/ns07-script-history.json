@@ -1,7 +1,7 @@
 {
   "id": "ns07-script-history",
   "north_star": 7,
-  "description": "gptr(\"cluster the cells ...\") at the console with analysis.R bound by gptr_doc(): the standard interactive prefix with the <documents> section and the r schema variant with record and note; one composed r call with a decision note, then the answer.",
+  "description": "peter(\"cluster the cells ...\") at the console with analysis.R bound by gptr_doc(): the standard interactive prefix with the <documents> section and the r schema variant with record and note; one composed r call with a decision note, then the answer.",
   "mode": "manual",
   "human": true,
   "preset": null,
@@ -16,7 +16,7 @@
   ],
   "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nDocument: analysis.R\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
   "files": {
-    "analysis.R": "library(gptr)\n\ngptr(\"cluster the cells and show me the markers for the three largest clusters\")",
+    "analysis.R": "library(gptr)\n\npeter(\"cluster the cells and show me the markers for the three largest clusters\")",
     "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Single-cell data: Seurat v5; keep pbmc as the main object."
   },
   "objects": {
@@ -58,7 +58,7 @@
           ]
         },
         {
-          "text": "Clustered at resolution 0.8 (0.4 merged the two monocyte groups) and found 4,211 marker genes for the three largest clusters; they are in `markers`, and the code is recorded in a block below your gptr() call in analysis.R.",
+          "text": "Clustered at resolution 0.8 (0.4 merged the two monocyte groups) and found 4,211 marker genes for the three largest clusters; they are in `markers`, and the code is recorded in a block below your peter() call in analysis.R.",
           "calls": []
         }
       ]

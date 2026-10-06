@@ -18,7 +18,7 @@ columns \code{FALSE} and \code{TRUE}).}
 A named numeric vector, or a matrix for \code{what = "probabilities"}.
 }
 \description{
-System 1 calls (\code{gptr(question, x, model = jev)}) return typed vectors: a \code{gptr_decision}
+System 1 calls (\code{peter(question, x, model = jev)}) return typed vectors: a \code{gptr_decision}
 (logical), a \code{gptr_choice} (character) or a \code{gptr_score} (double, the expected 0-based level).
 They work in \verb{if()}, \verb{while()}, \code{ifelse()}, \code{table()}, \code{sum()} and comparisons like the bare
 vectors, and carry the model's probabilities as attributes. \code{gptr_prob()} reads them.
@@ -41,8 +41,6 @@ that the answer is correct.
 
 \examples{
 judge = gptr_fake_provider(list(0.9, 0.2), name = "judge", type = "classifier")
-\dontshow{if (exists("gptr", mode = "function")) withAutoprint(\{ # examplesIf}
-d = gptr("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
+d = peter("Is this about dogs?", c(a = "A puppy.", b = "A car."), model = judge)
 gptr_prob(d)
-\dontshow{\}) # examplesIf}
 }

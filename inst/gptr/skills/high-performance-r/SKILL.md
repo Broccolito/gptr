@@ -20,9 +20,9 @@ fast, and never lose or duplicate what is already in memory.
    `remotes::install_*()` or `update.packages()` without the user's explicit yes (see
    "Installing" at the end).
 2. **Look before you load or print.** `dim(x)`, `nrow(x)`, `object.size(x)`, `file.size(path)`,
-   `head(x)` and `gptr$describe(x)`. Never print a whole large object into the transcript.
+   `head(x)` and `peter$describe(x)`. Never print a whole large object into the transcript.
    Do not call the base function `str` on a large object: it leaves a sticky reference, so
-   the next in-place edit of that object copies all of it. `gptr$describe(x)` is copy-free.
+   the next in-place edit of that object copies all of it. `peter$describe(x)` is copy-free.
 3. **Do not copy big objects.** `y = x; y$col = ...` copies `x` on write. Prefer
    `data.table` in-place updates (`:=`, `set()`, `setorder()`, `setnames()`), work on column
    subsets, and `rm(tmp); invisible(gc())` large temporaries.

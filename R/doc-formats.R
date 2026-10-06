@@ -201,7 +201,7 @@ doc_rmd_chunks = function(lines) {
   do.call(rbind, res)
 }
 
-#' gptr() calls of the R chunks of an Rmd/qmd text, with document line numbers, chunk index and
+#' peter() calls of the R chunks of an Rmd/qmd text, with document line numbers, chunk index and
 #' label; attributes `blocks` (marker blocks) and `chunks`
 #' @noRd
 doc_rmd_calls = function(lines) {
@@ -516,15 +516,15 @@ doc_r_upsert = function(text, site, lines, block_id) {
   append(text, doc_indent_lines(lines, loc$indent), after = loc$insert_after)
 }
 
-#' The transcript statement of a console turn (IC-49): `s_<6 hex> = gptr(...)` for the
-#' session's first prompt in this text, `s_<6 hex> |> gptr(...)` afterwards
+#' The transcript statement of a console turn (IC-49): `s_<6 hex> = peter(...)` for the
+#' session's first prompt in this text, `s_<6 hex> |> peter(...)` afterwards
 #' @noRd
 doc_console_statement = function(text, site) {
   var = paste0("s_", substr(sub("^s", "", site[["session_id"]] %||% "s000000"), 1L, 6L))
   args = paste(c(doc_str_literal(site[["template"]] %||% ""), site[["context_labels"]]),
                collapse = ", ")
-  first = !any(startsWith(sub("^#~ ", "", text), paste0(var, " = gptr(")))
-  if (first) paste0(var, " = gptr(", args, ")") else paste0(var, " |> gptr(", args, ")")
+  first = !any(startsWith(sub("^#~ ", "", text), paste0(var, " = peter(")))
+  if (first) paste0(var, " = peter(", args, ")") else paste0(var, " |> peter(", args, ")")
 }
 
 #' Header lines of a transcript session (contract 11.5 transcript row), once per session id
@@ -834,7 +834,7 @@ nb_is_agent = function(ids) {
   !is.na(ids) & startsWith(ids, "gptr-")
 }
 
-#' Index of the j-th code cell (not an agent cell) calling gptr() with this prompt hash, or an
+#' Index of the j-th code cell (not an agent cell) calling peter() with this prompt hash, or an
 #' identical call for computed prompts; NA when none
 #' @noRd
 nb_find_call_cell = function(nb, ph, call0 = NULL, j = 1L) {
@@ -852,7 +852,7 @@ nb_find_call_cell = function(nb, ph, call0 = NULL, j = 1L) {
   NA_integer_
 }
 
-#' Ordinal of calling cell `cell` among the code cells that call gptr() with the same prompt
+#' Ordinal of calling cell `cell` among the code cells that call peter() with the same prompt
 #' hash (or the same call, for computed prompts): the `j` of a notebook anchor
 #' @noRd
 nb_call_ordinal = function(nb, cell, ph, call0 = NULL) {
@@ -901,7 +901,7 @@ nb_has_cell_ids = function(nb) {
 }
 
 #' The ipynb format's locate(): the calling cell (found by content: the j-th code cell calling
-#' gptr() with the anchor's prompt hash, or its call0; IC-51), the located call in it (among the
+#' peter() with the anchor's prompt hash, or its call0; IC-51), the located call in it (among the
 #' cell's rows with that prompt hash, the one that is the anchor's call0 itself: the steps of a
 #' pipeline that repeats a prompt, ambiguity 28) and the agent cells after it. The calling cell's
 #' top-level calls share that run of agent cells and own them one to one (doc_rmd_owner()); a
@@ -1073,7 +1073,7 @@ doc_inert_text = function(lines, fmt, ids, inert = TRUE, transcript = FALSE) {
     if (transcript) {
       p = b$start[k[1L]] - 1L
       while (p >= 1L && !nzchar(trimws(lines[p]))) p = p - 1L
-      if (p >= 1L && grepl("^(#~ )?s_[0-9a-f]{6} (=|\\|>) gptr\\(", lines[p])) {
+      if (p >= 1L && grepl("^(#~ )?s_[0-9a-f]{6} (=|\\|>) peter\\(", lines[p])) {
         lines[p] = if (inert) sub("^(#~ )?", "#~ ", lines[p]) else sub("^#~ ", "", lines[p])
       }
     }
@@ -1169,7 +1169,7 @@ doc_set_inert = function(path, ids, inert = TRUE, session = NULL, transcript = N
 #' @noRd
 doc_section_body = paste(c(
   paste0("Code from successful r calls is written into the user's document (named in ",
-         "<environment>) in a block below the gptr() call that asked for it, so the document ",
+         "<environment>) in a block below the peter() call that asked for it, so the document ",
          "re-runs from top to bottom. Therefore:"),
   paste0("- Make recorded code the clean final version: named objects, no exploratory prints. ",
          "Pass record = false for throwaway checks (head(), summaries, tests)."),
@@ -1177,8 +1177,8 @@ doc_section_body = paste(c(
          "key printed outputs are added as #> comments automatically."),
   paste0("- To change code you wrote earlier, edit that block in the document instead of ",
          "appending a second version."),
-  paste0("- In the document, prompts are quoted strings in gptr(\"...\"), and System 1 decisions ",
-         "are gptr(..., model = {s1}) inside if, for or while. Add such calls only when the user ",
+  paste0("- In the document, prompts are quoted strings in peter(\"...\"), and System 1 decisions ",
+         "are peter(..., model = {s1}) inside if, for or while. Add such calls only when the user ",
          "asks for an agent step in the script.")
 ), collapse = "\n")
 

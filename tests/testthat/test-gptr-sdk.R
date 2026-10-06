@@ -35,7 +35,7 @@ test_tool = function(name, fun) {
 test_that("gptr_step() starts a pending session; with nothing queued it is a no-op", {
   local_gw()
   fake = local_fake_provider(list("Plan: ..."))
-  s = gptr("Plan the analysis", model = fake, .run = FALSE, envir = new.env())
+  s = peter("Plan the analysis", model = fake, .run = FALSE, envir = new.env())
   expect_identical(s$turns, 0L)
   expect_invisible(gptr_step(s))
   expect_identical(s$turns, 1L)
@@ -53,7 +53,7 @@ test_that("gptr_step(turns = 1) stops after one turn; turns = Inf runs to settle
   local_gptr_options(unsafe_no_permissions = TRUE)
   noop = test_tool("noop", function(ctx) "ok")
   fake = local_fake_provider(list(fake_tool("noop"), fake_tool("noop"), "done"))
-  s = gptr("go", model = fake, tools = list(noop), .run = FALSE, envir = new.env())
+  s = peter("go", model = fake, tools = list(noop), .run = FALSE, envir = new.env())
   gptr_step(s, turns = 1L)
   expect_identical(s$turns, 1L)
   expect_identical(s$status, "running")
@@ -65,7 +65,7 @@ test_that("gptr_step(turns = 1) stops after one turn; turns = Inf runs to settle
 test_that("the call record of a pending session is held until its run settles [R2]", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   call = get0(s$id, envir = gateway_state()$pending, inherits = FALSE)$call
   expect_true(isTRUE(call$hold))
   expect_true(is.environment(call$envir))
@@ -77,8 +77,8 @@ test_that("the call record of a pending session is held until its run settles [R
 test_that("gptr_wait() starts queued sessions and waits for all of them", {
   local_gw()
   fake = local_fake_provider(list("a"))
-  runs = list(a = gptr("one", model = fake, .run = FALSE, envir = new.env()),
-              b = gptr("two", model = fake, .run = FALSE, envir = new.env()))
+  runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),
+              b = peter("two", model = fake, .run = FALSE, envir = new.env()))
   expect_invisible(gptr_wait(runs, timeout = 10))
   expect_identical(vapply(runs, function(x) x$status, ""), c(a = "idle", b = "idle"))
   expect_identical(vapply(runs, function(x) x$turns, 0L), c(a = 1L, b = 1L))
@@ -87,7 +87,7 @@ test_that("gptr_wait() starts queued sessions and waits for all of them", {
 test_that("gptr_wait() on one failed session signals its condition", {
   local_gw()
   fake = local_fake_provider(list(fake_error("bad request", status = 400L)))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   cnd = expect_error(gptr_wait(s), class = "gptr_error_provider")
   expect_identical(cnd$session, s)
 })
@@ -95,7 +95,7 @@ test_that("gptr_wait() on one failed session signals its condition", {
 test_that("gptr_wait() returns at the timeout; gptr_cancel() then aborts the run", {
   local_gw()
   fake = local_fake_provider(list(list(hang = TRUE)))
-  s = gptr("long task", model = fake, .run = FALSE, envir = new.env())
+  s = peter("long task", model = fake, .run = FALSE, envir = new.env())
   expect_invisible(gptr_cancel(s))
   expect_identical(s$status, "idle")
   gptr_wait(s, timeout = 0.2)
@@ -107,7 +107,7 @@ test_that("gptr_wait() returns at the timeout; gptr_cancel() then aborts the run
 test_that("gptr_steer() queues a follow-up delivered when the agent would stop", {
   local_gw()
   fake = local_fake_provider(list("first", "second"))
-  s = gptr("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
+  s = peter("Summarise mtcars", model = fake, .run = FALSE, envir = new.env())
   expect_invisible(gptr_steer(s, "Use only the mpg column", as = "follow_up"))
   gptr_wait(s)
   users = Filter(function(m) identical(m$role, "user"), s$messages)
@@ -118,7 +118,7 @@ test_that("gptr_steer() queues a follow-up delivered when the agent would stop",
 test_that("gptr_steer() redacts with the context profile and queues an api_user item", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   box = new.env()
   local_mocked_bindings(redact = function(x, profile = "persist") {
     box$profile = profile
@@ -136,7 +136,7 @@ test_that("gptr_steer() redacts with the context profile and queues an api_user 
 test_that("the verbs validate their arguments", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   expect_error(gptr_steer(s, 1), class = "gptr_error_invalid_argument")
   expect_error(gptr_steer(s, "x", as = "later"), class = "gptr_error_invalid_argument")
   expect_error(gptr_steer("s", "x"), class = "gptr_error_invalid_argument")
@@ -150,7 +150,7 @@ test_that("the verbs validate their arguments", {
 test_that("model code may not steer or cancel another session, nor add listeners (IC-53)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  s = gptr("x", model = fake, .run = FALSE, envir = new.env())
+  s = peter("x", model = fake, .run = FALSE, envir = new.env())
   run = fake_run(session = "s9999999999")
   local_mocked_bindings(run_current = function() run)
   expect_error(gptr_steer(s, "x"), class = "gptr_error_permission")
@@ -165,7 +165,7 @@ test_that("gptr_on() registers a session listener and returns its remover", {
   # bound first: a local_*() helper called inside the `model =` expression would attach its
   # cleanup to the gateway's alias mask (it is evaluated there), not to this test
   fake = local_fake_provider(list("hello"))
-  s = gptr("hi", model = fake, .run = FALSE, envir = new.env())
+  s = peter("hi", model = fake, .run = FALSE, envir = new.env())
   log = new.env()
   log$roles = character()
   off = gptr_on(s, "message_end", function(event, ctx) {
@@ -177,7 +177,7 @@ test_that("gptr_on() registers a session listener and returns its remover", {
   expect_true("assistant" %in% log$roles)
   off()
   n = length(log$roles)
-  s |> gptr("again")
+  s |> peter("again")
   expect_length(log$roles, n)
   expect_error(gptr_on(s, "PreToolUse", function(event, ctx) NULL),
                class = "gptr_error_invalid_argument")
@@ -199,7 +199,7 @@ test_that("gptr_return() designates the run's value from R code during a run", {
     "designated"
   })
   fake = local_fake_provider(list(fake_tool("designate"), "done"))
-  s = gptr("designate it", model = fake, tools = list(designate), envir = new.env())
+  s = peter("designate it", model = fake, tools = list(designate), envir = new.env())
   expect_identical(s$value, c(a = 1, b = 2))
 })
 
@@ -216,7 +216,7 @@ test_that("a pending run freezes its safety record when a verb starts it (07 sec
   })
   queue = function() {
     fake = gptr_fake_provider(list(fake_tool("probe_safety"), "done"))
-    gptr("check", model = fake, tools = list(probe), .run = FALSE, envir = new.env())
+    peter("check", model = fake, tools = list(probe), .run = FALSE, envir = new.env())
   }
   # queued while the human layer keeps local-only inference, started after a human relaxed it
   s1 = queue()
@@ -247,7 +247,7 @@ test_that("starting a pending run re-checks egress and replay; a refusal keeps i
   live = gptr_fake_provider(list("live answer"), name = "livefake")
   live$offline = FALSE
   settings_write("user", list(egress = list(livefake = "ack")))
-  s = gptr("x", model = live, .run = FALSE, envir = new.env())
+  s = peter("x", model = live, .run = FALSE, envir = new.env())
   expect_true(gateway_pending_has(s$id))
   # the acknowledgement was withdrawn before the run started
   settings_write("user", list(egress = json_obj()))
@@ -277,8 +277,8 @@ test_that("gptr_wait() checks every session before it starts any; a refusal star
   live = gptr_fake_provider(list("live answer"), name = "livefake")
   live$offline = FALSE
   settings_write("user", list(egress = list(livefake = "ack")))
-  a = gptr("one", model = fake, .run = FALSE, envir = new.env())
-  b = gptr("two", model = live, .run = FALSE, envir = new.env())
+  a = peter("one", model = fake, .run = FALSE, envir = new.env())
+  b = peter("two", model = live, .run = FALSE, envir = new.env())
   # the acknowledgement of b's provider was withdrawn before the wait
   settings_write("user", list(egress = json_obj()))
   cnd = expect_error(gptr_wait(list(a, b)), class = "gptr_error_egress")
@@ -306,7 +306,7 @@ test_that("a follow-up on a session without a kept home runs in the verb's calle
     "seen"
   })
   fake = local_fake_provider(list("first", fake_tool("probe_home"), "second"))
-  make = function() gptr("first", model = fake, tools = list(probe))
+  make = function() peter("first", model = fake, tools = list(probe))
   s = make()
   expect_null(session_home(s))
   gptr_steer(s, "now probe", as = "follow_up")
@@ -333,7 +333,7 @@ test_that("gptr_return() keeps a name bound in the kept home by name (03 5.1)", 
     "designated"
   })
   fake = local_fake_provider(list(fake_tool("designate"), "done"))
-  s = gptr("designate fit", model = fake, tools = list(designate), envir = home)
+  s = peter("designate fit", model = fake, tools = list(designate), envir = home)
   expect_null(box$ret)
   expect_identical(s$value, c(1, 2, 3))
   entry = gateway_last_custom(session_data(s), "gptr.value")
@@ -344,8 +344,8 @@ test_that("gptr_return() keeps a name bound in the kept home by name (03 5.1)", 
 test_that("one approved gptr_cancel() call may cancel a list of other sessions (IC-53)", {
   local_gw()
   fake = local_fake_provider(list("ok"))
-  a = gptr("a", model = fake, .run = FALSE, envir = new.env())
-  b = gptr("b", model = fake, .run = FALSE, envir = new.env())
+  a = peter("a", model = fake, .run = FALSE, envir = new.env())
+  b = peter("b", model = fake, .run = FALSE, envir = new.env())
   run = fake_run(session = "s9999999999")
   local_mocked_bindings(run_current = function() run)
   run$signal$control = "gptr_cancel"

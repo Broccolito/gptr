@@ -769,7 +769,7 @@ s1_request = function(model, states, questions, opts = list()) {
 #' @noRd
 s1_section_body = paste0(
   "For fast typed judgements call a System 1 model from R instead of reasoning over each item ",
-  "yourself: gptr(\"Is this abstract about a randomised trial?\", abstracts, model = {s1}) ",
+  "yourself: peter(\"Is this abstract about a randomised trial?\", abstracts, model = {s1}) ",
   "returns a logical vector with attr(, \"prob\"); with choices = c(\"a\", \"b\", \"c\") it ",
   "returns one choice per input. Calls are vectorised, so pass all items at once. Use them ",
   "inside if, for and while, and check items with probabilities near 0.5 yourself. Keep ",

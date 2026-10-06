@@ -229,7 +229,7 @@ doc_identity_rows = function(calls, call0) {
 
 #' Narrow candidate call rows that share a prompt hash to those that are the evaluated call
 #' itself (`call0`, as sys.call() reports it): the steps of a pipeline that repeats a prompt,
-#' `gptr("draft") |> gptr("again") |> gptr("again")`, differ only in their identity (contract
+#' `peter("draft") |> peter("again") |> peter("again")`, differ only in their identity (contract
 #' 11.5, plan self-review ambiguity 28). Unchanged without a call or when no row is that call.
 #' @noRd
 doc_by_identity = function(cand, call0) {
@@ -240,8 +240,8 @@ doc_by_identity = function(cand, call0) {
 
 #' The rows of a call table that may hold the call (doc_calls_have()), except for a computed
 #' prompt whose value equals a literal prompt of the table: doc_calls_have() prefers the rows
-#' with that prompt hash, so `gptr(q)` with `q = "count rows"` would be found as
-#' `gptr("count rows")`. When rows are the call `call0` itself and none of the prompt-hash rows
+#' with that prompt hash, so `peter(q)` with `q = "count rows"` would be found as
+#' `peter("count rows")`. When rows are the call `call0` itself and none of the prompt-hash rows
 #' is, those rows are taken. A literal-prompt call keeps its rows: they are in both sets.
 #' @noRd
 doc_call_rows = function(calls, ph, call0) {
@@ -535,7 +535,7 @@ doc_context_labels = function(context) {
   labels[nzchar(labels)]
 }
 
-#' Locate the calling statement of a gptr() call record (contract 7.15): a site list, the
+#' Locate the calling statement of a peter() call record (contract 7.15): a site list, the
 #' console site when the call is in no document, or NULL. Sets `call$top_level`.
 #'
 #' The first finder that sees a running document (a srcref, a source() frame, knitr or Quarto,

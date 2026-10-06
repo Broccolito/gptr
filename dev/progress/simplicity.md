@@ -155,3 +155,11 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   see exported keys (offline, read-only).
 - Deviations: none. Open: `progress/infra.md` (from tooling.md) and `HANDOFF.md` (validation
   commands) still say the runner clears credentials; keys are cleared by `setup.R` for tests only.
+
+## REN-1, REN-2 - rename the entry point to peter() (2026-10-05)
+- Green: full suite FAIL 0, PASS 22392; `prompt-text|bench-context` PASS 135; lint clean; token
+  bench `--check` OK (1262/2335/2813/2956); cross-plan 0 errors (warn 77 as before), 764 R blocks
+  0 problems, no lints; residue greps only deliberate keeps; `check --as-cran` 0/0/0, examples run.
+- Reviews: r1 5 minor fixed (P15 delta 183 + 51, P25 Task 3 D-135 note, rename tools trimmed);
+  NS-4 (test-s1-client.R) compares session names, not a count (GC flake; P13 literal kept).
+- Deviations: D-135. Open: none.

@@ -1,5 +1,5 @@
 # Tests for R/doc-locate.R (plan P15): the precedence of architecture 6.9.3 and the console
-# transcript target. A stand-in `gptr()` defined in the sourcing environment builds the call
+# transcript target. A stand-in `peter()` defined in the sourcing environment builds the call
 # record the way P08 does (template, sys_call, nframe) and returns doc_locate()'s site.
 
 # Bind a document for the calling test (restores the previous binding)
@@ -12,7 +12,7 @@ local_doc_binding = function(path, format = "r", .env = parent.frame()) {
 
 doc_probe_env = function() {
   e = new.env()
-  e$gptr = function(prompt, ...) {
+  e$peter = function(prompt, ...) {
     call = new.env(parent = emptyenv())
     call$template = prompt
     call$prompt = prompt
@@ -38,9 +38,9 @@ test_that("a sourced top-level call is located through its srcref and owns its b
   proj = local_project()
   f = file.path(proj, "analysis.R")
   ph = prompt_hash("count rows")
-  writeLines(c("x = 1", "site = gptr(\"count rows\")",
+  writeLines(c("x = 1", "site = peter(\"count rows\")",
                paste0("# >>> gptr:abc123 model=m prompt=", ph), "n = 1", "# <<< gptr:abc123",
-               "f = function() gptr(\"inner\")", "inner = f()"), f)
+               "f = function() peter(\"inner\")", "inner = f()"), f)
   e = doc_probe_env()
   source(f, local = e, keep.source = TRUE)
   s = e$site
@@ -61,7 +61,8 @@ test_that("without srcrefs the source() frame locates the statement, unless swit
   proj = local_project()
   local_no_running_document()
   f = file.path(proj, "analysis.R")
-  writeLines(c("x = 1", "site = gptr(\"count rows\")", "y = 2", "site2 = gptr(\"count rows\")"), f)
+  writeLines(c("x = 1", "site = peter(\"count rows\")", "y = 2",
+               "site2 = peter(\"count rows\")"), f)
   e = doc_probe_env()
   source(f, local = e, keep.source = FALSE)
   expect_identical(e$site$kind, "source_frame")
@@ -78,12 +79,12 @@ test_that("pipelines, block-nested calls and dynamic prompts are told apart", {
   proj = local_project()
   f = file.path(proj, "a.R")
   ph = prompt_hash("outer")
-  writeLines(c("chain = gptr(\"step one\") |> gptr(\"step two\")",
-               "dyn = gptr(paste(\"dy\", \"n\"))",
-               "outer = gptr(\"outer\")", paste0("# >>> gptr:abc123 model=m prompt=", ph),
-               "nested = gptr(\"inner\")", "# <<< gptr:abc123"), f)
+  writeLines(c("chain = peter(\"step one\") |> peter(\"step two\")",
+               "dyn = peter(paste(\"dy\", \"n\"))",
+               "outer = peter(\"outer\")", paste0("# >>> gptr:abc123 model=m prompt=", ph),
+               "nested = peter(\"inner\")", "# <<< gptr:abc123"), f)
   e = doc_probe_env()
-  e$gptr = function(x, prompt = NULL, ...) {
+  e$peter = function(x, prompt = NULL, ...) {
     if (is.null(prompt)) prompt = x
     call = new.env(parent = emptyenv())
     call$template = if (is.character(prompt)) prompt else NULL
@@ -107,7 +108,7 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
   fixture = normalizePath(testthat::test_path("fixtures", "docs", "floats.ipynb"))
   proj = local_project()
   q = file.path(proj, "report.qmd")
-  writeLines(c("```{r}", "#| label: ask", "gptr(\"count rows\")", "```"), q)
+  writeLines(c("```{r}", "#| label: ask", "peter(\"count rows\")", "```"), q)
   withr::local_options(knitr.in.progress = TRUE)
   withr::local_envvar(QUARTO_DOCUMENT_PATH = proj, QUARTO_DOCUMENT_FILE = "report.qmd")
   raw = doc_site_knitr(NULL, prompt_hash("count rows"), NULL)
@@ -119,7 +120,7 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
   withr::local_envvar(JPY_SESSION_NAME = nb)
   call = new.env(parent = emptyenv())
   call$template = "summarise the mpg column"
-  call$sys_call = quote(gptr("summarise the mpg column"))
+  call$sys_call = quote(peter("summarise the mpg column"))
   call$nframe = 0L
   site = doc_locate(call)
   expect_identical(site$kind, "jupyter")
@@ -129,7 +130,7 @@ test_that("Quarto and Jupyter locations come from their environment variables", 
   expect_true(site$top_level)
   expect_true(call$top_level)
   # a call in an unlabelled chunk: knitr reports unnamed-chunk-<k>, which the anchor matches
-  un = c("```{r}", "x = 1", "```", "", "```{r}", "gptr(\"count rows\")", "```")
+  un = c("```{r}", "x = 1", "```", "", "```{r}", "peter(\"count rows\")", "```")
   a = doc_anchor(list(format = "rmd"), list(kind = "knitr", label = "unnamed-chunk-2"), un,
                  prompt_hash("count rows"), NULL)
   expect_identical(a$label, "unnamed-chunk-2")
@@ -141,7 +142,7 @@ test_that("calls in no document go to the console transcript target, if any", {
   local_no_running_document()
   call = new.env(parent = emptyenv())
   call$template = "first prompt"
-  call$sys_call = quote(gptr("first prompt"))
+  call$sys_call = quote(peter("first prompt"))
   call$nframe = 0L
   call$context = list(list(label = "mtcars", kind = "symbol", name = "mtcars"))
   expect_null(doc_locate(call))
@@ -185,11 +186,11 @@ test_that("an interactive console asks once where to record and remembers the an
 
 # ---- Task 8 additions (contract 7.15, 11.5; IC-52; dev/DEVIATIONS.md D-103) ---------------------
 
-# A stand-in gptr() that locates first and forces a piped session afterwards (as the pipeline
+# A stand-in peter() that locates first and forces a piped session afterwards (as the pipeline
 # test above), so the inner calls of a chain are located from inside the outer call
 doc_pipe_env = function() {
   e = new.env()
-  e$gptr = function(x, prompt = NULL, ...) {
+  e$peter = function(x, prompt = NULL, ...) {
     if (is.null(prompt)) prompt = x
     call = new.env(parent = emptyenv())
     call$template = if (is.character(prompt)) prompt else NULL
@@ -216,7 +217,7 @@ test_that("each step of a pipeline that repeats a prompt is located as itself (a
   proj = local_project()
   f = file.path(proj, "chain.R")
   writeLines(c("x = 1",
-               "out = gptr(\"draft\") |> gptr(\"improve it\") |> gptr(\"improve it\")"), f)
+               "out = peter(\"draft\") |> peter(\"improve it\") |> peter(\"improve it\")"), f)
   for (keep in c(TRUE, FALSE)) {
     e = doc_pipe_env()
     source(f, local = e, keep.source = keep)
@@ -231,26 +232,26 @@ test_that("each step of a pipeline that repeats a prompt is located as itself (a
 test_that("an Rscript run counts executions per call, and a repeated prompt per pipeline step", {
   proj = local_project()
   f = file.path(proj, "run.R")
-  writeLines(c("a = gptr(\"count rows\")",
-               "out = gptr(\"draft\") |> gptr(\"improve it\") |> gptr(\"improve it\")",
-               "b = gptr(\"count rows\")"), f)
+  writeLines(c("a = peter(\"count rows\")",
+               "out = peter(\"draft\") |> peter(\"improve it\") |> peter(\"improve it\")",
+               "b = peter(\"count rows\")"), f)
   testthat::local_mocked_bindings(doc_command_args = function() {
     c("/usr/lib/R/bin/exec/R", "--no-echo", "--no-restore", paste0("--file=", f))
   })
   locate = function(sys_call, template) doc_locate(doc_bare_call(sys_call, template))
-  s1 = locate(quote(gptr("count rows")), "count rows")
+  s1 = locate(quote(peter("count rows")), "count rows")
   expect_identical(c(s1$kind, s1$backend, s1$driver), c("rscript", "deferred", "base"))
   expect_true(s1$defer)
   expect_identical(s1$stmt, c(1L, 1L))
   # the outer call runs first and forces the inner ones (as a piped session is forced)
-  s3 = locate(quote(gptr(gptr(gptr("draft"), "improve it"), "improve it")), "improve it")
-  s2 = locate(quote(gptr(gptr("draft"), "improve it")), "improve it")
-  s0 = locate(quote(gptr("draft")), "draft")
+  s3 = locate(quote(peter(peter(peter("draft"), "improve it"), "improve it")), "improve it")
+  s2 = locate(quote(peter(peter("draft"), "improve it")), "improve it")
+  s0 = locate(quote(peter("draft")), "draft")
   expect_identical(c(s0$ordinal, s2$ordinal, s3$ordinal), c(1L, 2L, 3L))
-  s4 = locate(quote(gptr("count rows")), "count rows")
+  s4 = locate(quote(peter("count rows")), "count rows")
   expect_identical(s4$stmt, c(3L, 3L))
   expect_true(s4$top_level)
-  expect_null(locate(quote(gptr("count rows")), "count rows")$stmt)
+  expect_null(locate(quote(peter("count rows")), "count rows")$stmt)
 })
 
 test_that("a notebook call with a computed prompt is anchored by its call and owns its cell", {
@@ -263,12 +264,12 @@ test_that("a notebook call with a computed prompt is anchored by its call and ow
   ph = prompt_hash("dyn")
   meta = list(gptr = list(id = "abc123", prompt = ph))
   writeLines(json_encode(list(cells = list(cell("c1", "y = 1"),
-                                           cell("c2", "dyn = gptr(paste(\"dy\", \"n\"))"),
+                                           cell("c2", "dyn = peter(paste(\"dy\", \"n\"))"),
                                            cell("gptr-abc123", "n = 1", meta)),
                               metadata = json_obj(), nbformat = 4L, nbformat_minor = 5L)), nb)
   withr::local_options(jupyter.in_kernel = TRUE)
   withr::local_envvar(JPY_SESSION_NAME = nb)
-  call = doc_bare_call(quote(gptr(paste("dy", "n"))), NULL, "dyn")
+  call = doc_bare_call(quote(peter(paste("dy", "n"))), NULL, "dyn")
   site = doc_locate(call)
   expect_identical(site$kind, "jupyter")
   expect_true(site$top_level)
@@ -281,8 +282,8 @@ test_that("a notebook call with a computed prompt is anchored by its call and ow
 test_that("an IDE call is located in the editor buffer at or above the cursor", {
   proj = local_project()
   f = file.path(proj, "ide.R")
-  writeLines(c("gptr(\"count rows\")", "y = 2"), f)
-  buffer = c("gptr(\"count rows\")", "y = 2", "z = gptr(\"count rows\")", "w = 3")
+  writeLines(c("peter(\"count rows\")", "y = 2"), f)
+  buffer = c("peter(\"count rows\")", "y = 2", "z = peter(\"count rows\")", "w = 3")
   focus = new.env()
   focus$console = FALSE
   testthat::local_mocked_bindings(
@@ -296,15 +297,15 @@ test_that("an IDE call is located in the editor buffer at or above the cursor", 
     doc_ide_console_focused = function() focus$console,
     front_end = function() "positron"
   )
-  site = doc_locate(doc_bare_call(quote(gptr("count rows")), "count rows"))
+  site = doc_locate(doc_bare_call(quote(peter("count rows")), "count rows"))
   expect_identical(c(site$kind, site$backend, site$driver, site$ide_id),
                    c("ide", "positron", "ide", "ed1"))
   expect_identical(site$stmt, c(3L, 3L))
   expect_true(site$top_level)
   focus$console = TRUE
-  expect_null(doc_locate(doc_bare_call(quote(gptr("typed at the console")),
+  expect_null(doc_locate(doc_bare_call(quote(peter("typed at the console")),
                                        "typed at the console")))
-  expect_identical(doc_locate(doc_bare_call(quote(gptr("count rows")), "count rows"))$stmt,
+  expect_identical(doc_locate(doc_bare_call(quote(peter("count rows")), "count rows"))$stmt,
                    c(3L, 3L))
 })
 
@@ -339,7 +340,7 @@ test_that("a malformed session or context item never stops the console fallback"
   proj = local_project()
   local_no_running_document()
   local_doc_binding(file.path(proj, ".gptr", "transcripts", "t.R"))
-  call = doc_bare_call(quote(gptr("first prompt")), "first prompt")
+  call = doc_bare_call(quote(peter("first prompt")), "first prompt")
   call$session = new.env()
   call$context = list("mtcars", list(kind = "value", name = "v"),
                       list(kind = "symbol", name = "df"))
@@ -352,13 +353,13 @@ test_that("a malformed session or context item never stops the console fallback"
 test_that("an Rscript run counts a computed prompt per call, whatever its value", {
   proj = local_project()
   f = file.path(proj, "run.R")
-  writeLines(c("q = \"summarise mtcars\"", "a = gptr(q)", "q = \"summarise iris\"", "b = gptr(q)"),
-             f)
+  writeLines(c("q = \"summarise mtcars\"", "a = peter(q)", "q = \"summarise iris\"",
+               "b = peter(q)"), f)
   testthat::local_mocked_bindings(doc_command_args = function() {
     c("/usr/lib/R/bin/exec/R", "--no-echo", "--no-restore", paste0("--file=", f))
   })
-  s1 = doc_locate(doc_bare_call(quote(gptr(q)), "summarise mtcars"))
-  s2 = doc_locate(doc_bare_call(quote(gptr(q)), "summarise iris"))
+  s1 = doc_locate(doc_bare_call(quote(peter(q)), "summarise mtcars"))
+  s2 = doc_locate(doc_bare_call(quote(peter(q)), "summarise iris"))
   expect_identical(c(s1$kind, s2$kind), c("rscript", "rscript"))
   expect_identical(s1$stmt, c(2L, 2L))
   expect_identical(s2$stmt, c(4L, 4L))
@@ -448,11 +449,11 @@ doc_locate_both = function(call) {
 test_that("a call nested in a sourced script is no console turn, with or without srcrefs", {
   proj = local_project()
   f = file.path(proj, "analysis.R")
-  writeLines(c("f = function() gptr(\"inner\")", "inner = f()"), f)
+  writeLines(c("f = function() peter(\"inner\")", "inner = f()"), f)
   # gptr_doc(f) makes f the console transcript target as well (contract 6.4)
   local_doc_binding(f)
   e = new.env()
-  e$gptr = function(prompt, ...) {
+  e$peter = function(prompt, ...) {
     call = new.env(parent = emptyenv())
     call$template = prompt
     call$prompt = prompt
@@ -474,11 +475,11 @@ test_that("a call nested in a sourced script is no console turn, with or without
   # the first finder that sees a running document decides: the editor's buffer, which holds the
   # same call at top level, is not consulted
   g = file.path(proj, "other.R")
-  writeLines("gptr(\"inner\")", g)
+  writeLines("peter(\"inner\")", g)
   testthat::local_mocked_bindings(
     gptr_is_interactive = function() TRUE,
     doc_ide_available = function() TRUE,
-    doc_ide_context = function() list(id = "ed1", path = g, contents = "gptr(\"inner\")"),
+    doc_ide_context = function() list(id = "ed1", path = g, contents = "peter(\"inner\")"),
     doc_ide_console_focused = function() TRUE
   )
   source(f, local = e, keep.source = FALSE)
@@ -489,18 +490,18 @@ test_that("a call nested in a sourced script is no console turn, with or without
 test_that("a call that the running Rscript file or knitted document does not hold is nested", {
   proj = local_project()
   f = file.path(proj, "run.R")
-  writeLines(c("for (i in 1:2) a = gptr(\"count rows\")", "x = helper()"), f)
+  writeLines(c("for (i in 1:2) a = peter(\"count rows\")", "x = helper()"), f)
   local_doc_binding(file.path(proj, ".gptr", "transcripts", "t.R"))
   testthat::local_mocked_bindings(doc_command_args = function() {
     c("/usr/lib/R/bin/exec/R", "--no-echo", "--no-restore", paste0("--file=", f))
   })
   locate = function(sys_call, template) doc_locate_both(doc_bare_call(sys_call, template))
-  s1 = locate(quote(gptr("count rows")), "count rows")
+  s1 = locate(quote(peter("count rows")), "count rows")
   expect_identical(c(s1$site$kind, s1$site$stmt), c("rscript", "1", "1"))
   expect_false(s1$top_level)
   # the loop's second execution, and a call inside helper(): not in a statement of run.R
-  for (s in list(locate(quote(gptr("count rows")), "count rows"),
-                 locate(quote(gptr("inner")), "inner"))) {
+  for (s in list(locate(quote(peter("count rows")), "count rows"),
+                 locate(quote(peter("inner")), "inner"))) {
     expect_identical(c(s$site$kind, s$site$path, s$site$backend),
                      c("rscript", path_norm(f), "deferred"))
     expect_null(s$site$stmt)
@@ -511,7 +512,7 @@ test_that("a call that the running Rscript file or knitted document does not hol
   writeLines(c("```{r}", "x = helper()", "```"), q)
   withr::local_options(knitr.in.progress = TRUE)
   withr::local_envvar(QUARTO_DOCUMENT_PATH = proj, QUARTO_DOCUMENT_FILE = "report.qmd")
-  s = locate(quote(gptr("inner")), "inner")
+  s = locate(quote(peter("inner")), "inner")
   expect_identical(c(s$site$kind, s$site$path, s$site$format), c("quarto", path_norm(q), "qmd"))
   expect_null(s$site$stmt)
   expect_false(s$top_level)
@@ -520,7 +521,7 @@ test_that("a call that the running Rscript file or knitted document does not hol
 test_that("RStudio's sourced copy of the editor buffer is located in the editor, not nested", {
   proj = local_project()
   f = file.path(proj, "analysis.R")
-  buffer = c("x = 1", "site = gptr(\"count rows\")")
+  buffer = c("x = 1", "site = peter(\"count rows\")")
   writeLines("x = 1", f)
   copy = file.path(proj, ".active-rstudio-document")
   writeLines(buffer, copy)
@@ -546,7 +547,7 @@ test_that("a relative Rscript file is found from the launch directory after setw
   skip_on_os("windows")
   proj = local_project()
   f = file.path(proj, "run.R")
-  writeLines(c("a = gptr(\"count rows\")", "setwd(\"sub\")", "b = gptr(\"count rows\")"), f)
+  writeLines(c("a = peter(\"count rows\")", "setwd(\"sub\")", "b = peter(\"count rows\")"), f)
   dir.create(file.path(proj, "sub"))
   testthat::local_mocked_bindings(
     doc_command_args = function() {
@@ -556,7 +557,7 @@ test_that("a relative Rscript file is found from the launch directory after setw
   )
   # R's sh front end exports the launch directory as PWD, which setwd() does not change
   withr::local_envvar(PWD = proj)
-  locate = function() doc_locate(doc_bare_call(quote(gptr("count rows")), "count rows"))
+  locate = function() doc_locate(doc_bare_call(quote(peter("count rows")), "count rows"))
   s1 = locate()
   expect_identical(c(s1$kind, s1$path), c("rscript", path_norm(f)))
   expect_identical(s1$stmt, c(1L, 1L))
@@ -594,21 +595,21 @@ test_that("each step of a pipeline that repeats a prompt in a notebook owns its 
     nb_test_cell(paste0("gptr-", id), "n = 1",
                  list(gptr = list(call = k, id = id, prompt = prompt_hash(prompt))))
   }
-  run = list(nb_test_cell("c2", paste("out = gptr(\"draft\") |> gptr(\"improve it\") |>",
-                                      "gptr(\"improve it\")")),
+  run = list(nb_test_cell("c2", paste("out = peter(\"draft\") |> peter(\"improve it\") |>",
+                                      "peter(\"improve it\")")),
              agent("aaa111", "draft", 1L), agent("bbb222", "improve it", 2L),
              agent("ccc333", "improve it", 3L))
   withr::local_options(jupyter.in_kernel = TRUE)
   locate = function(sys_call, template) doc_locate(doc_bare_call(sys_call, template))
   # the second notebook first holds the repeated prompt in a call of its own, in an earlier cell
-  for (lead in list(list(), list(nb_test_cell("c1", "first = gptr(\"improve it\")")))) {
+  for (lead in list(list(), list(nb_test_cell("c1", "first = peter(\"improve it\")")))) {
     nb = file.path(proj, paste0("chain", length(lead), ".ipynb"))
     nb_test_write(nb, c(lead, run))
     withr::local_envvar(JPY_SESSION_NAME = nb)
     # the outer call runs first and forces the inner ones (as a piped session is forced)
-    s3 = locate(quote(gptr(gptr(gptr("draft"), "improve it"), "improve it")), "improve it")
-    s2 = locate(quote(gptr(gptr("draft"), "improve it")), "improve it")
-    s1 = locate(quote(gptr("draft")), "draft")
+    s3 = locate(quote(peter(peter(peter("draft"), "improve it"), "improve it")), "improve it")
+    s2 = locate(quote(peter(peter("draft"), "improve it")), "improve it")
+    s1 = locate(quote(peter("draft")), "draft")
     info = basename(nb)
     expect_identical(c(s3$kind, s2$kind, s1$kind), rep("jupyter", 3L), info = info)
     expect_identical(c(s3$ordinal, s2$ordinal, s1$ordinal), c(3L, 2L, 1L), info = info)
@@ -617,7 +618,7 @@ test_that("each step of a pipeline that repeats a prompt in a notebook owns its 
     expect_identical(s3$stmt, rep(length(lead) + 1L, 2L), info = info)
   }
   # the call of its own is located in its own cell
-  s0 = locate(quote(gptr("improve it")), "improve it")
+  s0 = locate(quote(peter("improve it")), "improve it")
   expect_identical(c(s0$stmt, s0$ordinal), c(1L, 1L, 1L))
   expect_true(s0$top_level)
   expect_null(s0$block)
@@ -626,7 +627,7 @@ test_that("each step of a pipeline that repeats a prompt in a notebook owns its 
 test_that("a computed prompt equal to a literal prompt elsewhere is located as its own call", {
   proj = local_project()
   f = file.path(proj, "run.R")
-  writeLines(c("q = \"count rows\"", "a = gptr(q)", "b = gptr(\"count rows\")"), f)
+  writeLines(c("q = \"count rows\"", "a = peter(q)", "b = peter(\"count rows\")"), f)
   testthat::local_mocked_bindings(
     doc_command_args = function() {
       c("/usr/lib/R/bin/exec/R", "--no-echo", "--no-restore", paste0("--file=", f))
@@ -635,8 +636,8 @@ test_that("a computed prompt equal to a literal prompt elsewhere is located as i
   )
   locate = function(sys_call) doc_locate(doc_bare_call(sys_call, "count rows"))
   # Rscript: each call counts and owns its own statement
-  s1 = locate(quote(gptr(q)))
-  s2 = locate(quote(gptr("count rows")))
+  s1 = locate(quote(peter(q)))
+  s2 = locate(quote(peter("count rows")))
   expect_identical(c(s1$kind, s2$kind), c("rscript", "rscript"))
   expect_identical(s1$stmt, c(2L, 2L))
   expect_true(is.na(s1$anchor$ph))
@@ -644,23 +645,23 @@ test_that("a computed prompt equal to a literal prompt elsewhere is located as i
   expect_true(s2$top_level)
   # a Quarto chunk (no counter: each call is found by its content alone)
   qmd = file.path(proj, "report.qmd")
-  writeLines(c("```{r}", "q = \"count rows\"", "a = gptr(q)", "b = gptr(\"count rows\")", "```"),
+  writeLines(c("```{r}", "q = \"count rows\"", "a = peter(q)", "b = peter(\"count rows\")", "```"),
              qmd)
   withr::local_options(knitr.in.progress = TRUE)
   withr::local_envvar(QUARTO_DOCUMENT_PATH = proj, QUARTO_DOCUMENT_FILE = "report.qmd")
-  s = locate(quote(gptr(q)))
+  s = locate(quote(peter(q)))
   expect_identical(c(s$kind, s$path), c("quarto", path_norm(qmd)))
   expect_identical(s$stmt, c(3L, 3L))
-  expect_identical(locate(quote(gptr("count rows")))$stmt, c(4L, 4L))
+  expect_identical(locate(quote(peter("count rows")))$stmt, c(4L, 4L))
 })
 
-# No gptr() call is written in this test's code: without srcrefs in the sourced file, the srcref
+# No peter() call is written in this test's code: without srcrefs in the sourced file, the srcref
 # finder searches the frames below, and the test_that() statement of this file is one of them
 test_that("in one statement, a computed prompt equal to a literal prompt is located as itself", {
   proj = local_project()
   local_no_running_document()
   g = file.path(proj, "chain.R")
-  writeLines(c("q = \"count rows\"", "out = gptr(q) |> gptr(\"count rows\")"), g)
+  writeLines(c("q = \"count rows\"", "out = peter(q) |> peter(\"count rows\")"), g)
   for (keep in c(TRUE, FALSE)) {
     e = doc_pipe_env()
     source(g, local = e, keep.source = keep)
@@ -675,7 +676,7 @@ test_that("in one statement, a computed prompt equal to a literal prompt is loca
 test_that("a computed prompt equal to a literal prompt is located in its IDE line and cell", {
   proj = local_project()
   f = file.path(proj, "ide.R")
-  buffer = c("q = \"count rows\"", "a = gptr(q)", "b = gptr(\"count rows\")")
+  buffer = c("q = \"count rows\"", "a = peter(q)", "b = peter(\"count rows\")")
   writeLines(buffer, f)
   testthat::local_mocked_bindings(
     gptr_is_interactive = function() TRUE,
@@ -689,7 +690,7 @@ test_that("a computed prompt equal to a literal prompt is located in its IDE lin
     front_end = function() "rstudio"
   )
   locate = function(sys_call) doc_locate(doc_bare_call(sys_call, "count rows"))
-  s = locate(quote(gptr(q)))
+  s = locate(quote(peter(q)))
   expect_identical(c(s$kind, s$ide_id), c("ide", "ed1"))
   expect_identical(s$stmt, c(2L, 2L))
   expect_true(is.na(s$anchor$ph))
@@ -697,17 +698,17 @@ test_that("a computed prompt equal to a literal prompt is located in its IDE lin
   nb = file.path(proj, "dyn.ipynb")
   meta = list(gptr = list(id = "abc123", prompt = prompt_hash("count rows")))
   nb_test_write(nb, list(nb_test_cell("c1", "q = \"count rows\""),
-                         nb_test_cell("c2", "b = gptr(\"count rows\")"),
-                         nb_test_cell("c3", "a = gptr(q)"),
+                         nb_test_cell("c2", "b = peter(\"count rows\")"),
+                         nb_test_cell("c3", "a = peter(q)"),
                          nb_test_cell("gptr-abc123", "n = 1", meta)))
   withr::local_options(jupyter.in_kernel = TRUE)
   withr::local_envvar(JPY_SESSION_NAME = nb)
-  s = locate(quote(gptr(q)))
+  s = locate(quote(peter(q)))
   expect_identical(c(s$kind, s$path), c("jupyter", path_norm(nb)))
   expect_identical(s$stmt, c(3L, 3L))
   expect_true(is.na(s$anchor$ph))
   expect_identical(s$block$id, "abc123")
-  s = locate(quote(gptr("count rows")))
+  s = locate(quote(peter("count rows")))
   expect_identical(s$stmt, c(2L, 2L))
   expect_null(s$block)
 })
@@ -717,7 +718,7 @@ test_that("a script sourced with chdir = TRUE is found from the directory it was
   local_no_running_document()
   dir.create(file.path(proj, "sub", "sub"), recursive = TRUE)
   f = file.path(proj, "sub", "analysis.R")
-  writeLines(c("x = 1", "site = gptr(\"count rows\")"), f)
+  writeLines(c("x = 1", "site = peter(\"count rows\")"), f)
   for (decoy in c(FALSE, TRUE)) {
     # a file of the same relative name below the new working directory is not the script
     if (decoy) writeLines("x = helper()", file.path(proj, "sub", "sub", "analysis.R"))

@@ -21,7 +21,7 @@ With \code{path = NULL}, the binding \code{list(path, format)} or \code{NULL}, v
 previous binding, invisibly.
 }
 \description{
-\code{gptr_doc(path)} binds every \code{gptr()} call of this R process, at the console and in scripts,
+\code{gptr_doc(path)} binds every \code{peter()} call of this R process, at the console and in scripts,
 to a history document, and is your explicit consent that gptr writes agent blocks into it.
 Nothing is written until a block is recorded. \code{gptr_doc(FALSE)} removes the binding and
 \code{gptr_doc()} shows it. \code{sync = TRUE} writes the blocks that were recorded while the document

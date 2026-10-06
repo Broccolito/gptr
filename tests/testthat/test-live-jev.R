@@ -3,7 +3,7 @@
 # the path with GPTR_JEV_KEY_FILE) and is never printed. About ten requests of about 300 input
 # tokens at $0.042 per million: well below a cent.
 
-test_that("live: Jev answers decisions, choices and scores through gptr()", {
+test_that("live: Jev answers decisions, choices and scores through peter()", {
   skip_if_not(identical(Sys.getenv("GPTR_LIVE_TESTS"), "true"))
   skip_on_cran()
   key_file = Sys.getenv("GPTR_JEV_KEY_FILE", test_path("..", "..", ".secrets", "jev-key.env"))
@@ -27,12 +27,12 @@ test_that("live: Jev answers decisions, choices and scores through gptr()", {
   gptr_config(egress = list(typesafe = "ack"), .scope = "user")
 
   text = "A golden retriever puppy fetched the ball and wagged its tail."
-  hit = if (gptr("Does this text describe a dog?", text, model = jev)) "dog" else "other"
+  hit = if (peter("Does this text describe a dog?", text, model = jev)) "dog" else "other"
   expect_identical(hit, "dog")
 
   texts = c(dog = "A puppy chewed my shoe.", wolf = "A wolf howled at the moon.",
             car = "The car would not start.")
-  d = gptr("Does this text describe a dog?", texts, model = jev)
+  d = peter("Does this text describe a dog?", texts, model = jev)
   expect_identical(class(d), c("gptr_decision", "gptr_s1", "logical"))
   expect_identical(names(d), names(texts))
   expect_true(d[["dog"]])
@@ -49,15 +49,15 @@ test_that("live: Jev answers decisions, choices and scores through gptr()", {
   expect_identical(attr(d, "meta")[c("provider", "api", "execution")],
                    list(provider = "typesafe", api = "typesafe-system-one", execution = "native"))
 
-  animal = gptr("Which animal does the text describe?", texts, model = jev,
+  animal = peter("Which animal does the text describe?", texts, model = jev,
                 choices = c("dog", "wolf", "none"))
   expect_identical(unname(animal[["dog"]] == "dog"), TRUE)
   expect_identical(colnames(gptr_prob(animal, "probabilities")), c("dog", "wolf", "none"))
-  mood = gptr("How positive is the text?", texts, model = jev,
+  mood = peter("How positive is the text?", texts, model = jev,
               levels = c("negative", "neutral", "positive"))
   expect_true(all(as.double(mood) >= 0 & as.double(mood) <= 2))
 
-  again = gptr("Does this text describe a dog?", texts, model = jev)
+  again = peter("Does this text describe a dog?", texts, model = jev)
   expect_true(all(attr(again, "meta")$cached))
 
   key = Sys.getenv("TYPESAFE_API_KEY")
