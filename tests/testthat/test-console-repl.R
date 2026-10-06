@@ -116,3 +116,225 @@ test_that("repl_state() takes the console call's identifiers, options and object
 test_that("console_history_add() never fails", {
   expect_null(console_history_add("a prompt"))
 })
+
+# ---------------------------------------------------------------- Task 5: !expr, notes, mentions
+
+# The console's context blocks for this test unless builtin:console registered them already
+local_console_blocks = function(.env = parent.frame()) {
+  have = registry_names("context_block")
+  for (spec in console_blocks()) {
+    if (spec$name %in% have) next
+    off = gptr_register(spec)
+    withr::defer(off(), envir = .env)
+  }
+  invisible(NULL)
+}
+
+# Context blocks and text of the last user message a fake provider received, named by kind
+last_user_blocks = function(req) {
+  users = Filter(function(m) identical(m$role, "user"), req$messages)
+  content = users[[length(users)]]$content
+  kinds = vapply(content, function(b) if (identical(b$type, "context")) b$kind else b$type, "")
+  stats::setNames(vapply(content, function(b) as.character(b$text %||% ""), ""), kinds)
+}
+
+test_that("notes keep the newest within the token budget and cut one long note", {
+  notes = c("> a\n#> [1] 1", "> b\n#> [1] 2")
+  text = console_notes_text(notes, 300L)
+  expect_match(text, "^The user ran this R code in the session")
+  expect_match(text, "> a\n#> [1] 1\n> b\n#> [1] 2", fixed = TRUE)
+  many = vapply(1:200, function(i) paste0("> x", i, "\n#> [1] ", i), "")
+  text = console_notes_text(many, 300L)
+  expect_lte(est_tokens(text, "r_output"), 300)
+  expect_match(text, "> x200", fixed = TRUE)
+  expect_false(grepl("> x1\n", text, fixed = TRUE))
+  expect_match(text, "earlier omitted", fixed = TRUE)
+  long = paste(c("> big", paste0("#> ", strrep("y", 60), seq_len(200))), collapse = "\n")
+  text = console_notes_text(long, 300L)
+  expect_lte(est_tokens(text, "r_output"), 300)
+  expect_match(text, "#> [... output cut]", fixed = TRUE)
+  expect_null(console_notes_text(character()))
+})
+
+test_that("@mentions: files become <file> blocks, bound names become objects", {
+  root = local_project(files = list("data/notes.txt" = c("line one", "line two")))
+  e = new.env()
+  e$tbl = data.frame(a = 1:3)
+  men = repl_mentions("compare @tbl with @data/notes.txt and mail me@example.org", e)
+  expect_identical(men$objects, "tbl")
+  expect_length(men$files, 1L)
+  expect_match(men$files, "<file path=\"data/notes.txt\">\nline one\nline two\n</file>",
+               fixed = TRUE)
+  expect_identical(repl_mentions("use @c and @nothing", e)$objects, character())
+})
+
+test_that("a binary @file is announced, not inlined", {
+  root = local_project()
+  writeBin(as.raw(c(0x50, 0x00, 0x01)), file.path(root, "blob.bin"))
+  men = repl_mentions("look at @blob.bin", new.env())
+  expect_match(men$files, "binary=\"true\" bytes=\"3\"", fixed = TRUE)
+})
+
+test_that("a long @file is marked truncated even when the first cut line is blank", {
+  root = local_project(files = list("long.R" = c(paste0("l", 1:40), "", paste0("m", 1:10))))
+  block = repl_mentions("see @long.R", new.env())$files
+  expect_match(block, "<file path=\"long.R\" truncated=\"true\">\nl1\n", fixed = TRUE)
+  expect_match(block, "\nl40\n</file>", fixed = TRUE)
+})
+
+test_that("!code runs in the REPL environment and leaves a note; !!code does not", {
+  local_project()
+  e = new.env()
+  e$x = matrix(1:6, 2)
+  rs = repl_state(NULL, e)
+  out = utils::capture.output(repl_passthrough(rs, "!dim(x)"))
+  expect_true("[1] 2 3" %in% out)
+  expect_length(rs$notes, 1L)
+  expect_match(rs$notes, "> dim(x)\n#> [1] 2 3", fixed = TRUE)
+  utils::capture.output(repl_passthrough(rs, "!!y = sum(x)"))
+  expect_identical(e$y, 21L)
+  expect_length(rs$notes, 1L)
+})
+
+test_that("!code errors are shown on stderr and noted", {
+  local_project()
+  rs = repl_state(NULL, new.env())
+  err = utils::capture.output(invisible(utils::capture.output(
+    repl_passthrough(rs, "!stop('boom')"))), type = "message")
+  expect_true(any(grepl("Error: boom", err, fixed = TRUE)))
+  expect_match(rs$notes, "boom", fixed = TRUE)
+})
+
+test_that("the input event (source passthrough) can handle or transform !code", {
+  local_project()
+  e = new.env()
+  rs = repl_state(NULL, e)
+  off = gptr_register(gptr_hook("input", function(event, ctx) {
+    if (!identical(event$source, "passthrough")) return(NULL)
+    if (identical(event$text, "secret()")) return(list(action = "handled", text = ""))
+    list(action = "transform", text = sub("^old", "new_value", event$text))
+  }))
+  withr::defer(off())
+  utils::capture.output(repl_passthrough(rs, "!secret()"))
+  expect_length(rs$notes, 0L)
+  utils::capture.output(repl_passthrough(rs, "!old = 5"))
+  expect_identical(e$new_value, 5)
+})
+
+test_that("!code is announced on the console:direct channel", {
+  local_project()
+  got = new.env(parent = emptyenv())
+  off = gptr_register(gptr_hook("console:direct", function(event, ctx) {
+    got$data = event$data
+    NULL
+  }))
+  withr::defer(off())
+  rs = repl_state(NULL, new.env())
+  utils::capture.output(repl_passthrough(rs, "!1 + 1"))
+  expect_identical(got$data$code, "1 + 1")
+  expect_identical(got$data$status, "ok")
+  expect_true(got$data$noted)
+  expect_true(any(grepl("[1] 2", got$data$output, fixed = TRUE)))
+})
+
+test_that("console_send() makes an ordinary gateway call and continues the session", {
+  local_project()
+  local_console_blocks()
+  fake = gptr_fake_provider(list("first answer", "second answer"))
+  e = new.env()
+  e$x = matrix(1:6, 2)
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  utils::capture.output(repl_passthrough(rs, "!dim(x)"))
+  res = console_send(rs, "how big is it?")
+  expect_identical(res$status, "ok")
+  s = rs$session
+  expect_s3_class(s, "gptr_session")
+  expect_identical(s$text, "first answer")
+  blocks = last_user_blocks(fake_requests(fake)[[1L]])
+  expect_identical(unname(blocks[["text"]]), "how big is it?")
+  expect_match(blocks[["user_ran"]], "> dim(x)\n#> [1] 2 3", fixed = TRUE)
+  expect_length(rs$notes, 0L)
+  console_send(rs, "and now?")
+  expect_identical(rs$session, s)
+  expect_identical(s$turns, 2L)
+  expect_false("user_ran" %in% names(last_user_blocks(fake_requests(fake)[[2L]])))
+  expect_identical(ls(e), "x")
+  expect_null(rs$sending)
+})
+
+test_that("console_send() attaches @objects by name and @files as a block", {
+  local_project(files = list("a.R" = "fit = lm(mpg ~ wt, data = mtcars)"))
+  local_console_blocks()
+  fake = gptr_fake_provider(list("ok"))
+  e = new.env(parent = globalenv())
+  e$my_cars = mtcars
+  rs = repl_state(NULL, e)
+  rs$model = fake
+  console_send(rs, "explain @a.R using @my_cars")
+  blocks = last_user_blocks(fake_requests(fake)[[1L]])
+  expect_match(blocks[["user_files"]], "<file path=\"a.R\">", fixed = TRUE)
+  expect_true("attached" %in% names(blocks))
+  expect_match(blocks[["attached"]], "my_cars", fixed = TRUE)
+  expect_identical(unname(blocks[["text"]]), "explain @a.R using @my_cars")
+})
+
+test_that("console_send() keeps the session of a failed call and reports the error", {
+  local_project()
+  fake = gptr_fake_provider(list(list(error = "bad key", status = 401L, after = 0L)))
+  rs = repl_state(NULL, new.env())
+  rs$model = fake
+  res = console_send(rs, "hello")
+  expect_identical(res$status, "error")
+  expect_s3_class(res$error, "gptr_error")
+  expect_s3_class(rs$session, "gptr_session")
+  expect_identical(rs$session$status, "error")
+})
+
+test_that("!code runs through the eval.r service (the evaluator kind, IC-69)", {
+  local_project()
+  old = the$services
+  withr::defer({
+    the$services = old
+  })
+  seen = new.env(parent = emptyenv())
+  ext_service_set("eval.r", function(code, envir, ...) {
+    seen$code = code
+    seen$args = names(list(...))
+    eval_r(code, envir, ...)
+  }, provided_by = "test")
+  rs = repl_state(NULL, new.env())
+  utils::capture.output(repl_passthrough(rs, "!1 + 1"))
+  expect_identical(seen$code, "1 + 1")
+  expect_setequal(seen$args, c("plots", "tee", "guard"))
+})
+
+test_that("the console call's arguments reach the first prompt, also on a piped session", {
+  local_project()
+  s = peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+  call = list(ids = list(mode = "auto"), args = list(), context = list())
+  rs = repl_state(s, new.env(), call = call)
+  cl = console_call(rs, "go")
+  console_call_release(rs)
+  expect_identical(cl$mode, "auto")
+  expect_identical(cl[[2L]], quote(.gptr_session))
+  cl2 = console_call(rs, "again")
+  console_call_release(rs)
+  expect_null(cl2$mode)
+})
+
+test_that("console_send() passes max_turns from gptr.max_turns_console", {
+  local_project()
+  fake = gptr_fake_provider(list("ok"))
+  rs = repl_state(NULL, new.env())
+  rs$model = fake
+  local_gptr_options(max_turns_console = 7L)
+  got = new.env(parent = emptyenv())
+  off = gptr_register(gptr_context_block("probe_opts", function(ctx, budget) {
+    got$max_turns = ctx$input$opts$max_turns
+    NULL
+  }, placement = "both"))
+  withr::defer(off())
+  console_send(rs, "hello")
+  expect_identical(got$max_turns, 7L)
+})
