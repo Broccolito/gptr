@@ -332,3 +332,448 @@ console_spinner = function(label = "thinking") {
   }
   sp
 }
+
+# ---- renderer hooks ---------------------------------------------------------------------------
+# Rendering subscribes to events (INFRA-27): process-wide notify hooks render runs of foreground
+# sessions at verbosity() >= 2 and report progress on stderr at verbosity 1. `the$console$active`
+# maps a run id to its session from agent_start to agent_end, at any verbosity, because the
+# interrupt policy needs the session of a run (04 gives no accessor from a run to its session).
+
+#' The console's process state (`the$console`, owned by P14): `active` (run id -> record) and
+#' `artifacts` (NS-8 lines queued while a tool executes)
+#' @noRd
+console_state = function() {
+  if (is.null(the$console)) {
+    the$console = new.env(parent = emptyenv())
+    the$console$active = new.env(parent = emptyenv())
+  }
+  the$console
+}
+
+#' Start tracking a run of a session: a record with its session, tool calls and entry count
+#' @noRd
+console_track = function(run_id, session) {
+  rec = new.env(parent = emptyenv())
+  rec$session = session
+  rec$tools = new.env(parent = emptyenv())
+  rec$n0 = length(session_data(session)$entries)
+  assign(run_id, rec, envir = console_state()$active)
+  invisible(rec)
+}
+
+#' The record of the run an event belongs to, or NULL
+#' @noRd
+console_record = function(event) {
+  if (!rlang::is_string(event$run)) return(NULL)
+  get0(event$run, envir = console_state()$active, inherits = FALSE)
+}
+
+#' Forget a run after stopping its spinner
+#' @noRd
+console_drop = function(run_id) {
+  active = console_state()$active
+  rec = get0(run_id, envir = active, inherits = FALSE)
+  if (!is.null(rec)) {
+    console_spinner_stop(rec)
+    rm(list = run_id, envir = active)
+  }
+  invisible(NULL)
+}
+
+#' A foreground session: depth 0, live, not handed to P21's background pump; never while a tool
+#' executes on the stack, whose output P09 captures for the model (nested calls: `details$nested`)
+#' @noRd
+console_foreground = function(rec) {
+  live = session_live(rec$session)
+  !is.null(live) && is.null(live$background) &&
+    identical(session_data(rec$session)$depth, 0L) && is.null(run_current())
+}
+
+#' Render this record on stdout now?
+#' @noRd
+console_render_on = function(rec) {
+  verbosity() >= 2L && console_foreground(rec)
+}
+
+#' Start the spinner of a record, ticked by a reactor task every 0.1 s (03 section 6.17)
+#' @noRd
+console_spinner_start = function(rec) {
+  if (!is.null(rec$task) || !cli::is_dynamic_tty()) return(invisible(NULL))
+  rec$spinner = console_spinner("thinking")
+  rec$task = reactor_task(function() {
+    if (is.null(rec$spinner)) return(FALSE)
+    rec$spinner$tick()
+    0.1
+  })
+  invisible(NULL)
+}
+
+#' Stop the spinner of a record and clear its line
+#' @noRd
+console_spinner_stop = function(rec) {
+  if (!is.null(rec$spinner)) rec$spinner$clear()
+  if (!is.null(rec$task)) reactor_cancel(rec$task)
+  rec$spinner = NULL
+  rec$task = NULL
+  invisible(NULL)
+}
+
+#' End the partial lines of a record (before a tool line, a prompt or the pause menu)
+#' @noRd
+console_pause_one = function(rec) {
+  console_spinner_stop(rec)
+  if (!is.null(rec$think)) rec$think$reset_line()
+  if (!is.null(rec$md)) rec$md$reset_line()
+  invisible(NULL)
+}
+
+#' End the partial lines of every tracked run (the pause menu, approval prompts)
+#' @noRd
+console_render_pause = function() {
+  active = console_state()$active
+  for (id in ls(active, all.names = TRUE)) console_pause_one(get(id, envir = active))
+  invisible(NULL)
+}
+
+#' The text blocks of a message, concatenated
+#' @noRd
+console_msg_text = function(msg) {
+  text = vapply(msg$content %||% list(), function(b) {
+    if (identical(b$type, "text") && rlang::is_string(b$text)) b$text else ""
+  }, "")
+  paste(text, collapse = "")
+}
+
+#' The preview lines of a tool input: its code, its path, its questions, else compact JSON
+#' @noRd
+console_preview = function(input) {
+  text = if (is.character(input$code) && length(input$code)) {
+    paste(input$code, collapse = "\n")
+  } else if (is.character(input$path) && length(input$path)) {
+    input$path[[1L]]
+  } else if (is.list(input$questions)) {
+    paste0(length(input$questions), " question(s)")
+  } else if (length(input)) {
+    tryCatch(json_encode(input), error = function(e) "")
+  } else {
+    ""
+  }
+  strsplit(text, "\n", fixed = TRUE)[[1L]]
+}
+
+#' The default start line of a tool call: "  * r  first line  (+N more lines)" (NS-1)
+#' @noRd
+console_call_line = function(call) {
+  lines = console_preview(call$input)
+  more = if (length(lines) > 1L) paste0("  (+", length(lines) - 1L, " more lines)") else ""
+  paste0("  ", console_symbols()$tool, console_escape(call$name %||% "?", FALSE), "  ",
+         console_escape(c(lines, "")[[1L]], FALSE), more)
+}
+
+#' The default result lines of a tool call: errors, object changes of `r`, the diff of `edit`,
+#' the path of `write`, else the elapsed time when it took a second or more
+#' @noRd
+console_result_lines = function(call, result) {
+  pad = paste0("    ", console_symbols()$result)
+  el = result$elapsed
+  secs = if (isTRUE(el >= 1)) sprintf(" (%.1f s)", el) else ""
+  d = result$details %||% list()
+  if (isTRUE(result$is_error)) {
+    first = c(strsplit(console_msg_text(result), "\n", fixed = TRUE)[[1L]], "failed")[[1L]]
+    return(cli::col_red(paste0(pad, "error: ", console_escape(first, FALSE), secs)))
+  }
+  if (identical(call$name, "r")) {
+    obj = d$objects
+    parts = c(
+      if (length(obj$added)) paste0("+ ", paste(obj$added, collapse = ", ")),
+      if (length(obj$modified)) paste0("~ ", paste(obj$modified, collapse = ", ")),
+      if (length(obj$removed)) paste0("- ", paste(obj$removed, collapse = ", ")),
+      if (isTRUE(d$plots >= 1L)) paste0("[", d$plots, if (d$plots == 1L) " plot]" else " plots]")
+    )
+    if (length(parts)) {
+      return(paste0(pad, console_escape(paste(parts, collapse = "  "), FALSE), secs))
+    }
+  }
+  if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
+    shown = utils::head(d$diff, 12L)
+    lines = paste0("    ", console_escape(shown, FALSE))
+    lines = ifelse(startsWith(shown, "+"), cli::col_green(lines),
+                   ifelse(startsWith(shown, "-"), cli::col_red(lines), lines))
+    more = length(d$diff) - 12L
+    return(c(lines, if (more > 0L) paste0("    (+", more, " more lines)")))
+  }
+  if (identical(call$name, "write") && rlang::is_string(d$path)) {
+    bytes = if (is.numeric(d$bytes)) paste0(" (", format(d$bytes, big.mark = ","), " bytes)")
+    return(paste0(pad, "wrote ", console_escape(d$path, FALSE), bytes, secs))
+  }
+  if (nzchar(secs)) paste0(pad, "done", secs) else character()
+}
+
+#' The console lines of a tool call (`result = NULL`) or of its result, fitted to `width`
+#'
+#' A tool spec's `render(call, result, width)` wins (IC-69), escaped like any untrusted text;
+#' `call` is `list(id, name, input)`, `result` the tool-result message plus `elapsed`.
+#' @noRd
+console_tool_line = function(call, result = NULL, session = NULL, width = cli::console_width()) {
+  out = tryCatch({
+    spec = registry_get("tool", call$name, session = session)
+    if (is.function(spec$render)) spec$render(call, result, width)
+  }, error = function(e) NULL)
+  out = if (is.character(out)) {
+    console_escape(out, FALSE)
+  } else if (is.null(result)) {
+    console_call_line(call)
+  } else {
+    console_result_lines(call, result)
+  }
+  as.character(cli::ansi_strtrim(out, max(20L, as.integer(width))))
+}
+
+#' The status line of a run's end: `  done | 2 turns | 1.2k tokens | $0.0042`; the status and
+#' reason when it did not end idle; an unknown (NA) usage value is unknown (IC-74)
+#' @noRd
+console_status_line = function(status, reason = NULL, usage = NULL, turns = NULL) {
+  word = if (identical(status, "idle")) "done" else console_escape(status %||% "?", FALSE)
+  if (!identical(status, "idle") && rlang::is_string(reason) && nzchar(reason)) {
+    word = paste0(word, ": ", console_escape(reason, FALSE))
+  }
+  cols = c("input", "output", "cache_read", "cache_write_5m", "cache_write_1h")
+  parts = c(word,
+            if (length(turns) == 1L && !is.na(turns)) {
+              paste0(turns, if (turns == 1L) " turn" else " turns")
+            },
+            paste(format_count(unlist(usage[intersect(cols, names(usage))])), "tokens"),
+            format_cost(usage$cost))
+  paste0("  ", paste(parts, collapse = console_symbols()$sep))
+}
+
+#' Show the custom entries appended during a run through `renderer` records (IC-69)
+#' @noRd
+console_render_custom = function(s, n0) {
+  d = session_data(s)
+  ctx = session_live(s)$ctx
+  for (e in d$entries[seq_along(d$entries) > n0]) {
+    if (!identical(e$type, "custom")) next
+    out = tryCatch({
+      spec = registry_get("renderer", e$custom_type, session = d$id)
+      if (is.function(spec$render)) spec$render(e, cli::console_width(), ctx)
+    }, error = function(err) NULL)
+    if (is.character(out)) console_write(console_escape(out, FALSE))
+  }
+  invisible(NULL)
+}
+
+#' agent_start: track the run
+#' @noRd
+console_on_agent_start = function(event, ctx) {
+  s = ctx$session
+  if (inherits(s, "gptr_session") && rlang::is_string(event$run)) console_track(event$run, s)
+  NULL
+}
+
+#' before_request: start the spinner; at verbosity 3 also a request line
+#' @noRd
+console_on_before_request = function(event, ctx) {
+  rec = console_record(event)
+  if (is.null(rec) || !console_render_on(rec)) return(NULL)
+  if (verbosity() >= 3L) {
+    console_pause_one(rec)
+    console_write(cli::col_grey(sprintf(
+      "  request %s -> %s (~%.0f tokens)", console_escape(event$request_id %||% "", FALSE),
+      console_escape(event$model %||% "", FALSE), as.numeric(event$tokens_est %||% 0))))
+  }
+  console_spinner_start(rec)
+  NULL
+}
+
+#' message_update: stream text deltas through the markdown renderer; thinking at verbosity 3
+#' @noRd
+console_on_message_update = function(event, ctx) {
+  rec = console_record(event)
+  delta = event$delta
+  if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
+  kind = event$kind %||% "text"
+  if (identical(kind, "text")) {
+    console_spinner_stop(rec)
+    if (!is.null(rec$think)) rec$think$finish()
+    rec$think = NULL
+    if (is.null(rec$md)) rec$md = render_markdown_stream()
+    rec$md$write(delta)
+  } else if (identical(kind, "thinking") && verbosity() >= 3L) {
+    console_spinner_stop(rec)
+    if (is.null(rec$think)) {
+      console_write(cli::col_grey("  (thinking)"))
+      rec$think = render_markdown_stream()
+    }
+    rec$think$write(delta)
+  }
+  NULL
+}
+
+#' message_end: close the streamed answer, or print it whole when nothing was streamed; for a
+#' tool result, its result lines
+#' @noRd
+console_on_message_end = function(event, ctx) {
+  rec = console_record(event)
+  msg = event$message
+  if (is.null(rec) || !is.list(msg) || !console_render_on(rec)) return(NULL)
+  if (identical(msg$role, "assistant")) {
+    console_spinner_stop(rec)
+    if (!is.null(rec$think)) rec$think$finish()
+    if (is.null(rec$md)) console_print_text(console_msg_text(msg)) else rec$md$finish()
+    rec$think = NULL
+    rec$md = NULL
+  } else if (identical(msg$role, "tool_result")) {
+    call = get0(paste0("t", msg$tool_call_id), envir = rec$tools, inherits = FALSE) %||%
+      list(id = msg$tool_call_id, name = msg$tool_name, input = list())
+    result = c(msg[c("content", "is_error", "details")], list(elapsed = call$elapsed))
+    console_write(console_tool_line(call, result, rec$session))
+  }
+  NULL
+}
+
+#' tool_execution_start: one line per call (verbosity 2) or a progress message (verbosity 1)
+#' @noRd
+console_on_tool_start = function(event, ctx) {
+  rec = console_record(event)
+  if (is.null(rec) || !console_foreground(rec)) return(NULL)
+  call = list(id = event$tool_call_id, name = event$tool_name, input = event$input %||% list())
+  v = verbosity()
+  if (v == 1L) {
+    gptr_inform(paste0("gptr: ", console_escape(call$name %||% "?", FALSE), "  ",
+                       console_escape(c(console_preview(call$input), "")[[1L]], FALSE)),
+                "progress")
+  } else if (v >= 2L) {
+    assign(paste0("t", call$id), call, envir = rec$tools)
+    console_pause_one(rec)
+    console_write(console_tool_line(call, NULL, rec$session))
+  }
+  NULL
+}
+
+#' tool_execution_end: print the artifact lines queued while tools ran, keep the elapsed time
+#' for the result line, report a failure at verbosity 1
+#' @noRd
+console_on_tool_end = function(event, ctx) {
+  console_artifact_flush()
+  rec = console_record(event)
+  if (is.null(rec)) return(NULL)
+  key = paste0("t", event$tool_call_id)
+  call = get0(key, envir = rec$tools, inherits = FALSE)
+  if (!is.null(call)) {
+    call$elapsed = event$elapsed
+    assign(key, call, envir = rec$tools)
+  }
+  if (verbosity() == 1L && isTRUE(event$is_error) && console_foreground(rec)) {
+    gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), " failed"),
+                "progress")
+  }
+  NULL
+}
+
+#' permission_request: end partial lines before the UI asks; never decides and never fails, since
+#' a failing permission_request handler denies (04 section 10.7)
+#' @noRd
+console_on_permission = function(event, ctx) {
+  tryCatch(console_render_pause(), error = function(e) NULL)
+  NULL
+}
+
+#' retry_start: say that a request is retried
+#' @noRd
+console_on_retry = function(event, ctx) {
+  rec = console_record(event)
+  if (is.null(rec) || !console_render_on(rec)) return(NULL)
+  console_pause_one(rec)
+  console_write(cli::col_grey(sprintf("  retrying in %.1f s (%s)",
+                                      as.numeric(event$delay %||% 0),
+                                      console_escape(event$class %||% "error", FALSE))))
+  NULL
+}
+
+#' agent_end: close the streams, show custom entries and the status line, forget the run; queued
+#' artifact lines (an interrupted tool) print last
+#' @noRd
+console_on_agent_end = function(event, ctx) {
+  on.exit(console_artifact_flush(), add = TRUE)
+  rec = console_record(event)
+  if (is.null(rec)) return(NULL)
+  on.exit(console_drop(event$run), add = TRUE)
+  console_spinner_stop(rec)
+  if (!console_foreground(rec)) return(NULL)
+  line = console_status_line(event$status, event$reason, event$usage, event$turns)
+  v = verbosity()
+  if (v == 1L) gptr_inform(paste0("gptr:", sub("^ +", " ", line)), "progress")
+  if (v < 2L) return(NULL)
+  if (!is.null(rec$think)) rec$think$finish()
+  if (!is.null(rec$md)) rec$md$finish()
+  console_render_custom(rec$session, rec$n0)
+  console_write(cli::col_grey(line))
+  NULL
+}
+
+#' artifact_start: the NS-8 line `artifact  <id>  ->  <url>   (running in background)` (IC-71)
+#'
+#' The event usually fires inside the model's `r` code (`peter$app()`), whose output P09's
+#' evaluator captures into the tool result; so while a tool executes the line is queued and the
+#' tool_execution_end hook (or agent_end) prints it once no tool executes on the stack.
+#' @noRd
+console_on_artifact_start = function(event, ctx) {
+  if (verbosity() < 1L) return(NULL)
+  line = paste0("artifact  ", console_escape(event$id %||% "?", FALSE), "  ->  ",
+                console_escape(event$url %||% "?", FALSE), "   (running in background)")
+  if (is.null(run_current())) return(console_artifact_emit(line))
+  st = console_state()
+  st$artifacts = c(st$artifacts, line)
+  NULL
+}
+
+#' Print NS-8 lines: on stdout at verbosity 2 or 3, as progress on stderr at verbosity 1
+#' @noRd
+console_artifact_emit = function(lines) {
+  v = verbosity()
+  if (v == 1L) gptr_inform(lines, "progress")
+  if (v >= 2L) console_write(lines)
+  NULL
+}
+
+#' Print the queued NS-8 lines once no tool executes on the stack
+#' @noRd
+console_artifact_flush = function() {
+  st = console_state()
+  if (!length(st$artifacts) || !is.null(run_current())) return(invisible(NULL))
+  lines = st$artifacts
+  st$artifacts = NULL
+  console_artifact_emit(lines)
+  invisible(NULL)
+}
+
+#' session_shutdown: forget every run of the session
+#' @noRd
+console_on_shutdown = function(event, ctx) {
+  active = console_state()$active
+  for (id in ls(active, all.names = TRUE)) {
+    if (identical(session_data(get(id, envir = active)$session)$id, event$session)) {
+      console_drop(id)
+    }
+  }
+  NULL
+}
+
+#' The renderer hooks builtin_console() registers (04 section 7.14)
+#' @noRd
+console_hooks = function() {
+  list(
+    gptr_hook("agent_start", console_on_agent_start),
+    gptr_hook("before_request", console_on_before_request),
+    gptr_hook("message_update", console_on_message_update),
+    gptr_hook("message_end", console_on_message_end),
+    gptr_hook("tool_execution_start", console_on_tool_start),
+    gptr_hook("tool_execution_end", console_on_tool_end),
+    gptr_hook("permission_request", console_on_permission),
+    gptr_hook("retry_start", console_on_retry),
+    gptr_hook("agent_end", console_on_agent_end),
+    gptr_hook("artifact_start", console_on_artifact_start),
+    gptr_hook("session_shutdown", console_on_shutdown)
+  )
+}

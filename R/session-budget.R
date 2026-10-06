@@ -44,26 +44,6 @@ ledger_empty = function() {
              cached = logical(), stringsAsFactors = FALSE)
 }
 
-#' A short token count: 950, 1.2k, 3.4M ("unknown" when any count is unknown, IC-74); the unit
-#' follows the printed value, so 999.7 is "1.0k"
-#' @noRd
-format_count = function(n) {
-  n = sum(n)
-  if (is.na(n)) return("unknown")
-  if (round(n) < 1000) return(as.character(round(n)))
-  k = sprintf("%.1f", n / 1000)
-  if (as.numeric(k) < 1000) return(paste0(k, "k"))
-  paste0(sprintf("%.1f", n / 1e6), "M")
-}
-
-#' A short cost in USD: "$0.0123"; "unknown cost" when any cost is unknown (IC-74)
-#' @noRd
-format_cost = function(x) {
-  x = sum(x)
-  if (is.na(x)) return("unknown cost")
-  sprintf("$%.4f", x)
-}
-
 # ---------------------------------------------------------------------------- rows and the ledger
 
 #' Add a usage row to the session and every live ancestor (root charging, IC-66)

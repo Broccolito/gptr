@@ -144,3 +144,288 @@ test_that("the interrupt key follows the front end", {
   local_mocked_bindings(front_end = function() "terminal")
   expect_identical(console_interrupt_key(), "Ctrl-C")
 })
+
+# ---------------------------------------------------------------- Task 2: renderer hooks
+
+# A real, idle session that never ran (its prompt waits in the queue): the hooks only read it
+render_session = function(.env = parent.frame()) {
+  local_project(.env = .env)
+  peter("hello", model = gptr_fake_provider(list("ok")), .run = FALSE, envir = new.env())
+}
+
+# Run events through the handlers that console_hooks() registers, capturing stdout
+render_events = function(s, events) {
+  hooks = console_hooks()
+  types = vapply(hooks, function(h) h$event, "")
+  ctx = session_live(s)$ctx
+  utils::capture.output({
+    for (ev in events) {
+      for (h in hooks[types == ev$type]) h$handler(ev, ctx)
+    }
+  })
+}
+
+hook_event = function(type, s, ..., run = "u0000test") {
+  ev_new(type, session = session_data(s)$id, run = run, ...)
+}
+
+assistant_msg = function(text) {
+  msg_assistant(text, api = "fake", provider = "fake", model = "fake-1")
+}
+
+test_that("console_hooks() subscribes the events of contract 7.14", {
+  events = vapply(console_hooks(), function(h) h$event, "")
+  expect_true(all(c("message_update", "message_end", "tool_execution_start",
+                    "tool_execution_end", "agent_end", "artifact_start") %in% events))
+  expect_true(all(vapply(console_hooks(), function(h) inherits(h, "gptr_hook"), NA)))
+})
+
+test_that("a foreground run streams its answer and ends with a status line (verbosity 2)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  out = render_events(s, list(
+    hook_event("agent_start", s),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "Hello **wo"),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "rld** {x}\n"),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("Hello")),
+    hook_event("agent_end", s, status = "idle", reason = NULL, usage = NULL, doc = NULL,
+               turns = 1L)))
+  expect_identical(out, c("Hello **world** {x}", "  done | 1 turn | 0 tokens | $0.0000"))
+  expect_null(console_record(list(run = "u0000test")))
+})
+
+test_that("nothing is printed at verbosity 0 or for a background session", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  s = render_session()
+  events = list(
+    hook_event("agent_start", s),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "quiet"),
+    hook_event("agent_end", s, status = "idle", usage = NULL, turns = 1L))
+  local_gptr_options(verbose = 0L)
+  expect_identical(render_events(s, events), character())
+  local_gptr_options(verbose = 2L)
+  live = session_live(s)
+  live$background = list(id = "s-in-the-background")
+  withr::defer({
+    live$background = NULL
+  })
+  expect_identical(render_events(s, events), character())
+})
+
+test_that("an answer without deltas is printed whole at message_end", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  out = render_events(s, list(
+    hook_event("agent_start", s),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("All at once."))))
+  expect_identical(out, "All at once.")
+})
+
+test_that("tool lines escape the preview and summarise the result (acceptance 7)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  result = msg_tool_result("c1", "r", "ok", details = list(
+    objects = list(added = c("x", "y"), modified = character(), removed = character()),
+    plots = 0L))
+  out = render_events(s, list(
+    hook_event("agent_start", s),
+    hook_event("tool_execution_start", s, tool_call_id = "c1", tool_name = "r",
+               input = list(code = "x = 1 # \033[31mred\ny = 2")),
+    hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
+               elapsed = 2.5, details = list()),
+    hook_event("message_end", s, role = "tool_result", message = result)))
+  expect_identical(out, c("  * r  x = 1 # <U+001B>[31mred  (+1 more lines)",
+                          "    -> + x, y (2.5 s)"))
+  expect_false(any(grepl("\033", out, fixed = TRUE)))
+})
+
+test_that("an error result shows its first line", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  bad = msg_tool_result("c2", "r", "Error: object 'z' not found\nIn: z + 1", is_error = TRUE)
+  out = render_events(s, list(
+    hook_event("agent_start", s),
+    hook_event("tool_execution_start", s, tool_call_id = "c2", tool_name = "r",
+               input = list(code = "z + 1")),
+    hook_event("message_end", s, role = "tool_result", message = bad)))
+  expect_identical(out[[2L]], "    -> error: Error: object 'z' not found")
+})
+
+test_that("a tool's render() function replaces the default lines (IC-69)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  shout = gptr_spec("tool", "shout", description = "Shout a text.",
+                    parameters = list(type = "object",
+                                      properties = list(text = list(type = "string"))),
+                    execute = function(input, ctx) "ok",
+                    render = function(call, result, width) {
+                      if (is.null(result)) paste("SHOUT", call$input$text) else "SHOUTED"
+                    })
+  off = gptr_register(shout)
+  withr::defer(off())
+  call = list(id = "c1", name = "shout", input = list(text = "hi\033"))
+  expect_identical(console_tool_line(call), "SHOUT hi<U+001B>")
+  expect_identical(console_tool_line(call, list(is_error = FALSE)), "SHOUTED")
+})
+
+test_that("artifact_start prints the NS-8 line (acceptance 7)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  ev = ev_new("artifact_start", id = "marker-explorer", url = "http://127.0.0.1:4827",
+              version = 1L)
+  local_gptr_options(verbose = 2L)
+  expect_identical(utils::capture.output(invisible(console_on_artifact_start(ev, NULL))),
+                   "artifact  marker-explorer  ->  http://127.0.0.1:4827   (running in background)")
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  expect_message(console_on_artifact_start(ev, NULL), class = "gptr_message_progress")
+})
+
+test_that("an artifact_start fired while a tool executes prints after tool_execution_end", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  st = console_state()
+  st$artifacts = NULL
+  withr::defer({
+    st$artifacts = NULL
+    console_drop("u0000test")
+  })
+  s = render_session()
+  ctx = session_live(s)$ctx
+  in_tool = structure(new.env(parent = emptyenv()), class = "gptr_run")
+  art = ev_new("artifact_start", id = "marker-explorer", url = "http://127.0.0.1:4827",
+               version = 1L)
+  line = "artifact  marker-explorer  ->  http://127.0.0.1:4827   (running in background)"
+  invisible(utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_tool_start(hook_event("tool_execution_start", s, tool_call_id = "c1",
+                                     tool_name = "r", input = list(code = "a = peter$app()")),
+                          ctx)
+  }))
+  # inside the model's r code (run_current() non-NULL; P09 captures this output): queued; a
+  # nested tool call (peter$<tool>() in that code) ends while the r tool still runs
+  inside = local({
+    local_mocked_bindings(run_current = function() in_tool)
+    utils::capture.output({
+      console_on_artifact_start(art, ctx)
+      invisible(console_on_tool_end(hook_event("tool_execution_end", s, tool_call_id = "n1",
+                                               tool_name = "read", is_error = FALSE,
+                                               elapsed = 0.1, details = list()), ctx))
+    })
+  })
+  expect_identical(inside, character())
+  expect_identical(console_state()$artifacts, line)
+  after = utils::capture.output(invisible(console_on_tool_end(
+    hook_event("tool_execution_end", s, tool_call_id = "c1", tool_name = "r", is_error = FALSE,
+               elapsed = 0.2, details = list()), ctx)))
+  expect_identical(after, line)
+  expect_null(console_state()$artifacts)
+})
+
+test_that("a run's events while a tool executes print nothing (P09 captures that output)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  console_on_agent_start(hook_event("agent_start", s), ctx)
+  withr::defer(console_drop("u0000test"))
+  # a nested peter$read() inside the model's r code
+  local_mocked_bindings(run_current = function() structure(new.env(), class = "gptr_run"))
+  start = hook_event("tool_execution_start", s, tool_call_id = "c1/1", tool_name = "read",
+                     input = list(path = "a.txt"))
+  end = hook_event("tool_execution_end", s, tool_call_id = "c1/1", tool_name = "read",
+                   is_error = TRUE, elapsed = 0.1, details = list())
+  local_gptr_options(verbose = 2L)
+  expect_identical(utils::capture.output(invisible(console_on_tool_start(start, ctx))),
+                   character())
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  expect_no_message(console_on_tool_start(start, ctx))
+  expect_no_message(console_on_tool_end(end, ctx))
+})
+
+test_that("verbosity 1 reports tool calls and the end as progress messages", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 1L, quiet = FALSE)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  console_on_agent_start(hook_event("agent_start", s), ctx)
+  expect_message(
+    console_on_tool_start(hook_event("tool_execution_start", s, tool_call_id = "c1",
+                                     tool_name = "r", input = list(code = "dim(x)")), ctx),
+    "gptr: r  dim(x)", fixed = TRUE)
+  expect_message(
+    console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = NULL, turns = 2L),
+                         ctx),
+    "gptr: done | 2 turns", fixed = TRUE)
+})
+
+test_that("the status line names an unusual end and sums the usage rows", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  usage = data.frame(input = c(1000, 200), output = c(50, 10), cache_read = c(0, 900),
+                     cost = c(0.001, 0.0005))
+  expect_identical(console_status_line("idle", NULL, usage, 3L),
+                   "  done | 3 turns | 2.2k tokens | $0.0015")
+  expect_identical(console_status_line("aborted", "aborted (user)", NULL, 1L),
+                   "  aborted: aborted (user) | 1 turn | 0 tokens | $0.0000")
+  expect_identical(console_status_line("idle", NULL, data.frame(input = 999950), 1L),
+                   "  done | 1 turn | 1.0M tokens | $0.0000")
+  usage$cost[[2L]] = NA
+  usage$output[[1L]] = NA
+  expect_identical(console_status_line("idle", NULL, usage, 3L),
+                   "  done | 3 turns | unknown tokens | unknown cost")
+})
+
+test_that("custom entries of a run are shown through renderer records (IC-69)", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  off = gptr_register(gptr_spec("renderer", "demo.note",
+                                render = function(entry, width, ctx) {
+                                  paste("NOTE:", entry$data$text)
+                                }))
+  withr::defer(off())
+  s = render_session()
+  ctx = session_live(s)$ctx
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    session_append(s, list(type = "custom", custom_type = "demo.note",
+                           data = list(text = "kept \033 safe")))
+    console_on_agent_end(hook_event("agent_end", s, status = "idle", usage = NULL, turns = 0L),
+                         ctx)
+  })
+  expect_identical(out[[1L]], "NOTE: kept <U+001B> safe")
+})
+
+test_that("the spinner runs as a reactor task from before_request to the first delta", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  console_on_agent_start(hook_event("agent_start", s), ctx)
+  rec = console_record(list(run = "u0000test"))
+  console_on_before_request(hook_event("before_request", s, provider = "fake",
+                                       model = "fake/fake-1", request_id = "q1",
+                                       tokens_est = 10), ctx)
+  expect_false(is.null(rec$task))
+  utils::capture.output(console_on_message_update(
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "x"), ctx))
+  expect_null(rec$task)
+  expect_null(rec$spinner)
+  console_drop("u0000test")
+})
+
+test_that("permission_request ends partial lines and never decides", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  ctx = session_live(s)$ctx
+  out = utils::capture.output({
+    console_on_agent_start(hook_event("agent_start", s), ctx)
+    console_on_message_update(hook_event("message_update", s, index = 1L, kind = "text",
+                                         delta = "partial "), ctx)
+    expect_null(console_on_permission(hook_event("permission_request", s), ctx))
+    cat("allow? ")
+  })
+  expect_identical(out, c("partial", "allow? "))
+  console_drop("u0000test")
+})

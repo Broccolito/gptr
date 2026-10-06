@@ -1989,3 +1989,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   amended); plan P19 Task 12 Step 3's P19 service names drop `mcp.serve_ensure`.
 - Tests: test-cli-common.R "request_params ensures gptr's MCP server for a codex session, not for claude".
   Evidence: progress/P19.md Task 2.
+
+## D-164 - P14 console: nothing printed while a tool executes; status line uses format_count/format_cost (2026-10-06)
+- Rule: `console_foreground()` also requires `is.null(run_current())`: a run's events fired while a tool
+  executes on the stack (a nested `peter$<tool>()` in the model's `r` code, P09 capturing) print
+  nothing; nested calls stay in the outer result's `details$nested` (04 section 7.6, 7.14).
+- Rule: `console_status_line()` uses P06's `format_count()`/`format_cost()` (moved unchanged from
+  `session-budget.R` to `utils-tokens.R`, L0), so the unit follows the printed value (D-021).
+- Contract-visible: none.
+- Tests: test-console-render.R "a run's events while a tool executes print nothing (P09 captures that
+  output)" (+3), "the status line names an unusual end and sums the usage rows" (+1).
+  Evidence: progress/P14.md Task 2.
