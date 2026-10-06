@@ -13,8 +13,7 @@ risk_labels = c("read-only", "local", "mutating", "dangerous", "critical")
 risk_base_pkgs = c("base", "stats", "utils", "methods", "graphics", "grDevices", "tools")
 
 # A file-local cache: the merged risk tables keyed by registry generation and the content of the
-# risk_rule records, and the object sizes keyed by address (numbers only, never the objects;
-# copy-safety R1).
+# risk_rule records.
 risk_state = new.env(parent = emptyenv())
 
 # ---- risk tables --------------------------------------------------------------------------
@@ -1737,3 +1736,916 @@ risk_control_env = c("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "G
                      "AWS_BEARER_TOKEN_BEDROCK", "TYPESAFE_API_KEY", "R_ENVIRON_USER",
                      "R_PROFILE_USER", "R_ENVIRON", "R_PROFILE")
 risk_control_env_re = "^GPTR_|_BASE_URL\\z"
+
+# ---- the R classifier (03 section 6.8.1, D-132) ---------------------------------------------
+
+risk_arrow = paste0("<", "-")
+risk_assign_ops = c(risk_arrow, "=", "<<-")
+# The gateway object of the member namespace (04 section 9.4).
+risk_gateway = "peter"
+# Syntax and control flow: never flagged (the calls inside are still read).
+risk_plan_syntax = c("{", "(", risk_arrow, "=", "if", "for", "while", "repeat", "function",
+                     "return", "break", "next", "switch", "[", "[[", "$", "@", "::", "~",
+                     "<lambda>")
+risk_quoting_funs = c("quote", "bquote", "expression", "substitute", "~", "alist")
+# Function slots: formals whose argument is called in any call R can match, and the slots of
+# functions whose formal name is ambiguous or whose namespace may not be loaded (formal, position).
+risk_slot_names = c("FUN", ".f", ".fn", ".fns", "func", ".p", ".else", "rhs")
+risk_hof_args = list(
+  Map = c("f", "1"), Reduce = c("f", "1"), Filter = c("f", "1"), Find = c("f", "1"),
+  Position = c("f", "1"), Negate = c("f", "1"), do.call = c("what", "1"), `%>%` = c("rhs", "2"),
+  map = c(".f", "2"), map2 = c(".f", "3"), pmap = c(".f", "2"), walk = c(".f", "2"),
+  walk2 = c(".f", "3"), pwalk = c(".f", "2"), imap = c(".f", "2"), iwalk = c(".f", "2"),
+  map_chr = c(".f", "2"), map_lgl = c(".f", "2"), map_dbl = c(".f", "2"), map_int = c(".f", "2"),
+  map_df = c(".f", "2"), map_dfr = c(".f", "2"), keep = c(".p", "2"), discard = c(".p", "2"),
+  every = c(".p", "2"), some = c(".p", "2"), reduce = c(".f", "2"), across = c(".fns", "2"),
+  if_any = c(".fns", "2"), if_all = c(".fns", "2"), future_lapply = c("FUN", "2"),
+  future_map = c(".f", "2"), mclapply = c("FUN", "2"), parLapply = c("fun", "3"),
+  parSapply = c("FUN", "3"), clusterCall = c("fun", "2"), later = c("func", "1"),
+  rapply = c("f", "2"), optim = c("fn", "2"), optimize = c("f", "1"), optimise = c("f", "1"),
+  uniroot = c("f", "1")
+)
+# Handlers: every `...` argument of these is called.
+risk_handler_funs = c("tryCatch", "withCallingHandlers")
+# Lookups whose `dynamic` row stands for a name the code computes (formal, position).
+risk_lookups = list(get = c("x", "1"), get0 = c("x", "1"), mget = c("x", "1"),
+                    match.fun = c("FUN", "1"), getFromNamespace = c("x", "1"),
+                    getExportedValue = c("name", "2"), do.call = c("what", "1"),
+                    exec = c(".fn", "1"), invoke = c(".f", "1"))
+# Namespace accessors and their namespace formal (IC-53: "gptr" is control, a computed one is
+# dynamic); environment getters of a function reach gptr's namespace through a gptr function.
+risk_ns_funs = c(`:::` = "pkg", asNamespace = "ns", getNamespace = "name", .getNamespace = "name",
+                 loadNamespace = "package", getNamespaceInfo = "ns", getFromNamespace = "ns",
+                 fixInNamespace = "ns", assignInNamespace = "ns", getExportedValue = "ns",
+                 ns_env = "x")
+risk_env_funs = c(environment = "fun", topenv = "envir", fn_env = "fn", get_env = "env")
+# Arguments that are code in another language (formal, position, language): a literal is read
+# by the command or SQL classifier, a computed one keeps the row (at least 3).
+risk_code_args = list(
+  system = c("command", "1", "sh"), shell = c("cmd", "1", "sh"), pipe = c("description", "1", "sh"),
+  system2 = c("command", "1", "sh"), run = c("command", "1", "argv"), fread = c("cmd", "0", "sh"),
+  dbGetQuery = c("statement", "2", "sql"), dbSendQuery = c("statement", "2", "sql"),
+  dbExecute = c("statement", "2", "sql"), dbSendStatement = c("statement", "2", "sql")
+)
+# Calls whose effect on the workspace the walk cannot name (targets$unknown, IC-31).
+risk_unknown_funs = c("load", "list2env", "attach", "eval", "evalq", "local", "with", "within",
+                      "sys.function", "attachNamespace", "makeActiveBinding", "delayedAssign",
+                      "source", "sys.source")
+
+#' Classify the risk of R code without running it
+#'
+#' `gptr_risk()` is the advisory static classifier behind gptr's permission prompts. It reads
+#' `code` without evaluating it and labels each effect it can see with a level from 0 (known
+#' read-only) to 4 (critical) and a category (`read`, `object_write`, `file_write`,
+#' `file_delete`, `network`, `process`, `install`, `dynamic`, `session`, `secret`,
+#' `interactive`, `critical`, `control`, plus `unlisted` for functions the risk tables do not
+#' list). Level 0 is only what the tables know to be read-only; code whose function is computed
+#' at run time is level 3. It cannot see S4 methods, compiled code, package load hooks
+#' or the files `source()` reads: it decides when gptr asks you, it is not a security boundary.
+#'
+#' Paths are classified relative to `root` (`workspace`, `temp`, `outside`, `protected`,
+#' `control`, `instructions`, `critical`, `url`, `wildcard`, `unknown`). Calls of
+#' `peter$sh()`, `system()`, `system2()` and `processx::run()` with literal commands are
+#' classified with the command table (`inst/extdata/risk-commands.csv`), `peter$sql()` by its
+#' statements and `peter$py()` by a token scan. Plugins and users extend both tables with
+#' `risk_rule` records.
+#'
+#' @param code R code: a character vector, a call or an expression.
+#' @param envir `NULL` or the environment the code would run in. When given, assignments to
+#'   existing bindings are reported as overwrites with their size (`object.size()` in a leaf;
+#'   promises and active bindings are never forced) and user-defined functions called by the
+#'   code are classified through their bodies.
+#' @param root The project root used for path classes; `NULL` means the current project root.
+#' @return A `gptr_risk` object: a list with `level` (integer 0-4), `label`, `categories`,
+#'   `flagged` (a data frame with columns `call`, `fn`, `level`, `category`, `path`,
+#'   `path_class`), `paths`, `secret`, `secret_guard`, `assigned`, `dynamic`, and the additive
+#'   fields `sizes` (bytes of overwritten objects, by name), `secrets` (guarded secret names),
+#'   `kind` and `parse_error`.
+#' @examples
+#' gptr_risk("unlink('data', recursive = TRUE)")$level
+#' gptr_risk("summary(mtcars)")
+#' e = new.env()
+#' e$df = data.frame(a = 1:3)
+#' gptr_risk("df = head(df, 2)", envir = e)$flagged
+#' @export
+gptr_risk = function(code, envir = NULL, root = NULL) {
+  risk_check_code(code)
+  check_env(envir, "envir", null = TRUE)
+  check_string(root, "root", null = TRUE)
+  risk_classify(code, envir = envir, root = root, kind = "r")
+}
+
+#' The `risk.classify` service: classify R code, a shell command, SQL or Python
+#' @noRd
+risk_classify = function(code, envir = NULL, root = NULL,
+                         kind = c("r", "command", "sql", "python")) {
+  kind = check_choice(kind, c("r", "command", "sql", "python"), "kind")
+  root = root %||% project_root()
+  if (identical(kind, "r")) return(risk_classify_r(code, envir, root))
+  text = risk_code_text(code)
+  flags = switch(kind, command = risk_command(text, root),
+                 sql = risk_sql(paste(text, collapse = "\n"), root),
+                 python = risk_python(paste(text, collapse = "\n"), root))
+  risk_new(flags, kind = kind)
+}
+
+#' Validate the code argument of gptr_risk()
+#' @noRd
+risk_check_code = function(code) {
+  ok = is.character(code) || is.call(code) || is.expression(code) || is.name(code)
+  if (!ok || (is.character(code) && anyNA(code))) {
+    gptr_abort("`code` must be R code as a character vector, a call or an expression.",
+               "invalid_argument", arg = "code",
+               expected = "R code (character, call or expression)")
+  }
+  invisible(code)
+}
+
+#' Code as text: UTF-8 strings, or a call or an expression deparsed
+#' @noRd
+risk_code_text = function(code) {
+  if (is.character(code)) return(as_utf8(code))
+  unlist(lapply(as.list(as.expression(code)), deparse, width.cutoff = 500L))
+}
+
+#' Parse code as P09's evaluator does (CR line ends read as LF), keeping srcrefs for line numbers
+#' @noRd
+risk_parse = function(code) {
+  if (!is.character(code)) return(list(exprs = as.expression(code), error = NULL))
+  res = eval_parse(paste(as_utf8(code), collapse = "\n"))
+  if (inherits(res, "error")) return(list(exprs = NULL, error = conditionMessage(res)))
+  list(exprs = res, error = NULL)
+}
+
+#' Classify R code: the parse walk plus P03's secret rules (a walk that fails is level 3)
+#' @noRd
+risk_classify_r = function(code, envir, root) {
+  parsed = risk_parse(code)
+  if (!is.null(parsed$error)) {
+    out = risk_new(risk_flags_empty())
+    out$label = "invalid"
+    out$parse_error = parsed$error
+    return(out)
+  }
+  scan = tryCatch(risk_scan(parsed$exprs, envir = envir, root = root), error = function(e) {
+    list(flags = risk_flags_row("code nested too deeply for gptr to read", "", 3L, "dynamic"),
+         sizes = numeric())
+  })
+  sec = risk_secret_scan(gsub("\r\n?", "\n", paste(risk_code_text(code), collapse = "\n")))
+  fl = sec$findings
+  flags = scan$flags
+  if (nrow(fl)) {
+    flags = risk_flags_bind(flags, risk_flags_row(trimws(paste(fl$rule, fl$name)), fl$rule,
+                                                  fl$level, "secret"))
+  }
+  out = risk_new(flags, assigned = c(scan$targets$assign, sec$assigned), sizes = scan$sizes)
+  out$secret_guard = isTRUE(sec$guard)
+  out$secrets = unique(as.character(fl$name[fl$rule == "secret_env_registered"]))
+  out
+}
+
+#' P03's secret scan with a safe fallback shape
+#' @noRd
+risk_secret_scan = function(text, tainted = character()) {
+  empty = list(findings = data.frame(rule = character(), name = character(), level = integer(),
+                                     guard = logical(), stringsAsFactors = FALSE),
+               level = 0L, guard = FALSE, assigned = character())
+  res = tryCatch(secret_scan(text, tainted = tainted), error = function(e) NULL)
+  if (is.null(res) || !is.data.frame(res$findings)) return(empty)
+  res
+}
+
+#' Build a gptr_risk object from flag rows
+#' @noRd
+risk_new = function(flags, kind = "r", assigned = character(), sizes = numeric()) {
+  lv = if (nrow(flags)) max(flags$level) else 0L
+  if (lv < 1L && length(assigned)) lv = 1L
+  lv = as.integer(min(max(lv, 0L), 4L))
+  hot = flags[flags$level >= 1L, , drop = FALSE]
+  structure(list(level = lv, label = risk_labels[lv + 1L], categories = unique(hot$category),
+                 flagged = flags, paths = unique(flags$path[!is.na(flags$path)]),
+                 secret = "secret" %in% hot$category, secret_guard = FALSE,
+                 assigned = unique(assigned), dynamic = "dynamic" %in% hot$category,
+                 sizes = sizes, secrets = character(), kind = kind, parse_error = NULL),
+            class = "gptr_risk")
+}
+
+#' Normalise a tool risk (a gptr_risk, list(level, categories, paths) or NULL) to a gptr_risk
+#'
+#' A NULL risk is level 0 for tools annotated read-only, else 2 (contract section 9.1); a
+#' malformed level is 3, as in P06's call_risk().
+#' @noRd
+risk_norm = function(risk, tool = NULL) {
+  if (inherits(risk, "gptr_risk")) return(risk)
+  if (is.null(risk)) {
+    ro = isTRUE(tool$annotations$read_only) || isTRUE(tool$annotations$readOnlyHint)
+    risk = list(level = if (ro) 0L else 2L, categories = if (ro) "read" else "unlisted")
+  }
+  lv = suppressWarnings(as.integer(risk$level %||% 2L))
+  if (length(lv) != 1L || is.na(lv)) lv = 3L
+  out = risk_new(risk_flags_empty(), kind = "tool")
+  out$level = as.integer(min(max(lv, 0L), 4L))
+  out$label = risk_labels[out$level + 1L]
+  out$categories = as.character(risk$categories %||% character())
+  out$paths = as.character(risk$paths %||% character())
+  out$secret_guard = isTRUE(risk$secret_guard)
+  out$secrets = as.character(risk$secrets %||% character())
+  out
+}
+
+#' Format a gptr_risk
+#'
+#' @param x A `gptr_risk` object.
+#' @param ... Unused.
+#' @return `format()` returns a character vector: the level line, then one line per flagged
+#'   call (control, bidi and zero-width characters escaped); `print()` returns `x` invisibly.
+#' @examples
+#' r = gptr_risk("x = 1; unlink('data', recursive = TRUE)")
+#' format(r)
+#' print(r)
+#' @export
+format.gptr_risk = function(x, ...) {
+  if (identical(x$label, "invalid")) {
+    return(paste0("invalid R code: ", risk_escape(x$parse_error %||% "")))
+  }
+  out = paste0("risk ", x$level, " (", x$label, ")")
+  f = x$flagged[x$flagged$level >= 1L, , drop = FALSE]
+  if (nrow(f)) {
+    f = f[order(-f$level), , drop = FALSE]
+    where = ifelse(is.na(f$path_class), "", paste0(" [path: ", f$path_class, "]"))
+    out = c(out, paste0("  [", f$level, "] ", formatC(f$category, width = -12L), " ",
+                        risk_escape(f$call), where))
+  }
+  created = setdiff(x$assigned, names(x$sizes))
+  if (length(created)) {
+    out = c(out, paste0("  creates: ", paste(risk_escape(created), collapse = ", ")))
+  }
+  out
+}
+
+#' @rdname format.gptr_risk
+#' @export
+print.gptr_risk = function(x, ...) {
+  cat(format(x), sep = "\n")
+  invisible(x)
+}
+
+#' Escape control (except TAB), bidi and zero-width characters for display as <U+XXXX>
+#'
+#' console-ui.R keeps its own copy because a front-end file may not call a capability file
+#' (architecture section 2.2).
+#' @noRd
+risk_escape = function(x) {
+  vapply(as_utf8(as.character(x)), function(s) {
+    cp = utf8ToInt(s)
+    if (anyNA(cp)) return(iconv(s, "UTF-8", "ASCII", sub = "byte"))
+    bad = (cp <= 0x1F & cp != 0x09) | (cp >= 0x7F & cp <= 0x9F) | cp == 0x061C |
+      (cp >= 0x200B & cp <= 0x200F) | (cp >= 0x202A & cp <= 0x202E) |
+      (cp >= 0x2060 & cp <= 0x2069) | cp == 0xFEFF
+    out = vapply(cp, intToUtf8, character(1))
+    out[bad] = sprintf("<U+%04X>", cp[bad])
+    paste(out, collapse = "")
+  }, character(1), USE.NAMES = FALSE)
+}
+
+# ---- the environment the code would run in (never forcing promises; R4) --------------------
+
+#' Where a call head resolves: "fun" (with pkg, or user = TRUE and the function's code), "lazy"
+#' (a promise or an active binding) or "none"
+#' @noRd
+risk_fn_where = function(name, envir) {
+  e = envir %||% globalenv()
+  while (!identical(e, emptyenv())) {
+    if (exists(name, envir = e, inherits = FALSE)) {
+      pkg_env = isNamespace(e) || identical(e, baseenv()) ||
+        startsWith(environmentName(e), "package:")
+      if (bindingIsActive(name, e) ||
+          (!pkg_env && isTRUE(rlang::env_binding_are_lazy(e, name)))) return(list(kind = "lazy"))
+      if (exists(name, envir = e, mode = "function", inherits = FALSE)) {
+        f = get(name, envir = e, mode = "function", inherits = FALSE)
+        top = if (is.primitive(f)) baseenv() else topenv(environment(f))
+        if (identical(top, baseenv())) return(list(kind = "fun", pkg = "base"))
+        if (isNamespace(top)) return(list(kind = "fun", pkg = getNamespaceName(top)[[1L]]))
+        return(list(kind = "fun", user = TRUE, code = call("function", formals(f), body(f))))
+      }
+    }
+    e = parent.env(e)
+  }
+  list(kind = "none")
+}
+
+#' Class and size of an existing binding the code overwrites, or NULL
+#'
+#' The object is only ever an argument of the closure-free leaf risk_binding_leaf(): a frame
+#' that held it and created a handler would keep it referenced (copy-safety R4).
+#' @noRd
+risk_binding_info = function(name, envir) {
+  e = envir
+  while (!identical(e, emptyenv()) && !isNamespace(e) && !identical(e, baseenv()) &&
+         !startsWith(environmentName(e), "package:")) {
+    if (exists(name, envir = e, inherits = FALSE)) {
+      if (bindingIsActive(name, e)) return(list(class = "<active>", bytes = NA_real_))
+      if (isTRUE(rlang::env_binding_are_lazy(e, name))) {
+        return(list(class = "<promise>", bytes = NA_real_))
+      }
+      return(risk_binding_leaf(get(name, envir = e, inherits = FALSE)))
+    }
+    if (identical(e, globalenv())) break
+    e = parent.env(e)
+  }
+  NULL
+}
+
+#' Class and bytes of an object (the closure-free leaf)
+#' @noRd
+risk_binding_leaf = function(obj) {
+  list(class = class(obj)[1L], bytes = as.numeric(utils::object.size(obj)))
+}
+
+#' risk_binding_info() with errors caught one frame up
+#' @noRd
+risk_binding_safe = function(name, envir) {
+  tryCatch(risk_binding_info(name, envir),
+           error = function(e) list(class = "<unknown>", bytes = NA_real_))
+}
+
+#' A byte count for display
+#' @noRd
+risk_bytes = function(b) {
+  if (is.na(b)) return("size unknown")
+  u = c("B", "KB", "MB", "GB", "TB")
+  i = if (b < 1) 1L else min(length(u), floor(log(b, 1024)) + 1L)
+  paste(format(round(b / 1024^(i - 1L), 1), trim = TRUE), u[i])
+}
+
+# ---- arguments and paths -------------------------------------------------------------------
+
+#' The arguments of call `e` by formal name, as R matches them when the function's namespace is
+#' loaded (attribute `formals`); else as written. An empty argument is NULL, in place.
+#' @noRd
+risk_args = function(e, fn, pkg) {
+  e[vapply(as.list(e), identical, NA, quote(expr = ))] = list(NULL)
+  f = if (!is.na(pkg) && isNamespaceLoaded(pkg)) {
+    get0(fn, envir = asNamespace(pkg), mode = "function")
+  }
+  if (is.primitive(f)) f = args(f)
+  m = if (is.function(f)) {
+    tryCatch(as.list(match.call(f, e, expand.dots = FALSE))[-1L], error = function(err) NULL)
+  }
+  if (is.null(m)) return(as.list(e)[-1L])
+  structure(m, formals = formals(f))
+}
+
+#' The expression a call passes for formal `name` (its default when R matched the call and
+#' `default` is set); for an unmatched call, else its `pos`-th unnamed argument
+#' @noRd
+risk_arg = function(a, name, pos = 0L, default = FALSE) {
+  nms = names(a) %||% rep("", length(a))
+  if (name %in% nms) return(a[[match(name, nms)]])
+  fm = attr(a, "formals")
+  if (!is.null(fm)) return(if (default && !identical(fm[[name]], quote(expr = ))) fm[[name]])
+  un = a[!nzchar(nms)]
+  if (pos >= 1L && length(un) >= pos) un[[pos]]
+}
+
+#' The expressions a call may pass as its path argument: the matched one; for `...` rows, a
+#' wrapper that passes `...` on or a call R cannot match, every unnamed argument
+#' @noRd
+risk_path_exprs = function(a, arg) {
+  v = if (arg != "...") risk_arg(a, arg, default = TRUE)
+  if (!is.null(v)) return(list(v))
+  nms = names(a) %||% rep("", length(a))
+  as.list(a[["..."]] %||% a[!nzchar(nms)])
+}
+
+#' A path expression built from literals, folded; NULL when the code computes it, "" for the
+#' console (tempdir() and tempfile() are this session's)
+#' @noRd
+risk_fold = function(x) {
+  if (is.character(x)) return(x)
+  if (!is.call(x) || !is.symbol(x[[1L]])) return(NULL)
+  fn = as.character(x[[1L]])
+  a = as.list(x)[-1L]
+  if (fn %in% c("stdout", "stderr")) return("")
+  if (fn == "tempdir") return(tempdir())
+  if (fn == "tempfile") {
+    dir = risk_fold(risk_arg(risk_args(x, fn, "base"), "tmpdir", 2L, default = TRUE))
+    return(if (!is.null(dir)) file.path(dir, "file"))
+  }
+  if (!fn %in% c("c", "file.path", "paste0", "paste", "path.expand", "normalizePath")) return()
+  sep = a$sep %||% " "
+  a$sep = NULL
+  parts = lapply(unname(a), risk_fold)
+  if (!is.character(sep) || any(vapply(parts, is.null, logical(1)))) return(NULL)
+  switch(fn, c = unlist(parts), file.path = do.call(file.path, parts),
+         paste0 = do.call(paste0, parts), paste = do.call(paste, c(parts, sep = sep)),
+         parts[[1L]])
+}
+
+#' The class of one literal path read, written or deleted by a call of `category`
+#' @noRd
+risk_path_cls = function(p, category, root) {
+  risk_target(p, switch(category, read = "read", file_delete = "delete", "write"), root)$pc
+}
+
+#' The worst of several path classes
+#' @noRd
+risk_cmd_worst = function(pcs) {
+  rank = c("console", "temp", "workspace", "unknown", "wildcard", "url", "outside",
+           "instructions", "protected", "critical", "control")
+  unname(pcs[which.max(match(pcs, rank, nomatch = 4L))])
+}
+
+#' Level of a path-carrying call (03 section 6.8.1; a write to a path the code computes keeps
+#' the row's 2, a download's destination is a write)
+#' @noRd
+risk_path_level = function(category, level, pclass) {
+  if (identical(category, "file_delete")) return(risk_op_level(pclass, "delete"))
+  if (identical(category, "read")) return(max(level, risk_op_level(pclass, "read")))
+  write = if (identical(pclass, "unknown")) 2L else risk_op_level(pclass, "write")
+  if (identical(category, "file_write")) return(if (write == 2L) level else write)
+  max(level, if (write > 2L) write else 0L)
+}
+
+# ---- the parse walk -------------------------------------------------------------------------
+
+#' A call head: list(name, pkg, how) with how in direct, ns, member, lambda, computed
+#' @noRd
+risk_head = function(h) {
+  str = function(x) if (is.symbol(x) || (is.character(x) && length(x) == 1L)) as.character(x)
+  nm = str(h)
+  if (!is.null(nm)) {
+    if (grepl("^[A-Za-z.][A-Za-z0-9._]*:::?[^:]", nm)) {
+      return(list(name = sub("^.*:::?", "", nm), pkg = sub(":::?.*", "", nm), how = "ns"))
+    }
+    return(list(name = nm, pkg = NA_character_, how = "direct"))
+  }
+  op = if (is.call(h)) str(h[[1L]]) %||% "" else ""
+  if (op %in% c("::", ":::") && !is.null(str(h[[2L]])) && !is.null(str(h[[3L]]))) {
+    return(list(name = str(h[[3L]]), pkg = str(h[[2L]]), how = "ns"))
+  }
+  if (op == "(") return(risk_head(h[[2L]]))
+  if (op == "function") return(list(name = "<lambda>", pkg = NA_character_, how = "lambda"))
+  if (op %in% c("$", "[[") && !is.null(str(h[[3L]]))) {
+    lhs = h[[2L]]
+    gw = identical(lhs, as.name(risk_gateway)) ||
+      (is.call(lhs) && identical(str(lhs[[1L]]), "::") && identical(str(lhs[[3L]]), risk_gateway))
+    inner = if (!gw && is.call(lhs)) risk_head(lhs)
+    if (gw || identical(inner$how, "member")) {
+      return(list(name = paste0(if (!gw) paste0(inner$name, "$"), str(h[[3L]])),
+                  pkg = "gptr", how = "member"))
+    }
+  }
+  list(name = "<computed>", pkg = NA_character_, how = "computed")
+}
+
+#' Names the code binds: functions it defines (`fun`), names bound to values the code computes
+#' (`val`: formals, loop variables, results of calls, roots of replacement calls) and all
+#' @noRd
+risk_bound = function(exprs) {
+  fun = character()
+  val = character()
+  all = character()
+  visit = function(e) {
+    if (!is.call(e)) return(invisible())
+    h = if (is.symbol(e[[1L]])) as.character(e[[1L]]) else ""
+    if (h %in% risk_assign_ops && length(e) == 3L) {
+      lhs = e[[2L]]
+      while (is.call(lhs) && length(lhs) >= 2L) lhs = lhs[[2L]]
+      nm = if (is.symbol(lhs)) as.character(lhs)
+      rhs = e[[3L]]
+      if (!is.call(e[[2L]])) all <<- c(all, nm)
+      if (is.call(e[[2L]]) || is.call(rhs) || is.symbol(rhs)) {
+        if (is.call(rhs) && identical(rhs[[1L]], as.name("function")) && !is.call(e[[2L]])) {
+          fun <<- c(fun, nm)
+        } else {
+          val <<- c(val, nm)
+        }
+      }
+    }
+    if (h == "for" && is.symbol(e[[2L]])) val <<- c(val, as.character(e[[2L]]))
+    if (h == "function") val <<- c(val, names(e[[2L]]))
+    if (h %in% c("for", "function")) all <<- c(all, val)
+    xs = as.list(e)
+    for (i in seq_along(xs)) if (!identical(xs[[i]], quote(expr = ))) visit(xs[[i]])
+  }
+  for (x in as.list(exprs)) visit(x)
+  list(fun = setdiff(fun, val), val = unique(val), all = unique(c(all, fun)))
+}
+
+#' The one parse walk (IC-31): list(flags, targets, calls, sizes)
+#' @noRd
+risk_scan = function(exprs, envir = NULL, root = project_root(), depth = 2L) {
+  flags = list()
+  sizes = numeric()
+  tg = list(assign = character(), modify = character(), byref = character(),
+            remove = character(), super = character(), files = character(),
+            unknown = character(), process = character())
+  calls = list(fn = character(), package = character(), line = integer())
+  bound = risk_bound(exprs)
+  env_names = NULL
+  protect = gptr_opt("protect_size") %||% 1e8
+  computed = as.name("<computed>")
+
+  add = function(ctx, call, fn, level, category, path = NA_character_, pclass = NA_character_) {
+    if (ctx$quote) level = min(level, 2L)
+    if (level > 0L) {
+      flags[[length(flags) + 1L]] <<- risk_flags_row(call, fn, level, category, path, pclass)
+    }
+  }
+  add_rows = function(df, ctx, fn = NULL, prefix = "") {
+    if (!nrow(df)) return(invisible())
+    if (!is.null(fn)) df$fn = fn
+    df$call = paste0(prefix, df$call)
+    if (ctx$quote) df$level = pmin(df$level, 2L)
+    flags[[length(flags) + 1L]] <<- df
+  }
+  add_tg = function(field, v) tg[[field]] <<- c(tg[[field]], v)
+  add_call = function(fn, pkg, line) {
+    calls$fn <<- c(calls$fn, fn)
+    calls$package <<- c(calls$package, pkg)
+    calls$line <<- c(calls$line, line)
+  }
+  text = function(e) {
+    t = deparse(e, width.cutoff = 80L, nlines = 1L)[1L]
+    if (nchar(t) > 80L) paste0(substr(t, 1L, 77L), "...") else t
+  }
+  # A user function's code, read one level deeper (FALSE when too deep).
+  read_user = function(code, label, ctx) {
+    if (depth <= 0L) return(FALSE)
+    s = risk_scan(as.expression(list(code)), envir, root, depth - 1L)
+    add_rows(s$flags, ctx, prefix = label)
+    TRUE
+  }
+  # User S3 methods of a generic the code calls (`print.evil` for print()).
+  user_s3 = function(gen, ctx) {
+    if (is.null(envir) || !grepl("^[A-Za-z.][A-Za-z0-9._]*\\z", gen, perl = TRUE)) {
+      return(invisible())
+    }
+    if (is.null(env_names)) env_names <<- ls(envir, all.names = TRUE)
+    for (m in env_names[startsWith(env_names, paste0(gen, "."))]) {
+      w = risk_fn_where(m, envir)
+      if (isTRUE(w$user)) read_user(w$code, paste0("via S3 method ", m, "(): "), ctx)
+    }
+  }
+  # A function name written literally (a string, or a name or pkg::name the tables list that
+  # the code does not bind).
+  literal_fun = function(x) {
+    if (is.character(x)) return(TRUE)
+    r = if (is.symbol(x) || (is.call(x) && identical(x[[1L]], as.name("::")))) risk_head(x)
+    !is.null(r) && !r$name %in% bound$val && !is.null(risk_lookup(r$name, r$pkg))
+  }
+
+  # A function used by name: called with `e`, or (e = NULL) a value another function calls,
+  # read as a call whose arguments the code computes.
+  use_fun = function(name, pkg, e, ctx) {
+    label = if (is.null(e)) paste0(if (!is.na(pkg)) paste0(pkg, "::"), name) else text(e)
+    if (is.null(e)) e = as.call(c(as.name(name), rep(list(computed), 3L)))
+    if (is.na(pkg)) {
+      if (name %in% risk_plan_syntax) return(invisible())
+      if (name %in% bound$val) {
+        return(add(ctx, paste0(label, " (a function the code computes)"), name, 3L, "dynamic"))
+      }
+      if (name %in% bound$fun && is.null(risk_lookup(name, pkg))) return(invisible())
+      w = risk_fn_where(name, envir)
+      if (identical(w$kind, "lazy")) return(add(ctx, label, name, 3L, "dynamic"))
+      user_s3(name, ctx)
+      if (isTRUE(w$user)) {
+        if (!read_user(w$code, paste0("via ", name, "(): "), ctx)) {
+          add(ctx, paste0(label, " (not read: nested too deep)"), name, 3L, "dynamic")
+        }
+        return(invisible())
+      }
+      if (identical(w$kind, "fun") && !w$pkg %in% risk_base_pkgs) pkg = w$pkg
+    }
+    row = risk_lookup(name, pkg)
+    a = risk_args(e, name, row$package %||% (if (is.na(pkg)) "base" else pkg))
+    reach(name, pkg, a, ctx, label)
+    slots(name, a, ctx)
+    if (is.null(row)) return(add(ctx, label, name, 1L, "unlisted"))
+    if (by_args(name, row, a, as.list(e)[-1L], ctx, label)) return(invisible())
+    if (startsWith(row$note, "by reference") && name != ":=" && is.symbol(e[[2L]])) {
+      add_tg("byref", as.character(e[[2L]]))
+    }
+    if (name %in% risk_unknown_funs) add_tg("unknown", paste0(name, "()"))
+    lk = risk_lookups[[name]]
+    if (!is.null(lk) && literal_fun(risk_arg(a, lk[1L], as.integer(lk[2L])))) return(invisible())
+    if (!nzchar(row$path_arg)) return(add(ctx, label, name, row$level, row$category))
+    # the worst path the call may pass
+    best = list(level = -1L)
+    for (p in risk_path_exprs(a, row$path_arg)) {
+      v = risk_fold(p)
+      pc = if (is.null(v)) "unknown" else if (all(v == "")) "console" else
+        risk_cmd_worst(vapply(v[nzchar(v)], risk_path_cls, character(1), row$category, root))
+      lv = risk_path_level(row$category, row$level, pc)
+      if (!is.null(v) && row$category %in% c("file_write", "file_delete", "network")) {
+        add_tg("files", v[nzchar(v)])
+      }
+      if (lv > best$level) best = list(level = lv, path = v[1L] %||% NA_character_, pc = pc)
+    }
+    if (best$level < 0L) best = list(level = row$level, path = NA_character_, pc = NA_character_)
+    add(ctx, label, name, best$level, if (identical(best$pc, "control") &&
+                                          row$category != "read") "control" else row$category,
+        best$path, best$pc)
+  }
+
+  # IC-53: gptr's namespace named literally, or the environment of a gptr function, is
+  # control; a namespace or function the code computes is dynamic.
+  reach = function(name, pkg, a, ctx, label) {
+    if (!is.na(pkg) && !pkg %in% c(risk_base_pkgs, "rlang")) return(invisible())
+    if (!is.na(risk_ns_funs[name])) {
+      ns = risk_arg(a, risk_ns_funs[[name]], 1L)
+      if (name == ":::" && is.symbol(ns)) ns = as.character(ns)
+      if (identical(ns, "gptr")) {
+        add(ctx, paste0(label, " (reaches gptr's internals)"), name, 4L, "control")
+      } else if (!is.null(ns) && !is.character(ns)) {
+        add(ctx, paste0(label, " (a namespace the code computes)"), name, 3L, "dynamic")
+      }
+    }
+    if (!is.na(risk_env_funs[name])) {
+      f = risk_arg(a, risk_env_funs[[name]], 1L)
+      r = if (is.symbol(f) || is.call(f)) risk_head(f)
+      w = if (!is.null(r) && is.na(r$pkg)) risk_fn_where(r$name, envir)
+      if (identical(r$pkg, "gptr") || identical(w$pkg, "gptr")) {
+        add(ctx, paste0(label, " (reaches gptr's internals)"), name, 4L, "control")
+      } else if (identical(r$how, "computed")) {
+        add(ctx, paste0(label, " (a function the code computes)"), name, 3L, "dynamic")
+      }
+    }
+  }
+
+  # Function slots: the functions a call calls.
+  slots = function(name, a, ctx) {
+    nms = names(a) %||% rep("", length(a))
+    d = a[["..."]]
+    vals = c(a[nms %in% risk_slot_names], d[names(d) %in% risk_slot_names])
+    if (name %in% risk_handler_funs) vals = c(vals, d %||% a[nzchar(nms)])
+    hof = risk_hof_args[[name]]
+    if (!is.null(hof) && !hof[1L] %in% names(vals)) {
+      vals = c(vals, list(risk_arg(a, hof[1L], as.integer(hof[2L]))))
+    }
+    for (v in vals) if (!is.null(v)) use_value(v, ctx, slot = TRUE)
+  }
+
+  # Rows whose level depends on the arguments; TRUE when the call is classified here.
+  by_args = function(name, row, a, w, ctx, label) {
+    nms = names(w) %||% rep("", length(w))
+    lit = vapply(w, is.character, logical(1))
+    code = risk_code_args[[name]]
+    if (!is.null(code) && (name != "run" || row$package == "processx")) {
+      if (row$category == "process") add_tg("process", name)
+      x = risk_arg(a, code[1L], as.integer(code[2L]))
+      if (is.null(x) && name == "fread") {
+        # data.table runs a literal input with a space and no line end as a command
+        x = risk_arg(a, "input", 1L)
+        if (!is.character(x) || !grepl(" ", x, fixed = TRUE) || grepl("[\n\r]", x)) x = NULL
+      }
+      if (is.null(x)) return(FALSE)
+      x = risk_fold(x)
+      more = if (name %in% c("system2", "run")) risk_arg(a, "args", 2L)
+      argv = if (!is.null(more)) risk_fold(more)
+      if (is.null(x) || (!is.null(more) && is.null(argv))) {
+        add(ctx, paste0(label, " (code the code computes)"), name, max(3L, row$level),
+            if (row$category == "read") "dynamic" else row$category)
+        return(TRUE)
+      }
+      f = switch(code[3L], sql = risk_sql(paste(x, collapse = "\n"), root),
+                 argv = risk_command(c(x, argv), root),
+                 risk_command(paste(c(x, argv), collapse = " "), root))
+      add_rows(f, ctx, name, paste0(name, "(): "))
+      return(TRUE)
+    }
+    if (name == "options") {
+      if (any(startsWith(nms, "gptr."))) {
+        add(ctx, label, name, 4L, "control")
+      } else if (any(nzchar(nms))) {
+        add(ctx, label, name, 2L, "session")
+      } else if (!all(lit)) {
+        add(ctx, label, name, 3L, "dynamic")
+      }
+      return(TRUE)
+    }
+    if (name %in% c("Sys.setenv", "Sys.unsetenv")) {
+      vals = lapply(w[!nzchar(nms)], risk_fold)
+      keys = c(nms[nzchar(nms)], unlist(vals))
+      if (any(keys %in% risk_control_env | grepl(risk_control_env_re, keys, perl = TRUE))) {
+        add(ctx, label, name, 4L, "control")
+      } else if (any(vapply(vals, is.null, logical(1)))) {
+        add(ctx, paste0(label, " (names the code computes)"), name, 3L, "dynamic")
+      } else {
+        add(ctx, label, name, 2L, "session")
+      }
+      return(TRUE)
+    }
+    if (name %in% c("rm", "remove")) {
+      l = w$list
+      if (is.call(l) && risk_head(l[[1L]])$name %in% c("ls", "objects")) {
+        add_tg("unknown", "rm(list = ls())")
+        add(ctx, label, name, 4L, "critical")
+        return(TRUE)
+      }
+      add_tg("remove", c(vapply(w[!nzchar(nms)], function(x) {
+        if (is.symbol(x) || is.character(x)) as.character(x) else NA_character_
+      }, ""), risk_fold(l)))
+      if (!is.null(l) && is.null(risk_fold(l))) add_tg("unknown", "rm(list = <computed>)")
+      return(FALSE)
+    }
+    if (name %in% c("file", "gzfile", "bzfile", "xzfile")) {
+      mode = risk_arg(a, "open", 2L)
+      if (is.null(mode) || (is.character(mode) && !grepl("[wa+]", mode))) return(FALSE)
+      v = risk_fold(risk_arg(a, "description", 1L))
+      pc = if (is.null(v)) "unknown" else risk_path_class(v[1L], root)
+      if (!is.null(v)) add_tg("files", v)
+      add(ctx, label, name, risk_path_level("file_write", 2L, pc),
+          if (pc == "control") "control" else "file_write", v[1L] %||% NA_character_, pc)
+      return(TRUE)
+    }
+    if (name %in% c("gptr_cache", "gptr_scrub")) {
+      x = if (name == "gptr_cache") risk_arg(a, "action", 1L) else risk_arg(a, "dry_run", 2L)
+      hit = if (name == "gptr_cache") is.character(x) && any(x %in% c("prune", "clear")) else
+        isFALSE(x)
+      if (hit) {
+        add(ctx, label, name, 4L, "control")
+      } else if (!is.null(x) && !is.character(x) && !is.logical(x)) {
+        add(ctx, paste0(label, " (an action the code computes)"), name, 3L, "dynamic")
+      }
+      return(TRUE)
+    }
+    if (name == "gptr_artifacts") {
+      sig = function(id = NULL, open = FALSE, stop = FALSE, version = NULL) NULL
+      m = tryCatch(as.list(match.call(sig, as.call(c(as.name(name), a))))[-1L],
+                   error = function(err) NULL)
+      if (is.null(m) || !is.null(m$version) || !isFALSE(m$open %||% FALSE) ||
+          !isFALSE(m$stop %||% FALSE)) add(ctx, label, name, 3L, "process")
+      return(TRUE)
+    }
+    FALSE
+  }
+
+  # A function value: in a function slot (slot = TRUE) or bound by an assignment.
+  use_value = function(x, ctx, slot) {
+    if (is.call(x) && identical(x[[1L]], as.name("function"))) return(invisible())
+    if (slot && is.call(x) && identical(x[[1L]], as.name("list"))) {
+      for (v in as.list(x)[-1L]) use_value(v, ctx, slot)
+      return(invisible())
+    }
+    r = if (is.symbol(x) || (slot && is.character(x)) ||
+            (is.call(x) && is.symbol(x[[1L]]) && as.character(x[[1L]]) %in% c("::", ":::"))) {
+      risk_head(x)
+    }
+    if (is.null(r)) {
+      if (slot) {
+        add(ctx, paste("a function the code computes:", text(x)), "<computed>", 3L, "dynamic")
+      }
+      return(invisible())
+    }
+    if (!slot && is.null(risk_lookup(r$name, r$pkg))) return(invisible())
+    add_call(r$name, r$pkg, ctx$line)
+    use_fun(r$name, r$pkg, NULL, ctx)
+  }
+
+  note_assign = function(target, op, ctx) {
+    if (ctx$quote) return(invisible())
+    node = target
+    while (is.call(node) && length(node) >= 2L) {
+      g = paste0(risk_head(node[[1L]])$name, risk_arrow)
+      row = risk_lookup(g)
+      if (!is.null(row) && row$level >= 2L) add(ctx, text(target), g, row$level, row$category)
+      node = node[[2L]]
+    }
+    if (!is.symbol(node) && !is.character(node)) return(invisible())
+    nm = as.character(node)
+    if (ctx$def && op != "<<-") {
+      # in a function body only a replacement of a name the code does not bind can reach an
+      # object outside it (an environment, by reference)
+      if (is.call(target) && !nm %in% bound$all) {
+        add(ctx, paste0("modifies `", nm, "` by reference"), NA_character_, 2L, "object_write")
+      }
+      return(invisible())
+    }
+    add_tg(if (op == "<<-") "super" else "assign", nm)
+    if (is.call(target)) add_tg("modify", nm)
+    if (op == "<<-") add(ctx, paste(nm, "<<- ..."), "<<-", 2L, "object_write")
+    info = if (!is.null(envir)) risk_binding_safe(nm, envir)
+    if (is.null(info)) return(invisible())
+    sizes[[nm]] <<- info$bytes
+    add(ctx, paste0(if (is.call(target)) "modifies" else "overwrites", " `", nm, "` <",
+                    info$class, ", ", risk_bytes(info$bytes), ">"), NA_character_,
+        if (!is.na(info$bytes) && info$bytes > protect) 3L else 2L, "object_write")
+  }
+
+  walk = function(e, ctx) {
+    if (is.expression(e)) {
+      srcs = attr(e, "srcref")
+      for (i in seq_along(e)) {
+        if (!is.null(srcs)) ctx$line = as.integer(srcs[[i]][1L])
+        walk(e[[i]], ctx)
+      }
+      return(invisible())
+    }
+    if (!is.call(e)) return(invisible())
+    r = risk_head(e[[1L]])
+    a = as.list(e)[-1L]
+    add_call(r$name, r$pkg, ctx$line)
+    if (identical(r$how, "ns") && identical(r$pkg, "gptr") && is.call(e[[1L]]) &&
+        identical(e[[1L]][[1L]], as.name(":::"))) {
+      add(ctx, paste0(text(e), " (reaches gptr's internals)"), r$name, 4L, "control")
+    }
+    if (r$how == "computed") {
+      add(ctx, paste("calls a function the code computes:", text(e[[1L]])), "<computed>", 3L,
+          "dynamic")
+      add_tg("unknown", "<computed call>")
+      walk(e[[1L]], ctx)
+    } else if (r$how == "lambda") {
+      walk(e[[1L]], ctx)
+    } else if (r$how == "member") {
+      add_rows(risk_member_flags(r$name, e, root), ctx)
+      if (r$name %in% c("sh", "bg", "script")) add_tg("process", paste0(risk_gateway, "$", r$name))
+    } else {
+      use_fun(r$name, r$pkg, e, ctx)
+    }
+    if (r$name %in% risk_assign_ops && length(a) == 2L) {
+      note_assign(a[[1L]], r$name, ctx)
+      use_value(a[[2L]], ctx, slot = FALSE)
+    }
+    if (r$name == "for") note_assign(a[[1L]], "=", ctx)
+    if (r$name == "assign" && length(a)) {
+      if (is.character(a[[1L]])) {
+        note_assign(as.name(a[[1L]]), "=", ctx)
+      } else {
+        add_tg("unknown", "assign(<computed name>)")
+      }
+    }
+    if (r$name == "[" && is.symbol(a[[1L]]) && any(vapply(a, function(x) {
+      is.call(x) && identical(x[[1L]], as.name(":="))
+    }, logical(1)))) add_tg("byref", as.character(a[[1L]]))
+    if (r$name %in% c("parse", "str2lang", "str2expression")) {
+      txt = if (r$name == "parse") a$text else a[[1L]]
+      ex = if (is.character(txt)) tryCatch(parse(text = txt, keep.source = FALSE),
+                                           error = function(err) NULL)
+      if (!is.null(ex)) walk(ex, ctx)
+    }
+    inner = ctx
+    if (r$name == "function") {
+      inner$def = TRUE
+      a = c(as.list(a[[1L]]), a[-1L])
+    }
+    if (r$name %in% risk_quoting_funs) inner$quote = TRUE
+    for (i in seq_along(a)) if (!identical(a[[i]], quote(expr = ))) walk(a[[i]], inner)
+  }
+
+  walk(exprs, list(quote = FALSE, def = FALSE, line = 1L))
+  fl = if (length(flags)) do.call(risk_flags_bind, flags) else risk_flags_empty()
+  list(flags = fl, targets = lapply(tg, function(x) unique(x[!is.na(x)])), sizes = sizes,
+       calls = data.frame(fn = calls$fn, package = calls$package, line = calls$line,
+                          stringsAsFactors = FALSE))
+}
+
+#' Flags of a gateway member call (04 section 9.4); every row's fn is `peter$<member>`
+#' @noRd
+risk_member_flags = function(member, e, root) {
+  txt = paste0(risk_gateway, "$", member)
+  a = as.list(e)[-1L]
+  row = function(level, category = "process", call = txt) {
+    risk_flags_row(call, txt, level, category)
+  }
+  if (member %in% c("read", "grep", "find", "ls", "write", "edit")) {
+    v = risk_fold(risk_arg(a, "path", if (member %in% c("grep", "find")) 2L else 1L) %||% ".")
+    write = member %in% c("write", "edit")
+    pc = if (is.null(v)) "unknown" else risk_path_cls(v[1L], if (write) "file_write" else "read",
+                                                      root)
+    lv = risk_path_level(if (write) "file_write" else "read", if (write) 2L else 0L, pc)
+    return(risk_flags_row(paste0(txt, "(", v[1L] %||% "<computed>", ")"), txt, lv,
+                          if (write && pc == "control") "control" else
+                            if (write) "file_write" else "read", v[1L] %||% NA_character_, pc))
+  }
+  if (member %in% c("help", "search", "describe", "plot", "out")) return(row(0L, "read"))
+  if (member == "jobs") return(row(if (isFALSE(risk_arg(a, "kill", 1L) %||% FALSE)) 0L else 3L))
+  if (startsWith(member, "mcp$") || member %in% c("bg", "script", "app")) return(row(3L))
+  code = switch(member, sh = risk_fold(risk_arg(a, "cmd", 1L)),
+                py = risk_fold(risk_arg(a, "code", 1L)), sql = risk_fold(risk_arg(a, "query", 1L)),
+                knit = risk_fold(risk_arg(a, "code", 2L)))
+  if (member %in% c("sh", "py", "sql", "knit") && is.null(code)) {
+    return(row(3L, "dynamic", paste0(txt, "(<code the code computes>)")))
+  }
+  eng = risk_fold(risk_arg(a, "engine", 1L))
+  f = switch(member, sh = risk_command(code, root),
+             py = risk_python(paste(code, collapse = "\n"), root),
+             sql = risk_sql(paste(code, collapse = "\n"), root),
+             knit = if (isTRUE(eng %in% c("bash", "sh", "zsh", "powershell", "cmd"))) {
+               risk_command(paste(code, collapse = "\n"), root)
+             } else {
+               row(3L)
+             },
+             {
+               spec = tryCatch(registry_get("tool", sub("$", "/", member, fixed = TRUE)),
+                               error = function(err) NULL)
+               ro = isTRUE(spec$annotations$read_only) || isTRUE(spec$annotations$readOnlyHint)
+               row(if (ro) 0L else 2L, if (ro) "read" else "unlisted")
+             })
+  if (nrow(f)) f$fn = txt
+  f
+}
+
+on_load(ext_service_set("risk.classify", risk_classify, provided_by = "P11",
+                        builtin = "permissions"))
