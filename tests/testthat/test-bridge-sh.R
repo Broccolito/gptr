@@ -82,3 +82,171 @@ test_that("labels are one line of at most 50 characters", {
   expect_identical(nchar(long), 50L)
   expect_true(endsWith(long, "..."))
 })
+
+r_cmd = function(code) c(rscript_path(), "--vanilla", "-e", code)
+
+test_that("the argv form passes arguments without a shell and decodes UTF-8", {
+  skip_on_cran()
+  x = bridge_sh(r_cmd(paste0("cat('a b', rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9))), ",
+                             "sep = '\\n')")))
+  expect_s3_class(x, "gptr_cmd")
+  expect_identical(names(unclass(x)),
+                   c("cmd", "status", "ok", "stdout", "stderr", "elapsed", "timed_out", "id"))
+  expect_identical(attr(x, "via"), "argv")
+  expect_true(x$ok)
+  expect_identical(x$status, 0L)
+  expect_false(x$timed_out)
+  lines = strsplit(x$stdout, "\n", fixed = TRUE)[[1L]]
+  expect_identical(lines[[1L]], "a b")
+  expect_identical(charToRaw(lines[[2L]]), as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9)))
+  expect_identical(Encoding(lines[[2L]]), "UTF-8")
+  expect_identical(format(x), x$stdout)
+  expect_identical(as.character(x), x$stdout)
+  expect_match(x$id, "^o[0-9a-f]{6}$")
+})
+
+test_that("output and arguments stay correct UTF-8 in a C locale", {
+  skip_on_cran()
+  skip_on_os("windows")
+  withr::local_locale(c(LC_CTYPE = "C"))
+  x = bridge_sh(r_cmd("cat(rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9))))"))
+  expect_identical(Encoding(x$stdout), "UTF-8")
+  expect_identical(charToRaw(x$stdout), as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9)))
+  arg = bridge_sh(c(rscript_path(), "--vanilla", "-e",
+                    "cat(as.character(charToRaw(commandArgs(TRUE)[1])))", "caf\u00e9"))
+  expect_identical(arg$stdout, "63 61 66 c3 a9")
+})
+
+test_that("a simple command line runs directly and a pipeline through the shell", {
+  skip_on_cran()
+  skip_on_os("windows")
+  d = bridge_sh("echo 'quoted words' plain")
+  expect_identical(attr(d, "via"), "direct")
+  expect_identical(d$stdout, "quoted words plain\n")
+  p = bridge_sh("printf 'x\\ny\\nx\\n' | sort | uniq -c | sort -rn")
+  expect_identical(attr(p, "via"), "shell")
+  expect_match(strsplit(p$stdout, "\n", fixed = TRUE)[[1L]][[1L]], "2 x", fixed = TRUE)
+})
+
+test_that("stderr stays separate, exits are reported and check = TRUE raises", {
+  skip_on_cran()
+  x = bridge_sh(r_cmd("cat('out\\n'); message('oops'); quit(status = 3)"))
+  expect_identical(x$status, 3L)
+  expect_false(x$ok)
+  expect_identical(x$stdout, "out\n")
+  expect_identical(x$stderr, "oops\n")
+  expect_identical(bridge_cmd_view(x), c("out", "[stderr]", "oops", "[exit 3]"))
+  expect_identical(out_get(x$id, "stderr"), "oops")
+  err = expect_error(bridge_sh(r_cmd("quit(status = 4)"), check = TRUE),
+                     class = "gptr_error_process")
+  expect_identical(err$status, 4L)
+  m = bridge_sh(r_cmd("cat('a\\n'); message('b')"), merge = TRUE)
+  expect_identical(m$stderr, "")
+  expect_identical(m$stdout, "a\nb\n")
+  expect_error(bridge_sh(character()), class = "gptr_error_invalid_argument")
+  expect_error(bridge_sh("ls", wd = file.path(tempdir(), "no-such-dir-p22")),
+               class = "gptr_error_invalid_argument")
+})
+
+test_that("input reaches stdin as lines, as CSV or as bytes; env sets variables", {
+  skip_on_cran()
+  x = bridge_sh(r_cmd("cat(rev(readLines(file('stdin'))), sep = '\\n')"), input = c("a", "b", "c"))
+  expect_identical(strsplit(x$stdout, "\n", fixed = TRUE)[[1L]], c("c", "b", "a"))
+  y = bridge_sh(r_cmd("d = read.csv(file('stdin')); cat(nrow(d), names(d))"),
+                input = head(mtcars[, 1:3], 5))
+  expect_identical(y$stdout, "5 mpg cyl disp")
+  z = bridge_sh(r_cmd("cat(length(readBin(file('stdin', 'rb'), 'raw', 100)))"),
+                input = as.raw(1:7))
+  expect_identical(z$stdout, "7")
+  expect_error(bridge_sh("ls", input = 1:3), class = "gptr_error_invalid_argument")
+  expect_error(bridge_sh("ls", input = c("a", NA)), class = "gptr_error_invalid_argument")
+  e = bridge_sh(r_cmd("cat(Sys.getenv('GPTR_P22_SET'))"), env = c(GPTR_P22_SET = "set-value"))
+  expect_identical(e$stdout, "set-value")
+})
+
+test_that("a timeout kills the process tree and suggests peter$bg()", {
+  skip_on_cran()
+  skip_on_os("windows")
+  skip_if(!nzchar(Sys.which("pgrep")))
+  t0 = proc.time()[["elapsed"]]
+  x = bridge_sh("sleep 57 & sleep 58; wait", timeout = 1)
+  expect_lt(proc.time()[["elapsed"]] - t0, 10)
+  expect_true(x$timed_out)
+  expect_true(is.na(x$status))
+  expect_false(x$ok)
+  v = bridge_cmd_view(x)
+  expect_match(v[[length(v)]], "timed out after", fixed = TRUE)
+  expect_match(v[[length(v)]], "peter$bg()", fixed = TRUE)
+  Sys.sleep(0.5)
+  left = processx::run("pgrep", c("-f", "sleep 5[78]"), error_on_status = FALSE)$stdout
+  expect_identical(left, "")
+  expect_error(bridge_sh("sleep 5", timeout = 0.5, check = TRUE), class = "gptr_error_timeout")
+})
+
+test_that("long output is cut in the view and peter$out() returns all of it", {
+  skip_on_cran()
+  x = bridge_sh(r_cmd("cat(seq_len(20000), sep = '\\n')"), max_tokens = 120L)
+  expect_identical(attr(x, "max_tokens"), 120L)
+  v = bridge_cmd_view(x)
+  expect_lte(est_tokens(v, "r_output"), 120)
+  notice = grep("lines omitted", v, value = TRUE, fixed = TRUE)
+  expect_match(notice, paste0("peter$out(\"", x$id, "\")"), fixed = TRUE)
+  full = out_get(x$id)
+  expect_length(full, 20000L)
+  expect_identical(full[[20000L]], "20000")
+  expect_output(print(x), "lines omitted", fixed = TRUE)
+  log = local_bridge_events()
+  mid = bridge_sh(r_cmd("cat(sprintf('line %d', 1:200), sep = '\\n')"), max_tokens = 120L)
+  expect_true(any(grepl("lines omitted", bridge_cmd_view(mid), fixed = TRUE)))
+  expect_true(file.exists(log$events[[length(log$events)]]$spill))
+})
+
+test_that("the default print budget of 1,500 tokens holds with the stderr floors", {
+  skip_on_cran()
+  x = bridge_sh(r_cmd(paste0("cat(sprintf('stdout line %d', 1:20000), sep = '\\n'); ",
+                             "message(paste(sprintf('stderr line %d', 1:5000), ",
+                             "collapse = '\\n')); quit(status = 2)")))
+  v = bridge_cmd_view(x)
+  expect_lte(est_tokens(v, "r_output"), 1500)
+  expect_identical(v[[length(v)]], "[exit 2]")
+  err_part = v[seq.int(match("[stderr]", v), length(v) - 1L)]
+  err_tokens = est_tokens(err_part, "r_output")
+  expect_gte(err_tokens, 300)
+  expect_lte(err_tokens, 380)
+  expect_match(grep("lines omitted", err_part, value = TRUE),
+               paste0("peter$out(\"", x$id, "\", \"stderr\")"), fixed = TRUE)
+  expect_length(out_get(x$id, "stderr"), 5000L)
+  expect_lte(est_tokens(bridge_cmd_view(x, max_tokens = 400L), "r_output"), 400)
+})
+
+test_that("each call emits bridge_call with a #> digest", {
+  skip_on_cran()
+  log = local_bridge_events()
+  x = bridge_sh(r_cmd("cat('a\\nb\\n')"))
+  ev = log$events[[length(log$events)]]
+  expect_identical(ev$type, "bridge_call")
+  expect_identical(ev$bridge, "sh")
+  expect_identical(ev$id, x$id)
+  expect_identical(ev$status, "ok")
+  expect_identical(ev$bytes_out, 4L)
+  expect_null(ev$spill)
+  expect_match(ev$digest, "^#> sh .*: exit 0, 2 lines$")
+  big = bridge_sh(r_cmd("cat(sprintf('row %d of a long listing', 1:3000), sep = '\\n')"))
+  ev = log$events[[length(log$events)]]
+  expect_true(file.exists(ev$spill))
+  expect_identical(basename(ev$spill), paste0("gptr-output-", big$id, ".txt"))
+})
+
+test_that("a registered value is redacted before the digest label or cmd is cut", {
+  skip_on_cran()
+  vault_reset()
+  withr::defer(vault_reset())
+  fake = paste0("zqFAKE", strrep("bridge", 4L), "0042")
+  secret_register(fake, "GPTR_P22_TEST_TOKEN", source = "test")
+  log = local_bridge_events()
+  bridge_sh(c("Rscript", "--vanilla", "-e", "invisible(0)", paste0("--key=", fake)))
+  expect_false(grepl("zqFAKE", log$events[[length(log$events)]]$digest, fixed = TRUE))
+  bridge_sh(c("Rscript", "--vanilla", "-e", "invisible(0)", strrep("p", 450L),
+              paste0("--key=", fake)))
+  expect_false(grepl("zqFAKE", log$events[[length(log$events)]]$cmd, fixed = TRUE))
+})

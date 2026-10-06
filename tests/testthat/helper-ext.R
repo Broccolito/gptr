@@ -39,3 +39,15 @@ local_no_bootstrap_services = function(.env = parent.frame()) {
   assign("services", list(), envir = the)
   invisible(NULL)
 }
+
+# Record the bridge_call events (P22) raised while the calling test runs
+local_bridge_events = function(.env = parent.frame()) {
+  log = new.env(parent = emptyenv())
+  log$events = list()
+  off = gptr_register(gptr_hook("bridge_call", function(event, ctx) {
+    log$events[[length(log$events) + 1L]] = event
+    NULL
+  }))
+  withr::defer(off(), envir = .env)
+  log
+}

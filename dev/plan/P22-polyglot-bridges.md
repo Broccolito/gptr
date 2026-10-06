@@ -76,7 +76,7 @@ The pure helpers every bridge shares: how a `cmd` becomes a program plus argumen
 - Test: `tests/testthat/test-bridge-sh.R` (create)
 
 **Interfaces:**
-- Consumes: `shell_resolve(cmd)` -> `list(command, args)` (P04 `proc-spawn.R`, 04 §7.4); `est_tokens(x, class)`, `gptr_opt(name)`, `rscript_path()`, `is_windows()`, `` `%||%` `` (P01, 04 §7.1); `est_tokens_each(x, class)` (P01 `utils-tokens.R`: the per-element costs whose sum bounds `est_tokens()` of the joined text) and `truncation_notice(omitted, id)` (P01 `utils-text.R`: `[... n lines omitted; all: peter$out("<id>")]`, the notice of `truncate_output()`); `run_current()` (P06, kernel SDK); test helper `local_gptr_options(..., .env)` (P01).
+- Consumes: `shell_resolve(cmd)` -> `list(command, args)` (P04 `proc-spawn.R`, 04 §7.4); `est_tokens(x, class)`, `gptr_opt(name)`, `redact_hook(x, profile)`, `rscript_path()`, `is_windows()`, `` `%||%` `` (P01, 04 §7.1); `est_tokens_each(x, class)` (P01 `utils-tokens.R`: the per-element costs whose sum bounds `est_tokens()` of the joined text) and `truncation_notice(omitted, id)` (P01 `utils-text.R`: `[... n lines omitted; all: peter$out("<id>")]`, the notice of `truncate_output()`); `run_current()` (P06, kernel SDK); test helper `local_gptr_options(..., .env)` (P01).
 - Produces (internal to P22): `bridge_split(cmd)` -> chr or `NULL`; `bridge_program_word(word)`; `bridge_resolve(cmd)` -> `list(command, args, via = "argv" | "direct" | "shell")`; `bridge_chr(x)`; `bridge_notice(omitted, id = NULL, stream = "stdout")`; `bridge_view_lines(lines, budget, head = 0.4, id = NULL, stream = "stdout")`; `bridge_budget(max_tokens = NULL)` -> int(1); `bridge_label(cmd, width = 50L)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -268,10 +268,10 @@ bridge_budget = function(max_tokens = NULL) {
   as.integer(b)
 }
 
-#' A one-line label of a command for digests and job listings
+#' A one-line label of a command for digests and job listings, redacted before it is cut
 #' @noRd
 bridge_label = function(cmd, width = 50L) {
-  x = gsub("\\s+", " ", paste(cmd, collapse = " "))
+  x = gsub("\\s+", " ", redact_hook(paste(cmd, collapse = " "), "persist"))
   if (nchar(x) > width) paste0(substr(x, 1L, width - 3L), "...") else x
 }
 ```
@@ -297,24 +297,23 @@ git commit -m "feat(bridge): command resolution and budgeted head+tail views"
 
 Copy safety: `input` is turned into new raw bytes through a temporary file before it reaches `proc_run()`, whose `tryCatch()` handlers would otherwise keep the user's vector referenced after the call (rules R1 and R3; measured for this plan: passing a character or raw `input` on as is cost one copy on the next edit, this route none; Task 10 holds the rows). The record has exactly the eight fields of 04 §5.10; the call's print budget and the resolution route travel as the attributes `max_tokens` and `via`.
 
-The event goes into the running run with `run_emit()` (kernel SDK), so that P10's session hook collects the digest into the `r` result's `details$bridge`; at the console it is dispatched at process level with `ev_dispatch()` and the event fields of 04 §4.5 built here (`ev_new()` lives in an L1 file the `bridge` area may not call). The live record of the running session is `session_live(run$shell)`: 04 §7.6 lists the run's session id (`run$session`) among its readable fields, and P06 binds the session object itself as `run$shell` (see the self-review).
+The event goes into the running run with `run_emit()` (kernel SDK), so that P10's session hook collects the digest into the `r` result's `details$bridge`; at the console it is dispatched at process level with `ev_dispatch()` on an `ev_new()` record (04 §4.5; record constructors are callable from every layer). The live record of the running session is `session_live(run$shell)`: 04 §7.6 lists the run's session id (`run$session`) among its readable fields, and P06 binds the session object itself as `run$shell` (see the self-review).
 
 **Files:**
 - Modify: `R/bridge-sh.R` (append)
-- Test: `tests/testthat/test-bridge-sh.R` (append)
+- Test: `tests/testthat/test-bridge-sh.R` (append), `tests/testthat/helper-ext.R` (append)
 - Generate: `NAMESPACE` (`devtools::document()`)
 
 **Interfaces:**
-- Consumes: `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` -> `list(status, stdout, stderr, timed_out, elapsed)`, `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())`, `kill_all(p, grace = 2)`, `reactor_now()` (P04, 04 §7.4, §1.2); `proc_input_file(input)` (P04 `proc-spawn.R`: chr or raw -> a temporary stdin file) and `proc_read_text(path)` (P04: a redirect file decoded as UTF-8 with the code-page fallback); `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03, 04 §7.3); `out_put(text, stream = "stdout", meta = list(), session = NULL)`, `out_get(id, stream, lines, session)` (tests), `spill_write(text, prefix)` (`prefix` is the full file stem), `redact_hook(x, profile)`, `ext_service_has(name)`, `ext_service_get(name)`, `project_root()`, `clean_terminal()`, `text_lines()`, `check_strings()`, `check_string()`, `check_number()`, `check_flag()`, `gptr_abort()` (P01); `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (P02); `run_current()`, `run_emit(run, type, ...)`, `session_live(s)` (P06 kernel SDK) and the run binding `run$shell`; the service `risk.classify` (P11, 04 §7.0) with its documented fallback (level 3 when absent); tests: `gptr_register(spec)`, `gptr_hook(event, handler, matcher = NULL)` (P02), `rscript_path()`, `est_tokens()` (P01), `withr::local_locale()`.
-- Produces: `bridge_sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` -> `gptr_cmd` (the `fun` of member `sh`, 04 §9.4); `bridge_exec(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL, bridge = "sh", label = NULL, level = NULL, target = NULL)`; `bridge_risk(x, kind)` -> `list(level, categories, paths)`; `bridge_level(x, kind)` -> int(1); `bridge_emit(payload)` (the `bridge_call` event of 04 §10.4); `bridge_out_session()`; `bridge_write(lines)`, `bridge_cmd_view(x, max_tokens = NULL)`, `bridge_cmd_lines(x)`, `bridge_cmd_digest(x, bridge, label)`, `bridge_opts()`, `bridge_child_env(env = NULL)`, `bridge_check_cmd(cmd)`, `bridge_wd(wd)`; S3 methods `print.gptr_cmd(x, max_tokens = NULL, ...)`, `format.gptr_cmd()`, `as.character.gptr_cmd()`.
+- Consumes: `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` -> `list(status, stdout, stderr, timed_out, elapsed)`, `proc_spawn(command, args = character(), env = NULL, wd = NULL, stdin = NULL, stdout = "|", stderr = "|", cleanup_tree = TRUE, supervise = supervise_default())`, `kill_all(p, grace = 2)`, `reactor_now()` (P04, 04 §7.4, §1.2); `proc_input_file(input)` (P04 `proc-spawn.R`: chr or raw -> a temporary stdin file) and `proc_read_text(path)` (P04: a redirect file decoded as UTF-8 with the code-page fallback); `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03, 04 §7.3); `out_put(text, stream = "stdout", meta = list(), session = NULL)`, `out_get(id, stream, lines, session)` (tests), `spill_write(text, prefix)` (`prefix` is the full file stem), `redact_hook(x, profile)`, `ext_service_has(name)`, `ext_service_get(name)`, `project_root()`, `clean_terminal()`, `text_lines()`, `check_strings()`, `check_string()`, `check_number()`, `check_flag()`, `gptr_abort()` (P01); `ev_dispatch(event, payload, session = NULL, ctx = NULL)` (P02); `ev_new(type, ...)` (P01 record constructor, callable from every layer); `run_current()`, `run_emit(run, type, ...)`, `session_live(s)` (P06 kernel SDK) and the run binding `run$shell`; the service `risk.classify` (P11, 04 §7.0) with its documented fallback (level 3 when absent); tests: `gptr_register(spec)`, `gptr_hook(event, handler, matcher = NULL)` (P02), `rscript_path()`, `est_tokens()` (P01), `withr::local_locale()`.
+- Produces: `bridge_sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE, check = FALSE, max_tokens = NULL)` -> `gptr_cmd` (the `fun` of member `sh`, 04 §9.4); `bridge_exec(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL, merge = NULL, check = NULL, max_tokens = NULL, bridge = "sh", label = NULL, level = NULL, target = NULL)` (validates the options; `NULL` takes `peter$sh()`'s default); `bridge_risk(x, kind)` -> `list(level, categories, paths)`; `bridge_level(x, kind)` -> int(1); `bridge_emit(payload)` (the `bridge_call` event of 04 §10.4); `bridge_out_session()`; `bridge_write(lines)`, `bridge_write_lines(lines, path)`, `bridge_cmd_view(x, max_tokens = NULL)`, `bridge_status_line(x)`, `bridge_cmd_digest(x, bridge, label)`, `bridge_check_cmd(cmd)`; S3 methods `print.gptr_cmd(x, max_tokens = NULL, ...)`, `format.gptr_cmd()`, `as.character.gptr_cmd()`.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/testthat/test-bridge-sh.R`:
+Append to `tests/testthat/helper-ext.R` (shared with `test-bridge-lang.R`):
 
 ```r
-r_cmd = function(code) c(rscript_path(), "--vanilla", "-e", code)
-
+# Record the bridge_call events (P22) raised while the calling test runs
 local_bridge_events = function(.env = parent.frame()) {
   log = new.env(parent = emptyenv())
   log$events = list()
@@ -325,6 +324,12 @@ local_bridge_events = function(.env = parent.frame()) {
   withr::defer(off(), envir = .env)
   log
 }
+```
+
+Append to `tests/testthat/test-bridge-sh.R`:
+
+```r
+r_cmd = function(code) c(rscript_path(), "--vanilla", "-e", code)
 
 test_that("the argv form passes arguments without a shell and decodes UTF-8", {
   skip_on_cran()
@@ -477,6 +482,20 @@ test_that("each call emits bridge_call with a #> digest", {
   expect_true(file.exists(ev$spill))
   expect_identical(basename(ev$spill), paste0("gptr-output-", big$id, ".txt"))
 })
+
+test_that("a registered value is redacted before the digest label or cmd is cut", {
+  skip_on_cran()
+  vault_reset()
+  withr::defer(vault_reset())
+  fake = paste0("zqFAKE", strrep("bridge", 4L), "0042")
+  secret_register(fake, "GPTR_P22_TEST_TOKEN", source = "test")
+  log = local_bridge_events()
+  bridge_sh(c("Rscript", "--vanilla", "-e", "invisible(0)", paste0("--key=", fake)))
+  expect_false(grepl("zqFAKE", log$events[[length(log$events)]]$digest, fixed = TRUE))
+  bridge_sh(c("Rscript", "--vanilla", "-e", "invisible(0)", strrep("p", 450L),
+              paste0("--key=", fake)))
+  expect_false(grepl("zqFAKE", log$events[[length(log$events)]]$cmd, fixed = TRUE))
+})
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -485,7 +504,7 @@ test_that("each call emits bridge_call with a #> digest", {
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: the nine new tests error with `could not find function "bridge_sh"`; summary `[ FAIL 9 | WARN 0 | SKIP 0 | PASS 48 ]`.
+Expected: the ten new tests error with `could not find function "bridge_sh"`; summary `[ FAIL 10 | WARN 0 | SKIP 0 | PASS 48 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -494,23 +513,20 @@ Append to `R/bridge-sh.R`:
 ```r
 # ---- peter$sh(): running a command and the gptr_cmd result ---------------------------------------
 
-#' Write display lines to standard output as UTF-8 bytes; the text is data, never a format
-#' string (rule C1), and the r evaluator's sink captures it
+#' Write display lines to stdout as UTF-8 bytes, never as a format string (rule C1)
 #' @noRd
 bridge_write = function(lines) {
   writeLines(as_utf8(as.character(lines)), useBytes = TRUE)
   invisible(NULL)
 }
 
-#' Classify text with P11's classifiers through the risk.classify service
-#'
-#' Level 3 when the service is absent or fails (the classifier is advisory; contract 7.0).
+#' Classify text through P11's risk.classify service; level 3 when it is absent or fails (04 7.0)
 #' @param kind "command", "sql" or "python".
 #' @noRd
 bridge_risk = function(x, kind) {
   fallback = list(level = 3L, categories = "unclassified", paths = character())
   if (!ext_service_has("risk.classify")) return(fallback)
-  tryCatch(ext_service_get("risk.classify")(x, envir = NULL, root = project_root(), kind = kind),
+  tryCatch(ext_service_get("risk.classify")(x, root = project_root(), kind = kind),
            error = function(e) fallback)
 }
 
@@ -521,36 +537,29 @@ bridge_level = function(x, kind) {
 }
 
 #' The live record of the running session (its peter$out() store, IC-71), else NULL (the process
-#' store). P06 binds the session object of a run as `run$shell`; P10's peter$out() reads the same
-#' store.
+#' store); P06 binds the run's session object as `run$shell` (P22 ambiguity 1)
 #' @noRd
 bridge_out_session = function() {
   run = run_current()
   if (is.null(run) || is.null(run$shell)) NULL else session_live(run$shell)
 }
 
-#' Emit bridge_call (contract 10.4): into the running run, so that the `r` tool's session hook
-#' collects the digest into `details$bridge` (contract 4.4), else at process level with the event
-#' fields of contract 4.5 (ev_new() is L1, so the record is built here)
-#'
-#' `cmd` (at most 500 characters) and `digest` are redacted with the persist profile; the digest
-#' becomes the `#> ` line of history documents (contract 4.4 and 11.5).
+#' Emit bridge_call (04 10.4) into the running run, where P10 collects the digest into
+#' `details$bridge` (04 4.4), else at process level; `cmd` is redacted before it is cut
 #' @noRd
 bridge_emit = function(payload) {
-  payload$cmd = redact_hook(substr(paste(payload$cmd, collapse = " "), 1L, 500L), "persist")
-  payload$digest = redact_hook(paste0("#> ", payload$digest), "persist")
+  payload$cmd = substr(redact_hook(paste(payload$cmd, collapse = " "), "persist"), 1L, 500L)
+  payload$digest = paste0("#> ", payload$digest)
   run = run_current()
   if (is.null(run)) {
-    ev = c(list(type = "bridge_call", session = NULL, run = NULL, agent = "main", turn = NULL,
-                ts = as.numeric(Sys.time())), payload)
-    ev_dispatch("bridge_call", ev)
+    ev_dispatch("bridge_call", do.call(ev_new, c("bridge_call", payload)))
   } else {
     do.call(run_emit, c(list(run, "bridge_call"), payload))
   }
   invisible(NULL)
 }
 
-#' Validate cmd: a non-empty character vector
+#' Validate cmd: a character vector whose first element is not blank
 #' @noRd
 bridge_check_cmd = function(cmd) {
   check_strings(cmd, "cmd")
@@ -561,61 +570,16 @@ bridge_check_cmd = function(cmd) {
   invisible(cmd)
 }
 
-#' The sh options shared by peter$sh(), peter$script() and the knit shell engines; NULL means the
-#' default (a validated nested call omits arguments the model did not give)
-#' @noRd
-bridge_opts = function(wd = NULL, timeout = NULL, merge = NULL, check = NULL,
-                       max_tokens = NULL) {
-  dir = wd %||% "."
-  check_string(dir, "wd")
-  secs = timeout %||% 120
-  check_number(secs, "timeout", min = 0)
-  mrg = merge %||% FALSE
-  check_flag(mrg, "merge")
-  chk = check %||% FALSE
-  check_flag(chk, "check")
-  budget = check_number(max_tokens, "max_tokens", min = 1, int = TRUE, null = TRUE)
-  list(wd = dir, timeout = secs, merge = mrg, check = chk, max_tokens = budget)
-}
-
-#' The child's working directory, normalised
-#' @noRd
-bridge_wd = function(wd) {
-  if (!dir.exists(wd)) {
-    gptr_abort("The directory given as `wd` does not exist.", "invalid_argument", arg = "wd",
-               expected = "an existing directory")
-  }
-  normalizePath(wd, winslash = "/", mustWork = TRUE)
-}
-
-#' The helper child environment (IC-60): named values of `env` are set, unnamed ones name
-#' variables passed through although they look secret (for example a token the program needs)
-#' @noRd
-bridge_child_env = function(env = NULL) {
-  if (is.null(env)) return(child_env("helper"))
-  check_strings(env, "env")
-  nms = names(env) %||% rep("", length(env))
-  child_env("helper", pass = unname(env[!nzchar(nms)]), set = env[nzchar(nms)])
-}
-
-#' Standard input for proc_run() as new raw bytes: character lines as UTF-8 with a final newline,
-#' a data frame as CSV, raw bytes as they are
-#'
-#' The bytes go through a temporary file (writeLines(), write.csv(), writeBin()) and are read back
-#' as a new vector: paste() would put the user's vector into a list (its `...`), and proc_run()'s
-#' frame creates tryCatch() handlers that keep its arguments referenced after the call, so the
-#' user's next in-place edit would copy the object (architecture 6.4 rules R1 and R3; measured
-#' for this plan: a character or raw `input` passed on as is cost one copy, this route none).
+#' Standard input as new raw bytes: character lines as UTF-8, a data frame as CSV, raw as is
+#' Read back through a temporary file so that no list or handler frame keeps the user's object
+#' (paste() and proc_run() would; architecture 6.4 rules R1, R3).
 #' @noRd
 bridge_input = function(input) {
   if (is.null(input)) return(NULL)
-  if (is.character(input) && anyNA(input)) {
-    gptr_abort("`input` must not contain NA.", "invalid_argument", arg = "input",
-               expected = "character lines without NA")
-  }
-  if (!is.character(input) && !is.data.frame(input) && !is.raw(input)) {
-    gptr_abort("`input` must be a character vector, a data frame or a raw vector.",
-               "invalid_argument", arg = "input", expected = "character, data frame or raw")
+  if (!(is.raw(input) || is.data.frame(input) || (is.character(input) && !anyNA(input)))) {
+    gptr_abort("`input` must be character lines without NA, a data frame or a raw vector.",
+               "invalid_argument", arg = "input",
+               expected = "character without NA, data frame or raw")
   }
   f = tempfile("gptr-input-")
   on.exit(unlink(f), add = TRUE)
@@ -629,8 +593,7 @@ bridge_input = function(input) {
   readBin(f, "raw", file.size(f))
 }
 
-#' Write character lines to a file as UTF-8 bytes with LF line ends; the connection is opened in
-#' binary mode and closed before returning (conventions 6, IC-59)
+#' Write character lines to a file as UTF-8 bytes with LF line ends
 #' @noRd
 bridge_write_lines = function(lines, path) {
   con = file(path, open = "wb")
@@ -642,7 +605,7 @@ bridge_write_lines = function(lines, path) {
 #' Run a child to completion through P04; merge = TRUE sends stderr into the stdout file
 #' @noRd
 bridge_run = function(target, input, wd, timeout, env, merge) {
-  if (!isTRUE(merge)) {
+  if (!merge) {
     return(proc_run(target$command, target$args, input = input, timeout = timeout, env = env,
                     wd = wd))
   }
@@ -669,15 +632,7 @@ bridge_run = function(target, input, wd, timeout, env, merge) {
        elapsed = reactor_now() - t0)
 }
 
-#' The status word of a result for bridge_call
-#' @noRd
-bridge_cmd_status = function(x) {
-  if (isTRUE(x$timed_out)) return("timeout")
-  if (isTRUE(x$ok)) "ok" else paste("exit", x$status)
-}
-
-#' The digest of a result (G5 p09: "sh git status --porcelain: exit 0, 6 lines"); bridge_emit()
-#' adds the `#> ` prefix
+#' The digest of a result without the `#> ` prefix (G5: "sh git status: exit 0, 6 lines")
 #' @noRd
 bridge_cmd_digest = function(x, bridge, label) {
   n_out = length(text_lines(x$stdout))
@@ -699,7 +654,7 @@ bridge_status_line = function(x) {
 }
 
 #' The budgeted view of a gptr_cmd: stdout head 40% + tail 60%, then "[stderr]" within
-#' max(200, 25%) of the budget (head 20%), then the status line (G5 format.gptr_cmd, item 15)
+#' max(200, 25%) of the budget (head 20%), then the status line (04 5.10)
 #' @noRd
 bridge_cmd_view = function(x, max_tokens = NULL) {
   budget = bridge_budget(max_tokens %||% attr(x, "max_tokens", exact = TRUE))
@@ -715,13 +670,6 @@ bridge_cmd_view = function(x, max_tokens = NULL) {
                                id = x$id)
   view = c(out_view, err_view, status)
   if (length(view)) view else "(no output)"
-}
-
-#' All display lines of a gptr_cmd (stdout, [stderr], status) without truncation
-#' @noRd
-bridge_cmd_lines = function(x) {
-  err = clean_terminal(x$stderr)
-  c(clean_terminal(x$stdout), if (length(err)) c("[stderr]", err), bridge_status_line(x))
 }
 
 #' check = TRUE: a timeout or a non-zero exit becomes a classed error
@@ -742,33 +690,43 @@ bridge_check = function(x, bridge, label, timeout) {
   invisible(x)
 }
 
-#' Run a command and build its gptr_cmd: the engine behind sh, script and the knit engines
-#'
-#' The record has exactly the fields of contract 5.10 (cmd, status, ok, stdout, stderr, elapsed,
-#' timed_out, id); the print budget and the resolution route travel as the attributes
-#' `max_tokens` and `via`. stdout and stderr are kept under one peter$out() id (stderr as its
-#' "stderr" stream); stdout that a print may cut (more than this call's print budget, or the
-#' helper budget) is also written to the redacted spill file `gptr-output-<id>`, which P01's
-#' out_get() reads once the store (gptr.out_keep entries) has dropped the entry, so the
-#' truncation notice's peter$out() id stays valid.
+#' Run a command and build its gptr_cmd: the engine of sh, script and the knit engines
+#' NULL options take peter$sh()'s defaults; the 04 5.10 fields, with the print budget and route as
+#' attributes; stdout above the print budget is spilled, so the notice's id outlives the store.
 #' @noRd
-bridge_exec = function(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE,
-                       check = FALSE, max_tokens = NULL, bridge = "sh", label = NULL,
+bridge_exec = function(cmd, input = NULL, wd = NULL, timeout = NULL, env = NULL, merge = NULL,
+                       check = NULL, max_tokens = NULL, bridge = "sh", label = NULL,
                        level = NULL, target = NULL) {
+  wd = wd %||% "."
+  timeout = timeout %||% 120
+  merge = merge %||% FALSE
+  check = check %||% FALSE
+  env = env %||% character()
+  check_string(wd, "wd")
+  check_number(timeout, "timeout", min = 0)
+  check_flag(merge, "merge")
+  check_flag(check, "check")
+  check_strings(env, "env")
+  max_tokens = check_number(max_tokens, "max_tokens", min = 1, int = TRUE, null = TRUE)
+  if (!dir.exists(wd)) {
+    gptr_abort("The directory given as `wd` does not exist.", "invalid_argument", arg = "wd",
+               expected = "an existing directory")
+  }
+  # IC-60 helper environment: named values are set, unnamed ones pass variables through
+  named = nzchar(names(env) %||% character(length(env)))
+  child = child_env("helper", pass = unname(env[!named]), set = env[named])
   target = target %||% bridge_resolve(cmd)
-  res = bridge_run(target, bridge_input(input), bridge_wd(wd), timeout, bridge_child_env(env),
-                   merge)
+  res = bridge_run(target, bridge_input(input), wd, timeout, child, merge)
   timed_out = isTRUE(res$timed_out)
   status = if (timed_out) NA_integer_ else as.integer(res$status)
   out = gsub("\r\n", "\n", res$stdout, fixed = TRUE)
   err = gsub("\r\n", "\n", res$stderr, fixed = TRUE)
   lab = label %||% bridge_label(cmd)
-  id = out_put(out, stream = "stdout",
-               meta = list(stderr = err, bridge = bridge, cmd = lab),
+  id = out_put(out, meta = list(stderr = err, bridge = bridge, cmd = lab),
                session = bridge_out_session())
   spill = NULL
-  limit = min(as.numeric(gptr_opt("helper_output_tokens")), bridge_budget(max_tokens))
-  if (est_tokens(out, "r_output") > limit) {
+  if (est_tokens(out, "r_output") > min(gptr_opt("helper_output_tokens"),
+                                        bridge_budget(max_tokens))) {
     spill = spill_write(out, prefix = paste0("gptr-output-", id))
   }
   x = structure(list(cmd = cmd, status = status, ok = !timed_out && identical(status, 0L),
@@ -777,23 +735,21 @@ bridge_exec = function(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, m
                 class = "gptr_cmd", max_tokens = max_tokens, via = target$via)
   bridge_emit(list(bridge = bridge, id = id, cmd = cmd,
                    level = level %||% bridge_level(cmd, "command"),
-                   status = bridge_cmd_status(x), seconds = x$elapsed,
-                   bytes_out = nchar(out, type = "bytes"), bytes_err = nchar(err, type = "bytes"),
-                   spill = spill, digest = bridge_cmd_digest(x, bridge, lab)))
-  if (isTRUE(check)) bridge_check(x, bridge, lab, timeout)
+                   status = if (timed_out) "timeout" else if (x$ok) "ok" else paste("exit", status),
+                   seconds = x$elapsed, bytes_out = nchar(out, type = "bytes"),
+                   bytes_err = nchar(err, type = "bytes"), spill = spill,
+                   digest = bridge_cmd_digest(x, bridge, lab)))
+  if (check) bridge_check(x, bridge, lab, timeout)
   x
 }
 
-#' peter$sh(): run a program (argv) or a command line; UTF-8 stdout, stderr and the status
+#' peter$sh(): run a program (argv) or a command line (04 9.4)
 #' @noRd
 bridge_sh = function(cmd, input = NULL, wd = ".", timeout = 120, env = NULL, merge = FALSE,
                      check = FALSE, max_tokens = NULL) {
   argv = bridge_chr(cmd)
   bridge_check_cmd(argv)
-  opts = bridge_opts(wd, timeout, merge, check, max_tokens)
-  bridge_exec(argv, input = input, wd = opts$wd, timeout = opts$timeout, env = bridge_chr(env),
-              merge = opts$merge, check = opts$check, max_tokens = opts$max_tokens,
-              bridge = "sh")
+  bridge_exec(argv, input, wd, timeout, bridge_chr(env), merge, check, max_tokens)
 }
 
 #' Print a command result within its budget
@@ -836,12 +792,12 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `devtools::document()` adds `S3method(as.character,gptr_cmd)`, `S3method(format,gptr_cmd)` and `S3method(print,gptr_cmd)` to `NAMESPACE` and writes no Rd file (the methods are `@noRd`); the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 117 ]`.
+Expected: `devtools::document()` adds `S3method(as.character,gptr_cmd)`, `S3method(format,gptr_cmd)` and `S3method(print,gptr_cmd)` to `NAMESPACE` and writes no Rd file (the methods are `@noRd`); the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 119 ]`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add R/bridge-sh.R tests/testthat/test-bridge-sh.R NAMESPACE
+git add R/bridge-sh.R tests/testthat/test-bridge-sh.R tests/testthat/helper-ext.R NAMESPACE
 git commit -m 'feat(bridge): peter$sh() engine, gptr_cmd results and bridge_call digests'
 ```
 
@@ -856,7 +812,7 @@ This task adds the first version of `builtin_bridges()` (the kind and the interp
 - Test: `tests/testthat/test-bridge-sh.R` (append)
 
 **Interfaces:**
-- Consumes: `gptr_spec(kind, name, ...)` and the `kind` meta-kind (fields `validate` `function(spec)`, `resolve`, `fields`, `order_field`, `experimental`; P02, 04 §10.2 row 30), `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)` (for a `first`-resolving kind: the winning spec of each name), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02); `on_load(expr)`, `rscript_path()`, `gptr_abort()`, `check_string()`, `check_strings()` (P01); `run_current()` (P06) and its field `session` (the session id, 04 §7.6); Tasks 1-2 (`bridge_program_word()`, `bridge_chr()`, `bridge_label()`, `bridge_opts()`, `bridge_exec()`); tests: `gptr_api()`, `registry_names()`, `gptr_register()` (P02), `withr::local_tempdir()`.
+- Consumes: `gptr_spec(kind, name, ...)` and the `kind` meta-kind (fields `validate` `function(spec)`, `resolve`, `fields`, `order_field`, `experimental`; P02, 04 §10.2 row 30), `registry_get(kind, name, session = NULL)`, `registry_all(kind, session = NULL)` (for a `first`-resolving kind: the winning spec of each name), `ext_declare_builtin(name, factory, after = character(), replaceable = TRUE)` (P02); `on_load(expr)`, `rscript_path()`, `gptr_abort()`, `check_string()`, `check_strings()` (P01); `run_current()` (P06) and its field `session` (the session id, 04 §7.6); Tasks 1-2 (`bridge_program_word()`, `bridge_chr()`, `bridge_label()`, `bridge_exec()`); tests: `gptr_api()`, `registry_names()`, `gptr_register()` (P02), `withr::local_tempdir()`.
 - Produces: the kind `interpreter` [experimental] (source `builtin:bridges`); the interpreter specs `sh`, `py`, `r`, `js`, `pl`, `rb`, `jl`; `interpreter_validate(spec)`; `bridge_script(path, args = character(), interpreter = NULL, ...)` -> `gptr_cmd` (the `fun` of member `script`, 04 §9.4); `bridge_program(programs)` -> path or `NULL`; `bridge_script_argv(path, args, interpreter = NULL)`; `bridge_session_id()`; `bridge_sh_option_names`; `builtin_bridges(gptr)` (first version) declared as `builtin:bridges`.
 
 - [ ] **Step 1: Write the failing test**
@@ -958,7 +914,7 @@ test_that("unknown extensions, missing scripts and unknown options are argument 
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 117 ]`. The six new tests fail: `could not find function "interpreter_validate"` and `could not find function "bridge_script"`; `"kind.interpreter" %in% gptr_api()$features` is `FALSE`, and `registry_names("interpreter")` and `gptr_spec("interpreter", ...)` signal `Unknown capability kind 'interpreter'; registered kinds are listed by gptr_api()$features.`
+Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 119 ]`. The six new tests fail: `could not find function "interpreter_validate"` and `could not find function "bridge_script"`; `"kind.interpreter" %in% gptr_api()$features` is `FALSE`, and `registry_names("interpreter")` and `gptr_spec("interpreter", ...)` signal `Unknown capability kind 'interpreter'; registered kinds are listed by gptr_api()$features.`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1157,10 +1113,8 @@ bridge_script = function(path, args = character(), interpreter = NULL, ...) {
                expected = "an existing script file")
   }
   file = normalizePath(path, winslash = "/", mustWork = TRUE)
-  opts = bridge_opts(wd, timeout, merge, check, max_tokens)
   argv = bridge_script_argv(file, script_args, interp)
-  bridge_exec(argv, input = input, wd = opts$wd, timeout = opts$timeout, env = bridge_chr(env),
-              merge = opts$merge, check = opts$check, max_tokens = opts$max_tokens,
+  bridge_exec(argv, input, wd, timeout, bridge_chr(env), merge, check, max_tokens,
               bridge = "script", label = bridge_label(c(basename(file), script_args)),
               level = 3L)
 }
@@ -1191,7 +1145,7 @@ on_load(ext_declare_builtin("bridges", builtin_bridges))
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 146 ]`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 148 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -1309,7 +1263,7 @@ test_that("at most two jobs run at once under R CMD check (IC-60)", {
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: the six new tests error with `could not find function "bridge_bg"` (or `"bridge_jobs"`); summary `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 146 ]`.
+Expected: the six new tests error with `could not find function "bridge_bg"` (or `"bridge_jobs"`); summary `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 148 ]`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1578,7 +1532,7 @@ Rscript --vanilla -e 'devtools::document()'
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `devtools::document()` adds `S3method(print,gptr_bridge_text)` and `S3method(print,gptr_job)` to `NAMESPACE`; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 173 ]`.
+Expected: `devtools::document()` adds `S3method(print,gptr_bridge_text)` and `S3method(print,gptr_job)` to `NAMESPACE`; the tests print `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 175 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -1790,7 +1744,7 @@ test_that("computed commands are re-checked at run time with the actual command"
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: the 176 expectations of Tasks 1-4 still pass and eight of the ten new tests fail (`FAIL` is 8 or more): `bridge_block_hook()` does not exist yet; `registry_get("tool", "sh")` is `NULL`, so `expect_s3_class()` fails and `spec$risk(...)`/`spec$available(NULL)` error with `attempt to apply non-function`; `peter$sh` signals `gptr_error_unknown_member`; `registry_get("prompt_section", "shell")` is `NULL`; in the gateway runs the model code fails on the unknown member, so `e$res` is never created and the direct `sh` call reads `Tool sh not found`. Two tests already pass: P11 classifies `peter$sh()` calls (acceptance 3's static half), and with Task 3's built-in there is no shell line to remove.
+Expected: the 178 expectations of Tasks 1-4 still pass and eight of the ten new tests fail (`FAIL` is 8 or more): `bridge_block_hook()` does not exist yet; `registry_get("tool", "sh")` is `NULL`, so `expect_s3_class()` fails and `spec$risk(...)`/`spec$available(NULL)` error with `attempt to apply non-function`; `peter$sh` signals `gptr_error_unknown_member`; `registry_get("prompt_section", "shell")` is `NULL`; in the gateway runs the model code fails on the unknown member, so `e$res` is never created and the direct `sh` call reads `Tool sh not found`. Two tests already pass: P11 classifies `peter$sh()` calls (acceptance 3's static half), and with Task 3's built-in there is no shell line to remove.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -2060,7 +2014,7 @@ on_load(ext_declare_builtin("bridges", builtin_bridges))
 Rscript --vanilla -e 'devtools::test(filter = "bridge-sh")'
 ```
 
-Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 267 ]`.
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 269 ]`.
 
 - [ ] **Step 5: Commit**
 
@@ -2091,17 +2045,6 @@ Create `tests/testthat/test-bridge-lang.R`:
 ```r
 # Tests for R/bridge-lang.R (P22): objects passed by name, peter$sql(), peter$py(), peter$knit(),
 # builtin:lang.
-
-local_bridge_events = function(.env = parent.frame()) {
-  log = new.env(parent = emptyenv())
-  log$events = list()
-  off = gptr_register(gptr_hook("bridge_call", function(event, ctx) {
-    log$events[[length(log$events) + 1L]] = event
-    NULL
-  }))
-  withr::defer(off(), envir = .env)
-  log
-}
 
 test_that("objects passed by name take the label of their expression", {
   f = function(query, name = NULL) bridge_object_names(name, "name", f)
@@ -2755,8 +2698,8 @@ git commit -m 'feat(bridge): peter$py() in reticulate __main__ with the provisio
 - Test: `tests/testthat/test-bridge-lang.R` (append)
 
 **Interfaces:**
-- Consumes: `shell_resolve(cmd)` (P04, Windows Git Bash) and `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_cmd_lines()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_session_id()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
-- Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`; `bridge_knit_interpreter(engine)` -> an interpreter spec or `NULL`; `bridge_knit_script(spec, engine, src)` -> `gptr_cmd`.
+- Consumes: `shell_resolve(cmd)` (P04, Windows Git Bash) and `shell_ps_encode(cmd)` (P04 `proc-spawn.R`: base64 of the UTF-16LE command with the UTF-8 output prefix and the `$LASTEXITCODE` postfix); `knitr::knit_engines`, `knitr::opts_chunk` (Suggests); `registry_all(kind, session = NULL)` (P02); `out_put()`, `as_utf8()`, `check_string()`, `check_strings()`, `gptr_abort()`, `reactor_now()`, `clean_terminal()` (P01, P04); Tasks 1-7 (`bridge_exec()`, `bridge_program()`, `bridge_status_line()`, `bridge_write_lines()`, `bridge_interpreter_argv()`, `bridge_session_id()`, `bridge_text()`, `bridge_py()`, `bridge_py_lines()`, `bridge_sql()`, `bridge_sql_lines()`, `bridge_find_connection()`, `bridge_caller_env()`, `bridge_level()`, `bridge_emit()`, `bridge_out_session()`); tests: `secret_register(value, name, source = "user", active = TRUE, origin = NULL)` and `vault_reset()` (P03), `RSQLite::SQLite()`, `knitr::knit_engines$set()`/`$delete()`.
+- Produces: `bridge_knit(engine, code)` -> `gptr_bridge_text` (a character vector; the `fun` of member `knit`); `bridge_cmd_lines(x)`; `bridge_knit_shells`; `bridge_knit_timeout()`; `bridge_knit_target(engine, code)`; `bridge_knit_interpreter(engine)` -> an interpreter spec or `NULL`; `bridge_knit_script(spec, engine, src)` -> `gptr_cmd`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2930,6 +2873,13 @@ bridge_knit_interpreter = function(engine) {
     if (identical(tolower(spec$name), eng) || eng %in% progs) return(spec)
   }
   NULL
+}
+
+#' All display lines of a gptr_cmd (stdout, [stderr], status) without truncation
+#' @noRd
+bridge_cmd_lines = function(x) {
+  err = clean_terminal(x$stderr)
+  c(clean_terminal(x$stdout), if (length(err)) c("[stderr]", err), bridge_status_line(x))
 }
 
 #' Run engine code with an interpreter, like peter$script(): a temporary script with the
@@ -3480,7 +3430,7 @@ Commands and expected results:
 Rscript --vanilla -e 'devtools::test(filter = "bridge|copy-bridge")'
 ```
 
-Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 361 ]` (`test-bridge-sh.R` 267; `test-bridge-lang.R` 84 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 399 ]`.
+Expected without duckdb and a configured Python: `[ FAIL 0 | WARN 0 | SKIP 7 | PASS 363 ]` (`test-bridge-sh.R` 269; `test-bridge-lang.R` 84 with 6 skips: two duckdb tests, two Python tests, the Python half of the knit engines test and the console/model `peter$sql(name =)` test; `test-copy-bridge.R` 10 with the `peter$sql()` row skipped). With duckdb installed and `RETICULATE_PYTHON` set to a Python with pandas: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 401 ]`.
 
 ```bash
 Rscript --vanilla dev/bench/tokens/run.R --check
