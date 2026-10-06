@@ -1,0 +1,180 @@
+# tests/testthat/test-ckpt-objects.R -- object pre-images and gptr_preimage() (P16). Model code
+# is simulated with agent_eval(), the way the evaluator runs top-level expressions in the
+# workspace (values never kept); values are compared, and addresses where G7 says an operation
+# must not copy.
+
+agent_eval = function(code, envir) {
+  for (ex in parse(text = code, keep.source = FALSE)) eval(ex, envir)
+  invisible(NULL)
+}
+
+test_that("gptr_preimage() keeps value objects by reference and refuses reference objects", {
+  ctx = list(predicted = "assign", bytes = 64, budget = 1e9)
+  expect_identical(gptr_preimage(1:3, "x", ctx), list(mode = "ref", reason = NULL, copy = NULL))
+  res = gptr_preimage(new.env(), "cfg", ctx)
+  expect_identical(res$mode, "none")
+  expect_match(res$reason, "reference object")
+  expect_identical(gptr_preimage(methods::new("externalptr"), "p", ctx)$mode, "none")
+  expect_identical(gptr_preimage(mtcars, "mt", list(predicted = "byref", bytes = 7e3,
+                                                     budget = 1e9))$mode, "ref")
+})
+
+test_that("the data.table method copies only predicted := and set() targets within budget", {
+  skip_if_not_installed("data.table")
+  dt = data.table::data.table(a = 1:3)
+  ctx = list(predicted = "modify", bytes = 100, budget = 1e9)
+  expect_identical(gptr_preimage(dt, "dt", ctx)$mode, "ref")
+  res = gptr_preimage(dt, "dt", list(predicted = "byref", bytes = 100, budget = 1e9))
+  expect_identical(res$mode, "copy")
+  data.table::set(dt, 1L, "a", 99L)
+  expect_identical(res$copy$a, 1:3)
+  over = gptr_preimage(dt, "dt", list(predicted = "byref", bytes = 2e9, budget = 1e9))
+  expect_identical(over$mode, "none")
+  dry = gptr_preimage(dt, "dt", list(predicted = "byref", bytes = 100, budget = 1e9, dry = TRUE))
+  expect_identical(dry$mode, "copy")
+  expect_null(dry$copy)
+})
+
+test_that("capture, settle and restore swap values by reference", {
+  e = new.env()
+  e$x = c(1, 2, 3)
+  e$y = "unchanged"
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, c("x", "y"))
+  expect_identical(p$address, c(rlang::obj_address(e$x), rlang::obj_address(e$y)))
+  agent_eval("x = x * 2", e)
+  r = ckpt_settle(st, e, p, frag = "f1", turn = 1L)
+  expect_identical(r$status, c("changed", "unchanged"))
+  expect_false(exists(p$key[2], envir = st$slots))
+  expect_true(exists(p$key[1], envir = st$slots))
+  res = ckpt_restore(st, e, "x", r$key[1], expect = r$post_address[1], frag = "f1")
+  expect_true(res$ok)
+  expect_identical(e$x, c(1, 2, 3))
+  expect_identical(rlang::obj_address(e$x), p$address[1])
+  expect_identical(get(res$redo, envir = st$slots), c(2, 4, 6))
+  expect_identical(st$index$role, "redo")
+})
+
+test_that("a restore refuses a binding changed after the checkpoint unless forced", {
+  e = new.env()
+  e$x = c(1, 2, 3)
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "x")
+  agent_eval("x = x * 2", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  e$x = 0
+  res = ckpt_restore(st, e, "x", r$key, expect = r$post_address)
+  expect_false(res$ok)
+  expect_match(res$reason, "conflict")
+  expect_identical(e$x, 0)
+  res = ckpt_restore(st, e, "x", r$key, expect = r$post_address, force = TRUE)
+  expect_true(res$ok)
+  expect_identical(e$x, c(1, 2, 3))
+  expect_identical(ckpt_restore(st, e, "x", "pnone")$reason, "no pre-image")
+})
+
+test_that("removed bindings come back and created ones are unbound into redo images", {
+  e = new.env()
+  e$a = 1
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "a")
+  agent_eval("rm(a); b = 2", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  expect_identical(r$status, "removed")
+  res = ckpt_restore(st, e, "a", r$key, expect = NA_character_, frag = "f1")
+  expect_true(res$ok)
+  expect_identical(e$a, 1)
+  expect_true(is.na(res$redo))
+  k = ckpt_uncreate(st, e, "b", frag = "f1")
+  expect_false(exists("b", envir = e, inherits = FALSE))
+  expect_identical(get(k, envir = st$slots), 2)
+})
+
+test_that("spilled images restore from disk; drop deletes images and defuses lists", {
+  dir = withr::local_tempdir()
+  e = new.env()
+  e$x = seq(1, 10, by = 0.5)
+  st = ckpt_obj_store(dir)
+  p = ckpt_capture(st, e, "x")
+  agent_eval("x[2] = 0", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  f = ckpt_spill(st, r$key)
+  expect_true(file.exists(f))
+  expect_false(exists(r$key, envir = st$slots))
+  expect_identical(st$index$where, "disk")
+  res = ckpt_restore(st, e, "x", r$key, expect = r$post_address)
+  expect_true(res$ok)
+  expect_identical(e$x, seq(1, 10, by = 0.5))
+  expect_false(file.exists(f))
+  e$L = list(a = 1:3, b = 4:6)
+  p = ckpt_capture(st, e, "L")
+  agent_eval("L$new = 1", e)
+  r = ckpt_settle(st, e, p, frag = "f2")
+  expect_lt(ckpt_unshared_bytes(st, r$key, e, "L"), 400)
+  ckpt_drop(st, st$index$key)
+  expect_identical(nrow(st$index), 0L)
+  expect_identical(ls(st$slots), character())
+  expect_identical(e$L$a, 1:3)
+  expect_identical(e$L$new, 1)
+})
+
+test_that("the unshared-bytes walk visits a classed list's components, not its length()", {
+  e = new.env()
+  e$tm = as.POSIXlt(as.POSIXct("2024-01-01", tz = "UTC") + 0:99)
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "tm")
+  agent_eval("tm = as.POSIXlt(as.POSIXct(tm) + 60)", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  expect_gt(ckpt_unshared_bytes(st, r$key, e, "tm"), 800)
+})
+
+test_that("defusing a data frame image leaves the user's data frame intact", {
+  e = new.env()
+  e$df = data.frame(a = 1:3, b = c("x", "y", "z"))
+  st = ckpt_obj_store()
+  p = ckpt_capture(st, e, "df")
+  agent_eval("df$c = 1", e)
+  r = ckpt_settle(st, e, p, frag = "f1")
+  ckpt_drop(st, r$key)
+  expect_identical(e$df$a, 1:3)
+  expect_identical(e$df$b, c("x", "y", "z"))
+  expect_identical(ls(st$slots), character())
+})
+
+test_that("an eager disk image restores a large object edited in place", {
+  dir = withr::local_tempdir()
+  e = new.env()
+  e$big = c(1, 2, 3)
+  st = ckpt_obj_store(dir)
+  d = ckpt_capture_disk(st, e, "big")
+  expect_true(file.exists(d$file))
+  expect_identical(ls(st$slots), character())
+  agent_eval("big[1] = 10", e)
+  ckpt_index_add(st, d$key, "f1", "big", "pre", where = "disk", file = d$file)
+  res = ckpt_restore(st, e, "big", d$key, expect = ckpt_addr(e, "big"))
+  expect_true(res$ok)
+  expect_identical(e$big, c(1, 2, 3))
+})
+
+test_that("the sweep releases captures that no index row owns", {
+  e = new.env()
+  e$x = 1:3
+  st = ckpt_obj_store()
+  ckpt_capture(st, e, "x")
+  expect_length(ls(st$slots), 1L)
+  ckpt_obj_sweep(st)
+  expect_length(ls(st$slots), 0L)
+})
+
+test_that("a collected checkpoint state releases its images (finalizer, G7 c06b)", {
+  ck = ckpt_ck_new("s0000000008")
+  e = new.env()
+  e$x = seq(0, 1, length.out = 10)
+  ckpt_capture(ck$obj, e, "x")
+  slots = ck$obj$slots
+  expect_length(ls(slots), 1L)
+  rm(ck)
+  invisible(gc())
+  invisible(gc())
+  expect_length(ls(slots), 0L)
+})
