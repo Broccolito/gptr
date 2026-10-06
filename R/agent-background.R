@@ -12,6 +12,7 @@ bg_state = function() {
     st = new.env(parent = emptyenv())
     st$sessions = new.env(parent = emptyenv())
     st$ticking = FALSE
+    st$ticks = 0L
     the$bg = st
   }
   st
@@ -225,6 +226,7 @@ bg_register = function(s) {
   }
   run$opts$background = TRUE
   bg_track(s, run)
+  bg_ensure_pump()
   invisible(s)
 }
 
@@ -279,9 +281,10 @@ bg_stop = function(id) {
   bg_release(id)
 }
 
-#' Forget a background session: UI wrappers, live handle, job row, strong reference
+#' Forget a background session: UI wrappers, live handle, job row, strong reference; with
+#' `notice`, tell the idle console how it settled
 #' @noRd
-bg_release = function(id) {
+bg_release = function(id, notice = FALSE) {
   s = bg_get(id)
   if (is.null(s)) return(invisible(FALSE))
   live = session_live(s)
@@ -291,14 +294,108 @@ bg_release = function(id) {
   }
   job_remove(id)
   rm(list = id, envir = bg_state()$sessions)
+  if (notice) {
+    d = session_data(s)
+    why = if (length(d$reason) && nzchar(d$reason)) paste0(": ", bg_cut(d$reason, 120L))
+    gptr_inform(paste0("Background session ", id, " finished with status ", d$status, why, "."),
+                "notice")
+  }
   invisible(TRUE)
 }
 
-#' Unload cleanup (registered with on_unload()): stop every background session
+#' Unload cleanup (registered with on_unload()): cancel the timer, stop every background session
 #' @noRd
 bg_shutdown = function() {
-  if (is.null(the$bg)) return(invisible(NULL))
+  st = the$bg
+  if (is.null(st)) return(invisible(NULL))
+  if (!is.null(st$cancel)) st$cancel()
   for (id in bg_ids()) try(bg_stop(id), silent = TRUE)
   the$bg = NULL
+  invisible(NULL)
+}
+
+#' Arm the 50 ms later timer when background sessions exist and none is armed. Never creates
+#' `the$bg`: a callback that fires after bg_shutdown() must not revive the state
+#' @noRd
+bg_ensure_pump = function() {
+  st = the$bg
+  if (is.null(st) || !is.null(st$cancel) || !length(ls(st$sessions))) return(invisible(FALSE))
+  st$cancel = later::later(bg_callback, 0.05)
+  invisible(TRUE)
+}
+
+#' Evaluate `expr`; an error becomes a `builtin:background` diagnostic (later::run_now() would
+#' re-raise it at the console)
+#' @noRd
+bg_guard = function(event, expr) {
+  tryCatch(expr, error = function(e) {
+    registry_diagnostic("builtin:background", event, class(e)[1L], conditionMessage(e))
+    invisible(NULL)
+  })
+}
+
+#' The later callback: an idle tick, or bookkeeping only while a reactor pump is on the stack
+#' (IC-57). It re-arms on exit, even after an interrupt, and guards tick and sweep separately, so
+#' a failing tick never skips the sweep that stops a run with a recorded ask
+#' @noRd
+bg_callback = function() {
+  st = bg_state()
+  pending = st$cancel
+  st$cancel = NULL
+  # a manual call must not leave two timer chains
+  if (!is.null(pending)) pending()
+  on.exit(bg_ensure_pump(), add = TRUE)
+  idle = reactor_depth() == 0L
+  if (idle) bg_guard("tick", bg_tick())
+  bg_guard("sweep", bg_sweep(idle))
+  invisible(NULL)
+}
+
+#' Live runs of the background sessions (a session with a recorded ask is not ticked again)
+#' @noRd
+bg_runs = function() {
+  out = list()
+  for (id in bg_ids()) {
+    live = session_live(bg_get(id))
+    if (!is.null(live$run) && is.null(live$background$ask)) out[[length(out) + 1L]] = live$run
+  }
+  out
+}
+
+#' One idle tick: one non-blocking reactor iteration under the console interrupt policy (P14) in
+#' "repl" mode, else abort-only. Explicit `allow_runs` keep the tools of other (suspended
+#' foreground) runs queued
+#' @noRd
+bg_tick = function() {
+  runs = bg_runs()
+  if (!length(runs)) return(invisible(FALSE))
+  st = bg_state()
+  allow = character()
+  if (identical(bg_tools_mode(), "idle")) allow = vapply(runs, function(r) r$id, "")
+  st$ticking = TRUE
+  on.exit({
+    st$ticking = FALSE
+  }, add = TRUE)
+  st$ticks = st$ticks + 1L
+  pump = function() reactor_pump(until = bg_once(), slice_ms = 0L, allow_runs = allow)
+  if (ext_service_has("console.interrupt_policy")) {
+    ext_service_get("console.interrupt_policy")(pump, runs, mode = "repl")
+  } else {
+    tryCatch(pump(), interrupt = function(cnd) for (run in runs) run_abort(run, reason = "user"))
+  }
+  invisible(TRUE)
+}
+
+#' Bookkeeping after a tick or inside a blocking pump: stop the runs of sessions with a recorded
+#' ask (never retried at the next tick), release settled sessions
+#' @noRd
+bg_sweep = function(idle) {
+  for (id in bg_ids()) {
+    live = session_live(bg_get(id))
+    if (!is.null(live$run) && !is.null(live$background$ask)) {
+      run_abort(live$run, reason = "waiting")
+    }
+    if (is.null(live$run)) bg_release(id, notice = idle)
+  }
   invisible(NULL)
 }

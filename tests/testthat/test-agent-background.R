@@ -276,3 +276,118 @@ test_that("gptr_jobs(kill = TRUE) and bg_shutdown() stop background sessions", {
   expect_identical(c1$status, "aborted")
   expect_null(the$bg)
 })
+
+bg_pump_until = function(cond, timeout = 20) {
+  t0 = Sys.time()
+  while (!isTRUE(cond()) && as.numeric(difftime(Sys.time(), t0, units = "secs")) < timeout) {
+    later::run_now(0.05)
+  }
+  isTRUE(cond())
+}
+
+bg_has_assistant = function(s) {
+  "assistant" %in% vapply(s$messages, function(m) m$role, "")
+}
+
+test_that("a background run progresses while the test pumps later::run_now()", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_gptr_options(background_tools = "idle")
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "x = 1"), delay = 0.1),
+                                 list(text = "done", delay = 0.1)))
+  e = new.env()
+  s = peter("long job", model = fake, mode = "auto", envir = e, background = TRUE)
+  expect_s3_class(s, "gptr_session")
+  expect_identical(s$status, "running")
+  expect_true(s$id %in% gptr_jobs()$id)
+  expect_true(bg_pump_until(function() !identical(s$status, "running")))
+  expect_identical(s$status, "idle")
+  expect_identical(s$text, "done")
+  expect_identical(e$x, 1)
+  expect_identical(length(fake$log$requests), 2L)
+  expect_true(bg_state()$ticks > 0L)
+  expect_true(bg_pump_until(function() !bg_has(s$id)))
+  expect_false(s$id %in% gptr_jobs()$id)
+})
+
+test_that("the background tick is a no-op while a reactor pump is on the stack", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  s = peter("hang", model = gptr_fake_provider(list(list(hang = TRUE))), envir = new.env(),
+           background = TRUE)
+  st = bg_state()
+  before = st$ticks
+  reactor_pump(until = function() {
+    bg_callback()
+    TRUE
+  }, slice_ms = 0L, timeout = 5)
+  expect_identical(st$ticks, before)
+  bg_callback()
+  expect_identical(st$ticks, before + 1L)
+  expect_identical(s$status, "running")
+})
+
+test_that("a pipe into a running background session steers it after the tool result", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  local_gptr_options(background_tools = "wait")
+  fake = gptr_fake_provider(list(list(tool = "r", input = list(code = "y = 2")), "used TPM"))
+  e = new.env()
+  s = peter("normalise the counts", model = fake, mode = "auto", envir = e, background = TRUE)
+  expect_true(bg_pump_until(function() bg_has_assistant(s)))
+  expect_identical(s$status, "running")
+  expect_null(e$y)
+  res = withVisible(s |> peter("Use TPM, not CPM"))
+  expect_false(res$visible)
+  expect_identical(res$value, s)
+  expect_identical(s$status, "running")
+  expect_identical(length(session_data(s)$queue$steer), 1L)
+  gptr_wait(s, timeout = 20)
+  expect_identical(s$status, "idle")
+  expect_identical(e$y, 2)
+  expect_identical(s$text, "used TPM")
+  msgs = fake$log$requests[[2]]$messages
+  roles = vapply(msgs, function(m) m$role, "")
+  texts = vapply(msgs, msg_text, "")
+  i_result = max(which(roles == "tool_result"))
+  i_steer = which(grepl("Use TPM, not CPM", texts, fixed = TRUE))
+  expect_identical(i_steer, i_result + 1L)
+  expect_match(texts[[i_steer]],
+               "The user sent this message while you were working: Use TPM, not CPM",
+               fixed = TRUE)
+})
+
+test_that("gptr_cancel() aborts a background session and releases its job", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  fake = gptr_fake_provider(list(list(hang = TRUE)))
+  s = peter("long task", model = fake, envir = new.env(), background = TRUE)
+  expect_true(bg_pump_until(function() length(fake$log$requests) >= 1L))
+  gptr_cancel(s)
+  expect_identical(s$status, "aborted")
+  local_gptr_options(quiet = FALSE)
+  expect_message(expect_true(bg_pump_until(function() !bg_has(s$id))),
+                 "finished with status aborted", class = "gptr_message_notice")
+  expect_false(s$id %in% gptr_jobs()$id)
+})
+
+test_that("an unreferenced settled background session is collected", {
+  skip_on_cran()
+  skip_if_not_installed("later")
+  withr::defer(bg_shutdown())
+  s = peter("short job", model = gptr_fake_provider(list("done")), envir = new.env(),
+           background = TRUE)
+  w = rlang::new_weakref(s)
+  id = s$id
+  expect_true(bg_pump_until(function() !bg_has(id)))
+  expect_identical(rlang::wref_key(w)$status, "idle")
+  peter("replace the last session", model = gptr_fake_provider(list("ok")), envir = new.env())
+  rm(s)
+  invisible(gc())
+  invisible(gc())
+  expect_null(rlang::wref_key(w))
+})
