@@ -860,10 +860,15 @@ test_that("a console call asks once where to record and keeps the transcript sit
   testthat::local_mocked_bindings(doc_command_args = function() "R")
   asked = new.env()
   asked$n = 0L
-  testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
-    asked$n = asked$n + 1L
-    "y"
-  })
+  has = ext_service_has
+  # without a UI backend (P11's ui.get) the console asks a yes/no question
+  testthat::local_mocked_bindings(
+    ext_service_has = function(name) !identical(name, "ui.get") && has(name),
+    gptr_readline = function(prompt = "") {
+      asked$n = asked$n + 1L
+      "y"
+    }
+  )
   call = doc_console_call()
   expect_true(doc_route_match(call))
   expect_true(call$top_level)
@@ -1013,10 +1018,15 @@ test_that("a console call asks nothing when it cannot be recorded (record off, r
   testthat::local_mocked_bindings(doc_command_args = function() "R")
   asked = new.env()
   asked$n = 0L
-  testthat::local_mocked_bindings(gptr_readline = function(prompt = "") {
-    asked$n = asked$n + 1L
-    "y"
-  })
+  has = ext_service_has
+  # without a UI backend (P11's ui.get) the console asks a yes/no question
+  testthat::local_mocked_bindings(
+    ext_service_has = function(name) !identical(name, "ui.get") && has(name),
+    gptr_readline = function(prompt = "") {
+      asked$n = asked$n + 1L
+      "y"
+    }
+  )
   local_gptr_options(record = "off", replay = "auto", interactive = TRUE)
   call = doc_console_call()
   expect_false(doc_route_match(call))

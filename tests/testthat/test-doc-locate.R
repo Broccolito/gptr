@@ -163,7 +163,12 @@ test_that("transcript targets follow the setting and are validated (IC-52)", {
 test_that("an interactive console asks once where to record and remembers the answer", {
   proj = local_project()
   local_gptr_options(transcript = "ask", interactive = TRUE)
-  testthat::local_mocked_bindings(gptr_readline = function(prompt = "") "y")
+  has = ext_service_has
+  # without a UI backend (P11's ui.get) the console asks a yes/no question
+  testthat::local_mocked_bindings(
+    ext_service_has = function(name) !identical(name, "ui.get") && has(name),
+    gptr_readline = function(prompt = "") "y"
+  )
   t1 = doc_transcript_target(ask = TRUE)
   expect_match(t1, "gptr-session-")
   testthat::local_mocked_bindings(gptr_readline = function(prompt = "") stop("asked twice"))
@@ -381,7 +386,9 @@ test_that("with an active document and no workspace the question names the docum
   local_gptr_options(transcript = "ask", interactive = TRUE)
   asked = new.env()
   asked$q = character()
+  has = ext_service_has
   testthat::local_mocked_bindings(
+    ext_service_has = function(name) !identical(name, "ui.get") && has(name),
     doc_ide_available = function() TRUE,
     doc_ide_context = function() list(id = "ed1", path = f, contents = "x = 1"),
     gptr_readline = function(prompt = "") {
