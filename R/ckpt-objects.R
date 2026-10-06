@@ -367,6 +367,7 @@ ckpt_ck_new = function(sid, spill_dir = NULL) {
   ck = new.env(parent = emptyenv())
   ck$sid = sid
   ck$obj = ckpt_obj_store(spill_dir)
+  ck$state_img = new.env(parent = emptyenv())
   reg.finalizer(ck, ckpt_ck_finalize)
   ck
 }
@@ -387,6 +388,12 @@ ckpt_frag_id = function() {
 #' @noRd
 ckpt_json_num = function(x) {
   if (is.na(x)) -1 else as.numeric(x)
+}
+
+#' A character vector from a fragment field, as built or as decoded from JSON (lists, NULL)
+#' @noRd
+ckpt_chr = function(x) {
+  as.character(unlist(x, use.names = FALSE))
 }
 
 #' An empty item table (the results of undo, redo and previews)
@@ -806,4 +813,190 @@ ckpt_note = function(call, run = NULL) {
   size = vapply(snap$bytes[bad], env_fmt_bytes, "")
   why = ifelse(how[bad] == "skip", paste0(size, ", over the undo budget"), pm$reason[bad])
   paste0("cannot be undone: ", paste0(snap$name[bad], " (", why, ")", collapse = "; "))
+}
+
+# ---- the state checkpointer (G7 section 5.5) -----------------------------------------------------
+# Fragments carry names; option values, working directories and connection identities stay in this
+# R process (ck$state_img, by fragment id). Environment variables and the RNG state are reported,
+# never set (contract 12.3: Sys.setenv() only in auth-dotenv.R; .Random.seed only in rng_swap() and
+# with_seed_preserved(), IC-61).
+
+#' The open user connections, named by number: each one's conn_id as text (unique within this R
+#' process; text, so an image never keeps a connection alive)
+#' @noRd
+ckpt_cons = function() {
+  n = setdiff(as.integer(getAllConnections()), 0:2)
+  stats::setNames(vapply(n, function(i) format(attr(getConnection(i), "conn_id")), ""), n)
+}
+
+#' The process state an R call can change: P09's session state, the locale, the open connections
+#' and a hash of the global RNG state ("" when there is none)
+#' @noRd
+ckpt_state_snapshot = function() {
+  seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  c(eval_session_state(),
+    list(locale = Sys.getlocale(), connections = ckpt_cons(),
+         seed = if (is.null(seed)) "" else hash_xxh128(seed)))
+}
+
+#' State checkpointer, before a call that evaluates R code
+#' @return A token, or NULL when the call evaluates no R code.
+#' @noRd
+ckpt_state_before = function(ck, call, turn = 1L) {
+  if (!rlang::is_string(call$input$code)) return(NULL)
+  list(frag = ckpt_frag_id(), turn = as.integer(turn), pre = ckpt_state_snapshot())
+}
+
+#' State checkpointer, after the call: names in the fragment, values in `ck$state_img`. Options
+#' that appear while the call loads namespaces belong to those namespaces and stay with them.
+#' @return `list(id, turn, options, envvars, wd, locale, attached, detached, loaded, dev_opened,
+#'   dev_closed, con_opened, con_closed, rng)`, or NULL when nothing changed.
+#' @noRd
+ckpt_state_after = function(ck, call, token) {
+  if (is.null(token)) return(NULL)
+  pre = token$pre
+  post = ckpt_state_snapshot()
+  ev = eval_state_diff(pre, post)
+  new = if (length(ev$loaded)) setdiff(names(post$options), names(pre$options))
+  dev = function(a, b) as.integer(setdiff(a$devices, b$devices))
+  con = function(a, b) as.integer(names(a$connections)[!a$connections %in% b$connections])
+  d = list(options = setdiff(ev$options, new), envvars = ev$envvars, wd = !is.null(ev$wd),
+           locale = !identical(pre$locale, post$locale), attached = ev$attached,
+           detached = setdiff(pre$search, post$search), loaded = ev$loaded,
+           dev_opened = dev(post, pre), dev_closed = dev(pre, post),
+           con_opened = con(post, pre), con_closed = con(pre, post),
+           rng = isTRUE(gptr_opt("checkpoint_rng")) && !identical(pre$seed, post$seed))
+  if (!any(vapply(d, function(x) length(x) > 0L && !isFALSE(x), NA))) return(NULL)
+  items = c(paste("option", d$options, recycle0 = TRUE), "working directory")
+  keep = function(s) stats::setNames(c(s$options[d$options], list(s$wd)), items)
+  assign(token$frag, list(pre = keep(pre), post = keep(post), con = post$connections),
+         envir = ck$state_img)
+  c(list(id = token$frag, turn = token$turn), d)
+}
+
+#' One undo or redo action as an item row: "would be <verb>" when `dry`; otherwise `fun()` runs
+#' and the row says <verb>, or "not <verb> (<error>)" when it fails
+#' @noRd
+ckpt_state_do = function(out, item, verb, dry, fun) {
+  err = if (!dry) {
+    tryCatch({
+      fun()
+      NULL
+    }, error = conditionMessage)
+  }
+  action = if (dry) paste("would be", verb) else if (is.null(err)) verb else
+    paste0("not ", verb, " (", err, ")")
+  ckpt_item(out, item, is.null(err), action)
+}
+
+#' Undo (or redo) the options, the working directory and the search path of a state fragment. An
+#' option or the directory is set only while it holds the value the call (or the undo) left: the
+#' 3-way rule of G7 section 3.6.
+#' @noRd
+ckpt_state_apply = function(ck, fragment, undo, force, dry) {
+  img = get0(fragment$id, envir = ck$state_img, inherits = FALSE)
+  left = if (undo) img$post else img$pre
+  goal = if (undo) img$pre else img$post
+  done = if (undo) "restored" else "redone"
+  out = ckpt_items()
+  wd = if (isTRUE(fragment$wd)) "working directory"
+  for (item in c(paste("option", ckpt_chr(fragment$options), recycle0 = TRUE), wd)) {
+    n = sub("^option ", "", item)
+    now = if (identical(item, wd)) getwd() else getOption(n)
+    if (is.null(img)) {
+      out = ckpt_item(out, item, FALSE, paste0("not ", done, " (the values were not kept: ",
+                                               "another R process made this checkpoint)"))
+    } else if (!force && !identical(now, left[[item]])) {
+      out = ckpt_item(out, item, FALSE, paste0("conflict: changed after the ",
+                                               if (undo) "checkpoint" else "undo",
+                                               " (kept current)"))
+    } else {
+      out = ckpt_state_do(out, item, done, dry, function() {
+        if (identical(item, wd)) setwd(goal[[item]]) else options(stats::setNames(goal[item], n))
+      })
+    }
+  }
+  attached = ckpt_chr(fragment$attached)
+  for (p in c(attached, ckpt_chr(fragment$detached))) {
+    attach = xor(undo, p %in% attached)
+    out = ckpt_state_do(out, p, if (attach) "attached" else "detached", dry, function() {
+      if (attach && !p %in% search()) {
+        suppressPackageStartupMessages(attachNamespace(sub("^package:", "", p)))
+      }
+      if (!attach && p %in% search()) detach(p, character.only = TRUE)
+    })
+  }
+  out
+}
+
+#' Undo one state fragment: options, the working directory and the search path
+#' (ckpt_state_apply()), connections the call opened while they are still open, and devices with
+#' gptr.checkpoint_close_devices; the rest is reported
+#' @return An item table (`ckpt_items()`).
+#' @noRd
+ckpt_state_undo = function(ck, fragment, force = FALSE, dry = FALSE) {
+  out = ckpt_state_apply(ck, fragment, TRUE, force, dry)
+  img = get0(fragment$id, envir = ck$state_img, inherits = FALSE)
+  gone = "not closed (another R process made this checkpoint)"
+  for (n in ckpt_chr(fragment$envvars)) {
+    out = ckpt_item(out, paste("environment variable", n), FALSE,
+                    "not restored (gptr never sets environment variables; use Sys.setenv())")
+  }
+  if (isTRUE(fragment$locale)) {
+    out = ckpt_item(out, "locale", NA, "changed by the turn; left as is (see Sys.setlocale())")
+  }
+  loaded = ckpt_chr(fragment$loaded)
+  if (length(loaded)) {
+    out = ckpt_item(out, paste("namespaces", paste(loaded, collapse = ", ")), NA,
+                    "stay loaded with the options they created (unloading is unsafe)")
+  }
+  close_dev = isTRUE(gptr_opt("checkpoint_close_devices"))
+  for (dv in as.integer(ckpt_chr(fragment$dev_opened))) {
+    item = paste("graphics device", dv)
+    if (!close_dev) {
+      out = ckpt_item(out, item, NA, "left open (gptr.checkpoint_close_devices = FALSE)")
+    } else if (is.null(img)) {
+      out = ckpt_item(out, item, FALSE, gone)
+    } else {
+      out = ckpt_state_do(out, item, "closed", dry, function() {
+        if (dv %in% grDevices::dev.list()) grDevices::dev.off(dv)
+      })
+    }
+  }
+  now = ckpt_cons()
+  for (cn in ckpt_chr(fragment$con_opened)) {
+    item = paste("connection", cn)
+    if (is.null(img)) {
+      out = ckpt_item(out, item, FALSE, gone)
+    } else if (!identical(now[cn], img$con[cn])) {
+      out = ckpt_item(out, item, TRUE, "already closed")
+    } else {
+      out = ckpt_state_do(out, item, "closed", dry, function() close(getConnection(as.integer(cn))))
+    }
+  }
+  for (item in c(paste("graphics device", ckpt_chr(fragment$dev_closed), recycle0 = TRUE),
+                 paste("connection", ckpt_chr(fragment$con_closed), recycle0 = TRUE))) {
+    out = ckpt_item(out, item, FALSE, "not restored (closed by the turn; it cannot be reopened)")
+  }
+  if (isTRUE(fragment$rng)) {
+    out = ckpt_item(out, "RNG state", NA,
+                    "advanced by the turn; left as is (gptr never sets .Random.seed)")
+  }
+  out
+}
+
+#' Redo one state fragment: options, the working directory and packages again
+#' @noRd
+ckpt_state_redo = function(ck, fragment, force = FALSE, dry = FALSE) {
+  ckpt_state_apply(ck, fragment, FALSE, force, dry)
+}
+
+#' One line per item of a state fragment
+#' @noRd
+ckpt_state_describe = function(fragment) {
+  c(paste("option", ckpt_chr(fragment$options), recycle0 = TRUE),
+    paste("environment variable", ckpt_chr(fragment$envvars), recycle0 = TRUE),
+    if (isTRUE(fragment$wd)) "working directory",
+    ckpt_chr(fragment$attached), ckpt_chr(fragment$detached),
+    if (isTRUE(fragment$rng)) "RNG state")
 }
