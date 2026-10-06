@@ -2027,3 +2027,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   answering a legacy server request does not time the call out" (+1), "an interrupt can be resumed (G3); ..."
   (+1, and waits for the cancel without pumping). Evidence: progress/P18.md Task 4.
   Evidence: progress/P14.md Task 2.
+
+## D-166 - P19 gptr_parallel(): the contract example's member name `plan` is an accessor (IC-71) (2026-10-06)
+- Rule: member names equal to a session accessor are refused (IC-71); `plan` is one (04 section 5.1), so 04
+  section 6.5's example `gptr_parallel(plan = peter(...), ...)` signals `gptr_error_invalid_argument`; the
+  roxygen example and tests use `planner` (plan Task 10's skill example needs the same rename).
+- Contract-visible: the member name of 04 section 6.5's example (not amended).
+- Tests: test-subagent-team.R "gptr_parallel() returns a team of the members (contract 6.5 example)".
+  Evidence: progress/P19.md Task 3.
