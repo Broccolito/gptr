@@ -806,3 +806,69 @@ test_that("printed names of created objects escape controls (IC-53, D-132)", {
   r = gptr_risk("`a\u001b[2Jb` = 1", root = local_project())
   expect_identical(format(r)[2L], "  creates: a<U+001B>[2Jb")
 })
+
+test_that("code_targets() reports the static targets of G7's walk without evaluating (IC-31)", {
+  root = local_project()
+  t = code_targets("pbmc = FindClusters(pbmc, resolution = 0.8)")
+  expect_identical(t$assign, "pbmc")
+  expect_identical(t$modify, character())
+  t = code_targets("x[1] = 0; names(y) = letters[1:3]; z$a$b = 1; attr(w, 'u') = 1")
+  expect_setequal(t$modify, c("x", "y", "z", "w"))
+  t = code_targets(paste("dt[, b := a * 2]; data.table::set(dt2, 1L, 'a', 0);",
+                         "setnames(dt3, 'a', 'b')"))
+  expect_setequal(t$byref, c("dt", "dt2", "dt3"))
+  t = code_targets("rm(a, 'b'); rm(list = c('c1', 'c2')); rm(list = ls())")
+  expect_setequal(t$remove, c("a", "b", "c1", "c2"))
+  expect_identical(t$unknown, "rm(list = ls())")
+  expect_identical(code_targets("counter <<- counter + 1")$super, "counter")
+  t = code_targets("assign('m1', 1); assign(nm, 2)")
+  expect_identical(t$assign, "m1")
+  expect_identical(t$unknown, "assign(<computed name>)")
+  t = code_targets(paste("write.csv(df, 'out/results.csv'); saveRDS(fit, file = 'fit.rds');",
+                         "ggplot2::ggsave('p.png', p); unlink('tmp', recursive = TRUE)"))
+  expect_setequal(t$files, c("out/results.csv", "fit.rds", "p.png", "tmp"))
+  t = code_targets("load('ws.RData'); source('helpers.R'); eval(parse(text = s))")
+  expect_setequal(t$unknown, c("load()", "source()", "eval()"))
+  t = code_targets("system2('bash', 'run.sh'); processx::run('python', 'x.py')")
+  expect_setequal(t$process, c("system2", "run"))
+  t = code_targets("for (i in 1:3) res[[i]] = f(i); out = lapply(xs, function(v) { tmp = v; tmp })")
+  expect_setequal(t$assign, c("i", "res", "out"))
+  expect_identical(t$modify, "res")
+})
+
+test_that("code_targets() lists every call with its package and line (IC-31)", {
+  t = code_targets("x = 1\ny = sum(x)\nz = stats::median(y)")
+  expect_identical(names(t$calls), c("fn", "package", "line"))
+  expect_identical(t$calls$fn, c("=", "=", "sum", "=", "median"))
+  expect_identical(t$calls$package, c(NA, NA, NA, NA, "stats"))
+  expect_identical(t$calls$line, c(1L, 2L, 2L, 3L, 3L))
+  expect_named(code_targets("x"), c("assign", "modify", "byref", "remove", "super", "files",
+                                    "unknown", "process", "calls", "parse_error"))
+  expect_true(code_targets("not valid (")$parse_error)
+})
+
+test_that("the plan-mode allowlist admits only known read-only calls (IC-54)", {
+  root = local_project()
+  expect_identical(risk_plan_disallowed("x = head(df, 2); summary(x); peter$grep('a')", root),
+                   character())
+  expect_identical(risk_plan_disallowed("m = mean(df$a); fit = lm(y ~ x, d); coef(fit)", root),
+                   character())
+  expect_identical(risk_plan_disallowed("gptr_describe(df); peter$describe(df)", root),
+                   character())
+  expect_true("write.csv" %in% risk_plan_disallowed("write.csv(df, 'a.csv')", root))
+  expect_true("targets::tar_destroy" %in% risk_plan_disallowed("targets::tar_destroy()", root))
+  expect_true("usethis::create_package" %in%
+                risk_plan_disallowed("usethis::create_package('.')", root))
+  expect_true("FindClusters" %in% risk_plan_disallowed("FindClusters(x)", root))
+  expect_true("peter$write" %in% risk_plan_disallowed("peter$write('a.txt', 'x')", root))
+  expect_true("peter$sh" %in% risk_plan_disallowed("peter$sh('rm -rf build')", root))
+  expect_identical(risk_plan_disallowed("peter$sh('git status')", root), character())
+  expect_identical(risk_plan_disallowed("s = summary(df); getOption('digits')", root),
+                   character())
+  expect_true("file" %in% risk_plan_disallowed("close(file('a.csv', 'w'))", root))
+  expect_true("write.dcf" %in% risk_plan_disallowed("write.dcf(df, 'a.dcf')", root))
+  expect_true("gptr_artifacts" %in% risk_plan_disallowed("gptr_artifacts('a', open = TRUE)", root))
+  expect_identical(risk_plan_disallowed("gptr_artifacts()", root), character())
+  expect_true("read.csv" %in% risk_plan_disallowed("x = read.csv('https://x.org/a.csv')", root))
+  expect_identical(risk_plan_disallowed("this is not R (", root), character())
+})

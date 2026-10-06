@@ -2666,3 +2666,54 @@ risk_member_flags = function(member, e, root) {
 
 on_load(ext_service_set("risk.classify", risk_classify, provided_by = "P11",
                         builtin = "permissions"))
+
+# ---- the shared walk for checkpoints (IC-31) and the plan-mode allowlist (IC-54) -----------
+
+# peter$ members that plan mode accepts when their own classification is level 0.
+risk_plan_members = c("read", "grep", "find", "ls", "help", "search", "describe", "out", "plot",
+                      "sh", "sql", "jobs")
+
+#' Static targets of R code (the parse walk shared with the checkpointer, IC-31)
+#'
+#' Returns list(assign, modify, byref, remove, super, files, unknown, process, calls) where
+#' `calls` is a data frame (fn, package, line) of every call head and function value, and an
+#' additive `parse_error` flag. Never evaluates the code.
+#' @noRd
+code_targets = function(code) {
+  parsed = risk_parse(code)
+  scan = risk_scan(parsed$exprs %||% expression(), envir = NULL, root = project_root(),
+                   depth = 0L)
+  c(scan$targets, list(calls = scan$calls, parse_error = !is.null(parsed$error)))
+}
+
+#' Calls in R code that plan mode does not know to be read-only (IC-54)
+#'
+#' Every call head and function value must be plan syntax, a level-0 `read` row of the risk
+#' table, `gptr_describe()`, a nested `peter()` (its child inherits plan mode) or a peter$ read
+#' member whose own classification is level 0, and no call may be flagged at level 2 or more
+#' (a read row used to write, such as `file("a.csv", "w")`, or a network read). Returns the
+#' offending names (empty = allowed).
+#' @noRd
+risk_plan_disallowed = function(code, root = project_root()) {
+  parsed = risk_parse(code)
+  if (!is.null(parsed$error)) return(character())
+  scan = risk_scan(parsed$exprs, envir = NULL, root = root, depth = 0L)
+  calls = scan$calls
+  gw = paste0(risk_gateway, "$")
+  bad = character()
+  for (i in seq_len(nrow(calls))) {
+    fn = calls$fn[i]
+    pkg = calls$package[i]
+    if (fn %in% risk_plan_syntax || fn %in% c(risk_gateway, "gptr_describe")) next
+    if (identical(pkg, "gptr")) {
+      if (!fn %in% risk_plan_members) bad = c(bad, paste0(gw, fn))
+      next
+    }
+    row = risk_lookup(fn, pkg)
+    if (!is.null(row) && identical(row$level, 0L) && identical(row$category, "read")) next
+    bad = c(bad, if (is.na(pkg)) fn else paste0(pkg, "::", fn))
+  }
+  fl = scan$flags
+  member = !is.na(fl$fn) & startsWith(fl$fn, gw)
+  unique(c(bad, fl$fn[member & fl$level > 0L], fl$fn[!is.na(fl$fn) & !member & fl$level >= 2L]))
+}
