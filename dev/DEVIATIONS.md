@@ -46,7 +46,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Rule: an unresolved sensitive candidate above the hold-back cap (`gptr.stream_hold_max`) is never emitted: `redact_stream()` signals `gptr_error_redaction_limit` (numeric `limit`, generic message without input), discards held text and stays failed for later `push()`/`flush()`; invalid-byte overflow takes the same path.
 - Rule: chunk/whole parity holds within the bound; overflow terminates the stream.
 - Contract-visible: contract 7.3 (`redact_stream()` row and "D-010 implementation clarification") and the 2.2 condition table (`redaction_limit`, field `limit`) amended.
-- Tests: test-auth-redact.R: "stream overflow fails closed at every split around the default cap (D-010)", "flush also rejects oversized pending candidates and leaves failure latched", "invalid byte overflow also clears and permanently stops the stream", "the streaming hold limit must be a positive finite integer". Evidence: progress/P03.md Task 3.
+- Tests: test-auth-redact.R: "stream overflow fails closed, emits no prefix and stays failed (D-010)" (table of splits, derived forms, PEM, invalid bytes and flush; P03-S), "the streaming hold limit must be a positive finite integer". Evidence: progress/P03.md Task 3.
 
 ## D-011 - P04 Explicit transport performance acceptance (2026-10-03)
 - Rule: INFRA-01 (first-delta latency, six-stream concurrency; architecture 6.18) and INFRA-23 are the P04 Global Constraints' existing exceptions to the five-second test guidance; no new target or waiver.
@@ -1813,6 +1813,25 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   run's requests (`pcli_hook_usage()`). A per-call `budget =` and a root's remaining budget (IC-66)
   do not reach `--max-turns`/`--max-budget-usd` or the codex cap, which IC-65 asks for; P06 still
   stops the run at the next request boundary. The hook cannot read the run's budget (`ctx` has no
+  such member; L1 may not call P06, IC-33).
+- Contract-visible: proposed, not edited (outside lane cli-sub): the 04 section 10.4 `request_params`
+  payload gains `budget`, the run chain's remaining `turns` and `cost` (P06 `run_chain()`,
+  `run_used()`); the hook then passes it on and `pcli_used()`/`pcli_hook_usage()` go.
+- Tests: test-cli-common.R "request_params gives CLI routes the mode and the remaining budget"
+  (settings path). Evidence: progress/P20.md Task 8.
+
+## D-150 - P03 auth and redaction: rules validated once, structural redaction keeps only its own marker (2026-10-05)
+- Rule: a redaction rule is validated once, by P02's `kind_check_redaction_rule()` at registration
+  (valid PCRE, never matches its own marker); `rules_compile()` only maps fields and no longer
+  skips rules with a registry diagnostic (P03 plan Task 2 text superseded; nothing invalid reaches it).
+- Rule: `redact_tree(structural = TRUE)` keeps a value under a sensitive key only when it is exactly
+  `[secret:<key>]`; other markers and handle displays are blanked too (no caller in R/ yet).
+- Rule: argument errors of `redact()`, `redact_stream()`, `secret_register()`,
+  `secret_live_entries_set()` and `child_env_callr()` come from P01's checkers (class and `arg`
+  unchanged; message and `expected` text change; the value is never echoed).
+- Contract-visible: none (04 section 7.3 signatures and D-010 unchanged).
+- Tests: test-auth-redact.R "structural redaction keeps only the key's own marker";
+  test-auth-secrets.R own-marker rule refused at registration. Evidence: progress/simplicity.md P03-S.
 
 ## D-151 - P17 frontmatter: one cap on merge keys, tags and aliases; no expansion check after yaml (2026-10-05)
 - Rule: `fm_size_ok()` and the alias-only refusal `too many aliases (more than 4 references to anchors)` go
@@ -1826,9 +1845,3 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-ext-plugins.R "frontmatter whose YAML aliases expand too far is an error string (D-074)" and
   the three `(D-074)` refusal blocks; test-skill-discover.R "a SKILL.md whose YAML aliases expand too far is
   skipped with a diagnostic". Evidence: progress/simplicity.md P17-S.
-  such member; L1 may not call P06, IC-33).
-- Contract-visible: proposed, not edited (outside lane cli-sub): the 04 section 10.4 `request_params`
-  payload gains `budget`, the run chain's remaining `turns` and `cost` (P06 `run_chain()`,
-  `run_used()`); the hook then passes it on and `pcli_used()`/`pcli_hook_usage()` go.
-- Tests: test-cli-common.R "request_params gives CLI routes the mode and the remaining budget"
-  (settings path). Evidence: progress/P20.md Task 8.

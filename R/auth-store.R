@@ -175,7 +175,7 @@ auth_record_values = function(rec) {
       auth_need_keyring()
       v = tryCatch(keyring::key_get(rec[["keyring"]][["service"]], rec[["keyring"]][["username"]]),
                    error = function(e) NULL)
-      if (is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)) rec[[field]] = as_utf8(v)
+      if (rlang::is_string(v) && nzchar(v)) rec[[field]] = as_utf8(v)
     }
   }
   rec
@@ -190,7 +190,7 @@ auth_store_get = function(key) {
   rec = auth_record_values(rec)
   for (f in intersect(names(rec), auth_secret_fields)) {
     v = rec[[f]]
-    if (is.character(v) && length(v) == 1L && !is.na(v) && nzchar(v)) {
+    if (rlang::is_string(v) && nzchar(v)) {
       rec[[f]] = secret_register(v, auth_secret_name(key, f), source = "auth.json")
     }
   }
@@ -208,11 +208,7 @@ auth_store_set = function(key, record) {
   kfield = if (is.list(rec[["keyring"]])) auth_keyring_field(rec) else NULL
   for (f in intersect(names(rec), auth_secret_fields)) {
     v = rec[[f]]
-    if (inherits(v, "gptr_secret")) {
-      gptr_abort("Credential records hold values; handles are never written to auth.json.",
-                 "invalid_argument", arg = "record", expected = "string values")
-    }
-    if (!is.character(v) || length(v) != 1L || is.na(v) || !nzchar(v)) next
+    if (!rlang::is_string(v) || !nzchar(v)) next
     secret_register(v, auth_secret_name(key, f), source = "auth.json")
     if (f %in% auth_memory_fields) {
       rec[[f]] = NULL

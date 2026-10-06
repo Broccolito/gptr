@@ -390,8 +390,7 @@ test_that("unknown Ollama model names never grant tools vision or configured cap
 })
 
 test_that("credential presence checks do not register store values or query keyring", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_mocked_bindings(
     secret_lookup = function(name) NULL,
     auth_store_get = function(...) stop("must not resolve credentials"),

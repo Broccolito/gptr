@@ -151,8 +151,7 @@ local_knitr_hooks = function(.env = parent.frame()) {
 
 test_that("knit_print output is redacted like the recorded blocks (IC-74)", {
   skip_if_not_installed("knitr")
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   key = "kn1t-s3cr3t-0123456789abcdef"
   s = doc_test_session(list(doc_test_turn(paste0("token = \"", key, "\""))))
   withCallingHandlers(secret_register(key, "KNIT_TOKEN", "test"),

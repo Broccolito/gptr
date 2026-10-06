@@ -58,31 +58,13 @@ redact_rules_builtin = function() {
   )
 }
 
-#' Compile redaction_rule specs; invalid rules and rules matching their own marker are skipped
+#' Compile redaction_rule specs (kind_check_redaction_rule() validated them at registration)
 #' @noRd
 rules_compile = function(rules) {
-  out = list()
-  for (r in rules) {
-    marker = r$marker %||% r$name
-    ok = is.character(r$pattern) && length(r$pattern) == 1L && tryCatch({
-      grepl(r$pattern, "", perl = TRUE)
-      TRUE
-    }, error = function(e) FALSE, warning = function(w) FALSE)
-    if (ok && grepl(r$pattern, paste0("[secret:", marker, "]"), perl = TRUE)) ok = FALSE
-    if (!ok) {
-      registry_diagnostic(paste0("redaction_rule:", r$name), "redaction_rule", "invalid_spec",
-                          paste0("Redaction rule ", r$name, " was skipped: its pattern is not ",
-                                 "valid PCRE or it matches its own marker."))
-      next
-    }
-    out[[length(out) + 1L]] = list(
-      name = r$name, re = r$pattern,
-      repl = r$replace %||% paste0("[secret:", marker, "]"),
-      anchor = as.character(r$anchor %||% character()),
-      profiles = as.character(r$profiles %||% c("stream", "code", "context", "persist"))
-    )
-  }
-  out
+  lapply(unname(rules), function(r) {
+    list(name = r$name, re = r$pattern, repl = r$replace %||% paste0("[secret:", r$marker, "]"),
+         anchor = as.character(r$anchor), profiles = r$profiles)
+  })
 }
 
 #' The compiled rules for the current registry (the built-ins when the registry has none)
@@ -112,10 +94,7 @@ rules_current = function() {
 redact = function(x, profile = "persist") {
   if (is.list(x)) return(redact_tree(x, profile))
   if (!is.character(x) || !length(x)) return(x)
-  if (!(is.character(profile) && length(profile) == 1L && profile %in% redact_profiles)) {
-    gptr_abort("`profile` must be one of persist, stream, context, code, user_data.",
-               "invalid_argument", arg = "profile", expected = "a redaction profile")
-  }
+  profile = check_choice(profile, redact_profiles, "profile")
   st = secrets_state()
   na = is.na(x)
   y = as.character(x)
@@ -129,7 +108,7 @@ redact = function(x, profile = "persist") {
     if (any(!ub)) y[!ub] = redact_literals(y[!ub], st)
     if (any(ub)) y[ub] = redact_literals(y[ub], st, use_bytes = TRUE)
   }
-  if (!identical(profile, "user_data") && isTRUE(secrets_opt("redact_patterns"))) {
+  if (!identical(profile, "user_data") && isTRUE(gptr_opt("redact_patterns"))) {
     rules = rules_current()
     cand = if (isTRUE(st$anchor_all)) {
       rep(TRUE, length(y))
@@ -175,8 +154,7 @@ redact_literal_group = function(y, pattern, st, fixed = FALSE, use_bytes = FALSE
   if (use_bytes) Encoding(y) = "bytes"
   matches = gregexpr(pattern, y, perl = !fixed, fixed = fixed, useBytes = use_bytes)
   values = regmatches(y, matches)
-  marker = "\\[secret:[^\\]\\[\\s\"'\\\\{}]{1,200}\\]"
-  markers = gregexpr(marker, y, perl = TRUE, useBytes = use_bytes)
+  markers = gregexpr(secret_marker_re, y, perl = TRUE, useBytes = use_bytes)
   marker_values = regmatches(y, markers)
   known = redact_known_markers(st)
   for (i in seq_along(values)) {
@@ -205,8 +183,7 @@ redact_literal_group = function(y, pattern, st, fixed = FALSE, use_bytes = FALSE
 redact_known_markers = function(st = secrets_state()) {
   builtins = vapply(redact_rules_builtin(), function(r) r$marker, "")
   replacements = vapply(st$rules %||% list(), function(r) r$repl, "")
-  pattern = "\\[secret:[^\\]\\[\\s\"'\\\\{}]{1,200}\\]"
-  rule_markers = regmatches(replacements, gregexpr(pattern, replacements, perl = TRUE))
+  rule_markers = regmatches(replacements, gregexpr(secret_marker_re, replacements, perl = TRUE))
   unique(c(st$marks, paste0("[secret:", builtins, "]"), unlist(rule_markers, use.names = FALSE)))
 }
 
@@ -302,13 +279,10 @@ code_rewrite_literals = function(code) {
   list(code = out, needs = unique(needs))
 }
 
-#' Should structural redaction blank this value (a sensitive key, not already a marker)?
+#' Should structural redaction blank this value (a sensitive key; its own marker is kept)?
 #' @noRd
 structural_blank = function(k, v) {
-  if (!nzchar(k) || !is.character(v) || length(v) != 1L || is.na(v)) return(FALSE)
-  st = secrets_state()
-  displays = vapply(st$reg, function(e) paste0("<secret ", e$name, " #", e$fp, ">"), "")
-  if (v %in% c(paste0("[secret:", k, "]"), redact_known_markers(st), displays)) return(FALSE)
+  if (!nzchar(k) || !rlang::is_string(v) || identical(v, paste0("[secret:", k, "]"))) return(FALSE)
   key = gsub("([a-z0-9])([A-Z])", "\\1_\\2", k)
   grepl(sensitive_key_re, key, ignore.case = TRUE, perl = TRUE)
 }
@@ -326,7 +300,7 @@ redact_tree = function(x, profile = "persist", structural = FALSE) {
   collect = function(node, path, skip, preserve_replay = TRUE) {
     nm = names(node)
     type = node[["type"]]
-    if (!is.character(type) || length(type) != 1L || is.na(type)) type = ""
+    if (!rlang::is_string(type)) type = ""
     fields = if (preserve_replay) switch(type,
       text = c("signature", "text_signature", "textSignature"),
       thinking = c("signature", "thinking_signature", "thinkingSignature", "encrypted_content"),
@@ -416,7 +390,7 @@ on_load(redactor_set(redact))
 
 #' Where a pending stream buffer may be cut without splitting a secret (G6 section 3.6)
 #' @noRd
-stream_cut = function(s, hold_max) {
+stream_cut = function(s) {
   n = nchar(s)
   if (!n) return(1L)
   st = secrets_state()
@@ -465,37 +439,27 @@ stream_cut = function(s, hold_max) {
       if (any(inside)) cut = min(g[inside])
     }
   }
-  if (n - cut + 1L > hold_max) stream_limit_abort(hold_max)
   cut
-}
-
-#' Fail closed without including pending text in the condition (D-010)
-#' @noRd
-stream_limit_abort = function(limit) {
-  gptr_abort("Streaming redaction exceeded its holding limit.", "redaction_limit", limit = limit)
 }
 
 #' A streaming redactor: push(chunk) returns redacted text that is safe to emit now
 #' @noRd
 redact_stream = function(profile = "stream") {
-  if (!(is.character(profile) && length(profile) == 1L && profile %in% redact_profiles)) {
-    gptr_abort("`profile` must be one of persist, stream, context, code, user_data.",
-               "invalid_argument", arg = "profile", expected = "a redaction profile")
-  }
-  hold_max = check_number(secrets_opt("stream_hold_max"), "gptr.stream_hold_max",
+  profile = check_choice(profile, redact_profiles, "profile")
+  hold_max = check_number(gptr_opt("stream_hold_max"), "gptr.stream_hold_max",
                           min = 1, int = TRUE)
   rs = new.env(parent = emptyenv())
   rs$pending = ""
   rs$last = ""   # the last raw character emitted: left context for look-behinds
   rs$failed = FALSE
-  fail_limit = function() {
+  # D-010: past the cap the stream fails closed, drops what it holds and stays failed
+  guard = function(held = 0L) {
+    if (!rs$failed && held <= hold_max) return(invisible())
     rs$failed = TRUE
     rs$pending = ""
     rs$last = ""
-    stream_limit_abort(hold_max)
-  }
-  guarded_cut = function(text) {
-    tryCatch(stream_cut(text, hold_max), gptr_error_redaction_limit = function(e) fail_limit())
+    gptr_abort("Streaming redaction exceeded its holding limit.", "redaction_limit",
+               limit = hold_max)
   }
   emit = function(raw) {
     if (!nzchar(raw)) return("")
@@ -510,27 +474,23 @@ redact_stream = function(profile = "stream") {
     out
   }
   rs$push = function(chunk) {
-    if (isTRUE(rs$failed)) fail_limit()
+    guard()
     if (!length(chunk)) return("")
     rs$pending = paste0(rs$pending, paste(chunk, collapse = ""))
     if (!validUTF8(rs$pending)) {
       # a multi-byte character split across chunks: wait for the rest, within the cap
-      if (nchar(rs$pending, type = "bytes") <= hold_max) return("")
-      fail_limit()
+      guard(nchar(rs$pending, type = "bytes"))
+      return("")
     }
-    cut = guarded_cut(rs$pending)
+    cut = stream_cut(rs$pending)
+    guard(nchar(rs$pending) - cut + 1L)
     raw = substr(rs$pending, 1L, cut - 1L)
     rs$pending = substr(rs$pending, cut, nchar(rs$pending))
     emit(raw)
   }
   rs$flush = function() {
-    if (isTRUE(rs$failed)) fail_limit()
-    if (validUTF8(rs$pending)) {
-      guarded_cut(rs$pending)
-    } else if (nchar(rs$pending, type = "bytes") > hold_max) {
-      fail_limit()
-    }
     raw = rs$pending
+    guard(if (validUTF8(raw)) nchar(raw) - stream_cut(raw) + 1L else nchar(raw, type = "bytes"))
     rs$pending = ""
     emit(raw)
   }
@@ -587,7 +547,7 @@ scrub_bound_documents = function(dir) {
           !identical(rec[["customType"]], "gptr.doc_block")) next
       data = rec[["data"]]
       d = if (is.list(data)) data[["doc"]] else NULL
-      if (!is.character(d) || length(d) != 1L || is.na(d) || !nzchar(d)) next
+      if (!rlang::is_string(d) || !nzchar(d)) next
       lexical = gsub("\\", "/", d, fixed = TRUE)
       if (grepl("^(/|~|[A-Za-z]:)|(^|/)\\.\\.(/|$)|[[:cntrl:]]", lexical)) next
       path = file.path(project_root(), lexical)
@@ -663,8 +623,7 @@ scrub_text = function(f, raw) {
 #' Text segments outside complete known markers (unknown marker-like text stays searchable)
 #' @noRd
 scrub_unmarked = function(txt, st) {
-  pattern = "\\[secret:[^\\]\\[\\s\"'\\\\{}]{1,200}\\]"
-  m = gregexpr(pattern, txt, perl = TRUE)[[1L]]
+  m = gregexpr(secret_marker_re, txt, perl = TRUE)[[1L]]
   if (m[1L] < 0L) return(txt)
   known = regmatches(txt, list(m))[[1L]] %in% redact_known_markers(st)
   if (!any(known)) return(txt)
@@ -732,7 +691,7 @@ scrub_append_entry = function(txt, rows) {
   entries = lapply(lines, function(ln) tryCatch(json_decode(ln), error = function(e) NULL))
   entry_id = function(rec) {
     id = if (is.list(rec)) rec[["id"]] else NULL
-    if (is.character(id) && length(id) == 1L && !is.na(id)) id else character()
+    if (rlang::is_string(id)) id else character()
   }
   last = entries[[length(entries)]]
   parent = if (is.list(last) && !identical(last[["type"]], "session") &&

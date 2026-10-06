@@ -105,36 +105,29 @@ child_env_names = function(nm, arg, unique = TRUE) {
   invisible(nm)
 }
 
-#' Validate all explicit values before any secret is materialised
+#' Validate explicit values (named strings or handles) before any secret is materialised
 #' @noRd
-child_env_values = function(values, arg = "set") {
+child_env_values = function(values) {
   if (!(is.character(values) || is.list(values)) || is.object(values) ||
       (length(values) && is.null(names(values)))) {
     gptr_abort("Environment values must be named strings or secret handles.", "invalid_argument",
-               arg = arg, expected = "named strings or handles")
+               arg = "set", expected = "named strings or handles")
   }
-  child_env_names(names(values) %||% character(), arg)
-  valid = vapply(values, function(v) {
-    inherits(v, "gptr_secret") || (is.character(v) && length(v) == 1L && !is.na(v))
-  }, NA)
+  child_env_names(names(values) %||% character(), "set")
+  valid = vapply(values, function(v) inherits(v, "gptr_secret") || rlang::is_string(v), NA)
   if (!all(valid)) {
     gptr_abort("Environment values must be single strings or secret handles.", "invalid_argument",
-               arg = arg, expected = "named strings or handles")
+               arg = "set", expected = "named strings or handles")
   }
   invisible(values)
 }
 
-#' Put named values (strings or handles) into an environment vector, replacing any case variant
+#' Put validated named values into an environment vector, replacing any case variant
 #' @noRd
 child_env_put = function(out, values) {
-  child_env_values(values)
   for (nm in names(values)) {
     v = values[[nm]]
     if (inherits(v, "gptr_secret")) v = secret_value(v, secret_bound_origin(v))
-    if (!is.character(v) || length(v) != 1L || is.na(v)) {
-      gptr_abort("Child-environment values must be single strings or secret handles.",
-                 "invalid_argument", arg = "set", expected = "named strings or handles")
-    }
     out = out[toupper(names(out)) != toupper(nm)]
     out[[nm]] = as_utf8(v)
   }
@@ -179,6 +172,7 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   child_env_names(pass, "pass")
   child_env_values(set)
   spec = child_env_profile(profile)
+  child_env_values(spec[["set"]] %||% character())
   env = Sys.getenv()
   env = stats::setNames(as_utf8(as.character(env)), names(env))
   env = env[!duplicated(toupper(names(env)))]
@@ -214,7 +208,9 @@ child_env = function(profile, pass = character(), set = character(), provider = 
   out = env[take]
   out = child_env_put(out, as.list(spec[["set"]] %||% character()))
   out = child_env_put(out, as.list(set))
-  if (!is.null(provider)) out = child_env_put(out, as.list(child_env_provider_key(provider)))
+  if (!is.null(provider)) {
+    out = child_env_put(out, as.list(child_env_values(child_env_provider_key(provider))))
+  }
   # IC-60 overrides the plan snippet: every profile neutralises both user startup files,
   # including explicit `set`. Only R_ENVIRON has the documented explicit-pass exception.
   out = out[!startsWith(out, "()") &
@@ -227,10 +223,7 @@ child_env = function(profile, pass = character(), set = character(), provider = 
 #' The callr form of a child_env() result: every other inherited variable set to NA (unset)
 #' @noRd
 child_env_callr = function(env) {
-  if (!is.character(env) || is.null(names(env)) || anyNA(env)) {
-    gptr_abort("`env` must be a result of child_env().", "invalid_argument",
-               arg = "env", expected = "a named character vector without NA")
-  }
+  check_strings(env, "env")
   child_env_names(names(env), "env")
   current = names(Sys.getenv())
   # callr merges into the parent environment. POSIX names are case-sensitive, so an

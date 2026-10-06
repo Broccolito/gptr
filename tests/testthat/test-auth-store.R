@@ -5,8 +5,7 @@ fake_refresh = paste0("rt_", strrep("FAKErefresh", 3))
 fake_access = paste0("at_", strrep("FAKEaccess0", 3))
 
 test_that("auth.json is created 0600 in a 0700 directory and round-trips an api key", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   auth_store_set("openrouter", list(type = "api_key", key = fake_or))
   p = auth_store_path()
@@ -26,8 +25,7 @@ test_that("auth.json is created 0600 in a 0700 directory and round-trips an api 
 })
 
 test_that("access tokens stay in memory: registered, never written", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   auth_store_set("mcp:github", list(type = "oauth", issuer = "https://auth.example.test",
                                     refresh = fake_refresh, access = fake_access,
@@ -43,8 +41,7 @@ test_that("access tokens stay in memory: registered, never written", {
 })
 
 test_that("a keyring reference round-trips through the store file", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   ref = list(service = "gptr", username = "anthropic")
   auth_store_set("anthropic", list(type = "api_key", keyring = ref))
@@ -55,8 +52,7 @@ test_that("a keyring reference round-trips through the store file", {
 test_that("a keyring-backed key goes to the keyring, not the file, and resolves on read", {
   skip_on_cran()
   skip_if_not_installed("keyring")
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   withr::local_options(keyring_backend = "env")
   withr::local_envvar(c("gptr:anthropic-p03" = NA))
@@ -73,8 +69,7 @@ test_that("a keyring-backed key goes to the keyring, not the file, and resolves 
 
 test_that("a keyring reference without keyring installed is a classed error", {
   skip_if(requireNamespace("keyring", quietly = TRUE), "keyring is installed")
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   auth_store_set("anthropic", list(type = "api_key",
                                    keyring = list(service = "gptr", username = "anthropic")))
@@ -82,8 +77,7 @@ test_that("a keyring reference without keyring installed is a classed error", {
 })
 
 test_that("remove, stale locks, corrupt files and handles in records", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   expect_false(auth_store_remove("openrouter"))
   auth_store_set("openrouter", list(type = "api_key", key = fake_or))
@@ -143,8 +137,7 @@ test_that("Linux missing-process errors release a lock only with confirmed holde
 })
 
 test_that("malformed stores and credential fields fail before writing values", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   p = auth_store_path(create = TRUE)
   for (txt in c("[]", "[{}]", '{"x":1}', '{"x":{"key":["a","b"]}}',
@@ -167,8 +160,7 @@ test_that("malformed stores and credential fields fail before writing values", {
 })
 
 test_that("keyring references are validated before backend access", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   for (ref in list(list(service = "gptr"), list(service = "gptr", username = NA_character_),
                   list(service = "gptr", username = "test", field = "access"),
@@ -180,8 +172,7 @@ test_that("keyring references are validated before backend access", {
 })
 
 test_that("record metadata cannot partially select keyring actions", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
   keyring_calls = 0L
   if (requireNamespace("keyring", quietly = TRUE)) {

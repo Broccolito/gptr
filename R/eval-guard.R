@@ -42,10 +42,6 @@ eval_guard_readers = c(
   read.csv2 = "file", read.delim = "file", read.delim2 = "file"
 )
 
-#' The redactor's `[secret:NAME]` marker grammar (auth-redact.R)
-#' @noRd
-eval_guard_secret_re = "\\[secret:[^\\]\\[\\s\"'\\\\{}]{1,200}\\]"
-
 #' Is `x` a `pkg::name` or `pkg:::name` call? R also accepts a quoted name (`base::"q"`).
 #' @noRd
 eval_guard_is_ns = function(x) {
@@ -113,7 +109,7 @@ eval_guard_secrets = function(x) {
   n_open = sum(unlist(gregexpr("[secret:", x, fixed = TRUE, useBytes = TRUE)) > 0L)
   if (!n_open) return(character())
   # Invalid UTF-8 (a "\xff" escape) is matched bytewise rather than with a warning
-  marks = unlist(regmatches(x, gregexpr(eval_guard_secret_re, x, perl = TRUE,
+  marks = unlist(regmatches(x, gregexpr(secret_marker_re, x, perl = TRUE,
                                         useBytes = !all(validUTF8(x)))))
   if (n_open > length(marks)) marks = c(marks, "[secret:")
   marks

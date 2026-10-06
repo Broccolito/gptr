@@ -17,8 +17,7 @@ test_that("live: Jev answers decisions, choices and scores through peter()", {
   # gptr_env() registers the key in the process vault, which provider credentials consult before
   # the environment: start from an empty vault, so the key file is the only Jev credential, and
   # forget the key when the test ends, so no later test finds it
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   gptr_env(key_file, quiet = TRUE)
   skip_if_not(nzchar(Sys.getenv("TYPESAFE_API_KEY")), "the key file holds no Jev key")
   local_project(gptr = FALSE)

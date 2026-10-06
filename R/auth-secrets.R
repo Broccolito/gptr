@@ -31,17 +31,12 @@ is_secret_name = function(x) {
 #' Is a name usable as a secret name (and inside a `[secret:NAME]` marker)?
 #' @noRd
 secret_name_ok = function(name) {
-  is.character(name) && length(name) == 1L && !is.na(name) && nzchar(name) &&
-    nchar(name) <= 200L && !grepl("[\\]\\[\\s\"'\\\\{}]", name, perl = TRUE)
+  rlang::is_string(name) && nzchar(name) && nchar(name) <= 200L &&
+    !grepl("[\\]\\[\\s\"'\\\\{}]", name, perl = TRUE)
 }
 
-#' A P03 option with its contract default (04 section 3.1)
-#' @noRd
-secrets_opt = function(name) {
-  defaults = list(redact_min_chars = 8L, redact_patterns = TRUE, stream_hold_max = 4096L,
-                  env_export = TRUE, prompt_secrets = "redact", secret_guard = TRUE)
-  gptr_opt(name) %||% defaults[[name]]
-}
+# A complete `[secret:NAME]` marker, NAME as secret_name_ok() allows it.
+secret_marker_re = "\\[secret:[^\\]\\[\\s\"'\\\\{}]{1,200}\\]"
 
 #' The vault: id -> value, the only place secret values live
 #' @noRd
@@ -62,7 +57,6 @@ secrets_state = function() {
   st$lit_re = character()    # PCRE alternations of the escaped literals (lit_groups())
   st$lits_long = integer()   # indices (into lits) of literals too long for a group: fixed strings
   st$lits_odd = character()  # literals with characters outside token_class
-  st$version = 0L            # bumped by every recompilation of the literals
   st$rules = NULL            # compiled redaction rules (auth-redact.R)
   st$rules_src = NULL        # the rule specs they were compiled from
   st$anchor_re = ""          # one alternation of every rule anchor
@@ -86,15 +80,6 @@ vault_reset = function() {
     st$live_entries = keep
   }
   invisible(NULL)
-}
-
-#' Values of the registered secrets that are value-redacted (child-environment scrubbing)
-#' @noRd
-vault_values = function() {
-  st = secrets_state()
-  ids = names(st$reg)[vapply(st$reg, function(e) isTRUE(e$redact), NA)]
-  if (!length(ids)) return(character())
-  unlist(mget(ids, envir = vault_env()), use.names = FALSE)
 }
 
 #' The origin a handle is bound to: its own field, else the one it was registered with
@@ -180,7 +165,7 @@ lit_groups = function(esc) {
 #' @noRd
 secret_compile = function() {
   st = secrets_state()
-  min_len = secrets_opt("redact_min_chars")
+  min_len = gptr_opt("redact_min_chars")
   lits = character()
   marks = character()
   for (e in st$reg) {
@@ -200,17 +185,13 @@ secret_compile = function() {
   st$lits_long = which(long)
   st$lit_re = lit_groups(esc[!long])
   st$lits_odd = st$lits[grepl(paste0("[^", token_class, "]"), st$lits, perl = TRUE)]
-  st$version = st$version + 1L
   invisible(NULL)
 }
 
 #' Register a secret value in the vault and return its handle (the only entry point for values)
 #' @noRd
 secret_register = function(value, name, source = "user", active = TRUE, origin = NULL) {
-  if (!is.character(value) || length(value) != 1L || is.na(value) || !nzchar(value)) {
-    gptr_abort("A secret value must be one non-empty string.", "invalid_argument",
-               arg = "value", expected = "a non-empty string")
-  }
+  check_string(value, "value")
   if (!secret_name_ok(name)) {
     gptr_abort(paste("A secret name must have 1-200 characters and no blanks, quotes,",
                      "brackets or braces."),
@@ -244,7 +225,7 @@ secret_register = function(value, name, source = "user", active = TRUE, origin =
   n_chars = nchar(value, allowNA = TRUE)
   if (is.na(n_chars)) n_chars = nchar(value, type = "bytes")
   entry = list(id = id, name = name, source = source, fp = fp, active = active,
-               redact = n_chars >= secrets_opt("redact_min_chars"),
+               redact = n_chars >= gptr_opt("redact_min_chars"),
                origin = origin %||% old$origin)
   st$reg[[id]] = NULL                  # re-registration moves the entry to the end
   st$reg[[id]] = entry
@@ -331,7 +312,7 @@ secret_discover_env = function(env = Sys.getenv()) {
   found = 0L
   if (length(nm)) {
     vals = as_utf8(unname(as.character(env)))
-    min_len = secrets_opt("redact_min_chars")
+    min_len = gptr_opt("redact_min_chars")
     hit = is_secret_name(nm) & (nchar(vals, allowNA = TRUE) >= min_len) %in% TRUE &
       vapply(nm, secret_name_ok, NA, USE.NAMES = FALSE)
     proxies = which(nm %in% c("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy",
@@ -360,10 +341,7 @@ secret_discover_env = function(env = Sys.getenv()) {
 #' `NULL` removes it. Before P06 is loaded no session exists, so nothing is scanned.
 #' @noRd
 secret_live_entries_set = function(fun) {
-  if (!is.null(fun) && !is.function(fun)) {
-    gptr_abort("`fun` must be a function or NULL.", "invalid_argument",
-               arg = "fun", expected = "a function or NULL")
-  }
+  check_function(fun, "fun", null = TRUE)
   st = secrets_state()
   st$live_entries = fun
   invisible(NULL)
@@ -371,20 +349,10 @@ secret_live_entries_set = function(fun) {
 
 #' The known strings of a nested list: every character leaf at any depth, NA dropped
 #'
-#' Live entries hold NA wherever a value is unknown (IC-74: the usage and cost of an unpriced
-#' model or of an aborted or truncated stream), and may hold non-text leaves (numbers, flags,
-#' functions, environments). Only text can carry a secret, as in redact_tree(), so the late
-#' check scans the character leaves alone; a non-text leaf neither coerces nor hides its
-#' neighbours.
+#' Only text can carry a secret; unknown (NA, IC-74) and non-text leaves are skipped.
 #' @noRd
 secret_known_strings = function(x) {
-  if (is.character(x)) {
-    x = as.vector(unclass(x), "character")
-    return(x[!is.na(x)])
-  }
-  if (!is.list(x)) return(character())
-  out = unlist(lapply(unclass(x), secret_known_strings), use.names = FALSE)
-  if (is.null(out)) character() else out
+  as.character(rapply(list(x), function(s) if (is.character(s)) s[!is.na(s)], how = "unlist"))
 }
 
 #' Warn when a newly registered value already occurs in live sessions (IC-70, G6 section 4.7)
@@ -394,7 +362,7 @@ secret_late_check = function(value, name) {
   if (!is.function(fun)) return(invisible(NULL))
   live = tryCatch(fun(), error = function(e) NULL)
   if (!is.list(live) || !length(live) || is.null(names(live))) return(invisible(NULL))
-  forms = secret_variants(value, secrets_opt("redact_min_chars"))
+  forms = secret_variants(value, gptr_opt("redact_min_chars"))
   counts = integer()
   for (id in names(live)) {
     txt = secret_known_strings(live[[id]])
@@ -683,7 +651,7 @@ builtin_secrets = function(gptr) {
       rec = auth_store_read()[[name]]
       if (!is.list(rec)) return(NULL)
       v = auth_record_values(rec)[["key"]]
-      if (!is.character(v) || length(v) != 1L || !nzchar(v)) return(NULL)
+      if (!rlang::is_string(v) || !nzchar(v)) return(NULL)
       secret_register(v, auth_secret_name(name, "key"), source = "auth.json")
       v
     },
@@ -696,7 +664,7 @@ builtin_secrets = function(gptr) {
     resolve = function(name, ctx) {
       if (!requireNamespace("keyring", quietly = TRUE)) return(NULL)
       v = tryCatch(keyring::key_get("gptr", name), error = function(e) NULL)
-      if (!is.character(v) || length(v) != 1L || !nzchar(v)) return(NULL)
+      if (!rlang::is_string(v) || !nzchar(v)) return(NULL)
       secret_register(v, name, source = "keyring")
       v
     },

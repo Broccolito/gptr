@@ -276,8 +276,7 @@ test_that("missing or malformed configured origins fail before credential lookup
 })
 
 test_that("provider credentials honor both the actual vault and handle origin restrictions", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   handle = secret_register("synthetic-provider-bound-key-123456", "BOUND_TEST_KEY",
                              origin = "https://elsewhere.example")
   handle$origin = "https://lab.example"
@@ -287,8 +286,7 @@ test_that("provider credentials honor both the actual vault and handle origin re
 })
 
 test_that("real stored handles bind without exposing values and default Ollama avoids cloud auth", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   root = withr::local_tempdir()
   local_mocked_bindings(auth_store_path = function(create = FALSE) file.path(root, "auth.json"))
   value = "synthetic-store-provider-key-123456"
@@ -308,8 +306,7 @@ test_that("real stored handles bind without exposing values and default Ollama a
 })
 
 test_that("environment fallback preserves old origin restrictions and distinguishes new keys", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_mocked_bindings(auth_store_get = function(key) NULL)
   old_value = "synthetic-existing-bound-env-key-123456"
   old = secret_register(old_value, "BOUND_TEST_KEY", origin = "https://old.example")
@@ -328,8 +325,7 @@ test_that("environment fallback preserves old origin restrictions and distinguis
 })
 
 test_that("a stale credential ID is unavailable before dispatch", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   stale = secret_register("synthetic-stale-key-123456", "STALE_TEST_KEY")
   vault_reset()
   provider = gptr_provider("stale", "openai-completions", base_url = "https://lab.example",

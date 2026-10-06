@@ -243,6 +243,20 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Reviews: none yet.
 - Deviations: none. Open: none.
 
+## P03-S - Auth and redaction (2026-10-05)
+- F1 `local_vault()` (117 calls); F3 `rules_compile()` a field map; F4 child_env values validated
+  once; F5 `secrets_opt()`, F6 `vault_values()`, `st$version` gone; F7 one table-driven D-010 test
+  (4 merged), codetools test out; F8 `rapply()`; F9/F13 P01 checkers; F10/F11 duplicate path, handle
+  and rule checks gone; F12 one `guard()`; F14 option A; F15 `secret_marker_re` (R -95, tests -161).
+- Red: FAIL 2 (`auth-redact`: structural kept a handle display and a known marker). Green:
+  `auth-|eval-guard` PASS 1213 (1194 before: +17 D-010 table, +2 structural and rule, +1 provider key
+  name, -1 codetools). Lint clean. Neighbours: `catalog-models|doc-|mcp-client|proc-|provider-registry|
+  session-live|arch-layers|lint-rules|eval-|http-|copy-|cli-common|ext-check|gptr-config|agent-run` green.
+- Reviews: R1 minor (provider key name no longer checked; fixed test-first, FAIL 1 then green), nit
+  (counts, Open list; fixed).
+- Deviations: D-150. Open: F17/F18 specifics lost (shared decision 1 sites only); test-session-live.R,
+  test-artifact-registry.R, test-artifact-app.R keep vault_reset() (lanes simp-core, art-bench).
+
 ## P17-S - Skills, templates, plugins (2026-10-05)
 - S01 three SKILL.md copies of the guard tests; S02 skill and template roots on `res_roots()` (untrusted
   project skill roots rank 7, as D-134), `res_foreign_names("command")`; S04 aliases and wrappers; S05

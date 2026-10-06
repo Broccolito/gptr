@@ -30,8 +30,7 @@ pattern_cases = function() {
 }
 
 test_that("registered values and their derived forms are redacted", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   b64 = jsonlite::base64_enc(charToRaw(paste0("user:", fake_jev)))
   b64url = chartr("+/", "-_",
@@ -56,8 +55,7 @@ test_that("registered values and their derived forms are redacted", {
 })
 
 test_that("the 12 rules redact their shapes and leave near misses alone", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   pos = pattern_cases()
   for (n in names(pos)) {
     r = redact(pos[[n]], "context")
@@ -83,8 +81,7 @@ test_that("the 12 rules redact their shapes and leave near misses alone", {
 })
 
 test_that("a PGP private key block is redacted (G6 verification log)", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   pgp = paste0("-----BEGIN PGP PRIVATE ", "KEY BLOCK-----\nlQOYBFAKEFAKE\n",
                "-----END PGP PRIVATE ", "KEY BLOCK-----")
   expect_identical(redact(paste("key:", pgp), "persist"), "key: [secret:private-key]")
@@ -93,8 +90,7 @@ test_that("a PGP private key block is redacted (G6 verification log)", {
 })
 
 test_that("redaction is idempotent; the code profile skips NAME=value and rewrites literals", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   all_text = paste(c(paste("key is", fake_jev), pattern_cases()), collapse = "\n")
   r1 = redact(all_text, "persist")
@@ -109,8 +105,7 @@ test_that("redaction is idempotent; the code profile skips NAME=value and rewrit
 })
 
 test_that("user_data redacts values only; NA and attributes survive; invalid UTF-8 never errors", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   x = c(a = paste("v", fake_jev), b = NA, c = "Authorization: Bearer FAKEtoken1234567890abcdef")
   r = redact(x, "user_data")
@@ -124,8 +119,7 @@ test_that("user_data redacts values only; NA and attributes survive; invalid UTF
 })
 
 test_that("a later registration is redacted from then on", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   late = paste0("FAKE_late_registered_", "secret_42")
   before = redact(paste("value", late), "context")
   secret_register(late, "LATE_KEY", "session")
@@ -135,8 +129,7 @@ test_that("a later registration is redacted from then on", {
 })
 
 test_that("long secrets (private keys, long tokens) never overflow the PCRE pattern size", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   pem = function(i) {
     body = rep(sprintf("MIIEvFAKE%04dFAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKEfakeFAKE", i), 26)
     paste0("-----BEGIN PRIVATE ", "KEY-----\n", paste(body, collapse = "\n"),
@@ -156,8 +149,7 @@ test_that("long secrets (private keys, long tokens) never overflow the PCRE patt
 })
 
 test_that("a PEM block split over a line vector keeps the length and the neighbours", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   lines = c("before", paste0("-----BEGIN OPENSSH PRIVATE ", "KEY-----"),
             "b3BlbnNzaC1rZXktdjEAAAAFAKE", "FAKEFAKEFAKE",
             paste0("-----END OPENSSH PRIVATE ", "KEY-----"), "after")
@@ -168,8 +160,7 @@ test_that("a PEM block split over a line vector keeps the length and the neighbo
 })
 
 test_that("trees: text and arguments are redacted, opaque replay fields are not", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   blocks = list(
     list(type = "thinking", thinking = paste("I saw", fake_jev),
@@ -201,8 +192,7 @@ test_that("trees: text and arguments are redacted, opaque replay fields are not"
 })
 
 test_that("structural redaction blanks sensitive header values only", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   hdr = list(url = "https://api.anthropic.com/v1/messages",
              headers = list(`x-api-key` = "k-not-registered-123",
                             `anthropic-version` = "2023-06-01", Authorization = "Bearer abc"))
@@ -219,8 +209,7 @@ test_that("structural redaction blanks sensitive header values only", {
 })
 
 test_that("gptr_redact() validates its arguments and delegates to the redactor", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   expect_identical(gptr_redact("Authorization: Bearer abcdef0123456789abcdef"),
                    "Authorization: Bearer [secret:auth-header]")
   expect_identical(gptr_redact(list(a = "postgres://u:FAKEpw99@h/db"))$a,
@@ -231,8 +220,7 @@ test_that("gptr_redact() validates its arguments and delegates to the redactor",
 })
 
 test_that("the redaction hook is installed: conditions never carry a registered value", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   expect_identical(redact_hook(paste("k", fake_jev)), "k [secret:TYPESAFE_API_KEY]")
   e = tryCatch(gptr_abort(paste0("HTTP 401: {\"error\":\"invalid x-api-key ", fake_ant, "\"}"),
@@ -242,8 +230,7 @@ test_that("the redaction hook is installed: conditions never carry a registered 
 })
 
 test_that("ordinary signature and JSON fields never bypass value redaction", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register(fake_jev, "TYPESAFE_API_KEY")
   fields = c("signature", "thinking_signature", "thought_signature", "text_signature",
              "thinkingSignature", "thoughtSignature", "textSignature", "encrypted_content", "json")
@@ -254,8 +241,7 @@ test_that("ordinary signature and JSON fields never bypass value redaction", {
 })
 
 test_that("generic payload fields cannot spoof replay blocks to hide registered values", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register(fake_jev, "TYPESAFE_API_KEY")
   generic = c("input", "arguments", "raw_arguments", "details", "params", "attrs",
               "headers", "settings", "env")
@@ -275,8 +261,7 @@ test_that("generic payload fields cannot spoof replay blocks to hide registered 
 })
 
 test_that("unterminated private-key blocks redact every remaining line", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   begin = paste0("-----BEGIN PRIVATE ", "KEY-----")
   end = paste0("-----END PRIVATE ", "KEY-----")
   incomplete = c(begin, "FAKE-MIDDLE-ONLY", "FAKE-LAST-LINE")
@@ -287,8 +272,7 @@ test_that("unterminated private-key blocks redact every remaining line", {
 })
 
 test_that("literal redaction preserves emitted markers without hiding adjacent raw values", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   value = paste0("FAKE_", "TOKEN_NAME")
   secret_register(value, value)
   marker = paste0("[secret:", value, "]")
@@ -302,25 +286,21 @@ test_that("literal redaction preserves emitted markers without hiding adjacent r
                    charToRaw(paste0("bin \xff ", marker, " ", marker)))
 })
 
-test_that("structural redaction exempts only complete markers and handle displays", {
-  vault_reset()
-  withr::defer(vault_reset())
+test_that("structural redaction keeps only the key's own marker", {
+  local_vault()
   h = secret_register(fake_jev, "TYPESAFE_API_KEY")
-  malformed = c("[secret:pretend]FAKE_UNREGISTERED_PASSWORD_TAIL",
-                "<secret pretend>FAKE_UNREGISTERED_PASSWORD_TAIL",
-                "[secret:unfinished", paste0(format(h), "FAKE_TAIL"))
-  for (value in malformed) {
+  blanked = c("[secret:pretend]FAKE_UNREGISTERED_PASSWORD_TAIL",
+              "<secret pretend>FAKE_UNREGISTERED_PASSWORD_TAIL",
+              "[secret:unfinished", paste0(format(h), "FAKE_TAIL"), format(h),
+              "[secret:TYPESAFE_API_KEY]", "[secret:password]")
+  for (value in blanked) {
     expect_identical(redact_tree(list(password = value), structural = TRUE)$password,
                      "[secret:password]")
-  }
-  for (value in c("[secret:password]", format(h))) {
-    expect_identical(redact_tree(list(password = value), structural = TRUE)$password, value)
   }
 })
 
 test_that("an unknown marker name cannot hide a registered credential", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register(fake_jev, "TYPESAFE_API_KEY")
   forged = paste0("[secret:", fake_jev, "]")
   out = redact(forged, "user_data")
@@ -368,8 +348,7 @@ stream_doc = function() {
 }
 
 test_that("a short stream equals whole-text redaction (CRAN-sized)", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   text = stream_doc()
   want = redact(text, "stream")
@@ -382,8 +361,7 @@ test_that("a short stream equals whole-text redaction (CRAN-sized)", {
 
 test_that("streaming equals whole-text redaction over 400 chunkings; no secret prefix leaks", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   text = stream_doc()
   want = redact(text, "stream")
@@ -406,8 +384,7 @@ test_that("streaming equals whole-text redaction over 400 chunkings; no secret p
 
 test_that("1,000 shuffled documents streamed in chunks of 1-200 characters stay invariant", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   frags = c(fake_jev, fake_ant, fake_odd, "Bearer FAKEtok3n4567890abcdefgh",
             "postgres://u:FAKEpw99@h/db",
@@ -432,8 +409,7 @@ test_that("1,000 shuffled documents streamed in chunks of 1-200 characters stay 
 
 test_that("the persist profile (NAME=value rule included) is chunk invariant too", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   register_fakes()
   text = paste0(stream_doc(), "\nMY_SERVICE_TOKEN     FAKEvalue9876543210\n",
                 "OPENAI_API_KEY=sk-", "proj-FAKEfakeFAKEfakeFAKEfake1234567890abcd\n")
@@ -448,8 +424,7 @@ test_that("the persist profile (NAME=value rule included) is chunk invariant too
 })
 
 test_that("a multi-byte character split across chunks is held, not mangled", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   rs = redact_stream("stream")
   e_acute = charToRaw("\u00e9")
   first = rs$push(rawToChar(e_acute[1]))
@@ -461,72 +436,48 @@ test_that("a multi-byte character split across chunks is held, not mangled", {
   expect_error(redact_stream("nope"), class = "gptr_error_invalid_argument")
 })
 
-expect_failed_redaction_stream = function(rs, cnd, limit, sensitive_prefix) {
-  expect_s3_class(cnd, "gptr_error_redaction_limit")
-  if (!inherits(cnd, "gptr_error_redaction_limit")) return(invisible(NULL))
-  expect_identical(cnd$limit, as.integer(limit))
-  expect_null(cnd$call)
-  expect_length(grepRaw(charToRaw(sensitive_prefix), serialize(cnd, NULL)), 0L)
-  expect_identical(rs$held(), 0L)
-  expect_error(rs$push("ordinary follow-up"), class = "gptr_error_redaction_limit")
-  expect_error(rs$flush(), class = "gptr_error_redaction_limit")
-  expect_identical(rs$held(), 0L)
-}
-
-test_that("stream overflow fails closed at every split around the default cap (D-010)", {
-  vault_reset()
-  withr::defer(vault_reset())
+test_that("stream overflow fails closed, emits no prefix and stays failed (D-010)", {
+  local_vault()
   limit = 4096L
-  value = paste0("FAKE_LONG_PRIVATE_", strrep("x", limit + 32L))
-  secret_register(value, "LONG_TOKEN")
-  for (split in (limit - 2L):(limit + 2L)) {
+  token = paste0("FAKE_LONG_PRIVATE_", strrep("x", limit + 32L))
+  spaced = paste0("FAKE LONG PRIVATE ", strrep("x", limit + 32L))
+  secret_register(token, "LONG_TOKEN")
+  secret_register(spaced, "LONG_SPACED")
+  pem = paste0("-----BEGIN PRIVATE ", "KEY-----\n", strrep("FAKE_PRIVATE_BODY", 300L))
+  split = function(at, text) list(push = c(substr(text, 1L, at), substring(text, at + 1L)))
+  edges = c(1L, limit - 1L, limit, limit + 1L)
+  cases = c(
+    lapply((limit - 2L):(limit + 2L), split, text = token),
+    lapply(edges, split, text = utils::URLencode(spaced, reserved = TRUE)),
+    lapply(edges, split, text = pem),
+    list(list(push = rawToChar(c(as.raw(255), charToRaw(paste0("FAKE_", strrep("x", limit))))))),
+    list(list(pending = paste0("FAKE_PRIVATE_PENDING_", strrep("x", limit + 4L))))
+  )
+  for (cs in cases) {
     rs = redact_stream()
+    rs$pending = cs$pending %||% ""
     emitted = character()
     cnd = tryCatch({
-      emitted = c(emitted, rs$push(substr(value, 1L, split)))
-      emitted = c(emitted, rs$push(substring(value, split + 1L)))
+      for (chunk in cs$push) emitted = c(emitted, rs$push(chunk))
+      if (is.null(cs$push)) rs$flush()
       NULL
     }, error = identity)
-    expect_failed_redaction_stream(rs, cnd, limit, substr(value, 1L, 16L))
-    expect_identical(paste(emitted, collapse = ""), "")
-  }
-})
-
-test_that("oversized derived credentials and unterminated PEM never emit raw prefixes", {
-  vault_reset()
-  withr::defer(vault_reset())
-  limit = 4096L
-  value = paste0("FAKE LONG PRIVATE ", strrep("x", limit + 32L))
-  secret_register(value, "LONG_TOKEN")
-  pem = paste0("-----BEGIN PRIVATE ", "KEY-----\n", strrep("FAKE_PRIVATE_BODY", 300L))
-  for (text in c(utils::URLencode(value, reserved = TRUE), pem)) {
-    for (split in c(1L, limit - 1L, limit, limit + 1L)) {
-      rs = redact_stream()
-      emitted = character()
-      cnd = tryCatch({
-        emitted = c(emitted, rs$push(substr(text, 1L, split)))
-        emitted = c(emitted, rs$push(substring(text, split + 1L)))
-        NULL
-      }, error = identity)
-      expect_failed_redaction_stream(rs, cnd, limit, substr(text, 1L, 16L))
-      expect_identical(paste(emitted, collapse = ""), "")
+    expect_s3_class(cnd, "gptr_error_redaction_limit")
+    expect_identical(cnd$limit, limit)
+    expect_null(cnd$call)
+    for (leak in c("FAKE", "PRIVATE")) {
+      expect_length(grepRaw(leak, serialize(cnd, NULL), fixed = TRUE), 0L)
     }
+    expect_identical(paste(emitted, collapse = ""), "")
+    expect_identical(rs$held(), 0L)
+    expect_error(rs$push("ordinary follow-up"), class = "gptr_error_redaction_limit")
+    expect_error(rs$flush(), class = "gptr_error_redaction_limit")
+    expect_identical(rs$held(), 0L)
   }
-})
-
-test_that("flush also rejects oversized pending candidates and leaves failure latched", {
-  vault_reset()
-  withr::defer(vault_reset())
-  rs = redact_stream()
-  pending = paste0("FAKE_PRIVATE_PENDING_", strrep("x", 4100L))
-  rs$pending = pending
-  cnd = tryCatch(rs$flush(), error = identity)
-  expect_failed_redaction_stream(rs, cnd, 4096L, substr(pending, 1L, 16L))
 })
 
 test_that("known markers remain unchanged when streamed across arbitrary character boundaries", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   value = paste0("FAKE_", "TOKEN_NAME")
   secret_register(value, value)
   text = paste0("before [secret:", value, "] after")
@@ -538,16 +489,6 @@ test_that("known markers remain unchanged when streamed across arbitrary charact
   }
 })
 
-
-test_that("invalid byte overflow also clears and permanently stops the stream", {
-  vault_reset()
-  withr::defer(vault_reset())
-  rs = redact_stream()
-  chunk = rawToChar(c(as.raw(255), charToRaw(paste0("FAKE_INVALID_", strrep("x", 4096L)))))
-  cnd = tryCatch(rs$push(chunk), error = identity)
-  expect_failed_redaction_stream(rs, cnd, 4096L, "FAKE_INVALID_")
-})
-
 test_that("the streaming hold limit must be a positive finite integer", {
   for (limit in list(NA_real_, Inf, 0, 1.5, 1 + 1i)) {
     withr::local_options(gptr.stream_hold_max = limit)
@@ -557,8 +498,7 @@ test_that("the streaming hold limit must be a positive finite integer", {
 
 
 test_that("recorded code replays: exact literals become Sys.getenv(), the rest are flagged", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register(fake_ghp, "GITHUB_PAT", "environment")
   code = c("req = httr2::request('https://api.github.com/user')",
            paste0("req = httr2::req_auth_bearer_token(req, '", fake_ghp, "')"),
@@ -576,8 +516,7 @@ test_that("recorded code replays: exact literals become Sys.getenv(), the rest a
 })
 
 test_that("code without secrets passes through unchanged and unflagged", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   code = "fit = lm(mpg ~ wt, data = mtcars)\nsummary(fit)"
   h = code_for_history(code)
   expect_identical(as.character(h), code)
@@ -586,8 +525,7 @@ test_that("code without secrets passes through unchanged and unflagged", {
 })
 
 test_that("a secret whose name is not a variable name becomes a flagged marker", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   stored = paste0("sk-", "or-v1-FAKEstoredKey0123456789")
   secret_register(stored, "auth:openrouter", "auth.json")
   h = code_for_history(paste0("k = '", stored, "'"))
@@ -597,8 +535,7 @@ test_that("a secret whose name is not a variable name becomes a flagged marker",
 })
 
 test_that("recorded code preserves needs metadata on repeated passes", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register(fake_ghp, "GITHUB_PAT", "environment")
   first = code_for_history(paste0("token = '", fake_ghp, "'"))
   expect_identical(code_for_history(first), first)
@@ -618,8 +555,7 @@ test_that("recorded code rejects missing code and invalid needs metadata", {
 })
 
 test_that("unsafe replay-variable metadata remains a flagged marker", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   name = paste0("FAKE_", "TOKEN_NAME")
   secret_register(name, name, "environment")
   h = code_for_history(paste0("token = '", name, "'"))
@@ -645,8 +581,7 @@ session_lines = function(secret) {
 }
 
 test_that("gptr_scrub() finds a value registered after it was written and rewrites it", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   d = withr::local_tempdir()
   dir.create(file.path(d, "sessions"))
   late = paste0("FAKE_late_key_", "0123456789abcdef")
@@ -671,8 +606,7 @@ test_that("gptr_scrub() finds a value registered after it was written and rewrit
 })
 
 test_that("a rewritten session file stays valid JSONL and gets a gptr.scrub entry", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   d = withr::local_tempdir()
   late = paste0("FAKE_late_key_", "0123456789abcdef")
   f = file.path(d, "s.jsonl")
@@ -693,8 +627,7 @@ test_that("a rewritten session file stays valid JSONL and gets a gptr.scrub entr
 })
 
 test_that("default paths cover the workspace and the documents bound in its sessions", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   late = paste0("FAKE_late_key_", "0123456789abcdef")
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
@@ -710,8 +643,7 @@ test_that("default paths cover the workspace and the documents bound in its sess
 })
 
 test_that("binary files are reported but never rewritten; bad paths are refused", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   d = withr::local_tempdir()
   late = paste0("FAKE_late_key_", "0123456789abcdef")
   bin = file.path(d, "blob.bin")
@@ -726,8 +658,7 @@ test_that("binary files are reported but never rewritten; bad paths are refused"
 })
 
 test_that("a long secret is counted and removed through the fixed-string path", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   d = withr::local_tempdir()
   huge = paste0(strrep("FAKEhuge", 5000), "end")
   writeLines(c("a", huge, "b"), file.path(d, "log.txt"))
@@ -748,8 +679,7 @@ test_that("the documented example runs on a clean directory", {
 })
 
 test_that("scrub derives authority only from exact safe document records", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   dir.create(file.path(proj, ".gptr", "sessions"), showWarnings = FALSE)
@@ -775,8 +705,7 @@ test_that("scrub derives authority only from exact safe document records", {
 
 test_that("scrub directory traversal never follows escaping symlinks", {
   skip_on_os("windows")
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   cache = file.path(proj, ".gptr", "cache")
@@ -794,8 +723,7 @@ test_that("scrub directory traversal never follows escaping symlinks", {
 })
 
 test_that("scrub audit metadata and known markers remain idempotent", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   name = "FAKE_SCRUB_TOKEN_NAME"
   secret_register(name, name, "test")
   f = withr::local_tempfile(fileext = ".jsonl")
@@ -813,8 +741,7 @@ test_that("scrub audit metadata and known markers remain idempotent", {
 })
 
 test_that("scrub entry IDs account for JSON whitespace and exact metadata", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   f = withr::local_tempfile(fileext = ".jsonl")
   late = "FAKE_scrub_id_0123456789"
   secret_register(late, "LATE_KEY", "test")
@@ -832,8 +759,7 @@ test_that("scrub entry IDs account for JSON whitespace and exact metadata", {
 })
 
 test_that("scrub holds session and document writer locks throughout replacement", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   late = "FAKE_scrub_lock_0123456789"
@@ -864,8 +790,7 @@ test_that("scrub holds session and document writer locks throughout replacement"
 })
 
 test_that("scrub refuses held document locks and preserves invalid UTF-8 bytes", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   late = "FAKE_scrub_lock_0123456789"
@@ -888,8 +813,7 @@ test_that("scrub refuses held document locks and preserves invalid UTF-8 bytes",
 })
 
 test_that("scrub preserves old and incomplete session locks instead of stealing them", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   f = withr::local_tempfile(fileext = ".jsonl")
   late = "FAKE_scrub_session_lock_0123456789"
   secret_register(late, "LATE_KEY", "test")
@@ -914,8 +838,7 @@ test_that("scrub preserves old and incomplete session locks instead of stealing 
 })
 
 test_that("scrub rereads after acquiring locks and releases locks after write errors", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   f = file.path(proj, "notes.txt")
@@ -943,8 +866,7 @@ test_that("scrub rereads after acquiring locks and releases locks after write er
 
 test_that("scrub refuses symlinked writer-lock roots without writing outside the workspace", {
   skip_on_os("windows")
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   outside = withr::local_tempdir()
@@ -967,8 +889,7 @@ test_that("scrub refuses symlinked writer-lock roots without writing outside the
 
 test_that("dangling cache links do not prevent the scrub audit", {
   skip_on_os("windows")
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   cache = file.path(proj, ".gptr", "cache")
@@ -981,8 +902,7 @@ test_that("dangling cache links do not prevent the scrub audit", {
 })
 
 test_that("scrub discovery does not turn lock metadata into rewrite targets", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project()
   withr::local_envvar(GPTR_PROJECT_ROOT = proj)
   sessions = file.path(proj, ".gptr", "sessions")
@@ -998,11 +918,4 @@ test_that("scrub discovery does not turn lock metadata into rewrite targets", {
   writeLines(json_encode(rec), file.path(sessions, "doc.jsonl"))
   expect_identical(nrow(gptr_scrub()), 0L)
   expect_identical(nrow(gptr_scrub(pid)), 1L)
-})
-
-test_that("scrub discovery calls utils::file_test() explicitly (R CMD check code usage)", {
-  skip_if_not_installed("codetools")
-  # utils is not imported: an unqualified file_test() is an undefined global under R CMD check
-  globals = codetools::findGlobals(scrub_walk, merge = FALSE)$functions
-  expect_false("file_test" %in% globals)
 })

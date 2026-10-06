@@ -106,8 +106,7 @@ test_that("separator whitespace can introduce an empty-value comment", {
 })
 
 test_that("gptr_env() maps aliases, exports canonical names only and never shows a value", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(stats::setNames(rep(NA_character_, length(win_vars)), win_vars))
   local_gptr_options(quiet = FALSE)
   d = withr::local_tempdir()
@@ -151,8 +150,7 @@ test_that("gptr_env() maps aliases, exports canonical names only and never shows
 })
 
 test_that("set_env = FALSE keeps a key in the vault only; override decides about set variables", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(TYPESAFE_API_KEY = NA)
   d = withr::local_tempdir()
   f1 = file.path(d, "jev-key.env")
@@ -173,8 +171,7 @@ test_that("set_env = FALSE keeps a key in the vault only; override decides about
 })
 
 test_that("an API key with blanks is registered, not exported, and reported by line only", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(OPENAI_API_KEY = NA)
   local_gptr_options(quiet = FALSE)
   d = withr::local_tempdir()
@@ -190,8 +187,7 @@ test_that("an API key with blanks is registered, not exported, and reported by l
 })
 
 test_that("gptr_env() validates arguments and serialised handles carry no key bytes", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   expect_error(gptr_env(tempfile(fileext = ".env")), class = "gptr_error_invalid_argument")
   expect_error(gptr_env(withr::local_tempdir()), class = "gptr_error_invalid_argument")
   d = withr::local_tempdir()
@@ -204,8 +200,7 @@ test_that("gptr_env() validates arguments and serialised handles carry no key by
 })
 
 test_that("gptr_env() takes extra aliases and emits one aggregated secret_registered event", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(SLACK_BOT_TOKEN = NA, OTHER_TOKEN = NA)
   seen = list()
   off = gptr_register(gptr_hook("secret_registered", function(event, ctx) {
@@ -225,8 +220,7 @@ test_that("gptr_env() takes extra aliases and emits one aggregated secret_regist
 })
 
 test_that("an alias repeating the canonical value never deactivates the winner", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(TYPESAFE_API_KEY = NA)
   d = withr::local_tempdir()
   f = file.path(d, "same.env")
@@ -239,8 +233,7 @@ test_that("an alias repeating the canonical value never deactivates the winner",
 })
 
 test_that("a trusted project's .env is discovered vault-only; an untrusted one is not read", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(TYPESAFE_API_KEY = NA)
   key = paste0("FAKE", "projectDotenvKey0123")
   proj = local_project(files = list(.env = c(paste0("jev-key=", key),
@@ -270,8 +263,7 @@ test_that("a trusted project's .env is discovered vault-only; an untrusted one i
 })
 
 test_that("literal canonical spelling wins over canonicalized aliases", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   f = tempfile(fileext = ".env")
   withr::defer(unlink(f))
   writeLines(c("TYPESAFE_API_KEY=FAKEcanonical012345", "typesafe_api_key=FAKElowercase012345"), f)
@@ -281,8 +273,7 @@ test_that("literal canonical spelling wins over canonicalized aliases", {
 })
 
 test_that("trusted dotenv sources refuse invalid keys and honor file precedence", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   proj = local_project(files = list(
     .env = c("TYPESAFE_API_KEY=FAKEroot0123456789", "OPENAI_API_KEY=bad value"),
     ".gptr/.env" = "TYPESAFE_API_KEY=FAKEgptr0123456789"
@@ -297,8 +288,7 @@ test_that("trusted dotenv sources refuse invalid keys and honor file precedence"
 })
 
 test_that("higher-priority empty or invalid dotenv entries mask lower file credentials", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   for (value in c("", "invalid value")) {
     vault_reset()
     proj = local_project(files = list(

@@ -43,6 +43,12 @@ fake_requests = function(spec) {
   spec$log$requests
 }
 
+# An empty secret vault for the calling test, emptied again when the test ends
+local_vault = function(.env = parent.frame()) {
+  vault_reset()
+  withr::defer(vault_reset(), envir = .env)
+}
+
 # A temporary project made the working directory and the project root for the calling test
 #
 # `gptr = TRUE` creates a `.gptr/` skeleton directly (sessions/, cache/tmp/, .gitignore; no

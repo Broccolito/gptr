@@ -313,8 +313,7 @@ test_that("line readers end lines at CRLF as a Windows child writes them, across
 
 test_that("proc_run echo redacts registered values spanning output polls", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret = "FAKEfirstLine\nFAKEsecondLine"
   secret_register(secret, "SPLIT_TEST_TOKEN")
   emitted = character()
@@ -332,8 +331,7 @@ test_that("proc_run echo redacts registered values spanning output polls", {
 })
 
 test_that("proc_run echo ends lines at CRLF, so a Windows child's output is redacted as LF", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register("FAKEfirstLine\nFAKEsecondLine", "SPLIT_TEST_TOKEN")
   emitted = character()
   local_mocked_bindings(msg_verbatim = function(x, stream) {
@@ -358,8 +356,7 @@ test_that("proc_run echo ends lines at CRLF, so a Windows child's output is reda
 })
 
 test_that("proc_run echo redacts a registered CRLF value however the child wrote its line end", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   secret_register("FAKEfirstLine\r\nFAKEsecondLine", "CRLF_TEST_TOKEN")
   # the value written verbatim (a Unix child, or a binary-mode Windows child) and through
   # Windows text-mode stdout ("\r\n" arrives as "\r\r\n"), its line break between two polls
@@ -384,8 +381,7 @@ test_that("proc_run echo redacts a registered CRLF value however the child wrote
 })
 
 test_that("proc_run echo redacts a CRLF value whose LF form is under the redaction minimum", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_options(gptr.redact_min_chars = 8L)
   # 8 characters, so the value is redacted; its LF form, which the echo shows, has 7
   secret_register("Ab3\r\nXy9", "EDGE_TEST_TOKEN")
@@ -406,8 +402,7 @@ test_that("proc_run echo redacts a CRLF value whose LF form is under the redacti
 
 test_that("proc_run echo fails closed when streaming redaction exceeds its bound", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_options(gptr.stream_hold_max = 8L)
   emitted = character()
   local_mocked_bindings(msg_verbatim = function(x, stream) {

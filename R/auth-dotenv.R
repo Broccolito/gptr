@@ -161,11 +161,6 @@ dotenv_bad_key_value = function(variable, value) {
 #' unlink(f)
 gptr_env = function(path = ".env", aliases = NULL, set_env = getOption("gptr.env_export", TRUE),
                     override = FALSE, quiet = FALSE) {
-  check_string(path, "path")
-  if (!file.exists(path) || dir.exists(path)) {
-    gptr_abort("`path` must name an existing .env file.", "invalid_argument",
-               arg = "path", expected = "an existing file")
-  }
   check_list(aliases, "aliases", named = TRUE, null = TRUE)
   check_flag(set_env, "set_env")
   check_flag(override, "override")

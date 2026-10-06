@@ -44,8 +44,7 @@ with_billing_warning = function(expr) {
 }
 
 test_that("every profile is a complete vector without NA and with empty R startup files", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(stats::setNames(rep(NA_character_, length(billing_vars)), billing_vars))
   withr::local_envvar(fake_env()[setdiff(names(fake_env()), billing_vars)])
   for (p in profiles) {
@@ -64,8 +63,7 @@ test_that("every profile is a complete vector without NA and with empty R startu
 })
 
 test_that("mcp and worker are allowlists; the worker gets only its provider's key", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_fake_env()
   withr::local_envvar(GPTR_HOME = "/tmp/gptr-home", GPTR_SUBAGENT_DEPTH = "2")
   secret_discover_env(fake_env())
@@ -92,8 +90,7 @@ test_that("mcp and worker are allowlists; the worker gets only its provider's ke
 })
 
 test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, with a warning", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_fake_env()
   res = with_billing_warning(child_env("cli-claude"))
   expect_s3_class(res$warning, "gptr_warning_billing_env")
@@ -113,8 +110,7 @@ test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, 
 })
 
 test_that("cli-codex drops CODEX_MANAGED_*, CODEX_SANDBOX* and billing variables", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_fake_env()
   res = with_billing_warning(child_env("cli-codex"))
   expect_identical(res$warning$variables, c("CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL"))
@@ -125,8 +121,7 @@ test_that("cli-codex drops CODEX_MANAGED_*, CODEX_SANDBOX* and billing variables
 })
 
 test_that("helper and artifact inherit minus secrets and registered values", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_fake_env()
   withr::local_envvar(PLAIN_BUT_REGISTERED = "FAKEregisteredvalue42")
   secret_register("FAKEregisteredvalue42", "SOME_SECRET", "test")
@@ -144,8 +139,7 @@ test_that("helper and artifact inherit minus secrets and registered values", {
 })
 
 test_that("child_env_callr() unsets every other inherited variable with NA", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_fake_env()
   env = child_env("mcp")
   ce = child_env_callr(env)
@@ -177,8 +171,7 @@ run_rscript = function(env, code) {
 
 test_that("processx starts with a helper environment", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   env = child_env("helper")
   expect_false(anyNA(env))
   p = processx::process$new(rscript_path(), c("--vanilla", "-e", "cat(Sys.getenv('TERM'))"),
@@ -191,8 +184,7 @@ test_that("processx starts with a helper environment", {
 
 test_that("Rscript children of the mcp and helper profiles never see a .Renviron key", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   local_fake_renviron()
   probe = "cat(Sys.getenv('RENVIRON_ONLY_TOKEN'))"
   expect_identical(run_rscript(NULL, probe), "FAKErenvironToken0123456789")   # negative control
@@ -202,8 +194,7 @@ test_that("Rscript children of the mcp and helper profiles never see a .Renviron
 
 test_that("a callr worker sees neither the .Renviron key nor the file", {
   skip_on_cran()
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   renviron = local_fake_renviron()
   res = callr::r(function() c(Sys.getenv("RENVIRON_ONLY_TOKEN"), Sys.getenv("R_ENVIRON_USER")),
                  env = child_env_callr(child_env("worker")), user_profile = FALSE)
@@ -226,8 +217,7 @@ test_that("environment inputs reject malformed names and values without exposing
 })
 
 test_that("case variants and exported functions do not defeat environment filtering", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   parent = c(Path = "/synthetic/bin", PATH = "/duplicate/bin", codex_managed_by = "ide",
              ClaUde_CoDe_EntryPoint = "sdk", DROP_FUNCTION = "() { echo unsafe; }")
   child = child_env
@@ -242,8 +232,7 @@ test_that("case variants and exported functions do not defeat environment filter
 })
 
 test_that("registered profiles and explicit startup settings still use empty files", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   file = withr::local_tempfile()
   writeLines("stop('FAKE startup file')", file)
   off = gptr_register(gptr_spec("child_env", "test-startup", base = "allowlist",
@@ -263,8 +252,7 @@ test_that("registered profiles and explicit startup settings still use empty fil
 })
 
 test_that("provider credentials preserve vault origin restrictions and register environment keys", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   handle = secret_register("FAKEproviderValue123456", "TEST_PROVIDER_KEY",
                            origin = "https://allowed.test")
   off = gptr_register(gptr_provider("test-origin", api = "openai-completions",
@@ -285,6 +273,12 @@ test_that("provider credentials preserve vault origin restrictions and register 
   expect_identical(secret_registered_names(), "TEST_PROVIDER_KEY")
   expect_false(grepl("FAKEenvironmentKey123456", gptr_redact(env[["TEST_PROVIDER_KEY"]]),
                     fixed = TRUE))
+  secret_register("FAKEbadNameValue123456", "BAD=NAME")
+  off3 = gptr_register(gptr_provider("test-bad-name", api = "openai-completions",
+    base_url = "https://other.test", auth = "BAD=NAME"))
+  withr::defer(off3())
+  expect_error(child_env("worker", provider = "test-bad-name"),
+               class = "gptr_error_invalid_argument")
 })
 
 test_that("CLI billing switches warn once per removed set and respect explicit consent", {
@@ -309,8 +303,7 @@ test_that("CLI billing switches warn once per removed set and respect explicit c
 })
 
 test_that("inherited settings containing registered values or derived forms are omitted", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   value = "FAKE/key?with=reserved&characters123456"
   secret_register(value, "TEST_EMBEDDED_TOKEN")
   parent = c(PLAIN = "safe", CONFIG = paste0("prefix=", value, ";suffix"),

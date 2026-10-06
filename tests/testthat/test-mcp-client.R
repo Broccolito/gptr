@@ -68,8 +68,7 @@ test_that("tool results become text, images and R values", {
 })
 
 test_that("placeholders expand at connect time; secret-like values are registered", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(MCP_T_TOKEN = "tok-abcdefghijklmnop", MCP_T_UNSET = NA,
                       MCP_T_ARG_TOKEN = "argtok-abcdefghijkl")
   x = mcp_expand(c(a = "${MCP_T_TOKEN}", b = "${MCP_T_UNSET:-dflt}", c = "${env:MCP_T_TOKEN}",
@@ -110,8 +109,7 @@ test_that("era and tool caches live in the user cache with their keys and expiry
 })
 
 test_that("placeholder values are spliced in once and literally; env entries become strings", {
-  vault_reset()
-  withr::defer(vault_reset())
+  local_vault()
   withr::local_envvar(MCP_T_NESTED = "${MCP_T_TOKEN}", MCP_T_TOKEN = "tok-abcdefghijklmnop",
                       MCP_T_UNSET = NA)
   # an expanded value is never expanded again, and the expansion ends even when the home
