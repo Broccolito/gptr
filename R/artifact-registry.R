@@ -245,3 +245,118 @@ artifact_sweep = function() {
   artifact_state$swept = TRUE
   invisible(killed)
 }
+
+# ---- gptr_artifacts(), the listing and unload cleanup -----------------------------------------
+
+#' The gptr_artifacts listing (contract 5.12): one row per artifact.json of the workspace
+#'
+#' artifact.json is committed, so a merge conflict or a hand edit can leave one unreadable; such
+#' an artifact is named in the footer instead of failing the whole listing.
+#' @noRd
+artifact_list = function() {
+  ids = Filter(artifact_exists, basename(list.dirs(artifact_root(), recursive = FALSE)))
+  readable = vapply(ids, function(id) !is.null(artifact_meta_read(id)), NA, USE.NAMES = FALSE)
+  footer = if (any(!readable)) {
+    paste0("# artifact.json not readable (skipped): ", paste(ids[!readable], collapse = ", "))
+  }
+  rows = lapply(ids[readable], function(id) {
+    h = artifact_handle(id)
+    files = list.files(artifact_dir(id), recursive = TRUE, full.names = TRUE, all.files = TRUE)
+    data.frame(id = id, title = h$title, version = h$version, status = h$status, url = h$url,
+               pid = if (identical(h$status, "running")) artifact_proc_get(id)$pid else NA_integer_,
+               bytes = sum(file.size(files), na.rm = TRUE), path = h$path,
+               stringsAsFactors = FALSE)
+  })
+  df = if (length(rows)) {
+    do.call(rbind, rows)
+  } else {
+    data.frame(id = character(), title = character(), version = integer(),
+               status = character(), url = character(), pid = integer(), bytes = numeric(),
+               path = character(), stringsAsFactors = FALSE)
+  }
+  new_listing(df, "gptr_artifacts", footer = footer)
+}
+
+#' List, open, relaunch and stop artifacts
+#'
+#' Artifacts are Shiny apps the agent builds from objects in your session. It writes
+#' `.gptr/artifacts/<id>/app.R` and launches it with `peter$app("<id>", data = c("obj"))`, which
+#' snapshots the named objects into an immutable version directory (`v001/`, `v002/`, ...) and
+#' serves it from a supervised background R process on `127.0.0.1`, so the console stays free.
+#' `gptr_artifacts()` lists the artifacts of the workspace (`.gptr/`, else a temporary
+#' directory) and manages their processes.
+#'
+#' @param id `NULL` to list every artifact, or the id of one artifact.
+#' @param open `TRUE` to open the artifact in the IDE viewer or the browser (only in an
+#'   interactive session); a stopped artifact is relaunched first.
+#' @param stop `TRUE` to stop the artifact's process (interrupt, a 3 s grace, then the process
+#'   tree is killed).
+#' @param version The number of a stored version (`2` for `v002/`) to relaunch and make current.
+#' @return Without `id`, a `gptr_artifacts` data frame with the columns `id`, `title`, `version`
+#'   (the current version), `status` (`running`, `stopped` or `failed`), `url`, `pid`, `bytes`
+#'   (disk use of the artifact directory) and `path` (the working copy). With `id`, the
+#'   `gptr_artifact` handle: a list with `id`, `title`, `kind`, `version`, `url` (it carries the
+#'   launch's access token), `path`, `status`, `checks` (`parse`, `launch`, `http` and `session`,
+#'   each `TRUE`, `FALSE` or `NA`, plus `messages`), `screenshot` and `session`; it is returned
+#'   invisibly after `open`, `stop` or `version`.
+#' @section Security considerations:
+#' An artifact runs model-written code in a separate R process whose environment holds none of
+#' your registered secrets. It listens only on `127.0.0.1`, and every launch gets a new 128-bit
+#' access token that its URL carries (`?gptr_token=`); without the openssl package on Windows
+#' there is no token and a notice says so. The data snapshot in `vNNN/data/` is a copy of the
+#' objects named in `data`; the `.gptr/.gitignore` that `gptr_init()` writes keeps it and `run/`
+#' out of git.
+#' @section Options:
+#' `gptr.artifact_max_bytes` (default `5e8`): the largest total `object.size()` of the objects
+#' one version may snapshot; above it `peter$app()` signals `gptr_error_artifact_too_large`.
+#' @examples
+#' gptr_artifacts()                      # an empty listing when no artifact exists
+#' @export
+gptr_artifacts = function(id = NULL, open = FALSE, stop = FALSE, version = NULL) {
+  check_flag(open, "open")
+  check_flag(stop, "stop")
+  version = check_number(version, "version", min = 1, int = TRUE, null = TRUE)
+  if (is.null(id)) {
+    if (open || stop || !is.null(version)) {
+      gptr_abort("`open`, `stop` and `version` need an artifact `id`.", "invalid_argument",
+                 arg = "id", expected = "an artifact id when open, stop or version is set")
+    }
+    artifact_sweep()
+    return(artifact_list())
+  }
+  artifact_id_check(id)
+  if (!artifact_exists(id)) {
+    gptr_abort("`id` does not name an existing artifact; see gptr_artifacts().",
+               "invalid_argument", arg = "id", expected = "the id of an existing artifact")
+  }
+  if (stop && (open || !is.null(version))) {
+    gptr_abort("`stop = TRUE` cannot be combined with `open` or `version`.", "invalid_argument",
+               arg = "stop", expected = "FALSE when open or version is set")
+  }
+  if (stop) {
+    artifact_stop(id, reason = "user")
+    return(invisible(artifact_handle(id)))
+  }
+  # a launch opens the viewer itself when a human is present (artifact_start())
+  if (!is.null(version) || (open && !identical(artifact_status(id), "running"))) {
+    return(invisible(artifact_relaunch(id, version %||% artifact_meta_read(id)$current)))
+  }
+  handle = artifact_handle(id)
+  if (!open) return(handle)
+  artifact_view(handle$url)
+  invisible(handle)
+}
+
+#' Stop every artifact of this process and close the headless browser (.onUnload; report 17
+#' section 4.3: the shared browser must not outlive the package). Not an exit finalizer: closing
+#' chromote's websocket while R shuts down crashed R; at exit, supervision, processx's cleanup and
+#' the child's watchdog end the processes and the next session's sweep removes stale run files.
+#' @noRd
+artifact_unload = function() {
+  for (id in ls(artifact_state$procs, all.names = TRUE)) {
+    try(artifact_stop(id, reason = "unload", emit = FALSE), silent = TRUE)
+  }
+  artifact_browser_close()
+}
+
+on_load(on_unload(artifact_unload))

@@ -958,8 +958,10 @@ artifact_relaunch = function(id, version, ctx = NULL) {
   meta = artifact_meta_read(id)
   vrec = artifact_version_record(meta, version)
   if (is.null(vrec)) {
-    gptr_abort("`version` is not a stored version of this artifact.", "invalid_argument",
-               arg = "version", expected = "the number of a stored version (vNNN)")
+    gptr_abort(paste0("Artifact `", id, "` has no stored version ", version,
+                      ": call peter$app() first, or pass a stored `version`."),
+               "invalid_argument", arg = "version",
+               expected = "the number of a stored version (vNNN)")
   }
   type = artifact_type_get(vrec$kind %||% meta$kind %||% "shiny", ctx)
   artifact_set_current(id, version)
