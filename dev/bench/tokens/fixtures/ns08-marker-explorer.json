@@ -1,0 +1,92 @@
+{
+  "id": "ns08-marker-explorer",
+  "north_star": 8,
+  "description": "peter(\"Build me an explorer for the marker table with a gene search box and a volcano plot\", markers) at the console: standard preset, manual mode, a human present, no bound document; the model reads the shiny-bslib skill, writes .gptr/artifacts/marker-explorer/app.R, launches it with peter$app() in r (the result carries the NS-8 line, the checks and a 1000x700 screenshot), then answers.",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": ["benchmain/benchmain-1"],
+  "standins": ["artifacts", "system1", "skills", "r_env"],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nArtifacts: .gptr/artifacts\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- `markers` is the FindAllMarkers() table of the PBMC clustering (one row per gene and cluster)."
+  },
+  "objects": {
+    "markers": "data.frame(p_val = 10^-((1:4211) %% 300), avg_log2FC = round(0.25 + ((1:4211) %% 37) / 10, 2), pct.1 = round(0.3 + ((1:4211) %% 70) / 100, 2), pct.2 = round(0.05 + ((1:4211) %% 40) / 100, 2), p_val_adj = pmin(1, 10^-((1:4211) %% 300) * 2e4), cluster = factor((1:4211) %% 12), gene = paste0(\"G\", 1:4211))"
+  },
+  "facts": ["markers", "gene", "avg_log2FC", "p_val_adj", "cluster"],
+  "turns": [
+    {
+      "prompt": "Build me an explorer for the marker table with a gene search box and a volcano plot",
+      "source": "prompt",
+      "context": [
+        {
+          "label": "markers",
+          "class": "data.frame"
+        }
+      ],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "read",
+              "input": {
+                "path": "skill:shiny-bslib/SKILL.md"
+              },
+              "result": "---\nname: shiny-bslib\ndescription: \"Build Shiny apps with bslib layouts (page_sidebar, cards, value boxes) for artifacts.\"\nlicense: MIT\nmetadata:\n  source: \"gptr research report 17, sections 2.4 and 4.4\"\n---\n\n# Shiny artifacts with bslib\n\nWrite `<artifacts>/<id>/app.R` (id: lower-case letters, digits, `-`), then in r run\n`a = peter$app(\"<id>\", data = c(\"obj\"))` and print `a`. Each call snapshots the objects into a new\nversion on the same URL. Fix what the checks, messages or screenshot show with edit (not a rewrite)\nand call `peter$app()` again until no check reads FAILED.\n\nRules for app.R:\n- One file ending in `shinyApp(ui, server)`; the objects in `data` exist under their names. Never\n  read files or call `setwd()`, `runApp()` or `install.packages()`.\n- Ship small data (the rows and columns shown); check it in r with `dim()` or `peter$describe(x)`.\n- `page_sidebar()` with the inputs in `sidebar()`; KPIs as `value_box()` in `layout_columns()`;\n  each chart or table in `card(card_header(), ..., full_screen = TRUE)`; never nest cards or pages.\n- `renderPlot()` with ggplot2 and `theme_minimal()`; plotly, DT or leaflet only if `<r_env>` lists\n  them. Filter once in `reactive()`; `req()` for empty inputs, `validate(need())` for empty\n  results; no custom CSS or JS. Use `=` and `|>`.\n\n```r\nlibrary(shiny)\nlibrary(bslib)\nui = page_sidebar(\n  title = \"Markers\",\n  sidebar = sidebar(textInput(\"gene\", \"Gene\")),\n  layout_columns(value_box(\"Markers shown\", textOutput(\"n\"))),\n  card(card_header(\"Top markers\"), tableOutput(\"top\"), full_screen = TRUE)\n)\nserver = function(input, output, session) {\n  shown = reactive(markers[grepl(input$gene, markers$gene, ignore.case = TRUE), ])\n  output$n = renderText(nrow(shown()))\n  output$top = renderTable({\n    validate(need(nrow(shown()) > 0, \"No marker matches the search.\"))\n    head(shown(), 20)\n  })\n}\nshinyApp(ui, server)\n```\n\nRaw HTML only when truly required: write `<artifacts>/<id>/page.html` and call\n`peter$app(\"<id>\", data = c(\"obj\"), kind = \"html\")`; the data is `window.GPTR_DATA.<name>`.",
+              "details": {
+                "path": "skill:shiny-bslib/SKILL.md"
+              }
+            }
+          ]
+        },
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_02",
+              "name": "write",
+              "input": {
+                "path": ".gptr/artifacts/marker-explorer/app.R",
+                "content": "library(shiny)\nlibrary(bslib)\nlibrary(ggplot2)\n\nui = page_sidebar(\n  title = \"Marker explorer\",\n  sidebar = sidebar(\n    textInput(\"gene\", \"Gene search\", placeholder = \"e.g. CD14\"),\n    selectInput(\"cluster\", \"Cluster\", c(\"All\", sort(unique(as.character(markers$cluster))))),\n    sliderInput(\"padj\", \"Adjusted p-value below\", min = 0, max = 0.1, value = 0.05)\n  ),\n  layout_columns(\n    value_box(\"Significant markers\", textOutput(\"n\")),\n    value_box(\"Clusters shown\", textOutput(\"k\"))\n  ),\n  card(card_header(\"Volcano plot\"), plotOutput(\"volcano\"), full_screen = TRUE),\n  card(card_header(\"Markers\"), tableOutput(\"table\"), full_screen = TRUE)\n)\n\nserver = function(input, output, session) {\n  shown = reactive({\n    d = markers\n    if (!identical(input$cluster, \"All\")) d = d[as.character(d$cluster) == input$cluster, ]\n    if (nzchar(input$gene)) d = d[grepl(input$gene, d$gene, ignore.case = TRUE), ]\n    d\n  })\n  output$n = renderText(format(sum(shown()$p_val_adj < input$padj), big.mark = \",\"))\n  output$k = renderText(length(unique(shown()$cluster)))\n  output$volcano = renderPlot({\n    d = shown()\n    validate(need(nrow(d) > 0, \"No marker matches the search.\"))\n    d$significant = d$p_val_adj < input$padj\n    ggplot(d, aes(avg_log2FC, -log10(p_val_adj + 1e-300), colour = significant)) +\n      geom_point(alpha = 0.6) +\n      scale_colour_manual(values = c(`FALSE` = \"grey60\", `TRUE` = \"firebrick\")) +\n      labs(x = \"Average log2 fold change\", y = \"-log10 adjusted p-value\", colour = \"Significant\") +\n      theme_minimal()\n  })\n  output$table = renderTable({\n    d = shown()\n    cols = c(\"gene\", \"cluster\", \"avg_log2FC\", \"pct.1\", \"pct.2\", \"p_val_adj\")\n    head(d[order(d$p_val_adj), cols], 25)\n  })\n}\n\nshinyApp(ui, server)"
+              },
+              "result": "Successfully wrote to .gptr/artifacts/marker-explorer/app.R",
+              "details": {
+                "path": ".gptr/artifacts/marker-explorer/app.R",
+                "bytes": 1734,
+                "created": true
+              }
+            }
+          ]
+        },
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_03",
+              "name": "r",
+              "input": {
+                "code": "a = peter$app(\"marker-explorer\", data = \"markers\", title = \"Marker explorer\")\na"
+              },
+              "result": "artifact  marker-explorer  ->  http://127.0.0.1:4827/?gptr_token=5385506dfcec7dae1f99162397a857c3   (running in background)\nchecks: parse ok | launch ok | http ok | session ok\nscreenshot: .gptr/artifacts/marker-explorer/run/screenshot-v001.png\n+ a <gptr_artifact length 10>",
+              "images": [
+                [1000, 700]
+              ],
+              "details": {
+                "code": "a = peter$app(\"marker-explorer\", data = \"markers\", title = \"Marker explorer\")\na",
+                "status": "ok",
+                "artifacts": [".gptr/artifacts/marker-explorer/app.R"]
+              }
+            }
+          ]
+        },
+        {
+          "text": "The marker explorer is running at http://127.0.0.1:4827/?gptr_token=5385506dfcec7dae1f99162397a857c3. Type a gene in the search box; the cluster menu and the adjusted p-value slider filter the volcano plot and the table of top markers. All four checks passed and the screenshot shows both cards. The app is .gptr/artifacts/marker-explorer/app.R with a snapshot of `markers` in v001/; `gptr_artifacts(\"marker-explorer\", stop = TRUE)` stops it.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}
