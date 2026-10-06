@@ -1741,6 +1741,21 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-provider-anthropic.R classifier blocks (fixture directory, test fixtures in the new
   shape). Evidence: progress/simplicity.md K-CLS.
 
+## D-144 - P20 CLI providers: pcli_* names without aliases, one normaliser, one control-file end (2026-10-05)
+- Rule: 04 section 7.20's `cli_find()`, `cli_version()`, `cli_probe()` are the `pcli_*` functions,
+  without aliases (section 12.3 lint rule); D-101/D-104/D-106 helper names gone, rules unchanged.
+- Rule: both parse() use `pcli_normaliser()`: an R error in the claude wall clock now ends the turn
+  as `internal` and stops the child (as codex, D-106 item 4).
+- Rule: after a claude turn ended or an abort, `mcp_message` is refused at once by
+  `pcli_claude_mcp()` (aborted: "The gptr run was aborted."); `can_use_tool` is still denied.
+- Rule: a codex exec ends through `pcli_codex_end()` (check, terminal event, then one `cli_sandbox`
+  warning text, also when the end fails; replaces D-106 item 8c's stash).
+- Rule: `pcli_params()` gives NULL for a non-finite budget; negative or infinite plan-status
+  numbers read NA.
+- Contract-visible: 04 section 7.20 not amended (outside lane cli-sub; 00-index row 315).
+- Tests: test-cli-common.R 2 alias tests out, +2 Inf; test-cli-claude.R refusal text;
+  test-cli-codex.R record shape, errors via pcli_aborted(). Evidence: progress/simplicity.md P20-S.
+
 ## D-145 - P02 extension core: one load transaction, no-opinion policy lists, a synthetic check ctx (2026-10-05)
 - Rule: `ext_run_factory()` runs requirement, factory, commit and post-checks in one
   `tryCatch(error)`; an interrupt is no longer caught and re-signalled by `ext_load()`: it

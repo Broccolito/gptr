@@ -67,7 +67,7 @@ test_that("the MCP record of a session reaches only its own codex exec", {
   expect_identical(rec$port, 54999L)
   h = pcli_codex_mcp(stub_opts())
   expect_identical(h$port, 54999L)
-  expect_identical(pcli_codex_env(h), c(GPTR_MCP_TOKEN = "tok-session-0123"))
+  expect_identical(h$env, c(GPTR_MCP_TOKEN = "tok-session-0123"))
   expect_null(pcli_codex_mcp(stub_opts(session = "s9999999999")))
   expect_null(pcli_codex_ensure(list(id = NULL)))
   pcli_codex_forget("s0123456789")
@@ -90,7 +90,7 @@ test_that("build() starts one exec per turn with the MCP overrides and the token
   local_mocked_bindings(
     pcli_probe = function(path) list(resume = TRUE),
     pcli_notice = function(cli) invisible(NULL),
-    pcli_codex_mcp = function(opts) stub_mcp_handle(),
+    pcli_codex_mcp = function(opts) list(port = 54321L, env = c(GPTR_MCP_TOKEN = "tok-test-0123")),
     reactor_served = function(run, served = TRUE) {
       seen$calls = c(seen$calls, paste(run, served))
       invisible(run)
@@ -105,7 +105,7 @@ test_that("build() starts one exec per turn with the MCP overrides and the token
   tail = c("exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "-m", "gpt-6-sol",
            "-C", path_norm(getwd()), codex_mcp_8_5(54321L), "--sandbox", "read-only", "-")
   expect_identical(args[(length(args) - length(tail) + 1L):length(args)], tail)
-  expect_identical(spec$start$env, c(GPTR_MCP_TOKEN = "tok-test-0123456789"))
+  expect_identical(spec$start$env, c(GPTR_MCP_TOKEN = "tok-test-0123"))
   expect_identical(spec$start$env_profile, "cli-codex")
   expect_true(spec$close_stdin)
   expect_s3_class(spec$send[[1]], "json")
@@ -379,7 +379,7 @@ test_that("an R error inside the codex normaliser ends the exec with one error e
   # Codex may still be working on the turn: the exec is stopped
   expect_identical(stopped$n, 1L)
   expect_false(stopped$wait)
-  local_mocked_bindings(pcli_codex_after = function(s) stop("disk gone"))
+  local_mocked_bindings(pcli_aborted = function(s) stop("disk gone"))
   opts2 = stub_opts()
   n2 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts2)
   expect_match(n2$finish()$error_message, "disk gone", fixed = TRUE)
@@ -726,7 +726,7 @@ test_that("an exec that ends in an internal error has its control files checked,
   opts3 = auto_opts()
   n3 = pcli_codex_parse(stub_model("codex"), opts3)
   writeLines('{"exit": true}', settings)
-  local_mocked_bindings(pcli_codex_error = function(...) stop("boom"))
+  local_mocked_bindings(pcli_aborted = function(s) stop("boom"))
   catch(n3$finish(), opts3)
   expect_identical(event_types(opts3), c("start", "error"))
   expect_identical(opts3$log$events[[2]]$error$class, "internal")

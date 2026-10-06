@@ -12,7 +12,7 @@
 #' The claude argv of architecture 8.3 in its exact order, then the budget flags (IC-65,
 #' IC-66), the documented --bare opt-out when the probe found one, and --resume (never --bare)
 #'
-#' A budget value that is not a positive finite number adds no flag (pcli_claude_flags());
+#' A budget value that is not a positive finite number adds no flag (pcli_scalar_num());
 #' `turns` is rounded down (at least 1), `cost` rounded to 4 decimals (at least 0.01), both
 #' written as plain decimal numbers whatever `OutDec` and `digits` say.
 #' @noRd
@@ -24,30 +24,15 @@ pcli_claude_args = function(model_id, mcp_config, system_file, budget = NULL, op
            "--permission-prompt-tool", "stdio", "--permission-mode", "default",
            "--allowedTools", "mcp__gptr__*", "--system-prompt-file", system_file,
            "--model", model_id)
-  flags = pcli_claude_flags(budget)
-  if (!is.null(flags$turns)) {
-    args = c(args, "--max-turns", pcli_claude_number(max(1, floor(flags$turns))))
-  }
-  if (!is.null(flags$cost)) {
-    args = c(args, "--max-budget-usd", pcli_claude_number(max(0.01, round(flags$cost, 4))))
+  turns = pcli_scalar_num(budget[["turns"]])
+  cost = pcli_scalar_num(budget[["cost"]])
+  if (!is.null(turns)) args = c(args, "--max-turns", pcli_claude_number(max(1, floor(turns))))
+  if (!is.null(cost)) {
+    args = c(args, "--max-budget-usd", pcli_claude_number(max(0.01, round(cost, 4))))
   }
   if (!is.null(optout)) args = c(args, optout)
   if (!is.null(resume)) args = c(args, "--resume", resume)
   args
-}
-
-#' The budget flags a child is started with: `turns` and `cost` when each is a positive finite
-#' number, else NULL (no flag, no limit, as without a budget; P06's budget_check() stays
-#' authoritative between requests)
-#' @param budget list(turns, cost) or NULL.
-#' @return list(turns = num(1) | NULL, cost = num(1) | NULL)
-#' @noRd
-pcli_claude_flags = function(budget) {
-  fin = function(x) {
-    x = pcli_scalar_num(x)
-    if (!is.null(x) && is.finite(x)) x else NULL
-  }
-  list(turns = fin(budget[["turns"]]), cost = fin(budget[["cost"]]))
 }
 
 #' A budget number as an argv word: plain decimal, `.` as the decimal mark, up to 15
@@ -116,13 +101,13 @@ pcli_claude_user_line = function(content) {
 }
 
 #' Does a child carry budget flags (`--max-turns`, `--max-budget-usd`)? Only a positive finite
-#' value makes a flag (pcli_claude_flags()), so the argv, the reuse rule of build() and Task 9's
-#' retirement of a budgeted child agree
+#' value makes a flag (pcli_scalar_num()), so the argv, the reuse rule of build() and Task 9's
+#' retirement of a budgeted child agree; no flag means no limit, and P06's budget_check() stays
+#' authoritative between requests
 #' @param flags list(turns, cost) or NULL.
 #' @noRd
 pcli_claude_budgeted = function(flags) {
-  fl = pcli_claude_flags(flags)
-  !is.null(fl$turns) || !is.null(fl$cost)
+  !is.null(pcli_scalar_num(flags[["turns"]])) || !is.null(pcli_scalar_num(flags[["cost"]]))
 }
 
 #' build(): reuse the session's live claude child, or start one (find, probe, notice, files,
@@ -150,7 +135,7 @@ pcli_claude_build = function(model, context, opts) {
   model_id = pcli_model_id(model)
   par = pcli_params(context)
   parts = pcli_split(context[["messages"]] %||% list())
-  flags = pcli_claude_flags(par)
+  flags = par[c("turns", "cost")]
   same_run = identical(state$claude_run, opts[["run"]])
   unbudgeted = !pcli_claude_budgeted(flags) && !pcli_claude_budgeted(state$claude_flags)
   reuse = identical(state$cli_api, "cli-claude") && identical(state$claude_model, model_id) &&
@@ -257,7 +242,8 @@ pcli_claude_mcp = function(req, id, s) {
     answer(resp)
   }
   run = opts[["run"]]
-  if (identical(msg[["method"]], "tools/call") && is.character(run) && length(run) == 1L) {
+  queue = identical(msg[["method"]], "tools/call") && rlang::is_string(run)
+  if (queue && !s$done && !pcli_aborted(s)) {
     reactor_enqueue_tool(run, run_it)
   } else {
     run_it()
@@ -290,7 +276,8 @@ pcli_claude_permission = function(req, opts) {
   list(behavior = "deny", message = d[["reason"]] %||% "Denied by gptr's permission gate.")
 }
 
-#' Answer a control_request from the CLI (contract 8.5)
+#' Answer a control_request from the CLI (contract 8.5); after the turn ended or an abort,
+#' can_use_tool is denied and mcp_message refused at once, never evaluated (D-104)
 #'
 #' The answer, and so the gate's decision, is computed here, before pcli_send(): an error in it
 #' reaches parse()'s push() and ends the turn (D-104), instead of being swallowed by the write.
@@ -300,29 +287,14 @@ pcli_claude_control = function(obj, s) {
   id = obj[["request_id"]]
   sub = req[["subtype"]] %||% ""
   if (identical(sub, "mcp_message")) return(pcli_claude_mcp(req, id, s))
-  out = if (identical(sub, "can_use_tool")) {
-    pcli_control_ok(id, pcli_claude_permission(req, s$opts))
-  } else {
+  out = if (!identical(sub, "can_use_tool")) {
     pcli_control_err(id, paste("Unsupported control request subtype:", sub))
+  } else if (s$done || pcli_aborted(s)) {
+    pcli_control_ok(id, list(behavior = "deny", message = "The gptr turn is over."))
+  } else {
+    pcli_control_ok(id, pcli_claude_permission(req, s$opts))
   }
   pcli_send(s$opts, out)
-}
-
-#' Refuse a control request that arrives after the turn ended or after an abort
-#' @noRd
-pcli_claude_refuse = function(obj, s) {
-  req = obj[["request"]] %||% list()
-  id = obj[["request_id"]]
-  if (identical(req[["subtype"]], "mcp_message")) {
-    msg = req[["message"]] %||% list()
-    resp = pcli_jsonrpc_error(msg, -32603L, "The gptr turn is over.")
-    return(pcli_send(s$opts, pcli_control_ok(id, list(mcp_response = resp))))
-  }
-  if (identical(req[["subtype"]], "can_use_tool")) {
-    answer = list(behavior = "deny", message = "The gptr turn is over.")
-    return(pcli_send(s$opts, pcli_control_ok(id, answer)))
-  }
-  pcli_send(s$opts, pcli_control_err(id, "The gptr turn is over."))
 }
 
 #' Forward one event of the inner (per API message) Anthropic normaliser into the turn's stream
@@ -382,17 +354,16 @@ pcli_claude_stream = function(event, s) {
 #' @noRd
 pcli_claude_system = function(obj, s) {
   if (!identical(obj[["subtype"]], "init")) return(invisible(NULL))
-  sid = obj[["session_id"]]
-  if (is.character(sid) && length(sid) == 1L && nzchar(sid)) s$state$claude_session = sid
-  model = pcli_claude_chr(obj[["model"]])
+  sid = pcli_sid(obj[["session_id"]])
+  if (!is.null(sid)) s$state$claude_session = sid
+  model = pcli_chr(obj[["model"]])
   if (!is.null(model)) s$response_model = model
   src = obj[["apiKeySource"]]
   if (is.null(src) || identical(src, "none")) return(invisible(NULL))
   why = paste0("The claude CLI reported apiKeySource ", src, ": this turn would be billed to ",
                "an API key instead of your Claude plan, so gptr stopped it. Remove the key from ",
                "the claude CLI's own settings, or use the anthropic provider for API billing.")
-  pcli_fail(s, "billing", why)
-  pcli_stop_child(s$state, wait_ack = FALSE)
+  pcli_claude_error(s, "billing", why, kill = TRUE)
   invisible(NULL)
 }
 
@@ -403,25 +374,12 @@ pcli_claude_system = function(obj, s) {
 #' that is not one finite nonnegative number (unknown, IC-74; the child's baseline is kept).
 #' @noRd
 pcli_claude_cost = function(obj, state = NULL) {
-  total = obj[["total_cost_usd"]]
-  ok = is.numeric(total) && length(total) == 1L && is.finite(total) && total >= 0
-  if (!ok) return(NULL)
-  total = as.numeric(total)
+  total = pcli_num(obj[["total_cost_usd"]])
+  if (is.na(total)) return(NULL)
   if (!is.environment(state)) return(total)
   seen = state$claude_cost_seen %||% 0
   state$claude_cost_seen = total
   if (total >= seen) total - seen else total
-}
-
-#' One string reported by the CLI, or NULL when the value is anything else
-#' @noRd
-pcli_claude_chr = function(x) if (is.character(x) && length(x) == 1L && !is.na(x)) x else NULL
-
-#' A token count of a `result` line: the number when it is one finite nonnegative number, else
-#' NA (absent or malformed counts are unknown, IC-74, as in P12's normaliser core)
-#' @noRd
-pcli_claude_count = function(x) {
-  if (is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0) as.numeric(x) else NA_real_
 }
 
 #' The cost record of a turn's estimate (contract 4.3): the CLI reports only the total, so the
@@ -453,7 +411,7 @@ pcli_claude_usage = function(obj, state = NULL) {
     w1 = if (is.null(w5)) NULL else 0
   }
   details = u[["output_tokens_details"]]
-  n = pcli_claude_count
+  n = pcli_num
   usage_new(input = n(u[["input_tokens"]]), output = n(u[["output_tokens"]]),
             cache_read = n(u[["cache_read_input_tokens"]]), cache_write_5m = n(w5),
             cache_write_1h = n(w1),
@@ -464,7 +422,7 @@ pcli_claude_usage = function(obj, state = NULL) {
 #' gptr stop reason of the CLI's final stop reason (04 4.2; no tool_use: tools ran in the CLI)
 #' @noRd
 pcli_claude_stop = function(raw) {
-  switch(pcli_claude_chr(raw) %||% "end_turn", max_tokens = "length", refusal = "refusal",
+  switch(pcli_chr(raw) %||% "end_turn", max_tokens = "length", refusal = "refusal",
          pause_turn = "pause", "stop")
 }
 
@@ -486,12 +444,12 @@ pcli_claude_error_class = function(obj) {
 pcli_claude_result = function(obj, s) {
   text = obj[["result"]]
   has_text = any(vapply(pcli_blocks(s), function(b) identical(b[["type"]], "text"), NA))
-  if (!has_text && is.character(text) && length(text) == 1L) pcli_text_block(s, text)
+  if (!has_text) pcli_text_block(s, text)
   usage = pcli_claude_usage(obj, s$state)
-  aborted = startsWith(pcli_claude_chr(obj[["terminal_reason"]]) %||% "", "aborted")
+  aborted = startsWith(pcli_chr(obj[["terminal_reason"]]) %||% "", "aborted")
   failed = isTRUE(obj[["is_error"]]) || !identical(obj[["subtype"]] %||% "success", "success")
   if (!aborted && !failed) {
-    raw = pcli_claude_chr(obj[["stop_reason"]]) %||% "end_turn"
+    raw = pcli_chr(obj[["stop_reason"]]) %||% "end_turn"
     return(pcli_done(s, usage, pcli_claude_stop(raw), raw))
   }
   detail = as.character(unlist(obj[["errors"]]))
@@ -501,11 +459,21 @@ pcli_claude_result = function(obj, s) {
                 max_turns = "it reached --max-turns",
                 budget_cost = "the turn is out of budget (--max-budget-usd)",
                 aborted = "the turn was interrupted",
-                paste0("it reported ", pcli_claude_chr(obj[["subtype"]]) %||% "an error"))
+                paste0("it reported ", pcli_chr(obj[["subtype"]]) %||% "an error"))
   if (length(detail)) what = paste0(what, ": ", paste(detail, collapse = "; "))
   pcli_fail(s, cls, paste0("The claude CLI ended the turn: ", what, "."),
            reason = if (aborted) "aborted" else "error",
            status = obj[["api_error_status"]] %||% NA_integer_, usage = usage)
+}
+
+#' End a claude turn with its terminal error event (pcli_fail()); `kill` then stops the child,
+#' without an interrupt since the turn is closed by then
+#' @noRd
+pcli_claude_error = function(s, class, text, reason = "error", status = NA_integer_,
+                            kill = FALSE) {
+  msg = pcli_fail(s, class, text, reason = reason, status = status)
+  if (kill) tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e) NULL)
+  msg
 }
 
 #' The per-turn wall-clock limit passed: interrupt, report and stop the child. The words "out
@@ -514,56 +482,31 @@ pcli_claude_result = function(obj, s) {
 #' child is stopped without an interrupt (D-104): the terminal event finishes P05's stream, so
 #' neither P05 (whose abort watch run_abort() cancelled) nor the next turn lets go of the child,
 #' and with the turn closed builtin:cli's `agent_end` hook would leave it running.
-#'
-#' Only while the turn is its session's current one (pcli_turn_current()): P05 can end a turn
-#' without its normaliser, and the session's next turn then has the shared state and its own
-#' child, which this callback must not close or stop (D-104).
 #' @noRd
 pcli_claude_timeout = function(s) {
-  if (s$done || !pcli_turn_current(s)) return(invisible(NULL))
   if (pcli_aborted(s)) {
-    pcli_fail(s, "aborted", "The run was aborted.", reason = "aborted")
-    pcli_stop_child(s$state, wait_ack = FALSE)
-    return(invisible(NULL))
+    return(pcli_claude_error(s, "aborted", "The run was aborted.", "aborted", kill = TRUE))
   }
-  secs = pcli_turn_seconds()
   pcli_send(s$opts, pcli_control_request(s$state, list(subtype = "interrupt")))
-  pcli_fail(s, "timeout", paste0("The claude CLI turn is out of budget: it ran past the ",
-                                "per-turn limit of ", secs, " s (option gptr.cli_turn_timeout)."))
-  pcli_stop_child(s$state, wait_ack = FALSE)
-  invisible(NULL)
+  pcli_claude_error(s, "timeout", paste0("The claude CLI turn is out of budget: it ran past the ",
+                                        "per-turn limit of ", pcli_turn_seconds(),
+                                        " s (option gptr.cli_turn_timeout)."), kill = TRUE)
 }
 
-#' parse(): the normaliser of one claude turn (contract 8.1, 8.5)
-#'
-#' No function of the normaliser signals an R condition: an error while a line, the end of
-#' input or a transport failure is processed becomes the turn's one terminal `error` event
-#' (class `internal`), as P12's normaliser core does (contract 8.1; D-104). An error in push()
-#' also stops the child, which may still be working on the turn: the terminal event finishes
-#' P05's stream, so P05 no longer drops the child as it does for an error escaping push(), and
-#' a later turn would otherwise reuse it and read this turn's late output. push() only reaches
-#' the open turn's normaliser, so the session's current child is this turn's.
+#' parse(): the normaliser of one claude turn (contract 8.1, 8.5; pcli_normaliser()). push()
+#' only reaches the open turn's normaliser, so the session's current child is this turn's.
 #' @noRd
 pcli_claude_parse = function(model, opts) {
   s = pcli_turn_new(model, opts)
   s$inner = NULL
   s$map = integer()
-  pcli_wire_log(s, "start")
-  pcli_turn_timer(s, function() pcli_claude_timeout(s))
-
   push = function(ev) {
-    obj = ev[["obj"]] %||% pcli_parse_line(ev[["data"]])
+    obj = ev[["obj"]]
     if (!is.list(obj)) return(s$done)
-    type = obj[["type"]] %||% ""
-    if (identical(type, "control_response")) {
-      pcli_claude_ack(obj, s$state)
-      return(s$done)
-    }
-    if (identical(type, "control_request")) {
-      if (s$done || pcli_aborted(s)) pcli_claude_refuse(obj, s) else pcli_claude_control(obj, s)
-      return(s$done)
-    }
-    if (s$done) return(TRUE)
+    type = pcli_chr(obj[["type"]]) %||% ""
+    if (identical(type, "control_response")) pcli_claude_ack(obj, s$state)
+    if (identical(type, "control_request")) pcli_claude_control(obj, s)
+    if (s$done || type %in% c("control_response", "control_request")) return(s$done)
     if (pcli_aborted(s)) {
       if (identical(type, "result")) {
         pcli_fail(s, "aborted", "The run was aborted.", reason = "aborted",
@@ -582,44 +525,7 @@ pcli_claude_parse = function(model, opts) {
     }
     s$done
   }
-
-  finish = function() {
-    if (!s$done) {
-      if (pcli_aborted(s)) {
-        pcli_fail(s, "aborted", "The run was aborted.", reason = "aborted")
-      } else {
-        pcli_fail(s, "provider", "The claude CLI exited before the end of the turn.")
-      }
-    }
-    s$msg
-  }
-
-  fail = function(cnd) {
-    if (!s$done) {
-      aborted = pcli_aborted(s)
-      cls = sub("^gptr_error_", "", class(cnd)[[1L]])
-      pcli_fail(s, if (aborted) "aborted" else cls, conditionMessage(cnd),
-               reason = if (aborted) "aborted" else "error",
-               status = cnd[["status"]] %||% NA_integer_)
-    }
-    s$msg
-  }
-
-  message = function() s$msg %||% pcli_message(s)
-
-  internal = function(e) {
-    pcli_fail(s, "internal", paste0("The cli-claude adapter could not process the claude ",
-                                   "CLI's output: ", conditionMessage(e)))
-  }
-
-  push_safe = function(ev) {
-    tryCatch(push(ev), error = function(e) {
-      internal(e)
-      tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e2) NULL)
-      TRUE
-    })
-  }
-
-  list(push = push_safe, finish = function() tryCatch(finish(), error = internal),
-       fail = function(cnd) tryCatch(fail(cnd), error = internal), message = message)
+  pcli_normaliser(s, "claude", push, pcli_claude_error,
+                  function() "The claude CLI exited before the end of the turn.",
+                  function() pcli_claude_timeout(s))
 }

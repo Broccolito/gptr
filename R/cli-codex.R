@@ -90,12 +90,12 @@ pcli_codex_env = function(h) {
   name = h$token_env %||% "GPTR_MCP_TOKEN"
   env = h$config$codex$env
   tok = if (is.null(env)) NULL else env[[name]]
-  ok = is.character(tok) && length(tok) == 1L && !is.na(tok) && nzchar(tok)
-  if (ok) c(GPTR_MCP_TOKEN = tok) else character()
+  if (rlang::is_string(tok) && nzchar(tok)) c(GPTR_MCP_TOKEN = tok) else character()
 }
 
-#' Ensure gptr's MCP server for a session and keep what its next codex exec needs: the URL, the
-#' port and this session's bearer token (mcp.serve_ensure, IC-58)
+#' Ensure gptr's MCP server for a session and keep what its next codex exec needs:
+#' list(url, port, env = c(GPTR_MCP_TOKEN = <this session's token>)) (mcp.serve_ensure, IC-58),
+#' or list(error) when there is no server or no token
 #'
 #' Called by builtin:cli's `request_params` hook with the session object, which the service
 #' takes (P18 checks its class) while the adapter holds only ids (contract 8.1). Only strings
@@ -105,21 +105,20 @@ pcli_codex_env = function(h) {
 #' @return invisible(the record kept), or invisible(NULL) without a session id.
 #' @noRd
 pcli_codex_ensure = function(session) {
-  id = tryCatch(session$id, error = function(e) NULL)
-  ok = is.character(id) && length(id) == 1L && !is.na(id) && nzchar(id)
-  if (!ok) return(invisible(NULL))
+  id = pcli_sid(tryCatch(session$id, error = function(e) NULL))
+  if (is.null(id)) return(invisible(NULL))
   rec = if (!ext_service_has("mcp.serve_ensure")) {
     list(error = "gptr's MCP server is not loaded")
   } else {
-    h = tryCatch(ext_service_get("mcp.serve_ensure")(session), error = function(e) e)
-    if (inherits(h, "condition")) {
-      list(error = conditionMessage(h))
-    } else if (!length(pcli_codex_env(h))) {
-      list(error = "the MCP server gave no token for this session")
-    } else {
-      list(url = h$url, port = h$port, token_env = "GPTR_MCP_TOKEN",
-           config = list(codex = list(env = pcli_codex_env(h))))
-    }
+    tryCatch({
+      h = ext_service_get("mcp.serve_ensure")(session)
+      env = pcli_codex_env(h)
+      if (length(env)) {
+        list(url = h$url, port = h$port, env = env)
+      } else {
+        list(error = "the MCP server gave no token for this session")
+      }
+    }, error = function(e) list(error = conditionMessage(e)))
   }
   tab = pcli_cache$mcp %||% list()
   tab[[id]] = rec
@@ -131,7 +130,7 @@ pcli_codex_ensure = function(session) {
 #' @noRd
 pcli_codex_forget = function(session) {
   tab = pcli_cache$mcp %||% list()
-  if (is.character(session) && length(session) == 1L && !is.na(session)) tab[[session]] = NULL
+  if (!is.null(pcli_sid(session))) tab[[session]] = NULL
   pcli_cache$mcp = tab
   invisible(NULL)
 }
@@ -140,9 +139,8 @@ pcli_codex_forget = function(session) {
 #' files-only notice
 #' @noRd
 pcli_codex_mcp = function(opts) {
-  sid = opts[["session"]]
-  ok = is.character(sid) && length(sid) == 1L && !is.na(sid) && nzchar(sid)
-  rec = if (ok) (pcli_cache$mcp %||% list())[[sid]] else NULL
+  sid = pcli_sid(opts[["session"]])
+  rec = if (is.null(sid)) NULL else (pcli_cache$mcp %||% list())[[sid]]
   if (is.null(rec)) {
     return(pcli_codex_files_only("gptr's MCP server was not started for this session"))
   }
@@ -233,10 +231,8 @@ pcli_control_changed = function(before, after) {
 #' @noRd
 pcli_codex_cap = function(par) {
   whole = function(x) as.integer(max(1, min(floor(x), .Machine$integer.max)))
-  turns = par[["turns"]]
-  if (is.numeric(turns) && length(turns) == 1L && is.finite(turns) && turns > 0) {
-    return(whole(turns))
-  }
+  turns = pcli_scalar_num(par[["turns"]])
+  if (!is.null(turns)) return(whole(turns))
   max_turns = gptr_opt("max_turns")
   if (is.numeric(max_turns) && length(max_turns) == 1L && !is.na(max_turns) && max_turns > 0) {
     return(whole(max_turns))
@@ -264,11 +260,7 @@ pcli_codex_build = function(model, context, opts) {
   par = pcli_params(context)
   sandbox = pcli_codex_sandbox(par$mode, path)
   h = pcli_codex_mcp(opts)
-  env = pcli_codex_env(h)
-  if (!is.null(h) && !length(env)) {
-    h = pcli_codex_files_only("the MCP server gave no token for this session")
-  }
-  port = if (is.null(h)) NULL else h$port
+  port = h$port
   resume = if (isTRUE(probe$resume)) state$codex_thread else NULL
   wd = path_norm(getwd())
   args = pcli_codex_args(pcli_model_id(model), wd, sandbox, port = port, resume = resume)
@@ -283,12 +275,12 @@ pcli_codex_build = function(model, context, opts) {
     state$codex_root = root
   }
   run = opts[["run"]]
-  if (!is.null(port) && is.character(run) && length(run) == 1L) {
+  if (!is.null(port) && rlang::is_string(run)) {
     reactor_served(run, TRUE)
     state$served_run = run
   }
   list(start = list(command = path[[1L]], args = c(as.character(path[-1L]), args),
-                    env_profile = "cli-codex", env = env, wd = wd),
+                    env_profile = "cli-codex", env = h$env %||% character(), wd = wd),
        send = list(json_verbatim(pcli_codex_prompt(context, fresh = is.null(resume),
                                                   provider = model$provider))),
        close_stdin = TRUE)
@@ -299,26 +291,14 @@ pcli_codex_build = function(model, context, opts) {
 pcli_codex_tool_kinds = c("mcp_tool_call", "command_execution", "file_change", "web_search",
                          "collab_tool_call")
 
-#' One string reported by Codex, or NULL when the value is anything else (a number would pick a
-#' switch() alternative by position)
-#' @noRd
-pcli_codex_chr = function(x) if (is.character(x) && length(x) == 1L && !is.na(x)) x else NULL
-
 #' The error text of an `error` or `turn.failed` event: `message`, or `error` as a string or as
 #' an object with `message`; NULL when none is a nonempty string
 #' @noRd
 pcli_codex_why = function(obj) {
   err = obj[["error"]]
-  why = pcli_codex_chr(obj[["message"]]) %||% pcli_codex_chr(err) %||%
-    (if (is.list(err)) pcli_codex_chr(err[["message"]]))
+  why = pcli_chr(obj[["message"]]) %||% pcli_chr(err) %||%
+    (if (is.list(err)) pcli_chr(err[["message"]]))
   if (is.null(why) || !nzchar(why)) NULL else why
-}
-
-#' A token count of turn.completed: one finite nonnegative number, else NA (absent and malformed
-#' counts are unknown, IC-74; as pcli_claude_count())
-#' @noRd
-pcli_num = function(x) {
-  if (is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0) as.numeric(x) else NA_real_
 }
 
 #' Usage of turn.completed: input_tokens includes the cached ones (OpenAI semantics, 08 3.9), so
@@ -347,7 +327,7 @@ pcli_codex_files = function(item) {
   changes = item[["changes"]]
   if (!is.list(changes)) return(character())
   paths = vapply(changes, function(ch) {
-    (if (is.list(ch)) pcli_codex_chr(ch[["path"]])) %||% ""
+    (if (is.list(ch)) pcli_chr(ch[["path"]])) %||% ""
   }, "")
   paths[nzchar(paths)]
 }
@@ -355,9 +335,9 @@ pcli_codex_files = function(item) {
 #' Informational tool name of a Codex item
 #' @noRd
 pcli_codex_tool_name = function(item) {
-  switch(pcli_codex_chr(item[["type"]]) %||% "",
-         mcp_tool_call = paste0("mcp__", pcli_codex_chr(item[["server"]]) %||% "?", "__",
-                                pcli_codex_chr(item[["tool"]]) %||% "?"),
+  switch(pcli_chr(item[["type"]]) %||% "",
+         mcp_tool_call = paste0("mcp__", pcli_chr(item[["server"]]) %||% "?", "__",
+                                pcli_chr(item[["tool"]]) %||% "?"),
          command_execution = "codex_shell", file_change = "codex_file_change",
          web_search = "codex_web_search", collab_tool_call = "codex_agent", "codex_item")
 }
@@ -365,21 +345,21 @@ pcli_codex_tool_name = function(item) {
 #' Emit the informational tool_execution_start/_end events of a Codex tool item (contract 8.5)
 #' @noRd
 pcli_codex_tool = function(s, item, phase) {
-  kind = pcli_codex_chr(item[["type"]]) %||% ""
+  kind = pcli_chr(item[["type"]]) %||% ""
   if (!(kind %in% pcli_codex_tool_kinds)) return(invisible(FALSE))
   emit = s$opts[["emit"]]
   if (!is.function(emit)) return(invisible(FALSE))
-  id = paste0("codex_", pcli_codex_chr(item[["id"]]) %||% "item")
+  id = paste0("codex_", pcli_chr(item[["id"]]) %||% "item")
   name = pcli_codex_tool_name(item)
-  status = pcli_codex_chr(item[["status"]])
+  status = pcli_chr(item[["status"]])
   if (!(id %in% s$open_tools)) {
     s$open_tools = c(s$open_tools, id)
     arguments = item[["arguments"]]
     input = switch(kind,
-                   command_execution = list(command = pcli_codex_chr(item[["command"]]) %||% ""),
+                   command_execution = list(command = pcli_chr(item[["command"]]) %||% ""),
                    mcp_tool_call = if (is.list(arguments)) arguments else json_obj(),
                    file_change = list(paths = I(pcli_codex_files(item))),
-                   web_search = list(query = pcli_codex_chr(item[["query"]]) %||% ""), json_obj())
+                   web_search = list(query = pcli_chr(item[["query"]]) %||% ""), json_obj())
     emit(ev_new("tool_execution_start", tool_call_id = id, tool_name = name, input = input))
   }
   if (identical(phase, "end")) {
@@ -390,27 +370,6 @@ pcli_codex_tool = function(s, item, phase) {
                                files = I(pcli_codex_files(item)))))
   }
   invisible(TRUE)
-}
-
-#' After a workspace-write exec: the control files it added, removed or changed (IC-54, IC-65);
-#' nothing is signalled here, the caller warns after the terminal event (pcli_codex_report())
-#'
-#' A check that failed gives no paths and the reason as attribute `unchecked`, so the exec still
-#' ends with its terminal event and the warning says the files were not checked (D-106). The
-#' result is also kept as `s$unreported` until pcli_codex_report() warns about it, so an R error
-#' between the check and the warning cannot lose it (the `internal` end reports it).
-#' @noRd
-pcli_codex_after = function(s) {
-  if (!identical(s$sandbox, "workspace-write")) {
-    s$state$codex_control = NULL
-    s$state$codex_root = NULL
-    return(character())
-  }
-  changed = pcli_codex_check(s$state)
-  if (length(changed) || !is.null(attr(changed, "unchecked", exact = TRUE))) {
-    s$unreported = changed
-  }
-  changed
 }
 
 #' The control-file check of the session's last workspace-write exec: the files added, removed
@@ -432,7 +391,7 @@ pcli_codex_check = function(state) {
 }
 
 #' Check, and warn about, the control files of the session's earlier workspace-write exec that
-#' ended without the normaliser's own end, so it never reached pcli_codex_after()
+#' ended without the normaliser's own end, so it never reached pcli_codex_end()
 #'
 #' P05 lets go of an exec of an aborted or settled run without its normaliser
 #' (stream_abort(), stream_detach()), and a stop of the child also cancels the exec's wall clock
@@ -447,59 +406,45 @@ pcli_codex_settle = function(state) {
   pcli_codex_warn(pcli_codex_check(state), earlier = TRUE)
 }
 
-#' Warn about the check pcli_codex_after() kept for this exec (once), after its terminal event
-#' @noRd
-pcli_codex_report = function(s) {
-  changed = s$unreported %||% character()
-  s$unreported = NULL
-  pcli_codex_warn(changed)
-}
-
 #' Warn about changed control files once the exec has ended; the trust fingerprint of P08 then
 #' treats changed trust-gated files as untrusted until confirmed. `earlier`: the check of an
 #' earlier exec that ended unchecked (pcli_codex_settle()); paths are shown relative to the
 #' root the exec ran in (attribute `root`)
 #' @noRd
 pcli_codex_warn = function(changed, earlier = FALSE) {
-  earlier = isTRUE(earlier)
   why = attr(changed, "unchecked", exact = TRUE)
-  if (!is.null(why)) {
-    turn = if (earlier) "Codex's earlier workspace-write turn" else "Codex's workspace-write turn"
-    gptr_warn(paste0("gptr could not check its control files after ", turn, " (", why,
-                     "). Review the project's .gptr settings, MCP servers, extensions and ",
-                     "agents, its R startup files and its git hooks before you confirm them ",
-                     "or restart R."), "cli_sandbox")
-    return(invisible(changed))
-  }
-  if (!length(changed)) return(invisible(changed))
-  files = paste(path_rel(changed, attr(changed, "root", exact = TRUE) %||% project_root()),
-                collapse = ", ")
-  head = if (earlier) {
-    paste0("Codex's earlier workspace-write turn ended before gptr could check its control ",
-           "files; since that turn started, these changed (by Codex or a later edit): ")
+  if (!length(changed) && is.null(why)) return(invisible(changed))
+  turn = paste0("Codex's ", if (isTRUE(earlier)) "earlier ", "workspace-write turn")
+  what = if (is.null(why)) {
+    root = attr(changed, "root", exact = TRUE) %||% project_root()
+    paste0("control files changed since ", turn, " started: ",
+           paste(path_rel(changed, root), collapse = ", "))
   } else {
-    "Codex changed gptr control files during its workspace-write turn: "
+    paste0("could not check its control files after ", turn, " (", why, ")")
   }
-  gptr_warn(paste0(head, files, ". Changed project settings, MCP servers, extensions and ",
-                   "agents are treated as untrusted until you confirm them; review the other ",
-                   "files before you restart R."), "cli_sandbox")
+  gptr_warn(paste0("gptr ", what, ". Changed project settings, MCP servers, extensions and ",
+                   "agents stay untrusted until you confirm them; review the project's R ",
+                   "startup files and git hooks before you restart R."), "cli_sandbox")
   invisible(changed)
 }
 
-#' End an exec with the terminal error event; `kill` stops the child (turn cap, wall clock, an
-#' aborted run)
-#'
-#' A child gptr stops is stopped first: the control files are then checked once Codex can no
-#' longer write them, and the terminal event (whose done callback runs at once) finds it gone
-#' (D-106).
+#' End an exec through `end()`, its terminal event: the control files of a workspace-write exec
+#' are checked first and reported after the event, also when `end()` fails (IC-54, IC-65; D-106)
 #' @noRd
-pcli_codex_error = function(s, class, text, reason = "error", kill = FALSE, usage = NULL) {
-  if (s$done) return(s$msg)
+pcli_codex_end = function(s, end) {
+  changed = pcli_codex_check(s$state)
+  tryCatch(end(), finally = pcli_codex_warn(changed))
+}
+
+#' End an exec with the terminal error event; `kill` first stops the child (turn cap, wall clock,
+#' an aborted run, an R error), so the control files are checked once Codex can no longer write
+#' them and the terminal event (whose done callback runs at once) finds it gone (D-106)
+#' @noRd
+pcli_codex_error = function(s, class, text, reason = "error", status = NA_integer_,
+                           kill = FALSE) {
   if (kill) tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e) NULL)
-  pcli_codex_after(s)
-  msg = pcli_fail(s, class, text, reason = reason, usage = usage)
-  pcli_codex_report(s)
-  msg
+  if (s$done) return(s$msg)
+  pcli_codex_end(s, function() pcli_fail(s, class, text, reason = reason, status = status))
 }
 
 #' End an exec of an aborted run as aborted and stop it: once the terminal event has finished
@@ -513,7 +458,7 @@ pcli_codex_abort = function(s) {
 #' One completed item: text, reasoning, or a counted tool step
 #' @noRd
 pcli_codex_item = function(s, item) {
-  kind = pcli_codex_chr(item[["type"]]) %||% ""
+  kind = pcli_chr(item[["type"]]) %||% ""
   if (identical(kind, "agent_message")) {
     pcli_text_block(s, item[["text"]] %||% "")
   } else if (identical(kind, "reasoning")) {
@@ -535,12 +480,12 @@ pcli_codex_item = function(s, item) {
 #' Fields are read only with the JSON types of 08 3.9; anything else is ignored or unknown.
 #' @noRd
 pcli_codex_event = function(obj, s) {
-  type = pcli_codex_chr(obj[["type"]]) %||% ""
+  type = pcli_chr(obj[["type"]]) %||% ""
   item = obj[["item"]]
   if (!is.list(item)) item = list()
   if (identical(type, "thread.started")) {
-    tid = pcli_codex_chr(obj[["thread_id"]])
-    if (!is.null(tid) && nzchar(tid)) s$state$codex_thread = tid
+    tid = pcli_sid(obj[["thread_id"]])
+    if (!is.null(tid)) s$state$codex_thread = tid
     pcli_start(s)
   } else if (identical(type, "turn.started")) {
     pcli_start(s)
@@ -551,9 +496,8 @@ pcli_codex_event = function(obj, s) {
     pcli_start(s)
     pcli_codex_item(s, item)
   } else if (identical(type, "turn.completed")) {
-    pcli_codex_after(s)
-    pcli_done(s, pcli_codex_usage(obj[["usage"]]), "stop", "completed")
-    pcli_codex_report(s)
+    usage = pcli_codex_usage(obj[["usage"]])
+    pcli_codex_end(s, function() pcli_done(s, usage, "stop", "completed"))
   } else if (identical(type, "turn.failed")) {
     why = pcli_codex_why(obj) %||% s$last_error %||% "unknown error"
     pcli_codex_error(s, "provider", paste0("Codex reported an error: ", why))
@@ -565,48 +509,28 @@ pcli_codex_event = function(obj, s) {
 }
 
 #' The wall-clock limit of an exec passed: report and stop it (the words "out of budget" keep P06
-#' from retrying the turn)
-#'
-#' Only while the exec is its session's current turn (pcli_turn_current()): P05 can end a turn
-#' without its normaliser, and the session's next exec then has the shared state and its own
-#' child, which this callback must not close or stop. In an aborted run the exec ends as aborted
-#' (D-104, D-106).
+#' from retrying the turn); in an aborted run the exec ends as aborted (D-104, D-106)
 #' @noRd
 pcli_codex_timeout = function(s) {
-  if (s$done || !pcli_turn_current(s)) return(invisible(NULL))
-  if (pcli_aborted(s)) {
-    pcli_codex_abort(s)
-    return(invisible(NULL))
-  }
-  secs = pcli_turn_seconds()
+  if (pcli_aborted(s)) return(pcli_codex_abort(s))
   pcli_codex_error(s, "timeout", paste0("The codex exec is out of budget: it ran past the ",
-                                       "per-turn limit of ", secs,
+                                       "per-turn limit of ", pcli_turn_seconds(),
                                        " s (option gptr.cli_turn_timeout)."), kill = TRUE)
-  invisible(NULL)
 }
 
-#' parse(): the normaliser of one codex exec (contract 8.1, 8.5)
-#'
-#' No function of the normaliser signals an R condition: an error while a line, the end of
-#' input, a transport failure or the wall clock is processed becomes the exec's one terminal
-#' `error` event (class `internal`), as in the claude adapter (contract 8.1; D-104, D-106). An
-#' error in push() or in the wall clock first stops the exec, which may still be working on the
-#' turn. Every end the normaliser makes checks the control files of a workspace-write exec, the
-#' `internal` one included, and warns after the terminal event; an exec P05 ends without the
-#' normaliser is checked by the session's next build() (pcli_codex_settle()).
+#' parse(): the normaliser of one codex exec (contract 8.1, 8.5; pcli_normaliser()). Every end
+#' checks the control files of a workspace-write exec (pcli_codex_end()); an exec P05 ends
+#' without the normaliser is checked by the session's next build() (pcli_codex_settle()).
 #' @noRd
 pcli_codex_parse = function(model, opts) {
   s = pcli_turn_new(model, opts)
   s$items = 0L
   s$open_tools = character()
   s$last_error = NULL
-  s$sandbox = s$state$codex_sandbox %||% "read-only"
   s$cap = s$state$codex_cap %||% pcli_codex_cap(list())
-  pcli_wire_log(s, "start")
-
   push = function(ev) {
     if (s$done) return(TRUE)
-    obj = ev[["obj"]] %||% pcli_parse_line(ev[["data"]])
+    obj = ev[["obj"]]
     if (!is.list(obj)) return(FALSE)
     if (pcli_aborted(s)) {
       pcli_codex_abort(s)
@@ -615,61 +539,9 @@ pcli_codex_parse = function(model, opts) {
     pcli_codex_event(obj, s)
     s$done
   }
-
-  finish = function() {
-    if (!s$done) {
-      if (pcli_aborted(s)) {
-        pcli_codex_error(s, "aborted", "The run was aborted.", reason = "aborted")
-      } else {
-        last = if (is.null(s$last_error)) "" else paste0(" Its last error: ", s$last_error)
-        pcli_codex_error(s, "provider",
-                        paste0("codex exec exited before completing the turn.", last))
-      }
-    }
-    s$msg
+  exited = function() {
+    paste0("codex exec exited before completing the turn.",
+           if (!is.null(s$last_error)) paste0(" Its last error: ", s$last_error))
   }
-
-  fail = function(cnd) {
-    if (!s$done) {
-      aborted = pcli_aborted(s)
-      pcli_codex_error(s, if (aborted) "aborted" else sub("^gptr_error_", "", class(cnd)[[1L]]),
-                      conditionMessage(cnd), reason = if (aborted) "aborted" else "error")
-    }
-    s$msg
-  }
-
-  message = function() s$msg %||% pcli_message(s)
-
-  # the control files are checked here too (after the stop of push_safe() and timeout_safe()),
-  # and a check an error kept from its warning is reported; neither may signal from here
-  internal = function(e) {
-    if (!s$done) tryCatch(pcli_codex_after(s), error = function(e2) NULL)
-    msg = pcli_fail(s, "internal", paste0("The cli-codex adapter could not process the codex ",
-                                         "CLI's output: ", conditionMessage(e)))
-    tryCatch(pcli_codex_report(s), error = function(e2) NULL)
-    msg
-  }
-
-  push_safe = function(ev) {
-    tryCatch(push(ev), error = function(e) {
-      tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e2) NULL)
-      internal(e)
-      TRUE
-    })
-  }
-
-  # the wall clock is the one entry point P05 does not call: an R error in it would only reach
-  # the reactor's diagnostic, leaving the exec open and Codex running without its timer
-  timeout_safe = function() {
-    if (s$done || !pcli_turn_current(s)) return(invisible(NULL))
-    tryCatch(pcli_codex_timeout(s), error = function(e) {
-      tryCatch(pcli_stop_child(s$state, wait_ack = FALSE), error = function(e2) NULL)
-      internal(e)
-    })
-    invisible(NULL)
-  }
-  pcli_turn_timer(s, timeout_safe)
-
-  list(push = push_safe, finish = function() tryCatch(finish(), error = internal),
-       fail = function(cnd) tryCatch(fail(cnd), error = internal), message = message)
+  pcli_normaliser(s, "codex", push, pcli_codex_error, exited, function() pcli_codex_timeout(s))
 }

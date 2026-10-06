@@ -81,8 +81,6 @@ test_that("a native executable anywhere on PATH comes before an earlier shim (07
   withr::local_options(gptr.cli_path = NULL)
   withr::local_envvar(PATH = paste(c(shims, native), collapse = .Platform$path.sep))
   local_mocked_bindings(pcli_is_windows = function() TRUE, user_home = function() shims)
-  expect_identical(pcli_on_path("claude"),
-                   file.path(c(native, shims), c("claude.exe", "claude.cmd")))
   expect_identical(pcli_find("claude")[[1L]],
                    normalizePath(file.path(native, "claude.exe"), winslash = "/"))
 })
@@ -132,7 +130,7 @@ test_that("a .cmd claude is refused with the install hint", {
   err = expect_error(pcli_find("claude"), class = "gptr_error_cli_missing")
   expect_match(conditionMessage(err), "install.ps1", fixed = TRUE)
   withr::local_options(gptr.cli_path = NULL)
-  local_mocked_bindings(pcli_on_path = function(cli) shim,
+  local_mocked_bindings(pcli_is_windows = function() TRUE, pcli_on_path = function(cli) shim,
                         pcli_known_paths = function(cli) character())
   err = expect_error(pcli_find("claude"), class = "gptr_error_cli_missing")
   expect_match(conditionMessage(err), "only native executables", fixed = TRUE)
@@ -150,16 +148,10 @@ test_that("a codex npm shim resolves to its vendored codex.exe", {
   # Normalised: on Windows tempfile() paths use backslashes but dirname() returns "/"
   expect_identical(pcli_codex_vendored(shim), normalizePath(exe, winslash = "/"))
   withr::local_options(gptr.cli_path = NULL)
-  local_mocked_bindings(pcli_on_path = function(cli) shim,
+  local_mocked_bindings(pcli_is_windows = function() TRUE, pcli_on_path = function(cli) shim,
                         pcli_known_paths = function(cli) character())
   expect_identical(pcli_find("codex")[[1L]], normalizePath(exe, winslash = "/"))
   expect_identical(pcli_identity(pcli_find("codex")), "codex")
-})
-
-test_that("the contract name cli_find() of 04 7.20 is pcli_find()", {
-  withr::local_options(gptr.cli_path = list(claude = c(rscript_path(), "--vanilla", "fake.R")))
-  expect_identical(names(formals(cli_find)), "cli")
-  expect_identical(cli_find("claude"), pcli_find("claude"))
 })
 
 # ---- version and capability probes, notices (Task 2) -------------------------------------------
@@ -289,15 +281,6 @@ test_that("a help probe that failed or timed out is an error and is not cached",
   expect_identical(pcli_cache$status$claude$error, "help unreadable")
   expect_identical(pcli_probe(claude)$bare_optout, "--no-bare")
   expect_length(queue$results, 0L)
-})
-
-test_that("the contract names cli_version() and cli_probe() of 04 7.20 are the probes", {
-  expect_identical(names(formals(cli_version)), "path")
-  expect_identical(names(formals(cli_probe)), "path")
-  local_mocked_bindings(pcli_version = function(path) package_version("9.9.9"),
-                        pcli_probe = function(path) list(cli = "claude", version = "9.9.9"))
-  expect_identical(cli_version("claude"), package_version("9.9.9"))
-  expect_identical(cli_probe("claude")$version, "9.9.9")
 })
 
 test_that("each route prints its one-time notice through gptr_inform()", {
@@ -494,6 +477,9 @@ test_that("pcli_params() reads the mode and budget patched in by request_params"
   expect_null(p$turns)
   expect_null(p$cost)
   expect_identical(pcli_params(list(params = list(cli_mode = "yolo")))$mode, "manual")
+  p = pcli_params(list(params = list(cli_budget = list(turns = Inf, cost = Inf))))
+  expect_null(p$turns)
+  expect_null(p$cost)
 })
 
 test_that("one CLI turn emits one start and one terminal event and closes the turn", {

@@ -58,19 +58,14 @@ pcli_exe_names = function(cli) {
   if (pcli_is_windows()) paste0(cli, c(".exe", ".cmd", ".bat")) else cli
 }
 
-#' Candidates for a CLI on PATH, found without starting a process (Sys.which() runs `which`
+#' Candidate paths of a CLI on PATH, named without starting a process (Sys.which() runs `which`
 #' on Unix, and IC-65 forbids process I/O in status())
 #'
 #' Native executables anywhere on PATH come before shims: the official SDK prefers claude.exe
 #' over an earlier-on-PATH claude.cmd (07 6.2).
 #' @noRd
 pcli_on_path = function(cli) {
-  dirs = pcli_path_dirs()
-  if (!length(dirs)) return(character())
-  cands = as.vector(outer(dirs, pcli_exe_names(cli), file.path))
-  ok = file.exists(cands) & !dir.exists(cands)
-  if (!pcli_is_windows()) ok = ok & file.access(cands, 1L) == 0L
-  cands[ok]
+  as.vector(outer(pcli_path_dirs(), pcli_exe_names(cli), file.path))
 }
 
 #' Per-OS install locations searched after PATH (IC-65): RStudio and Positron on macOS do not
@@ -142,6 +137,14 @@ pcli_found = function(cli, cmd) {
   structure(cmd, cli = cli)
 }
 
+#' The native executable of a path: itself, the vendored codex.exe behind a codex.cmd shim, or
+#' NULL for a shim gptr refuses (07 6.2)
+#' @noRd
+pcli_native = function(cli, path) {
+  if (!pcli_is_shim(path)) return(path)
+  if (identical(cli, "codex")) pcli_codex_vendored(path) else NULL
+}
+
 #' Refuse a batch shim with the install hint (07 6.2; IC-65)
 #' @noRd
 pcli_refuse_shim = function(cli, shim) {
@@ -180,43 +183,31 @@ pcli_find = function(cli = c("claude", "codex")) {
                         pcli_install_hint[[cli]]),
                  "cli_missing", cli = cli)
     }
-    if (pcli_is_shim(cmd[[1L]])) {
-      exe = if (identical(cli, "codex")) pcli_codex_vendored(cmd[[1L]]) else NULL
-      if (is.null(exe)) pcli_refuse_shim(cli, cmd[[1L]])
-      cmd[[1L]] = exe
-    }
+    exe = pcli_native(cli, cmd[[1L]])
+    if (is.null(exe)) pcli_refuse_shim(cli, cmd[[1L]])
+    cmd[[1L]] = exe
     return(pcli_found(cli, cmd))
   }
-  shims = character()
-  for (cand in unique(c(pcli_on_path(cli), pcli_known_paths(cli)))) {
-    if (!file.exists(cand) || dir.exists(cand)) next
-    if (!pcli_is_shim(cand)) {
-      # Unix: an install location without the execute bit is skipped, as pcli_on_path() does
-      # (a shim needs no check: it never runs, it is refused or resolved to codex.exe)
-      if (pcli_is_windows() || file.access(cand, 1L) == 0L) return(pcli_found(cli, cand))
-      next
-    }
-    exe = if (identical(cli, "codex")) pcli_codex_vendored(cand) else NULL
+  # existing files only; on Unix only executable ones
+  cands = unique(c(pcli_on_path(cli), pcli_known_paths(cli)))
+  cands = cands[file.exists(cands) & !dir.exists(cands) &
+                  (pcli_is_windows() | file.access(cands, 1L) == 0L)]
+  for (cand in cands) {
+    exe = pcli_native(cli, cand)
     if (!is.null(exe)) return(pcli_found(cli, exe))
-    shims = c(shims, cand)
   }
-  if (length(shims)) pcli_refuse_shim(cli, shims[[1L]])
+  if (length(cands)) pcli_refuse_shim(cli, cands[[1L]])
   pcli_record(cli, path = NA_character_, error = "not found")
   gptr_abort(paste0("The ", cli, " CLI was not found on PATH or in the usual install ",
                     "locations. ", pcli_install_hint[[cli]], " Or set options(gptr.cli_path = ",
                     "list(", cli, " = \"<path>\"))."), "cli_missing", cli = cli)
 }
 
-#' The contract name of pcli_find() (04 7.20). P20's own code calls pcli_find(): P01's lint rule
-#' `cli_literal` flags unqualified cli_*() calls whose first argument is not a literal
-#' @noRd
-cli_find = function(cli = c("claude", "codex")) pcli_find(cli)
-
 #' Which CLI a found command belongs to (its `cli` attribute)
 #' @noRd
 pcli_identity = function(cmd) {
   cli = attr(cmd, "cli")
-  if (is.character(cli) && length(cli) == 1L && cli %in% c("claude", "codex")) return(cli)
+  if (rlang::is_string(cli) && cli %in% c("claude", "codex")) return(cli)
   if (grepl("codex", paste(cmd, collapse = " "), ignore.case = TRUE)) "codex" else "claude"
 }
 
@@ -227,11 +218,6 @@ pcli_identity = function(cmd) {
 #' @noRd
 pcli_min_version = list(claude = "2.0.0", codex = NULL)
 
-#' The child-environment profile of a CLI (P03 removes billing and enclosing-agent variables
-#' with one billing_env warning, G6 3.7)
-#' @noRd
-pcli_profile = function(cli) paste0("cli-", cli)
-
 #' Cache key of a command: its words and the executable's modification time (contract 7.20)
 #' @noRd
 pcli_cache_key = function(cmd) {
@@ -240,10 +226,11 @@ pcli_cache_key = function(cmd) {
   paste(c(as.character(cmd), stamp), collapse = "\r")
 }
 
-#' Run a CLI command to completion through the process engine (never a shell, never by name)
+#' Run a CLI command to completion through the process engine (never a shell, never by name),
+#' in the CLI's child-environment profile (P03 removes billing and enclosing-agent variables)
 #' @noRd
 pcli_run = function(cmd, args, timeout = 30) {
-  env = child_env(pcli_profile(pcli_identity(cmd)))
+  env = child_env(paste0("cli-", pcli_identity(cmd)))
   proc_run(cmd[[1L]], c(as.character(cmd[-1L]), args), timeout = timeout, env = env)
 }
 
@@ -396,14 +383,6 @@ pcli_probe = function(path) {
   hit
 }
 
-#' The contract name of pcli_version() (04 7.20; P20's code calls pcli_version(), see cli_find())
-#' @noRd
-cli_version = function(path) pcli_version(path)
-
-#' The contract name of pcli_probe() (04 7.20; P20's code calls pcli_probe(), see cli_find())
-#' @noRd
-cli_probe = function(path) pcli_probe(path)
-
 #' The one-time notice of a subscription route (03 8.3; message class `notice`)
 #' @noRd
 pcli_notice = function(cli) {
@@ -445,7 +424,7 @@ pcli_default_model = function(api) {
   m = tryCatch(model_resolve(if (codex) "gpt" else "sonnet", strict = FALSE),
                error = function(e) NULL)
   id = if (is.list(m)) m[["id"]] else NULL
-  ok = is.character(id) && length(id) == 1L && !is.na(id) && nzchar(id)
+  ok = rlang::is_string(id) && nzchar(id)
   if (ok && codex) {
     ok = id %in% setdiff(vapply(pcli_models("codex"), function(x) x$id, ""), "default")
   }
@@ -467,15 +446,12 @@ pcli_model_id = function(model) {
 #' @noRd
 pcli_plan_set = function(provider, info) {
   if (!is.list(info)) info = list()
-  chr = function(x) if (is.character(x) && length(x) == 1L && !is.na(x)) x else NA_character_
-  num = function(x) {
-    if (is.numeric(x) && length(x) == 1L && !is.na(x)) as.numeric(x) else NA_real_
-  }
+  chr = function(x) pcli_chr(x) %||% NA_character_
   w = info[["unifiedWindows"]]
   if (!is.list(w)) w = list()
-  util = function(k) if (is.list(w[[k]])) num(w[[k]][["utilization"]]) else NA_real_
+  util = function(k) if (is.list(w[[k]])) pcli_num(w[[k]][["utilization"]]) else NA_real_
   rec = list(status = chr(info[["status"]]), type = chr(info[["rateLimitType"]]),
-             resets_at = num(info[["resetsAt"]]), five_hour = util("five_hour"),
+             resets_at = pcli_num(info[["resetsAt"]]), five_hour = util("five_hour"),
              seven_day = util("seven_day"), time = Sys.time())
   plan = pcli_cache$plan %||% list()
   plan[[provider]] = rec
@@ -643,10 +619,22 @@ pcli_system_text = function(context) {
   paste(parts, collapse = "\n\n")
 }
 
-#' A positive number or NULL
+#' A positive finite number or NULL (a budget that is not finite is none, D-101)
 #' @noRd
 pcli_scalar_num = function(x) {
-  if (is.numeric(x) && length(x) == 1L && !is.na(x) && x > 0) as.numeric(x) else NULL
+  if (is.numeric(x) && length(x) == 1L && is.finite(x) && x > 0) as.numeric(x) else NULL
+}
+
+#' One string reported by a CLI, or NULL for anything else (a number would pick a switch()
+#' alternative by position)
+#' @noRd
+pcli_chr = function(x) if (rlang::is_string(x)) x else NULL
+
+#' A count reported by a CLI: one finite nonnegative number, else NA (absent and malformed counts
+#' are unknown, IC-74)
+#' @noRd
+pcli_num = function(x) {
+  if (is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0) as.numeric(x) else NA_real_
 }
 
 #' The run's mode and remaining budget, patched into `context$params` by builtin:cli's
@@ -657,8 +645,7 @@ pcli_scalar_num = function(x) {
 pcli_params = function(context) {
   p = context[["params"]] %||% list()
   mode = p[["cli_mode"]]
-  ok = is.character(mode) && length(mode) == 1L && !is.na(mode) &&
-    mode %in% c("plan", "manual", "edits", "auto")
+  ok = rlang::is_string(mode) && mode %in% c("plan", "manual", "edits", "auto")
   b = p[["cli_budget"]] %||% list()
   list(mode = if (ok) mode else "manual", turns = pcli_scalar_num(b[["turns"]]),
        cost = pcli_scalar_num(b[["cost"]]))
@@ -684,12 +671,15 @@ pcli_alive = function(p) {
   !is.null(p) && isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))
 }
 
+#' A session id (one nonempty string), or NULL
+#' @noRd
+pcli_sid = function(x) if (rlang::is_string(x) && nzchar(x)) x else NULL
+
 #' Remember the adapter state of a session that runs a CLI child, weakly: the session's live
 #' record owns the state, so the table never keeps a session alive
 #' @noRd
 pcli_track = function(session, state) {
-  ok = is.character(session) && length(session) == 1L && !is.na(session) && nzchar(session)
-  if (!ok || !is.environment(state)) return(invisible(NULL))
+  if (is.null(pcli_sid(session)) || !is.environment(state)) return(invisible(NULL))
   tab = pcli_cache$children
   if (is.null(tab)) {
     tab = new.env(parent = emptyenv())
@@ -703,8 +693,7 @@ pcli_track = function(session, state) {
 #' @noRd
 pcli_tracked = function(session) {
   tab = pcli_cache$children
-  ok = is.character(session) && length(session) == 1L && !is.na(session) && nzchar(session)
-  if (is.null(tab) || !ok) return(NULL)
+  if (is.null(tab) || is.null(pcli_sid(session))) return(NULL)
   w = get0(session, envir = tab, inherits = FALSE)
   if (is.null(w)) return(NULL)
   st = rlang::wref_key(w)
@@ -716,7 +705,7 @@ pcli_tracked = function(session) {
 #' @noRd
 pcli_untrack = function(session) {
   tab = pcli_cache$children
-  if (!is.null(tab) && is.character(session) && length(session) == 1L &&
+  if (!is.null(tab) && !is.null(pcli_sid(session)) &&
       exists(session, envir = tab, inherits = FALSE)) {
     rm(list = session, envir = tab)
   }
@@ -794,13 +783,6 @@ pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
   invisible(TRUE)
 }
 
-#' Parse one output line when the transport did not (P05 passes `obj`)
-#' @noRd
-pcli_parse_line = function(x) {
-  if (!is.character(x) || length(x) != 1L || !nzchar(x)) return(NULL)
-  tryCatch(json_decode(x), error = function(e) NULL)
-}
-
 #' The state of one CLI turn (one INFRA-02 stream: one `start`, one terminal event)
 #' @noRd
 pcli_turn_new = function(model, opts) {
@@ -844,7 +826,7 @@ pcli_start = function(s, response_id = NULL) {
 #' Emit a whole text or thinking block (start, one delta, end) and keep it
 #' @noRd
 pcli_text_block = function(s, text, kind = "text") {
-  if (!is.character(text) || length(text) != 1L || !nzchar(text)) return(invisible(NULL))
+  if (!rlang::is_string(text) || !nzchar(text)) return(invisible(NULL))
   pcli_start(s)
   m = s$model
   blk = if (identical(kind, "thinking")) {
@@ -910,7 +892,7 @@ pcli_finish = function(s, msg, event) {
     s$state$turn_timer = NULL
   }
   served = s$state$served_run
-  if (is.character(served) && length(served) == 1L) {
+  if (rlang::is_string(served)) {
     tryCatch(reactor_served(served, FALSE), error = function(e) NULL)
     s$state$served_run = NULL
   }
@@ -981,6 +963,52 @@ pcli_turn_timer = function(s, on_timeout) {
 #' @noRd
 pcli_turn_current = function(s) {
   is.character(s$timer) && identical(s$state$turn_timer, s$timer)
+}
+
+#' The normaliser of one CLI turn around an adapter's push() (contract 8.1, 8.5)
+#'
+#' No R condition escapes: an error while a line, the end of input, a transport failure or the
+#' wall clock is processed becomes the turn's one terminal `error` event (class `internal`), and
+#' an error in push() or the wall clock also stops the child, which may still be working on the
+#' turn. The wall clock acts only while the turn is its session's current one (D-104, D-106).
+#' @param end the adapter's terminal error, function(s, class, text, reason = "error",
+#'   status = NA_integer_, kill = FALSE); `kill` stops the child.
+#' @param exited function() giving the text of a turn whose CLI exited before its end.
+#' @param timeout function() run when the per-turn wall clock passes.
+#' @noRd
+pcli_normaliser = function(s, cli, push, end, exited, timeout) {
+  internal = function(e, kill = FALSE) {
+    end(s, "internal", paste0("The cli-", cli, " adapter could not process the ", cli,
+                              " CLI's output: ", conditionMessage(e)), kill = kill)
+  }
+  pcli_wire_log(s, "start")
+  pcli_turn_timer(s, function() {
+    if (!s$done && pcli_turn_current(s)) {
+      tryCatch(timeout(), error = function(e) internal(e, kill = TRUE))
+    }
+    invisible(NULL)
+  })
+  finish = function() {
+    if (s$done) return(s$msg)
+    if (pcli_aborted(s)) return(end(s, "aborted", "The run was aborted.", "aborted"))
+    end(s, "provider", exited())
+  }
+  fail = function(cnd) {
+    if (s$done) return(s$msg)
+    aborted = pcli_aborted(s)
+    end(s, if (aborted) "aborted" else sub("^gptr_error_", "", class(cnd)[[1L]]),
+        conditionMessage(cnd), if (aborted) "aborted" else "error",
+        cnd[["status"]] %||% NA_integer_)
+  }
+  list(push = function(ev) {
+         tryCatch(push(ev), error = function(e) {
+           internal(e, kill = TRUE)
+           TRUE
+         })
+       },
+       finish = function() tryCatch(finish(), error = internal),
+       fail = function(cnd) tryCatch(fail(cnd), error = internal),
+       message = function() s$msg %||% pcli_message(s))
 }
 
 #' One redacted wire-log line per CLI turn start and terminal event (P04's per-session file,

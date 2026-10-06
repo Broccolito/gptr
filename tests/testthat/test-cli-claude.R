@@ -382,8 +382,14 @@ test_that("a turn without a result line ends with an error; an aborted one with 
                                    message = list(jsonrpc = "2.0", id = 5L,
                                                   method = "tools/call"))))
   expect_identical(opts2$log$sent[[1]]$response$response$mcp_response$error$message,
-                   "The gptr turn is over.")
+                   "The gptr run was aborted.")
   expect_length(opts2$log$dispatched, 0L)
+  push_obj(n2, list(type = "control_request", request_id = "c10",
+                    request = list(subtype = "can_use_tool", tool_name = "Bash",
+                                   input = list(command = "ls"))))
+  expect_identical(opts2$log$sent[[2]]$response$response,
+                   list(behavior = "deny", message = "The gptr turn is over."))
+  expect_length(opts2$log$gated, 0L)
   expect_identical(n2$finish()$stop_reason, "aborted")
 })
 
@@ -442,6 +448,9 @@ test_that("an R error inside the normaliser ends the turn with one error event (
   expect_false(stopped$wait)
   odd = stub_opts()
   n2 = local_normaliser(pcli_claude_parse, stub_model("claude"), odd)
+  expect_false(push_obj(n2, list(type = list("a", "b"))))
+  expect_false(push_obj(n2, list(type = list())))
+  expect_length(odd$log$events, 0L)
   expect_true(push_obj(n2, list(type = "result", subtype = "success", is_error = FALSE,
                                 stop_reason = 2L, terminal_reason = 5L,
                                 usage = list(input_tokens = "many"))))

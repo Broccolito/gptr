@@ -178,6 +178,19 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Deviations: none. Open: test-gptr-gateway.R, test-gptr-sdk.R, test-copy-gateway.R keep their
   "(Task n: create)" markers (outside this package).
 
+## P20-S - CLI providers duplication (2026-10-05)
+- S03 aliases and `pcli_profile()` gone; S06 one `pcli_normaliser()`; S09 `pcli_chr()`/`pcli_num()`,
+  `rlang::is_string()`; S10 finite-only `pcli_scalar_num()`; S11 `pcli_codex_end()`, one warning
+  text; S14 refusals in `pcli_claude_control()`; S15 one candidate filter; S16, S17, S18 (R -192).
+- Red: FAIL 7 (aborted refusal text, MCP record shape, Inf budget). Green: `cli-` PASS 640 (640
+  before: -6 alias, -1 PATH-scan, +2 Inf, +5 review). Lint clean. Neighbours: `lint-rules|
+  arch-layers|provider-registry|zzz` PASS 840; cross-plan 0 errors, warn 83 (+6 recorded as C3).
+- Reviews: R1 clear, 3 minor + 1 nit. Fixed: claude reads `type` by `pcli_chr()` (a non-scalar
+  type ended the turn), test of `can_use_tool` denied after abort (red FAIL 8 with the guard
+  mutated), redundant empty-PATH return. Declined: 04 section 7.20 and 00-index row 315 (outside
+  lane; Open).
+- Deviations: D-144. Open: 04 section 7.20 and 00-index row 315 still name the aliases (outside lane).
+
 ## P02-S - Extension core (2026-10-05)
 - X-1 `helper-ext.R`; X-2 comments; X-3 one load transaction; X-4 `registry_enabled()` (lazy
   activation folded in); X-5 one `kind_from_spec()` (P22 text); X-6, X-8, X-9, X-10 (is_string,

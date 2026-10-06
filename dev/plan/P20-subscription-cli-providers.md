@@ -20,7 +20,7 @@
 
 Plan-specific requirements (values copied verbatim from the spec):
 
-- Function names: P20's internal functions and objects use the prefix `pcli_` (plan-route CLI), never `cli_`: P01's lint rule `cli_literal` (conventions §5, 04 §12.3, `tests/testthat/test-lint-rules.R` "R/ follows the package lint rules") flags every unqualified `cli_*()` call in `R/` whose first argument is not a literal, which would hit P20's own calls such as `cli_find(cli)` and `cli_version(path)` (231 hits in the review's scan). The three contract names of 04 §7.20 exist as one-line aliases, `cli_find(cli)`, `cli_version(path)` and `cli_probe(path)`, which P20's code never calls (their bodies call `pcli_find()`, `pcli_version()`, `pcli_probe()`, which the rule does not match). Option names (`gptr.cli_path`, `gptr.cli_turn_timeout`), request parameters (`cli_mode`, `cli_budget`), condition classes (`gptr_error_cli_missing`, `gptr_error_cli_version`, `gptr_warning_cli_sandbox`) and test-only helpers keep their names.
+- Function names: P20's internal functions and objects use the prefix `pcli_` (plan-route CLI), never `cli_`: P01's lint rule `cli_literal` (conventions §5, 04 §12.3, `tests/testthat/test-lint-rules.R` "R/ follows the package lint rules") flags every unqualified `cli_*()` call in `R/` whose first argument is not a literal, which would hit P20's own calls such as `cli_find(cli)` and `cli_version(path)` (231 hits in the review's scan). The three contract names of 04 §7.20, `cli_find(cli)`, `cli_version(path)` and `cli_probe(path)`, are implemented as `pcli_find()`, `pcli_version()` and `pcli_probe()`, without aliases (simplicity package P20-S, D-144). Option names (`gptr.cli_path`, `gptr.cli_turn_timeout`), request parameters (`cli_mode`, `cli_budget`), condition classes (`gptr_error_cli_missing`, `gptr_error_cli_version`, `gptr_warning_cli_sandbox`) and test-only helpers keep their names.
 - Files and layer (03 §3.2): `cli-common.R` | L1 | "CLI discovery (native binaries preferred), minimum-version probe, one-time notice, billing-switch scrub" | built-in `cli` | P20; `cli-claude.R` | L1 | "`cli-claude` adapter: stream-json, control protocol, in-process `sdk` MCP, `can_use_tool`"; `cli-codex.R` | L1 | "`cli-codex` adapter: `codex exec --json --ignore-user-config -`, sandbox mapping, MCP via `-c`". L1 "may call L0" (and L1); "the run's gate, MCP dispatcher and tool-result builder arrive as injected `opts` callbacks [IC-33]"; `cli-claude.R` "uses only these" (IC-33).
 - Contract rows (04 §7.20): `builtin_cli(gptr)` "registers providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` (`transport = "process_jsonl"`), a `status` function per provider for `gptr_providers()`"; `cli_find(cli = c("claude", "codex"))` "path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise"; `cli_version(path)`, `cli_probe(path)` "`package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version`".
 - claude argv (04 §8.5, 03 §8.3), exactly: `-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands --mcp-config <file> --permission-prompt-tool stdio --permission-mode default --allowedTools mcp__gptr__* --system-prompt-file <file> --model <full id>`, "plus `--max-turns <n> --max-budget-usd <x>` when a budget is in force (IC-65, IC-66) (never `--bare`)". The `--mcp-config` file "contains `{"mcpServers":{"gptr":{"type":"sdk","name":"gptr"}}}`; the system-prompt file holds the session's frozen T0 + T1". "Per turn `send` = one `{"type":"user","message":{"role":"user","content":<blocks>},"parent_tool_use_id":null,"session_id":""}` line." `mcp_message` is answered as `{"type":"control_response","response":{"subtype":"success","request_id":…,"response":{"mcp_response":…}}}`; `can_use_tool` "`{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`; unknown subtypes -> an error response. After `system/init`, an `apiKeySource` other than `"none"` aborts the turn with `gptr_error_billing`." "`result` lines end the turn (usage from `usage` and `total_cost_usd` as an estimate, route `plan-cli`); `rate_limit_event` updates the provider's plan status. Interrupt: `{"type":"control_request","request_id":…,"request":{"subtype":"interrupt"}}`, then `kill_all()` after the grace period."
@@ -119,7 +119,7 @@ Exact signatures (04 and the dependency plans); the tasks call nothing else.
 
 **Interfaces:**
 - Consumes: `gptr_opt(name)`, `check_choice(x, choices, arg)`, `user_home()`, `gptr_abort(message, class, ..., .data = NULL, call = NULL)`, `` `%||%` `` (P01); in tests `rscript_path()` (P01).
-- Produces: `cli_find(cli = c("claude", "codex"))` (04 §7.20; a contract alias of the implementation `pcli_find()`, see Global Constraints) -> chr, the normalised executable followed by any prefix arguments, with attribute `cli`; `gptr_error_cli_missing` with field `cli` (04 §2.2). Private: `pcli_cache` (process-level data: discovery results, versions, probes, plan status and, from Task 4, the weak child table), `pcli_cache_clear()`, `pcli_install_hint`, `pcli_is_windows()`, `pcli_path_dirs()`, `pcli_exe_names(cli)`, `pcli_on_path(cli)`, `pcli_known_paths(cli)`, `pcli_is_shim(path)`, `pcli_codex_vendored(shim)`, `pcli_record(cli, path = NULL, version = NULL, error = NULL)`, `pcli_forget(cli)`, `pcli_found(cli, cmd)`, `pcli_refuse_shim(cli, shim)`, `pcli_identity(cmd)`. Test support: `fake_cli_fixtures()`, `cli_billing_vars`.
+- Produces: `pcli_find(cli = c("claude", "codex"))` (named `cli_find` in 04 §7.20, see Global Constraints) -> chr, the normalised executable followed by any prefix arguments, with attribute `cli`; `gptr_error_cli_missing` with field `cli` (04 §2.2). Private: `pcli_cache` (process-level data: discovery results, versions, probes, plan status and, from Task 4, the weak child table), `pcli_cache_clear()`, `pcli_install_hint`, `pcli_is_windows()`, `pcli_path_dirs()`, `pcli_exe_names(cli)`, `pcli_on_path(cli)`, `pcli_known_paths(cli)`, `pcli_is_shim(path)`, `pcli_codex_vendored(shim)`, `pcli_record(cli, path = NULL, version = NULL, error = NULL)`, `pcli_forget(cli)`, `pcli_found(cli, cmd)`, `pcli_refuse_shim(cli, shim)`, `pcli_identity(cmd)`. Test support: `fake_cli_fixtures()`, `cli_billing_vars`.
 
 Adapted from `cc_find_cli()` of report 07 §5.7 (verified live; verification log item 37 confirms the install paths) with the review fixes of IC-65: PATH is scanned with `file.exists()`/`file.access()` instead of `Sys.which()` (which runs `which` on Unix, and `status()` must never start a process), native executables anywhere on PATH come before `.cmd`/`.bat` shims (07 §6.2: the official SDK prefers `claude.exe`), the npm `claude.cmd` shim is refused (so the empty-string arguments `--tools ""` and `--setting-sources ""` reach a native binary intact), and an npm `codex.cmd` shim resolves to its vendored `codex.exe` (08 §3.11, §6.2). The `~/.claude/local` location comes from the same verified prototype.
 
@@ -242,19 +242,13 @@ test_that("a codex npm shim resolves to its vendored codex.exe", {
   expect_identical(pcli_find("codex")[[1L]], normalizePath(exe, winslash = "/"))
   expect_identical(pcli_identity(pcli_find("codex")), "codex")
 })
-
-test_that("the contract name cli_find() of 04 7.20 is pcli_find()", {
-  withr::local_options(gptr.cli_path = list(claude = c(rscript_path(), "--vanilla", "fake.R")))
-  expect_identical(names(formals(cli_find)), "cli")
-  expect_identical(cli_find("claude"), pcli_find("claude"))
-})
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 7 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors, with ``could not find function "pcli_cache_clear"``, ``could not find function "pcli_find"``, ``object 'cli_find' not found``, ``Can't find binding for `pcli_is_windows` `` and ``could not find function "pcli_codex_vendored"``.
+Expected: `[ FAIL 6 | WARN 0 | SKIP 0 | PASS 0 ]`; every test errors, with ``could not find function "pcli_cache_clear"``, ``could not find function "pcli_find"``, ``Can't find binding for `pcli_is_windows` `` and ``could not find function "pcli_codex_vendored"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -454,11 +448,6 @@ pcli_find = function(cli = c("claude", "codex")) {
                     "list(", cli, " = \"<path>\"))."), "cli_missing", cli = cli)
 }
 
-#' The contract name of pcli_find() (04 7.20). P20's own code calls pcli_find(): P01's lint rule
-#' `cli_literal` flags unqualified cli_*() calls whose first argument is not a literal
-#' @noRd
-cli_find = function(cli = c("claude", "codex")) pcli_find(cli)
-
 #' Which CLI a found command belongs to (its `cli` attribute)
 #' @noRd
 pcli_identity = function(cmd) {
@@ -493,7 +482,7 @@ git commit -m "feat(cli): find the claude and codex CLIs without starting a proc
 
 **Interfaces:**
 - Consumes: `child_env(profile, pass = character(), set = character(), provider = NULL)` (P03; profiles `cli-claude`, `cli-codex`), `proc_run(command, args = character(), input = NULL, timeout = 120, env = NULL, wd = NULL, echo = FALSE)` (P04; never a shell, R only through `rscript_path()`), `as_utf8(x)`, `gptr_inform(message, class, ..., .data = NULL, .once = NULL)`, `rscript_path()` (P01); `pid_alive(pid, create_time = NULL)` (P04) in the test support.
-- Produces: `cli_version(path)` -> `package_version`, `cli_probe(path)` -> `list(cli, version, bare_default, bare_optout, resume, missing)` (04 §7.20, both cached per command and executable mtime; contract aliases of the implementations `pcli_version()` and `pcli_probe()`); `gptr_error_cli_version` with fields `cli`, `found`, `required`; `pcli_notice(cli)` (a `gptr_message_notice` once per route, `.once = "cli_notice:<cli>"`); `pcli_fake_command(cli = c("claude", "codex"), case = "text", fixtures, log)` -> the fake CLI's command for `options(gptr.cli_path)`. Private: `pcli_min_version` (`claude = "2.0.0"`), `pcli_profile(cli)`, `pcli_cache_key(cmd)`, `pcli_run(cmd, args, timeout = 30)`, `pcli_version_forget(path)`, `pcli_flags(help)`, `pcli_bare_state(help)`. The fake CLI's command-line and fixture grammar are documented at the top of `fake_cli.R`. Test support: `local_fake_cli_path(cli, case = "text", .env = parent.frame())`, `fake_log(fake, kind = NULL)`, `fake_argv(fake)`, `fake_env_names(fake)`, `fake_prompts(fake)`, `fake_pids(fake)`, `expect_all_dead(pids)`.
+- Produces: `pcli_version(path)` -> `package_version`, `pcli_probe(path)` -> `list(cli, version, bare_default, bare_optout, resume, missing)` (named `cli_version` and `cli_probe` in 04 §7.20; both cached per command and executable mtime); `gptr_error_cli_version` with fields `cli`, `found`, `required`; `pcli_notice(cli)` (a `gptr_message_notice` once per route, `.once = "cli_notice:<cli>"`); `pcli_fake_command(cli = c("claude", "codex"), case = "text", fixtures, log)` -> the fake CLI's command for `options(gptr.cli_path)`. Private: `pcli_min_version` (`claude = "2.0.0"`), `pcli_profile(cli)`, `pcli_cache_key(cmd)`, `pcli_run(cmd, args, timeout = 30)`, `pcli_version_forget(path)`, `pcli_flags(help)`, `pcli_bare_state(help)`. The fake CLI's command-line and fixture grammar are documented at the top of `fake_cli.R`. Test support: `local_fake_cli_path(cli, case = "text", .env = parent.frame())`, `fake_log(fake, kind = NULL)`, `fake_argv(fake)`, `fake_env_names(fake)`, `fake_prompts(fake)`, `fake_pids(fake)`, `expect_all_dead(pids)`.
 
 The fake CLI adapts the verified offline fake of report 07 §5.9 (verification log item 32: it "needs R >= 4.4.0 for base `%||%`", so the script defines its own) and the stdin handling of 08 §5.1 (the looping writer of verification item 54 is P04's `write_all()` on the gptr side; the fake reads stdin to EOF in binary). Its `--help` texts reproduce the relevant lines of `claude --help` 2.1.261 and `codex exec --help` 0.157.0 (07 §2.13, 08 §2.E, 15 §2.9). The `--bare` probe follows 15 §2.9's verifier note ("`--bare` ... will become the default for `-p` in a future release", so the subscription path may later need an explicit opt-out): a help line that names `--bare` with "default" and `-p`/`--print` (and not "future") means bare by default; `--no-bare` is the opt-out passed when the help lists it. The probes run through `child_env("cli-<name>")`, so even `--version` never sees a billing variable. The test support unsets the billing variables of G6 §3.7 and passes this session's library paths in `R_LIBS` (setup.R moves `HOME`, so a user library would not be found by the child Rscript).
 
@@ -961,15 +950,6 @@ test_that("an old or bare-only claude and an old codex signal gptr_error_cli_ver
   expect_false(pcli_probe(pcli_find("codex"))$resume)
 })
 
-test_that("the contract names cli_version() and cli_probe() of 04 7.20 are the probes", {
-  expect_identical(names(formals(cli_version)), "path")
-  expect_identical(names(formals(cli_probe)), "path")
-  local_mocked_bindings(pcli_version = function(path) package_version("9.9.9"),
-                        pcli_probe = function(path) list(cli = "claude", version = "9.9.9"))
-  expect_identical(cli_version("claude"), package_version("9.9.9"))
-  expect_identical(cli_probe("claude")$version, "9.9.9")
-})
-
 test_that("each route prints its one-time notice through gptr_inform()", {
   seen = new.env()
   seen$calls = list()
@@ -992,7 +972,7 @@ test_that("each route prints its one-time notice through gptr_inform()", {
 
 Run: `Rscript --vanilla -e 'devtools::test(filter = "cli-common")'`
 
-Expected: `[ FAIL 5 | WARN 0 | SKIP 0 | PASS 26 ]`; the five new tests error with ``could not find function "pcli_bare_state"``, ``could not find function "pcli_fake_command"`` (twice, from `local_fake_cli_path()`), ``object 'cli_version' not found`` and ``could not find function "pcli_notice"``.
+Expected: `[ FAIL 4 | WARN 0 | SKIP 0 | PASS 26 ]`; the four new tests error with ``could not find function "pcli_bare_state"``, ``could not find function "pcli_fake_command"`` (twice, from `local_fake_cli_path()`) and ``could not find function "pcli_notice"``.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -1144,14 +1124,6 @@ pcli_probe = function(path) {
   }
   hit
 }
-
-#' The contract name of pcli_version() (04 7.20; P20's code calls pcli_version(), see cli_find())
-#' @noRd
-cli_version = function(path) pcli_version(path)
-
-#' The contract name of pcli_probe() (04 7.20; P20's code calls pcli_probe(), see cli_find())
-#' @noRd
-cli_probe = function(path) pcli_probe(path)
 
 #' The one-time notice of a subscription route (03 8.3; message class `notice`)
 #' @noRd
@@ -1461,7 +1433,7 @@ git commit -m "feat(cli): cached status, plan status and the plan-route model en
 
 **Interfaces:**
 - Consumes: `msg_assistant(...)`, `block_text(text, signature = NULL)`, `block_thinking(thinking, signature = NULL, redacted = FALSE, data = NULL, origin = NULL)`, `ev_new(type, ...)`, `id_new(prefix = "", n = 10L)`, `json_encode(x, pretty = FALSE)`, `json_decode(text)` (P01); `usage_new(...)` (P05); `write_all(p, data)`, `write_close(p)`, `kill_all(p, grace = 2)`, `reactor_pump(until = function() FALSE, slice_ms = 100L, allow_runs = NULL, timeout = Inf)`, `reactor_now()`, `reactor_timer(at, fn, run = NULL)`, `reactor_cancel(ids)`, `reactor_served(run, served = TRUE)`, `wire_log_path(session)`, `wire_log_append(path, line)` (P04); `redact(x, profile = "persist")` (P03); `rlang::new_weakref()`, `rlang::wref_key()`; in tests `msg_user()`, `block_context()`, `msg_text()`, `local_project()`, `local_gptr_options()` (P01).
-- Produces (used by Tasks 5-10): `pcli_split(messages)` -> `list(prior, input)`; `pcli_unseen(prior, provider)` (the earlier messages after the last assistant message `provider` answered); `pcli_block_text(b)`, `pcli_message_text(m)`, `pcli_input_text(messages)`, `pcli_history_text(prior)`, `pcli_system_text(context)`; `pcli_scalar_num(x)`; `pcli_params(context)` -> `list(mode, turns, cost)` from `context$params$cli_mode`/`cli_budget` (default mode `"manual"`); `pcli_state(opts)`; `pcli_child(state)`; `pcli_alive(p)`; the weak child table `pcli_track(session, state)`, `pcli_tracked(session)`, `pcli_untrack(session)`; `pcli_request_id(state)` (`req_<n>_<8 hex>`, RNG-free); `pcli_control_request(state, request)`; `pcli_send(opts, obj)`; `pcli_stop_child(state, wait_ack = TRUE, grace = 2)`; `pcli_parse_line(x)`; the turn state `pcli_turn_new(model, opts)`, `pcli_aborted(s)`, `pcli_start(s, response_id = NULL)`, `pcli_text_block(s, text, kind = "text")`, `pcli_blocks(s)`, `pcli_message(s, stop_reason = "stop", usage = NULL, error_message = NULL, raw_stop_reason = NULL)`, `pcli_finish(s, msg, event)`, `pcli_done(s, usage, stop_reason = "stop", raw_stop_reason = NULL)`, `pcli_fail(s, class, message, reason = "error", status = NA_integer_, usage = NULL, retry_after = NULL)`, `pcli_turn_seconds()`, `pcli_turn_timer(s, on_timeout)`, `pcli_wire_log(s, event)`. Adapter state fields set here: `turn_open`, `turn_timer`, `interrupt_id`, `interrupt_acked`, `served_run`, `n_req`. Test support: `stub_opts(gate = NULL, dispatch = NULL, ...)`, `stub_model(cli = "claude", id = NULL)`, `event_types(opts)`, `stub_process(pid = 4242L)`.
+- Produces (used by Tasks 5-10): `pcli_split(messages)` -> `list(prior, input)`; `pcli_unseen(prior, provider)` (the earlier messages after the last assistant message `provider` answered); `pcli_block_text(b)`, `pcli_message_text(m)`, `pcli_input_text(messages)`, `pcli_history_text(prior)`, `pcli_system_text(context)`; `pcli_scalar_num(x)`; `pcli_params(context)` -> `list(mode, turns, cost)` from `context$params$cli_mode`/`cli_budget` (default mode `"manual"`); `pcli_state(opts)`; `pcli_child(state)`; `pcli_alive(p)`; the weak child table `pcli_track(session, state)`, `pcli_tracked(session)`, `pcli_untrack(session)`; `pcli_request_id(state)` (`req_<n>_<8 hex>`, RNG-free); `pcli_control_request(state, request)`; `pcli_send(opts, obj)`; `pcli_stop_child(state, wait_ack = TRUE, grace = 2)`; the turn state `pcli_turn_new(model, opts)`, `pcli_aborted(s)`, `pcli_start(s, response_id = NULL)`, `pcli_text_block(s, text, kind = "text")`, `pcli_blocks(s)`, `pcli_message(s, stop_reason = "stop", usage = NULL, error_message = NULL, raw_stop_reason = NULL)`, `pcli_finish(s, msg, event)`, `pcli_done(s, usage, stop_reason = "stop", raw_stop_reason = NULL)`, `pcli_fail(s, class, message, reason = "error", status = NA_integer_, usage = NULL, retry_after = NULL)`, `pcli_turn_seconds()`, `pcli_turn_timer(s, on_timeout)`, `pcli_wire_log(s, event)`. Adapter state fields set here: `turn_open`, `turn_timer`, `interrupt_id`, `interrupt_acked`, `served_run`, `n_req`. Test support: `stub_opts(gate = NULL, dispatch = NULL, ...)`, `stub_model(cli = "claude", id = NULL)`, `event_types(opts)`, `stub_process(pid = 4242L)`.
 
 One CLI turn is one INFRA-02 stream (04 §4.5): one `start`, block events, exactly one terminal `done` or `error` carrying the partial message (04 §8.1: "Normalisers never signal R conditions after `start`"). Messages carry `route = "plan-cli"` and the request id. The child table maps a session id to its adapter state through `rlang::new_weakref()`: the session's live record owns the state (`opts$state` is the live record's `adapter` environment), so the table never keeps a session alive and a collected session's processx object cleans its child up; the table is a process table like P04's job table (03 §2.2 rule 5). `pcli_stop_child()` sends the claude interrupt control request only while a turn is open (07 §3.10: `interrupt` ends the turn cleanly), pumps the reactor with `allow_runs = character()` (no FIFO tool runs, IC-57) until the CLI acknowledges or `grace` seconds pass, forgets the child (`state$process = NULL`, so P05 routes none of its late lines or its exit, as P05's own `stream_abort()` does), closes its stdin with P04's `write_close()` (a claude CLI in stream-json mode exits at end of input, and so does the fake, which an R child blocked on stdin would otherwise ignore SIGINT for the whole grace period) and then calls `kill_all(p, grace = 1)`. `pcli_unseen()` serves cross-model continuity (REQ-34, 03 §8.3 "another model may have answered"): a reused claude child, a resumed claude session and a resumed Codex thread have seen the conversation only up to the last assistant message their own provider answered, so the messages after it (a turn answered by another model in between) travel as a `<conversation_history>` block. The wire log writes the fields of P04's `wire_log()` (`ts` in epoch seconds, `request_id`, `provider`, `model`, `url` as `cli:<name>`, `seconds`, `event`), redacted, never prompts or output.
 
@@ -1939,13 +1911,6 @@ pcli_stop_child = function(state, wait_ack = TRUE, grace = 2) {
   tryCatch(write_close(p), error = function(e) NULL)
   tryCatch(kill_all(p, grace = 1), error = function(e) NULL)
   invisible(TRUE)
-}
-
-#' Parse one output line when the transport did not (P05 passes `obj`)
-#' @noRd
-pcli_parse_line = function(x) {
-  if (!is.character(x) || length(x) != 1L || !nzchar(x)) return(NULL)
-  tryCatch(json_decode(x), error = function(e) NULL)
 }
 
 #' The state of one CLI turn (one INFRA-02 stream: one `start`, one terminal event)
@@ -3091,7 +3056,7 @@ pcli_claude_parse = function(model, opts) {
   pcli_turn_timer(s, function() pcli_claude_timeout(s))
 
   push = function(ev) {
-    obj = ev[["obj"]] %||% pcli_parse_line(ev[["data"]])
+    obj = ev[["obj"]]
     if (!is.list(obj)) return(s$done)
     type = obj[["type"]] %||% ""
     if (identical(type, "control_response")) {
@@ -3931,7 +3896,7 @@ pcli_codex_parse = function(model, opts) {
 
   push = function(ev) {
     if (s$done) return(TRUE)
-    obj = ev[["obj"]] %||% pcli_parse_line(ev[["data"]])
+    obj = ev[["obj"]]
     if (!is.list(obj)) return(FALSE)
     if (pcli_aborted(s)) {
       pcli_codex_error(s, "aborted", "The run was aborted.", reason = "aborted")
@@ -4155,7 +4120,7 @@ test_that("request_params ensures gptr's MCP server for a codex session, not for
   pcli_hook_params(list(provider = "codex"), stub_ctx())
   h = pcli_codex_mcp(list(session = "s00000000cc"))
   expect_identical(h$port, 54777L)
-  expect_identical(pcli_codex_env(h), c(GPTR_MCP_TOKEN = "tok-test-0123456789"))
+  expect_identical(h$env, c(GPTR_MCP_TOKEN = "tok-test-0123456789"))
 })
 ```
 
@@ -5050,7 +5015,7 @@ The plan contains no "TBD", "TODO", "implement later", "similar to Task N" or st
 
 ### Type and name consistency with 04
 
-- `builtin_cli(gptr)`, `cli_find(cli = c("claude", "codex"))`, `cli_version(path)`, `cli_probe(path)` have the 04 §7.20 signatures (contract aliases of `pcli_find()`, `pcli_version()`, `pcli_probe()`, tested in Tasks 1 and 2); providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` with `transport = "process_jsonl"` and `build`/`parse` of 04 §8.1.
+- `builtin_cli(gptr)` and `pcli_find(cli = c("claude", "codex"))`, `pcli_version(path)`, `pcli_probe(path)` have the 04 §7.20 signatures of `builtin_cli()`, `cli_find()`, `cli_version()`, `cli_probe()` (without aliases, D-144); providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` with `transport = "process_jsonl"` and `build`/`parse` of 04 §8.1.
 - Conditions: `gptr_error_cli_missing` (`cli`), `gptr_error_cli_version` (`cli`, `found`, `required`), `billing` as the class of the terminal error event (P06 turns it into `gptr_error_billing`/`gptr_error_provider`), `gptr_warning_billing_env` (raised by P03's `child_env()`), `gptr_message_notice`; plus the P20 addition `gptr_warning_cli_sandbox` (Global Constraints, ambiguity 4).
 - Options `gptr.cli_path`, `gptr.cli_turn_timeout` read through `gptr_opt()`; events and payloads of 04 §10.4; `ctx` members of 04 §10.6; adapter `opts` fields of 04 §8.1; message, usage and event shapes of 04 §4.2-4.5 (`route = "plan-cli"`).
 - Every function consumed from P01-P05 and P12 was taken from those plans' code (and executed, see below). P18 and P19 were checked against their plan files in the review of 2026-10-01: P18's `mcp_serve_ensure(session)` requires the `gptr_session` object (`check_class()`) and returns the handle whose `config$codex$env[[token_env]]` holds the token (P18 ambiguity 19); P19's `backend_cli_start()` passes the child session object to the same service and `subagent_backend(agent, model)` reads `model$type`; P06 passes `opts$session = <session id>` and `opts$mcp_dispatch = function(message)` bound to the session; P16 walks the files checkpointer at `turn_end` of `type = "cli"` sessions (P16 ambiguity 9); P08's `replay_guard()`/`egress_check()` govern the live tests.
@@ -5078,7 +5043,7 @@ The plan contains no "TBD", "TODO", "implement later", "similar to Task N" or st
 19. Claude child lifetime under a budget (UNCERTAIN CLI semantics, decided defensively). 03 §8.3 wants one long-lived child per session, and IC-65/IC-66 want `--max-turns`/`--max-budget-usd` set to the remaining budget of a budget that restarts with every top-level call. The flags are fixed at launch, and report 07 ran one query per process, so whether a stream-json child applies `--max-budget-usd` and reports `total_cost_usd` per query or per process is not verified; the 07 §3.14 capture points to the process (`total_cost_usd` equals `modelUsage.costUSD`, whose 946 input tokens include the CLI's auxiliary calls, against `usage`'s 20). P20 therefore (a) reuses a child that carries budget flags only within the run that started it: the next run retires it and resumes the CLI session (`--resume`, the same system-prompt file) with fresh flags, and `agent_end` retires it at once; a child without budget flags lives across runs, as 03 §8.3 describes; and (b) records a turn's cost as the increase of `total_cost_usd` since the child's previous result (`pcli_claude_cost()`; a smaller value counts whole). Under the default budget (`cost: 5`) each top-level call therefore starts one claude process. Should a live check show per-query semantics, the reuse rule can drop its run condition; the cost rule is then wrong only for a later turn that costs more than the previous one on the same child.
 20. Codex's top-level `error` event is treated as non-terminal (the verified driver of 08 §5.1 records it and decides at `turn.failed` or the exit). Codex reports transient problems such as stream reconnects through it (UNCERTAIN for the 0.157.0 schema; non-terminal handling is the safe reading either way: a fatal error is followed by `turn.failed` or the exit, and the per-exec wall clock bounds a hang).
 21. Cross-model continuity (REQ-34): a reused claude child, a resumed claude session and a resumed Codex thread get the turns after the last assistant message their own provider answered as a `<conversation_history>` block (`pcli_unseen()`), so turns answered by another model in between are not lost.
-22. 04 is internally inconsistent on names: §7.20 names `cli_version(path)` and `cli_probe(path)`, while §12.3's lint rule (IC-72; P01's `lint_call_rule()`) flags every unqualified `cli_*()` call in `R/` whose first argument is not a literal, which any call of those two functions is. P20 keeps the §7.20 names as one-line aliases (tested) and implements and calls everything under the prefix `pcli_`, so P01's lint test stays green without a change to P01. P18's prose (its ambiguity 19) still names the reader `cli_codex_env()`, now `pcli_codex_env()`; P18 has no code that calls it.
+22. 04 is internally inconsistent on names: §7.20 names `cli_version(path)` and `cli_probe(path)`, while §12.3's lint rule (IC-72; P01's `lint_call_rule()`) flags every unqualified `cli_*()` call in `R/` whose first argument is not a literal, which any call of those two functions is. P20 implements and calls everything under the prefix `pcli_` (the §7.20 names had one-line aliases until the simplicity package P20-S removed them, D-144), so P01's lint test stays green without a change to P01. P18's prose (its ambiguity 19) still names the reader `cli_codex_env()`, now `pcli_codex_env()`; P18 has no code that calls it.
 
 ### Validation executed
 
@@ -5124,3 +5089,4 @@ Issues raised by the cross-plan checkers (2026-10-01), verified against 04 (§2.
 | F1 | finalize | minor | Task 1 `tests/testthat/fixtures/cli/local-fake-cli.R`, header comment | applied | `commented_code_linter` (consolidation lint `P20_L00130.R:3`): the header quoted the sourcing call `source(testthat::test_path(...), local = TRUE)` on a comment line of its own, which parses as code. The header is now prose ("Each test-cli-*.R file sources it as its first statement, with local = TRUE, from the path testthat::test_path("fixtures", "cli", "local-fake-cli.R") ..."), one line shorter; the call itself stays in the three test files. No code, test or count change. |
 | F2 | finalize | minor | Task 2 `inst/gptr/fixtures/fake_cli.R`, definition of `` `%\|\|%` `` | applied | `object_name_linter` (consolidation lint `P20_L00505.R:26`): not renamed, because the infix name is fixed (an operator, the same name as P01's `R/aaa-state.R` helper, which carries the same nolint). The fake runs as a standalone `Rscript --vanilla` script, where gptr's internal `%\|\|%` is not visible and base R (>= 4.2.0 per DESCRIPTION) has one only from 4.4.0, so the script keeps its own definition; the line now ends `# nolint: object_name_linter.` and a comment line above gives the reason. No other plan calls the fake's copy (it is a script, not a function of the namespace). No behaviour, test or count change. |
 | F3 | finalize | minor | Task 3 `R/cli-common.R`, roxygen of `pcli_fake_provider()` | applied | `commented_code_linter` (consolidation lint `P20_L01322.R:105`): the roxygen line `#' options(gptr.cli_path) like the real CLIs'` parsed as a single-quoted string after the `#`. Reworded to "like the real CLIs, it takes its command from options(gptr.cli_path)" (same meaning). Lint of all 34 P20 `r` blocks with P01's linters (`indentation_linter = NULL`; `object_usage_linter = NULL` for standalone blocks): 0 lints; every block re-extracted and parsed under `Rscript --vanilla` (0 errors, no `<-` or `%>%`, ASCII, no line over 100 characters). No test or count change. |
+| C3 | contract-names | minor | Global Constraints; Tasks 1-2 Produces; ambiguity 22 | recorded (2026-10-05) | The simplicity package P20-S (D-144) removed the aliases `cli_find`, `cli_version` and `cli_probe`, so `build_index.py` warns 6 times that 04 §7.20 (lines 2890-2897, 4669) and this plan's prose name functions no plan defines. They stay until 04 §7.20 names the `pcli_*` implementations (00-index row "04 text to correct"). |
