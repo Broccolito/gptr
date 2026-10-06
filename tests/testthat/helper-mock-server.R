@@ -166,3 +166,12 @@ local_mock_server = function(scenario, ..., .env = parent.frame()) {
     provider = mock_provider(scenario, url)
   )
 }
+
+# A streaming request spec for the mock server (its `url` carries the per-run token); `...`
+# overrides fields
+mock_spec = function(srv, ...) {
+  utils::modifyList(list(url = paste0(srv$url, "/v1/messages"), method = "POST",
+         headers = list(`content-type` = "application/json", accept = "text/event-stream"),
+         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse"),
+    list(...))
+}

@@ -7,13 +7,3 @@ put_file = function(root, rel, content = "x\n") {
   writeBin(if (is.raw(content)) content else charToRaw(content), p)
   p
 }
-
-# Bind a service for the calling test only (the entry in the bootstrap table is restored afterwards)
-local_service = function(name, fun, .env = parent.frame()) {
-  old = the$services[[name]]
-  withr::defer({
-    the$services[[name]] = old
-  }, envir = .env)
-  ext_service_set(name, fun, provided_by = "test")
-  invisible(fun)
-}

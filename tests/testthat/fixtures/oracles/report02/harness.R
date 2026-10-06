@@ -49,13 +49,6 @@ local_policy = function(name, check, .env = parent.frame()) {
   invisible(NULL)
 }
 
-#' Provide or replace a service through the registry's `service` kind (IC-34)
-local_service = function(name, fun, .env = parent.frame()) {
-  id = registry_add(gptr_spec("service", name, fun = fun), source = "user", rank = 3L)
-  withr::defer(registry_remove(id), envir = .env)
-  invisible(id)
-}
-
 #' Hide bootstrap services of later plans for the calling test (the fallbacks of 04 section 7.0)
 #'
 #' P07, P11, ... register their services in P01's bootstrap table from on_load(), so in the full

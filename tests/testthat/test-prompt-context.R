@@ -1,18 +1,5 @@
 # P07 Task 5: context blocks, the first user message and per-turn blocks.
 
-p07_session = function(mode = "auto", .env = parent.frame()) {
-  local_fake_provider(list("ok"), .env = .env)
-  session_new("fake/fake-1", mode, home = new.env())
-}
-
-p07_project = function(files, .env = parent.frame()) {
-  local_project(files = files, .env = .env)
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd(), .local_envir = .env)
-  getwd()
-}
-
-kinds = function(blocks) vapply(blocks, function(b) b$kind %||% b$type, "")
-
 append_user = function(s, blocks, prompt) {
   session_append(s, list(type = "message",
                          message = msg_user(c(blocks, list(block_text(prompt))))))
@@ -125,8 +112,8 @@ test_that("the first message follows architecture 7.4 with the anchor on the pro
                    ".gptr/vignette.Rmd" = "# Project\n- data in data/"))
   s = p07_session("manual")
   b = context_first_message(s, list(call = mtcars_call(), turn = 1L, prompt = "hi"))
-  expect_identical(kinds(b)[1:4], c("project_instructions", "project_instructions",
-                                    "environment", "mode"))
+  expect_identical(block_kinds(b)[1:4], c("project_instructions", "project_instructions",
+                                          "environment", "mode"))
   expect_true(isTRUE(b[[2]]$anchor))
   expect_false(isTRUE(b[[1]]$anchor))
   expect_identical(b[[1]]$text, paste0("<project_instructions path=\"AGENTS.md\" ",
@@ -141,7 +128,7 @@ test_that("session_start blocks follow the registered blocks of the first messag
   s = p07_session()
   start = list(blocks = list(block_context("lab", "cohort B"), "plain note"))
   b = context_first_message(s, list(turn = 1L, start = start))
-  k = kinds(b)
+  k = block_kinds(b)
   expect_identical(k[(length(k) - 1L):length(k)], c("lab", "text"))
 })
 
@@ -238,16 +225,16 @@ test_that("an unchanged turn block is sent once; a changed one again (IC-38)", {
   withr::defer(off())
   s = p07_session()
   first = context_first_message(s, list(turn = 1L, prompt = "one"))
-  expect_true("lab" %in% kinds(first))
+  expect_true("lab" %in% block_kinds(first))
   append_user(s, first, "one")
   expect_length(context_turn_blocks(s, list(turn = 2L, prompt = "two")), 0L)
   box$text = "cohort C only"
   t3 = context_turn_blocks(s, list(turn = 3L, prompt = "three"))
-  expect_identical(kinds(t3), "lab")
+  expect_identical(block_kinds(t3), "lab")
   append_user(s, t3, "three")
   session_set_mode(s, "edits")
   t4 = context_turn_blocks(s, list(turn = 4L, prompt = "four"))
-  expect_identical(kinds(t4), "mode")
+  expect_identical(block_kinds(t4), "mode")
   expect_identical(t4[[1]]$attrs$name, "edits")
 })
 
@@ -270,7 +257,7 @@ test_that("a mode the kernel announced mid-run is not sent again as a turn block
   # the session kernel's shape of the operator mode note (P06 entry_message())
   session_append(s, list(type = "custom_message", custom_type = "gptr.operator",
                          message = msg_operator("mode", mode[[1]]$text)))
-  expect_false("mode" %in% kinds(context_turn_blocks(s, list(turn = 2L))))
+  expect_false("mode" %in% block_kinds(context_turn_blocks(s, list(turn = 2L))))
 })
 
 test_that("a changed instruction file is announced once as project_instructions_update", {
@@ -279,7 +266,7 @@ test_that("a changed instruction file is announced once as project_instructions_
   first = context_first_message(s, list(turn = 1L, prompt = "one"))
   append_user(s, first, "one")
   expect_false("project_instructions_update" %in%
-                 kinds(context_turn_blocks(s, list(turn = 2L))))
+                 block_kinds(context_turn_blocks(s, list(turn = 2L))))
   writeLines("- rule two", file.path(root, "AGENTS.md"))
   t2 = context_turn_blocks(s, list(turn = 2L))
   upd = Filter(function(b) identical(b$kind, "project_instructions_update"), t2)
@@ -289,7 +276,7 @@ test_that("a changed instruction file is announced once as project_instructions_
                                          "</project_instructions_update>"))
   append_user(s, t2, "two")
   expect_false("project_instructions_update" %in%
-                 kinds(context_turn_blocks(s, list(turn = 3L))))
+                 block_kinds(context_turn_blocks(s, list(turn = 3L))))
 })
 
 test_that("a project file dropped at compaction is announced again only when it changes", {
@@ -306,10 +293,10 @@ test_that("a project file dropped at compaction is announced again only when it 
                          usage = NULL, gptr = list(blocks = list(block_text("c")),
                                                    state = list(), n = 1L)))
   expect_false("project_instructions_update" %in%
-                 kinds(context_turn_blocks(s, list(turn = 2L))))
+                 block_kinds(context_turn_blocks(s, list(turn = 2L))))
   writeLines("- rule two", file.path(root, "AGENTS.md"))
   expect_true("project_instructions_update" %in%
-                kinds(context_turn_blocks(s, list(turn = 2L))))
+                block_kinds(context_turn_blocks(s, list(turn = 2L))))
 })
 
 test_that("blocks the transcript stores redacted are deduplicated all the same (IC-38)", {
@@ -343,7 +330,7 @@ test_that("blocks the transcript stores redacted are deduplicated all the same (
   writeLines(paste("- set", sub("abcdef", "zyxwvu", key, fixed = TRUE), "in ~/.Renviron"),
              file.path(root, "AGENTS.md"))
   t4 = context_turn_blocks(s, list(turn = 4L))
-  expect_identical(kinds(t4), "project_instructions_update")
+  expect_identical(block_kinds(t4), "project_instructions_update")
   append_user(s, t4, "four")
   expect_length(context_turn_blocks(s, list(turn = 5L)), 0L)
 })
@@ -355,7 +342,7 @@ test_that("operator-authority blocks are queued as operator messages, not user b
   withr::defer(off())
   s = p07_session()
   b = context_turn_blocks(s, list(turn = 2L, prompt = "x"))
-  expect_false("budget_note" %in% kinds(b))
+  expect_false("budget_note" %in% block_kinds(b))
   q = get0("prompt_pending", envir = session_live(s)$memo, inherits = FALSE)
   expect_identical(q[[1]]$kind, "reminder")
   expect_match(msg_text(q[[1]]), "<budget_note>\n80% used\n</budget_note>", fixed = TRUE)
@@ -371,7 +358,7 @@ test_that("a failing provide() omits its block and records a diagnostic", {
   withr::defer(off())
   s = p07_session()
   b = context_first_message(s, list(turn = 1L))
-  expect_false("broken" %in% kinds(b))
+  expect_false("broken" %in% block_kinds(b))
   d = gptr_registry(diagnostics = TRUE)
   expect_true(any(d$source == "context_block:broken"))
 })

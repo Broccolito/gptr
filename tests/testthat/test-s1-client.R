@@ -940,7 +940,7 @@ test_that("System 1 emits a decision event and writes one summary line at top le
   withr::defer(off())
   lines = new.env()
   lines$summary = character()
-  s1_local_service("doc.s1_block", function(call, summary) {
+  local_service("doc.s1_block", function(call, summary) {
     lines$summary = c(lines$summary, summary)
     invisible(NULL)
   })

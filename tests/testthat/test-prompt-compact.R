@@ -47,7 +47,7 @@ test_that("compact_at comes from the settings service; a null setting disables t
 
 # ---- Task 12: harness state and the checkpoint body ---------------------------------------------
 
-p07_session = function(script = list("ok"), mode = "auto", .env = parent.frame()) {
+compact_session = function(script = list("ok"), mode = "auto", .env = parent.frame()) {
   fake = local_fake_provider(script, .env = .env)
   list(s = session_new("fake/fake-1", mode, home = new.env()), fake = fake)
 }
@@ -71,7 +71,7 @@ test_that("compact_assigned_names finds every assignment form with the code as w
 })
 
 test_that("extract_state collects the harness state of a transcript", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("cluster the cells"))
   calls = list(block_tool_call("c1", "r", list(code = "pbmc = f(pbmc)")),
@@ -104,7 +104,7 @@ test_that("extract_state collects the harness state of a transcript", {
 })
 
 test_that("a failed r call contributes no objects", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_tool_result("c1", "r", "Error", is_error = TRUE,
                                details = list(code = "bad = stop('x')", status = "error")))
@@ -112,7 +112,7 @@ test_that("a failed r call contributes no objects", {
 })
 
 test_that("the state of an earlier compaction is merged under the newer one", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   old = compact_state_empty()
   old$user = "first request"
@@ -165,7 +165,7 @@ test_that("the checkpoint body follows G4 section 3.6", {
 })
 
 test_that("objects stay oldest first across reassignment and compaction; oldest dropped", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   old = compact_state_empty()
   old$objects = list(p = "p = 1", q = "q = 1")
@@ -190,7 +190,7 @@ test_that("objects stay oldest first across reassignment and compaction; oldest 
 })
 
 test_that("shapes come from the session's workspace snapshot; unforced bindings give ?", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   expect_identical(compact_shapes(NULL), list())
   expect_identical(compact_shapes(s), list())
@@ -338,9 +338,8 @@ test_that("the compaction request is G4's text with an optional focus", {
 })
 
 test_that("compact_run appends one compaction entry built from the checkpoint reply", {
-  local_project(files = list("AGENTS.md" = "- rule"))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
-  x = p07_session(list("## Goal\n- cluster pbmc\n## Progress\n- done"), mode = "manual")
+  p07_project(list("AGENTS.md" = "- rule"))
+  x = compact_session(list("## Goal\n- cluster pbmc\n## Progress\n- done"), mode = "manual")
   s = x$s
   prompt_freeze(s, list(interactive = FALSE))
   blocks = context_first_message(s, list(turn = 1L, prompt = "cluster"))
@@ -365,7 +364,7 @@ test_that("compact_run appends one compaction entry built from the checkpoint re
   cmp = compactions(s)
   expect_length(cmp, 1L)
   e = cmp[[1]]
-  k = vapply(e$gptr$blocks, function(b) b$kind %||% b$type, "")
+  k = block_kinds(e$gptr$blocks)
   expect_identical(k[1:4], c("project_instructions", "environment", "checkpoint", "mode"))
   expect_identical(k[length(k)], "text")
   expect_identical(e$gptr$blocks[[1]], blocks[[1]])
@@ -390,7 +389,7 @@ test_that("compact_run appends one compaction entry built from the checkpoint re
 })
 
 test_that("the checkpoint request does not replace the guard's view of the model", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   target = model_resolve("fake/fake-1")
@@ -402,7 +401,7 @@ test_that("the checkpoint request does not replace the guard's view of the model
 })
 
 test_that("a cold compaction the kernel requests as threshold is recorded as cold", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   expect_identical(attr(compact_should(s, tokens = 150000, idle_s = 400), "reason"), "cold")
@@ -411,9 +410,8 @@ test_that("a cold compaction the kernel requests as threshold is recorded as col
 })
 
 test_that("after a compaction the request starts with the reused project block", {
-  local_project(files = list("AGENTS.md" = "- rule"))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
-  x = p07_session(list("## Goal\n- g"), mode = "manual")
+  p07_project(list("AGENTS.md" = "- rule"))
+  x = compact_session(list("## Goal\n- g"), mode = "manual")
   s = x$s
   prompt_freeze(s, list(interactive = FALSE))
   blocks = context_first_message(s, list(turn = 1L, prompt = "go"))
@@ -428,9 +426,8 @@ test_that("after a compaction the request starts with the reused project block",
 })
 
 test_that("a project block over the re-injection budget is dropped and recorded (IC-71)", {
-  local_project(files = list("AGENTS.md" = "- rule"))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
-  x = p07_session(list("## Goal\n- g"), mode = "manual")
+  p07_project(list("AGENTS.md" = "- rule"))
+  x = compact_session(list("## Goal\n- g"), mode = "manual")
   s = x$s
   prompt_freeze(s, list(interactive = FALSE))
   blocks = context_first_message(s, list(turn = 1L, prompt = "go"))
@@ -439,13 +436,13 @@ test_that("a project block over the re-injection budget is dropped and recorded 
   d$frozen$reinject = list(project = 0, skills = 10000)
   compact_run(s, "manual")
   e = compactions(s)[[1]]
-  k = vapply(e$gptr$blocks, function(b) b$kind %||% b$type, "")
+  k = block_kinds(e$gptr$blocks)
   expect_false("project_instructions" %in% k)
   expect_identical(e$details$dropped$AGENTS.md, hash_sha256(blocks[[1]]$text))
 })
 
 test_that("a session_before_compact hook can cancel or supply the result", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
   off = gptr_register(gptr_hook("session_before_compact",
@@ -468,7 +465,7 @@ test_that("a session_before_compact hook can cancel or supply the result", {
 })
 
 test_that("a checkpoint reply that calls a tool is rejected and asked again", {
-  x = p07_session(list(fake_tool("r", code = "1"), "## Goal\n- second try"))
+  x = compact_session(list(fake_tool("r", code = "1"), "## Goal\n- second try"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   compact_run(s, "manual")
@@ -477,7 +474,7 @@ test_that("a checkpoint reply that calls a tool is rejected and asked again", {
 })
 
 test_that("an error reply is not retried; the checkpoint keeps the harness state", {
-  x = p07_session(list(fake_error("overloaded", status = 400L), "never asked"))
+  x = compact_session(list(fake_error("overloaded", status = 400L), "never asked"))
   s = x$s
   msg_entry(s, msg_user("keep this request"))
   compact_run(s, "overflow")
@@ -489,7 +486,7 @@ test_that("an error reply is not retried; the checkpoint keeps the harness state
 })
 
 test_that("compact_should applies the threshold, the growth rule and the cold rule", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
   expect_false(compact_should(s, tokens = 1000, idle_s = 0))
@@ -515,7 +512,7 @@ test_that("the checkpoint compactor and the compaction services are registered",
 })
 
 test_that("INFRA-26: an overflow triggers exactly one compaction and one retry", {
-  x = p07_session(list(list(overflow = TRUE), "## Goal\n- checkpoint", "done"))
+  x = compact_session(list(list(overflow = TRUE), "## Goal\n- checkpoint", "done"))
   s = x$s
   session_run(s, msg_user("hello"), list(max_turns = 3L))
   expect_length(compactions(s), 1L)
@@ -524,7 +521,7 @@ test_that("INFRA-26: an overflow triggers exactly one compaction and one retry",
 })
 
 test_that("INFRA-26: a second overflow after the retry surfaces as an error", {
-  x = p07_session(list(list(overflow = TRUE), "## Goal\n- checkpoint", list(overflow = TRUE)))
+  x = compact_session(list(list(overflow = TRUE), "## Goal\n- checkpoint", list(overflow = TRUE)))
   s = x$s
   session_run(s, msg_user("hello"), list(max_turns = 3L))
   expect_length(compactions(s), 1L)
@@ -534,15 +531,8 @@ test_that("INFRA-26: a second overflow after the retry surfaces as an error", {
 
 # ---- Task 13 adaptations ------------------------------------------------------------------------
 
-# A registry `service` record for the calling test (IC-34), as P06's tests provide services
-compact_local_service = function(name, fun, .env = parent.frame()) {
-  id = registry_add(gptr_spec("service", name, fun = fun), source = "user", rank = 3L)
-  withr::defer(registry_remove(id), envir = .env)
-  invisible(id)
-}
-
 test_that("compaction events carry the event envelope of contract 4.5", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   seen = new.env()
@@ -577,7 +567,7 @@ test_that("compaction events carry the event envelope of contract 4.5", {
 })
 
 test_that("inside a run the checkpoint request uses the run's model and safety record", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   rec = model_resolve("fake/fake-1")
@@ -612,14 +602,14 @@ test_that("inside a run the checkpoint request uses the run's model and safety r
 })
 
 test_that("a router session outside a run asks router.call for the compaction model", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   d = session_data(s)
   d$model = "router:demo"
   expect_false(compact_should(s, tokens = 175000, idle_s = 0))
   seen = new.env()
-  compact_local_service("router.call", function(s, reason) {
+  local_service("router.call", function(s, reason) {
     seen$reason = c(seen$reason, reason)
     list(model = "fake/fake-1", thinking = NULL, state = NULL)
   })
@@ -628,7 +618,7 @@ test_that("a router session outside a run asks router.call for the compaction mo
 })
 
 test_that("a checkpoint request that cannot start leaves the harness state alone", {
-  x = p07_session(list("never asked"))
+  x = compact_session(list("never asked"))
   s = x$s
   msg_entry(s, msg_user("keep this request"))
   local_mocked_bindings(provider_stream = function(model, context, opts, emit, done,
@@ -644,7 +634,7 @@ test_that("a checkpoint request that cannot start leaves the harness state alone
 })
 
 test_that("an empty checkpoint reply is asked again", {
-  x = p07_session(list(list(text = ""), "## Goal\n- second try"))
+  x = compact_session(list(list(text = ""), "## Goal\n- second try"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   compact_run(s, "manual")
@@ -653,7 +643,7 @@ test_that("an empty checkpoint reply is asked again", {
 })
 
 test_that("the continuation line repeats a long latest request whole", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   # keep_recent = 0: the continuation line is the only copy of the unanswered request the model
   # sees after the compaction; only the checkpoint's <user_messages> list has the 2,000 budget
@@ -675,7 +665,7 @@ test_that("the continuation line repeats a long latest request whole", {
 })
 
 test_that("a compaction without a resolvable model records its token count as unknown", {
-  x = p07_session(list("never asked"))
+  x = compact_session(list("never asked"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   d = session_data(s)
@@ -710,7 +700,7 @@ test_that("a compaction without a resolvable model records its token count as un
 })
 
 test_that("a malformed hook result runs the compactor; harness details fields win", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   local({
@@ -741,7 +731,7 @@ test_that("a malformed hook result runs the compactor; harness details fields wi
 })
 
 test_that("a failing plugin compactor falls back to the checkpoint compactor", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   seen = new.env()
@@ -770,7 +760,7 @@ test_that("a failing plugin compactor falls back to the checkpoint compactor", {
 })
 
 test_that("compact_should takes unknown counts as no evidence; compact_run checks its reason", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
   expect_false(compact_should(s, tokens = NA, idle_s = 0))
@@ -784,7 +774,7 @@ test_that("compact_should takes unknown counts as no evidence; compact_run check
 # ---- Task 13 review fixes (round 1) -------------------------------------------------------------
 
 test_that("tool additions and section patches are re-announced after a compaction", {
-  x = p07_session(list("## Goal\n- g", "## Goal\n- again"))
+  x = compact_session(list("## Goal\n- g", "## Goal\n- again"))
   s = x$s
   prompt_freeze(s, list(interactive = FALSE))
   msg_entry(s, msg_user("hi"))
@@ -834,13 +824,13 @@ test_that("tool additions and section patches are re-announced after a compactio
 })
 
 test_that("an overflow compaction inside a run asks the router for its model (IC-69)", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
   d = session_data(s)
   d$model = "router:demo"
   seen = new.env()
-  compact_local_service("router.call", function(s, reason) {
+  local_service("router.call", function(s, reason) {
     seen$reason = c(seen$reason, reason)
     list(model = "fake/fake-1", thinking = NULL, state = NULL)
   })
@@ -874,7 +864,7 @@ test_that("an overflow compaction inside a run asks the router for its model (IC
 })
 
 test_that("a result whose state is not a list keeps the harness state", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("keep me"))
   local({
@@ -900,7 +890,7 @@ test_that("a result whose state is not a list keeps the harness state", {
 test_that("a run aborted while the checkpoint reply is awaited cancels it and records nothing", {
   # Review round 3: a real P06 abort settles the run, and run_settle() clears live$run, so the
   # halted state is read from the run the compaction started under
-  x = p07_session(list("first answer", "second answer"))
+  x = compact_session(list("first answer", "second answer"))
   s = x$s
   long = paste(sprintf("w%04d", 1:3000), collapse = " ")
   session_run(s, msg_user(long), list(max_turns = 2L))
@@ -940,8 +930,8 @@ test_that("a run aborted while the checkpoint reply is awaited cancels it and re
 })
 
 test_that("the compaction's usage sums every checkpoint attempt", {
-  x = p07_session(list(list(text = "", usage = fake_usage(100, 5)),
-                       list(text = "## Goal\n- ok", usage = fake_usage(120, 7))))
+  x = compact_session(list(list(text = "", usage = fake_usage(100, 5)),
+                           list(text = "## Goal\n- ok", usage = fake_usage(120, 7))))
   s = x$s
   msg_entry(s, msg_user("hi"))
   compact_run(s, "manual")
@@ -954,7 +944,7 @@ test_that("the compaction's usage sums every checkpoint attempt", {
 })
 
 test_that("operator messages a result keeps (first_kept_entry_id) are not announced twice", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
   prompt_section_patch(s, "rules", "OLD RULE")
@@ -983,7 +973,7 @@ test_that("operator messages a result keeps (first_kept_entry_id) are not announ
 test_that("the continuation repeats the images of the latest request", {
   # keep_recent = 0: at a threshold compaction the new prompt exists only in the compaction, so
   # its image must ride with the continuation line, also through a later compaction
-  x = p07_session(list("first answer", "## Goal\n- g", "second answer", "## Goal\n- again"))
+  x = compact_session(list("first answer", "## Goal\n- g", "second answer", "## Goal\n- again"))
   s = x$s
   long = paste(sprintf("w%04d", 1:3000), collapse = " ")
   session_run(s, msg_user(long), list(max_turns = 2L))
@@ -1022,7 +1012,7 @@ test_that("the continuation repeats the images of the latest request", {
 })
 
 test_that("only the latest request's images are repeated; tokens_after counts images", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   img = block_image("AAAA", source = "user", width = 768L, height = 512L)
   msg_entry(s, msg_user(list(img, block_text("look at this"))))
@@ -1049,7 +1039,7 @@ test_that("only the latest request's images are repeated; tokens_after counts im
 })
 
 test_that("a reason given as the whole choice vector is recorded as its first choice", {
-  x = p07_session(list("## Goal\n- g"))
+  x = compact_session(list("## Goal\n- g"))
   s = x$s
   msg_entry(s, msg_user("hi"))
   seen = new.env()
@@ -1064,7 +1054,7 @@ test_that("a reason given as the whole choice vector is recorded as its first ch
 })
 
 test_that("a checkpoint reply without a usage record makes the summed usage unknown", {
-  x = p07_session()
+  x = compact_session()
   s = x$s
   msg_entry(s, msg_user("hi"))
   n = new.env()

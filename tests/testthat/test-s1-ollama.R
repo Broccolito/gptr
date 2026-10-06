@@ -39,17 +39,6 @@ clef_record = function(...) {
   utils::modifyList(base, list(...))
 }
 
-# Settings come from P08's layers; these tests pin them by mocking the one reader, as P05's do
-local_settings = function(..., .env = parent.frame()) {
-  values = list(...)
-  testthat::local_mocked_bindings(
-    setting_get = function(key, session = NULL, default = NULL) {
-      if (key %in% names(values)) values[[key]] else default
-    },
-    .env = .env
-  )
-}
-
 # The installed models of a synthetic native Ollama server: /api/tags and /api/show answers
 ollama_models = function(digest = strrep("2", 64)) {
   list(

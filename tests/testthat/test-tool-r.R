@@ -174,7 +174,7 @@ test_that("the risk of r comes from the risk.classify service, level 2 before it
   call = list(name = "r", tool = registry_get("tool", "r"), input = list(code = "1 + 1"))
   if (!ext_service_has("risk.classify")) expect_identical(call_risk(call, NULL, run)$level, 2L)
   seen = new.env()
-  local_service("risk.classify", function(code, envir = NULL, root = NULL, kind = "r") {
+  local_bootstrap_service("risk.classify", function(code, envir = NULL, root = NULL, kind = "r") {
     seen$envir = envir
     list(level = 0L, categories = "read", paths = character(), kind = kind)
   })

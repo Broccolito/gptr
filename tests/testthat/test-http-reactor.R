@@ -502,15 +502,6 @@ test_that("wire default and fallback paths reject escaping symlinks", {
   expect_false(file.exists(target))
 })
 
-# A request spec for the mock server (P01's local_mock_server() answers every path under its
-# `url`, which carries the per-run token)
-mock_spec = function(srv, ...) {
-  utils::modifyList(list(url = paste0(srv$url, "/v1/messages"), method = "POST",
-         headers = list(`content-type` = "application/json", accept = "text/event-stream"),
-         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse"),
-    list(...))
-}
-
 # Start a transfer whose bytes go through sse_splitter(); returns its state environment
 # (`arrivals`/`t_end` on the reactor clock, `walls`/`wall_end` on the wall clock the mock logs)
 start_transfer = function(spec, provider = NULL, retry = NULL, run = NULL) {

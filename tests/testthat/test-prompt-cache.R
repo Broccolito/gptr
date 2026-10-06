@@ -1,16 +1,5 @@
 # P07 Tasks 10-11: request assembly, cache plans, the gap-based tail TTL and the prefix guard.
 
-p07_session = function(mode = "auto", .env = parent.frame()) {
-  local_fake_provider(list("ok"), .env = .env)
-  session_new("fake/fake-1", mode, home = new.env())
-}
-
-p07_project = function(files, .env = parent.frame()) {
-  local_project(files = files, .env = .env)
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd(), .local_envir = .env)
-  getwd()
-}
-
 # Freeze, then append a user message led by the first-message context blocks.
 p07_first_turn = function(s, prompt = "hello", call = NULL) {
   prompt_freeze(s, list(interactive = FALSE))

@@ -2,9 +2,8 @@
 # P22, P23): the direct tools (Anthropic schemas of contract 9.2, snippets and guidelines of
 # architecture 7.3), the r_session fragments and the documents, artifacts, system1, skills and
 # r_env sections, all copied from the specification into prefix-baseline.json (`standins`).
-# Sourced by test-prompt-sections.R, test-bench-context.R, test-prompt-cache.R and
-# dev/bench/tokens/run.R, so that P07's composition of architecture 7.3 can be checked before
-# the owners exist.
+# Sourced by helper-p07.R and dev/bench/tokens/run.R, so that P07's composition of architecture
+# 7.3 can be checked before the owners exist.
 
 # The `r` tool's four schema variants (IC-68), built from its full schema: `record` and `note`
 # only with a bound document, `timeout` (with the short description) only without a human.

@@ -263,7 +263,7 @@ test_that("a bound history document is edited through the doc.edit service", {
   f = file.path(td, "analysis.R")
   writeBin(charToRaw("x = 1\n"), f)
   calls = new.env()
-  local_service("doc.edit", function(path, edits, session) {
+  local_bootstrap_service("doc.edit", function(path, edits, session) {
     calls$path = path
     gptr_tool_result("Successfully replaced 1 block(s) in analysis.R.",
                      details = list(path = path, n_edits = 1L, fuzzy = FALSE, diff = character(),
@@ -302,7 +302,7 @@ test_that("an edit the document backend refuses signals gptr_error_tool", {
   f = file.path(td, "analysis.R")
   writeBin(charToRaw("x = 1\n"), f)
   msg = "Block abc of analysis.R was edited by hand; it was left unchanged."
-  local_service("doc.edit", function(path, edits, session) {
+  local_bootstrap_service("doc.edit", function(path, edits, session) {
     gptr_tool_result(msg, details = list(path = path, document = TRUE), is_error = TRUE)
   })
   cnd = tryCatch(member_edit(f, list(list(oldText = "x = 1", newText = "x = 2"))),
@@ -652,7 +652,7 @@ test_that("search sources get a gptr_ctx; a failing source is skipped with a dia
 })
 
 test_that("skills and MCP tools are searched from their catalog texts", {
-  local_service("skill.catalog", function(session, budget) {
+  local_bootstrap_service("skill.catalog", function(session, budget) {
     paste(c("<skills>",
             "Skills hold specialized instructions. Read SKILL.md with the read tool.",
             paste("- high-performance-r: Fast data work in R: data.table, arrow, duckdb.",
@@ -661,7 +661,7 @@ test_that("skills and MCP tools are searched from their catalog texts", {
                   "[skill:shiny-bslib/SKILL.md]"),
             "</skills>"), collapse = "\n")
   })
-  local_service("mcp.catalog", function(session, budget) {
+  local_bootstrap_service("mcp.catalog", function(session, budget) {
     paste(c("<mcp>",
             "MCP tools are R functions called inside r as peter$mcp$<server>$<tool>(...).",
             "github: 2 tools, 2 shown",
@@ -683,10 +683,10 @@ test_that("skills and MCP tools are searched from their catalog texts", {
     "peter$mcp$github$search_issues(query: string, perPage?: integer)",
     " # Search issues and pull requests."
   ))
-  local_service("skill.catalog", function(session, budget) stop("no skills"))
-  local_service("mcp.catalog", function(session, budget) NULL)
+  local_bootstrap_service("skill.catalog", function(session, budget) stop("no skills"))
+  local_bootstrap_service("mcp.catalog", function(session, budget) NULL)
   expect_identical(nrow(member_search("bslib cards pull requests")), 0L)
-  local_service("skill.catalog", function(session, budget) character())
+  local_bootstrap_service("skill.catalog", function(session, budget) character())
   expect_identical(nrow(member_search("bslib cards")), 0L)
 })
 
@@ -723,7 +723,7 @@ test_that("peter$search() indexes text that is not valid UTF-8 instead of failin
   expect_true(startsWith(res$name, "bytes9/caf"))
   expect_identical(nrow(member_search(paste(bad, "bytesentinel9"))), 1L)
   expect_true(all(c("caf", "search") %in% bm25_tokenize(paste0(bad, "Search"))))
-  local_service("skill.catalog", function(session, budget) {
+  local_bootstrap_service("skill.catalog", function(session, budget) {
     paste(c("<skills>",
             paste0("- r", e9, "sum", e9, ": Write a CV in R. [skill:resume/SKILL.md]"),
             paste("- shiny-bslib: Build Shiny apps with bslib layouts (page_sidebar, cards).",

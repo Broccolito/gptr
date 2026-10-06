@@ -151,7 +151,7 @@ test_that("skill:<name>/<path> resolves inside the skill directory only (IC-68)"
   td = withr::local_tempdir()
   put_file(td, "sk/references/a.md", "reference text")
   put_file(td, "sk/SKILL.md", "---\nname: demo\n---\nbody")
-  local_service("skill.body", function(name) {
+  local_bootstrap_service("skill.body", function(name) {
     if (identical(name, "demo")) list(text = "", dir = file.path(td, "sk"))
   })
   expect_identical(read_file("skill:demo/references/a.md")$text, "reference text")

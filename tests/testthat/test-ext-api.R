@@ -138,30 +138,6 @@ test_that("gptr$state is shared by a plugin source and private to each user-leve
   expect_identical(ext_api_new("builtin:demo")$state, ext_api_new("builtin:demo")$state)
 })
 
-local_service = function(name, fun, env = parent.frame()) {
-  id = registry_add(gptr_spec("service", name, fun = fun), "user", 3L)
-  withr::defer(registry_remove(id), envir = env)
-  invisible(id)
-}
-
-local_bootstrap_service = function(name, fun, env = parent.frame()) {
-  old = the$services
-  withr::defer(assign("services", old, envir = the), envir = env)
-  ext_service_set(name, fun, provided_by = "P02-test")
-}
-
-# Hide P01's bootstrap service table for one test (as P01's local_services() does). Later plans
-# register services there from on_load() (ctx.kernel P06, session.add_tools P07, describe and
-# eval.r P09, risk.classify P11, s1.decide P13, agent_def.get P17, ...), and with the empty scratch
-# registry of local_registry() P01's service_builtin_active() counts every built-in as active, so a
-# test of a "not available" fallback must empty the table itself to hold in the full suite.
-local_no_bootstrap_services = function(env = parent.frame()) {
-  old = the$services
-  withr::defer(assign("services", old, envir = the), envir = env)
-  assign("services", list(), envir = the)
-  invisible(NULL)
-}
-
 test_that("ctx members whose plan is not loaded signal gptr_error_not_available", {
   local_registry()
   local_no_bootstrap_services()

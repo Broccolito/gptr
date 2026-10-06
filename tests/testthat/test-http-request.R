@@ -113,13 +113,6 @@ test_that("request fields match exactly and HEAD configures a bodyless response"
   expect_identical(captured$options$nobody, 1L)
 })
 
-request_spec = function(srv, ...) {
-  utils::modifyList(list(url = paste0(srv$url, "/v1/messages"), method = "POST",
-         headers = list(`content-type` = "application/json"),
-         body = "{\"model\":\"mock-1\",\"stream\":true,\"messages\":[]}", stream = "sse"),
-    list(...))
-}
-
 # Run one transfer until it ends (not called run_request(): P06 defines that internal function)
 request_until_done = function(spec, timeout = 120, provider = NULL) {
   st = new.env()
@@ -146,7 +139,7 @@ request_until_done = function(spec, timeout = 120, provider = NULL) {
 test_that("INFRA-05: held headers give gptr_error_timeout_first_byte", {
   local_gptr_options(first_byte_timeout = 1)
   srv = local_mock_server("hold_headers")
-  st = request_until_done(request_spec(srv), timeout = 30, provider = "mock")
+  st = request_until_done(mock_spec(srv), timeout = 30, provider = "mock")
   expect_s3_class(st$fail, "gptr_error_timeout_first_byte")
   expect_s3_class(st$fail, "gptr_error_timeout")
   expect_identical(st$fail$seconds, 1)
@@ -157,7 +150,7 @@ test_that("INFRA-05: held headers give gptr_error_timeout_first_byte", {
 test_that("INFRA-05: a stall mid-stream gives gptr_error_timeout_idle", {
   local_gptr_options(idle_timeout = 1)
   srv = local_mock_server("stall")
-  st = request_until_done(request_spec(srv), timeout = 30)
+  st = request_until_done(mock_spec(srv), timeout = 30)
   expect_gt(st$bytes, 0)
   expect_s3_class(st$fail, "gptr_error_timeout_idle")
   expect_lt(st$elapsed, 5)
@@ -168,7 +161,7 @@ test_that("INFRA-05: a stream sending one byte every 10 s for 60 s completes", {
   # where libcurl's low-speed check (1 byte/s averaged) would have ended the stream
   local_gptr_options(idle_timeout = 15)
   srv = local_mock_server("bytes_per_10s", duration = 60)
-  st = request_until_done(request_spec(srv), timeout = 120)
+  st = request_until_done(mock_spec(srv), timeout = 120)
   expect_null(st$fail)
   expect_identical(st$status, 200L)
   expect_gte(st$elapsed, 55)
@@ -178,7 +171,7 @@ test_that("IC-64: a redirect is never followed and never carries the key", {
   srv = local_mock_server("redirect")
   key = "sk-redirect-test-0123456789abcdef"
   h = secret_register(key, "GPTR_TEST_REDIRECT_KEY", origin = url_origin(srv$url))
-  st = request_until_done(request_spec(srv, headers = list(`x-api-key` = h)), timeout = 30)
+  st = request_until_done(mock_spec(srv, headers = list(`x-api-key` = h)), timeout = 30)
   expect_s3_class(st$fail, "gptr_error_redirect")
   expect_s3_class(st$fail, "gptr_error_provider")
   expect_false(is.na(st$fail$location_origin))

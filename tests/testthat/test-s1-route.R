@@ -349,7 +349,7 @@ test_that("the document summary is written through doc.s1_block, never from mode
   local_fake_provider(list(0.9), name = "judge", type = "classifier")
   seen = new.env()
   seen$summary = character()
-  s1_local_service("doc.s1_block", function(call, summary) {
+  local_service("doc.s1_block", function(call, summary) {
     seen$summary = c(seen$summary, summary)
     seen$meta = attr(summary, "meta")
     invisible(NULL)
@@ -1017,16 +1017,6 @@ test_that("the route keeps its phase across a compaction and plans without Syste
   expect_identical(asked$n, 1L)
 })
 
-# A bootstrap service replaced for one test (the compaction services of the next test)
-local_router_service = function(name, fun, .env = parent.frame()) {
-  old = the$services[[name]]
-  withr::defer({
-    the$services[[name]] = old
-  }, envir = .env)
-  ext_service_set(name, fun, provided_by = "test")
-  invisible(fun)
-}
-
 test_that("a compaction right after the first edit moves the router to implementation", {
   s1_fresh()
   m = local_router_models(
@@ -1038,11 +1028,11 @@ test_that("a compaction right after the first edit moves the router to implement
   # messages, so the next turn still sees the edit
   n = new.env()
   n$k = 0L
-  local_router_service("compact.should", function(s, tokens, idle) {
+  local_bootstrap_service("compact.should", function(s, tokens, idle) {
     n$k = n$k + 1L
     n$k == 2L
   })
-  local_router_service("compact.run", function(s, reason, focus = NULL) invisible(s))
+  local_bootstrap_service("compact.run", function(s, reason, focus = NULL) invisible(s))
   s = peter("Refactor the cache layer.", model = router_spec(), envir = new.env())
   s = peter(s, "Now add the tests.")
   expect_identical(n$k, 3L)

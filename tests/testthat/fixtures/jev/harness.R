@@ -46,14 +46,6 @@ s1_test_call = function(prompt, ..., model, args = list(), session = NULL) {
            ids = list(model = model), args = full)
 }
 
-# Provide a service for the calling test through the registry's `service` kind (IC-34), as P15
-# provides doc.s1_block
-s1_local_service = function(name, fun, .env = parent.frame()) {
-  id = registry_add(gptr_spec("service", name, fun = fun), source = "user", rank = 3L)
-  withr::defer(registry_remove(id), envir = .env)
-  invisible(id)
-}
-
 # A classifier-route call (s1_call()) against Ollama's Clef Flash, or another `model`
 ollama_call = function(prompt, ..., args = list(), model = "ollama/clef-flash") {
   s1_call(s1_test_call(prompt, ..., model = model, args = args))

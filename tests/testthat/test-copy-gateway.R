@@ -1,4 +1,3 @@
-# tests/testthat/test-copy-gateway.R (Task 11: create)
 # Fresh-process tracemem rows for every gateway entry point (G3 t5 and its verification log;
 # IC-41; architecture 6.4). Each row runs its setup (creating the 40 MB `big`), starts
 # tracemem(big), runs the gateway code and then the user's next in-place edit `big[1] = 0`: a

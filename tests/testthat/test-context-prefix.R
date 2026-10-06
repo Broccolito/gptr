@@ -213,8 +213,7 @@ scn_breaks = function(sc) {
 }
 
 test_that("20 turns: every same-model request pair without compaction is a byte prefix", {
-  local_project(files = list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
   sc = scn_run(scn_targets())
   pairs = scn_pairs(sc)
   expect_identical(sc$turn, 20L)
@@ -227,8 +226,7 @@ test_that("20 turns: every same-model request pair without compaction is a byte 
 })
 
 test_that("compaction keeps the tools, the system blocks and the anchored project block", {
-  local_project(files = list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
   sc = scn_run(scn_targets())
   pairs = scn_pairs(sc)
   cp = pairs[pairs$compaction, ]
@@ -245,8 +243,7 @@ test_that("compaction keeps the tools, the system blocks and the anchored projec
 })
 
 test_that("negative controls: a re-rendered system prompt and an edited entry break the prefix", {
-  local_project(files = list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list("AGENTS.md" = "- Style: = for assignment, |> for pipes."))
   targets = scn_targets()
   rerender = scn_run(targets, mutate = function(sc) {
     d = session_data(sc$s)

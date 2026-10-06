@@ -3,37 +3,15 @@
 # figures are P07's composition of the measured architecture 7.3 texts (the T1 fixture is
 # `<r_env>` plus the two built-in skills, 542 o200k tokens).
 
-# The stand-in helpers (shared with test-prompt-sections.R and dev/bench/tokens/run.R), bound
-# here by name: the lint's object_usage_linter cannot see names that source() defines.
-standins_env = local({
-  source(test_path("fixtures", "bench", "standins.R"), local = TRUE)
-  environment()
-})
-prefix_fixture = standins_env$prefix_fixture
-prompt_standins_register = standins_env$prompt_standins_register
-
-bench_compose = function(name, .env = parent.frame()) {
-  pb = prefix_fixture()
-  cs = pb$cases[[name]]
-  local_fake_provider(list("ok"), .env = .env)
-  s = session_new("fake/fake-1", cs$mode, home = new.env(), preset = cs$preset)
-  prompt_standins_register(pb$standins, session_data(s)$id, sections = unlist(cs$sections),
-                           exclusive = TRUE)
-  doc = if (isTRUE(cs$document)) list(path = file.path(project_root(), "analysis.R"), format = "R")
-  prompt_compose(s, list(interactive = cs$human, doc = doc))
-}
-
 prefix_estimate = function(fr) {
   prompt_est(fr$tools_json, "json") + prompt_est(fr$t0, "prose") + prompt_est(fr$t1, "prose")
 }
-
-wrap = function(name, x) paste0("<", name, ">\n", x, "\n</", name, ">")
 
 test_that("each preset's estimated prefix is within 5% of prefix-baseline.json", {
   pb = prefix_fixture()
   expect_setequal(names(pb$estimate), names(pb$cases))
   for (nm in names(pb$cases)) {
-    est = prefix_estimate(bench_compose(nm))
+    est = prefix_estimate(compose_case(nm))
     base = pb$estimate[[nm]]
     expect_lte(abs(est - base) / base, 0.05, label = nm)
   }
@@ -50,7 +28,7 @@ test_that("every section is within its budget", {
   budgets = vapply(st, function(x) as.numeric(x$budget), 0)
   names(budgets) = vapply(st, function(x) x$name, "")
   for (nm in c("minimal", "standard_all", "standard_interactive")) {
-    fr = bench_compose(nm)
+    fr = compose_case(nm)
     for (i in seq_len(nrow(fr$sections))) {
       sec = fr$sections$name[i]
       budget = registry_get("prompt_section", sec)$budget
@@ -58,7 +36,7 @@ test_that("every section is within its budget", {
       expect_lte(fr$sections$tokens[i], budget, label = paste(nm, sec))
     }
   }
-  s = bench_compose("standard_interactive")
+  s = compose_case("standard_interactive")
   expect_lte(s$sections$tokens[s$sections$name == "r_performance"], 150)
   d = gptr_registry(diagnostics = TRUE)
   expect_false(any(grepl("was truncated", d$message, fixed = TRUE) &
@@ -68,7 +46,7 @@ test_that("every section is within its budget", {
 
 test_that("the standard composition is architecture 7.3 byte for byte (with stand-ins)", {
   rd = prefix_fixture()$expected$rendered
-  fr = bench_compose("standard_interactive")
+  fr = compose_case("standard_interactive")
   st = prefix_fixture()$standins$sections
   names(st) = vapply(st, function(x) x$name, "")
   s1 = function(x) gsub("{s1}", "jev", x, fixed = TRUE)
@@ -94,7 +72,7 @@ test_that("the composed T0 and skills equal the text block of architecture 7.3",
   sp = a[(s + 1L):(e - 1L)]
   t0_end = which(sp == "</context>")
   sk = c(which(sp == "<skills>"), which(sp == "</skills>"))
-  fr = bench_compose("standard_interactive")
+  fr = compose_case("standard_interactive")
   jev = function(x) gsub("{s1}", "jev", x, fixed = TRUE)
   expect_identical(fr$t0, jev(paste(sp[1:t0_end], collapse = "\n")))
   expect_true(startsWith(fr$t1, paste(sp[sk[1]:sk[2]], collapse = "\n")))
@@ -103,7 +81,7 @@ test_that("the composed T0 and skills equal the text block of architecture 7.3",
 test_that("no composed prompt or shipped skill mentions str( (IC-67)", {
   rx = "(^|[^A-Za-z0-9_.])str\\("
   for (nm in c("minimal", "standard_interactive")) {
-    expect_false(grepl(rx, bench_compose(nm)$t0), label = nm)
+    expect_false(grepl(rx, compose_case(nm)$t0), label = nm)
   }
   skills = system.file("gptr", "skills", package = "gptr")
   files = if (nzchar(skills)) {

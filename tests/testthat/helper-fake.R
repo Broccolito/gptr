@@ -84,3 +84,45 @@ local_gptr_options = function(..., .env = parent.frame()) {
   nms = ifelse(startsWith(nms, "gptr."), nms, paste0("gptr.", nms))
   withr::local_options(stats::setNames(opts, nms), .local_envir = .env)
 }
+
+# local_project() with a private user config directory; the process settings layer is restored
+# when the test ends
+local_gw = function(workspace = TRUE, .env = parent.frame()) {
+  cfg = withr::local_tempdir("gptr-config-", .local_envir = .env)
+  withr::local_envvar(R_USER_CONFIG_DIR = cfg, .local_envir = .env)
+  old = the$settings_session
+  withr::defer({
+    the$settings_session = old
+  }, envir = .env)
+  local_project(gptr = workspace, .env = .env)
+}
+
+# Settings pinned for the calling test by mocking the one reader, setting_get()
+local_settings = function(..., .env = parent.frame()) {
+  values = list(...)
+  testthat::local_mocked_bindings(
+    setting_get = function(key, session = NULL, default = NULL) {
+      if (key %in% names(values)) values[[key]] else default
+    },
+    .env = .env
+  )
+}
+
+# A stand-in for the run that run_current() returns while model code runs
+fake_run = function(session = "s0000000000", mode = "manual", depth = 0L) {
+  run = new.env(parent = emptyenv())
+  run$id = "u00000000"
+  run$session = session
+  run$mode = mode
+  run$depth = depth
+  run$opts = list()
+  run$signal = new.env(parent = emptyenv())
+  run
+}
+
+# A direct tool whose execute() runs `fun(ctx)`
+test_tool = function(name, fun) {
+  gptr_tool(name, paste("Test tool", name),
+            parameters = list(type = "object", properties = json_obj()),
+            execute = function(input, ctx) fun(ctx))
+}

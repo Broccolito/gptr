@@ -99,17 +99,8 @@ test_that("a later-collating file can call on_load() at top level when installed
   expect_identical(loaded$stdout, "loaded at .onLoad")
 })
 
-local_services = function(.env = parent.frame()) {
-  old = the$services
-  withr::defer({
-    the$services = old
-  }, envir = .env)
-  the$services = list()
-  invisible(NULL)
-}
-
 test_that("an unbound service signals not_available naming the providing plan (IC-09)", {
-  local_services()
+  local_no_bootstrap_services()
   expect_false(ext_service_has("settings.get"))
   cnd = tryCatch(ext_service_get("settings.get"), error = identity)
   expect_s3_class(cnd, "gptr_error_not_available")
@@ -121,7 +112,7 @@ test_that("an unbound service signals not_available naming the providing plan (I
 })
 
 test_that("ext_service_set() registers and replaces services", {
-  local_services()
+  local_no_bootstrap_services()
   # The owning built-in `workspace` (P09) is not declared in this build, so once other built-ins
   # have loaded records the plan's rule counts it as filtered out; this test is about the
   # bootstrap table, and filtering is tested below (DEVIATIONS D-016)
@@ -138,7 +129,7 @@ test_that("ext_service_set() registers and replaces services", {
 })
 
 test_that("a registry `service` record wins, and a filtered built-in hides its services (IC-34)", {
-  local_services()
+  local_no_bootstrap_services()
   ext_service_set("doc.site", function(session) "bootstrap", provided_by = "P15",
                   builtin = "documents")
   local_mocked_bindings(service_from_registry = function(name) function(session) "plugin")

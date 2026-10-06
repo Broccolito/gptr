@@ -354,3 +354,17 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   F15 not adopted (any rule but xfun's comment table shifts knitr's unnamed-chunk numbers);
   F16 sidecar per-upsert check kept (dropping it applies a sidecar's other-format upsert); computed-prompt
   locate tests unmerged (three finders' mocks); 04 section 11.5 text.
+
+## TEST-H - Shared test helpers of completed plans (2026-10-05)
+- `helper-fake.R`: `local_gw()`, `local_settings()`, `fake_run()`, `test_tool()`; `helper-ext.R`: `local_service()`
+  (registry kind), `local_bootstrap_service()` (`the$services`; the tool tests' calls renamed),
+  `local_no_bootstrap_services()`; `helper-mock-server.R`: `mock_spec()`; new `helper-p07.R` (`p07_session()`,
+  `p07_project()`, `block_kinds()`, `wrap()`, the stand-ins, `compose_case()`); compaction's own session helper is
+  `compact_session()`; three "(Task n: create)" headers gone (tests -192; plan ~155).
+- Red: none (refactor). Green: touched files PASS 7567 (7567 before). Lint clean. Neighbours: `env-snapshot|
+  gptr-capture|copy-gateway|lint-rules|arch-layers|ext-|zzz|context-prefix|prompt-text|provider-(fake|message)`
+  PASS 2724 (2724 before); token bench `--check` OK.
+- Reviews: round 1 changes_required: `test-s1-route.R`'s `local_router_service()` copy removed (calls use
+  `local_bootstrap_service()`); inline `p07_project()`/`block_kinds()` bodies in `test-prompt-compact.R`,
+  `test-prompt-sections.R` and `test-context-prefix.R` replaced by the helpers.
+- Deviations: none. Open: P11 plan literal (line 3625) defines its own `fake_run(id)` (lane perm).

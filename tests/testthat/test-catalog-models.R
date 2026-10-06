@@ -192,17 +192,6 @@ fx_models = function() {
   )
 }
 
-# Settings come from P08's layers later; tests pin them by mocking the one reader.
-local_settings = function(..., .env = parent.frame()) {
-  values = list(...)
-  testthat::local_mocked_bindings(
-    setting_get = function(key, session = NULL, default = NULL) {
-      if (key %in% names(values)) values[[key]] else default
-    },
-    .env = .env
-  )
-}
-
 local_catalog = function(models = fx_models(), .env = parent.frame()) {
   dir = withr::local_tempdir(.local_envir = .env)
   path = file.path(dir, "models.json")

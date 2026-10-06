@@ -1,11 +1,6 @@
 # P07 prompt-sections.R: rendering input, helpers, presets, composition, freeze, tool additions
 # and gptr_prompt().
 
-p07_session = function(mode = "auto", preset = NULL, .env = parent.frame()) {
-  local_fake_provider(list("ok"), .env = .env)
-  session_new("fake/fake-1", mode, home = new.env(), preset = preset)
-}
-
 pending_of = function(s) get0("prompt_pending", envir = session_live(s)$memo, inherits = FALSE)
 
 # ---- Task 2: rendering input and shared helpers -------------------------------------------------
@@ -289,34 +284,12 @@ test_that("ctx$input reaches the ctx.input service once builtin:prompt is loaded
 
 # ---- Task 4: the tool array and section composition ---------------------------------------------
 
-# The stand-in helpers (shared with the bench tests and dev/bench/tokens/run.R), bound here by
-# name: the lint's object_usage_linter cannot see names that source() defines.
-standins_env = local({
-  source(test_path("fixtures", "bench", "standins.R"), local = TRUE)
-  environment()
-})
-prefix_fixture = standins_env$prefix_fixture
-prompt_standins_register = standins_env$prompt_standins_register
-
-# Compose one case of prefix-baseline.json with the stand-ins for other owners' texts.
-compose_case = function(name, .env = parent.frame()) {
-  pb = prefix_fixture()
-  cs = pb$cases[[name]]
-  s = p07_session(cs$mode, cs$preset, .env = .env)
-  prompt_standins_register(pb$standins, session_data(s)$id, sections = unlist(cs$sections),
-                           exclusive = TRUE)
-  doc = if (isTRUE(cs$document)) list(path = file.path(project_root(), "analysis.R"), format = "R")
-  prompt_compose(s, list(interactive = cs$human, doc = doc))
-}
-
 section_of = function(t0, name) {
   i = regexpr(paste0("<", name, ">\n"), t0, fixed = TRUE)
   j = regexpr(paste0("\n</", name, ">"), t0, fixed = TRUE)
   if (i < 0 || j < 0) return(NA_character_)
   substr(t0, i, j + nchar(name) + 3L)
 }
-
-wrap = function(name, x) paste0("<", name, ">\n", x, "\n</", name, ">")
 
 test_that("rendered P07 sections are byte-identical to architecture 7.3 (with stand-ins)", {
   rd = prefix_fixture()$expected$rendered
@@ -412,8 +385,7 @@ test_that("SYSTEM text, .opts$system and session_start sections replace or remov
 })
 
 test_that("the user's SYSTEM.md replaces the core; the project's needs trust", {
-  local_project(files = list(".gptr/SYSTEM.md" = "Project system prompt."))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list(".gptr/SYSTEM.md" = "Project system prompt."))
   s = p07_session()
   expect_false(grepl("Project system prompt.", prompt_compose(s)$t0, fixed = TRUE))
   local_mocked_bindings(prompt_trusted = function(root) TRUE)
@@ -696,9 +668,8 @@ test_that("a resumed session restores the frozen prompt from its gptr.frozen ent
 })
 
 test_that("a model with an 8K window is refused for the standard preset (IC-71)", {
-  local_project(files = list("AGENTS.md" = paste(rep("- Always check the data dictionary.", 400),
-                                                 collapse = "\n")))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list("AGENTS.md" = paste(rep("- Always check the data dictionary.", 400),
+                                       collapse = "\n")))
   # manual mode: the untrusted project's instructions are sent (not withheld), so they count
   s = p07_session("manual")
   local_mocked_bindings(prompt_model = function(ref) {
@@ -741,8 +712,6 @@ local_tiny_model = function(.env = parent.frame()) {
   }, .env = .env)
 }
 
-block_kinds = function(blocks) vapply(blocks, function(b) b$kind %||% b$type, "")
-
 # P09 registers the skill_content block, whose 10,000-token re-injection budget alone overruns
 # the tiny window's threshold: the floor tests below hide that block, so the skills budget is 0
 # and the floor varies with the project instructions only
@@ -755,8 +724,7 @@ local_no_skill_block = function(.env = parent.frame()) {
 }
 
 test_that("the floor counts the project instructions the frozen audience will be sent (IC-52)", {
-  local_project(files = list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
   local_tiny_model()
   local_no_skill_block()
   # untrusted project, auto mode: a session frozen for a human (`interactive = TRUE`, as P06's
@@ -779,8 +747,7 @@ test_that("the floor counts the project instructions the frozen audience will be
 })
 
 test_that("cut re-injection budgets are recorded in gptr.frozen and survive a restore (IC-71)", {
-  local_project(files = list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
-  withr::local_envvar(GPTR_PROJECT_ROOT = getwd())
+  p07_project(list("AGENTS.md" = rep("- Always check the data dictionary.", 900)))
   local_tiny_model()
   local_no_skill_block()
   s = p07_session("manual")

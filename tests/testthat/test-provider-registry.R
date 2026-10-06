@@ -5,17 +5,6 @@ builtin_ids = c("anthropic", "openai", "google", "openrouter", "groq", "deepseek
                 "together", "xai", "cerebras", "fireworks", "ollama", "lmstudio", "llamacpp",
                 "vllm", "azure", "bedrock")
 
-# Settings come from P08's layers later; tests pin them by mocking the one reader.
-local_settings = function(..., .env = parent.frame()) {
-  values = list(...)
-  testthat::local_mocked_bindings(
-    setting_get = function(key, session = NULL, default = NULL) {
-      if (key %in% names(values)) values[[key]] else default
-    },
-    .env = .env
-  )
-}
-
 test_that("builtin:providers registers the architecture section 8.1 providers as data", {
   a = provider_get("anthropic")
   expect_true(all(builtin_ids %in% registry_names("provider")))

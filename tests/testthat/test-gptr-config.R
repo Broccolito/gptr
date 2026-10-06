@@ -1,31 +1,6 @@
 # test-gptr-config.R -- settings files, scopes and layers, trust, gptr_config(), gptr_init(),
 # replay and egress (plan P08).
 
-# A temporary project (P01's local_project(): the working directory and the project root, with
-# or without .gptr/) and a private user config directory; the process settings layer is restored
-# when the test ends.
-local_gw = function(workspace = TRUE, .env = parent.frame()) {
-  cfg = withr::local_tempdir("gptr-config-", .local_envir = .env)
-  withr::local_envvar(R_USER_CONFIG_DIR = cfg, .local_envir = .env)
-  old = the$settings_session
-  withr::defer({
-    the$settings_session = old
-  }, envir = .env)
-  local_project(gptr = workspace, .env = .env)
-}
-
-# A stand-in for the run that run_current() returns while model code runs.
-fake_run = function(session = "s0000000000", mode = "manual", depth = 0L) {
-  run = new.env(parent = emptyenv())
-  run$id = "u00000000"
-  run$session = session
-  run$mode = mode
-  run$depth = depth
-  run$opts = list()
-  run$signal = new.env(parent = emptyenv())
-  run
-}
-
 test_that("settings_write() and settings_read() round-trip every scope", {
   proj = local_gw()
   settings_write("session", list(mode = "plan"))

@@ -1,18 +1,5 @@
-# tests/testthat/test-gptr-gateway.R (Task 8: create)
 # test-gptr-gateway.R -- the peter() gateway: capture, routing, the classed closure and its methods,
 # the built-in routes on the fake provider, terminal statuses and routers (plan P08).
-
-# A temporary project (P01's local_project(): working directory and project root) with a private
-# user config directory; the process settings layer is restored when the test ends.
-local_gw = function(workspace = TRUE, .env = parent.frame()) {
-  cfg = withr::local_tempdir("gptr-config-", .local_envir = .env)
-  withr::local_envvar(R_USER_CONFIG_DIR = cfg, .local_envir = .env)
-  old = the$settings_session
-  withr::defer({
-    the$settings_session = old
-  }, envir = .env)
-  local_project(gptr = workspace, .env = .env)
-}
 
 # A route of order 1 that records what the gateway captured and answers "probed".
 local_probe = function(.env = parent.frame()) {
@@ -36,17 +23,6 @@ local_probe = function(.env = parent.frame()) {
   off = gptr_register(spec)
   withr::defer(off(), envir = .env)
   box
-}
-
-fake_run = function(session = "s0000000000", mode = "manual", depth = 0L) {
-  run = new.env(parent = emptyenv())
-  run$id = "u00000000"
-  run$session = session
-  run$mode = mode
-  run$depth = depth
-  run$opts = list()
-  run$signal = new.env(parent = emptyenv())
-  run
 }
 
 test_that("peter('a', mice) and mice |> peter('a') capture mice by name", {
@@ -451,13 +427,6 @@ local_labels_block = function(.env = parent.frame()) {
       if (length(labels)) paste("labels:", paste(labels, collapse = ", ")) else NULL
     }))
   withr::defer(off(), envir = .env)
-}
-
-# A direct tool whose execute() runs `fun(ctx)` (tests only)
-test_tool = function(name, fun) {
-  gptr_tool(name, paste("Test tool", name),
-            parameters = list(type = "object", properties = json_obj()),
-            execute = function(input, ctx) fun(ctx))
 }
 
 test_that("builtin:gateway registers its routes, core settings and four services (IC-24, IC-33)", {
