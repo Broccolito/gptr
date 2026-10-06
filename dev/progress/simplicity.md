@@ -163,3 +163,7 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
 - Reviews: r1 5 minor fixed (P15 delta 183 + 51, P25 Task 3 D-135 note, rename tools trimmed);
   NS-4 (test-s1-client.R) compares session names, not a count (GC flake; P13 literal kept).
 - Deviations: D-135. Open: none.
+
+## DOC-3 - README trim (2026-10-05)
+- README.md 120 -> 88 lines: one status paragraph, a `peter()` example (exports only, ran offline),
+  short development section; peter() and Ollama sections kept.
