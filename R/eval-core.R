@@ -729,6 +729,8 @@ eval_state_diff = function(a, b) {
 #' @noRd
 eval_result = function(st, state0) {
   ch = eval_state_diff(state0, st$state1 %||% eval_session_state())
+  # secret-like variables the code set are registered before its output is redacted (03 6.5)
+  if (length(ch$envvars)) secret_discover_env(Sys.getenv(ch$envvars, names = TRUE))
   ch$objects = st$objects %||%
     list(added = character(), modified = character(), removed = character(),
          lines = character())

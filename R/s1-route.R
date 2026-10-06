@@ -885,10 +885,12 @@ s1_run = function(prompt, parts, target, args, session = NULL, call = NULL) {
   started = Sys.time()
   images = s1_images(args[["opts"]][["system1_images"]], target)
   zipped = s1_zip(parts)
+  # the question and the inputs leave for a provider: the context redactor (03 6.5)
+  prompt = redact(prompt, "context")
+  states = redact(zipped$states, "context")
   q = s1_question(prompt, zipped$labels, args[["choices"]], args[["levels"]],
                   decision = target$model[["decision"]])
   a = s1_check_args(q, args)
-  states = zipped$states
   n = length(states)
   if (!is.null(zipped$split)) {
     gptr_inform(paste0("System 1 judged each row of ", zipped$split, " separately (", n,

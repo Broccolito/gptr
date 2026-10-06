@@ -2125,3 +2125,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-mcp-server.R "a session's token is revoked when the session shuts down (IC-58)" (+2),
   "gptr_mcp_serve() refuses a port other than the shared socket's" (+2).
   Evidence: progress/P18.md Task 9.
+
+## D-174 - P24 secrets e2e: a key set inside `r` is registered at once; System 1 egress is redacted (2026-10-06)
+- Rule (03 6.5 "Sources"): `eval_result()` (P09) registers the secret-like variables an evaluation changed
+  (`secret_discover_env()`) before its output is formatted, so a key set and printed in one `r` call reaches
+  no sink.
+- Rule (03 6.5, `context` = provider egress): `s1_run()` (P13) passes the System 1 question and inputs
+  through `redact(, "context")` before the cache keys and the request (classifier route and `ctx$decide()`).
+- Plan test adapted to the real interfaces: the late secret and the MCP echo are calls of their own (P11:
+  `r(secret:NAME)` allows a call only when its secret reads are its only flagged calls); the main run is a
+  block of the bound document run by `gptr_source(doc, replay = "auto")`, the Rscript run is the bound
+  document itself with `GPTR_REPLAY=auto` and copies its sidecar before exit (P15 records no `peter()` nested
+  in another sourced file, nor in replay mode); the MCP echo writes to stderr and the server is closed before
+  its log is read; the worker's spec and result files are scanned in a mocked `worker_cleanup()`; each of
+  these sinks must hold a marker or the file before its grep counts; the mock server starts before
+  `local_project()`; empty files (processx fifos) are not scanned.
+- Contract-visible: none (03 6.5 behaviour). Tests: test-secrets-e2e.R. Evidence: progress/P24.md Task 9.
