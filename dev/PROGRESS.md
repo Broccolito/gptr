@@ -36,7 +36,9 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
   spec carried the registry), FIX-11; CI-15..17 (CI-17: keep-source installs shipped package state to workers).
 - 2026-10-07: M3+M4 local gate and the final gate pass on clean exports (full suite 23,798, `R CMD check --as-cran`
   0/0/1 local clock NOTE); A14 cache-sim refresh; P25 review nits; CI-18 (token benchmark pins `<r_env>`), CI-19
-  (hosted job budgets). Remaining: hosted CI green, M3/M4 tags, maintainer release steps (HANDOFF section 5).
+  (hosted job budgets), CI-20 (INFRA-03 race), FIX-12 (keyring warning), PERF-2 (stream redaction 3.5x
+  faster), DOC-3 (roxygen link warnings), WIN-1..3 (Windows workers, killed children, a timing test); final gate
+  re-run on `240db69` (23,865 tests; check 0/0/0). Remaining: M3/M4 tags, maintainer release steps (HANDOFF 5).
 
 ## Execution and recording rules
 

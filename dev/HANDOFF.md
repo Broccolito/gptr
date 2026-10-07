@@ -9,13 +9,13 @@ branch and is pushed. This file is self-contained; read it top to bottom.
 
 gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R
 session (pure R, CRAN-bound, Version 1.0.0). Specs and plans are in `dev/`. Besides the plan tasks the
-coordinator landed the IC-74 Ollama System 1 adapter, FIX-1..11, PERF-1, CI-1..19, CLEAN-1 and every
+coordinator landed the IC-74 Ollama System 1 adapter, FIX-1..12, PERF-1..2, CI-1..20, WIN-1..3, DOC-3, CLEAN-1 and every
 simplicity package (`progress/simplicity.md`). The entry point is **`peter()`** (D-135).
 
 ## 1. Read first
 
 1. `CLAUDE.md` (rules: simplicity first, `peter()` naming, `=`/`|>`, offline tests, secrets).
-2. This file; then `dev/PROGRESS.md` (milestones) and `dev/DEVIATIONS.md` (D-001..D-178, condensed;
+2. This file; then `dev/PROGRESS.md` (milestones) and `dev/DEVIATIONS.md` (D-001..D-180, condensed;
    D-135 = maintainer decisions and the rename; D-061 = the classifier standard).
 3. `dev/plan/00-index.md` (order, gates) and `dev/plan/00-conventions.md` (section 11: simplicity and
    the short record formats, which win over any plan literal).
@@ -49,18 +49,21 @@ simplicity package (`progress/simplicity.md`). The entry point is **`peter()`** 
 | P22-P24 | `fa9c171`, `f6aa1c8`, `3299ff5` | P24 A14 passes after the reviewed cache-sim refresh (`2e8fd09`) |
 | P25 | offline rows `f6be1fa` | Tasks 1-13 done; Tasks 14-15 offline parts done; their live, network and submission steps: maintainer |
 
-Final gate (2026-10-07, clean exports; `R/`, `tests/` (but `test-zzz.R`'s CI-19 block) and `DESCRIPTION`
-identical from `78ee719` to HEAD): `document()` exit 0, NAMESPACE/man unchanged; lint clean; full suite
-`[ FAIL 0 | WARN 0 | SKIP 17 | PASS 23798 ]` (skips: live 9, Python 3, Quarto, keyring, macOS, INFRA-03 off CI,
-INFRA-16 worker leg) and the connections gate the same; token ratchet OK (4 prefixes, 14 transcripts); M5 rows: e2e
-PASS 373, polyglot within 10%, dev bench PASS 523, release tests PASS 140, check-docs/examples/files 0 problems,
-precompute 5 vignettes, spelling clean; `R CMD check --as-cran` on `0385ad9` (gptr 1.0.0): `0 errors | 0 warnings
-| 1 note` (local "unable to verify current time"). Logs: `dev/.validation/gate-final/`.
+Final gate (2026-10-07, clean export of `240db69`): `document()` exit 0, NAMESPACE/man unchanged; lint clean;
+full suite `[ FAIL 0 | WARN 0 | SKIP 17 | PASS 23865 ]` (skips: live 9, Python 3, Quarto, keyring, macOS, INFRA-03
+off CI, INFRA-16 worker leg) and the connections gate the same; token ratchet OK (4 prefixes, 14 transcripts); M5
+e2e PASS 373, dev bench PASS 524, perf 7 rows "PURE R IS ENOUGH", release tests PASS 140; `R CMD check --as-cran`
+(gptr 1.0.0) `0 errors | 0 warnings | 0 notes` in 13 min. Earlier on `0385ad9`: polyglot within 10%,
+check-docs/examples/files 0 problems, precompute 5 vignettes, spelling clean (those inputs are unchanged since).
+Logs: `dev/.validation/gate-final2/`.
 
-Hosted CI: on `2e8fd09` every Ubuntu and macOS check job is green (CI-17 confirmed). Two infrastructure faults
-surfaced and are fixed: the token benchmark measured the machine's `<r_env>` (CI-18, `f20c99f`), and the
-connections and Windows jobs had outgrown their time limits since `f6aa1c8` (CI-19, `0292aad`).
-The hosted run on `0292aad` (CI-18 and CI-19 included) decides the M3/M4 tags (section 5, step 1).
+Hosted CI: faults hidden since `f6aa1c8` by jobs that ran into `timeout-minutes` (shown as cancelled) are fixed:
+job budgets (CI-19), the benchmark's machine `<r_env>` (CI-18), INFRA-03's SIGINT race (CI-20), keyring's env
+fallback warning (FIX-12), and three Windows defects found with the on-demand file-by-file run
+(`.github/workflows/windows-by-file.yaml`): workers blocked reading stdin and lost `R_ARCH` (WIN-1, D-179), killed
+children still listed for ~0.3 s (WIN-2, D-180), a test's timing assumption (WIN-3). On `ca0aa3c` all 11 non-Windows
+jobs were green; **on `240db69` all 13 jobs are green** (run 37686569854; Windows release 42 min, oldrel-4 37 min).
+That commit is the candidate for the M3 and M4 tags (section 5, step 1).
 
 ## 4. How to resume
 
@@ -97,8 +100,11 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 
 - P12: `claude-haiku-4-5` has `tool_addition = TRUE` but `mid_system = FALSE` (no tool-addition
   declarations sent; D-075).
-- D-019 item 5: processx `write_all()` blocks on Windows; decide before large stdin payloads go to
-  Windows children.
+- D-019 item 5: processx's stdin write blocks on Windows (a pause, not a deadlock, where children read
+  first; WIN-1 shows workers are safe, D-179). Decide before large stdin payloads go to Windows children.
+- CRAN check time: under CRAN conditions (`NOT_CRAN` unset) the tests took 284 s on this Mac after PERF-2; the
+  slowest is the report-budget test of `test-subagent-team.R` (about 48 s). win-builder shows CRAN's real time.
+- Windows open item (WIN-2): concurrent fake CLIs append to one log file (INFRA-19 race, once).
 - Hosted timing and flake watch (D-011: never loosen silently): `progress/infra.md` "Open hosted
   items" (INFRA-01, INFRA-23, `test-proc-supervise.R:89`, Chrome and Windows detritus NOTEs). Hosted
   jobs that hit `timeout-minutes` show as cancelled, not failed: check durations, not only failures.
@@ -131,7 +137,8 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 
 ## 8. Key commits
 
-- 2026-10-07: CI-19 `0292aad`; CI-18 `f20c99f`; P25 gate rows `489080d`.
+- 2026-10-07: WIN-3 `240db69`, WIN-2 `49e9875`, WIN-1 `1b8a367`; FIX-12 `ca0aa3c`; CI-20 `0d392ae`; PERF-2
+  `0d66192`; DOC-3 `ca11e42`; CI-19 `0292aad`; CI-18 `f20c99f`; P25 gate rows `489080d`.
 - 2026-10-06: CI-17 `78ee719`; cache-sim refresh `2e8fd09`; P25 nits `0385ad9`; P25 Tasks 12-15
   `90bb54a`, `8885332` (Version 1.0.0), `56ccc60`, `131f754`; FIX-10 `ef522eb`; CLEAN-1 `16b2b79`.
 - 2026-10-05: FIX-7 `7d784df`; DOC-1/DOC-2 `31118fb` (full text before condensation: `2dca780`);

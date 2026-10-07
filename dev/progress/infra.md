@@ -28,6 +28,7 @@ pending (maintainer).
 | 37583355970 (`2e8fd09`) | token benchmark, first run of its `dev/bench` test step (`d1691d4`): `test-token-gates.R:145-147`, `run.R --check` exits 0 with the ns02 prefix baseline scaled by 0.97 (prefix 2287 hosted, 2409 on macOS: the machine's `<r_env>`) | CI-18 |
 | 37540280557 (`f6aa1c8`) to 37583355970 (`2e8fd09`) | connections (30 min) and both Windows jobs (45 and 75 min) cancelled at their timeouts in every run; on `2e8fd09` every Ubuntu and macOS check job is green (CI-17 confirmed) | CI-19 |
 | 37588313491 (`0292aad`) | connections completes (suite 2331 s; CI-19 confirmed for it): FAIL 3 `test-console-interrupt.R:467,469,470` (INFRA-03 step 1: no pause menu, status line or tokens; steps 2-3 pass), WARN 2 `test-auth-secrets.R:423,505` (keyring's "Selecting 'env' backend"); both Windows jobs cancelled at 120 min inside `checking tests`; Ubuntu, macOS, copy-safety and token benchmark green | CI-20 (FAIL 3); WARN 2 and Windows open |
+| 37686569854 (`240db69`) | green, 13/13: macOS; Windows release (42 min), oldrel-4 (37 min); Ubuntu devel, release, oldrel-1, oldrel-4; no-Suggests; LC_ALL=C; copy-safety release, devel; connections; token bench. Confirms CI-18..20, FIX-12, PERF-2, WIN-1..3 | - |
 
 ## Task CI-1 - Cross-platform hosted CI corrections (2026-10-03, `118f78b`)
 - Fixed: P01's service test isolated from undeclared built-ins (D-016 item 2); INFRA-01 measured on the mock's clock
