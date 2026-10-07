@@ -30,3 +30,7 @@ test_that("the script-as-history vignette is precomputed and current (Task 7)", 
 test_that("NEWS.md records the breaking changes (Task 11)", {
   expect_no_problems(files_news(gptr_root(), character()))
 })
+
+test_that("_pkgdown.yml indexes every page (Task 12)", {
+  expect_no_problems(files_pkgdown(gptr_root(), character()))
+})
