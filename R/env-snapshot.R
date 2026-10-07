@@ -439,7 +439,7 @@ env_block_attached = function(ctx, budget) {
 }
 
 #' `<skill_content name="..">`: bodies of the skills preloaded with `skills =` (5,000 tokens per
-#' skill; P17's `skill.body` service; NULL before P17 is loaded)
+#' skill; P17's `skill.body` service, whose canonical names label them; NULL before P17 is loaded)
 #' @noRd
 env_block_skills = function(ctx, budget) {
   call = ctx$input$call
@@ -450,8 +450,11 @@ env_block_skills = function(ctx, budget) {
   parts = character(length(skills))
   for (k in seq_along(skills)) {
     b = body(skills[k])
-    txt = if (is.list(b)) b$text else b
-    lines = strsplit(as.character(txt %||% ""), "\n", fixed = TRUE)[[1L]]
+    if (is.list(b)) {
+      skills[k] = b$name %||% skills[k]
+      b = b$text
+    }
+    lines = strsplit(as.character(b %||% ""), "\n", fixed = TRUE)[[1L]]
     lines = utils::head(lines, max(1L, lines_fit(lines, per, "prose")))
     parts[k] = paste(c(if (length(skills) > 1L) sprintf("[skill: %s]", skills[k]), lines),
                      collapse = "\n")

@@ -94,10 +94,11 @@ prompt_trusted = function(root) {
   isTRUE(tryCatch(ext_service_get("trust.get")(root), error = function(e) FALSE))
 }
 
-#' The bound history document of a session (the doc.site service of P15), or NULL
+#' The bound history document of a session, or of a new one when `s` is NULL (the doc.site
+#' service of P15), or NULL
 #' @noRd
 prompt_doc = function(s) {
-  if (is.null(s) || !ext_service_has("doc.site")) return(NULL)
+  if (!ext_service_has("doc.site")) return(NULL)
   tryCatch(ext_service_get("doc.site")(s), error = function(e) NULL)
 }
 

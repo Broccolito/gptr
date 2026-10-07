@@ -467,7 +467,9 @@ test_that("a new session carries the catalog in T1 and preloads skills = (e2e)",
   expect_match(req$system$t1, "- single-cell: Single-cell work in R. [skill:single-cell/SKILL.md]",
                fixed = TRUE)
   first = paste(unlist(req$messages[[1L]]$content), collapse = "\n")
-  expect_match(first, "Use Seurat v5 layers.", fixed = TRUE)
+  # sent once, under the skill's canonical name
+  expect_match(first, "<skill_content name=\"single-cell\">\nUse Seurat v5 layers.", fixed = TRUE)
+  expect_length(gregexpr("Use Seurat v5 layers.", first, fixed = TRUE)[[1L]], 1L)
 })
 
 test_that("an untrusted project's skill is not in the catalog of a session (e2e)", {

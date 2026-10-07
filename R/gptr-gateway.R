@@ -649,19 +649,6 @@ gateway_guards = function(call, s, safety, m = NULL) {
   replay_guard(pr %||% m %||% d$model, mode = replay_mode(call$args$replay))
 }
 
-#' <skill_content> preloads through the skill.body service (P17)
-#' @noRd
-gateway_skill_blocks = function(skills) {
-  if (!length(skills)) return(list())
-  body = ext_service_get("skill.body")
-  out = list()
-  for (nm in as.character(unlist(skills))) {
-    b = body(nm)
-    out = c(out, list(block_context("skill_content", b$text, attrs = list(name = nm))))
-  }
-  out
-}
-
 #' Base64 without line breaks
 #' @noRd
 gateway_b64 = function(raw) gsub("\n", "", jsonlite::base64_enc(raw), fixed = TRUE)
@@ -754,13 +741,15 @@ gateway_input = function(call, s, first, nested) {
   inp = list(call = call, turn = as.integer(session_data(s)$turns %||% 0L) + 1L, prompt = prompt,
              placement = if (first) "first" else "turn", last_hash = NULL,
              opts = call$args$opts %||% list())
+  # an unknown or untrusted `skills =` preload stops the call; builtin:workspace renders the
+  # <skill_content> blocks (IC-38)
+  for (nm in as.character(unlist(call$ids$skills))) ext_service_get("skill.body")(nm)
   # P07's context.first / context.turn services (none when P07 is filtered out)
   svc = if (first) "context.first" else "context.turn"
   ctx = if (ext_service_has(svc)) ext_service_get(svc)(s, inp) %||% list() else list()
-  skills = gateway_skill_blocks(call$ids$skills)
   images = gateway_image_blocks(call$args$opts$images, s)
-  list(prompt = prompt, blocks = c(ctx, skills, images),
-       content = c(ctx, skills, list(block_text(prompt)), images),
+  list(prompt = prompt, blocks = c(ctx, images),
+       content = c(ctx, list(block_text(prompt)), images),
        source = if (nested) "parent" else if (first) "prompt" else "pipe")
 }
 

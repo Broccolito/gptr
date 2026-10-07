@@ -1883,6 +1883,7 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   collection or unload); `run_wait(runs, timeout = Inf, background = FALSE)`.
 - Tests: test-session-budget.R (two refusal blocks out), test-agent-loop.R (three re-validation fragments
   out), test-agent-run.R (two folds, the retry refusal loop out), test-agent-dispatch.R (one message).
+  Evidence: progress/simplicity.md P06-S1.
 
 ## D-155 - P03/P04/P18 one URL parser: url_parse() (2026-10-05)
 - Rule: `url_parse(url)` (`R/auth-secrets.R`, L0) is libcurl's parse with `decode = FALSE, params = FALSE`,
@@ -1895,7 +1896,6 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   decoded); an MCP URL cache key hashes curl's path (`/` for an empty path: one cache miss). No 04 text.
 - Tests: test-auth-oauth.R "url helpers split URLs; ..." (url_parse, raw path and query), "redirects are
   checked ..." (+2). Evidence: progress/simplicity.md URL.
-  Evidence: progress/simplicity.md P06-S1.
 
 ## D-156 - P24 cache simulator prices gptr's Anthropic elements in a trusted project (2026-10-05)
 - Rule: messages are the elements gptr's Anthropic adapter sends (`anthropic_elements()`, without
@@ -2157,3 +2157,14 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: 04 section 7.0 `secret.lookup` amended to `function(name, ctx = NULL)`. Open: provider
   credentials (`provider_credential()`, P05) do not consult plugin `secret_source` records (03 6.5).
   Tests: test-s11-conformance.R, test-skill-templates.R. Evidence: progress/P24.md Task 12.
+
+## D-176 - P24 north-star: one skill preload under its canonical name; previews see the bound document (2026-10-06)
+- Rule (IC-38; 04 6.1 `skills`): builtin:workspace's `skill_content` block is the one producer of `skills =`
+  preloads, labelled by the canonical name `skill.body` returns; P08's `gateway_skill_blocks()` is removed and
+  the gateway only calls `skill.body` per name, so an unknown or untrusted skill still stops the call (the
+  preload reached the first message twice, as `single_cell`: P17 Task 4's open item).
+- Rule (IC-68; `?gptr_prompt`, "what a new session would freeze now"): `prompt_doc(NULL)` asks `doc.site`, so a
+  session-less composition has the `documents` section while `gptr_doc()` binds a document.
+- Contract-visible: none.
+- Tests: test-northstar.R "NS-10 ...", "the composed standard prompt ... (IC-68)"; test-skill-discover.R "a new
+  session carries the catalog in T1 and preloads skills = (e2e)". Evidence: progress/P24.md Task 11.
