@@ -39,8 +39,8 @@ in \verb{$args} and the environment to start Codex with in \verb{$env}) and in t
 children gptr starts. One server runs per R process. Needs 'httpuv', 'later' and 'openssl'.
 }
 \examples{
-\dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
-h = gptr_mcp_serve(envir = globalenv())
+\dontshow{if (interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))) withAutoprint(\{ # examplesIf}
+h = gptr_mcp_serve(envir = new.env())
 h$config$codex
 gptr_mcp_serve(stop = TRUE)
 \dontshow{\}) # examplesIf}

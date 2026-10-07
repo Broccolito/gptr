@@ -105,17 +105,12 @@ last_set = function(s) {
   invisible(s)
 }
 
-#' The most recent session
-#'
-#' Returns the most recently active session of this R process. It is held strongly (it survives
-#' `gc()`), so a session whose call was interrupted before its result was assigned is not lost.
-#'
-#' @return A `gptr_session`, or `NULL` when no session was created in this process.
-#' @examples
-#' s = gptr_last()
-#' is.null(s) || inherits(s, "gptr_session")
-#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
-#' identical(gptr_last(), s)
+#' @description
+#' `gptr_last()` returns the most recently active session of this R process. It is held strongly
+#' (it survives `gc()`), so a session whose call was interrupted before its result was assigned
+#' is not lost.
+#' @rdname gptr_sessions
+#' @order 3
 #' @export
 gptr_last = function() the$last
 

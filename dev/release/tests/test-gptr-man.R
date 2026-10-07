@@ -4,3 +4,7 @@ test_that("gptr's help topics exist and ?peter links them (Task 2)", {
   expect_no_problems(grep("^(gptr_options|gptr_security|gptr_egress): |^peter: @seealso",
                           docs_problems(db), value = TRUE))
 })
+
+test_that("every export's page passes the documentation audit (Task 3)", {
+  expect_no_problems(docs_problems(rd_read_dir(file.path(gptr_root(), "man"))))
+})

@@ -52,9 +52,14 @@ expanded from the environment when gptr connects and never stored. Nothing conne
 tool is used.
 }
 \examples{
-\dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
+proj = tempfile("proj")
+dir.create(proj)
+old = options(gptr.project_root = proj)
+gptr_init(proj)
 gptr_mcp_add("fs", command = "npx",
-             args = c("-y", "@modelcontextprotocol/server-filesystem", "."))
-gptr_mcp_remove("fs")
-\dontshow{\}) # examplesIf}
+             args = c("-y", "@modelcontextprotocol/server-filesystem", "."),
+             scope = "project")
+gptr_mcp_remove("fs", scope = "project")
+options(old)
+unlink(proj, recursive = TRUE)
 }

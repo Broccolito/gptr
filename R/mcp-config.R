@@ -771,10 +771,17 @@ mcp_check_kv = function(x, arg) {
 #' @param scope `"user"` (default) or `"project"`.
 #' @return `gptr_mcp_add()` returns the server spec invisibly; `gptr_mcp_remove()` returns
 #'   `TRUE` invisibly when a server was removed, else `FALSE`.
-#' @examplesIf interactive()
+#' @examples
+#' proj = tempfile("proj")
+#' dir.create(proj)
+#' old = options(gptr.project_root = proj)
+#' gptr_init(proj)
 #' gptr_mcp_add("fs", command = "npx",
-#'              args = c("-y", "@modelcontextprotocol/server-filesystem", "."))
-#' gptr_mcp_remove("fs")
+#'              args = c("-y", "@modelcontextprotocol/server-filesystem", "."),
+#'              scope = "project")
+#' gptr_mcp_remove("fs", scope = "project")
+#' options(old)
+#' unlink(proj, recursive = TRUE)
 #' @export
 gptr_mcp_add = function(name, command = NULL, args = character(), url = NULL, env = NULL,
                         headers = NULL, exposure = "r", timeout = 60,

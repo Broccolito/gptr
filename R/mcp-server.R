@@ -475,8 +475,8 @@ mcp_handle_new = function(st, tok, stop) {
 #' @param stop `TRUE` to stop the server.
 #' @return A `gptr_mcp_handle` with `$url`, `$port`, `$token_env`, `$config` and `$stop()`;
 #'   calling again returns the running handle; with `stop = TRUE`, `invisible(NULL)`.
-#' @examplesIf interactive()
-#' h = gptr_mcp_serve(envir = globalenv())
+#' @examplesIf interactive() && rlang::is_installed(c("httpuv", "later", "openssl"))
+#' h = gptr_mcp_serve(envir = new.env())
 #' h$config$codex
 #' gptr_mcp_serve(stop = TRUE)
 #' @export

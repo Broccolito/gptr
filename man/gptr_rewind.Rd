@@ -2,6 +2,7 @@
 % Please edit documentation in R/ckpt-rewind.R
 \name{gptr_rewind}
 \alias{gptr_rewind}
+\alias{gptr_checkpoints}
 \title{Rewind a session: undo turns, restore objects and files, move the conversation}
 \usage{
 gptr_rewind(
@@ -12,6 +13,8 @@ gptr_rewind(
   force = FALSE,
   preview = FALSE
 )
+
+gptr_checkpoints(s, all = FALSE)
 }
 \arguments{
 \item{s}{A \code{gptr_session}.}
@@ -30,10 +33,13 @@ state; the conversation stays where it is).}
 
 \item{preview}{Return the plan instead: a data frame with one row per item (\code{record}, \code{turn},
 \code{action}, \code{checkpointer}, \code{item}, \code{restore}, \code{reason}); nothing changes.}
+
+\item{all}{Also list the turns of abandoned branches.}
 }
 \value{
-\code{s}, invisibly (the plan when \code{preview = TRUE}). \code{s$last_rewind} holds the report and
-\code{s$editor_text} the undone prompt.
+\code{gptr_rewind()} returns \code{s}, invisibly (the plan when \code{preview = TRUE});
+\code{s$last_rewind} holds the report and \code{s$editor_text} the undone prompt.
+\code{gptr_checkpoints()} returns a \code{gptr_checkpoints} data frame (it prints at most 20 rows).
 }
 \description{
 \code{gptr_rewind()} is a branch-in-place on the one session object: it undoes the checkpoint
@@ -42,6 +48,12 @@ branch (oldest first) and appends one \code{gptr.rewind} entry parented at the t
 file stays append-only and the rewind survives a reload). It hands back the undone prompt in
 \code{s$editor_text} and returns \code{s} invisibly, so it pipes:
 \code{s |> gptr_rewind() |> peter("Try another way")}. Use \code{\link[=gptr_fork]{gptr_fork()}} for a second session.
+
+\code{gptr_checkpoints()} lists one row per turn of the active path (\code{all = TRUE} adds the turns of
+abandoned branches): \code{turn}; \code{id}, the last entry of the turn (pass it as \code{to} to
+\code{gptr_rewind()}); \code{time}, when the prompt was sent; \code{prompt} (its first 60 characters);
+\code{objects} and \code{files}, \code{"changed/restorable"} counts; \code{held_mb} and \code{disk_mb}, megabytes of
+object pre-images held in memory and on disk; and \code{branch} (\code{"active"} or \code{"abandoned"}).
 }
 \details{
 Restores are 3-way: an object or file that changed after the turn (by you or another session)
@@ -92,5 +104,6 @@ e$x
 s |> gptr_rewind()
 e$x
 s$editor_text
+gptr_checkpoints(s, all = TRUE)
 options(op)
 }

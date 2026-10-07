@@ -586,19 +586,25 @@ sessions_dir = function() file.path(workspace_root(create = FALSE), "sessions")
 
 # ---------------------------------------------------------------------------- list (gptr_sessions)
 
-#' List stored sessions
+#' Stored and live sessions
 #'
-#' Lists the sessions of the workspace store (`.gptr/sessions/`, or `tempdir()/gptr/sessions/`
-#' without a workspace), newest first. Reads only the header and the last lines of each file.
+#' `gptr_sessions()` lists the sessions of the workspace store (`.gptr/sessions/`, or
+#' `tempdir()/gptr/sessions/` without a workspace), newest first. It reads only the header and
+#' the last lines of each file.
 #'
 #' @param project `TRUE`: the stored sessions; `FALSE`: also the live sessions of this process
 #'   that are not in that store.
-#' @return A `gptr_sessions` data frame: `id`, `file`, `created`, `updated`, `turns`, `model`,
-#'   `status`, `title` (the first prompt, 60 characters), `live`.
+#' @return `gptr_sessions()` returns a `gptr_sessions` data frame: `id`, `file`, `created`,
+#'   `updated`, `turns`, `model`, `status`, `title` (the first prompt, 60 characters), `live`.
+#'   `gptr_resume()` returns a `gptr_session`: the live object when one exists in this process,
+#'   otherwise one rebuilt from its session file. `gptr_last()` returns the most recently active
+#'   session of this process, or `NULL` when no session was created in this process.
+#' @order 1
 #' @examples
-#' gptr_sessions()
 #' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
+#' identical(gptr_last(), s)
 #' gptr_sessions()
+#' identical(gptr_resume(s$id), s)
 #' @export
 gptr_sessions = function(project = TRUE) {
   check_flag(project, "project")
@@ -710,23 +716,19 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 
 # ---------------------------------------------------------------------------- resume (gptr_resume)
 
-#' Resume a stored session
-#'
-#' Returns the live object when one exists in this process; otherwise rebuilds the session from
-#' its JSONL file (leaf = the last entry; status `idle` when the tail is a final answer, else
-#' `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of `envir`. A
-#' detached copy (from `saveRDS()`, a knitr cache or callr) is attached under the split-brain
-#' rules. `block =` returns the session that a document replay bound to that block.
-#'
+#' @description
+#' `gptr_resume()` returns the live object when one exists in this process; otherwise it rebuilds
+#' the session from its JSONL file (leaf = the last entry; status `idle` when the tail is a final
+#' answer, else `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of
+#' `envir`. A detached copy (from `saveRDS()`, a knitr cache or callr) is attached under the
+#' split-brain rules. `block =` returns the session that a document replay bound to that block.
 #' @param x `NULL` (the most recently updated stored session), a session id, a file path, or a
 #'   detached `gptr_session`.
 #' @param envir The home of a rebuilt session.
 #' @param block,child A document block id (and a team member name): the session replay bound to
 #'   that block in this process, or `gptr_error_replay_unbound`; never a fallback to `envir`.
-#' @return A `gptr_session`.
-#' @examples
-#' s = peter("hi", model = gptr_fake_provider(list("hello")), envir = new.env())
-#' identical(gptr_resume(s$id), s)
+#' @rdname gptr_sessions
+#' @order 2
 #' @export
 gptr_resume = function(x = NULL, envir = parent.frame(), block = NULL, child = NULL) {
   check_string(block, "block", null = TRUE)

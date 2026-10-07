@@ -559,8 +559,10 @@ ckpt_ext_state = function(s) {
 #' @param force Also restore items that changed after the checkpoint (3-way conflicts).
 #' @param preview Return the plan instead: a data frame with one row per item (`record`, `turn`,
 #'   `action`, `checkpointer`, `item`, `restore`, `reason`); nothing changes.
-#' @return `s`, invisibly (the plan when `preview = TRUE`). `s$last_rewind` holds the report and
-#'   `s$editor_text` the undone prompt.
+#' @return `gptr_rewind()` returns `s`, invisibly (the plan when `preview = TRUE`);
+#'   `s$last_rewind` holds the report and `s$editor_text` the undone prompt.
+#'   `gptr_checkpoints()` returns a `gptr_checkpoints` data frame (it prints at most 20 rows).
+#' @order 1
 #' @section Options:
 #' Options of checkpoints and rewind (`?gptr_options` collects every option):
 #'
@@ -595,6 +597,7 @@ ckpt_ext_state = function(s) {
 #' s |> gptr_rewind()
 #' e$x
 #' s$editor_text
+#' gptr_checkpoints(s, all = TRUE)
 #' options(op)
 gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversation", "workspace"),
                        force = FALSE, preview = FALSE) {
@@ -668,22 +671,16 @@ gptr_rewind = function(s, turn = -1L, to = NULL, restore = c("all", "conversatio
 
 # ---- gptr_checkpoints() and the console commands (contract 5.12, 6.5; G7 section 4.2) ----------
 
-#' List the checkpoints of a session
-#'
-#' One row per turn of the active path (`all = TRUE` adds the turns of abandoned branches):
-#' `turn`; `id`, the last entry of the turn (pass it as `to` to [gptr_rewind()]); `time`, when the
-#' prompt was sent; `prompt` (its first 60 characters); `objects` and `files`,
-#' `"changed/restorable"` counts; `held_mb` and `disk_mb`, megabytes of object pre-images held in
-#' memory and on disk; and `branch` (`"active"` or `"abandoned"`).
-#'
-#' @param s A `gptr_session`.
+#' @description
+#' `gptr_checkpoints()` lists one row per turn of the active path (`all = TRUE` adds the turns of
+#' abandoned branches): `turn`; `id`, the last entry of the turn (pass it as `to` to
+#' `gptr_rewind()`); `time`, when the prompt was sent; `prompt` (its first 60 characters);
+#' `objects` and `files`, `"changed/restorable"` counts; `held_mb` and `disk_mb`, megabytes of
+#' object pre-images held in memory and on disk; and `branch` (`"active"` or `"abandoned"`).
 #' @param all Also list the turns of abandoned branches.
-#' @return A `gptr_checkpoints` data frame (it prints at most 20 rows).
+#' @rdname gptr_rewind
+#' @order 2
 #' @export
-#' @examples
-#' fake = gptr_fake_provider(list("done"))
-#' s = peter("step", model = fake, envir = new.env())
-#' gptr_checkpoints(s)
 gptr_checkpoints = function(s, all = FALSE) {
   check_class(s, "gptr_session", "s")
   check_flag(all, "all")
