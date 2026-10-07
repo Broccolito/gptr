@@ -1,0 +1,158 @@
+---
+title: "The script is the history"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{The script is the history}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE)
+old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+```
+
+A script that calls `peter()` is both the program and the record of the agent's work. After each
+call, gptr writes the code the agent ran into the script, directly below the prompt, between two
+marker comments. Running the script again replays that code as ordinary R without asking a
+model; the same works in R Markdown, Quarto and Jupyter documents, where the recorded code
+becomes a chunk or a cell.
+
+This vignette records into a temporary script with a scripted model, so it runs offline.
+
+## Recording
+
+gptr writes only into documents you designate. `gptr_doc()` binds a document for this R session,
+which is your consent to write into it.
+
+```{r}
+library(gptr)
+
+fake = gptr_fake_provider(list(
+  list(tool = "r",
+       input = list(code = "top = head(mtcars[order(-mtcars$mpg), c(\"mpg\", \"wt\")], 3)",
+                    note = "ranked by mpg; ties keep the order of the data")),
+  "The three most fuel-efficient cars are stored in `top`."
+))
+
+proj = tempfile("analysis-")
+dir.create(proj)
+script = file.path(proj, "analysis.R")
+writeLines(c(
+  "library(gptr)",
+  "",
+  "res = peter(\"Find the three most fuel-efficient cars\", model = fake, mode = auto)",
+  "top"
+), script)
+
+gptr_doc(script)
+first = gptr_source(script, envir = new.env())
+first
+```
+
+`gptr_source()` runs the script expression by expression. The `peter()` call had no recorded
+block yet, so it asked the model, ran the code it wrote and recorded it. The script now reads:
+
+```{r}
+writeLines(readLines(script))
+```
+
+The header line names the model, the date and a hash of the prompt; `## Decision:` keeps the
+note the model gave for its code; `#>` lines keep short output.
+
+## Replaying
+
+Sourcing the script again replays the recorded block: its code runs as ordinary R and no model
+is called.
+
+```{r}
+n_before = length(fake$log$requests)
+again = gptr_source(script, replay = "replay", envir = new.env())
+length(fake$log$requests) - n_before
+gptr_blocks(script)
+```
+
+`replay = "replay"` (or `GPTR_REPLAY=replay` in the environment) fails with
+`gptr_error_not_recorded` instead of calling a model when a block is missing, which proves that
+a script is fully recorded:
+
+```sh
+GPTR_REPLAY=replay Rscript analysis.R
+```
+
+The replay modes are:
+
+- `"auto"` (default): a fresh block is replayed; a missing or stale block runs live.
+- `"replay"`: never call a model.
+- `"live"`: ask the model again and rewrite the blocks.
+- `"record"`: regenerate stale blocks only.
+
+## Stale blocks
+
+A block belongs to its prompt. When you edit the prompt, the block becomes stale and is
+regenerated the next time `gptr_source()` runs the script; base `source()` replays it with a
+warning.
+
+```{r}
+lines = readLines(script)
+writeLines(sub("three most", "five most", lines, fixed = TRUE), script)
+gptr_blocks(script)[, c("id", "status")]
+gptr_doc(FALSE)
+```
+
+## Pipe chains and steering
+
+A pipe chain is recorded as one statement: every piped prompt steers the same session, and the
+recorded code of each step follows the chain. A console session without a bound document can
+be recorded, once you agree, as a transcript in `.gptr/transcripts/` that re-sources as one
+steered session.
+
+```{r, eval = FALSE}
+prep = peter("Normalize pbmc, find variable features and run PCA", pbmc) |>
+  peter("Regress out percent.mt while scaling") |>
+  peter("Keep 30 PCs; tell me if the elbow suggests fewer")
+```
+
+## A whole workflow that reads like R
+
+Prompts, plain R, System 1 decisions in control flow and steering chains mix in one file. Only
+top-level calls own a recorded block; calls inside loops and functions run live when the script
+is sourced again, or fail with "not recorded" under `replay = "replay"`.
+
+```{r, eval = FALSE}
+library(gptr)
+library(Seurat)
+
+pbmc = readRDS("pbmc.rds")
+
+prep = peter("Normalize pbmc, find variable features and run PCA", pbmc) |>
+  peter("Keep 30 PCs; tell me if the elbow suggests fewer")
+
+pbmc = FindNeighbors(pbmc, dims = 1:30) |> FindClusters(resolution = 0.8)
+
+for (cl in levels(Idents(pbmc))) {
+  markers = FindMarkers(pbmc, ident.1 = cl, only.pos = TRUE)
+  top = paste(head(rownames(markers), 10), collapse = ", ")
+  cell_type = peter("Which immune cell type do these marker genes indicate?", top, model = jev,
+                   choices = c("T cell", "B cell", "NK cell", "monocyte", "unclear"))
+  if (cell_type == "unclear") {
+    peter("Cluster {cl} has ambiguous markers ({top}). Propose a label.", pbmc)
+  }
+}
+```
+
+`{cl}` and `{top}` in a literal prompt are replaced by the values of those variables, so the
+recorded prompt stays a template while each iteration asks about its own cluster.
+
+## R Markdown, Quarto and Jupyter
+
+In `.Rmd` and `.qmd` files the recorded code goes into a chunk labeled `gptr-<id>` right after
+the chunk that holds the prompt; knitting the document replays it. In a Jupyter notebook the
+block becomes a cell that gptr writes when the notebook is closed; `gptr_doc(path, sync = TRUE)`
+applies blocks recorded while it was open. Undone turns (`/undo` at the console, or
+`gptr_rewind()`) stay in the document as inert, commented code.
+
+```{r cleanup, include = FALSE}
+unlink(proj, recursive = TRUE)
+options(old_options)
+```

@@ -14,3 +14,7 @@ test_that("the system-one vignette is precomputed and current (Task 6)", {
 test_that("the extending-gptr vignette is precomputed and current (Task 8)", {
   expect_no_problems(vig_committed_problems(gptr_root(), "extending-gptr"))
 })
+
+test_that("the script-as-history vignette is precomputed and current (Task 7)", {
+  expect_no_problems(vig_committed_problems(gptr_root(), "script-as-history"))
+})
