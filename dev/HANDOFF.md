@@ -8,10 +8,10 @@ and is pushed after every few commits. This file is self-contained; read it top 
 ## 0. Summary
 
 gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R
-session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **about 244 of 307 plan tasks
+session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **about 291 of 307 plan tasks
 are committed** (each test-first and independently reviewed), plus coordinator work: the IC-74 Ollama
 System 1 adapter, FIX-1..9, CI-1..10, and every simplicity package (`progress/simplicity.md`). P01-P10,
-P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135, landed in `bd8eeaf`).
+P12-P18 and P20-P23 are complete. The entry point is **`peter()`** (D-135, landed in `bd8eeaf`).
 
 ## 1. Read first
 
@@ -46,36 +46,36 @@ P12, P13, P15, P17 and P20 are complete. The entry point is **`peter()`** (D-135
 
 | Plan | Done | Acceptance | Notes |
 |---|---|---|---|
-| P01-P10, P12, P13 | all | recorded (see PROGRESS) | P03/P04 tables `b024286` |
-| P11 Permissions | 11/11 | `0f2ac14` | classifier rebuilt (Task 2b, D-061); FIX-9 |
-| P14 Console | 0/8 | - | needs P11 Task 8 |
-| P15 Documents | 19/19 | `84d85db` | Quarto and plan-mode rows skip until available |
-| P16 Checkpoints | 4/8 | - | Tasks 5-8 need P11 Task 8 |
+| P01-P13 | all | recorded (see PROGRESS) | M0, M1, M2 tagged |
+| P14 Console | 8/8 | `ee23bab` | manual terminal check: maintainer |
+| P15 Documents | 19/19 | `84d85db` | |
+| P16 Checkpoints | 8/8 | `c38ffe0` | |
 | P17 Skills/plugins | 12/12 | `59d7987` | row 5 = M3 exit |
-| P18 MCP/OAuth | 2/10 | - | Task 2 needs P11 Task 8 (LOCK, URL, P18-S done) |
-| P19 Sub-agents | 1/12 | - | Task 2+ need P11 Task 7 |
-| P20 CLI providers | 11/11 | (with M4 gate) | live test gated (maintainer) |
-| P21 Background | 3/7 | - | Task 4+ need P11 Task 7 |
+| P18 MCP/OAuth | 10/10 | `552e95f` | |
+| P19 Sub-agents | 11/12 | - | Task 12 + acceptance running (lane sub) |
+| P20 CLI providers | 11/11 | `dde8fad` | live test gated (maintainer) |
+| P21 Background | 7/7 | `38d1bdb` | manual Ctrl-C check optional (maintainer) |
 | P22 Polyglot | 11/11 | `fa9c171` | |
-| P23 Artifacts | 11/12 | - | Task 10 needs P14 Task 7 (console renderer hooks) |
-| P24 Benchmarks/e2e | 6/13 | - | live calibration and polyglot baseline pending; Tasks 3, 8-13 later |
-| P25 Release | 1/15 | - | Task 2+ need P11, P16, P18, P19 |
-| **Total** | **~244/307** | | |
+| P23 Artifacts | 12/12 | `f6aa1c8` | |
+| P24 Benchmarks/e2e | 9/13 | - | Tasks 3, 8, 11, 13 running (lane bench2) |
+| P25 Release | 2/15 | - | Task 3 (roxygen review of all exports) after P19; Tasks 14-15 maintainer |
+| **Total** | **~291/307** | | |
 
 Milestones: **M0, M1 and M2 are closed** (tags `gptr-1.0-m0`, `gptr-1.0-m1` on `5e01bf4`; `gptr-1.0-m2` on
-`ef21d3f`; each with local gates on a clean export and hosted CI 13/13 green). M3 needs P14, P16 (and
-the P17 row 5 exit), M4 needs P18, P19, P21 (P20 done). Hosted CI: `.github/workflows/R-CMD-check.yaml` on every push to `main` (one
-run per ref; superseded queued runs are cancelled); logs via `gh run view <run> --json jobs`.
+`ef21d3f`). **M3's plans are complete**: its gate on `ee23bab` passed every row (full suite 23,208, M3 filters)
+except one R CMD check test (the INFRA-16 worker leg) that needed P19 Task 8, now committed; re-run, then
+ask the maintainer for the M3 tag (and the P14 manual terminal check). M4 waits for P19 acceptance. Hosted
+CI runs on every push to `main` (one run per ref; superseded queued runs are cancelled).
 
 ## 4. Running now and how to resume
 
 Lane ownership: `dev/.validation/scratch/lanes-current.txt` (local, ignored): files of other running
-lanes are off limits; every other file is free for a task's minimal edits. Running (Stage 3): **mcp**
-(P18 Tasks 2, 4-10 + acceptance; critical path), **console** (P14 Tasks 1-8 + acceptance), **sub** (P19
-Tasks 2-12 + acceptance), **ckptbg** (P16 Tasks 5-8 + acceptance, then P21 Tasks 4-7 + acceptance),
-**bridgeart** (P22 Tasks 5, 9-11 + acceptance, then P23 Tasks 9, 12, 10). Each lane is one run of
+lanes are off limits; every other file is free for a task's minimal edits. Running: **sub** (P19 Task 12
++ acceptance) and **bench2** (P24 Tasks 3, 8, 11, 13). Next: CLEAN-1 (delete six stale "before plan X"
+test guards in test-gptr-gateway.R and test-catalog-models.R that can never run again), the M3/M4 gates,
+then P25 Tasks 3-13 (Tasks 14-15 are the maintainer's). Each lane is one run of
 `dev/ci/orchestration/plan-tasks.workflow.js` (section 7); early prechecks block tasks whose
-prerequisites another lane has not landed yet (re-dispatch them).
+prerequisites have not landed yet (re-dispatch them).
 
 The P11 redesign evidence (design, prototypes, `fin-changes.tsv`, `fin-accept.R`) is in
 `dev/.validation/scratch/p11/` (local); the remaining-work schedule is `dev/.validation/scratch/schedule.md`
