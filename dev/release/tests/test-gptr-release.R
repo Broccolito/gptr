@@ -34,3 +34,8 @@ test_that("NEWS.md records the breaking changes (Task 11)", {
 test_that("_pkgdown.yml indexes every page (Task 12)", {
   expect_no_problems(files_pkgdown(gptr_root(), character()))
 })
+
+test_that("cran-comments.md and DESCRIPTION are ready for submission (Task 13)", {
+  expect_no_problems(files_cran_comments(gptr_root(), character()))
+  expect_no_problems(files_description(gptr_root(), "--release"))
+})

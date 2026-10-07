@@ -1,6 +1,6 @@
 Package: gptr
 Title: Language Model Agents Inside the Live 'R' Session
-Version: 0.99.0.9000
+Version: 1.0.0
 Authors@R: c(
     person("Wanjun", "Gu", , "wanjun.gu@ucsf.edu", role = c("aut", "cre", "cph"),
            comment = c(ORCID = "0000-0002-7342-7000")),

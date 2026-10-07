@@ -685,3 +685,61 @@ site_build = function(root, dest) {
   if (res$status == 0L) return(character())
   sprintf("pkgdown::build_site() failed: %s", rel_tail(c(res$stdout, res$stderr)))
 }
+
+# ---- cran-comments.md (Task 13) ----------------------------------------------------------------
+
+cran_comments_problems = function(lines) {
+  need = c("## Submission", "## Consent and side effects", "## Examples, tests and vignettes",
+           "## Test environments", "## R CMD check results", "## Reverse dependencies")
+  out = sprintf("cran-comments.md: missing section %s", need[!need %in% lines])
+  text = paste(lines, collapse = "\n")
+  phrases = c("0.7.0 -> 1.0.0", "get_response()", "dataframe_to_text()", "'btw' 1.5.0",
+              "'aisdk' 1.4.12", "'ellmer' 0.5.0", "'mcptools' 1.0.3", "gptr_login()",
+              "gptr_mcp_serve()", "gptr_fake_provider()", "@examplesIf", "SystemRequirements",
+              "?gptr_security", "No example uses `\\dontrun{}`",
+              "tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")")
+  hit = vapply(phrases, grepl, NA, x = text, fixed = TRUE)
+  out = c(out, sprintf("cran-comments.md: must mention %s", phrases[!hit]))
+  if (!grepl("` run on [0-9]{4}-[0-9]{2}-[0-9]{2}:", text)) {
+    out = c(out, "cran-comments.md: the reverse-dependency check must name the day it ran")
+  }
+  out
+}
+
+# Rewrites the "## Reverse dependencies" section with the result of the submission-day run.
+cran_comments_set_revdeps = function(lines, revdeps, date = Sys.Date()) {
+  start = which(lines == "## Reverse dependencies")
+  if (length(start) != 1L) {
+    stop("cran-comments.md needs exactly one `## Reverse dependencies` section", call. = FALSE)
+  }
+  nxt = grep("^## ", lines)
+  nxt = nxt[nxt > start]
+  call = "`tools::package_dependencies(\"gptr\", reverse = TRUE, which = \"all\")`"
+  body = c("", sprintf("%s run on %s:", call, format(date, "%Y-%m-%d")),
+           sprintf("%s.", if (length(revdeps)) paste(sort(revdeps), collapse = ", ") else "none"),
+           if (length(revdeps)) "Their maintainers were told at least two weeks before submission."
+           else "No package depends on, imports, links to or suggests gptr.",
+           if (length(nxt)) "")
+  c(lines[seq_len(start)], body, if (length(nxt)) lines[nxt[1L]:length(lines)])
+}
+
+# `--revdeps` (network; maintainer, on submission day) records the reverse dependencies first.
+files_cran_comments = function(root, args) {
+  path = file.path(root, "cran-comments.md")
+  lines = rel_read(root, "cran-comments.md")
+  if (is.null(lines)) return("cran-comments.md is missing")
+  if ("--revdeps" %in% args) {
+    db = utils::available.packages(repos = c(CRAN = "https://cloud.r-project.org"))
+    revdeps = tools::package_dependencies("gptr", db = db, reverse = TRUE, which = "all")
+    lines = cran_comments_set_revdeps(lines, revdeps[["gptr"]])
+    writeLines(lines, path)
+  }
+  c(cran_comments_problems(lines), rel_ascii_problems(path))
+}
+
+# Every release file at the release stage.
+files_all = function(root, args) {
+  c(files_description(root, "--release"), files_news(root, character()),
+    files_readme(root, character()), files_pkgdown(root, character()),
+    files_cran_comments(root, character()))
+}
