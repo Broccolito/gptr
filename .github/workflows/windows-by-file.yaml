@@ -1,9 +1,18 @@
 # On-demand diagnosis (D-019, CI-19): the offline suite file by file on Windows release with the
 # package installed (worker tests run, as under R CMD check), naming each file's time and the file
-# a slow or hung check is in. Run: gh workflow run windows-by-file.yaml
+# a slow or hung check is in (each file in its own R child, limited to `minutes`).
+# Run: gh workflow run windows-by-file.yaml [-f filter='^test-cli-' -f minutes=15]
 name: windows-by-file
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: Test file name regex
+        default: '.'
+      minutes:
+        description: Time limit per file in minutes
+        default: '15'
 
 permissions: read-all
 
@@ -27,4 +36,4 @@ jobs:
         run: R CMD INSTALL .
       - name: Offline tests file by file
         shell: bash
-        run: Rscript --vanilla dev/ci/test-by-file.R
+        run: Rscript --vanilla dev/ci/test-by-file.R "${{ inputs.filter }}" "${{ inputs.minutes }}"
