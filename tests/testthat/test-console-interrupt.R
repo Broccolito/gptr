@@ -460,9 +460,12 @@ test_that("INFRA-03: real SIGINTs continue, steer and abort runs (acceptance 5)"
   p$write_input(sprintf("source('%s')\n", normalizePath(child, winslash = "/")))
   expect_true(drv$wait_for("CHILD READY", timeout = 120))
 
-  # 1. SIGINT while waiting for the first byte, then [c]ontinue: the request completes
+  # 1. SIGINT once the mock holds the request (3 s to the first byte), then [c]ontinue: the
+  # request completes
   drv$send("step_ttft()")
-  Sys.sleep(1)
+  deadline = Sys.time() + 30
+  while (!nrow(ttft$log()) && Sys.time() < deadline) Sys.sleep(0.05)
+  expect_identical(nrow(ttft$log()), 1L)
   p$interrupt()
   expect_true(drv$wait_for("paused"))
   drv$send("c")
