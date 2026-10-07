@@ -2178,3 +2178,16 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   inherit the registry" states the reference.
 - Tests: test-subagent-worker.R "a registry is a reference ..."; test-secrets-e2e.R "worker spec and result files
   ...". Evidence: progress/fixes.md FIX-10.
+
+## D-178 - P24 INFRA-24 times the INFRA-nn acceptance tests, not every test of their files (2026-10-06)
+- Rule (03 6.18 row 24, D-011): `infra-time.R` runs the 29 files of 03 6.18 with `NOT_CRAN=false` and fails on
+  any failing test; the unchanged 60 s budget applies to the INFRA suite, the run's elapsed time less the blocks
+  naming no INFRA-nn in files whose other blocks do (`infra_seconds()`); a file naming none (perm-gate,
+  secrets-e2e, provider-fake, provider-message, agent-background) counts whole.
+- Measured (M4 Max, load average 8-12): the whole files take 84-89 s after PERF-1 (83-88 s before); the INFRA
+  tests 13.9-15.2 s.
+- Contract-visible: none. Open: acceptance blocks whose names lack INFRA-nn are not timed (INFRA-12's report-02
+  loop checks but L22; offline checks of INFRA-13, -14 and -21); counting every report-02 oracle block too gives
+  25.1 s.
+- Tests: dev/bench/tests/test-perf.R "the INFRA time leaves out only the untagged blocks of files that tag INFRA
+  tests". Evidence: progress/P24.md Task P24-8.

@@ -180,3 +180,9 @@ jobs:
           extra-packages: any::rtiktoken any::pkgload
       - name: Token ratchet
         run: Rscript --vanilla dev/bench/tokens/run.R --check
+      - name: Polyglot token ratchet (B and C within 10%, P24)
+        run: Rscript --vanilla dev/bench/polyglot/run.R --check
+      - name: Offline INFRA suite under 60 s (INFRA-24, P24)
+        run: Rscript --vanilla dev/bench/perf/infra-time.R
+      - name: Development tests of dev/bench (P24)
+        run: Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests", stop_on_failure = TRUE)'

@@ -13,6 +13,8 @@ step stops for the maintainer; nothing is installed).
 | Live calibration (IC-73), at release (P25); paid requests | `GPTR_LIVE_TESTS=true dev/bench/tokens/live.R` after `run.R` | requests +2 and input 20% of the golden transcript (o200k x provider prior), in `live-<date>.csv` |
 | Polyglot tasks (G5); a task whose program or R package is missing is skipped | `dev/bench/polyglot/run.R [--check] [--update]` | B and C totals within 10% (at least 6 tasks in common) |
 | Cache economics (G4), before layout or TTL changes | `dev/bench/cache-sim/run.R [--check] [--update]` | simulated session cost +2% |
+| Performance (report 21), on demand | `dev/bench/perf/run.R [--check]` | grep, read, SSE and diff within their bars (200 ms typical, 1 s large) |
+| INFRA-24 (architecture 6.18), CI bench job | `dev/bench/perf/infra-time.R` | the 29 INFRA acceptance files pass with `NOT_CRAN=false`; their INFRA-nn tests take under 60 s (D-178) |
 | Development tests | `Rscript --vanilla -e 'testthat::test_dir("dev/bench/tests")'` | green |
 
 `dev/bench/tokens/run.R`, its NS-2/NS-3 fixtures and `baseline.csv` belong to P07; P10, P13, P15,
