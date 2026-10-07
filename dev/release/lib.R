@@ -94,6 +94,12 @@ rel_finish = function(label, problems) {
   if (n) quit(save = "no", status = 1L)
 }
 
+# The last n non-blank lines of process output, on one line.
+rel_tail = function(text, n = 6L) {
+  lines = strsplit(paste(text, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
+  paste(utils::tail(lines[nzchar(trimws(lines))], n), collapse = " | ")
+}
+
 # Leaves joined by spaces, so that words of adjacent markup (\item{a}{b}) stay apart.
 rd_text = function(x) {
   paste(if (is.list(x)) vapply(x, rd_text, "") else x, collapse = " ")
@@ -254,4 +260,125 @@ docs_problems = function(db, exports = rel_exports(), groups = rel_rd_groups(),
     out = c(out, sprintf("peter: @seealso does not link [%s]", unlinked))
   }
   out
+}
+
+# ---- offline child processes (Task 4; also used by Tasks 5, 10 and 12) -------------------------
+
+rel_exe = function(name) {
+  file.path(R.home("bin"), if (.Platform$OS.type == "windows") paste0(name, ".exe") else name)
+}
+
+# The complete environment of a child (processx form): the inherited one without credentials,
+# endpoints, proxies, gptr, user-library, profile and check variables; home and user directories
+# redirected; a private temporary directory and project root; `lib` before this process's
+# libraries; offline = TRUE sends every HTTP request to a closed local port; check_pkg sets
+# R CMD check's variables, under which gptr forces replay and caps child pools (IC-45, IC-60).
+rel_child_env = function(home, tmp, proj, lib = NULL, offline = TRUE, check_pkg = NULL) {
+  set = c(HOME = home, USERPROFILE = home,
+          APPDATA = file.path(home, "AppData", "Roaming"),
+          LOCALAPPDATA = file.path(home, "AppData", "Local"),
+          XDG_CONFIG_HOME = file.path(home, ".config"),
+          XDG_DATA_HOME = file.path(home, ".local", "share"),
+          XDG_CACHE_HOME = file.path(home, ".cache"),
+          R_USER_CONFIG_DIR = file.path(home, "r-user", "config"),
+          R_USER_DATA_DIR = file.path(home, "r-user", "data"),
+          R_USER_CACHE_DIR = file.path(home, "r-user", "cache"),
+          TMPDIR = tmp, TMP = tmp, TEMP = tmp, GPTR_PROJECT_ROOT = proj,
+          OMP_THREAD_LIMIT = "2", LANGUAGE = "en", NO_COLOR = "1",
+          R_LIBS = paste(c(lib, .libPaths()), collapse = .Platform$path.sep))
+  if (offline) {
+    set[c("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy")] =
+      "http://127.0.0.1:9"
+  }
+  if (!is.null(check_pkg)) {
+    set[c("_R_CHECK_PACKAGE_NAME_", "_R_CHECK_LIMIT_CORES_")] = c(check_pkg, "TRUE")
+  }
+  env = Sys.getenv()
+  drop = names(env) %in% names(set) |
+    grepl("^(GPTR_|R_USER_|R_LIBS|R_ENVIRON|R_PROFILE|XDG_|_R_CHECK_|NOT_CRAN$|TESTTHAT$)|PROXY$",
+          names(env), ignore.case = TRUE) |
+    grepl("(^|[_-])(KEY|TOKEN|SECRET|PAT|PASSWORD|PASSWD|CREDENTIALS?|ENDPOINT)([_-]|$)",
+          names(env), ignore.case = TRUE)
+  c(env[!drop], set)
+}
+
+rel_dirs = function(work) {
+  names = c("lib", "home", "tmp", "proj", "scripts", "wd")
+  dirs = stats::setNames(file.path(work, names), names)
+  for (d in dirs) dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  vapply(dirs, normalizePath, "", winslash = "/")
+}
+
+rel_files = function(dirs) {
+  sort(unlist(lapply(dirs, list.files, recursive = TRUE, all.files = TRUE, full.names = TRUE,
+                     include.dirs = TRUE, no.. = TRUE), use.names = FALSE))
+}
+
+rel_install = function(root, lib, env) {
+  args = c("CMD", "INSTALL", "--no-multiarch", paste0("--library=", lib), root)
+  res = processx::run(rel_exe("R"), args, env = env, error_on_status = FALSE, timeout = 900)
+  if (res$status != 0L) {
+    stop("R CMD INSTALL failed: ", rel_tail(c(res$stdout, res$stderr)), call. = FALSE)
+  }
+  invisible(lib)
+}
+
+# ---- every example offline, one fresh process per Rd page (Task 4) -----------------------------
+
+# Reports what R CMD check --as-cran would: a failing example, a connection or child process left
+# open, a file written outside the session temp directory or into the working directory, and a
+# page slower than `threshold` seconds.
+ex_run_all = function(root, pkg = "gptr", work = tempfile("rel-examples-"), threshold = 5) {
+  dirs = rel_dirs(work)
+  env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], lib = dirs[["lib"]],
+                      check_pkg = pkg)
+  rel_install(root, dirs[["lib"]], env)
+  watched = dirs[c("home", "tmp", "proj")]
+  leftovers = c(
+    "local({",
+    "  cons = showConnections(all = FALSE)",
+    "  if (NROW(cons) > 0L) stop(\"connections left open: \",",
+    "                            paste(cons[, \"description\"], collapse = \", \"), call. = FALSE)",
+    "  kids = ps::ps_children(ps::ps_handle())",
+    "  if (length(kids) > 0L) stop(length(kids), \" child process(es) left\", call. = FALSE)",
+    "})")
+  db = rd_read_dir(file.path(root, "man"))
+  problems = character()
+  rows = list()
+  for (name in names(db)) {
+    code = rd_examples_code(db[[name]])
+    if (!length(code)) next
+    timefile = file.path(dirs[["scripts"]], paste0(name, ".time"))
+    script = file.path(dirs[["scripts"]], paste0(name, ".R"))
+    writeLines(c(sprintf("library(%s)", pkg), "rel_t0_ = proc.time()[[\"elapsed\"]]", code,
+                 sprintf("writeLines(format(proc.time()[[\"elapsed\"]] - rel_t0_), %s)",
+                         deparse(timefile)),
+                 leftovers), script)
+    wd = file.path(dirs[["wd"]], name)
+    dir.create(wd)
+    before = rel_files(watched)
+    res = processx::run(rel_exe("Rscript"), c("--vanilla", script), env = env, wd = wd,
+                        error_on_status = FALSE, timeout = 120)
+    new = setdiff(rel_files(watched), before)
+    secs = if (file.exists(timefile)) as.numeric(readLines(timefile)) else NA_real_
+    if (res$status != 0L) {
+      problems = c(problems, sprintf("%s: example failed (exit %d): %s", name, res$status,
+                                     rel_tail(res$stderr)))
+    }
+    if (length(new)) {
+      problems = c(problems, sprintf("%s: wrote outside the session temp directory: %s", name,
+                                     paste(new, collapse = ", ")))
+    }
+    left = rel_files(wd)
+    if (length(left)) {
+      problems = c(problems, sprintf("%s: wrote into the working directory: %s", name,
+                                     paste(basename(left), collapse = ", ")))
+    }
+    if (!is.na(secs) && secs > threshold) {
+      problems = c(problems, sprintf("%s: examples took %.1f s (limit %g s)", name, secs,
+                                     threshold))
+    }
+    rows[[name]] = data.frame(page = name, status = res$status, seconds = secs)
+  }
+  list(results = do.call(rbind, rows), problems = problems)
 }
