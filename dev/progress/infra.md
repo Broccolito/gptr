@@ -279,6 +279,15 @@ pending (maintainer).
   helper unchanged, D-180 item 2 corrected; minor: `kill_all()` skipped the wait when `kill_tree()` threw -> waits for
   the process too. Deviations: D-180. Open: hosted confirmation on `main`; INFRA-19 log race, IC-58 ENOTSOCK (below).
 
+## Task WIN-3 - Console tool previews render the same on Windows (2026-10-07)
+- Red: Windows runs 37639048633, 37673008909, 37681637302: acceptance 7 lacks `"    -> + z"`. Probe 37685570563: the
+  first two `r` calls of a process take 1.7 and 1.1 s on hosted Windows (0.47 s on macOS) and print `    -> + z (1.7 s)`
+  as designed (elapsed shown from 1 s); the renderer's output is the same. Local slowed copy (`Sys.sleep(1)`): FAIL 1.
+- Fix (test only): the result line may end with the elapsed time. Green: Windows 37685570563 `console-render` 0 failed
+  (85 passed); local `^console-render$` PASS 85, slowed copy PASS 4. Lint clean. Neighbours: `^console-` SKIP 1
+  (INFRA-03, CI only) PASS 440 green.
+- Reviews: none. Deviations: none. Open: hosted confirmation on `main`.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
@@ -297,8 +306,6 @@ pending (maintainer).
   Windows append is not atomic. Test fixture only; not fixed.
 - Windows `test-mcp-server.R` IC-58 (run 37669294935, before D-180 item 2): httpuv "connection error: socket operation
   on non-socket" and both POSTs status 0; probes did not reproduce it. Investigate if it recurs.
-- Windows `test-console-render.R` acceptance 7 (`"    -> + z"` missing): fails in 37639048633, 37673008909 and
-  37681637302; not investigated.
 - `tools::file_ext()` calls `basename()` on R >= 4.6 (stops on a non-ASCII path in a non-UTF-8 locale): P17
   `R/ext-specs.R:1330` (also needs `fs_path()`) and P08 `R/gptr-gateway.R:796` should use `path_ext()` (D-111).
 - ctx members read with `get()`, `get0()`, `mget()` or `as.list()` pin a function frame on R >= 4.6 (D-137 item 1);
