@@ -11,9 +11,9 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 | M0 Foundation | P01-P04 | **closed**: tag `gptr-1.0-m0` on `5e01bf4` (local gates + hosted CI 13/13) | P01-P04 logs; `progress/infra.md` |
 | M1 Offline session kernel | P05-P08 | **closed**: tag `gptr-1.0-m1` on `5e01bf4` (local gates + hosted CI 13/13) | P05 `df47cbe`, P06 `a535986`, P07 `698e495`, P08 `7d89173` |
 | M2 Live R agent and decisions | P09-P13 | **closed**: tag `gptr-1.0-m2` on `ef21d3f` (local gates + hosted CI 13/13) | P09 `4ef76fa`, P10 `2823b07`, P12 `3b26e32`, P13 `1968f1c` |
-| M3 Interactive, recorded, reversible | P14-P17 | all plans complete; gate passed except one check test fixed by P19 Task 8 (re-run pending); tag: ask | P14 `ee23bab`, P15 `84d85db`, P16 `c38ffe0`, P17 `59d7987` |
-| M4 Interop and scale-out | P18-P21 | P18, P20, P21 complete; P19 11/12 | P18 `552e95f`, P20 `dde8fad`, P21 `38d1bdb` |
-| M5 Polyglot, apps, release | P22-P25 | P22, P23 complete; P24 9/13; P25 2/15 | P22 `fa9c171`, P23 `f6aa1c8` |
+| M3 Interactive, recorded, reversible | P14-P17 | all plans complete; local gate passed (`7330b50`, final gate 2026-10-07); hosted CI and tag: pending (ask) | P14 `ee23bab`, P15 `84d85db`, P16 `c38ffe0`, P17 `59d7987` |
+| M4 Interop and scale-out | P18-P21 | all plans complete; local gate passed (as M3); hosted CI and tag: pending (ask) | P18 `552e95f`, P19 `c8248c2`, P20 `dde8fad`, P21 `38d1bdb` |
+| M5 Polyglot, apps, release | P22-P25 | all plans complete; offline and coordinator rows pass (2026-10-07); live, network and submission steps: maintainer | P22 `fa9c171`, P23 `f6aa1c8`, P24 `3299ff5`, P25 `f6be1fa`, `489080d` |
 
 ## Resume log
 
@@ -32,6 +32,11 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
   (Tasks 7-11, FIX-9); Stage 3 lanes: P18, P14, P19, P16+P21, P22+P23.
 - 2026-10-06 (evening): tag `gptr-1.0-m2`; P14, P16, P18, P20 (acceptance), P21, P22, P23 complete; P19 Tasks
   2-11; P24 e2e suites (Tasks 9, 10, 12) and polyglot baseline; P25 Task 2; CI-14 (a real cancel defect).
+- 2026-10-06 (night): P19, P24 complete; P25 Tasks 3-15 (offline parts; Version 1.0.0); CLEAN-1; FIX-10 (a worker
+  spec carried the registry), FIX-11; CI-15..17 (CI-17: keep-source installs shipped package state to workers).
+- 2026-10-07: M3+M4 local gate and the final gate pass on clean exports (full suite 23,798, `R CMD check --as-cran`
+  0/0/1 local clock NOTE); A14 cache-sim refresh; P25 review nits; CI-18 (token benchmark pins `<r_env>`), CI-19
+  (hosted job budgets). Remaining: hosted CI green, M3/M4 tags, maintainer release steps (HANDOFF section 5).
 
 ## Execution and recording rules
 

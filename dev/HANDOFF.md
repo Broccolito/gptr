@@ -1,31 +1,29 @@
 # GPTR 1.0 implementation - handoff
 
-**State on 2026-10-06 (~02:00 PDT): work in progress.** A coordinator session resumed the 2026-10-05
-pause, settled the six interrupted tasks, landed the `peter()` rename, condensed the records and
-finished the simplicity plan; lanes now run the remaining plans (section 4). `main` is the only branch
-and is pushed after every few commits. This file is self-contained; read it top to bottom.
+**State on 2026-10-07: implementation complete; release steps are the maintainer's.** All
+25 plans (307 tasks) are committed, each test-first and independently reviewed; what remains needs
+the network, paid calls, a real terminal or the maintainer's approval (section 5). `main` is the only
+branch and is pushed. This file is self-contained; read it top to bottom.
 
 ## 0. Summary
 
 gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R
-session (pure R, CRAN-bound). Specs and 25 plans (307 tasks) are in `dev/`. **about 291 of 307 plan tasks
-are committed** (each test-first and independently reviewed), plus coordinator work: the IC-74 Ollama
-System 1 adapter, FIX-1..9, CI-1..10, and every simplicity package (`progress/simplicity.md`). P01-P10,
-P12-P18 and P20-P23 are complete. The entry point is **`peter()`** (D-135, landed in `bd8eeaf`).
+session (pure R, CRAN-bound, Version 1.0.0). Specs and plans are in `dev/`. Besides the plan tasks the
+coordinator landed the IC-74 Ollama System 1 adapter, FIX-1..11, PERF-1, CI-1..19, CLEAN-1 and every
+simplicity package (`progress/simplicity.md`). The entry point is **`peter()`** (D-135).
 
 ## 1. Read first
 
 1. `CLAUDE.md` (rules: simplicity first, `peter()` naming, `=`/`|>`, offline tests, secrets).
-2. This file; then `dev/PROGRESS.md` (milestones) and `dev/DEVIATIONS.md` (D-001..D-143, condensed;
+2. This file; then `dev/PROGRESS.md` (milestones) and `dev/DEVIATIONS.md` (D-001..D-178, condensed;
    D-135 = maintainer decisions and the rename; D-061 = the classifier standard).
 3. `dev/plan/00-index.md` (order, gates) and `dev/plan/00-conventions.md` (section 11: simplicity and
    the short record formats, which win over any plan literal).
 4. Specs: `04-interface-contract.md` (section 15 wins), `07-local-ollama.md` (IC-74),
    `03-architecture.md`, `05-plan-decomposition.md`. Authority: contract (section 15, IC-74) >
    architecture > decomposition > plan literal code > plan expected counts.
-5. The plan being implemented (`dev/plan/Pxx-*.md`) and its log `dev/progress/Pxx.md`. Other logs:
-   `progress/infra.md` (CI, tooling), `fixes.md` (FIX-n), `simplicity.md` (packages),
-   `simplicity-plan.md` (the package definitions; sections 2 and 5 hold the shared decisions and chains).
+5. Logs: `dev/progress/Pxx.md`, `progress/infra.md` (CI, tooling, open hosted items), `fixes.md`
+   (FIX-n), `simplicity.md`.
 
 ## 2. Maintainer decisions in force (D-135)
 
@@ -34,89 +32,40 @@ P12-P18 and P20-P23 are complete. The entry point is **`peter()`** (D-135, lande
   `peter> `. Named for Peter Wason (System 1/System 2) and Peter Naur (Backus-Naur form; sessions as
   replayable documents) - in `?peter` and the README.
 - **Simplicity first** (conventions section 11). DEC-1..DEC-4 of the simplicity plan are not taken.
-- **P11 classifier redesign accepted** (D-061 standard (A)-(C), architecture 6.8.1). Coordinator took
-  the design's D1-D3 on 2026-10-05; the maintainer acknowledged them on 2026-10-06: accept the 347 listed level changes,
-  the plan row `get(nm)` becomes 3, and read rows for common base functions (Task 3b).
+- **P11 classifier redesign accepted** (D-061 standard (A)-(C), architecture 6.8.1); the maintainer
+  acknowledged the design's D1-D3 on 2026-10-06.
 - Standing: work on `main`, task-sized commits with the plan's subject + `Co-Authored-By`, periodic
-  pushes; **ask first** before pushing tags, releases, CRAN, paid/live runs (section 9).
-- **Milestone tags** (maintainer, 2026-10-06): M0, M1 and M2 approved and pushed; the maintainer's condition is
+  pushes; **ask first** before pushing tags, releases, CRAN, paid/live runs (section 5).
+- **Milestone tags** (maintainer, 2026-10-06): M0, M1 and M2 approved and pushed; the condition is
   hosted CI green and the code reviewed and tested. Ask before each later tag (M3-M5) and before release.
 
 ## 3. Status
 
-| Plan | Done | Acceptance | Notes |
-|---|---|---|---|
-| P01-P13 | all | recorded (see PROGRESS) | M0, M1, M2 tagged |
-| P14 Console | 8/8 | `ee23bab` | manual terminal check: maintainer |
-| P15 Documents | 19/19 | `84d85db` | |
-| P16 Checkpoints | 8/8 | `c38ffe0` | |
-| P17 Skills/plugins | 12/12 | `59d7987` | row 5 = M3 exit |
-| P18 MCP/OAuth | 10/10 | `552e95f` | |
-| P19 Sub-agents | 11/12 | - | Task 12 + acceptance running (lane sub) |
-| P20 CLI providers | 11/11 | `dde8fad` | live test gated (maintainer) |
-| P21 Background | 7/7 | `38d1bdb` | manual Ctrl-C check optional (maintainer) |
-| P22 Polyglot | 11/11 | `fa9c171` | |
-| P23 Artifacts | 12/12 | `f6aa1c8` | |
-| P24 Benchmarks/e2e | 9/13 | - | Tasks 3, 8, 11, 13 running (lane bench2) |
-| P25 Release | 2/15 | - | Task 3 (roxygen review of all exports) after P19; Tasks 14-15 maintainer |
-| **Total** | **~291/307** | | |
+| Plan | Acceptance | Notes |
+|---|---|---|
+| P01-P13 | recorded (PROGRESS) | M0, M1, M2 tagged |
+| P14-P17 | `ee23bab`, `84d85db`, `c38ffe0`, `59d7987` | M3; P14 manual terminal check: maintainer |
+| P18-P21 | `552e95f`, `c8248c2`, `dde8fad`, `38d1bdb` | M4; P20 live CLI test and P21 manual check: maintainer |
+| P22-P24 | `fa9c171`, `f6aa1c8`, `3299ff5` | P24 A14 passes after the reviewed cache-sim refresh (`2e8fd09`) |
+| P25 | offline rows `f6be1fa` | Tasks 1-13 done; Tasks 14-15 offline parts done; their live, network and submission steps: maintainer |
 
-Milestones: **M0, M1 and M2 are closed** (tags `gptr-1.0-m0`, `gptr-1.0-m1` on `5e01bf4`; `gptr-1.0-m2` on
-`ef21d3f`). **M3's plans are complete**: its gate on `ee23bab` passed every row (full suite 23,208, M3 filters)
-except one R CMD check test (the INFRA-16 worker leg) that needed P19 Task 8, now committed; re-run, then
-ask the maintainer for the M3 tag (and the P14 manual terminal check). M4 waits for P19 acceptance. Hosted
-CI runs on every push to `main` (one run per ref; superseded queued runs are cancelled).
+Final gate (2026-10-07, clean exports; `R/`, `tests/` (but `test-zzz.R`'s CI-19 block) and `DESCRIPTION`
+identical from `78ee719` to HEAD): `document()` exit 0, NAMESPACE/man unchanged; lint clean; full suite
+`[ FAIL 0 | WARN 0 | SKIP 17 | PASS 23798 ]` (skips: live 9, Python 3, Quarto, keyring, macOS, INFRA-03 off CI,
+INFRA-16 worker leg) and the connections gate the same; token ratchet OK (4 prefixes, 14 transcripts); M5 rows: e2e
+PASS 373, polyglot within 10%, dev bench PASS 523, release tests PASS 140, check-docs/examples/files 0 problems,
+precompute 5 vignettes, spelling clean; `R CMD check --as-cran` on `0385ad9` (gptr 1.0.0): `0 errors | 0 warnings
+| 1 note` (local "unable to verify current time"). Logs: `dev/.validation/gate-final/`.
 
-## 4. Running now and how to resume
+Hosted CI: on `2e8fd09` every Ubuntu and macOS check job is green (CI-17 confirmed). Two infrastructure faults
+surfaced and are fixed: the token benchmark measured the machine's `<r_env>` (CI-18, `f20c99f`), and the
+connections and Windows jobs had outgrown their time limits since `f6aa1c8` (CI-19, `0292aad`).
+The hosted run on `0292aad` (CI-18 and CI-19 included) decides the M3/M4 tags (section 5, step 1).
 
-Lane ownership: `dev/.validation/scratch/lanes-current.txt` (local, ignored): files of other running
-lanes are off limits; every other file is free for a task's minimal edits. Running: **sub** (P19 Task 12
-+ acceptance) and **bench2** (P24 Tasks 3, 8, 11, 13). Next: CLEAN-1 (delete six stale "before plan X"
-test guards in test-gptr-gateway.R and test-catalog-models.R that can never run again), the M3/M4 gates,
-then P25 Tasks 3-13 (Tasks 14-15 are the maintainer's). Each lane is one run of
-`dev/ci/orchestration/plan-tasks.workflow.js` (section 7); early prechecks block tasks whose
-prerequisites have not landed yet (re-dispatch them).
+## 4. How to resume
 
-The P11 redesign evidence (design, prototypes, `fin-changes.tsv`, `fin-accept.R`) is in
-`dev/.validation/scratch/p11/` (local); the remaining-work schedule is `dev/.validation/scratch/schedule.md`
-(local). If a session ends mid-task, the uncommitted work stays in the tree: re-dispatch that task with
-"ALREADY IMPLEMENTED, UNCOMMITTED: review, fix, commit".
-
-## 5. Next steps
-
-1. Let the Stage 3 lanes finish; re-dispatch any `review-not-clear` or `blocked` task; run the M2 gate.
-2. Stage 2-4 (schedule section 3): after P11 Task 3, P11 Task 4 and P16 Tasks 2-4; at P11 Task 7,
-   P19 Tasks 2+, P21 Task 4+, P22 Tasks 5/9/10, P23 Task 9; at **P11 Task 8** (critical), P18 Tasks
-   2, 4-10 and P14 Tasks 1-8 in parallel lanes; then P19 rest, P20 Tasks 10-11, P21 rest, P23 Tasks
-   10, 12, P16 Tasks 5-8.
-3. P24 (end-to-end tests as their dependencies land, then Task 13 = M5 pre-check), P25 (release).
-4. Milestones: close M0/M1 (tags with the maintainer's approval), M2 after P11 acceptance, M3 after
-   P14/P16, M4 after P18-P21, M5 at P25.
-
-## 6. Open obligations
-
-- P12: `claude-haiku-4-5` has `tool_addition = TRUE` but `mid_system = FALSE` (no tool-addition
-  declarations sent).
-- D-019 item 5: processx `write_all()` blocks on Windows; decide before large stdin payloads go to
-  Windows children (P18, P19, P20, P22).
-- Hosted CI: INFRA-01/INFRA-23 timing on hosted runners (D-011: never loosen silently),
-  `test-proc-supervise.R:89` flake on Linux (`progress/infra.md`).
-- P13: a few roxygen link warnings in `@noRd` comments; the P13 plan literal of the NS-4 session
-  count test differs from the committed name-based test (GC flake fix).
-- IC-74 gap: no task covers P24's mixed local/cloud fixtures, quality-adjusted reporting and
-  local-only failure tests; P25 Task 13's cran-comments text omits Ollama; the P05 Task 6 online
-  models.dev catalog refresh must happen before release.
-
-## 7. Orchestration (reuse it)
-
-Each lane runs `dev/ci/orchestration/plan-tasks.workflow.js` with the Workflow tool. Per task: an
-**implementer** (test first; red, green, lint, neighbour filters, short log; with `early: true` it first
-checks every cross-plan prerequisite and returns `blocked` without edits), an **independent reviewer**
-(re-runs filters and lint; audits against plan, contract and simplicity), a **fixer** (up to 5 rounds),
-and a **committer** (stages only the task's files and, for shared files, only its own hunks; pushes
-every `pushEvery` commits). `args`: `{plan, planFile, contextRanges, log, pushEvery, early?,
-continueOnBlocked?, extraContext, scratch?, tasks: [{id, title, range, notes, reviewScope?, planFile?,
-log?}]}`; a task's `planFile`/`log` override the lane's. Validation always uses the isolated runner:
+Nothing is running. Validation always uses the isolated runner; full-package gates run on a clean
+export (`git archive HEAD | tar -x -C <dir>`), raw logs in the ignored `dev/.validation/`:
 
 ```
 R_LIBS_USER=/Users/wgu/Desktop/gptr/dev/.library Rscript --vanilla dev/ci/isolated-check.R test '<regex>'
@@ -124,37 +73,65 @@ R_LIBS_USER=... Rscript --vanilla dev/ci/isolated-check.R lint [files] | documen
 env -u TYPESAFE_API_KEY R_LIBS_USER=... Rscript --vanilla dev/bench/tokens/run.R --check
 ```
 
-Full-package gates run on a clean export (`git archive HEAD | tar -x -C <dir>`). Raw logs go to the
-ignored `dev/.validation/`.
+New work runs through `dev/ci/orchestration/plan-tasks.workflow.js` (Workflow tool): per task an
+implementer (test first; red, green, lint, neighbour filters, short log), an independent reviewer, a
+fixer (up to 5 rounds) and a committer that stages only its own hunks of shared files. `args`:
+`{plan, planFile, contextRanges, log, pushEvery, early?, continueOnBlocked?, extraContext, scratch?,
+tasks: [{id, title, range, notes, reviewScope?, planFile?, log?}]}`. A clear review with only nits
+skips the fixer, so read the nits (the P25 ones were applied in `0385ad9`). Concurrent lanes list
+their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 
-## 8. Pitfalls
+## 5. Maintainer steps (ask first; in this order)
 
-- One shared working tree: give every lane the others' files; committers stage only their own hunks of
-  NAMESPACE, man, DEVIATIONS and progress logs (one sweep happened on 2026-10-05; the rule is now in
-  the committer prompt). Take the next free D-id at the moment of writing.
-- Heuristic review loops do not converge: bind reviewers to a closed rule list (P11 design section 2)
-  and the D-061 standard; conventions section 11 forbids demanding special cases.
-- Never stub another plan's function; early lanes block cleanly.
+1. **M3 and M4 tags** (`gptr-1.0-m3`, `gptr-1.0-m4`) on a commit with hosted CI green (section 3).
+2. Manual terminal checks in `R --vanilla`: P14 Task 7 (console, INFRA-03), P21 Task 7 (Ctrl-C).
+3. Live runs (`GPTR_LIVE_TESTS=true`, paid or plan quota): P25 Task 14 Step 6 (`dev/bench/tokens/live.R`
+   with both models, then `dev/release/check-live.R` and commit the `live-<date>.csv`), the P20 live
+   CLI test, optionally the P12/P13 live files (`00-index.md` section 6).
+4. Network: refresh the models.dev catalog (P05 Task 6), `urlchecker::url_check()`,
+   `dev/release/build-site.R` (exclude `CLAUDE.md` and `AGENTS.md` before deploying a site).
+5. P25 Task 15 Steps 5-6: hosted CI on the release commit, `devtools::check_win_devel()`,
+   `dev/release/check-files.R cran-comments --revdeps`, `devtools::submit_cran()`; then the M5 tag.
+
+## 6. Open obligations
+
+- P12: `claude-haiku-4-5` has `tool_addition = TRUE` but `mid_system = FALSE` (no tool-addition
+  declarations sent; D-075).
+- D-019 item 5: processx `write_all()` blocks on Windows; decide before large stdin payloads go to
+  Windows children.
+- Hosted timing and flake watch (D-011: never loosen silently): `progress/infra.md` "Open hosted
+  items" (INFRA-01, INFRA-23, `test-proc-supervise.R:89`, Chrome and Windows detritus NOTEs). Hosted
+  jobs that hit `timeout-minutes` show as cancelled, not failed: check durations, not only failures.
+- `dev/bench/cache-sim` (local only) still measures the machine's `<r_env>` (CI-18 Open).
+- IC-74 gap: no task covers P24's mixed local/cloud fixtures, quality-adjusted reporting and
+  local-only failure tests.
+- `document()` prints 44 roxygen "could not resolve link" warnings from bracketed text in `@noRd`
+  comments (14 files; harmless to check); a cleanup is offered as a separate task.
+- P13: the plan literal of the NS-4 session count test differs from the committed name-based test (GC
+  flake fix).
+
+## 7. Pitfalls
+
+- One shared working tree: lanes get each other's files; committers stage only their own hunks of
+  NAMESPACE, man, DEVIATIONS and progress logs. Take the next free D-id at the moment of writing.
+- Heuristic review loops do not converge: bind reviewers to a closed rule list and the D-061 standard;
+  conventions section 11 forbids demanding special cases.
 - A test that byte-compares shipped text with a spec couples code and spec changes: land them in one
-  commit (the rename did).
+  commit.
+- Hosted runners install with `R_KEEP_PKG_SOURCE=yes`: a package function's source file then holds a
+  lazy-load promise reaching package state; never serialize package closures with their srcrefs to a
+  child (CI-17, D-177).
 - R 4.6: `tools::file_ext()` fails on non-ASCII names in a C locale (use `path_ext()`); values from
-  active bindings are immutable. Windows: CRLF, `core.autocrlf` (`.gitattributes`), symlinks,
-  `write_all()` blocking. GC finalizers run at any allocation (D-085). IC-74: unknown usage is NA,
-  never 0.
-- Machine: macOS, 16 cores, R 4.5.0, dev library `dev/.library`; keep at most 5 lanes. macOS storage
-  indexing can push the load to 40+ (not R): check `uptime` before adding lanes.
+  active bindings are immutable. Windows: CRLF, symlinks, `write_all()` blocking. GC finalizers run at
+  any allocation (D-085). IC-74: unknown usage is NA, never 0.
+- Machine: macOS, 16 cores, R 4.5.0, dev library `dev/.library`; keep at most 5 lanes; check `uptime`.
 - Never read `.secrets/`; tests are offline; never run live tests or the real `claude`/`codex` CLIs.
 - Never stage or delete the maintainer's untracked `AGENTS.md`.
 
-## 9. Maintainer-only (ask first)
+## 8. Key commits
 
-Milestone tags, releases, CRAN submission and win-builder (P25 Task 15), paid live calibration (P25
-Task 14, P24 Task 4 live leg), live provider tests (`GPTR_LIVE_TESTS=true`), the real CLI tests (P20
-Task 11), installing packages into the user library, manual terminal checks (P14 Task 7, P21 Task 7).
-
-## 10. Key commits
-
-- This session: FIX-7 `7d784df`; P15 acceptance `84d85db`; P17 acceptance `59d7987`; DOC-1/DOC-2
-  `31118fb` (full text before condensation: `2dca780`); rename `bd8eeaf`.
-- Earlier: D-135 `bd7bc50`; simplicity plan `d7650ba`; CI-6 `38db483`; P10 acceptance `2823b07`.
-  Older history of this file: `git show 16127b1:dev/HANDOFF.md`.
+- 2026-10-07: CI-19 `0292aad`; CI-18 `f20c99f`; P25 gate rows `489080d`.
+- 2026-10-06: CI-17 `78ee719`; cache-sim refresh `2e8fd09`; P25 nits `0385ad9`; P25 Tasks 12-15
+  `90bb54a`, `8885332` (Version 1.0.0), `56ccc60`, `131f754`; FIX-10 `ef522eb`; CLEAN-1 `16b2b79`.
+- 2026-10-05: FIX-7 `7d784df`; DOC-1/DOC-2 `31118fb` (full text before condensation: `2dca780`);
+  rename `bd8eeaf`; D-135 `bd7bc50`. Older history of this file: `git show 16127b1:dev/HANDOFF.md`.
