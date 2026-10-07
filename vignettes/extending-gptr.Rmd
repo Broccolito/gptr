@@ -1,0 +1,210 @@
+---
+title: "Extending gptr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Extending gptr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+Everything in gptr is a plugin. Providers, tools, permission policies, hooks, slash commands,
+prompt sections, context blocks, sub-agent backends and more are records in one registry, and
+the built-in features register themselves through the same public API that your code uses. This
+vignette shows the common kinds; `gptr_api()$features` lists all of them.
+
+
+``` r
+library(gptr)
+gptr_api()$version
+#> [1] '1.0'
+head(grep("^kind[.]", gptr_api()$features, value = TRUE))
+#> [1] "kind.adapter"       "kind.agent"         "kind.artifact_type"
+#> [4] "kind.backend"       "kind.cache_policy"  "kind.checkpointer"
+```
+
+## A tool the model calls as an R function
+
+Most capabilities are members of the `peter$` namespace rather than separate model-visible tools:
+the model calls them from R code, which costs a few tokens per tool instead of a full schema.
+`gptr_check()` runs the conformance checks on a spec before you register it.
+
+
+``` r
+add_tool = gptr_tool(
+  "add", "Add two numbers",
+  parameters = list(type = "object", required = I(c("a", "b")),
+                    properties = list(a = list(type = "number"), b = list(type = "number"))),
+  fun = function(a, b) a + b,
+  exposure = "r", namespace = "demo"
+)
+gptr_check(add_tool)
+#> <gptr_check> 4 check(s), 0 failed
+#>   ok    tool:add  spec.class
+#>   ok    tool:add  spec.fields
+#>   ok    tool:add  tool.schema
+#>   ok    tool:add  tool.empty_input: empty input fails schema validation before execute()
+off_tool = gptr_register(add_tool)
+peter$demo$add(2, 3)
+#> [1] 5
+```
+
+Model code calls it the same way:
+
+
+``` r
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "peter$demo$add(40, 2)")),
+  "The sum is 42."
+))
+s = peter("What is 40 plus 2? Use the demo tools.", model = fake, envir = new.env(), mode = auto)
+s$text
+#> [1] "The sum is 42."
+off_tool()
+```
+
+`gptr_register()` returns a function that unregisters the record. To add a tool to one session
+only, pass it as `peter(..., tools = list(add_tool))`.
+
+## A permission policy
+
+A policy sees every tool call before it runs and can deny, ask, modify or allow it. The strictest
+answer of all policies wins, and a policy that throws an error denies.
+
+
+``` r
+no_installs = gptr_policy("no_installs", check = function(call, ctx) {
+  if (identical(call$name, "r") && grepl("install.packages", call$input$code, fixed = TRUE)) {
+    list(decision = "deny", reason = "installing packages is not allowed in this project")
+  } else {
+    NULL
+  }
+})
+off_policy = gptr_register(no_installs)
+
+eager = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "install.packages(\"fortunes\")")),
+  "I was not allowed to install the package."
+))
+s = peter("Install the fortunes package.", model = eager, envir = new.env(), mode = auto)
+result = eager$log$requests[[2]]$last_results[[1]]
+result$is_error
+#> [1] TRUE
+s$text
+#> [1] "I was not allowed to install the package."
+off_policy()
+```
+
+The denial reached the model as an error result, and the model reported it. Nothing was
+installed, even in `auto` mode.
+
+## A hook on a session
+
+`gptr_on()` attaches a handler to one session's events; `gptr_hook()` specs registered with
+`gptr_register()` apply to every session.
+
+
+``` r
+s = peter("hi", model = gptr_fake_provider(list("hello")), .run = FALSE, envir = new.env())
+seen = new.env()
+seen$roles = character()
+off_hook = gptr_on(s, "message_end", function(event, ctx) {
+  seen$roles = c(seen$roles, event$message$role)
+  NULL
+})
+gptr_step(s)
+off_hook()
+seen$roles
+#> [1] "user"      "assistant"
+```
+
+## Prompt sections, context blocks and commands
+
+A prompt section adds text to the system prompt of new sessions; a context block adds data to the
+first message or to every turn; a command adds a slash command to the console.
+
+
+``` r
+rules = gptr_prompt_section("house_rules", "Report every quantity with its unit.", tier = "T1",
+                            order = 780L)
+notebook = gptr_context_block("lab_notebook", function(ctx, budget) "Experiment 12: cohort B.",
+                              placement = "first", order = 650L)
+rows = gptr_command("rows", function(args, ctx) paste("rows:", nrow(mtcars)),
+                    description = "Show the rows of mtcars")
+offs = lapply(list(rules, notebook, rows), gptr_register)
+reg = gptr_registry(c("prompt_section", "context_block", "command"))
+reg[reg$name %in% c("house_rules", "lab_notebook", "rows"), c("kind", "name", "source")]
+#> <gptr_registry> 3 record(s)
+#>            kind         name source
+#>  prompt_section  house_rules   user
+#>   context_block lab_notebook   user
+#>         command         rows   user
+for (off in offs) off()
+```
+
+`gptr_prompt()` shows what a new session would freeze, section by section, with token estimates.
+
+## Other kinds
+
+The eleven exported constructors cover the common kinds: `gptr_tool()`, `gptr_provider()`,
+`gptr_adapter()`, `gptr_router()`, `gptr_hook()`, `gptr_policy()`, `gptr_agent()`,
+`gptr_command()`, `gptr_prompt_section()`, `gptr_context_block()` and `gptr_backend()`. Every
+other kind uses `gptr_spec()`:
+
+
+``` r
+gptr_spec("env_alias", "SLACK_BOT_TOKEN", aliases = "slack-token")
+#> <gptr_env_alias SLACK_BOT_TOKEN>
+#>   aliases: slack-token
+#>   api_version: 1.0
+```
+
+A provider for an OpenAI-compatible endpoint is data:
+
+
+``` r
+gptr_register(gptr_provider("corp", api = "openai-completions",
+                            base_url = "https://llm.corp.example/v1", auth = "CORP_LLM_KEY",
+                            models = list(list(id = "corp-large", context = 128000))))
+peter("Summarize this table", mtcars, model = "corp/corp-large")
+```
+
+## Extensions and plugins
+
+An extension is a function of the extension API object. It registers records with
+`gptr$register()` and can be passed to one call with `extensions =`, or saved in
+`.gptr/extensions/` of a trusted project.
+
+
+``` r
+lab_rules = function(gptr) {
+  gptr$register(gptr_prompt_section("lab_rules", "Report concentrations in mmol/L.",
+                                    tier = "T1", order = 790L))
+}
+peter("Summarize the assay results", assay, extensions = lab_rules)
+```
+
+A plugin is an R package (or a directory) with a manifest in `inst/gptr/plugin.json`. Its skills,
+prompt templates, agent definitions and MCP servers are discovered from the manifest; its R code
+is loaded only when a session first needs it, and the manifest's declarations let gptr describe
+its tools to the model without loading anything.
+
+```json
+{"name": "gptrpanel", "version": "0.1.0", "description": "Reviewer panels and trial lookups",
+ "gptr": {"api": ">= 1.0, < 2"},
+ "skills": "skills", "prompts": "prompts", "agents": "agents", "mcpServers": "mcp.json",
+ "extension": {"entry": "gptrpanel::gptr_plugin", "activation": "lazy",
+               "provides": {"tool": ["trials/search"], "command": ["panel"]},
+               "declarations": {"trials/search": {
+                 "signature": "search(condition: string)",
+                 "description": "Search ClinicalTrials.gov for recruiting trials"}}}}
+```
+
+Its `DESCRIPTION` adds `Config/gptr/plugin: true` and `Config/gptr/api: >= 1.0, < 2`. Use the
+plugin with `peter(..., plugins = gptrpanel)` or list the installed ones with
+`gptr_plugins(installed = TRUE)`. Packages can also teach gptr about their classes by
+registering methods for `gptr_describe()` (compact descriptions for the model) and
+`gptr_preimage()` (how to undo changes to an object) as delayed S3 methods.
+
+

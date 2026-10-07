@@ -6,3 +6,7 @@ test_that("DESCRIPTION declares the vignette builder (Task 5)", {
 test_that("the getting-started vignette is precomputed and current (Task 5)", {
   expect_no_problems(vig_committed_problems(gptr_root(), "getting-started"))
 })
+
+test_that("the extending-gptr vignette is precomputed and current (Task 8)", {
+  expect_no_problems(vig_committed_problems(gptr_root(), "extending-gptr"))
+})
