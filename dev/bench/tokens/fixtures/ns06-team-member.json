@@ -1,0 +1,48 @@
+{
+  "id": "ns06-team-member",
+  "north_star": 6,
+  "description": "One inline member of NS-6's team: reviews = peter(\"Review analysis.R for statistical errors.\", agents = list(stats = agent(model = opus, skills = statistics), ...)) run as a script. The member runs the minimal preset (sub-agents, architecture 6.13), auto mode, no human; it reads analysis.R once and reports. Measures the per-member static prefix of 03 section 10.4 (about 1,300 tokens instead of about 2,900).",
+  "mode": "auto",
+  "human": false,
+  "preset": "minimal",
+  "models": [
+    "benchopus/benchopus-1"
+  ],
+  "standins": [],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: Rscript (no human present)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "analysis.R": "library(lme4)\nmice = read.csv(\"mice.csv\")\nfit = lm(weight ~ diet + day, data = mice)\nsummary(fit)\nt.test(weight ~ diet, data = mice)\n"
+  },
+  "objects": {},
+  "facts": [],
+  "turns": [
+    {
+      "prompt": "Review analysis.R for statistical errors.",
+      "source": "parent",
+      "context": [],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "read",
+              "input": {
+                "path": "analysis.R"
+              },
+              "result": "library(lme4)\nmice = read.csv(\"mice.csv\")\nfit = lm(weight ~ diet + day, data = mice)\nsummary(fit)\nt.test(weight ~ diet, data = mice)",
+              "details": {
+                "path": "analysis.R",
+                "lines": 5
+              }
+            }
+          ]
+        },
+        {
+          "text": "Two statistical errors. 1. Line 3 fits lm() although weight is measured repeatedly per mouse: the observations are not independent, so standard errors are too small. Use lmer(weight ~ diet * day + (1 | mouse), data = mice). 2. Line 5 runs a t-test on all repeated measurements, which pseudo-replicates mice; compare per-mouse means or use the mixed model's diet contrast instead. lme4 is loaded but unused.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}

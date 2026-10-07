@@ -548,3 +548,58 @@ test_that("System 1 inside one agent's evaluation never runs a sibling's tool (I
   expect_false(is.na(a_start) || is.na(a_end) || is.na(b_start))
   expect_true(b_start < a_start || b_start > a_end)
 })
+
+# ---- Task 11: NS-6 records one team block and replays it with zero requests ---------------------
+
+# A temporary project where peter() records with the fake provider (as P15's end-to-end tests do):
+# consent to record by option, replay auto, mode auto, no document bound from earlier tests and
+# its own replay table; the live registry is restored too, as the row resets it
+local_ns6 = function(script, .env = parent.frame()) {
+  root = local_project(.env = .env)
+  local_gptr_options(record = "auto", replay = "auto", model = "fake/fake-1", mode = "auto",
+                     .env = .env)
+  fake = local_fake_provider(script, .env = .env)
+  old = mget(c("doc_binding", "live", "replay_blocks"), envir = the, ifnotfound = list(NULL))
+  withr::defer(list2env(old, envir = the), envir = .env)
+  the$doc_binding = NULL
+  the$replay_blocks = new.env(parent = emptyenv())
+  list(root = root, fake = fake)
+}
+
+test_that("NS-6: the team statement owns one block and replays with zero requests (IC-47)", {
+  x = local_ns6(function(request) {
+    if (grepl("statistics", request$system$t1 %||% "", fixed = TRUE)) {
+      "Line 3 ignores the repeated measures."
+    } else {
+      "The code runs; lme4 is unused."
+    }
+  })
+  f = file.path(x$root, "review.R")
+  writeLines(c("reviews = peter(\"Review analysis.R for statistical errors.\",",
+               "               agents = list(stats = agent(model = \"fake/fake-1\",",
+               "                                           system = \"You review statistics.\"),",
+               "                             code = agent(model = \"fake/fake-1\")))"), f)
+  e1 = new.env(parent = globalenv())
+  source(f, local = e1, keep.source = TRUE)
+  expect_identical(length(fake_requests(x$fake)), 2L)
+  expect_identical(e1$reviews$stats$text, "Line 3 ignores the repeated measures.")
+  txt = readLines(f, encoding = "UTF-8")
+  b = doc_find_blocks(txt)
+  expect_length(b$id, 1L)
+  expect_true(any(grepl("kind=team", txt, fixed = TRUE)))
+  expect_true(any(startsWith(txt, "## Agent code (fake/fake-1): The code runs")))
+  expect_true(any(startsWith(txt, "## Agent stats (fake/fake-1): Line 3 ignores")))
+  local_gptr_options(replay = "replay")
+  # a later R process: no session of the first run is live or bound to the block
+  the$live = new.env(parent = emptyenv())
+  the$replay_blocks = new.env(parent = emptyenv())
+  e2 = new.env(parent = globalenv())
+  source(f, local = e2, keep.source = TRUE)
+  expect_identical(length(fake_requests(x$fake)), 2L)
+  expect_identical(e2$reviews$kind, "team")
+  expect_identical(names(e2$reviews$children), c("stats", "code"))
+  expect_identical(e2$reviews$stats$text, "Line 3 ignores the repeated measures.")
+  expect_match(e2$reviews$text, "### code (fake/fake-1)\nThe code runs; lme4 is unused.",
+               fixed = TRUE)
+  expect_identical(readLines(f, encoding = "UTF-8"), txt)
+})
