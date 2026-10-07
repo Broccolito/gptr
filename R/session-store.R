@@ -685,7 +685,8 @@ session_file_summary = function(path) {
   }
   created = (iso_ms(hdr$timestamp) %||% (1000 * as.numeric(file.mtime(path)))) / 1000
   data.frame(id = hdr$id, file = normalizePath(path, winslash = "/"),
-             created = .POSIXct(created, tz = "UTC"), updated = file.mtime(path), turns = turns,
+             created = .POSIXct(created, tz = "UTC"),
+             updated = .POSIXct(as.numeric(file.mtime(path)), tz = "UTC"), turns = turns,
              model = model, status = status, title = title, live = FALSE, stringsAsFactors = FALSE)
 }
 

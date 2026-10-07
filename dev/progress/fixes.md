@@ -168,3 +168,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   PASS 2332.
 - Reviews: none recorded.
 - Deviations: none. Open: none.
+
+## Task FIX-11 - gptr_sessions() shows created and updated in the same time zone (2026-10-06)
+- Red: FAIL 1 in `^session-store$` (America/Los_Angeles: `created` shown in UTC, `updated` from
+  `file.mtime()` in local time, 25199 s apart). Fix: a stored row's `updated` is UTC POSIXct like
+  `created`, the live row and the empty frame. Green: `^session-store$` PASS 253. Lint clean.
+  Neighbours: `^session-(store|object|live)$` PASS 800, `^ckpt-rewind$` PASS 192,
+  `^(arch-layers|lint-rules)$` PASS 19 green.
+- Reviews: none recorded.
+- Deviations: none. Open: none.

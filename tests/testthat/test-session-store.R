@@ -766,6 +766,16 @@ test_that("gptr_sessions() lists stored sessions with their columns and live fla
   expect_error(gptr_sessions(project = "yes"), class = "gptr_error_invalid_argument")
 })
 
+test_that("gptr_sessions() shows created and updated in one time zone (FIX-11)", {
+  withr::local_timezone("America/Los_Angeles")
+  s = stored_run()
+  x = gptr_sessions()
+  row = x[x$id == s$id, ]
+  fmt = "%Y-%m-%d %H:%M:%S"
+  shown = as.POSIXct(c(format(row$created, fmt), format(row$updated, fmt)), tz = "UTC")
+  expect_lt(abs(as.numeric(diff(shown), units = "secs")), 60)
+})
+
 test_that("gptr_resume() returns the live object for an id, a path or NULL", {
   s = stored_run()
   expect_identical(gptr_resume(s$id), s)
