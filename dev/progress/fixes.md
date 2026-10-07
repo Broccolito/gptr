@@ -1,4 +1,4 @@
-# Coordinator follow-up fixes (FIX-1..9)
+# Coordinator follow-up fixes (FIX-1..9, PERF-1)
 Defects routed from plan lanes and fixed outside plan tasks; the owning plans' logs cross-reference
 them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest is FIX5-LINT).
 
@@ -124,6 +124,21 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Reviews: R1 clear, 1 minor (counts taken with Task 7's uncommitted files; header not updated):
   counts re-measured on HEAD plus FIX-9, header updated.
 - Deviations: none. Open: none.
+
+## PERF-1 - Settings are read from disk once per change, not once per lookup (2026-10-06)
+- `settings_file_read()` keys its cache on mtime, ctime and size and caches a file only once its
+  last change is over 2 s old (git's racy-clean rule, as `ckpt-files.R`).
+- Red: FAIL 2 (a file changed within 2 s served from the cache; a same-size rewrite with its
+  mtime restored read stale). Green: `^gptr-config$` PASS 492 (+1 test). Lint clean. Neighbours:
+  `gptr-|session-|agent-|ext-|doc-|s1-` PASS 8966 SKIP 1.
+- Measured: 10 fake-provider sessions, best of 3, 1.31 s before and 1.33 s after (files were
+  already parsed once per change); elapsed sampling puts `settings_layered()` at 3.5-7%, so layer
+  paths are not cached.
+- Reviews: R1 clear; minor (a malformed file changed within 2 s logs a diagnostic per lookup)
+  accepted as Open; nit (entry length, stale warning note) fixed.
+- Deviations: none. Open: a malformed settings file changed within 2 s logs its `parse_error` once
+  per lookup; a new session's time is in `ev_redact_payload()` (21% elapsed), `model_resolve()`
+  (17%) and `registry_sort()` (13%).
 
 ## Task FIX-10 - A worker receives no closure environments beyond its own records (2026-10-06)
 - Red: FAIL 2 in `^subagent-worker$` (the walk entered the registry; no `refhook`) and FAIL 2 in

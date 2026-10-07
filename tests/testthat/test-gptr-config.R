@@ -30,6 +30,33 @@ test_that("settings files keep unknown keys and a NULL removes a key", {
   expect_false("preset" %in% names(u))
 })
 
+test_that("a settings file is parsed once per change, a same-size rewrite included", {
+  local_gw()
+  p = settings_path("user", create = TRUE)
+  box = new.env()
+  box$n = 0L
+  decode = settings_decode
+  local_mocked_bindings(settings_decode = function(...) {
+    box$n = box$n + 1L
+    decode(...)
+  })
+  # changed within the last 2 s: parsed at every lookup, so a same-second rewrite is seen
+  writeLines('{"mode": "plan"}', p)
+  expect_identical(settings_read("user")$mode, "plan")
+  writeLines('{"mode": "auto"}', p)
+  expect_identical(settings_read("user")$mode, "auto")
+  Sys.sleep(2.1)
+  expect_identical(settings_read("user")$mode, "auto")
+  expect_identical(settings_read("user")$mode, "auto")
+  expect_identical(box$n, 3L)
+  # ctime is the creation time on Windows
+  skip_on_os("windows")
+  old = file.info(p)$mtime
+  writeLines('{"mode": "plan"}', p)
+  Sys.setFileTime(p, old)
+  expect_identical(settings_read("user")$mode, "plan")
+})
+
 test_that("the project scope needs a workspace", {
   local_gw(workspace = FALSE)
   expect_error(settings_write("project", list(mode = "plan")), class = "gptr_error_workspace")

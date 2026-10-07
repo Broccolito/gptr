@@ -214,18 +214,22 @@ json_simplify = function(x) {
   lapply(x, json_simplify)
 }
 
-#' Reads a JSON settings file through a cache keyed by path, mtime and size; a malformed file is
-#' a diagnostic and reads as empty
+#' Reads a JSON settings file through a cache keyed by path, mtime, ctime and size; a file changed
+#' within the last 2 s is not cached, as a rewrite in the same clock tick can keep its stamp (git's
+#' racy-clean rule). A malformed file is a diagnostic and reads as empty.
 #' @noRd
 settings_file_read = function(path) {
   if (!file.exists(path)) return(list())
   st = gateway_state()
   info = file.info(path, extra_cols = FALSE)
-  stamp = paste(format(as.numeric(info$mtime), digits = 15), info$size)
+  time = as.numeric(c(info$mtime, info$ctime))
+  stamp = paste(c(format(time, digits = 15), info$size), collapse = " ")
   hit = get0(path, envir = st$files, inherits = FALSE)
   if (!is.null(hit) && identical(hit$stamp, stamp)) return(hit$value)
   value = json_simplify(settings_decode(path))
-  assign(path, list(stamp = stamp, value = value), envir = st$files)
+  if (as.numeric(Sys.time()) - max(time) > 2) {
+    assign(path, list(stamp = stamp, value = value), envir = st$files)
+  }
   value
 }
 
