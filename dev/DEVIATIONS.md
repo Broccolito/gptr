@@ -2198,3 +2198,11 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   25.1 s.
 - Tests: dev/bench/tests/test-perf.R "the INFRA time leaves out only the untagged blocks of files that tag INFRA
   tests". Evidence: progress/P24.md Task P24-8.
+
+## D-179 - WIN-1 Windows workers read stdin through R only while a request waits; the worker keeps R_ARCH (2026-10-07)
+- Rule (contract 11.11, IC-60; P19 `R/subagent-worker.R`, P03 `R/auth-childenv.R`):
+  1. processx cannot read a Windows child's stdin (a synchronous pipe): its first poll fails (system error 87), the next read waits for data and drops it, later polls see neither data nor EOF (hosted probe). On Windows `worker_io_open()` opens R's `file("stdin")`, `worker_io_poll()` reads one line of an R connection, waiting for it, and the watchdog polls only a processx connection: a Windows worker sees `cancel` and stdin EOF while a request waits for its reply, a dead parent through the 5 s pid check (or EOF in that wait). Unix unchanged.
+  2. No deadlock with D-019 item 5's blocking parent write: the parent writes one small reply per request, while the worker waits for it in a read and writes nothing.
+  3. The `worker` profile keeps `R_ARCH`: callr sets the child's variables in the parent while it starts the child, so a worker that was the session's first supervised child made processx look for its supervisor under `bin/` instead of `bin/x64/` ("no file found").
+- Contract-visible: on Windows a `cancel` line or stdin EOF between requests is seen at the next request (11.11; gptr sends no `cancel`, a cancelled worker is killed); no section amended.
+- Tests: test-subagent-worker.R "stdin on Windows is an R connection, read only while a request waits (WIN-1)" (`local_worker_io()` reads an overlapped pipe end on Windows); test-auth-childenv.R "the worker keeps R_ARCH, which processx reads while callr sets its variables (WIN-1)"; test-secrets-e2e.R compares normalised paths. Evidence: progress/infra.md Task WIN-1.

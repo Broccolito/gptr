@@ -235,7 +235,9 @@ test_that("worker spec and result files and worker output carry no key (IC-70)",
   expect_identical(e2e_count_text(team$text, keys), 0L)
   expect_true(all(c("spec.rds", "result.rds") %in% basename(names(seen))))
   expect_lt(spec_size, 4e6)
-  recent = setdiff(e2e_recent_files(c(tempdir(), root), started), env_file)
+  # tempfile() and list.files() separate a Windows path differently
+  recent = setdiff(normalizePath(e2e_recent_files(c(tempdir(), root), started), "/", FALSE),
+                   normalizePath(env_file, "/", FALSE))
   files = c(e2e_scan_files(recent, keys), seen)
   expect_identical(sum(files), 0L, info = e2e_leaks(files))
 })

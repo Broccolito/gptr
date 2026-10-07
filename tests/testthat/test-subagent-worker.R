@@ -2,9 +2,10 @@
 # the child side, the parent's proxy adapter and the worker backend (plan P19).
 
 # The worker's stdin as a processx pipe pair with a blocking read end, as fd 0 may be (the test
-# writes, the worker reads), and its stdout as a text connection
+# writes, the worker reads), and its stdout as a text connection. On Windows, where processx
+# cannot read a blocking pipe end (WIN-1), the read end is overlapped.
 local_worker_io = function(.env = parent.frame()) {
-  pp = processx::conn_create_pipepair(nonblocking = c(FALSE, FALSE))
+  pp = processx::conn_create_pipepair(nonblocking = c(is_windows(), FALSE))
   tc = textConnection("out", "w", local = TRUE)
   io = worker_io_open(con = pp[[1L]], out = tc)
   withr::defer({
@@ -85,6 +86,32 @@ test_that("a partial line on a blocking stdin waits for its end without blocking
   worker_io_poll(w$io, 100L)
   expect_identical(w$io$stash[[1L]]$answers$a, "x")
   expect_false(w$io$eof)
+})
+
+test_that("stdin on Windows is an R connection, read only while a request waits (WIN-1)", {
+  tc = textConnection("out", "w", local = TRUE)
+  withr::defer(close(tc))
+  replies = vapply(list(list(type = "permission", id = "p1", decision = "allow"),
+                        list(type = "cancel")), json_encode, "")
+  io = worker_io_open(con = textConnection(replies), out = tc)
+  withr::defer(close(io$input))
+  run = new.env()
+  aborted = NULL
+  local_mocked_bindings(run_abort = function(run, reason) aborted <<- reason)
+  expect_identical(worker_watch_tick(io, run), 0.5)
+  expect_length(io$stash, 0L)
+  expect_identical(worker_ui_permission(io, list(tool = "r", input = list()))$decision, "allow")
+  expect_identical(worker_ui_permission(io, list(tool = "r", input = list()))$decision, "abort")
+  expect_true(io$cancel)
+  io$cancel = FALSE
+  expect_true(worker_ui_questions(io, list(list(id = "a", question = "x?")))$cancelled)
+  expect_true(io$eof)
+  expect_false(worker_watch_tick(io, run))
+  expect_identical(aborted, "cancel")
+  local_mocked_bindings(is_windows = function() TRUE)
+  stdin_io = worker_io_open(out = tc)
+  expect_identical(summary(stdin_io$input)$description, "stdin")
+  close(stdin_io$input)
 })
 
 test_that("the worker UI is a ui spec named worker", {

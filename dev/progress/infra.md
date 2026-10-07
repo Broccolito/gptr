@@ -249,6 +249,17 @@ pending (maintainer).
 - Reviews: r1 clear; minor (1 of its 9 runs: the `stream` mock exited before ready with empty stderr, line 438, before
   the edit; 160 starts did not reproduce it) -> declined, out of scope. Deviations: none. Open: hosted confirmation.
 
+## Task WIN-1 - Worker children never block reading an empty stdin on Windows (2026-10-07)
+- Red: on-demand Windows run 37639048633: `subagent-worker`, `cli-codex` (INFRA-16) and `injection-e2e` time out; the
+  `secrets-e2e` and `subagent-backends` workers end `error`. Probes on a temporary branch (runs 37654220709,
+  37657007246): processx's fd-0 poll fails (error 87) and its read drops data; `file("stdin")` reads lines and EOF;
+  the tests' blocking in-process pipe end never reads; a worker that is the first supervised child fails "no file
+  found" (`supervisor_path()` without `R_ARCH`); secrets-e2e's `setdiff()` kept the `.env` file (path separators).
+  Local: new tests FAIL 4 (`^subagent-worker$`), FAIL 1 (`^auth-childenv$`).
+- Green: Windows run 37657687678, the five files plus `auth-childenv`: 0 failed (platform skips only). Local
+  `^subagent-` PASS 580, `^(cli-codex|injection-e2e|secrets-e2e|auth-)` PASS 1677 (2 environmental skips). Lint clean.
+- Reviews: none. Deviations: D-179. Open: hosted confirmation on `main`.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);

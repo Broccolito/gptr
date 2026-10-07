@@ -4,20 +4,26 @@
 #
 # The child runs one session with the `jsonl` frontend on stdout and forwards permission requests
 # and questions to the parent, whose answers arrive on stdin (read without blocking through a
-# processx connection on fd 0). It exits on stdin EOF, EPIPE or a dead parent pid. The worker is
-# not an isolation boundary: the parent re-classifies every forwarded request (IC-53 item 5).
+# processx connection on fd 0; on Windows a line at a time while a request waits, WIN-1). It
+# exits on stdin EOF, EPIPE or a dead parent pid. The worker is not an isolation boundary: the
+# parent re-classifies every forwarded request (IC-53 item 5).
 # In the parent a worker is a proxy session (model `worker/worker`) whose request goes to the
 # inprocess adapter `subagent-worker`, which spawns and drives the child; status, usage, budgets
 # and gptr_cancel() are those of an ordinary run.
 
 # ---- the child: standard input and output -------------------------------------------------------
 
-#' The worker's I/O state: `input` (a processx connection, by default on fd 0), `out` (stdout),
-#' the partial line and the stash of replies read so far and the `cancel`/`eof` flags
+#' The worker's I/O state: `input` (by default stdin: a processx connection on fd 0, or on Windows,
+#' where processx cannot read a child's synchronous stdin pipe, R's `file("stdin")`), `out`
+#' (stdout), the partial line and the stash of replies read so far and the `cancel`/`eof` flags
 #' @noRd
 worker_io_open = function(con = NULL, out = stdout()) {
   io = new.env(parent = emptyenv())
-  io$input = con %||% processx::conn_create_fd(0L, encoding = "UTF-8", close = FALSE)
+  io$input = con %||% if (is_windows()) {
+    file("stdin", open = "r")
+  } else {
+    processx::conn_create_fd(0L, encoding = "UTF-8", close = FALSE)
+  }
   io$out = out
   io$partial = ""
   io$stash = list()
@@ -50,17 +56,25 @@ worker_send = function(io, obj) {
   invisible(NULL)
 }
 
-#' Read what is ready on stdin (waiting at most `ms`) and handle its complete lines: `cancel`
-#' sets the flag, other JSON objects go to the stash, non-JSON lines are ignored, a partial line
-#' waits for its end; end of input sets `eof`
+#' Read what is ready on stdin (waiting at most `ms`; an R connection waits for one line) and
+#' handle its complete lines: `cancel` sets the flag, other JSON objects go to the stash, non-JSON
+#' lines are ignored, a partial line waits for its end; end of input sets `eof`
 #' @noRd
 worker_io_poll = function(io, ms = 0L) {
   if (isTRUE(io$eof)) return(invisible(io))
-  # fd 0 may block: one read, once poll() reports data or end of input (a line read would wait)
-  state = tryCatch(processx::poll(list(io$input), as.integer(ms))[[1L]],
-                   error = function(e) "closed")
-  if (identical(state, "timeout")) return(invisible(io))
-  txt = paste0(io$partial, tryCatch(processx::conn_read_chars(io$input), error = function(e) ""))
+  if (inherits(io$input, "processx_connection")) {
+    # fd 0 may block: one read, once poll() reports data or end of input (a line read would wait)
+    state = tryCatch(processx::poll(list(io$input), as.integer(ms))[[1L]],
+                     error = function(e) "closed")
+    if (identical(state, "timeout")) return(invisible(io))
+    txt = paste0(io$partial, tryCatch(processx::conn_read_chars(io$input), error = function(e) ""))
+    eof = !isTRUE(tryCatch(processx::conn_is_incomplete(io$input), error = function(e) FALSE))
+  } else {
+    ln = tryCatch(readLines(io$input, n = 1L, warn = FALSE, encoding = "UTF-8"),
+                  error = function(e) character())
+    txt = if (length(ln)) paste0(ln, "\n") else ""
+    eof = !length(ln)
+  }
   lines = strsplit(txt, "\n", fixed = TRUE)[[1L]]
   io$partial = ""
   if (length(lines) && !endsWith(txt, "\n")) {
@@ -76,9 +90,7 @@ worker_io_poll = function(io, ms = 0L) {
       io$stash[[length(io$stash) + 1L]] = obj
     }
   }
-  if (!isTRUE(tryCatch(processx::conn_is_incomplete(io$input), error = function(e) FALSE))) {
-    io$eof = TRUE
-  }
+  if (eof) io$eof = TRUE
   invisible(io)
 }
 
@@ -242,11 +254,12 @@ worker_outcome = function(s) {
 }
 
 #' The watchdog (a reactor task every 0.5 s): a `cancel` line or end of input aborts the run; a
-#' dead parent ends the process (IC-60)
+#' dead parent ends the process (IC-60). An R connection (stdin on Windows) waits for a line, so
+#' it is read only while a request waits for its reply.
 #' @noRd
 worker_watch_tick = function(io, run) {
   if (isTRUE(run$settled)) return(FALSE)
-  worker_io_poll(io, 0L)
+  if (inherits(io$input, "processx_connection")) worker_io_poll(io, 0L)
   if (isTRUE(io$cancel) || isTRUE(io$eof)) {
     run_abort(run, reason = "cancel")
     return(FALSE)

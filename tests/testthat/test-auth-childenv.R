@@ -89,6 +89,11 @@ test_that("mcp and worker are allowlists; the worker gets only its provider's ke
                class = "gptr_error_invalid_argument")
 })
 
+test_that("the worker keeps R_ARCH, which processx reads while callr sets its variables (WIN-1)", {
+  withr::local_envvar(R_ARCH = "/x64")
+  expect_identical(child_env("worker")[["R_ARCH"]], "/x64")
+})
+
 test_that("cli-claude follows G6 3.7: enclosing-agent and billing variables go, with a warning", {
   local_vault()
   local_fake_env()

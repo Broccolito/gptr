@@ -28,8 +28,10 @@ env_allow_common = c("TZ", "LANG", "LANGUAGE", "LC_ALL", "LC_COLLATE", "LC_CTYPE
                      "XDG_DATA_HOME", "XDG_RUNTIME_DIR")
 # What an R worker additionally needs. Only gptr variables that 04 section 3.2 defines; the
 # others a worker needs (GPTR_WORKER, GPTR_PROJECT_ROOT) are passed by P19 through `set =`.
-env_allow_r = c("R_HOME", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE", "R_USER", "R_USER_CONFIG_DIR",
-                "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_SUBAGENT_DEPTH")
+# R_ARCH: callr sets the child's variables in the parent while it starts the child, when processx
+# may look up its supervisor under bin/R_ARCH (WIN-1).
+env_allow_r = c("R_HOME", "R_ARCH", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE", "R_USER",
+                "R_USER_CONFIG_DIR", "R_USER_DATA_DIR", "R_USER_CACHE_DIR", "GPTR_SUBAGENT_DEPTH")
 
 #' The six built-in profiles as child_env spec fields (base, keep, drop, set, billing)
 #' @noRd
