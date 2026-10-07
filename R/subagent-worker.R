@@ -387,7 +387,7 @@ worker_key_provider = function(ref) {
 
 #' `start()` of the `worker` backend: a proxy child session whose overlay receives the exports.
 #' Its spec (contract 11.11) waits in the session's adapter state (contract 8.1 `opts$state`)
-#' with the object names only, so no user object is kept [R1][R2]. The egress acknowledgement,
+#' with the object names only, so no user object is kept (rules R1, R2). The egress acknowledgement,
 #' the replay guard (for the real model, which the worker never checks) and the objects are
 #' checked before any process starts.
 #' @noRd
@@ -532,8 +532,8 @@ worker_kill = function(st) {
 
 #' Spawn the worker of one request (architecture 6.13 `worker` row; IC-60). The spec file gets
 #' the values of the objects, read by name from the proxy's overlay only while it is written, so
-#' this frame and its callbacks keep none [R1][R2]. A guard task kills the worker once the proxy
-#' run is aborted (P06's run_abort() cancels the stream task itself).
+#' this frame and its callbacks keep none (rules R1, R2). A guard task kills the worker once the
+#' proxy run is aborted (P06's run_abort() cancels the stream task itself).
 #' @noRd
 worker_spawn = function(st) {
   w = st$spec

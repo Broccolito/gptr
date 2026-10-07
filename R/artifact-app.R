@@ -305,8 +305,8 @@ artifact_check_html = function(dir, ctx) {
 
 # ---- immutable versions: data snapshots and the shiny and html builds -------------------------
 
-#' Facts about one data object, read in a leaf that returns primitives only [R4][leaf]; NULL when
-#' the name is empty or not visible from `envir`
+#' Facts about one data object, read in a leaf function that returns primitives only (rule R4);
+#' NULL when the name is empty or not visible from `envir`
 #' @noRd
 artifact_data_facts = function(name, envir) {
   if (!nzchar(name) || !exists(name, envir = envir, inherits = TRUE)) return(NULL)
@@ -315,7 +315,8 @@ artifact_data_facts = function(name, envir) {
        size = as.numeric(utils::object.size(obj)))
 }
 
-#' Serialise one data object through the leaf save_rds() [R7][leaf]; returns the file's bytes
+#' Serialise one data object through the leaf function save_rds() (rule R7); returns the file's
+#' bytes
 #' @noRd
 artifact_data_save = function(name, envir, file) {
   save_rds(get(name, envir = envir, inherits = TRUE), file)
@@ -327,7 +328,7 @@ artifact_data_save = function(name, envir, file) {
 #'
 #' Names are free-form (`a/b` becomes data/001.rds; the mapping is in artifact.json). The total
 #' `object.size()` is checked against `gptr.artifact_max_bytes` before anything is written.
-#' `envir` is read only through leaf functions and never kept [R1][R2].
+#' `envir` is read only through leaf functions and never kept (rules R1, R2).
 #' @return The `data` records of artifact.json: list(name, file, class, dim, bytes) per object.
 #' @noRd
 artifact_snapshot = function(vdir, data, envir, id = basename(dirname(vdir))) {
@@ -1053,7 +1054,7 @@ artifact_ckpt_describe = function(fragment) {
 #' peter$app(): check, snapshot, build and optionally launch one new version (architecture 6.15)
 #'
 #' `envir` is where the objects named in `data` are looked up; it is read only through leaf
-#' functions and never kept [R1][R2]. A version claimed by a call that fails before its build
+#' functions and never kept (rules R1, R2). A version claimed by a call that fails before its build
 #' finished is removed again; a version that fails to launch stays (immutable) with its checks.
 #' @return The `gptr_artifact` handle.
 #' @noRd
@@ -1136,7 +1137,7 @@ artifact_attach_image = function(block) {
 #' Objects are looked up in the frame that called `peter$app()`: inside P10's member closure (which
 #' evaluates this function in its own frame) the closure's caller, found by frame numbers through
 #' sys.parents(), never sys.frames() (rule R3); called directly, its own caller. The frame is used
-#' during the call only [R2].
+#' during the call only (rule R2).
 #' @noRd
 artifact_member_fun = function(id, data = character(), title = NULL, kind = "shiny",
                                check = TRUE, launch = interactive()) {

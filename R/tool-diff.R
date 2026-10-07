@@ -42,8 +42,8 @@ diff_lis = function(x) {
   out
 }
 
-#' Length of the common run a[x + 1 ..], b[y + 1 ..]: eight scalar steps, then doubling vector
-#' blocks
+#' Length of the common run that starts at `a[x + 1]` and `b[y + 1]`: eight scalar steps, then
+#' doubling vector blocks
 #' @noRd
 diff_snake = function(a, b, x, y) {
   len_max = min(length(a) - x, length(b) - y)

@@ -5,7 +5,7 @@
 
 # ------------------------------------------------------------------ dot facts (leaves)
 
-#' Facts about one dot value [leaf] (contract 7.8; G3 `.leaf_dot`)
+#' Facts about one dot value (leaf function; contract 7.8; G3 `.leaf_dot`)
 #' @noRd
 dot_facts = function(x) {
   chr = is.character(x)
@@ -23,7 +23,7 @@ dot_facts = function(x) {
        })
 }
 
-#' The value bound to a call-site symbol, read by name [leaf]; an argument error naming the
+#' The value bound to a call-site symbol, read by name (leaf function); an argument error naming the
 #' symbol when it is unbound
 #' @noRd
 dot_get = function(name, envir) {
@@ -34,14 +34,14 @@ dot_get = function(name, envir) {
   get0(name, envir = envir, inherits = TRUE)
 }
 
-#' Address of the object bound to `name` as seen from `envir`, or NA [leaf]
+#' Address of the object bound to `name` as seen from `envir`, or NA (leaf function)
 #' @noRd
 binding_address = function(name, envir) {
   if (!exists(name, envir = envir, inherits = TRUE)) return(NA_character_)
   obj_address_leaf(get0(name, envir = envir, inherits = TRUE))
 }
 
-#' rlang::obj_address() of a forced value [leaf]
+#' rlang::obj_address() of a forced value (leaf function)
 #' @noRd
 obj_address_leaf = function(x) rlang::obj_address(x)
 
@@ -185,7 +185,7 @@ gateway_builtin_tools = function() c("read", "edit", "write", "grep", "find", "l
 # ------------------------------------------------------------------ interpolation (6.1.4; IC-45)
 
 #' Formats one interpolated value: an atomic vector of 1-50 elements, joined with ", ", cut at
-#' 1,000 characters; anything else is not interpolated (NULL) [leaf]
+#' 1,000 characters; anything else is not interpolated (NULL). A leaf function.
 #' @noRd
 interp_format = function(x) {
   if (is.null(x) || !is.atomic(x) || length(x) < 1L || length(x) > 50L) return(NULL)
@@ -418,7 +418,7 @@ gateway_choice_labels = function(choices) {
   unname(choices)
 }
 
-#' Validates the value arguments of peter(); forces each on entry [leaf]
+#' Validates the value arguments of peter(); forces each on entry (leaf function)
 #' @noRd
 gateway_args = function(parallel, choices, lvls, threshold, min_confidence, uncertain, background,
                         budget, replay, opts, run, stdin) {
@@ -512,7 +512,7 @@ call_new = function(prompt = NULL, template = NULL, interp = character(), sessio
   call
 }
 
-#' Releases a call record on every exit of peter() [R2]: values removed, `envir` and `sys_call`
+#' Releases a call record on every exit of peter() (rule R2): values removed, `envir` and `sys_call`
 #' NULL; a held record is left to gateway_release_held()
 #' @noRd
 call_release = function(call) {
@@ -525,8 +525,8 @@ call_release = function(call) {
   invisible(TRUE)
 }
 
-#' The value of context item `i` [leaf]: symbols by name from `envir`, others from `values`;
-#' gptr_error_internal after call_release()
+#' The value of context item `i` (leaf function): symbols by name from `envir`, others from
+#' `values`; gptr_error_internal after call_release()
 #' @noRd
 call_value = function(call, i) {
   check_class(call, "gptr_call", "call")
@@ -644,7 +644,7 @@ ident_spec_ok = function(spec, arg) {
 
 #' Accepts a resolved value: character (identifiers), a spec of the right kind, a factory for
 #' `extensions`, or a list of those for `tools`/`extensions`; anything else is
-#' gptr_error_invalid_identifier naming its class [leaf]
+#' gptr_error_invalid_identifier naming its class (leaf function)
 #' @noRd
 ident_accept = function(value, arg, label) {
   if (inherits(value, "AsIs")) class(value) = setdiff(class(value), "AsIs")
@@ -728,7 +728,7 @@ ident_symbol = function(nm, arg, envir) {
 }
 
 #' Spends one step of a reachability walk (ident_holds_env()); TRUE once 100000 steps are spent,
-#' and the walk then counts as reaching the mask [leaf]
+#' and the walk then counts as reaching the mask (leaf function)
 #' @noRd
 ident_walk_spent = function(seen) {
   n = get0(".n", envir = seen, inherits = FALSE, ifnotfound = 0L) + 1L
@@ -738,7 +738,7 @@ ident_walk_spent = function(seen) {
 
 #' TRUE when the unforced binding `nm` of frame `env` is the default of an unsupplied formal, which
 #' R evaluates in `env` itself (missing() forces nothing; a forwarded default counts as supplied,
-#' and a forwarded missing argument fails when forced either way) [leaf]
+#' and a forwarded missing argument fails when forced either way). A leaf function.
 #' @noRd
 ident_lazy_default = function(nm, env) {
   isTRUE(eval(as.call(list(base::missing, as.name(nm))), env))
@@ -746,7 +746,7 @@ ident_lazy_default = function(nm, env) {
 
 #' TRUE when environment `env` can reach the mask `target`, walking parents up to `stop` or a named
 #' environment. Unforced promises other than ident_lazy_default() ones, non-empty dots and active
-#' bindings count as reaching it (D-105); `seen` holds visited addresses (rule R2) [leaf]
+#' bindings count as reaching it (D-105); `seen` holds visited addresses (rule R2). A leaf function.
 #' @noRd
 ident_env_reaches = function(env, target, stop, seen, depth) {
   while (is.environment(env)) {
@@ -779,7 +779,7 @@ ident_env_reaches = function(env, target, stop, seen, depth) {
 
 #' TRUE when a resolved value can reach the mask `target` through a closure environment, an
 #' environment, a list element or an attribute (ident_env_reaches()); nesting deeper than 64 or a
-#' walk over 100000 steps counts as reaching it [leaf]
+#' walk over 100000 steps counts as reaching it (leaf function)
 #' @noRd
 ident_holds_env = function(x, target, stop, seen = NULL, depth = 0L) {
   force(x)
@@ -908,7 +908,7 @@ ident_force_needed = function(expr, arg, envir) {
   is.call(expr) && identical(expr[[1L]], as.name("I"))
 }
 
-#' Forces a formal's promise and accepts its value [leaf]
+#' Forces a formal's promise and accepts its value (leaf function)
 #' @noRd
 ident_value = function(x, arg, expr) {
   force(x)
@@ -944,7 +944,7 @@ agents_is_definition = function(a) {
 }
 
 #' TRUE when an agent definition call names itself: an argument named `name` (or a prefix) or a
-#' non-empty unnamed one, which R binds to gptr_agent()'s first formal `name` [leaf]
+#' non-empty unnamed one, which R binds to gptr_agent()'s first formal `name` (leaf function)
 #' @noRd
 agents_own_name = function(a) {
   an = names(a)

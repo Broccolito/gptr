@@ -689,7 +689,7 @@ s1_num = function(x) {
   if (is.numeric(x) && length(x) == 1L && is.finite(x)) as.double(x) else NA_real_
 }
 
-#' A finite number in [0, 1] (a probability or a confidence) or NA
+#' A finite number from 0 to 1 (a probability or a confidence) or NA
 #' @noRd
 s1_unit = function(x) {
   p = s1_num(x)
@@ -748,7 +748,7 @@ s1_parse_choice = function(ch, p, keys, conf, bad, tol = s1_round_tol) {
   list(type = "choice", choice = ch, probabilities = p, confidence = conf)
 }
 
-#' The score of a score answer, in [0, levels - 1] and never rounded to a level
+#' The score of a score answer, from 0 to levels - 1 and never rounded to a level
 #'
 #' A missing score becomes the expected level of the normalised probabilities; a given one must
 #' lie within their rounding of it, `tol * (sum(levels) + 1) / min(1, sum(p))`.

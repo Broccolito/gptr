@@ -105,8 +105,6 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 - `dev/bench/cache-sim` (local only) still measures the machine's `<r_env>` (CI-18 Open).
 - IC-74 gap: no task covers P24's mixed local/cloud fixtures, quality-adjusted reporting and
   local-only failure tests.
-- `document()` prints 44 roxygen "could not resolve link" warnings from bracketed text in `@noRd`
-  comments (14 files; harmless to check); a cleanup is offered as a separate task.
 - P13: the plan literal of the NS-4 session count test differs from the committed name-based test (GC
   flake fix).
 
@@ -118,6 +116,9 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
   conventions section 11 forbids demanding special cases.
 - A test that byte-compares shipped text with a spec couples code and spec changes: land them in one
   commit.
+- roxygen reads `[text]` in any `#'` comment, `@noRd` included, as a link and reports an unresolved one
+  as a message (`document()` still exits 0): write rule tags as "(rule R2)", intervals in words and
+  syntax or code in backticks; `document()` prints no `✖` line (DOC-3).
 - Hosted runners install with `R_KEEP_PKG_SOURCE=yes`: a package function's source file then holds a
   lazy-load promise reaching package state; never serialize package closures with their srcrefs to a
   child (CI-17, D-177).

@@ -377,8 +377,8 @@ route_team_run = function(call) {
 #' @noRd
 route_fanout_match = function(call) !is.null(call$args$parallel)
 
-#' The shape of a context value [leaf]: `kind` (`list`, `rows`, `atomic` or `none`), `n` and
-#' `keys` (element names, or NULL)
+#' The shape of a context value (leaf function): `kind` (`list`, `rows`, `atomic` or `none`),
+#' `n` and `keys` (element names, or NULL)
 #' @noRd
 subagent_shape = function(x) {
   if (is.data.frame(x)) {

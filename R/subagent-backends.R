@@ -154,7 +154,7 @@ subagent_is_frame = function(env) {
   FALSE
 }
 
-#' A child's overlay: reads fall through to `base` without a copy, writes stay local [R1][R2];
+#' A child's overlay: reads fall through to `base` without a copy, writes stay local (rules R1, R2);
 #' P06's home_label() reads the `gptr_overlay` attribute
 #' @noRd
 subagent_overlay = function(base, label) {
@@ -164,7 +164,7 @@ subagent_overlay = function(base, label) {
 }
 
 #' Once a child settled, re-parent its overlay to the global environment when its base held a
-#' function frame, so the child never pins that frame after the call returned [R2]
+#' function frame, so the child never pins that frame after the call returned (rule R2)
 #' @noRd
 subagent_overlay_release = function(child, base_is_frame) {
   home = session_home(child)
@@ -248,7 +248,7 @@ subagent_unbind = function(h) {
 #' The first user message of a child (source "parent"): P07's first-message context blocks for a
 #' child `gptr_call` record (contract 7.8; P09's `attached` block reads `context` through
 #' call_value(), the `skill_content` preloads read `ids$skills`), then the prompt. The record is
-#' released after rendering [R2]; `values` only when the spec owns them.
+#' released after rendering (rule R2); `values` only when the spec owns them.
 #' @noRd
 subagent_first_message = function(child, spec) {
   call = new.env(parent = emptyenv())
@@ -365,7 +365,7 @@ subagent_emit = function(parent, type, ...) {
 #' IC-60) and emits `subagent_start` on the parent. The child's overlay `home` reads `base`, else
 #' `call$envir`; routes pass the gateway's `call` record, never its frame: R never lowers the
 #' reference counts a list holds, so a list holding a function frame would keep the frame's
-#' objects referenced after it returned [R2].
+#' objects referenced after it returned (rule R2).
 #' @return The backend's handle `list(session, run, fds, poll, cancel)` plus `backend`, `name`,
 #'   `model`, `base_is_frame` and `bound`.
 #' @noRd

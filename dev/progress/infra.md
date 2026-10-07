@@ -228,6 +228,15 @@ pending (maintainer).
   workflow FAIL 2 (Windows 75/45 < 120, connections 30 < 60), green `^zzz$` PASS 88. Lint clean.
 - Green: hosted confirmation pending. Deviations: D-019 (edited in place).
 
+## Task DOC-3 - Internal roxygen comments hold no unresolved links (2026-10-07)
+- Red: `document()` printed 44 `✖` lines (exit 0; roxygen 7.3.3 reports them through `cli::cli_inform()`): bracketed
+  text in `#'` comments of 14 files read as links: copy-safety tags `[R1][R2]`, `[leaf]`, `[experimental]`, console
+  syntax `/model [ref]`, intervals `[0, 1]`, `a[x + 1 ..]`, and `"[...]"` (found in 18 packages).
+- Fix: each fragment says what it means: "(rules R1, R2)", "(leaf function)", "(...; experimental)", command
+  syntax and index or glob notation in backticks, intervals in words. Comment lines only.
+- Green: `document()` exit 0 with no `✖` line, NAMESPACE and `man/` unchanged; lint clean (14 files);
+  `^(arch-layers|lint-rules|zzz)$` PASS 107. Deviations: none.
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);

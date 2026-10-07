@@ -514,7 +514,8 @@ patch_hunk_edits = function(op, text) {
 }
 
 #' Remove a file named by a patch (a link is removed, not its target); a failure is an error. The
-#' name is never a pattern: unlink() expands "*", "?" and "[...]" unless `expand = FALSE`.
+#' name is never a pattern: unlink() expands the wildcards `*`, `?` and `[...]` unless
+#' `expand = FALSE`.
 #' @noRd
 patch_remove = function(abs, path) {
   p = fs_path(abs)

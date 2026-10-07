@@ -585,7 +585,8 @@ s1_build = function(q, answers, nm, threshold, meta) {
   s1_new_levels(q$type, value, q$options, m, conf, meta)
 }
 
-#' Validate the answer-shape arguments: threshold in (0, 1), min_confidence in [0, 1], uncertain
+#' Validate the answer-shape arguments `threshold` (strictly between 0 and 1), `min_confidence`
+#' (from 0 to 1) and `uncertain`
 #' @noRd
 s1_check_args = function(q, args) {
   threshold = args[["threshold"]] %||% 0.5

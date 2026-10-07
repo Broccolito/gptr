@@ -262,7 +262,7 @@ bg_has_later = function() {
   requireNamespace("later", quietly = TRUE)
 }
 
-#' Run a session in the background (service `bg.register`, 04 section 7.21) [experimental]
+#' Run a session in the background (service `bg.register`, 04 section 7.21; experimental)
 #'
 #' A live run is marked background, an idle session with queued input is started in the
 #' background, and anything else is refused.

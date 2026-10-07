@@ -40,7 +40,7 @@ artifact_log_new = function(raw, log) {
 
 #' A new record for a launched version: a log record plus the version, the type spec and the
 #' handle its `launch()` returned (closures over the child process only), never a user object
-#' or frame [R1][R2]
+#' or frame (rules R1, R2)
 #' @noRd
 artifact_record_new = function(id, version, type, handle) {
   version = as.integer(version)

@@ -196,8 +196,8 @@ peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugin
   if (isTRUE(res$visible)) res$value else invisible(res$value)
 }, class = c("gptr_gateway", "function"))
 
-#' For each dot expression, TRUE when the argument was left empty (`peter("x", , big)`) [leaf];
-#' read by index, never bound to a local, so it is never evaluated
+#' For each dot expression, TRUE when the argument was left empty (`peter("x", , big)`); a leaf
+#' function: read by index, never bound to a local, so it is never evaluated
 #' @noRd
 dot_empty = function(exprs) {
   out = logical(length(exprs))
@@ -345,7 +345,7 @@ gateway_defer = function(expr_fun) {
 #' @noRd
 gateway_deferring = function() gateway_state()$defer > 0L
 
-#' Address string of an environment for the pending-plan key [R2]: never a reference
+#' Address string of an environment for the pending-plan key (rule R2): never a reference
 #' @noRd
 home_address = function(envir) {
   check_env(envir, "envir")
@@ -813,7 +813,7 @@ gateway_pending_take = function(id) {
 gateway_pending_has = function(id) exists(id, envir = gateway_state()$pending, inherits = FALSE)
 
 #' Keeps a call record (and its `envir` frame) in `the$gateway$held` until the session's run
-#' settles or the session shuts down [R2]; gateway_release_hooks() releases it
+#' settles or the session shuts down (rule R2); gateway_release_hooks() releases it
 #' @noRd
 call_hold = function(call, s) {
   sid = session_data(s)$id
@@ -824,7 +824,7 @@ call_hold = function(call, s) {
   invisible(call)
 }
 
-#' Releases every call record held for a session and forgets its pending run options [R2]
+#' Releases every call record held for a session and forgets its pending run options (rule R2)
 #' @noRd
 gateway_release_held = function(sid) {
   if (!is.character(sid) || length(sid) != 1L || is.na(sid)) return(invisible(FALSE))
@@ -1116,7 +1116,7 @@ gateway_routes = function() {
               }))
 }
 
-#' builtin:gateway: its routes, the core setting specs (IC-24) and the release hooks [R2]
+#' builtin:gateway: its routes, the core setting specs (IC-24) and the release hooks (rule R2)
 #' @noRd
 builtin_gateway = function(gptr) {
   for (sp in gateway_routes()) gptr$register(sp)

@@ -138,7 +138,7 @@ cmd_exit = function(args, ctx) {
   NULL
 }
 
-#' /model [ref]: on a session from the next request; before the first prompt for that prompt
+#' `/model [ref]`: on a session from the next request; before the first prompt for that prompt
 #' @noRd
 cmd_model = function(args, ctx) {
   rs = console_repl_find()
@@ -222,7 +222,7 @@ cmd_env = function(args, ctx) {
   if (length(lines)) lines else "(no objects)"
 }
 
-#' /compact [focus], under the interrupt policy (mode "repl": an abort returns NULL)
+#' `/compact [focus]`, under the interrupt policy (mode "repl": an abort returns NULL)
 #' @noRd
 cmd_compact = function(args, ctx) {
   s = ctx$session
@@ -339,7 +339,7 @@ cmd_skills = function(args, ctx) {
   utils::capture.output(print(f()))
 }
 
-#' /skill:<name> [request]: the skill goes to the next prompt's `skills =`; the request is sent
+#' `/skill:<name> [request]`: the skill goes to the next prompt's `skills =`; the request is sent
 #' @noRd
 cmd_skill = function(args, ctx) {
   name = sub("[[:space:]].*$", "", args)

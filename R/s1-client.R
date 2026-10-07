@@ -261,7 +261,7 @@ s1_typesafe_parse = function(model, status, headers, body, questions) {
 
 # ---- answers ----------------------------------------------------------------------------------
 
-#' TypeSafe's choice confidence (n * peak - 1) / (n - 1), clamped to [0, 1] (report 04 2.4)
+#' TypeSafe's choice confidence (n * peak - 1) / (n - 1), clamped between 0 and 1 (report 04 2.4)
 #' @noRd
 s1_confidence_choice = function(p) {
   n = length(p)
