@@ -19,7 +19,7 @@ A \code{gptr_providers} data frame with columns \code{id}, \code{type}, \code{ap
 \description{
 Shows every registered provider record: its wire api, where its credential comes from (as
 \code{NAME #fingerprint}, never the value), the registry source of the record, its status, default
-model, egress acknowledgement and, for subscription command-line tools, their version.
+model, egress acknowledgment and, for subscription command-line tools, their version.
 }
 \details{
 \code{status} is \code{ready}, \verb{no key}, \verb{no base url} or \verb{invalid base url} (HTTP providers),
@@ -28,7 +28,7 @@ settings or its credential lookup failed) or what a command-line provider report
 \code{check = TRUE} the \code{ready} or \verb{no key} of an HTTP provider becomes \verb{reachable (HTTP <code>)}
 for a reachable endpoint (a 401 without a key still proves reachability), otherwise
 \code{unreachable}, or \verb{not checked} under \verb{R CMD check}. \code{egress} is \code{ack} when no
-acknowledgement is needed (offline providers, local servers at a loopback address) or the
+acknowledgment is needed (offline providers, local servers at a loopback address) or the
 user has given it. Listing reads credentials only: it never registers an environment
 variable or binds it to a provider.
 }

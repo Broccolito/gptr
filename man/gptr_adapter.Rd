@@ -22,7 +22,7 @@ gptr_adapter(
 
 \item{build}{\verb{function(model, context, opts)} returning a request spec.}
 
-\item{parse}{\verb{function(model, opts)} returning a stream normaliser.}
+\item{parse}{\verb{function(model, opts)} returning a stream normalizer.}
 
 \item{stream}{\verb{function(model, context, opts)} returning a generator (\code{inprocess}).}
 

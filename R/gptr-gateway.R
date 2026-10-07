@@ -11,7 +11,7 @@
 #'
 #' The dots take, in order: at most one leading session to continue, the prompt (the first
 #' unnamed string literal, else the first unnamed length-1 character value), and context objects
-#' (unnamed ones are labelled by their expression, named ones by name). Context objects are never
+#' (unnamed ones are labeled by their expression, named ones by name). Context objects are never
 #' copied: gptr reads them by name where they live. Every other argument is matched by its exact
 #' name only.
 #'
@@ -23,7 +23,7 @@
 #' and `max_turns` `gptr_error_max_turns`. `peter()` with no prompt opens the console when someone
 #' can answer, and signals `gptr_error_noninteractive` otherwise.
 #'
-#' The name honours Peter Cathcart Wason, whose work on reasoning framed the dual-process (System 1
+#' The name honors Peter Cathcart Wason, whose work on reasoning framed the dual-process (System 1
 #' / System 2) view that gptr unifies, and Peter Naur of the Backus-Naur form, in the spirit of
 #' recording sessions as readable, replayable documents. A user object named `peter` hides the
 #' gateway; call `gptr::peter()` then.

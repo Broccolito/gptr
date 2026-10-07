@@ -1042,7 +1042,7 @@ gptr_provider = function(id, api, base_url = NULL, auth = NULL, models = NULL, c
 #' @param transport `"http_sse"`, `"http_ndjson"`, `"http_json"`, `"process_jsonl"` or
 #'   `"inprocess"`.
 #' @param build `function(model, context, opts)` returning a request spec.
-#' @param parse `function(model, opts)` returning a stream normaliser.
+#' @param parse `function(model, opts)` returning a stream normalizer.
 #' @param stream `function(model, context, opts)` returning a generator (`inprocess`).
 #' @param classify Named list for classifier adapters: `build(model, state, questions, opts)`
 #'   and `parse(model, status, headers, body, questions)`, or
@@ -1094,7 +1094,7 @@ gptr_router = function(name, route, description = NULL, timeout = 2) {
 
 #' Define an event hook
 #'
-#' A hook runs `handler(event, ctx)` for one event of the catalogue (see `gptr_api()$features`) or
+#' A hook runs `handler(event, ctx)` for one event of the catalog (see `gptr_api()$features`) or
 #' for a plugin channel named `"<plugin>:<topic>"`. What the handler may return depends on the
 #' event: patches for `tool_result`, a decision for `tool_call`, nothing for notifications.
 #' Handlers of `tool_call`, `permission_request` and `document_write` fail closed: an error blocks

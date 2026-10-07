@@ -1308,7 +1308,7 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 #'
 #' Shows every registered provider record: its wire api, where its credential comes from (as
 #' `NAME #fingerprint`, never the value), the registry source of the record, its status, default
-#' model, egress acknowledgement and, for subscription command-line tools, their version.
+#' model, egress acknowledgment and, for subscription command-line tools, their version.
 #'
 #' `status` is `ready`, `no key`, `no base url` or `invalid base url` (HTTP providers),
 #' `disabled` (the settings say `providers.<id>.enabled: false`), `error` (the provider's
@@ -1316,7 +1316,7 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 #' `check = TRUE` the `ready` or `no key` of an HTTP provider becomes `reachable (HTTP <code>)`
 #' for a reachable endpoint (a 401 without a key still proves reachability), otherwise
 #' `unreachable`, or `not checked` under `R CMD check`. `egress` is `ack` when no
-#' acknowledgement is needed (offline providers, local servers at a loopback address) or the
+#' acknowledgment is needed (offline providers, local servers at a loopback address) or the
 #' user has given it. Listing reads credentials only: it never registers an environment
 #' variable or binds it to a provider.
 #'

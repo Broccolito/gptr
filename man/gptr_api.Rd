@@ -12,7 +12,7 @@ A \code{gptr_api} list with \code{version} (a \code{package_version}) and \code{
 \description{
 The version of gptr's public extension API (independent of the package version) and the
 features this build offers: \verb{kind.<name>} for every registered kind, \verb{event.<name>} for every
-catalogued event, and the named features \code{lazy_activation}, \code{declarations}, \code{ctx.decide},
+cataloged event, and the named features \code{lazy_activation}, \code{declarations}, \code{ctx.decide},
 \code{ctx.secret}, \code{route} and \code{services}. Plugins test features instead of comparing versions.
 }
 \examples{

@@ -18,7 +18,7 @@ gptr_hook(event, handler, matcher = NULL)
 A spec of class \code{c("gptr_hook", "gptr_spec")}, named after its event.
 }
 \description{
-A hook runs \code{handler(event, ctx)} for one event of the catalogue (see \code{gptr_api()$features}) or
+A hook runs \code{handler(event, ctx)} for one event of the catalog (see \code{gptr_api()$features}) or
 for a plugin channel named \code{"<plugin>:<topic>"}. What the handler may return depends on the
 event: patches for \code{tool_result}, a decision for \code{tool_call}, nothing for notifications.
 Handlers of \code{tool_call}, \code{permission_request} and \code{document_write} fail closed: an error blocks

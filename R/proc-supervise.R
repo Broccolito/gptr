@@ -482,7 +482,7 @@ job_list = function(kind = NULL) {
 #' subscription-CLI children. A finished job whose stop was requested reads `stopped` or
 #' `aborted`, never `error`. Unavailable status information is shown as `unknown`.
 #'
-#' @param kill `TRUE` stops every job (sessions are cancelled, processes are killed together
+#' @param kill `TRUE` stops every job (sessions are canceled, processes are killed together
 #'   with their process tree) and returns the table of what was stopped, invisibly.
 #' @return A `gptr_jobs` data frame with the columns `id`, `kind` (`session`, `bg`,
 #'   `artifact`, `mcp_serve`, `worker`, `cli`), `name`, `pid`, `status` and `started`.

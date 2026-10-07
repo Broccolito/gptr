@@ -202,7 +202,7 @@ gptr_steer = function(s, text, as = c("steer", "follow_up")) {
 
 #' Cancel running sessions
 #'
-#' Aborts the run of a session (or of each session in a list): transfers are cancelled, child
+#' Aborts the run of a session (or of each session in a list): transfers are canceled, child
 #' processes stopped, the partial turn recorded as aborted, queued items moved to `dropped`, and
 #' the status set to `aborted`. Idle sessions are left alone.
 #'
@@ -228,7 +228,7 @@ gptr_cancel = function(x) {
 
 #' Listen to a session's events
 #'
-#' Registers a session-scoped hook (rank 0) for one catalogued event (such as `message_end`,
+#' Registers a session-scoped hook (rank 0) for one cataloged event (such as `message_end`,
 #' `tool_call`, `turn_end`) or a plugin channel containing `:`. The handler is
 #' `function(event, ctx)` and returns what the event allows. Forks never copy listeners.
 #'

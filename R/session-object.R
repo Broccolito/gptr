@@ -458,7 +458,7 @@ format.gptr_session = function(x, ...) session_text(x)
 #' @export
 as.character.gptr_session = function(x, ...) session_text(x)
 
-#' Summarise a session as its history
+#' Summarize a session as its history
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.

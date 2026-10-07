@@ -2,7 +2,7 @@
 % Please edit documentation in R/session-object.R
 \name{summary.gptr_session}
 \alias{summary.gptr_session}
-\title{Summarise a session as its history}
+\title{Summarize a session as its history}
 \usage{
 \method{summary}{gptr_session}(object, ...)
 }
@@ -15,5 +15,5 @@
 A \code{gptr_session_summary} data frame (\code{turn}, \code{role}, \code{preview}, \code{tools}, \code{tokens}).
 }
 \description{
-Summarise a session as its history
+Summarize a session as its history
 }

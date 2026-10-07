@@ -13,7 +13,7 @@ gptr_cancel(x)
 \code{x}, invisibly.
 }
 \description{
-Aborts the run of a session (or of each session in a list): transfers are cancelled, child
+Aborts the run of a session (or of each session in a list): transfers are canceled, child
 processes stopped, the partial turn recorded as aborted, queued items moved to \code{dropped}, and
 the status set to \code{aborted}. Idle sessions are left alone.
 }

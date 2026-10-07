@@ -5,7 +5,7 @@
 #'
 #' The version of gptr's public extension API (independent of the package version) and the
 #' features this build offers: `kind.<name>` for every registered kind, `event.<name>` for every
-#' catalogued event, and the named features `lazy_activation`, `declarations`, `ctx.decide`,
+#' cataloged event, and the named features `lazy_activation`, `declarations`, `ctx.decide`,
 #' `ctx.secret`, `route` and `services`. Plugins test features instead of comparing versions.
 #'
 #' @return A `gptr_api` list with `version` (a `package_version`) and `features` (character).

@@ -19,7 +19,7 @@ gptr_on(s, event, handler, matcher = NULL)
 A function of no arguments that removes the hook, invisibly.
 }
 \description{
-Registers a session-scoped hook (rank 0) for one catalogued event (such as \code{message_end},
+Registers a session-scoped hook (rank 0) for one cataloged event (such as \code{message_end},
 \code{tool_call}, \code{turn_end}) or a plugin channel containing \code{:}. The handler is
 \verb{function(event, ctx)} and returns what the event allows. Forks never copy listeners.
 }

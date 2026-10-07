@@ -39,3 +39,16 @@ test_that("cran-comments.md and DESCRIPTION are ready for submission (Task 13)",
   expect_no_problems(files_cran_comments(gptr_root(), character()))
   expect_no_problems(files_description(gptr_root(), "--release"))
 })
+
+test_that("the manual, vignettes and release files have no unknown words (Task 15)", {
+  testthat::skip_if_not_installed("spelling")
+  root = gptr_root()
+  found = spelling::spell_check_package(root)
+  expect_no_problems(sprintf("%s (%s)", found$word, vapply(found$found, paste, "",
+                                                           collapse = ", ")))
+  wl = file.path(root, "inst", "WORDLIST")
+  wordlist = if (file.exists(wl)) readLines(wl, warn = FALSE) else character()
+  cc = spelling::spell_check_files(file.path(root, "cran-comments.md"), ignore = wordlist,
+                                   lang = "en_US")
+  expect_no_problems(sprintf("cran-comments.md: %s", cc$word))
+})

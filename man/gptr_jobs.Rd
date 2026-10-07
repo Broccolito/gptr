@@ -7,7 +7,7 @@
 gptr_jobs(kill = FALSE)
 }
 \arguments{
-\item{kill}{\code{TRUE} stops every job (sessions are cancelled, processes are killed together
+\item{kill}{\code{TRUE} stops every job (sessions are canceled, processes are killed together
 with their process tree) and returns the table of what was stopped, invisibly.}
 }
 \value{
