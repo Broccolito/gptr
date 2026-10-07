@@ -587,6 +587,17 @@ test_that("mock requests bypass configured proxies for loopback only", {
   expect_identical(curl::curl_fetch_memory(srv$url)$status_code, 200L)
 })
 
+test_that("the mock skips a port another process holds on loopback", {
+  skip_if_not_installed("httpuv")
+  ports = port_candidates(20L)
+  held = httpuv::startServer("127.0.0.1", ports[[1L]], list())
+  withr::defer(httpuv::stopServer(held))
+  local_mocked_bindings(port_candidates = function(n) ports)
+  srv = local_mock_server("json", body = "{}")
+  expect_false(srv$port == ports[[1L]])
+  expect_identical(mock_fetch(srv$url)$status_code, 200L)
+})
+
 test_that("the mock child exits if its parent vanished before startup", {
   skip_on_cran()
   dir = withr::local_tempdir()

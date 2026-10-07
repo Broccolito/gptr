@@ -509,6 +509,12 @@ write_due = function(key) {
 
 listen = function(candidates) {
   for (port in candidates) {
+    # serverSocket() binds the wildcard address, which macOS allows over a loopback listener
+    busy = tryCatch({
+      close(socketConnection("127.0.0.1", port, timeout = 1))
+      TRUE
+    }, error = function(e) FALSE, warning = function(w) FALSE)
+    if (busy) next
     socket = tryCatch(serverSocket(port), error = function(e) NULL)
     if (!is.null(socket)) return(list(socket = socket, port = port))
   }
