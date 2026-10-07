@@ -331,8 +331,9 @@ proc_cleanup_record = function(rec) {
 #'
 #' Interrupt, wait `grace` seconds, `kill_tree()` (processx's marker) and gptr's marker, on
 #' Windows `taskkill /F /T /PID` while the process still lives, then `$kill()` (the process
-#' group on Unix); the marker cleanup then waits at most 2 s for the processes it signalled to
-#' exit (Windows `TerminateProcess()` is asynchronous; D-019).
+#' group on Unix); then wait at most 2 s for the process and those the tree kills signalled to
+#' stop running, and the marker cleanup for those it signals itself (Windows `TerminateProcess()`
+#' is asynchronous, and processx reads the exit code before the process is gone; D-019, D-180).
 #' @param p a processx (or callr) process.
 #' @param grace num(1) seconds to wait after the interrupt.
 #' @return invisible(lgl(1)): TRUE when the process is gone
@@ -344,9 +345,12 @@ kill_all = function(p, grace = 2) {
     try(p$interrupt(), silent = TRUE)
     if (grace > 0) try(p$wait(as.integer(ceiling(grace * 1000))), silent = TRUE)
   }
-  try(p$kill_tree(), silent = TRUE)
+  killed = tryCatch(p$kill_tree(), error = function(e) NULL)
   rec = proc_record(pid, process = p)
-  if (!is.null(rec)) suppressWarnings(try(ps::ps_kill_tree(rec$marker), silent = TRUE))
+  if (!is.null(rec)) {
+    killed = c(killed, suppressWarnings(tryCatch(ps::ps_kill_tree(rec$marker),
+                                                 error = function(e) NULL)))
+  }
   if (is_windows() && isTRUE(tryCatch(p$is_alive(), error = function(e) FALSE))) {
     tk = file.path(Sys.getenv("SystemRoot", "C:/Windows"), "System32", "taskkill.exe")
     try({
@@ -356,6 +360,9 @@ kill_all = function(p, grace = 2) {
     }, silent = TRUE)
   }
   try(p$kill(), silent = TRUE)
+  proc_wait_exit(lapply(unique(c(pid, killed)), function(x) {
+    tryCatch(ps::ps_handle(x), error = function(e) NULL)
+  }))
   dead = isFALSE(tryCatch(p$is_alive(), error = function(e) NA))
   if (!is.null(rec)) {
     cleanup = proc_cleanup_record(rec)

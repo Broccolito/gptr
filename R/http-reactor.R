@@ -5,8 +5,9 @@
 # http-retry.R) and strong references to active runs only (INFRA-15). reactor_pump() is the
 # only blocking wait in gptr. The wait primitive is report 15's (sections 2.2-2.4, 4.2, 5.9,
 # `p10_mixed.R`): one processx::poll() over processx::curl_fds(curl::multi_fdset(pool)) and
-# the live pipes, then curl::multi_run(timeout = 0). The curl multi interface also survives a
-# resumed interrupt in every phase of a request (report 02 section 4.3).
+# the live pipes (on Windows the pipes only, D-180), then curl::multi_run(timeout = 0). The
+# curl multi interface also survives a resumed interrupt in every phase of a request (report 02
+# section 4.3).
 #
 # Re-entrancy (IC-57): the reactor counts its pump depth. A nested pump (a sub-agent, System 1
 # or MCP call made inside an `r` evaluation) runs FIFO tools only of the runs named in its
@@ -260,7 +261,14 @@ reactor_io = function(r, allow_runs, slice_ms, t_end) {
     if (is.numeric(fds$timeout) && length(fds$timeout) == 1L && fds$timeout >= 0) {
       wait = min(wait, fds$timeout)
     }
-    pollables = c(list(processx::curl_fds(fds)), pollables)
+    # processx's Windows poll over curl's sockets keeps the handles of the socket pair it closes:
+    # later reads send to them and later polls close them again, whatever socket reuses them;
+    # there curl is checked every 5 ms instead (D-180)
+    if (is_windows()) {
+      wait = min(wait, 5)
+    } else {
+      pollables = c(list(processx::curl_fds(fds)), pollables)
+    }
   }
   if (length(pollables)) {
     processx::poll(pollables, as.integer(min(wait, .Machine$integer.max)))

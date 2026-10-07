@@ -668,6 +668,31 @@ test_that("one pump drives an HTTP stream and a child process together", {
   expect_length(ch$lines, 6L)
 })
 
+test_that("on Windows one pump drives both without curl's sockets in processx::poll() (WIN-2)", {
+  srv = local_mock_server("stream", n = 6L, interval = 0.2)
+  code = "for (i in 1:6) { Sys.sleep(0.2); cat('line', i, '\\n'); flush(stdout()) }"
+  p = proc_spawn(rscript_path(), c("--vanilla", "-e", code))
+  withr::defer(try(p$kill_tree(), silent = TRUE))
+  ch = new.env()
+  ch$lines = character()
+  ch$status = NULL
+  reactor_proc(p, on_line = function(l) ch$lines = c(ch$lines, l),
+               on_exit = function(s) ch$status = s)
+  curl_polled = logical()
+  real_poll = processx::poll
+  local_mocked_bindings(is_windows = function() TRUE)
+  local_mocked_bindings(poll = function(processes, ms) {
+    curl_polled <<- c(curl_polled, vapply(processes, inherits, NA, "processx_curl_fds"))
+    real_poll(processes, ms)
+  }, .package = "processx")
+  st = start_transfer(mock_spec(srv))
+  expect_true(reactor_pump(until = function() st$done && !is.null(ch$status), timeout = 60))
+  expect_identical(sum(st$types == "content_block_delta"), 6L)
+  expect_length(ch$lines, 6L)
+  expect_true(length(curl_polled) > 0L)
+  expect_false(any(curl_polled))
+})
+
 test_that("the wire log records the start and the end of a real transfer", {
   local_gptr_options(wire_log = TRUE)
   srv = local_mock_server("stream", n = 2L, interval = 0.05)

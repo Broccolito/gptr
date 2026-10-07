@@ -1753,16 +1753,22 @@ test_that("process_jsonl drives a real child through P04's process engine", {
   ))
   state = new.env()
   log = local_stream_log()
-  id = provider_stream(model, stream_context("hi"), list(state = state), emit = log$emit,
+  # the child's job row as each event arrives: on Windows the turn's stdin write returns only
+  # once the child read it (D-019 item 5), so the whole answer can arrive inside provider_stream()
+  rows = new.env()
+  emit = function(ev) {
+    rows$kind = c(rows$kind, jobs_env()$table[[state$job]]$kind)
+    log$emit(ev)
+  }
+  id = provider_stream(model, stream_context("hi"), list(state = state), emit = emit,
                        done = log$finish)
   p = state$process
   withr::defer(kill_all(p, grace = 0))
   job = state$job
-  expect_true(is.character(job) && exists(job, envir = jobs_env()$table, inherits = FALSE))
-  expect_equal(jobs_env()$table[[job]]$kind, "cli")
   expect_true(reactor_pump(until = function() length(log$done) > 0L && is.null(state$process),
                            timeout = 30))
   expect_equal(log$types(), c("start", "text_delta", "done"))
+  expect_identical(rows$kind, rep("cli", 3L))
   expect_equal(msg_text(log$done[[1]]),
                paste0(nchar(json_encode(list(type = "user", text = "hi"))), ":set-by-start"))
   expect_false(exists(job, envir = jobs_env()$table, inherits = FALSE))

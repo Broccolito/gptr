@@ -260,6 +260,25 @@ pending (maintainer).
   `^subagent-` PASS 580, `^(cli-codex|injection-e2e|secrets-e2e|auth-)` PASS 1677 (2 environmental skips). Lint clean.
 - Reviews: none. Deviations: D-179. Open: hosted confirmation on `main`.
 
+## Task WIN-2 - Windows child processes are gone once stopped (2026-10-07)
+- Red: Windows runs 37639048633, 37661638171 (HEAD): `artifact-app` IC-61, `artifact-registry` unload, NS-8 read the
+  stopped child alive (probe 37663005849: after `kill_tree()` processx reads exit 15, ps reads it running ~0.3 s more);
+  `provider-registry` process_jsonl: the stdin write returned once the child had answered and exited (D-019 item 5), so
+  the job row was gone at return; `mcp-server`: processx "Read error" 10038 in the helper's read (probes 37672983832,
+  37674400273: every pending read after a processx poll over curl sockets, until a poll without them). Local: FAIL 1;
+  round 1: FAIL 2 (`http-reactor` WIN-2, `proc-supervise` WIN-2).
+- Fix: `kill_all()` waits (at most 2 s) for the process and what its tree kills signalled; the CI-13 launcher wait goes
+  (slow-exit control 3/3 pass, 3/3 fail without the wait); on Windows the reactor polls the pipes only and checks curl
+  every 5 ms; process_jsonl checks the row per event.
+- Green: Windows 37672983832 (`artifact-`, `provider-registry`, `proc-`, `http-reactor`, `mcp-server` x5): 0 failed;
+  full suite 37673008909 (146 files, 3871 s, `mcp-server` x5 0 failed): `console-render` (also in 37639048633) and
+  `bridge-lang` perl over its 1 s timeout once (rerun 37681637302: 0 failed). Local focused PASS 1673; `^(artifact-|
+  provider-|mcp-|proc-|http-|subagent-|cli-|bridge-|arch-layers|lint-rules)` SKIP 5 PASS 6249. Lint clean.
+- Reviews: round 1 (changes required): `mcp-server` IC-58 failed once in 4 (status 0, httpuv ENOTSOCK) with the helper's
+  retrying read, which hid the processx defect -> the reactor stops polling curl sockets through processx on Windows,
+  helper unchanged, D-180 item 2 corrected; minor: `kill_all()` skipped the wait when `kill_tree()` threw -> waits for
+  the process too. Deviations: D-180. Open: hosted confirmation on `main`; INFRA-19 log race, IC-58 ENOTSOCK (below).
+
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
   single runs 1.01-1.39 s (5 failures in 9 Windows executions of the CI-6 runs; oldrel-4 1.040 s in 37390651676);
@@ -273,6 +292,13 @@ pending (maintainer).
 - One-off local failures (P04; both read the mock's log): `test-http-retry.R:613` (0-row log) and
   `test-http-reactor.R:726` (`disconnected` FALSE, loaded machine). Investigate if either recurs.
 - D-019 item 5: processx `write_all()` blocks on Windows; P04 decision before P18, P19, P20 and P22 send large stdin.
+- Windows `test-cli-claude.R:753` (INFRA-19, 1 of 2 runs on the WIN-2 branch): "parse error: trailing garbage" reading
+  the fake CLIs' log; three concurrent fakes append to one file (`inst/gptr/fixtures/fake_cli.R` `log_line()`) and
+  Windows append is not atomic. Test fixture only; not fixed.
+- Windows `test-mcp-server.R` IC-58 (run 37669294935, before D-180 item 2): httpuv "connection error: socket operation
+  on non-socket" and both POSTs status 0; probes did not reproduce it. Investigate if it recurs.
+- Windows `test-console-render.R` acceptance 7 (`"    -> + z"` missing): fails in 37639048633, 37673008909 and
+  37681637302; not investigated.
 - `tools::file_ext()` calls `basename()` on R >= 4.6 (stops on a non-ASCII path in a non-UTF-8 locale): P17
   `R/ext-specs.R:1330` (also needs `fs_path()`) and P08 `R/gptr-gateway.R:796` should use `path_ext()` (D-111).
 - ctx members read with `get()`, `get0()`, `mget()` or `as.list()` pin a function frame on R >= 4.6 (D-137 item 1);

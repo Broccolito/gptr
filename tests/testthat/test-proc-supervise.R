@@ -285,6 +285,33 @@ test_that("boundary: orphan cleanup waits for a kill that completes asynchronous
   expect_false(file.exists(path))
 })
 
+test_that("kill_all() returns once the processes it signalled stop running (WIN-2)", {
+  local_proc_state()
+  # hosted Windows: kill_tree()'s TerminateProcess() returns at once and processx reads the exit
+  # code, but the killed artifact child read as running for about 0.3 s more
+  now = function() proc.time()[["elapsed"]]
+  died = Inf
+  running = function() now() < died
+  local_mocked_bindings(
+    ps_handle = function(pid, time = NULL) list(pid = pid, time = time),
+    ps_is_running = function(p) running(),
+    ps_status = function(p) "running",
+    .package = "ps"
+  )
+  dies = function() {
+    died <<- now() + 0.3
+    c(Rterm.exe = 42L)
+  }
+  # the tree kill signals it, or fails and $kill() does
+  for (p in list(list(kill = function() FALSE, kill_tree = dies),
+                 list(kill = dies, kill_tree = function() stop("TerminateProcess failed")))) {
+    died = Inf
+    p = c(p, get_pid = function() 42L, is_alive = function() FALSE)
+    expect_true(kill_all(p, grace = 0))
+    expect_false(running())
+  }
+})
+
 test_that("boundary: a kill counts as signalled only for the handles ps_kill() reached", {
   handles = list(list(pid = 41L), list(pid = 42L))
   outcome = "partial"
