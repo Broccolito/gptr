@@ -787,7 +787,7 @@ artifact_launch_shiny = function(version_dir, ctx) {
   raw = tempfile(paste0("gptr-artifact-", id, "-"), fileext = ".log")
   token = artifact_token()
   proc = callr::r_bg(
-    artifact_serve,
+    utils::removeSource(artifact_serve), # callr keeps its body's source files (IC-70)
     args = list(dir = path_norm(version_dir), port_file = path_norm(port_file),
                 parent_pid = Sys.getpid(), token = token),
     stdout = raw, stderr = "2>&1", supervise = supervise_default(), package = FALSE,

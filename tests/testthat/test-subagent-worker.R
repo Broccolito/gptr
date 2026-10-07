@@ -393,6 +393,38 @@ test_that("a registry is a reference: a closure reaching it ships none of its re
   expect_identical(environment(readRDS(f, refhook = worker_refhook))$reg, emptyenv())
 })
 
+test_that("a lazily loaded source file is a reference, a user's ships its lines (IC-69, IC-70)", {
+  # closures of baseenv(): the source of this file, which they would reach, holds the marker
+  fun = eval(parse(text = "function() 'ok'", keep.source = TRUE), baseenv())
+  user = eval(parse(text = "function(x) {\n  x + 1\n}", keep.source = TRUE), baseenv())
+  # a package installed with its source keeps `lines` as a lazy-load promise whose environment
+  # reaches every environment of the package, the secret vault included
+  delayedAssign("lines", k, eval.env = list2env(list(k = "p19-held-by-the-promise")),
+                assign.env = attr(attr(fun, "srcref"), "srcfile"))
+  f = withr::local_tempfile(fileext = ".rds")
+  save_rds(list(fun = fun, user = user), f, refhook = worker_refhook)
+  expect_length(grepRaw("p19-held-by-the-promise", readBin(f, "raw", file.size(f)), fixed = TRUE),
+                0L)
+  back = readRDS(f, refhook = worker_refhook)
+  expect_identical(back$fun(), "ok")
+  expect_match(gptr_describe(back$user), "x + 1", fixed = TRUE, all = FALSE)
+})
+
+test_that("worker_main() goes to callr without its source references (IC-70)", {
+  fun = NULL
+  local_mocked_bindings(r_bg = function(func, ...) {
+    fun <<- func
+    stop("not started")
+  }, .package = "callr")
+  st = new.env()
+  st$spec = list(depth = 1L, settings = list(project_root = tempdir()))
+  st$home = new.env()
+  withr::defer(unlink(st$dir, recursive = TRUE))
+  expect_error(worker_spawn(st), "not started")
+  # callr drops a function's srcref but keeps the source files of its body, as above a promise
+  expect_length(grepRaw("srcfile", serialize(fun, NULL), fixed = TRUE), 0L)
+})
+
 test_that("objects are shipped by name from the caller's environment", {
   e = new.env()
   e$d = 1:3

@@ -2169,15 +2169,22 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Tests: test-northstar.R "NS-10 ...", "the composed standard prompt ... (IC-68)"; test-skill-discover.R "a new
   session carries the catalog in T1 and preloads skills = (e2e)". Evidence: progress/P24.md Task 11.
 
-## D-177 - P19 a worker spec writes the registry as a reference, never its records (2026-10-06)
+## D-177 - P19 a worker spec writes the registry and lazily loaded source files as references (2026-10-06)
 - Rule (IC-69, IC-70): `save_rds()` of the worker spec and `worker_main()`'s `readRDS()` share `worker_refhook()`:
-  a registry (class `gptr_registry_env`) is written as a reference and read back as the empty environment, so a
-  closure that reaches it (an extension's API object, `gptr_register()`'s remover) ships none of its records;
-  `worker_unserialisable()` stops at a registry too. In the worker such an API object is stale, as before.
+  a registry (class `gptr_registry_env`) and a source file holding a lazy-load promise are written as references
+  and read back as the empty environment, so a closure that reaches the registry (an extension's API object,
+  `gptr_register()`'s remover) ships none of its records; `worker_unserialisable()` stops at a registry too (in
+  the worker such an API object is stale, as before). Installed with its source, a package keeps its source
+  lines as such a promise, which reaches `the` (vault, out store); in the worker its functions describe by
+  source position, while a user's source file holds its lines and ships with them. Every package function
+  handed to callr (`worker_main`, `artifact_serve`) goes through `utils::removeSource()`, since callr keeps the
+  source files of a body.
 - Contract-visible: 04 section 7.0 `save_rds(object, file, compress = FALSE, refhook = NULL)`; IC-69 "Workers
   inherit the registry" states the reference.
-- Tests: test-subagent-worker.R "a registry is a reference ..."; test-secrets-e2e.R "worker spec and result files
-  ...". Evidence: progress/fixes.md FIX-10.
+- Tests: test-subagent-worker.R "a registry is a reference ...", "a lazily loaded source file is a reference
+  ...", "worker_main() goes to callr ..."; test-artifact-app.R "artifact_serve() goes to callr ...";
+  test-secrets-e2e.R "worker spec and result files ...". Evidence: progress/fixes.md FIX-10, progress/infra.md
+  CI-17.
 
 ## D-178 - P24 INFRA-24 times the INFRA-nn acceptance tests, not every test of their files (2026-10-06)
 - Rule (03 6.18 row 24, D-011): `infra-time.R` runs the 29 files of 03 6.18 with `NOT_CRAN=false` and fails on

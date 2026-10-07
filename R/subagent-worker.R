@@ -303,13 +303,16 @@ worker_main = function(spec_path, result_path) {
 
 # ---- the parent: the worker spec and the `worker` backend (contract 11.11; IC-69) -------------
 
-#' The refhook of the worker spec file (IC-69, IC-70): a registry is written as a reference and
-#' read back (`x` is then its name) as the empty environment, so a closure that reaches it (an
-#' extension's API object, the remover gptr_register() returns) ships none of its records
+#' The refhook of the worker spec file (IC-69, IC-70): a registry, and a source file with a
+#' lazy-load promise, are written as references and read back (`x` is then a name) as the empty
+#' environment, so a closure that reaches the registry (an extension's API object, the remover
+#' gptr_register() returns) ships none of its records, and a function of a package installed
+#' with its source ships no promise (which reaches every package environment)
 #' @noRd
 worker_refhook = function(x) {
   if (is.character(x)) return(emptyenv())
-  if (inherits(x, "gptr_registry_env")) "gptr_registry_env"
+  if (inherits(x, "gptr_registry_env") ||
+      inherits(x, "srcfile") && any(rlang::env_binding_are_lazy(x))) class(x)[[1L]]
 }
 
 #' TRUE when a value holds an external pointer or a connection, which do not survive
@@ -543,10 +546,11 @@ worker_spawn = function(st) {
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
           GPTR_PROJECT_ROOT = w$settings$project_root, stats::setNames("YES", marker))
-  # the child environment holds the provider's key: not bound in this frame, which callbacks keep
-  st$p = callr::r_bg(worker_main, args = list(spec_path, st$result_path), package = TRUE,
-                     supervise = supervise_default(), cleanup_tree = TRUE, user_profile = FALSE,
-                     encoding = "UTF-8", stdin = "|",
+  # the child environment holds the provider's key: not bound in this frame, which callbacks keep;
+  # callr keeps the source files of a function's body (see worker_refhook())
+  st$p = callr::r_bg(utils::removeSource(worker_main), args = list(spec_path, st$result_path),
+                     package = TRUE, supervise = supervise_default(), cleanup_tree = TRUE,
+                     user_profile = FALSE, encoding = "UTF-8", stdin = "|",
                      env = child_env_callr(child_env("worker", set = set,
                                                      provider = w$key_provider)))
   proc_mark(st$p, marker, "Rscript")

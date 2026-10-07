@@ -635,6 +635,19 @@ test_that("missing shiny is a missing_package error naming the feature", {
   expect_identical(cnd$feature, "artifacts")
 })
 
+test_that("artifact_serve() goes to callr without its source references (IC-70)", {
+  local_project()
+  fun = NULL
+  local_mocked_bindings(artifact_shiny_available = function() TRUE)
+  local_mocked_bindings(r_bg = function(func, ...) {
+    fun <<- func
+    stop("not started")
+  }, .package = "callr")
+  expect_error(artifact_launch_shiny(artifact_version_dir("x", 1L), NULL), "not started")
+  # callr keeps the source files of nested functions, which can reach the package's state
+  expect_length(grepRaw("srcfile", serialize(fun, NULL), fixed = TRUE), 0L)
+})
+
 test_that("the viewer opens only when a human is present (13 C-42)", {
   seen = new.env(parent = emptyenv())
   seen$urls = character()

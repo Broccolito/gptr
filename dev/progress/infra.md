@@ -24,6 +24,7 @@ pending (maintainer).
 | 37351073211 (`2823b07`) | green, 13/13: macOS; Windows release, oldrel-4; Ubuntu devel, release, oldrel-1, oldrel-4; no-Suggests; LC_ALL=C; copy-safety release, devel; connections; token bench. Confirms CI-6 | - |
 | 37390651676 (`31118fb`, docs only) | Windows oldrel-4 only: INFRA-23 1.040 s (`test-http-sse.R:126`); 12 jobs green | CI-7 |
 | 37503348214 (`fba1a15`) | Ubuntu oldrel-4 only: `test-cli-claude.R:774` (no `interrupt` row), Chrome detritus NOTE; 12 jobs green | CI-14 |
+| 37566867447 (`0a23d95`) | Ubuntu release, devel, oldrel-1, oldrel-4, macOS (`R_KEEP_PKG_SOURCE=yes`): `test-secrets-e2e.R:237,240`, worker spec 18.2-18.3 MB, 6062 key matches in it and callr's function file; LC_ALL=C (no keep-source) green; Windows, connections cancelled | CI-17 |
 
 ## Task CI-1 - Cross-platform hosted CI corrections (2026-10-03, `118f78b`)
 - Fixed: P01's service test isolated from undeclared built-ins (D-016 item 2); INFRA-01 measured on the mock's clock
@@ -178,6 +179,25 @@ pending (maintainer).
 - Reviews: r1 3 findings (0/0/2, 1 nit): no test asserted the acknowledgement (a no-ack mutant passed) -> fixed,
   the mutant now FAIL 1 `:779`; heading named a test change, the fix is in R/ -> fixed; another lane's
   DEVIATIONS hunk -> not CI-14's, stage D-163 only. Deviations: D-163. Open: hosted confirmation.
+
+## Task CI-17 - Worker spec and callr function files carry no lazily loaded package source (2026-10-06)
+- Red: hosted run 37566867447 (above). Not registry leftovers: an installed-package probe over the 114 files to
+  secrets-e2e (`CI=true`) finds no user record left by any test. Cause in R/: installed with its source, a
+  package keeps a source file's `lines` as a lazy-load promise reaching `the` (vault, out store), shipped by the
+  e2e extension's API closures (spec) and `worker_main` (callr keeps its body's source files). The same order on
+  a keep-source install gives the hosted failure (14.6 MB, 6062 matches); `^subagent-worker$` FAIL 2 (new tests).
+- Fix: `worker_refhook()` writes a source file holding a lazy-load promise as a reference; callr gets
+  `utils::removeSource()` of `worker_main` and `artifact_serve` (`R/artifact-app.R`).
+  Green: `^subagent-worker$` PASS 119 (x2); `^(secrets-e2e|subagent-worker|subagent-backends)$` PASS 308;
+  `^(ext-plugins|secrets-e2e)$` PASS 415; `^artifact-` PASS 464. Keep-source install: the 114-file order green
+  (2856 tests, 15 skips), `^(secrets-e2e|subagent-worker|artifact-app)$` green; with a marker in `the`, a shipped
+  package function is 10.5 KB and callr's `artifact_serve` 6 KB, neither holding it. Lint clean. Neighbours:
+  `^subagent-` PASS 570, `^(arch-layers|lint-rules|injection-e2e|zzz)$` PASS 306 green.
+- Reviews: r1 2 findings (0/2/0): every source file a reference broke a user's shipped function (read back as the
+  empty environment, its description printed to the worker's JSONL stdout and classed that environment) ->
+  fixed, a user's source file ships by value (new assertion FAIL 1 with the r1 hook); `artifact_serve` went to
+  callr with the package source (8.2 MB) -> fixed (new test FAIL 1 before). Deviations: D-177 (edited in place).
+  Open: hosted confirmation.
 
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
