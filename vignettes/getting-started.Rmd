@@ -66,9 +66,9 @@ s$status
 #> [1] "idle"
 s$turns
 #> [1] 1
-gptr_usage(s)
+gptr_usage(s, by = "model")
 #>        group requests input output cache_read cache_write cost
-#>  sf3b19d7ad0        2  3262     33          0           0    0
+#>  fake/fake-1        2  3262     33          0           0    0
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
 ```

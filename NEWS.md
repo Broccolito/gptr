@@ -3,26 +3,23 @@
 gptr 1.0.0 is a complete rewrite. gptr is now an agent harness that runs inside the live R
 session: `peter()` is an interactive chat at the console and a programmable function in
 scripts, loops and `if` statements, and the agent works on the objects already in memory.
-Nothing from the 0.x API is kept.
 
 ## Breaking changes
 
 * The whole interface of gptr 0.7.0 is removed: its only two exported functions,
   `get_response()` and `dataframe_to_text()`, are gone, and no 0.x name is kept as a shim or an
   alias. Code written for 0.7.0 is rewritten as follows.
-* `get_response()` has been removed, without a deprecation shim. Use
+* `get_response()` has been removed. Use
   `s = peter("your prompt", model = "openai/gpt-6-sol")`, which returns a session object; its
   answer is `s$text`, and `s |> peter("next prompt")` continues the conversation. The key comes
   from `OPENAI_API_KEY` (or a `.env` file read with `gptr_env()`) instead of the `api_key`
   argument, instructions that went into `system_specification` go into the prompt or the
   project instructions file `.gptr/vignette.Rmd`, and answers stream to the console when a
   person is present instead of through `print_response`.
-* `dataframe_to_text()` has been removed, without a deprecation shim. Pass the data frame to
+* `dataframe_to_text()` has been removed. Pass the data frame to
   `peter()` as context, for example `peter("Which variables are correlated?", mtcars)`: gptr
   describes the object compactly and the model computes on it in your session.
-* Providers and models are chosen with the `model` argument (for example
-  `model = "openai/gpt-6-sol"`) or with `gptr_config()`; the `OPENAI_API_KEY` environment
-  variable is still read.
+* Providers and models are chosen with the `model` argument or with `gptr_config()`.
 * 'RCurl' is no longer used; HTTP is handled by 'curl'.
 * R 4.2.0 or later is required.
 

@@ -17,11 +17,12 @@ compute the answer itself. Four levers do most of the work:
 
 - **Reference.** Objects stay in the session and are referred to by name with a short,
   budgeted description. A 5,000-row data frame printed into the context costs about 127,000
-  tokens; its name and default description cost at most 150.
+  tokens; its name and a description of at most 150 tokens replace it.
 - **Composition.** One `r` tool call can run many steps (filters, models, plots, helper calls)
   and return a small result, instead of one model round trip per step. On the eight polyglot
-  tasks of the package's benchmark (git, scripts, search, Python, SQL, make), the tool calls and
-  results cost 66,517 tokens through a shell tool and 1,657 when `r` composes the same programs.
+  tasks of the source repository's benchmark (git, a script, search, Python, SQL, a download,
+  make and a long job), the tool calls and results cost 66,517 tokens through a shell tool and
+  1,657 when `r` does the same work.
 - **Compression.** R code, and Shiny apps for interactive artifacts, are shorter than the
   equivalent shell transcripts or HTML and JavaScript.
 - **Stability.** The system prompt and tool list are frozen when a session starts and the
@@ -77,7 +78,7 @@ fake = gptr_fake_provider(list(
 ))
 s = peter("Fit mpg on weight separately for each number of cylinders and compare the slopes.",
          mtcars, model = fake, envir = new.env(), mode = auto)
-gptr_usage(s)
+gptr_usage(s, by = "model")
 ledger = gptr_usage(s, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 ```

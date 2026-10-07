@@ -60,7 +60,7 @@ token usage:
 ```{r}
 s$status
 s$turns
-gptr_usage(s)
+gptr_usage(s, by = "model")
 ```
 
 ## The pipe steers one session
