@@ -24,10 +24,10 @@ jobs:
       matrix:
         config:
           - {os: macos-latest, r: 'release'}
-          # the file-by-file stream (at most 30 minutes) runs before the 45 of the check
-          - {os: windows-latest, r: 'release', minutes: 75}
+          # Windows runs the suite about twice as slowly as Linux (about 80 minutes in October 2026)
+          - {os: windows-latest, r: 'release', minutes: 120}
           # Windows R < 4.5.0: file.info() lacks the owner columns this check variable needs
-          - {os: windows-latest, r: 'oldrel-4', things-in-other-dirs: 'false'}
+          - {os: windows-latest, r: 'oldrel-4', things-in-other-dirs: 'false', minutes: 120}
           # R-devel installs every dependency from source (about 65 minutes on a cold cache)
           - {os: ubuntu-latest, r: 'devel', http-user-agent: 'release', minutes: 120}
           - {os: ubuntu-latest, r: 'release'}
@@ -50,15 +50,6 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
-      # R CMD check prints test output only at the end; this names the file a hung run is in.
-      - name: Offline tests file by file (Windows release diagnosis)
-        if: runner.os == 'Windows' && matrix.config.r == 'release'
-        timeout-minutes: 30
-        continue-on-error: true
-        shell: bash
-        env:
-          NOT_CRAN: 'true'
-        run: Rscript --vanilla dev/ci/test-by-file.R
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
@@ -148,7 +139,7 @@ jobs:
   connections:
     runs-on: ubuntu-latest
     name: connections left open
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:

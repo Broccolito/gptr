@@ -26,6 +26,7 @@ pending (maintainer).
 | 37503348214 (`fba1a15`) | Ubuntu oldrel-4 only: `test-cli-claude.R:774` (no `interrupt` row), Chrome detritus NOTE; 12 jobs green | CI-14 |
 | 37566867447 (`0a23d95`) | Ubuntu release, devel, oldrel-1, oldrel-4, macOS (`R_KEEP_PKG_SOURCE=yes`): `test-secrets-e2e.R:237,240`, worker spec 18.2-18.3 MB, 6062 key matches in it and callr's function file; LC_ALL=C (no keep-source) green; Windows, connections cancelled | CI-17 |
 | 37583355970 (`2e8fd09`) | token benchmark, first run of its `dev/bench` test step (`d1691d4`): `test-token-gates.R:145-147`, `run.R --check` exits 0 with the ns02 prefix baseline scaled by 0.97 (prefix 2287 hosted, 2409 on macOS: the machine's `<r_env>`) | CI-18 |
+| 37540280557 (`f6aa1c8`) to 37583355970 (`2e8fd09`) | connections (30 min) and both Windows jobs (45 and 75 min) cancelled at their timeouts in every run; on `2e8fd09` every Ubuntu and macOS check job is green (CI-17 confirmed) | CI-19 |
 
 ## Task CI-1 - Cross-platform hosted CI corrections (2026-10-03, `118f78b`)
 - Fixed: P01's service test isolated from undeclared built-ins (D-016 item 2); INFRA-01 measured on the mock's clock
@@ -215,6 +216,17 @@ pending (maintainer).
 - Reviews: r1 clear; minor (hand-built `r_env` stand-in) -> reuses `bench_standins()`; nit (test header) -> fixed.
   Deviations: none. Open: hosted confirmation; `dev/bench/cache-sim` (local-only, not on CI) drives
   `peter()`, so its baseline still holds the machine's `<r_env>`.
+
+## Task CI-19 - Hosted job budgets fit the grown suite (2026-10-07)
+- Red: since `f6aa1c8` three jobs are cancelled at their `timeout-minutes` in every run (shown as cancelled, not failed):
+  connections at 30 min (reached `subagent-defs`; 15.6 min on `ef21d3f`), Windows oldrel-4 at 45 (31 min on `ef21d3f`)
+  and Windows release at 75 (57 min), whose 30 min file-by-file step now ends at `injection-e2e` (70 of ~170 files).
+  No file hangs: every file takes about twice its Linux time (copy-gateway 125 s, copy-ckpt 112 s, artifact-app 99 s).
+- Fix: connections 60 min, both Windows jobs 120 min (job budgets, not timing assertions; every test bound unchanged,
+  D-011); the Windows release job no longer runs `dev/ci/test-by-file.R`, kept for on-demand diagnosis (D-019 edited).
+- Test: `test-zzz.R`'s file-by-file block becomes "the hosted jobs have time for the whole suite (CI-19)": red on the old
+  workflow FAIL 2 (Windows 75/45 < 120, connections 30 < 60), green `^zzz$` PASS 88. Lint clean.
+- Green: hosted confirmation pending. Deviations: D-019 (edited in place).
 
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
