@@ -1,0 +1,139 @@
+---
+title: "Token efficiency"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Token efficiency}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE)
+old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+```
+
+Tokens are what a session costs, in money and in time. gptr spends them only where R cannot
+compute the answer itself. Four levers do most of the work:
+
+- **Reference.** Objects stay in the session and are referred to by name with a short,
+  budgeted description. A 5,000-row data frame printed into the context costs about 127,000
+  tokens; its name and default description cost at most 150.
+- **Composition.** One `r` tool call can run many steps (filters, models, plots, helper calls)
+  and return a small result, instead of one model round trip per step. On the eight polyglot
+  tasks of the package's benchmark (git, scripts, search, Python, SQL, make), the tool calls and
+  results cost 66,517 tokens through a shell tool and 1,657 when `r` composes the same programs.
+- **Compression.** R code, and Shiny apps for interactive artifacts, are shorter than the
+  equivalent shell transcripts or HTML and JavaScript.
+- **Stability.** The system prompt and tool list are frozen when a session starts and the
+  conversation only grows at the end, so providers can serve the repeated prefix from their
+  prompt cache at a fraction of the price.
+
+This vignette runs offline with a scripted model, so the token counts in its output are the
+package's own estimates.
+
+## What a new session sends
+
+`gptr_prompt()` shows the frozen part of a request: the system prompt sections, the tool list
+and the first message, each with an estimated token count.
+
+```{r}
+library(gptr)
+view = gptr_prompt(preset = "minimal")
+attr(view, "tool_names")
+view$sections
+view$total_tokens
+```
+
+Printing the view shows the full text of every section. The `standard` preset, the default for
+interactive and programmatic sessions, has four model-visible tools (`r`, `read`, `edit`,
+`write`, plus `ask` when a person is present or the mode is `manual`) and describes everything
+else as R functions in the `peter$` namespace. Measured with an o200k tokenizer, the static
+prefix (system prompt and tools, without the first message) is 1,262 tokens for the `minimal`
+preset used by sub-agents, 2,335 for `standard` without optional sections, 2,813 with every
+section and 2,956 with `ask` as well. After the first request that prefix is read from the
+provider's cache.
+
+## Describing objects instead of sending them
+
+`gptr_describe()` is what the model sees about an attached object: class, shape, size, column
+types and a summary of the values, within a token budget (150 by default).
+
+```{r}
+writeLines(gptr_describe(iris))
+writeLines(gptr_describe(iris, budget = 60))
+```
+
+Packages can register `gptr_describe()` methods for their own classes. Attaching an object to a
+prompt costs its description; the model computes on the object itself with the `r` tool.
+
+## Counting what a session used
+
+```{r}
+code = paste("fits = lapply(split(mtcars, mtcars$cyl), function(d) lm(mpg ~ wt, data = d))",
+             "sapply(fits, function(f) coef(f)[[2]])", sep = "\n")
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = code)),
+  "The weight slope is steepest for four-cylinder cars."
+))
+s = peter("Fit mpg on weight separately for each number of cylinders and compare the slopes.",
+         mtcars, model = fake, envir = new.env(), mode = auto)
+gptr_usage(s)
+ledger = gptr_usage(s, detail = TRUE)
+aggregate(tokens ~ component, data = ledger, FUN = sum)
+```
+
+The ledger splits every request into its components (system prompt, tools, workspace,
+attached objects, transcript, tool results), so it is easy to see what grows. The usage table
+holds what the provider reported; the scripted model leaves out the tool list, so its input
+count is smaller than the ledger's sum.
+
+## Budgets
+
+A budget stops a run before it spends more than you allow. Budgets are checked before every
+request, so a budget of 500 tokens stops this run before its first request: the static prefix
+alone is larger. At the console gptr asks whether to extend a budget; in a script the run stops
+with a classed condition and keeps the partial transcript.
+
+```{r}
+small = gptr_fake_provider(list("Done."))
+res = tryCatch(
+  peter("Summarize mpg.", model = small, envir = new.env(), budget = list(tokens = 500)),
+  gptr_error_budget = function(e) e
+)
+class(res)[1]
+res$session$status
+```
+
+Every top-level call also has a default ceiling (2 million tokens and 5 US dollars), which
+`gptr_config()` can change.
+
+## Cheap decisions
+
+A judgment such as "is this abstract about a randomized trial?" costs about 380 input tokens
+with a System 1 model against about 2,200 with a generative model, and a vector of inputs is
+answered in parallel. See `vignette("system-one", package = "gptr")`.
+
+## Smaller contexts on request
+
+- `.opts = list(context = "names")` describes the workspace by object names only;
+  `.opts = list(context = "none")` sends no automatic context.
+- `.opts = list(preset = "minimal")` uses the smallest tool set and system prompt.
+- `{identifier}` in a literal prompt inserts a short value (about 10 tokens) instead of attaching
+  an object.
+- Long `r` results keep their first 40% and last 60% within about 4,000 tokens; the full text
+  stays available through `peter$out(id)`.
+
+## The benchmark
+
+The package's source repository contains a token benchmark: golden transcripts of the
+north-star tasks are replayed through the fake provider on every change, and the continuous
+integration fails when a prefix grows by more than 2% or a task needs another request.
+Releases are also calibrated against real providers.
+
+```sh
+Rscript --vanilla dev/bench/tokens/run.R --check
+```
+
+```{r cleanup, include = FALSE}
+options(old_options)
+```
