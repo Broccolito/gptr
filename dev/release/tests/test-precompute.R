@@ -48,6 +48,10 @@ test_that("vig_precompute() knits offline, writes Markdown and detects stale or 
   expect_true(file.exists(file.path(root, "README.md")))
   expect_true("#> [1] 42" %in% readLines(file.path(root, "README.md")))
   expect_lt(attr(problems, "seconds"), 60)
+  unlink(file.path(root, "README.md"))
+  expect_identical(as.character(vig_precompute(root, names = character(), readme = TRUE)),
+                   character())
+  expect_true(file.exists(file.path(root, "README.md")))
 
   orig = file.path(root, "vignettes", "intro.Rmd.orig")
   writeLines(sub("twice(21)", "twice(20)", readLines(orig), fixed = TRUE), orig)

@@ -1,5 +1,5 @@
 # Checks the release files (plan P25, from Task 5). Usage, from the repository root:
-#   Rscript --vanilla dev/release/check-files.R description [--release]
+#   Rscript --vanilla dev/release/check-files.R <check> [flags]
 source(file.path("dev", "release", "lib.R"))
 args = commandArgs(trailingOnly = TRUE)
 if (!length(args)) stop("usage: check-files.R <check> [flags]", call. = FALSE)

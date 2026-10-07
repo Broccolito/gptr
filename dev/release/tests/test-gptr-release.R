@@ -15,6 +15,10 @@ test_that("the extending-gptr vignette is precomputed and current (Task 8)", {
   expect_no_problems(vig_committed_problems(gptr_root(), "extending-gptr"))
 })
 
+test_that("README.md is rendered from README.Rmd (Task 10)", {
+  expect_no_problems(files_readme(gptr_root(), character()))
+})
+
 test_that("the token-efficiency vignette is precomputed and current (Task 9)", {
   expect_no_problems(vig_committed_problems(gptr_root(), "token-efficiency"))
 })

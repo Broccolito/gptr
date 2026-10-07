@@ -447,7 +447,7 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
                           work = tempfile("rel-vignettes-"), limit = 60) {
   root = normalizePath(root, winslash = "/")
   vdir = file.path(root, "vignettes")
-  origs = file.path(vdir, paste0(names, ".Rmd.orig"))
+  origs = file.path(vdir, sprintf("%s.Rmd.orig", names))
   if (!all(file.exists(origs))) {
     return(sprintf("vignettes/%s.Rmd.orig is missing", names[!file.exists(origs)]))
   }
@@ -474,8 +474,9 @@ vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, rea
     problems = c(problems, sprintf("vignettes: knitting took %.1f s (limit %g s)", seconds, limit))
   }
   if (readme) {
+    # -smart: pandoc would turn ASCII quotes into curly ones, and README.md must stay ASCII.
     render = paste("rmarkdown::render('README.Rmd', quiet = TRUE, output_format =",
-                   "rmarkdown::github_document(html_preview = FALSE))")
+                   "rmarkdown::github_document(html_preview = FALSE, md_extensions = '-smart'))")
     problems = c(problems, run(render, root, "README.Rmd: rendering failed:"))
   }
   left = setdiff(rel_files(dirs[c("home", "tmp", "proj")]), before)
@@ -510,6 +511,33 @@ vig_committed_problems = function(root, name) {
   c(out, code_style_problems(rel_code_lines(rmd_chunks(orig_lines)), paste0(where, ".orig")),
     stale_problems(orig_lines, rmd_lines, where), rel_ascii_problems(orig),
     rel_ascii_problems(rmd))
+}
+
+# ---- README (Task 10) --------------------------------------------------------------------------
+
+readme_problems = function(rmd_lines, md_lines) {
+  out = character()
+  if (!any(rmd_lines == "output: github_document")) {
+    out = c(out, "README.Rmd: output must be github_document")
+  }
+  need = c("install.packages(\"gptr\")", "gptr_fake_provider(", "vignette(\"getting-started\"",
+           "?gptr_security")
+  for (n in need) {
+    if (!any(grepl(n, rmd_lines, fixed = TRUE))) {
+      out = c(out, sprintf("README.Rmd: must mention %s", n))
+    }
+  }
+  if (any(grepl("^```+\\s*\\{", md_lines))) out = c(out, "README.md: contains unrendered chunks")
+  out = c(out, code_style_problems(rel_code_lines(rmd_chunks(rmd_lines)), "README.Rmd"))
+  c(out, stale_problems(rmd_lines, md_lines, "README.md"))
+}
+
+files_readme = function(root, args) {
+  rmd = rel_read(root, "README.Rmd")
+  md = rel_read(root, "README.md")
+  if (is.null(rmd) || is.null(md)) return("README.Rmd or README.md is missing")
+  c(readme_problems(rmd, md), rel_ascii_problems(file.path(root, "README.Rmd")),
+    rel_ascii_problems(file.path(root, "README.md")))
 }
 
 # ---- DESCRIPTION (Task 5; the release stage from Task 13) --------------------------------------
