@@ -1,9 +1,11 @@
 # Every gate of architecture 12.7 on P07's golden-transcript runner (plan P24; IC-73; 05 P24
 # acceptance 1 and 4). P07's dev/bench/tokens/run.R owns the gates; these tests prove that each
 # one trips just above its tolerance and passes at it, that the committed baseline covers every
-# fixture, that the replay is fast, and that `run.R --check` exits non-zero on a regression.
+# fixture, that the replay is fast and independent of the machine's <r_env>, and that
+# `run.R --check` exits non-zero on a regression.
 
 tokens_dir = file.path(bench_root(), "dev", "bench", "tokens")
+standins_dir = file.path(bench_root(), "tests", "testthat", "fixtures", "bench")
 gate_fixtures = sub("[.]json$", "", sort(list.files(file.path(tokens_dir, "fixtures"),
                                                      pattern = "[.]json$")))
 
@@ -86,29 +88,47 @@ test_that("the committed baseline has exactly one row per golden transcript", {
   expect_true(all(base$requests >= 1 & base$prefix > 0 & base$input_total > base$prefix))
 })
 
-test_that("every golden transcript replays offline in under 5 s (05 P24 acceptance 1)", {
-  bench_test_load_gptr()
-  standins = file.path(bench_root(), "tests", "testthat", "fixtures", "bench")
-  home = withr::local_tempdir()
+# The runner with the stand-ins sourced (`r`, `standins`) and a fixture reader, replaying as
+# bench_main() does in a temporary user home until `env` returns
+local_replay = function(env = parent.frame()) {
+  home = withr::local_tempdir(.local_envir = env)
   withr::local_envvar(GPTR_REPLAY = "replay", R_USER_CONFIG_DIR = file.path(home, "config"),
                       R_USER_DATA_DIR = file.path(home, "data"),
-                      R_USER_CACHE_DIR = file.path(home, "cache"))
+                      R_USER_CACHE_DIR = file.path(home, "cache"), .local_envir = env)
   r = load_runner()
-  sys.source(file.path(standins, "standins.R"), envir = r)
-  pb = jsonlite::fromJSON(file.path(standins, "prefix-baseline.json"), simplifyVector = FALSE)
-  # The tokenizer is replaced by a character count: this measures the replay itself (fake
-  # provider, context assembly, request building), not rtiktoken's encoder construction.
-  tok = function(x) if (is.null(x) || !nzchar(x)) 0 else nchar(x, "chars") / 4
+  sys.source(file.path(standins_dir, "standins.R"), envir = r)
+  pb = jsonlite::fromJSON(file.path(standins_dir, "prefix-baseline.json"), simplifyVector = FALSE)
+  list(r = r, standins = pb$standins, fixture = function(id) {
+    jsonlite::fromJSON(file.path(tokens_dir, "fixtures", paste0(id, ".json")),
+                       simplifyVector = FALSE)
+  })
+}
+
+# The tokenizer is replaced by a character count: the replay tests measure the replay itself
+# (fake provider, context assembly, request building), not rtiktoken's encoder construction.
+char_tok = function(x) if (is.null(x) || !nzchar(x)) 0 else nchar(x, "chars") / 4
+
+test_that("every golden transcript replays offline in under 5 s (05 P24 acceptance 1)", {
+  bench_test_load_gptr()
+  rp = local_replay()
   t0 = proc.time()[["elapsed"]]
   res = do.call(rbind, lapply(gate_fixtures, function(id) {
-    fx = jsonlite::fromJSON(file.path(tokens_dir, "fixtures", paste0(id, ".json")),
-                            simplifyVector = FALSE)
-    r$bench_case(fx, pb$standins, tok)
+    rp$r$bench_case(rp$fixture(id), rp$standins, char_tok)
   }))
   secs = proc.time()[["elapsed"]] - t0
   expect_setequal(res$case, gate_fixtures)
   expect_true(all(res$requests >= 1))
   expect_lt(secs, 5)
+})
+
+test_that("a golden transcript's prefix does not depend on the machine's <r_env> (CI-18)", {
+  bench_test_load_gptr()
+  rp = local_replay()
+  fx = rp$fixture("ns02-mixed-model")
+  here = rp$r$bench_case(fx, rp$standins, char_tok)
+  local_mocked_bindings(r_env_probe = function() "R 4.6.1, x86_64-pc-linux-gnu; 4 cores",
+                        .package = "gptr")
+  expect_identical(rp$r$bench_case(fx, rp$standins, char_tok)$prefix, here$prefix)
 })
 
 test_that("run.R --check exits 0 on the baseline and non-zero when a prefix grows over 2%", {

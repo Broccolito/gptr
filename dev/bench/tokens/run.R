@@ -6,9 +6,10 @@
 # attached objects, the model's replies (tool calls with recorded results) and model switches.
 # The runner drives gptr's real context assembly: it freezes the prompt, renders the first
 # message and turn blocks, and calls request_build() before every scripted reply, so the counts
-# measure what gptr would send. The volatile <environment> block is pinned by the fixture, and
-# texts owned by plans that are not loaded yet come from the stand-ins of
-# tests/testthat/fixtures/bench/prefix-baseline.json (only when no real spec is registered).
+# measure what gptr would send. The volatile <environment> block is pinned by the fixture and the
+# machine's <r_env> section by its stand-in; other texts owned by plans that are not loaded yet
+# come from the stand-ins of tests/testthat/fixtures/bench/prefix-baseline.json (only when no
+# real spec is registered).
 #
 # Usage (from the repository root):
 #   Rscript --vanilla dev/bench/tokens/run.R                 # run, write results.csv
@@ -108,6 +109,8 @@ bench_case = function(fx, standins, tok) {
   s = session_new(refs[1], fx$mode %||% "manual", home = home, preset = fx$preset)
   sid = session_data(s)$id
   bench_standins(standins, sid, sections = unlist(fx$standins), only_missing = TRUE)
+  # <r_env> describes the machine: pinned to its stand-in, like <environment> to the fixture's
+  bench_standins(standins["sections"], sid, sections = "r_env")
   if (!is.null(fx$environment)) {
     registry_add(bench_environment_block(fx$environment), source = "session", rank = 0L,
                  session = sid)

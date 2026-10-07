@@ -25,6 +25,7 @@ pending (maintainer).
 | 37390651676 (`31118fb`, docs only) | Windows oldrel-4 only: INFRA-23 1.040 s (`test-http-sse.R:126`); 12 jobs green | CI-7 |
 | 37503348214 (`fba1a15`) | Ubuntu oldrel-4 only: `test-cli-claude.R:774` (no `interrupt` row), Chrome detritus NOTE; 12 jobs green | CI-14 |
 | 37566867447 (`0a23d95`) | Ubuntu release, devel, oldrel-1, oldrel-4, macOS (`R_KEEP_PKG_SOURCE=yes`): `test-secrets-e2e.R:237,240`, worker spec 18.2-18.3 MB, 6062 key matches in it and callr's function file; LC_ALL=C (no keep-source) green; Windows, connections cancelled | CI-17 |
+| 37583355970 (`2e8fd09`) | token benchmark, first run of its `dev/bench` test step (`d1691d4`): `test-token-gates.R:145-147`, `run.R --check` exits 0 with the ns02 prefix baseline scaled by 0.97 (prefix 2287 hosted, 2409 on macOS: the machine's `<r_env>`) | CI-18 |
 
 ## Task CI-1 - Cross-platform hosted CI corrections (2026-10-03, `118f78b`)
 - Fixed: P01's service test isolated from undeclared built-ins (D-016 item 2); INFRA-01 measured on the mock's clock
@@ -198,6 +199,22 @@ pending (maintainer).
   fixed, a user's source file ships by value (new assertion FAIL 1 with the r1 hook); `artifact_serve` went to
   callr with the package source (8.2 MB) -> fixed (new test FAIL 1 before). Deviations: D-177 (edited in place).
   Open: hosted confirmation.
+
+## Task CI-18 - The token benchmark pins the machine's r_env section (2026-10-07)
+- Red: hosted run 37583355970 (above): T1 is the machine's real `<r_env>` (`only_missing` skips its stand-in), so a
+  case prefix describes the machine. New `test-token-gates.R` test (a mocked `r_env_probe()` moves ns02's prefix)
+  FAIL 1, PASS 62. Fix: `bench_case()` pins the `r_env` stand-in at session rank 0 (`bench_standins()`), like
+  `<environment>`.
+- Baseline (`run.R --update`, reviewed): the 12 standard cases' prefix and catalog +48 (stand-in 399, this machine
+  351), input totals +48 and estimates +30 (ns10 +31) per request; minimal cases, requests, output, image tokens and
+  facts unchanged; the six rows recorded before `0d70a9d` also take its +47 (P24-3's Open). The hosted rows
+  (`<r_env>` 229) plus 170 (prefix) and 170 per request (input) give every refreshed row exactly.
+- Green: dev `test_dir("dev/bench/tests")` PASS 524 (token-gates 63); `run.R --check` OK (4 static prefixes, 14
+  transcripts; results equal the baseline). Lint clean. Neighbours: `^(bench-context|context-prefix|prompt-sections)$`
+  PASS 435, `^(arch-layers|lint-rules)$` PASS 19.
+- Reviews: r1 clear; minor (hand-built `r_env` stand-in) -> reuses `bench_standins()`; nit (test header) -> fixed.
+  Deviations: none. Open: hosted confirmation; `dev/bench/cache-sim` (local-only, not on CI) drives
+  `peter()`, so its baseline still holds the machine's `<r_env>`.
 
 ## Open hosted items
 - INFRA-23 (`test-http-sse.R:126`, 20,000 deltas under 1 s CPU, decomposition P04 acceptance 5): hosted Windows
