@@ -107,7 +107,6 @@ ctx_fixture = function(messages, params = list(), cache_plan = NULL, t1 = "T1 ca
 # The cache plan the registered default cache_policy (P07, prompt-cache.R) gives an adapter
 default_plan = function(api, project = TRUE) {
   policy = registry_get("cache_policy", "default")
-  testthat::skip_if(is.null(policy), "the default cache_policy of builtin:prompt is not loaded")
   parts = list(t0 = "T0 static sections.", t1 = "T1 catalogs.", tools_json = "[]",
                project = project, n = 1L)
   policy$plan(parts, adapter_get(api)$capabilities, NULL)
@@ -216,17 +215,6 @@ local_count_tool = function(.env = parent.frame()) {
 # The `returns =` schema of the INFRA-25 runs
 count_schema = function() {
   list(type = "object", required = I("n"), properties = list(n = list(type = "integer")))
-}
-
-# The INFRA-25 run tests drive P06's run engine (session_new(), session_run()) with P07's request
-# context (the request.build service fills params$returns; plan header "Depends on: P05, P07").
-# This lane runs before P06/P07 are complete, so such a test skips until both are loaded and runs
-# unchanged from then on.
-skip_without_run_engine = function() {
-  ns = asNamespace("gptr")
-  ready = exists("session_run", envir = ns, mode = "function", inherits = FALSE) &&
-    ext_service_has("request.build")
-  testthat::skip_if_not(ready, "P06's session_run() and P07's request.build are not loaded")
 }
 
 # ---- the base-R mock server (P01's local_mock_server(), skips on CRAN) -------------------------

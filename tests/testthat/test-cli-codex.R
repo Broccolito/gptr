@@ -799,7 +799,6 @@ test_that("a fake codex evaluates R in the live session through gptr's MCP serve
   skip_if_not_installed("httpuv")
   skip_if_not_installed("later")
   skip_if_not_installed("openssl")
-  skip_if_not(ext_service_has("mcp.serve_ensure"), "P18's mcp.serve_ensure is not loaded")
   withr::defer(gptr_mcp_serve(stop = TRUE))
   f = local_fake_cli("codex", "mcp")
   e = new.env()
@@ -818,7 +817,6 @@ test_that("the auto rule runs CLI-only models on the cli backend", {
 test_that("a fake CLI joins two inline agents and two workers on one reactor (INFRA-16)", {
   skip_on_cran()
   skip_without_installed_gptr()
-  skip_if(is.null(registry_get("route", "team")), "P19's team route is not loaded")
   f = local_fake_cli("codex", "slow")
   local_mcp_stub()
   slow = function(name) {

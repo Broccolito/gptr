@@ -40,6 +40,14 @@ local_no_bootstrap_services = function(.env = parent.frame()) {
   invisible(NULL)
 }
 
+# Disable built-ins for the calling test with user-scope `-builtin:<name>` filters (contract 10.1)
+local_without_builtin = function(name, .env = parent.frame()) {
+  old = registry_env()$filters$user
+  registry_filters_set(c(old, paste0("-builtin:", name)), "user")
+  withr::defer(registry_filters_set(old, "user"), envir = .env)
+  invisible(NULL)
+}
+
 # Record the bridge_call events (P22) raised while the calling test runs
 local_bridge_events = function(.env = parent.frame()) {
   log = new.env(parent = emptyenv())

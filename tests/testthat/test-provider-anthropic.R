@@ -786,7 +786,6 @@ test_that("provider_stream() puts the returns schema on the wire (INFRA-25)", {
 })
 
 test_that("returns = through the run loop: a typed value and the tool calls kept (INFRA-25)", {
-  skip_without_run_engine()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_scripted_provider(api)
   local_count_tool()

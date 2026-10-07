@@ -682,7 +682,6 @@ test_that("usage fields are populated and the rate-limit event becomes plan stat
 
 test_that("an mcp_message round trip evaluates R in the live session and is gated once", {
   skip_on_cran()
-  skip_if_not(ext_service_has("mcp.dispatch_local"), "P18's mcp.dispatch_local is not loaded")
   f = local_fake_cli("claude", "tool")
   ui = local_scripted_ui(answers = list("y"))
   e = new.env()

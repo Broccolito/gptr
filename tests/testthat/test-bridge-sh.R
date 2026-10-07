@@ -515,9 +515,7 @@ test_that("the shell line of <r_session> is registered byte for byte", {
 })
 
 test_that("-builtin:bridges removes the shell line from <r_session> and the members", {
-  old = registry_env()$filters[["session"]] %||% character()
-  registry_filters_set(c(old, "-builtin:bridges"), "session")
-  withr::defer(registry_filters_set(old, "session"))
+  local_without_builtin("bridges")
   t0 = gptr_prompt(preset = "standard")$system$t0
   expect_false(grepl("There is no shell tool", t0, fixed = TRUE))
   expect_true(grepl("<r_session>", t0, fixed = TRUE))

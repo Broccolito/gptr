@@ -483,7 +483,6 @@ test_that("the frozen prefix stays byte-identical across turns (acceptance 4)", 
 })
 
 test_that("returns = through the run loop on Responses: instruction and validation (INFRA-25)", {
-  skip_without_run_engine()
   local_gptr_options(unsafe_no_permissions = TRUE)
   local_scripted_provider(api)
   local_count_tool()

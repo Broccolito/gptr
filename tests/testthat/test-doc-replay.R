@@ -2163,7 +2163,6 @@ test_that("a two-turn console session with a menu steer re-sources as one sessio
 })
 
 test_that("a plan-mode run records only its plan line (IC-48)", {
-  skip_if_not(ext_service_has("plan.pending"), "plan mode (P11) is not loaded")
   x = local_doc_e2e(list(fake_tool("r", code = "x = 1"),
                          fake_text("Plan:\n1. Load the data\n2. Fit the model")))
   f = file.path(x$root, "plan.R")

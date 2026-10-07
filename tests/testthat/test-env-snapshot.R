@@ -514,7 +514,6 @@ test_that("the eval.r service runs the evaluator the evaluator setting names (IC
 })
 
 test_that("a call's first message sends <attached> after <workspace>, and turns again (IC-38)", {
-  # P07's own versions of this check skip once P09 registers the attached block
   local_fake_provider(list("ok"))
   user_log_stop()
   withr::defer(user_log_stop())

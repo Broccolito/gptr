@@ -263,7 +263,7 @@ test_that("unknown references fail with suggestions, or NULL when not strict", {
   expect_null(model_resolve("sonnet:turbo", strict = FALSE))
   expect_error(model_resolve("anthropic/claude-nope"), class = "gptr_error_unknown_model")
   expect_error(model_resolve(42), class = "gptr_error_invalid_argument")
-  skip_if_not(is.null(provider_get("claude-cli")), "builtin:cli (P20) registers claude-cli")
+  local_without_builtin("cli")
   expect_error(model_resolve("claude_code"), "claude-cli", class = "gptr_error_unknown_model")
 })
 

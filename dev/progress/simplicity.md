@@ -381,3 +381,12 @@ commit. DEF-2, P13-C and P13-S are logged in `progress/P13.md`.
   no longer says "every config value". Not ours: the D-154/D-155 evidence-line hunk (P06-S1); left unstaged.
 - Deviations: D-090 item 6 edited in place. Open: `stream_mcp_dispatch()` (`R/provider-registry.R`, no stage-1 lane)
   still builds its JSON-RPC error inline; `progress/P18.md` Task 3's Open line on `mcp_chr()` is superseded.
+
+## CLEAN-1 - Delete the stale 'before plan X' test guards (2026-10-06)
+- The six guards became `local_without_builtin()` filters (moved to `helper-ext.R`; contract 10.1: the fallbacks
+  stay reachable, no other test covers them); 7 always-true guards, `skip_without_run_engine()`, a stale comment gone.
+- Red: none (test-only); before SKIP 6, PASS 718. Green: `^(gptr-gateway|catalog-models)$` SKIP 0, PASS 733;
+  `^(arch-layers|lint-rules)$` 19; helper users and neighbours 1245 + 2473 + 2592 + 2374 (SKIP 3: installed, live).
+- Reviews: r1 clear; minor (duplicate of `local_without_builtin()`) fixed; nits fixed (`test-skill-templates.R`).
+- Deviations: none. Open: dead "if absent" branches that are not skips: `test-tool-namespace.R` `members`
+  search_source (3), `test-tool-r.R` risk.classify line, `test-console-commands.R` `local_console_commands()`.

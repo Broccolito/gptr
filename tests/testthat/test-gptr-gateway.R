@@ -167,7 +167,7 @@ test_that("peter() without a prompt needs a human", {
 })
 
 test_that("with a human but no console route, a no-prompt call is not_available", {
-  skip_if(!is.null(registry_get("route", "console")), "the console route (P14) is loaded")
+  local_without_builtin("console")
   local_gw()
   local_gptr_options(interactive = TRUE)
   expect_error(peter(), class = "gptr_error_not_available")
@@ -199,8 +199,8 @@ test_that("peter is a classed closure whose members come from the ns services (I
   expect_identical(utils::.DollarNames(peter, ""), c("read", "grep"))
 })
 
-test_that("before the namespace services exist, $ is not_available and completion is empty", {
-  skip_if(ext_service_has("ns.resolve"), "P10 registers ns.resolve")
+test_that("without the namespace services, $ is not_available and completion is empty", {
+  local_without_builtin("tools")
   expect_error(peter$read, class = "gptr_error_not_available")
   expect_identical(utils::.DollarNames(peter, ""), character(0))
 })
@@ -385,7 +385,7 @@ test_that("routes select by the model-level type, without discovery (IC-74, 07 s
 })
 
 test_that("without the classifier route a decision-only model is not_available (IC-74)", {
-  skip_if(!is.null(registry_get("route", "classifier")), "the classifier route (P13) is loaded")
+  local_without_builtin("system1")
   local_gw()
   seen = new.env()
   seen$n = 0L
@@ -832,7 +832,7 @@ test_that("a failing router falls back to the default model", {
 
 test_that("background = TRUE needs the bg.register service (P21)", {
   skip_if_not_installed("later")
-  skip_if(ext_service_has("bg.register"), "P21 registers bg.register")
+  local_without_builtin("background")
   local_gw()
   fake = local_fake_provider(list("ok"))
   expect_error(peter("x", model = fake, envir = new.env(), background = TRUE),
@@ -895,7 +895,7 @@ test_that("the gateway emits route, model_select and input (contract 6.1.5)", {
 })
 
 test_that("parallel = and agents = need the sub-agent routes (P19)", {
-  skip_if(!is.null(registry_get("route", "fanout")), "P19 registers the fanout route")
+  local_without_builtin("subagents")
   local_gw()
   fake = local_fake_provider(list("ok"))
   cohorts = list(a = 1, b = 2)

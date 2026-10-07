@@ -32,7 +32,6 @@ skip_live_cli = function(cli, .env = parent.frame()) {
 
 test_that("the claude plan route evaluates R in the live session", {
   skip_live_cli("claude")
-  skip_if_not(ext_service_has("mcp.dispatch_local"), "P18's mcp.dispatch_local is not loaded")
   e = new.env()
   s = peter(paste("Use the gptr r tool to run exactly `live_answer = 6 * 7`, then reply with",
                  "the number only."),
@@ -51,7 +50,6 @@ test_that("Codex in a non-git temporary directory calls the gptr r tool", {
   skip_if_not_installed("httpuv")
   skip_if_not_installed("later")
   skip_if_not_installed("openssl")
-  skip_if_not(ext_service_has("mcp.serve_ensure"), "P18's mcp.serve_ensure is not loaded")
   withr::defer(gptr_mcp_serve(stop = TRUE))
   dir = withr::local_tempdir()
   withr::local_dir(dir)

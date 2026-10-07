@@ -339,11 +339,9 @@ test_that("only files are template files (D-133)", {
 
 test_that("a filtered template command does not hide a later command (D-133)", {
   withr::defer(res_prune("prompts:", character()))
-  old = registry_env()$filters$session
-  withr::defer(registry_filters_set(old, "session"))
   template_sync()
   expect_identical(registry_get("command", "review")[["template"]], "review")
-  registry_filters_set("-builtin:prompts", "session")
+  local_without_builtin("prompts")
   off = gptr_register(gptr_command("review", function(args, ctx) "real"))
   withr::defer(off())
   p = local_project(trust = TRUE)
@@ -356,8 +354,6 @@ test_that("a filtered template command does not hide a later command (D-133)", {
 
 test_that("a filtered template command does not keep a user template running (D-133)", {
   withr::defer(res_prune("prompts:", character()))
-  old = registry_env()$filters$session
-  withr::defer(registry_filters_set(old, "session"))
   user = file.path(gptr_user_dir("config"), "prompts")
   dir.create(user, recursive = TRUE, showWarnings = FALSE)
   writeLines("User review $1", file.path(user, "review.md"))
@@ -365,7 +361,7 @@ test_that("a filtered template command does not keep a user template running (D-
   template_sync()
   expect_identical(registry_get("command", "review")$handler("x", NULL),
                    list(prompt = "User review x"))
-  registry_filters_set("-builtin:prompts", "session")
+  local_without_builtin("prompts")
   off = gptr_register(gptr_command("review", function(args, ctx) "real"))
   withr::defer(off())
   expect_identical(registry_get("command", "review")$handler("x", NULL), "real")
