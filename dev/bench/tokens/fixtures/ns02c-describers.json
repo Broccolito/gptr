@@ -1,0 +1,98 @@
+{
+  "id": "ns02c-describers",
+  "north_star": 2,
+  "description": "peter(\"Check these objects for problems before I model them\", trial, doses, visits, genes, fit, cfg, clean_fn) at the console: seven attached objects of different classes share the <attached> block (150 tokens each, architecture 7.5); the facts gate holds the describers to every fact they showed when the baseline was recorded (architecture 12.7: describer facts no loss). Standard preset, manual mode, a human present, no bound document; one request.",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": [
+    "benchmain/benchmain-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case."
+  },
+  "objects": {
+    "trial": "data.frame(id = 1:400, arm = factor(rep(c('placebo', 'low', 'high'), length.out = 400)), dose = rep(c(0, 5, 10), length.out = 400), response = round(sin(1:400) * 3 + 50, 2), visit = as.Date('2025-01-06') + (1:400) %% 120, site = factor(sprintf('site%02d', (1:400) %% 12 + 1)), completed = (1:400) %% 9 != 0)",
+    "doses": "c(0, 2.5, 5, 10, 20, NA)",
+    "visits": "as.Date('2025-01-06') + seq(0, 364, by = 7)",
+    "genes": "matrix(round(cos(1:600), 3), 60, 10, dimnames = list(sprintf('gene%02d', 1:60), sprintf('s%02d', 1:10)))",
+    "fit": "stats::lm(mpg ~ wt + hp, data = datasets::mtcars)",
+    "cfg": "list(alpha = 0.05, method = 'BH', strata = c('site', 'arm'), output = list(dir = 'results', format = 'csv'))",
+    "clean_fn": "function(df, col, threshold = 0.5) df[!is.na(df[[col]]) & df[[col]] > threshold, , drop = FALSE]"
+  },
+  "facts": [
+    "trial",
+    "arm",
+    "dose",
+    "response",
+    "visit",
+    "site",
+    "completed",
+    "data.frame",
+    "doses",
+    "visits",
+    "Date",
+    "genes",
+    "matrix",
+    "fit",
+    "lm",
+    "mpg",
+    "wt",
+    "hp",
+    "cfg",
+    "alpha",
+    "method",
+    "strata",
+    "clean_fn",
+    "threshold"
+  ],
+  "turns": [
+    {
+      "prompt": "Check these objects for problems before I model them",
+      "source": "prompt",
+      "context": [
+        {
+          "label": "trial",
+          "class": "data.frame"
+        },
+        {
+          "label": "doses",
+          "class": "numeric"
+        },
+        {
+          "label": "visits",
+          "class": "Date"
+        },
+        {
+          "label": "genes",
+          "class": "matrix"
+        },
+        {
+          "label": "fit",
+          "class": "lm"
+        },
+        {
+          "label": "cfg",
+          "class": "list"
+        },
+        {
+          "label": "clean_fn",
+          "class": "function"
+        }
+      ],
+      "steps": [
+        {
+          "text": "From the descriptions: doses has one NA; trial has 400 rows with three arms and twelve sites; visits are weekly through 2025; genes is a 60 x 10 numeric matrix; fit is a linear model of mpg on wt and hp; cfg uses BH correction stratified by site and arm; clean_fn drops NA values and values at or below the threshold. Nothing blocks modelling; decide how to treat the NA dose first.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}

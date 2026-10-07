@@ -1,0 +1,57 @@
+{
+  "id": "ns01-console",
+  "north_star": 1,
+  "description": "peter() with no prompt opens the console on a session whose workspace holds pbmc; the user types the clustering request; the agent clusters and finds the markers of the three largest clusters in one composed r call (approved once), then answers; !dim(markers) and /mode auto cost no tokens. Standard preset, manual mode, a human present, no bound document (architecture 10.1, 12.8).",
+  "mode": "manual",
+  "human": true,
+  "preset": null,
+  "models": [
+    "benchmain/benchmain-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: interactive console (RStudio)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case.\n- Single cell: Seurat 5; keep pbmc in memory, never reload it."
+  },
+  "objects": {
+    "pbmc": "data.frame(cell = sprintf('cell%04d', 1:80), nCount_RNA = 1000 + (1:80 * 37) %% 900, nFeature_RNA = 400 + (1:80 * 13) %% 300, percent.mt = round(((1:80) * 37 %% 800) / 100, 2))"
+  },
+  "facts": [],
+  "turns": [
+    {
+      "prompt": "cluster the cells and show me the markers for the three largest clusters",
+      "source": "repl",
+      "context": [],
+      "steps": [
+        {
+          "text": "I'll cluster and find the markers of the three largest clusters in one step.",
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "pbmc = FindNeighbors(pbmc, dims = 1:10, verbose = FALSE) |> FindClusters(resolution = 1.5, verbose = FALSE)\nsizes = sort(table(Idents(pbmc)), decreasing = TRUE)\ntop3 = names(sizes)[1:3]\nmarkers = FindAllMarkers(subset(pbmc, idents = top3), only.pos = TRUE, verbose = FALSE)\nsizes\ntapply(markers$gene, markers$cluster, function(g) paste(head(g, 8), collapse = \", \"))[top3]",
+                "note": "SNN graph on 10 PCs, resolution 1.5"
+              },
+              "result": "\n 0  1  2  3  4  5 \n22 18 14  9  9  8 \n                                                                             0 \n                         \"S100A8, S100A9, TYMP, FCN1, LYZ, LST1, AIF1, TYROBP\" \n                                                                             1 \n                              \"GNLY, GZMA, CTSW, LAMP1, CST7, LCK, GZMB, GZMM\" \n                                                                             2 \n\"HLA-DQA1, HLA-DPB1, HLA-DRA, HLA-DQB1, HLA-DRB1, HLA-DMB, HLA-DQA2, HLA-DRB5\" \n[r] ~ pbmc <Seurat> modified, + sizes <table 6>, + top3 <character 3>, + markers <data.frame 211 x 7>\n[status: ok; 6 of 6 top-level expressions completed; 3.1s]",
+              "details": {
+                "code": "pbmc = FindNeighbors(pbmc, dims = 1:10, verbose = FALSE) |> FindClusters(resolution = 1.5, verbose = FALSE)\nsizes = sort(table(Idents(pbmc)), decreasing = TRUE)\ntop3 = names(sizes)[1:3]\nmarkers = FindAllMarkers(subset(pbmc, idents = top3), only.pos = TRUE, verbose = FALSE)\nsizes\ntapply(markers$gene, markers$cluster, function(g) paste(head(g, 8), collapse = \", \"))[top3]",
+                "status": "ok",
+                "note": "SNN graph on 10 PCs, resolution 1.5"
+              }
+            }
+          ]
+        },
+        {
+          "text": "The three largest clusters are 0 (22 cells), 1 (18) and 2 (14): cluster 0 shows myeloid genes (S100A8, LYZ), cluster 1 cytotoxic genes (GNLY, GZMA) and cluster 2 HLA class II genes. I stored the marker table in `markers` and the clustering in `pbmc`.",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}

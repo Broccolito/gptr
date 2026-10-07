@@ -1,0 +1,57 @@
+{
+  "id": "ns05-routing",
+  "north_star": 5,
+  "description": "for (task in tasks) { hard = peter(..., task, model = jev); peter(task, model = if (hard) opus else haiku, mode = auto) } in a sourced script: System 1 routes the task, and this fixture is the System 2 session of a task routed to the strong model; standard preset, auto mode, no human (non-interactive), no bound document, one composed r call and the answer.",
+  "mode": "auto",
+  "human": false,
+  "preset": null,
+  "models": [
+    "benchopus/benchopus-1"
+  ],
+  "standins": [
+    "artifacts",
+    "system1",
+    "skills",
+    "r_env"
+  ],
+  "environment": "Date: 2026-09-29\nWorking directory: /Users/me/project (project root)\nFront end: Rscript (no human)\nR 4.4.3 on aarch64-apple-darwin20; RAM 24 GB (17 GB free)",
+  "files": {
+    "AGENTS.md": "# AGENTS.md\n- Style: = for assignment, |> for pipes, snake_case."
+  },
+  "objects": {
+    "trial": "data.frame(id = 1:240, dose = rep(c(0, 5, 10), 80), genotype = factor(rep(c('AA', 'AB', 'BB'), each = 80)), response = round(50 + (1:240 %% 7) + rep(c(0, 2, 4), 80) * rep(c(1, 1.5, 2), each = 80), 2))"
+  },
+  "facts": [],
+  "turns": [
+    {
+      "prompt": "Is the interaction between dose and genotype in trial significant? Return the fitted model.",
+      "source": "prompt",
+      "context": [],
+      "steps": [
+        {
+          "text": null,
+          "calls": [
+            {
+              "id": "toolu_01",
+              "name": "r",
+              "input": {
+                "code": "fit = lm(response ~ dose * genotype, data = trial)\ngptr_return(fit)\nround(anova(fit), 3)",
+                "note": "interaction tested with a sequential ANOVA"
+              },
+              "result": "Analysis of Variance Table\n\nResponse: response\n               Df   Sum Sq  Mean Sq F value Pr(>F)\ndose            1 1792.000 1792.000 486.214  0.000\ngenotype        2  716.800  358.400  97.243  0.000\ndose:genotype   2  179.200   89.600  24.311  0.000\nResiduals     234  862.440    3.686               \n[r] + fit <lm>\n[status: ok; 3 of 3 top-level expressions completed; 0.1s]",
+              "details": {
+                "code": "fit = lm(response ~ dose * genotype, data = trial)\ngptr_return(fit)\nround(anova(fit), 3)",
+                "status": "ok",
+                "note": "interaction tested with a sequential ANOVA"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Yes: the dose:genotype interaction is significant (F = 24.3 on 2 and 234 df, p < 0.001); the dose effect grows from genotype AA to BB. The fitted model is returned as `res$value` (`fit`).",
+          "calls": []
+        }
+      ]
+    }
+  ]
+}
