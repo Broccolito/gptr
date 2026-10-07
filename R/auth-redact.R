@@ -72,11 +72,16 @@ rules_compile = function(rules) {
 rules_current = function() {
   st = secrets_state()
   if (isTRUE(st$in_rules)) return(st$rules %||% list())
+  reg = registry_env()
+  # registry_all() changes only with the registry, its version or the built-in table
+  key = list(reg, reg$version, the$builtins)
+  if (!is.null(st$rules) && identical(key, st$rules_key)) return(st$rules)
   st$in_rules = TRUE
   on.exit({
     st$in_rules = FALSE
   }, add = TRUE)
   src = tryCatch(registry_all("redaction_rule"), error = function(e) NULL)
+  if (is.null(src)) key = NULL   # a failed read is retried on the next call
   if (!length(src)) src = redact_rules_builtin()
   if (is.null(st$rules) || !identical(src, st$rules_src)) {
     rules = rules_compile(src)
@@ -85,7 +90,9 @@ rules_current = function() {
     st$anchor_re = paste(re_escape(anchors), collapse = "|")
     st$rules = rules
     st$rules_src = src
+    st$known = NULL
   }
+  st$rules_key = key
   st$rules
 }
 
@@ -154,6 +161,10 @@ redact_literal_group = function(y, pattern, st, fixed = FALSE, use_bytes = FALSE
   if (use_bytes) Encoding(y) = "bytes"
   matches = gregexpr(pattern, y, perl = !fixed, fixed = fixed, useBytes = use_bytes)
   values = regmatches(y, matches)
+  if (!any(lengths(values))) {
+    Encoding(y) = encodings
+    return(y)
+  }
   markers = gregexpr(secret_marker_re, y, perl = TRUE, useBytes = use_bytes)
   marker_values = regmatches(y, markers)
   known = redact_known_markers(st)
@@ -181,10 +192,13 @@ redact_literal_group = function(y, pattern, st, fixed = FALSE, use_bytes = FALSE
 #' Marker metadata the redactor knows from vault entries and configured rules
 #' @noRd
 redact_known_markers = function(st = secrets_state()) {
+  if (!is.null(st$known)) return(st$known)
   builtins = vapply(redact_rules_builtin(), function(r) r$marker, "")
   replacements = vapply(st$rules %||% list(), function(r) r$repl, "")
   rule_markers = regmatches(replacements, gregexpr(secret_marker_re, replacements, perl = TRUE))
-  unique(c(st$marks, paste0("[secret:", builtins, "]"), unlist(rule_markers, use.names = FALSE)))
+  st$known = unique(c(st$marks, paste0("[secret:", builtins, "]"),
+                      unlist(rule_markers, use.names = FALSE)))
+  st$known
 }
 
 #' Does a string contain any registered literal (a value or a derived form)?
@@ -198,6 +212,7 @@ lits_present = function(x, st) {
 #' A PEM block split over line elements: BEGIN becomes the marker, body lines become ""
 #' @noRd
 redact_pem_lines = function(y) {
+  if (!any(grepl("-----BEGIN", y, fixed = TRUE, useBytes = TRUE))) return(y)
   b = grep(pem_begin_re, y, perl = TRUE, useBytes = TRUE)
   if (!length(b)) return(y)
   e = grep(pem_end_re, y, perl = TRUE, useBytes = TRUE)

@@ -308,6 +308,75 @@ test_that("an unknown marker name cannot hide a registered credential", {
   expect_identical(redact(out, "user_data"), out)
 })
 
+test_that("text without a registered value costs no marker work per call (PERF-2)", {
+  local_vault()
+  register_fakes()
+  n = c(builtin = 0L, known = 0L, registry = 0L)
+  builtin = redact_rules_builtin
+  known = redact_known_markers
+  walk = registry_all
+  local_mocked_bindings(
+    redact_rules_builtin = function() {
+      n[["builtin"]] <<- n[["builtin"]] + 1L
+      builtin()
+    },
+    redact_known_markers = function(st = secrets_state()) {
+      n[["known"]] <<- n[["known"]] + 1L
+      known(st)
+    },
+    registry_all = function(kind, session = NULL) {
+      n[["registry"]] <<- n[["registry"]] + 1L
+      walk(kind, session)
+    }
+  )
+  for (i in 1:50) redact(paste("delta", i, "of a long answer"), "stream")
+  expect_identical(n[["known"]], 0L)
+  rs = redact_stream("stream")
+  for (i in 1:50) {
+    rs$push(paste(" delta", i))
+    redact(paste("key", fake_jev, i), "stream")
+  }
+  expect_lte(n[["builtin"]], 1L)
+  expect_lte(n[["registry"]], 1L)
+})
+
+test_that("text without secrets passes every profile byte for byte, encoding included", {
+  local_vault()
+  register_fakes()
+  x = c("plain", "caf\u00e9 \u4e2d", "caf\xe9", iconv("\u00c3\u00a9", "UTF-8", "latin1"),
+        "b\xff\xfe", NA, "")
+  Encoding(x[3]) = "latin1"
+  Encoding(x[5]) = "bytes"
+  bytes = function(v) lapply(v, function(s) if (is.na(s)) NA else list(charToRaw(s), Encoding(s)))
+  for (p in redact_profiles) {
+    expect_identical(bytes(redact(x, p)), bytes(x), info = p)
+    for (s in x) expect_identical(bytes(redact(s, p)), bytes(s), info = p)
+  }
+})
+
+test_that("the redactor follows later secrets and rules and retries a failed registry read", {
+  local_vault()
+  register_fakes()
+  marker = function(name) paste0("[secret:", name, "]")
+  rules_current()   # compiled first, so the next redaction caches the marker table
+  expect_identical(redact(fake_jev, "persist"), marker("TYPESAFE_API_KEY"))
+  late = paste0("FAKE_", "LATE_NAME")
+  secret_register(late, late)
+  expect_identical(redact(marker(late), "persist"), marker(late))
+  mark = paste0("FAKE_", "RULE_MARK")
+  secret_register(mark, "RULE_MARK_TOKEN")
+  expect_identical(redact(paste("x", mark), "persist"), paste("x", marker("RULE_MARK_TOKEN")))
+  off = gptr_register(gptr_spec("redaction_rule", "fake-rule", pattern = "FAKERULE[0-9]{8}",
+                                anchor = "FAKERULE", marker = mark))
+  withr::defer(off())
+  with_mocked_bindings(
+    expect_identical(redact("FAKERULE12345678", "persist"), "FAKERULE12345678"),
+    registry_all = function(kind, session = NULL) stop("registry unavailable")
+  )
+  expect_identical(redact("FAKERULE12345678", "persist"), marker(mark))
+  expect_identical(redact(marker(mark), "persist"), marker(mark))
+})
+
 
 # Streaming chunk invariance (G6 section 5.2 part 6). A fixed LCG, not R's RNG, drives the chunk
 # sizes, so the user's .Random.seed is never touched.

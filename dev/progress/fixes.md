@@ -177,3 +177,19 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   `^(arch-layers|lint-rules)$` PASS 19 green.
 - Reviews: none recorded.
 - Deviations: none. Open: none.
+
+## Task PERF-2 - Stream-event redaction does constant work per event (2026-10-07)
+- Red: FAIL 13 on HEAD sources (per call: marker table, built-in markers, registry walk; latin1
+  text valid as UTF-8 re-marked). Green: `^auth-redact$` PASS 471 (421 + 50; +3 tests), also under
+  `LC_ALL=C`. Lint clean. Neighbours: `auth-|secrets|ext-|injection-e2e|session-live|console-`,
+  `provider-registry|subagent-team|arch-layers|lint-rules|doc-blocks|cli-common|s11-conformance`,
+  `agent-run|gptr-gateway`, dev bench `perf` green; `perf/run.R --check` exit 0 (new row `peter`
+  1.73 s, bar 3 s; HEAD 5.88 s fails).
+- Measured: `peter()` over a fake 50 KB reply 5.8 -> 1.65 s (installed 5.15 -> 1.49 s);
+  `test-subagent-team.R` 186.6 -> 65.4 s; installed suite, NOT_CRAN unset, 420.8 -> 284.1 s. Output
+  byte-identical to HEAD on 2,965 comparisons except latin1 text valid as UTF-8 that matches no
+  value: kept as given (as with an empty vault; HEAD re-marked it UTF-8, under `LC_ALL=C` as
+  `<c3><a9>` text).
+- Reviews: none recorded.
+- Deviations: none. Open: the report-budget test still takes 47.5 s (was 167.2 s; per-delta event
+  pipeline, redaction about a third).
