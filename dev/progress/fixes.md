@@ -159,3 +159,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   PASS 603.
 - Reviews: r1 1 finding (0/1/0): the per-file fix left NS-8's supervisor open (3 -> 5) -> fixed (suite-level).
 - Deviations: none. Open: none.
+
+## Task CI-16 - The plugin settings test unregisters the user-scope command it creates (2026-10-06)
+- Red: after `^ext-plugins$` the process registry still held the user command `p17-user-ext` (1
+  record, shipped to later workers). Fix (test only): the test's defer removes that record, as
+  `test-secrets-e2e.R` does for `e2e-ext`; 0 records after the file. Green: `^ext-plugins$` PASS 379,
+  `^(ext-plugins|subagent-worker|secrets-e2e)$` PASS 529. Lint clean. Neighbours: `^(ext-|subagent-)`
+  PASS 2332.
+- Reviews: none recorded.
+- Deviations: none. Open: none.

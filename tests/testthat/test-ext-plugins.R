@@ -1017,7 +1017,10 @@ test_that("settings plugins and user extension files are enabled by plugins_sync
   ext_dir = file.path(gptr_user_dir("config"), "extensions")
   write_file(file.path(ext_dir, "p17-user-ext.R"),
              command_ext("p17-user-ext", "\"from user ext\""))
-  withr::defer(unlink(file.path(ext_dir, "p17-user-ext.R")))
+  withr::defer({
+    unlink(file.path(ext_dir, "p17-user-ext.R"))
+    for (r in registry_candidates("command", "p17-user-ext", NULL)) registry_remove(r$id)
+  })
   plugins_sync()
   expect_false(is.null(registry_get("skill", "settings-skill")))
   expect_identical(registry_get("command", "p17-user-ext")$handler("", NULL), "from user ext")
