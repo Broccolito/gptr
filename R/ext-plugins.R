@@ -339,25 +339,29 @@ res_prune = function(prefix, keep) {
   invisible(stale)
 }
 
-#' Names of the process-level `kind` records that something other than P17's resources registered
+#' The process-level `kind` records that something other than P17's resources registered
 #'
 #' A console command, plugin code or `gptr_register()`: an enabled process-level record whose id
 #' belongs to no resource group and to no plugin entry's declarative records, so a removed or
 #' disabled record of P17 hides nothing (D-133, D-134).
 #' @noRd
-res_foreign_names = function(kind) {
+res_foreign_recs = function(kind) {
   reg = registry_env()
   registry_enter(reg)
   on.exit(registry_leave(reg), add = TRUE)
   recs = registry_recs(reg, get0(kind, envir = reg$by_kind, inherits = FALSE))
-  if (!length(recs)) return(character())
   st = res_state()
   own = c(unlist(lapply(st$groups, function(g) g$ids), use.names = FALSE),
           unlist(lapply(st$plugins, function(e) e$ids), use.names = FALSE))
-  keep = vapply(recs, function(r) {
+  Filter(function(r) {
     is.null(r$session) && !(r$id %in% own) && !registry_rec_filtered(r, reg)
-  }, NA)
-  unique(vapply(recs[keep], function(r) r$name, ""))
+  }, recs)
+}
+
+#' Names of the `res_foreign_recs()` records
+#' @noRd
+res_foreign_names = function(kind) {
+  unique(vapply(res_foreign_recs(kind), function(r) r$name, ""))
 }
 
 #' Install a resource handler (called by the L4 built-ins from `on_load()`)

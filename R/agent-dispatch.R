@@ -141,12 +141,17 @@ tool_execute_frame = function(run, call, ctx, st = NULL) {
   tool_run(call$tool, call$input, ctx, call$name)
 }
 
-#' Call a tool's execute(): its normalised, well-formed result, or an error result (errors,
-#' warnings under `warn = 2`, time limits, a malformed result)
+#' Call a tool's execute() with the ctx attributed to the tool's record, as for policies (its
+#' extension's `ctx$append_entry()` types and `ctx$state()`, 04 section 10.6): its normalised,
+#' well-formed result, or an error result (errors, warnings under `warn = 2`, time limits, a
+#' malformed result)
 #' @noRd
 tool_run = function(tool, input, ctx, name) {
-  tryCatch(tool_result_check(as_tool_result(tool$execute(input, ctx)), name),
-           error = function(e) tool_error(conditionMessage(e)))
+  key = spec_key(tool)
+  rec = Find(function(r) identical(r$name, key), registry_all_recs("tool", ctx$session))
+  tryCatch(tool_result_check(as_tool_result(
+    ctx_with_source(ctx, rec$source, function() tool$execute(input, ctx))
+  ), name), error = function(e) tool_error(conditionMessage(e)))
 }
 
 #' A tool result with fields of the types tool_result_message() records, or gptr_error_tool

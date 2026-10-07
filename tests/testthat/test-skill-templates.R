@@ -128,6 +128,27 @@ test_that("template_sync registers templates and one command per template", {
   expect_identical(cmd$handler("#12", NULL), list(prompt = "Triage #12."))
 })
 
+test_that("a template that code registers is a command unless a file template shadows it", {
+  withr::defer(res_prune("prompts:", character()))
+  withr::defer(res_prune("templates:", character()))
+  ids = c(registry_add(gptr_spec("prompt_template", "p17-codet", text = "Code $1"),
+                       source = "plugin:p17-tpl", rank = 5L),
+          registry_add(gptr_spec("prompt_template", "p17-dupt", text = "Plugin $1"),
+                       source = "plugin:p17-tpl", rank = 5L))
+  withr::defer(for (id in ids) registry_remove(id))
+  user = file.path(gptr_user_dir("config"), "prompts")
+  dir.create(user, recursive = TRUE, showWarnings = FALSE)
+  writeLines("File $1", file.path(user, "p17-dupt.md"))
+  withr::defer(unlink(file.path(user, "p17-dupt.md")))
+  template_sync()
+  expect_identical(registry_get("command", "p17-codet")$handler("x", NULL),
+                   list(prompt = "Code x"))
+  expect_identical(registry_get("command", "p17-dupt")$handler("x", NULL),
+                   list(prompt = "File x"))
+  reg = gptr_registry()
+  expect_identical(sum(reg$kind == "command" & reg$name == "p17-dupt"), 1L)
+})
+
 test_that("an untrusted project's templates are not registered", {
   withr::defer(res_prune("prompts:", character()))
   p = local_project(trust = FALSE)

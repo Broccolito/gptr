@@ -2158,7 +2158,7 @@ P02 is loaded a `service` registry record of lower rank replaces the bootstrap e
 | `check.adapter` | P12 | `gptr_check()` (P02) | `function(adapter, fixtures = NULL) <gptr_check>` |
 | `trust.get` | P08 | P03 (`.env` discovery), P07 (SYSTEM.md, instruction authority), P17, P18 (IC-33) | `function(path = getwd()) lgl(1)`; fallback `FALSE` |
 | `identifier.resolve` | P08 | `gptr_agent()` capture (P02), agent files (P17) | `function(expr, arg, envir) chr or spec`; fallback: literal names |
-| `secret.lookup` | P03 | `ctx$secret()` (P02) | `function(name) <handle> or NULL`; fallback `NULL` |
+| `secret.lookup` | P03 | `ctx$secret()` (P02) | `function(name, ctx = NULL) <handle> or NULL`; fallback `NULL` |
 | `ctx.kernel` | P06 | `ctx_new()` (P02) | `function() named list` of the §10.6 member implementations marked P06 |
 | `ctx.input` | P07 | `ctx$input` (P02) | `function(ctx) list or NULL` |
 | `ns.names` | P10 | `.DollarNames.gptr_gateway` (P08) | `function(pattern) chr`; fallback `character(0)` |

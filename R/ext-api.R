@@ -332,7 +332,7 @@ ctx_call_plugin = function(ctx, member, ...) {
 #' Run `fun()` with the ctx attributed to `source`, restoring the previous source
 #' @noRd
 ctx_with_source = function(ctx, source, fun) {
-  if (is.null(ctx)) return(fun())
+  if (!is.environment(ctx)) return(fun())
   old = ctx_source(ctx)
   assign(".source", source, envir = ctx)
   on.exit(assign(".source", old, envir = ctx), add = TRUE)
@@ -391,7 +391,7 @@ ctx_new = function(session, run = NULL) {
   ctx$secret = function(name) {
     check_string(name, "name")
     f = ext_service_try("secret.lookup", sid())
-    if (is.null(f)) NULL else f(name)
+    if (is.null(f)) NULL else f(name, ctx)
   }
   ctx$execute_tool = function(name, input) ctx_call(ctx, "execute_tool", name, input)
   ctx$send = function(text, as = c("steer", "follow_up")) {

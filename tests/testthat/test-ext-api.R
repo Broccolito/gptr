@@ -263,7 +263,7 @@ test_that("ctx services: ui, risk, secret, tokens, eval, describe, decide, add_t
     list(level = 2L, kind = kind)
   })
   expect_equal(ctx$risk("x = 1", kind = "r")$level, 2L)
-  local_service("secret.lookup", function(name) paste0("<secret ", name, ">"))
+  local_service("secret.lookup", function(name, ctx) paste0("<secret ", name, ">"))
   expect_equal(ctx$secret("JEV"), "<secret JEV>")
   expect_equal(ctx$tokens("abcdefgh"), est_tokens("abcdefgh", "prose"))
   registry_add(gptr_spec("estimator", "default", estimate = function(x, class) 42),

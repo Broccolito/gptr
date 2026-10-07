@@ -303,6 +303,19 @@ secret_lookup = function(name) {
             class = "gptr_secret")
 }
 
+#' `ctx$secret()` (service secret.lookup, 04 section 10.6): the registered handle, else the first
+#' value a `secret_source` record resolves, registered at once (10.2 row 25)
+#' @noRd
+secret_lookup_ctx = function(name, ctx = NULL) {
+  h = secret_lookup(name)
+  if (!is.null(h)) return(h)
+  for (src in registry_all("secret_source", ctx$session)) {
+    v = src$resolve(name, ctx)
+    if (rlang::is_string(v) && nzchar(v)) return(secret_register(v, name, source = src$name))
+  }
+  NULL
+}
+
 #' Names of every registered secret (the classifier's secret guard reads them)
 #' @noRd
 secret_registered_names = function() {
@@ -695,4 +708,5 @@ builtin_secrets = function(gptr) {
 }
 
 on_load(ext_declare_builtin("secrets", builtin_secrets, replaceable = FALSE))
-on_load(ext_service_set("secret.lookup", secret_lookup, provided_by = "P03", builtin = "secrets"))
+on_load(ext_service_set("secret.lookup", secret_lookup_ctx, provided_by = "P03",
+                        builtin = "secrets"))

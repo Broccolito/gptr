@@ -2141,3 +2141,19 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
   these sinks must hold a marker or the file before its grep counts; the mock server starts before
   `local_project()`; empty files (processx fifos) are not scanned.
 - Contract-visible: none (03 6.5 behaviour). Tests: test-secrets-e2e.R. Evidence: progress/P24.md Task 9.
+
+## D-175 - P24 S-11 conformance: three run-time consumers of plugin records filled in (2026-10-06)
+- Rule (04 10.2 row 25, 10.6): `ctx$secret(name)` calls service `secret.lookup` as `f(name, ctx)`; it
+  returns the vault's handle, else that of the first value a `secret_source` record resolves, registered at once.
+- Rule (04 10.6 `ctx$append_entry()` "<plugin>.<type>"): a tool's `execute()` runs with the ctx attributed to
+  its record's source, as policies do (FIX-9); `ctx_with_source()` leaves a non-environment ctx alone.
+- Rule (IC-31): `template_sync()` gives the winning `prompt_template` records that code registered
+  (`res_foreign_recs()`) their commands, under the template's source and rank (group `templates:<source>`);
+  file templates are unchanged.
+- Plan test adapted: the frontend gets the piped session (P14 passes the call's session, `NULL` without
+  one); the custom artifact kind needs its working copy directory (P23); a `peter()` call inside
+  `test_that()` is located in the test file by its srcref, nested with no block, so the `qmd` format is used
+  by a chunk of the knitted bound document.
+- Contract-visible: 04 section 7.0 `secret.lookup` amended to `function(name, ctx = NULL)`. Open: provider
+  credentials (`provider_credential()`, P05) do not consult plugin `secret_source` records (03 6.5).
+  Tests: test-s11-conformance.R, test-skill-templates.R. Evidence: progress/P24.md Task 12.

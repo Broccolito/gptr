@@ -215,7 +215,6 @@ template_command = function(tpl, group = NULL) {
 #' `source` field; `group` is the synced group of the commands (`template_sync()`).
 #' @noRd
 template_specs = function(files, labels = NULL, prefix = NULL, source = NULL, group = NULL) {
-  existing = res_foreign_names("command")
   tpls = list()
   for (i in seq_along(files)) {
     nm = labels[i] %||% sub("\\.md$", "", basename(files[i]))
@@ -227,6 +226,13 @@ template_specs = function(files, labels = NULL, prefix = NULL, source = NULL, gr
   }
   nm = vapply(tpls, function(t) t[["name"]], "")
   tpls = tpls[!duplicated(nm)]
+  c(tpls, template_commands(tpls, group))
+}
+
+#' The command specs of templates whose names no foreign command holds (`template_specs()`)
+#' @noRd
+template_commands = function(tpls, group = NULL) {
+  existing = res_foreign_names("command")
   cmds = list()
   for (t in tpls) {
     if (t[["name"]] %in% existing) {
@@ -238,7 +244,7 @@ template_specs = function(files, labels = NULL, prefix = NULL, source = NULL, gr
     cmd = template_command(t, group)
     if (!is.null(cmd)) cmds[[length(cmds) + 1L]] = cmd
   }
-  c(tpls, cmds)
+  cmds
 }
 
 #' Resource handler for gptr plugin `prompts/` directories
@@ -361,6 +367,22 @@ template_sync = function() {
     if (res_group_fresh(paste0("prompts:", g), sig)) next
     res_register(paste0("prompts:", g), template_specs(files, source = g, group = g),
                  source = g, rank = roots$rank[roots$reg == g][1L], sig = sig)
+  }
+  # Winning templates that code registered (a plugin's factory, gptr_register()) get commands under
+  # the template's source and rank, so filtering or unloading that source hides both (IC-31)
+  recs = registry_all_recs("prompt_template")
+  foreign = vapply(res_foreign_recs("prompt_template"), function(r) r$id, "")
+  recs = Filter(function(r) r$id %in% foreign, recs)
+  srcs = unique(vapply(recs, function(r) r$source, ""))
+  res_prune("templates:", paste0("templates:", srcs))
+  for (src in srcs) {
+    mine = Filter(function(r) identical(r$source, src), recs)
+    tpls = lapply(mine, function(r) r$spec)
+    nms = vapply(tpls, function(t) t[["name"]], "")
+    sig = paste(c(nms, vapply(tpls, function(t) t[["text"]], ""),
+                  intersect(nms, res_foreign_names("command"))), collapse = "\r")
+    res_register(paste0("templates:", src), template_commands(tpls), source = src,
+                 rank = mine[[1L]]$rank, sig = sig)
   }
   invisible(NULL)
 }
