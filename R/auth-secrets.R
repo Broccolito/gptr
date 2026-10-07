@@ -686,6 +686,9 @@ builtin_secrets = function(gptr) {
     "secret_source", "keyring",
     resolve = function(name, ctx) {
       if (!requireNamespace("keyring", quietly = TRUE)) return(NULL)
+      # A speculative lookup: keyring's env-backend fallback is not worth a warning here
+      old = options(keyring_warn_for_env_fallback = FALSE)
+      on.exit(options(old), add = TRUE)
       v = tryCatch(keyring::key_get("gptr", name), error = function(e) NULL)
       if (!rlang::is_string(v) || !nzchar(v)) return(NULL)
       secret_register(v, name, source = "keyring")
@@ -693,6 +696,8 @@ builtin_secrets = function(gptr) {
     },
     list = function(ctx) {
       if (!requireNamespace("keyring", quietly = TRUE)) return(character())
+      old = options(keyring_warn_for_env_fallback = FALSE)
+      on.exit(options(old), add = TRUE)
       tryCatch(keyring::key_list("gptr")$username, error = function(e) character())
     }
   ))

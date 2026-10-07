@@ -193,3 +193,13 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Reviews: none recorded.
 - Deviations: none. Open: the report-budget test still takes 47.5 s (was 167.2 s; per-delta event
   pipeline, redaction about a third).
+
+## Task FIX-12 - A speculative keyring lookup never warns about keyring's env fallback (2026-10-07)
+- Red: FAIL 2 in `^auth-secrets$` (the keyring source's `resolve`/`list` passed keyring's "Selecting 'env'
+  backend" warning through; hosted run 37588313491 WARN 2 at `test-auth-secrets.R:423/505`). Fix: both
+  run with `options(keyring_warn_for_env_fallback = FALSE)`, restored on exit; `auth-store.R`'s
+  explicit keyring references unchanged. Green: `^auth-secrets$` PASS 308 (+1 test). Lint clean.
+  Neighbours: `^auth-` PASS 1199 SKIP 1 (keyring installed), `^secrets` 36,
+  `^(arch-layers|lint-rules)$` 19, `^(ext-api|provider-registry)$` 960 green, all WARN 0.
+- Reviews: none recorded.
+- Deviations: none. Open: none.

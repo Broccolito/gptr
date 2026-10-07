@@ -446,6 +446,23 @@ test_that("the environment and auth sources resolve and register values", {
   expect_true(auth_src$forget("openrouter", NULL))
 })
 
+test_that("the keyring source never warns about keyring's environment fallback", {
+  skip_if_not_installed("keyring")
+  local_vault()
+  fallback = function(value) {
+    if (getOption("keyring_warn_for_env_fallback", TRUE)) warning("Selecting 'env' backend.")
+    value
+  }
+  local_mocked_bindings(key_get = function(...) fallback(NULL),
+                        key_list = function(...) fallback(data.frame(username = "P03_KR_TOKEN")),
+                        .package = "keyring")
+  src = registry_get("secret_source", "keyring")
+  before = getOption("keyring_warn_for_env_fallback")
+  expect_no_warning(expect_null(src$resolve("P03_KR_TOKEN", NULL)))
+  expect_no_warning(expect_identical(src$list(NULL), "P03_KR_TOKEN"))
+  expect_identical(getOption("keyring_warn_for_env_fallback"), before)
+})
+
 test_that("plugin records extend the redactor, the alias table and the child profiles", {
   local_vault()
   off1 = gptr_register(gptr_spec("redaction_rule", "demo-token", pattern = "demo_[0-9]{8}",
