@@ -208,6 +208,7 @@ test_that("NS-8: an artifact is a Shiny app written under .gptr/artifacts and st
   skip_if_not_installed("shiny")
   skip_if_not_installed("httpuv")
   root = local_project()
+  withr::defer(artifact_browser_close())
   local_gptr_options(quiet = FALSE, verbose = 2L)
   app = paste("library(shiny)",
               "ui = fluidPage(textInput('gene', 'Gene'), tableOutput('tab'))",

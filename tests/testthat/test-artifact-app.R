@@ -375,10 +375,6 @@ skip_if_browser_failed = function(res) {
   skip_if(is.na(res$ok) && is.null(artifact_state$browser), res$messages[1])
 }
 
-# chromote always starts processx's supervisor; when gptr does not supervise (IC-60), end it
-# with this file, after the tests have closed the browser
-withr::defer(if (!supervise_default()) processx::supervisor_kill())
-
 # A served version as a record the session check reads: its URL, its redacted log
 served_record = function(id, lines, data = character(), envir = new.env(),
                          .env = parent.frame()) {

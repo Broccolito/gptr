@@ -148,3 +148,14 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
   installed), `^(arch-layers|lint-rules)$` PASS 19, `^(utils-paths|utils-hash|copy-ckpt|doc-io)$` PASS 604.
 - Reviews: none recorded.
 - Deviations: D-177. Open: none.
+
+## Task CI-15 - The artifact registry tests leave no processx supervisor open (2026-10-06)
+- Red: the connections gate on `^artifact-(app|registry)$` 3 -> 5, and on `^northstar$` 3 -> 5 (processx's
+  supervisor fifos: chromote, started by the registry's launching tests and by NS-8, always supervises
+  Chrome). Fix (tests only): CI-8's per-file `supervisor_kill()` line moves from test-artifact-app.R to
+  setup.R (`testthat::teardown_env()`), ending the supervisor with the run; NS-8 in test-northstar.R closes
+  its browser. Green: gate `^(artifact-app|artifact-registry|northstar)$` 3 -> 3, PASS 543; `^northstar$`
+  gate 3 -> 3, PASS 81. Lint clean. Neighbours: `^(artifact-|copy-artifact$|lint-rules$|northstar$|utils-options$)`
+  PASS 603.
+- Reviews: r1 1 finding (0/1/0): the per-file fix left NS-8's supervisor open (3 -> 5) -> fixed (suite-level).
+- Deviations: none. Open: none.
