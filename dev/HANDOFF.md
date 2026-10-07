@@ -36,16 +36,16 @@ simplicity package (`progress/simplicity.md`). The entry point is **`peter()`** 
   acknowledged the design's D1-D3 on 2026-10-06.
 - Standing: work on `main`, task-sized commits with the plan's subject + `Co-Authored-By`, periodic
   pushes; **ask first** before pushing tags, releases, CRAN, paid/live runs (section 5).
-- **Milestone tags** (maintainer, 2026-10-06): M0, M1 and M2 approved and pushed; the condition is
-  hosted CI green and the code reviewed and tested. Ask before each later tag (M3-M5) and before release.
+- **Milestone tags**: M0, M1, M2 (2026-10-06) and M3, M4 (2026-10-07, on `240db69`) approved and pushed; the
+  condition is hosted CI green and the code reviewed and tested. Ask before the M5 tag and before release.
 
 ## 3. Status
 
 | Plan | Acceptance | Notes |
 |---|---|---|
 | P01-P13 | recorded (PROGRESS) | M0, M1, M2 tagged |
-| P14-P17 | `ee23bab`, `84d85db`, `c38ffe0`, `59d7987` | M3; P14 manual terminal check: maintainer |
-| P18-P21 | `552e95f`, `c8248c2`, `dde8fad`, `38d1bdb` | M4; P20 live CLI test and P21 manual check: maintainer |
+| P14-P17 | `ee23bab`, `84d85db`, `c38ffe0`, `59d7987` | M3 tagged; P14 manual terminal check: maintainer |
+| P18-P21 | `552e95f`, `c8248c2`, `dde8fad`, `38d1bdb` | M4 tagged; P20 live CLI test and P21 manual check: maintainer |
 | P22-P24 | `fa9c171`, `f6aa1c8`, `3299ff5` | P24 A14 passes after the reviewed cache-sim refresh (`2e8fd09`) |
 | P25 | offline rows `f6be1fa` | Tasks 1-13 done; Tasks 14-15 offline parts done; their live, network and submission steps: maintainer |
 
@@ -63,7 +63,7 @@ fallback warning (FIX-12), and three Windows defects found with the on-demand fi
 (`.github/workflows/windows-by-file.yaml`): workers blocked reading stdin and lost `R_ARCH` (WIN-1, D-179), killed
 children still listed for ~0.3 s (WIN-2, D-180), a test's timing assumption (WIN-3). On `ca0aa3c` all 11 non-Windows
 jobs were green; **on `240db69` all 13 jobs are green** (run 37686569854; Windows release 42 min, oldrel-4 37 min).
-That commit is the candidate for the M3 and M4 tags (section 5, step 1).
+Tags `gptr-1.0-m3` and `gptr-1.0-m4` are on that commit (maintainer-approved, 2026-10-07).
 
 ## 4. How to resume
 
@@ -86,14 +86,13 @@ their files in `dev/.validation/scratch/lanes-current.txt` (empty now).
 
 ## 5. Maintainer steps (ask first; in this order)
 
-1. **M3 and M4 tags** (`gptr-1.0-m3`, `gptr-1.0-m4`) on a commit with hosted CI green (section 3).
-2. Manual terminal checks in `R --vanilla`: P14 Task 7 (console, INFRA-03), P21 Task 7 (Ctrl-C).
-3. Live runs (`GPTR_LIVE_TESTS=true`, paid or plan quota): P25 Task 14 Step 6 (`dev/bench/tokens/live.R`
+1. Manual terminal checks in `R --vanilla`: P14 Task 7 (console, INFRA-03), P21 Task 7 (Ctrl-C).
+2. Live runs (`GPTR_LIVE_TESTS=true`, paid or plan quota): P25 Task 14 Step 6 (`dev/bench/tokens/live.R`
    with both models, then `dev/release/check-live.R` and commit the `live-<date>.csv`), the P20 live
    CLI test, optionally the P12/P13 live files (`00-index.md` section 6).
-4. Network: refresh the models.dev catalog (P05 Task 6), `urlchecker::url_check()`,
+3. Network: refresh the models.dev catalog (P05 Task 6), `urlchecker::url_check()`,
    `dev/release/build-site.R` (exclude `CLAUDE.md` and `AGENTS.md` before deploying a site).
-5. P25 Task 15 Steps 5-6: hosted CI on the release commit, `devtools::check_win_devel()`,
+4. P25 Task 15 Steps 5-6: hosted CI on the release commit, `devtools::check_win_devel()`,
    `dev/release/check-files.R cran-comments --revdeps`, `devtools::submit_cran()`; then the M5 tag.
 
 ## 6. Open obligations

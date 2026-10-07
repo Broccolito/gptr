@@ -11,8 +11,8 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 | M0 Foundation | P01-P04 | **closed**: tag `gptr-1.0-m0` on `5e01bf4` (local gates + hosted CI 13/13) | P01-P04 logs; `progress/infra.md` |
 | M1 Offline session kernel | P05-P08 | **closed**: tag `gptr-1.0-m1` on `5e01bf4` (local gates + hosted CI 13/13) | P05 `df47cbe`, P06 `a535986`, P07 `698e495`, P08 `7d89173` |
 | M2 Live R agent and decisions | P09-P13 | **closed**: tag `gptr-1.0-m2` on `ef21d3f` (local gates + hosted CI 13/13) | P09 `4ef76fa`, P10 `2823b07`, P12 `3b26e32`, P13 `1968f1c` |
-| M3 Interactive, recorded, reversible | P14-P17 | all plans complete; local gate passed (`7330b50`, final gate 2026-10-07); hosted CI and tag: pending (ask) | P14 `ee23bab`, P15 `84d85db`, P16 `c38ffe0`, P17 `59d7987` |
-| M4 Interop and scale-out | P18-P21 | all plans complete; local gate passed (as M3); hosted CI and tag: pending (ask) | P18 `552e95f`, P19 `c8248c2`, P20 `dde8fad`, P21 `38d1bdb` |
+| M3 Interactive, recorded, reversible | P14-P17 | **closed**: tag `gptr-1.0-m3` on `240db69` (local gates + hosted CI 13/13) | P14 `ee23bab`, P15 `84d85db`, P16 `c38ffe0`, P17 `59d7987` |
+| M4 Interop and scale-out | P18-P21 | **closed**: tag `gptr-1.0-m4` on `240db69` (local gates + hosted CI 13/13) | P18 `552e95f`, P19 `c8248c2`, P20 `dde8fad`, P21 `38d1bdb` |
 | M5 Polyglot, apps, release | P22-P25 | all plans complete; offline and coordinator rows pass (2026-10-07); live, network and submission steps: maintainer | P22 `fa9c171`, P23 `f6aa1c8`, P24 `3299ff5`, P25 `f6be1fa`, `489080d` |
 
 ## Resume log
@@ -38,7 +38,8 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
   0/0/1 local clock NOTE); A14 cache-sim refresh; P25 review nits; CI-18 (token benchmark pins `<r_env>`), CI-19
   (hosted job budgets), CI-20 (INFRA-03 race), FIX-12 (keyring warning), PERF-2 (stream redaction 3.5x
   faster), DOC-3 (roxygen link warnings), WIN-1..3 (Windows workers, killed children, a timing test); final gate
-  re-run on `240db69` (23,865 tests; check 0/0/0). Remaining: M3/M4 tags, maintainer release steps (HANDOFF 5).
+  re-run on `240db69` (23,865 tests; check 0/0/0); hosted CI 13/13; tags `gptr-1.0-m3`, `gptr-1.0-m4`.
+  Remaining: the maintainer's release steps (HANDOFF section 5).
 
 ## Execution and recording rules
 
