@@ -279,8 +279,8 @@ ws_path = function(..., create_parent = TRUE) {
 
 #' The one saveRDS() of user data: always ascii = FALSE (copy-safety rule R7) (a leaf function)
 #' @noRd
-save_rds = function(object, file, compress = FALSE) {
-  saveRDS(object, file, ascii = FALSE, compress = compress)
+save_rds = function(object, file, compress = FALSE, refhook = NULL) {
+  saveRDS(object, file, ascii = FALSE, compress = compress, refhook = refhook)
 }
 
 #' The one serialize() of user data: always ascii = FALSE (copy-safety rule R7) (a leaf function)

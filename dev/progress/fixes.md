@@ -124,3 +124,12 @@ them. Status: FIX-1..4, 6..9 committed; FIX-5 partial (P15 part done, the rest i
 - Reviews: R1 clear, 1 minor (counts taken with Task 7's uncommitted files; header not updated):
   counts re-measured on HEAD plus FIX-9, header updated.
 - Deviations: none. Open: none.
+
+## Task FIX-10 - A worker receives no closure environments beyond its own records (2026-10-06)
+- Red: FAIL 2 in `^subagent-worker$` (the walk entered the registry; no `refhook`) and FAIL 2 in
+  `^secrets-e2e$` (spec.rds 30 MB holding the key 15 times). Green: `^subagent-worker$` PASS 114,
+  `^secrets-e2e$` PASS 36, `^(ext-plugins|secrets-e2e)$` PASS 415. Lint clean. Neighbours: `^subagent-`
+  PASS 565, `^(secrets-e2e|injection-e2e)$` PASS 229, `cli-codex` PASS 248 (INFRA-16 leg skips: gptr not
+  installed), `^(arch-layers|lint-rules)$` PASS 19, `^(utils-paths|utils-hash|copy-ckpt|doc-io)$` PASS 604.
+- Reviews: none recorded.
+- Deviations: D-177. Open: none.

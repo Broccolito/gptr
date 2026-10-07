@@ -378,6 +378,21 @@ test_that("specs that cannot be serialised are found; others are not (IC-69)", {
   expect_false(worker_unserialisable(peter))
 })
 
+test_that("a registry is a reference: a closure reaching it ships none of its records (IC-69)", {
+  local_registry()
+  con = file(tempfile(), "w")
+  withr::defer(close(con))
+  # another extension keeps a connection in its state, inside the registry
+  ext_load(local(function(gptr) gptr$state$con = con,
+                 envir = list2env(list(con = con), parent = globalenv())),
+           source = "user", rank = 3L)
+  off = gptr_register(gptr_command("w-cmd", function(args, ctx) "ok"))
+  expect_false(worker_unserialisable(off))
+  f = withr::local_tempfile(fileext = ".rds")
+  save_rds(off, f, refhook = worker_refhook)
+  expect_identical(environment(readRDS(f, refhook = worker_refhook))$reg, emptyenv())
+})
+
 test_that("objects are shipped by name from the caller's environment", {
   e = new.env()
   e$d = 1:3

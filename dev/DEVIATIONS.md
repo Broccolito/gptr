@@ -2168,3 +2168,13 @@ Format (conventions section 11): `## D-nnn - <plan> <title> (date)`, then Rule (
 - Contract-visible: none.
 - Tests: test-northstar.R "NS-10 ...", "the composed standard prompt ... (IC-68)"; test-skill-discover.R "a new
   session carries the catalog in T1 and preloads skills = (e2e)". Evidence: progress/P24.md Task 11.
+
+## D-177 - P19 a worker spec writes the registry as a reference, never its records (2026-10-06)
+- Rule (IC-69, IC-70): `save_rds()` of the worker spec and `worker_main()`'s `readRDS()` share `worker_refhook()`:
+  a registry (class `gptr_registry_env`) is written as a reference and read back as the empty environment, so a
+  closure that reaches it (an extension's API object, `gptr_register()`'s remover) ships none of its records;
+  `worker_unserialisable()` stops at a registry too. In the worker such an API object is stale, as before.
+- Contract-visible: 04 section 7.0 `save_rds(object, file, compress = FALSE, refhook = NULL)`; IC-69 "Workers
+  inherit the registry" states the reference.
+- Tests: test-subagent-worker.R "a registry is a reference ..."; test-secrets-e2e.R "worker spec and result files
+  ...". Evidence: progress/fixes.md FIX-10.

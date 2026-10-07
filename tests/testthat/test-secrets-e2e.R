@@ -203,11 +203,30 @@ test_that("worker spec and result files and worker output carry no key (IC-70)",
   keys = e2e_needles(e2e_keys)
   # The worker's spec and result files are removed when it exits: they are scanned just before.
   seen = integer()
+  spec_size = NA
   cleanup = worker_cleanup
   local_mocked_bindings(worker_cleanup = function(st) {
-    if (!is.null(st$dir)) seen <<- c(seen, e2e_scan_dir(st$dir, keys))
+    if (!is.null(st$dir)) {
+      seen <<- c(seen, e2e_scan_dir(st$dir, keys))
+      spec_size <<- file.size(file.path(st$dir, "spec.rds"))
+    }
     cleanup(st)
   })
+  # A user extension file, whose handler closes over its API object and so reaches the registry,
+  # where another session's tool holds the key: the worker gets the extension, not the registry.
+  ext = file.path(withr::local_tempdir(), "e2e-ext.R")
+  writeLines(paste0("function(gptr) gptr$register(gptr::gptr_command(\"e2e-ext\", ",
+                    "function(args, ctx) \"ok\"))"), ext)
+  ext_load(plugin_dir_factory(ext), source = "user", rank = 3L)
+  withr::defer(for (r in registry_candidates("command", "e2e-ext", NULL)) registry_remove(r$id))
+  held = local({
+    k = e2e_keys[["TYPESAFE_API_KEY"]]
+    function() k
+  })
+  held_id = registry_add(gptr_tool("held", "Holds a key", exposure = "r", namespace = "e2e",
+                                   fun = held),
+                         source = "session", rank = 0L, session = "s0e2eother")
+  withr::defer(registry_remove(held_id))
   wfake = local_fake_provider(list("summary ok"), name = "wfake")
   team = peter(paste("Summarise the configuration; the token is", e2e_keys[["TYPESAFE_API_KEY"]]),
               agents = list(w = agent(model = wfake, backend = "worker")), mode = "auto",
@@ -215,6 +234,7 @@ test_that("worker spec and result files and worker output carry no key (IC-70)",
   expect_identical(team$kind, "team")
   expect_identical(e2e_count_text(team$text, keys), 0L)
   expect_true(all(c("spec.rds", "result.rds") %in% basename(names(seen))))
+  expect_lt(spec_size, 4e6)
   recent = setdiff(e2e_recent_files(c(tempdir(), root), started), env_file)
   files = c(e2e_scan_files(recent, keys), seen)
   expect_identical(sum(files), 0L, info = e2e_leaks(files))

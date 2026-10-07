@@ -265,7 +265,7 @@ worker_watch_tick = function(io, run) {
 #' @return The final status, invisibly.
 #' @noRd
 worker_main = function(spec_path, result_path) {
-  spec = readRDS(spec_path)
+  spec = readRDS(spec_path, refhook = worker_refhook)
   st = spec$settings
   old = options(gptr.interactive = TRUE, gptr.ui = "worker", gptr.quiet = TRUE,
                 gptr.verbose = 0L, gptr.replay = st$replay, gptr.project_root = st$project_root)
@@ -303,9 +303,18 @@ worker_main = function(spec_path, result_path) {
 
 # ---- the parent: the worker spec and the `worker` backend (contract 11.11; IC-69) -------------
 
+#' The refhook of the worker spec file (IC-69, IC-70): a registry is written as a reference and
+#' read back (`x` is then its name) as the empty environment, so a closure that reaches it (an
+#' extension's API object, the remover gptr_register() returns) ships none of its records
+#' @noRd
+worker_refhook = function(x) {
+  if (is.character(x)) return(emptyenv())
+  if (inherits(x, "gptr_registry_env")) "gptr_registry_env"
+}
+
 #' TRUE when a value holds an external pointer or a connection, which do not survive
 #' serialisation; searched through lists, closure environments and plain environments
-#' (namespaces and the global, base and empty environments are references)
+#' (namespaces, registries and the global, base and empty environments are references)
 #' @noRd
 worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth = 0L) {
   if (depth > 6L) return(FALSE)
@@ -313,8 +322,9 @@ worker_unserialisable = function(x, seen = new.env(parent = emptyenv()), depth =
   if (is.function(x)) x = environment(x)
   if (is.environment(x)) {
     key = rlang::obj_address(x)
-    if (isNamespace(x) || identical(x, globalenv()) || identical(x, baseenv()) ||
-        identical(x, emptyenv()) || exists(key, envir = seen, inherits = FALSE)) {
+    if (isNamespace(x) || inherits(x, "gptr_registry_env") || identical(x, globalenv()) ||
+        identical(x, baseenv()) || identical(x, emptyenv()) ||
+        exists(key, envir = seen, inherits = FALSE)) {
       return(FALSE)
     }
     assign(key, TRUE, envir = seen)
@@ -528,7 +538,8 @@ worker_spawn = function(st) {
   dir.create(st$dir)
   spec_path = file.path(st$dir, "spec.rds")
   st$result_path = file.path(st$dir, "result.rds")
-  save_rds(c(w, list(objects = worker_ship_objects(w$object_names, st$home))), spec_path)
+  save_rds(c(w, list(objects = worker_ship_objects(w$object_names, st$home))), spec_path,
+           refhook = worker_refhook)
   marker = proc_marker_new()
   set = c(GPTR_WORKER = "1", GPTR_SUBAGENT_DEPTH = as.character(w$depth),
           GPTR_PROJECT_ROOT = w$settings$project_root, stats::setNames("YES", marker))

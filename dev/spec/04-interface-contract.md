@@ -2233,7 +2233,7 @@ eol = "\n" | "\r\n", bom = lgl(1), encoding = chr(1), final_newline = lgl(1))`, 
 | `workspace_root(create = TRUE)` | `workspace_dir()` if non-NULL, else `file.path(tempdir(), "gptr")` (created lazily) | P06, P11, P15, P16, P23 |
 | `ws_path(..., create_parent = TRUE)` | `file.path(workspace_root(), ...)` with parents created | P06, P11, P15, P16, P23 |
 | `write_atomic(path, content)` | writes chr (UTF-8, LF) or raw to a temp file in the same directory, then `file.rename()` (3 retries with 100 ms sleeps, then an in-place `writeBin()` after an md5 re-check, IC-51); returns `invisible(path)` | all writers |
-| `save_rds(object, file, compress = FALSE)` [R7][leaf] | `saveRDS(object, file, ascii = FALSE, compress = compress)`; the only `saveRDS` of user data | P16, P19, P23 |
+| `save_rds(object, file, compress = FALSE, refhook = NULL)` [R7][leaf] | `saveRDS(object, file, ascii = FALSE, compress = compress, refhook = refhook)`; the only `saveRDS` of user data | P16, P19, P23 |
 | `serialize_leaf(object, xdr = TRUE)` [R7][leaf] | `serialize(object, NULL, ascii = FALSE, xdr = xdr)` | P16 |
 | `path_norm(path)`, `path_rel(path, root = project_root())` | normalised absolute / root-relative paths (symlink-safe: the deepest existing ancestor is resolved) | P10, P11, P15, P16 |
 | `path_class(path, root = project_root())` | chr: `workspace`, `temp`, `outside`, `protected`, `control` (level 4, IC-54), `instructions` (level 3, IC-54), `critical`, `url`, `wildcard`, `unknown` [18 §3.8] | P10, P11, P16 |
@@ -4816,7 +4816,9 @@ calls and suggests `GPTR_REPLAY=replay`.
 - **Workers inherit the registry**: the worker spec gains `registry = list(specs = <rank-0 session specs and
   rank-3 user specs>, plugins = <enabled plugins with ranks>, filters = chr)`; `worker_main()` re-registers them
   first. Functions from package namespaces serialise by reference; closures from the global environment are shipped
-  with their environments (documented); a spec that cannot be serialised makes an explicit `backend = "worker"`
+  with their environments (documented); a registry serialises by reference and reads back in the worker as the
+  empty environment, so a closure that reaches it (an extension's API object) ships none of its records (IC-70,
+  D-177); a spec that cannot be serialised makes an explicit `backend = "worker"`
   fail with `gptr_error_invalid_argument` naming it, and `auto` stays inline. P19 acceptance: a plugin `r` member
   and a `gptr_fake_provider()` spec work inside a worker.
 - **Token extension points**: `gptr_check(x, error = FALSE, tokens = FALSE)`; `tokens = TRUE` reports a plugin's
