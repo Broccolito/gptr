@@ -1,0 +1,8 @@
+# Checks gptr's own release files (plan P25, Tasks 5-15). A failure lists the open problems.
+test_that("DESCRIPTION declares the vignette builder (Task 5)", {
+  expect_no_problems(files_description(gptr_root(), character()))
+})
+
+test_that("the getting-started vignette is precomputed and current (Task 5)", {
+  expect_no_problems(vig_committed_problems(gptr_root(), "getting-started"))
+})

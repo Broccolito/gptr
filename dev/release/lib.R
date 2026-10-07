@@ -86,6 +86,10 @@ rel_topics = function() {
   )
 }
 
+rel_vignettes = function() {
+  c("getting-started", "system-one", "script-as-history", "extending-gptr", "token-efficiency")
+}
+
 # Prints the problems and exits with status 1 when there are any.
 rel_finish = function(label, problems) {
   n = length(problems)
@@ -98,6 +102,15 @@ rel_finish = function(label, problems) {
 rel_tail = function(text, n = 6L) {
   lines = strsplit(paste(text, collapse = "\n"), "\n", fixed = TRUE)[[1L]]
   paste(utils::tail(lines[nzchar(trimws(lines))], n), collapse = " | ")
+}
+
+rel_ascii_problems = function(path) {
+  if (!file.exists(path)) return(character())
+  bytes = readBin(path, "raw", file.size(path))
+  bad = which(bytes > as.raw(127L))
+  if (!length(bad)) return(character())
+  line = sum(bytes[seq_len(bad[1L])] == as.raw(10L)) + 1L
+  sprintf("%s: non-ASCII byte at line %d", path, line)
 }
 
 # Leaves joined by spaces, so that words of adjacent markup (\item{a}{b}) stay apart.
@@ -381,4 +394,164 @@ ex_run_all = function(root, pkg = "gptr", work = tempfile("rel-examples-"), thre
     rows[[name]] = data.frame(page = name, status = res$status, seconds = secs)
   }
   list(results = do.call(rbind, rows), problems = problems)
+}
+
+# ---- precomputed vignettes and README (Task 5) -------------------------------------------------
+
+# The fenced blocks whose opening line matches `open`, each with that line first.
+fenced_blocks = function(lines, open) {
+  out = list()
+  i = 1L
+  while (i <= length(lines)) {
+    j = i + 1L
+    if (grepl(open, lines[i])) {
+      while (j <= length(lines) && !grepl("^```+\\s*$", lines[j])) j = j + 1L
+      out[[length(out) + 1L]] = lines[i:(j - 1L)]
+      j = j + 1L
+    }
+    i = j
+  }
+  out
+}
+
+# The echoed code of the {r} chunks of an R Markdown source (.Rmd.orig or README.Rmd). Static
+# code in these sources must be an `{r, eval = FALSE}` chunk, never a bare ```r fence.
+rmd_chunks = function(lines) {
+  chunks = fenced_blocks(lines, "^```+\\s*\\{r[ ,}]")
+  shown = !grepl("(include|echo)\\s*=\\s*(FALSE|F)\\b", vapply(chunks, `[`, "", 1L))
+  lapply(chunks[shown], `[`, -1L)
+}
+
+# The code of the ```r blocks of knitted Markdown; collapse = TRUE puts the "#>" output there.
+md_code_blocks = function(lines) {
+  lapply(fenced_blocks(lines[!startsWith(lines, "#>")], "^```+\\s*r\\s*$"), `[`, -1L)
+}
+
+rel_code_lines = function(blocks) {
+  x = sub("\\s+$", "", unlist(blocks, use.names = FALSE))
+  x[nzchar(x)]
+}
+
+# A knitted file is stale when its code differs from the code of its source.
+stale_problems = function(source_lines, knitted_lines, where) {
+  same = identical(rel_code_lines(rmd_chunks(source_lines)),
+                   rel_code_lines(md_code_blocks(knitted_lines)))
+  if (same) return(character())
+  sprintf("%s: code differs from its source; re-run dev/release/precompute.R", where)
+}
+
+# Knits the vignettes (write = TRUE: into vignettes/; FALSE: into a scratch copy, which proves
+# that they still run offline) in children against the package installed into a temporary
+# library, then checks the committed Markdown. `limit` is acceptance 4's 60 s.
+vig_precompute = function(root = ".", names = rel_vignettes(), write = TRUE, readme = FALSE,
+                          work = tempfile("rel-vignettes-"), limit = 60) {
+  root = normalizePath(root, winslash = "/")
+  vdir = file.path(root, "vignettes")
+  origs = file.path(vdir, paste0(names, ".Rmd.orig"))
+  if (!all(file.exists(origs))) {
+    return(sprintf("vignettes/%s.Rmd.orig is missing", names[!file.exists(origs)]))
+  }
+  dirs = rel_dirs(work)
+  env = rel_child_env(dirs[["home"]], dirs[["tmp"]], dirs[["proj"]], lib = dirs[["lib"]])
+  rel_install(root, dirs[["lib"]], env)
+  before = rel_files(dirs[c("home", "tmp", "proj")])
+  run = function(code, wd, failed) {
+    res = processx::run(rel_exe("Rscript"), c("--vanilla", "-e", code), env = env, wd = wd,
+                        error_on_status = FALSE, timeout = 600)
+    if (res$status == 0L) character() else paste(failed, rel_tail(c(res$stdout, res$stderr)))
+  }
+  out_dir = if (write) vdir else dirs[["wd"]]
+  if (!write) file.copy(origs, out_dir, overwrite = TRUE)
+  problems = character()
+  t0 = proc.time()[["elapsed"]]
+  for (nm in names) {
+    knit = sprintf("knitr::knit('%1$s.Rmd.orig', '%1$s.Rmd', quiet = TRUE)", nm)
+    failed = sprintf("vignettes/%s.Rmd.orig: knitting failed:", nm)
+    problems = c(problems, run(knit, out_dir, failed))
+  }
+  seconds = proc.time()[["elapsed"]] - t0
+  if (seconds >= limit) {
+    problems = c(problems, sprintf("vignettes: knitting took %.1f s (limit %g s)", seconds, limit))
+  }
+  if (readme) {
+    render = paste("rmarkdown::render('README.Rmd', quiet = TRUE, output_format =",
+                   "rmarkdown::github_document(html_preview = FALSE))")
+    problems = c(problems, run(render, root, "README.Rmd: rendering failed:"))
+  }
+  left = setdiff(rel_files(dirs[c("home", "tmp", "proj")]), before)
+  if (length(left)) {
+    problems = c(problems, sprintf("knitting wrote outside the session temp directory: %s",
+                                   paste(left, collapse = ", ")))
+  }
+  problems = c(problems, unlist(lapply(names, vig_committed_problems, root = root)))
+  attr(problems, "seconds") = seconds
+  problems
+}
+
+# The committed pair vignettes/<name>.Rmd.orig and vignettes/<name>.Rmd, without knitting.
+vig_committed_problems = function(root, name) {
+  where = paste0("vignettes/", name, ".Rmd")
+  orig = file.path(root, paste0(where, ".orig"))
+  rmd = file.path(root, where)
+  if (!file.exists(orig)) return(sprintf("%s.orig is missing", where))
+  if (!file.exists(rmd)) return(sprintf("%s is missing; run precompute.R", where))
+  orig_lines = readLines(orig, encoding = "UTF-8", warn = FALSE)
+  rmd_lines = readLines(rmd, encoding = "UTF-8", warn = FALSE)
+  need = c("output: rmarkdown::html_vignette", "%\\VignetteIndexEntry{",
+           "%\\VignetteEngine{knitr::rmarkdown}", "%\\VignetteEncoding{UTF-8}")
+  found = vapply(need, function(n) any(grepl(n, rmd_lines, fixed = TRUE)), NA)
+  out = sprintf("%s: header lacks %s", where, need[!found])
+  if (any(grepl("^```+\\s*\\{", rmd_lines))) {
+    out = c(out, sprintf("%s: has executable chunks; ship precomputed Markdown only", where))
+  }
+  if (any(grepl("^#> Error", rmd_lines))) {
+    out = c(out, sprintf("%s: its output contains an error", where))
+  }
+  c(out, code_style_problems(rel_code_lines(rmd_chunks(orig_lines)), paste0(where, ".orig")),
+    stale_problems(orig_lines, rmd_lines, where), rel_ascii_problems(orig),
+    rel_ascii_problems(rmd))
+}
+
+# ---- DESCRIPTION (Task 5; the release stage from Task 13) --------------------------------------
+
+rel_dep_names = function(field) {
+  if (is.na(field) || !nzchar(field)) return(character())
+  trimws(sub("\\(.*$", "", strsplit(field, ",", fixed = TRUE)[[1L]]))
+}
+
+# P25 changes only Version and VignetteBuilder (IC-72); the other fields are P01's and are
+# checked so that a release never ships a drifted DESCRIPTION.
+description_problems = function(dcf, stage = c("vignettes", "release")) {
+  stage = match.arg(stage)
+  field = function(f) {
+    if (f %in% colnames(dcf)) unname(trimws(gsub("\\s+", " ", dcf[1L, f]))) else NA_character_
+  }
+  out = character()
+  if (!identical(field("Package"), "gptr")) out = c(out, "DESCRIPTION: Package is not gptr")
+  title = "Language Model Agents Inside the Live 'R' Session"
+  if (!identical(field("Title"), title)) out = c(out, "DESCRIPTION: Title differs from P01's")
+  if (!identical(field("VignetteBuilder"), "knitr")) {
+    out = c(out, "DESCRIPTION: VignetteBuilder must be knitr (IC-72)")
+  }
+  if (!all(c("knitr", "rmarkdown") %in% rel_dep_names(field("Suggests")))) {
+    out = c(out, "DESCRIPTION: Suggests must list knitr and rmarkdown")
+  }
+  if (!identical(field("Depends"), "R (>= 4.2.0)")) {
+    out = c(out, "DESCRIPTION: Depends must be R (>= 4.2.0)")
+  }
+  banned = c("httr2", "R6", "S7", "evaluate", "digest", "glue", "promises", "coro", "mirai", "fs",
+             "magrittr", "ellmer", "tidyllm", "chattr", "gptstudio", "mall", "btw", "mcptools",
+             "openai", "rollama", "corteza", "aisdk", "agenticr")
+  hit = intersect(c(rel_dep_names(field("Imports")), rel_dep_names(field("Suggests"))), banned)
+  out = c(out, sprintf("DESCRIPTION: %s must not be a dependency (S-10, conventions 8)", hit))
+  if (identical(stage, "release") && !identical(field("Version"), "1.0.0")) {
+    out = c(out, "DESCRIPTION: Version must be 1.0.0")
+  }
+  out
+}
+
+# check-files.R runs files_<name>(root, args).
+files_description = function(root, args) {
+  stage = if ("--release" %in% args) "release" else "vignettes"
+  description_problems(read.dcf(file.path(root, "DESCRIPTION")), stage)
 }

@@ -1,0 +1,163 @@
+---
+title: "Getting started with gptr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with gptr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE)
+old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+```
+
+gptr runs a language model agent inside your R session. The agent works on the objects that are
+already in memory: it inspects them, runs R code on them and leaves its results in your
+workspace, so a large object is loaded once and a mistake costs one re-evaluation instead of a
+fresh run of the whole script. The same function, `peter()`, is an interactive chat at the
+console and a programmable call in scripts, loops and `if` statements.
+
+This vignette runs without a network connection or a key. Every call uses
+`gptr_fake_provider()`, a scripted model that ships with the package, so the output is
+reproducible. With a real model the calls are the same; only the `model` argument changes (see
+"Connecting a real model" below).
+
+## A first call
+
+A fake provider plays a script in which each element is one model reply. A reply can call a
+tool: the `r` tool runs R code in the environment you give to `peter()`.
+
+```{r}
+library(gptr)
+
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = mtcars)\ncoef(fit)")),
+  "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon."
+))
+
+work = new.env()
+s = peter("How does fuel economy depend on weight in mtcars?", model = fake, envir = work,
+         mode = auto)
+s$text
+```
+
+Prompts are always quoted strings. Identifiers such as the mode can be bare names, the way
+`library(gptr)` needs no quotes: `mode = auto` and `mode = "auto"` are the same. The `auto` mode
+lets the agent run code without asking, which this vignette needs because nobody is there to
+answer. At the console the default mode, `manual`, asks before every change.
+
+The object the agent created is in `work`, like any object you created yourself:
+
+```{r}
+ls(work)
+coef(work$fit)
+```
+
+`peter()` returned a session object. It holds the conversation, the model, the status and the
+token usage:
+
+```{r}
+s$status
+s$turns
+gptr_usage(s)
+```
+
+## The pipe steers one session
+
+Piping a session into `peter()` adds a turn to the same session: the same history, the same
+model and the same workspace. Nothing is copied and no new conversation starts.
+
+```{r}
+fake2 = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "cyl_mpg = tapply(mtcars$mpg, mtcars$cyl, mean)")),
+  "The mean fuel economy per number of cylinders is stored in `cyl_mpg`.",
+  "Four-cylinder cars are the most economical, at about 26.7 miles per gallon.",
+  "Four."
+))
+
+s2 = peter("Compute the mean mpg for each number of cylinders.", model = fake2, envir = work,
+          mode = auto)
+s3 = s2 |> peter("Which group is the most economical?")
+identical(s2, s3)
+s2$turns
+s2$text
+```
+
+A branch is always explicit. `gptr_fork()` copies the conversation into a new session whose
+workspace sees the original objects without copying them and keeps its own changes:
+
+```{r}
+branch = gptr_fork(s2)
+branch |> peter("Answer in one word.")
+c(original = s2$turns, branch = branch$turns)
+```
+
+## Stopping instead of guessing
+
+In `manual` mode every change needs a yes. When nobody can answer (an `Rscript` job, a knitted
+report), the run stops with a classed condition that says how to allow the action, instead of
+guessing:
+
+```{r}
+careful = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "mtcars$kpl = mtcars$mpg * 0.425")),
+  "Added the column kpl."
+))
+res = tryCatch(
+  peter("Add fuel economy in km per liter to mtcars.", model = careful, envir = new.env(),
+       mode = manual),
+  gptr_error_permission = function(e) e
+)
+class(res)[1]
+res$session$status
+```
+
+`mode = plan` inspects and proposes without changing anything, `mode = edits` allows file edits
+inside the project, and `gptr_permissions()` adds rules such as `"r(level<=1)"` that allow
+low-risk code without a question.
+
+## At the console
+
+Called without a prompt, `peter()` opens a chat in the console. Piping a session into it
+continues that session interactively, and `/exit` returns the session.
+
+```{r, eval = FALSE}
+peter()
+s |> peter()
+```
+
+## Connecting a real model
+
+Keys are read from environment variables or from a `.env` file. gptr never prints them and
+replaces them with markers such as `[secret:ANTHROPIC_API_KEY]` wherever they would appear.
+
+```{r, eval = FALSE}
+gptr_env("~/keys/.env")
+gptr_providers()
+gptr_models("sonnet")
+gptr_config(model = "anthropic/claude-sonnet-5-5", .scope = "user")
+
+res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
+res$value
+```
+
+The first time a provider is used interactively, gptr shows what is sent to it and records your
+acknowledgment; `?gptr_egress` lists what a request contains. `gptr_init()` creates a `.gptr/`
+workspace in a project, where sessions, caches and the project instructions file
+`.gptr/vignette.Rmd` are kept. Without a workspace everything stays in the session's temporary
+directory.
+
+## Where to go next
+
+- `vignette("system-one", package = "gptr")`: typed decisions inside `if`, `for` and `while`.
+- `vignette("script-as-history", package = "gptr")`: scripts and notebooks that record and
+  replay agent work.
+- `vignette("extending-gptr", package = "gptr")`: tools, policies, hooks and plugins.
+- `vignette("token-efficiency", package = "gptr")`: what a session costs and how to keep it
+  small.
+- `?gptr_security`, `?gptr_egress` and `?gptr_options`.
+
+```{r cleanup, include = FALSE}
+options(old_options)
+```
