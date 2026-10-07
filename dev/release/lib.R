@@ -743,3 +743,48 @@ files_all = function(root, args) {
     files_readme(root, character()), files_pkgdown(root, character()),
     files_cran_comments(root, character()))
 }
+
+# ---- live calibration (Task 14) ----------------------------------------------------------------
+
+# IC-73 on the CSV of P24's dev/bench/tokens/live.R: NS-1..NS-11 (fixture ids `ns<two digits>`)
+# ran on an Anthropic and an OpenAI model, each within +2 requests and 20% input tokens of its
+# golden transcript (golden o200k input x provider prior of 03 section 12.5, as live.R scales it).
+live_problems = function(live, ns = 1:11, extra_requests = 2, input_tol = 0.2) {
+  need = c("provider", "model", "fixture", "status", "requests_golden", "requests_live",
+           "input_golden_o200k", "prior", "input_live")
+  miss = setdiff(need, names(live))
+  if (length(miss)) return(sprintf("live csv: missing column %s", miss))
+  out = character()
+  ids = sprintf("ns%02d", ns)
+  for (p in c("anthropic", "openai")) {
+    rows = live$provider == p
+    if (!any(rows)) {
+      out = c(out, sprintf("live csv: no %s model", p))
+      next
+    }
+    lack = setdiff(ids, substr(live$fixture[rows], 1L, 4L))
+    if (length(lack)) {
+      out = c(out, sprintf("live csv: %s has no row for %s", p, paste(lack, collapse = ", ")))
+    }
+  }
+  failed = is.na(live$status) | live$status != "ok"
+  out = c(out, sprintf("%s on %s: the run failed: %s", live$fixture[failed], live$model[failed],
+                       live$status[failed]))
+  live = live[!failed, , drop = FALSE]
+  extra = live$requests_live - live$requests_golden
+  over = !is.finite(extra) | extra > extra_requests
+  out = c(out, sprintf("%s on %s: %.0f requests vs %.0f golden (limit +%.0f)", live$fixture[over],
+                       live$model[over], live$requests_live[over], live$requests_golden[over],
+                       extra_requests))
+  expected = live$input_golden_o200k * live$prior
+  ratio = live$input_live / expected
+  far = !is.finite(ratio) | abs(ratio - 1) > input_tol
+  c(out, sprintf("%s on %s: %.0f input tokens vs %.0f expected (golden x prior; limit %.0f%%)",
+                 live$fixture[far], live$model[far], live$input_live[far], expected[far],
+                 100 * input_tol))
+}
+
+# The calibration file of a release.
+live_file_name = function(date = Sys.Date()) {
+  file.path("dev", "bench", "tokens", sprintf("live-%s.csv", format(date, "%Y-%m-%d")))
+}
