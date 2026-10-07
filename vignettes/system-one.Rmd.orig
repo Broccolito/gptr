@@ -1,0 +1,173 @@
+---
+title: "System 1 decisions in R control flow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{System 1 decisions in R control flow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE,
+                      render = knitr::normal_print)
+old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+```
+
+Generative models (System 2) write text and code. Typed decision models (System 1), such as
+TypeSafe AI's Jev, answer a question about an input with a probability: yes or no, one label
+out of several, or a score. gptr returns those answers as ordinary R vectors, so they
+work directly in `if`, `for`, `while`, `ifelse()` and data-frame filters, and one call answers a
+whole vector of inputs at once.
+
+This vignette uses a scripted classifier made with `gptr_fake_provider(type = "classifier")`, so
+it runs offline. Its answers are a function of the input text; a real System 1 model is used in
+exactly the same way with `model = jev`.
+
+```{r}
+library(gptr)
+
+judge = gptr_fake_provider(function(state, question) {
+  # `state` is a named list that holds the input (or the answer of a piped session).
+  txt = paste(unlist(state), collapse = " ")
+  if (identical(question$type, "choice")) {
+    p = if (grepl("lobe", txt)) {
+      c(liver = 0.03, lung = 0.91, brain = 0.03, other = 0.03)
+    } else if (grepl("Hepatocyte", txt)) {
+      c(liver = 0.88, lung = 0.04, brain = 0.03, other = 0.05)
+    } else {
+      c(liver = 0.05, lung = 0.05, brain = 0.80, other = 0.10)
+    }
+    return(p)
+  }
+  if (identical(question$type, "score")) {
+    if (grepl("Anaphylaxis", txt)) return(c(0.02, 0.08, 0.90))
+    return(c(0.85, 0.10, 0.05))
+  }
+  if (grepl("randomized|succeeded|mixed model", txt)) return(0.94)
+  if (grepl("pilot", txt)) return(0.55)
+  0.07
+}, name = "judge", type = "classifier")
+```
+
+## Yes or no, for a whole vector
+
+```{r}
+abstracts = c(
+  trial = "We randomized 200 adults with hypertension to drug A or placebo for 12 weeks.",
+  cohort = "We followed 5000 nurses for 20 years and recorded incident diabetes.",
+  pilot = "A pilot study of 30 patients; the allocation method is not reported."
+)
+is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts,
+              model = judge)
+is_rct
+gptr_prob(is_rct)
+```
+
+The result is a logical vector with the probabilities attached. A probability of at least
+`threshold` (0.5 by default) is `TRUE`. The last line names the model and says whether its
+probabilities are known to be calibrated.
+
+## Decisions inside control flow
+
+A single input gives a single value, which `if` accepts:
+
+```{r}
+included = character()
+for (id in names(abstracts)) {
+  if (peter("Is this abstract about a randomized controlled trial?", abstracts[[id]],
+           model = judge)) {
+    included = c(included, id)
+  }
+}
+included
+```
+
+Answers are cached per input: asking the same question about the same text again costs nothing.
+Without a workspace the cache lives in memory; with a `.gptr/` workspace it is kept in
+`.gptr/cache/s1/` so that a script replays without model calls (see `?gptr_security` before you
+commit answers about personal data).
+
+## When the model is unsure
+
+By default every answer is `TRUE` or `FALSE`. `min_confidence` defines an uncertain band, and
+`uncertain` says what an answer inside it becomes: `NA` (the default when `min_confidence` is
+given), `TRUE`, `FALSE`, `"stop"` (an error) or a function that escalates, for example to a
+System 2 model.
+
+```{r}
+peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge,
+     min_confidence = 0.8)
+```
+
+## One label out of several, and scores
+
+```{r}
+samples = c(s1 = "Biopsy of the right lower lobe",
+            s2 = "Hepatocytes from a resected liver segment",
+            s3 = "Cortex from an epilepsy resection")
+tissue = peter("Which tissue does this sample description refer to?", samples,
+              model = judge, choices = c("liver", "lung", "brain", "other"))
+tissue
+gptr_prob(tissue, "probabilities")
+
+severity = peter("How severe is this adverse event?",
+                c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
+                model = judge, levels = c("mild", "moderate", "severe"))
+severity
+```
+
+A score is the expected level, counted from 0 (`mild`) to 2 (`severe`).
+
+## System 1 routes System 2
+
+A cheap decision can choose which generative model does the work. The R script is the
+orchestration graph; no separate workflow language is needed.
+
+```{r}
+strong = gptr_fake_provider(list("A careful answer from the strong model."), name = "strong")
+fast = gptr_fake_provider(list("A quick answer from the fast model."), name = "fast")
+tasks = c("Rename the column mpg to miles_per_gallon.",
+          "Decide whether a mixed model or a GEE suits these repeated measures.")
+for (task in tasks) {
+  hard = peter("Is this task subtle enough to need the strongest model?", task, model = judge)
+  chosen = if (hard) strong else fast
+  answer = peter(task, model = chosen, envir = new.env())
+  print(answer$text)
+}
+```
+
+## Judging a session
+
+Piping a System 2 session into a System 1 question asks about the session's last answer. No
+turn is added to the session.
+
+```{r}
+analysis = peter("Summarize mtcars in one sentence.",
+                model = gptr_fake_provider(list("The summary succeeded: 32 cars, 11 variables.")),
+                envir = new.env())
+analysis |> peter("Did the analysis succeed?", model = judge)
+analysis$turns
+```
+
+## Using Jev
+
+Jev is TypeSafe AI's System 1 model. Its key is read from `TYPESAFE_API_KEY`; `gptr_env()` also
+accepts the variable names `jev-key`, `JEV_KEY`, `JEV_API_KEY` and `TYPESAFE_KEY` in a `.env`
+file and maps them to it.
+
+```{r, eval = FALSE}
+gptr_env("jev-key.env")
+is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = jev)
+table(is_rct)
+```
+
+A local Ollama server (0.35.1 or later) answers the same questions without a key through
+its decision models, `model = "ollama/clef-flash"` or `model = "ollama/clef"`.
+
+Without a System 1 model, `gptr_config(system1 = "emulate:anthropic/claude-haiku-4-5")` answers
+the same questions with a generative model. Emulated answers are marked as uncalibrated and are
+never used silently.
+
+```{r cleanup, include = FALSE}
+options(old_options)
+```
