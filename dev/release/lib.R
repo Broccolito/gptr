@@ -550,8 +550,52 @@ description_problems = function(dcf, stage = c("vignettes", "release")) {
   out
 }
 
+rel_read = function(root, path) {
+  f = file.path(root, path)
+  if (!file.exists(f)) return(NULL)
+  readLines(f, encoding = "UTF-8", warn = FALSE)
+}
+
 # check-files.R runs files_<name>(root, args).
 files_description = function(root, args) {
   stage = if ("--release" %in% args) "release" else "vignettes"
   description_problems(read.dcf(file.path(root, "DESCRIPTION")), stage)
+}
+
+# ---- NEWS.md (Task 11) -------------------------------------------------------------------------
+
+news_problems = function(lines) {
+  out = character()
+  if (!length(lines) || !identical(lines[1L], "# gptr 1.0.0")) {
+    out = c(out, "NEWS.md: the first line must be `# gptr 1.0.0`")
+  }
+  h1 = grep("^# ", lines)
+  bad = lines[h1][!grepl("^# gptr [0-9]+\\.[0-9]+\\.[0-9]+$", lines[h1])]
+  out = c(out, sprintf("NEWS.md: a level-1 heading must be `# gptr x.y.z`: %s", bad))
+  end = if (length(h1) > 1L) h1[2L] - 1L else length(lines)
+  first = lines[seq_len(end)]
+  br = which(first == "## Breaking changes")
+  if (!length(br)) {
+    out = c(out, "NEWS.md: 1.0.0 has no `## Breaking changes` section")
+  } else {
+    nxt = grep("^## ", first)
+    nxt = nxt[nxt > br[1L]]
+    section = first[br[1L]:(if (length(nxt)) nxt[1L] - 1L else end)]
+    for (f in c("get_response()", "dataframe_to_text()")) {
+      if (!any(grepl(f, section, fixed = TRUE))) {
+        out = c(out, sprintf("NEWS.md: Breaking changes must name %s", f))
+      }
+    }
+    if (!any(grepl("0.7.0", section, fixed = TRUE))) {
+      out = c(out, "NEWS.md: Breaking changes must say that the whole gptr 0.7.0 API is removed")
+    }
+  }
+  if (!"## New features" %in% first) out = c(out, "NEWS.md: 1.0.0 has no `## New features` section")
+  out
+}
+
+files_news = function(root, args) {
+  lines = rel_read(root, "NEWS.md")
+  if (is.null(lines)) return("NEWS.md is missing")
+  c(news_problems(lines), rel_ascii_problems(file.path(root, "NEWS.md")))
 }

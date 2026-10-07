@@ -22,3 +22,7 @@ test_that("the token-efficiency vignette is precomputed and current (Task 9)", {
 test_that("the script-as-history vignette is precomputed and current (Task 7)", {
   expect_no_problems(vig_committed_problems(gptr_root(), "script-as-history"))
 })
+
+test_that("NEWS.md records the breaking changes (Task 11)", {
+  expect_no_problems(files_news(gptr_root(), character()))
+})
