@@ -30,6 +30,17 @@ test_that("displays escape C0/C1 controls, bidi and zero-width characters (IC-53
   expect_identical(ui_escape(c("\u0085x", "y\u061c")), c("<U+0085>x", "y<U+061C>"))
 })
 
+test_that("console select preserves title line feeds but escapes other controls and labels", {
+  out = console_try(function() {
+    ui_console_select("First line\nSecond line\033[2J", c("One\nInjected", "Two"))
+  }, "2")
+  expect_identical(out$result, 2L)
+  text = paste(out$shown, collapse = "\n")
+  expect_match(text, "First line\nSecond line<U+001B>[2J", fixed = TRUE)
+  expect_match(text, "1: One<U+000A>Injected", fixed = TRUE)
+  expect_false(grepl("\033", text, fixed = TRUE))
+})
+
 test_that("the one-line prompt shows the first line, +N more lines and every flagged call", {
   root = local_project()
   # R's parser refuses bidi controls inside string literals in UTF-8 locales, so the payload

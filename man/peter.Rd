@@ -84,7 +84,10 @@ gateway; call \code{gptr::peter()} then.
 
 \code{peter()} without a prompt opens a console when someone can answer (interactive R or
 IRkernel); \code{peter(.stdin = TRUE)} reads its input from standard input, and \code{s |> peter()}
-opens it on \code{s}. Each input is one of:
+opens it on \code{s}. With no explicit or configured model, the interactive console first offers
+Codex CLI, Claude Code CLI or API configuration instructions. Choosing an available CLI saves
+its default model at user scope; cancelling returns to R. Piped input skips this setup.
+Each input is one of:
 \itemize{
 \item a prompt, sent as \code{s |> peter("...")} with \code{{name}} interpolation; \verb{@file} adds the head of a
 file and \verb{@object} attaches an object by name;

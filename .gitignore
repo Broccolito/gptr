@@ -16,3 +16,6 @@ gptr_*.tar.gz
 
 /dev/.library/
 /dev/.validation/
+/tmp/
+/local-materials/
+/dev/research/10-cli-login-status.md

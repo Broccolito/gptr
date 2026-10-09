@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd by dev/release/precompute.R; edit README.Rmd. -->
 
-# gptr <img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/img/logo.png" align="right" height="140" alt="gptr logo"/>
+# gptr <img src="man/img/logo.png" align="right" height="140" alt="gptr logo"/>
 
 gptr runs language model agents inside your live R session. The agent
 works on the objects that are already in memory: it inspects them, runs
@@ -33,11 +33,26 @@ scripts, loops and `if` statements.
 
 ## Installation
 
+gptr 1.0 is preparing for release on CRAN. Until then, install it from GitHub:
+
 ``` r
-install.packages("gptr")
-# the development version
-pak::pak("Broccolito/gptr")
+install.packages("devtools") # if needed
+devtools::install_github("Broccolito/gptr")
 ```
+
+## Quick start with a CLI
+
+Install and sign in to Codex CLI or Claude Code in your terminal, then run:
+
+``` r
+library(gptr)
+peter()
+```
+
+When no default model is configured, Peter offers Codex CLI, Claude Code CLI or API
+configuration instructions. Choosing an available CLI saves its default model in your user
+settings for future R sessions and projects. API users get commands for configuring their
+provider and model. An explicit `model =` or an existing default skips this setup.
 
 ## A first session
 

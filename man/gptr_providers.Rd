@@ -4,17 +4,25 @@
 \alias{gptr_providers}
 \title{List the configured model providers}
 \usage{
-gptr_providers(check = FALSE)
+gptr_providers(check = FALSE, check_login = FALSE)
 }
 \arguments{
-\item{check}{\code{FALSE} (default) performs no network or process input/output. \code{TRUE} also
+\item{check}{\code{FALSE} (default) performs no network or process input/output unless
+\code{check_login = TRUE}. \code{TRUE} also
 probes each HTTP provider's models endpoint once without credentials (2 s timeout; skipped
 under \verb{R CMD check}) and lets command-line providers check their tool; it never sends a
 paid request.}
+
+\item{check_login}{Also check Codex and Claude Code's CLI-reported login status using
+their supported status commands (3 s timeout per subprocess, no model request).
+Adds a \code{login} column: \verb{signed in}, \verb{not signed in}, or \code{unknown}. Unsupported CLI
+versions, missing tools and failed checks report \code{unknown}; other providers report
+\verb{not applicable}. This does not verify credentials online. Defaults to \code{FALSE}.}
 }
 \value{
 A \code{gptr_providers} data frame with columns \code{id}, \code{type}, \code{api}, \code{credential},
-\code{source}, \code{status}, \code{default_model}, \code{egress} (\code{ack} or \code{needed}) and \code{version}.
+\code{source}, \code{status}, \code{default_model}, \code{egress} (\code{ack} or \code{needed}) and \code{version}, plus
+\code{login} when \code{check_login = TRUE}.
 }
 \description{
 Shows every registered provider record: its wire api, where its credential comes from (as

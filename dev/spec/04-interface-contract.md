@@ -961,7 +961,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 | `gptr_ledger` | P06 | the §4.3 ledger columns |
 | `gptr_sessions` | P06 | `id`, `file`, `created`, `updated`, `turns`, `model`, `status`, `title` (first prompt, 60 chars), `live` (lgl) |
 | `gptr_models` | P05 | `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` |
-| `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs) |
+| `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs); optional `login` when `check_login = TRUE` |
 | `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` |
 | `gptr_skills` | P17 | `name`, `description`, `source`, `path`, `tokens`, `visible` |
 | `gptr_agents` | P17 | `name`, `description`, `model`, `backend`, `source`, `path` |
@@ -1255,15 +1255,23 @@ gptr_login("openrouter")
 #### `gptr_providers()` — P05, `provider-registry.R` [stable]
 
 ```r
-gptr_providers(check = FALSE)
+gptr_providers(check = FALSE, check_login = FALSE)
 ```
 
 Returns a `gptr_providers` data frame (§5.12): every registered provider record, its credential source as
-`NAME #fp` (never values), CLI paths and cached versions (P20 contributes a `status` function per `cli` provider
-that reads only cached `Sys.which()` data unless `check = TRUE`, IC-65), plan status and egress acknowledgement.
+`NAME #fp` (never values), CLI paths and cached versions (P20 contributes a `status` function per CLI provider
+that uses cached results or filesystem discovery unless `check = TRUE`, IC-65), plan status and egress acknowledgement.
 `check = TRUE` makes cheap reachability checks (models endpoint with a 2 s timeout for HTTP providers;
-`claude --version`/`codex --version` for CLIs; never a paid request). `check = FALSE` performs no network or
-process I/O. Conditions: `invalid_argument`. Emits nothing.
+version and capability probes for CLIs; never a paid request). With both `check = FALSE` and
+`check_login = FALSE`, listing performs no network or process I/O.
+`check_login = TRUE` independently checks CLI-reported login using supported `codex login status` and
+`claude auth status` commands (3 s timeout per subprocess, closed stdin, no model request). It adds a
+`login` column: `signed in`, `not signed in`, or `unknown`; non-CLI providers report `not applicable`.
+Unsupported commands, missing tools and failed checks report `unknown`. Raw account/key output is never
+returned or displayed. A signed-in report does not guarantee online credential validity or quota.
+The first-use console accepts the CLI shortcuts only when their registered APIs are `cli-codex` and
+`cli-claude`, respectively; same-name non-CLI overrides cannot be saved as CLI defaults.
+Conditions: `invalid_argument`. Emits nothing.
 
 ```r
 gptr_providers()
@@ -2890,6 +2898,7 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 | `builtin_cli(gptr)` | `cli-common.R` | registers providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` (`transport = "process_jsonl"`), a `status` function per provider for `gptr_providers()` | P02 load |
 | `pcli_find(cli = c("claude", "codex"))` | `cli-common.R` | path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise | P20 |
 | `pcli_version(path)`, `pcli_probe(path)` | `cli-common.R` | `package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version` | P20 (`status()` reads the cache only unless `gptr_providers(check = TRUE)`, IC-65) |
+| `pcli_login_status(cli)` | `cli-common.R` | help-gated CLI login-status commands, closed stdin and 3 s timeout per subprocess; returns only `signed in`, `not signed in`, or `unknown`, never raw auth output; no model request | P05 when `check_login = TRUE` |
 
 Example calls:
 
@@ -4672,8 +4681,11 @@ document are exact.
   WinGet links, and for codex the npm prefix resolved to the vendored `codex.exe`); RStudio and Positron on macOS
   do not source shell profiles. The npm `claude.cmd` shim is **refused** with an install hint (07); native
   binaries run without a shell, so the empty-string arguments `--tools ""` and `--setting-sources ""` are safe.
-  The providers' `status()` functions use only cached `Sys.which()` data unless `gptr_providers(check = TRUE)`;
-  `check = FALSE` never spawns a process.
+  The providers' `status()` functions use cached results or filesystem discovery unless
+  `gptr_providers(check = TRUE)` requests version and capability probes. With both `check = FALSE` and
+  `check_login = FALSE`, listing never spawns a process. `check_login = TRUE` is an explicit exception:
+  help-gated CLI login-status commands run with closed stdin and a 3 s timeout per subprocess, never
+  a model request. Only sanitized login states are returned; unknown/error states never imply signed out.
 - **claude** argv adds `--permission-mode default` and `--allowedTools "mcp__gptr__*"`, so the CLI sends no
   `can_use_tool` for gptr's own tools and gating happens once, in the `mcp_message` dispatch (the handler still
   denies anything else). With a budget in force it adds `--max-turns <remaining turns>` and

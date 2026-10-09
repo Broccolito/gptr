@@ -25,6 +25,12 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 
 ## New features
 
+* The interactive `peter()` console offers first-use setup when no default model is
+  configured: choose Codex CLI or Claude Code CLI and save the choice at user scope, or get
+  API configuration instructions. Explicit models, existing sessions and piped input skip it.
+  Setup also shows CLI-reported login status (`signed in`, `not signed in`, or `unknown`)
+  without a model request; `gptr_providers(check_login = TRUE)` exposes the same check.
+  Same-name provider overrides must use the expected CLI adapter to be selected as CLI defaults.
 * `peter()` is the single entry point. Without a prompt it opens a chat in the console; with a
   prompt it runs the agent loop and returns the session. The pipe steers one session:
   `peter("...") |> peter("...")` adds turns to the same object. `gptr_fork()` is the only way to
