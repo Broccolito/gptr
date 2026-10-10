@@ -246,7 +246,7 @@ listing_print_lines = function(x, width = cli::console_width()) {
   width = max(10L, as.integer(width))
   row_width = nchar(as.character(nrow(x))) + 1L
   budget = width - row_width
-  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status")
+  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status", "branch")
   first = which(names(x) %in% priority)
   first = first[order(match(names(x)[first], priority))]
   idx = c(first, setdiff(seq_along(x), first))
@@ -263,7 +263,7 @@ listing_print_lines = function(x, width = cli::console_width()) {
     min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
   }, 0)
   minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
-  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status")
+  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status", "branch")
   minimum[state] = wanted[state]
   groups = list()
   group = integer()
@@ -311,12 +311,13 @@ listing_print_lines = function(x, width = cli::console_width()) {
   sub(" +$", "", out)
 }
 
-#' Collapse cell whitespace and mark display-width truncation without splitting UTF-8 bytes
+#' Size the native display copy, collapse whitespace and truncate without splitting UTF-8 bytes
 #' @noRd
 listing_cell = function(text, width) {
   text = as_utf8(as.character(text))
   text[is.na(text)] = "NA"
   text = trimws(gsub("[[:space:][:cntrl:]]+", " ", text))
+  if (!isTRUE(l10n_info()[["UTF-8"]])) text = enc2native(text)
   long = nchar(text, type = "width") > width
   if (any(long)) text[long] = paste0(strtrim(text[long], max(0L, width - 3L)), "...")
   text

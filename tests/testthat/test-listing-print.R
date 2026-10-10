@@ -63,6 +63,26 @@ test_that("listing previews retain usable session identifiers before shortening 
   expect_identical(x$id, id)
 })
 
+test_that("checkpoint listings keep active and abandoned branches visible at narrow widths", {
+  local_reproducible_output()
+  df = data.frame(turn = 1:2, id = paste0("e", c(strrep("a", 20L), strrep("b", 20L))),
+                  time = as.POSIXct(c("2026-10-10 12:00:00", "2026-10-10 12:01:00"),
+                                   tz = "UTC"),
+                  prompt = c("First checkpoint", "Second checkpoint"), objects = "1/1",
+                  files = "0/0", held_mb = c(0.25, 0.5), disk_mb = 0,
+                  branch = c("active", "abandoned"))
+  x = new_listing(df, "checkpoints")
+  before = x
+  for (width in c(32L, 40L, 80L)) {
+    out = withr::with_options(list(cli.width = width), utils::capture.output(print(x)))
+    expect_true(all(nchar(out, type = "width") <= width), info = paste("width", width))
+    expect_true(any(grepl("active", out, fixed = TRUE)), info = paste("width", width))
+    expect_true(any(grepl("abandoned", out, fixed = TRUE)), info = paste("width", width))
+    expect_lte(sum(startsWith(out, "# Columns ")), 2L)
+  }
+  expect_identical(x, before)
+})
+
 test_that("listing truncation uses display widths and keeps wide and combining Unicode valid", {
   local_reproducible_output(width = 40L)
   df = data.frame(name = c(strrep("\u4e2d", 20L), strrep("e\u0301", 30L)),
@@ -72,10 +92,30 @@ test_that("listing truncation uses display widths and keeps wide and combining U
   out = utils::capture.output(print(x))
   expect_true(all(nchar(out, type = "width") <= 40L))
   expect_true(all(validUTF8(out)))
-  expect_true(any(grepl("\u4e2d", out, fixed = TRUE)))
-  expect_true(any(grepl("e\u0301", out, fixed = TRUE)))
+  if (isTRUE(l10n_info()[["UTF-8"]])) {
+    expect_true(any(grepl("\u4e2d", out, fixed = TRUE)))
+    expect_true(any(grepl("e\u0301", out, fixed = TRUE)))
+  }
   expect_false(any(grepl("\\n", out, fixed = TRUE)))
   expect_false(any(grepl("\\t", out, fixed = TRUE)))
   expect_true(any(grepl("NA", out, fixed = TRUE)))
   expect_identical(x$description, df$description)
+})
+
+test_that("C-locale listings fit printed Unicode escapes without changing source values", {
+  skip_if_not(identical(Sys.getlocale("LC_CTYPE"), "C"), "C-locale display witness")
+  local_reproducible_output(width = 40L)
+  df = data.frame(name = c(strrep("\u4e2d", 20L), strrep("e\u0301", 30L)),
+                  description = c(strrep("\u4e2d", 30L), "C:\\work\\file.R"),
+                  visible = c(TRUE, FALSE))
+  x = new_listing(df, "skills")
+  before = x
+  out = utils::capture.output(print(x))
+  expect_true(all(nchar(out, type = "width") <= 40L))
+  expect_true(any(grepl("<U+4E2D>", out, fixed = TRUE)))
+  expect_true(any(grepl("e<U+0301>", out, fixed = TRUE)))
+  expect_true(any(grepl("C:\\work\\file.R", out, fixed = TRUE)))
+  expect_true(any(grepl("TRUE", out, fixed = TRUE)))
+  expect_true(any(grepl("FALSE", out, fixed = TRUE)))
+  expect_identical(x, before)
 })

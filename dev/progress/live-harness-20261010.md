@@ -146,3 +146,19 @@
 - Actual native `R --vanilla` readline at Peter's prompt completed `!mtc` and `!!mtc` to `mtcars` without removing their prefixes. Namespace completion produced `stats::median`, whose executed mpg median was 19.2. Quoted file-path completion retained its closing quote; the `!!file.exists()` oracle returned TRUE.
 - Leaving with `/exit` restored the exact original `rl_word_breaks` and kept the original dataset identical. The offline provider isolated this input integration from model latency. GUI completion and resize remain separate pending checks.
 - The PTY profiler was mistakenly started without process-inspection privileges: all 43 samples failed. Its memory peak is unavailable, and its wall time includes manual inspection; do not interpret the reported zero RSS as a measurement.
+
+## Narrow listings and native output encoding
+
+Hosted c722 testing reproduced a missing abandoned checkpoint state: the bounded preview could
+omit the branch column. It now prioritizes and preserves branch labels alongside other state
+columns. New narrow-width tests failed4assertions at32/40before the fix; listing/checkpoint/text
+coverage then passed278assertions with0failures/warnings/skips in18.6s, including the real
+/checkpoints all command. Exact hosted console width was not recorded.
+
+The hosted C-locale job exposed a separate width issue: native output escapes unsupported UTF-8
+characters after Unicode widths were measured. Only the display copy is now converted to native
+encoding before sizing; canonical values stay identical. Local C RED had2width failures/49passes.
+C GREEN passed283assertions (0failures/warnings/skips,13.9s); UTF-8 GREEN passed278 (0failures/
+warnings,one C-only witness skip,12.6s). Literal glyph assertions remain in UTF-8 locales;
+C-locale tests verify bounded readable escapes and unchanged source data. Three-file lint and
+whitespace checks are clean; dependency build-version startup notes are separate.

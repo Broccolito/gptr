@@ -196,3 +196,21 @@ Installed-size messages must retain their actual severity and build settings: pr
 release/devel 8.8 MB (R 7.4 MB) used R_KEEP_PKG_SOURCE=yes and were INFO; without that setting,
 the C-locale check reported 6.0 MB (R 4.7 MB), also INFO. Oldrel-4 reports its larger installed
 size as a NOTE. Those logs do not replace the final exact-archive size/check gate.
+
+## Hosted cleanup and path spelling
+
+The c722 macOS and six Linux jobs reported temporary-detritus OK after owned Chrome temporary
+paths were introduced. macOS retained21Apple OS-service directories without established package
+ownership. Its installed9.7MiB/R8.3MiB size message is INFO, not a hard rejection. Connection-table
+checking reported no changed table; its job failed on the same checkpoint display assertion.
+
+Windows release R4.6.1 reported temporary-detritus and nonstandard-directory checks OK, removing
+the earlier global Rscript NOTE. PASS24047/FAIL5/WARN0/SKIP83: one checkpoint display regression
+and four comparisons of slash spellings for the same existing owned temporary directory. The
+seven-assertion Windows force-kill witness had no reported failure/skip with NOT_CRAN=true (source
+and complete failure/skip report inference, not a separately printed context count).
+
+The setup assertions now normalize both independently derived actual and expected existing paths
+with winslash="/",mustWork=TRUE; setup/containment/ownership behavior is unchanged. Local test
+environment coverage passed5assertions with0failures/warnings and one Windows-only skip. New
+Windows execution of the corrected assertions remains pending; no local Windows pass is claimed.

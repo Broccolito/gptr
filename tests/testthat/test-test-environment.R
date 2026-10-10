@@ -1,14 +1,16 @@
 test_that("test children inherit temporary directories owned by the suite", {
   root = dirname(Sys.getenv("R_USER_CONFIG_DIR"))
-  expected = file.path(root, "child-temp")
-  actual = Sys.getenv(c("TMPDIR", "TMP", "TEMP"))
+  expected = normalizePath(file.path(root, "child-temp"), winslash = "/", mustWork = TRUE)
+  actual = normalizePath(Sys.getenv(c("TMPDIR", "TMP", "TEMP")), winslash = "/",
+                         mustWork = TRUE)
   expect_identical(unname(actual), rep(expected, 3L))
-  expect_identical(Sys.getenv("MAC_CHROMIUM_TMPDIR"), expected)
+  expect_identical(normalizePath(Sys.getenv("MAC_CHROMIUM_TMPDIR"), winslash = "/",
+                                 mustWork = TRUE), expected)
   expect_true(dir.exists(expected))
   keep = if (is_windows()) c("TMP", "TEMP") else "TMPDIR"
   for (profile in c("helper", "mcp")) {
-    env = child_env(profile)
-    expect_identical(unname(env[keep]), rep(expected, length(keep)), label = profile)
+    env = normalizePath(child_env(profile)[keep], winslash = "/", mustWork = TRUE)
+    expect_identical(unname(env), rep(expected, length(keep)), label = profile)
   }
 })
 
