@@ -36,7 +36,6 @@ dispatch_tools = function(run, calls) {
 #' @noRd
 dispatch_call = function(run, call, stop_reason) {
   st = new.env(parent = emptyenv())
-  st$t0 = reactor_now()
   st$exec_t0 = NULL
   st$recorded = FALSE
   st$failed = FALSE
@@ -213,6 +212,7 @@ dispatch_record = function(res, call) {
 
 #' Append the tool-result message and emit tool_execution_end, message_start and message_end
 #' The append and the `recorded` mark are one uninterruptible step (suspendInterrupts()).
+#' Duration is execution wall time: preparation and approval are excluded; unrun calls take zero.
 #' @noRd
 dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, call)) {
   suspendInterrupts({
@@ -220,7 +220,8 @@ dispatch_finish = function(run, call, res, st, msg = tool_result_message(res, ca
     st$recorded = TRUE
   })
   run_emit(run, "tool_execution_end", tool_call_id = call$id, tool_name = call$name,
-           is_error = isTRUE(res$is_error), elapsed = reactor_now() - st$t0,
+           is_error = isTRUE(res$is_error),
+           elapsed = if (is.null(st$exec_t0)) 0 else reactor_now() - st$exec_t0,
            details = list(fields = names(res$details)))
   run_emit(run, "message_start", role = "tool_result")
   run_emit(run, "message_end", role = "tool_result", message = msg)

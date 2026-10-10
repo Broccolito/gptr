@@ -225,7 +225,8 @@ print.gptr_listing = function(x, ...) {
     shown = x[seq_len(min(n, 20L)), , drop = FALSE]
     attr(shown, "footer") = NULL
     class(shown) = "data.frame"
-    print(shown, row.names = FALSE)
+    cat(listing_print_lines(shown), sep = "\n")
+    cat("\n")
   }
   count = if (n > 20L) {
     paste0("# 20 of ", n, " rows shown")
@@ -236,6 +237,89 @@ print.gptr_listing = function(x, ...) {
   footer = attr(x, "footer", exact = TRUE)
   if (length(footer)) cat(footer, sep = "\n")
   invisible(x)
+}
+
+#' A width-bounded display copy: provenance/state first, at most two column groups, no row loss
+#' @noRd
+listing_print_lines = function(x, width = cli::console_width()) {
+  if (!ncol(x)) return(character())
+  width = max(10L, as.integer(width))
+  row_width = nchar(as.character(nrow(x))) + 1L
+  budget = width - row_width
+  priority = c("name", "ref", "id", "rule", "source", "visible", "trusted", "status")
+  first = which(names(x) %in% priority)
+  first = first[order(match(names(x)[first], priority))]
+  idx = c(first, setdiff(seq_along(x), first))
+  x = x[idx]
+  headers = listing_cell(names(x), min(24L, budget))
+  values = lapply(x, function(col) {
+    text = if (is.character(col) || is.factor(col)) as.character(col) else format(col, trim = TRUE)
+    listing_cell(text, Inf)
+  })
+  caps = ifelse(names(x) == "description", 40L, ifelse(names(x) == "path", 28L, 24L))
+  identifiers = names(x) %in% c("id", "ref", "name", "rule")
+  caps[identifiers] = budget
+  wanted = vapply(seq_along(x), function(j) {
+    min(budget, caps[[j]], max(nchar(c(headers[[j]], values[[j]]), type = "width")))
+  }, 0)
+  minimum = pmax(nchar(headers, type = "width"), pmin(wanted, 8L))
+  state = identifiers | names(x) %in% c("source", "visible", "trusted", "status")
+  minimum[state] = wanted[state]
+  groups = list()
+  group = integer()
+  used = 0
+  for (j in seq_along(x)) {
+    gap = if (length(group)) 2L else 0L
+    if (length(group) && used + gap + minimum[[j]] > budget) {
+      groups[[length(groups) + 1L]] = group
+      group = integer()
+      used = gap = 0L
+    }
+    group = c(group, j)
+    used = used + gap + minimum[[j]]
+  }
+  groups[[length(groups) + 1L]] = group
+  omitted = unlist(groups[-seq_len(min(2L, length(groups)))], use.names = FALSE)
+  groups = utils::head(groups, 2L)
+  pad = function(text, size) paste0(text, strrep(" ", size - nchar(text, type = "width")))
+  out = character()
+  for (k in seq_along(groups)) {
+    g = groups[[k]]
+    sizes = wanted[g]
+    while (sum(sizes) + 2L * (length(g) - 1L) > budget) {
+      choices = which(sizes > minimum[g])
+      j = choices[[which.max(sizes[choices])]]
+      sizes[[j]] = sizes[[j]] - 1L
+    }
+    cells = lapply(seq_along(g), function(j) {
+      pad(listing_cell(values[[g[[j]]]], sizes[[j]]), sizes[[j]])
+    })
+    if (length(groups) > 1L) out = c(out, paste0("# Columns ", k, "/", length(groups)))
+    title = vapply(seq_along(g), function(j) {
+      pad(listing_cell(headers[[g[[j]]]], sizes[[j]]), sizes[[j]])
+    }, "")
+    out = c(out, paste0(strrep(" ", row_width), paste(title, collapse = "  ")),
+            vapply(seq_len(nrow(x)), function(i) {
+              prefix = paste0(strrep(" ", row_width - nchar(as.character(i)) - 1L), i, " ")
+              paste0(prefix, paste(vapply(cells, `[[`, "", i), collapse = "  "))
+            }, ""))
+  }
+  if (length(omitted)) {
+    out = c(out, strwrap(paste("# Other columns:", paste(headers[omitted], collapse = ", ")),
+                         width = width))
+  }
+  sub(" +$", "", out)
+}
+
+#' Collapse cell whitespace and mark display-width truncation without splitting UTF-8 bytes
+#' @noRd
+listing_cell = function(text, width) {
+  text = as_utf8(as.character(text))
+  text[is.na(text)] = "NA"
+  text = trimws(gsub("[[:space:][:cntrl:]]+", " ", text))
+  long = nchar(text, type = "width") > width
+  if (any(long)) text[long] = paste0(strtrim(text[long], max(0L, width - 3L)), "...")
+  text
 }
 
 #' Safe notebook Markdown: keep fenced code and matched backtick spans literal, while prose

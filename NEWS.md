@@ -84,6 +84,8 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 * IRkernel sessions display safe Markdown answers and ordinary progress without error
   styling. Pending recorded R code is shown once while notebook writes remain queued for
   explicit synchronization.
+* Console listings keep descriptions and paths within the available width while preserving
+  their full returned data. Tool elapsed time excludes time spent reviewing permission.
 
 # gptr 0.7.0
 
