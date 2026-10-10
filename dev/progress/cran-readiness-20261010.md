@@ -161,8 +161,8 @@ or total package-size measurement. No source-size or timing threshold is relaxed
 
 Remote `cb180d3` completed all 13 CI jobs. Its Windows release used actual R 4.6.1 and oldrel-4
 used R 4.2.3; each had zero test failures/warnings and 23,826 assertions. Both retained a
-temporary-directory detritus NOTE for 15 `Rscript*` entries; this category/count also existed
-at `e5703be`. Oldrel additionally reports an 8.7 MB installed-size diagnostic. These are
+temporary-directory detritus NOTE: release listed 15 `Rscript*` entries and oldrel-4 listed
+14. The category also existed at `e5703be`. Oldrel additionally reports an 8.7 MB installed-size diagnostic. These are
 older-head, independently rebuilt CI results, not the current exact archive check.
 
 Official Windows R source writes every `Rscript -e` input into TMPDIR (then TMP/TEMP fallback)
