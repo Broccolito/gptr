@@ -109,3 +109,5 @@ doc_knitr_unhook = function(old, mine) {
 
 on_load(s3_register("knitr::knit_print", "gptr_session"))
 on_load(s3_register("knitr::knit_print", "gptr_s1"))
+on_load(s3_register("repr::repr_text", "gptr_session", method = doc_session_repr_text))
+on_load(s3_register("repr::repr_markdown", "gptr_session", method = doc_session_repr_markdown))

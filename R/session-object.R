@@ -446,6 +446,21 @@ session_footer = function(s) {
         collapse = dot)
 }
 
+#' Optional repr methods return text, without print()'s message side effects. Notebook code is
+#' displayed independently by doc_pending_add(), so it is not appended a second time here.
+#' @noRd
+doc_session_repr_text = function(x, ...) {
+  txt = session_text(x)
+  txt = txt[!is.na(txt) & nzchar(txt)]
+  redact(paste(c(txt, session_footer(x)), collapse = "\n\n"), "persist")
+}
+
+#' The notebook renders this safe Markdown; no HTML MIME, dependency load or model request
+#' @noRd
+doc_session_repr_markdown = function(x, ...) {
+  doc_jupyter_markdown(doc_session_repr_text(x))
+}
+
 #' Format a session as its text
 #'
 #' @param x A `gptr_session`.

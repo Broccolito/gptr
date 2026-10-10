@@ -237,3 +237,79 @@ print.gptr_listing = function(x, ...) {
   if (length(footer)) cat(footer, sep = "\n")
   invisible(x)
 }
+
+#' Safe notebook Markdown: keep fenced code and matched backtick spans literal, while prose
+#' HTML and link/image markup remain text. This is a display copy, never the canonical message.
+#' @noRd
+doc_jupyter_markdown = function(text) {
+  text = redact(as_utf8(text), "persist")
+  text = gsub("\r\n|\r", "\n", text, perl = TRUE)
+  lines = strsplit(paste0(text, "\n"), "\n", fixed = TRUE)[[1L]]
+  fence = ""
+  width = 0L
+  for (i in seq_along(lines)) {
+    line = lines[[i]]
+    if (nzchar(fence)) {
+      if (grepl(paste0("^ {0,3}", fence, "{", width, ",}[ \t]*$"), line)) fence = ""
+      next
+    }
+    marker = regmatches(line, regexpr("^ {0,3}(`{3,}|~{3,})", line))
+    if (length(marker)) {
+      run = trimws(marker)
+      info = substring(line, nchar(marker) + 1L)
+      if (!startsWith(run, "`") || !grepl("`", info, fixed = TRUE)) {
+        fence = substr(run, 1L, 1L)
+        width = nchar(run)
+        next
+      }
+    }
+    lines[[i]] = doc_jupyter_prose(line)
+  }
+  paste(lines, collapse = "\n")
+}
+
+#' Escape prose between inline code spans; an escaped or unmatched opener protects nothing
+#' @noRd
+doc_jupyter_prose = function(text) {
+  escape = function(x) {
+    x = gsub("&", "&amp;", x, fixed = TRUE)
+    x = gsub("<", "&lt;", x, fixed = TRUE)
+    x = gsub(">", "&gt;", x, fixed = TRUE)
+    gsub("[", "&#91;", x, fixed = TRUE)
+  }
+  ticks = gregexpr("`+", text)[[1L]]
+  if (ticks[[1L]] < 0L) return(escape(text))
+  widths = attr(ticks, "match.length")
+  next_tick = integer(length(ticks))
+  last = integer(max(widths))
+  for (j in rev(seq_along(ticks))) {
+    next_tick[[j]] = last[[widths[[j]]]]
+    last[[widths[[j]]]] = j
+  }
+  escaped = rep(FALSE, length(ticks))
+  slashes = gregexpr("\\\\+`", text)[[1L]]
+  if (slashes[[1L]] > 0L) {
+    slash_widths = attr(slashes, "match.length")
+    at = match(slashes + slash_widths - 1L, ticks)
+    escaped[at] = (slash_widths - 1L) %% 2L == 1L
+  }
+  out = character(length(ticks) + 1L)
+  count = 0L
+  start = 1L
+  i = 1L
+  while (i <= length(ticks)) {
+    j = next_tick[[i]]
+    if (!escaped[[i]] && j > 0L) {
+      end = ticks[[j]] + widths[[j]] - 1L
+      out[[count + 1L]] = escape(substr(text, start, ticks[[i]] - 1L))
+      out[[count + 2L]] = substr(text, ticks[[i]], end)
+      count = count + 2L
+      start = end + 1L
+      i = j + 1L
+    } else {
+      i = i + 1L
+    }
+  }
+  out[[count + 1L]] = escape(substring(text, start))
+  paste0(out[seq_len(count + 1L)], collapse = "")
+}

@@ -582,9 +582,30 @@ doc_pending_add = function(fmt, site, up, kind) {
   rec$time = Sys.time()
   doc_sidecar_write(rec)
   st$docs[[key]] = rec
-  if (identical(kind, "pending")) msg_verbatim(c("```r", as.character(prep$rendered), "```"))
+  if (identical(kind, "pending")) {
+    code = as.character(prep$rendered)
+    if (!doc_jupyter_display_code(code)) {
+      fence = doc_rmd_fence("```", unlist(strsplit(code, "\r\n|\r|\n", perl = TRUE)))
+      msg_verbatim(c(paste0(fence, "r"), code, fence))
+    }
+  }
   list(action = prep$action, block_id = prep$id, lines = NULL, backend = kind, sha = prep$sha,
        prompt = prep$prompt)
+}
+
+#' Publish pending code through IRdisplay's documented kernel callback, without loading it.
+#' The sidecar is already durable; a missing or failed display callback keeps the text fallback.
+#' @noRd
+doc_jupyter_display_code = function(code) {
+  publish = getOption("jupyter.base_display_func")
+  if (!is.function(publish)) return(FALSE)
+  code = redact(code, "persist")
+  fence = doc_rmd_fence("```", unlist(strsplit(code, "\r\n|\r|\n", perl = TRUE)))
+  markdown = paste(c(paste0(fence, "r"), code, fence), collapse = "\n")
+  tryCatch({
+    publish(list("text/markdown" = markdown, "text/plain" = paste(code, collapse = "\n")), NULL)
+    TRUE
+  }, error = function(e) FALSE)
 }
 
 #' Make blocks of a queued document (`kind`: the script this process runs under Rscript, or the
