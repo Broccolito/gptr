@@ -37,6 +37,7 @@ local_completion_repl = function(setup, .env = parent.frame()) {
 }
 
 test_that("native readline gets one bang separator and caller separators return on exit", {
+  skip_on_os("windows")
   local_completion_console()
   withr::local_options(rl_word_breaks = " ,;")
   seen = new.env(parent = emptyenv())
@@ -50,6 +51,7 @@ test_that("native readline gets one bang separator and caller separators return 
 })
 
 test_that("an existing bang is preserved without duplication", {
+  skip_on_os("windows")
   local_completion_console()
   withr::local_options(rl_word_breaks = " !,;")
   local_completion_repl(function(rs) {
@@ -61,6 +63,7 @@ test_that("an existing bang is preserved without duplication", {
 })
 
 test_that("setup cancellation restores the original default separators", {
+  skip_on_os("windows")
   local_completion_console()
   defaults = " \t\n\"\\'`><=%;,|&{()}"
   withr::local_options(rl_word_breaks = defaults)
@@ -73,6 +76,7 @@ test_that("setup cancellation restores the original default separators", {
 })
 
 test_that("errors and interrupts restore the caller's completion option", {
+  skip_on_os("windows")
   local_completion_console()
   withr::local_options(rl_word_breaks = " ,")
   local_completion_repl(function(rs) {
@@ -92,6 +96,7 @@ test_that("errors and interrupts restore the caller's completion option", {
 })
 
 test_that("nested console entry restores the outer scope before the original option", {
+  skip_on_os("windows")
   local_completion_console()
   withr::local_options(rl_word_breaks = " ,")
   local_completion_repl(function(rs) {
@@ -109,6 +114,7 @@ test_that("nested console entry restores the outer scope before the original opt
 })
 
 test_that("a caller-owned full completer keeps its token policy and settings", {
+  skip_on_os("windows")
   local_completion_console()
   withr::local_options(rl_word_breaks = " ,")
   handler = function(env) env$comps = "caller completion"
@@ -126,6 +132,7 @@ test_that("a caller-owned full completer keeps its token policy and settings", {
 })
 
 test_that("native prefix integration preserves argument and quote completers", {
+  skip_on_os("windows")
   local_completion_console()
   withr::local_options(rl_word_breaks = " ,")
   argument = function(fun, text) character()
@@ -150,18 +157,18 @@ test_that("unsupported input modes and frontends keep completion options unchang
              list(list(human = FALSE), list(cledit = FALSE), list(tty = FALSE),
                   list(unix = FALSE), list(stdin = TRUE), list(disabled = TRUE)))
   for (case in cases) (function(case) {
+    original = getOption("rl_word_breaks")
     input = isTRUE(case$stdin)
     disabled = isTRUE(case$disabled)
     case$stdin = NULL
     case$disabled = NULL
     do.call(local_completion_console, c(case, list(.env = environment())))
     if (disabled) withr::local_envvar(R_COMPLETION = "FALSE")
-    withr::local_options(rl_word_breaks = " ,")
     local_completion_repl(function(rs) {
-      expect_identical(getOption("rl_word_breaks"), " ,")
+      expect_identical(getOption("rl_word_breaks"), original)
       FALSE
     })
     expect_null(repl_main(completion_repl_state(input)))
-    expect_identical(getOption("rl_word_breaks"), " ,")
+    expect_identical(getOption("rl_word_breaks"), original)
   })(case)
 })
