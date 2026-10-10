@@ -1892,6 +1892,82 @@ doc_e2e_source = function(path, envir = new.env(parent = globalenv()), keep_sour
   envir
 }
 
+test_that("per-call record FALSE does not ask for or remember a console transcript", {
+  x = local_doc_e2e(list(fake_text("Done.")))
+  local_gptr_options(interactive = TRUE)
+  asked = new.env(parent = emptyenv())
+  asked$n = 0L
+  has = ext_service_has
+  testthat::local_mocked_bindings(
+    doc_command_args = function() "R",
+    ext_service_has = function(name) !identical(name, "ui.get") && has(name),
+    gptr_readline = function(prompt = "") {
+      asked$n = asked$n + 1L
+      "y"
+    }
+  )
+  s = eval(doc_e2e_call(.opts = list(record = FALSE, context = "none"),
+                         prompt = "Answer without recording"), new.env(parent = globalenv()))
+  expect_identical(s$status, "idle")
+  expect_length(fake_requests(x$fake), 1L)
+  expect_identical(asked$n, 0L)
+  expect_null(doc_project_entry(doc_project_get(), "transcript", "target"))
+  expect_false(dir.exists(file.path(x$root, ".gptr", "transcripts")))
+})
+
+test_that("per-call record FALSE prevents writes to an explicitly bound document", {
+  x = local_doc_e2e(rep(list(fake_tool("r", code = "answer = 42"), fake_text("Done.")), 2L),
+                     record = "ask")
+  f = file.path(x$root, "analysis.R")
+  code = 'res = peter("Set the answer", .opts = list(record = FALSE, context = "none"))'
+  writeLines(code, f)
+  gptr_doc(f)
+  e = doc_e2e_source(f)
+  expect_identical(e$answer, 42)
+  expect_identical(e$res$status, "idle")
+  expect_length(fake_requests(x$fake), 2L)
+  expect_identical(readLines(f), code)
+  expect_identical(nrow(gptr_blocks(f)), 0L)
+  writeLines(sub("record = FALSE", "record = TRUE", code, fixed = TRUE), f)
+  e2 = doc_e2e_source(f)
+  expect_identical(e2$answer, 42)
+  expect_length(fake_requests(x$fake), 4L)
+  expect_identical(nrow(gptr_blocks(f)), 1L)
+})
+
+test_that("per-call record TRUE does not grant recording consent under persistent off", {
+  x = local_doc_e2e(list(fake_tool("r", code = "answer = 42"), fake_text("Done.")),
+                     record = "off")
+  f = file.path(x$root, "analysis.R")
+  code = 'res = peter("Set the answer", .opts = list(record = TRUE, context = "none"))'
+  writeLines(code, f)
+  e = doc_e2e_source(f)
+  expect_identical(e$answer, 42)
+  expect_length(fake_requests(x$fake), 2L)
+  expect_identical(readLines(f), code)
+  expect_identical(nrow(gptr_blocks(f)), 0L)
+})
+
+test_that("per-call record FALSE suppresses a System 1 document summary", {
+  root = local_project()
+  local_gptr_options(record = "auto", replay = "auto", interactive = FALSE)
+  judge = local_fake_provider(list(0.9), name = "judge", type = "classifier")
+  f = file.path(root, "decision.R")
+  code = paste0('decision = peter("Is it about dogs?", text = "A puppy.", ',
+                'model = "judge/judge-s1", .opts = list(record = FALSE, context = "none"))')
+  writeLines(code, f)
+  local_doc_binding(f)
+  e = doc_e2e_source(f)
+  expect_true(unname(as.logical(e$decision)))
+  expect_length(fake_requests(judge), 1L)
+  expect_identical(readLines(f), code)
+  expect_identical(nrow(gptr_blocks(f)), 0L)
+  writeLines(sub("record = FALSE", "record = TRUE", code, fixed = TRUE), f)
+  e2 = doc_e2e_source(f)
+  expect_true(unname(as.logical(e2$decision)))
+  expect_identical(nrow(gptr_blocks(f)), 1L)
+})
+
 test_that("a recorded block replays under source() with zero model calls (acceptance 2)", {
   x = local_doc_e2e(list(fake_tool("r", code = "n_rows = nrow(d)\nn_rows", note = "count"),
                          fake_text("There are 4 rows.")))

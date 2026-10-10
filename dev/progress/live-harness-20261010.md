@@ -28,3 +28,9 @@
 - Nested tool captures suppress redraws, completion/error removes reactor tasks, and abort-only IDEs advertise their actual stop key. Background notices remove missing bidi/invisible control characters.
 - Offline red: FAIL 26 / PASS 28; IDE hint red: FAIL 2 / PASS 54. Green new regressions PASS 56; affected suite PASS 1477; final renderer/interrupt/stream checks PASS 238, FAIL 0, WARN 0, one CI-only interrupt skip. Five changed files lint clean; independent root source review clear.
 - Evidence: ignored `dev/.validation/live-20261010/console-wait/`. Revised installed-package live verification is still pending.
+
+## Per-call recording control
+- Actual R terminal prompted for a transcript despite `.opts = list(record = FALSE)`. Offline regressions also reproduced writes to a bound document and native System 1 summary blocks.
+- Three recording-route guards now honor FALSE. Existing explicit binding consent is preserved; TRUE does not newly grant consent when persistent recording is off. Replay behavior is unchanged.
+- Red PASS 594 / FAIL 7. Affected document/capture tests PASS 954, FAIL 0, WARN 0, SKIP 0 (18.0s test time, 19.78s measured wall). Two changed files lint clean; root source review clear. Sandbox denied scheduling-priority and BSD peak-RSS probes for this lane, so no RAM measurement is claimed.
+- Evidence: ignored `dev/.validation/live-20261010/record-false-{red,green,lint}.log`. Updated installed-package live verification is pending.

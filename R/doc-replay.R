@@ -347,11 +347,13 @@ doc_replay_team = function(call, site, mode) {
 
 # ---- the `document` route (IC-45..IC-47) --------------------------------------------------------
 
-#' Could a console call be recorded at all? Not in replay mode and not under `record = "off"`;
+#' Could a console call be recorded at all? Not with `.opts$record = FALSE`, in replay mode or
+#' under `record = "off"`;
 #' the route asks the transcript question only then (an answer that cannot take effect would
 #' still be remembered)
 #' @noRd
 doc_console_may_record = function(call) {
+  if (isFALSE(call$args$opts$record)) return(FALSE)
   mode = tryCatch(replay_mode(call$args$replay), error = function(e) NA_character_)
   if (!isTRUE(mode %in% c("auto", "live", "record"))) return(FALSE)
   rec = doc_setting("record", "ask")
@@ -418,7 +420,8 @@ doc_skip_undone = function(site) {
 #' consent can still be given (IC-45); else NULL
 #' @noRd
 doc_keep = function(call, site, mode) {
-  ok = !is.null(site) && !identical(mode, "replay") && doc_consent_possible(site$path)
+  ok = !is.null(site) && !isFALSE(call$args$opts$record) && !identical(mode, "replay") &&
+    doc_consent_possible(site$path)
   assign("doc", if (ok) site else NULL, envir = call)
 }
 
@@ -617,10 +620,11 @@ doc_s1_summary = function(x) {
 
 #' doc.s1_block: the one-line block of a top-level System 1 call (contract 11.5), redacted with
 #' the persist profile (free-text choice levels reach it; IC-74); nothing in replay mode, for
-#' nested calls or for calls in no document
+#' nested calls, for calls in no document or with `.opts$record = FALSE`
 #' @noRd
 doc_s1_block_service = function(call, summary) {
-  if (!is.null(run_current()) || identical(replay_mode(call$args$replay), "replay")) {
+  if (isFALSE(call$args$opts$record) || !is.null(run_current()) ||
+      identical(replay_mode(call$args$replay), "replay")) {
     return(invisible(NULL))
   }
   site = tryCatch(doc_locate(call), error = function(e) NULL)
