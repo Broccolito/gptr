@@ -424,14 +424,27 @@ console_spinner_stop = function(rec) {
   invisible(NULL)
 }
 
-#' Waiting feedback: a dynamic spinner for streamed consoles, else a concise stderr message
+#' Normal progress: stdout in an IRkernel cell, else the usual stderr message. Callers keep
+#' their verbosity/foreground gates and escape untrusted parts; failures do not use this path.
+#' @noRd
+console_progress = function(text) {
+  if (isTRUE(getOption("gptr.quiet"))) return(invisible(NULL))
+  if (isTRUE(getOption("jupyter.in_kernel")) && !is_knitting()) {
+    console_write(text)
+  } else {
+    gptr_inform(text, "progress")
+  }
+  invisible(NULL)
+}
+
+#' Waiting feedback: a dynamic spinner for streamed consoles, else concise progress
 #' @noRd
 console_wait_start = function(rec) {
   if (verbosity() < 1L || !console_foreground(rec)) return(invisible(NULL))
   if (verbosity() >= 2L && cli::is_dynamic_tty()) {
     console_spinner_start(rec)
   } else {
-    gptr_inform("gptr: thinking", "progress")
+    console_progress("gptr: thinking")
   }
   invisible(NULL)
 }
@@ -696,9 +709,8 @@ console_on_tool_start = function(event, ctx) {
   call = list(id = event$tool_call_id, name = event$tool_name, input = event$input %||% list())
   v = verbosity()
   if (v == 1L) {
-    gptr_inform(paste0("gptr: ", console_escape(call$name %||% "?", FALSE), "  ",
-                       console_escape(c(console_preview(call$input), "")[[1L]], FALSE)),
-                "progress")
+    console_progress(paste0("gptr: ", console_escape(call$name %||% "?", FALSE), "  ",
+                            console_escape(c(console_preview(call$input), "")[[1L]], FALSE)))
   } else if (v >= 2L) {
     assign(paste0("t", call$id), call, envir = rec$tools)
     console_pause_one(rec)
@@ -760,7 +772,10 @@ console_on_agent_end = function(event, ctx) {
   if (!console_foreground(rec)) return(NULL)
   line = console_status_line(event$status, event$reason, event$usage, event$turns)
   v = verbosity()
-  if (v == 1L) gptr_inform(paste0("gptr:", sub("^ +", " ", line)), "progress")
+  if (v == 1L) {
+    text = paste0("gptr:", sub("^ +", " ", line))
+    if (identical(event$status, "idle")) console_progress(text) else gptr_inform(text, "progress")
+  }
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
   if (!is.null(rec$md)) rec$md$finish()
