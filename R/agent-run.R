@@ -1138,6 +1138,8 @@ run_on_event = function(run, ev) {
     }
     safe = x$rs$push(ev$delta)
     if (nzchar(safe)) run_emit(run, "message_update", index = ev$index, kind = kind, delta = safe)
+  } else if (type %in% c("text_end", "thinking_end", "toolcall_end")) {
+    run_flush_deltas(run, as.character(ev$index))
   } else if (identical(type, "error")) {
     run$last_error = ev$error
   } else if (type %in% c("retry_start", "retry_end")) {
@@ -1147,12 +1149,14 @@ run_on_event = function(run, ev) {
   invisible(NULL)
 }
 
-#' Emit what the streaming redactors still hold; a redactor that failed closed (D-010) drops its
-#' held text with a diagnostic
+#' Flush completed blocks, or all remaining blocks in index order; remove each redactor before
+#' emitting so a repeated end cannot flush it twice. Failed-closed held text (D-010) is dropped.
 #' @noRd
-run_flush_deltas = function(run) {
-  for (key in ls(run$rs)) {
-    x = get(key, envir = run$rs)
+run_flush_deltas = function(run, keys = ls(run$rs)) {
+  for (key in keys[order(as.integer(keys))]) {
+    x = get0(key, envir = run$rs, inherits = FALSE)
+    if (is.null(x)) next
+    rm(list = key, envir = run$rs)
     rest = tryCatch(x$rs$flush(), error = function(e) {
       registry_diagnostic("session", "message_update", class(e)[[1L]], conditionMessage(e))
       ""
@@ -1517,6 +1521,7 @@ run_abort = function(run, reason = "user") {
   streaming = run$status %in% c("requesting", "streaming")
   if (isTRUE(run$busy) && streaming && !isTRUE(run$request_closed)) {
     run$request_closed = TRUE
+    run_flush_deltas(run)
     msg = run_partial_message(run)
     msg$stop_reason = "aborted"
     msg$error_message = paste0("aborted (", reason, ")")
