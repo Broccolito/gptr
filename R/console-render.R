@@ -84,13 +84,15 @@ console_notice = function(...) {
 #' Styling (bold, inline code, headings, bullets, quotes, fenced code) is used when
 #' `cli::num_ansi_colors() > 1` at creation; the plain mode keeps the markdown characters and only
 #' wraps at `width` display columns. A word is held until the next blank or line end, so the
-#' output does not depend on how the text was chunked.
+#' output does not depend on how the text was chunked at a fixed width. When width is omitted,
+#' each write and final flush sample the current console width; an explicit width stays fixed.
 #' @noRd
 render_markdown_stream = function(width = cli::console_width(), before_output = NULL) {
+  auto_width = missing(width)
   style = cli::num_ansi_colors() > 1L
   sym = console_symbols()
-  width = max(20L, as.integer(width))
   st = new.env(parent = emptyenv())
+  st$width = max(20L, as.integer(width))
   st$buf = ""
   st$cr = ""
   st$col = 0L
@@ -243,7 +245,7 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
       w = inline(tok)
       sp = isTRUE(st$space)
       st$space = FALSE
-      if (st$col > st$indent && st$col + sp + w$width > width) {
+      if (st$col > st$indent && st$col + sp + w$width > st$width) {
         emit(paste0(reset_styles(), "\n", strrep(" ", st$indent),
                     if (st$heading) sgr("1;4") else "", if (st$bold) sgr("1") else "",
                     if (st$code) sgr("36") else ""))
@@ -268,14 +270,20 @@ render_markdown_stream = function(width = cli::console_width(), before_output = 
     }
     process(console_escape(gsub("\r\n?", "\n", text)), final)
   }
+  refresh_width = function() {
+    if (auto_width) st$width = max(20L, as.integer(cli::console_width()))
+    invisible()
+  }
   r = new.env(parent = emptyenv())
   r$write = function(delta) {
+    refresh_width()
     ingest(delta)
     flush(stdout())
     utils::flush.console()
     invisible()
   }
   r$finish = function() {
+    refresh_width()
     ingest("", final = TRUE)
     if (st$col > 0L) newline()
     flush(stdout())
