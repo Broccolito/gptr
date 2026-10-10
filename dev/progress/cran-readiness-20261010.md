@@ -176,3 +176,23 @@ The inheritance/profile regression reproduced four failures, then passed all fou
 Relevant auth/child/spawn/supervisor suites passed 442 assertions with zero failures/warnings/
 skips (16.3s); both changed files lint clean. A seven-assertion Windows-only force-kill witness
 was skipped on macOS. Its hosted execution and disappearance of the NOTE remain pending.
+
+## Native browser temporary files
+
+The later pre-isolation `fc9f8d4` Ubuntu checks passed on release, devel and old releases,
+but recorded five Chromium component-update URL-fetcher directories. Chromium on Linux
+inherits TMPDIR; the existing suite-owned `child-temp` fix should cover this category too.
+Mac Chromium instead reads MAC_CHROMIUM_TMPDIR. That variable now joins the same existing
+test-only restoration scope and owned directory; shipping browser behavior is unchanged.
+[Chromium Mac source](https://chromium.googlesource.com/chromium/src/+/refs/tags/146.0.7680.180/base/files/file_util_apple.mm)
+
+The outside-sentinel regression failed one assertion before the change and passed all five
+afterward, with zero test failures/warnings and one honest Windows-only skip. Two-file lint
+is clean. Hosted disappearance of browser/Rscript detritus remains unverified until a run
+containing these changes completes. The Mac runner also listed unrelated Apple service
+directories; no package-ownership evidence justifies deleting those.
+
+Installed-size messages must retain their actual severity and build settings: pre-isolation
+release/devel 8.8 MB (R 7.4 MB) used R_KEEP_PKG_SOURCE=yes and were INFO; without that setting,
+the C-locale check reported 6.0 MB (R 4.7 MB), also INFO. Oldrel-4 reports its larger installed
+size as a NOTE. Those logs do not replace the final exact-archive size/check gate.

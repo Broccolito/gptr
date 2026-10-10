@@ -22,6 +22,8 @@ local({
     XDG_CONFIG_HOME = paths[["xdg"]],
     # Windows Rscript -e leaves its input file after a force-kill; suite teardown owns this tree.
     TMPDIR = paths[["temp"]], TMP = paths[["temp"]], TEMP = paths[["temp"]],
+    # Chromium uses its own temp override on macOS.
+    MAC_CHROMIUM_TMPDIR = paths[["temp"]],
     GPTR_PROJECT_ROOT = paths[["project"]],
     GPTR_REPLAY = "replay",
     OMP_THREAD_LIMIT = "2",
