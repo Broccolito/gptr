@@ -6,7 +6,8 @@ local({
   root = withr::local_tempdir("gptr-tests-", .local_envir = testthat::teardown_env())
   dirs = c(
     config = "user-config", data = "user-data", cache = "user-cache", home = "home",
-    appdata = "appdata", localappdata = "localappdata", xdg = "xdg-config", project = "project"
+    appdata = "appdata", localappdata = "localappdata", xdg = "xdg-config", project = "project",
+    temp = "child-temp"
   )
   paths = stats::setNames(file.path(root, dirs), names(dirs))
   for (path in paths) dir.create(path, recursive = TRUE, showWarnings = FALSE)
@@ -19,6 +20,8 @@ local({
     APPDATA = paths[["appdata"]],
     LOCALAPPDATA = paths[["localappdata"]],
     XDG_CONFIG_HOME = paths[["xdg"]],
+    # Windows Rscript -e leaves its input file after a force-kill; suite teardown owns this tree.
+    TMPDIR = paths[["temp"]], TMP = paths[["temp"]], TEMP = paths[["temp"]],
     GPTR_PROJECT_ROOT = paths[["project"]],
     GPTR_REPLAY = "replay",
     OMP_THREAD_LIMIT = "2",

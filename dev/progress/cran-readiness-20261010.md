@@ -156,3 +156,23 @@ checkout and is not proof of byte-identical archive validation.
 The committed runtime `4e66376` installed with default byte compilation in 16.14s and peaked
 at 293 MiB process-family RSS. This is an installation diagnostic, not a fresh tarball check
 or total package-size measurement. No source-size or timing threshold is relaxed.
+
+## Windows child-process temporary files
+
+Remote `cb180d3` completed all 13 CI jobs. Its Windows release used actual R 4.6.1 and oldrel-4
+used R 4.2.3; each had zero test failures/warnings and 23,826 assertions. Both retained a
+temporary-directory detritus NOTE for 15 `Rscript*` entries; this category/count also existed
+at `e5703be`. Oldrel additionally reports an 8.7 MB installed-size diagnostic. These are
+older-head, independently rebuilt CI results, not the current exact archive check.
+
+Official Windows R source writes every `Rscript -e` input into TMPDIR (then TMP/TEMP fallback)
+and normally removes it during R exit. Intentional force-kill tests bypass that finalizer.
+The test suite now redirects those child variables into `child-temp` beneath its existing
+withr-owned suite root. Supervisor shutdown and environment restoration still precede
+owned-root removal. No shipping runtime or broad temporary-file deletion was added.
+[R Windows source](https://svn.r-project.org/R/trunk/src/gnuwin32/system.c)
+
+The inheritance/profile regression reproduced four failures, then passed all four assertions.
+Relevant auth/child/spawn/supervisor suites passed 442 assertions with zero failures/warnings/
+skips (16.3s); both changed files lint clean. A seven-assertion Windows-only force-kill witness
+was skipped on macOS. Its hosted execution and disappearance of the NOTE remain pending.
