@@ -395,7 +395,7 @@ test_that("custom entries of a run are shown through renderer records (IC-69)", 
   expect_identical(out[[1L]], "NOTE: kept <U+001B> safe")
 })
 
-test_that("the spinner runs as a reactor task from before_request to the first delta", {
+test_that("the spinner runs as a reactor task until the first rendered text", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   withr::local_options(cli.dynamic = TRUE)
   local_gptr_options(verbose = 2L)
@@ -409,6 +409,10 @@ test_that("the spinner runs as a reactor task from before_request to the first d
   expect_false(is.null(rec$task))
   utils::capture.output(console_on_message_update(
     hook_event("message_update", s, index = 1L, kind = "text", delta = "x"), ctx))
+  expect_false(is.null(rec$task))
+  expect_false(is.null(rec$spinner))
+  utils::capture.output(console_on_message_update(
+    hook_event("message_update", s, index = 1L, kind = "text", delta = " "), ctx))
   expect_null(rec$task)
   expect_null(rec$spinner)
   console_drop("u0000test")

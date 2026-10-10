@@ -133,8 +133,9 @@ bg_clean = function(x) {
   vapply(x, function(s) {
     if (is.na(s)) return("")
     cp = utf8ToInt(s)
-    bad = cp < 32L | (cp >= 127L & cp <= 159L) | (cp >= 0x200bL & cp <= 0x200fL) |
-      (cp >= 0x202aL & cp <= 0x202eL) | (cp >= 0x2066L & cp <= 0x2069L) | cp == 0xfeffL
+    bad = cp < 32L | (cp >= 127L & cp <= 159L) | cp == 0x061cL |
+      (cp >= 0x200bL & cp <= 0x200fL) | (cp >= 0x202aL & cp <= 0x202eL) |
+      (cp >= 0x2060L & cp <= 0x2069L) | cp == 0xfeffL
     cp[bad] = 32L
     intToUtf8(cp)
   }, "", USE.NAMES = FALSE)

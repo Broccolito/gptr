@@ -21,3 +21,10 @@
 ## Hosted MCP test isolation
 - Prior main Windows-release check failed two HTTP request/probe assertions. Deliberately priming a prior URL's legacy-era cache reproduced exactly those failures locally (PASS 164, FAIL 2).
 - Test-only fresh user-directory isolation preserves same-fixture reconnect checks. Green PASS 166, FAIL 0, WARN 0; one Windows-only skip locally. Changed test lint clean; production MCP unchanged.
+
+## Waiting feedback
+- Live terminal reproduction: resuming a pending request after Ctrl-C lost its indicator; verbosity 1 in Rscript also waited silently before its first tool response.
+- Dynamic consoles now draw immediately and restore the spinner after continue, steer or follow-up. It remains active while text is buffered and clears before visible output. Other foreground consoles receive concise stderr feedback; verbosity zero stays quiet.
+- Nested tool captures suppress redraws, completion/error removes reactor tasks, and abort-only IDEs advertise their actual stop key. Background notices remove missing bidi/invisible control characters.
+- Offline red: FAIL 26 / PASS 28; IDE hint red: FAIL 2 / PASS 54. Green new regressions PASS 56; affected suite PASS 1477; final renderer/interrupt/stream checks PASS 238, FAIL 0, WARN 0, one CI-only interrupt skip. Five changed files lint clean; independent root source review clear.
+- Evidence: ignored `dev/.validation/live-20261010/console-wait/`. Revised installed-package live verification is still pending.

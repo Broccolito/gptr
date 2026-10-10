@@ -133,6 +133,7 @@ policy_menu = function(cnd, pol) {
     key = if (is.na(ans)) "a" else tolower(substr(trimws(ans), 1L, 1L))
     if (key %in% c("", "c")) {
       console_notice("[gptr] continuing")
+      console_render_resume(pol$runs)
       invokeRestart("resume")
     }
     if (identical(key, "a")) return(invisible(NULL))
@@ -140,6 +141,7 @@ policy_menu = function(cnd, pol) {
       text = console_ask(if (identical(key, "s")) "steer> " else "follow-up> ")
       if (is.na(text)) return(invisible(NULL))
       policy_enqueue(s, text, if (identical(key, "s")) "steer" else "follow_up")
+      console_render_resume(pol$runs)
       invokeRestart("resume")
     }
     if (bg && identical(key, "b")) {

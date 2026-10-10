@@ -86,7 +86,7 @@ console_notice = function(...) {
 #' wraps at `width` display columns. A word is held until the next blank or line end, so the
 #' output does not depend on how the text was chunked.
 #' @noRd
-render_markdown_stream = function(width = cli::console_width()) {
+render_markdown_stream = function(width = cli::console_width(), before_output = NULL) {
   style = cli::num_ansi_colors() > 1L
   sym = console_symbols()
   width = max(20L, as.integer(width))
@@ -104,7 +104,10 @@ render_markdown_stream = function(width = cli::console_width()) {
   st$space = FALSE
   sgr = function(code) if (style) paste0("\033[", code, "m") else ""
   emit = function(x) {
-    if (nzchar(x)) cat(x, sep = "")
+    if (nzchar(x)) {
+      if (is.function(before_output)) before_output(x)
+      cat(x, sep = "")
+    }
     invisible()
   }
   vis_width = function(x) sum(nchar(x, type = "width"))
@@ -304,6 +307,7 @@ console_print_text = function(text) {
 console_spinner = function(label = "thinking") {
   frames = console_symbols()$frames
   key = console_interrupt_key()
+  action = if (console_menu_available()) "steer or stop" else "stop"
   sp = new.env(parent = emptyenv())
   sp$dynamic = cli::is_dynamic_tty()
   sp$i = 0L
@@ -316,7 +320,7 @@ console_spinner = function(label = "thinking") {
     if (now - sp$last < 0.08) return(invisible())
     sp$last = now
     sp$i = sp$i %% length(frames) + 1L
-    cat(sprintf("\r%s %s (%.0fs, %s to steer or stop)", frames[[sp$i]], label, now - sp$t0, key),
+    cat(sprintf("\r%s %s (%.0fs, %s to %s)", frames[[sp$i]], label, now - sp$t0, key, action),
         sep = "")
     utils::flush.console()
     sp$shown = TRUE
@@ -357,6 +361,7 @@ console_track = function(run_id, session) {
   rec$session = session
   rec$tools = new.env(parent = emptyenv())
   rec$n0 = length(session_data(session)$entries)
+  rec$request_pending = FALSE
   assign(run_id, rec, envir = console_state()$active)
   invisible(rec)
 }
@@ -400,9 +405,10 @@ console_render_on = function(rec) {
 console_spinner_start = function(rec) {
   if (!is.null(rec$task) || !cli::is_dynamic_tty()) return(invisible(NULL))
   rec$spinner = console_spinner("thinking")
+  rec$spinner$tick()
   rec$task = reactor_task(function() {
     if (is.null(rec$spinner)) return(FALSE)
-    rec$spinner$tick()
+    if (console_render_on(rec)) rec$spinner$tick()
     0.1
   })
   invisible(NULL)
@@ -416,6 +422,44 @@ console_spinner_stop = function(rec) {
   rec$spinner = NULL
   rec$task = NULL
   invisible(NULL)
+}
+
+#' Waiting feedback: a dynamic spinner for streamed consoles, else a concise stderr message
+#' @noRd
+console_wait_start = function(rec) {
+  if (verbosity() < 1L || !console_foreground(rec)) return(invisible(NULL))
+  if (verbosity() >= 2L && cli::is_dynamic_tty()) {
+    console_spinner_start(rec)
+  } else {
+    gptr_inform("gptr: thinking", "progress")
+  }
+  invisible(NULL)
+}
+
+#' Restore waiting feedback after a pause, only while the same foreground request is pending
+#' @noRd
+console_render_resume = function(runs) {
+  for (run in runs) {
+    rec = console_record(list(run = run$id))
+    if (!is.null(rec) && isTRUE(rec$request_pending) &&
+        run$status %in% c("requesting", "streaming")) console_wait_start(rec)
+  }
+  invisible(NULL)
+}
+
+#' A record-only callback: clear before visible text; blank output clears only the current redraw
+#' @noRd
+console_stream_output = function(rec) {
+  force(rec)
+  function(text) {
+    if (is.null(rec$spinner)) return(invisible(NULL))
+    if (grepl("[^[:space:]]", cli::ansi_strip(text))) {
+      console_spinner_stop(rec)
+    } else {
+      rec$spinner$clear()
+    }
+    invisible(NULL)
+  }
 }
 
 #' End the partial lines of a record (before a tool line, a prompt or the pause menu)
@@ -571,18 +615,20 @@ console_on_agent_start = function(event, ctx) {
   NULL
 }
 
-#' before_request: start the spinner; at verbosity 3 also a request line
+#' before_request: announce waiting; at verbosity 3 also a request line
 #' @noRd
 console_on_before_request = function(event, ctx) {
   rec = console_record(event)
-  if (is.null(rec) || !console_render_on(rec)) return(NULL)
+  if (is.null(rec)) return(NULL)
+  rec$request_pending = TRUE
+  if (verbosity() < 1L || !console_foreground(rec)) return(NULL)
   if (verbosity() >= 3L) {
     console_pause_one(rec)
     console_write(cli::col_grey(sprintf(
       "  request %s -> %s (~%.0f tokens)", console_escape(event$request_id %||% "", FALSE),
       console_escape(event$model %||% "", FALSE), as.numeric(event$tokens_est %||% 0))))
   }
-  console_spinner_start(rec)
+  console_wait_start(rec)
   NULL
 }
 
@@ -594,16 +640,17 @@ console_on_message_update = function(event, ctx) {
   if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
   kind = event$kind %||% "text"
   if (identical(kind, "text")) {
-    console_spinner_stop(rec)
     if (!is.null(rec$think)) rec$think$finish()
     rec$think = NULL
-    if (is.null(rec$md)) rec$md = render_markdown_stream()
+    if (is.null(rec$md)) {
+      rec$md = render_markdown_stream(before_output = console_stream_output(rec))
+    }
     rec$md$write(delta)
   } else if (identical(kind, "thinking") && verbosity() >= 3L) {
     console_spinner_stop(rec)
     if (is.null(rec$think)) {
       console_write(cli::col_grey("  (thinking)"))
-      rec$think = render_markdown_stream()
+      rec$think = render_markdown_stream(before_output = console_stream_output(rec))
     }
     rec$think$write(delta)
   }
@@ -616,7 +663,9 @@ console_on_message_update = function(event, ctx) {
 console_on_message_end = function(event, ctx) {
   rec = console_record(event)
   msg = event$message
-  if (is.null(rec) || !is.list(msg) || !console_render_on(rec)) return(NULL)
+  if (is.null(rec) || !is.list(msg)) return(NULL)
+  if (identical(msg$role, "assistant")) rec$request_pending = FALSE
+  if (!console_render_on(rec)) return(NULL)
   if (identical(msg$role, "assistant")) {
     console_spinner_stop(rec)
     if (!is.null(rec$think)) rec$think$finish()
