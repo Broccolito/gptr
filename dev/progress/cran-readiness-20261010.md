@@ -214,3 +214,46 @@ The setup assertions now normalize both independently derived actual and expecte
 with winslash="/",mustWork=TRUE; setup/containment/ownership behavior is unchanged. Local test
 environment coverage passed5assertions with0failures/warnings and one Windows-only skip. New
 Windows execution of the corrected assertions remains pending; no local Windows pass is claimed.
+
+## Read-only structural audit at 7d7a39a
+
+An ancestor-aware application of .Rbuildignore to committed paths found 596 conservative
+shipping candidates totaling 7,574,884 logical bytes: R 3,102,319, tests 3,797,551, man 369,856,
+inst 137,656, 14 guides 141,421 and eight root files 26,081. This is not compressed tarball
+size and does not apply every default build exclusion or generate inst/doc HTML. The local
+90-page website totals 4,771,510 logical bytes and is excluded. All 14 shipped precomputed
+guides have the expected vignette metadata and no executable R chunk headers.
+
+Fixed external Imports and base R modules remain; Enhances: repr and NeedsCompilation: no
+are retained. No src/compiled libraries/install hooks/symlinks/credential paths or forbidden
+provider bridge dependencies appeared in shipping candidates. All eight artwork hashes
+match the supplied pre-move originals; the ninth figure file is the intentionally updated
+asset README. No logo remains in the original Downloads directory.
+
+The existing 8d13b58 direct-source installation measures 5,480 KiB, including R 4,732 KiB
+and help 488 KiB; it has no built doc/ directory. All 119 current R source hashes match its
+export manifest. Its 29.511s default-byte-compile install and 417.1 MiB family profile remain
+installation diagnostics, not normal final-artifact measurements.
+
+Earlier hosted 390485f source-retained installs report size as INFO on current release/devel:
+macOS 9.5 MB/R 8.2 MB and Ubuntu 8.8 MB/R 7.4 MB. Oldrel-4 reports 8.8 MB/R 7.4 MB as NOTE.
+Alternate noSuggests and C-locale jobs report INFO 6.0/6.1 MB, with no keep-source declaration
+seen. Windows release reports INFO 8.7 MB/R 7.4 MB and no detritus NOTE, but one native Unix
+fixture cleanup ERROR; the narrow test correction is locally verified and awaits Windows.
+The Mac OS-service NOTE still lacks ownership evidence, and Chromote-close messages remain
+outside counted test warnings. These are revision-specific hosted checkout rebuilds.
+
+No threshold is relaxed. Exact archive bytes/hash/listing, 14 built HTML guides, installed
+size, complete timings and manual/incoming/current-release/devel checks remain not run.
+At 16:02 PDT free disk was 32 GiB and used swap 41,690.5 MiB, so heavy local gates remain
+deferred. The tiny installed optional-tools/workflow integrations passed offline with cleanup;
+they do not replace R CMD check --as-cran.
+
+The preserved 390485f hosted run finished with 11 successful jobs and both Windows jobs
+failing the same completion-fixture cleanup. Windows release R 4.6.1 and oldrel-4 R 4.2.3
+each reported PASS 24,143 / FAIL 1 / WARN 0 / SKIP 84. Release status was one ERROR with
+zero NOTEs; oldrel-4 additionally retained its installed-size NOTE (8.7 MB / R 7.4 MB with
+source retained). Both temporary-detritus and nonstandard-directory checks were OK. The
+complete failure/skip reports contain no test-environment case, supporting—but not separately
+counting—the path-normalization and Windows force-kill checks. The 2aeb9f0 fixture correction
+passed 71 local Unix assertions and file lint; its Windows execution remains pending.

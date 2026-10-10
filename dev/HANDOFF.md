@@ -25,6 +25,16 @@ offline checks and read-only hosted review are appropriate until headroom recove
 unrelated user jobs/models, maintainer DESCRIPTION/AGENTS changes and the pre-merge stash.
 No release, tag, public website deployment or CRAN submission has been performed.
 
+**Later bounded offline checkpoint:** installed 8d13b58 passed the optional-tools/skills/
+plugins/stdio-MCP integration (14 stages) and four fresh workflow-summary/draft/Peter-history
+children. Sum 7 / mean 3.5 and input/state invariants passed; native summary and fresh history
+replay made no requests. Scripted template expansion passed. These used fake responses, not
+live model-summary quality or GUI command UX. Hosted Windows release exposed one native-Unix
+fixture cleanup error; its narrow test-only fix is independently reviewed and locally passes
+71 assertions/no lints, with actual corrected Windows CI still pending. At 16:02 PDT free
+disk had declined to 32 GiB, swap was 41,690.5 MiB and CPU idle 0.32%; keep heavy work deferred.
+The newer dated progress sections and living plan contain the complete scope and advisories.
+
 **State on 2026-10-07: offline implementation milestones complete; release steps are the maintainer's.** All
 25 plans (307 tasks) are committed, each test-first and independently reviewed; what remains needs
 the network, paid calls, a real terminal or the maintainer's approval (section 5). `main` is the only

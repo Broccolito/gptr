@@ -246,3 +246,18 @@ findings, 89 existing consolidation warnings and zero errors. All 770 extracted 
 zero parse/style problems, and single-worker lintr 3.4 reported no lints. Logs are retained
 under ignored `dev/.validation/plan-20261010/after-e094f22-memory-final/`. These historical
 cross-plan warnings are distinct from documentation/file/lint problems.
+
+The rebuilt Why Peter article was also opened in the browser, checking both full names and
+the distinction between software System 1/2 roles and historical terminology. Its ACM
+announcement, revised ALGOL 60 report and Wason/Evans primary paper were reopened for content
+review; this is not the full automated external URL scan. The homepage preview is restored
+to light mode with its normal viewport. DESCRIPTION and NEWS already describe objects in
+memory and were reviewed alongside the updated README and guides.
+
+The required full consolidation sequence after the bounded-integration plan update passed
+at the 2aeb9f0 checkpoint: index, extraction, parse and serial lint all exited zero. It
+indexed 25 plans, 1,446 blocks, 4,389 definitions and 28,337 calls, with 821 informational
+findings, 89 existing consolidation warnings and zero errors. All 770 extracted R blocks
+had zero parse/style problems; three LONG notes are nested P17 examples. Single-worker
+lintr 3.4.0 found no lints. Outputs remain ignored under
+`dev/.validation/plan-20261010/after-7d7a39a-offline-fixtures/`.

@@ -1,6 +1,6 @@
 # Living testing plan
 
-Updated 2026-10-10, with the 15:32 PDT resource checkpoint and subsequent bounded documentation
+Updated 2026-10-10, with the 16:02 PDT resource checkpoint and subsequent bounded offline
 validation. This is the coverage ledger for the current package, documentation and
 authorized live testing. Update a row after inspecting its evidence; retain failed runs and
 older revision results. It does not replace the numbered implementation plans or authorize a
@@ -49,6 +49,22 @@ fresh replay 1.081s failed because beta was absent from an empty recorded MCP R 
 The `8d13b58` repair applies to new recordings; it does not repair or overwrite that artifact.
 All nine repaired CLI/Qwen cells passed fresh replay, independently checking fit/coefficient,
 child exit and unchanged recorded source. Native GUI replay at `8d13b58` has not run.
+
+Two small serial offline integrations on the unchanged `8d13b58` runtime passed after the
+documentation checkpoint `7d7a39a`: optional tools/skills/plugins/stdio MCP (14 stages,
+13.707s, 568.3 MiB / 15 samples) and workflow summary/drafts/template/Peter history (four fresh
+children, 4.046s, 243.3 MiB / five samples). Both had zero counted warnings and sampling errors,
+independent sum 7 / mean 3.5 oracles, unchanged inputs and successful owned cleanup. The
+optional run made one fake request; workflow phases made seven fake requests. External model
+requests were zero. Native `summary()` and fresh history replay made no request; narrative
+and bare-R drafts were explicitly synthetic model output, not a guaranteed native export.
+
+Hosted `390485f` Windows release exposed a fixture cleanup error: its mocked Unix completion
+case introduced `rl_word_breaks`, which Windows R cannot later delete. The narrow test-only
+correction skips native Unix positive fixtures before Windows platform mocking and retains
+all 13 unsupported-mode variants without creating that option. Independent review and local
+Unix validation passed 71 assertions with zero failures/countable warnings/skips and no lints;
+the environment's testthat build-version advisory is retained. Actual corrected Windows CI is P.
 
 Historical final gate `240db69` had 23,865 passing assertions and local CRAN 0/0/0;
 it is not a current-artifact claim. Newer hosted results likewise apply to their own SHAs.
@@ -101,9 +117,10 @@ checked separately from catalog/authentication inventory.
 Prepared ignored controllers/fixtures are under `dev/.validation/live-20261010/`:
 `driver.R`, `matrix-serial.py`, `notebook-headless.py`, `setup.R`, `renderer-support.R`,
 `jupyter-support.R`, `timings.R`, regression/typed/team documents and the process-family
-profiler. Prepared `optional-smoke.R` and `system-one-emulation.R` with its emulation plan are
-not executed passes; their optional/offline and emulated live lanes are resource-deferred.
-These files are execution aids, not evidence. Root coordinates runs and the sole local R
+profiler. `optional-smoke.R` and `workflow-summary.R` now have the scoped offline evidence
+above. `system-one-emulation.R` and its emulation plan remain prepared, not executed passes;
+their live lane is resource-deferred. Fixtures alone are execution aids, not evidence.
+Root coordinates runs and the sole local R
 slot. Headless notebook coverage supplements actual GUI observations.
 
 ## All guides and tables
@@ -138,16 +155,16 @@ provider, permission UI, MCP server or external engine.
 | ID / guide | Mandatory coverage, including its tables | Current evidence and remaining check |
 |---|---|---|
 | G01 [Getting started](../vignettes/getting-started.Rmd.orig) | First call; result/session; same-session pipe; stopping; console; real connection; in-memory reuse | H fake examples; L selected function/pipes. P fresh quickstart through each frontend and preserved caller input. |
-| G02 [Why Peter](../vignettes/why-peter.Rmd.orig) | Both namesakes; primary links; gptr/Peter naming; avoid claiming Wason coined System 1/2 | H source/site review. P refreshed links and wording check after rebuild. |
+| G02 [Why Peter](../vignettes/why-peter.Rmd.orig) | Both namesakes; primary links; gptr/Peter naming; avoid claiming Wason coined System 1/2 | O rebuilt article browser wording check and reopened primary source content; H earlier source review. Full automated external URL scan stays separate. |
 | G03 [Language models](../vignettes/language-models.Rmd.orig) | Provider table (all five rows); APIs; Azure/Bedrock; subscription CLIs; local Ollama; session lifecycle; functions/scripts; loaded-object reuse | L five requested routes in selected cells. P remaining matrix; other access inventory is not inference. |
 | G04 [System 1](../vignettes/system-one.Rmd.orig) | Logical/probability; structured batch shape/names; uncertainty in filters/functions/loops; choices/levels/fractional scores; provenance/cache; routing/judging System 2; native/local/emulated engines | LR Jev recorded R/Rmd/Quarto logical/choice/score `390485f`. P default-setting/service routing, prepared emulation, native local classifier, calibration/uncertainty boundary and other frontends. |
 | G05 [Interactive console](../vignettes/interactive-console.Rmd.orig) | All command-table rows/aliases and dynamic skill commands; prompt/@file/@object; `!`/`!!`; fences/triple quotes/continuations; approvals; interrupt/continue/steer/follow-up/abort/background | L Versa terminal subset, IDE function waiting and c722 native manual-tool timing/listing; L native Unix inline completion `f0f3448`. O abort/listing/width/completion regressions; LGUI-O active R.app streamed resize `390485f`. P full commands, installed abort witnesses, IDE/VS Code resize and remaining controls. |
 | G06 [Configuration](../vignettes/configuration.Rmd.orig) | Scope table; all model/execution, context/history, extension/interaction tables; all option groups; precedence/unset/nested overrides; trust/egress; credential loading; matching configuration help for loaded objects and storage opt-ins | O guide/help regeneration `82a7db3`; H config/security suites. P isolated user/project/process defaults and every current table row, including inactive registered settings. |
-| G07 [Script as history](../vignettes/script-as-history.Rmd.orig) | Scripts/functions/pipes; binding/consent/opt-out; blocks/hash/cache; all four replay modes; R/Rmd/qmd/ipynb; custom-environment limit; notebook display/sync; workflow summaries and executable drafts | LR direct Rscript/Rmd/Quarto for four conversational providers, Jev recorded R/Rmd/Quarto, and older Versa notebook. F earlier CLI empty body preserved; O fix 48 focused/1,601 affected. P stale/user-edited/undone records, missing cache, latest notebooks, remaining GUI cells and summary/draft validation. |
+| G07 [Script as history](../vignettes/script-as-history.Rmd.orig) | Scripts/functions/pipes; binding/consent/opt-out; blocks/hash/cache; all four replay modes; R/Rmd/qmd/ipynb; custom-environment limit; notebook display/sync; workflow summaries and executable drafts | LR direct Rscript/Rmd/Quarto for four conversational providers, Jev recorded R/Rmd/Quarto, and older Versa notebook. F earlier CLI empty body preserved; O recording fix and 8d offline summary/draft/Peter-history fresh replay. P stale/user-edited/undone records, missing cache, latest notebooks, remaining GUI cells and real-model summary quality. |
 | G08 [Teams/background](../vignettes/teams-and-background.Rmd.orig) | Named roles; element fan-out; independent parallel calls; deferred SDK; steer/step/wait/cancel; background; checkpoints/usage/history | H fake recipes; L terminal responsive background with pumped completion. P all real child backends, fan-out/team formats and cancellation/replay; idle-only completion unverified. |
-| G09 [Tools/artifacts](../vignettes/tools-and-artifacts.Rmd.orig) | Objects/files/output; shell/scripts; background programs; Python/SQL/other engines; artifact versioning, launch, reopen, stop | H fake/read-only recipes and historical offline suites. P representative real optional engines/app UI, failure cleanup and permission prompts; do not assume installed tools. |
-| G10 [Skills/plugins](../vignettes/skills-and-plugins.Rmd.orig) | Discovery/use; skill files; templates/instructions; agent definitions; packaged lazy factories; trust and precedence | H docs/offline suites; terminal discovery observed. P real skill invocation, template command, plugin activation/unload and changed-trust rejection. |
-| G11 [MCP](../vignettes/mcp.Rmd.orig) | List/lazy connect; register; R tool members; HTTP auth; serve R; tools-only API; imported config/trust | L CLI-served R numerical returns; O isolated client/bridge cases. P standalone stdio/HTTP server, reconnect/auth expiry, allow/deny, disconnect and realistic UI discovery. |
+| G09 [Tools/artifacts](../vignettes/tools-and-artifacts.Rmd.orig) | Objects/files/output; shell/scripts; background programs; Python/SQL/other engines; artifact versioning, launch, reopen, stop | O installed 8d files, shell/nonzero error, background wait, pandas mean, DuckDB mean and bash engine with owned cleanup. H recipes/suites. P real-provider tools, app UI/versioning, failure cleanup and permission prompts. |
+| G10 [Skills/plugins](../vignettes/skills-and-plugins.Rmd.orig) | Discovery/use; skill files; templates/instructions; agent definitions; packaged lazy factories; trust and precedence | O installed 8d skill read, packaged factory checks, actual lazy directory-plugin activation, file-template discovery and scripted-stdin quoted expansion. P live-model skill use, native GUI command UX, package installation/unload and changed-trust rejection. |
+| G11 [MCP](../vignettes/mcp.Rmd.orig) | List/lazy connect; register; R tool members; HTTP auth; serve R; tools-only API; imported config/trust | L CLI-served R numerical returns; O installed 8d standalone local stdio list/lazy connect/tools/progress/error/reconnect/remove and isolated bridge cases. P independent HTTP/auth expiry/allow-deny and realistic UI discovery. |
 | G12 [Extending gptr](../vignettes/extending-gptr.Rmd.orig) | Tool signatures and return values; permission policy; hooks; prompt/context/command components; other kinds; plugin packaging | H fake recipes/offline suites. P real minimal package/plugin round trip, event cleanup and protected-component refusal. |
 | G13 [Execution model](../vignettes/execution-model.Rmd.orig) | Turn flow; caller/home/overlay objects; both interface/reference tables (14 rows); return capture/history; permissions/concurrency; direct in-memory iteration | L real fit/beta values; H fake examples. P repeated caller identity/copy-safety proof and worker/CLI/nested ownership boundaries. |
 | G14 [Token efficiency](../vignettes/token-efficiency.Rmd.orig) | Prompt inspection; descriptions/results; reported/estimated/unknown usage; budgets/partial results; all three cache rows; compaction/context; source benchmark | H token ratchet and examples; O abort unknown accounting. P live partial usage, modest workload profiling, compaction/cache/checkpoint serialization and actual large-object headroom run. |
@@ -270,14 +287,14 @@ the observed boundary and proposed owner rather than promising gptr can replace 
 | ID | Acceptance and failure cases | Current boundary |
 |---|---|---|
 | X01 values/lifecycle | Numeric/type/shape/names oracles, actual objects, caller environment, nested `gptr_return`, continuation, status/history, resume/fork, deferred `.run = FALSE` and step/wait/cancel | L selected functions; O served-return fix; P direct deferred/Rscript lifecycle matrix |
-| X02 recording/workflow exports | Explicit binding consents; persistent off prevents automatic recording; per-call logical FALSE wins even when bound; TRUE grants no new consent. Exactly 1 regression / 3 typed / 2 team blocks; post-exit hashes. Generated narrative/script drafts must be reviewed/run, never labeled an automatic verified export. | O guards and CLI trace repair; LR direct exit-finalizer for four chat providers and rendered regressions. F old CLI empty block retained. P all modes/edited records/team blocks and summaries/drafts. |
+| X02 recording/workflow exports | Explicit binding consents; persistent off prevents automatic recording; per-call logical FALSE wins even when bound; TRUE grants no new consent. Exactly 1 regression / 3 typed / 2 team blocks; post-exit hashes. Generated narrative/script drafts must be reviewed/run, never labeled an automatic verified export. | O guards, CLI trace repair and 8d zero-call summary/reviewed synthetic draft/native Peter history with one fresh nonempty block and fresh-child zero-call replay. LR existing live document cells. F old CLI block retained. P other modes/edited records/team blocks and real model summaries. |
 | X03 strict replay | New key-free process/kernel, original provider metadata, zero before-request events, zero fresh usage events and zero new native usage-log rows; unchanged source/cell/gptr fingerprint, correct R results. Team child numeric values require explicit exports; absent exports test cached reports/metadata, not persisted numerics. | LR six Versa/Jev cells `390485f` and nine Claude/Codex/Qwen cells `8d13b58`; older notebook LR `fc9f8d4`. P latest notebooks, remaining GUI/provider cells and teams. |
 | X04 interactive controls | Genuine in-flight request and R-tool steer; follow-up; continue; partial-stream abort then recovery; two idle interrupts/EOF/exit; IDE stop key/fallback; background responsiveness and explicit pumped completion | L Versa terminal subset. RStudio partial-stream interruption not reached; P installed abort repair and other provider/RStudio/Jupyter control cases |
 | X05 progress/display | Visible early thinking feedback, delayed first byte/cold model/tool wait, no silent hang, spinner cleanup after pause/continue/steer/abort/error; separate safe final abort tail; quiet/v0 and knitr gates; ordinary IRkernel stdout progress with true errors separate; safe Markdown and one pending code display | L fc9 terminal/Jupyter; O abort/listings/width refresh; L c722 RStudio listing/timing; LGUI-O R.app streaming resize `390485f`. P installed abort, active IDE/VS Code resize and remaining surfaces. No notebook cursor-animation promise. |
 | X06 commands/settings | Each G05 row/alias/dynamic command; full resume IDs; bounded readable skills/MCP listings with full invisible values. Every G06 setting/option row, precedence/source/unset/type errors, inactive setting limits, no user-state leaks | L terminal subset and c722 RStudio `/skills`; O bounded listings. P full IDs/MCP installed UI, exhaustive tables and native completion/slash boundaries |
 | X07 teams/fan-out | At most two fixture children; names/status/usage; independent mean/median values; worker/coroutine/CLI attribution; queued/in-flight steer, cancellation, budget/depth, nested calls, recording and replay by format | P live; H offline acceptance. Source ownership must not infer preserved child values without exports. |
-| X08 skills/plugins/MCP | Real skill/template selection; agent definitions; trusted packaged factory lazy loading; tools-only MCP and server lifetime; transport/auth/reconnect; filtered discovery and trust renewal; no protected-policy replacement | P end-to-end; H/O focused offline and CLI bridge evidence |
-| X09 tools/apps | R and bounded shell; optional Python/SQL engines; permission previews/denials; read/write/edit; output/plot truncation; artifact create/version/reopen/stop; Shiny dependency and browser UI; exact owned child cleanup | P representative live/UI; H offline suites, optional-engine skips named |
+| X08 skills/plugins/MCP | Real skill/template selection; agent definitions; trusted packaged factory lazy loading; tools-only MCP and server lifetime; transport/auth/reconnect; filtered discovery and trust renewal; no protected-policy replacement | O installed 8d plugin activation/template expansion/skill read/local stdio MCP lifecycle and numeric oracles. H/O bridge suites. P real-provider/GUI and auth/trust/agent-file cases |
+| X09 tools/apps | R and bounded shell; optional Python/SQL engines; permission previews/denials; read/write/edit; output/plot truncation; artifact create/version/reopen/stop; Shiny dependency and browser UI; exact owned child cleanup | O installed 8d tiny Python/SQL/bash/files/shell/background and exact owned cleanup. P representative live/UI/apps/permissions; H broader offline suites |
 | X10 security/restoration | No credentials in prompt/events/logs/doc/cache/display; synthetic split-secret/bidi/markup tests; context/egress/local-only/trust restrictions; permission allow/ask/deny and guarded actions; original input invariant; cwd/options/env/libs/seed/listeners/binding restored; no orphaned owned processes | O synthetic guards; L selected cleanup/UI; P new installed/failure-path witnesses. In-process R is not a security sandbox. |
 | X11 usage/budget/cache | Known vs estimated vs unknown tokens/cost; abort once/request; preserve known partial usage; no implied zero charge; pricing tier and lower-bound budget behavior; cache-hit no request; compaction/checkpoint/rewind partial restoration | O abort accounting; H suites/ratchet; P live unknown/limit/cache/compaction cases |
 | X12 performance/resources | Installed SHA, first visible feedback, first normalized text, request/tool/completion intervals; approval dwell excluded from R execution duration; CLI telemetry gaps labeled. Sample owned process-family peak RSS and server/GPU allocation separately; deadline/cancellation cleanup and cold/warm comparisons | L documented install/document profiles and c722 approval-dwell exclusion; O timing. Latest live family RSS 249.4–876.4 MiB excludes the model server and may double-count shared pages/miss children. Qwen Rscript 70.008s versus rendered 20.685/22.963s under rising host load is not a causal model-performance diagnosis. Remaining comparisons P. |
@@ -296,7 +313,7 @@ CLI does not expose every MCP tool event, actual R objects and numeric oracles r
 |---|---|---|
 | Q01 documentation | All 14 guide precomputes; README, function/configuration help and asset README in-memory wording; man aliases/examples, every options/command table row, source/output consistency and no live chunks; private-overlay generation preserves the maintainer's DESCRIPTION preference | O `82a7db3` help generation and final README/all14 fresh-process guide refresh, zero documentation/file problems; NAMESPACE unchanged, DESCRIPTION `8.1.0` preserved. H 58 example pages/71 assertions. Static-site refresh did not rerun reference examples or install. P current full artifact checks. |
 | Q02 site/branding | Homepage/quickstart/Why Peter prominent; all guide/reference links; canonical logo files unchanged; light/dark/auto; native menu/theme persistence; code/table overflow keyboard focus; representative 320–1920px layouts and doubled text | O refreshed 90-page site: all14 guides/63 exports, zero broken local links, all8 image assets hash-identical. Browser18 cases: light five pages and dark homepage at320/768/1440, no page overflow, white light background, matching logos; theme/viewport restored. H prior60 cases and doubled-text check. P actual browser zoom and expanded current-site accessibility. |
-| Q03 CRAN periodic | Focused isolated tests/lint then docs/files; examples/precompute when changed; current dependency metadata including optional `Enhances: repr`, absent-optional load/display, pure R/fixed Imports, source/archive exclusions and credential-free offline tests | O focused metadata/display/temp guards; P current exact archive contents, sizes and checks. No eager repr load found. |
+| Q03 CRAN periodic | Focused isolated tests/lint then docs/files; examples/precompute when changed; current dependency metadata including optional `Enhances: repr`, absent-optional load/display, pure R/fixed Imports, source/archive exclusions and credential-free offline tests | O 7d structural/metadata/guide/asset audit and focused test/lint guards; no compiled paths, install hooks, forbidden dependencies or credential shipping candidates found. P current exact archive contents, sizes and checks. |
 | Q04 resource/size/timing | Record install/example/test/vignette timings, slowest pages, actual tarball bytes/hash, installed `du -k` and largest directories; watch source near 10 MB and docs/data near 5 MB; check at most two cores | P fresh artifact; prior static sizes/oldrel installed-size diagnostic are historical, not archive measurements. |
 | Q05 platform/current artifact | Existing hosted matrix with exact SHA; current R-release/R-devel exact-tarball `--as-cran`, Windows and reverse dependencies; force-killed child temp cleanup on Windows; manual/incoming/URL checks | Historical gates only; current Windows cleanup and final artifact validation P. Hosted checkout rebuilds do not prove byte-identical upload-tarball validation. |
 
@@ -322,17 +339,21 @@ submission remain coordinator/maintainer actions; consult current
 4. Complete every guide/table acceptance checklist, skills/plugins/MCP/tools/artifacts and
    modest in-memory multi-iteration profiling and UX01–UX03 across native surfaces; record
    all omissions as P and identify proposed integration gaps explicitly.
-5. Finish the mandatory full cross-plan rerun after this edit; periodic full CRAN/artifact
-   gates remain resource-deferred. The fresh static site has been inspected. Prepared optional-engine/MCP/plugin
-   smoke and emulation lanes are also deferred. Schedule the actual 4 GiB object only with new
+5. Run the mandatory full cross-plan checks after this update and retain their outcome in
+   the documentation ledger. Periodic full CRAN/artifact gates remain resource-deferred; the
+   fresh static site and tiny offline optional/workflow lanes are validated. Emulation stays
+   deferred. Schedule the actual 4 GiB object only with new
    headroom evidence. Current artifact/release gates remain separate; testing is not complete.
 
 At 15:32 PDT, CPU idle was 0%, load 152.44/74.37/52.51, memory 127 GiB used with 296 MiB
 unused, swap 42,098.5 MiB used and free disk 49 GiB. No owned gptr live jobs remained active;
 unrelated user processes were retained. Hold new inference, heavy builds, full checks,
 optional/emulated lanes and large allocations until the coordinator observes recovered
-headroom. Bounded serial offline documentation and mandatory consolidation checks were
-allowed separately; they do not clear the resource gate for larger workloads.
+headroom. At 16:02 PDT the later snapshot had CPU idle 0.32%, load 28.40/31.76/41.92,
+physical memory 125 GiB used, swap 41,690.5 MiB used and free disk 32 GiB; thermal status
+was unavailable. Memory-pressure's 67% system-wide-free metric is distinct from physical
+unused memory. Bounded serial offline documentation, tiny integrations and mandatory
+consolidation checks are allowed separately; they do not clear the gate for larger workloads.
 
 Before expanding local work, follow AGENTS resource thresholds: inspect CPU/load, memory/
 swap, disk and thermal state; do not expand during pressure/active swap, disk below 200 GiB,

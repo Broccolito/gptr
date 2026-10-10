@@ -277,3 +277,58 @@ encrypted swap 42,098.5 MiB used, and free disk 49 GiB. The memory-pressure comm
 serial matrix was allowed to exit normally. Further local inference, builds, full package
 checks and large allocations are deferred until headroom recovers. Continue source review,
 remote CI inspection and documentation maintenance without adding local heavy jobs.
+
+## Bounded offline integrations after documentation checkpoint 7d7a39a
+
+The installed runtime remains 8d13b58; all 119 current R source hashes still match its
+immutable export manifest. These small serial checks used fresh Rscript --vanilla processes,
+tiny public values 2 and 5, fake providers, low scheduling priority and outer 180s deadlines.
+They do not establish real-model quality or native GUI interaction.
+
+Optional-tools integration passed all 14 stages in 13.707s: read/write/edit, argv shell and
+Rscript success/nonzero error, owned background wait, pandas/Python and DuckDB SQL means,
+bash engine, skill read, public extension/template registry checks, actual lazy directory
+plugin activation, and a local stdio MCP server's lazy list, numeric/echo/progress/error
+calls, reconnect and removal. Sum 7 and mean 3.5 matched independently and inputs stayed
+unchanged. One fake request, zero external model requests, zero counted warnings and all
+options/environment/libraries/cwd/owned-child cleanup flags passed. The profiler recorded
+15 samples, 568.3 MiB peak family RSS, zero sampling errors and successful exit. Template
+discovery was tested here; expansion was tested separately below.
+
+Workflow integration passed four serial fresh children in 4.046s. Native summary(s) kept its
+five documented columns and made zero additional requests. One synthetic narrative and one
+exactly reviewed bare-R draft each added a fake turn; the draft ran independently and checked
+7/3.5, input invariants and unchanged state. A real Peter history script recorded one fresh,
+nonempty R block; fresh-process strict replay executed it once, returned the same numbers,
+made zero fake/request/usage calls and preserved its source MD5. Project-template expansion
+through scripted stdin checked quoted arguments and one-pass substitution, including a
+literal $1 in an argument. This is scripted stdin, not native GUI slash-command UX. Total
+seven fake requests and usage events, zero external requests and zero counted warnings.
+All child/controller document, options, environment, seed/RNG, directory, library and owned
+process cleanup flags passed. Profiling recorded five samples, 243.3 MiB peak family RSS,
+zero sampling errors and successful exit. Model-output drafts are not a native guaranteed
+workflow export. Evidence stays in ignored optional-smoke-8d13b58 and workflow-summary-8d13b58
+run directories; numeric output and original recorded sources are retained.
+
+Both RSS profiles are sampled process-family estimates, can count shared pages twice and
+miss short-lived children; they are not large-object, unified-memory or GPU measurements.
+At 16:02 PDT host CPU idle was 0.32%, load 28.40/31.76/41.92, physical memory 125 GiB used,
+encrypted swap 41,690.5 MiB used and free disk 32 GiB. Thermal status was unavailable.
+The memory-pressure 67% system-wide-free value does not mean 67% physical RAM was unused.
+Heavy inference/build/full-check/large-allocation gates remain closed.
+
+## Windows native-completion fixture correction
+
+Hosted 390485f Windows release passed 24,143 assertions but failed deferred fixture cleanup:
+the mocked Unix case had introduced rl_word_breaks, which Windows R cannot later delete.
+Temporary-detritus and nonstandard check-directory checks passed. The production completion
+guard already excludes Windows; no runtime change was needed.
+
+Seven native Unix positive fixtures now skip actual Windows before platform mocking or
+option writes. All 13 unsupported-mode variants still run on every host, capturing the
+original option and checking it during/after without creating it. Independent review found
+no blocker. Local Unix validation passed 71 assertions, zero failures/errors/countable test
+warnings/skips and no lints. Profiling recorded three samples, 2.45s, 289.4 MiB peak family
+RSS and zero sampling errors. A startup advisory that installed testthat was built under
+R 4.5.2 rather than local R 4.5.0 is retained separately. Actual corrected Windows execution
+remains pending; expected 39 assertions and seven native-Unix skips are not a measured pass.
