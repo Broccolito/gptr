@@ -389,7 +389,21 @@ test_that("a .cmd MCP command runs through cmd.exe /d /c call on Windows", {
 })
 
 test_that("Streamable HTTP works in both eras: probe, fallback, cache, list, call, SSE bodies", {
-  fx = local_mcp_fixture("modern", "http", n_extra = 55L)
+  # Reuse a previous fixture's cached URL deterministically, without relying on port collisions.
+  previous_cache = withr::local_tempdir("mcp-previous-cache-")
+  withr::local_envvar(R_USER_CACHE_DIR = previous_cache)
+  test_env = environment()
+  fixture = function(era, ..., .env = test_env) {
+    fx = local_mcp_fixture(era, ..., .env = .env)
+    if (identical(era, "legacy")) {
+      withr::with_envvar(c(R_USER_CACHE_DIR = previous_cache), {
+        mcp_era_put(fx$spec, "legacy", "2025-11-25")
+      })
+    }
+    fx
+  }
+  local_user_dirs()
+  fx = fixture("modern", "http", n_extra = 55L)
   conn = mcp_connect(fx$spec)
   expect_identical(conn$era, "modern")
   expect_length(mcp_tools(conn), 60L)
@@ -402,7 +416,7 @@ test_that("Streamable HTTP works in both eras: probe, fallback, cache, list, cal
   expect_identical(seen$n, 2L)
   mcp_close(conn)
 
-  fx = local_mcp_fixture("legacy", "http")
+  fx = fixture("legacy", "http")
   conn = mcp_connect(fx$spec)
   expect_identical(conn$era, "legacy")
   expect_false(is.null(conn$session_id))
