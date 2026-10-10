@@ -505,10 +505,15 @@ responses_build = function(model, context, opts) {
 
   headers = list(`content-type` = "application/json", accept = "text/event-stream")
   if (!is.null(opts$credential)) {
-    headers$authorization = adp_header_secret(opts$credential, "Bearer ")
+    if (identical(compat$auth_header, "api-key")) {
+      headers$`api-key` = adp_header_secret(opts$credential)
+    } else {
+      headers$authorization = adp_header_secret(opts$credential, "Bearer ")
+    }
   }
   if (!is.null(context$request_id)) headers$`x-client-request-id` = context$request_id
-  headers = adp_merge_headers(headers, adp_provider_headers(model, opts), auth = "authorization")
+  headers = adp_merge_headers(headers, adp_provider_headers(model, opts),
+                              auth = c("authorization", "api-key"))
 
   list(url = adp_url(opts$base_url %||% "https://api.openai.com/v1", "responses"),
        method = "POST", headers = headers,
