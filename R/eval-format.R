@@ -131,3 +131,19 @@ format_eval_result = function(res, budget_tokens) {
   list(text = tr$text, images = res$images, truncated = isTRUE(tr$truncated),
        out_id = tr$out_id, spill = tr$spill)
 }
+
+#' Printed-output lines of the completed expressions for `#>` comments: at most
+#' gptr.doc_output_lines per expression, 76 characters each (contract section 4.4)
+#' @noRd
+r_doc_outputs = function(res) {
+  outs = res$outputs %||% list()
+  n = min(length(outs), as.integer(res$n_done %||% 0L))
+  if (!n) return(character())
+  cap = as.integer(gptr_opt("doc_output_lines"))
+  lines = unlist(lapply(outs[seq_len(n)], function(o) {
+    o = as.character(o)
+    o = utils::head(o[nzchar(o)], cap)
+    ifelse(nchar(o) > 76L, paste0(substr(o, 1L, 73L), "..."), o)
+  }), use.names = FALSE)
+  as_utf8(as.character(lines))
+}

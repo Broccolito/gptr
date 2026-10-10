@@ -225,8 +225,9 @@ mcp_serve_r = function(input, env, run, session = NULL) {
                                   tee = FALSE, budget_tokens = budget, rng = run$opts$rng_state,
                                   record = record)
   if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
-    session_append(session, entry_custom("gptr.mcp_r",
-      list(code = input$code, record = TRUE, status = res$status, outputs = r_doc_outputs(res))))
+    session_append(session, list(type = "custom", custom_type = "gptr.mcp_r",
+      data = list(code = input$code, record = TRUE, status = res$status,
+                  outputs = r_doc_outputs(res))))
   }
   out = format_eval_result(res, budget)
   gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"))

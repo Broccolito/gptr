@@ -92,22 +92,6 @@ r_collect_unhook = function(ids) {
   invisible(NULL)
 }
 
-#' Printed-output lines of the completed expressions for `#>` comments: at most
-#' gptr.doc_output_lines per expression, 76 characters each (contract section 4.4)
-#' @noRd
-r_doc_outputs = function(res) {
-  outs = res$outputs %||% list()
-  n = min(length(outs), as.integer(res$n_done %||% 0L))
-  if (!n) return(character())
-  cap = as.integer(gptr_opt("doc_output_lines"))
-  lines = unlist(lapply(outs[seq_len(n)], function(o) {
-    o = as.character(o)
-    o = utils::head(o[nzchar(o)], cap)
-    ifelse(nchar(o) > 76L, paste0(substr(o, 1L, 73L), "..."), o)
-  }), use.names = FALSE)
-  as_utf8(as.character(lines))
-}
-
 #' Name designated through gptr_return() during this call (the newest value record), or NULL
 #' @noRd
 r_new_value_name = function(session, n_before) {
