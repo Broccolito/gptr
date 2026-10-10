@@ -1,6 +1,12 @@
-# gptr design workspace
+# gptr design workspace <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
 Everything needed to build gptr 1.0. The folder is excluded from the package build (`.Rbuildignore`).
+
+The harness computes on objects already loaded in the running R session and reuses named
+results across turns. Model requests receive bounded descriptions and tool output; worker
+backends, checkpoints and file-backed objects have separate transfer or storage costs. The
+[user README](../README.md) and [execution guide](../vignettes/execution-model.Rmd.orig)
+explain these boundaries. Track current validation in [TESTING_PLAN.md](TESTING_PLAN.md).
 
 Historical machine snapshots in the plans and research may differ from your environment.
 Keep any current machine inventory in `LOCAL_SETUP.md` (ignored; not distributed with the repository).

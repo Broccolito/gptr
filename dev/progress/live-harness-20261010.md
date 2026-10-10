@@ -162,3 +162,118 @@ C GREEN passed283assertions (0failures/warnings/skips,13.9s); UTF-8 GREEN passed
 warnings,one C-only witness skip,12.6s). Literal glyph assertions remain in UTF-8 locales;
 C-locale tests verify bounded readable escapes and unchanged source data. Three-file lint and
 whitespace checks are clean; dependency build-version startup notes are separate.
+
+## Fresh document matrix at 390485f
+
+The immutable installed export includes the regenerated in-memory documentation and the
+listing/locale fixes. Default byte-compilation installation took 20.09s; the installation
+profiler recorded 21 samples, 399.6 MiB peak family RSS and zero sampling errors. Working
+DESCRIPTION and its user's roxygen preference were preserved.
+
+| Actual frontend / provider | Live / fresh strict replay, seconds | Independent witnesses |
+|---|---|---|
+| Direct Rscript / Versa Azure | 4.771 / 0.932 | Real fit and coefficient, one recorded block; child exit finalizer verified |
+| R Markdown / Versa Azure | 4.775 / 0.855 | Same coefficient and fit; one block |
+| Quarto / Versa Azure | 7.741 / 3.828 | Same coefficient and fit; one block |
+| Recorded R / native Jev | 1.032 / 0.349 | Logical, choice and score type/value/probability oracles; three blocks |
+| R Markdown / native Jev | 1.618 / 0.891 | Same three typed decisions and blocks |
+| Quarto / native Jev | 7.132 / 3.740 | Same three typed decisions and blocks |
+
+All six cells passed both phases with zero warning classes. Each Azure live phase emitted
+two fresh request events and two usage events; replay emitted neither. Each Jev live phase
+appended exactly three native decision-usage rows; replay appended none. Jev correctly
+emitted no agent request/usage events in either phase. These are distinct witnesses: historical
+cached metadata alone is not fresh inference evidence. The recorded R Jev fixture uses
+gptr_source(); the Azure Rscript fixture executes an actual child Rscript and checks exit.
+
+Approximate sampled live family RSS ranged 156.9–544.8 MiB for these cells. Samples include
+rendering and subprocesses, may double-count shared pages, miss short-lived children and do
+not measure an already-running model server or unified/GPU memory. The subsecond Jev replay
+had only one sample and no meaningful R memory peak. No claim about 4 GiB data or loaded-model
+memory follows from these measurements.
+
+Claude CLI's direct Rscript live phase passed the actual fit/coefficient oracle in 9.563s
+(642.0 MiB approximate family peak,11 samples,zero sampling errors). Fresh replay FAILED in
+1.081s: value beta was absent because its recorded block had an empty body. Investigation
+confirmed that approved R code executed through the CLI's owned MCP bridge was missing from
+the document trace; the shared Codex bridge is source-affected too. Retain this failed run
+and its empty-code hash; do not call CLI script replay validated until the fix is installed
+and a new live/replay run passes. The serial matrix stopped at this failure; later Codex/Qwen
+cells were not attempted by that controller.
+
+Evidence is retained in ignored live-20261010/matrix-390485f.json and its per-cell runs,
+summaries, recorded documents, controller logs and resource profiles. Each controller has
+a 900s whole-cell limit and cleans up only its witnessed process family.
+
+## Actual native R.app streaming resize
+
+Owned R.app R 4.5.0 / GUI 1.81 ran the installed 390485f with a scripted offline provider.
+An initial verbosity 1 probe correctly showed plain thinking/done notices; it did not exercise
+answer streaming. The follow-up used verbosity 2 and changed the actual window size while
+paragraphs were arriving. Its 71 message-update events observed both R and cli widths 79 then 383;
+the change occurred 24.159s into a 32.337s run. Newly printed paragraphs visibly changed from
+two lines to one, the final text matched exactly, status was idle, and the disposable input
+environment stayed empty. A wide-console screenshot is retained alongside width-events.csv
+and summary.json in ignored runs/rapp-stream-width-probe. The window was restored afterward.
+
+This establishes native GUI integration with an offline provider, not native GUI live-model
+inference, IDE completion, historical-scrollback reflow or active RStudio/VS Code resizing.
+The earlier probe's 120-sample/280 MiB family profile includes idle inspection time and does
+not profile the later streamed-resize run. Initial R.app inspection took 874s through the
+computer-use client; subsequent idle UI actions took approximately 0.1–2s. That latency is
+not a model-request or gptr execution timing.
+
+At 15:18 PDT, host CPU idle was 0%, load 40.85/37.93/36.29, physical memory 124 GiB used,
+swap 42.7 GiB and disk free 68 GiB. Unrelated high-CPU and large-memory processes were retained.
+Keep local work serial, avoid further GPU models/large allocations and defer the 4 GiB stress
+case until headroom recovers.
+
+## Native CLI recording repaired and verified at 8d13b58
+
+The owned Claude/Codex MCP bridge now records approved, successful R execution in the exact
+active session's document trace. Plan, aborted, detached, settled, wrong-owner and unrecorded
+calls do not append history. Canonical code, redaction and output formatting use the existing
+document helpers. Previously recorded empty blocks are retained as failure evidence; this
+repair applies to new recordings.
+
+The new offline recording regression first failed nine assertions. It then passed all 48;
+affected MCP, document/replay and both CLI suites passed 1,601 assertions with zero failures,
+warnings or skips. Three-file lint and whitespace checks were clean. The immutable installed
+8d13b58 export used default byte compilation: installation took 29.51s; its profiler recorded
+31 samples, 417.1 MiB peak family RSS and zero sampling errors.
+
+| Actual frontend / provider | Live / fresh strict replay, seconds |
+|---|---|
+| Direct Rscript / Claude CLI | 9.646 / 1.579 |
+| Direct Rscript / Codex CLI | 16.681 / 1.332 |
+| Direct Rscript / Qwen 3.8 27B | 70.008 / 0.809 |
+| R Markdown / Claude CLI | 9.073 / 0.657 |
+| R Markdown / Codex CLI | 9.123 / 1.181 |
+| R Markdown / Qwen 3.8 27B | 20.685 / 1.161 |
+| Quarto / Claude CLI | 11.531 / 3.135 |
+| Quarto / Codex CLI | 19.726 / 4.155 |
+| Quarto / Qwen 3.8 27B | 22.963 / 4.219 |
+
+All nine cells passed both phases, with zero warning classes and one nonempty recorded block
+each. Live execution and replay independently verified the fitted model and its coefficient.
+Each CLI live phase emitted one fresh request and usage event; Qwen emitted two in Rscript
+and three in each rendered format. Every fresh-process replay emitted zero request events,
+zero fresh usage events and zero new native decision-usage rows, preserving the recorded
+source. The controller checked successful child exit as well as the explicit phase witnesses.
+The earlier 390485f CLI failure has not been overwritten.
+
+Sampled live family RSS ranged 249.4–876.4 MiB, with zero sampling errors. These samples exclude
+the already-running Ollama model server, can double-count shared pages and miss short-lived
+children; they do not establish unified/GPU memory consumption or a large-data memory bound.
+Qwen's 70s Rscript run is slower than its subsequent 21–23s rendered runs. Concurrent host load
+rose sharply during this batch; no causal diagnosis of the model timings is established yet.
+Evidence is in ignored matrix-8d13b58.json and its per-cell documents, logs and resource profiles.
+
+## Resource limit at 15:32 PDT
+
+CPU idle was 0%, load 152.44/74.37/52.51, physical memory 127 GiB used with 296 MiB unused,
+encrypted swap 42,098.5 MiB used, and free disk 49 GiB. The memory-pressure command reported
+42% system-wide free; that metric is distinct from the top physical-unused value. The completed
+serial matrix was allowed to exit normally. Further local inference, builds, full package
+checks and large allocations are deferred until headroom recovers. Continue source review,
+remote CI inspection and documentation maintenance without adding local heavy jobs.
