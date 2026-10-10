@@ -2,11 +2,11 @@
 
 ## Delivered documentation
 
-Expanded the five existing guides and added eight, with grouped pkgdown navigation:
+Expanded the five existing guides and added nine, with grouped pkgdown navigation:
 
 | Group | Guides |
 |---|---|
-| Get started | getting-started |
+| Get started | getting-started, why-peter |
 | Use Peter | language-models, system-one, interactive-console, configuration |
 | Build workflows | script-as-history, teams-and-background, tools-and-artifacts |
 | Extend Peter | skills-and-plugins, mcp, extending-gptr |
@@ -40,7 +40,7 @@ single-thread limits; no new dependency was installed.
 All 119 package R files parse to the same expressions as the starting main revision
 `34b53cf2abbd6db65fe93f5347d139b370f767c5`, with source attributes removed. NAMESPACE is unchanged.
 Package implementation, dependency declarations and tests are unchanged. Development release
-tooling now derives the 13-guide manifest and grouped pkgdown navigation from one list.
+tooling now derives the 14-guide manifest and grouped pkgdown navigation from one list.
 
 The maintainer's initial DESCRIPTION change and untracked AGENTS.md were preserved and excluded
 from these commits. The validation snapshot used the committed DESCRIPTION and roxygen2 7.3.3,
@@ -55,12 +55,12 @@ the configured `dev/.library`, `Rscript --vanilla`, isolated child directories, 
 credentials and `GPTR_LIVE_TESTS=false`.
 
 - roxygen generation: success, no unresolved documentation links; unchanged NAMESPACE.
-- Precomputed all 13 vignettes and README: zero problems.
+- Precomputed the initial 13 vignettes and README, then the updated getting-started and new Why Peter guide: zero problems (all 14 guides).
 - pkgdown manifest, Rd coverage/spelling, README and file checks: zero problems.
 - Documentation/release checks: 71 passing assertions, zero failures, warnings or skips.
 - All 58 reference example pages: zero problems; offline execution only.
-- Complete pkgdown site: zero problems; 89 HTML pages.
-- Final static site audit: 13/13 articles, 63/63 export aliases, all navigation groups,
+- Complete pkgdown site: zero problems; 90 HTML pages.
+- Final static site audit: 14/14 articles, 63/63 export aliases, all navigation groups,
   zero broken local links/fragments, no AGENTS/CLAUDE outputs.
 - Browser inspection: homepage, article index and interactive guide render correctly;
   compact logo and local vignette navigation verified.
@@ -101,3 +101,51 @@ status do not establish model invocation permission, quota, billing, latency or 
 Next: review the PR findings with the maintainer before merge; separately authorize and plan
 bounded live harness tests using the local inventory. Release, tags and CRAN submission remain
 the maintainer's outstanding gates in HANDOFF.md.
+
+## Maintainer logo follow-up
+
+Moved all nine supplied files from `~/Downloads/gptr-logo` into `man/figures/`, with unchanged
+bytes verified before and after the move. The original light/dark SVG and PNG variants, small
+and double-resolution PNGs, and asset README are now versioned together; the Downloads folder
+is gone. Removed the old green logo from `man/img/` and updated both README source and output.
+
+The README uses a light fallback and a dark-mode picture source. Shared pkgdown branding uses
+the canonical PNG assets for the navbar and page headers, with the native light/dark/auto switch
+and paired syntax highlighting. New visitors start in light mode; existing reader preferences
+are retained. Locally supplied SVG tab icons follow the selected theme. A pkgdown 2.2.1 head
+template override changes only its favicon block, so no external favicon generator or image
+conversion is needed. Logo source artwork is unmodified; package executable code is unchanged.
+
+
+## Namesake and responsive design follow-up
+
+Added the concise Why Peter guide with primary sources for Peter Naur's ALGOL 60/syntax
+notation contribution and Peter Cathcart Wason's work with Jonathan Evans on dual processes
+in reasoning. It distinguishes gptr's software roles from human cognition and does not
+attribute the System 1/System 2 labels to Wason. README, getting-started and article navigation
+link to it.
+
+The site uses the logo's cream/ink palette and derived blue links (5.53:1 light,
+6.01:1 dark contrast against their page backgrounds), with paired a11y syntax themes.
+Mobile headers stack a 72px portrait logo above the title; wider headers contain its float.
+Tables and code scroll independently. Overflowing regions have labels and keyboard focus;
+the compact menu has bounded vertical scrolling for short windows.
+
+Browser layout checks passed for homepage, article index, configuration, Why Peter and peter()
+reference at 320, 375, 768, 1024, 1440 and 1920 CSS pixels in both themes: 60 cases, zero
+page-wide horizontal overflow, contained logos and no unfocusable overflow regions. A temporary
+copy of configuration tested doubled root/body text at 320, 768 and 1440 pixels: zero page-wide
+overflow. This is a text-scaling/reflow check, not a claim that browser zoom controls were tested.
+The temporary page was removed. Native mobile menu/theme choices and theme persistence were
+also inspected. The viewport override was reset and the local preview returned to light mode.
+
+Final static audit: 90/90 pages include shared branding/theme controls; 14/14 articles,
+63/63 export aliases and all local links, fragments and assets resolve. All nine supplied
+logo files and copied site assets retain their original hashes. The final isolated documentation
+suite passes 71 assertions with zero failures, warnings or skips; the full site rebuild succeeds.
+Evidence adds responsive-matrix.json, text-scale-matrix.json and logo-light-preview.jpg under
+ignored dev/.validation/documentation-20261010/.
+
+Hosted run 38071919571 for documentation commit 42a89f6 was still in progress at the last check;
+its completed benchmark, copy-safety, macOS-release and Ubuntu-oldrel-4 jobs had passed. These are revision-specific
+observations, not a completed hosted gate for this follow-up.

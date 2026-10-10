@@ -19,6 +19,9 @@ workspace, so a large object is loaded once and a mistake costs one re-evaluatio
 fresh run of the whole script. The same function, `peter()`, is an interactive chat at the
 console and a programmable call in scripts, loops and `if` statements.
 
+Peter's name commemorates Peter Naur and Peter Cathcart Wason. The
+[Why Peter? guide](why-peter.html) connects their work on programs and reasoning to gptr.
+
 This vignette runs without a network connection or a key. Every call uses
 `gptr_fake_provider()`, a scripted model that ships with the package, so the output is
 reproducible. Start with this example before connecting an API, subscription command-line tool

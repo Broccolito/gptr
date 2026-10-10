@@ -15,6 +15,9 @@ workspace, so a large object is loaded once and a mistake costs one re-evaluatio
 fresh run of the whole script. The same function, `peter()`, is an interactive chat at the
 console and a programmable call in scripts, loops and `if` statements.
 
+Peter's name commemorates Peter Naur and Peter Cathcart Wason. The
+[Why Peter? guide](why-peter.html) connects their work on programs and reasoning to gptr.
+
 This vignette runs without a network connection or a key. Every call uses
 `gptr_fake_provider()`, a scripted model that ships with the package, so the output is
 reproducible. Start with this example before connecting an API, subscription command-line tool
@@ -77,9 +80,9 @@ s$turns
 #> [1] 1
 gptr_usage(s, by = "model")
 #>        group requests input output cache_read cache_write cost
-#>  fake/fake-1        2  3251     36          0           0    0
+#>  fake/fake-1        2  3249     36          0           0    0
 #> # 1 row
-#> 2 requests, 3.3k tokens in, $0.0000
+#> 2 requests, 3.2k tokens in, $0.0000
 ```
 
 ## The pipe steers one session
@@ -115,7 +118,7 @@ workspace sees the original objects without copying them and keeps its own chang
 branch = gptr_fork(s2)
 branch |> peter("Answer in one word.")
 #> Four.
-#> idle . fake/fake-1 . 3 turns . 1.7k tokens . $0.0000 . s00e95747a2
+#> idle . fake/fake-1 . 3 turns . 1.7k tokens . $0.0000 . sf75a5e8e4f
 c(original = s2$turns, branch = branch$turns)
 #> original   branch
 #>        2        3

@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd by dev/release/precompute.R; edit README.Rmd. -->
 
-# gptr <img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/img/logo.png" align="right" width="140" height="140" style="width: 140px; height: auto; float: right;" alt="gptr logo"/>
+# gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
 gptr runs language model agents inside your live R session. The agent
 works on the objects that are already in memory: it inspects them, runs
@@ -10,6 +10,10 @@ object is loaded once and a mistake costs one re-evaluation instead of a
 fresh run of the whole script. One function, `peter()`, is an
 interactive chat in the console and a programmable call that you put in
 scripts, loops and `if` statements.
+
+Peter's name honors Peter Naur and Peter Cathcart Wason: readable
+programs and careful reasoning. See [Why Peter?](#why-peter) and
+`vignette("why-peter", package = "gptr")`.
 
 - **One gateway.** `peter()` with no prompt opens a chat at the console;
   with a prompt it runs the agent and returns the session, which the
@@ -69,7 +73,7 @@ ls(work)
 
 s |> peter("Which cylinder group is the most economical?")
 #> Four-cylinder cars are the most economical.
-#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . se88aa04efb
+#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . sb1b86248da
 s$turns
 #> [1] 2
 ```
@@ -141,6 +145,7 @@ MCP server or external program are shown without running them.
 
 | Task | Guide |
 |----|----|
+| Understand the name and ideas behind Peter | `vignette("why-peter")` |
 | Choose a language model; call Peter from functions and scripts | `vignette("language-models")` |
 | Make logical, choice and score decisions | `vignette("system-one")` |
 | Chat, use slash commands, or run inline R with `!` | `vignette("interactive-console")` |
@@ -163,17 +168,20 @@ and `?gptr_egress`.
 The package is `gptr`; you talk to its agent through `peter()`. The name
 honors two Peters:
 
-- **Peter Cathcart Wason** (1924-2003), the cognitive psychologist whose
-  work on human reasoning, with Jonathan Evans, framed the dual-process
-  view later known as "System 1" and "System 2" thinking. gptr joins
-  both kinds of model in one agent flow: fast, typed System 1 decisions
-  inside R control flow, and System 2 reasoning models that plan and
-  write code.
-- **Peter Naur** (1928-2016), whose name the Backus-Naur form carries: a
-  notation for writing down the syntax of programming languages. In that
-  spirit, gptr records agent sessions as ordinary documents - R scripts,
-  R Markdown and Quarto files, Jupyter notebooks - that can be read,
-  edited and replayed.
+- **Peter Naur**, the Danish computer scientist who edited the ALGOL 60
+  report and helped develop the syntax notation now called Backus-Naur
+  Form. His work connects to gptr's readable R code and history
+  documents.
+- **Peter Cathcart Wason**, the cognitive psychologist who, with
+  Jonathan Evans, studied dual processes in reasoning and the difference
+  between a response and its conscious justification. His work connects
+  to inspecting results, evidence and explanations.
+
+gptr calls typed decision models "System 1" and conversational agents
+"System 2". These are software roles; they do not imply human cognition
+or that Wason introduced those labels. The
+`vignette("why-peter", package = "gptr")` guide gives the history and
+primary sources.
 
 ## Upgrading from gptr 0.7.0
 

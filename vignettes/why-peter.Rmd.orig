@@ -1,0 +1,53 @@
+---
+title: "Why Peter?"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Why Peter?}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+**gptr is the R package; Peter is its agent persona and the name of its main function,
+`peter()`.** You install and load gptr, then ask Peter to work with your live R objects.
+A conversational model returns a session; a typed decision model returns a vector that
+ordinary R code can use. The name brings together two influences: readable programs and
+the study of reasoning.
+
+## Peter Naur: make the program readable
+
+Peter Naur was a Danish computer scientist and a central contributor to ALGOL 60. He edited
+its language report, which used the syntax notation now known as **Backus-Naur Form** to
+describe how programs are constructed. This was collaborative work, including John Backus;
+Naur helped make the language's definition precise and readable.
+[Association for Computing Machinery award announcement](https://www.naur.com/ACM.html) describes his contribution, and
+the [revised ALGOL 60 report](https://www.cs.tufts.edu/comp/150FP/archive/peter-naur/algol60.pdf)
+shows the notation in use.
+
+For gptr, the connection is practical: an analysis should leave code you can read, inspect
+and run. Peter works inside R, and a designated history document can retain the R code an
+agent executed beside the prompt that requested it. Recording preserves work for review;
+replay still depends on the code's inputs, packages and side effects.
+
+## Peter Cathcart Wason: examine the reasoning
+
+Peter Cathcart Wason studied human reasoning. With Jonathan St. B. T. Evans, he proposed a
+dual-process account in
+["Dual processes in reasoning?"](https://cogsci.ucsd.edu/~coulson/203/wason-evans.pdf).
+Their study distinguished processes behind people's responses from the conscious reasons
+people gave for them. An explanation could be a justification rather than an accurate account
+of how a response arose.
+
+That influence suggests a useful discipline for model-assisted analysis: examine the result
+and the evidence, as well as the explanation.
+
+## Two ideas in one R workflow
+
+gptr uses **System 1** for typed logical decisions, choices and scores with probabilities, and
+**System 2** for conversational agents that produce text and request tools. These are software
+roles inspired by reasoning research; they do not establish that models reproduce human
+cognition or that Wason introduced those labels.
+
+Use [typed decisions](system-one.html) to screen or route inputs, keeping uncertainty visible.
+Use [agent sessions](language-models.html) to inspect objects and carry out requested R work.
+Keep useful work in a [readable history document](script-as-history.html), and verify the
+calculations and outputs before relying on a model-generated explanation.
