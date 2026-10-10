@@ -126,11 +126,21 @@ call. The header identifies the block, model, date and prompt hash; the body has
 its recorded code. `## Decision:` retains a model-supplied note, and `#>` retains bounded
 output. A note is a model explanation, not proof that the code is correct.
 
-Writing blocks also depends on recording settings and the document being writable. A
-binding does not override `record = "off"`. Without a binding, source discovery can find a
-call in a document, but recording still needs consent. At an interactive console, agreeing
-to transcript recording creates a script under `.gptr/transcripts/`; an explicit
+The document must be writable, and recording needs consent. `gptr_doc(path)` supplies that
+consent explicitly; `record = "off"` prevents automatic recording into discovered documents.
+To opt out for one call, including a call in a bound document, pass
+`.opts = list(record = FALSE)`. Pass it to each call in a pipe chain that should not record.
+`record = TRUE` in `.opts` keeps the usual consent checks; it does not supply consent.
+Without a binding, source discovery can find a call in a document. At an interactive console,
+agreeing to transcript recording creates a script under `.gptr/transcripts/`; an explicit
 `gptr_doc(path, format = "transcript")` selects an R transcript target.
+
+Main-session recorded code runs as ordinary document code on replay. Keep its input objects
+in the document's evaluation environment, using `peter()`'s default caller environment. An
+arbitrary custom `envir` is not restored or applied to the following recorded chunk. For a
+function that works in a separate environment, opt out with `.opts = list(record = FALSE)`
+and keep its executable steps explicitly in the function. Forks and team children have their
+own recorded overlay wrappers.
 
 ## Inspecting and replaying
 

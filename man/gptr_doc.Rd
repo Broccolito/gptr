@@ -30,15 +30,18 @@ run that was killed.
 }
 \details{
 Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-or functions do not. Binding a document neither reconstructs earlier unrecorded turns
-nor overrides recording being off. A narrative summary or model-generated script draft
-needs review and execution checks before it can serve as a reproducible workflow.
+or functions do not. Binding supplies recording consent even when automatic recording is
+off, but \code{.opts = list(record = FALSE)} suppresses recording for that call. Binding does
+not reconstruct earlier unrecorded turns. A narrative summary or model-generated script
+draft needs review and execution checks before it can serve as a reproducible workflow.
 }
 \section{Options}{
 
 Options of history documents (\code{?gptr_options} collects every option):
 \code{gptr.record} (settings, \code{"ask"}): \code{"auto"} records into documents without asking, \code{"off"}
-never records; also the settings key \code{record}, which a project can only tighten.
+prevents automatic recording; an explicit binding supplies consent. Also the settings key
+\code{record}, which a project can only tighten. A call's \code{.opts = list(record = FALSE)} opts out
+even when bound; \code{.opts = list(record = TRUE)} retains the usual consent checks.
 \code{gptr.replay} (settings, \code{"auto"}): the replay mode \code{"auto"}, \code{"replay"}, \code{"live"} or
 \code{"record"} (also the \code{GPTR_REPLAY} environment variable); a call's \verb{replay =} argument wins.
 \code{gptr.doc_output_lines} (\code{12}): \verb{#>} output lines recorded per execution.

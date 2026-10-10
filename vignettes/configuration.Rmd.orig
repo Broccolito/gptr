@@ -106,7 +106,7 @@ guarantee of free execution. Disabling a direct tool does not make in-process R 
 | Context and history setting | Default and purpose |
 |---|---|
 | `context` | `"summary"`; `"names"` reduces automatic descriptions and `"none"` omits automatic workspace context. Explicitly attached data and tool results remain relevant. |
-| `record` | `"ask"`; `"auto"` or `"off"` governs permission to write document blocks. |
+| `record` | `"ask"`; `"auto"` allows automatic document recording and `"off"` prevents it. An explicit `gptr_doc(path)` binding supplies recording consent. |
 | `replay` | `"auto"`; `"replay"`, `"live"`, `"record"` choose how recorded blocks are used. |
 | `transcript` | `"ask"`; `"file"`, `"active-document"`, `"off"` select console recording. |
 | `doc` | `list(outputs = TRUE, output_lines = 12)` for recorded outputs. |
@@ -117,8 +117,11 @@ guarantee of free execution. Disabling a direct tool does not make in-process R 
 | `checkpoint` | `"on"`; `"files"` or `"off"` changes checkpoint capture. |
 | `plot` | Registered defaults `list(width = 768, height = 512, res = 120)`. Current renderers read `gptr.plot_width`, `gptr.plot_height` and `gptr.plot_res` options; use those to change model-bound plots. |
 
-Recording and replay are separate controls. `record = "off"` prevents document recording;
-`replay = "replay"` refuses uncached model calls. See [script as history](script-as-history.html)
+Recording and replay are separate controls. `record = "off"` prevents automatic recording;
+an explicit `gptr_doc(path)` binding supplies consent. To suppress recording for one call,
+even when bound, use `.opts = list(record = FALSE)`; repeat it for each call in a pipe chain.
+`.opts = list(record = TRUE)` does not grant consent. `replay = "replay"` refuses uncached model calls.
+See [script as history](script-as-history.html)
 for each replay mode and [token efficiency](token-efficiency.html) for compaction and budgets.
 
 | Extension and interaction setting | Default and purpose |

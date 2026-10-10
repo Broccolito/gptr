@@ -86,7 +86,14 @@ defines this final tarball gate. Include manual validation in the final check, o
 record it when a local `--no-manual` run is necessary. Refresh submission comments with
 actual results and submit only after the maintainer's final authorization.
 
-## Stream-order patch: cross-block redaction assessment
+## Historical stream-order review: cross-block redaction assessment
+
+This source-review candidate was subsequently reproduced on both the earlier and patched
+versions, then corrected by `b8f8386`: text blocks now retain canonical separators and
+buffered tails flush before tool/pause boundaries. The synthetic console regressions pass
+(154 assertions, no failures/warnings) and changed files lint clean. See
+[live harness evidence](live-harness-20261010.md#console-content-boundaries). The analysis
+below records the earlier hypothesis; it is not an outstanding finding or a new assessment.
 
 The patch keeps secret redaction per content index:
 [run_on_event](../../R/agent-run.R#L1133) creates one redactor per block;
@@ -126,3 +133,25 @@ test_that("a registered synthetic value cannot reappear across text blocks", {
 Run it both before and after the patch, including a captured console assertion, before
 classifying the result or changing redaction. Keep hold-limit failure tests and same-block
 secret protection intact. No security runtime change was made during this review.
+
+## Current R and exact-artifact checkpoint
+
+Primary sites currently identify R 4.6.1 as release and an Apple Silicon R-devel 4.7.0 build.
+This machine's live fixtures use R 4.5.0. Local diagnostics must state that version; they do
+not replace current-release/R-devel checks. Published macOS framework binaries target the
+system framework location. An isolated source build with a private prefix, or an official
+builder check of the exact artifact, avoids replacing the user's R installation.
+[CRAN macOS](https://cran.r-project.org/bin/macosx/),
+[nightly builds](https://mac.r-project.org/),
+[R administration](https://cran.r-project.org/doc/manuals/r-devel/R-admin.html#Frameworks)
+
+`dev/ci/isolated-check.R check` rebuilds its source and uses `--no-manual`; it does not take
+a nominated archive. For the final artifact gate, export the committed shipping inputs,
+build once, and run `R CMD check --as-cran` on that exact archive with the manual and incoming
+checks enabled. Retain its SHA256, bytes, archive listing, installed sizes, section/example/
+test/vignette timings, and actual R version. Repository CI independently rebuilds the
+checkout and is not proof of byte-identical archive validation.
+
+The committed runtime `4e66376` installed with default byte compilation in 16.14s and peaked
+at 293 MiB process-family RSS. This is an installation diagnostic, not a fresh tarball check
+or total package-size measurement. No source-size or timing threshold is relaxed.

@@ -833,9 +833,10 @@ doc_console_append = function(lines, session = NULL) {
 #' run that was killed.
 #'
 #' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
-#' or functions do not. Binding a document neither reconstructs earlier unrecorded turns
-#' nor overrides recording being off. A narrative summary or model-generated script draft
-#' needs review and execution checks before it can serve as a reproducible workflow.
+#' or functions do not. Binding supplies recording consent even when automatic recording is
+#' off, but `.opts = list(record = FALSE)` suppresses recording for that call. Binding does
+#' not reconstruct earlier unrecorded turns. A narrative summary or model-generated script
+#' draft needs review and execution checks before it can serve as a reproducible workflow.
 #'
 #' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
 #'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.
@@ -848,7 +849,9 @@ doc_console_append = function(lines, session = NULL) {
 #' @section Options:
 #' Options of history documents (`?gptr_options` collects every option):
 #' `gptr.record` (settings, `"ask"`): `"auto"` records into documents without asking, `"off"`
-#' never records; also the settings key `record`, which a project can only tighten.
+#' prevents automatic recording; an explicit binding supplies consent. Also the settings key
+#' `record`, which a project can only tighten. A call's `.opts = list(record = FALSE)` opts out
+#' even when bound; `.opts = list(record = TRUE)` retains the usual consent checks.
 #' `gptr.replay` (settings, `"auto"`): the replay mode `"auto"`, `"replay"`, `"live"` or
 #' `"record"` (also the `GPTR_REPLAY` environment variable); a call's `replay =` argument wins.
 #' `gptr.doc_output_lines` (`12`): `#>` output lines recorded per execution.

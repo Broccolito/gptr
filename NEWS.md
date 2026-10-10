@@ -76,6 +76,12 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 * See `?gptr_security` and `?gptr_egress` for what gptr does on your behalf and what it sends to
   model providers, and `?gptr_options` for every option.
 
+## Fixes
+
+* `.opts = list(record = FALSE)` suppresses console recording questions and recorded
+  System 1/System 2 blocks, including in explicitly bound documents. `TRUE` retains the
+  existing recording consent checks.
+
 # gptr 0.7.0
 
 * Last release of the 0.x interface, `get_response()` and `dataframe_to_text()` for the
