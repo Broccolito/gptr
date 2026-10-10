@@ -202,6 +202,7 @@ s1_df_record = function(df, i) {
 as_state = function(x, label, ...) UseMethod("as_state")
 
 #' @noRd
+#' @export
 as_state.default = function(x, label, name = NULL, envir = NULL, ...) {
   r = s1_small(x)
   if (isTRUE(r$ok) && (!is.list(r$value) ||
@@ -212,6 +213,7 @@ as_state.default = function(x, label, name = NULL, envir = NULL, ...) {
 }
 
 #' @noRd
+#' @export
 as_state.data.frame = function(x, label, name = NULL, envir = NULL, ...) {
   n = nrow(x)
   if (n == 1L) return(s1_df_record(x, 1L))
@@ -228,6 +230,7 @@ as_state.data.frame = function(x, label, name = NULL, envir = NULL, ...) {
 }
 
 #' @noRd
+#' @export
 as_state.gptr_session = function(x, label, ...) {
   d = session_data(x)
   cap = gptr_opt("s1_state_max")
