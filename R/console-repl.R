@@ -602,6 +602,19 @@ repl_main = function(rs) {
   piped = rs$session
   on.exit(repl_close(rs), add = TRUE)
   rs$reader = console_reader(rs$stdin)
+  # Native Unix readline keeps ! in its completion token by default. Let it complete the R
+  # expression after !/!! without changing a caller-owned completer or an editor's input engine.
+  if (!rs$stdin && identical(.Platform$OS.type, "unix") && gptr_is_interactive() &&
+      isTRUE(capabilities("cledit")[["cledit"]]) && isatty(stdin()) &&
+      front_end() %in% c("terminal", "vscode", "unknown") &&
+      !identical(Sys.getenv("R_COMPLETION"), "FALSE") &&
+      !is.function(utils::rc.getOption("custom.completer"))) {
+    breaks = getOption("rl_word_breaks", " \t\n\"\\'`><=%;,|&{()}")
+    if (!grepl("!", breaks, fixed = TRUE)) {
+      completion_options = options(rl_word_breaks = paste0(breaks, "!"))
+      on.exit(options(completion_options), add = TRUE)
+    }
+  }
   if (rs$stdin) {
     set = list()
     if (is.null(getOption("gptr.interactive"))) set$gptr.interactive = TRUE
