@@ -20,6 +20,11 @@ Starts the queued input of an idle session (built with \code{.run = FALSE}, or g
 with \code{\link[=gptr_steer]{gptr_steer()}}) and pumps it until \code{turns} model turns have ended or the run settles. A
 running session is advanced the same way.
 }
+\details{
+\code{.run = FALSE} builds a session without making its model request; \code{\link[=gptr_step]{gptr_step()}} or
+\code{\link[=gptr_wait]{gptr_wait()}} starts it. Supply an explicit workspace with \verb{envir =} when results must
+remain available outside the function that creates the session.
+}
 \examples{
 s = peter("Plan the analysis", model = gptr_fake_provider(list("Plan: ...")), .run = FALSE,
          envir = new.env())

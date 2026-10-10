@@ -28,6 +28,12 @@ Nothing is written until a block is recorded. \code{gptr_doc(FALSE)} removes the
 could not be written: a Jupyter notebook that was open, or the deferred writes of an \code{Rscript}
 run that was killed.
 }
+\details{
+Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
+or functions do not. Binding a document neither reconstructs earlier unrecorded turns
+nor overrides recording being off. A narrative summary or model-generated script draft
+needs review and execution checks before it can serve as a reproducible workflow.
+}
 \section{Options}{
 
 Options of history documents (\code{?gptr_options} collects every option):

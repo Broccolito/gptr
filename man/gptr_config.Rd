@@ -19,17 +19,36 @@ invisibly (a named list; \code{NULL} where the key was unset).
 \description{
 With no arguments, returns the effective settings with the layer each value came from:
 package defaults < user \code{settings.json} < project \code{.gptr/settings.json} (an untrusted project
-only tightens \code{mode}, \code{context}, \code{record} and permissions) < the user-level project file <
-\verb{options(gptr.*)} < this R session. With named arguments, sets those keys in one scope.
+only tightens \code{mode}, \code{context}, \code{record}, permission rules and local-only inference) < the
+user-level project file < \verb{options(gptr.*)} < this R session. With named arguments, sets
+those keys in one scope.
 }
 \details{
 \code{model}, \code{small_model}, \code{system1}, \code{mode} and \code{preset} take bare names (\code{mode = plan}); \code{NULL}
 removes a key from the scope. \code{egress} (the providers you allow automatic context to go to) is
 accepted only at user scope. Local-only Ollama inference (\code{providers = list(ollama = list(local_only = FALSE))}) can be turned off only at user or session scope; a project can only
 keep it on. Called from model code during a run, it is refused.
+
+The \code{"session"} scope means this R process, not one conversation. User settings live at
+\code{tools::R_user_dir("gptr", "config")/settings.json}; project settings live in \verb{.gptr/}.
+A no-argument call always reads effective values, even when \code{.scope} is supplied. Inspect
+\code{attr(gptr_config(), "sources")} to see their origins. Named lists merge with lower layers;
+protected objects such as \code{providers} must be set as a whole named list.
 }
+\section{Choosing controls}{
+
+Use settings for defaults such as \code{model}, \code{mode}, \code{context}, \code{budget}, \code{record}, \code{replay}
+and registered extension selections. Use \link{gptr_options} for transport timeouts, output caps,
+undo retention and concurrency. Arguments to \code{\link[=peter]{peter()}} choose values for one call, within
+inherited safety restrictions. \code{vignette("configuration", package = "gptr")} groups all
+core settings and options and explains trust and scope.
+}
+
 \examples{
 old = gptr_config(mode = plan, .scope = "session")
 gptr_config()$mode
 gptr_config(mode = old$mode, .scope = "session")
+}
+\seealso{
+\code{\link[=gptr_init]{gptr_init()}}, \code{\link[=gptr_trust]{gptr_trust()}}, \code{\link[=gptr_permissions]{gptr_permissions()}} and \link{gptr_options}.
 }

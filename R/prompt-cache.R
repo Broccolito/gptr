@@ -165,6 +165,8 @@ prompt_cache_gap_state = function(s) {
 
 #' The built-in cache_policy "default": anchors per provider, gap-based tail TTL, cache key
 #' `caps$cache` names the provider mechanism (missing: none, contract section 8.1).
+#' These anchors request supported prefix reuse; the provider still determines hits, expiry
+#' and accounting. This is separate from the local System 1 and document answer caches.
 #' @noRd
 prompt_cache_plan_gap = function(parts, caps, session) {
   anchors = switch(caps$cache %||% "none",

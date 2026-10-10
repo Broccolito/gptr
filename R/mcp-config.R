@@ -870,6 +870,8 @@ mcp_forget_conn = function(name) {
 #' @return A `gptr_mcp_servers` data frame (`name`, `source`, `transport`, `era`, `status`,
 #'   `tools`, `exposure`, `tokens`, `trusted`) or, with `tools = TRUE`, a data frame with
 #'   `server`, `tool`, `signature`, `exposure` and `tokens`.
+#' @seealso [gptr_mcp_add], [gptr_mcp_remove], [gptr_login], [gptr_mcp_serve];
+#'   `vignette("mcp", package = "gptr")` for setup, authentication and tool calls.
 #' @examples
 #' gptr_mcp()
 #' @export

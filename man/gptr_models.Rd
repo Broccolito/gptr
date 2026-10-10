@@ -16,20 +16,30 @@ first.}
 \item{refresh}{\code{TRUE} downloads the current models.dev catalog with ETag revalidation into
 the user cache. For a local provider (\code{provider = "ollama"}, \code{"lmstudio"}, ...) it asks
 that server for its installed models instead (a 1 second limit per request; for Ollama the
-native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints, on a loopback address only).
+native \verb{/api/version}, \verb{/api/tags} and \verb{/api/show} endpoints). Ollama discovery requires a
+loopback address under the default local-only policy; only an explicit human setting at
+user or session scope can relax it (see \code{\link[=gptr_config]{gptr_config()}}).
 The only network use of this function; it never starts or installs a server and never
 downloads a model.}
 }
 \value{
 A \code{gptr_models} data frame with columns \code{ref}, \code{provider}, \code{name}, \code{context},
-\code{max_output}, \code{input_price}, \code{output_price} (USD per million tokens, in force today; \code{0}
-for local inference, \code{NA} when unknown), \code{reasoning}, \code{aliases} and \code{status}.
+\code{max_output}, \code{input_price}, \code{output_price} (USD per million tokens, selected for today's
+date from the available catalog; \code{0} for verified local inference, \code{NA} when unknown),
+\code{reasoning}, \code{aliases} and \code{status}. Catalog prices can be stale and are not an account quote.
 }
 \description{
 Searches the merged model catalog: the shipped snapshot (models.dev plus gptr's reviewed
 prices and capabilities), a refreshed copy in \code{tools::R_user_dir("gptr", "cache")}, models
 declared by registered providers, user configuration and discovered local servers. Offline
 by default: only \code{refresh = TRUE} touches the network.
+}
+\details{
+A catalog entry describes a route, not current account access. Copy its \code{ref} into the
+\code{model} argument of \code{\link[=peter]{peter()}} to choose that route. Ollama routes require current installed
+model evidence before inference; discovery does not pull models. See
+\code{vignette("language-models", package = "gptr")} for setup and \code{\link[=gptr_providers]{gptr_providers()}} for
+credentials and reachability.
 }
 \examples{
 gptr_models("sonnet")

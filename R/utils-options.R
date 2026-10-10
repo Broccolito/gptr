@@ -214,7 +214,8 @@ s3_register = function(generic, class, method = NULL) {
 #' @section Interaction and output:
 #' - `gptr.quiet` (logical, `FALSE`): silence notices and progress messages.
 #' - `gptr.interactive` (logical or `NULL`, `NULL`): force the decision whether a person is
-#'   present to answer questions and permission prompts.
+#'   present to answer questions and permission prompts. This does not supply a UI or an answer
+#'   in an unattended process.
 #' - `gptr.verbose` (integer or `NULL`, `NULL`): 0 silent, 1 progress on standard error, 2 the
 #'   streamed console, 3 debugging; `NULL` chooses by context (0 in knitr and testthat, 1 under
 #'   Rscript, 2 at the console).
@@ -362,6 +363,7 @@ s3_register = function(generic, class, method = NULL) {
 #' - `_R_CHECK_PACKAGE_NAME_`: set by `R CMD check`; outside the package's own tests gptr then
 #'   replays recorded document blocks only and runs at most two child processes at a time.
 #'
-#' @seealso [gptr_config()] for settings stored in files, [gptr_security] and [gptr_egress].
+#' @seealso [gptr_config()] for settings stored in files, [gptr_security] and [gptr_egress];
+#'   `vignette("configuration", package = "gptr")` for scope, precedence and grouped examples.
 #' @name gptr_options
 NULL

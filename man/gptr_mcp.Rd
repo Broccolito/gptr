@@ -30,3 +30,7 @@ an untrusted project are listed but never started.
 \examples{
 gptr_mcp()
 }
+\seealso{
+\link{gptr_mcp_add}, \link{gptr_mcp_remove}, \link{gptr_login}, \link{gptr_mcp_serve};
+\code{vignette("mcp", package = "gptr")} for setup, authentication and tool calls.
+}

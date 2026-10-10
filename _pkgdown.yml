@@ -95,9 +95,23 @@ articles:
 - title: "Get started"
   contents:
   - getting-started
-- title: "Guides"
+- title: "Use Peter"
   contents:
+  - language-models
   - system-one
+  - interactive-console
+  - configuration
+- title: "Build workflows"
+  contents:
   - script-as-history
+  - teams-and-background
+  - tools-and-artifacts
+- title: "Extend Peter"
+  contents:
+  - skills-and-plugins
+  - mcp
   - extending-gptr
+- title: "Understand execution"
+  contents:
+  - execution-model
   - token-efficiency

@@ -545,7 +545,7 @@ s1_images = function(images, target) {
   unname(images)
 }
 
-#' The egress acknowledgement and the replay guard before any System 1 request (contract 7.8;
+#' The egress acknowledgment and the replay guard before any System 1 request (contract 7.8;
 #' IC-45, IC-47, IC-74)
 #'
 #' The call's own `replay =` guard runs first (a replayed miss is not_recorded); egress is checked

@@ -1,0 +1,237 @@
+---
+title: "Skills and plugins"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Skills and plugins}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+A skill teaches a workflow; a prompt template turns a repeated request into a slash command;
+an agent definition describes a specialist. A plugin distributes these resources and can add R
+tools or MCP servers. Start with Markdown when instructions are enough. Use the
+[extension API](extending-gptr.html) when you need executable behavior.
+
+## Find and use skills
+
+List resources without running plugin code:
+
+
+``` r
+library(gptr)
+gptr_skills(scope = "all")
+gptr_agents(scope = "project")
+gptr_plugins(installed = TRUE)
+```
+
+`gptr_skills(scope = c("all", "project", "user", "packages"))` reports each skill's name,
+description, source, path, catalog token estimate and visibility. The same scope choices apply
+to `gptr_agents()`. A short skill catalog helps the model choose relevant instructions; the body
+is loaded on demand. Preload a known skill with `skills = "name"`:
+
+
+``` r
+peter("Review the normalization steps", skills = "analysis-review", model = "provider/model")
+peter$read("skill:analysis-review/SKILL.md")
+peter$read("skill:analysis-review/references/checklist.md")
+```
+
+These paths refer to files inside the skill directory. Keep long references and examples in
+separate files and tell the skill when to read them. See [Language models](language-models.html)
+for selecting a provider, and [Tools and artifacts](tools-and-artifacts.html) for reading files.
+
+## Write a skill
+
+Put `SKILL.md` in `.gptr/skills/analysis-review/` for a project, or in
+`file.path(tools::R_user_dir("gptr", "config"), "skills", "analysis-review")` for your own sessions.
+A minimal file is:
+
+```yaml
+---
+name: analysis-review
+description: Review an R analysis for units, missing values and reproducibility.
+---
+Check the input dimensions and missing values before interpreting results.
+Report quantities with units. Read references/checklist.md for the detailed checks.
+Ask before changing the analysis.
+```
+
+Use a lowercase name of at most 64 characters with letters, digits and hyphens, beginning with
+a letter or digit. Avoid a trailing hyphen or consecutive hyphens.
+`description` is required and should say when to use the skill. `name` defaults to the folder
+name. `disable-model-invocation: true` hides a skill from automatic catalog selection; an
+explicit `skills =` preload still works. `allowed-tools` is retained as metadata and does not
+grant or restrict permissions by itself.
+
+Project discovery also recognizes `.agents/skills/` and `.claude/skills/`. User discovery includes
+the gptr configuration directory and compatible `.agents`, `.claude`, `.codex` and `.pi/agent`
+skill directories. Attached packages and enabled plugins can supply skills. For another location,
+set `skills.paths`; relative paths belong to the project, while absolute or `~/` paths are user
+resources:
+
+
+``` r
+gptr_config(skills = list(paths = "training/skills"), .scope = "project")
+gptr_reload()
+```
+
+## Prompt templates and project instructions
+
+Save a prompt template as `.gptr/prompts/review.md`, or under the user's gptr `prompts/` directory.
+Its file name becomes `/review` in the [interactive console](interactive-console.html):
+
+```yaml
+---
+description: Review an analysis section
+argument-hint: section focus
+---
+Review $1. Focus on ${2:-reproducibility}. The full request is: $ARGUMENTS
+```
+
+For example, `/review "normalization steps" "missing values"` substitutes the two quoted
+arguments. `$1`, `$2`, `$ARGUMENTS` and `$@` cover the common forms; `${1:-default}` provides a
+fallback, `${@:2:2}` takes a slice, and Claude's `$ARGUMENTS[0]` selects the first argument.
+Substitution happens once and does not evaluate R or shell code. Template `model` and
+`allowed-tools` fields are retained as metadata; the generated command does not apply them.
+An existing slash command wins over a template with the same name.
+
+Use `AGENTS.md` for instructions that apply to a directory rather than a selected workflow.
+From the project root to the current directory, gptr takes the first existing file among
+`AGENTS.override.md`, `AGENTS.md` and `CLAUDE.md`, and also reads `CLAUDE.local.md`. It includes
+user instructions from the gptr configuration directory and `.gptr/vignette.Rmd` when present.
+These are instruction data; executable extensions live in a different directory.
+
+## Agent definition files
+
+An agent file is Markdown with required `name` and `description` frontmatter. Save this as
+`.gptr/agents/reviewer.md`:
+
+```yaml
+---
+name: reviewer
+description: Check an analysis and report issues without changing files.
+model: inherit
+tools: [r, read, grep, find, ls]
+preset: minimal
+max_turns: 8
+---
+Inspect the supplied objects and files. Give evidence for each issue and suggest a fix.
+```
+
+Load a definition by name or file; pass it to `agents =` to make the specialist available:
+
+
+``` r
+reviewer = gptr_agent("reviewer")
+reviewer = gptr_agent(file = ".gptr/agents/reviewer.md")
+peter("Have the reviewer check this analysis", agents = list(reviewer))
+```
+
+Definitions can also set `skills`, `backend`, permission `mode` and a structured `returns`
+schema. `gptr_agent()` creates the same records in R. An agent definition does not itself run a
+review; execution and object transfer are covered in
+[Teams and background work](teams-and-background.html).
+Compatible `.claude/agents`, `.codex/agents` and `.pi/agents` directories are discovered too.
+
+## Package a plugin
+
+An R package stores its resources under `inst/gptr/`; the installed directory is `gptr/`.
+Add these fields to `DESCRIPTION`:
+
+```text
+Imports: gptr
+Config/gptr/plugin: true
+Config/gptr/api: >= 1.0, < 2
+```
+
+A directory plugin instead keeps `plugin.json` at its root. This manifest works for an R package
+with an exported factory `gptrlab::gptr_plugin`:
+
+```json
+{
+  "name": "gptrlab",
+  "version": "0.1.0",
+  "description": "Analysis review instructions and tools",
+  "gptr": {"api": ">= 1.0, < 2"},
+  "skills": "skills",
+  "prompts": "prompts",
+  "agents": "agents",
+  "mcpServers": "mcp.json",
+  "extension": {
+    "entry": "gptrlab::gptr_plugin",
+    "activation": "lazy",
+    "provides": {"tool": ["gptrlab/add"]},
+    "declarations": {
+      "gptrlab/add": {"signature": "add(a, b)", "description": "Add two numbers"}
+    }
+  }
+}
+```
+
+The factory registers the promised records:
+
+
+``` r
+gptr_plugin = function(gptr) {
+  gptr$require(">= 1.0, < 2")
+  schema = list(type = "object", required = I(c("a", "b")),
+                properties = list(a = list(type = "number"), b = list(type = "number")))
+  gptr$register(gptr::gptr_tool("add", "Add two numbers", parameters = schema,
+                               fun = function(a, b) a + b, exposure = "r", namespace = "gptrlab"))
+}
+```
+
+Export that function from the package. For a directory plugin, put a factory as the last
+expression of each `extensions/*.R` file instead of using a package entry point.
+Enable an installed plugin, or an existing directory, for a call:
+
+
+``` r
+peter("Review the analysis", plugins = "gptrlab")
+peter("Review the analysis", plugins = "./lab-plugin")
+gptr_config(plugins = "gptrlab", .scope = "user")
+gptr_check("gptrlab", error = TRUE)
+```
+
+`gptr_check()` validates a package and can execute its extension factory in a scratch registry;
+review its code before checking or enabling it. Listing with `gptr_plugins()` only reads metadata.
+R code activates lazily when the manifest declares `extension.provides`, unless activation is
+`"eager"`. Without those declarations, code loads eagerly. Resource discovery and code activation
+are separate: skills and templates can be available before the package namespace loads.
+
+Claude bundles with `.claude-plugin/plugin.json` can contribute skills, commands, agents and MCP
+configuration. gptr reads compatible installed Claude plugin inventories but does not install
+plugins for you. Claude hooks and executable Claude plugin behavior are not imported. Supported
+root substitutions include `${CLAUDE_PLUGIN_ROOT}` and `${GPTR_PLUGIN_ROOT}` in plugin resources.
+See [MCP](mcp.html) for the connection and authentication steps.
+
+## Trust and precedence
+
+Project skills, templates, executable extensions, plugins and MCP servers require project trust.
+Review a project before calling `gptr_trust(".", trust = TRUE)`. Untrusted agent definitions have
+special restrictions on their model and tools and require interactive confirmation when usable;
+unattended runs refuse them. [Configuration](configuration.html) explains the trust boundary.
+
+For the same resource kind and name, session definitions take priority over trusted project
+resources, then user resources, plugins and built-ins. Equal-rank collisions keep the first
+registration and produce a diagnostic. Built-in permission safeguards remain active. Inspect
+`gptr_registry(diagnostics = TRUE)` when a resource is missing or shadowed; `gptr_reload()`
+rereads changed resources for later use.
+
+The smallest executable extension can be tried offline without creating a plugin:
+
+
+``` r
+library(gptr)
+units = function(gptr) {
+  gptr$register(gptr_prompt_section("example_units", "Report quantities with units."))
+}
+fake = gptr_fake_provider(list("The distance is 3 m."))
+s = peter("Report the distance", extensions = units, model = fake, envir = new.env())
+s$text
+#> [1] "The distance is 3 m."
+```
+
+For recorded workflows that others can replay, see [Script as history](script-as-history.html).

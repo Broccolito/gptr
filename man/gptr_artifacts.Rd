@@ -34,6 +34,13 @@ serves it from a supervised background R process on \verb{127.0.0.1}, so the con
 \code{gptr_artifacts()} lists the artifacts of the workspace (\verb{.gptr/}, else a temporary
 directory) and manages their processes.
 }
+\details{
+The built-in \code{kind = "html"} uses a working \code{page.html} and a Shiny serving wrapper.
+Both built-in kinds need Shiny to launch. \code{peter$app(..., launch = FALSE)} creates a version
+without launching it; startup and browser checks therefore remain unperformed. Browser
+session checks and screenshots additionally need chromote and Chrome. A check value of
+\code{NA} means it was skipped. Separate processes organize execution but are not OS sandboxes.
+}
 \section{Security considerations}{
 
 An artifact runs model-written code in a separate R process whose environment holds none of
@@ -52,4 +59,8 @@ one version may snapshot; above it \code{peter$app()} signals \code{gptr_error_a
 
 \examples{
 gptr_artifacts()                      # an empty listing when no artifact exists
+}
+\seealso{
+\code{vignette("tools-and-artifacts", package = "gptr")} for working files, data
+snapshots, checks and lifecycle examples.
 }

@@ -1256,10 +1256,18 @@ plugin_candidates = function(installed = FALSE) {
 #' With `installed = TRUE` it also scans every installed package for `inst/gptr/`. Nothing is
 #' loaded or run. A plugin enabled both for the process and for a live session is listed once.
 #'
+#' Enable a plugin with `peter(plugins = "name")` or the `plugins` configuration setting.
+#' Packages put resources in `inst/gptr/`; directory plugins use a root `plugin.json`.
+#' R factories activate lazily only when the manifest declares `extension.provides` and does
+#' not request eager activation. Claude bundles contribute declarative resources; their hooks
+#' and executable plugin behavior are not imported.
+#'
 #' @param installed `TRUE` to scan every installed package as well.
 #' @return A `gptr_plugins` data frame with columns `name`, `version`, `api`, `kind`
 #'   (`package`, `directory`, `claude-plugin`), `enabled`, `state` (`lazy`, `active`,
 #'   `disabled`, `failed`), `provides`, `tokens` and `path`.
+#' @seealso [gptr_check], [gptr_reload], [gptr_registry];
+#'   `vignette("skills-and-plugins", package = "gptr")` for resource files and plugin manifests.
 #' @examples
 #' gptr_plugins(installed = TRUE)
 #' @export

@@ -37,6 +37,11 @@ it.
 Members evaluate R code in their own environment (\verb{envir =}) with their own random-number
 stream, and share one budget, as one \code{peter()} call does. A member's \verb{tools =}, \verb{budget =} and
 the run options in its \code{.opts} (such as \code{max_turns}) are not applied.
+
+Use \code{peter(..., agents = list(...))} for named roles on one task, or \verb{parallel =} for one
+task per input element. Those routes start new foreground children and cannot be deferred
+as members here. A team report is model-generated output; inspect child statuses and
+workspace results before continuing the team with a synthesis prompt.
 }
 \examples{
 fake = gptr_fake_provider(list("ok"))

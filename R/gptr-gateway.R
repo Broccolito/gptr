@@ -28,6 +28,12 @@
 #' recording sessions as readable, replayable documents. A user object named `peter` hides the
 #' gateway; call `gptr::peter()` then.
 #'
+#' @section Sessions and results:
+#' A pipe such as `s |> peter("Explain the result.")` adds work to the same session and kept
+#' workspace. Use [gptr_fork()] to branch explicitly. The final answer is `s$text`; `s$value`
+#' is the R value selected by [gptr_return()] during a tool call. Agent-created objects remain
+#' in `envir`. Give a function a dedicated environment when those objects should stay local.
+#'
 #' @usage
 #' peter(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
 #'       extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
@@ -65,7 +71,8 @@
 #' s$text
 #' s |> peter("And how many columns?")
 #' identical(gptr_last(), s)
-#' @seealso [gptr_security], [gptr_egress] and [gptr_options].
+#' @seealso [gptr_security], [gptr_egress] and [gptr_options];
+#'   `vignette("language-models", package = "gptr")` for connecting models and scripted calls.
 #' @export
 peter = structure(function(..., model = NULL, mode = NULL, skills = NULL, plugins = NULL,
                            extensions = NULL, tools = NULL, agents = NULL, parallel = NULL,
@@ -634,7 +641,7 @@ gateway_check_visible = function(call) {
   invisible(TRUE)
 }
 
-#' Egress acknowledgement (unless the context of `call` is "none") under `safety` and the replay
+#' Egress acknowledgment (unless the context of `call` is "none") under `safety` and the replay
 #' guard under `call`'s `replay =` (contract 3.1, IC-45), on the session's own record of the
 #' provider: of the session's model, or of `m`, a router's choice (a router session's own model is
 #' checked per request by router_call(); IC-29, IC-74; D-099, D-114)

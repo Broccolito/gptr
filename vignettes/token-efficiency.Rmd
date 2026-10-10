@@ -9,30 +9,20 @@ vignette: >
 
 
 
-Tokens are what a session costs, in money and in time. gptr spends them only where R cannot
-compute the answer itself. Four levers do most of the work:
+Keep data and computation in R, and send models enough context to choose useful actions.
+Four practices help:
 
-- **Reference.** Objects stay in the session and are referred to by name with a short,
-  budgeted description. A 5,000-row data frame printed into the context costs about 127,000
-  tokens; its name and a description of at most 150 tokens replace it.
-- **Composition.** One `r` tool call can run many steps (filters, models, plots, helper calls)
-  and return a small result, instead of one model round trip per step. On the eight polyglot
-  tasks of the source repository's benchmark (git, a script, search, Python, SQL, a download,
-  make and a long job), the tool calls and results cost 66,517 tokens through a shell tool and
-  1,657 when `r` does the same work.
-- **Compression.** R code, and Shiny apps for interactive artifacts, are shorter than the
-  equivalent shell transcripts or HTML and JavaScript.
-- **Stability.** The system prompt and tool list are frozen when a session starts and the
-  conversation only grows at the end, so providers can serve the repeated prefix from their
-  prompt cache at a fraction of the price.
+- Refer to live objects with a compact description rather than printing large tables into a
+  prompt. The model can compute on those objects with the `r` tool.
+- Compose several deterministic operations in one R call and return a bounded result.
+- Reuse a session's stable prompt and growing conversation when the provider supports prompt
+  caching. Changing models, tools, compaction or rewind can change that prefix.
+- Inspect usage and set budgets before starting a costly workflow.
 
-This vignette runs offline with a scripted model, so the token counts in its output are the
-package's own estimates.
+The executed examples use fake providers. Their request counts and estimates demonstrate the
+interfaces; they are not measurements of a real model's speed, quality or bill.
 
-## What a new session sends
-
-`gptr_prompt()` shows the frozen part of a request: the system prompt sections, the tool list
-and the first message, each with an estimated token count.
+## Inspecting the prompt
 
 
 ``` r
@@ -48,22 +38,20 @@ view$sections
 #> 4    modes   T0     84
 #> 5  context   T0    152
 view$total_tokens
-#> [1] 1836
+#> [1] 1806
 ```
 
-Printing the view shows the full text of every section. The `standard` preset, the default for
-interactive and programmatic sessions, has four model-visible tools (`r`, `read`, `edit`,
-`write`, plus `ask` when a person is present or the mode is `manual`) and describes everything
-else as R functions in the `peter$` namespace. Measured with an o200k tokenizer, the static
-prefix (system prompt and tools, without the first message) is 1,262 tokens for the `minimal`
-preset used by sub-agents, 2,335 for `standard` without optional sections, 2,813 with every
-section and 2,956 with `ask` as well. After the first request that prefix is read from the
-provider's cache.
+`gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
+printing it shows their text. It does not query a provider. The `standard` preset describes
+most capabilities as functions in `peter$`, with the core model-visible `r`, `read`, `edit`
+and `write` tools and `ask` when applicable.
 
-## Describing objects instead of sending them
+The source benchmark's recorded o200k static-prefix counts are 1,262 for `minimal`, 2,335 for
+`standard` without optional sections, 2,813 with every section, and 2,956 with `ask` as well.
+These are measured fixture counts, not a promise about every runtime context or tokenizer.
+The first user message, project instructions and object descriptions add to them.
 
-`gptr_describe()` is what the model sees about an attached object: class, shape, size, column
-types and a summary of the values, within a token budget (150 by default).
+## Object descriptions and result size
 
 
 ``` r
@@ -79,53 +67,71 @@ writeLines(gptr_describe(iris, budget = 60))
 #>   Sepal.Length:dbl Sepal.Width:dbl Petal.Length:dbl Petal.Width:dbl Species:fct
 ```
 
-Packages can register `gptr_describe()` methods for their own classes. Attaching an object to a
-prompt costs its description; the model computes on the object itself with the `r` tool.
-
-## Counting what a session used
+`gptr_describe()` summarizes class, shape and values within a budget (150 tokens by default).
+Packages can register methods for their own classes. Generative-model context normally uses
+these descriptions and names; **System 1 questions send their input states**, so their egress
+and size rules differ. See the system-one vignette.
 
 
 ``` r
-code = paste("fits = lapply(split(mtcars, mtcars$cyl), function(d) lm(mpg ~ wt, data = d))",
-             "sapply(fits, function(f) coef(f)[[2]])", sep = "\n")
+work = new.env()
+work$mtcars = mtcars
+code = paste(
+  "fits = lapply(split(mtcars, mtcars$cyl), function(d) stats::lm(mpg ~ wt, data = d))",
+  "slopes = sapply(fits, function(f) stats::coef(f)[[2]])",
+  "slopes", sep = "\n"
+)
 fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = code)),
-  "The weight slope is steepest for four-cylinder cars."
+  "The fitted weight slopes are stored in slopes."
 ))
-s = peter("Fit mpg on weight separately for each number of cylinders and compare the slopes.",
-         mtcars, model = fake, envir = new.env(), mode = auto)
+s = peter("Fit mpg on weight by cylinder count and compare the slopes.", mtcars,
+          model = fake, envir = work, mode = auto)
+work$slopes
+#>         4         6         8
+#> -5.647025 -2.780106 -2.192438
+```
+
+The calculation runs in R once the model requests it. Return a small table, statistic or plot
+rather than a full intermediate object. Long `r` output keeps a bounded head and tail; the
+full spilled text can be read through `peter$out(id)` when an output ID was supplied.
+
+## Reported usage and estimated components
+
+
+``` r
 gptr_usage(s, by = "model")
 #>        group requests input output cache_read cache_write cost
-#>  fake/fake-1        2  3280     42          0           0    0
+#>  fake/fake-1        2  3276     48          0           0    0
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
 ledger = gptr_usage(s, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 #>       component tokens
 #> 1      attached    130
-#> 2   environment    200
+#> 2   environment    140
 #> 3        images      0
 #> 4         other    162
 #> 5       project      0
 #> 6            t0   2604
 #> 7            t1    620
-#> 8  tool_results     40
+#> 8  tool_results     53
 #> 9         tools   1942
 #> 10   transcript     78
-#> 11    workspace     58
+#> 11    workspace     76
 ```
 
-The ledger splits every request into its components (system prompt, tools, workspace,
-attached objects, transcript, tool results), so it is easy to see what grows. The usage table
-holds what the provider reported; the scripted model leaves out the tool list, so its input
-count is smaller than the ledger's sum.
+The usage summary contains provider-reported input, output, cache reads/writes and cost.
+`by = "session"`, `"agent"`, `"model"` or `"route"` groups it; child requests are included
+once. `gptr_usage()` without a session also includes the process-level System 1 log.
 
-## Budgets
+The detailed ledger estimates components such as tools, workspace, attached objects,
+transcript and tool results. Its sum can differ from reported usage because tokenizers,
+provider accounting, images and fake-provider behavior differ. Unknown reported usage or
+cost stays `NA`, not zero. A local model's known zero metered charge does not imply zero
+hardware cost or latency.
 
-A budget stops a run before it spends more than you allow. Budgets are checked before every
-request, so a budget of 500 tokens stops this run before its first request: the static prefix
-alone is larger. At the console gptr asks whether to extend a budget; in a script the run stops
-with a classed condition and keeps the partial transcript.
+## Budgets and partial results
 
 
 ``` r
@@ -140,34 +146,70 @@ res$session$status
 #> [1] "budget"
 ```
 
-Every top-level call also has a default ceiling (2 million tokens and 5 US dollars), which
-`gptr_config()` can change.
+The estimated input for the first request already exceeds 500 tokens, so this call stops
+before that request. A top-level run's defaults are 2 million tokens and 5 US dollars;
+`budget = list(tokens = ..., cost = ..., turns = ...)` supplies limits for that call. Change
+settings deliberately when different defaults are needed:
 
-## Cheap decisions
 
-A judgment such as "is this abstract about a randomized trial?" costs about 380 input tokens
-with a System 1 model against about 2,200 with a generative model, and a vector of inputs is
-answered in parallel. See `vignette("system-one", package = "gptr")`.
+``` r
+gptr_config(budget = list(tokens = 20000, cost = 1, turns = 10), .scope = "session")
+s = peter("Review this analysis.", budget = list(tokens = 12000, turns = 6))
+```
 
-## Smaller contexts on request
+Checks happen before requests using estimated next-input tokens and usage already recorded.
+The next output or final provider charge can exceed a remaining allowance; unknown usage
+cannot establish a hard monetary ceiling. A budget is a stopping policy, not a billing
+reservation. At the console the UI can ask to extend it; without a person present the call
+signals a budget condition carrying the partial session as `e$session`. Inspect that
+session's status, transcript, workspace and usage before deciding whether to continue.
 
-- `.opts = list(context = "names")` describes the workspace by object names only;
-  `.opts = list(context = "none")` sends no automatic context.
-- `.opts = list(preset = "minimal")` uses the smallest tool set and system prompt.
-- `{identifier}` in a literal prompt inserts a short value (about 10 tokens) instead of attaching
-  an object.
-- Long `r` results keep their first 40% and last 60% within about 4,000 tokens; the full text
-  stays available through `peter$out(id)`.
+Teams and fan-outs share the root call's budget; launching more children does not give each
+one a fresh root allowance. With `gptr_parallel()`, member `budget =`, `tools =` and per-run
+`.opts` are not applied. Set the intended limits through the governing settings or enclosing
+run, cap concurrency and inspect the returned children's statuses. See
+`vignette("teams-and-background", package = "gptr")`.
 
-## The benchmark
+## Three different caches
 
-The package's source repository contains a token benchmark: golden transcripts of the
-north-star tasks are replayed through the fake provider on every change, and the continuous
-integration fails when a prefix grows by more than 2% or a task needs another request.
-Releases are also calibrated against real providers.
+| Mechanism | What is reused | What to inspect |
+|---|---|---|
+| Provider prompt cache | A supported repeated request prefix | `gptr_usage(s)` cache columns |
+| System 1 answer cache | A matching input/question/model decision | Result metadata and `gptr_cache()` |
+| Document replay and System 2 answer cache | Recorded code and the call's saved answer | `gptr_blocks(path)` and `gptr_cache()` |
+
+A stable prefix makes provider cache reuse possible. Providers decide whether a cache hit
+occurs, subject to their support, minimum size, expiry and pricing; gptr does not guarantee a
+hit after the first request. Compaction, image elision, changed resources or rewind can break
+the prefix. Document replay makes no model request for a usable recorded call but still runs
+its R code. Clearing an answer cache changes what can be reused.
+
+## Explicit ways to reduce context
+
+
+``` r
+peter("Summarize the model fit.", fit, .opts = list(context = "names"))
+peter("Answer using only this attached result.", result, .opts = list(context = "none"))
+peter("Compute the mean.", x, .opts = list(preset = "minimal"))
+```
+
+`context = "names"` describes the automatic workspace by names; `"none"` omits automatic
+context, not the explicit objects attached to the prompt. `preset = "minimal"` reduces the
+tool/prompt surface; it does not authorize actions or remove required safety checks.
+`{identifier}` in a literal prompt can insert a short atomic value when that is sufficient.
+For a long workflow, continue one session, keep intermediate data in R and request concise
+reports between stages. Use a new session or an explicit fork when a separate analysis is
+intended.
+
+## The source benchmark
+
+The source repository contains offline golden transcripts, component counts and ratchets for
+prompt growth and extra requests:
 
 ```sh
 Rscript --vanilla dev/bench/tokens/run.R --check
 ```
 
-
+These fixture measurements support regression checks. They do not prove universal token
+savings or calibration against every provider. Live calibration is a separate, explicitly
+enabled release check; implementation or offline acceptance alone does not establish it.

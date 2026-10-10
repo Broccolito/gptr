@@ -21,6 +21,17 @@ setting (a settings plugin not enabled yet shows as \code{lazy}), attached packa
 With \code{installed = TRUE} it also scans every installed package for \verb{inst/gptr/}. Nothing is
 loaded or run. A plugin enabled both for the process and for a live session is listed once.
 }
+\details{
+Enable a plugin with \code{peter(plugins = "name")} or the \code{plugins} configuration setting.
+Packages put resources in \verb{inst/gptr/}; directory plugins use a root \code{plugin.json}.
+R factories activate lazily only when the manifest declares \code{extension.provides} and does
+not request eager activation. Claude bundles contribute declarative resources; their hooks
+and executable plugin behavior are not imported.
+}
 \examples{
 gptr_plugins(installed = TRUE)
+}
+\seealso{
+\link{gptr_check}, \link{gptr_reload}, \link{gptr_registry};
+\code{vignette("skills-and-plugins", package = "gptr")} for resource files and plugin manifests.
 }

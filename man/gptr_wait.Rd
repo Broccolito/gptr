@@ -20,6 +20,11 @@ waiting, or \code{timeout} seconds have passed. Every session's egress and repla
 any is started, so a refusal starts none. On timeout the sessions keep their \code{running} status
 and no condition is raised.
 }
+\details{
+A timeout is not cancellation. Inspect \verb{$status} and use \code{\link[=gptr_cancel]{gptr_cancel()}} if you want to
+abort active work. In Rscript and rendered reports, a blocking call such as this is how
+experimental background sessions progress when there is no idle console.
+}
 \examples{
 fake = gptr_fake_provider(list("a"))
 runs = list(a = peter("one", model = fake, .run = FALSE, envir = new.env()),

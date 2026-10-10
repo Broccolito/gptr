@@ -1,0 +1,186 @@
+---
+title: "The interactive Peter console"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{The interactive Peter console}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE,
+                      render = knitr::normal_print)
+old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+```
+
+Call `peter()` without a prompt from an interactive R console to chat. It uses your current
+environment and the configured model. Give it an explicit model when you want to choose the
+route. The [language-model guide](language-models.html) covers API, CLI and local setup.
+
+```{r, eval = FALSE}
+library(gptr)
+s = peter(model = "openai/gpt-6-sol")
+```
+
+The default prompt is `peter> `; other permission modes appear as `peter[plan]> `,
+`peter[edits]> ` or `peter[auto]> `. Enter `/exit` to return the session invisibly to `s`.
+Objects created by the agent remain in the environment where the console runs.
+
+For input piped to an R process, `peter(.stdin = TRUE)` explicitly reads standard input using
+the same syntax; end of input returns the session. This does not supply permission answers or
+credentials, so configure those before unattended work.
+
+An existing session can become a chat. This offline example creates one first:
+
+```{r}
+library(gptr)
+work = new.env()
+work$x = 1:5
+fake = gptr_fake_provider(list("The vector has five values.", "Their sum is fifteen."))
+s = peter("Describe x.", x = work$x, model = fake, envir = work)
+s$text
+```
+
+```{r, eval = FALSE}
+s |> peter()
+# At peter>, enter: What is their sum?
+# Then enter: /exit
+```
+
+Piping continues the same session and uses its kept workspace. To explore independently,
+use `gptr_fork(s) |> peter()`; writes then stay in the fork's overlay. `/clear` resets the
+conversation while retaining workspace objects, model and mode.
+
+## Enter prompts, objects and your own R
+
+Ordinary text is a prompt. `@x` attaches a visible R object by name, and `@analysis.R` adds the
+beginning of a text file. Quote a path containing spaces as `@"analysis notes.txt"`.
+Files take precedence when a mention matches both a file and an object. A file mention sends
+at most its first 40 lines; binary files contribute a description rather than their contents.
+For a larger file, ask the agent to read the relevant section.
+
+```text
+peter> Compare @mtcars columns mpg and wt.
+peter> Explain the approach in @analysis.R.
+peter> !head(mtcars[, c("mpg", "wt")])
+peter> Now suggest a diagnostic plot.
+```
+
+`!code` runs your R code immediately in the console environment, prints its output and adds
+a compact note of the code and output to the **next** model prompt. It does not send a prompt
+or spend model tokens by itself. The note is bounded to about 300 estimated tokens, so inspect
+large results in R and send the part the model needs.
+
+`!!code` also runs immediately, but does not add that code/output note. Changes it makes are
+still part of the workspace that later calls can inspect or describe. Neither prefix passes
+through the model's permission gate: you are explicitly running your own R code. Do not paste
+unreviewed code merely because the agent suggested it.
+
+```text
+peter> !fit = lm(mpg ~ wt, data = mtcars)
+peter> !coef(fit)
+peter> Explain the slope I just fitted.
+peter> !!local_note = "Check the measurement units later"
+```
+
+For multiple lines, use a triple-quoted prompt, a trailing backslash to continue a prompt, or
+a fenced R block. The fenced block behaves like `!code`. Incomplete `!`/`!!` R expressions
+continue at the `+ ` prompt until they parse. Very long single lines can exceed R's console
+input limit; use an `@file` or a multiline prompt instead.
+
+```text
+peter> """
+... Fit mpg on wt.
+... Explain the units and give one diagnostic.
+... """
+```
+
+```text
+peter> ```r
+... fit = lm(mpg ~ wt, data = mtcars)
+... coef(fit)
+... ```
+```
+
+These input forms apply inside Peter's chat; at the ordinary R prompt, use normal R syntax.
+Console inputs may enter R's history (`gptr.history`), and an enabled transcript can record
+user-run code. `!!` is a control over the next prompt note, not a privacy boundary.
+
+## Commands
+
+These are all built-in slash commands. Arguments in brackets are optional. `/help` lists the
+commands available in the current session, including any supplied by plugins or prompt templates.
+
+| Command | Effect |
+|---|---|
+| `/help [command]` | List input syntax and commands, or describe one command. |
+| `/exit`, `/quit`, `/q` | Leave the chat and return its session. |
+| `/model [provider/model or alias]` | Show the model or switch it from the next request; keeps the conversation. |
+| `/mode [plan|manual|edits|auto]` | Show the mode or switch it from the next turn. |
+| `/plan` | Switch to plan mode for read-only exploration and a proposed plan. |
+| `/tools` | List direct tools and `peter$` members. |
+| `/env [pattern]` | Describe workspace objects whose names contain the pattern. |
+| `/compact [focus]` | Compact the conversation now, optionally emphasizing a topic; may make a model request. |
+| `/cost` | Show this session's tokens and cost. |
+| `/context` | Show the token ledger of the last request. |
+| `/status` | Show session, model, mode, document and queued messages. |
+| `/clear` | Start a new conversation while retaining workspace objects, model and mode. |
+| `/resume [id]` | List stored sessions or continue the selected session in this console. |
+| `/fork` | Continue on a new session with an overlay workspace. |
+| `/doc [path]` | Show the recording document or bind one; binding authorizes writes to it. |
+| `/skills` | List discoverable skills. |
+| `/skill:<name> [request]` | Preload a skill and send the request; without a request, ask the agent to use that skill. |
+| `/mcp` | List MCP servers. |
+| `/permissions` | Show the permission rules. |
+| `/permissions allow|ask|deny|remove <rule>` | Change a rule for this R process, for example `/permissions allow r(fn:saveRDS)`. |
+| `/retry` | Undo the last turn and send its recovered prompt again; may make a model request. |
+| `/undo` | Undo the last turn's restorable objects, files and conversation. |
+| `/redo` | Redo what the last rewind undid. |
+| `/rewind [k]` | Offer a rewind menu, or retain turns 1 through `k`. |
+| `/checkpoints [all]` | List current checkpoints, or all branches when `all` is given. |
+
+Undo and rewind report partial restores when something cannot be captured or restored. External
+side effects are not generally reversible. See `?gptr_rewind` and `?gptr_security` before relying
+on restoration.
+
+## Approve, interrupt and continue
+
+In `manual`, known read-only actions and actions covered by existing allow rules run directly;
+other changes ask for approval. The prompt offers `y` for this action, `a` for a session rule
+covering the flagged calls, `n` to deny, and `?` for details. `edits` allows project file edits
+while still asking about R changes unless an allow rule applies; `auto` allows ordinary actions
+while retaining critical and secret guards. `plan` offers read-only tools and level-1 R
+exploration in a scratch environment, where intermediate bindings can change while the user
+workspace is preserved. Settings and policies are described in the
+[configuration guide](configuration.html) and `?gptr_security`.
+
+While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
+
+- **Steer** delivers a new instruction after the current tool results.
+- **Follow-up** queues a prompt for when the agent would otherwise stop.
+- **Continue** resumes the current work.
+- **Abort** stops it and retains the partial session.
+
+A foreground programmatic call can also offer **background** when that experimental capability
+is available. Resume pumping with `gptr_wait(s)`. At the chat prompt, one Ctrl-C prints a hint;
+two consecutive interrupts leave the chat. IDEs that cannot resume an interrupted evaluation
+use an abort fallback; pause/resume behavior is not uniformly verified across front ends.
+
+The equivalent session verbs work from R:
+
+```{r, eval = FALSE}
+gptr_steer(s, "Use the existing fit instead of fitting again.")
+gptr_steer(s, "Summarize the diagnostics at the end.", as = "follow_up")
+gptr_wait(s)
+gptr_cancel(s)
+```
+
+For persistent conversation storage, initialize a project with `gptr_init(path)` and review its
+trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` recovers one.
+The [script-as-history guide](script-as-history.html) covers document recording, replay and
+transcripts; the [language-model guide](language-models.html) covers scripted calls that need
+no interactive console.
+
+```{r cleanup, include = FALSE}
+options(old_options)
+```

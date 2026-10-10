@@ -400,7 +400,7 @@ worker_key_provider = function(ref) {
 
 #' `start()` of the `worker` backend: a proxy child session whose overlay receives the exports.
 #' Its spec (contract 11.11) waits in the session's adapter state (contract 8.1 `opts$state`)
-#' with the object names only, so no user object is kept (rules R1, R2). The egress acknowledgement,
+#' with the object names only, so no user object is kept (rules R1, R2). The egress acknowledgment,
 #' the replay guard (for the real model, which the worker never checks) and the objects are
 #' checked before any process starts.
 #' @noRd

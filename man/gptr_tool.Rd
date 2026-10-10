@@ -77,3 +77,7 @@ gptr_tool("nrow_of", "Number of rows of a data frame in the session",
           fun = function(name) nrow(get(name, envir = globalenv())), exposure = "r",
           namespace = "demo")
 }
+\seealso{
+\link{gptr_register}, \link{gptr_check};
+\code{vignette("extending-gptr", package = "gptr")} for complete tool and policy examples.
+}

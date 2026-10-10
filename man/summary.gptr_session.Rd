@@ -15,5 +15,7 @@
 A \code{gptr_session_summary} data frame (\code{turn}, \code{role}, \code{preview}, \code{tools}, \code{tokens}).
 }
 \description{
-Summarize a session as its history
+Reads a table of recorded turns without a model request. It does not generate a narrative
+workflow summary or export an executable script. To request prose, continue the session
+with \code{\link[=peter]{peter()}} and verify the model-generated answer against the recorded work.
 }

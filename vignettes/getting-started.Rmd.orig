@@ -8,7 +8,8 @@ vignette: >
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE,
+                      render = knitr::normal_print)
 old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 ```
 
@@ -20,8 +21,8 @@ console and a programmable call in scripts, loops and `if` statements.
 
 This vignette runs without a network connection or a key. Every call uses
 `gptr_fake_provider()`, a scripted model that ships with the package, so the output is
-reproducible. With a real model the calls are the same; only the `model` argument changes (see
-"Connecting a real model" below).
+reproducible. Start with this example before connecting an API, subscription command-line tool
+or local Ollama model through the [language-model guide](language-models.html).
 
 ## A first call
 
@@ -32,21 +33,28 @@ tool: the `r` tool runs R code in the environment you give to `peter()`.
 library(gptr)
 
 fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = mtcars)\ncoef(fit)")),
+  list(tool = "r", input = list(code = paste(
+    "fit = lm(mpg ~ wt, data = cars)", "gptr_return(coef(fit))", sep = "\n"
+  ))),
   "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon."
 ))
 
 work = new.env()
-s = peter("How does fuel economy depend on weight in mtcars?", model = fake, envir = work,
-         mode = auto)
+work$cars = mtcars
+s = peter("Fit mpg on wt in cars and return the coefficients.", cars = work$cars,
+          model = fake, envir = work, mode = auto)
 s$text
+s$value
 ```
 
 Prompts are always quoted strings. Identifiers such as the mode can be bare names, the way
 `library(gptr)` needs no quotes: `mode = auto` and `mode = "auto"` are the same. The `auto` mode
-lets the agent run code without asking, which this vignette needs because nobody is there to
-answer. At the console the default mode, `manual`, asks before every change.
+lets ordinary agent actions run without asking, while retaining the critical and secret guards.
+This vignette needs it because nobody is there to answer. At the console the default mode,
+`manual`, asks before changes unless a permission rule already allows them. The fake provider
+supplies the tool code explicitly; a real model chooses its own code from the prompt.
 
+`s$text` is the final answer, and `s$value` is the value the tool selected with `gptr_return()`.
 The object the agent created is in `work`, like any object you created yourself:
 
 ```{r}
@@ -95,9 +103,9 @@ c(original = s2$turns, branch = branch$turns)
 
 ## Stopping instead of guessing
 
-In `manual` mode every change needs a yes. When nobody can answer (an `Rscript` job, a knitted
-report), the run stops with a classed condition that says how to allow the action, instead of
-guessing:
+In `manual` mode a change needs approval unless an allow rule already permits it. When nobody
+can answer (an `Rscript` job, a knitted report), the run stops with a classed condition that says
+how to allow the action:
 
 ```{r}
 careful = gptr_fake_provider(list(
@@ -113,14 +121,17 @@ class(res)[1]
 res$session$status
 ```
 
-`mode = plan` inspects and proposes without changing anything, `mode = edits` allows file edits
+`mode = plan` inspects and proposes while preserving the user workspace; level-1 R exploration
+can create intermediate objects in its scratch environment. `mode = edits` allows file edits
 inside the project, and `gptr_permissions()` adds rules such as `"r(level<=1)"` that allow
 low-risk code without a question.
 
 ## At the console
 
-Called without a prompt, `peter()` opens a chat in the console. Piping a session into it
-continues that session interactively, and `/exit` returns the session.
+Called without a prompt in an interactive console, `peter()` opens a chat. Piping a session
+into it continues that session, and `/exit` returns the session. Inside chat, `/help` lists
+commands, `@name` attaches an object and `!code` runs your own R immediately. The
+[console guide](interactive-console.html) explains input syntax, permissions and interrupts.
 
 ```{r, eval = FALSE}
 peter()
@@ -129,33 +140,36 @@ s |> peter()
 
 ## Connecting a real model
 
-Keys are read from environment variables or from a `.env` file. gptr never prints them and
-replaces them with markers such as `[secret:ANTHROPIC_API_KEY]` wherever they would appear.
+Choose a route explicitly. API providers use their named environment variables, which you can
+load from a private file with `gptr_env()`. Subscription CLI routes use the executable's own
+sign-in; Ollama uses an already-running local server and an installed model. The
+[language-model guide](language-models.html) gives setup examples for each route.
 
 ```{r, eval = FALSE}
 gptr_env("~/keys/.env")
 gptr_providers()
-gptr_models("sonnet")
-gptr_config(model = "anthropic/claude-sonnet-5-5", .scope = "user")
+gptr_models(provider = "openai")
+gptr_config(model = "openai/gpt-6-sol", .scope = "user")
 
-res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
-res$value
+res = peter("Describe the mpg and wt columns.", mtcars)
+res$text
 ```
 
 The first time a provider is used interactively, gptr shows what is sent to it and records your
-acknowledgment; `?gptr_egress` lists what a request contains. `gptr_init()` creates a `.gptr/`
-workspace in a project, where sessions, caches and the project instructions file
-`.gptr/vignette.Rmd` are kept. Without a workspace everything stays in the session's temporary
-directory.
+acknowledgment; `?gptr_egress` lists what a request contains. For persistent storage, call
+`gptr_init("/path/to/project")` to create a `.gptr/` workspace and review its separate trust
+decision. Without a project workspace, session storage is temporary. Defaults and storage
+policy are covered in the [configuration guide](configuration.html).
 
 ## Where to go next
 
-- `vignette("system-one", package = "gptr")`: typed decisions inside `if`, `for` and `while`.
-- `vignette("script-as-history", package = "gptr")`: scripts and notebooks that record and
-  replay agent work.
-- `vignette("extending-gptr", package = "gptr")`: tools, policies, hooks and plugins.
-- `vignette("token-efficiency", package = "gptr")`: what a session costs and how to keep it
-  small.
+- [Language models](language-models.html): connect a route and use sessions in functions and scripts.
+- [Interactive console](interactive-console.html): all built-in commands and inline R.
+- [Configuration](configuration.html): scopes, settings, options and credentials.
+- [System 1](system-one.html): typed decisions inside `if`, `for` and `while`.
+- [Script as history](script-as-history.html): documents that record and replay agent work.
+- [Extensions](extending-gptr.html): tools, policies, hooks and plugins.
+- [Token efficiency](token-efficiency.html): costs, budgets and compact context.
 - `?gptr_security`, `?gptr_egress` and `?gptr_options`.
 
 ```{r cleanup, include = FALSE}

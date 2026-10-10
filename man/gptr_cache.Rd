@@ -26,6 +26,10 @@ whose block is neither in its document nor queued for it in a sidecar, System 1 
 for 90 days, temporary files older than \code{getOption("gptr.spill_days", 7)} days and older
 refreshed model catalogs; \code{clear} removes a kind entirely.
 }
+\details{
+Clearing the System 2 answer cache does not remove the R code of document blocks, but
+saved answers needed to reconstruct a replayed call may no longer be available.
+}
 \examples{
 gptr_cache()
 gptr_cache("prune", "tmp")

@@ -1,0 +1,142 @@
+---
+title: "How Peter runs inside R"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{How Peter runs inside R}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+Peter combines a model with your current R workspace. A language model requests tools and
+returns a session; a decision model returns a typed vector. The same `peter()` gateway handles
+both. This guide explains where work happens and how to inspect it.
+
+## One language model turn
+
+1. `peter()` captures the prompt and context expressions and selects the model and permission mode.
+2. It describes the workspace and attached objects within a token budget, then builds the request.
+3. The provider streams a reply. Each gptr tool request passes through the permission gate.
+4. R code runs in the selected environment; file and external tools use their own documented paths.
+5. Tool results return to the model until it finishes, is interrupted, or reaches a limit.
+6. The session retains the conversation, status, usage and a designated result, if there is one.
+
+This example uses a scripted provider, so it runs offline and always requests the same R code:
+
+
+``` r
+library(gptr)
+work = new.env()
+work$d = mtcars
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = d)\ngptr_return(fit)")),
+  "The regression is ready."
+))
+s = peter("Fit fuel economy against weight.", d = work$d, model = fake,
+          envir = work, mode = "auto")
+s$text
+#> [1] "The regression is ready."
+s$status
+#> [1] "idle"
+coef(s$value)
+#> (Intercept)          wt
+#>   37.285126   -5.344472
+```
+
+`gptr_return(fit)` designates `fit` as the result. The final model text is `s$text`; it does
+not automatically become the fitted object. The result also remains available as `work$fit`.
+
+## Where objects live
+
+The default `envir` is the calling frame. At the console that is usually the global workspace;
+inside a function it is that function's frame. Supply an environment when you want the work to
+persist in a particular place. Named context such as `d = work$d` labels an attachment;
+it does not create a binding called `d` in a different evaluation environment.
+
+
+``` r
+gptr_describe(work$d, budget = 60)
+#> [1] "<data.frame> 32 x 11, 7 KB"
+#> [2] "  mpg:dbl cyl:dbl disp:dbl hp:dbl drat:dbl wt:dbl qsec:dbl vs:dbl am:dbl gear:dbl carb:dbl"
+ls(work)
+#> [1] "d"   "fit"
+identical(s$value, work$fit)
+#> [1] TRUE
+```
+
+Compact descriptions keep the initial request small. The model can inspect more through tools;
+the permission and egress controls still apply. Passing a large object by name avoids keeping
+an extra reference to it in the session. This does not promise that arbitrary R code will
+never copy an object: ordinary R copy-on-modify rules and the code you run still matter.
+
+A continued session keeps its home environment unless you explicitly supply a new `envir`.
+An explicit `gptr_fork(s)` branches the conversation and uses a workspace overlay. Restoring a
+session from disk restores its conversation; it does not restore all of your R objects.
+
+## What the session retains
+
+
+``` r
+s$id
+#> [1] "s0ad369da5d"
+s$model
+#> [1] "fake/fake-1"
+s$turns
+#> [1] 1
+names(s$messages[[1]])
+#> [1] "role"      "content"   "source"    "timestamp"
+gptr_usage(s)
+#>        group requests input output cache_read cache_write cost
+#>  s0ad369da5d        2  3243     20          0           0    0
+#> # 1 row
+#> 2 requests, 3.2k tokens in, $0.0000
+identical(gptr_last(), s)
+#> [1] TRUE
+```
+
+| Interface | Use |
+|---|---|
+| `s$text`, `s$value`, `s$status` | Inspect the latest answer, designated R result and state |
+| `s$messages`, `s$history`, `s$usage` | Inspect conversation, the per-message history table and accounting |
+| `s |> peter("next question")` | Add a turn to the same conversation |
+| `gptr_step()`, `gptr_wait()`, `gptr_steer()`, `gptr_cancel()` | Drive or control a session |
+| `gptr_sessions()`, `gptr_resume()`, `gptr_last()` | Find stored or live sessions |
+| `gptr_on()` | Attach a session event handler |
+| `gptr_fork()`, `gptr_checkpoints()`, `gptr_rewind()` | Branch or recover supported state |
+
+Without an initialized project workspace, session files use a temporary directory.
+`gptr_init()` creates `.gptr/` for project storage. Recording an R document is a separate choice;
+see [Script as history](script-as-history.html).
+
+## Permissions and concurrency
+
+`manual` is the default: actions classified as read-only can run, while changes require approval.
+`plan` is for inspection and proposals; `edits` allows approved classes of project file edits;
+`auto` allows ordinary tool work without prompting. Critical, secret and control guards remain
+separate. A permission gate is not an isolation boundary. External CLIs also have their own sandbox
+and tool controls; live R requests still pass through gptr's MCP gate. Use [Configuration](configuration.html)
+and `?gptr_security` to choose a mode and understand its limits.
+
+HTTP requests, CLI processes, MCP connections and workers share a cooperative reactor.
+Multiple requests can wait for I/O together. Inline R code runs serially in the owning R process
+and pauses its reactor callbacks until evaluation returns. A worker is a separate R process and receives
+serializable context; it does not share the parent workspace. See
+[Teams and background work](teams-and-background.html).
+
+## Find the right reference page
+
+The reference index groups every export by purpose:
+
+| Area | Start here |
+|---|---|
+| Gateway and settings | `?peter`, `?gptr_config`, `?gptr_options` |
+| Providers and decisions | `?gptr_providers`, `?gptr_models`, `?gptr_prob` |
+| Environment and execution | `?gptr_describe`, `?gptr_return`, `?gptr_risk` |
+| Documents and sessions | `?gptr_doc`, `?gptr_source`, `?gptr_sessions`, `?gptr_step` |
+| Skills, plugins and MCP | `?gptr_skills`, `?gptr_plugins`, `?gptr_mcp` |
+| Extension development | `?gptr_api`, `?gptr_register`, `?gptr_spec`, `?gptr_check` |
+| Artifacts and accounting | `?gptr_artifacts`, `?gptr_usage`, `?gptr_cache` |
+
+For a new provider or tool, follow [Extending gptr](extending-gptr.html). For common workflows,
+start with [Getting started](getting-started.html) rather than the internal implementation.

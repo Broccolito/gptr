@@ -105,6 +105,10 @@ sdk_sessions = function(x, arg = "x") {
 #' with [gptr_steer()]) and pumps it until `turns` model turns have ended or the run settles. A
 #' running session is advanced the same way.
 #'
+#' `.run = FALSE` builds a session without making its model request; [gptr_step()] or
+#' [gptr_wait()] starts it. Supply an explicit workspace with `envir =` when results must
+#' remain available outside the function that creates the session.
+#'
 #' @param s A session.
 #' @param turns The number of turns to advance (`Inf` for all).
 #' @return `s`, invisibly. A run that settles in status `error`, `blocked`, `budget` or
@@ -137,6 +141,10 @@ gptr_step = function(s, turns = 1L) {
 #' waiting, or `timeout` seconds have passed. Every session's egress and replay checks pass before
 #' any is started, so a refusal starts none. On timeout the sessions keep their `running` status
 #' and no condition is raised.
+#'
+#' A timeout is not cancellation. Inspect `$status` and use [gptr_cancel()] if you want to
+#' abort active work. In Rscript and rendered reports, a blocking call such as this is how
+#' experimental background sessions progress when there is no idle console.
 #'
 #' @param x A session or a list of sessions (a team or fan-out session counts as one).
 #' @param timeout Seconds to wait.
