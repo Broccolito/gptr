@@ -1170,6 +1170,9 @@ doc_turn_body = function(ents, with_out = TRUE, plan_mode = FALSE) {
         out$value = e$data$name
       }
       if (identical(ct, "gptr.plan")) out$plan_path = e$data$path %||% out$plan_path
+      if (identical(ct, "gptr.mcp_r")) {
+        out = doc_turn_r(out, e$data, list(), with_out, plan_mode)
+      }
     }
   }
   out
@@ -1212,39 +1215,47 @@ doc_turn_assistant = function(out, m, results, with_out, plan_mode) {
     res = results[[b$id]]
     if (is.null(res) || isTRUE(res$is_error)) next
     det = res$details %||% list()
-    if (!identical(det$status %||% "ok", "ok")) next
-    if (!is.null(det$value)) out$value = det$value
-    if (plan_mode || isFALSE(det$record) || isFALSE(b$arguments$record)) next
-    chunk = doc_code_clean(det$code %||% b$arguments$code %||% "")
-    kept = attr(chunk, "kept")
-    chunk = as.character(chunk)
-    safe = doc_history_code(chunk)
-    hist = safe$lines
-    if (safe$secrets) out$secrets = TRUE
-    outs = det$outputs
-    if (!length(chunk)) {
-      outs = NULL
-    } else if (is.list(outs) && length(kept) && length(outs) == length(kept)) {
-      outs = outs[kept]
-    }
-    lines = hist
-    if (with_out) lines = c(lines, doc_output_lines(outs))
-    if (length(det$bridge)) {
-      dig = as_utf8(as.character(det$bridge))
-      lines = c(lines, ifelse(startsWith(dig, "#>"), dig, paste0("#> ", dig)))
-    }
-    if (length(det$artifacts)) {
-      art = as_utf8(as.character(det$artifacts))
-      tag = ifelse(basename(art) == "app.R", "#> [app] ", "#> [plot] ")
-      lines = c(lines, paste0(tag, art))
-    }
-    note = det$note %||% b$arguments$note
-    if (length(note) && nzchar(doc_one_line(note))) {
-      lines = c(lines, paste0("## Decision: ", doc_one_line(note)))
-    }
-    out$body = c(out$body, lines)
-    out$code = c(out$code, hist)
+    out = doc_turn_r(out, det, b$arguments, with_out, plan_mode)
   }
+  out
+}
+
+#' Serialize successful canonical or locally served R with the same code, secret and output
+#' rules. A local MCP trace does not create or alter the provider's assistant/tool messages.
+#' @noRd
+doc_turn_r = function(out, det, args, with_out, plan_mode) {
+  if (!identical(det$status %||% "ok", "ok")) return(out)
+  if (!is.null(det$value)) out$value = det$value
+  if (plan_mode || isFALSE(det$record) || isFALSE(args$record)) return(out)
+  chunk = doc_code_clean(det$code %||% args$code %||% "")
+  kept = attr(chunk, "kept")
+  chunk = as.character(chunk)
+  safe = doc_history_code(chunk)
+  hist = safe$lines
+  if (safe$secrets) out$secrets = TRUE
+  outs = det$outputs
+  if (!length(chunk)) {
+    outs = NULL
+  } else if (is.list(outs) && length(kept) && length(outs) == length(kept)) {
+    outs = outs[kept]
+  }
+  lines = hist
+  if (with_out) lines = c(lines, doc_output_lines(outs))
+  if (length(det$bridge)) {
+    dig = as_utf8(as.character(det$bridge))
+    lines = c(lines, ifelse(startsWith(dig, "#>"), dig, paste0("#> ", dig)))
+  }
+  if (length(det$artifacts)) {
+    art = as_utf8(as.character(det$artifacts))
+    tag = ifelse(basename(art) == "app.R", "#> [app] ", "#> [plot] ")
+    lines = c(lines, paste0(tag, art))
+  }
+  note = det$note %||% args$note
+  if (length(note) && nzchar(doc_one_line(note))) {
+    lines = c(lines, paste0("## Decision: ", doc_one_line(note)))
+  }
+  out$body = c(out$body, lines)
+  out$code = c(out$code, hist)
   out
 }
 

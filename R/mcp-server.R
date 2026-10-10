@@ -205,7 +205,7 @@ mcp_serve_call = function(target, name, args, id) {
                                    "rule with gptr_permissions(allow = ...)."), is_error = TRUE))
   }
   if (is.list(d$input)) input = d$input
-  if (identical(name, "r")) return(mcp_serve_r(input, env, run))
+  if (identical(name, "r")) return(mcp_serve_r(input, env, run, s))
   tryCatch(as_tool_result(spec$execute(input, ctx)), error = function(e) {
     gptr_tool_result(paste("Error:", conditionMessage(e)), is_error = TRUE)
   })
@@ -215,16 +215,31 @@ mcp_serve_call = function(target, name, args, id) {
 #' Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
 #' and nested calls belong to the session whose MCP token authorized this evaluation.
 #' @noRd
-mcp_serve_r = function(input, env, run) {
+mcp_serve_r = function(input, env, run, session = NULL) {
   .gptr_tool_run = run
   force(.gptr_tool_run)
+  record = mcp_r_recording(run, session)
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
   res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = "capture",
                                   tee = FALSE, budget_tokens = budget, rng = run$opts$rng_state,
-                                  record = FALSE)
+                                  record = record)
+  if (record && identical(res$status, "ok") && mcp_r_recording(run, session)) {
+    session_append(session, entry_custom("gptr.mcp_r",
+      list(code = input$code, record = TRUE, status = res$status, outputs = r_doc_outputs(res))))
+  }
   out = format_eval_result(res, budget)
   gptr_tool_result(out$text, images = out$images, is_error = !identical(res$status, "ok"))
+}
+
+#' Only the exact active token-owned run's document receives native R history. Standalone MCP
+#' calls, non-recording calls and plan/aborted/settled runs keep their existing behavior.
+#' @noRd
+mcp_r_recording = function(run, session) {
+  inherits(run, "gptr_run") && !is.null(session) && identical(run$shell, session) &&
+    identical(run$session, session_data(session)$id) &&
+    identical(session_live(session)$run, run) && !is.null(run$opts$doc$path) &&
+    !identical(run$mode, "plan") && !isTRUE(run$settled) && !isTRUE(run$signal$aborted)
 }
 
 on_load(ext_service_set("mcp.dispatch_local", mcp_dispatch_local, provided_by = "P18",
