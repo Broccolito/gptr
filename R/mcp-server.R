@@ -211,9 +211,13 @@ mcp_serve_call = function(target, name, args, id) {
   })
 }
 
-#' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69)
+#' Evaluate served R code in `env` through the eval.r service (the evaluator kind, IC-69).
+#' Mark the running tool on this call stack, as tool_execute_frame() does, so gptr_return()
+#' and nested calls belong to the session whose MCP token authorized this evaluation.
 #' @noRd
 mcp_serve_r = function(input, env, run) {
+  .gptr_tool_run = run
+  force(.gptr_tool_run)
   budget = as.integer(gptr_opt("r_output_tokens"))
   timeout = input$timeout %||% (if (gptr_has_human()) NULL else gptr_opt("r_timeout"))
   res = ext_service_get("eval.r")(input$code, env, timeout = timeout, plots = "capture",

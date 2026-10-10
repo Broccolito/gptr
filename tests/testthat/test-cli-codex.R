@@ -808,6 +808,29 @@ test_that("a fake codex evaluates R in the live session through gptr's MCP serve
   expect_match(s$text, "55", fixed = TRUE)
 })
 
+test_that("a fake codex returns a function's numeric result through the HTTP MCP bridge", {
+  skip_on_cran()
+  skip_if_not_installed("httpuv")
+  skip_if_not_installed("later")
+  skip_if_not_installed("openssl")
+  withr::defer(gptr_mcp_serve(stop = TRUE))
+  f = local_fake_cli("codex", "mcp-return")
+  fit_in_session = function(data) {
+    work = new.env(parent = baseenv())
+    work$dat = data
+    s = peter("Fit mpg on wt and hp, then return its coefficients with gptr_return().",
+              model = f$model, envir = work, mode = "auto", .opts = list(record = FALSE))
+    list(session = s, fit = work$fit, beta = work$beta)
+  }
+  answer = fit_in_session(datasets::mtcars)
+  expected = stats::coef(stats::lm(mpg ~ wt + hp, data = datasets::mtcars))
+  expect_s3_class(answer$fit, "lm")
+  expect_equal(answer$beta, expected)
+  expect_equal(answer$session$value, expected)
+  expect_identical(fake_log(f, "mcp")[[1L]]$status, 200L)
+  expect_null(run_current())
+})
+
 test_that("the auto rule runs CLI-only models on the cli backend", {
   f = local_fake_cli("codex", "text")
   expect_identical(subagent_backend(gptr_agent("code", model = "fakecodex/gpt-6-sol"),
