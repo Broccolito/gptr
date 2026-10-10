@@ -81,6 +81,9 @@ scripts, loops and `if` statements, and the agent works on the objects already i
 * `.opts = list(record = FALSE)` suppresses console recording questions and recorded
   System 1/System 2 blocks, including in explicitly bound documents. `TRUE` retains the
   existing recording consent checks.
+* IRkernel sessions display safe Markdown answers and ordinary progress without error
+  styling. Pending recorded R code is shown once while notebook writes remain queued for
+  explicit synchronization.
 
 # gptr 0.7.0
 

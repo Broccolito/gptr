@@ -69,6 +69,7 @@ Suggests:
     testthat (>= 3.2.0),
     vctrs,
     withr
+Enhances: repr
 VignetteBuilder: knitr, rmarkdown
 Config/testthat/edition: 3
 Copyright: file inst/COPYRIGHTS

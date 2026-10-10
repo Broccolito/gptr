@@ -188,6 +188,10 @@ Use Quarto's renderer for `.qmd`; `gptr_source()` is not a renderer for either f
 the document's setup to load gptr, prepare its input data and select a model or replay mode.
 Plain R chunks still execute when the report is rendered.
 
+In IRkernel, session answers render as safe Markdown, with ordinary progress separate from
+error messages. The executed R code of a pending recorded block is shown once in the cell
+output; notebook writes remain queued until you explicitly synchronize them.
+
 For Jupyter, bind the saved `.ipynb` path in the R kernel. Blocks become agent cells. Writes
 are queued while the notebook is open to avoid competing with the notebook editor; after
 closing it, apply the pending blocks:
