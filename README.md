@@ -50,6 +50,14 @@ expose the older 0.7 API. Check `packageVersion("gptr")` before
 following these examples. No model server or CLI is required for the
 offline examples below.
 
+For an interactive first session, install and sign in to Codex CLI or
+Claude Code outside gptr, then call `peter()`. When no default model is
+configured, Peter offers the two CLI routes or manual API/Ollama setup.
+Selecting an available CLI saves its default model in your user
+settings. CLI-reported sign-in does not verify online access or
+subscription billing; an API-key login can also appear signed in. See
+`vignette("interactive-console", package = "gptr")`.
+
 ## A first session
 
 The example below uses `gptr_fake_provider()`, a scripted model that
@@ -73,7 +81,7 @@ ls(work)
 
 s |> peter("Which cylinder group is the most economical?")
 #> Four-cylinder cars are the most economical.
-#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . sb1b86248da
+#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . s2accda92df
 s$turns
 #> [1] 2
 ```

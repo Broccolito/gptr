@@ -245,6 +245,39 @@ pcli_run_failure = function(res) {
   NULL
 }
 
+#' CLI-reported login, never a model request or a guarantee of server access
+#'
+#' Help-gate status commands so an old claude cannot interpret them as a chat prompt.
+#' Each subprocess has a short timeout. Raw output (including account/key information)
+#' stays private; missing tools, unsupported commands and errors return "unknown".
+#' @noRd
+pcli_login_status = function(cli) {
+  tryCatch({
+    path = pcli_find(cli)
+    help_args = if (identical(cli, "codex")) c("login", "--help") else "--help"
+    help = pcli_run(path, help_args, timeout = 3)
+    if (!is.null(pcli_run_failure(help))) return("unknown")
+    command = if (identical(cli, "codex")) "status" else "auth"
+    if (!grepl(paste0("(^|\n)[ \t]*", command, "([ \t]|$)"),
+               paste(help$stdout, help$stderr, sep = "\n"))) return("unknown")
+    args = if (identical(cli, "codex")) c("login", "status") else c("auth", "status")
+    res = pcli_run(path, args, timeout = 3)
+    if (isTRUE(res$timed_out) || !res$status %in% c(0L, 1L)) return("unknown")
+    if (identical(cli, "claude")) {
+      auth = tryCatch(json_decode(res$stdout), error = function(e) NULL)
+      if (!is.list(auth)) return("unknown")
+      if (identical(auth$loggedIn, TRUE) && res$status == 0L) return("signed in")
+      if (identical(auth$loggedIn, FALSE) && res$status == 1L) return("not signed in")
+    } else {
+      lines = trimws(strsplit(paste(res$stdout, res$stderr, sep = "\n"), "\n",
+                               fixed = TRUE)[[1L]])
+      if (res$status == 0L && any(grepl("^Logged in using ", lines))) return("signed in")
+      if (res$status == 1L && "Not logged in" %in% lines) return("not signed in")
+    }
+    "unknown"
+  }, error = function(e) "unknown")
+}
+
 #' Version of a CLI from `--version`, cached per command and modification time
 #'
 #' Runs only on first use or for `gptr_providers(check = TRUE)` (IC-65). A run that timed out
@@ -383,16 +416,19 @@ pcli_probe = function(path) {
   hit
 }
 
-#' The one-time notice of a subscription route (03 8.3; message class `notice`)
+#' The one-time notice of a CLI route; login alone does not establish billing
 #' @noRd
 pcli_notice = function(cli) {
   text = if (identical(cli, "claude")) {
     paste0("The claude-cli route is experimental: gptr drives your own claude CLI with your ",
-           "own sign-in, usage counts against your Claude plan and Anthropic's terms apply. ",
-           "gptr never reads or stores Claude credentials.")
+           "own sign-in and is intended for your Claude plan. Check your CLI account and ",
+           "billing; login status alone does not establish subscription access. ",
+           "Anthropic's terms apply. gptr never reads or stores Claude credentials.")
   } else {
-    paste0("The codex route drives your own Codex CLI with your own sign-in; usage counts ",
-           "against your ChatGPT plan. Codex runs its own shell inside its sandbox, and each ",
+    paste0("The codex route uses your own Codex CLI and its active authentication. A signed-in ",
+           "status can include an API-key login and does not establish subscription billing. ",
+           "Check your CLI account and billing. Codex runs its own shell inside its sandbox, ",
+           "and each ",
            "turn adds about 19-38K input tokens of Codex's own instructions.")
   }
   gptr_inform(text, "notice", .once = paste0("cli_notice:", cli))

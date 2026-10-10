@@ -444,6 +444,7 @@ test_that("the end of piped input leaves the REPL like /exit", {
 
 test_that("in IRkernel peter() without a prompt starts the console on gptr_readline() (acc. 7)", {
   local_console_test()
+  local_gptr_options(model = "fake/fake-1")
   withr::local_options(gptr.interactive = NULL, jupyter.in_kernel = TRUE)
   box = new.env(parent = emptyenv())
   box$answers = c("/status", "/exit")

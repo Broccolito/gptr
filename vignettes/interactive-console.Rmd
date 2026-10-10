@@ -13,6 +13,23 @@ Call `peter()` without a prompt from an interactive R console to chat. It uses y
 environment and the configured model. Give it an explicit model when you want to choose the
 route. The [language-model guide](language-models.html) covers API, CLI and local setup.
 
+On a new console with no explicit or configured model, Peter first offers Codex CLI, Claude Code
+CLI and manual API/Ollama setup. Selecting an installed CLI that reports `Signed in` saves its
+default model in your user settings and opens the console. `Unknown` permits your explicit
+choice with a notice; `Not signed in` returns to R with terminal sign-in instructions.
+CLI-reported login does not verify online access or subscription billing; an API-key login can
+also count as signed in. Context-sharing acknowledgment remains separate.
+
+Manual setup prints API and local Ollama commands and returns to R; cancellation, a missing CLI
+or a non-CLI replacement of a shortcut also returns without saving a default. Configure a model
+as shown in [Language models](language-models.html), then call `peter()` again.
+An existing session, an explicit or effective configured model, `.stdin = TRUE` and
+noninteractive workflows skip setup. Calls with a prompt use their normal model resolution.
+
+The saved default applies in future R sessions and projects unless a higher-priority setting
+overrides it. Use `gptr_config(model = "provider/model", .scope = "user")` to change it; see
+[Configuration](configuration.html) for precedence and settings locations.
+
 
 ``` r
 library(gptr)

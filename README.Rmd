@@ -50,6 +50,12 @@ pak::pak("Broccolito/gptr")
 Check `packageVersion("gptr")` before following these examples. No model server or CLI is
 required for the offline examples below.
 
+For an interactive first session, install and sign in to Codex CLI or Claude Code outside gptr,
+then call `peter()`. When no default model is configured, Peter offers the two CLI routes or
+manual API/Ollama setup. Selecting an available CLI saves its default model in your user
+settings. CLI-reported sign-in does not verify online access or subscription billing; an API-key
+login can also appear signed in. See `vignette("interactive-console", package = "gptr")`.
+
 ## A first session
 
 The example below uses `gptr_fake_provider()`, a scripted model that ships with the package, so

@@ -1324,17 +1324,26 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 #' account quota or access to a specific model. `check = TRUE` tests reachability, not login.
 #' See `vignette("language-models", package = "gptr")` for API, command-line and local setup.
 #'
-#' @param check `FALSE` (default) performs no network or process input/output. `TRUE` also
+#' @param check `FALSE` (default) performs no network or process input/output unless
+#'   `check_login = TRUE`. `TRUE` also
 #'   probes each HTTP provider's models endpoint once without credentials (2 s timeout; skipped
 #'   under `R CMD check`) and lets command-line providers check their tool; it never sends a
 #'   paid request.
+#' @param check_login Also check Codex and Claude Code's CLI-reported login status using
+#'   their supported status commands (3 s timeout per subprocess, no model request).
+#'   Adds a `login` column: `signed in`, `not signed in`, or `unknown`. Unsupported CLI
+#'   versions, missing tools and failed checks report `unknown`; other providers report
+#'   `not applicable`. A supported API-key login can count as signed in; this does not verify
+#'   credentials online or establish subscription billing. Defaults to `FALSE`.
 #' @return A `gptr_providers` data frame with columns `id`, `type`, `api`, `credential`,
-#'   `source`, `status`, `default_model`, `egress` (`ack` or `needed`) and `version`.
+#'   `source`, `status`, `default_model`, `egress` (`ack` or `needed`) and `version`, plus
+#'   `login` when `check_login = TRUE`.
 #' @examples
 #' gptr_providers()
 #' @export
-gptr_providers = function(check = FALSE) {
+gptr_providers = function(check = FALSE, check_login = FALSE) {
   check_flag(check, "check")
+  check_flag(check_login, "check_login")
   ids = sort(registry_names("provider"), method = "radix")
   provs = lapply(ids, provider_listing_get)
   keep = !vapply(provs, function(x) is.null(x$p), NA)
@@ -1348,6 +1357,14 @@ gptr_providers = function(check = FALSE) {
                   credential = col("credential"), source = col("source"),
                   status = col("status"), default_model = col("default_model"),
                   egress = col("egress"), version = col("version"), stringsAsFactors = FALSE)
+  if (check_login) {
+    df$login = vapply(seq_len(nrow(df)), function(i) {
+      cli = c(`cli-codex` = "codex", `cli-claude` = "claude")[df$api[i]]
+      if (is.na(cli)) return("not applicable")
+      if (!df$status[i] %in% c("found", "ready")) return("unknown")
+      pcli_login_status(unname(cli))
+    }, "")
+  }
   new_listing(df, "gptr_providers",
               footer = "Credentials show variable names and fingerprints only.")
 }

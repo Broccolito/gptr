@@ -611,6 +611,7 @@ repl_main = function(rs) {
     old = options(set)
     on.exit(options(old), add = TRUE)
   }
+  if (!repl_setup(rs)) return(invisible(NULL))
   repl_banner(rs)
   repeat {
     if (rs$exit) break
@@ -641,6 +642,82 @@ repl_main = function(rs) {
                 session = s)
   }
   invisible(s)
+}
+
+#' Choose and save a default before the first interactive chat; FALSE returns to R
+#' @noRd
+repl_setup = function(rs) {
+  if (!is.null(rs$session) || !is.null(rs$model) || !is.null(setting_get("model")) ||
+      rs$stdin || !gptr_can_prompt()) return(TRUE)
+  ids = c("codex", "claude-cli")
+  refs = c("codex/default", "claude-cli/default")
+  providers = gptr::gptr_providers(check_login = TRUE)
+  rows = match(ids, providers$id)
+  api = providers$api[rows]
+  is_cli = !is.na(api) & api == c("cli-codex", "cli-claude")
+  status = providers$status[rows]
+  status[is.na(status)] = "not available"
+  status[!is_cli] = "not a CLI provider"
+  login = providers$login[rows]
+  login[is.na(login)] = "unknown"
+  login[!is_cli] = "unknown"
+  shown_status = console_escape(status, newlines = FALSE)
+  shown_login = c(`signed in` = "Signed in", `not signed in` = "Not signed in",
+                  unknown = "Unknown")[login]
+  cli_names = c("Codex CLI", "Claude Code CLI")
+  labels = c(sprintf("%-*s  %-*s  %s", max(nchar(cli_names)), cli_names,
+                      max(nchar(shown_status)), shown_status, shown_login),
+              "Manual setup (API or Ollama)")
+  choice = ui_get()$select(
+    "Welcome to Peter.\nChoose a default model provider.", labels,
+    details = c("Saved in your user settings for future sessions.",
+                "CLI login status does not verify billing or online access.",
+                "Manual setup shows API and Ollama commands, then returns to R."))
+  if (length(choice) != 1L || is.na(choice) || !choice %in% seq_along(labels)) {
+    console_notice("Setup cancelled. No default provider was saved.")
+    return(FALSE)
+  }
+  if (choice == 3L) {
+    console_out(c(
+      "Configure an API provider in R:",
+      '  gptr_login("openai", method = "key")',
+      '  # Or load an existing key file with gptr_env("~/keys/.env").',
+      '  gptr_config(model = "openai/gpt-6-sol", .scope = "user")',
+      "Or use an installed local Ollama model:",
+      '  gptr_models(provider = "ollama", refresh = TRUE)',
+      "  # Replace <installed-model> with a local chat model from this listing.",
+      '  gptr_config(model = "ollama/<installed-model>", .scope = "user")',
+      "  peter()",
+      "Use gptr_providers(), gptr_models(), and ?gptr_config for other providers."))
+    return(FALSE)
+  }
+  if (!is_cli[choice]) {
+    console_notice("The ", ids[choice], " provider is not using the expected CLI adapter. ",
+                     "Choose another provider or use manual setup. ",
+                     "No default provider was saved.")
+    return(FALSE)
+  }
+  if (!status[choice] %in% c("found", "ready")) {
+    command = c("codex", "claude")[choice]
+    console_notice("The ", command, " CLI is not available. Install it and sign in in your ",
+                     "terminal, then run peter() again. Use gptr_providers(check = TRUE) ",
+                     "to check its status.")
+    return(FALSE)
+  }
+  if (login[choice] == "not signed in") {
+    command = c("codex login", "claude auth login")[choice]
+    console_notice("Sign in in your terminal with `", command, "`, then run peter() again. ",
+                     "No default provider was saved.")
+    return(FALSE)
+  }
+  if (login[choice] == "unknown") {
+    console_notice("Login status is unknown. If needed, sign in in your CLI before chatting.")
+  }
+  ref = refs[choice]
+  gptr::gptr_config(model = ref, .scope = "user")
+  rs$model = ref
+  console_notice("Default provider saved: ", ids[choice], " (user settings).")
+  TRUE
 }
 
 #' End a REPL: its reader closed (IC-59), its environment released (rule R2)
@@ -707,7 +784,10 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' @section The interactive console:
 #' `peter()` without a prompt opens a console when someone can answer (interactive R or
 #' IRkernel); `peter(.stdin = TRUE)` reads its input from standard input, and `s |> peter()`
-#' opens it on `s`. Each input is one of:
+#' opens it on `s`. With no explicit or configured model, the interactive console first offers
+#' Codex CLI, Claude Code CLI or API configuration instructions. Choosing an available CLI saves
+#' its default model at user scope; cancelling returns to R. Piped input skips this setup.
+#' Each input is one of:
 #'
 #' * a prompt, sent as `s |> peter("...")` with `{name}` interpolation; `@file` adds the head of a
 #'   file (at most 40 lines) and `@object` attaches an object by name;

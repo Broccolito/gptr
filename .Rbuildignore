@@ -24,3 +24,5 @@
 ^\.env($|\.)
 ^.*\.env$
 ^gptr-discussion\.txt$
+^tmp$
+^local-materials$

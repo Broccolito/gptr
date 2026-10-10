@@ -185,12 +185,14 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 }
 
 #' Console select(): numbered choices; NA = cancelled; attr "other" = free text
+#' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
                              allow_other = FALSE, read = ui_console_read) {
   labels = as.character(unlist(choices))
-  msg_verbatim(ui_escape(c("", title, if (length(details)) paste0("  | ", details),
-                           sprintf("  %d: %s", seq_along(labels), labels))))
+  msg_verbatim(c("", console_escape(title),
+                  ui_escape(if (length(details)) paste0("  | ", details)), "",
+                  ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""), "stderr")
   hint = c(if (multiple) "numbers separated by commas" else "a number",
            if (allow_other) "or type your own answer",
            if (length(default)) paste0("Enter = ", paste(labels[default], collapse = ", ")))

@@ -961,7 +961,7 @@ All are `c("gptr_<name>", "gptr_listing", "data.frame")`, built by `new_listing(
 | `gptr_ledger` | P06 | the §4.3 ledger columns |
 | `gptr_sessions` | P06 | `id`, `file`, `created`, `updated`, `turns`, `model`, `status`, `title` (first prompt, 60 chars), `live` (lgl) |
 | `gptr_models` | P05 | `ref`, `provider`, `name`, `context`, `max_output`, `input_price`, `output_price`, `reasoning`, `aliases`, `status` |
-| `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs) |
+| `gptr_providers` | P05 | `id`, `type`, `api`, `credential` (`"NAME #fp"` or `NA`), `source`, `status`, `default_model`, `egress` (`ack`/`needed`), `version` (CLIs); optional `login` when `check_login = TRUE` |
 | `gptr_mcp_servers` | P18 | `name`, `source` (`gptr:user`, `gptr:project`, `claude-code:user`, ...), `transport`, `era`, `status`, `tools`, `exposure`, `tokens`, `trusted` |
 | `gptr_skills` | P17 | `name`, `description`, `source`, `path`, `tokens`, `visible` |
 | `gptr_agents` | P17 | `name`, `description`, `model`, `backend`, `source`, `path` |
@@ -1058,7 +1058,7 @@ exact name.
    | 15 | `team` | P19 | `agents` given | a team session; inside a run its children are children of the running session (IC-39) |
    | 16 | `fanout` | P19 | `parallel` given and exactly one list-like context object | a fan-out session (same nesting rule) |
    | 20 | `nested` | P08 | a run is active on the call stack (`run_current()` non-NULL) and no session is continued | a child session of the running one (depth + 1, mode inherited and only tightened, usage and budget rolled up to the root, no document block) |
-   | 30 | `console` | P14 | no prompt (`gptr_can_prompt()` or `.stdin`) | the `console` frontend on the piped session or a new one; returns it invisibly on `/exit` |
+   | 30 | `console` | P14 | no prompt (`gptr_can_prompt()` or `.stdin`) | the `console` frontend on the piped session or a new one; returns it invisibly on `/exit`, or `NULL` when first-use setup returns before a session starts |
    | 50 | `document` | P15 | a top-level call located in a document that contains a block owned by this call (no write consent needed to replay, IC-45) | a fresh block: the replay of IC-46 (the piped session advanced in place, else a replayed session; zero tokens); a stale block under `replay`: `gptr_error_stale_block`; otherwise sets `call$doc` when write consent exists and passes |
    | 60 | `continue` | P08 | a session was piped in | running: `gptr_steer(s, prompt)` and `invisible(s)`; otherwise a new turn on `s` |
    | 70 | `new` | P08 | always | a new session |
@@ -1068,6 +1068,17 @@ exact name.
    the running mode (only tightened) and filters whatever route handles it (IC-53). Top-level team and fan-out
    statements own one document block (IC-47); in replay mode their children pass `replay_guard()`, so
    `GPTR_REPLAY=replay` still proves that a script makes no model calls.
+
+   The console's first-use setup runs before its banner or chat input only for a new interactive
+   console without an explicit or effective configured model. It offers the expected Codex and
+   Claude CLI adapters plus manual API/Ollama instructions. A usable CLI with reported sign-in, or
+   unknown login explicitly selected by the user, saves `codex/default` or `claude-cli/default`
+   through `gptr_config(model = ..., .scope = "user")` and continues. Cancellation, manual setup,
+   unavailable/signed-out CLI or a same-name non-CLI provider returns `NULL` without saving.
+   Existing sessions, explicit/configured models, `.stdin = TRUE` and noninteractive workflows
+   skip setup; prompt-bearing calls retain normal model resolution. Setup preserves unrelated
+   settings, does not grant an egress acknowledgment and never performs inference. Login status
+   is a local CLI report, not proof of subscription billing or online credential validity.
 6. **Run**: `.run = FALSE` -> the session with the rendered input queued; `background = TRUE` -> registered with
    the background pump (P21) and returned running; otherwise run to settlement on the reactor under the
    interrupt policy (`console-interrupt.R` when loaded, else abort-only), then return.
@@ -1255,15 +1266,23 @@ gptr_login("openrouter")
 #### `gptr_providers()` — P05, `provider-registry.R` [stable]
 
 ```r
-gptr_providers(check = FALSE)
+gptr_providers(check = FALSE, check_login = FALSE)
 ```
 
 Returns a `gptr_providers` data frame (§5.12): every registered provider record, its credential source as
-`NAME #fp` (never values), CLI paths and cached versions (P20 contributes a `status` function per `cli` provider
-that reads only cached `Sys.which()` data unless `check = TRUE`, IC-65), plan status and egress acknowledgement.
+`NAME #fp` (never values), CLI paths and cached versions (P20 contributes a `status` function per CLI provider
+that uses cached results or filesystem discovery unless `check = TRUE`, IC-65), plan status and egress acknowledgement.
 `check = TRUE` makes cheap reachability checks (models endpoint with a 2 s timeout for HTTP providers;
-`claude --version`/`codex --version` for CLIs; never a paid request). `check = FALSE` performs no network or
-process I/O. Conditions: `invalid_argument`. Emits nothing.
+version and capability probes for CLIs; never a paid request). With both `check = FALSE` and
+`check_login = FALSE`, listing performs no network or process I/O.
+`check_login = TRUE` independently checks CLI-reported login using supported `codex login status` and
+`claude auth status` commands (3 s timeout per subprocess, closed stdin, no model request). It adds a
+`login` column: `signed in`, `not signed in`, or `unknown`; non-CLI providers report `not applicable`.
+Unsupported commands, missing tools and failed checks report `unknown`. Raw account/key output is never
+returned or displayed. A signed-in report does not guarantee online credential validity or quota.
+The first-use console accepts the CLI shortcuts only when their registered APIs are `cli-codex` and
+`cli-claude`, respectively; same-name non-CLI overrides cannot be saved as CLI defaults.
+Conditions: `invalid_argument`. Emits nothing.
 
 ```r
 gptr_providers()
@@ -2709,6 +2728,10 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt lists every flagged call and `+N more lines` (IC-53) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
 
+Console `select()` deliberately preserves title line feeds for setup and `ask` questions.
+Choice labels and details escape line feeds, and all other control/bidi/zero-width escaping is
+retained. Permission approval displays keep the separate IC-53 escaping rules.
+
 **Permission request record** (argument of `ui$permission()` and payload of `permission_request`):
 `list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
@@ -2770,7 +2793,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
-| `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s` (a new session when `NULL`); returns `s` invisibly on `/exit` | P08 (route) |
+| `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu (`[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, `[b]ackground` for foreground calls when P21 is loaded) writes to stderr and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)`, `finish()`, `reset_line()`; chunk-invariant; untrusted text never used as a format string | P14 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
@@ -2890,6 +2913,7 @@ subagent_backend(gptr_agent(model = "codex"), model_resolve("codex"))     # "cli
 | `builtin_cli(gptr)` | `cli-common.R` | registers providers `claude-cli` (alias `claude_code`, `type = "cli"`) and `codex` (alias `codex`), adapters `cli-claude` and `cli-codex` (`transport = "process_jsonl"`), a `status` function per provider for `gptr_providers()` | P02 load |
 | `pcli_find(cli = c("claude", "codex"))` | `cli-common.R` | path from `gptr.cli_path`, then PATH, then the per-OS known locations of IC-65; native binaries only for claude (the npm `claude.cmd` shim is refused with an install hint); `gptr_error_cli_missing` otherwise | P20 |
 | `pcli_version(path)`, `pcli_probe(path)` | `cli-common.R` | `package_version` from `--version` and a capability probe of `--help` (cached per path and mtime; run only on first use or `check = TRUE`); below the minimum (`claude` >= 2.0.0), or a `-p` that defaults to `--bare` without a documented opt-out, signals `gptr_error_cli_version` | P20 (`status()` reads the cache only unless `gptr_providers(check = TRUE)`, IC-65) |
+| `pcli_login_status(cli)` | `cli-common.R` | help-gated CLI login-status commands, closed stdin and 3 s timeout per subprocess; returns only `signed in`, `not signed in`, or `unknown`, never raw auth output; no model request | P05 when `check_login = TRUE` |
 
 Example calls:
 
@@ -4672,8 +4696,13 @@ document are exact.
   WinGet links, and for codex the npm prefix resolved to the vendored `codex.exe`); RStudio and Positron on macOS
   do not source shell profiles. The npm `claude.cmd` shim is **refused** with an install hint (07); native
   binaries run without a shell, so the empty-string arguments `--tools ""` and `--setting-sources ""` are safe.
-  The providers' `status()` functions use only cached `Sys.which()` data unless `gptr_providers(check = TRUE)`;
-  `check = FALSE` never spawns a process.
+  The providers' `status()` functions use cached results or filesystem discovery unless
+  `gptr_providers(check = TRUE)` requests version and capability probes. With both `check = FALSE` and
+  `check_login = FALSE`, listing never spawns a process. `check_login = TRUE` is an explicit exception:
+  help-gated CLI login-status commands run with closed stdin and a 3 s timeout per subprocess, never
+  a model request. Only sanitized login states are returned; unknown/error states never imply signed out.
+  A signed-in state includes supported API-key authentication and does not establish subscription
+  billing or online credential validity.
 - **claude** argv adds `--permission-mode default` and `--allowedTools "mcp__gptr__*"`, so the CLI sends no
   `can_use_tool` for gptr's own tools and gating happens once, in the `mcp_message` dispatch (the handler still
   denies anything else). With a budget in force it adds `--max-turns <remaining turns>` and

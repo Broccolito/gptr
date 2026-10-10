@@ -1809,6 +1809,13 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
 
 ### 6.17 Console and front ends [18]
 
+- **First-use setup**: before the banner/input of a new interactive console, when neither an
+  explicit nor an effective configured model exists, offer Codex CLI, Claude Code CLI and manual
+  API/Ollama instructions. A usable CLI with reported sign-in, or an explicitly accepted unknown
+  state, persists its default model at user scope before continuing. Cancel, manual instructions,
+  missing CLI, reported signed-out state or a same-name non-CLI override returns to R without
+  changing settings. Existing sessions, explicit/configured models, stdin and noninteractive
+  workflows skip this step. Setup does not acknowledge context sharing or issue a model request.
 - **REPL** (`frontend` "console"): `readline()` when interactive, one persistent `file("stdin")` under
   `.stdin = TRUE`; input grammar: natural language, `/command`, `!expr` (evaluated in `envir`, added to the
   next prompt's context within 300 tokens [IC-73]) and `!!expr` (not added), fenced ```` ```r ```` blocks, `"""` multi-line prompts,
@@ -1826,6 +1833,9 @@ than HTML/JS for the same app (20 apps, 5 levels) and a full rewrite costs 3.9x 
   is a denial with a notice). The UI abstraction is how Shiny or RPC front ends replace the console. Whether anyone
   can be prompted is `gptr_can_prompt()`: true in IRkernel, where `interactive()` is false but `readline()` works
   [18 §2; IC-43].
+  Console selector titles intentionally preserve line feeds for setup and question text; option
+  labels, details and other control/bidi/zero-width characters remain escaped. Permission approval
+  rendering retains its separate escaping contract.
 - **Other front ends**: `knit_print` for sessions and System 1 vectors; the JSONL event sink (`frontend`
   "jsonl": redacted Pi-named events on a connection, used by worker children and by agentic layers written in
   other languages) [P-B graft].

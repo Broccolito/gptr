@@ -76,8 +76,8 @@ Encoding: UTF-8
 Language: en-US
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 SystemRequirements: Optional: Ollama (>= 0.35.1) for native local decision models;
     other optional external programs: 'claude' (Claude Code)
     and 'codex' (Codex) for subscription providers, 'quarto' for 'Quarto'
     documents, and a 'Chrome'-family browser for app screenshots.
+Config/roxygen2/version: 8.1.1
