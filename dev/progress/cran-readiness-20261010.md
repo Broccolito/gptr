@@ -78,7 +78,8 @@ largest installed directories beside its commit/artifact hash. Flag source growt
 changes against prior measurements. Do not equate CI's 45/120-minute job timeout with
 package checking time because it includes setup and dependency installation.
 
-For submission, build once and check the exact upload tarball with current R-devel
+For submission, build once using current release/R-patched, then check the exact upload
+tarball with current R-devel
 `R CMD check --as-cran`, then verify Windows and reverse dependencies. Resolve warnings
 and significant notes. Keep the checked artifact hash and logs; change no shipped input
 after that gate. [CRAN Repository Policy](https://cran.r-project.org/web/packages/policies.html)
