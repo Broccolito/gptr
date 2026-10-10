@@ -10,34 +10,27 @@ vignette: >
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", error = FALSE,
                       render = knitr::normal_print)
-old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
+old_options = options(gptr.quiet = TRUE, gptr.interactive = FALSE, gptr.record = "off",
+                      cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 ```
 
-Generative models (System 2) write text and code. Typed decision models (System 1), such as
-TypeSafe AI's Jev, answer a question about an input with a probability: yes or no, one label
-out of several, or a score. gptr returns those answers as ordinary R vectors, so they
-work directly in `if`, `for`, `while`, `ifelse()` and data-frame filters, and one call answers a
-whole vector of inputs at once.
+Generative models (System 2) produce text and code. Typed decision models (System 1) answer
+with a logical value, a choice, or a numeric score, together with their probabilities. gptr
+returns R vectors that can be used in comparisons, filters and control flow. A batch returns
+one answer per input.
 
-This vignette uses a scripted classifier made with `gptr_fake_provider(type = "classifier")`, so
-it runs offline. Its answers are a function of the input text; a real System 1 model is used in
-exactly the same way with `model = jev`.
+Every executed example below uses a fake classifier, with synthetic probabilities chosen for
+the demonstration. These outputs are not evidence of a model's accuracy or calibration.
 
 ```{r}
 library(gptr)
 
 judge = gptr_fake_provider(function(state, question) {
-  # `state` is a named list that holds the input (or the answer of a piped session).
   txt = paste(unlist(state), collapse = " ")
   if (identical(question$type, "choice")) {
-    p = if (grepl("lobe", txt)) {
-      c(liver = 0.03, lung = 0.91, brain = 0.03, other = 0.03)
-    } else if (grepl("Hepatocyte", txt)) {
-      c(liver = 0.88, lung = 0.04, brain = 0.03, other = 0.05)
-    } else {
-      c(liver = 0.05, lung = 0.05, brain = 0.80, other = 0.10)
-    }
-    return(p)
+    if (grepl("lobe", txt)) return(c(liver = 0.03, lung = 0.91, brain = 0.03, other = 0.03))
+    if (grepl("Hepatocyte", txt)) return(c(liver = 0.88, lung = 0.04, brain = 0.03, other = 0.05))
+    return(c(liver = 0.05, lung = 0.05, brain = 0.80, other = 0.10))
   }
   if (identical(question$type, "score")) {
     if (grepl("Anaphylaxis", txt)) return(c(0.02, 0.08, 0.90))
@@ -49,124 +42,194 @@ judge = gptr_fake_provider(function(state, question) {
 }, name = "judge", type = "classifier")
 ```
 
-## Yes or no, for a whole vector
+## Logical decisions and probabilities
 
 ```{r}
 abstracts = c(
-  trial = "We randomized 200 adults with hypertension to drug A or placebo for 12 weeks.",
+  trial = "We randomized 200 adults to drug A or placebo for 12 weeks.",
   cohort = "We followed 5000 nurses for 20 years and recorded incident diabetes.",
   pilot = "A pilot study of 30 patients; the allocation method is not reported."
 )
 is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts,
-              model = judge)
+               model = judge, envir = new.env())
 is_rct
 gptr_prob(is_rct)
+gptr_prob(is_rct, "probabilities")
 ```
 
-The result is a logical vector with the probabilities attached. A probability of at least
-`threshold` (0.5 by default) is `TRUE`. The last line names the model and says whether its
-probabilities are known to be calibrated.
+The `gptr_decision` result is logical. Its value is `TRUE` when P(yes) is at least
+`threshold` (0.5 by default). `gptr_prob(x)` returns P(yes), while
+`gptr_prob(x, "confidence")` returns `abs(2 * P(yes) - 1)`; confidence is different from
+the probability of a positive answer.
 
-## Decisions inside control flow
+## Structured inputs and batch shape
 
-A single input gives a single value, which `if` accepts:
+A data frame supplies one record per row. An atomic vector or an unnamed list supplies one
+state per element. A fully named list supplies one structured state; `I(x)` also requests one
+state for the whole object. Multiple inputs must have compatible batch sizes: a single state
+can accompany every item in a batch.
 
 ```{r}
-included = character()
-for (id in names(abstracts)) {
-  if (peter("Is this abstract about a randomized controlled trial?", abstracts[[id]],
-           model = judge)) {
-    included = c(included, id)
-  }
+studies = data.frame(
+  abstract = unname(abstracts),
+  sample_size = c(200L, 5000L, 30L),
+  row.names = names(abstracts)
+)
+peter("Does this study report randomized allocation?", studies, model = judge,
+      envir = new.env())
+
+record = list(abstract = abstracts[["trial"]], sample_size = 200L,
+              allocation = "randomized")
+length(peter("Was allocation randomized?", record, model = judge, envir = new.env()))
+```
+
+System 1 sends the input states to the selected provider, rather than only an object name.
+Small structured values can be serialized in full; large or unsupported values are described
+or truncated. Check what information the question needs before sending sensitive data; see
+`?gptr_egress` and `?gptr_security`.
+
+## Uncertainty in filters, functions and loops
+
+`min_confidence` turns answers below the requested confidence into `NA` by default. Unknown
+confidence is also uncertain when the minimum is positive. For yes/no decisions,
+`min_confidence = 0.8` requires P(yes) at least 0.9 or at most 0.1.
+
+```{r}
+screened = peter("Is this abstract about a randomized controlled trial?", abstracts,
+                 model = judge, min_confidence = 0.8, envir = new.env())
+screened
+names(abstracts)[!is.na(screened) & screened]
+names(abstracts)[is.na(screened)]
+```
+
+Use `isTRUE()` for a scalar decision in `if` or `while` when abstention is possible. Decide
+separately what to do with an uncertain result; treating `NA` as exclusion is a workflow
+choice, not a negative model answer.
+
+```{r}
+is_trial = function(text) {
+  peter("Is this abstract about a randomized controlled trial?", text = force(text),
+        model = judge, min_confidence = 0.8, envir = new.env())
 }
-included
+included = character()
+review = character()
+for (id in names(abstracts)) {
+  decision = is_trial(abstracts[[id]])
+  if (isTRUE(decision)) included = c(included, id)
+  if (is.na(decision)) review = c(review, id)
+}
+list(included = included, review = review)
 ```
 
-Answers are cached per input: asking the same question about the same text again costs nothing.
-Without a workspace the cache lives in memory; with a `.gptr/` workspace it is kept in
-`.gptr/cache/s1/` so that a script replays without model calls (see `?gptr_security` before you
-commit answers about personal data).
+`text = force(text)` passes the function argument as context even though `envir` is a different
+environment from the function frame.
+The same function can live in an ordinary R file. A call inside a function or loop does not
+own a recorded document block. A matching System 1 cache entry can avoid another request;
+that is distinct from document replay. See the script-as-history vignette.
 
-## When the model is unsure
+`uncertain = "stop"` signals `gptr_error_s1_uncertain`. `TRUE` or `FALSE` supply a yes/no
+fallback; a function `function(state, answer)` can return one replacement of the answer's
+type. Such a function may make another model request if you explicitly implement that
+escalation, with its own egress, permissions and usage.
 
-By default every answer is `TRUE` or `FALSE`. `min_confidence` defines an uncertain band, and
-`uncertain` says what an answer inside it becomes: `NA` (the default when `min_confidence` is
-given), `TRUE`, `FALSE`, `"stop"` (an error) or a function that escalates, for example to a
-System 2 model.
-
-```{r}
-peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge,
-     min_confidence = 0.8)
-```
-
-## One label out of several, and scores
+## Choices and fractional scores
 
 ```{r}
 samples = c(s1 = "Biopsy of the right lower lobe",
             s2 = "Hepatocytes from a resected liver segment",
             s3 = "Cortex from an epilepsy resection")
-tissue = peter("Which tissue does this sample description refer to?", samples,
-              model = judge, choices = c("liver", "lung", "brain", "other"))
+tissue = peter("Which tissue does this description refer to?", samples, model = judge,
+               choices = c("liver", "lung", "brain", "other"), envir = new.env())
 tissue
+gptr_prob(tissue)
 gptr_prob(tissue, "probabilities")
 
 severity = peter("How severe is this adverse event?",
-                c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
-                model = judge, levels = c("mild", "moderate", "severe"))
+                 c(a = "Mild headache", b = "Anaphylaxis requiring adrenaline"),
+                 model = judge, levels = c("mild", "moderate", "severe"), envir = new.env())
 severity
+gptr_prob(severity, "probabilities")
 ```
 
-A score is the expected level, counted from 0 (`mild`) to 2 (`severe`).
+`gptr_choice` is character; `gptr_prob(tissue)` gives the probability of the selected label.
+`gptr_score` is numeric, the expected **zero-based** level: here mild = 0, moderate = 1,
+severe = 2. The example scores are 0.20 and 1.88, not rounded labels. For scores,
+`gptr_prob(x)` gives confidence; use `"probabilities"` to inspect the distribution over
+levels. Choice and score confidence are provider-defined measures of concentration, not
+established probabilities that the answer is correct.
 
-## System 1 routes System 2
+## Provenance and caching
 
-A cheap decision can choose which generative model does the work. The R script is the
-orchestration graph; no separate workflow language is needed.
+```{r}
+attr(is_rct, "meta")[c("model", "engine", "calibrated", "execution", "locality", "cached")]
+```
+
+The metadata also includes usage, request IDs and, when available, a model digest, server
+version and calibration provenance. `calibrated = NA` means unknown; native decision models
+do not become calibrated merely by returning probabilities. Emulated answers have
+`calibrated = FALSE`. Slicing a typed result keeps its probabilities aligned.
+
+Matching answers are cached per input and question. With a `.gptr/` workspace the System 1
+cache is durable; without one it lives under the session's temporary workspace. Cache
+identity also depends on the model and answer options. Changed model identity, live mode or
+a missing entry can require a request. A mutable local model without verified immutable
+identity cannot promise durable reuse. Use `gptr_cache()` to inspect the cache.
+
+## System 1 routes or judges System 2
 
 ```{r}
 strong = gptr_fake_provider(list("A careful answer from the strong model."), name = "strong")
 fast = gptr_fake_provider(list("A quick answer from the fast model."), name = "fast")
-tasks = c("Rename the column mpg to miles_per_gallon.",
-          "Decide whether a mixed model or a GEE suits these repeated measures.")
+tasks = c("Rename a column.", "Choose a mixed model for repeated measurements.")
 for (task in tasks) {
-  hard = peter("Is this task subtle enough to need the strongest model?", task, model = judge)
-  chosen = if (hard) strong else fast
-  answer = peter(task, model = chosen, envir = new.env())
+  hard = peter("Does this task need the stronger model?", task, model = judge,
+                envir = new.env())
+  answer = peter(task, model = if (isTRUE(hard)) strong else fast, envir = new.env())
   print(answer$text)
 }
-```
 
-## Judging a session
-
-Piping a System 2 session into a System 1 question asks about the session's last answer. No
-turn is added to the session.
-
-```{r}
 analysis = peter("Summarize mtcars in one sentence.",
-                model = gptr_fake_provider(list("The summary succeeded: 32 cars, 11 variables.")),
-                envir = new.env())
+                 model = gptr_fake_provider(list("The summary succeeded: 32 cars, 11 variables.")),
+                 envir = new.env())
 analysis |> peter("Did the analysis succeed?", model = judge)
 analysis$turns
 ```
 
-## Using Jev
+The piped classifier receives a bounded description of the session's status, designated
+value and last answer. It adds no agent turn. Judging the answer text is not verification of
+the calculations or saved artifacts; validate those in R.
 
-Jev is TypeSafe AI's System 1 model. Its key is read from `TYPESAFE_API_KEY`; `gptr_env()` also
-accepts the variable names `jev-key`, `JEV_KEY`, `JEV_API_KEY` and `TYPESAFE_KEY` in a `.env`
-file and maps them to it.
+## Native Jev, local Ollama and explicit emulation
+
+The following examples can contact real providers and are not executed here. Jev reads
+`TYPESAFE_API_KEY`; `gptr_env()` also recognizes `jev-key`, `JEV_KEY`, `JEV_API_KEY` and
+`TYPESAFE_KEY` aliases in a key file.
 
 ```{r, eval = FALSE}
-gptr_env("jev-key.env")
-is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = jev)
-table(is_rct)
+gptr_env("~/keys/jev.env")
+peter("Is this a randomized trial?", abstracts, model = jev)
+
+# Prepare an installed native decision model on your local Ollama server first.
+peter("Is this a randomized trial?", abstracts, model = "ollama/clef-flash")
 ```
 
-A local Ollama server (0.35.1 or later) answers the same questions without a key through
-its decision models, `model = "ollama/clef-flash"` or `model = "ollama/clef"`.
+Native Clef and Clef Flash use Ollama's System One API and require server 0.35.1 or later.
+Their local-only preflight checks the endpoint and discovered model evidence; an unavailable
+or unsuitable model fails instead of silently falling back to a cloud model. Ollama chat
+models use a different adapter and return agent sessions.
 
-Without a System 1 model, `gptr_config(system1 = "emulate:anthropic/claude-haiku-4-5")` answers
-the same questions with a generative model. Emulated answers are marked as uncalibrated and are
-never used silently.
+Emulation uses structured output from a generative model. It must be enabled explicitly in
+settings; writing an `emulate:` model name alone does not enable it.
+
+```{r, eval = FALSE}
+gptr_config(system1 = "emulate:anthropic/claude-haiku-4-5", .scope = "session")
+peter("Is this a randomized trial?", abstracts,
+      model = "emulate:anthropic/claude-haiku-4-5")
+```
+
+Emulation is a model request, is marked uncalibrated, and does not create native decision
+capabilities for a chat model. Select a native model when the workflow requires native
+probabilities, and assess calibration on the data relevant to that workflow.
 
 ```{r cleanup, include = FALSE}
 options(old_options)

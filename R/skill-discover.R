@@ -232,10 +232,17 @@ skill_discover = function(scope = "all") {
 #' enter the catalog the model sees. `gptr_agents()` lists agent definition files the same way.
 #' Both only read files.
 #'
+#' A skill is a directory containing `SKILL.md` with a YAML `description` and optional `name`.
+#' Its body is read on demand, or preloaded with `peter(skills = "name")`.
+#' `disable-model-invocation: true` hides it from automatic catalog selection, while explicit
+#' preloading remains available. `allowed-tools` is metadata, not a permission rule.
+#'
 #' @param scope One of `"all"`, `"project"`, `"user"` or `"packages"`.
 #' @return `gptr_skills()`: a `gptr_skills` data frame with columns `name`, `description`,
 #'   `source`, `path`, `tokens` (catalog cost) and `visible`. `gptr_agents()`: a `gptr_agents`
 #'   data frame with columns `name`, `description`, `model`, `backend`, `source` and `path`.
+#' @seealso [gptr_agent], [gptr_plugins], [gptr_trust];
+#'   `vignette("skills-and-plugins", package = "gptr")` for skills, templates and agent files.
 #' @examples
 #' gptr_skills("packages")
 #' @export

@@ -17,6 +17,13 @@ steps: [HANDOFF.md](HANDOFF.md). Per-plan evidence: `progress/Pxx.md`; CI and to
 
 ## Resume log
 
+- 2026-10-10: expanded usage documentation to 13 guides, refreshed reference comments and grouped
+  pkgdown navigation; 71 documentation assertions and all 58 reference example pages passed;
+  built and inspected the local site (89 HTML pages, no broken local links/fragments). Remote/PR
+  synchronization and independent PR #5 review complete; PR stays unmerged. Read-only model-access
+  inventory saved only in ignored LOCAL_SETUP.md; no inference run. Evidence:
+  [documentation-20261010.md](progress/documentation-20261010.md),
+  [pr-review-20261010.md](progress/pr-review-20261010.md).
 - 2026-10-03: implementation started; P01-P04 committed (M0 local gates), P05 complete.
 - 2026-10-04: P06, P07, P12 complete; P08 and the early lanes (P09, P10, P11, P13, P15, P17, P18,
   P20) under way; FIX-1..4, CI-3/CI-4.

@@ -286,6 +286,12 @@ artifact_list = function() {
 #' `gptr_artifacts()` lists the artifacts of the workspace (`.gptr/`, else a temporary
 #' directory) and manages their processes.
 #'
+#' The built-in `kind = "html"` uses a working `page.html` and a Shiny serving wrapper.
+#' Both built-in kinds need Shiny to launch. `peter$app(..., launch = FALSE)` creates a version
+#' without launching it; startup and browser checks therefore remain unperformed. Browser
+#' session checks and screenshots additionally need chromote and Chrome. A check value of
+#' `NA` means it was skipped. Separate processes organize execution but are not OS sandboxes.
+#'
 #' @param id `NULL` to list every artifact, or the id of one artifact.
 #' @param open `TRUE` to open the artifact in the IDE viewer or the browser (only in an
 #'   interactive session); a stopped artifact is relaunched first.
@@ -309,6 +315,8 @@ artifact_list = function() {
 #' @section Options:
 #' `gptr.artifact_max_bytes` (default `5e8`): the largest total `object.size()` of the objects
 #' one version may snapshot; above it `peter$app()` signals `gptr_error_artifact_too_large`.
+#' @seealso `vignette("tools-and-artifacts", package = "gptr")` for working files, data
+#'   snapshots, checks and lifecycle examples.
 #' @examples
 #' gptr_artifacts()                      # an empty listing when no artifact exists
 #' @export

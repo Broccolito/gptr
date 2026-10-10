@@ -828,6 +828,11 @@ doc_console_append = function(lines, session = NULL) {
 #' could not be written: a Jupyter notebook that was open, or the deferred writes of an `Rscript`
 #' run that was killed.
 #'
+#' Eligible top-level calls and pipe chains own document blocks; calls nested inside loops
+#' or functions do not. Binding a document neither reconstructs earlier unrecorded turns
+#' nor overrides recording being off. A narrative summary or model-generated script draft
+#' needs review and execution checks before it can serve as a reproducible workflow.
+#'
 #' @param path `NULL` to return the current binding, `FALSE` to remove it, or the path of an
 #'   `.R`, `.Rmd`, `.qmd` or `.ipynb` document.
 #' @param format `NULL` (from the file extension) or the format of that extension: `"r"`,
@@ -1042,6 +1047,9 @@ doc_blocks_ipynb = function(text) {
 #' for 90 days, temporary files older than `getOption("gptr.spill_days", 7)` days and older
 #' refreshed model catalogs; `clear` removes a kind entirely.
 #'
+#' Clearing the System 2 answer cache does not remove the R code of document blocks, but
+#' saved answers needed to reconstruct a replayed call may no longer be available.
+#'
 #' @param action `"info"`, `"prune"` or `"clear"`.
 #' @param kind `"all"`, `"s1"`, `"s2"` or `"tmp"`.
 #' @return `info`: a `gptr_cache_info` data frame with columns `kind`, `entries`, `bytes`,
@@ -1193,6 +1201,11 @@ doc_catalog_prune = function() {
 #' values interpolated into it changed), or every call under `replay = "live"`, asks the model
 #' again and rewrites its block in place, and the old block is skipped, which base `source()`
 #' cannot do.
+#'
+#' Replay executes the recorded R code, including its ordinary side effects. It does not
+#' freeze package versions, supply external inputs or validate the analysis. This function
+#' accepts `.R` scripts; render `.Rmd` and `.qmd` with their report tools, and execute
+#' `.ipynb` through its R kernel. Use [gptr_blocks()] to inspect any supported format.
 #'
 #' @param file Path of an `.R` document.
 #' @param replay Replay mode for the calls in the file: `"auto"`, `"replay"`, `"live"` or

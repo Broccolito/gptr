@@ -25,7 +25,17 @@ project is not trusted (their source reads \code{project (untrusted)}), but only
 enter the catalog the model sees. \code{gptr_agents()} lists agent definition files the same way.
 Both only read files.
 }
+\details{
+A skill is a directory containing \code{SKILL.md} with a YAML \code{description} and optional \code{name}.
+Its body is read on demand, or preloaded with \code{peter(skills = "name")}.
+\code{disable-model-invocation: true} hides it from automatic catalog selection, while explicit
+preloading remains available. \code{allowed-tools} is metadata, not a permission rule.
+}
 \examples{
 gptr_skills("packages")
 gptr_agents()
+}
+\seealso{
+\link{gptr_agent}, \link{gptr_plugins}, \link{gptr_trust};
+\code{vignette("skills-and-plugins", package = "gptr")} for skills, templates and agent files.
 }

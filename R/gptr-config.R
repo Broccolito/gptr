@@ -1233,14 +1233,28 @@ settings_config_value = function(key, value, scope) {
 #'
 #' With no arguments, returns the effective settings with the layer each value came from:
 #' package defaults < user `settings.json` < project `.gptr/settings.json` (an untrusted project
-#' only tightens `mode`, `context`, `record` and permissions) < the user-level project file <
-#' `options(gptr.*)` < this R session. With named arguments, sets those keys in one scope.
+#' only tightens `mode`, `context`, `record`, permission rules and local-only inference) < the
+#' user-level project file < `options(gptr.*)` < this R session. With named arguments, sets
+#' those keys in one scope.
 #'
 #' `model`, `small_model`, `system1`, `mode` and `preset` take bare names (`mode = plan`); `NULL`
 #' removes a key from the scope. `egress` (the providers you allow automatic context to go to) is
 #' accepted only at user scope. Local-only Ollama inference (`providers = list(ollama =
 #' list(local_only = FALSE))`) can be turned off only at user or session scope; a project can only
 #' keep it on. Called from model code during a run, it is refused.
+#'
+#' The `"session"` scope means this R process, not one conversation. User settings live at
+#' `tools::R_user_dir("gptr", "config")/settings.json`; project settings live in `.gptr/`.
+#' A no-argument call always reads effective values, even when `.scope` is supplied. Inspect
+#' `attr(gptr_config(), "sources")` to see their origins. Named lists merge with lower layers;
+#' protected objects such as `providers` must be set as a whole named list.
+#'
+#' @section Choosing controls:
+#' Use settings for defaults such as `model`, `mode`, `context`, `budget`, `record`, `replay`
+#' and registered extension selections. Use [gptr_options] for transport timeouts, output caps,
+#' undo retention and concurrency. Arguments to [peter()] choose values for one call, within
+#' inherited safety restrictions. `vignette("configuration", package = "gptr")` groups all
+#' core settings and options and explains trust and scope.
 #'
 #' @param ... Named settings, e.g. `mode = manual`, `model = sonnet`, `budget = list(cost = 2)`.
 #' @param .scope `NULL` (the project when a `.gptr/` workspace exists, else this session), or
@@ -1251,6 +1265,7 @@ settings_config_value = function(key, value, scope) {
 #' old = gptr_config(mode = plan, .scope = "session")
 #' gptr_config()$mode
 #' gptr_config(mode = old$mode, .scope = "session")
+#' @seealso [gptr_init()], [gptr_trust()], [gptr_permissions()] and [gptr_options].
 #' @export
 gptr_config = function(..., .scope = NULL) {
   scope = if (is.null(.scope)) {

@@ -34,6 +34,12 @@ Unknown usage stays unknown: a token count or cost that a provider did not repor
 never zero, so a group or total that includes it is \code{NA} and the footer prints it as
 \code{unknown}. A known zero, such as the metered charge of a local model, stays zero. Rows without
 a session, agent, model or route (process-level System 1 calls) form the \code{NA} group.
+
+The detailed component ledger contains estimates; its sum can differ from provider-reported
+usage. A run's token budget checks estimated next-input tokens and recorded usage before
+requests; cost limits check recorded cost. The next output or an unknown final charge can
+exceed a remaining allowance, so these stopping policies are not billing reservations.
+Teams and fan-outs count child requests against their shared root budget.
 }
 \examples{
 gptr_usage()

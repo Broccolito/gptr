@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd by dev/release/precompute.R; edit README.Rmd. -->
 
-# gptr <img src="man/img/logo.png" align="right" height="140" alt="gptr logo"/>
+# gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
 gptr runs language model agents inside your live R session. The agent
 works on the objects that are already in memory: it inspects them, runs
@@ -10,6 +10,10 @@ object is loaded once and a mistake costs one re-evaluation instead of a
 fresh run of the whole script. One function, `peter()`, is an
 interactive chat in the console and a programmable call that you put in
 scripts, loops and `if` statements.
+
+Peter's name honors Peter Naur and Peter Cathcart Wason: readable
+programs and careful reasoning. See [Why Peter?](#why-peter) and
+`vignette("why-peter", package = "gptr")`.
 
 - **One gateway.** `peter()` with no prompt opens a chat at the console;
   with a prompt it runs the agent and returns the session, which the
@@ -20,39 +24,31 @@ scripts, loops and `if` statements.
   command-line tools) work next to typed decision models such as
   TypeSafe AI's Jev and Clef on a local Ollama server, whose yes/no,
   choice and score answers go straight into `if` and `for`.
-- **The script is the history.** The code the agent ran is recorded into
-  your `.R`, `.Rmd`, `.qmd` or `.ipynb` document and replays without
-  model calls.
+- **The script is the history.** gptr can record executed agent code
+  into your `.R`, `.Rmd`, `.qmd` or `.ipynb` document. Fresh recorded
+  blocks replay without model calls.
 - **Everything is R.** Tools are R functions; artifacts are Shiny apps;
   skills, MCP servers, sub-agents, hooks and plugins use one documented
   extension API.
 - **Safe defaults.** In the default `manual` mode only actions known to
-  be read-only run without asking; every change to a file or an object
-  asks first. The permission gate is not a sandbox: see
+  be read-only run without asking; changes ask unless an applicable
+  allow rule permits them. The permission gate is not a sandbox: see
   `?gptr_security`.
 
 ## Installation
 
-gptr 1.0 is preparing for release on CRAN. Until then, install it from GitHub:
+These guides describe the 1.0 development version. Install it from
+GitHub with R 4.2 or later:
 
 ``` r
-install.packages("devtools") # if needed
-devtools::install_github("Broccolito/gptr")
+install.packages("pak")  # if pak is not installed
+pak::pak("Broccolito/gptr")
 ```
 
-## Quick start with a CLI
-
-Install and sign in to Codex CLI or Claude Code in your terminal, then run:
-
-``` r
-library(gptr)
-peter()
-```
-
-When no default model is configured, Peter offers Codex CLI, Claude Code CLI or API
-configuration instructions. Choosing an available CLI saves its default model in your user
-settings for future R sessions and projects. API users get commands for configuring their
-provider and model. An explicit `model =` or an existing default skips this setup.
+`install.packages("gptr")` installs the CRAN version, which may still
+expose the older 0.7 API. Check `packageVersion("gptr")` before
+following these examples. No model server or CLI is required for the
+offline examples below.
 
 ## A first session
 
@@ -77,7 +73,7 @@ ls(work)
 
 s |> peter("Which cylinder group is the most economical?")
 #> Four-cylinder cars are the most economical.
-#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . s11bce5cb35
+#> idle . fake/fake-1 . 2 turns . 5.0k tokens . $0.0000 . sb1b86248da
 s$turns
 #> [1] 2
 ```
@@ -93,19 +89,24 @@ abstracts = c(a = "We randomized 200 adults to drug or placebo.",
               b = "We followed a cohort of nurses for 20 years.")
 is_rct = peter("Is this abstract about a randomized controlled trial?", abstracts, model = judge)
 is_rct
-#>              a              b 
-#>  TRUE (p=0.93) FALSE (p=0.08) 
-#> judge-s1-1.0 . calibration unknown . 2026-10-06
+#>              a              b
+#>  TRUE (p=0.93) FALSE (p=0.08)
+#> judge-s1-1.0 . calibration unknown . 2026-10-10
 gptr_prob(is_rct)
-#>    a    b 
+#>    a    b
 #> 0.93 0.08
 ```
 
 ## With a real model
 
+Choose a provider explicitly before your first real call. API
+credentials and CLI sign-in are separate routes; see
+`vignette("language-models")`.
+
 ``` r
 gptr_env("~/keys/.env")          # ANTHROPIC_API_KEY, OPENAI_API_KEY, TYPESAFE_API_KEY, ...
 gptr_providers()                 # what is configured
+gptr_config(model = "openai/gpt-6-sol", .scope = "session")
 peter()                          # chat in the console
 
 res = peter("Fit a mixed model of weight on diet with a random intercept per mouse.", mice)
@@ -138,31 +139,49 @@ network tool.
 
 ## Learn more
 
-- `vignette("getting-started", package = "gptr")`
-- `vignette("system-one", package = "gptr")`
-- `vignette("script-as-history", package = "gptr")`
-- `vignette("extending-gptr", package = "gptr")`
-- `vignette("token-efficiency", package = "gptr")`
-- `?gptr_security` for what gptr does on your behalf and where its
-  protections end, and `?gptr_egress` for what is sent to model
-  providers.
+Start with `vignette("getting-started", package = "gptr")`. Most guides
+include a runnable offline example. Recipes that need a real provider,
+MCP server or external program are shown without running them.
+
+| Task | Guide |
+|----|----|
+| Understand the name and ideas behind Peter | `vignette("why-peter")` |
+| Choose a language model; call Peter from functions and scripts | `vignette("language-models")` |
+| Make logical, choice and score decisions | `vignette("system-one")` |
+| Chat, use slash commands, or run inline R with `!` | `vignette("interactive-console")` |
+| Set defaults, permissions, paths and runtime options | `vignette("configuration")` |
+| Record, replay and summarize a workflow | `vignette("script-as-history")` |
+| Run teams, fan-outs, background sessions and the session SDK | `vignette("teams-and-background")` |
+| Use R, files, shell, Python, SQL and Shiny apps | `vignette("tools-and-artifacts")` |
+| Reuse skills, templates, agent files and plugins | `vignette("skills-and-plugins")` |
+| Connect MCP servers or expose an R session | `vignette("mcp")` |
+| Write tools, providers, policies and hooks | `vignette("extending-gptr")` |
+| Understand execution, environments and result objects | `vignette("execution-model")` |
+| Inspect usage, budgets, caching and compaction | `vignette("token-efficiency")` |
+
+The function reference documents all 63 exports. In R, use
+`help(package = "gptr")`, `?peter`, `?gptr_options`, `?gptr_security`
+and `?gptr_egress`.
 
 ## Why `peter()`?
 
 The package is `gptr`; you talk to its agent through `peter()`. The name
 honors two Peters:
 
-- **Peter Cathcart Wason** (1924-2003), the cognitive psychologist whose
-  work on human reasoning, with Jonathan Evans, framed the dual-process
-  view later known as "System 1" and "System 2" thinking. gptr joins
-  both kinds of model in one agent flow: fast, typed System 1 decisions
-  inside R control flow, and System 2 reasoning models that plan and
-  write code.
-- **Peter Naur** (1928-2016), whose name the Backus-Naur form carries: a
-  notation for writing down the syntax of programming languages. In that
-  spirit, gptr records agent sessions as ordinary documents - R scripts,
-  R Markdown and Quarto files, Jupyter notebooks - that can be read,
-  edited and replayed.
+- **Peter Naur**, the Danish computer scientist who edited the ALGOL 60
+  report and helped develop the syntax notation now called Backus-Naur
+  Form. His work connects to gptr's readable R code and history
+  documents.
+- **Peter Cathcart Wason**, the cognitive psychologist who, with
+  Jonathan Evans, studied dual processes in reasoning and the difference
+  between a response and its conscious justification. His work connects
+  to inspecting results, evidence and explanations.
+
+gptr calls typed decision models "System 1" and conversational agents
+"System 2". These are software roles; they do not imply human cognition
+or that Wason introduced those labels. The
+`vignette("why-peter", package = "gptr")` guide gives the history and
+primary sources.
 
 ## Upgrading from gptr 0.7.0
 

@@ -1256,7 +1256,7 @@ provider_default_model = function(p, idx) {
   rows$ref[order(rows$release_date, decreasing = TRUE, method = "radix")][[1]]
 }
 
-#' Egress acknowledgement state of a provider (the acknowledgement itself is P08's)
+#' Egress acknowledgment state of a provider (the acknowledgment itself is P08's)
 #' None needed offline or for a loopback local endpoint (IC-74); else `egress.<id>` decides.
 #' @noRd
 provider_egress = function(p) {
@@ -1319,6 +1319,10 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 #' acknowledgment is needed (offline providers, local servers at a loopback address) or the
 #' user has given it. Listing reads credentials only: it never registers an environment
 #' variable or binds it to a provider.
+#'
+#' `ready` means the required configuration is present; it does not validate the credential,
+#' account quota or access to a specific model. `check = TRUE` tests reachability, not login.
+#' See `vignette("language-models", package = "gptr")` for API, command-line and local setup.
 #'
 #' @param check `FALSE` (default) performs no network or process input/output unless
 #'   `check_login = TRUE`. `TRUE` also

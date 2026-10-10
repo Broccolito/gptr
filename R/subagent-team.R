@@ -176,6 +176,11 @@ parallel_start = function(m, nm, backend, team, cur, caller) {
 #' stream, and share one budget, as one `peter()` call does. A member's `tools =`, `budget =` and
 #' the run options in its `.opts` (such as `max_turns`) are not applied.
 #'
+#' Use `peter(..., agents = list(...))` for named roles on one task, or `parallel =` for one
+#' task per input element. Those routes start new foreground children and cannot be deferred
+#' as members here. A team report is model-generated output; inspect child statuses and
+#' workspace results before continuing the team with a synthesis prompt.
+#'
 #' @param ... Named [peter()] calls (or sessions created with `.run = FALSE`).
 #' @param .list A named list of sessions created with `.run = FALSE`.
 #' @param max_active The number of members that run at once; `NULL` uses the option

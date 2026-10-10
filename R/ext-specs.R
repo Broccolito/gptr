@@ -973,6 +973,8 @@ spec_missing = function(kind, name, field) {
 #' @param annotations Named list: `read_only`, `destructive`, `idempotent`, `open_world`,
 #'   `requires_user` (MCP `readOnlyHint`-style names are mapped).
 #' @return A spec of class `c("gptr_tool", "gptr_spec")`.
+#' @seealso [gptr_register], [gptr_check];
+#'   `vignette("extending-gptr", package = "gptr")` for complete tool and policy examples.
 #' @examples
 #' gptr_tool("nrow_of", "Number of rows of a data frame in the session",
 #'           parameters = list(type = "object", required = I("name"),

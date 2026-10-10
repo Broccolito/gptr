@@ -90,23 +90,37 @@ its default model at user scope; cancelling returns to R. Piped input skips this
 Each input is one of:
 \itemize{
 \item a prompt, sent as \code{s |> peter("...")} with \code{{name}} interpolation; \verb{@file} adds the head of a
-file and \verb{@object} attaches an object by name;
+file (at most 40 lines) and \verb{@object} attaches an object by name;
 \item \code{!code}: R code run in the session's environment; the code and its output go with the next
-prompt (at most 300 tokens). \code{!!code} runs without telling the model. A fenced R block works
-like \code{!code}, a \verb{"""} block is a multi-line prompt, and a trailing backslash continues a line;
+prompt (at most 300 estimated tokens). \code{!!code} omits that note. Both execute your own R
+immediately, without the model's permission gate or a model request. Workspace changes
+remain visible to later calls, and enabled transcripts can record the code; \verb{!!} is not a
+privacy boundary. A fenced R block works like \code{!code}, a \verb{"""} block is a multi-line prompt,
+and a trailing backslash continues a line;
 \item a slash command such as \verb{/model}, \verb{/mode}, \verb{/cost} or \verb{/exit}; \verb{/help} lists them all.
 }
 
-Ctrl-C (Esc in RStudio and Rgui) while an answer runs opens a pause menu in terminal R:
+Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
 \verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up}, \verb{[c]ontinue}, \verb{[a]bort}
-and, when background sessions are available, \verb{[b]ackground}; a second Ctrl-C aborts. In other
-front ends Ctrl-C aborts. \verb{/exit}, Ctrl-C twice at the prompt or the end of piped input return
+and, for a foreground programmatic call when available, \verb{[b]ackground}; a second Ctrl-C aborts.
+Front ends that cannot resume use an abort fallback. \verb{/exit}, Ctrl-C twice at the prompt
+or the end of piped input return
 the session invisibly, so \code{s = peter()} keeps the conversation.
 
 Options: \code{gptr.verbose} (0 silent, 1 progress on stderr, 2 streamed console, 3 debug; by
 default 0 in knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}
 (turns per console prompt, default 200) and \code{gptr.history} (console inputs to R's history,
 default \code{TRUE}).
+\code{vignette("interactive-console", package = "gptr")} gives input examples and the complete
+built-in command table.
+}
+
+\section{Sessions and results}{
+
+A pipe such as \code{s |> peter("Explain the result.")} adds work to the same session and kept
+workspace. Use \code{\link[=gptr_fork]{gptr_fork()}} to branch explicitly. The final answer is \code{s$text}; \code{s$value}
+is the R value selected by \code{\link[=gptr_return]{gptr_return()}} during a tool call. Agent-created objects remain
+in \code{envir}. Give a function a dedicated environment when those objects should stay local.
 }
 
 \examples{
@@ -117,5 +131,6 @@ s |> peter("And how many columns?")
 identical(gptr_last(), s)
 }
 \seealso{
-\link{gptr_security}, \link{gptr_egress} and \link{gptr_options}.
+\link{gptr_security}, \link{gptr_egress} and \link{gptr_options};
+\code{vignette("language-models", package = "gptr")} for connecting models and scripted calls.
 }

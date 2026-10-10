@@ -17,7 +17,8 @@ cannot change them for that run.
 \itemize{
 \item \code{gptr.quiet} (logical, \code{FALSE}): silence notices and progress messages.
 \item \code{gptr.interactive} (logical or \code{NULL}, \code{NULL}): force the decision whether a person is
-present to answer questions and permission prompts.
+present to answer questions and permission prompts. This does not supply a UI or an answer
+in an unattended process.
 \item \code{gptr.verbose} (integer or \code{NULL}, \code{NULL}): 0 silent, 1 progress on standard error, 2 the
 streamed console, 3 debugging; \code{NULL} chooses by context (0 in knitr and testthat, 1 under
 Rscript, 2 at the console).
@@ -216,5 +217,6 @@ replays recorded document blocks only and runs at most two child processes at a 
 }
 
 \seealso{
-\code{\link[=gptr_config]{gptr_config()}} for settings stored in files, \link{gptr_security} and \link{gptr_egress}.
+\code{\link[=gptr_config]{gptr_config()}} for settings stored in files, \link{gptr_security} and \link{gptr_egress};
+\code{vignette("configuration", package = "gptr")} for scope, precedence and grouped examples.
 }

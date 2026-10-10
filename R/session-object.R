@@ -460,6 +460,10 @@ as.character.gptr_session = function(x, ...) session_text(x)
 
 #' Summarize a session as its history
 #'
+#' Reads a table of recorded turns without a model request. It does not generate a narrative
+#' workflow summary or export an executable script. To request prose, continue the session
+#' with [peter()] and verify the model-generated answer against the recorded work.
+#'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
 #' @return A `gptr_session_summary` data frame (`turn`, `role`, `preview`, `tools`, `tokens`).

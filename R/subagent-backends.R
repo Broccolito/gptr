@@ -194,7 +194,7 @@ subagent_model_info = function(model, sid = NULL) {
        type = registry_get("provider", pid, session = sid)$type %||% "chat", spec = NULL)
 }
 
-#' The egress acknowledgement and the replay guard on the child's own record of the provider of
+#' The egress acknowledgment and the replay guard on the child's own record of the provider of
 #' `model` (the model the child calls; a worker proxy's session model is `worker/worker`), as
 #' P08's gateway_guards(): a router's are checked per routed request (contract 7.8; IC-29, IC-30,
 #' IC-69, IC-74)

@@ -448,6 +448,19 @@ Summary.gptr_s1 = function(...) {
 #' and scores the confidence describes how concentrated the distribution is, not the probability
 #' that the answer is correct.
 #'
+#' A score can be fractional: with levels low, medium and high (0, 1 and 2), probabilities
+#' 0.85, 0.10 and 0.05 give the score 0.20. It is not rounded to the most likely level.
+#' `attr(x, "meta")` records the model, engine, calibration state, cached elements, usage and
+#' available execution provenance such as locality, model digest and server version.
+#'
+#' @section Input shape and uncertainty:
+#' Atomic vectors and unnamed lists give one input state per element; data frames give one
+#' per row. Fully named lists and `I(x)` give one structured state. These states can contain
+#' the actual input values sent to the provider; see [gptr_egress].
+#' `min_confidence` makes low-confidence answers `NA` by default, including unknown
+#' confidence when the minimum is positive. Use `isTRUE()` in scalar control flow when
+#' abstention is possible, and handle uncertain inputs separately.
+#'
 #' @param x A System 1 vector: a `gptr_decision`, `gptr_choice` or `gptr_score`.
 #' @param what `"prob"` (decisions: P(yes); choices: the probability of the chosen option;
 #'   scores: the confidence), `"confidence"` (decisions: `abs(2 * p - 1)`) or `"probabilities"`

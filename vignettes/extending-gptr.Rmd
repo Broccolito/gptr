@@ -9,10 +9,14 @@ vignette: >
 
 
 
-Everything in gptr is a plugin. Providers, tools, permission policies, hooks, slash commands,
-prompt sections, context blocks, sub-agent backends and more are records in one registry, and
-the built-in features register themselves through the same public API that your code uses. This
-vignette shows the common kinds; `gptr_api()$features` lists all of them.
+Add a tool, a policy or a hook when an existing capability needs a small change. These features,
+providers, commands and prompt sections share the extension registry with gptr's built-ins.
+`gptr_api()$features` lists the supported extension kinds and services.
+
+For reusable instructions and packaged extensions, see
+[Skills and plugins](skills-and-plugins.html).
+For existing helpers, see [Tools and artifacts](tools-and-artifacts.html); for provider setup, see
+[Language models](language-models.html).
 
 
 ``` r
@@ -67,6 +71,16 @@ off_tool()
 `gptr_register()` returns a function that unregisters the record. To add a tool to one session
 only, pass it as `peter(..., tools = list(add_tool))`.
 
+`exposure = "r"` makes a callable `peter$demo$add()` member. A `"direct"` tool goes into the
+model's tool declarations; give it an `execute = function(input, ctx)` handler. A `"deferred"`
+tool is found through `peter$search()`, while `"hidden"` omits it from the model's catalog.
+An R package's tools should use the package name as their namespace. Use
+`peter$help("demo/add")` to inspect a registered member's schema.
+
+Choose `execution = "sequential"` for handlers that evaluate R or change files. A tool's
+`risk = function(input, ctx)` classifies its actions; its result still passes the active
+permission policies. A custom tool does not grant permission to run its own side effects.
+
 ## A permission policy
 
 A policy sees every tool call before it runs and can deny, ask, modify or allow it. The strictest
@@ -74,30 +88,31 @@ answer of all policies wins, and a policy that throws an error denies.
 
 
 ``` r
-no_installs = gptr_policy("no_installs", check = function(call, ctx) {
-  if (identical(call$name, "r") && grepl("install.packages", call$input$code, fixed = TRUE)) {
-    list(decision = "deny", reason = "installing packages is not allowed in this project")
+keep_data = gptr_policy("keep_data", check = function(call, ctx) {
+  if (identical(call$name, "r") && grepl("rm(", call$input$code, fixed = TRUE)) {
+    list(decision = "deny", reason = "removing objects is not allowed in this session")
   } else {
     NULL
   }
 })
-off_policy = gptr_register(no_installs)
+off_policy = gptr_register(keep_data)
 
 eager = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "install.packages(\"fortunes\")")),
-  "I was not allowed to install the package."
+  list(tool = "r", input = list(code = "rm(list = ls())")),
+  "I was not allowed to remove the objects."
 ))
-s = peter("Install the fortunes package.", model = eager, envir = new.env(), mode = auto)
+s = peter("Remove the session's objects.", model = eager, envir = new.env(), mode = auto)
 result = eager$log$requests[[2]]$last_results[[1]]
 result$is_error
 #> [1] TRUE
 s$text
-#> [1] "I was not allowed to install the package."
+#> [1] "I was not allowed to remove the objects."
 off_policy()
 ```
 
-The denial reached the model as an error result, and the model reported it. Nothing was
-installed, even in `auto` mode.
+The denial reached the model as an error result, even in `auto` mode. This text match illustrates
+the callback; it is not a general R code security filter. See
+[Configuration](configuration.html) for modes, trust and permission rules.
 
 ## A hook on a session
 
@@ -185,26 +200,20 @@ lab_rules = function(gptr) {
 peter("Summarize the assay results", assay, extensions = lab_rules)
 ```
 
-A plugin is an R package (or a directory) with a manifest in `inst/gptr/plugin.json`. Its skills,
-prompt templates, agent definitions and MCP servers are discovered from the manifest; its R code
-is loaded only when a session first needs it, and the manifest's declarations let gptr describe
-its tools to the model without loading anything.
+In an extension file, the last expression must be this factory function. Review the whole file:
+earlier expressions are evaluated when it loads. The API object has `$register(spec)`,
+`$on(event, handler, matcher = NULL)`, `$require(">= 1.0, < 2")` and `$has(feature)`, along with
+plugin-local `$state`. Check a factory with `gptr_check(lab_rules)` before enabling it.
 
-```json
-{"name": "gptrpanel", "version": "0.1.0", "description": "Reviewer panels and trial lookups",
- "gptr": {"api": ">= 1.0, < 2"},
- "skills": "skills", "prompts": "prompts", "agents": "agents", "mcpServers": "mcp.json",
- "extension": {"entry": "gptrpanel::gptr_plugin", "activation": "lazy",
-               "provides": {"tool": ["trials/search"], "command": ["panel"]},
-               "declarations": {"trials/search": {
-                 "signature": "search(condition: string)",
-                 "description": "Search ClinicalTrials.gov for recruiting trials"}}}}
-```
+Use `gptr_registry(kind = NULL, diagnostics = FALSE)` to inspect records, or
+`gptr_registry(diagnostics = TRUE)` to see validation and collision messages. For the same kind
+and name, session records win over trusted project records, user records, plugins and built-ins,
+in that order. A tie keeps the first registration and reports a collision. Additive kinds such
+as hooks keep multiple records. Removing a user record exposes the next matching record.
 
-Its `DESCRIPTION` adds `Config/gptr/plugin: true` and `Config/gptr/api: >= 1.0, < 2`. Use the
-plugin with `peter(..., plugins = gptrpanel)` or list the installed ones with
-`gptr_plugins(installed = TRUE)`. Packages can also teach gptr about their classes by
-registering methods for `gptr_describe()` (compact descriptions for the model) and
-`gptr_preimage()` (how to undo changes to an object) as delayed S3 methods.
+`gptr_reload()` rereads configuration and extensions for later use; existing sessions keep their
+frozen prompt. Plugin manifests, activation and compatibility are covered in
+[Skills and plugins](skills-and-plugins.html).
 
-
+Packages can teach gptr about their classes through methods for `gptr_describe()` (compact object
+descriptions) and `gptr_preimage()` (undo support). These are separate from a tool registration.

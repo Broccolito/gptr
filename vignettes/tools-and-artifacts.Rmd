@@ -1,0 +1,252 @@
+---
+title: "Tools and artifacts"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Tools and artifacts}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+The model usually works through the `r` tool and calls helpers inside that R code. You can call
+the same helpers from the R console. A model call passes permission checks; a helper you call
+yourself executes directly. [Configuration](configuration.html) explains modes and permissions.
+
+Use `peter$help("member")` for a helper's full schema and `peter$search("words")` to discover
+capabilities. R functions, file helpers, language bridges, artifact creation and MCP share the
+namespace. Plugin tools use `peter$namespace$name(...)`; MCP tools use
+`peter$mcp$server$tool(...)`. There is no general `peter$r()` member: ordinary R code is already
+the model's `r` input.
+
+## Inspect objects, files and output
+
+This example is offline: the fake provider requests one read-only object summary and then emits
+a fixed response. It demonstrates helper execution, without testing a language model's reasoning.
+
+
+``` r
+library(gptr)
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = "peter$describe(head(mtcars), budget = 60L)")),
+  "The preview contains six rows of mtcars."
+))
+s = peter("Describe the first six rows", model = fake, envir = new.env(), mode = auto)
+s$text
+#> [1] "The preview contains six rows of mtcars."
+```
+
+These are the object and output helper signatures:
+
+
+``` r
+peter$describe(x, budget = 150L)
+peter$help(name, package = NULL, budget = 800L)
+peter$search(words, limit = 8L)
+peter$plot(which = NULL, width = 1000L, height = 700L)
+peter$out(id, stream = c("stdout", "stderr"), lines = NULL)
+```
+
+`describe()` returns a compact object description. `help()` also accepts an R help topic,
+`"namespace/member"` or `"server/tool"`. `search()` returns names, kinds, signatures and scores.
+`plot()` attaches the current plot, or a stored plot selected by `which`, to a running `r` result;
+it returns invisibly. `out()` retrieves full captured text by output id, optionally only selected
+lines. Display budgets limit what is printed, not the stored full output.
+
+The file helper signatures are:
+
+
+``` r
+peter$read(path, offset = NULL, limit = NULL)
+peter$write(path, content)
+peter$edit(path, edits, replace_all = FALSE)
+peter$grep(pattern, path = ".", glob = NULL, ignore_case = FALSE, fixed = FALSE,
+           context = 0L, limit = 100L, output = c("content", "files", "count"),
+           sort = c("path", "count", "mtime"))
+peter$find(pattern, path = ".", sort = c("path", "mtime", "size", "relevance"),
+           type = "file", limit = 1000L)
+peter$ls(path = ".", sort = c("name", "mtime", "size"), long = FALSE)
+```
+
+`read()` returns numbered lines and can attach supported images to a model's running `r` result.
+`write()` replaces a file and returns its path invisibly. `edit()` accepts a list of exact text
+replacements (`oldText`, `newText`) or a supported patch envelope. Review a write or edit before
+executing it. For example:
+
+
+``` r
+peter$read("analysis.R", offset = 1L, limit = 40L)
+peter$grep("normalization", path = "R", glob = "*.R", fixed = TRUE, output = "files")
+peter$find("analysis", type = "file", sort = "relevance")
+peter$ls("R", long = TRUE)
+peter$edit("analysis.R", list(list(oldText = "n = 10", newText = "n = 20")))
+```
+
+`grep()` returns matching lines, file names or counts; sorting by count or modification time
+applies to file and count output. `find()` supports relevance sorting when you know part of a
+name. `ls()` lists directory entries. File access outside the project and protected paths can
+require stronger permissions in model code.
+
+`read`, `write`, `edit`, `grep`, `find` and `ls` also have direct model tool forms; the active
+preset decides which forms are offered. The broader helper catalog stays callable inside R.
+For the console's `!` inline R and file references, see
+[Interactive console](interactive-console.html). To keep generated analysis code in a document,
+see [Script as history](script-as-history.html).
+
+## Shell commands and scripts
+
+
+``` r
+peter$sh(cmd, input = NULL, wd = ".", timeout = 120, env = NULL,
+         merge = FALSE, check = FALSE, max_tokens = NULL)
+peter$script(path, args = character(), interpreter = NULL, ...)
+```
+
+A `cmd` vector of more than one element is a program and its arguments, without shell expansion.
+A single command line is parsed directly when possible and uses a shell when it contains shell
+syntax. Prefer a vector when passing paths or data. `input` accepts text, raw bytes or a data
+frame; `env` supplies named environment entries and `wd` chooses the working directory.
+
+
+``` r
+result = peter$sh(c("Rscript", "--vanilla", "analysis.R"), timeout = 60, check = TRUE)
+result$status
+result$stdout
+peter$script("analysis.R", args = "input.csv", timeout = 60, check = TRUE)
+```
+
+`sh()` and `script()` return a `gptr_cmd` containing captured output and status. `check = TRUE`
+raises an error for a nonzero exit status. A timeout stops the child process tree. `script()`
+chooses an interpreter from the file or your explicit `interpreter`, and forwards additional
+options to `sh()`. Script bodies are not statically inspected as R model code, so model calls
+need the corresponding execution permission. These helpers do not install missing programs.
+
+## Background programs
+
+
+``` r
+peter$bg(cmd, name = NULL, stdin = FALSE, merge = TRUE)
+peter$jobs(kill = FALSE)
+job = peter$bg(c("Rscript", "--vanilla", "analysis.R"), name = "analysis")
+job$status()
+job$read(stream = "stdout", n = 20L)
+job$wait(timeout = 30, until = NULL)
+job$kill()
+```
+
+`bg()` returns a job handle. Output goes to files so an unread job can keep running. Set
+`stdin = TRUE` only when you need `job$write(text)` to send input. `$read()` consumes unread
+output; `$wait()` accepts a timeout or a matching `until` pattern. `$kill()` stops this job.
+`peter$jobs()` lists these background programs; `kill = TRUE` stops the running ones.
+Background gptr sessions and teams are separate workflows, described in
+[Teams and background work](teams-and-background.html).
+
+## Python, SQL and other engines
+
+
+``` r
+peter$py(code, name = NULL, max_rows = 10L)
+peter$sql(query, name = NULL, con = NULL, n = 10L)
+peter$knit(engine, code)
+```
+
+Python needs `reticulate` and an already configured Python runtime. Its interpreter persists
+between calls; gptr refuses to provision Python automatically. Pass an R object, or a named list
+of objects, as `name` to make them available in Python. The result holds captured output and the
+last expression's representation; `$value` converts that value to R and `$error` reports a Python
+error.
+
+Data-frame conversion to Python also requires the corresponding Python support, such as pandas
+for the example below.
+
+
+``` r
+py = peter$py("float(mtcars['mpg'].mean())", name = mtcars)
+py$value
+rows = peter$sql("SELECT cyl, AVG(mpg) AS mpg FROM mtcars GROUP BY cyl", name = mtcars)
+peter$sql("SELECT * FROM measurements", con = con, n = 5L)
+peter$knit("bash", "printf 'hello\n'")
+```
+
+SQL on a supplied data frame requires `DBI` and `duckdb`; the expression label (`mtcars` here)
+becomes the table name. A named list supplies multiple tables. Otherwise give a DBI connection
+as `con`; without either argument, gptr looks for one unambiguous connection in the calling
+environment. SQL returns all rows while printing only `n`. Temporary data-frame databases are
+closed after the call.
+
+`knit()` captures a knitr language engine's output. Shell engines use the supervised shell
+helper with its timeout; Python and SQL use the helpers above. Other engines need their own
+installed runtime. All model calls still pass permission checks.
+
+## Build a versioned artifact
+
+`peter$app(id, data = character(), title = NULL, kind = "shiny", check = TRUE,
+launch = interactive())` turns an artifact's working files into an immutable version.
+The built-in kinds are `"shiny"` and `"html"`; plugins can register other artifact types.
+
+For Shiny, write `.gptr/artifacts/<id>/app.R` with a final `shinyApp(ui, server)` expression.
+Do not call `runApp()`, change the working directory or install packages inside the app. This
+complete example writes files and needs Shiny, so it is not run while building the guide:
+
+
+``` r
+gptr_init(".")
+survey = data.frame(group = c("A", "B"), value = c(2, 5))
+dir = file.path(".gptr", "artifacts", "survey-view")
+dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+writeLines(c(
+  "library(shiny)",
+  "ui = fluidPage(tableOutput('table'))",
+  "server = function(input, output, session) {",
+  "  output$table = renderTable(survey)",
+  "}",
+  "shinyApp(ui, server)"
+), file.path(dir, "app.R"))
+h = peter$app("survey-view", data = "survey", title = "Survey", launch = FALSE)
+h$version
+h$checks
+gptr_artifacts("survey-view", open = TRUE)
+```
+
+`data` is a vector of object **names**. Each version gets a copy of those objects, so later edits
+in your R session do not change a running version. Edit the working `app.R` and call
+`peter$app()` again to snapshot a revision into `v002/`, `v003/` and so on. The default snapshot
+limit is 500 MB (`gptr.artifact_max_bytes`). Without a project workspace, artifacts use a
+temporary workspace; use `gptr_init()` for work you want to retain.
+
+For HTML, write `page.html` in the same working directory and call
+`peter$app("survey-view", kind = "html", launch = FALSE)`. HTML is served through a Shiny
+wrapper too, so launching either built-in kind needs Shiny. Static HTML validation checks that
+the page exists and is nonempty; it does not certify its JavaScript or external dependencies.
+
+## Inspect, reopen and stop artifacts
+
+
+``` r
+gptr_artifacts(id = NULL, open = FALSE, stop = FALSE, version = NULL)
+gptr_artifacts("survey-view")
+gptr_artifacts("survey-view", version = 1L, open = TRUE)
+gptr_artifacts("survey-view", stop = TRUE)
+```
+
+The listing shows the current version, process status, URL, disk use and working path. An
+individual handle includes its version, URL, status, checks and optional screenshot.
+`open = TRUE` launches a stopped artifact and opens it in a browser. Selecting an older version
+changes the current version and relaunches its saved snapshot. Stopping releases the process;
+saved versions remain available. Stop cannot be combined with `open` or `version`.
+
+With `check = TRUE`, gptr checks Shiny source before versioning and, when launched, checks
+startup and HTTP access. A browser session check and screenshot also need `chromote` and Chrome.
+Check flags are `TRUE`, `FALSE` or `NA`; skipped browser checks do not prove the interface works.
+`launch = FALSE` creates a version without starting a server, and therefore cannot validate
+startup or browser behavior. Read the returned checks and messages before calling an app ready.
+
+Artifacts run in supervised child R processes on loopback addresses. Registered secrets are
+removed from their environment, and launch URLs carry access tokens when secure randomness is
+available. Keep URLs and data snapshots private. A child process is not an operating-system
+sandbox: review its code, file access and dependencies. Model-triggered app creation requires
+execution permission. The `.gptr/.gitignore` written by `gptr_init()` excludes snapshot data and
+runtime files; review your repository's ignore rules before committing artifacts.
+
+For new helpers and artifact types, see [Extending gptr](extending-gptr.html) and
+[Skills and plugins](skills-and-plugins.html). For external tool families, see [MCP](mcp.html).

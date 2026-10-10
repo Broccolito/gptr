@@ -1,0 +1,175 @@
+---
+title: "MCP"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{MCP}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+MCP connects tools across applications. gptr can call an existing MCP server's tools as R
+functions, or serve its live R session to another agent. A model provider is configured
+separately; see [Language models](language-models.html). All examples here require an existing
+server or change configuration, so they are shown without being run.
+
+## List first, connect when needed
+
+
+``` r
+library(gptr)
+gptr_mcp(server = NULL, tools = FALSE, refresh = FALSE)
+```
+
+The default listing reads configuration and cached counts. It does not start a process or contact
+a server. It includes gptr's user and project files and compatible configurations from Claude
+Code, Claude Desktop, Codex, Cursor, VS Code and Pi. gptr reads those other applications' files
+without editing them; their servers are used on request rather than advertised automatically.
+
+Listing tools can connect when the cache is missing or stale. `refresh = TRUE` reconnects even
+when `tools = FALSE`. A stdio connection starts a local program; an HTTP connection contacts its
+endpoint. Limit inspection to the server you intend to use:
+
+
+``` r
+gptr_mcp("catalog", tools = TRUE)
+gptr_mcp("catalog", tools = TRUE, refresh = TRUE)
+```
+
+Project servers are listed in an untrusted project but are not started. Review the configuration
+and command before trusting a project, as described in [Configuration](configuration.html).
+
+## Register a server
+
+`gptr_mcp_add()` accepts either `command` plus `args` for stdio, or `url` for Streamable HTTP.
+It writes gptr's own configuration and does not connect. Install or configure the server itself
+using its documentation before registering it. For a server script you already have:
+
+
+``` r
+gptr_mcp_add(
+  "catalog",
+  command = file.path(R.home("bin"), "Rscript"),
+  args = c("--vanilla", "/absolute/path/to/mcp-server.R"),
+  env = c(CATALOG_API_KEY = "${CATALOG_API_KEY}"),
+  exposure = "r", timeout = 60, scope = "user"
+)
+```
+
+For an existing HTTP service:
+
+
+``` r
+gptr_mcp_add(
+  "catalog-http", url = "http://127.0.0.1:8000/mcp",
+  headers = c(Authorization = "Bearer ${CATALOG_API_KEY}"),
+  exposure = "r", timeout = 60, scope = "project"
+)
+```
+
+`scope = "user"` stores the entry in `mcp.json` under `tools::R_user_dir("gptr", "config")`.
+`scope = "project"` uses `.gptr/mcp.json`. Secrets in `env` and `headers` must use `${VAR}`
+placeholders; gptr expands them from the environment at connection time. Do not put key values
+in a checked-in file or a recorded command. See [Configuration](configuration.html) for
+environment loading and credential storage.
+
+`exposure = "r"` lists R signatures in the model's catalog. `"direct"` declares full model
+tools, `"deferred"` makes tools discoverable through `peter$search()`, and `"hidden"` omits them
+from the catalog. The timeout is per request; server progress notifications extend it.
+
+Remove an entry from the same scope in which you added it:
+
+
+``` r
+gptr_mcp_remove("catalog", scope = "user")
+```
+
+Removal closes the connection and deletes that gptr entry. An entry in another scope or another
+application's configuration can still exist; edit its owning configuration to remove it there.
+
+## Call tools as R functions
+
+The tool listing reports each tool's R signature. Use the names and parameters it actually
+returns; `search` below is illustrative and must exist on your server:
+
+
+``` r
+peter$help("catalog/search")
+result = peter$mcp$catalog$search(query = "normalization")
+str(result)
+```
+
+The first call connects if necessary. Server and tool names are normalized into R member names;
+use the listed signature, or backticks for names that need them. Structured results become R
+values when possible; otherwise calls return text. A server-reported tool error becomes an R
+error. Filter a large result before printing or passing it to a model.
+
+The model uses the same functions inside its `r` tool:
+
+
+``` r
+peter("Use the catalog MCP server to find normalization references",
+      model = "provider/model")
+```
+
+MCP tools called by model code pass gptr's permission policies. Server descriptions and results
+are external data. Read-only annotations lower risk only when the server's annotations are
+explicitly trusted; a server calling itself read-only is not a permission grant.
+User calls to a `peter$` helper execute directly, so review their side effects yourself.
+
+The public client currently exposes MCP **tools**. It does not provide a separate public API
+for listing or reading MCP resources or invoking MCP prompts. A server may offer those actions
+as tools, in which case call the advertised tool signature. See
+[Tools and artifacts](tools-and-artifacts.html) for gptr's own file and output helpers.
+
+## Authenticate an HTTP server
+
+For an OAuth-capable HTTP server, sign in from an interactive R session:
+
+
+``` r
+gptr_login("mcp:catalog-http", method = "auto")
+gptr_logout("mcp:catalog-http")
+```
+
+`method = "oauth"` requests the browser flow; `"key"` requests masked key entry when supported.
+The server must support the chosen authentication method. A model tool call does not open a
+browser for you; an authentication error names the sign-in function to run. Credentials are
+stored separately from the MCP configuration. A stdio server's environment-based credentials
+are configured through its `env` placeholders.
+
+## Serve your R session
+
+`gptr_mcp_serve(tools, envir, port = NULL, stop = FALSE)` exposes a subset of `r`, `read`, `edit`
+and `write` from the current R process. It requires the optional packages `httpuv`, `later` and
+`openssl`. Choose the environment whose objects the other agent should be able to inspect or
+change:
+
+
+``` r
+workspace = new.env()
+workspace$measurements = data.frame(value = c(2, 3, 5))
+h = gptr_mcp_serve(tools = c("r", "read"), envir = workspace)
+h$url
+h$config$codex
+h$stop()
+```
+
+The handle provides `$url`, `$port`, `$token_env`, `$config` and `$stop()`. `$config` contains
+client snippets for Codex, Claude Code, Claude Desktop and Cursor. Printed snippets redact the
+token; `as.character(h$config$claude_code)` produces the actual configuration text for deliberate
+copying. Treat that text as a credential. The Codex snippet supplies `$args` and `$env` for the
+client process; it is not a command to paste without its environment.
+
+One server runs per R process, bound to `127.0.0.1` with a bearer token. It serves requests while R
+waits at the console or inside a gptr call. Calls use a dedicated gptr session and the permission
+mode in effect when the server starts; stop and restart it to change that mode. An action that
+needs a new approval is refused in a background callback. Approve a specific needed action
+interactively through your permission settings before retrying.
+
+Serving `r` permits code execution in the supplied environment; a separate environment helps
+organize objects but is not an operating-system sandbox. The server exposes tools, not an MCP
+resource or prompt catalog. Stop it with `h$stop()` or `gptr_mcp_serve(stop = TRUE)` when finished.
+For interactive approvals and recorded R work, see [Interactive console](interactive-console.html)
+and [Script as history](script-as-history.html).

@@ -5,6 +5,19 @@
 the network, paid calls, a real terminal or the maintainer's approval (section 5). `main` is the only
 branch and is pushed. This file is self-contained; read it top to bottom.
 
+**2026-10-10 documentation and review update:** 14 usage guides and the public function reference
+are validated and the pkgdown site is built locally. Package implementation and NAMESPACE are
+unchanged. Evidence and scope: [documentation-20261010.md](progress/documentation-20261010.md).
+All remote branches, tags and PR heads were fetched; PR #5 remains open and unmerged after
+independent review: [pr-review-20261010.md](progress/pr-review-20261010.md). Current machine
+model-access evidence is only in ignored `dev/LOCAL_SETUP.md`; catalogs/auth status were checked,
+but no inference was run. Original maintainer DESCRIPTION/AGENTS.md changes remain untouched.
+Release gates below still apply.
+The supplied light/dark logo set now lives in `man/figures/`; README and shared site branding
+use it, with light mode by default and a native theme switch. Why Peter explains both namesakes.
+The site passes representative 320-1920px light/dark layouts and doubled-text checks;
+all 90 pages have valid local links/assets. Details are in the same evidence log.
+
 ## 0. Summary
 
 gptr 1.0 is a ground-up rebuild of the `gptr` R package as an AI agent harness that lives in the R

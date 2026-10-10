@@ -1,0 +1,280 @@
+---
+title: "Language models in sessions, functions and scripts"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Language models in sessions, functions and scripts}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+Use `peter()` with a prompt to run a language model agent and receive a session. The agent can
+inspect the objects you attach and run R code in your environment. The same call works in a
+function, a loop or a script. This guide executes only scripted fake providers; examples that
+connect to real services are shown without running them.
+
+## Choose and connect a model
+
+`gptr_providers()` lists configured routes and credential sources without making a request.
+`gptr_models()` searches the catalog already available on disk. Neither listing proves that an
+account can make a model request. `check = TRUE` probes provider reachability and CLI versions;
+`refresh = TRUE` updates a catalog or asks a local server which models it has installed.
+
+
+``` r
+gptr_providers()
+gptr_models("sonnet")
+gptr_models(provider = "openai")
+gptr_providers(check = TRUE)
+```
+
+Select a canonical `"provider/model"` reference to make the route explicit. Catalog aliases such
+as `sonnet` also work. For a default, use `gptr_config(model = ..., .scope = "user")`; pass
+`model = ...` to override it for one call. The [configuration guide](configuration.html) explains
+scope and precedence.
+
+### API providers
+
+Obtain a key from the provider, then put it in the environment of your R process or an existing
+private `.env` file. `gptr_env()` loads that file, registers values for redaction and reports names
+and fingerprints. It leaves an existing environment variable alone unless `override = TRUE`.
+Keep the file out of version control.
+
+| Route | Credential variable | Example reference |
+|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` | `"anthropic/claude-sonnet-5-5"` |
+| OpenAI | `OPENAI_API_KEY` | `"openai/gpt-6-sol"` |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `"google/gemini-3.8-flash"` |
+| OpenRouter | `OPENROUTER_API_KEY` | Choose a reference from `gptr_models(provider = "openrouter")` |
+| Hosted System 1 | `TYPESAFE_API_KEY` (`jev-key` is a `.env` alias) | `"typesafe/jev-latest"` |
+
+
+``` r
+library(gptr)
+gptr_env("~/keys/models.env")
+gptr_config(model = "openai/gpt-6-sol", .scope = "user")
+s = peter("Explain the relationship between mpg and wt.", mtcars)
+s$text
+```
+
+At first interactive use of a remote route, gptr asks you to acknowledge the data sent to it.
+For unattended jobs, acknowledge the specific provider beforehand at user scope:
+
+
+``` r
+gptr_config(egress = utils::modifyList(gptr_config()$egress, list(openai = "ack")),
+            .scope = "user")
+```
+
+This covers automatic context; it does not pre-approve tool actions. Read `?gptr_egress` for the
+request contents and `?gptr_security` before using sensitive data. `gptr_login("openrouter")`
+offers an interactive login; `gptr_login("anthropic", method = "key")` offers masked key entry.
+These credentials are separate from a command-line tool's sign-in.
+
+An OpenAI-compatible service can use the existing completions adapter. Register its endpoint,
+credential variable and the model metadata supplied by your service:
+
+
+``` r
+off = gptr_register(gptr_provider(
+  "work", api = "openai-completions", base_url = "https://llm.example.org/v1",
+  auth = "WORK_API_KEY",
+  models = list(list(id = "work-model", context = 32000, max_output = 4000,
+                     tool_call = TRUE))
+))
+peter("Summarize these data.", mtcars, model = "work/work-model")
+off()  # remove this process-lifetime provider registration
+```
+
+Declare features only when your service supports them. Endpoint compatibility alone does not
+establish tool, image or reasoning support. More built-in compatible routes appear in
+`gptr_providers()`; `?gptr_provider` documents registration and compatibility fields.
+
+### Azure OpenAI and Amazon Bedrock
+
+The built-in Azure route reads `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT`. Give the
+resource endpoint, such as `https://your-resource.openai.azure.com`; gptr adds `/openai/v1`
+and sends the key in the `api-key` header. The model sent to Azure is your deployment name.
+Declare that deployment and its real capacities in provider settings:
+
+
+``` r
+gptr_env("~/keys/azure.env")  # AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT
+azure_model = list(id = "analysis-chat", context = 32000, max_output = 4000,
+                   tool_call = TRUE)
+gptr_config(providers = list(azure = list(models = list(azure_model))), .scope = "session")
+s = peter("Summarize these data.", mtcars, model = "azure/analysis-chat")
+```
+
+Replace `analysis-chat` and the limits with your deployment's metadata; declare `tool_call`
+only when supported. Alternatively, `AZURE_OPENAI_DEPLOYMENT_NAME_MAP` maps a declared model
+id to its deployment using `model-id=deployment-name` pairs separated by commas.
+
+The built-in Bedrock route uses `AWS_BEARER_TOKEN_BEDROCK` with the runtime's OpenAI-compatible
+API. `AWS_REGION`, then `AWS_DEFAULT_REGION`, selects the region; the default is `us-east-1`.
+Its endpoint is `https://bedrock-runtime.<region>.amazonaws.com/openai/v1`. Choose a model your
+account can use through that API and declare its id and capacities:
+
+
+``` r
+gptr_env("~/keys/bedrock.env")  # AWS_BEARER_TOKEN_BEDROCK and AWS_REGION
+bedrock_model = list(id = "your-bedrock-model-id", context = 32000, max_output = 4000,
+                     tool_call = TRUE)
+gptr_config(providers = list(bedrock = list(models = list(bedrock_model))), .scope = "session")
+s = peter("Summarize these data.", mtcars, model = "bedrock/your-bedrock-model-id")
+```
+
+Replace the illustrative metadata with your service's values. This built-in route does not
+implement AWS SigV4 signing, AWS profile credentials or the general Bedrock Converse API.
+An AWS credentials file alone therefore does not authenticate it, and the route does not imply
+support for every Bedrock model. These remote providers need the egress acknowledgment
+described above, using provider ids `azure` and `bedrock`.
+
+### Subscription command-line tools
+
+Install and sign in to the `claude` or `codex` tool outside gptr, following that tool's own setup.
+The executable must be on `PATH`, or you can give its path with the `gptr.cli_path` option.
+Then choose `model = "claude-cli"` (alias `claude_code`) or `model = "codex"`.
+
+
+``` r
+options(gptr.cli_path = list(claude = "/path/to/claude", codex = "/path/to/codex"))
+gptr_providers(check = TRUE)
+s = peter("Inspect the columns of mtcars.", mtcars, model = "codex")
+```
+
+These calls spend the CLI account's quota and run a child process. Live R access goes through
+gptr's MCP permission gate; the Codex route needs the suggested packages `httpuv`, `later` and
+`openssl`. First use asks for an acknowledgment. gptr checks required CLI flags and rejects
+incompatible versions. The Claude plan route is experimental and opt-in; review `?gptr_security`
+and the provider's terms before choosing it.
+
+### Local Ollama models
+
+Run Ollama separately and install the model you intend to use. Discover the installed models,
+then copy a returned reference into the call:
+
+
+``` r
+local_models = gptr_models(provider = "ollama", refresh = TRUE)
+local_models
+s = peter("Inspect mtcars and suggest a plot.", mtcars, model = "ollama/qwen3:1.7b")
+```
+
+The default server is `http://127.0.0.1:11434/v1`. For another local endpoint, configure its
+`base_url` explicitly with `gptr_config(providers = list(ollama = list(base_url = ...)),
+.scope = "user")`. gptr verifies installed-model capabilities and inference locality. Its
+default `local_only = TRUE` rejects cloud selectors, remote markers and ambiguous locality;
+it does not install, start or update Ollama, pull models or fall back to a cloud route.
+
+Conversational models return sessions. Clef and Clef Flash are native decision models, require
+Ollama 0.35.1 or later, and return logical, choice or score vectors. Their calls do not run an
+agent conversation. See [System 1 decisions](system-one.html). A local model does not keep a
+later cloud call or network tool local.
+
+## Work with a session
+
+A scripted provider demonstrates a tool call followed by an answer. The fake provider does not
+infer the code from the prompt: its script supplies the code, so this example is reproducible.
+
+
+``` r
+library(gptr)
+work = new.env()
+work$cars = mtcars
+fake = gptr_fake_provider(list(
+  list(tool = "r", input = list(code = paste(
+    "fit = lm(mpg ~ wt, data = cars)", "gptr_return(coef(fit))", sep = "\n"
+  ))),
+  "The fitted slope is about -5.3 mpg per additional 1000 lb.",
+  "Weight is associated with lower fuel economy in these data."
+))
+s = peter("Fit mpg on wt using cars and return the coefficients.", cars = work$cars,
+          model = fake, envir = work, mode = auto)
+s$text
+#> [1] "The fitted slope is about -5.3 mpg per additional 1000 lb."
+s$value
+#> (Intercept)          wt
+#>   37.285126   -5.344472
+```
+
+`s$text` is the final answer; `s$value` is the R value designated with `gptr_return()`.
+The fitted object also remains in `work`. Piping the session adds a turn on the same object:
+
+
+``` r
+follow_up = s |> peter("Describe the direction of the association in one sentence.")
+identical(s, follow_up)
+#> [1] TRUE
+s$status
+#> [1] "idle"
+s$turns
+#> [1] 2
+coef(work$fit)
+#> (Intercept)          wt
+#>   37.285126   -5.344472
+```
+
+`gptr_fork(s)` explicitly branches the conversation into a new session with an overlay workspace.
+A model switch continues the existing history; a separate `peter()` call starts a new session:
+
+
+``` r
+other = gptr_fake_provider(list("An association does not establish causation."), name = "other")
+s |> peter("Add a caveat.", model = other)
+#> An association does not establish causation.
+#> idle . other/other-1 . 3 turns . 6.6k tokens . $0.0000 . sfd32d6ea4b
+```
+
+## Put calls in functions and scripts
+
+Give a function its own working environment when you want its agent-created objects to stay
+local. Return the selected value using ordinary R:
+
+
+``` r
+numeric_means = function(data) {
+  work = new.env()
+  work$data = data
+  fake = gptr_fake_provider(list(
+    list(tool = "r", input = list(code = paste(
+      "numeric = vapply(data, is.numeric, logical(1))",
+      "means = colMeans(data[numeric])",
+      "gptr_return(means)", sep = "\n"
+    ))),
+    "The numeric-column means are ready."
+  ))
+  s = peter("Compute and return each numeric-column mean.", model = fake,
+            envir = work, mode = auto)
+  s$value
+}
+numeric_means(mtcars[, c("mpg", "wt"), drop = FALSE])
+#>      mpg       wt
+#> 20.09062  3.21725
+```
+
+In a real script, replace the fake provider with an explicit model reference. Use `manual` when
+a person can answer permissions; for an unattended job, choose appropriate permission rules
+or an explicit mode before running it. `auto` still retains critical and secret guards.
+A permission question with nobody present raises `gptr_error_permission` and carries the blocked
+session as `e$session`.
+
+
+``` r
+result = tryCatch(
+  peter("Fit mpg on wt and return the coefficients.", mtcars, model = "openai/gpt-6-sol",
+        mode = auto, budget = list(cost = 1, turns = 10)),
+  gptr_error_permission = function(e) {
+    message(conditionMessage(e))
+    e$session
+  }
+)
+result$status
+```
+
+`gptr_usage(s)` reports tokens and costs. `gptr_prompt(s)` inspects the frozen prompt, declared
+tools, first message and token estimates; it does not report the current request's budgets.
+Catalog prices and estimates are planning aids, and missing usage remains unknown. See
+[token efficiency](token-efficiency.html) for limits and [script as history](script-as-history.html)
+for recording and replay that removes repeated model calls.

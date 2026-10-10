@@ -39,6 +39,10 @@ for a reachable endpoint (a 401 without a key still proves reachability), otherw
 acknowledgment is needed (offline providers, local servers at a loopback address) or the
 user has given it. Listing reads credentials only: it never registers an environment
 variable or binds it to a provider.
+
+\code{ready} means the required configuration is present; it does not validate the credential,
+account quota or access to a specific model. \code{check = TRUE} tests reachability, not login.
+See \code{vignette("language-models", package = "gptr")} for API, command-line and local setup.
 }
 \examples{
 gptr_providers()

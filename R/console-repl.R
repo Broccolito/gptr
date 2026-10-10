@@ -789,22 +789,28 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' Each input is one of:
 #'
 #' * a prompt, sent as `s |> peter("...")` with `{name}` interpolation; `@file` adds the head of a
-#'   file and `@object` attaches an object by name;
+#'   file (at most 40 lines) and `@object` attaches an object by name;
 #' * `!code`: R code run in the session's environment; the code and its output go with the next
-#'   prompt (at most 300 tokens). `!!code` runs without telling the model. A fenced R block works
-#'   like `!code`, a `"""` block is a multi-line prompt, and a trailing backslash continues a line;
+#'   prompt (at most 300 estimated tokens). `!!code` omits that note. Both execute your own R
+#'   immediately, without the model's permission gate or a model request. Workspace changes
+#'   remain visible to later calls, and enabled transcripts can record the code; `!!` is not a
+#'   privacy boundary. A fenced R block works like `!code`, a `"""` block is a multi-line prompt,
+#'   and a trailing backslash continues a line;
 #' * a slash command such as `/model`, `/mode`, `/cost` or `/exit`; `/help` lists them all.
 #'
-#' Ctrl-C (Esc in RStudio and Rgui) while an answer runs opens a pause menu in terminal R:
+#' Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
 #' `[s]teer` (delivered after the current tool results), `[f]ollow-up`, `[c]ontinue`, `[a]bort`
-#' and, when background sessions are available, `[b]ackground`; a second Ctrl-C aborts. In other
-#' front ends Ctrl-C aborts. `/exit`, Ctrl-C twice at the prompt or the end of piped input return
+#' and, for a foreground programmatic call when available, `[b]ackground`; a second Ctrl-C aborts.
+#' Front ends that cannot resume use an abort fallback. `/exit`, Ctrl-C twice at the prompt
+#' or the end of piped input return
 #' the session invisibly, so `s = peter()` keeps the conversation.
 #'
 #' Options: `gptr.verbose` (0 silent, 1 progress on stderr, 2 streamed console, 3 debug; by
 #' default 0 in knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`
 #' (turns per console prompt, default 200) and `gptr.history` (console inputs to R's history,
 #' default `TRUE`).
+#' `vignette("interactive-console", package = "gptr")` gives input examples and the complete
+#' built-in command table.
 #' @name peter
 #' @rdname peter
 NULL

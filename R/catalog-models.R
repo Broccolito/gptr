@@ -1626,6 +1626,12 @@ catalog_grepl = function(pattern, x) {
 #' declared by registered providers, user configuration and discovered local servers. Offline
 #' by default: only `refresh = TRUE` touches the network.
 #'
+#' A catalog entry describes a route, not current account access. Copy its `ref` into the
+#' `model` argument of [peter()] to choose that route. Ollama routes require current installed
+#' model evidence before inference; discovery does not pull models. See
+#' `vignette("language-models", package = "gptr")` for setup and [gptr_providers()] for
+#' credentials and reachability.
+#'
 #' @param query `NULL` or a regular expression or alias (for example `"sonnet"`), matched
 #'   against the reference, the name and the aliases; the model an alias resolves to is listed
 #'   first.
@@ -1633,12 +1639,15 @@ catalog_grepl = function(pattern, x) {
 #' @param refresh `TRUE` downloads the current models.dev catalog with ETag revalidation into
 #'   the user cache. For a local provider (`provider = "ollama"`, `"lmstudio"`, ...) it asks
 #'   that server for its installed models instead (a 1 second limit per request; for Ollama the
-#'   native `/api/version`, `/api/tags` and `/api/show` endpoints, on a loopback address only).
+#'   native `/api/version`, `/api/tags` and `/api/show` endpoints). Ollama discovery requires a
+#'   loopback address under the default local-only policy; only an explicit human setting at
+#'   user or session scope can relax it (see [gptr_config()]).
 #'   The only network use of this function; it never starts or installs a server and never
 #'   downloads a model.
 #' @return A `gptr_models` data frame with columns `ref`, `provider`, `name`, `context`,
-#'   `max_output`, `input_price`, `output_price` (USD per million tokens, in force today; `0`
-#'   for local inference, `NA` when unknown), `reasoning`, `aliases` and `status`.
+#'   `max_output`, `input_price`, `output_price` (USD per million tokens, selected for today's
+#'   date from the available catalog; `0` for verified local inference, `NA` when unknown),
+#'   `reasoning`, `aliases` and `status`. Catalog prices can be stale and are not an account quote.
 #' @examples
 #' gptr_models("sonnet")
 #' gptr_models(provider = "anthropic")

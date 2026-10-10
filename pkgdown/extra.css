@@ -1,0 +1,78 @@
+/* Canonical logo assets are copied from man/figures by pkgdown. */
+.navbar-brand::before {
+  content: "";
+  display: inline-block;
+  width: 28px;
+  height: 33px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  background: url("reference/figures/logo-small.png") center / contain no-repeat;
+}
+
+img.logo {
+  width: 120px;
+  height: auto;
+  content: url("reference/figures/logo.png");
+}
+
+/* pkgdown adds its own local logo next to the README heading. */
+.page-header h1 picture {
+  display: none;
+}
+
+[data-bs-theme="dark"] .navbar-brand::before {
+  background-image: url("reference/figures/logo-dark-small.png");
+}
+
+[data-bs-theme="dark"] img.logo {
+  content: url("reference/figures/logo-dark.png");
+}
+
+/* Keep the portrait logo and long titles in the header at every width. */
+.page-header {
+  display: flow-root;
+}
+
+#main, .row > aside {
+  min-width: 0;
+}
+
+#main {
+  overflow-wrap: anywhere;
+}
+
+#main pre, #main pre code {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+#main pre, #main .sourceCode {
+  max-width: 100%;
+}
+
+#main pre {
+  overflow-x: auto;
+}
+
+.table-responsive:focus-visible, #main pre:focus-visible {
+  outline: 2px solid var(--bs-link-color);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767.98px) {
+  .page-header img.logo {
+    float: none;
+    display: block;
+    width: 72px;
+    height: auto;
+    margin: 0 0 0.75rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .navbar-collapse {
+    margin-left: 0 !important;
+    max-height: calc(100dvh - 4.5rem);
+    overflow-y: auto;
+  }
+}

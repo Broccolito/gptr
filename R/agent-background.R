@@ -16,6 +16,9 @@
 #' aborts its run and \code{\link{gptr_jobs}()} lists it. Background sessions are
 #' \strong{experimental}: they need the \pkg{later} package, and they are never used in
 #' examples or in CRAN tests.
+#' Background work is not an independent R execution thread: an inline R tool occupies the
+#' process while it runs. Returning a session does not establish idle progress in an
+#' unverified front end; inspect its status and use a blocking wait when needed.
 #'
 #' @section How a background run behaves:
 #' \itemize{

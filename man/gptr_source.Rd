@@ -37,6 +37,12 @@ values interpolated into it changed), or every call under \code{replay = "live"}
 again and rewrites its block in place, and the old block is skipped, which base \code{source()}
 cannot do.
 }
+\details{
+Replay executes the recorded R code, including its ordinary side effects. It does not
+freeze package versions, supply external inputs or validate the analysis. This function
+accepts \code{.R} scripts; render \code{.Rmd} and \code{.qmd} with their report tools, and execute
+\code{.ipynb} through its R kernel. Use \code{\link[=gptr_blocks]{gptr_blocks()}} to inspect any supported format.
+}
 \examples{
 f = tempfile(fileext = ".R")
 writeLines(c("x = 1", "y = x + 1"), f)

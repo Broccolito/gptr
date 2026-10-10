@@ -723,6 +723,9 @@ file_chunk_lines = function(path, from_end = FALSE, n = 65536) {
 #' answer, else `interrupted`) with home `envir`. A rebuilt fork always gets a fresh overlay of
 #' `envir`. A detached copy (from `saveRDS()`, a knitr cache or callr) is attached under the
 #' split-brain rules. `block =` returns the session that a document replay bound to that block.
+#' Resuming restores conversation state, not a complete analysis workspace, and does not
+#' rerun the R tool code. Make required objects available in `envir`; use document replay
+#' when the intention is to execute the recorded analysis again.
 #' @param x `NULL` (the most recently updated stored session), a session id, a file path, or a
 #'   detached `gptr_session`.
 #' @param envir The home of a rebuilt session.

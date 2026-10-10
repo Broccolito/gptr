@@ -31,7 +31,22 @@ combined from several calls (\code{c()}, \verb{[<-}, \code{vctrs::vec_c()}) say 
 part is calibrated and \code{uncalibrated} when any part is uncalibrated. For choices
 and scores the confidence describes how concentrated the distribution is, not the probability
 that the answer is correct.
+
+A score can be fractional: with levels low, medium and high (0, 1 and 2), probabilities
+0.85, 0.10 and 0.05 give the score 0.20. It is not rounded to the most likely level.
+\code{attr(x, "meta")} records the model, engine, calibration state, cached elements, usage and
+available execution provenance such as locality, model digest and server version.
 }
+\section{Input shape and uncertainty}{
+
+Atomic vectors and unnamed lists give one input state per element; data frames give one
+per row. Fully named lists and \code{I(x)} give one structured state. These states can contain
+the actual input values sent to the provider; see \link{gptr_egress}.
+\code{min_confidence} makes low-confidence answers \code{NA} by default, including unknown
+confidence when the minimum is positive. Use \code{isTRUE()} in scalar control flow when
+abstention is possible, and handle uncertain inputs separately.
+}
+
 \section{System 1 options}{
 
 \code{gptr.s1_max_active} (8) concurrent requests, \code{gptr.s1_rounds} (3) bounded retry rounds,

@@ -41,6 +41,9 @@ the session from its JSONL file (leaf = the last entry; status \code{idle} when 
 answer, else \code{interrupted}) with home \code{envir}. A rebuilt fork always gets a fresh overlay of
 \code{envir}. A detached copy (from \code{saveRDS()}, a knitr cache or callr) is attached under the
 split-brain rules. \verb{block =} returns the session that a document replay bound to that block.
+Resuming restores conversation state, not a complete analysis workspace, and does not
+rerun the R tool code. Make required objects available in \code{envir}; use document replay
+when the intention is to execute the recorded analysis again.
 
 \code{gptr_last()} returns the most recently active session of this R process. It is held strongly
 (it survives \code{gc()}), so a session whose call was interrupted before its result was assigned
