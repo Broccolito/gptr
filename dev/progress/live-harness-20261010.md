@@ -40,3 +40,8 @@
 - Console fallback now joins only text blocks with canonical line breaks. Streaming respects distinct content indices and flushes buffered tails before thinking headers, tool lines or pause notices; same-block chunking remains intact. Structural/signed blocks and event deltas are unchanged.
 - New plain/styled display and order regressions: red FAIL 11 / PASS 143; green PASS 154, FAIL 0, WARN 0, SKIP 0 (18.6s). Three changed files lint clean. Root reviewed the minimal source diff.
 - Evidence: `/private/tmp/gptr-console-boundary-{red,green,lint}-20261010.log` and ignored `cross-block-secret-review.md`. Arbitrarily concatenating separate event or stored fields is not the canonical display contract. Installed-package live checks remain pending.
+
+## Hosted timeout fixture and pause follow-up
+- Windows showed a Perl success call inheriting the previous case's one-second timeout mock. The mock is now scoped only around the intentional slow Rscript check; the original Perl success oracle and production timeout remain intact.
+- Root pause/wait/bridge follow-up: PASS 210, FAIL 0, WARN 0 (10.7s); four skips cover three unconfigured optional Python bridges and the CI-only interactive interrupt case. Changed bridge test lint clean.
+- The separate hosted HTTP wall-bound failure had 6–15ms end-delivery latency and 0.509s response-head spread. No runtime slowdown is established; its serialization threshold remains unchanged while timing evidence is reviewed.

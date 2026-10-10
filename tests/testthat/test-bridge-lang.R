@@ -183,11 +183,12 @@ test_that("interpreter engines run as scripts without registered keys and with a
   ev = log$events[[length(log$events)]]
   expect_identical(ev$bridge, "knit")
   expect_identical(ev$digest, "#> knit Rscript: exit 0, 1 line")
-  testthat::local_mocked_bindings(bridge_knit_timeout = function() 1)
-  t0 = proc.time()[["elapsed"]]
-  slow = bridge_knit("Rscript", "Sys.sleep(30)")
-  expect_lt(proc.time()[["elapsed"]] - t0, 10)
-  expect_true(any(grepl("timed out after", slow, fixed = TRUE)))
+  testthat::with_mocked_bindings({
+    t0 = proc.time()[["elapsed"]]
+    slow = bridge_knit("Rscript", "Sys.sleep(30)")
+    expect_lt(proc.time()[["elapsed"]] - t0, 10)
+    expect_true(any(grepl("timed out after", slow, fixed = TRUE)))
+  }, bridge_knit_timeout = function() 1)
   skip_if(!nzchar(Sys.which("perl")))
   pl = bridge_knit("perl", "print \"from perl: \", 6 * 7, \"\\n\";")
   expect_identical(as.character(pl), "from perl: 42")
