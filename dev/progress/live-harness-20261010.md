@@ -34,3 +34,9 @@
 - Three recording-route guards now honor FALSE. Existing explicit binding consent is preserved; TRUE does not newly grant consent when persistent recording is off. Replay behavior is unchanged.
 - Red PASS 594 / FAIL 7. Affected document/capture tests PASS 954, FAIL 0, WARN 0, SKIP 0 (18.0s test time, 19.78s measured wall). Two changed files lint clean; root source review clear. Sandbox denied scheduling-priority and BSD peak-RSS probes for this lane, so no RAM measurement is claimed.
 - Evidence: ignored `dev/.validation/live-20261010/record-false-{red,green,lint}.log`. Updated installed-package live verification is pending.
+
+## Console content boundaries
+- Synthetic offline before/current comparisons both reconstructed a contiguous registered value from separate text blocks on the console. Canonical `msg_text()` already separated the blocks; this display issue predates the stream-order patch. No real credential was read.
+- Console fallback now joins only text blocks with canonical line breaks. Streaming respects distinct content indices and flushes buffered tails before thinking headers, tool lines or pause notices; same-block chunking remains intact. Structural/signed blocks and event deltas are unchanged.
+- New plain/styled display and order regressions: red FAIL 11 / PASS 143; green PASS 154, FAIL 0, WARN 0, SKIP 0 (18.6s). Three changed files lint clean. Root reviewed the minimal source diff.
+- Evidence: `/private/tmp/gptr-console-boundary-{red,green,lint}-20261010.log` and ignored `cross-block-secret-review.md`. Arbitrarily concatenating separate event or stored fields is not the canonical display contract. Installed-package live checks remain pending.

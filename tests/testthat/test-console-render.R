@@ -223,6 +223,45 @@ test_that("an answer without deltas is printed whole at message_end", {
   expect_identical(out, "All at once.")
 })
 
+test_that("whole replies join only text blocks with canonical line breaks", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  local_vault()
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  secret = paste0("synthetic-", strrep("FAKE", 8L), "-offline")
+  secret_register(secret, "CONSOLE_BLOCK_SYNTHETIC", source = "test")
+  left = substr(secret, 1L, 25L)
+  right = substr(secret, 26L, nchar(secret))
+  msg = assistant_msg(list(block_text(left), block_thinking("hidden"), block_text(right)))
+  expect_identical(console_msg_text(msg), msg_text(msg))
+  for (colours in c(1L, 256L)) {
+    withr::local_options(cli.num_colors = colours)
+    out = render_events(s, list(
+      hook_event("agent_start", s),
+      hook_event("message_end", s, role = "assistant", message = msg)))
+    expect_identical(cli::ansi_strip(out), c(left, right))
+    expect_false(grepl(secret, paste(cli::ansi_strip(out), collapse = "\n"), fixed = TRUE))
+  }
+})
+
+test_that("same-block chunks stay contiguous and tools follow the complete text tail", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  s = render_session()
+  withr::defer(console_drop("u0000test"))
+  out = render_events(s, list(
+    hook_event("agent_start", s),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "First "),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "ta"),
+    hook_event("message_update", s, index = 1L, kind = "text", delta = "il"),
+    hook_event("tool_execution_start", s, tool_call_id = "c1", tool_name = "r",
+               input = list(code = "1 + 1")),
+    hook_event("message_update", s, index = 2L, kind = "text", delta = "Second ending"),
+    hook_event("message_end", s, role = "assistant", message = assistant_msg("ignored"))))
+  expect_identical(out, c("First tail", "  * r  1 + 1", "Second ending"))
+})
+
 test_that("tool lines escape the preview and summarise the result (acceptance 7)", {
   testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
   local_gptr_options(verbose = 2L)

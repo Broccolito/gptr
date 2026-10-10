@@ -174,3 +174,41 @@ test_that("a failed-closed redactor never releases held bytes on end or completi
   stream_order_finish(run)
   expect_length(updates(run$shell), 0L)
 })
+
+test_that("adjacent text blocks cannot reconstruct a synthetic secret on the console", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L)
+  for (colours in c(1L, 256L)) {
+    withr::local_options(cli.num_colors = colours)
+    run = stream_order_run()
+    secret = paste0("synthetic-", strrep("FAKE", 8L), "-offline")
+    secret_register(secret, "CROSS_BLOCK_SYNTHETIC", source = "test")
+    left = substr(secret, 1L, 25L)
+    right = substr(secret, 26L, nchar(secret))
+    out = utils::capture.output({
+      stream_order_block(run, 1L, c("Use ", left))
+      stream_order_block(run, 2L, right)
+      stream_order_finish(run)
+    })
+    last = utils::tail(run$shell$messages, 1L)[[1L]]
+    expect_false(grepl(secret, paste(cli::ansi_strip(out), collapse = "\n"), fixed = TRUE))
+    expect_false(grepl(secret, msg_text(last), fixed = TRUE))
+    expect_identical(utils::head(cli::ansi_strip(out), 2L), c(paste0("Use ", left), right))
+  }
+})
+
+test_that("text tails finish before thinking headers and the next text block", {
+  testthat::local_reproducible_output(width = 80, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 3L)
+  run = stream_order_run()
+  out = utils::capture.output({
+    stream_order_block(run, 1L, c("First ", "tail"))
+    stream_order_block(run, 2L, "Plan finished", kind = "thinking")
+    stream_order_block(run, 3L, "Second ending")
+    stream_order_finish(run)
+  })
+  expect_identical(utils::head(out, 4L),
+                   c("First tail", "  (thinking)", "Plan finished", "Second ending"))
+  last = utils::tail(run$shell$messages, 1L)[[1L]]
+  expect_identical(msg_text(last), "First tail\nSecond ending")
+})

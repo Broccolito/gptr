@@ -466,8 +466,8 @@ console_stream_output = function(rec) {
 #' @noRd
 console_pause_one = function(rec) {
   console_spinner_stop(rec)
-  if (!is.null(rec$think)) rec$think$reset_line()
-  if (!is.null(rec$md)) rec$md$reset_line()
+  if (!is.null(rec$think)) rec$think$finish()
+  if (!is.null(rec$md)) rec$md$finish()
   invisible(NULL)
 }
 
@@ -479,13 +479,13 @@ console_render_pause = function() {
   invisible(NULL)
 }
 
-#' The text blocks of a message, concatenated
+#' Only text blocks, joined with the same line breaks as msg_text()
 #' @noRd
 console_msg_text = function(msg) {
   text = vapply(msg$content %||% list(), function(b) {
-    if (identical(b$type, "text") && rlang::is_string(b$text)) b$text else ""
+    if (identical(b$type, "text") && rlang::is_string(b$text)) b$text else NA_character_
   }, "")
-  paste(text, collapse = "")
+  paste(text[!is.na(text)], collapse = "\n")
 }
 
 #' The preview lines of a tool input: its code, its path, its questions, else compact JSON
@@ -642,13 +642,19 @@ console_on_message_update = function(event, ctx) {
   if (identical(kind, "text")) {
     if (!is.null(rec$think)) rec$think$finish()
     rec$think = NULL
+    if (!is.null(rec$md) && !identical(rec$md_index, event$index)) {
+      rec$md$finish()
+      rec$md = NULL
+    }
     if (is.null(rec$md)) {
       rec$md = render_markdown_stream(before_output = console_stream_output(rec))
     }
+    rec$md_index = event$index
     rec$md$write(delta)
   } else if (identical(kind, "thinking") && verbosity() >= 3L) {
     console_spinner_stop(rec)
     if (is.null(rec$think)) {
+      if (!is.null(rec$md)) rec$md$finish()
       console_write(cli::col_grey("  (thinking)"))
       rec$think = render_markdown_stream(before_output = console_stream_output(rec))
     }
@@ -672,6 +678,7 @@ console_on_message_end = function(event, ctx) {
     if (is.null(rec$md)) console_print_text(console_msg_text(msg)) else rec$md$finish()
     rec$think = NULL
     rec$md = NULL
+    rec$md_index = NULL
   } else if (identical(msg$role, "tool_result")) {
     call = get0(paste0("t", msg$tool_call_id), envir = rec$tools, inherits = FALSE) %||%
       list(id = msg$tool_call_id, name = msg$tool_name, input = list())
