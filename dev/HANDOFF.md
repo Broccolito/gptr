@@ -1,6 +1,6 @@
 # GPTR 1.0 implementation - handoff
 
-**State on 2026-10-07: implementation complete; release steps are the maintainer's.** All
+**State on 2026-10-07: offline implementation milestones complete; release steps are the maintainer's.** All
 25 plans (307 tasks) are committed, each test-first and independently reviewed; what remains needs
 the network, paid calls, a real terminal or the maintainer's approval (section 5). `main` is the only
 branch and is pushed. This file is self-contained; read it top to bottom.
@@ -13,6 +13,15 @@ independent review: [pr-review-20261010.md](progress/pr-review-20261010.md). Cur
 model-access evidence is only in ignored `dev/LOCAL_SETUP.md`; catalogs/auth status were checked,
 but no inference was run. Original maintainer DESCRIPTION/AGENTS.md changes remain untouched.
 Release gates below still apply.
+**2026-10-10 live hardening update:** PR #5 is now reviewed, adapted, merged (`8b93b1e`),
+and main synchronized. The maintainer explicitly authorized bounded live tests with Claude CLI,
+Codex CLI, Jev, Ollama `qwen3.8:27b`, and UCSF Versa Azure, plus missing dependency installation;
+the older live-run prohibitions below do not block that authorized scope. Stream-boundary and
+Azure header repairs are pushed, and the selected Versa deployment passed real R-tool regression
+and continuation tests. Frontend, steering, fanout, performance and CRAN checks remain in progress.
+Current evidence: [live-harness-20261010.md](progress/live-harness-20261010.md) and
+[cran-readiness-20261010.md](progress/cran-readiness-20261010.md). No release, tag or CRAN submission
+has been performed. The maintainer's untracked AGENTS and roxygen preference are preserved.
 The supplied light/dark logo set now lives in `man/figures/`; README and shared site branding
 use it, with light mode by default and a native theme switch. Why Peter explains both namesakes.
 The site passes representative 320-1920px light/dark layouts and doubled-text checks;
