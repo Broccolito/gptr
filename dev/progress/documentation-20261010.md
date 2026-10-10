@@ -182,3 +182,18 @@ The interactive guide also documents proven native Unix !/!! R completion, prese
 caller completers, client-owned GUI input and width refresh of newly streamed prose. Active
 native-window resizing remains a separate live check. The site server and earlier browser
 layout certificate predate these edits; a fresh site build and browser review are still pending.
+
+## Living plan and cross-plan gate
+
+Saved `dev/TESTING_PLAN.md` covers all14 guides/tables,63 exports, provider/frontend combinations,
+native/system-wide decisions, interactive UX, extensions, optional tools, memory/performance and
+CRAN gates. A row is updated only from its revision-specific evidence; inherited tests, prepared
+fixtures and inventory are distinguished from live behavior.
+
+The required rerun after the latest plan edit completed successfully:25 implementation plans,
+1,446 indexed blocks,4,389 definitions,28,337 calls;910 findings (821 info,89 warnings,0errors).
+Extraction/parse checked770 R blocks with0parse/style problems; single-worker lintr3.4 found no
+lints. Three LONG notes are nested P17 skill examples. Read-only warning triage found recorded
+ownership/signature/prototype/historical-contract exceptions and current implementation coverage
+limitations; no new runtime blocker or numbered-plan change was required. The checker README's
+74-warning count is historical. Output remains ignored under `dev/.validation/plan-20261010/final/`.
