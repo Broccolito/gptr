@@ -186,7 +186,7 @@ bodyless_overflow_pattern = "^4(?:00|13)\\s*(?:status code)?\\s*\\(no body\\)"
 non_retryable_pattern = paste(c(
   "GoUsageLimitError", "FreeUsageLimitError", "Monthly usage limit reached", "available balance",
   "insufficient_quota", "out of budget", "quota exceeded", "billing",
-  "subscription_sharing_usage_limit_exceeded"), collapse = "|")
+  "subscription_sharing_usage_limit_exceeded", "hit (?:your|the) session limit"), collapse = "|")
 retryable_pattern = paste(c(
   "overloaded", "currently experiencing high demand", "rate.?limit", "too many requests", "429",
   "500", "502", "503", "504", "520", "524", "service.?unavailable", "server.?error",

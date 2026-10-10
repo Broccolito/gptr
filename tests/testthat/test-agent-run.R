@@ -200,6 +200,21 @@ test_that(oracle_title(recovery_recs, "R08"), {
   expect_false(retryable_error_text("429 billing hard limit reached"))
 })
 
+test_that("session quota errors stop retries without classifying successful content", {
+  err = list(class = "rate_limit", status = 429L)
+  for (notice in c("You've hit your session limit", "You've hit the session limit")) {
+    msg = err_msg(paste0("The claude CLI ended the turn: it hit a rate limit: ", notice))
+    expect_false(run_retryable(msg, err))
+  }
+  transient = err_msg("The claude CLI ended the turn: it hit a rate limit: Try again shortly")
+  expect_true(run_retryable(transient, err))
+  success = msg_assistant("A quote: You've hit your session limit", api = "fake",
+                          provider = "fake", model = "fake-1")
+  expect_identical(run_error_text(success), "")
+  expect_false(run_retryable(success, list()))
+  expect_identical(success$stop_reason, "stop")
+})
+
 test_that(oracle_title(recovery_recs, "R09"), {
   expect_false(run_retryable(err_msg("invalid x-api-key"), list(status = 401L)))
   expect_identical(provider_classes(list(status = 401L)), c("auth", "provider"))

@@ -445,13 +445,19 @@ pcli_claude_result = function(obj, s) {
     return(pcli_done(s, usage, pcli_claude_stop(raw), raw))
   }
   detail = as.character(unlist(obj[["errors"]]))
+  if (!aborted && !length(detail) && rlang::is_string(text) && nzchar(trimws(text))) detail = text
   if (any(grepl("No conversation found", detail, fixed = TRUE))) s$state$claude_session = NULL
   cls = if (aborted) "aborted" else pcli_claude_error_class(obj)
+  subtype = pcli_chr(obj[["subtype"]])
+  if (identical(subtype, "success")) subtype = "an error"
   what = switch(cls,
                 max_turns = "it reached --max-turns",
                 budget_cost = "the turn is out of budget (--max-budget-usd)",
                 aborted = "the turn was interrupted",
-                paste0("it reported ", pcli_chr(obj[["subtype"]]) %||% "an error"))
+                auth = "it reported an authentication or access error",
+                rate_limit = "it hit a rate limit",
+                overloaded = "the service is overloaded",
+                paste0("it reported ", subtype %||% "an error"))
   if (length(detail)) what = paste0(what, ": ", paste(detail, collapse = "; "))
   pcli_fail(s, cls, paste0("The claude CLI ended the turn: ", what, "."),
            reason = if (aborted) "aborted" else "error",
