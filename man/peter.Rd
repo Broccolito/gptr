@@ -108,15 +108,18 @@ and a trailing backslash continues a line;
 
 Ctrl-C while an answer runs opens a pause menu in supported terminal front ends:
 \verb{[s]teer} (delivered after the current tool results), \verb{[f]ollow-up}, \verb{[c]ontinue}, \verb{[a]bort}
-and, for a foreground programmatic call when available, \verb{[b]ackground}; a second Ctrl-C aborts.
+and, for a foreground call (including a chat turn) when available, \verb{[b]ackground};
+a second Ctrl-C aborts. Backgrounding returns to the chat prompt; use
+\code{!!gptr::gptr_wait(gptr::gptr_last())} there to wait for completion. Returning to the prompt
+does not guarantee progress while the chat waits for input. Under Rscript, background runs
+advance only inside blocking gptr calls.
 Front ends that cannot resume use an abort fallback. \verb{/exit}, Ctrl-C twice at the prompt
-or the end of piped input return
-the session invisibly, so \code{s = peter()} keeps the conversation.
+or the end of piped input return the session invisibly, so \code{s = peter()} keeps the conversation.
 
-Options: \code{gptr.verbose} (0 silent, 1 progress on stderr, 2 streamed console, 3 debug; by
-default 0 in knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}
+Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
+knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}
 (turns per console prompt, default 200) and \code{gptr.history} (console inputs to R's history,
-default \code{TRUE}).
+default \code{TRUE}). Ordinary progress uses stderr (stdout in an ordinary IRkernel cell).
 \code{vignette("interactive-console", package = "gptr")} gives input examples and the complete
 built-in command table.
 }

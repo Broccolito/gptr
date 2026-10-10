@@ -116,3 +116,10 @@
 - The tool dispatcher reuses its existing execution-entry timestamp. Preparation and approval dwell are excluded; calls that never execute report zero. Pauses during execution still count as wall time.
 - New regressions first failed nine assertions; the first affected run then found shortened `/resume` IDs. An explicit full-ID regression failed before identifier protection. Final affected suites passed 464 assertions with zero failures/warnings/skips (55.8s); four-file lint and whitespace checks are clean. Dependency startup warnings remain separately identified.
 - Evidence is retained in ignored `LISTING-ELAPSED.md` and its named logs. Reinstalled actual-terminal verification remains required.
+
+## Interrupted text and usage
+- A resumable pause keeps the streaming redactor intact. On final abort, a safely drained tail received after that pause is clearly labeled before the footer; continuing a pause adds no abort label. Synthetic split-secret coverage verifies that pause/resume never exposes a held secret prefix.
+- An aborted open request now records one usage row, retaining explicit partial counters or reported cost and leaving unreported fields unknown. It does not duplicate an existing row or invent a request for a run aborted while still queued. Partial API counters do not establish a final charge.
+- Red reproduced 18 failures/23 passes; focused green passed 41 assertions. Affected suites passed 1,263 assertions with zero failures/warnings and one intentional interactive-CI skip (47.93s); six-file lint is clean. Startup dependency warnings remain separate.
+- Source/help now accurately describe background transfer from a foreground chat turn, explicit pumping, the scope of `!!`, and ordinary IRkernel progress on stdout. Private-copy roxygen and interactive-guide regeneration completed in 23.08s; documentation/release-file checks passed, generated namespace stayed identical, and working source/DESCRIPTION fingerprints were preserved.
+- Evidence is retained in ignored `documentation-20261010/abort-stream/` and `live-20261010/doc-overlay-e298b49-2/`. Actual installed terminal verification remains pending.

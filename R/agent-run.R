@@ -1525,6 +1525,10 @@ run_abort = function(run, reason = "user") {
     msg = run_partial_message(run)
     msg$stop_reason = "aborted"
     msg$error_message = paste0("aborted (", reason, ")")
+    msg = tryCatch(run_abort_usage(run, msg), error = function(e) {
+      registry_diagnostic("session", "abort_usage", class(e)[[1L]], conditionMessage(e))
+      msg
+    })
     # a store failure must not stop the abort (the session would stay `running`)
     tryCatch(session_append(s, entry_message(msg)), error = function(e) {
       registry_diagnostic("session", "abort", class(e)[[1L]], conditionMessage(e))
@@ -1535,6 +1539,30 @@ run_abort = function(run, reason = "user") {
   d$queue = list(steer = list(), follow_up = list())
   run_settle(run, "aborted")
   invisible(run)
+}
+
+#' Account for an interrupted request once: preserve reported fields and cost, leaving missing
+#' observations unknown. Partial token counts do not establish the final charge.
+#' @noRd
+run_abort_usage = function(run, msg) {
+  s = run$shell
+  d = session_data(s)
+  msg$request_id = run$request_id
+  if (run$request_id %in% d$usage$request_id) return(msg)
+  u = msg[["usage"]] %||% list()
+  cost = usage_reported_cost(u)
+  for (name in setdiff(usage_fields, names(u))) u[[name]] = NA_real_
+  if (!("cost" %in% names(u))) u$cost = cost_unknown()
+  msg$usage = usage_as(u)
+  row = usage_row(msg, session = d$id, agent = run$opts$agent %||% "main",
+                  parent_id = d$parent_id %||% NA_character_, started = run$request_started,
+                  seconds = as.numeric(difftime(Sys.time(), run$request_started, units = "secs")),
+                  multiplier = d$estimator$m %||% 1)
+  row$cost = cost
+  row = usage_conform(row)
+  usage_add(s, row)
+  run_emit(run, "usage", row = row)
+  msg
 }
 
 #' The partial answer of an aborted request: the accumulator's message once the stream's `start`

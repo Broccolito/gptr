@@ -216,8 +216,9 @@ s3_register = function(generic, class, method = NULL) {
 #' - `gptr.interactive` (logical or `NULL`, `NULL`): force the decision whether a person is
 #'   present to answer questions and permission prompts. This does not supply a UI or an answer
 #'   in an unattended process.
-#' - `gptr.verbose` (integer or `NULL`, `NULL`): 0 silent, 1 progress on standard error, 2 the
-#'   streamed console, 3 debugging; `NULL` chooses by context (0 in knitr and testthat, 1 under
+#' - `gptr.verbose` (integer or `NULL`, `NULL`): 0 silent, 1 progress on stderr (stdout in an
+#'   ordinary IRkernel cell), 2 the streamed console, 3 debugging; `NULL` chooses by context
+#'   (0 in knitr and testthat, 1 under
 #'   Rscript, 2 at the console).
 #' - `gptr.ui` (character, UI spec or `NULL`, `NULL`): the user-interface backend; `NULL` means
 #'   the console when a person is present, else none.

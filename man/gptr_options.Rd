@@ -19,8 +19,9 @@ cannot change them for that run.
 \item \code{gptr.interactive} (logical or \code{NULL}, \code{NULL}): force the decision whether a person is
 present to answer questions and permission prompts. This does not supply a UI or an answer
 in an unattended process.
-\item \code{gptr.verbose} (integer or \code{NULL}, \code{NULL}): 0 silent, 1 progress on standard error, 2 the
-streamed console, 3 debugging; \code{NULL} chooses by context (0 in knitr and testthat, 1 under
+\item \code{gptr.verbose} (integer or \code{NULL}, \code{NULL}): 0 silent, 1 progress on stderr (stdout in an
+ordinary IRkernel cell), 2 the streamed console, 3 debugging; \code{NULL} chooses by context
+(0 in knitr and testthat, 1 under
 Rscript, 2 at the console).
 \item \code{gptr.ui} (character, UI spec or \code{NULL}, \code{NULL}): the user-interface backend; \code{NULL} means
 the console when a person is present, else none.

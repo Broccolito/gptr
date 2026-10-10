@@ -362,6 +362,7 @@ console_track = function(run_id, session) {
   rec$tools = new.env(parent = emptyenv())
   rec$n0 = length(session_data(session)$entries)
   rec$request_pending = FALSE
+  rec$paused = FALSE
   assign(run_id, rec, envir = console_state()$active)
   invisible(rec)
 }
@@ -454,6 +455,7 @@ console_wait_start = function(rec) {
 console_render_resume = function(runs) {
   for (run in runs) {
     rec = console_record(list(run = run$id))
+    if (!is.null(rec)) rec$paused = FALSE
     if (!is.null(rec) && isTRUE(rec$request_pending) &&
         run$status %in% c("requesting", "streaming")) console_wait_start(rec)
   }
@@ -488,7 +490,11 @@ console_pause_one = function(rec) {
 #' @noRd
 console_render_pause = function() {
   active = console_state()$active
-  for (id in ls(active, all.names = TRUE)) console_pause_one(get(id, envir = active))
+  for (id in ls(active, all.names = TRUE)) {
+    rec = get(id, envir = active)
+    console_pause_one(rec)
+    rec$paused = TRUE
+  }
   invisible(NULL)
 }
 
@@ -652,6 +658,12 @@ console_on_message_update = function(event, ctx) {
   delta = event$delta
   if (is.null(rec) || !is.character(delta) || !console_render_on(rec)) return(NULL)
   kind = event$kind %||% "text"
+  visible = identical(kind, "text") || (identical(kind, "thinking") && verbosity() >= 3L)
+  if (visible && isTRUE(rec$paused) && any(nzchar(delta))) {
+    rec$paused = FALSE
+    live = session_live(rec$session)
+    if (isTRUE(live$run$signal$aborted)) console_write("[gptr] final received text:")
+  }
   if (identical(kind, "text")) {
     if (!is.null(rec$think)) rec$think$finish()
     rec$think = NULL

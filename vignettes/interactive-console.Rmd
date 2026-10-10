@@ -178,10 +178,16 @@ While an answer or tool runs in a supported terminal, Ctrl-C opens a pause menu:
 - **Continue** resumes the current work.
 - **Abort** stops it and retains the partial session.
 
-A foreground programmatic call can also offer **background** when that experimental capability
-is available. Resume pumping with `gptr_wait(s)`. At the chat prompt, one Ctrl-C prints a hint;
-two consecutive interrupts leave the chat. IDEs that cannot resume an interrupted evaluation
-use an abort fallback; pause/resume behavior is not uniformly verified across front ends.
+A foreground call, including a chat turn, can also offer **background** when that experimental
+capability is available. It returns to `peter>` while the run remains active. Another prompt
+steers the running session; `!!gptr::gptr_wait(gptr::gptr_last())` waits for completion without
+adding a code/output note to the next prompt. Returning to the chat prompt does not guarantee
+progress while it waits for input. Under Rscript, background runs advance only inside blocking
+gptr calls. Inline R tools still occupy the same R process while they execute.
+
+At the chat prompt, one Ctrl-C prints a hint; two consecutive interrupts leave the chat. IDEs
+that cannot resume an interrupted evaluation use an abort fallback; pause/resume behavior is
+not uniformly verified across front ends.
 
 The equivalent session verbs work from R:
 
@@ -198,3 +204,5 @@ trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` r
 The [script-as-history guide](script-as-history.html) covers document recording, replay and
 transcripts; the [language-model guide](language-models.html) covers scripted calls that need
 no interactive console.
+
+

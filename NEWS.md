@@ -86,6 +86,8 @@ scripts, loops and `if` statements, and the agent works on the objects already i
   explicit synchronization.
 * Console listings keep descriptions and paths within the available width while preserving
   their full returned data. Tool elapsed time excludes time spent reviewing permission.
+* Interrupted streams label any final received text after the pause menu and retain unknown
+  usage when the provider has not reported it. Resumable pauses preserve secret redaction.
 
 # gptr 0.7.0
 

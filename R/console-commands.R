@@ -122,11 +122,12 @@ cmd_help = function(args, ctx) {
     "Input:",
     "  text             a prompt; @file adds a file, @object attaches an object",
     "  !code            run R code here; the code and its output go with the next prompt",
-    "  !!code           run R code here; not sent to the model",
+    "  !!code           run R code here; omit the code/output note for the next prompt",
     "  ```r ... ```     a block of R code (like !)",
     "  \"\"\" ... \"\"\"      a multi-line prompt; a trailing \\ also continues a line",
-    paste0("Keys: ", console_interrupt_key(), " pauses a running answer (steer, follow-up, ",
-           "continue, abort); twice at the prompt leaves."))
+    paste0("Keys: ", console_interrupt_key(), " pauses a running answer in supported terminals ",
+           "(steer, follow-up, continue, abort; background when available); ",
+           "twice at the prompt leaves. Other front ends may abort without a pause menu."))
 }
 
 #' /exit, /quit, /q
