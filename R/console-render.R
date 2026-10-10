@@ -328,8 +328,12 @@ console_spinner = function(label = "thinking") {
     if (now - sp$last < 0.08) return(invisible())
     sp$last = now
     sp$i = sp$i %% length(frames) + 1L
-    cat(sprintf("\r%s %s (%.0fs, %s to %s)", frames[[sp$i]], label, now - sp$t0, key, action),
-        sep = "")
+    width = max(0L, as.integer(cli::console_width()) - 1L)
+    text = sprintf("%s %s (%.0fs, %s to %s)", frames[[sp$i]], label, now - sp$t0, key, action)
+    text = if (width) cli::ansi_strtrim(text, width) else ""
+    # Reserve the last column to avoid wrapping; padding erases the tail of a shorter frame.
+    padding = strrep(" ", max(0L, width - cli::ansi_nchar(text, type = "width")))
+    cat("\r", text, padding, sep = "")
     utils::flush.console()
     sp$shown = TRUE
     invisible()
