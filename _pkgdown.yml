@@ -5,7 +5,7 @@ template:
   theme: a11y-light
   theme-dark: a11y-dark
   bslib:
-    bg: "#f3f1ec"
+    bg: "#ffffff"
     fg: "#1c1e22"
     primary: "#40628f"
     body-bg-dark: "#1c1e22"

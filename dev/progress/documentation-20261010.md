@@ -125,7 +125,7 @@ in reasoning. It distinguishes gptr's software roles from human cognition and do
 attribute the System 1/System 2 labels to Wason. README, getting-started and article navigation
 link to it.
 
-The site uses the logo's cream/ink palette and derived blue links (5.53:1 light,
+The light site uses a white background, dark text and derived blue links (6.25:1 light,
 6.01:1 dark contrast against their page backgrounds), with paired a11y syntax themes.
 Mobile headers stack a 72px portrait logo above the title; wider headers contain its float.
 Tables and code scroll independently. Overflowing regions have labels and keyboard focus;
@@ -149,3 +149,12 @@ ignored dev/.validation/documentation-20261010/.
 Hosted run 38071919571 for documentation commit 42a89f6 was still in progress at the last check;
 its completed benchmark, copy-safety, macOS-release and Ubuntu-oldrel-4 jobs had passed. These are revision-specific
 observations, not a completed hosted gate for this follow-up.
+
+
+## White background follow-up
+
+At the maintainer's request, changed the light-mode bslib background to pure white (#ffffff).
+The logo retains its original cream fill inside the artwork; no artwork bytes were changed.
+The generated pkgdown configuration and shared Bootstrap CSS were refreshed. The layout and
+explicit dark-mode colors remain the same. Verification uses rendered browser colors and the
+existing generated-manifest check; no package implementation or dependency changes.
