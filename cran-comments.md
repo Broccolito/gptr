@@ -52,7 +52,7 @@ documented in the "Breaking changes" section of NEWS.md.
   mock provider, an MCP server or a Shiny app) or gptr worker processes are skipped on CRAN;
   live provider tests run only when `GPTR_LIVE_TESTS` is `"true"`. Tests redirect `HOME` and
   `R_USER_*_DIR` to temporary directories.
-* The five vignettes are precomputed from `vignettes/*.Rmd.orig`, so building them runs no
+* The 14 vignettes are precomputed from `vignettes/*.Rmd.orig`, so building them runs no
   code.
 * Under `R CMD check` every pool of child processes is capped at two.
 
@@ -65,11 +65,11 @@ documented in the "Breaking changes" section of NEWS.md.
 
 ## R CMD check results
 
-`R CMD check --as-cran`: 0 errors | 0 warnings | 0 notes locally. The incoming-feasibility
-check of win-builder and CRAN (pending) is expected to add only the NOTE naming the maintainer:
-
-* checking CRAN incoming feasibility ... NOTE
-  Maintainer: 'Wanjun Gu <wanjun.gu@ucsf.edu>'
+The earlier local `R CMD check --as-cran` recorded in `dev/HANDOFF.md` had
+0 errors | 0 warnings | 0 notes. A fresh check of the final source tarball and
+win-builder (R-devel) are pending; these results will replace the historical record
+before submission. Current R-devel treats maintainer-only incoming metadata as OK,
+so no maintainer-only NOTE is assumed. Any other notes will be reviewed and explained.
 
 ## Reverse dependencies
 

@@ -566,8 +566,8 @@ description_problems = function(dcf, stage = c("vignettes", "release")) {
   if (!identical(field("Package"), "gptr")) out = c(out, "DESCRIPTION: Package is not gptr")
   title = "Language Model Agents Inside the Live 'R' Session"
   if (!identical(field("Title"), title)) out = c(out, "DESCRIPTION: Title differs from P01's")
-  if (!identical(field("VignetteBuilder"), "knitr")) {
-    out = c(out, "DESCRIPTION: VignetteBuilder must be knitr (IC-72)")
+  if (!identical(field("VignetteBuilder"), "knitr, rmarkdown")) {
+    out = c(out, "DESCRIPTION: VignetteBuilder must be knitr, rmarkdown for HTML vignettes")
   }
   if (!all(c("knitr", "rmarkdown") %in% rel_dep_names(field("Suggests")))) {
     out = c(out, "DESCRIPTION: Suggests must list knitr and rmarkdown")

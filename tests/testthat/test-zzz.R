@@ -31,16 +31,16 @@ test_that("DESCRIPTION carries the fields CRAN and the contract require (IC-72)"
   expect_identical(unname(d[["NeedsCompilation"]]), "no")
   expect_identical(unname(d[["Config/testthat/edition"]]), "3")
   expect_match(d[["Depends"]], "R (>= 4.2.0)", fixed = TRUE)
-  # IC-72: no VignetteBuilder before the vignettes exist; P25 adds exactly `knitr` with them. In
+  # No VignetteBuilder before the vignettes exist; knitr::rmarkdown needs both packages. In
   # the source tree the field must match vignettes/*.Rmd; under R CMD check (installed
-  # DESCRIPTION, no source tree) it is absent or knitr.
+  # DESCRIPTION, no source tree) it is absent or knitr, rmarkdown.
   builder = if ("VignetteBuilder" %in% names(d)) unname(d[["VignetteBuilder"]])
   if (!is.null(source_file("DESCRIPTION"))) {
     vignettes = source_file("vignettes")
     has_vignettes = !is.null(vignettes) && length(list.files(vignettes, "[.]Rmd$")) > 0L
-    expect_identical(builder, if (has_vignettes) "knitr")
+    expect_identical(builder, if (has_vignettes) "knitr, rmarkdown")
   } else {
-    expect_true(is.null(builder) || identical(builder, "knitr"))
+    expect_true(is.null(builder) || identical(builder, "knitr, rmarkdown"))
   }
   expect_false("Collate" %in% names(d))
 })
