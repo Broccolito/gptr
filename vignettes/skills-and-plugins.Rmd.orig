@@ -40,7 +40,10 @@ peter$read("skill:analysis-review/references/checklist.md")
 ```
 
 These paths refer to files inside the skill directory. Keep long references and examples in
-separate files and tell the skill when to read them. See [Language models](language-models.html)
+separate files and tell the skill when to read them. A skill supplies instructions, not a data
+snapshot; objects named in its text must still be available to the tools that use them. See
+[Execution model](execution-model.html) for the R environment and provider context,
+[Language models](language-models.html)
 for selecting a provider, and [Tools and artifacts](tools-and-artifacts.html) for reading files.
 
 ## Write a skill

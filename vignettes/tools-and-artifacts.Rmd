@@ -157,7 +157,8 @@ last expression's representation; `$value` converts that value to R and `$error`
 error.
 
 Data-frame conversion to Python also requires the corresponding Python support, such as pandas
-for the example below.
+for the example below. Conversion and Python computations can allocate additional memory even
+when the original R object is already loaded.
 
 
 ``` r
@@ -208,11 +209,15 @@ h$checks
 gptr_artifacts("survey-view", open = TRUE)
 ```
 
-`data` is a vector of object **names**. Each version gets a copy of those objects, so later edits
-in your R session do not change a running version. Edit the working `app.R` and call
+`data` is a vector of object **names**. Each version serializes those objects to its own RDS
+files; a launched app loads them in a separate R process. Ordinary edits to the original R
+objects do not rewrite that snapshot. This uses disk space and child-process memory, so choose
+the subset or summary the app needs. Edit the working `app.R` and call
 `peter$app()` again to snapshot a revision into `v002/`, `v003/` and so on. The default snapshot
 limit is 500 MB (`gptr.artifact_max_bytes`). Without a project workspace, artifacts use a
 temporary workspace; use `gptr_init()` for work you want to retain.
+See [Execution model](execution-model.html) for computation on live objects without an artifact
+snapshot.
 
 For HTML, write `page.html` in the same working directory and call
 `peter$app("survey-view", kind = "html", launch = FALSE)`. HTML is served through a Shiny

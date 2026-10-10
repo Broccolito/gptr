@@ -12,7 +12,8 @@ options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 
 # gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
-gptr runs language model agents inside your live R session. They work with objects you already
+gptr runs language model agents inside your live R session, using **in-memory compute**.
+They work with objects you already
 loaded, including datasets around **4 GB or larger**, and reuse your variables and intermediate
 results across turns. Load a dataset once, analyze it by name, and rerun the step you want to
 change. One function, `peter()`, is an interactive chat in the console and a programmable call

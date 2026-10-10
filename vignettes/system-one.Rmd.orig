@@ -85,8 +85,10 @@ length(peter("Was allocation randomized?", record, model = judge, envir = new.en
 
 System 1 sends the input states to the selected provider, rather than only an object name.
 Small structured values can be serialized in full; large or unsupported values are described
-or truncated. Check what information the question needs before sending sensitive data; see
-`?gptr_egress` and `?gptr_security`.
+or truncated. For a large object already loaded in R, derive the small text or structured
+records the decision needs locally before calling. Check what information the question needs
+before sending sensitive data; see `?gptr_egress`, `?gptr_security` and
+[Execution model](execution-model.html) for how inline R computation differs from these inputs.
 
 ## Uncertainty in filters, functions and loops
 

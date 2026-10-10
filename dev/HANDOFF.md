@@ -1,5 +1,30 @@
 # GPTR 1.0 implementation - handoff
 
+**2026-10-10 current checkpoint (supersedes older snapshots below):** PR #5 is merged and
+the live-hardening changes through `8d13b58` are pushed. Claude CLI, Codex CLI and exact
+Ollama `qwen3.8:27b` passed nine Rscript/R Markdown/Quarto live cells plus nine fresh-process
+replays on that runtime: one nonempty recorded R block per cell, zero replay provider calls
+and zero counted warnings. Earlier Versa Azure/Jev cells, native frontend observations and
+unverified cells retain their own revisions in [live-harness-20261010.md](progress/live-harness-20261010.md).
+The saved [testing plan](TESTING_PLAN.md) records the remaining provider/frontend, team,
+decision, UX and CRAN gates; prepared fixtures are not passing live evidence.
+
+README, all relevant guides and function help now explain in-memory computation on existing
+R objects, with accurate serialization, ordinary R copying, external-tool and replay-input
+boundaries. All 14 guides/README rendered offline in fresh processes with zero documentation
+or file problems. The rebuilt local site has 90 pages, 63 exports and zero broken local links;
+18 actual light/dark viewport cases passed at 320/768/1440px. The white light background and
+canonical logos are retained. Build advisories and historical plan warnings are recorded
+separately; this is not a completed release or a warning-free full package check. All required
+cross-plan checks after the final plan edit passed with zero errors/parse/style/lint findings.
+See [documentation evidence](progress/documentation-20261010.md).
+
+Heavy local tests and inference remain deferred by the live resource gate: at 15:52 PDT,
+load was 25.41/51.26/53.27, used swap 41,754.5 MiB and free disk 41 GiB. Only bounded serial
+offline checks and read-only hosted review are appropriate until headroom recovers. Preserve
+unrelated user jobs/models, maintainer DESCRIPTION/AGENTS changes and the pre-merge stash.
+No release, tag, public website deployment or CRAN submission has been performed.
+
 **State on 2026-10-07: offline implementation milestones complete; release steps are the maintainer's.** All
 25 plans (307 tasks) are committed, each test-first and independently reviewed; what remains needs
 the network, paid calls, a real terminal or the maintainer's approval (section 5). `main` is the only
@@ -51,7 +76,7 @@ simplicity package (`progress/simplicity.md`). The entry point is **`peter()`** 
 
 - **`peter()`**: package `gptr`; users call `peter(...)`; namespace `peter$...`; other exports keep
   `gptr_`; extension factories keep `function(gptr)`; the persona is "Peter"; the P14 console prompt is
-  `peter> `. Named for Peter Wason (System 1/System 2) and Peter Naur (Backus-Naur form; sessions as
+  `peter> `. Named for Peter Wason (reasoning and hypothesis testing) and Peter Naur (Backus-Naur form; sessions as
   replayable documents) - in `?peter` and the README.
 - **Simplicity first** (conventions section 11). DEC-1..DEC-4 of the simplicity plan are not taken.
 - **P11 classifier redesign accepted** (D-061 standard (A)-(C), architecture 6.8.1); the maintainer

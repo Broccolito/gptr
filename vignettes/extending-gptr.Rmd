@@ -77,6 +77,10 @@ tool is found through `peter$search()`, while `"hidden"` omits it from the model
 An R package's tools should use the package name as their namespace. Use
 `peter$help("demo/add")` to inspect a registered member's schema.
 
+An R helper runs in the current R process and can compute on already-loaded objects without a
+file export. Its allocations follow ordinary R rules; an external backend may need its own
+serialization. See [Execution model](execution-model.html) for these boundaries.
+
 Choose `execution = "sequential"` for handlers that evaluate R or change files. A tool's
 `risk = function(input, ctx)` classifies its actions; its result still passes the active
 permission policies. A custom tool does not grant permission to run its own side effects.

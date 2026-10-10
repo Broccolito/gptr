@@ -3,13 +3,13 @@
 
 # gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
-gptr runs language model agents inside your live R session. They work
-with objects you already loaded, including datasets around **4 GB or
-larger**, and reuse your variables and intermediate results across
-turns. Load a dataset once, analyze it by name, and rerun the step you
-want to change. One function, `peter()`, is an interactive chat in the
-console and a programmable call that you put in scripts, loops and `if`
-statements.
+gptr runs language model agents inside your live R session, using
+**in-memory compute**. They work with objects you already loaded,
+including datasets around **4 GB or larger**, and reuse your variables
+and intermediate results across turns. Load a dataset once, analyze it
+by name, and rerun the step you want to change. One function, `peter()`,
+is an interactive chat in the console and a programmable call that you
+put in scripts, loops and `if` statements.
 
 The model receives bounded object descriptions, previews and tool
 output; the R tool computes on the full object in your session. You
@@ -92,7 +92,7 @@ ls(work)
 
 s |> peter("Reuse fit to predict mpg for the same cars.")
 #> The predictions are stored in predicted.
-#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . sa58cda7e70
+#> idle . fake/fake-1 . 2 turns . 6.7k tokens . $0.0000 . s56d828fb07
 head(work$predicted)
 #>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
 #>          23.28261          21.91977          24.88595          20.10265

@@ -197,3 +197,52 @@ lints. Three LONG notes are nested P17 skill examples. Read-only warning triage 
 ownership/signature/prototype/historical-contract exceptions and current implementation coverage
 limitations; no new runtime blocker or numbered-plan change was required. The checker README's
 74-warning count is historical. Output remains ignored under `dev/.validation/plan-20261010/final/`.
+
+## Final in-memory prose and local website refresh
+
+README now names in-memory compute explicitly. Seven remaining guides add specific boundaries:
+System 1 derives compact decision inputs locally; recorded history requires the input objects;
+inline teams read parent bindings while workers transfer selected inputs; Python conversion can
+allocate; skills provide instructions; MCP arguments/results cross a serialized connection;
+and ordinary R extension helpers run in the current process. Artifact wording now describes
+versioned RDS snapshots and child-process loading, rather than promising an unconditional copy.
+Independent review found no blocking source/output or memory/egress inaccuracies.
+
+All 14 guides and README rendered in separate fresh offline R processes, using the installed
+8d13b58 runtime without another package installation. Guide knitting took 11.029s; total
+documentation/file validation 12.720s with zero problems. Profiling recorded 13 samples,
+250.8 MiB peak family RSS and zero sampling errors. Source, user DESCRIPTION and NAMESPACE
+fingerprints were preserved. Only affected generated outputs were copied; unchanged guide
+snapshots were retained to avoid unrelated session-ID changes.
+
+The static pkgdown site rebuilt in 85.557s (86 profile samples, peak family RSS 704.2 MiB,
+zero sampling errors). It skipped package installation and reference-example execution; the
+previous 58-page example gate remains separate. Its 90 HTML pages cover all 14 guides and
+63 exports, with zero broken local links and eight hash-identical canonical image assets.
+Agent instruction pages are excluded. The ignored docs/ artifact was refreshed with a retained
+backup; an owned loopback preview serves the same output at http://127.0.0.1:8766/.
+
+The build log retains pkgdown's missing-public-URL/custom-favicon sitrep advisories, two false
+interactive @examplesIf conditions, and Pandoc 3.12 deprecated math-flag notices. These are
+separate from the zero documentation/file/lint findings; do not describe this as a warning-free
+full release gate. The installed RStudio bundle has Pandoc 3.10 for subsequent rendering checks.
+
+Actual browser checks covered 18 viewport/theme cases: five light pages (home, introduction,
+configuration, options reference and tools) plus the dark homepage at 320/768/1440px. All
+reported no horizontal page overflow. Light background is rgb(255,255,255); dark is
+rgb(28,30,34), with the corresponding canonical header/navbar logos. Desktop light/dark and
+mobile screenshots were inspected. The light theme and normal viewport were restored. This
+does not establish actual browser zoom or new doubled-text coverage; prior checks are historical.
+
+The full cross-plan sequence after the first ledger update passed: 25 plans, 1,446 indexed
+blocks, 4,389 definitions, 28,337 calls; 910 findings (821 info, 89 existing warnings, zero
+errors), 770 parsed R blocks with zero parse/style problems and zero lintr findings. Logs
+are retained in ignored plan-20261010/after-e094f22-memory/. A further required full sequence
+follows the final plan status update; its result is appended below.
+
+The final required sequence after that plan status update also passed: all four stages exited
+zero; 25 plans, 1,446 indexed blocks, 4,389 definitions and 28,337 calls; 821 informational
+findings, 89 existing consolidation warnings and zero errors. All 770 extracted R blocks had
+zero parse/style problems, and single-worker lintr 3.4 reported no lints. Logs are retained
+under ignored `dev/.validation/plan-20261010/after-e094f22-memory-final/`. These historical
+cross-plan warnings are distinct from documentation/file/lint problems.

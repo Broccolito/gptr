@@ -19,6 +19,11 @@ report or notebook, it becomes a chunk or cell. A fresh recorded block can run a
 without another model request. Replaying still executes its R code, with the effects and
 input dependencies that code has.
 
+The history keeps code and bounded output, rather than archiving every input object. Provide
+those objects in the replay environment; working on data already loaded in R does not require
+an intermediate dataset file. See [Execution model](execution-model.html) for object lifetimes
+and the separate costs of checkpoints, workers and snapshots.
+
 The executed examples use fake providers and separate work environments. Recording and
 file-writing recipes are shown as code to run deliberately in your own temporary project.
 

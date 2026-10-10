@@ -42,10 +42,12 @@ reviews$code$status
 
 The member names identify roles. `gptr_agent()` can specify each role's model, system text,
 tools, skills, backend and exported object names. A multi-member inline team uses child
-workspace overlays: ordinary assignments stay in each child until requested exports are
-collected. That is not a security boundary or protection against arbitrary code mutating an
-external resource. Worker backends use separate R processes and serialize selected inputs;
-CLI backends need their external CLI and authentication.
+workspace overlays: reads can use the parent's already-loaded objects, while ordinary
+assignments stay in each child until requested exports are collected. That is not a security
+boundary or protection against arbitrary code mutating an external resource. Worker backends
+use separate R processes and serialize selected inputs, with their own memory and temporary
+file costs; CLI backends need their external CLI and authentication. See
+[Execution model](execution-model.html) for copy-on-modify and backend boundaries.
 
 `reviews$text` joins member reports under headings; `reviews$value` is their named list of
 values, and `reviews$statistics` is the member session. A report is model-generated output,

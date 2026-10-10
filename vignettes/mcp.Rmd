@@ -105,6 +105,9 @@ use the listed signature, or backticks for names that need them. Structured resu
 values when possible; otherwise calls return text. A server-reported tool error becomes an R
 error. Filter a large result before printing or passing it to a model.
 
+Tool arguments cross the connection as serialized data; an external server does not share R's
+object bindings. Serving R below lets another agent request computation on live local objects.
+
 The model uses the same functions inside its `r` tool:
 
 
@@ -169,7 +172,10 @@ needs a new approval is refused in a background callback. Approve a specific nee
 interactively through your permission settings before retrying.
 
 Serving `r` permits code execution in the supplied environment; a separate environment helps
-organize objects but is not an operating-system sandbox. The server exposes tools, not an MCP
+organize objects but is not an operating-system sandbox. The R tool can use its already-loaded
+objects without an intermediate dataset file, while returned text and images leave R through
+the connection. See [Execution model](execution-model.html) for the provider context boundary.
+The server exposes tools, not an MCP
 resource or prompt catalog. Stop it with `h$stop()` or `gptr_mcp_serve(stop = TRUE)` when finished.
 For interactive approvals and recorded R work, see [Interactive console](interactive-console.html)
 and [Script as history](script-as-history.html).
