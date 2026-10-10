@@ -9,11 +9,17 @@ vignette: >
 
 
 
-gptr runs a language model agent inside your R session. The agent works on the objects that are
-already in memory: it inspects them, runs R code on them and leaves its results in your
-workspace, so a large object is loaded once and a mistake costs one re-evaluation instead of a
-fresh run of the whole script. The same function, `peter()`, is an interactive chat at the
-console and a programmable call in scripts, loops and `if` statements.
+gptr runs a language model agent inside your R session. It computes on objects you already
+loaded and keeps named results available for the next iteration. A dataset around 4 GB can
+stay in R while the model sees a bounded description and the results its tools report. You
+can revise one analysis step without exporting and reloading the dataset for each turn.
+The same function, `peter()`, is an interactive chat at the console and a programmable call in
+scripts, loops and `if` statements.
+
+Names, shapes, previews, printed results and plots can reach the provider. R memory, copies and
+calculation time still matter, as does each model request's latency. The
+[execution guide](execution-model.html) explains those boundaries; the examples here use only
+small objects.
 
 Peter's name commemorates Peter Naur and Peter Cathcart Wason. The
 [Why Peter? guide](why-peter.html) connects their work on programs and reasoning to gptr.
@@ -36,7 +42,9 @@ fake = gptr_fake_provider(list(
   list(tool = "r", input = list(code = paste(
     "fit = lm(mpg ~ wt, data = cars)", "gptr_return(coef(fit))", sep = "\n"
   ))),
-  "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon."
+  "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon.",
+  list(tool = "r", input = list(code = "predicted = predict(fit)\ngptr_return(head(predicted))")),
+  "The first six predictions are ready."
 ))
 
 work = new.env()
@@ -69,6 +77,25 @@ coef(work$fit)
 #>   37.285126   -5.344472
 ```
 
+Reuse that fitted object in the next turn. No data file or repeated fit is needed:
+
+
+``` r
+s |> peter("Reuse fit to predict mpg and return the first six predictions.")
+#> The first six predictions are ready.
+#> idle . fake/fake-1 . 2 turns . 6.6k tokens . $0.0000 . s9e10ebe7d9
+s$value
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
+#>          23.28261          21.91977          24.88595          20.10265
+#> Hornet Sportabout           Valiant
+#>          18.90014          18.79325
+head(work$predicted)
+#>         Mazda RX4     Mazda RX4 Wag        Datsun 710    Hornet 4 Drive
+#>          23.28261          21.91977          24.88595          20.10265
+#> Hornet Sportabout           Valiant
+#>          18.90014          18.79325
+```
+
 `peter()` returned a session object. It holds the conversation, the model, the status and the
 token usage:
 
@@ -77,23 +104,25 @@ token usage:
 s$status
 #> [1] "idle"
 s$turns
-#> [1] 1
+#> [1] 2
 gptr_usage(s, by = "model")
-#>        group requests input output cache_read cache_write cost
-#>  fake/fake-1        2  3249     36          0           0    0
+#>   group        requests  input  output  cache_read  cache_write  cost
+#> 1 fake/fake-1  4         6575   60      0           0            0
+#>
 #> # 1 row
-#> 2 requests, 3.2k tokens in, $0.0000
+#> 4 requests, 6.6k tokens in, $0.0000
 ```
 
 ## The pipe steers one session
 
 Piping a session into `peter()` adds a turn to the same session: the same history, the same
-model and the same workspace. Nothing is copied and no new conversation starts.
+model and the same workspace. This continuation does not duplicate the dataset; ordinary R
+code can still allocate copies when it modifies objects or computes new results.
 
 
 ``` r
 fake2 = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "cyl_mpg = tapply(mtcars$mpg, mtcars$cyl, mean)")),
+  list(tool = "r", input = list(code = "cyl_mpg = tapply(cars$mpg, cars$cyl, mean)")),
   "The mean fuel economy per number of cylinders is stored in `cyl_mpg`.",
   "Four-cylinder cars are the most economical, at about 26.7 miles per gallon.",
   "Four."
@@ -118,11 +147,14 @@ workspace sees the original objects without copying them and keeps its own chang
 branch = gptr_fork(s2)
 branch |> peter("Answer in one word.")
 #> Four.
-#> idle . fake/fake-1 . 3 turns . 1.7k tokens . $0.0000 . sf75a5e8e4f
+#> idle . fake/fake-1 . 3 turns . 1.7k tokens . $0.0000 . sda7d4cca6a
 c(original = s2$turns, branch = branch$turns)
 #> original   branch
 #>        2        3
 ```
+
+The overlay separates ordinary bindings, rather than making a full data snapshot. Reference
+objects and arbitrary side effects require their usual care; see the execution guide.
 
 ## Stopping instead of guessing
 

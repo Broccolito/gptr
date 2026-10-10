@@ -105,7 +105,7 @@ guarantee of free execution. Disabling a direct tool does not make in-process R 
 
 | Context and history setting | Default and purpose |
 |---|---|
-| `context` | `"summary"`; `"names"` reduces automatic descriptions and `"none"` omits automatic workspace context. Explicitly attached data and tool results remain relevant. |
+| `context` | `"summary"`; `"names"` uses workspace names and attachment headers; `"none"` omits built-in workspace and attached-object descriptions. R objects remain available to tools. |
 | `record` | `"ask"`; `"auto"` allows automatic document recording and `"off"` prevents it. An explicit `gptr_doc(path)` binding supplies recording consent. |
 | `replay` | `"auto"`; `"replay"`, `"live"`, `"record"` choose how recorded blocks are used. |
 | `transcript` | `"ask"`; `"file"`, `"active-document"`, `"off"` select console recording. |
@@ -116,6 +116,12 @@ guarantee of free execution. Disabling a direct tool does not make in-process R 
 | `compactor` | `"checkpoint"`; selects a registered compactor. |
 | `checkpoint` | `"on"`; `"files"` or `"off"` changes checkpoint capture. |
 | `plot` | Registered defaults `list(width = 768, height = 512, res = 120)`. Current renderers read `gptr.plot_width`, `gptr.plot_height` and `gptr.plot_res` options; use those to change model-bound plots. |
+
+The `context` setting controls built-in generative-model descriptions, rather than R object
+availability. Prompt text, tool results, images and other context blocks can still be sent.
+System 1 decisions encode their supplied input states separately; `context = "none"` is not a
+way to omit those states. See [Execution and memory](execution-model.html),
+[Token efficiency](token-efficiency.html) and [System 1](system-one.html).
 
 Recording and replay are separate controls. `record = "off"` prevents automatic recording;
 an explicit `gptr_doc(path)` binding supplies consent. To suppress recording for one call,

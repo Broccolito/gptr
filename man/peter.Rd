@@ -61,11 +61,18 @@ agent should work on; it returns the agent session, which you can print, query (
 tools may be written as bare names.
 }
 \details{
+Conversational agents compute in memory: their R tools use the objects already loaded in
+\code{envir}, and later turns can reuse fitted models and intermediate results without saving and
+reloading the dataset. Model context contains bounded descriptions and requested results;
+R computes on the full local object. Ordinary R allocations, file-backed inputs, checkpoints
+and worker transfers still have their usual costs. See
+\code{vignette("execution-model", package = "gptr")} for these boundaries.
+
 The dots take, in order: at most one leading session to continue, the prompt (the first
 unnamed string literal, else the first unnamed length-1 character value), and context objects
-(unnamed ones are labeled by their expression, named ones by name). Context objects are never
-copied: gptr reads them by name where they live. Every other argument is matched by its exact
-name only.
+(unnamed ones are labeled by their expression, named ones by name). Conversational context
+bindings refer to objects where they live; descriptions are budgeted separately from
+in-memory R computation. Every other argument is matched by its exact name only.
 
 A literal prompt gets \code{{name}} interpolation from \code{envir} (atomic vectors of 1 to 50 values;
 \verb{\{\{} and \verb{\}\}} are literal braces); \code{.opts = list(interpolate = FALSE)} switches it off.

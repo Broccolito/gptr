@@ -10,6 +10,9 @@ vignette: >
 
 
 Keep data and computation in R, and send models enough context to choose useful actions.
+An object around 4 GB can remain in the same R session across turns: the model sees a compact
+description while its R tool computes on the object. No repeated export and reload cycle is
+required; R copies, calculation time and model-request latency still depend on the workflow.
 Four practices help:
 
 - Refer to live objects with a compact description rather than printing large tables into a
@@ -38,7 +41,7 @@ view$sections
 #> 4    modes   T0     84
 #> 5  context   T0    152
 view$total_tokens
-#> [1] 1806
+#> [1] 1834
 ```
 
 `gptr_prompt()` inspects the system sections and tool definitions with estimated token counts;
@@ -101,20 +104,21 @@ full spilled text can be read through `peter$out(id)` when an output ID was supp
 
 ``` r
 gptr_usage(s, by = "model")
-#>        group requests input output cache_read cache_write cost
-#>  fake/fake-1        2  3276     48          0           0    0
+#>   group        requests  input  output  cache_read  cache_write  cost
+#> 1 fake/fake-1  2         3273   48      0           0            0
+#>
 #> # 1 row
 #> 2 requests, 3.3k tokens in, $0.0000
 ledger = gptr_usage(s, detail = TRUE)
 aggregate(tokens ~ component, data = ledger, FUN = sum)
 #>       component tokens
 #> 1      attached    130
-#> 2   environment    140
+#> 2   environment    196
 #> 3        images      0
 #> 4         other    162
 #> 5       project      0
 #> 6            t0   2604
-#> 7            t1    620
+#> 7            t1    616
 #> 8  tool_results     53
 #> 9         tools   1942
 #> 10   transcript     78
@@ -189,13 +193,18 @@ its R code. Clearing an answer cache changes what can be reused.
 
 ``` r
 peter("Summarize the model fit.", fit, .opts = list(context = "names"))
-peter("Answer using only this attached result.", result, .opts = list(context = "none"))
+peter("Compute mean(x) in R and return only that number.", .opts = list(context = "none"))
 peter("Compute the mean.", x, .opts = list(preset = "minimal"))
 ```
 
-`context = "names"` describes the automatic workspace by names; `"none"` omits automatic
-context, not the explicit objects attached to the prompt. `preset = "minimal"` reduces the
-tool/prompt surface; it does not authorize actions or remove required safety checks.
+`context = "names"` lists workspace names and uses headers for explicitly attached objects.
+`"none"` omits both built-in workspace and attached-object descriptions; the R bindings still
+exist and can be used by tool code, as `x` is in the second example. Prompt text, tool results,
+images and other context blocks can still reach the model. System 1 input states use a separate
+encoding route. [Execution and memory](execution-model.html) explains these boundaries.
+`preset = "minimal"` reduces the tool/prompt surface; it does not authorize actions or remove
+required safety checks.
+
 `{identifier}` in a literal prompt can insert a short atomic value when that is sufficient.
 For a long workflow, continue one session, keep intermediate data in R and request concise
 reports between stages. Use a new session or an explicit fork when a separate analysis is

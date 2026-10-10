@@ -53,9 +53,9 @@ summary(s)
 #>     1   assistant The three most fuel-efficient cars are stored in top.
 #>  tokens
 #>      10
-#>    1636
+#>    1635
 #>       6
-#>    1639
+#>    1638
 ```
 
 The named `data = force(data)` supplies the helper's argument as an explicit context value:

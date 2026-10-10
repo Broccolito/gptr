@@ -158,3 +158,27 @@ The logo retains its original cream fill inside the artwork; no artwork bytes we
 The generated pkgdown configuration and shared Bootstrap CSS were refreshed. The layout and
 explicit dark-mode colors remain the same. Verification uses rendered browser colors and the
 existing generated-manifest check; no package implementation or dependency changes.
+
+## In-memory compute across user entry points
+
+The README source/rendered page, quickstart, language-model, execution, configuration and token
+guides now explain reuse of already loaded R objects and intermediates across turns. The
+interactive guide adds the same-session compute link. Function and egress help share the
+same explanation, and the canonical asset README identifies the in-session harness.
+
+The examples distinguish local R computation from bounded model descriptions and tool output.
+Large-object illustrations do not allocate 4 GiB during documentation builds. Copy-on-modify,
+worker boundaries, file-backed objects, optional checkpoint/cache serialization, model latency
+and replay's need for original inputs are explicit. Replaced obsolete absolute statements that
+objects are never copied or that context="none" disables every data transmission path.
+
+Private-overlay roxygen and all 14 guide/README precomputes passed with zero documentation/file
+problems (guide knitting 10.96s; total refresh 47.54s). The process-family profiler recorded
+48 samples, peak RSS 574.8 MiB and zero sampling errors. Original source/DESCRIPTION SHA256
+fingerprints stayed unchanged, and generated NAMESPACE stayed identical. Only reviewed
+README, guide and help outputs were copied back; the working roxygen preference was preserved.
+
+The interactive guide also documents proven native Unix !/!! R completion, preservation of
+caller completers, client-owned GUI input and width refresh of newly streamed prose. Active
+native-window resizing remains a separate live check. The site server and earlier browser
+layout certificate predate these edits; a fresh site build and browser review are still pending.

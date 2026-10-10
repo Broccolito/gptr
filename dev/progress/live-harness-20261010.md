@@ -140,3 +140,9 @@
 - Focused coverage passed 71 assertions in 1.85s (peak process RSS 298 MiB). Affected console/options/architecture suites passed 476 assertions with zero failures/warnings and one existing interactive-CI skip (28.6s; peak 554 MiB). Two-file lint and whitespace checks are clean. An initial test attempted to remove a native R option that R itself forbids; the corrected fixture tests restoration of the existing default.
 - Installed native completion verification remains pending. This integration does not implement editor autocomplete inside a GUI's `readline()` or invoke custom slash-command completion callbacks.
 - Resource checkpoint at 14:42 PDT: CPU idle 25.4%, load 19.20/20.10/30.32, swap 43.3 GiB and disk free 79 GiB. Keep jobs serial and avoid large allocations.
+
+## Installed inline completion proof
+- Immutable `f0f3448` installed with default byte compilation in 13.89s; its correctly privileged installation profiler recorded 15 samples, peak family RSS 386.7 MiB and zero sampling errors.
+- Actual native `R --vanilla` readline at Peter's prompt completed `!mtc` and `!!mtc` to `mtcars` without removing their prefixes. Namespace completion produced `stats::median`, whose executed mpg median was 19.2. Quoted file-path completion retained its closing quote; the `!!file.exists()` oracle returned TRUE.
+- Leaving with `/exit` restored the exact original `rl_word_breaks` and kept the original dataset identical. The offline provider isolated this input integration from model latency. GUI completion and resize remain separate pending checks.
+- The PTY profiler was mistakenly started without process-inspection privileges: all 43 samples failed. Its memory peak is unavailable, and its wall time includes manual inspection; do not interpret the reported zero RSS as a measurement.

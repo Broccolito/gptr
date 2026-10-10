@@ -39,6 +39,9 @@ s = peter(model = "openai/gpt-6-sol")
 The default prompt is `peter> `; other permission modes appear as `peter[plan]> `,
 `peter[edits]> ` or `peter[auto]> `. Enter `/exit` to return the session invisibly to `s`.
 Objects created by the agent remain in the environment where the console runs.
+R tools compute on those in-memory objects across turns; you can inspect or reuse them at the
+R prompt without exporting and reloading a dataset. Model context is a separate, bounded
+description of that workspace; see [Execution](execution-model.html) for copying and storage.
 
 For input piped to an R process, `peter(.stdin = TRUE)` explicitly reads standard input using
 the same syntax; end of input returns the session. This does not supply permission answers or
@@ -93,6 +96,14 @@ still part of the workspace that later calls can inspect or describe. Neither pr
 through the model's permission gate: you are explicitly running your own R code. Do not paste
 unreviewed code merely because the agent suggested it.
 
+In a native Unix R terminal with readline enabled, Tab retains R's completion after `!` and
+`!!`, including objects on R's search path, namespaces and quoted file paths. Peter restores
+the terminal's completion setting when you leave and respects an existing custom completer.
+Objects kept only in a private agent environment are not added to R's completion search path.
+RStudio, R.app, notebooks and other editors own their input and completion UI; completion
+inside their `readline()` prompt depends on the client. You can always run ordinary R at the
+client's R prompt, then return to Peter with the same workspace.
+
 ```text
 peter> !fit = lm(mpg ~ wt, data = mtcars)
 peter> !coef(fit)
@@ -122,6 +133,10 @@ peter> ```r
 These input forms apply inside Peter's chat; at the ordinary R prompt, use normal R syntax.
 Console inputs may enter R's history (`gptr.history`), and an enabled transcript can record
 user-run code. `!!` is a control over the next prompt note, not a privacy boundary.
+
+Streamed prose follows the available console width for newly received text. Previously printed
+scrollback, code blocks and long unbroken tokens keep their layout. Window resizing, font
+scaling and scrollback reflow are controlled by the terminal or editor.
 
 ## Commands
 
@@ -204,5 +219,3 @@ trust decision. `gptr_sessions()` lists stored sessions, and `gptr_resume(id)` r
 The [script-as-history guide](script-as-history.html) covers document recording, replay and
 transcripts; the [language-model guide](language-models.html) covers scripted calls that need
 no interactive console.
-
-

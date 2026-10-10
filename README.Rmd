@@ -12,11 +12,16 @@ options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1, width = 80)
 
 # gptr <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo-dark.png"/><img src="https://raw.githubusercontent.com/Broccolito/gptr/main/man/figures/logo.png" align="right" width="120" height="139" alt="gptr logo"/></picture>
 
-gptr runs language model agents inside your live R session. The agent works on the objects
-that are already in memory: it inspects them, runs R code on them and leaves its results in
-your workspace, so a large object is loaded once and a mistake costs one re-evaluation instead
-of a fresh run of the whole script. One function, `peter()`, is an interactive chat in the
-console and a programmable call that you put in scripts, loops and `if` statements.
+gptr runs language model agents inside your live R session. They work with objects you already
+loaded, including datasets around **4 GB or larger**, and reuse your variables and intermediate
+results across turns. Load a dataset once, analyze it by name, and rerun the step you want to
+change. One function, `peter()`, is an interactive chat in the console and a programmable call
+that you put in scripts, loops and `if` statements.
+
+The model receives bounded object descriptions, previews and tool output; the R tool computes
+on the full object in your session. You choose what results to print or plot. Model requests
+still have latency, and R code can allocate copies or run expensive calculations. See
+`vignette("execution-model", package = "gptr")` for memory and data-sharing details.
 
 Peter's name honors Peter Naur and Peter Cathcart Wason: readable programs and careful
 reasoning. See [Why Peter?](#why-peter) and `vignette("why-peter", package = "gptr")`.
@@ -30,7 +35,8 @@ reasoning. See [Why Peter?](#why-peter) and `vignette("why-peter", package = "gp
   AI's Jev and Clef on a local Ollama server, whose yes/no, choice and score answers go straight
   into `if` and `for`.
 - **The script is the history.** gptr can record executed agent code into your `.R`, `.Rmd`,
-  `.qmd` or `.ipynb` document. Fresh recorded blocks replay without model calls.
+  `.qmd` or `.ipynb` document. Fresh recorded blocks replay without model calls; supply their
+  required input data and packages when replaying in a fresh session.
 - **Everything is R.** Tools are R functions; artifacts are Shiny apps; skills, MCP servers,
   sub-agents, hooks and plugins use one documented extension API.
 - **Safe defaults.** In the default `manual` mode only actions known to be read-only run
@@ -65,18 +71,37 @@ it runs without a key. With a real model only the `model` argument changes.
 library(gptr)
 
 fake = gptr_fake_provider(list(
-  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = mtcars)\ncoef(fit)")),
+  list(tool = "r", input = list(code = "fit = lm(mpg ~ wt, data = cars)\ncoef(fit)")),
   "Each additional 1000 lb of weight lowers fuel economy by about 5.3 miles per gallon.",
-  "Four-cylinder cars are the most economical."
+  list(tool = "r", input = list(code = "predicted = predict(fit)\nhead(predicted)")),
+  "The predictions are stored in predicted."
 ))
 work = new.env()
-s = peter("How does fuel economy depend on weight?", model = fake, envir = work, mode = auto)
+work$cars = mtcars
+s = peter("How does fuel economy depend on weight?", cars = work$cars,
+          model = fake, envir = work, mode = auto)
 s$text
 ls(work)
 
-s |> peter("Which cylinder group is the most economical?")
+s |> peter("Reuse fit to predict mpg for the same cars.")
+head(work$predicted)
 s$turns
 ```
+
+The second turn uses the existing `fit` and `cars`. The same pattern works with a large object
+already in your workspace; this illustrative recipe does not allocate or load a 4 GB dataset:
+
+```{r, eval = FALSE}
+# counts is a numeric matrix, around 4 GB, already loaded in this R session.
+s = peter("Compute colSums(counts) as totals and return the six largest totals.", counts)
+s |> peter("Reuse totals to plot their distribution.")
+```
+
+These calls use your configured model and the usual permission checks. The dataset stays
+available to R between turns; descriptions and requested results can contain data values and
+reach the provider. R memory pressure, object types and the requested calculation still matter.
+File-backed objects may read from disk through their own packages. A history document records
+the reusable code and decisions; it does not automatically save the input dataset.
 
 A System 1 question returns a typed R vector with the probabilities attached:
 

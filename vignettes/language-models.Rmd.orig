@@ -14,9 +14,15 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 ```
 
 Use `peter()` with a prompt to run a language model agent and receive a session. The agent can
-inspect the objects you attach and run R code in your environment. The same call works in a
-function, a loop or a script. This guide executes only scripted fake providers; examples that
-connect to real services are shown without running them.
+inspect objects already loaded in your R environment, compute on them, and reuse named results
+on later turns. Choosing an API, CLI or Ollama model changes the model route; its gptr R tool
+still works in the selected live workspace. The model receives bounded descriptions and tool
+results, which may include data values or plots, rather than an automatic serialization of
+the full dataset. [Execution and memory](execution-model.html) explains copies, separate
+workers and file-backed objects.
+
+The same call works in a function, a loop or a script. This guide executes only scripted fake
+providers; examples that connect to real services are shown without running them.
 
 ## Choose and connect a model
 
@@ -210,6 +216,12 @@ s$status
 s$turns
 coef(work$fit)
 ```
+
+For a large dataset already bound in the calling environment, attach its name and ask for a
+small result. Subsequent turns can reuse the new R variables. Each model request still takes
+time; reusing data avoids a required load/export cycle but does not make the R calculation or
+its memory allocations free. Inline R uses your current R process; a worker backend transfers
+selected inputs to a separate process. See [Teams and background](teams-and-background.html).
 
 `gptr_fork(s)` explicitly branches the conversation into a new session with an overlay workspace.
 A model switch continues the existing history; a separate `peter()` call starts a new session:

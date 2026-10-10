@@ -13,7 +13,8 @@ gptr_command(name, handler, description = NULL, complete = NULL)
 
 \item{description}{One line for \verb{/help}.}
 
-\item{complete}{\verb{function(prefix, ctx)} returning completions, or \code{NULL}.}
+\item{complete}{Optional \verb{function(prefix, ctx)} returning completion candidates. Stored as
+metadata for frontend integrations; the built-in console does not currently invoke it.}
 }
 \value{
 A spec of class \code{c("gptr_command", "gptr_spec")}.

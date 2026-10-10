@@ -9,12 +9,17 @@ The package itself collects nothing: there is no telemetry, no usage reporting a
 access when the package loads. This page lists what a request contains so that you can decide
 what may leave your machine.
 }
+\details{
+R tools compute on objects already in memory; a large dataset does not need to be uploaded
+in full for a conversational agent to analyze it. Descriptions and tool results can still
+contain data values. Native typed decision inputs use the separate encoding described below.
+}
 \section{What a request contains}{
 
 \itemize{
 \item Your prompt and the conversation so far.
-\item A budgeted description of each object you attach (its class, dimensions, column names and
-types and a few values) instead of its contents; a small object can appear in full.
+\item With summary context, a budgeted description of each attached object (its class,
+dimensions, column names and types and a few values); a small object can appear in full.
 \item Automatic context: a short listing of the objects in the evaluation environment (names,
 classes and sizes), the R version, platform and available packages, and the project
 instruction files (\code{AGENTS.md}, \code{CLAUDE.md}, \code{.gptr/vignette.Rmd}).
@@ -34,9 +39,11 @@ Registered secrets are replaced by markers before anything is sent.
 
 \section{Limiting automatic context}{
 
-\code{.opts = list(context = "names")} sends object names only, and \code{.opts = list(context = "none")} sends no automatic context at all. Attach only the objects the task needs. The
-\code{plan} mode lets the model inspect without changing anything, which is a cheap way to see
-what it would read.
+\code{.opts = list(context = "names")} sends workspace object names and attached-object headers,
+and \code{.opts = list(context = "none")} suppresses workspace and attached-object descriptions.
+Prompts, tool results and native typed decision inputs have their own paths. Attach only the
+objects the task needs. The \code{plan} mode permits actions classified as read-only so you can
+inspect a proposed workflow before allowing changes to your workspace.
 }
 
 \section{Acknowledgment}{

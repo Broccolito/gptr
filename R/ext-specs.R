@@ -1205,7 +1205,8 @@ gptr_agent = function(name = NULL, description = NULL, model = NULL, tools = NUL
 #' @param name Command name without the leading `/`.
 #' @param handler `function(args, ctx)`.
 #' @param description One line for `/help`.
-#' @param complete `function(prefix, ctx)` returning completions, or `NULL`.
+#' @param complete Optional `function(prefix, ctx)` returning completion candidates. Stored as
+#'   metadata for frontend integrations; the built-in console does not currently invoke it.
 #' @return A spec of class `c("gptr_command", "gptr_spec")`.
 #' @examples
 #' gptr_command("rows", function(args, ctx) paste("rows:", nrow(mtcars)), description = "Show rows")

@@ -14,7 +14,9 @@ old_options = options(gptr.quiet = TRUE, cli.unicode = FALSE, cli.num_colors = 1
 
 Peter combines a model with your current R workspace. A language model requests tools and
 returns a session; a decision model returns a typed vector. The same `peter()` gateway handles
-both. This guide explains where work happens and how to inspect it.
+both. An inline agent can compute on a multi-GB object already loaded in R, keep intermediate
+variables, and reuse them across turns. This guide explains where that computation happens,
+what the model receives, and where memory or file transfers still occur.
 
 ## One language model turn
 
@@ -58,14 +60,43 @@ ls(work)
 identical(s$value, work$fit)
 ```
 
-Compact descriptions keep the initial request small. The model can inspect more through tools;
-the permission and egress controls still apply. Passing a large object by name avoids keeping
-an extra reference to it in the session. This does not promise that arbitrary R code will
-never copy an object: ordinary R copy-on-modify rules and the code you run still matter.
+The inline `r` tool evaluates against those actual bindings. It does not need to write a
+dataset to a file or reload it before the next tool call. Attach a large object as a plain name
+visible in that environment; gptr captures that name without retaining another copy of the
+object in the conversation. An expression such as `subset(d, ...)` still performs ordinary R
+work when evaluated, and may allocate a new object.
 
-A continued session keeps its home environment unless you explicitly supply a new `envir`.
+Workspace context lists names, classes, shapes and sizes within a budget. Attached objects get
+compact descriptions that can include schema, sample values and summaries. The full local
+object remains available to R code. Printed tool output is bounded, with an output handle for
+long results, and captured plots can be sent as images. Those previews and results may contain
+data values; the permission and egress controls still apply. System 1 decisions instead send
+encoded input states under their own size rules; see [System 1](system-one.html).
+
+`context = "names"` reduces workspace context to names and attachments to headers;
+`context = "none"` omits both built-in workspace and attached-object descriptions. These settings
+leave R objects available to the tools and do not suppress prompt text, tool results or every
+other context block. See [Configuration](configuration.html) and
+[Token efficiency](token-efficiency.html).
+
+Ordinary R copy-on-modify rules still apply. Modifying an object, keeping aliases, fitting a
+model or calling a package can allocate substantial memory. Checkpoints retain supported
+pre-images for undo, and workers, bridges and artifact snapshots have their own transfer or
+copy costs. An overlay lets reads find the parent object's binding while keeping ordinary
+assignments local; it does not isolate changes to reference objects or external resources.
+
+A continued session reuses its kept home environment unless you explicitly supply a new `envir`.
+When the default environment is a function call frame, gptr uses it during the active run and
+does not retain it as the session's home afterward. An explicit working environment can retain
+named results.
 An explicit `gptr_fork(s)` branches the conversation and uses a workspace overlay. Restoring a
 session from disk restores its conversation; it does not restore all of your R objects.
+
+Each model request has provider and transport latency. R evaluation takes the time and memory
+its code needs; memory pressure can slow work or make an allocation fail. A file-backed matrix,
+Arrow dataset or database connection may read from disk through its package even when its R
+handle is already loaded. Use those packages' normal subset and compute operations rather
+than assuming every object is a fully resident data frame.
 
 ## What the session retains
 
@@ -91,6 +122,11 @@ identical(gptr_last(), s)
 Without an initialized project workspace, session files use a temporary directory.
 `gptr_init()` creates `.gptr/` for project storage. Recording an R document is a separate choice;
 see [Script as history](script-as-history.html).
+
+A history document records executed code, decisions and bounded output. It does not
+automatically archive the full input dataset. Replay runs the recorded R procedure again;
+provide its input objects, packages and required files in a fresh session. Answer caches,
+checkpoints and artifact data snapshots are separate storage mechanisms.
 
 ## Permissions and concurrency
 

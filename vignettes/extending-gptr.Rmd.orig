@@ -138,6 +138,8 @@ for (off in offs) off()
 ```
 
 `gptr_prompt()` shows what a new session would freeze, section by section, with token estimates.
+The command's optional `complete` callback is metadata for frontend integrations; the built-in
+console does not currently invoke it for Tab completion.
 
 ## Other kinds
 

@@ -14,6 +14,9 @@ old_options = options(gptr.quiet = TRUE, gptr.interactive = FALSE, gptr.record =
 ```
 
 Keep data and computation in R, and send models enough context to choose useful actions.
+An object around 4 GB can remain in the same R session across turns: the model sees a compact
+description while its R tool computes on the object. No repeated export and reload cycle is
+required; R copies, calculation time and model-request latency still depend on the workflow.
 Four practices help:
 
 - Refer to live objects with a compact description rather than printing large tables into a
@@ -150,13 +153,18 @@ its R code. Clearing an answer cache changes what can be reused.
 
 ```{r, eval = FALSE}
 peter("Summarize the model fit.", fit, .opts = list(context = "names"))
-peter("Answer using only this attached result.", result, .opts = list(context = "none"))
+peter("Compute mean(x) in R and return only that number.", .opts = list(context = "none"))
 peter("Compute the mean.", x, .opts = list(preset = "minimal"))
 ```
 
-`context = "names"` describes the automatic workspace by names; `"none"` omits automatic
-context, not the explicit objects attached to the prompt. `preset = "minimal"` reduces the
-tool/prompt surface; it does not authorize actions or remove required safety checks.
+`context = "names"` lists workspace names and uses headers for explicitly attached objects.
+`"none"` omits both built-in workspace and attached-object descriptions; the R bindings still
+exist and can be used by tool code, as `x` is in the second example. Prompt text, tool results,
+images and other context blocks can still reach the model. System 1 input states use a separate
+encoding route. [Execution and memory](execution-model.html) explains these boundaries.
+`preset = "minimal"` reduces the tool/prompt surface; it does not authorize actions or remove
+required safety checks.
+
 `{identifier}` in a literal prompt can insert a short atomic value when that is sufficient.
 For a long workflow, continue one session, keep intermediate data in R and request concise
 reports between stages. Use a new session or an explicit fork when a separate analysis is

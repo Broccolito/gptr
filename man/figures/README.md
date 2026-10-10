@@ -1,5 +1,7 @@
 # gptr logo
 
+Brand assets for gptr, the agent harness that computes inside the running R session.
+
 Default: light (`logo.*`). Dark: `logo-dark.*`.
 
 Files
@@ -14,5 +16,10 @@ Colors
 - Deep model (tall cursor) #6c8ebf
 - Dark version: ink fill #1c1e22, light chevron/name #efede7, deep #7d9dcb
 
-R package use: copy logo.png to man/figures/logo.png, then add to README.md:
+These files are the repository's canonical assets. Use the light logo by default and the dark
+variant on dark surfaces. The main README and pkgdown site already use these files; a light-only
+embed can use:
+
+```html
 <img src="man/figures/logo.png" align="right" height="139" alt="gptr logo" />
+```
