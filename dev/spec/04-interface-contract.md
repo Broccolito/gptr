@@ -1058,7 +1058,7 @@ exact name.
    | 15 | `team` | P19 | `agents` given | a team session; inside a run its children are children of the running session (IC-39) |
    | 16 | `fanout` | P19 | `parallel` given and exactly one list-like context object | a fan-out session (same nesting rule) |
    | 20 | `nested` | P08 | a run is active on the call stack (`run_current()` non-NULL) and no session is continued | a child session of the running one (depth + 1, mode inherited and only tightened, usage and budget rolled up to the root, no document block) |
-   | 30 | `console` | P14 | no prompt (`gptr_can_prompt()` or `.stdin`) | the `console` frontend on the piped session or a new one; returns it invisibly on `/exit` |
+   | 30 | `console` | P14 | no prompt (`gptr_can_prompt()` or `.stdin`) | the `console` frontend on the piped session or a new one; returns it invisibly on `/exit`, or `NULL` when first-use setup returns before a session starts |
    | 50 | `document` | P15 | a top-level call located in a document that contains a block owned by this call (no write consent needed to replay, IC-45) | a fresh block: the replay of IC-46 (the piped session advanced in place, else a replayed session; zero tokens); a stale block under `replay`: `gptr_error_stale_block`; otherwise sets `call$doc` when write consent exists and passes |
    | 60 | `continue` | P08 | a session was piped in | running: `gptr_steer(s, prompt)` and `invisible(s)`; otherwise a new turn on `s` |
    | 70 | `new` | P08 | always | a new session |
@@ -1068,6 +1068,17 @@ exact name.
    the running mode (only tightened) and filters whatever route handles it (IC-53). Top-level team and fan-out
    statements own one document block (IC-47); in replay mode their children pass `replay_guard()`, so
    `GPTR_REPLAY=replay` still proves that a script makes no model calls.
+
+   The console's first-use setup runs before its banner or chat input only for a new interactive
+   console without an explicit or effective configured model. It offers the expected Codex and
+   Claude CLI adapters plus manual API/Ollama instructions. A usable CLI with reported sign-in, or
+   unknown login explicitly selected by the user, saves `codex/default` or `claude-cli/default`
+   through `gptr_config(model = ..., .scope = "user")` and continues. Cancellation, manual setup,
+   unavailable/signed-out CLI or a same-name non-CLI provider returns `NULL` without saving.
+   Existing sessions, explicit/configured models, `.stdin = TRUE` and noninteractive workflows
+   skip setup; prompt-bearing calls retain normal model resolution. Setup preserves unrelated
+   settings, does not grant an egress acknowledgment and never performs inference. Login status
+   is a local CLI report, not proof of subscription billing or online credential validity.
 6. **Run**: `.run = FALSE` -> the session with the rendered input queued; `background = TRUE` -> registered with
    the background pump (P21) and returned running; otherwise run to settlement on the reactor under the
    interrupt policy (`console-interrupt.R` when loaded, else abort-only), then return.
@@ -2717,6 +2728,10 @@ diff_lines(c("a", "b"), c("a", "c"))
 | `builtin_ui(gptr)` | `console-ui.R` | registers `ui` specs `console`, `none`, `scripted`, `rstudio` and the `ui.get` service (resolution from the run's snapshot of `gptr.ui`, else `console` when `gptr_can_prompt()`, else `none`, IC-43, IC-53); every display escapes control, bidi and zero-width characters and the one-line prompt lists every flagged call and `+N more lines` (IC-53) | P02 load |
 | `builtin_ask(gptr)` | `tool-ask.R` | registers the `ask` direct tool (schema §9.2) with `available = function(ctx) ctx$has_ui()`; result text as 18 §3.6 (`The user answered:` lines; cancellation and non-interactive texts) | P02 load |
 
+Console `select()` deliberately preserves title line feeds for setup and `ask` questions.
+Choice labels and details escape line feeds, and all other control/bidi/zero-width escaping is
+retained. Permission approval displays keep the separate IC-53 escaping rules.
+
 **Permission request record** (argument of `ui$permission()` and payload of `permission_request`):
 `list(tool = chr(1), input = named list, summary = chr (the lines to show: code preview, paths), risk =
 <gptr_risk> | NULL, reason = chr(1), suggested_rule = chr(1) | NULL, undo_note = chr(1) | NULL (from the
@@ -2778,7 +2793,7 @@ res = s1_request(model_resolve("jev"), states, q, list())
 | Function | File | Contract | Consumers |
 |---|---|---|---|
 | `builtin_console(gptr)` | `console-repl.R` | registers the `frontend` `console`, the route `console` (order 30), the renderer hooks (process-wide notify hooks on `message_update`, `message_end`, `tool_execution_start`, `tool_execution_end`, `agent_end` that render only for the foreground session when `verbosity() >= 2`, a hook on `artifact_start` printing `artifact  <id>  ->  <url>   (running in background)` (NS-8), tool `render` functions and `renderer` records, IC-69, IC-71), the service `console.interrupt_policy`, and the command specs of §6.17 of `03` | P02 load |
-| `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s` (a new session when `NULL`); returns `s` invisibly on `/exit` | P08 (route) |
+| `console_run(s, envir, stdin = FALSE)` | `console-repl.R` | the REPL of 18 §4.3 on `s`; first-use setup per §6.1.1 before its banner/input; returns the session invisibly on `/exit`, or `NULL` when setup returns before starting it | P08 (route) |
 | `with_interrupt_policy(expr_fun, runs, mode = c("call", "repl"))` (service) | `console-interrupt.R` | `tryCatch(withCallingHandlers(expr_fun(), interrupt = <pause menu>), interrupt = <abort>)`; the menu (`[s]teer`, `[f]ollow-up`, `[c]ontinue`, `[a]bort`, `[b]ackground` for foreground calls when P21 is loaded) writes to stderr and resumes through the `resume` restart; a second Ctrl-C aborts; `mode = "call"` re-signals the interrupt after an abort; abort-only where the restart is unverified (Rgui, IDE consoles) | P06, P08 |
 | `render_markdown_stream(width = cli::console_width())` | `console-render.R` | environment with `write(delta)`, `finish()`, `reset_line()`; chunk-invariant; untrusted text never used as a format string | P14 |
 | `builtin_jsonl(gptr)`, `jsonl_sink(session, con)` | `console-jsonl.R` | the `frontend` `jsonl`: subscribes to the session's events and writes one redacted JSON object per line in the §4.5 JSON form (event names verbatim) | P19 (worker children), P24 |
@@ -4686,6 +4701,8 @@ document are exact.
   `check_login = FALSE`, listing never spawns a process. `check_login = TRUE` is an explicit exception:
   help-gated CLI login-status commands run with closed stdin and a 3 s timeout per subprocess, never
   a model request. Only sanitized login states are returned; unknown/error states never imply signed out.
+  A signed-in state includes supported API-key authentication and does not establish subscription
+  billing or online credential validity.
 - **claude** argv adds `--permission-mode default` and `--allowedTools "mcp__gptr__*"`, so the CLI sends no
   `can_use_tool` for gptr's own tools and gating happens once, in the `mcp_message` dispatch (the handler still
   denies anything else). With a budget in force it adds `--max-turns <remaining turns>` and

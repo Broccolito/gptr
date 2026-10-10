@@ -75,6 +75,12 @@ Terminal statuses become conditions carrying the session as \verb{$session}: \co
 and \code{max_turns} \code{gptr_error_max_turns}. \code{peter()} with no prompt opens the console when someone
 can answer, and signals \code{gptr_error_noninteractive} otherwise.
 
+A new interactive console without an explicit or configured model first offers CLI selection
+or manual API/Ollama instructions. Selecting an available CLI saves its default at user scope;
+cancellation or manual setup returns without starting a session. Existing sessions, explicit
+or configured models and \code{.stdin = TRUE} skip setup. CLI-reported login is not proof of online
+access or subscription billing. See \code{vignette("interactive-console", package = "gptr")}.
+
 The name honors Peter Cathcart Wason, whose work on reasoning framed the dual-process (System 1
 / System 2) view that gptr unifies, and Peter Naur of the Backus-Naur form, in the spirit of
 recording sessions as readable, replayable documents. A user object named \code{peter} hides the

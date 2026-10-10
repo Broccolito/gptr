@@ -1333,7 +1333,8 @@ provider_listing_row = function(id, p, err, check, reg, idx) {
 #'   their supported status commands (3 s timeout per subprocess, no model request).
 #'   Adds a `login` column: `signed in`, `not signed in`, or `unknown`. Unsupported CLI
 #'   versions, missing tools and failed checks report `unknown`; other providers report
-#'   `not applicable`. This does not verify credentials online. Defaults to `FALSE`.
+#'   `not applicable`. A supported API-key login can count as signed in; this does not verify
+#'   credentials online or establish subscription billing. Defaults to `FALSE`.
 #' @return A `gptr_providers` data frame with columns `id`, `type`, `api`, `credential`,
 #'   `source`, `status`, `default_model`, `egress` (`ack` or `needed`) and `version`, plus
 #'   `login` when `check_login = TRUE`.

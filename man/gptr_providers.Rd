@@ -17,7 +17,8 @@ paid request.}
 their supported status commands (3 s timeout per subprocess, no model request).
 Adds a \code{login} column: \verb{signed in}, \verb{not signed in}, or \code{unknown}. Unsupported CLI
 versions, missing tools and failed checks report \code{unknown}; other providers report
-\verb{not applicable}. This does not verify credentials online. Defaults to \code{FALSE}.}
+\verb{not applicable}. A supported API-key login can count as signed in; this does not verify
+credentials online or establish subscription billing. Defaults to \code{FALSE}.}
 }
 \value{
 A \code{gptr_providers} data frame with columns \code{id}, \code{type}, \code{api}, \code{credential},
