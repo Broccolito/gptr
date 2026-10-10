@@ -298,6 +298,10 @@ test_that("each route prints its one-time notice through gptr_inform()", {
   expect_match(seen$calls[[1]]$message, "experimental", fixed = TRUE)
   expect_match(seen$calls[[2]]$message, "19-38K", fixed = TRUE)
   expect_match(seen$calls[[2]]$message, "own shell inside its sandbox", fixed = TRUE)
+  expect_match(seen$calls[[2]]$message, "API-key login", fixed = TRUE)
+  expect_match(seen$calls[[2]]$message, "does not establish subscription billing", fixed = TRUE)
+  expect_false(grepl("usage counts against your ChatGPT plan", seen$calls[[2]]$message,
+                     fixed = TRUE))
 })
 
 # ---- status, plan status, model entries (Task 3) -------------------------------------------------

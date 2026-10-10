@@ -416,16 +416,19 @@ pcli_probe = function(path) {
   hit
 }
 
-#' The one-time notice of a subscription route (03 8.3; message class `notice`)
+#' The one-time notice of a CLI route; login alone does not establish billing
 #' @noRd
 pcli_notice = function(cli) {
   text = if (identical(cli, "claude")) {
     paste0("The claude-cli route is experimental: gptr drives your own claude CLI with your ",
-           "own sign-in, usage counts against your Claude plan and Anthropic's terms apply. ",
-           "gptr never reads or stores Claude credentials.")
+           "own sign-in and is intended for your Claude plan. Check your CLI account and ",
+           "billing; login status alone does not establish subscription access. ",
+           "Anthropic's terms apply. gptr never reads or stores Claude credentials.")
   } else {
-    paste0("The codex route drives your own Codex CLI with your own sign-in; usage counts ",
-           "against your ChatGPT plan. Codex runs its own shell inside its sandbox, and each ",
+    paste0("The codex route uses your own Codex CLI and its active authentication. A signed-in ",
+           "status can include an API-key login and does not establish subscription billing. ",
+           "Check your CLI account and billing. Codex runs its own shell inside its sandbox, ",
+           "and each ",
            "turn adds about 19-38K input tokens of Codex's own instructions.")
   }
   gptr_inform(text, "notice", .once = paste0("cli_notice:", cli))

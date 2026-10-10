@@ -185,6 +185,7 @@ ui_parse_choice = function(ans, labels, multiple = FALSE) {
 }
 
 #' Console select(): numbered choices; NA = cancelled; attr "other" = free text
+#' Title line feeds are intentional (also for ask questions); labels and details stay escaped.
 #' @noRd
 ui_console_select = function(title, choices, default = NULL, details = NULL, multiple = FALSE,
                              allow_other = FALSE, read = ui_console_read) {

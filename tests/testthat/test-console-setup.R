@@ -23,7 +23,7 @@ for (choice in 1:2) {
     expect_identical(settings_read("user")$model, expected)
     expect_identical(settings_read("user")$egress, list(codex = "ack"))
     expect_identical(ui$log$method, "select")
-    expect_match(tolower(ui$log$prompt), "choose your default language model provider",
+    expect_match(tolower(ui$log$prompt), "choose a default model provider",
                   fixed = TRUE)
     expect_true(repl_setup(repl_state(NULL, new.env())))
     expect_identical(nrow(ui$log), 1L)
@@ -42,6 +42,26 @@ test_that("API setup gives commands and returns to R without choosing a model", 
   expect_false(result)
   expect_match(paste(out, collapse = "\n"), "gptr_login", fixed = TRUE)
   expect_match(paste(out, collapse = "\n"), '.scope = "user"', fixed = TRUE)
+  expect_null(rs$model)
+  expect_false(file.exists(settings_path("user")))
+})
+
+test_that("manual setup shows API and local Ollama paths without discovering or saving", {
+  local_gw(workspace = FALSE)
+  local_setup_providers()
+  local_scripted_ui(list(3L))
+  local_mocked_bindings(gptr_models = function(...) stop("unexpected model discovery"))
+  rs = repl_state(NULL, new.env())
+  result = NULL
+  out = utils::capture.output({
+    result = repl_setup(rs)
+  })
+  text = paste(out, collapse = "\n")
+  expect_false(result)
+  expect_match(text, 'gptr_login("openai", method = "key")', fixed = TRUE)
+  expect_match(text, 'gptr_models(provider = "ollama", refresh = TRUE)', fixed = TRUE)
+  expect_match(text, 'gptr_config(model = "ollama/<installed-model>", .scope = "user")',
+                fixed = TRUE)
   expect_null(rs$model)
   expect_false(file.exists(settings_path("user")))
 })
@@ -127,18 +147,18 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
   expect_match(text, "1: Codex CLI", fixed = TRUE)
   expect_match(text, "2: Claude Code CLI", fixed = TRUE)
   expect_match(text, "Welcome to Peter", fixed = TRUE)
-  expect_match(text, "runs inside your R session", fixed = TRUE)
-  expect_match(text, "saved to your user settings", fixed = TRUE)
-  expect_match(text, "3: Manual API configuration", fixed = TRUE)
+  expect_match(text, "Saved in your user settings", fixed = TRUE)
+  expect_match(text, "does not verify billing or online access", fixed = TRUE)
+  expect_match(text, "3: Manual setup (API or Ollama)", fixed = TRUE)
   expect_match(text, "Default provider saved: claude-cli", fixed = TRUE)
-  expect_match(text, "R session.\nFor first-time use", fixed = TRUE)
+  expect_match(text, "Welcome to Peter.\nChoose a default model provider.", fixed = TRUE)
   expect_false(grepl("<U+000A>", text, fixed = TRUE))
   expect_false(grepl("login:", text, fixed = TRUE))
   rows = err[grepl("^[[:space:]]+[12]: ", err)]
   expect_length(rows, 2L)
-  expect_true(all(grepl("Sign In", rows, fixed = TRUE)))
-  expect_identical(regexpr("Sign In", rows, fixed = TRUE)[1L],
-                   regexpr("Sign In", rows, fixed = TRUE)[2L])
+  expect_true(all(grepl("Signed in", rows, fixed = TRUE)))
+  expect_identical(regexpr("Signed in", rows, fixed = TRUE)[1L],
+                   regexpr("Signed in", rows, fixed = TRUE)[2L])
   first = which(grepl("^[[:space:]]+1: ", err))
   expect_identical(err[first - 1L], "")
   expect_match(text, "model claude-cli/default", fixed = TRUE)

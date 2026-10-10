@@ -662,37 +662,38 @@ repl_setup = function(rs) {
   login[is.na(login)] = "unknown"
   login[!is_cli] = "unknown"
   shown_status = console_escape(status, newlines = FALSE)
-  shown_login = c(`signed in` = "Sign In", `not signed in` = "Not Sign In",
+  shown_login = c(`signed in` = "Signed in", `not signed in` = "Not signed in",
                   unknown = "Unknown")[login]
   cli_names = c("Codex CLI", "Claude Code CLI")
   labels = c(sprintf("%-*s  %-*s  %s", max(nchar(cli_names)), cli_names,
                       max(nchar(shown_status)), shown_status, shown_login),
-              "Manual API configuration (advanced)")
+              "Manual setup (API or Ollama)")
   choice = ui_get()$select(
-    paste0("Welcome to Peter, the agent runs inside your R session.\n",
-           "For first-time use, please choose your default language model provider."), labels,
-    details = c("First-time setup: your choice is saved to your user settings.",
-                "CLI providers use your existing terminal login; no API key is needed.",
-                "Found means installed; login is reported by the CLI, not verified online.",
-                "Unknown means the CLI could not report login status (e.g. an older version).",
-                "Manual API configuration shows instructions and returns to R."))
+    "Welcome to Peter.\nChoose a default model provider.", labels,
+    details = c("Saved in your user settings for future sessions.",
+                "CLI login status does not verify billing or online access.",
+                "Manual setup shows API and Ollama commands, then returns to R."))
   if (length(choice) != 1L || is.na(choice) || !choice %in% seq_along(labels)) {
     console_notice("Setup cancelled. No default provider was saved.")
     return(FALSE)
   }
   if (choice == 3L) {
     console_out(c(
-      "Configure an API provider in R, for example:",
+      "Configure an API provider in R:",
       '  gptr_login("openai", method = "key")',
       '  # Or load an existing key file with gptr_env("~/keys/.env").',
       '  gptr_config(model = "openai/gpt-6-sol", .scope = "user")',
+      "Or use an installed local Ollama model:",
+      '  gptr_models(provider = "ollama", refresh = TRUE)',
+      "  # Replace <installed-model> with a local chat model from this listing.",
+      '  gptr_config(model = "ollama/<installed-model>", .scope = "user")',
       "  peter()",
       "Use gptr_providers(), gptr_models(), and ?gptr_config for other providers."))
     return(FALSE)
   }
   if (!is_cli[choice]) {
     console_notice("The ", ids[choice], " provider is not using the expected CLI adapter. ",
-                     "Choose another provider or use manual API configuration. ",
+                     "Choose another provider or use manual setup. ",
                      "No default provider was saved.")
     return(FALSE)
   }
