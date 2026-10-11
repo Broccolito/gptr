@@ -1527,3 +1527,10 @@ Parser/lint/native execution remains pending. Independent upstream partial patch
 private-install controller are source-cleared; no GPTR runtime or shared dependency changed.
 Fresh15:13PDT snapshot: disk265GiB, load39.69/88.90/160.80,43.51%CPUidle,125GiB used/2018MiB
 unused,20539.50MiB swap, no thermal warning. Local heavy jobs remain HELD; Ollama untouched.
+
+
+Reviewed partial upstream patch and isolated stock/patched controller are committed as the
+next task checkpoint. Provenance freezes all167 upstream files; delta is six R launch/helper
+files plus one nine-case upstream test. Registry is6strict/4admission/9upstream. No callr
+namespace/shared library or GPTR runtime/Imports changed. Native execution remains WAITING
+until the one active all-four plan job settles; then launch at most two hosted jobs.

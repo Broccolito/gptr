@@ -1,0 +1,149 @@
+{
+  "schema": 1,
+  "status": "SOURCE_PREPARED_PARTIAL_NOT_EXECUTED",
+  "adoption_authorized": false,
+  "created_date": "2026-10-11",
+  "upstream": {
+    "package": "callr",
+    "version": "3.8.0",
+    "tag": "v3.8.0",
+    "commit": "6a7dd7a51dbf16b3a28819264aa2db04c960399f",
+    "archive_url": "https://api.github.com/repos/r-lib/callr/tarball/refs/tags/v3.8.0",
+    "archive_sha256": "ced292bb160ceaee604747635d53ce3805fcf0ba34ee785a93b5aa06cf981993",
+    "baseline_file_count": 167,
+    "baseline_checksum_file": "baseline-files.sha256",
+    "baseline_checksum_sha256": "1d42a8797aceec5ad44055b8cb0feebd17d607f0419db9c2ab558c0659c8b8e9"
+  },
+  "processx_reference": {
+    "version": "3.9.0",
+    "tag": "v3.9.0",
+    "archive_url": "https://api.github.com/repos/r-lib/processx/tarball/refs/tags/v3.9.0",
+    "archive_sha256": "34d9dcf052d18b4bc3daaf9fd9efbf76b9a88a568b65adf38dad5aa358082d52",
+    "status": "READ_ONLY_REFERENCE_NOT_MODIFIED"
+  },
+  "files": [
+    {
+      "path": "R/r-process.R",
+      "baseline_sha256": "dccd0094968c0ab7be6e75695ab7d0bc6182449ac32c18e1c253f58fb0888f50",
+      "amended_sha256": "ce43be0bcf289d07febdc9bad4dab8f3aaea221ec56db8aa1aaa685998475276",
+      "boundary": "rp_init"
+    },
+    {
+      "path": "R/r-session.R",
+      "baseline_sha256": "e23d7a51b2379b0450fead661b4a1296f686dcd8109dab761824d22026673639",
+      "amended_sha256": "7397ff676e617172b02632b4530dc4f4d03fe4e86412dc92430d0d3f50a4498c",
+      "boundary": "rs_init"
+    },
+    {
+      "path": "R/rcmd-process.R",
+      "baseline_sha256": "8aaaa5747ef046a0a5549e7593c50208a3e73a98cd54141a1d01e8817a7406a6",
+      "amended_sha256": "5128eb746b5996b732b306f69370dc5d4427d37eb58543e6e4ac499d7d3fdeb2",
+      "boundary": "rcmdp_init"
+    },
+    {
+      "path": "R/rscript.R",
+      "baseline_sha256": "387e21f47afcdb260ad832cf8c4e777b45c2c59c51121edb3339d833b662e0fe",
+      "amended_sha256": "2a8e1bd75d3793110b4d8f381902738a1c4f71249cd0d89b35fa51ede3c42f8a",
+      "boundary": "rscript_init"
+    },
+    {
+      "path": "R/run.R",
+      "baseline_sha256": "57f00e499013ad3e9725d3d6a946059de662aa438aa29bee9c9dd271d6497b4d",
+      "amended_sha256": "3dbbaebbbea37d4cb04443f91944e4c4cfb3d5a41284e627a738cd5ae0c357cb",
+      "boundary": "run_r"
+    },
+    {
+      "path": "R/utils.R",
+      "baseline_sha256": "9d206d5001bf5ccdfb83fdd5bdec22ecb7e7a1217fcaf12f7cd5073ef8545c6a",
+      "amended_sha256": "354626bd21decc0261ebba770c2dbc15a223f7ef331dbf1d1463d889e3ce434e",
+      "new_private_helpers": ["native_child_env", "native_child_args"]
+    },
+    {
+      "path": "tests/testthat/test-native-child-env.R",
+      "baseline": "NEW_SOURCE_FIRST_FILE",
+      "test_first_sha256": "6e139a9d1bfe36910cef449614e75058e727c3ae7d0871d8721ac6a121343df2",
+      "amended_sha256": "6e139a9d1bfe36910cef449614e75058e727c3ae7d0871d8721ac6a121343df2"
+    }
+  ],
+  "unchanged_protected_files": {
+    "R/hook.R": "314a7d7d303726aacb9cf96fad1430d7cb4989f37027ef0b87f7eed42df3d8a9",
+    "R/setup.R": "0645d37997eb47ab3e3cb607ac353b405a0f45c5ac6d57326c4a2b7a4e211451",
+    "R/load-client.R": "2a3ce9d6943b2fc6d55f7f7237c17aba51f088dd1e5acd3f05e890ebf6b7bac1"
+  },
+  "packet_hashes": {
+    "native-child-env.patch": "0a2348f2edd1397bf5040d4deb43dce39fcbbfd7a3352804c2a7b56f8dfead28",
+    "README.md": "f8dfaaecbe45c333713906a0e47ae11962f23407bf4f50aaf7eaf4830ee09c96"
+  },
+  "scope": {
+    "parent_environment_setter_added": false,
+    "all_five_launch_boundaries_changed": true,
+    "native_code_added": false,
+    "dependency_or_namespace_changed": false,
+    "gptr_runtime_or_binding_changed": false,
+    "common_hook_changed": false,
+    "extra_env_duplicate_formal": false,
+    "extra_env_precedence": {
+      "absent_or_null": "prepared complete native child environment",
+      "explicit_full": "unchanged processx replacement vector",
+      "unnamed_current": "prepared environment plus exact-name processx overrides",
+      "explicit_extra_na": "unchanged invalid processx value; validation remains authoritative"
+    }
+  },
+  "test_titles": [
+    "native child environment preserves empty values and explicit removals",
+    "native child environment follows platform name matching",
+    "native child environment retains final prepared startup and trace values",
+    "native child arguments preserve processx extra env semantics",
+    "r_process launches without temporary parent environment mutation",
+    "r_session launches without temporary parent environment mutation",
+    "rcmd_process launches without temporary parent environment mutation",
+    "rscript_process launches without temporary parent environment mutation",
+    "synchronous r launches without temporary parent environment mutation"
+  ],
+  "retained_observation": {
+    "path": "dev/.validation/windows-security-20261010/diagnostic-windows-d53b313-evidence/test-callr-parent-environment.R-results.json",
+    "stock_callr_version": "3.8.0",
+    "profiles": ["worker", "artifact"],
+    "assertions_passed": 48,
+    "conditions_failed": 8,
+    "warnings": 0,
+    "skips": 0,
+    "interpretation": "Existing native parent/child empty environment failure; not patched evidence"
+  },
+  "open_admission_boundaries": [
+    {
+      "kind": "WINDOWS_CHILD_CRT_TRUE_EMPTY_STARTUP_RESTORATION",
+      "variables": ["R_ENVIRON", "R_ENVIRON_USER", "R_PROFILE", "R_PROFILE_USER", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE"],
+      "reason": "Unchanged common_hook restores through Sys.setenv; a Win32-only setter does not establish the R CRT view",
+      "status": "OPEN_NOT_IMPLEMENTED"
+    },
+    {
+      "kind": "WINDOWS_PROCESSX_REQUIRED_VARIABLE_NA_REMOVAL_PARITY",
+      "variables": ["HOMEDRIVE", "HOMEPATH", "LOGONSERVER", "PATH", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "USERDOMAIN", "USERNAME", "USERPROFILE", "WINDIR"],
+      "reason": "processx 3.9.0 replenishes absent required variables from the unchanged parent Win32 environment",
+      "status": "OPEN_UPSTREAM_PROTOCOL_OR_CONTRACT_REQUIRED"
+    },
+    {
+      "kind": "NON_ASCII_WINDOWS_NAME_FOLDING",
+      "reason": "R toupper and native invariant Windows name matching need actual non-ASCII and locale parity proof",
+      "status": "OPEN_NOT_UNIVERSALLY_CLAIMED"
+    }
+  ],
+  "validation": {
+    "source_file_checksums_recorded": true,
+    "test_first_equals_amended_test": true,
+    "new_r_lines_over_100_found": false,
+    "r_parse_or_lint_run": false,
+    "tests_run": false,
+    "package_build_or_install_run": false,
+    "patch_applied_to_active_source": false,
+    "peer_review": "PENDING_FROZEN_REVIEW",
+    "required_next": [
+      "isolated stock and patched hosted Windows/Linux narrow offline subset",
+      "original and prepared GPTR two-profile strict native callr file",
+      "separate seven-variable native startup admission diagnostics",
+      "required-variable explicit NA removal and non-ASCII comparison admission",
+      "affected upstream lifecycle, error, tracing and cleanup suites"
+    ]
+  }
+}

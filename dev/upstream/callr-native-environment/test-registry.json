@@ -1,0 +1,36 @@
+{
+  "strict": {
+    "file": "test-callr-parent-environment.R",
+    "titles": [
+      "a native callr worker launch preserves actual-empty parent entries and its r_process contract",
+      "a native callr artifact launch preserves actual-empty parent entries and its r_process contract",
+      "a native callr worker value matrix preserves empty absent Unicode and mixed-case environment states",
+      "a native callr artifact value matrix preserves empty absent Unicode and mixed-case environment states",
+      "a native callr startup failure preserves parent state and error transport",
+      "cancelling a native callr child preserves parent state and settles its exact owner"
+    ]
+  },
+  "admission": {
+    "file": "test-callr-startup-admission.R",
+    "titles": [
+      "a native callr child restores inherited absent states for all seven startup and library variables",
+      "a native callr child restores inherited empty states for all seven startup and library variables",
+      "a native callr child restores inherited nonempty states for all seven startup and library variables",
+      "a native callr PATH removal preserves its owned parent and requests child absence"
+    ]
+  },
+  "upstream": {
+    "file": "test-native-child-env.R",
+    "titles": [
+      "native child environment preserves empty values and explicit removals",
+      "native child environment follows platform name matching",
+      "native child environment retains final prepared startup and trace values",
+      "native child arguments preserve processx extra env semantics",
+      "r_process launches without temporary parent environment mutation",
+      "r_session launches without temporary parent environment mutation",
+      "rcmd_process launches without temporary parent environment mutation",
+      "rscript_process launches without temporary parent environment mutation",
+      "synchronous r launches without temporary parent environment mutation"
+    ]
+  }
+}

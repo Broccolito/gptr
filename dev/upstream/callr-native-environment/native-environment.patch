@@ -1,0 +1,436 @@
+--- a/R/r-process.R
++++ b/R/r-process.R
+@@ -84,21 +84,18 @@
+ 
+   private$options <- options
+ 
+-  with_envvar(
+-    options$env,
+-    do.call(
+-      super$initialize,
+-      c(
+-        list(
+-          options$bin,
+-          options$real_cmdargs,
+-          stdout = options$stdout,
+-          stderr = options$stderr,
+-          poll_connection = options$poll_connection,
+-          supervise = options$supervise
+-        ),
+-        options$extra
+-      )
++  do.call(
++    super$initialize,
++    c(
++      list(
++        options$bin,
++        options$real_cmdargs,
++        stdout = options$stdout,
++        stderr = options$stderr,
++        poll_connection = options$poll_connection,
++        supervise = options$supervise
++      ),
++      native_child_args(options$env, options$extra)
+     )
+   )
+ 
+--- a/R/r-session.R
++++ b/R/r-session.R
+@@ -293,21 +293,18 @@
+   private$options <- options
+ 
+   prepare_client_files()
+-  with_envvar(
+-    options$env,
+-    do.call(
+-      super$initialize,
+-      c(
+-        list(
+-          options$bin,
+-          options$real_cmdargs,
+-          stdin = "|",
+-          stdout = "|",
+-          stderr = "|",
+-          poll_connection = TRUE
+-        ),
+-        options$extra
+-      )
++  do.call(
++    super$initialize,
++    c(
++      list(
++        options$bin,
++        options$real_cmdargs,
++        stdin = "|",
++        stdout = "|",
++        stderr = "|",
++        poll_connection = TRUE
++      ),
++      native_child_args(options$env, options$extra)
+     )
+   )
+ 
+--- a/R/rcmd-process.R
++++ b/R/rcmd-process.R
+@@ -54,20 +54,17 @@
+   setwd(options$wd)
+   on.exit(setwd(oldwd), add = TRUE)
+ 
+-  with_envvar(
+-    options$env,
+-    do.call(
+-      super$initialize,
+-      c(
+-        list(
+-          options$bin,
+-          options$real_cmdargs,
+-          stdout = options$stdout,
+-          stderr = options$stderr,
+-          poll_connection = options$poll_connection
+-        ),
+-        options$extra
+-      )
++  do.call(
++    super$initialize,
++    c(
++      list(
++        options$bin,
++        options$real_cmdargs,
++        stdout = options$stdout,
++        stderr = options$stderr,
++        poll_connection = options$poll_connection
++      ),
++      native_child_args(options$env, options$extra)
+     )
+   )
+ 
+--- a/R/rscript.R
++++ b/R/rscript.R
+@@ -135,20 +135,17 @@
+ 
+   pty <- isTRUE(options$extra$pty)
+ 
+-  with_envvar(
+-    options$env,
+-    do.call(
+-      super$initialize,
+-      c(
+-        list(
+-          options$bin,
+-          options$real_cmdargs,
+-          stdout = if (pty) NULL else options$stdout,
+-          stderr = if (pty) NULL else options$stderr,
+-          poll_connection = options$poll_connection
+-        ),
+-        options$extra
+-      )
++  do.call(
++    super$initialize,
++    c(
++      list(
++        options$bin,
++        options$real_cmdargs,
++        stdout = if (pty) NULL else options$stdout,
++        stderr = if (pty) NULL else options$stderr,
++        poll_connection = options$poll_connection
++      ),
++      native_child_args(options$env, options$extra)
+     )
+   )
+ 
+--- a/R/run.R
++++ b/R/run.R
+@@ -25,31 +25,28 @@
+ 
+   res <- with(
+     options,
+-    with_envvar(
+-      env,
+-      do.call(
+-        processx::run,
+-        c(
++    do.call(
++      processx::run,
++      c(
++        list(
++          bin,
++          args = real_cmdargs,
++          stdout_line_callback = real_callback(stdout),
++          stdout_callback = real_block_callback,
++          echo_cmd = echo,
++          echo = show,
++          spinner = spinner,
++          error_on_status = fail_on_status,
++          timeout = timeout
++        ),
++        if (!pty) {
+           list(
+-            bin,
+-            args = real_cmdargs,
+-            stdout_line_callback = real_callback(stdout),
+-            stdout_callback = real_block_callback,
+-            echo_cmd = echo,
+-            echo = show,
+-            spinner = spinner,
+-            error_on_status = fail_on_status,
+-            timeout = timeout
+-          ),
+-          if (!pty) {
+-            list(
+-              stderr_line_callback = real_callback(stderr),
+-              stderr_callback = real_block_callback,
+-              stderr_to_stdout = stderr_to_stdout
+-            )
+-          },
+-          extra
+-        )
++            stderr_line_callback = real_callback(stderr),
++            stderr_callback = real_block_callback,
++            stderr_to_stdout = stderr_to_stdout
++          )
++        },
++        native_child_args(env, extra)
+       )
+     )
+   )
+--- a/R/utils.R
++++ b/R/utils.R
+@@ -88,6 +88,37 @@
+   force(code)
+ }
+ 
++# Complete processx environment, prepared without changing the caller.
++# NA removes a name; an empty string remains a real empty child entry.
++native_child_env = function(env, parent = Sys.getenv(),
++  windows = identical(.Platform$OS.type, "windows")) {
++  stopifnot(is.character(env), length(env) == 0L || is.named(env))
++  key = if (windows) toupper else identity
++  env = env[!duplicated(key(names(env)), fromLast = TRUE)]
++  parent = parent[!(key(names(parent)) %in% key(names(env)))]
++  out = c(parent, env[!is.na(env)])
++  out[!duplicated(key(names(out)), fromLast = TRUE)]
++}
++
++# Keep an explicitly supplied processx environment and its "current" sentinel.
++native_child_args = function(env, extra, parent = Sys.getenv(),
++  windows = identical(.Platform$OS.type, "windows")) {
++  child = native_child_env(env, parent = parent, windows = windows)
++  if (!is.null(extra$env)) {
++    pxenv = extra$env
++    if (is.null(names(pxenv))) names(pxenv) = rep("", length(pxenv))
++    current = !is.na(pxenv) & pxenv == "current" & names(pxenv) == ""
++    if (any(current)) {
++      pxenv = pxenv[!current]
++      child = c(child[!(names(child) %in% names(pxenv))], pxenv)
++    } else {
++      child = extra$env
++    }
++  }
++  extra$env = child
++  extra
++}
++
+ os_platform <- function() .Platform$OS.type
+ 
+ enumerate <- function(x) {
+--- /dev/null
++++ b/tests/testthat/test-native-child-env.R
+@@ -0,0 +1,198 @@
++test_that("native child environment preserves empty values and explicit removals", {
++  parent = c(KEEP = "", REMOVE = "old", CHANGE = "old", UNTOUCHED = "value")
++  env = c(REMOVE = NA_character_, CHANGE = "", ADD = "new")
++  before = parent
++  expect_identical(
++    native_child_env(env, parent = parent, windows = FALSE),
++    c(KEEP = "", UNTOUCHED = "value", CHANGE = "", ADD = "new")
++  )
++  expect_identical(parent, before)
++})
++
++test_that("native child environment follows platform name matching", {
++  parent = c(Path = "old", Keep = "", DROP = "old")
++  env = c(PATH = "first", path = "last", drop = NA_character_)
++  expect_identical(
++    native_child_env(env, parent = parent, windows = TRUE),
++    c(Keep = "", path = "last")
++  )
++  expect_identical(
++    native_child_env(env, parent = parent, windows = FALSE),
++    c(parent, PATH = "first", path = "last")
++  )
++})
++
++test_that("native child environment retains final prepared startup and trace values", {
++  parent = c(RETAINED = "", TRACEPARENT = "old", REMOVED = "old")
++  env = c(R_PROFILE_USER = "owned-profile", CALLR_IS_RUNNING = "true",
++    TRACEPARENT = "fixed-synthetic-trace", REMOVED = NA_character_)
++  expect_identical(
++    native_child_env(env, parent = parent, windows = FALSE),
++    c(RETAINED = "", R_PROFILE_USER = "owned-profile", CALLR_IS_RUNNING = "true",
++      TRACEPARENT = "fixed-synthetic-trace")
++  )
++})
++
++test_that("native child arguments preserve processx extra env semantics", {
++  prepared = c(CALLR_IS_RUNNING = "true", CHANGE = "prepared", DROP = NA_character_)
++  parent = c(RETAINED = "", DROP = "old")
++  extra = list(env = c("current", CHANGE = "extra"), cleanup_tree = TRUE)
++  before = extra
++  expect_identical(
++    native_child_args(prepared, extra, parent = parent, windows = FALSE),
++    list(env = c(RETAINED = "", CALLR_IS_RUNNING = "true", CHANGE = "extra"),
++      cleanup_tree = TRUE)
++  )
++  expect_identical(extra, before)
++  expect_identical(
++    native_child_args(prepared, list(env = c(ONLY = "")),
++      parent = parent, windows = FALSE),
++    list(env = c(ONLY = ""))
++  )
++  expect_identical(
++    native_child_args(prepared, list(env = NULL), parent = parent, windows = FALSE),
++    list(env = c(RETAINED = "", CALLR_IS_RUNNING = "true", CHANGE = "prepared"))
++  )
++  # A complete processx env does not use callr's NA-as-removal convention.
++  # Retain it unchanged so the existing processx validation still rejects it.
++  expect_identical(
++    native_child_args(prepared, list(env = c(INVALID = NA_character_)),
++      parent = parent, windows = FALSE),
++    list(env = c(INVALID = NA_character_))
++  )
++})
++
++test_that("r_process launches without temporary parent environment mutation", {
++  local_mocked_bindings(with_envvar = function(...) {
++    stop("A background launch must use only its native child environment.")
++  })
++  before = Sys.getenv()
++  p = NULL
++  withr::defer({
++    if (!is.null(p)) {
++      if (p$is_alive()) p$kill_tree()
++      p$cleanup()
++    }
++  })
++  p = r_bg(function() {
++    list(value = 42L, marker = Sys.getenv("CALLR_NATIVE_ENV_TEST"),
++      running = Sys.getenv("CALLR_IS_RUNNING"))
++  }, env = c(CALLR_NATIVE_ENV_TEST = "synthetic-value"),
++  user_profile = FALSE, system_profile = FALSE, supervise = FALSE,
++  cleanup = TRUE, cleanup_tree = TRUE)
++  expect_true(identical(Sys.getenv(), before))
++  expect_s3_class(p, "r_process")
++  p$wait(10000L)
++  expect_false(p$is_alive())
++  expect_identical(p$get_exit_status(), 0L)
++  expect_identical(p$get_result(),
++    list(value = 42L, marker = "synthetic-value", running = "true"))
++  p$cleanup()
++  expect_true(identical(Sys.getenv(), before))
++})
++
++test_that("r_session launches without temporary parent environment mutation", {
++  local_mocked_bindings(with_envvar = function(...) {
++    stop("A session launch must use only its native child environment.")
++  })
++  before = Sys.getenv()
++  p = NULL
++  withr::defer({
++    if (!is.null(p)) {
++      if (p$is_alive()) p$kill_tree()
++      p$cleanup()
++    }
++  })
++  p = r_session$new(r_session_options(
++    env = c(CALLR_NATIVE_ENV_TEST = "synthetic-value"),
++    user_profile = FALSE, system_profile = FALSE,
++    extra = list(cleanup = TRUE, cleanup_tree = TRUE)
++  ), wait_timeout = 10000L)
++  expect_true(identical(Sys.getenv(), before))
++  expect_s3_class(p, "r_session")
++  p$call(function() {
++    list(value = 42L, marker = Sys.getenv("CALLR_NATIVE_ENV_TEST"),
++      running = Sys.getenv("CALLR_IS_RUNNING"))
++  })
++  result = read_next(p, timeout = 10000L)
++  expect_null(result$error)
++  expect_identical(result$result,
++    list(value = 42L, marker = "synthetic-value", running = "true"))
++  p$close()
++  expect_false(p$is_alive())
++  p$cleanup()
++  expect_true(identical(Sys.getenv(), before))
++})
++
++test_that("rcmd_process launches without temporary parent environment mutation", {
++  local_mocked_bindings(with_envvar = function(...) {
++    stop("An R CMD launch must use only its native child environment.")
++  })
++  before = Sys.getenv()
++  p = NULL
++  withr::defer({
++    if (!is.null(p)) {
++      if (p$is_alive()) p$kill_tree()
++      p$cleanup()
++    }
++  })
++  p = rcmd_process$new(rcmd_process_options(
++    cmd = "config", cmdargs = "CC",
++    env = c(CALLR_NATIVE_ENV_TEST = "synthetic-value"),
++    user_profile = FALSE, system_profile = FALSE,
++    extra = list(cleanup = TRUE, cleanup_tree = TRUE)
++  ))
++  expect_true(identical(Sys.getenv(), before))
++  expect_s3_class(p, "rcmd_process")
++  p$wait(10000L)
++  expect_false(p$is_alive())
++  expect_identical(p$get_exit_status(), 0L)
++  expect_match(p$read_output_lines(), ".")
++  p$cleanup()
++  expect_true(identical(Sys.getenv(), before))
++})
++
++test_that("rscript_process launches without temporary parent environment mutation", {
++  local_mocked_bindings(with_envvar = function(...) {
++    stop("An Rscript launch must use only its native child environment.")
++  })
++  before = Sys.getenv()
++  script = test_temp_file(create = FALSE)
++  writeLines("cat(Sys.getenv('CALLR_NATIVE_ENV_TEST'), '\\n', sep = '')", script)
++  p = NULL
++  withr::defer({
++    if (!is.null(p)) {
++      if (p$is_alive()) p$kill_tree()
++      p$cleanup()
++    }
++  })
++  p = rscript_process$new(rscript_process_options(
++    script = script, env = c(CALLR_NATIVE_ENV_TEST = "synthetic-value"),
++    user_profile = FALSE, system_profile = FALSE,
++    extra = list(cleanup = TRUE, cleanup_tree = TRUE)
++  ))
++  expect_true(identical(Sys.getenv(), before))
++  expect_s3_class(p, "rscript_process")
++  p$wait(10000L)
++  expect_false(p$is_alive())
++  expect_identical(p$get_exit_status(), 0L)
++  expect_identical(p$read_output_lines(), "synthetic-value")
++  p$cleanup()
++  expect_true(identical(Sys.getenv(), before))
++})
++
++test_that("synchronous r launches without temporary parent environment mutation", {
++  local_mocked_bindings(with_envvar = function(...) {
++    stop("A synchronous launch must use only its native child environment.")
++  })
++  before = Sys.getenv()
++  result = r(function() {
++    list(value = 42L, marker = Sys.getenv("CALLR_NATIVE_ENV_TEST"),
++      running = Sys.getenv("CALLR_IS_RUNNING"))
++  }, env = c(CALLR_NATIVE_ENV_TEST = "synthetic-value"),
++  user_profile = FALSE, system_profile = FALSE, timeout = 10,
++  supervise = FALSE, cleanup_tree = TRUE)
++  expect_identical(result,
++    list(value = 42L, marker = "synthetic-value", running = "true"))
++  expect_true(identical(Sys.getenv(), before))
++})
