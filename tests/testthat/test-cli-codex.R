@@ -458,11 +458,15 @@ test_that("the Windows sandbox probe caches answers and timeouts, never a run th
 # ---- review round 1: control files, the wall clock and the order of a stop (Task 7, D-106) ------
 
 test_that("control files gptr cannot hash are kept by a marker, so an auto exec still runs", {
-  root = local_project(files = list(".gptr/settings.json" = "{}", ".git/hooks/pre-push" = "x"))
+  skip_on_cran()
+  codex_capability_local()
+  root = local_project(files = list(".gptr/settings.json" = "{}", ".git/hooks/pre-push" = "x",
+    "capability-canary.txt" = "untouched sentinel"))
+  codex_capability_preserve(file.path(root, "capability-canary.txt"))
   hook = file.path(root, ".git", "hooks", "pre-commit")
-  made = suppressWarnings(file.symlink(file.path(root, "gone-1.sh"), hook))
-  skip_if_not(isTRUE(made), "symbolic links are not available")
-  # R reads no link target on Windows (Sys.readlink() gives ""): there the link is unreadable
+  link = codex_capability_link(hook, root)
+  link$make(file.path(root, "gone-1.sh"))
+  # Keep the real platform's observed readlink result; the fake CLI does not alter the filesystem.
   readable = nzchar(pcli_control_link(hook))
   local_fake_cli_path("codex", "text")
   local_mocked_bindings(pcli_is_windows = function() FALSE,
@@ -486,30 +490,54 @@ test_that("control files gptr cannot hash are kept by a marker, so an auto exec 
   n = local_normaliser(pcli_codex_parse, stub_model("codex"), opts)
   expect_no_warning(expect_true(feed_fixture(n, "codex-text.jsonl")))
   expect_identical(event_types(opts)[[length(opts$log$events)]], "done")
-  # the dangling link pointed somewhere else is a change (R on Windows can neither read nor
-  # unlink a file link)
-  skip_if_not(readable, "R reads no symbolic link target on this platform")
+})
+
+test_that("retargeting a dangling control link warns after the Codex exec completes", {
+  skip_on_cran()
+  codex_capability_local()
+  root = local_project(files = list(".gptr/settings.json" = "{}", ".git/hooks/pre-push" = "x",
+    "capability-canary.txt" = "untouched sentinel"))
+  codex_capability_preserve(file.path(root, "capability-canary.txt"))
+  hook = file.path(root, ".git", "hooks", "pre-commit")
+  link = codex_capability_link(hook, root)
+  first = link$make(file.path(root, "gone-1.sh"))
   opts2 = stub_opts()
   opts2$state$codex_sandbox = "workspace-write"
   opts2$state$codex_control = pcli_control_hash(root)
   n2 = local_normaliser(pcli_codex_parse, stub_model("codex"), opts2)
-  unlink(hook)
-  file.symlink(file.path(root, "gone-2.sh"), hook)
-  w = expect_warning(feed_fixture(n2, "codex-text.jsonl"), class = "gptr_warning_cli_sandbox")
-  expect_match(conditionMessage(w), ".git/hooks/pre-commit", fixed = TRUE)
+  link$detach()
+  second = link$make(file.path(root, "gone-2.sh"))
+  expect_false(identical(first, second), info = "actual native link payload changed")
+  expect_identical(pcli_control_changed(opts2$state$codex_control, pcli_control_hash(root)),
+    path_norm(hook))
+  seen = new.env(parent = emptyenv())
+  seen$last = NULL
+  w = expect_warning(withCallingHandlers(feed_fixture(n2, "codex-text.jsonl"),
+    gptr_warning_cli_sandbox = function(w) {
+      seen$last = tail(event_types(opts2), 1L)
+    }), class = "gptr_warning_cli_sandbox")
+  warning_text = if (inherits(w, "condition")) conditionMessage(w) else ""
+  expect_match(warning_text, ".git/hooks/pre-commit", fixed = TRUE)
+  expect_identical(seen$last, "done")
   expect_identical(event_types(opts2)[[length(opts2$log$events)]], "done")
 })
 
 test_that("a control file gptr cannot read is marked by its size and time instead", {
-  root = local_project(files = list(".gptr/agents/locked.md" = "secret agent"))
+  skip_on_cran()
+  codex_capability_local()
+  root = local_project(files = list(".gptr/agents/locked.md" = "secret agent",
+    "capability-canary.txt" = "untouched sentinel"))
+  codex_capability_preserve(file.path(root, "capability-canary.txt"))
   locked = file.path(root, ".gptr", "agents", "locked.md")
-  Sys.chmod(locked, "200")
-  withr::defer(Sys.chmod(locked, "644"))
-  skip_if(file.access(locked, 4L) == 0L, "the file stays readable (permissions not enforced)")
+  access = codex_capability_deny_read(locked, root)
   h = pcli_control_hash(root)
   expect_match(h[[path_norm(locked)]], "^unreadable:[0-9]+ [0-9.]+$")
+  before_size = file.info(locked, extra_cols = FALSE)$size
+  access$set_expected(c(access$bytes, charToRaw("a longer secret agent\n")))
   cat("a longer secret agent\n", file = locked, append = TRUE)
+  expect_gt(file.info(locked, extra_cols = FALSE)$size, before_size)
   expect_identical(pcli_control_changed(h, pcli_control_hash(root)), path_norm(locked))
+  access$restore()
 })
 
 test_that("a control-file check that fails still completes the exec, then warns", {
