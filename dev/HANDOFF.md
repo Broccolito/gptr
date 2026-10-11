@@ -1,11 +1,11 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport -2026-10-11 00:43 PDT
+## Optional integrations and Windows transport -2026-10-11 00:52 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
 `codex/skipped-platform-tests`. Primary main718e81e/maintainer/old preparations remain intact;
-shared Ollama preserved. Latest00:36:load167.01/100.52/96.23/CPU6.30%idle/RAM117GiBused/
-11GiBunused/swap11,476MiB/disk143GiB. Hold local R/install/browser/model/build jobs; at most
+shared Ollama preserved. Latest00:49:load22.60/64.67/93.89/CPU37.76%idle/RAM123GiBused/
+4009MiBunused/swap11,388MiB/disk122GiB. Hold local R/install/browser/model/build jobs; at most
 2 independent hosted jobs. No shared-model operation.
 
 Actual combined15 run38120994420 exactf419fd6: Linux strict PASS1481 assertions/0failed
@@ -32,8 +32,11 @@ All5 Windows production lifecycle cases and native duplex fail before READY, sta
 UTF8 helper correction714aad4/source gate3074e01 reviewed. Idle contention witness332324d and
 strict CI6f92d3c reviewed:33 files/123 titles/46 lint paths; Windows19 assertions mandatory,
 Linux one exact OS guard. An early startup failure makes this probe inconclusive. Native ACL fixture75dc9e9 source reviewed with unchanged5s/denial/restore assertions.
-Next actual8 files: lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker, cli-common, cli-claude,
-cli-codex, ckpt-files plus fresh4 Linux plan stages. D-019/merge stay open until relevant strict GREEN.
+Warning observer44cff6c and bounded actor stages6e096c3 reviewed; no startup-speed fix.
+Strict CI3ffecab reviewed:33 full files/127 titles/46 lint paths; all29 writer titles mandatory
+on Windows,23 pure on Linux plus6 exact native guards. Actual READY/delivery proof mandatory.
+Next actual11 files: lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker, cli-common, cli-claude,
+cli-codex, ckpt-files, proc-writer-runtime, proc-windows-backpressure, proc-spawn plus fresh4 Linux plan stages. D-019/merge stay open until relevant strict GREEN.
 Local pandas/NumPy, actual GUI/kernel replay, broad check/release remain waiting. See plan/ledger.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated

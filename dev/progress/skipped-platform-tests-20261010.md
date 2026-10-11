@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At00:36 PDT October11, load was167.01/100.52/96.23, CPU6.30%idle, physical memory117GiB
-used/11GiB unused, swap11,476MiB, free disk143GiB, with no thermal/performance warning.
+At00:49 PDT October11, load was22.60/64.67/93.89, CPU37.76%idle, physical memory123GiB
+used/4009MiB unused, swap11,388MiB, free disk122GiB, with no thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -453,3 +453,31 @@ replace cmdlet discovery, and fixed allowlisted stage diagnostics preserve the o
 All test bodies/titles/guards,5s bound, minimal child environment, private backup, deny and
 exact restore oracles remain unchanged. The cmdlet-delay explanation is a hypothesis until
 actual hosted evidence. Candidate-only copy; primary67-line prepared suffix untouched.
+
+Controller warning capture44cff6c is SOURCE-CLEAR: the observer encloses the full main call,
+on.exit cleanup and bounded final artifact writes, never muffles warnings or records raw
+messages/arguments/custom classes. Positive counts are fatal; original errors are retained.
+Up to25 structural diagnostics survive. Late-write warnings permanently revoke summary PASS;
+2 bounded finalization attempts record an explicit pre-write observation boundary.
+
+Startup diagnostics6e096c3 are independently SOURCE-CLEAR after peer-reviewed Windows CRLF/
+split-CRLF and processx zero-time poll-before-read controls. Four additive writer titles
+retain25 prior cases and require actual READY/delivery-stage no-reader coverage. Reads are
+bounded1025 characters, retained protocol1024 UTF8 bytes, fixed monotonic stages/numeric
+timestamps only; arbitrary stderr is rejected without retention. Existing2s enqueue clock,
+ACL rules, ACK accounting, resource/argv caps and original native3/prototype/sampler fixtures
+stay intact. This is observability hardening, not a startup-speed fix or actual GREEN.
+
+Next exact candidate expands the8 planned source/idle/adapter/checkpoint files with full
+proc-writer-runtime, proc-windows-backpressure and proc-spawn:11 files, strict warnings/skips
+and fresh4 Linux plan stages. Updated4-title CI registration and actual execution pending.
+At00:49 disk122GiB and active swap11,388MiB/load22.60 keep the local compute lease closed
+despite37.76% CPU idle; no shared-model operation.
+
+Final strict startup registration3ffecab is independently SOURCE-CLEAR:33 full files/127
+representatives/46 lint paths. Exact29 writer titles match the frozen test; the first25 and
+all other32 vectors stay intact. All29 writer cases are mandatory on Windows;23 pure cases
+mandatory on Linux, with6 exact Windows-only guards. Missing/duplicate/raw errors/warnings/
+zero assertions and passing-prefix capability skips remain fatal. Actual11-file source/
+protocol/checkpoint/transport execution is next; all4 cross-plan gates must run on this
+updated exact candidate.57 required titles across the11 full files were source-verified once.

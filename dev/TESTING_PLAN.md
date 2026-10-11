@@ -472,7 +472,7 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
 | Windows filesystem safety | Native valid-target8 DONE668ae5b:207 assertions/pure5 policy21 each. Actualf419fd6 original7: Linux693 assertions/0 failures/warnings/skips; Windows809 passes/1 raw timeout/0 warnings/20 named OS guards. Precise native link cleanup and measured casefold/edit variants pass; owned-bucket denial/restoration stops after8 setup assertions on its5s PowerShell bound, so restoration remains RED. Missing native targets remain unproved. |
 | Windows child stdin | Actualf419fd6 Linux transport8 DONE788 passes/0 failures/warnings/5 named Windows guards; Windows778 passes/7 failed conditions/0 warnings/3 named OS guards. Native duplex and all5 production lifecycle cases fail before READY at startup1.83-1.97s/zero accepted bytes; no-reader typed2s result is startup, not delivery coverage. The4MB spawn case raises IO. Preserve2s queue budget,9998-expression/12000-argv caps and original native3. D-019 remains open; bounded phase diagnosis ONGOING. |
-| Validation/merge | Actualf419fd6 combined15: Linux1481 passes/0 failures/warnings/5 named Windows guards; Windows1587 passes/8 failed conditions/0 test warnings/23 named OS guards. All16 owned-family cleanup witnesses pass each; controller reports32 uncaptured warnings on Windows, diagnosis ONGOING. Python12/R gate1326 and all44 scoped paths pass both hosts;4 Linux plan stages pass39 equal hashes/770 R blocks/0 parse-style problems/0 lints. UTF8 helper fix714aad4 and strict package source gate3074e01 SOURCE-CLEAR. New idle-slot fixture332324d/CIf6f92d3c:33 suites/123 titles/46 lint paths. Next8-file source/idle/MCP/worker/CLI/checkpoint diagnostic run and fresh4-stage plan gates WAITING; merge WAITING strict GREEN. |
+| Validation/merge | Actualf419fd6 combined15: Linux1481 passes/0 failures/warnings/5 named Windows guards; Windows1587 passes/8 failed conditions/0 test warnings/23 named OS guards. All16 owned-family cleanup witnesses pass each; controller reports32 uncaptured warnings on Windows, diagnosis ONGOING. Python12/R gate1326 and all44 scoped paths pass both hosts;4 Linux plan stages pass39 equal hashes/770 R blocks/0 parse-style problems/0 lints. UTF8 helper fix714aad4 and strict package source gate3074e01 SOURCE-CLEAR. Idle-slot fixture332324d, warning observer44cff6c, startup diagnostics6e096c3 and strict CI3ffecab SOURCE-CLEAR:33 suites/127 titles/46 lint paths. Windows no-reader requires READY/delivery. Next11-file source/idle/MCP/worker/CLI/checkpoint/transport diagnostic run and fresh4-stage plan gates WAITING; merge WAITING strict GREEN. |
 
 The optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
@@ -490,9 +490,9 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest00:36 PDT load167.01/100.52/96.23, CPU6.30%idle, physical RAM117GiB used/11GiB
-unused, swap11,476MiB used and disk143GiB still prevent local compute. The separate
-memory-pressure free metric is85%; no thermal/performance warning was recorded.
+Latest00:49 PDT load22.60/64.67/93.89, CPU37.76%idle, physical RAM123GiB used/4009MiB
+unused, swap11,388MiB used and disk122GiB still prevent local compute. The separate
+memory-pressure free metric is62%; no thermal/performance warning was recorded.
 Keep local R/build/install/browser/model jobs held. Hosted validation uses independent
 resources with at most two active jobs; recheck before granting a local compute lease.
 
