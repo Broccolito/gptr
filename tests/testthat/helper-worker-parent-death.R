@@ -169,20 +169,39 @@ wpd_child_case = function(case, root, failure) {
       abs(record$create_time - as.numeric(ps::ps_create_time(handle))) < 0.01 &&
       isTRUE(fun("proc_handle_alive")(handle))
   }
-  stopifnot(fun("proc_marker_valid")(parent_record$marker),
-    fun("proc_marker_valid")(worker_record$marker),
-    parent_record$marker != worker_record$marker,
-    same(parent_record, parent_handle), same(worker_record, worker_handle),
-    identical(as.integer(ready$parent$pid), as.integer(parent_record$pid)),
-    abs(ready$parent$create_time - parent_record$create_time) < 0.01,
-    identical(as.integer(worker_record$parent_pid), as.integer(parent_record$pid)),
-    abs(worker_record$parent_create - parent_record$create_time) < 0.01,
-    identical(as.integer(ready$proof$identity$pid), as.integer(worker_record$pid)),
-    abs(ready$proof$identity$create_time - worker_record$create_time) < 0.01,
-    isTRUE(ready$proof$request_started), identical(ready$proof$request_number, 1L),
-    isTRUE(ready$proof$worker_flag), isTRUE(ready$proof$source_matches),
-    isTRUE(ready$registered), isTRUE(ready$active), isTRUE(ready$unsupervised),
-    file.exists(marker_path(parent_record)), file.exists(marker_path(worker_record)))
+  # Each original predicate is forced once, in the original stopifnot order.
+  # Only its fixed index/status is appended; no values or condition text are published.
+  precheck = function(index, value) {
+    checked = withCallingHandlers(force(value), error = function(error) {
+      tryCatch(phase(sprintf("prekill-check-%02d-9", index)),
+        error = function(diagnostic_error) NULL)
+    })
+    code = if (isTRUE(checked)) 1L else if (isFALSE(checked)) 0L else 2L
+    tryCatch(phase(sprintf("prekill-check-%02d-%d", index, code)),
+      error = function(diagnostic_error) NULL)
+    checked
+  }
+  stopifnot(
+    precheck(1L, fun("proc_marker_valid")(parent_record$marker)),
+    precheck(2L, fun("proc_marker_valid")(worker_record$marker)),
+    precheck(3L, parent_record$marker != worker_record$marker),
+    precheck(4L, same(parent_record, parent_handle)),
+    precheck(5L, same(worker_record, worker_handle)),
+    precheck(6L, identical(as.integer(ready$parent$pid), as.integer(parent_record$pid))),
+    precheck(7L, abs(ready$parent$create_time - parent_record$create_time) < 0.01),
+    precheck(8L, identical(as.integer(worker_record$parent_pid), as.integer(parent_record$pid))),
+    precheck(9L, abs(worker_record$parent_create - parent_record$create_time) < 0.01),
+    precheck(10L, identical(as.integer(ready$proof$identity$pid), as.integer(worker_record$pid))),
+    precheck(11L, abs(ready$proof$identity$create_time - worker_record$create_time) < 0.01),
+    precheck(12L, isTRUE(ready$proof$request_started)),
+    precheck(13L, identical(ready$proof$request_number, 1L)),
+    precheck(14L, isTRUE(ready$proof$worker_flag)),
+    precheck(15L, isTRUE(ready$proof$source_matches)),
+    precheck(16L, isTRUE(ready$registered)),
+    precheck(17L, isTRUE(ready$active)),
+    precheck(18L, isTRUE(ready$unsupervised)),
+    precheck(19L, file.exists(marker_path(parent_record))),
+    precheck(20L, file.exists(marker_path(worker_record))))
   phase("worker-request-started")
   phase("parent-only-kill")
   killed_at = fun("reactor_now")()
