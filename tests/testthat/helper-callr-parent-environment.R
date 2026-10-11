@@ -245,11 +245,11 @@ ce_extended_child_case = function(case, root, failure) {
         package = TRUE, env = bridge, user_profile = FALSE, system_profile = FALSE,
         supervise = FALSE, extra = list(stdin = "|", cleanup = TRUE, cleanup_tree = TRUE,
                                        encoding = "UTF-8"))
-      opts$load_hook = paste0(opts$load_hook, "\n(function(path) {\n",
+      opts$load_hook = c(opts$load_hook, paste0("\n(function(path) {\n",
         "writeLines('HOOK-STARTED', path)\ninput = file('stdin', 'r')\n",
         "on.exit(close(input), add = TRUE)\n",
         "stopifnot(identical(readLines(input, n = 1L, warn = FALSE), 'FAIL'))\n",
-        "stop('SYNTHETIC-CALLR-STARTUP-FAILURE')\n})(", deparse(hook_started), ")\n")
+        "stop('SYNTHETIC-CALLR-STARTUP-FAILURE')\n})(", deparse(hook_started), ")\n"))
       st$p = callr::r_process$new(opts)
     } else {
       st$p = callr::r_bg(utils::removeSource(probe), args = args,

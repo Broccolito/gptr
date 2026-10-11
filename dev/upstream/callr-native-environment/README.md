@@ -26,6 +26,14 @@ extra environment precedence and all five launchers. Four admission cases retain
 explicit startup-seed, child-restoration and essential PATH-removal results separately.
 Their RED results cannot be reported as a universal child-environment pass.
 
+After those core gates pass, four complete unchanged upstream files run separately on
+stock and patched builds:20 cases for background lifecycle/errors/streams, hooks,
+timeout, and tracing. Their raw warnings/errors/skips remain fatal. SDK recording is
+in memory in fresh children with telemetry environment settings removed; actual test
+dependency versions must match across all eight files. Five pure controller tests
+ensure core failures prevent compatibility execution and incompatible dependencies
+or failed assertions cannot count as a compatibility pass.
+
 The existing fixture bounds remain30seconds per case,60seconds outer,1GiB family
 RSS and64MiB owned output. The dedicated install/file controller additionally has
 300seconds,2GiB total owned-family RSS,1MiB per evidence file, exact inherited-marker

@@ -15,6 +15,22 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+
+def source_mismatch(output, expected, actual, mode):
+    differences = [name for name in sorted(expected) if expected[name] != actual.get(name)]
+    rows = [{"file": name, "expected_sha256": expected[name],
+             "actual_sha256": actual.get(name)} for name in differences[:20]]
+    report = {"schema": 1, "mode": mode, "stage": "post-apply",
+              "expected_file_count": len(expected), "observed_file_count": len(actual),
+              "missing_count": len(expected.keys() - actual.keys()),
+              "unexpected_count": len(actual.keys() - expected.keys()),
+              "differences_total": len(differences), "differences_truncated": len(differences) > 20,
+              "files": rows}
+    encoded = (json.dumps(report, indent=2) + "\n").encode("utf-8")
+    assert len(encoded) <= 16 * 1024
+    (output / "source-diff.json").write_bytes(encoded)
+
+
 def prepare(mode, output, packet):
     output.mkdir(parents=True, exist_ok=False)
     manifest = json.loads((packet / "source-manifest.json").read_text())
@@ -64,12 +80,16 @@ def prepare(mode, output, packet):
     patch = packet / "native-environment.patch"
     assert digest(patch) == manifest["patch_sha256"]
     if mode == "patched":
-        for command in (["git", "apply", "--check", str(patch.resolve())],
-                        ["git", "apply", str(patch.resolve())]):
+        git = ["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf"]
+        for command in (git + ["apply", "--check", str(patch.resolve())],
+                        git + ["apply", str(patch.resolve())]):
             subprocess.run(command, cwd=source, check=True, timeout=30)
     after = {p.relative_to(source).as_posix(): digest(p)
              for p in source.rglob("*") if p.is_file()}
-    assert after == manifest["files_after" if mode == "patched" else "files_before"]
+    expected = manifest["files_after" if mode == "patched" else "files_before"]
+    if after != expected:
+        source_mismatch(output, expected, after, mode)
+        raise AssertionError("Pinned post-apply source mismatch; bounded hashes retained")
     library = output / "library"
     library.mkdir()
     environment = dict(os.environ)

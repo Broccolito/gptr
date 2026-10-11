@@ -56,10 +56,13 @@ jobs:
           GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
         with:
           needs: check
-          extra-packages: any::pkgload any::testthat any::lintr
+          extra-packages: any::pkgload any::testthat any::lintr any::otelsdk
       - name: Install GPTR for real child fixtures
         shell: bash
         run: R CMD INSTALL .
+      - name: Pure controller admission checks without R children
+        shell: bash
+        run: python -B dev/ci/test_callr_native.py
       - name: Lint GPTR regression fixtures and dedicated R controller
         shell: bash
         run: |
@@ -78,6 +81,7 @@ jobs:
           path: |
             ${{ runner.temp }}/callr-evidence/summary.json
             ${{ runner.temp }}/callr-evidence/*/identity.json
+            ${{ runner.temp }}/callr-evidence/*/source-diff.json
             ${{ runner.temp }}/callr-evidence/*/install.log
             ${{ runner.temp }}/callr-evidence/*/results.json
             ${{ runner.temp }}/callr-evidence/*/cleanup.json

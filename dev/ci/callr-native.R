@@ -1,9 +1,10 @@
 # Dedicated disposable-process validation; dependency installations stay private to CI.
-callr_native_owned = function(command, args, output, paths) {
+callr_native_owned = function(command, args, output, paths, compat = FALSE) {
   source("dev/ci/optional-integrations.R", local = TRUE)
   marker = optional_marker()
   stopifnot(!nzchar(Sys.getenv(marker)))
   environment = c(Sys.getenv(), stats::setNames("YES", marker))
+  if (compat) environment = environment[!startsWith(toupper(names(environment)), "OTEL_")]
   process = NULL
   peak_rss = 0
   samples = 0L
@@ -72,6 +73,35 @@ callr_native_install = function(args) {
   stopifnot(identical(status, 0L))
 }
 
+callr_native_compat_preflight = function() {
+  stopifnot(!any(startsWith(toupper(names(Sys.getenv())), "OTEL_")),
+    !"otelsdk" %in% loadedNamespaces())
+  packages = c("callr", "processx", "testthat", "withr", "otelsdk")
+  dependencies = stats::setNames(lapply(packages, function(package) {
+    as.character(utils::packageVersion(package))
+  }), packages)
+  stopifnot(identical(dependencies$callr, "3.8.0"),
+    identical(dependencies$processx, "3.9.0"),
+    utils::packageVersion("testthat") >= "3.2.0",
+    utils::packageVersion("withr") >= "2.3.0",
+    utils::packageVersion("otelsdk") >= "0.2.0",
+    requireNamespace("otelsdk", quietly = TRUE),
+    "with_otel_record" %in% getNamespaceExports("otelsdk"))
+  initially_off = !otel::is_tracing_enabled("org.r-lib.callr")
+  recorded = otelsdk::with_otel_record({
+    tracer = otel::get_tracer("gptr.compat.preflight")
+    span = tracer$start_local_active_span("compat-preflight")
+    span$end()
+    7
+  }, what = "traces")
+  stopifnot(initially_off, identical(recorded$value, 7),
+    length(recorded$traces) == 1L,
+    identical(recorded$traces[[1L]]$name, "compat-preflight"),
+    !otel::is_tracing_enabled("org.r-lib.callr"),
+    !any(startsWith(toupper(names(Sys.getenv())), "OTEL_")))
+  list(dependencies = dependencies, exporter_free = TRUE)
+}
+
 callr_native_child = function(file, result_path, library) {
   warnings = new.env(parent = emptyenv())
   warnings$total = 0L
@@ -81,7 +111,9 @@ callr_native_child = function(file, result_path, library) {
     stopifnot(identical(as.character(utils::packageVersion("callr")), "3.8.0"),
       identical(normalizePath(dirname(find.package("callr"))), normalizePath(library)))
     source("dev/ci/optional-integrations.R", local = TRUE)
-    upstream = identical(basename(file), "test-native-child-env.R")
+    compat = basename(file) %in% c("test-r-bg.R", "test-hook.R", "test-timeout.R", "test-otel.R")
+    upstream = identical(basename(file), "test-native-child-env.R") || compat
+    compatibility = if (compat) callr_native_compat_preflight() else list()
     if (!upstream) pkgload::load_all(".", helpers = FALSE, quiet = TRUE)
     raw = testthat::test_file(file,
       reporter = testthat::LocationReporter$new(file = stderr()),
@@ -90,13 +122,15 @@ callr_native_child = function(file, result_path, library) {
     result = list(rows = optional_result_rows(raw), errors = sum(vapply(raw, function(test) {
       sum(vapply(test$results, inherits, logical(1), what = "expectation_error"))
     }, 0L)))
-  saveRDS(list(result = result$rows, fixture_errors_total = result$errors,
+  if (compat) stopifnot(!otel::is_tracing_enabled("org.r-lib.callr"),
+    !any(startsWith(toupper(names(Sys.getenv())), "OTEL_")))
+  saveRDS(c(list(result = result$rows, fixture_errors_total = result$errors,
     outside_test_warning_total = warnings$total,
     outside_test_warning_classes = warnings$classes,
     callr_version = as.character(utils::packageVersion("callr")),
     processx_version = as.character(utils::packageVersion("processx")),
     private_library_exact = identical(normalizePath(dirname(find.package("callr"))),
-      normalizePath(library))), result_path)
+      normalizePath(library))), compatibility), result_path)
   }, warning = function(w) {
     warnings$total = warnings$total + 1L
     warnings$classes = unique(c(warnings$classes,
@@ -108,7 +142,10 @@ callr_native_child = function(file, result_path, library) {
 callr_native_main = function(args) {
   stopifnot(length(args) == 4L)
   mode = match.arg(args[[1L]], c("stock", "patched"))
-  packet = match.arg(args[[2L]], c("strict", "admission", "upstream"))
+  compat_files = c("compat-r-bg" = "test-r-bg.R", "compat-hook" = "test-hook.R",
+    "compat-timeout" = "test-timeout.R", "compat-otel" = "test-otel.R")
+  packet = match.arg(args[[2L]], c("strict", "admission", "upstream", names(compat_files)))
+  compat = packet %in% names(compat_files)
   library = normalizePath(args[[3L]], mustWork = TRUE)
   output = args[[4L]]
   .libPaths(c(library, .libPaths()))
@@ -124,8 +161,9 @@ callr_native_main = function(args) {
   expected = registry[[packet]]$titles
   stopifnot(length(file) == 1L, length(expected) > 0L,
     file %in% c("test-callr-parent-environment.R", "test-callr-startup-admission.R",
-      "test-native-child-env.R"))
-  test_file = if (packet == "upstream") {
+      "test-native-child-env.R", unname(compat_files)))
+  if (compat) stopifnot(identical(file, unname(compat_files[[packet]])))
+  test_file = if (packet == "upstream" || compat) {
     file.path(dirname(library), "source", "tests", "testthat", file)
   } else {
     file.path("tests", "testthat", file)
@@ -140,7 +178,7 @@ callr_native_main = function(args) {
   started = proc.time()[["elapsed"]]
   status = callr_native_owned(command,
     c("--vanilla", "-e", expression, test_file,
-      result_path, library), output, c(stdout, stderr, result_path))
+      result_path, library), output, c(stdout, stderr, result_path), compat = compat)
   stopifnot(identical(status, 0L), file.exists(result_path))
   observed = readRDS(result_path)
   rows = observed$result
@@ -152,6 +190,13 @@ callr_native_main = function(args) {
     identical(observed$fixture_errors_total, 0L) &&
     identical(observed$outside_test_warning_total, 0L) &&
     !length(observed$outside_test_warning_classes) && isTRUE(observed$private_library_exact)
+  if (compat) structure_ok = structure_ok && isTRUE(observed$exporter_free) &&
+    is.list(observed$dependencies) &&
+    identical(names(observed$dependencies),
+      c("callr", "processx", "testthat", "withr", "otelsdk")) &&
+    all(vapply(observed$dependencies, function(version) {
+      is.character(version) && length(version) == 1L && !is.na(version) && nzchar(version)
+    }, logical(1)))
   summary = list(mode = mode, packet = packet, source_sha = Sys.getenv("GPTR_EXPECTED_SOURCE"),
     os = .Platform$OS.type, structural_gates_passed = isTRUE(structure_ok),
     passed = isTRUE(structure_ok) && counts("failed") == 0L,

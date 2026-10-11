@@ -1574,3 +1574,46 @@ swap and260GiB free disk; no thermal warning. Local-heavy jobs remain HELD for r
 pressure; shared Ollama is untouched. All four plan checks remain the verified b984
 artifact because plan content is unchanged. Separate security/CRT/PATH/locale admission
 boundaries, upstream compatible release, adoption and merge remain OPEN.
+
+
+## Complete26cab native observations and next correction — 2026-10-11
+
+Actual26cab/run38181009987 is COMPLETE RED with0 active hosted leases. Both hosts
+pass six-path scoped lint. Linux stock/patched strict each186P/1F/0W/0S: only the
+startup hook marker fails. Stock/patched admissions each136P/4F/0W/0S complete and
+retain three native-startup seed mismatches plus PATH absence mismatch. Upstream
+35P/1F remains the short R CMD output read despite poll_io. All seven Linux owned
+families settle with0 marked survivors; sampled peak family RSS ranges152-606MiB.
+Windows stock strict164P/23F/0W/0S retains original48P/8F and reaches extended
+oracles; stock admissions99P/16F/0W/0S retain startup/parent mismatches plus an
+incomplete typed native PATH construction failure. Its actual child PATH is unknown.
+All three Windows families settle with0 survivors and sampled peak185-619MiB. Windows
+patched source fails post-apply exact hashes before install; no patched test ran.
+
+Vector-safe hook append fixes source-confirmed repeated insertion after every line
+of default_load_hook; typed error/marker tests remain unchanged. R CMD read-all
+uses the documented poll/drain-through-EOF method, retaining the nonempty oracle.
+Git patch application now has per-command autocrlfFALSE/eolLF with no global config
+changes or source/hash normalization. A capped20-row/16KiB pinned-filename/hash
+mismatch report is retained if exact maps differ; installation stays blocked. On
+Mac both original autocrlf and overridden source-only applies match all168 hashes;
+the Windows line-ending hypothesis is not proven by that Mac check. Diagnostics
+unit passes, including truncation/missing/unexpected count and no unknown filenames.
+
+After core6/9 and exact stock controls pass in each fresh hosted job, four complete
+unchanged upstream files run stock/patched separately:20 lifecycle/error/stream,
+hook, timeout and tracing titles. Five actual stdlib controller units pass0.011s
+with no R/network/child requests; they enforce core-before-compatibility, dependency
+parity and explicit failure. The optional otelsdk test dependency has no GPTR Import.
+Fresh children remove OTEL settings and verify an in-memory recorder, disabled SDK
+before/after and exact five-field dependency versions. All warning/error/title/skip,
+300s/2GiB/1MiB output and owned-settlement gates stay strict; no test is rewritten.
+Current source-qualified repeat is ONGOING, at most two jobs, no local-heavy or model
+execution. Original RED artifacts are retained in native-26cab-evidence. No plan
+bytes changed; verified all4 b984 checks remain the plan evidence. Seven-variable
+CRT, essential PATH, non-ASCII matching, separate Windows security, upstream release,
+production adoption/merge and broader local/frontend/model/CRAN gates remain OPEN.
+
+Fresh15:48:53PDT resource witness:load64.65/75.27/58.56,51.46%CPUidle,95GiB RAM used/
+33GiB unused,20507.50MiB swap,259GiB disk free, no thermal/performance warning. CPU/load
+still fails the local gate; hosted-only execution and shared Ollama preservation continue.

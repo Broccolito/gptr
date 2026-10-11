@@ -386,7 +386,7 @@
 +  expect_false(p$is_alive())
 +  expect_identical(p$get_exit_status(), 0L)
 +  p$poll_io(0L)
-+  expect_match(p$read_output_lines(), ".")
++  expect_match(p$read_all_output_lines(), ".")
 +  p$cleanup()
 +  expect_true(identical(Sys.getenv(), before))
 +})

@@ -32,5 +32,45 @@
       "rscript_process launches without temporary parent environment mutation",
       "synchronous r launches without temporary parent environment mutation"
     ]
+  },
+  "compat-r-bg": {
+    "file": "test-r-bg.R",
+    "titles": [
+      "r_bg runs",
+      "r_bg takes arguments",
+      "r_bg can be killed",
+      "r_bg can get the error back",
+      "r_bg exit status is non-zero on error (#291)",
+      "can read standard output",
+      "can read standard error",
+      "can read stdout and stderr",
+      "cleans up temporary files"
+    ]
+  },
+  "compat-hook": {
+    "file": "test-hook.R",
+    "titles": [
+      "set options with hook"
+    ]
+  },
+  "compat-timeout": {
+    "file": "test-timeout.R",
+    "titles": [
+      "r with timeout"
+    ]
+  },
+  "compat-otel": {
+    "file": "test-otel.R",
+    "titles": [
+      "callr::r() produces a span when tracing is enabled",
+      "callr::rscript() produces a span",
+      "callr::rcmd() produces a span",
+      "TRACEPARENT is propagated to subprocess",
+      "subprocess errors generate an exception event",
+      "r_session produces spans for the session lifecycle",
+      "r_session$read sets message and status_code attributes",
+      "r_process produces a span and records the get_result event",
+      "tracing is disabled when no SDK is configured"
+    ]
   }
 }

@@ -1,5 +1,5 @@
 {
-  "status": "prepared-source-only-followup-e733",
+  "status": "prepared-source-only-followup-26cab",
   "local_execution": false,
   "runtime_changes": false,
   "upstream_source": {
@@ -22,7 +22,7 @@
     "retained_windows_fail": 8
   },
   "amended": {
-    "tests/testthat/helper-callr-parent-environment.R": "0240ec316f716baa534ddd65a6a74c4b94c90c9755a9f2fcd5be37c6378d658c",
+    "tests/testthat/helper-callr-parent-environment.R": "e7a46864b246d6de2f4788afdb2ae524da9f96b27ac46dc6a61beca52cb67f14",
     "tests/testthat/test-callr-parent-environment.R": "d1ca48d88c0378f7a4b628202301d9c52ff9bbdf0c707e61cf6e61bd90aeb459",
     "tests/testthat/test-callr-startup-admission.R": "82d9ed1d825a54d53fd286ecbc4285dae72c57700d1d8aede20071b0d4921654",
     "tests/testthat/helper-proc-backpressure.R": "e6f579c08acd9ebfe66b238da803f532dbf9adafa8bef572051a8235ddd75bba"
@@ -85,5 +85,13 @@
     "original_strict_cases_unchanged": true,
     "assertion_count_or_limits_changed": false,
     "new_execution": "PENDING"
+  },
+  "followup_26cab": {
+    "source_sha": "26cab5af1d593bc51a57a6149c76ffd88c89358e",
+    "actual_run_id": 38181009987,
+    "hook_fixture_sha256": "e7a46864b246d6de2f4788afdb2ae524da9f96b27ac46dc6a61beca52cb67f14",
+    "custom_hook_appended_once_after_default_vector": true,
+    "strict_and_admission_assertions_or_limits_changed": false,
+    "native_execution": "PENDING"
   }
 }
