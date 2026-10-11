@@ -150,7 +150,10 @@ optional_titles = list(
   "test-storage-boundaries.R" = c(
     "cache info and cleanup stay inside owned cache directories",
     "checkpoint GC never removes foreign content through storage links",
-    "discovered project instructions cannot read escaped or guarded link targets")
+    "discovered project instructions cannot read escaped or guarded link targets"),
+  "test-lint-rules.R" = c(
+    "R/ follows the package lint rules (contract section 12.3, IC-72)",
+    "each lint rule catches its violation (negative controls)")
 )
 
 optional_select = function(pattern, root) {

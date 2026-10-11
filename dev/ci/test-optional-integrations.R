@@ -574,3 +574,36 @@ testthat::test_that("split filesystem cases require real assertions without late
     }
   }
 })
+
+testthat::test_that("package-wide lint rules and their negative controls cannot silently skip", {
+  file = "test-lint-rules.R"
+  titles = c(
+    "R/ follows the package lint rules (contract section 12.3, IC-72)",
+    "each lint rule catches its violation (negative controls)")
+  testthat::expect_identical(optional_titles[[file]], titles)
+  rows = lapply(titles, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, titles)
+    testthat::expect_identical(result$platform_guard_cases, character())
+    for (i in seq_along(rows)) {
+      testthat::expect_false(optional_allowed_skip(file, titles[[i]], windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      messages = c(failed = "Failed", warnings = "Warnings", skipped = "Skipped",
+        passed = "assertions")
+      for (field in names(messages)) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+      }
+      late_skip = rows
+      late_skip[[i]]$passed = 3L
+      late_skip[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late_skip, file, windows), "Skipped")
+    }
+    testthat::expect_error(optional_gate(c(rows, list(record("unrelated lint capability",
+      passed = 3L, skipped = 1L))), file, windows), "Skipped")
+  }
+})

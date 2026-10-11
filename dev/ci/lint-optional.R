@@ -18,6 +18,7 @@ paths = c(
   "tests/testthat/helper-proc-writer-runtime.R", "tests/testthat/test-proc-writer-runtime.R",
   "tests/testthat/test-proc-spawn.R", "tests/testthat/test-proc-supervise.R",
   "tests/testthat/test-http-reactor.R", "tests/testthat/test-arch-layers.R",
+  "tests/testthat/test-lint-rules.R",
   "tests/testthat/test-mcp-client.R", "tests/testthat/test-subagent-worker.R",
   "tests/testthat/test-cli-common.R", "tests/testthat/test-cli-claude.R",
   "tests/testthat/test-cli-codex.R",
