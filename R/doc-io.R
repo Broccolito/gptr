@@ -149,7 +149,7 @@ doc_write = function(doc, lines, check = TRUE) {
   }
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   bytes = doc_serialize(lines, doc$eol, doc$bom, doc$final_nl)
-  write_atomic(path, bytes)
+  write_atomic(path, bytes, expected_md5 = if (check) doc$md5 else NULL)
   doc$lines = lines
   doc$md5 = cli::hash_raw_md5(bytes)
   invisible(doc)

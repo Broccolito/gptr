@@ -22,9 +22,10 @@ file_rename = function(from, to) {
 #' The bytes go to a temporary file in the same directory (with the permission bits of an
 #' existing `path`, else `mode`), which is renamed over `path`; the rename is retried 3 times with
 #' 100 ms pauses, then the file is written in place after an md5 check that nobody else changed it
-#' meanwhile.
+#' meanwhile. `expected_md5` additionally checks before each replacement: NULL means no document
+#' expectation, NA means an absent target; a mismatch is a document conflict.
 #' @noRd
-write_atomic = function(path, content, mode = "0600") {
+write_atomic = function(path, content, mode = "0600", expected_md5 = NULL) {
   check_string(path, "path")
   if (is.character(content)) {
     lines = as_utf8(content)
@@ -61,6 +62,13 @@ write_atomic = function(path, content, mode = "0600") {
                reason = "destination permissions")
   }
   for (attempt in 1:4) {
+    if (!is.null(expected_md5)) {
+      now = if (file.exists(path)) unname(tools::md5sum(path)) else NA_character_
+      if (!identical(expected_md5, now)) {
+        gptr_abort(paste0("The document changed on disk since it was read: ", path),
+                   "doc_write", path = path, reason = "conflict")
+      }
+    }
     if (file_rename(tmp, path)) return(invisible(path))
     if (attempt < 4L) Sys.sleep(0.1)
   }
@@ -70,7 +78,7 @@ write_atomic = function(path, content, mode = "0600") {
       paste0("Cannot write '", path, "': the file changed while gptr was writing it."),
       "doc_write",
       path = path,
-      reason = "concurrent change"
+      reason = if (is.null(expected_md5)) "concurrent change" else "conflict"
     )
   }
   write_bytes(path, bytes)

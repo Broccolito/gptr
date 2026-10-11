@@ -157,7 +157,7 @@ test_that("a lock whose pid file cannot be written is not left behind", {
   local_project()
   f = file.path(getwd(), "a.R")
   writeLines("x = 1", f)
-  testthat::local_mocked_bindings(write_atomic = function(path, content) stop("disk full"))
+  testthat::local_mocked_bindings(write_atomic = function(path, content, ...) stop("disk full"))
   expect_error(doc_lock(f), "disk full")
   expect_false(dir.exists(doc_lock_dir(f)))
 })
@@ -228,7 +228,7 @@ test_that("a written document's md5 is that of the bytes written, not of a later
   writeLines("x = 1", f)
   doc = doc_read(f)
   d2 = testthat::with_mocked_bindings(doc_write(doc, c("x = 1", "y = 2")),
-    write_atomic = function(path, content) {
+    write_atomic = function(path, content, ...) {
       writeBin(content, path)
       cat("w = 9\n", file = path, append = TRUE)
       invisible(path)
@@ -242,6 +242,63 @@ test_that("a written document's md5 is that of the bytes written, not of a later
   expect_identical(readLines(f), c("x = 1", "y = 2", "w = 9"))
   d3 = doc_write(doc_read(f), "x = 0")
   expect_identical(d3$md5, unname(tools::md5sum(f)))
+})
+
+test_that("checked document writes preserve edits made during temporary preparation", {
+  for (existing in c(TRUE, FALSE)) local({
+    project = local_project()
+    path = file.path(project, "job.R")
+    if (existing) writeLines("original = 1", path)
+    doc = doc_read_or_new(path)
+    writer = write_bytes
+    prepared = FALSE
+    local_mocked_bindings(write_bytes = function(file, bytes) {
+      writer(file, bytes)
+      writeLines("editor = 2", path)
+      prepared <<- TRUE
+    })
+    cnd = expect_error(doc_write(doc, "generated = 3"), class = "gptr_error_doc_write")
+    expect_identical(cnd$reason, "conflict")
+    expect_true(prepared)
+    expect_identical(readLines(path), "editor = 2")
+    expect_length(list.files(project, pattern = "^[.]gptr-write-", all.files = TRUE), 0L)
+  })
+})
+
+test_that("unchecked document writes keep intentional replacement semantics", {
+  project = local_project()
+  path = file.path(project, "job.R")
+  doc = doc_read_or_new(path)
+  writer = write_bytes
+  local_mocked_bindings(write_bytes = function(file, bytes) {
+    writer(file, bytes)
+    writeLines("editor = 2", path)
+  })
+  written = doc_write(doc, "generated = 3", check = FALSE)
+  expect_identical(readLines(path), "generated = 3")
+  expect_identical(written$md5, unname(tools::md5sum(path)))
+})
+
+test_that("checked document writes detect edits between rename attempts", {
+  project = local_project()
+  path = file.path(project, "job.R")
+  writeLines("original = 1", path)
+  doc = doc_read(path)
+  rename = file_rename
+  attempts = 0L
+  local_mocked_bindings(file_rename = function(from, to) {
+    attempts <<- attempts + 1L
+    if (attempts == 1L) {
+      writeLines("editor = 2", to)
+      return(FALSE)
+    }
+    rename(from, to)
+  })
+  cnd = expect_error(doc_write(doc, "generated = 3"), class = "gptr_error_doc_write")
+  expect_identical(cnd$reason, "conflict")
+  expect_identical(attempts, 1L)
+  expect_identical(readLines(path), "editor = 2")
+  expect_length(list.files(project, pattern = "^[.]gptr-write-", all.files = TRUE), 0L)
 })
 
 test_that("a document that cannot be opened is refused with reason unreadable", {

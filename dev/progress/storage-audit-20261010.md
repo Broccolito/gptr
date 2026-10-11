@@ -4,7 +4,7 @@ Scope: static review at `89525673ae4d9e8c76da0526a134e59de03615d1`, with one rea
 path-review child, followed by the authorized disposable offline regressions below.
 No provider, installer, browser or package-check job was started.
 The real repository `.gptr/`, credential files and user state were not read or changed.
-Findings 1 and 2 are reproduced; the remaining candidates are static review nominations.
+Findings 1, 2 and 5 are reproduced; the remaining candidates are static review nominations.
 CodeGraph is absent. Conventions, architecture sections 6.9/6.10 and contract section 15
 (especially IC-51/52/59/70/71) govern the expected behavior.
 
@@ -48,6 +48,24 @@ CodeGraph is absent. Conventions, architecture sections 6.9/6.10 and contract se
    unproven project bytes must be rejected before deserialization. Retain valid own-process
    and dead-process recovery coverage. Nomination: fail closed when provenance cannot be
    established; evaluate a plain-data sidecar format rather than loading arbitrary R objects.
+
+   Further static review: IC-51 requires a later process to recover a dead writer; live-PID
+   records stay deferred, while re-running that script adopts dead upserts and writes at exit.
+   Denying every Windows read or accepting only this process's PID would break legitimate
+   recovery. Existing tests write dead/PID-reused/adopted records through the production writer
+   (`test-doc-io.R:346` onward); only the private-mode provenance test skips Windows.
+   [R Core's CVE patch reply](https://stat.ethz.ch/pipermail/r-devel/2024-April/083393.html)
+   identifies the older-R backport, separately from any unrun gptr payload experiment.
+
+   The read-only child nominated new Windows sidecars in existing user-owned durable data
+   storage, retaining the document-path hash, atomic writer and recovery behavior. This needs
+   a scoped contract/path migration, cache-info discovery and a Windows ACL qualification;
+   legacy project-local RDS files must remain intact with explicit pending-recovery reporting,
+   not automatic import or silent loss. A reader spy returning only a benign object can
+   establish reader-before-validator ordering and require zero RDS reads of unauthenticated
+   project bytes. Pair it with dead/live-PID, adoption, conflict and interrupted-write positive
+   controls. JSON removes R object deserialization but does not authenticate supplied upserts.
+   No Windows/provenance code or policy has been changed.
 
 4. **P2 candidate: private transcripts and compressed file pre-images inherit public umask.**
    New [session JSONL writes](/Users/wgu/Desktop/gptr/R/session-store.R:114) use `file(...,"wb")`
@@ -156,7 +174,32 @@ warnings/skips**, 13.4 s total test duration (601 document, 128 checkpoint, 85 i
 whitespace check also passes. No timing/RSS profile was requested for these tiny witnesses.
 These resolved-path checks address the reproduced
 stable-link cases; they do not claim an atomic filesystem authorization boundary against a
-concurrent link replacement. The Windows sidecar, private-mode, concurrent-edit and declared
-workspace-root ownership candidates remain unpatched pending separate recovery/policy review.
-No real workspace cleanup is authorized, and previously verified `8952567` source archives
-do not include these uncommitted repairs.
+concurrent link replacement. The Windows sidecar, private-mode and declared workspace-root
+ownership candidates remain unpatched pending separate recovery/policy review. The checked
+document concurrent-edit repair is recorded below.
+No real workspace cleanup is authorized. Root committed containment as `2e4b709`; previously
+verified `8952567` source archives do not include it.
+
+## Checked-document concurrent-edit repair
+
+Root separately granted `R/doc-io.R`, the existing focused tests and the optional internal
+`write_atomic()` expectation in `R/utils-paths.R`. Synthetic writer hooks edit the destination
+while temporary bytes are prepared, including creation of a previously absent destination;
+another fixture edits it between failed/successful rename attempts. Original source overwrote
+the editor text: **RED 10 failures/392 passes, zero counted warnings/skips**, 24.2 s.
+
+Checked `doc_write()` now passes the original document MD5 through to `write_atomic()`, which
+checks it immediately before each rename. A mismatch is the existing `reason="conflict"`, so
+the document rewrite path may re-read/re-locate; its final in-place-fallback conflict uses
+the same reason. `NULL` means no document expectation; `NA_character_` requires absence.
+Unconditional `check=FALSE` replacement remains intentional, and unrelated helper writers
+keep their previous replacement/fallback behavior. The private temporary-file and existing
+destination-mode logic is unchanged. This reduces the witnessed preparation/retry window;
+it does not implement an OS-level atomic compare-and-replace.
+
+`doc-io|utils-paths` GREEN: **511 passes, zero failures/countable warnings/skips**, 22.8 s
+(402 document assertions, 109 path/writer assertions). Three-file lint: **zero lints**, exit 0;
+tracked whitespace check passes. Logs are the ignored `doc-concurrent-{red,green,lint}.log`
+under `dev/.validation/ci-exact-tarball-20261010/`; the known testthat built-version advisory
+is preserved outside counts. No provider, installer, real document/state or credential was
+used. Source review/commit and fresh archive validation belong to root.
