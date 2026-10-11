@@ -413,3 +413,133 @@ testthat::test_that("an unhandled promise in either owned log remains a hard fai
     writeLines("controlled ordinary fixture output", path)
   }
 })
+
+original_regression_titles = list(
+  "test-utils-encoding.R" = c(
+    "as_utf8() keeps valid UTF-8 bytes under LC_ALL=C where enc2utf8() does not (IC-62)",
+    "read_utf8() and write_utf8() round-trip CRLF, BOM and missing final newlines"),
+  "test-utils-paths.R" = c(
+    "write_atomic() falls back to an in-place write when rename keeps failing (IC-51)",
+    "path_norm() expands '~' before it turns backslashes into slashes (CI-5)",
+    "path_class protects local credential directories and env files"),
+  "test-tool-write.R" = c(
+    "write creates parent directories and writes a new file verbatim",
+    "an existing CRLF file keeps CRLF, its BOM and its encoding"),
+  "test-tool-walk.R" = c(
+    "the walker prunes .git, node_modules, renv/library; dotfiles only with hidden = TRUE",
+    "walk_files() returns path, size, mtime, type and honours max"),
+  "test-ckpt-files.R" = c(
+    "the blob store deduplicates, compresses small text and restores atomically",
+    "a mutating step records created, modified and deleted files; undo and redo swap them",
+    "undo keeps a file edited after the turn (3-way) unless forced"),
+  "test-tool-edit.R" = c(
+    "NFKC compatibility forms match through stringi",
+    "CRLF, BOM, mixed endings, CP1252, UTF-16 and stray bytes round-trip byte for byte",
+    "a patch that names one file in two operations is refused and writes nothing"),
+  "test-storage-boundaries.R" = c(
+    "cache info and cleanup stay inside owned cache directories",
+    "checkpoint GC never removes foreign content through storage links",
+    "discovered project instructions cannot read escaped or guarded link targets"))
+
+original_os_guards = list(
+  "test-utils-paths.R" = c(
+    "write_atomic() writes privately, keeps replaced permission bits, else `mode`",
+    "lexical control and secret paths stay protected when they are symlinks"),
+  "test-tool-write.R" = c(
+    "write refuses directories and writes through symbolic links keeping the mode",
+    "a new file gets the umask's default mode, an existing one keeps its own",
+    "a relative link that climbs with .. resolves from the link's physical directory",
+    "a chain of links is followed; a loop or a dangling link is refused",
+    "non-ASCII directories, files and relative links work in a C locale",
+    "a file that may be written but not read is written verbatim, keeping its mode",
+    "a link text that climbs after a symlinked component resolves as the kernel does",
+    "an existing file the process may not write is refused with EACCES and left unchanged"),
+  "test-tool-walk.R" = c(
+    "a file name holding a newline is matched like git",
+    "a symlinked directory is listed but not followed"),
+  "test-ckpt-files.R" = c(
+    "the walk prunes .git and .gptr and lists links unfollowed; restores avoid them",
+    "files over the capture cap and symbolic links are not restorable",
+    "undo restores mode bits; old rows, later edits and missing copies are not written",
+    "a file that cannot be written or read is an item and the undo goes on",
+    "files that cannot be read are listed, never captured and stop nothing else"),
+  "test-tool-edit.R" = c(
+    "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
+    "Delete File and a move remove only the file they name, whatever its characters",
+    "a move onto its own file under another spelling keeps the file and takes the name",
+    "two operations on one file through a directory link or a folded name are refused"))
+
+testthat::test_that("original regressions require their representative cases on both hosts", {
+  for (file in names(original_regression_titles)) {
+    titles = original_regression_titles[[file]]
+    testthat::expect_identical(optional_titles[[file]], titles)
+    rows = lapply(titles, record)
+    for (windows in c(FALSE, TRUE)) {
+      result = optional_gate(rows, file, windows)
+      testthat::expect_true(result$passed)
+      testthat::expect_identical(result$mandatory_cases, titles)
+      testthat::expect_false(result$platform_guard_only)
+      for (i in seq_along(rows)) {
+        testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+        testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+        messages = c(failed = "Failed", warnings = "Warnings", skipped = "Skipped",
+          passed = "assertions")
+        for (field in names(messages)) {
+          changed = rows
+          changed[[i]][[field]] = if (field == "passed") 0L else 1L
+          testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+        }
+      }
+    }
+  }
+})
+
+testthat::test_that("original OS guards are file-scoped and never excuse a Linux skip", {
+  testthat::expect_identical(optional_original_os_guards, original_os_guards)
+  for (file in names(original_os_guards)) for (name in original_os_guards[[file]]) {
+    testthat::expect_true(optional_allowed_skip(file, name, TRUE))
+    testthat::expect_false(optional_allowed_skip(file, name, FALSE))
+    testthat::expect_false(optional_allowed_skip("test-windows-link-policy.R", name, TRUE))
+    rows = lapply(original_regression_titles[[file]], record)
+    guarded = c(rows, list(record(name, passed = 0L, skipped = 1L)))
+    result = optional_gate(guarded, file, TRUE)
+    testthat::expect_identical(result$platform_guard_cases, name)
+    testthat::expect_identical(result$mandatory_cases, original_regression_titles[[file]])
+    testthat::expect_error(optional_gate(guarded, file, FALSE), "Skipped")
+    testthat::expect_error(optional_gate(c(rows, list(record("unrelated OS guard",
+      passed = 0L, skipped = 1L))), file, TRUE), "Skipped")
+  }
+})
+
+testthat::test_that("regression capabilities remain fatal even after earlier assertions", {
+  capabilities = list(
+    "test-utils-encoding.R" =
+      "as_utf8() keeps bytes that are not UTF-8 in a UTF-8 locale, on every R version",
+    "test-tool-walk.R" = "the file set equals git ls-files on a repository with tricky rules",
+    "test-ckpt-files.R" = c(
+      "already-compressed files are stored raw and come back byte for byte",
+      "undo and redo of a case-only rename keep the file"),
+    "test-tool-edit.R" = "NFKC compatibility forms match through stringi",
+    "test-storage-boundaries.R" =
+      "a cache-kind link to owned workspace storage still works")
+  for (file in names(capabilities)) for (name in capabilities[[file]]) {
+    for (windows in c(FALSE, TRUE)) {
+      testthat::expect_false(optional_allowed_skip(file, name, windows))
+      rows = lapply(original_regression_titles[[file]], record)
+      if (name %in% original_regression_titles[[file]]) {
+        i = match(name, original_regression_titles[[file]])
+        rows[[i]]$skipped = 1L
+      } else rows = c(rows, list(record(name, passed = 3L, skipped = 1L)))
+      testthat::expect_error(optional_gate(rows, file, windows), "Skipped")
+    }
+  }
+  file = "test-tool-edit.R"
+  name = "two operations on one file through a directory link or a folded name are refused"
+  rows = c(lapply(original_regression_titles[[file]], record),
+    list(record(name, passed = 3L, skipped = 1L)))
+  testthat::expect_false(optional_allowed_skip(file, name, FALSE))
+  testthat::expect_error(optional_gate(rows, file, FALSE), "Skipped")
+  result = optional_gate(rows, file, TRUE)
+  testthat::expect_identical(result$platform_guard_cases, name)
+  testthat::expect_false(name %in% result$mandatory_cases)
+})

@@ -115,7 +115,32 @@ optional_titles = list(
   "test-cli-codex.R" = c(
     "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
     "the next turn resumes the Codex thread with -c sandbox_mode=",
-    "a fake codex returns a function's numeric result through the HTTP MCP bridge")
+    "a fake codex returns a function's numeric result through the HTTP MCP bridge"),
+  "test-utils-encoding.R" = c(
+    "as_utf8() keeps valid UTF-8 bytes under LC_ALL=C where enc2utf8() does not (IC-62)",
+    "read_utf8() and write_utf8() round-trip CRLF, BOM and missing final newlines"),
+  "test-utils-paths.R" = c(
+    "write_atomic() falls back to an in-place write when rename keeps failing (IC-51)",
+    "path_norm() expands '~' before it turns backslashes into slashes (CI-5)",
+    "path_class protects local credential directories and env files"),
+  "test-tool-write.R" = c(
+    "write creates parent directories and writes a new file verbatim",
+    "an existing CRLF file keeps CRLF, its BOM and its encoding"),
+  "test-tool-walk.R" = c(
+    "the walker prunes .git, node_modules, renv/library; dotfiles only with hidden = TRUE",
+    "walk_files() returns path, size, mtime, type and honours max"),
+  "test-ckpt-files.R" = c(
+    "the blob store deduplicates, compresses small text and restores atomically",
+    "a mutating step records created, modified and deleted files; undo and redo swap them",
+    "undo keeps a file edited after the turn (3-way) unless forced"),
+  "test-tool-edit.R" = c(
+    "NFKC compatibility forms match through stringi",
+    "CRLF, BOM, mixed endings, CP1252, UTF-16 and stray bytes round-trip byte for byte",
+    "a patch that names one file in two operations is refused and writes nothing"),
+  "test-storage-boundaries.R" = c(
+    "cache info and cleanup stay inside owned cache directories",
+    "checkpoint GC never removes foreign content through storage links",
+    "discovered project instructions cannot read escaped or guarded link targets")
 )
 
 optional_select = function(pattern, root) {
@@ -125,6 +150,34 @@ optional_select = function(pattern, root) {
   if (!all(file.exists(paths))) stop("Missing selected integration files")
   paths
 }
+
+optional_original_os_guards = list(
+  "test-utils-paths.R" = c(
+    "write_atomic() writes privately, keeps replaced permission bits, else `mode`",
+    "lexical control and secret paths stay protected when they are symlinks"),
+  "test-tool-write.R" = c(
+    "write refuses directories and writes through symbolic links keeping the mode",
+    "a new file gets the umask's default mode, an existing one keeps its own",
+    "a relative link that climbs with .. resolves from the link's physical directory",
+    "a chain of links is followed; a loop or a dangling link is refused",
+    "non-ASCII directories, files and relative links work in a C locale",
+    "a file that may be written but not read is written verbatim, keeping its mode",
+    "a link text that climbs after a symlinked component resolves as the kernel does",
+    "an existing file the process may not write is refused with EACCES and left unchanged"),
+  "test-tool-walk.R" = c(
+    "a file name holding a newline is matched like git",
+    "a symlinked directory is listed but not followed"),
+  "test-ckpt-files.R" = c(
+    "the walk prunes .git and .gptr and lists links unfollowed; restores avoid them",
+    "files over the capture cap and symbolic links are not restorable",
+    "undo restores mode bits; old rows, later edits and missing copies are not written",
+    "a file that cannot be written or read is an item and the undo goes on",
+    "files that cannot be read are listed, never captured and stop nothing else"),
+  "test-tool-edit.R" = c(
+    "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
+    "Delete File and a move remove only the file they name, whatever its characters",
+    "a move onto its own file under another spelling keeps the file and takes the name",
+    "two operations on one file through a directory link or a folded name are refused"))
 
 optional_platform_guard = function(file, name, windows) {
   if (windows) return(FALSE)
@@ -140,6 +193,7 @@ optional_platform_guard = function(file, name, windows) {
 
 optional_allowed_skip = function(file, name, windows) {
   if (optional_platform_guard(file, name, windows)) return(TRUE)
+  if (windows && name %in% optional_original_os_guards[[file]]) return(TRUE)
   if (!windows) return(identical(file, "test-mcp-client.R") && identical(name,
     "a .cmd MCP command runs through cmd.exe /d /c call on Windows"))
   windows && ((identical(file, "test-artifact-app.R") && identical(name,
