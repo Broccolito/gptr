@@ -54,6 +54,7 @@ wpd_child_case = function(case, root, failure) {
       expected = lapply(c("worker_main", "worker_watch_tick", "worker_parent_check", "pid_alive"),
         function(name) paste(deparse(body(fun(name))), collapse = "\n"))
       names(expected) = c("worker_main", "worker_watch_tick", "worker_parent_check", "pid_alive")
+      phase_path = file.path(root, "phases.txt")
       script = function(request) {
         cat("parent-provider-proof\n", file = phase_path, append = TRUE)
         ns = asNamespace("gptr")
@@ -72,7 +73,7 @@ wpd_child_case = function(case, root, failure) {
       private = new.env(parent = baseenv())
       private$expected = expected
       private$proof_path = file.path(root, "worker-request.rds")
-      private$phase_path = file.path(root, "phases.txt")
+      private$phase_path = phase_path
       environment(script) = private
       stage = 1L
       phase("parent-fake-register")
