@@ -76,7 +76,11 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
       "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
       "  [System.IO.File]::WriteAllText($Stage, 'restore-applied')",
       "  $current = [System.IO.Directory]::GetAccessControl($Path, $section)",
-      "  if ($current.GetSecurityDescriptorSddlForm($section) -cne $original) {",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-acl-read')",
+      "  $restored = $current.GetSecurityDescriptorSddlForm($section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-sddl-read')",
+      "  if ($restored -cne $original) {",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-sddl-mismatch')",
       "    throw 'Owned bucket Access descriptor restoration did not match'",
       "  }",
       "  [System.IO.File]::WriteAllText($Stage, 'restore-verified')",
@@ -93,7 +97,8 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
                            error = function(error) "unreadable-marker")
           allowed = c("launch", "script-entered", "token-read", "private-acl-built",
             "private-acl-applied", "bucket-acl-read", "backup-saved", "deny-applied",
-            "restore-read", "restore-applied", "restore-verified")
+            "restore-read", "restore-applied", "restore-acl-read", "restore-sddl-read",
+            "restore-sddl-mismatch", "restore-verified")
           if (!(phase %in% allowed)) phase = "invalid-marker"
           # Emit only fixed stage labels, then rethrow the original condition unchanged.
           tryCatch(cat("Owned checkpoint ACL action=", action, " stage=", phase, "\n",
