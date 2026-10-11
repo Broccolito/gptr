@@ -1037,3 +1037,25 @@ before wheel install and separately requires actual reticulate prefix evidence i
 nominated R context. Earlier inventory/plan paragraphs are explicitly historical. No actual
 local Python execution/import/install or R/render/model/browser job occurred. Full CRAN,
 installed frontends, production callr empty-state/native gaps and merge remain OPEN.
+
+## Strict lint stop and unchanged integration rerun — 2026-10-11 06:22 PDT
+
+Exactf374dafbc73157b7823412446d257f9486b0276c/run38141881131 completes both hosted jobs
+but stops before installation, preflight or any of17 integration bodies. One object-usage
+lint at helper-worker-parent-death.R:58 lacks a local phase_path binding;52 other paths
+are clean.13 Python units and2721 strict result-gate assertions pass per host with no
+failures/warnings/skips. All4 fresh Linux plan stages pass25 plans/770 R blocks/0 parse-style
+problems/0 lints/39 equal source hashes;90 historical index warnings remain. Linux plan-only
+ZIP SHA256161085f8b3ca80c8e1f8d8902db338ff4dcfa5f54a50ea78cda885337b777075,8 retained files.
+
+eb55a5b binds the identical phase path before callback creation and assigns private state
+from that binding. Independent source review confirms original diagnostic error guards,
+positive oracles, time/resource limits and strict warnings unchanged. The same17 complete
+files must rerun; applied transport/runtime and diagnostic changes have no new actual GREEN
+evidence yet. This plan update requires fresh all4 checks. Hosted active leases0 before
+dispatch. Merge and current full CRAN remain pending.
+
+06:22:30 PDT load22.24/44.99/63.01, CPU55.85%idle, RAM93GiB used/35GiB unused,
+swap23,951.75MiB used and disk13GiB keep local heavy jobs held; no thermal warning. Shared
+Ollama and unrelated processes/files remain untouched. Private wheels, local renders and
+installed frontend/model tests remain WAITING.

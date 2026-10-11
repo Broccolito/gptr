@@ -1,14 +1,14 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 06:06 PDT
+## Optional integrations and Windows transport — 2026-10-11 06:22 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, source fixes pushed through57bebf1. Primary main stays718e81e;
+`codex/skipped-platform-tests`, source fixes pushed througheb55a5b. Primary main stays718e81e;
 maintainer dirt/staged chunks, historical tests, secrets and shared Ollama are preserved.
-At05:52:06 PDT load134.37/104.57/81.61, CPU16.73%idle, RAM83GiB used/45GiB unused,
-swap24,391.75MiB used and disk13GiB hold all local heavy jobs. No thermal warning clears
+At06:22:30 PDT load22.24/44.99/63.01, CPU55.85%idle, RAM93GiB used/35GiB unused,
+swap23,951.75MiB used and disk13GiB hold all local heavy jobs. No thermal warning clears
 load/disk gates. Do not stop unrelated work or delete user files. Hosted offline validation
-allows at most two jobs; actual26dc completed and both leases are free before next dispatch.
+allows at most two jobs; actualf374 completed and both leases are free before next dispatch.
 
 Exact26dc5185a8989157e48bfdbb7debc4c1d9d2c223/run38139096870 completed all17 full files.
 Linux2353P/0 failed conditions/0 R warnings/13 exact OS guards is GREEN. Windows2550P/
@@ -46,6 +46,14 @@ and adding fixed probe/ACL fields only. Registry36 files/165 titles/53 lint path
 adds bounded worker/Claude diagnostics; diagnostic publication failure cannot replace the
 original error. Actual parent-death and cancellation outcomes remain pending. The next exact-
 source run selects all17 complete files and all4 fresh Linux plan stages after this plan edit.
+Exactf374daf/run38141881131 stops before installation/preflight/all17 test bodies at one
+strict object-usage lint: phase_path lacked a local callback binding.52 other lint paths,13
+Python units and2721 result-gate assertions pass per host. All4 fresh Linux plan stages
+pass39 equal source hashes/770 R blocks/0 parse-style problems/0 lints;90 historical index
+warnings remain. eb55a5b binds the same path before callback creation; assertions, limits,
+diagnostic guards and warning policy are unchanged. Actual new lint/integration GREEN is
+pending. Rerun the same17 complete files plus fresh all4 plan stages on the next source.
+
 Require native bootstrap9998-byte limits, original duplex/no-reader/cancel, cold/warm/retire,
 raw environment, binary Codex append, provider/readiness/parent-only10s proof and all oracles.
 

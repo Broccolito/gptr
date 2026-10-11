@@ -472,9 +472,9 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
 | Windows filesystem safety | Actual26dc518 owned checkpoint ACL baseline and119 assertions pass; Codex effective denial/full descriptor restoration pass, but its independent appended LF oracle catches text-mode CRLF. ff3a587 appends binary LF while preserving byte/hash/ACL checks; native rerun pending. Actual MCP167 passes. Native absence remains7P/1F/1W; fixed numeric stages locate an ambiguous parent restoration failure before denied-probe proof. 7c69690 adds numeric probe/parent-DACL observations and one mandatory decoder test, preserving exact restoration and denial; native evidence pending. Effective denial/exact restoration and metadata warnings remain fatal. Arbitrary caller AI0 restoration and junction/unknown-reparse native evidence remain OPEN. |
 | Windows child stdin | Actual26dc518 cold19, warm42 and native retirement180 assertions pass at unchanged2s deadlines. Original native3 now46P/1F: duplex delivery fails after1703936 accepted bytes. Exactbea8c67 reproduces the publication race on both hosts: ordinary input4P/1F, alias5P and directory5P. Minimal8bfa6da now accepts only freshly validated ordinary input; native/full integration rerun pending. Windows parent-death135P/1F fails before provider request/readiness proof, and Claude240P/3F starts only two turns. Reviewed57bebf1 captures bounded worker/Claude startup conditions while preserving original errors and warnings.10s parent-only proof, native limits, cleanup and all positive oracles remain unchanged; blocking-parent-death coverage and D-019 remain OPEN. |
-| Validation/merge | Actual26dc518/run38139096870 completed all17 full files: Linux2353P/0F/0R warnings/13 exact OS guards GREEN; Windows2550P/13 failed conditions (11 failures+2 errors)/1R warning/10 guards RED. Both pass53 scoped lint paths,13 Python units,2571 result-gate assertions and18 cleanup records with no marked survivors. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings.Exactbea8c67 baseline43-case run completes expected ordinary-publication RED on both hosts; all4 fresh Linux plan stages pass/39 equal hashes. Applied8bfa6da/7c69690/57bebf1 require the next full17-file rerun, registry36 files/165 titles/53 lint paths, plus all4 fresh Linux plan stages. Merge WAITING strict relevant GREEN. |
+| Validation/merge | Actual26dc518/run38139096870 completed all17 full files: Linux2353P/0F/0R warnings/13 exact OS guards GREEN; Windows2550P/13 failed conditions (11 failures+2 errors)/1R warning/10 guards RED. Both pass53 scoped lint paths,13 Python units,2571 result-gate assertions and18 cleanup records with no marked survivors. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings.Exactbea8c67 baseline43-case run completes expected ordinary-publication RED on both hosts; all4 fresh Linux plan stages pass/39 equal hashes. Applied8bfa6da/7c69690/57bebf1 full17 nomination atf374daf stops before all bodies at one callback-binding lint;52 other paths,13 Python units and2721 result-gate assertions pass per host. All4 fresh Linux plan checks pass/39 equal hashes. eb55a5b binds the unchanged path; same17-file rerun and all4 fresh plan checks required. Registry36 files/165 titles/53 lint paths. Merge WAITING strict relevant GREEN. |
 
-Current follow-up checkpoint (2026-10-11 06:06 PDT): actualbea8c67/run38141027264 completes
+Current follow-up checkpoint (2026-10-11 06:22 PDT): actualbea8c67/run38141027264 completes
 all43 writer cases. Linux308P/1F/0R warnings/8 exact OS guards; Windows469P/2F/1R warning/
 0 skips. Both reproduce the single ordinary-publication regression; alias/directory controls
 pass5 each. The separate Windows absence7P/1F/1W remains open. Two cleanup records per host
@@ -491,9 +491,17 @@ files on both hosts, with44 writer cases/36 files/165 titles/53 lint paths and a
 plan stages. Native bootstrap size, duplex/no-reader/cancel, cold/warm/retirement, Codex binary
 bytes, raw environment, worker parent-death and Claude starts must all pass independently.
 
+Exactf374daf/run38141881131 stops before installation/preflight/all17 test bodies at one
+strict object-usage lint: phase_path lacked a local callback binding.52 other lint paths,13
+Python units and2721 result-gate assertions pass per host. All4 fresh Linux plan stages
+pass39 equal source hashes/770 R blocks/0 parse-style problems/0 lints;90 historical index
+warnings remain. eb55a5b binds the same path before callback creation; assertions, limits,
+diagnostic guards and warning policy are unchanged. Actual new lint/integration GREEN is
+pending. Rerun the same17 complete files plus fresh all4 plan stages on the next source.
+
 Local R, install/import, Quarto/render, GUI/kernel, build/check and model jobs remain WAITING:
-at05:52:06 PDT load134.37/104.57/81.61, CPU16.73%idle, RAM83GiB used/45GiB unused,
-swap24,391.75MiB used and disk13GiB. No thermal/performance warning is reported; load and
+at06:22:30 PDT load22.24/44.99/63.01, CPU55.85%idle, RAM93GiB used/35GiB unused,
+swap23,951.75MiB used and disk13GiB. No thermal/performance warning is reported; load and
 disk gates remain unsafe. Preserve shared Ollama and unrelated work. Do not delete user files
 or stop models. Swap occupancy alone does not establish active paging. Owned process-family
 samples do not describe whole-job or model RAM. The nofollow observer remains inactive;
