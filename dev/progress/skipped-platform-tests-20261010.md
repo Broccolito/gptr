@@ -856,3 +856,36 @@ At 04:14 PDT load is 138.30/79.23/62.26, RAM 123 GiB used/4339 MiB unused, swap
 All local jobs stay held; shared Ollama and unrelated processes/files remain untouched.
 At 04:16 remote main remains 718e81e and no open PR exists. Reviewed candidate commits are
 pushed through e5166b2; no merge or release is claimed.
+
+## Reviewed absence probe and expanded hosted scope — 2026-10-11 04:41 PDT
+
+Independently reviewed v3 is applied in ffcd3e8. The runtime changes only the native
+Windows mailbox-absence probe: two typed missing-path exceptions permit creation; other
+errors remain fatal. The fixture requires protected creation, effective denial, unchanged
+public canaries, exact saved Access restoration and independently bounded recovery. Exact
+utility settlement, original PID/create-time death and marker/table removal precede recovery
+or deletion; unknown settlement retains backups and fails. Original 35 cases, native-three,
+cold/warm fixtures and all 2/5/30/60-second and resource limits remain unchanged. No retirement
+is adopted. Reviewed registry commit 679f5d6 requires 35 files/148 titles/51 lint paths.
+
+[Run 38135856469](https://github.com/Broccolito/gptr/actions/runs/38135856469) started at
+04:31 PDT on exact 679f5d650a9dad643cc5e035ab1e76944721fb14. Its 16 complete files retain
+the previous 13 and add architecture, Quarto/knitr and language bridges. Both hosts pass
+the dependency/result-gate, scoped lint and package-install steps. Actual raw bodies and
+counts await verified artifacts; Windows remains active and Linux is running its four
+fresh plan stages. The updated plan source is frozen in that exact checkout. Both hosted
+leases remain occupied; no additional CI or local jobs are launched.
+
+A separate source CRAN boundary check confirms unchanged DESCRIPTION, 14 Imports, NAMESPACE,
+.Rbuildignore, no src/compiled code and no tracked local/credential/validation payload. Raw
+R bytes grow 38,714 (1.24%) relative to 718e81e; this does not measure tar or installed size.
+[CRAN policy](https://cran.r-project.org/web/packages/policies.html) generally limits data
+and documentation to 5 MB each and prefers source archives at most 10 MB. Exact current
+full CRAN/timing/archive verification remains WAITING.
+
+At 04:27 PDT load is 37.34/55.58/59.56, RAM 114 GiB used/13 GiB unused, swap 20,916.12 MiB
+used, free disk 19 GiB and no thermal/performance warning. The minimum disk/load gates remain
+unsafe; local dependency installation/imports/renders/models/GUI stay held. Shared Ollama
+and unrelated processes/files remain untouched. A dedicated Windows worker parent-death
+witness and fixed private protocol-readiness diagnostics are prepared only, undergoing
+source review; neither changes the active runtime or current CI selection.
