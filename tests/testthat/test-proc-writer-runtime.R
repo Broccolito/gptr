@@ -820,3 +820,39 @@ test_that("writer refuses a directory published after its directory snapshot", {
   expect_identical(list.files(path, all.files = TRUE, no.. = TRUE), character())
   expect_identical(readBin(file.path(x$st$dir, "owner"), "raw", n = 128L), owner)
 })
+
+test_that("absence observations retain only fixed probe and bounded parent ACL numbers", {
+  for (code in 1:4) {
+    x = rw_absence_observation(paste("GPTR_ABSENCE_PROBE", code))
+    expect_identical(x$key, "probe")
+    expect_identical(x$label, paste0("absence-probe-", code))
+  }
+  x = rw_absence_observation("GPTR_ABSENCE_PARENT_BEFORE 4096 1 28")
+  expect_identical(x$key, "parent-before")
+  expect_identical(x$label, "absence-parent-before-4096-1-28")
+  x = rw_absence_observation("GPTR_ABSENCE_PARENT_AFTER 5120 1 28")
+  expect_identical(x$key, "parent-after")
+  expect_identical(x$label, "absence-parent-after-5120-1-28")
+  x = rw_absence_observation("GPTR_ABSENCE_PARENT_COMPARE 1024 0 0")
+  expect_identical(x$key, "parent-compare")
+  expect_identical(x$label, "absence-parent-compare-1024-0-0")
+  expect_identical(rw_absence_observation("GPTR_ABSENCE_PARENT_BEFORE 65535 128 65536")$label,
+    "absence-parent-before-65535-128-65536")
+  expect_identical(rw_absence_observation("GPTR_ABSENCE_PARENT_COMPARE 65535 65536 1")$label,
+    "absence-parent-compare-65535-65536-1")
+  expect_null(rw_absence_observation("GPTR_ABSENCE_STAGE 11"))
+  expect_null(rw_absence_observation("GPTR-ABSENCE-RESTORED"))
+  for (line in c("GPTR_ABSENCE_PROBE 0", "GPTR_ABSENCE_PROBE 5", "GPTR_ABSENCE_PROBE 01",
+    "GPTR_ABSENCE_PROBE 1 ", "GPTR_ABSENCE_PROBE 1\r", "GPTR_ABSENCE_PROBE NaN",
+    "GPTR_ABSENCE_PARENT_BEFORE 65536 1 28", "GPTR_ABSENCE_PARENT_BEFORE 4096 129 28",
+    "GPTR_ABSENCE_PARENT_AFTER 4096 1 65537", "GPTR_ABSENCE_PARENT_COMPARE 0 65537 1",
+    "GPTR_ABSENCE_PARENT_COMPARE 0 0 2", "GPTR_ABSENCE_PARENT_COMPARE -1 0 1",
+    "GPTR_ABSENCE_PARENT_BEFORE 01 1 28", "GPTR_ABSENCE_PARENT_AFTER 1 1 Inf",
+    "GPTR_ABSENCE_PARENT_AFTER 1 1 1 private-SID-canary",
+    "GPTR_ABSENCE_PARENT_FOREIGN 1 1 1", paste0("GPTR_ABSENCE_PROBE ", strrep("1", 128)))) {
+    expect_error(rw_absence_observation(line), "Invalid absence observation", fixed = TRUE)
+  }
+  for (line in list(NULL, NA_character_, c("GPTR_ABSENCE_PROBE 1", "GPTR_ABSENCE_PROBE 2"))) {
+    expect_error(rw_absence_observation(line), "Invalid absence observation", fixed = TRUE)
+  }
+})

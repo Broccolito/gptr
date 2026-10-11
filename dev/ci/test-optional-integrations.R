@@ -210,7 +210,8 @@ writer_runtime_titles = c(
   "absence exit diagnostics retain numeric status without arbitrary content",
   "writer accepts ordinary input published after its directory snapshot",
   "writer refuses an alias published after its directory snapshot",
-  "writer refuses a directory published after its directory snapshot")
+  "writer refuses a directory published after its directory snapshot",
+  "absence observations retain only fixed probe and bounded parent ACL numbers")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -1530,10 +1531,10 @@ testthat::test_that("publication race cases require unique positive assertions o
     "writer refuses an alias published after its directory snapshot",
     "writer refuses a directory published after its directory snapshot")
   expected = c(writer_runtime_titles[seq_len(40L)], added)
-  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(optional_titles[[file]][seq_len(43L)], expected)
   testthat::expect_identical(length(expected), 43L)
   testthat::expect_identical(anyDuplicated(expected), 0L)
-  rows = lapply(expected, record)
+  rows = lapply(writer_runtime_titles, record)
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
     testthat::expect_true(result$passed)
@@ -1565,6 +1566,48 @@ testthat::test_that("publication race cases require unique positive assertions o
       }
     }
     unknown = record("unrelated publication capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+})
+
+
+testthat::test_that("absence numeric observations require a unique positive row on both hosts", {
+  file = "test-proc-writer-runtime.R"
+  title = "absence observations retain only fixed probe and bounded parent ACL numbers"
+  expected = c(writer_runtime_titles[seq_len(43L)], title)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(length(expected), 44L)
+  testthat::expect_identical(anyDuplicated(expected), 0L)
+  rows = lapply(expected, record)
+  i = match(title, expected)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_true(title %in% result$mandatory_cases)
+    testthat::expect_false(optional_allowed_skip(file, title, windows))
+    testthat::expect_false(optional_allowed_skip("test-proc-writer-retirement.R", title, windows))
+    testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+    messages = c(passed = "assertions", failed = "Failed", warnings = "Warnings")
+    for (field in names(messages)) {
+      changed = rows
+      changed[[i]][[field]] = if (field == "passed") 0L else 1L
+      testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+    }
+    late = rows
+    late[[i]]$passed = 3L
+    late[[i]]$skipped = 1L
+    testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+    for (kind in c("expectation_error", "expectation_warning")) {
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled absence observation condition"),
+          class = c(kind, "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows))
+    }
+    unknown = record("unrelated absence observation capability guard", passed = 3L, skipped = 1L)
     testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
   }
 })

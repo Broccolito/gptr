@@ -103,7 +103,8 @@ optional_titles = list(
     "absence exit diagnostics retain numeric status without arbitrary content",
     "writer accepts ordinary input published after its directory snapshot",
     "writer refuses an alias published after its directory snapshot",
-    "writer refuses a directory published after its directory snapshot"),
+    "writer refuses a directory published after its directory snapshot",
+    "absence observations retain only fixed probe and bounded parent ACL numbers"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",

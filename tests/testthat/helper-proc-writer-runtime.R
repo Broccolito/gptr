@@ -291,6 +291,33 @@ rw_absence_status = function(status, recovery = FALSE) {
   paste0("absence-", if (recovery) "recovery" else "main", "-status-", value)
 }
 
+rw_absence_observation = function(line) {
+  bad = function() stop("Invalid absence observation.")
+  if (!is.character(line) || length(line) != 1L || is.na(line) ||
+      nchar(line, type = "bytes") > 128L) bad()
+  if (!startsWith(line, "GPTR_ABSENCE_PROBE") &&
+      !startsWith(line, "GPTR_ABSENCE_PARENT_")) return(NULL)
+  integer = "(0|[1-9][0-9]*)"
+  pattern = paste0("^GPTR_ABSENCE_(PROBE ", integer, "|PARENT_(BEFORE|AFTER|COMPARE) ",
+    integer, " ", integer, " ", integer, ")$")
+  if (!grepl(pattern, line)) bad()
+  parts = strsplit(line, " ", fixed = TRUE)[[1L]]
+  key = switch(parts[[1L]], GPTR_ABSENCE_PROBE = "probe",
+    GPTR_ABSENCE_PARENT_BEFORE = "parent-before", GPTR_ABSENCE_PARENT_AFTER = "parent-after",
+    GPTR_ABSENCE_PARENT_COMPARE = "parent-compare")
+  bounds = if (key == "probe") {
+    4
+  } else if (key == "parent-compare") {
+    c(65535, 65536, 1)
+  } else {
+    c(65535, 128, 65536)
+  }
+  values = as.double(parts[-1L])
+  if (any(!is.finite(values)) || any(values > bounds) ||
+      (key == "probe" && values < 1)) bad()
+  list(key = key, label = paste(c(paste0("absence-", key), parts[-1L]), collapse = "-"))
+}
+
 # Run one native utility under the unchanged D-019 family/resource watchdog.
 rw_absence_case = function(case, root) {
   ns = asNamespace("gptr")
@@ -370,9 +397,36 @@ rw_absence_case = function(case, root) {
       unchanged,
       paste0("[Console]::WriteLine('", proof, "')"))
   }
+  observations = c(
+    "function ObserveParent([string]$label, [string]$descriptor) {",
+    "  if (@('BEFORE', 'AFTER') -cnotcontains $label -or $descriptor.Length -gt 262144) {",
+    "    throw 'Invalid parent observation' }",
+    "  $raw = [System.Security.AccessControl.RawSecurityDescriptor]::new($descriptor)",
+    "  $dacl = $raw.DiscretionaryAcl",
+    "  $flags = [int]$raw.ControlFlags",
+    "  if ($null -eq $dacl -or $dacl.Count -gt 128 -or $dacl.BinaryLength -gt 65536 -or",
+    "      $flags -lt 0 -or $flags -gt 65535) { throw 'Invalid parent observation' }",
+    "  $bytes = [byte[]]::new($dacl.BinaryLength)",
+    "  $dacl.GetBinaryForm($bytes, 0)",
+    "  [Console]::WriteLine('GPTR_ABSENCE_PARENT_' + $label + ' ' + $flags + ' ' +",
+    "    $dacl.Count + ' ' + $bytes.Length)",
+    "  return @{ Flags = $flags; Bytes = $bytes; Descriptor = $descriptor }",
+    "}",
+    "function CompareParent($before, $after) {",
+    "  $different = [Math]::Abs($before.Bytes.Length - $after.Bytes.Length)",
+    "  $length = [Math]::Min($before.Bytes.Length, $after.Bytes.Length)",
+    "  for ($i = 0; $i -lt $length; $i++) {",
+    "    if ($before.Bytes[$i] -ne $after.Bytes[$i]) { $different++ }",
+    "  }",
+    "  $equal = [int]($before.Descriptor -ceq $after.Descriptor)",
+    "  [Console]::WriteLine('GPTR_ABSENCE_PARENT_COMPARE ' +",
+    "    ($before.Flags -bxor $after.Flags) + ' ' + $different + ' ' + $equal)",
+    "}"
+  )
   script = paste(c(
     "$ErrorActionPreference = 'Stop'",
     "trap { [Console]::WriteLine('GPTR_ABSENCE_STAGE 99'); exit 1 }",
+    observations,
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 1')",
     paste0("$link = ", literal(paths[["link"]])),
     paste0("$denied = ", literal(paths[["denied"]])),
@@ -459,8 +513,16 @@ rw_absence_case = function(case, root) {
     "$refused = $false",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 8')",
     "try { & {", fun("proc_writer_acl")(paths[["denied"]], marker),
-    "} } catch [System.UnauthorizedAccessException] { $refused = $true }",
-    "if (-not $refused) { throw 'Attribute denial not effective' }",
+    "} } catch [System.UnauthorizedAccessException] {",
+    "  [Console]::WriteLine('GPTR_ABSENCE_PROBE 1'); $refused = $true",
+    "} catch {",
+    "  $code = if ($_.Exception.Message -ceq 'Existing writer directory') { 2 } else { 3 }",
+    "  [Console]::WriteLine('GPTR_ABSENCE_PROBE ' + $code)",
+    "  throw",
+    "}",
+    "if (-not $refused) {",
+    "  [Console]::WriteLine('GPTR_ABSENCE_PROBE 4')",
+    "  throw 'Attribute denial not effective' }",
     "[Console]::WriteLine('GPTR-ABSENCE-DENIED-REFUSED')",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 9')",
     "} finally {",
@@ -472,7 +534,10 @@ rw_absence_case = function(case, root) {
     "      $restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "      [System.IO.Directory]::SetAccessControl($fresh, $restore)",
     "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 11')",
+    "      $observedBefore = ObserveParent 'BEFORE' $descriptor",
     "      $got = [System.IO.Directory]::GetAccessControl($fresh, $access)",
+    "      $observedAfter = ObserveParent 'AFTER' ($got.GetSecurityDescriptorSddlForm($access))",
+    "      CompareParent $observedBefore $observedAfter",
     "      if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "        throw 'Parent access not restored' }",
     "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 12')",
@@ -506,6 +571,7 @@ rw_absence_case = function(case, root) {
     seen$out = character()
     seen$status = NULL
     seen$last_stage = if (identity) 0L else 100L
+    seen$observations = character()
     utility = NULL
     record = NULL
     settle = function() {
@@ -538,6 +604,21 @@ rw_absence_case = function(case, root) {
     stopifnot(is.list(record), is.finite(record$create_time))
     if (identity) saveRDS(record, file.path(root, "inner-identity.rds"))
     fun("reactor_proc")(utility, on_line = function(line) {
+      observation = rw_absence_observation(line)
+      if (!is.null(observation)) {
+        key = observation$key
+        stopifnot(!key %in% seen$observations, length(seen$observations) < 4L)
+        if (key == "probe") {
+          stopifnot(identity, identical(seen$last_stage, 8L))
+        } else {
+          stopifnot(identical(seen$last_stage, if (identity) 11L else 103L))
+          if (key == "parent-after") stopifnot("parent-before" %in% seen$observations)
+          if (key == "parent-compare") stopifnot("parent-after" %in% seen$observations)
+        }
+        seen$observations = c(seen$observations, key)
+        phase(observation$label)
+        return(invisible(NULL))
+      }
       stage = rw_absence_stage(line, recovery = !identity, last = seen$last_stage)
       if (!is.null(stage)) {
         seen$last_stage = stage
@@ -564,6 +645,7 @@ rw_absence_case = function(case, root) {
   recovery = paste(c(
     "$ErrorActionPreference = 'Stop'",
     "trap { [Console]::WriteLine('GPTR_ABSENCE_STAGE 199'); exit 1 }",
+    observations,
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 101')",
     paste0("$parent = ", literal(paths[["fresh"]])),
     paste0("$file = ", literal(paths[["denied"]])),
@@ -576,7 +658,10 @@ rw_absence_case = function(case, root) {
     "$restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "[System.IO.Directory]::SetAccessControl($parent, $restore)",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 103')",
+    "$observedBefore = ObserveParent 'BEFORE' $descriptor",
     "$got = [System.IO.Directory]::GetAccessControl($parent, $access)",
+    "$observedAfter = ObserveParent 'AFTER' ($got.GetSecurityDescriptorSddlForm($access))",
+    "CompareParent $observedBefore $observedAfter",
     "if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "  throw 'Parent recovery mismatch' }",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 104')",
@@ -639,6 +724,7 @@ rw_absence_run = function() {
   loader = bp_loader()
   decoder = c(paste0("rw_absence_stage = ", paste(deparse(rw_absence_stage),
     collapse = "\n")), paste0("rw_absence_status = ", paste(deparse(rw_absence_status),
+    collapse = "\n")), paste0("rw_absence_observation = ", paste(deparse(rw_absence_observation),
     collapse = "\n")))
   scope$bp_loader = function() c(loader, decoder)
   runner("native-absence")
