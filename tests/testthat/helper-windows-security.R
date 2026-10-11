@@ -3,6 +3,9 @@
 wsec_local = function(.env = parent.frame()) {
   testthat::skip_on_cran()
   testthat::skip_if(.Platform$OS.type != "windows", "requires an actual Windows filesystem")
+  # testthat's failure formatter initializes diffobj defaults through waldo. Do this
+  # before the caller-state snapshot; later assertions must not hide option mutations.
+  testthat::expect_failure(testthat::expect_identical(1L, 2L))
   seed = function() get0(".Random.seed", envir = globalenv(), inherits = FALSE)
   before = list(options = options(), env = Sys.getenv(), cwd = getwd(), seed = seed(),
                  names = sort(ls(envir = globalenv(), all.names = TRUE)))
@@ -85,13 +88,8 @@ wsec_link = function(target, link, .env = parent.frame()) {
   directory = dir.exists(target)
   script = withr::local_tempfile(pattern = "gptr-wsec-unlink-", fileext = ".ps1",
                                  .local_envir = .env)
-  writeLines(c("param([string]$Link, [string]$Directory, [string]$Action = 'remove')",
+  writeLines(c("param([string]$Link, [string]$Directory)",
                "$ErrorActionPreference = 'Stop'",
-               "if ($Action -eq 'inspect') {",
-               "  $item = Get-Item -LiteralPath $Link -Force",
-               "  if ($item.LinkType -cne 'SymbolicLink') { throw 'Not a true symbolic link' }",
-               "  Write-Output $item.LinkType; exit 0",
-               "}",
                "if ($Directory -eq 'yes') { [System.IO.Directory]::Delete($Link, $false) }",
                "else { [System.IO.File]::Delete($Link) }"), script)
   ok = file.symlink(target, link)
@@ -108,13 +106,18 @@ wsec_link = function(target, link, .env = parent.frame()) {
   testthat::expect_true(info$target_exists, info = label)
   testthat::expect_true(info$exists, info = label)
   testthat::expect_identical(info$directory, directory, info = label)
-  shell = Sys.which("powershell.exe")
-  if (!nzchar(shell)) stop("Windows link inspection requires powershell.exe", call. = FALSE)
-  native = processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
-                                  "-Link", link, "-Action", "inspect"),
+  # Read the native reparse tag without PowerShell's Get-Item/module initialization.
+  # A junction's mount-point tag (0xa0000003) does not satisfy the symbolic-link oracle.
+  query = Sys.which("fsutil.exe")
+  if (!nzchar(query)) stop("Windows link inspection requires fsutil.exe", call. = FALSE)
+  native = processx::run(query, c("reparsepoint", "query", link),
                          timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
                          cleanup_tree = TRUE, env = character())
-  testthat::expect_identical(trimws(native$stdout), "SymbolicLink", info = label)
+  tag = regmatches(native$stdout, regexpr("0x[[:xdigit:]]{8}\\b", native$stdout))
+  testthat::expect_identical(tolower(tag), "0xa000000c", info = label)
+  if (!identical(tolower(tag), "0xa000000c")) {
+    stop("Windows link inspection did not confirm a true symbolic link", call. = FALSE)
+  }
   if (!directory) {
     testthat::expect_identical(wsec_bytes(link), wsec_bytes(target), info = label)
   }
