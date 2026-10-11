@@ -1505,3 +1505,16 @@ Ollama stop/unload/reconfigure/inference occurred. Hosted active leases are now0
 Evidence:ignored `dev/.validation/windows-security-20261010/plan-only-7685c00-summary.json`
 and `current-execution.json`. Resume from [the living plan](../TESTING_PLAN.md) and
 [task progress](skipped-platform-tests-20261010.md).
+
+
+## Authorized upstream callr repair — 2026-10-11
+
+Mac source development/native Windows CI is authorized. The small upstream native-environment
+handoff covers all five callr launchers while preserving public classes and child lifecycle.
+Pinned source: callr3.8.0 commit6a7dd7a51dbf16b3a28819264aa2db04c960399f. Independent
+review and tests-first preparation are ONGOING; no new native pass is claimed. Separate
+Windows R/CRT startup-empty and processx essential-variable removal boundaries remain OPEN.
+A fork will not replace globally installed packages or GPTR dependency namespaces.
+Local heavy execution stays HELD: fresh disk7.4GiB is below200GiB. Ollama is untouched.
+This plan edit requires fresh all-four exact-source hosted plan checks before the two-host
+stock-versus-patched dependency validation. Track outcomes here without another plan edit.

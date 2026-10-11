@@ -729,3 +729,35 @@ new runtime blocker or numbered-plan edit was identified. The checker README's h
 The coordinator records each subsequent full rerun's result in the linked documentation
 progress ledger; do not infer a current gate from the historical counts alone.
 
+
+## Windows callr parent-environment repair — 2026-10-11
+
+The maintainer authorized the Mac development/native Windows verification recommendation.
+Develop the small upstream callr fix in an isolated checkout; preserve the caller's environment
+by passing the final child environment through processx's native environment argument. Preserve
+the existing r_process class, serialization, setup hooks, tracing, streams and lifecycle. Do not
+install a fork globally, mutate dependency namespaces, normalize empty caller values or replace
+the public process API. GPTR remains pure R with unchanged Imports and no compiled code.
+
+| Case | Required evidence | State |
+|---|---|---|
+| CE01 provenance | Pin callr3.8.0 commit6a7dd7a; verify every source-file hash, reviewed patch hash and installed private library identity. Preserve baseline and patched evidence separately. | ONGOING source pinned; hosted execution pending |
+| CE02 parent/child regression | Reproduce original two worker/artifact profiles on stock callr; repaired build must preserve actual native-empty parent values after construction/result/cleanup and the permitted empty child variable. Keep strict secret filtering, startup isolation, stdin, output, r_process result and owned settlement assertions. | Stock d53 Linux56P/Windows48P8F retained; new strict repeat WAITING |
+| CE03 value and lifecycle matrix | Both GPTR profiles: absent, empty, nonempty, removed, mixed-case and UTF-8 values; caller options/cwd/RNG invariant. Startup error and blocked-stdin cancellation must terminate exact owned children without late work or warnings. | Tests-first preparation ONGOING |
+| CE04 upstream API parity | Cover all five launch wrappers, exact extra environment behavior, Windows case-insensitive overlay and NA removals, context/tracing additions, result/error/stream/class behavior. No duplicate env argument or unsupported processx sentinel handling. | Source review ONGOING; native evidence WAITING |
+| CE05 startup-variable admission | Separately observe all seven inherited R startup/library variables before and after R startup/common_hook. Record native requested seeds versus observed prelaunch values; R Core may normalize library variables before callr runs. Never attribute scaffold failure to callr or silently skip it. | OPEN separate Windows R/CRT limitation; diagnostic tests WAITING |
+| CE06 essential-variable removal | Native processx on Windows may restore missing essential OS variables from its parent. Explicit removals must be reviewed against existing callr behavior; no universal env-removal claim from GPTR profiles that retain those variables. | OPEN upstream parity boundary; separate admission evidence required |
+| CE07 release integration | Run focused upstream/GPTR tests and scoped lint, independent review, periodic task-sized commit/push, all four exact-source plan gates. A tested development patch is not an available CRAN dependency fix: require an actual released compatible dependency before raising GPTR minimum versions or claiming production closure. | WAITING native proof and upstream publication |
+
+Use native hosted Windows and Linux, at most two jobs total and separate fresh R processes for
+stock/patched installs. All tests are offline, with fake canaries and no credentials or model
+requests. Keep the original 30-second fixture/60-second outer deadlines, 1GiB family RSS and
+64MiB output caps. Preserve strict zero-warning/no-unknown-skip gates and raw failed rows.
+Startup/essential-variable admission results remain explicit diagnostics, separate from the
+resolved parent regression; they cannot authorize a universal environment-preservation claim.
+
+Local heavy execution remains HELD while free disk is below200GiB or other resource gates fail.
+The shared Ollama model is preserved without stopping, unloading, changing settings or making
+requests. No VM is needed for source development; native Windows runner evidence is mandatory.
+Record completed runs in [task progress](progress/skipped-platform-tests-20261010.md) and
+[handoff](HANDOFF.md) so final status updates do not trigger another plan-edit/check loop.
