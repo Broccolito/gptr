@@ -902,9 +902,15 @@ test_that("Windows control entry listing refuses unreadable or uncertain parents
   seen = new.env(parent = emptyenv())
   seen$calls = list()
   probe = codex_control_scope(pcli_control_entries, dir.exists = function(path) TRUE,
-    list.files = function(path, all.files, no.., recursive = FALSE, full.names = FALSE) {
-      seen$calls[[length(seen$calls) + 1L]] =
-        list(all.files = all.files, no.. = no.., recursive = recursive, full.names = full.names)
+    list.files = function(path, ...) {
+      args = list(...)
+      required = c("all.files", "no..")
+      stopifnot(all(required %in% names(args)), !anyDuplicated(names(args)),
+        all(names(args) %in% c(required, "recursive", "full.names")))
+      seen$calls[[length(seen$calls) + 1L]] = list(all.files = args[["all.files"]],
+        no.. = args[["no.."]],
+        recursive = if ("recursive" %in% names(args)) args[["recursive"]] else FALSE,
+        full.names = if ("full.names" %in% names(args)) args[["full.names"]] else FALSE)
       c(".", "..", "SYSTEM.md")
     })
   expect_identical(probe("C:/public/.gptr"), "SYSTEM.md")

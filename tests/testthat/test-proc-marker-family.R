@@ -124,7 +124,8 @@ test_that("marker environment diagnostics distinguish casing from private value 
   expect_false(grepl(canary, encoded, fixed = TRUE), label = "private values stay unprinted")
   expect_false(grepl("PATH", encoded, fixed = TRUE), label = "variable names stay unprinted")
   expect_true(all(vapply(objects, function(value) {
-    all(vapply(value, function(field) is.null(field) ||
-      (length(field) == 1L && (is.logical(field) || is.integer(field))), logical(1)))
+    all(vapply(value, function(field) {
+      is.null(field) || (length(field) == 1L && (is.logical(field) || is.integer(field)))
+    }, logical(1)))
   }, logical(1))))
 })
