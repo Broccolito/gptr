@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At 21:43 PDT, load was 24.96/38.68/31.81, physical memory 123 GiB used/4.424 GiB unused,
-swap 22,675.94 MiB, free disk 114 GiB, with no recorded thermal/performance warning.
+At 22:06 PDT, load was 30.46/32.84/38.27, physical memory 76 GiB used/51 GiB unused,
+swap 14,021.94 MiB, free disk 114 GiB, with no recorded thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -42,9 +42,9 @@ cross-plan checks passed on candidate `245de54`. Runtime implementation remains 
 | Local pandas/NumPy install | Waiting for resources | Existing private Python 3.12 lacks both modules |
 | Actual Windows security baseline | Failed fixtures; corrected source ready | Run `38112622473`: raw 6 errors, 3 failed assertions, 6 warnings, 53 passes, 0 skips |
 | Actual Windows/Unix child-process baseline | Windows runtime RED; Unix pending | Same run: 3 watchdog failures, 24 passes, 0 skips, no observed process-test warnings |
-| Strict optional integration workflow | Setup RED; corrected rerun pending | Run `38113192422`: Windows Python pin unavailable; Linux unit helper path invalid; integration cases did not run |
+| Strict optional integration workflow | Corrected rerun running | `38113687980` at39f3248 corrects both setup failures; actual integration still pending |
 | Index/extract/R-parse/lintr plan checks | Passed exact `245de54`; rerun with plan updates | All four Linux stages succeeded and source hashes matched before/after |
-| Owned-writer transport prototype | Source prepared; peer review ongoing | Four bounded cases retain original native-runtime RED tests; not a production fix |
+| Owned-writer transport prototype | Source prepared; independent peer review clear | Four bounded cases retain original native-runtime RED tests;92 expected assertions, no actual execution yet; not a production fix |
 | Shared Ollama model | Preserved | No model stop, unload or inference request |
 
 Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
@@ -68,13 +68,27 @@ the new strict runner counts raw error/failure/warning conditions independently.
 The plan-check diagnostic controller passed six stdlib regression tests after a test-first RED.
 The subsequent strict [run `38113192422`](https://github.com/Broccolito/gptr/actions/runs/38113192422)
 executed all four actual plan stages successfully on Linux at exact `245de54`: index about
-90 seconds, extraction 0.3 seconds, parse 1 second and lint 53 seconds, with unchanged source
-hashes. Its integration setup failed separately: Python `3.12.12` has no Windows x64 archive,
+90 seconds, extraction 0.3 seconds, parse 1 second and lint 53 seconds, with unchanged39-file
+source hashes. The25-plan index had0 error-level and90 historical warning-level findings;
+770 R blocks had0 parse/style problems and scoped plan lint had0 findings. Its retained
+Linux artifact SHA256 is75c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
+Integration setup failed separately: Python `3.12.12` has no Windows x64 archive,
 and `test_file()` changes into `dev/ci`, making the unit helper's root-relative source path
 invalid. The reviewed correction selects Python `3.12.10`, available for both hosts, and a
 helper path valid in either controlled working directory. Optional integration cases, their
 scoped R lint, and corrected Windows fixtures have not run yet. Source syntax and Python tests
-are preparation only; these corrections require a fresh hosted rerun.
+are preparation only; the corrected exact39f3248 hosted rerun38113687980 is running.
+
+The test-only owned writer keeps the actual target's ordinary processx stdin pipe and moves
+its potentially blocking write into a separately tracked child. Private atomic mailbox files
+carry bounded raw input; ACK totals advance only for bytes accepted by the real pipe write.
+Four probes require exact40000-line stdout/stderr, typed no-reader timeout, queued cancellation
+without a late exit callback, and ordered binary/NUL/UTF-8 bytes. An independent source review
+found no blocker; Windows handle inheritance, raw FD1 writes, native ACLs and cleanup still
+require actual hosted proof. The final helper SHA256 is27e36707f08a208da0b52f520b78e40113b2c9e8fff0b3035de75053f196dfb4.
+The strict registry adds these four mandatory, unskipped cases on both hosts. Its pure negative
+tests reject a missing title, zero assertions or skipped probe. This is not a production fix
+or closure of D-019; the original native-runtime regression cases remain unchanged.
 The complete older exact-archive run `38102472275` has finished: all five consumers failed.
 Mac's two failures are the old notebook stdout assertion already corrected at `ad4e6a9`;
 Linux devel reports the same two plus the known mock-path fixture assertions. These older

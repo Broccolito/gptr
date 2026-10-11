@@ -29,7 +29,12 @@ optional_titles = list(
   "test-proc-windows-backpressure.R" = c(
     "real child duplex backpressure preserves every 4 MB stdout and stderr line",
     "a real no-reader child returns the typed stdin timeout under external bounds",
-    "a real queued 4 MB write leaves reactor cancellation responsive with no late exit")
+    "a real queued 4 MB write leaves reactor cancellation responsive with no late exit"),
+  "test-proc-writer-prototype.R" = c(
+    "owned writer prototype preserves every 4 MB duplex stdout and stderr line",
+    "owned writer prototype returns a typed no-reader stdin timeout",
+    "owned writer prototype cancels a queued 4 MB write without a late exit",
+    "owned writer prototype preserves queued binary NUL and UTF-8 bytes")
 )
 
 optional_select = function(pattern, root) {

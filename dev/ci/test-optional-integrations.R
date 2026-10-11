@@ -65,3 +65,25 @@ testthat::test_that("Windows security platform guards never excuse Windows cover
   testthat::expect_error(optional_gate(list(record(name, skipped = 1L)),
                                       "test-windows-security.R", TRUE), "Skipped")
 })
+
+testthat::test_that("every approved writer prototype case must execute assertions on both hosts", {
+  file = "test-proc-writer-prototype.R"
+  titles = c(
+    "owned writer prototype preserves every 4 MB duplex stdout and stderr line",
+    "owned writer prototype returns a typed no-reader stdin timeout",
+    "owned writer prototype cancels a queued 4 MB write without a late exit",
+    "owned writer prototype preserves queued binary NUL and UTF-8 bytes")
+  rows = lapply(titles, record)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_error(optional_gate(rows[-1L], file, windows), "Missing mandatory")
+    for (i in seq_along(rows)) {
+      no_assertions = rows
+      no_assertions[[i]]$passed = 0L
+      testthat::expect_error(optional_gate(no_assertions, file, windows), "assertions")
+      skipped = rows
+      skipped[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(skipped, file, windows), "Skipped")
+    }
+    testthat::expect_true(optional_gate(rows, file, windows)$passed)
+  }
+})

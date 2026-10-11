@@ -472,18 +472,21 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Browser/search prerequisites | Local Chrome/chromote/rg exist. ONGOING explicit hosted discovery/preflight; retain Chrome startup bound, actual render/screenshot proof and search comparison. |
 | Windows filesystem safety | Initial hosted38112622473 failed fixtures: raw6errors/3failures/6warnings/53passes/0skips. ONGOING corrected named temporary script/integer initial timestamps; eight strict actual-platform tests preserved, option-name diagnostic added. Link/cache runtime failures not yet established. |
 | Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. ONGOING owned-writer prototype review; four source-only probes retain fixed deadlines/RSS/output, byte/line oracles and identity-checked cleanup. Unix control pending. D-019 remains open. |
-| Validation/merge | Candidate `245de54` pushed. Strict hosted38113192422 failed setup before integration: Windows Python3.12.12 unavailable, Linux unit helper source path invalid. ONGOING reviewed3.12.10/path correction and rerun; WAITING strict integration GREEN/scoped lint/required-case counts, then integration. No skipped-case or zero-selection pass. |
+| Validation/merge | Candidate `39f3248` pushed; corrected two-host38113687980 is RUNNING. Prior38113192422 at245de54 failed setup before integration: Windows Python3.12.12 unavailable, Linux unit helper source path invalid. WAITING strict integration GREEN/scoped lint/required-case counts, then integration. No skipped-case or zero-selection pass. |
 
 The optional dependency helper's9 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
 All four mandatory index/extract/R-parse/lintr plan checks actually passed on Linux at
-exact245de54 in38113192422; source manifests matched before/after. Recheck the updated plan
+exact245de54 in38113192422:25 plans,770 R blocks,0 parse/style problems and0 lints;
+the index retained90 historical warning-level findings and0 error-level findings. Its
+39-file source manifests matched before/after; artifact SHA25675c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
+Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest21:43 PDT load24.96/38.68/31.81, CPU39.92%idle, physical RAM123GiB used/4424MiB
-unused, swap22,675.94MiB used and disk114GiB still prevent expanding local compute.
-Memory-pressure free83% is a distinct metric; no thermal/performance warning was recorded.
+Latest22:06 PDT load30.46/32.84/38.27, CPU41.91%idle, physical RAM76GiB used/51GiB
+unused, swap14,021.94MiB used and disk114GiB still prevent expanding local compute.
+Memory-pressure free84% is a distinct metric; no thermal/performance warning was recorded.
 Keep local R/build/install/browser/model jobs held; bounded read/source work and hosted
 validation use independent resources. Recheck before granting any local compute lease.
 
