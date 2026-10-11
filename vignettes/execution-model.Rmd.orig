@@ -119,6 +119,15 @@ identical(gptr_last(), s)
 | `gptr_on()` | Attach a session event handler |
 | `gptr_fork()`, `gptr_checkpoints()`, `gptr_rewind()` | Branch or recover supported state |
 
+Printing `s$history` or `summary(s)` shows eight recent messages and session details, without
+a model request. The underlying table keeps every message; unknown token counts stay unknown.
+
+```{r history-display}
+s$history
+print(s$history, n = Inf)
+as.data.frame(s$history)
+```
+
 Without an initialized project workspace, session files use a temporary directory.
 `gptr_init()` creates `.gptr/` for project storage. Recording an R document is a separate choice;
 see [Script as history](script-as-history.html).

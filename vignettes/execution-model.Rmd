@@ -110,7 +110,7 @@ than assuming every object is a fully resident data frame.
 
 ``` r
 s$id
-#> [1] "s1ff2b2b61a"
+#> [1] "sb95b5c3e33"
 s$model
 #> [1] "fake/fake-1"
 s$turns
@@ -119,7 +119,7 @@ names(s$messages[[1]])
 #> [1] "role"      "content"   "source"    "timestamp"
 gptr_usage(s)
 #>   group        requests  input  output  cache_read  cache_write  cost
-#> 1 s1ff2b2b61a  2         3239   20      0           0            0
+#> 1 sb95b5c3e33  2         3241   20      0           0            0
 #>
 #> # 1 row
 #> 2 requests, 3.2k tokens in, $0.0000
@@ -136,6 +136,35 @@ identical(gptr_last(), s)
 | `gptr_sessions()`, `gptr_resume()`, `gptr_last()` | Find stored or live sessions |
 | `gptr_on()` | Attach a session event handler |
 | `gptr_fork()`, `gptr_checkpoints()`, `gptr_rewind()` | Branch or recover supported state |
+
+Printing `s$history` or `summary(s)` shows eight recent messages and session details, without
+a model request. The underlying table keeps every message; unknown token counts stay unknown.
+
+
+``` r
+s$history
+#>   turn  role         preview                   tools  tokens
+#> 1 1     user         Fit fuel economy agai...         8
+#> 2 1     assistant                              r      1632
+#> 3 1     tool_result  + fit <lm length 12>      r      5
+#> 4 1     assistant    The regression is ready.         1629
+#> # 4 recorded messages
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . sb95b5c3e33
+print(s$history, n = Inf)
+#>   turn  role         preview                   tools  tokens
+#> 1 1     user         Fit fuel economy agai...         8
+#> 2 1     assistant                              r      1632
+#> 3 1     tool_result  + fit <lm length 12>      r      5
+#> 4 1     assistant    The regression is ready.         1629
+#> # 4 recorded messages
+#> idle . fake/fake-1 . 1 turn . 3.3k tokens . $0.0000 . sb95b5c3e33
+as.data.frame(s$history)
+#>   turn        role                          preview tools tokens
+#> 1    1        user Fit fuel economy against weight.            8
+#> 2    1   assistant                                      r   1632
+#> 3    1 tool_result             + fit <lm length 12>     r      5
+#> 4    1   assistant         The regression is ready.         1629
+```
 
 Without an initialized project workspace, session files use a temporary directory.
 `gptr_init()` creates `.gptr/` for project storage. Recording an R document is a separate choice;

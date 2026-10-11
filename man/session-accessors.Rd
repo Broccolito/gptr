@@ -43,5 +43,8 @@ The member's value; \code{names()} and \code{.DollarNames()} return the member n
 Sessions are changed only through \code{peter()} and the \verb{gptr_*()} verbs, so \verb{$<-} and \verb{[[<-}
 signal \code{gptr_error_readonly}. Usage a provider did not report stays unknown: \code{cost} is \code{NA}
 when the cost of any request is unknown.
+\code{history} is the complete recorded-message table with a concise display, like
+\code{summary(x)}. Use \code{print(x$history, n = Inf)} to show all rows or \code{as.data.frame(x$history)}
+to obtain an ordinary data frame.
 }
 \keyword{internal}

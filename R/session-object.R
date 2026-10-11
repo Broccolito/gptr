@@ -273,6 +273,9 @@ final_text = function(path) {
 #' Sessions are changed only through `peter()` and the `gptr_*()` verbs, so `$<-` and `[[<-`
 #' signal `gptr_error_readonly`. Usage a provider did not report stays unknown: `cost` is `NA`
 #' when the cost of any request is unknown.
+#' `history` is the complete recorded-message table with a concise display, like
+#' `summary(x)`. Use `print(x$history, n = Inf)` to show all rows or `as.data.frame(x$history)`
+#' to obtain an ordinary data frame.
 #'
 #' @param x A `gptr_session`.
 #' @param name,i A member name; `[[` also takes an integer index into `children`.
@@ -343,7 +346,7 @@ session_get = function(s, name) {
     values = session_values_df(s),
     usage = session_usage_rows(s),
     cost = sum(session_usage_rows(s)$cost),
-    history = session_history(s),
+    history = summary(s),
     messages = path_messages(entries_path(d)),
     model = d$model,
     mode = d$mode,
@@ -402,7 +405,7 @@ session_history = function(s) {
     tools = if (identical(m$role, "tool_result")) m$tool_name else
       paste(vapply(msg_calls(m), function(b) b$name, ""), collapse = ",")
     text = msg_text(m)
-    tokens = if (identical(m$role, "assistant") && !is.null(m$usage$total)) m$usage$total else
+    tokens = if (identical(m$role, "assistant")) m$usage$total %||% NA_real_ else
       est_tokens(text, "prose")
     rows[[i]] = data.frame(turn = turn, role = m$role, preview = substr(text, 1L, 60L),
                            tools = tools, tokens = as.numeric(tokens), stringsAsFactors = FALSE)
@@ -478,26 +481,104 @@ as.character.gptr_session = function(x, ...) session_text(x)
 #' Reads a table of recorded turns without a model request. It does not generate a narrative
 #' workflow summary or export an executable script. To request prose, continue the session
 #' with [peter()] and verify the model-generated answer against the recorded work.
+#' Both `summary(s)` and `s$history` retain every recorded message. Printing shows the latest
+#' eight messages and a snapshot of session metadata. Use `print(x, n = Inf)` to display every
+#' row, or `as.data.frame(x)` for an ordinary data frame without the display metadata.
 #'
 #' @param object A `gptr_session`.
 #' @param ... Unused.
 #' @return A `gptr_session_summary` data frame (`turn`, `role`, `preview`, `tools`, `tokens`).
 #' @export
 summary.gptr_session = function(object, ...) {
-  structure(session_history(object), class = c("gptr_session_summary", "data.frame"))
+  structure(session_history(object), class = c("gptr_session_summary", "data.frame"),
+            footer = session_footer(object))
 }
 
 #' Print a session summary
 #'
+#' Display the latest recorded messages at the current console width. This changes neither
+#' the complete history table nor the session, and makes no model request. Unknown token
+#' counts remain unknown. Previews are single lines; the underlying table retains its text.
+#'
 #' @param x A `gptr_session_summary`.
+#' @param n Maximum number of recent messages to display; `Inf` displays every row.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.gptr_session_summary = function(x, ...) {
-  df = x
-  class(df) = "data.frame"
-  msg_verbatim(utils::capture.output(print(df, row.names = FALSE)))
+print.gptr_session_summary = function(x, n = 8L, ...) {
+  if (!identical(n, Inf)) n = check_number(n, "n", min = 0, int = TRUE)
+  total = nrow(x)
+  shown = min(total, n)
+  width = max(1L, cli::console_width())
+  lines = character()
+  if (shown > 0L) {
+    df = as.data.frame(x)[seq.int(total - shown + 1L, total), , drop = FALSE]
+    df[] = lapply(df, session_history_display_text)
+    if (width >= 40L) {
+      lines = listing_print_lines(df, width)
+    } else {
+      for (i in seq_len(shown)) {
+        row = df[i, , drop = FALSE]
+        metadata = intersect(c("turn", "role", "tokens"), names(row))
+        if ("tokens" %in% metadata) row$tokens = paste0(row$tokens, " tokens")
+        if (length(metadata)) {
+          lines = c(lines, paste(unlist(row[metadata], use.names = FALSE), collapse = " . "))
+        }
+        for (field in setdiff(names(row), metadata)) {
+          value = row[[field]]
+          if (nzchar(value)) {
+            prefix = if (identical(field, "preview")) "" else paste0(field, ": ")
+            lines = c(lines, paste0(prefix, value))
+          }
+        }
+      }
+    }
+  }
+  count = if (shown < total) {
+    paste0("# Last ", shown, " of ", total, " recorded messages (", total - shown, " omitted)")
+  } else {
+    paste0("# ", total, " recorded ", if (total == 1L) "message" else "messages")
+  }
+  lines = c(lines, strwrap(count, width = width))
+  if (shown < total) lines = c(lines, strwrap("# All rows: print(x, n = Inf)", width = width))
+  footer = attr(x, "footer", exact = TRUE)
+  if (length(footer)) {
+    lines = c(lines, strwrap(session_history_display_text(footer), width = width))
+  }
+  if (!isTRUE(l10n_info()[["UTF-8"]])) lines = enc2native(lines)
+  msg_verbatim(cli::ansi_strtrim(lines, width, ellipsis = if (width >= 3L) "..." else ""))
   invisible(x)
+}
+
+#' Strip display metadata while retaining every history row and column
+#'
+#' @param x A `gptr_session_summary`.
+#' @param ... Further arguments, such as `row.names` and `optional`, passed to the ordinary
+#'   data frame method.
+#' @return An ordinary `data.frame` containing the complete history.
+#' @export
+as.data.frame.gptr_session_summary = function(x, ...) {
+  class(x) = "data.frame"
+  attr(x, "footer") = NULL
+  as.data.frame(x, ...)
+}
+
+#' Sanitize a bounded display copy; retain no reference to the session or its home
+#' @noRd
+session_history_display_text = function(text) {
+  text = redact_hook(as_utf8(as.character(text)), "persist")
+  bad = !is.na(text) & !validUTF8(text)
+  text[bad] = iconv(text[bad], "UTF-8", "ASCII", sub = "byte")
+  normalized = vapply(text, function(line) {
+    if (is.na(line)) return("unknown")
+    line = paste(clean_terminal(line), collapse = " ")
+    line = gsub("[[:space:][:cntrl:]]+", " ", line)
+    cp = utf8ToInt(line)
+    hidden = cp == 0x061C | (cp >= 0x200B & cp <= 0x200F) |
+      (cp >= 0x202A & cp <= 0x202E) | (cp >= 0x2060 & cp <= 0x2069) | cp == 0xFEFF
+    trimws(intToUtf8(cp[!hidden]))
+  }, "", USE.NAMES = FALSE)
+  redact_hook(normalized, "persist")
 }
 
 #' Show the structure of a session in one line (never touches user objects)

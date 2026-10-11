@@ -4,10 +4,12 @@
 \alias{print.gptr_session_summary}
 \title{Print a session summary}
 \usage{
-\method{print}{gptr_session_summary}(x, ...)
+\method{print}{gptr_session_summary}(x, n = 8L, ...)
 }
 \arguments{
 \item{x}{A \code{gptr_session_summary}.}
+
+\item{n}{Maximum number of recent messages to display; \code{Inf} displays every row.}
 
 \item{...}{Unused.}
 }
@@ -15,5 +17,7 @@
 \code{x}, invisibly.
 }
 \description{
-Print a session summary
+Display the latest recorded messages at the current console width. This changes neither
+the complete history table nor the session, and makes no model request. Unknown token
+counts remain unknown. Previews are single lines; the underlying table retains its text.
 }
