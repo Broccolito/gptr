@@ -12,7 +12,7 @@ bp_loader = function() {
 
 # This body is written into the fresh child's script. It performs real pipe I/O on the
 # host OS; neither is_windows() nor processx is mocked.
-bp_child_case = function(case, root) {
+bp_child_case = function(case, root, failure) {
   ns = asNamespace("gptr")
   fun = function(name) get(name, ns, inherits = FALSE)
   phase = function(text) cat(text, "\n", file = file.path(root, "phases.txt"), append = TRUE)
@@ -165,8 +165,9 @@ bp_run = function(case) {
                         c("home", "config", "cache", "data", "project", "tmp"))
   for (dir in dirs) dir.create(dir)
   script = file.path(root, "case.R")
-  call = paste0("(function(case, root) ", paste(deparse(body(bp_child_case)), collapse = "\n"),
-    ")(", deparse(case), ", ", deparse(normalizePath(root, winslash = "/")), ")")
+  call = paste0("(function(case, root, failure) ",
+    paste(deparse(body(bp_child_case)), collapse = "\n"),
+    ")(", deparse(case), ", ", deparse(normalizePath(root, winslash = "/")), ", failure)")
   failure_path = file.path(root, "case-failure.rds")
   diagnostic = paste0("failure = function(error) ",
     paste(deparse(body(bp_case_failure)), collapse = "\n"))
