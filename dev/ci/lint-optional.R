@@ -5,7 +5,7 @@ paths = c(
   "tests/testthat/test-tool-search.R", "tests/testthat/test-artifact-browser-cleanup.R",
   "tests/testthat/test-config-content-cache.R", "tests/testthat/test-gptr-config.R",
   "tests/testthat/helper-windows-security.R", "tests/testthat/test-windows-security.R",
-  "R/proc-spawn.R", "R/proc-supervise.R", "R/http-reactor.R",
+  "R/proc-spawn.R", "R/proc-supervise.R", "R/http-reactor.R", "R/cli-codex.R",
   "R/utils-paths.R", "R/utils-encoding.R", "R/tool-write.R", "R/tool-walk.R",
   "R/ckpt-files.R", "tests/testthat/test-windows-link-policy.R",
   "tests/testthat/test-utils-encoding.R", "tests/testthat/test-utils-paths.R",

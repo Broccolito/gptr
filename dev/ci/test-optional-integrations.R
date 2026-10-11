@@ -197,7 +197,12 @@ writer_runtime_titles = c(
   "writer startup diagnostics fail closed without retaining arbitrary stderr",
   "writer trusted bootstrap sends startup diagnostics only to its own stderr",
   "Windows no-reader timeout proves writer readiness and delivery-stage backpressure",
-  "Windows production mailbox has a protected owner DACL and inherited file rights")
+  "Windows production mailbox has a protected owner DACL and inherited file rights",
+  "nested ACL diagnostics preserve exact LF and split CRLF progress",
+  "nested ACL diagnostics reject arbitrary and unordered native output",
+  "nested ACL diagnostics read only after zero-time polling",
+  "writer nested ACL phases preserve exit failure without granting readiness",
+  "writer early failures retain only fixed numeric nested ACL phases")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -320,7 +325,13 @@ writer_affected_titles = list(
     "a fake codex returns a function's numeric result through the HTTP MCP bridge",
     "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
     "retargeting a dangling control link warns after the Codex exec completes",
-    "a control file gptr cannot read is marked by its size and time instead"))
+    "a control file gptr cannot read is marked by its size and time instead",
+  "Windows control entry listing refuses unreadable or uncertain parents",
+  "Windows control entry membership retains fixed names without following targets",
+  "Windows reparse digests use only the trusted query and stripped helper environment",
+  "Windows reparse probes reject unavailable executables and uncertain results",
+  "control digests query only unobservable Windows entries and retain POSIX markers",
+  "fixed dangling SYSTEM and MCP control links keep markers and detect retargeting"))
 
 testthat::test_that("affected transport integrations require their actual representative cases", {
   for (file in names(writer_affected_titles)) {
@@ -1002,7 +1013,7 @@ testthat::test_that("owned marker-family integration cannot omit or skip its nat
 testthat::test_that("native mailbox ACL proof is mandatory on Windows with one exact Unix guard", {
   file = "test-proc-writer-runtime.R"
   title = "Windows production mailbox has a protected owner DACL and inherited file rights"
-  testthat::expect_identical(tail(optional_titles[[file]], 1L), title)
+  testthat::expect_identical(optional_titles[[file]][[30L]], title)
   rows = lapply(optional_titles[[file]], record)
   i = match(title, vapply(rows, function(row) row$test, ""))
   testthat::expect_false(is.na(i))
@@ -1073,5 +1084,94 @@ testthat::test_that("marker restoration diagnostics remain mandatory without ski
     }
     testthat::expect_false(optional_allowed_skip("test-proc-marker-family-other.R",
       expected[[2L]], windows))
+  }
+})
+
+
+testthat::test_that("nested ACL diagnostics remain mandatory on both hosts", {
+  file = "test-proc-writer-runtime.R"
+  added = c(
+    "nested ACL diagnostics preserve exact LF and split CRLF progress",
+    "nested ACL diagnostics reject arbitrary and unordered native output",
+    "nested ACL diagnostics read only after zero-time polling",
+    "writer nested ACL phases preserve exit failure without granting readiness",
+    "writer early failures retain only fixed numeric nested ACL phases")
+  expected = c(writer_runtime_titles[seq_len(30L)], added)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_true(all(added %in% result$mandatory_cases))
+    testthat::expect_false(result$platform_guard_only)
+    for (title in added) {
+      i = match(title, expected)
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_false(optional_allowed_skip("test-proc-marker-family.R", title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("failed", "warnings", "skipped", "passed")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled nested ACL diagnostic error"),
+          class = c("expectation_error", "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    }
+  }
+})
+
+
+testthat::test_that("fixed Codex control cases remain mandatory without capability guards", {
+  file = "test-cli-codex.R"
+  added = c(
+    "Windows control entry listing refuses unreadable or uncertain parents",
+    "Windows control entry membership retains fixed names without following targets",
+    "Windows reparse digests use only the trusted query and stripped helper environment",
+    "Windows reparse probes reject unavailable executables and uncertain results",
+    "control digests query only unobservable Windows entries and retain POSIX markers",
+    "fixed dangling SYSTEM and MCP control links keep markers and detect retargeting")
+  original = c(
+    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "the next turn resumes the Codex thread with -c sandbox_mode=",
+    "a fake codex returns a function's numeric result through the HTTP MCP bridge",
+    "control files gptr cannot hash are kept by a marker, so an auto exec still runs",
+    "retargeting a dangling control link warns after the Codex exec completes",
+    "a control file gptr cannot read is marked by its size and time instead")
+  expected = c(original, added)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, expected)
+    testthat::expect_identical(result$platform_guard_cases, character())
+    testthat::expect_false(result$platform_guard_only)
+    for (title in added) {
+      i = match(title, expected)
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_false(optional_allowed_skip("test-cli-claude.R", title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("failed", "warnings", "skipped", "passed")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      late = rows
+      late[[i]]$passed = 3L
+      late[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled fixed Codex entry error"),
+          class = c("expectation_error", "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    }
   }
 })
