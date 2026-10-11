@@ -214,7 +214,9 @@ context_instruction_files = function(root = project_root(), cwd = getwd()) {
   if (!length(paths)) return(list())
   keys = vapply(paths, path_key, "")
   is_user = seq_along(paths) == 1L & !is.null(user)
-  keep = !duplicated(keys)
+  keep = !duplicated(keys) &
+    (is_user | (path_inside(paths, root) &
+                  !vapply(paths, context_file_guarded, NA, root = root)))
   paths = paths[keep]
   is_user = is_user[keep]
   home = user_home()

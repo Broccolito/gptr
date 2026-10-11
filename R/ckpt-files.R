@@ -108,25 +108,38 @@ ckpt_foreign_lock = function(session_files) {
 ckpt_gc = function(root = workspace_root(create = FALSE), days = gptr_opt("checkpoint_days")) {
   store = file.path(root, "checkpoints")
   if (!dir.exists(store)) return(invisible(list(deleted = 0L, skipped = FALSE)))
-  sessions = list.files(file.path(root, "sessions"), pattern = "[.]jsonl$", full.names = TRUE)
+  session_dir = file.path(root, "sessions")
+  blob_dir = file.path(store, "blobs")
+  object_dir = file.path(store, "objects")
+  if (!all(path_inside(c(store, session_dir), root)) ||
+        !all(path_inside(c(blob_dir, object_dir), store))) {
+    return(invisible(list(deleted = 0L, skipped = TRUE)))
+  }
+  sessions = list.files(session_dir, pattern = "[.]jsonl$", full.names = TRUE)
+  if (!all(path_inside(sessions, session_dir))) {
+    return(invisible(list(deleted = 0L, skipped = TRUE)))
+  }
   if (ckpt_foreign_lock(sessions)) return(invisible(list(deleted = 0L, skipped = TRUE)))
   x = as.character(unlist(lapply(sessions, readLines, warn = FALSE, encoding = "UTF-8")))
   live = unlist(regmatches(x, gregexpr("(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])", x,
                                        perl = TRUE, useBytes = TRUE)))
   old = function(p, d) (difftime(Sys.time(), file.mtime(p), units = "days") > d) %in% TRUE
-  blobs = list.files(file.path(store, "blobs"), recursive = TRUE, full.names = TRUE)
+  blobs = list.files(blob_dir, recursive = TRUE, full.names = TRUE)
+  blobs = blobs[path_inside(blobs, blob_dir)]
   hash = sub("[.]gz$", "", basename(blobs))
   tmp = grepl("[.]tmp-", hash)
   dead = !tmp & !(hash %in% live) & old(blobs, days)
   unlink(blobs[dead | (tmp & old(blobs, 1))])
   ids = sub("^.*_", "", sub("[.]jsonl$", "", basename(sessions)))
-  spills = list.dirs(file.path(store, "objects"), recursive = FALSE)
+  spills = list.dirs(object_dir, recursive = FALSE)
+  spills = spills[path_inside(spills, object_dir)]
   unlink(spills[!(basename(spills) %in% ids) & old(spills, days)], recursive = TRUE)
   keep = !tmp & !dead
   idx = stats::setNames(as.list(as.numeric(file.mtime(blobs[keep]))), hash[keep])
   write_atomic(file.path(store, "index.json"), json_encode(list(blobs = idx)))
-  bytes = sum(file.size(c(blobs[keep], list.files(file.path(store, "objects"), recursive = TRUE,
-                                                   full.names = TRUE))), na.rm = TRUE)
+  objects = list.files(object_dir, recursive = TRUE, full.names = TRUE)
+  objects = objects[path_inside(objects, object_dir)]
+  bytes = sum(file.size(c(blobs[keep], objects)), na.rm = TRUE)
   if (bytes > gptr_opt("checkpoint_disk_bytes")) {
     gptr_inform(paste0("The checkpoint store ", store, " holds ", env_fmt_bytes(bytes),
                        ", above gptr.checkpoint_disk_bytes; gptr deletes only blobs that no ",

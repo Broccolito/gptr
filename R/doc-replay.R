@@ -1082,17 +1082,18 @@ gptr_cache = function(action = c("info", "prune", "clear"), kind = c("all", "s1"
 #' which are never removed, IC-51; the S1 cache's `salt` file is not an entry)
 #' @noRd
 doc_cache_files = function(kind) {
-  cache = file.path(doc_root(), "cache")
-  tmp = file.path(cache, "tmp")
-  sidecars = list.files(tmp, pattern = "^pending-.*[.]rds$", full.names = TRUE)
-  f = switch(kind,
-             s1 = list.files(file.path(cache, "s1"), pattern = "[.]json$", recursive = TRUE,
-                             full.names = TRUE),
-             s2 = list.files(file.path(cache, "s2"), pattern = "[.]json$", recursive = TRUE,
-                             full.names = TRUE),
-             tmp = setdiff(list.files(tmp, full.names = TRUE), sidecars),
-             sidecar = sidecars,
-             character())
+  if (!kind %in% c("s1", "s2", "tmp", "sidecar")) return(character())
+  root = doc_root()
+  cache = file.path(root, "cache")
+  dir = file.path(cache, if (identical(kind, "sidecar")) "tmp" else kind)
+  if (!all(path_inside(c(cache, dir), root))) return(character())
+  answers = kind %in% c("s1", "s2")
+  f = list.files(dir, pattern = if (answers) "[.]json$" else NULL, recursive = answers,
+                 full.names = TRUE)
+  f = f[path_inside(f, dir)]
+  sidecars = grepl("^pending-.*[.]rds$", basename(f))
+  if (identical(kind, "tmp")) f = f[!sidecars]
+  if (identical(kind, "sidecar")) f = f[sidecars]
   f[file.exists(f) & !dir.exists(f)]
 }
 
