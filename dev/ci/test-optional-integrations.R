@@ -436,11 +436,16 @@ original_regression_titles = list(
   "test-ckpt-files.R" = c(
     "the blob store deduplicates, compresses small text and restores atomically",
     "a mutating step records created, modified and deleted files; undo and redo swap them",
-    "undo keeps a file edited after the turn (3-way) unless forced"),
+    "undo keeps a file edited after the turn (3-way) unless forced",
+    "already-compressed files are stored raw and come back byte for byte",
+    "the blob store reports effective create denial and restores its owned bucket",
+    "undo and redo of a case-only rename preserve bytes on the observed filesystem"),
   "test-tool-edit.R" = c(
     "NFKC compatibility forms match through stringi",
     "CRLF, BOM, mixed endings, CP1252, UTF-16 and stray bytes round-trip byte for byte",
-    "a patch that names one file in two operations is refused and writes nothing"),
+    "a patch that names one file in two operations is refused and writes nothing",
+    "two operations on one file through a directory link are refused",
+    "patch additions respect the observed case-folding of the filesystem"),
   "test-storage-boundaries.R" = c(
     "cache info and cleanup stay inside owned cache directories",
     "checkpoint GC never removes foreign content through storage links",
@@ -471,8 +476,7 @@ original_os_guards = list(
   "test-tool-edit.R" = c(
     "Delete File refuses a directory, an empty Add File is empty, a move removes its name",
     "Delete File and a move remove only the file they name, whatever its characters",
-    "a move onto its own file under another spelling keeps the file and takes the name",
-    "two operations on one file through a directory link or a folded name are refused"))
+    "a move onto its own file under another spelling keeps the file and takes the name"))
 
 testthat::test_that("original regressions require their representative cases on both hosts", {
   for (file in names(original_regression_titles)) {
@@ -542,9 +546,31 @@ testthat::test_that("regression capabilities remain fatal even after earlier ass
   name = "two operations on one file through a directory link or a folded name are refused"
   rows = c(lapply(original_regression_titles[[file]], record),
     list(record(name, passed = 3L, skipped = 1L)))
-  testthat::expect_false(optional_allowed_skip(file, name, FALSE))
-  testthat::expect_error(optional_gate(rows, file, FALSE), "Skipped")
-  result = optional_gate(rows, file, TRUE)
-  testthat::expect_identical(result$platform_guard_cases, name)
-  testthat::expect_false(name %in% result$mandatory_cases)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_false(optional_allowed_skip(file, name, windows))
+    testthat::expect_error(optional_gate(rows, file, windows), "Skipped")
+  }
+})
+
+testthat::test_that("split filesystem cases require real assertions without late trait skips", {
+  variants = list(
+    "test-ckpt-files.R" = c(
+      "already-compressed files are stored raw and come back byte for byte",
+      "the blob store reports effective create denial and restores its owned bucket",
+      "undo and redo of a case-only rename preserve bytes on the observed filesystem"),
+    "test-tool-edit.R" = c(
+      "two operations on one file through a directory link are refused",
+      "patch additions respect the observed case-folding of the filesystem"))
+  testthat::expect_length(unlist(optional_original_os_guards), 20L)
+  for (file in names(variants)) for (name in variants[[file]]) {
+    testthat::expect_true(name %in% optional_titles[[file]])
+    for (windows in c(FALSE, TRUE)) {
+      testthat::expect_false(optional_allowed_skip(file, name, windows))
+      rows = lapply(original_regression_titles[[file]], record)
+      i = match(name, original_regression_titles[[file]])
+      rows[[i]]$passed = 3L
+      rows[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(rows, file, windows), "Skipped")
+    }
+  }
 })
