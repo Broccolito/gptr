@@ -205,7 +205,9 @@ writer_runtime_titles = c(
   "writer early failures retain only fixed numeric nested ACL phases",
   "writer absence script accepts only two native missing-path exception types",
   "writer absence script isolates quoted paths from control and privacy rules",
-  "Windows native absence probe refuses existing aliases and denied attributes")
+  "Windows native absence probe refuses existing aliases and denied attributes",
+  "absence diagnostics accept only ordered fixed numeric stage tokens",
+  "absence exit diagnostics retain numeric status without arbitrary content")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -339,13 +341,17 @@ writer_affected_titles = list(
 testthat::test_that("affected transport integrations require their actual representative cases", {
   for (file in names(writer_affected_titles)) {
     titles = writer_affected_titles[[file]]
-    testthat::expect_identical(optional_titles[[file]], titles)
-    rows = lapply(titles, record)
+    if (identical(file, "test-subagent-worker.R")) {
+      testthat::expect_identical(optional_titles[[file]][seq_along(titles)], titles)
+    } else {
+      testthat::expect_identical(optional_titles[[file]], titles)
+    }
+    rows = lapply(optional_titles[[file]], record)
     for (windows in c(FALSE, TRUE)) {
       testthat::expect_true(optional_gate(rows, file, windows)$passed)
       testthat::expect_error(optional_gate(rows[-1L], file, windows), "Missing mandatory")
       testthat::expect_error(optional_gate(c(rows, rows[1L]), file, windows), "Duplicate")
-      for (i in seq_along(rows)) {
+      for (i in seq_along(titles)) {
         messages = c(failed = "Failed", warnings = "Warnings", skipped = "Skipped",
           passed = "assertions")
         for (field in c("failed", "warnings", "skipped", "passed")) {
@@ -1233,10 +1239,10 @@ testthat::test_that("absence policy and native probe retain exact mandatory cove
     "writer absence script isolates quoted paths from control and privacy rules",
     "Windows native absence probe refuses existing aliases and denied attributes")
   expected = c(writer_runtime_titles[seq_len(35L)], added)
-  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(optional_titles[[file]][seq_len(38L)], expected)
   testthat::expect_identical(optional_titles[[file]][[30L]],
     "Windows production mailbox has a protected owner DACL and inherited file rights")
-  rows = lapply(expected, record)
+  rows = lapply(writer_runtime_titles, record)
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
     testthat::expect_true(result$passed)
@@ -1287,4 +1293,228 @@ testthat::test_that("absence policy and native probe retain exact mandatory cove
   testthat::expect_false(added[[3L]] %in% result$mandatory_cases)
   testthat::expect_identical(sum(vapply(result$rows[38L], function(row) row$passed, 0L)), 0L)
   testthat::expect_error(optional_gate(guarded, file, TRUE), "Skipped")
+})
+
+
+retirement_titles = c(
+  "idle writer eligibility requires exact identities and a clean acknowledged mailbox",
+  "idle writer eligibility refuses queued unknown changed and unpublished states",
+  "retiring an acknowledged writer preserves the target input connection",
+  "unsettled retirement keeps its cap slot marker and target input",
+  "writer stop never removes a replacement table state",
+  "ordinary writer stop retains its default target-input close",
+  "retiring writer retry refuses replacement until owned cleanup settles",
+  "writer admission retires only one verified other idle actor at the unchanged cap",
+  "writer admission does not retire a queued actor to obtain a cap slot")
+
+
+testthat::test_that("conditional retirement retains every pure witness on both hosts", {
+  file = "test-proc-writer-retirement.R"
+  native = "idle Windows writer retirement preserves target stdin and later FIFO EOF"
+  expected = c(retirement_titles, native)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_true(all(retirement_titles %in% result$mandatory_cases))
+    testthat::expect_false(result$platform_guard_only)
+    for (i in seq_along(retirement_titles)) {
+      testthat::expect_false(optional_allowed_skip(file, retirement_titles[[i]], windows))
+      testthat::expect_false(optional_allowed_skip("test-proc-writer-idle-boundary.R",
+                                                 retirement_titles[[i]], windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("passed", "failed", "warnings")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      late = rows
+      late[[i]]$passed = 3L
+      late[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = retirement_titles[[i]], results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled conditional retirement error"),
+          class = c("expectation_error", "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    }
+  }
+})
+
+
+testthat::test_that("conditional retirement continuity has exactly one native platform guard", {
+  file = "test-proc-writer-retirement.R"
+  title = "idle Windows writer retirement preserves target stdin and later FIFO EOF"
+  expected = c(retirement_titles, title)
+  rows = lapply(expected, record)
+  i = length(rows)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_identical(result$mandatory_cases, if (windows) expected else retirement_titles)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+    for (field in c("failed", "warnings")) {
+      changed = rows
+      changed[[i]][[field]] = 1L
+      testthat::expect_error(optional_gate(changed, file, windows))
+    }
+    raw = rows
+    raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+      structure(list(), class = "expectation_success"),
+      structure(list(message = "controlled retirement continuity error"),
+        class = c("expectation_error", "condition"))))))[[1L]]
+    testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    testthat::expect_false(optional_allowed_skip("test-proc-writer-idle-boundary.R",
+                                               title, windows))
+    testthat::expect_false(optional_allowed_skip(file, "unrelated native capability", windows))
+  }
+  testthat::expect_false(optional_allowed_skip(file, title, TRUE))
+  testthat::expect_true(optional_allowed_skip(file, title, FALSE))
+  zero = rows
+  zero[[i]]$passed = 0L
+  testthat::expect_error(optional_gate(zero, file, TRUE), "assertions")
+  late = rows
+  late[[i]]$passed = 3L
+  late[[i]]$skipped = 1L
+  testthat::expect_error(optional_gate(late, file, TRUE), "Skipped")
+  guarded = rows
+  guarded[[i]]$passed = 0L
+  guarded[[i]]$skipped = 1L
+  result = optional_gate(guarded, file, FALSE)
+  testthat::expect_true(result$passed)
+  testthat::expect_identical(result$mandatory_cases, retirement_titles)
+  testthat::expect_identical(result$platform_guard_cases, title)
+  testthat::expect_false(result$platform_guard_only)
+})
+
+
+
+testthat::test_that("Windows worker parent death has one exact native platform guard", {
+  file = "test-subagent-worker.R"
+  original = c(
+    "a worker child answers through its proxy session and returns its exports",
+    "gptr_cancel() of a worker child leaves no process (P19 acceptance 5)")
+  title = "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"
+  expected = c(original, title)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_identical(result$mandatory_cases, if (windows) expected else original)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_identical(optional_allowed_skip(file, title, windows), !windows)
+    testthat::expect_false(optional_allowed_skip("test-mcp-client.R", title, windows))
+    testthat::expect_false(optional_allowed_skip(file, "unrelated parent-death guard", windows))
+    testthat::expect_error(optional_gate(rows[1:2], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[3L]), file, windows), "Duplicate")
+    for (field in c("failed", "warnings")) {
+      changed = rows
+      changed[[3L]][[field]] = 1L
+      testthat::expect_error(optional_gate(changed, file, windows))
+    }
+    for (kind in c("expectation_error", "expectation_warning")) {
+      raw = rows
+      raw[[3L]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled worker parent-death condition"),
+          class = c(kind, "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows))
+    }
+    unknown = record("unrelated worker capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+  empty = rows
+  empty[[3L]]$passed = 0L
+  testthat::expect_error(optional_gate(empty, file, TRUE), "assertions")
+  late = rows
+  late[[3L]]$passed = 3L
+  late[[3L]]$skipped = 1L
+  testthat::expect_error(optional_gate(late, file, TRUE), "Skipped")
+  guarded = rows
+  guarded[[3L]]$passed = 0L
+  guarded[[3L]]$skipped = 1L
+  result = optional_gate(guarded, file, FALSE)
+  testthat::expect_true(result$passed)
+  testthat::expect_identical(result$platform_guard_cases, title)
+  testthat::expect_identical(result$mandatory_cases, original)
+  testthat::expect_false(result$platform_guard_only)
+  testthat::expect_identical(result$rows[[3L]]$passed, 0L)
+  testthat::expect_error(optional_gate(guarded, file, TRUE), "Skipped")
+  unix = "a worker exits within 10 s when its parent is killed (IC-60)"
+  testthat::expect_true(optional_allowed_skip(file, unix, TRUE))
+  testthat::expect_false(optional_allowed_skip(file, unix, FALSE))
+})
+
+
+
+testthat::test_that("retirement raw warnings and unrelated late skips stay fatal", {
+  file = "test-proc-writer-retirement.R"
+  native = "idle Windows writer retirement preserves target stdin and later FIFO EOF"
+  expected = c(retirement_titles, native)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    for (i in seq_along(expected)) {
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = expected[[i]], results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled retirement raw warning"),
+          class = c("expectation_warning", "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows), "Warnings")
+    }
+    unknown = record("unrelated retirement capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+})
+
+
+
+testthat::test_that("absence decoder diagnostics remain pure mandatory coverage on both hosts", {
+  file = "test-proc-writer-runtime.R"
+  added = c(
+    "absence diagnostics accept only ordered fixed numeric stage tokens",
+    "absence exit diagnostics retain numeric status without arbitrary content")
+  expected = c(writer_runtime_titles[seq_len(38L)], added)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(optional_titles[[file]][[30L]],
+    "Windows production mailbox has a protected owner DACL and inherited file rights")
+  testthat::expect_identical(optional_titles[[file]][[38L]],
+    "Windows native absence probe refuses existing aliases and denied attributes")
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_true(all(added %in% result$mandatory_cases))
+    testthat::expect_false(result$platform_guard_only)
+    for (title in added) {
+      i = match(title, expected)
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_false(optional_allowed_skip("test-proc-writer-retirement.R", title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("passed", "failed", "warnings")) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      late = rows
+      late[[i]]$passed = 3L
+      late[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      for (kind in c("expectation_error", "expectation_warning")) {
+        raw = rows
+        raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+          structure(list(), class = "expectation_success"),
+          structure(list(message = "controlled absence diagnostic condition"),
+            class = c(kind, "condition"))))))[[1L]]
+        testthat::expect_error(optional_gate(raw, file, windows))
+      }
+    }
+    unknown = record("unrelated absence diagnostic capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
 })

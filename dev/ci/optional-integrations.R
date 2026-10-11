@@ -98,7 +98,9 @@ optional_titles = list(
     "writer early failures retain only fixed numeric nested ACL phases",
     "writer absence script accepts only two native missing-path exception types",
     "writer absence script isolates quoted paths from control and privacy rules",
-    "Windows native absence probe refuses existing aliases and denied attributes"),
+    "Windows native absence probe refuses existing aliases and denied attributes",
+    "absence diagnostics accept only ordered fixed numeric stage tokens",
+    "absence exit diagnostics retain numeric status without arbitrary content"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
@@ -122,7 +124,8 @@ optional_titles = list(
     "progress re-arms the idle timer; without progress a call times out and is cancelled"),
   "test-subagent-worker.R" = c(
     "a worker child answers through its proxy session and returns its exports",
-    "gptr_cancel() of a worker child leaves no process (P19 acceptance 5)"),
+    "gptr_cancel() of a worker child leaves no process (P19 acceptance 5)",
+    "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"),
   "test-cli-common.R" = c(
     "pcli_version() and pcli_probe() read the fake CLIs and cache per command",
     "a watched child is stopped through P05's glue: no watcher and no job row stay"),
@@ -182,7 +185,18 @@ optional_titles = list(
     "canonical markers enumerate an owned family and preserve unrelated processes",
     "marker environment diagnostics distinguish casing from private value changes"),
   "test-proc-writer-idle-boundary.R" =
-    "two warm acknowledged Windows writers do not starve a third two-second write"
+    "two warm acknowledged Windows writers do not starve a third two-second write",
+  "test-proc-writer-retirement.R" = c(
+    "idle writer eligibility requires exact identities and a clean acknowledged mailbox",
+    "idle writer eligibility refuses queued unknown changed and unpublished states",
+    "retiring an acknowledged writer preserves the target input connection",
+    "unsettled retirement keeps its cap slot marker and target input",
+    "writer stop never removes a replacement table state",
+    "ordinary writer stop retains its default target-input close",
+    "retiring writer retry refuses replacement until owned cleanup settles",
+    "writer admission retires only one verified other idle actor at the unchanged cap",
+    "writer admission does not retire a queued actor to obtain a cap slot",
+    "idle Windows writer retirement preserves target stdin and later FIFO EOF")
 )
 
 optional_select = function(pattern, root) {
@@ -228,6 +242,10 @@ optional_platform_guard = function(file, name, windows) {
     "two acknowledged idle Windows writers do not starve a third reading target"))
   if (identical(file, "test-proc-writer-idle-boundary.R")) return(identical(name,
     "two warm acknowledged Windows writers do not starve a third two-second write"))
+  if (identical(file, "test-proc-writer-retirement.R")) return(identical(name,
+    "idle Windows writer retirement preserves target stdin and later FIFO EOF"))
+  if (identical(file, "test-subagent-worker.R")) return(identical(name,
+    "a Windows worker exits within 10 s after its acknowledged parent dies (IC-60)"))
   identical(file, "test-proc-writer-runtime.R") && name %in% c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",
