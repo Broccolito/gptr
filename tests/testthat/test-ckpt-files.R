@@ -25,6 +25,7 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
   old_mode = file.mode(path)
   invoke = NULL
   backup = NULL
+  stage = NULL
   if (windows) {
     control = tempfile("gptr-owned-acl-", tmpdir = root)
     created = dir.create(control, mode = "0700")
@@ -32,21 +33,28 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
     if (!isTRUE(created)) stop("Refusing an existing ACL control directory")
     script = file.path(control, "acl.ps1")
     backup = file.path(control, "access.txt")
+    stage = file.path(control, "stage.txt")
     writeLines(c(
-      "param([string]$Path, [string]$Control, [string]$Backup, [string]$Action)",
+      "param([string]$Path, [string]$Control, [string]$Backup,",
+      "  [string]$Stage, [string]$Action)",
       "$ErrorActionPreference = 'Stop'",
+      "[System.IO.File]::WriteAllText($Stage, 'script-entered')",
       "$section = [System.Security.AccessControl.AccessControlSections]::Access",
       "if ($Action -eq 'deny') {",
       "  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User",
-      "  $private = New-Object System.Security.AccessControl.DirectorySecurity",
+      "  [System.IO.File]::WriteAllText($Stage, 'token-read')",
+      "  $private = [System.Security.AccessControl.DirectorySecurity]::new()",
       "  $private.SetAccessRuleProtection($true, $false)",
       "  $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit",
       "  $inherit = $inherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit",
       "  $allow = [System.Security.AccessControl.FileSystemAccessRule]::new(",
       "    $sid, 'FullControl', $inherit, 'None', 'Allow')",
       "  $private.AddAccessRule($allow)",
+      "  [System.IO.File]::WriteAllText($Stage, 'private-acl-built')",
       "  [System.IO.Directory]::SetAccessControl($Control, $private)",
+      "  [System.IO.File]::WriteAllText($Stage, 'private-acl-applied')",
       "  $acl = [System.IO.Directory]::GetAccessControl($Path, $section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'bucket-acl-read')",
       "  $original = $acl.GetSecurityDescriptorSddlForm($section)",
       "  $stream = [System.IO.File]::Open($Backup, 'CreateNew', 'Write', 'None')",
       "  try {",
@@ -54,27 +62,44 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
       "    $stream.Write($bytes, 0, $bytes.Length)",
       "    $stream.Flush()",
       "  } finally { $stream.Dispose() }",
+      "  [System.IO.File]::WriteAllText($Stage, 'backup-saved')",
       "  $deny = [System.Security.AccessControl.FileSystemAccessRule]::new(",
       "    $sid, 'CreateFiles', 'Deny')",
       "  $acl.AddAccessRule($deny)",
       "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
+      "  [System.IO.File]::WriteAllText($Stage, 'deny-applied')",
       "} elseif ($Action -eq 'restore') {",
       "  $original = [System.IO.File]::ReadAllText($Backup, [System.Text.Encoding]::UTF8)",
-      "  $acl = New-Object System.Security.AccessControl.DirectorySecurity",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-read')",
+      "  $acl = [System.Security.AccessControl.DirectorySecurity]::new()",
       "  $acl.SetSecurityDescriptorSddlForm($original, $section)",
       "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-applied')",
       "  $current = [System.IO.Directory]::GetAccessControl($Path, $section)",
       "  if ($current.GetSecurityDescriptorSddlForm($section) -cne $original) {",
       "    throw 'Owned bucket Access descriptor restoration did not match'",
       "  }",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-verified')",
       "} else { throw 'Unknown owned ACL action' }"), script)
     shell = Sys.which("powershell.exe")
     if (!nzchar(shell)) stop("Owned Windows permission test requires powershell.exe")
     invoke = function(action) {
-      processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
-        "-Path", path, "-Control", control, "-Backup", backup, "-Action", action),
-        timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
-        cleanup_tree = TRUE, env = character())
+      writeBin(charToRaw("launch"), stage)
+      tryCatch(processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
+        "-Path", path, "-Control", control, "-Backup", backup, "-Stage", stage,
+        "-Action", action), timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
+        cleanup_tree = TRUE, env = character()), error = function(error) {
+          phase = tryCatch(rawToChar(readBin(stage, "raw", 128L)),
+                           error = function(error) "unreadable-marker")
+          allowed = c("launch", "script-entered", "token-read", "private-acl-built",
+            "private-acl-applied", "bucket-acl-read", "backup-saved", "deny-applied",
+            "restore-read", "restore-applied", "restore-verified")
+          if (!(phase %in% allowed)) phase = "invalid-marker"
+          # Emit only fixed stage labels, then rethrow the original condition unchanged.
+          tryCatch(cat("Owned checkpoint ACL action=", action, " stage=", phase, "\n",
+                       sep = "", file = stdout()), error = function(error) NULL)
+          stop(error)
+        })
       invisible(NULL)
     }
   }
