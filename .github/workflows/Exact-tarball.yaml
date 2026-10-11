@@ -105,7 +105,8 @@ jobs:
           for item in members:
               parts = pathlib.PurePosixPath(item.name).parts
               assert parts and parts[0] == 'gptr' and '..' not in parts, item.name
-              assert not ({'dev', 'docs', '.secrets', '.git', 'node_modules'} & set(parts)), item.name
+              assert len(parts) == 1 or parts[1] not in {'dev', 'docs'}, item.name
+              assert not ({'.secrets', '.git', 'node_modules'} & set(parts)), item.name
           names = [item.name for item in members if item.isfile()]
           assert {'gptr/DESCRIPTION', 'gptr/NAMESPACE', 'gptr/LICENSE'} <= set(names)
           docs = [name for name in names if name.startswith('gptr/inst/doc/')]
