@@ -29,11 +29,10 @@ Linux runners have separate resources and can exercise the offline cases without
   Python modules. Its eight stdlib unit tests passed in 0.023 seconds. The local bundled
   Quarto exists; the private Python environment still needs pandas/NumPy before local integration.
 
-All new R cases are test-first source preparation, not a passing live or native-platform claim.
-The unchanged Windows file runner will collect the initial actual-platform failures; the later
-strict integration runner must independently reject warnings, missing mandatory cases and
-unexpected skips before any GREEN claim. Four mandatory cross-plan checks are pending on
-the candidate's plan amendments. Runtime implementation is unchanged in the initial candidate.
+New R cases were prepared before actual-platform execution. The unchanged Windows file runner
+collected the initial failures; the strict integration runner independently rejects warnings,
+missing mandatory cases and unexpected skips before any GREEN claim. All four mandatory
+cross-plan checks passed on candidate `245de54`. Runtime implementation remains unchanged.
 
 ## Execution ledger
 
@@ -43,8 +42,9 @@ the candidate's plan amendments. Runtime implementation is unchanged in the init
 | Local pandas/NumPy install | Waiting for resources | Existing private Python 3.12 lacks both modules |
 | Actual Windows security baseline | Failed fixtures; corrected source ready | Run `38112622473`: raw 6 errors, 3 failed assertions, 6 warnings, 53 passes, 0 skips |
 | Actual Windows/Unix child-process baseline | Windows runtime RED; Unix pending | Same run: 3 watchdog failures, 24 passes, 0 skips, no observed process-test warnings |
-| Strict optional integration workflow | In progress | Explicit dependencies, named coverage and bounded jobs |
-| Index/extract/R-parse/lintr plan checks | Pending hosted execution | New serial checker rejects soft diagnostic failures |
+| Strict optional integration workflow | Setup RED; corrected rerun pending | Run `38113192422`: Windows Python pin unavailable; Linux unit helper path invalid; integration cases did not run |
+| Index/extract/R-parse/lintr plan checks | Passed exact `245de54`; rerun with plan updates | All four Linux stages succeeded and source hashes matched before/after |
+| Owned-writer transport prototype | Source prepared; peer review ongoing | Four bounded cases retain original native-runtime RED tests; not a production fix |
 | Shared Ollama model | Preserved | No model stop, unload or inference request |
 
 Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
@@ -52,8 +52,9 @@ It uses the unchanged legacy file runner to collect failures, not to certify war
 All three process cases reached the 30-second case bound in about 32 seconds; owned families
 settled, peak family RSS was 348-374 MB, output about 10 KB, and sampling errors were zero.
 Cancellation reached the queued phase before hanging, consistent with the native write inside
-the drain preventing later output/timer/timeout handling. A public asynchronous pipepair is
-being investigated; no speculative runtime fix has been applied.
+the drain preventing later output/timer/timeout handling. Public processx pipe writes also use
+the blocking Windows write operation. An independently owned writer prototype is being reviewed;
+no speculative runtime fix has been applied.
 
 Six security cases stopped before link creation because positional `local_tempfile()` used its
 deprecated binding mode rather than returning a path. The two timestamp fixtures lost fractional
@@ -65,7 +66,15 @@ established by this scaffold run. The legacy numeric summary misses raw expectat
 the new strict runner counts raw error/failure/warning conditions independently.
 
 The plan-check diagnostic controller passed six stdlib regression tests after a test-first RED.
-This proves its parse-report guard, not execution of the four actual R/index/lint stages.
+The subsequent strict [run `38113192422`](https://github.com/Broccolito/gptr/actions/runs/38113192422)
+executed all four actual plan stages successfully on Linux at exact `245de54`: index about
+90 seconds, extraction 0.3 seconds, parse 1 second and lint 53 seconds, with unchanged source
+hashes. Its integration setup failed separately: Python `3.12.12` has no Windows x64 archive,
+and `test_file()` changes into `dev/ci`, making the unit helper's root-relative source path
+invalid. The reviewed correction selects Python `3.12.10`, available for both hosts, and a
+helper path valid in either controlled working directory. Optional integration cases, their
+scoped R lint, and corrected Windows fixtures have not run yet. Source syntax and Python tests
+are preparation only; these corrections require a fresh hosted rerun.
 The complete older exact-archive run `38102472275` has finished: all five consumers failed.
 Mac's two failures are the old notebook stdout assertion already corrected at `ad4e6a9`;
 Linux devel reports the same two plus the known mock-path fixture assertions. These older

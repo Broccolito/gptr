@@ -1,5 +1,7 @@
 # Pure result-gate tests. Run before the dedicated integration runner is implemented.
-source("dev/ci/optional-integrations.R", local = TRUE)
+runner_path = if (file.exists("optional-integrations.R")) "optional-integrations.R" else
+  file.path("dev", "ci", "optional-integrations.R")
+source(runner_path, local = TRUE)
 
 record = function(test, passed = 1L, skipped = 0L, failed = 0L, warnings = 0L) {
   list(test = test, passed = passed, skipped = skipped, failed = failed, warnings = warnings)

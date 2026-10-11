@@ -471,12 +471,14 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Python/R dependencies | Framework reticulate exists; private Python lacks pandas/numpy. ONGOING explicit hosted Python+pandas provisioning; local wheel installation WAITING resource lease. Verify actual bridge values, not only package directories. |
 | Browser/search prerequisites | Local Chrome/chromote/rg exist. ONGOING explicit hosted discovery/preflight; retain Chrome startup bound, actual render/screenshot proof and search comparison. |
 | Windows filesystem safety | Initial hosted38112622473 failed fixtures: raw6errors/3failures/6warnings/53passes/0skips. ONGOING corrected named temporary script/integer initial timestamps; eight strict actual-platform tests preserved, option-name diagnostic added. Link/cache runtime failures not yet established. |
-| Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. ONGOING asynchronous pipepair investigation; fixed deadlines/RSS/output and identity-checked child cleanup preserved. Unix control pending. D-019 remains open. |
-| Validation/merge | Initial test packet reviewed, committed and pushed to isolated candidate. ONGOING hosted RED; WAITING minimal fixes, strict hosted GREEN/scoped lint/required-case counts and four plan checks, then integration. No skipped-case or zero-selection pass. |
+| Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. ONGOING owned-writer prototype review; four source-only probes retain fixed deadlines/RSS/output, byte/line oracles and identity-checked cleanup. Unix control pending. D-019 remains open. |
+| Validation/merge | Candidate `245de54` pushed. Strict hosted38113192422 failed setup before integration: Windows Python3.12.12 unavailable, Linux unit helper source path invalid. ONGOING reviewed3.12.10/path correction and rerun; WAITING strict integration GREEN/scoped lint/required-case counts, then integration. No skipped-case or zero-selection pass. |
 
 The optional dependency helper's9 stdlib tests and plan diagnostic guard's6 stdlib tests
-are GREEN. They launch no R/browser/model process and do not replace actual integration
-or the four mandatory plan checks. The strict hosted runner counts raw expectation errors,
+are GREEN. They launch no R/browser/model process and do not replace actual integration.
+All four mandatory index/extract/R-parse/lintr plan checks actually passed on Linux at
+exact245de54 in38113192422; source manifests matched before/after. Recheck the updated plan
+on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
 Latest21:43 PDT load24.96/38.68/31.81, CPU39.92%idle, physical RAM123GiB used/4424MiB
@@ -491,7 +493,8 @@ used and disk127GiB; CPU3.57%idle with no thermal warning. The distinct memory-p
 was14%free; it does not clear the CPU/swap/disk gates. All owned
 test children have exited. Hold all new local R, build/check, model and kernel jobs; continue
 bounded static review and hosted-status reads. Preserve unrelated models/processes. Latest
-P14/P15 cross-plan parse/lint checks, roxygen generation and installed visual checks are pending.
+P14/P15 plan amendments passed the hosted gates at245de54; updated-plan gates, roxygen
+generation and installed visual checks remain pending.
 The maintainer explicitly chose to preserve the separate Ollama model and continue review.
 Source review of the frozen eight-file history frontend packet is clear; Python AST/notebook
 JSON checks are preparation only. Four Rmd modes, Quarto and actual IRkernel remain WAITING.
