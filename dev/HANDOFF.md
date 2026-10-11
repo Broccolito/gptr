@@ -1,5 +1,23 @@
 # GPTR 1.0 implementation - handoff
 
+## Optional integration rerun — 2026-10-10 23:17 PDT
+
+Reviewed cache/browser/fixture fixes are pushed through38cc8dc on the isolated
+`codex/skipped-platform-tests` branch/worktree. Run38116814583 stopped before package tests:
+Windows multiline inline lint failed parsing; Linux caught an unbraced member assignment
+in the new browser cleanup fixture. Other10Linux scoped files lint-clean; all four
+plan checks passed38cc8dc with unchanged source bytes. Saved lint-file launch and braced
+teardown are now frozen/reviewed for a six-file actual Windows/Linux rerun.
+
+The production Windows stdin writer is still source-only and under independent review.
+Stable mailbox identity/owner/child-alias checks, the Windows9998-byte expression limit and
+Unix marker-release behavior require correction and actual hosted validation. Do not copy
+half-prepared primary runtime files or claim D-019 closed. Original native3 oracles remain
+unchanged. Local dependencies/frontend/model tests remain held:23:04 load157.27,0.7%idle,
+swap12,679.62MiB, disk246GiB;23:15 partial probe load185.09,3.99%idle. Shared Ollama is
+preserved. Main718e81e, maintainer edits, unrun primary regressions and stash remain intact.
+
+
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached
 `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`. Do not reset the primary checkout

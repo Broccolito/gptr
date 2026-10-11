@@ -125,6 +125,28 @@ class DiscoveryTests(unittest.TestCase):
             overlay.assert_called_once_with(argv[0], argv, env)
             run.assert_not_called()
 
+    def test_windows_lint_launch_uses_the_saved_complete_script(self):
+        argv = ['C:\\space path\\Rscript.exe', '--vanilla', 'dev/ci/lint-optional.R']
+        env = {'PATH': 'owned-path', 'GPTR_LIVE_TESTS': 'false'}
+        with mock.patch.object(MODULE.sys, 'platform', 'win32'), \
+                mock.patch.object(MODULE.subprocess, 'run',
+                                  return_value=SimpleNamespace(returncode=0)) as run:
+            with self.assertRaises(SystemExit) as result:
+                MODULE.launch_child(argv, env)
+            self.assertEqual(result.exception.code, 0)
+            run.assert_called_once_with(argv, shell=False, env=env)
+        root = Path(__file__).resolve().parents[2]
+        script = root / 'dev/ci/lint-optional.R'
+        self.assertTrue(script.is_file())
+        code = script.read_text()
+        self.assertIn('pkgload::load_all(quiet = TRUE)', code)
+        self.assertIn('lintr::lint', code)
+        self.assertIn('stopifnot(all(lengths(results) == 0L))', code)
+        for name in ('Optional-integrations.yaml', 'windows-by-file.yaml'):
+            workflow = (root / '.github/workflows' / name).read_text()
+            self.assertIn('--run Rscript --vanilla dev/ci/lint-optional.R', workflow)
+            self.assertNotIn("--run Rscript --vanilla -e 'pkgload::load_all", workflow)
+
 
 if __name__ == '__main__':
     unittest.main()

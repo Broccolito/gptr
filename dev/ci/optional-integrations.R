@@ -53,7 +53,59 @@ optional_titles = list(
     "backpressure enumeration tolerates only a dead original parent exit race",
     "backpressure enumeration preserves the returned original child handles",
     "backpressure enumeration fails closed for live and unknown parent identities",
-    "backpressure sample diagnostics are bounded and omit arbitrary messages")
+    "backpressure sample diagnostics are bounded and omit arbitrary messages"),
+  "test-proc-writer-runtime.R" = c(
+    "Windows production writer preserves ordered writes and idle EOF",
+    "Windows production writer death is a typed IO failure",
+    "Windows reactor shutdown settles an idle production writer",
+    "Windows orphan sweep settles the exact production writer and mailbox",
+    "Windows production writer preserves split binary NUL and UTF-8 bytes",
+    "writer ACK accounting advances accepted bytes once",
+    "writer ACK validation rejects corrupt and regressing acceptance",
+    "writer startup death fails IO before publishing any payload",
+    "writer refuses malformed readiness before publishing any payload",
+    "writer ACK precedes immediate target exit classification",
+    "writer mailbox cleanup refuses foreign ownership and child directories",
+    "writer refuses a preexisting mailbox before actor construction",
+    "writer requires the exact live recorded target before construction",
+    "writer cleanup retains its original state until settlement is confirmed",
+    "writer refuses a changed mailbox root or owner before payload access",
+    "writer validates child aliases and preserves a single-line bootstrap"),
+  "test-proc-spawn.R" = c(
+    "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
+    "a 4 MB payload to a child that echoes each line completes without deadlock",
+    "write_all() times out on a child that reads nothing and refuses one without a pipe"),
+  "test-proc-supervise.R" = c(
+    "kill_all() leaves no descendant",
+    "boundary: orphan cleanup waits for a kill that completes asynchronously",
+    "boundary: unload retains records when owned child cleanup is unconfirmed"),
+  "test-http-reactor.R" = c(
+    "reactor_proc() delivers stdout and stderr lines, then the exit status once",
+    "reactor_cancel() on a watcher kills the child without calling on_exit",
+    "a pump nested in on_line never re-enters the watcher and on_exit comes once, last",
+    "one pump drives an HTTP stream and a child process together"),
+  "test-arch-layers.R" = c(
+    "every file under R/ has a layer and every function one home",
+    "internal calls respect the layer table and the kernel SDK (IC-33)",
+    "arch_check() flags calls that cross a boundary (negative controls)"),
+  "test-mcp-client.R" = c(
+    "a modern stdio server is found by the probe, listed with pagination and called",
+    "a legacy stdio server falls back to initialize, and the era is cached",
+    "progress re-arms the idle timer; without progress a call times out and is cancelled"),
+  "test-subagent-worker.R" = c(
+    "a worker child answers through its proxy session and returns its exports",
+    "gptr_cancel() of a worker child leaves no process (P19 acceptance 5)"),
+  "test-cli-common.R" = c(
+    "pcli_version() and pcli_probe() read the fake CLIs and cache per command",
+    "a watched child is stopped through P05's glue: no watcher and no job row stay"),
+  "test-cli-claude.R" = c(
+    "a claude turn through peter() streams the answer; the next call resumes the session",
+    "an mcp_message round trip evaluates R in the live session and is gated once",
+    "gptr_cancel() sends the interrupt control request, then kill_all()"),
+  "test-cli-codex.R" = c(
+    "a codex turn: exact argv, a 50 KB prompt on stdin intact, the token only in env",
+    "the next turn resumes the Codex thread with -c sandbox_mode=",
+    "a fake codex returns a function's numeric result through the HTTP MCP bridge")
 )
 
 optional_select = function(pattern, root) {
@@ -64,9 +116,22 @@ optional_select = function(pattern, root) {
   paths
 }
 
-optional_allowed_skip = function(file, name, windows) {
-  if (!windows && identical(file, "test-windows-security.R"))
+optional_platform_guard = function(file, name, windows) {
+  if (windows) return(FALSE)
+  if (identical(file, "test-windows-security.R"))
     return(name %in% optional_titles[[file]])
+  identical(file, "test-proc-writer-runtime.R") && name %in% c(
+    "Windows production writer preserves ordered writes and idle EOF",
+    "Windows production writer death is a typed IO failure",
+    "Windows reactor shutdown settles an idle production writer",
+    "Windows orphan sweep settles the exact production writer and mailbox",
+    "Windows production writer preserves split binary NUL and UTF-8 bytes")
+}
+
+optional_allowed_skip = function(file, name, windows) {
+  if (optional_platform_guard(file, name, windows)) return(TRUE)
+  if (!windows) return(identical(file, "test-mcp-client.R") && identical(name,
+    "a .cmd MCP command runs through cmd.exe /d /c call on Windows"))
   windows && ((identical(file, "test-artifact-app.R") && identical(name,
     "the access token is 128 random bits from openssl or /dev/urandom")) ||
     (identical(file, "test-bridge-lang.R") && name %in% c(
@@ -74,7 +139,16 @@ optional_allowed_skip = function(file, name, windows) {
       "the cmd engine is refused outside Windows")) ||
     (identical(file, "test-gptr-config.R") && name %in% c(
       "a settings file is parsed once per change, a same-size rewrite included",
-      "a gated file rewritten at the same size with its old mtime still voids trust")))
+      "a gated file rewritten at the same size with its old mtime still voids trust")) ||
+    (identical(file, "test-proc-spawn.R") && identical(name,
+      "a parent killed with SIGTERM leaves children that the next load's sweep removes")) ||
+    (identical(file, "test-http-reactor.R") && name %in% c(
+      "wire log resolves symlinks before enforcing its path boundary",
+      "wire default and fallback paths reject escaping symlinks")) ||
+    (identical(file, "test-subagent-worker.R") && identical(name,
+      "a worker exits within 10 s when its parent is killed (IC-60)")) ||
+    (identical(file, "test-cli-common.R") && identical(name,
+      "an install location without the execute bit is skipped, as on PATH")))
 }
 
 optional_gate = function(rows, file, windows) {
@@ -84,19 +158,24 @@ optional_gate = function(rows, file, windows) {
   for (row in rows) if (row$skipped && !optional_allowed_skip(file, row$test, windows))
     stop("Skipped integration case: ", row$test)
   expected = optional_titles[[file]]
+  if (!length(expected)) stop("Unapproved integration file")
   names = vapply(rows, function(x) x$test, "")
   if (!all(expected %in% names)) stop("Missing mandatory integration cases")
-  platform_only = !windows && identical(file, "test-windows-security.R")
+  mandatory = expected[!vapply(expected, function(name) {
+    optional_platform_guard(file, name, windows)
+  }, logical(1))]
+  platform_only = !length(mandatory)
   for (name in expected) {
     selected = rows[names == name]
     if (length(selected) != 1L) stop("Duplicate mandatory integration case")
-    if (!platform_only && (selected[[1L]]$skipped || selected[[1L]]$passed < 1L))
+    if (name %in% mandatory && (selected[[1L]]$skipped || selected[[1L]]$passed < 1L))
       stop("Mandatory integration has no passing assertions: ", name)
   }
   if (!platform_only && sum(vapply(rows, function(x) x$passed, 0L)) < 1L)
     stop("No passing assertions")
-  list(passed = TRUE, mandatory_cases = expected, platform_guard_only = platform_only,
-       rows = rows)
+  guards = names[vapply(rows, function(row) row$skipped > 0L, logical(1))]
+  list(passed = TRUE, expected_cases = expected, mandatory_cases = mandatory,
+    platform_guard_cases = guards, platform_guard_only = platform_only, rows = rows)
 }
 
 optional_condition_diagnostic = function(condition) {

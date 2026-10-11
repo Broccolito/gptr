@@ -110,14 +110,7 @@ jobs:
           GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-lint
         run: |
           python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
-            --run Rscript --vanilla -e 'pkgload::load_all(quiet = TRUE); paths = c(
-              "R/artifact-app.R", "R/gptr-config.R", "tests/testthat/setup.R",
-              "tests/testthat/test-tool-search.R", "tests/testthat/test-artifact-browser-cleanup.R",
-              "tests/testthat/test-config-content-cache.R", "tests/testthat/test-gptr-config.R",
-              "tests/testthat/helper-windows-security.R", "tests/testthat/test-windows-security.R",
-              "dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R");
-              results = lapply(paths, lintr::lint); print(results);
-              stopifnot(all(lengths(results) == 0L))'
+            --run Rscript --vanilla dev/ci/lint-optional.R
       - name: Install the package
         if: '!inputs.optional'
         shell: bash

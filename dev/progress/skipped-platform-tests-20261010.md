@@ -184,3 +184,43 @@ The complete older exact-archive run `38102472275` has finished: all five consum
 Mac's two failures are the old notebook stdout assertion already corrected at `ad4e6a9`;
 Linux devel reports the same two plus the known mock-path fixture assertions. These older
 archives do not include this new packet or prove current-source regressions.
+
+
+Reviewed cache, native-tag fixture, owned-browser shutdown, short private Linux temp root,
+Windows search comparison and distinct-log/strict-gate corrections are pushed task by task
+through `38cc8dc023c2c2ec2fa22e6aaaee94d3ea5e3caa`. The six affected full files are running on
+actual Windows and Linux in [38116814583](https://github.com/Broccolito/gptr/actions/runs/38116814583);
+new cache/cleanup regressions and full existing configuration coverage are included. Scoped
+lintr and all four cross-plan checks remain required on that exact source. No result is
+claimed before evidence completes.
+
+Local child-only discovery at38cc8dc confirms the existing RStudio bundled Quarto is on
+the isolated child PATH, the existing private Python is selected, and the parent environment
+is unchanged. The discovery launched no R/browser/model, imported no optional dependency
+and does not establish rendering or installed pandas/NumPy. The23:04 PDT resource snapshot
+(load157.27/149.57/168.73, CPU0.7%idle, swap12,679.62MiB, disk246GiB, no thermal warning)
+keeps local installation, rendering, native UI and model inference held. Shared Ollama is
+preserved.
+
+The Windows-only production writer packet is frozen for independent security review. Its
+new five actual-Windows lifecycle cases and nine pure guard/accounting cases are prepared,
+not executed. Original native/prototype/sampler oracles and timeout/resource guards remain
+unchanged; Unix retains its original write path. Secure DACL startup, acceptance accounting,
+shutdown/orphan ownership and measured overhead must pass actual hosted production tests
+before D-019 can close.
+
+
+The38cc8dc six-file rerun stopped before package bodies on both hosts. Actual Windows
+Rscript rejected the multiline inline lint expression (`unexpected end of input`). Linux
+ran lint and found a syntax error in the new cleanup fixture: deferred member assignment
+requires a braced expression. Other10scoped files were lint-clean. Both corrections preserve
+rules/oracles and are being reviewed. All four plan stages passed38cc8dc with unchanged
+39-file source manifests,770 selected R blocks/0 parse/style problems/0 lints. Verified
+Windows artifact SHA256c2dec42d3e9f6ec935c3b98278e63456c6c45dfddba9637e5565c38808857445;
+Linux4baa83ed51b26deef9bec2591091edc021d5702fcc91132c0aa1a177893084bb.
+These infrastructure failures add no package integration coverage.
+
+Independent production source review also caught the Windows R Core9998-byte single-expression
+limit and Unix ENOENT marker-release behavior; both are being corrected before runtime
+execution. Stable root/owner/child-alias validation is included in both the parent and actor.
+Source review is not production validation; D-019 remains open.
