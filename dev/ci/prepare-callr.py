@@ -105,7 +105,8 @@ def prepare(mode, output, packet):
     assert (output / "install.log").stat().st_size <= 1024 * 1024
     identity = {"mode": mode, "upstream_commit": PIN, "upstream_version": "3.8.0",
                 "archive_sha256": digest(archive), "patch_sha256": digest(patch),
-                "source_file_count": len(before), "source_files": after,
+                "source_file_count": len(after), "pinned_source_file_count": len(before),
+                "source_files": after,
                 "private_library": str(library.resolve()),
                 "shared_dependency_modified": False}
     (output / "identity.json").write_text(json.dumps(identity, indent=2))

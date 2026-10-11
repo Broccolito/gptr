@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "SOURCE_PREPARED_PARTIAL_FOLLOWUP_26CAB_NOT_EXECUTED",
+  "status": "SOURCE_PREPARED_PARTIAL_FOLLOWUP_CAD776_NATIVE_PENDING",
   "adoption_authorized": false,
   "created_date": "2026-10-11",
   "upstream": {
@@ -65,7 +65,7 @@
       "path": "tests/testthat/test-native-child-env.R",
       "baseline": "NEW_SOURCE_FIRST_FILE",
       "test_first_sha256": "6e139a9d1bfe36910cef449614e75058e727c3ae7d0871d8721ac6a121343df2",
-      "amended_sha256": "f943c6fcccd2dcbdf923cd2d7dd08f59388ab77a4183802ff6c06358dd1f27c2"
+      "amended_sha256": "afa5114507ef1f4fe2752576743a81be22bca07c425ccb941b1f558b2f2102e7"
     }
   ],
   "unchanged_protected_files": {
@@ -74,7 +74,7 @@
     "R/load-client.R": "2a3ce9d6943b2fc6d55f7f7237c17aba51f088dd1e5acd3f05e890ebf6b7bac1"
   },
   "packet_hashes": {
-    "native-child-env.patch": "ef19388243ead7abce7807f05faeeababce6052ee786920b86cd293c980b0d41",
+    "native-child-env.patch": "81cfad1cf00780178a31bfcaebaceb76eb86ec6a65c715b3236d1b7969280147",
     "README.md": "f8dfaaecbe45c333713906a0e47ae11962f23407bf4f50aaf7eaf4830ee09c96"
   },
   "scope": {
@@ -199,6 +199,27 @@
       "skipped": 0
     },
     "windows_patched_installation": "NOT_REACHED_POST_APPLY_HASH_FAILURE",
+    "new_native_execution": "PENDING"
+  },
+  "followup_cad776": {
+    "source_sha": "cad776c0824b38525be9bb1be518d8e8c418c88f",
+    "actual_run_id": 38182026839,
+    "previous_patch_sha256": "ef19388243ead7abce7807f05faeeababce6052ee786920b86cd293c980b0d41",
+    "test_only": "deterministic R CMD absolute Rscript payload and exact synthetic environment marker; explicit existing pipe preconditions",
+    "production_r_files_changed": false,
+    "actual_patched_strict_both_hosts": {
+      "passed": 187,
+      "failed": 0,
+      "warnings": 0,
+      "skipped": 0
+    },
+    "actual_upstream_both_hosts": {
+      "passed": 35,
+      "failed": 1,
+      "warnings": 0,
+      "skipped": 0
+    },
+    "old_rcmd_empty_output_cause": "NOT_ESTABLISHED",
     "new_native_execution": "PENDING"
   }
 }

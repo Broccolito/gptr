@@ -1,7 +1,7 @@
 {
   "upstream_commit": "6a7dd7a51dbf16b3a28819264aa2db04c960399f",
   "upstream_version": "3.8.0",
-  "patch_sha256": "ef19388243ead7abce7807f05faeeababce6052ee786920b86cd293c980b0d41",
+  "patch_sha256": "81cfad1cf00780178a31bfcaebaceb76eb86ec6a65c715b3236d1b7969280147",
   "files_before": {
     ".Rbuildignore": "2bc133d00c141f1b4d1ba309ae1b181f54efb10042ea67d31152e49c1f464633",
     "LICENSE.md": "f06f7984e92566367d048e983fccc54631e262da6306b2f492d43a9c116783fe",
@@ -339,7 +339,7 @@
     "inst/WORDLIST": "5a4b761962ca890867568b93050e1de85c81163d027701bc8c61cd3afe21b12e",
     "inst/developer-notes.md": "7ce4c49717f53112ea6a7182a3a6149c39226a38595527a9f86ca60cc9022d48",
     "inst/header.md": "39739d0434bacb6308b951a742d52d7144f4103b0bcf273c895c612cabea3536",
-    "tests/testthat/test-native-child-env.R": "f943c6fcccd2dcbdf923cd2d7dd08f59388ab77a4183802ff6c06358dd1f27c2"
+    "tests/testthat/test-native-child-env.R": "afa5114507ef1f4fe2752576743a81be22bca07c425ccb941b1f558b2f2102e7"
   },
   "universal_semantics_repaired": false
 }
