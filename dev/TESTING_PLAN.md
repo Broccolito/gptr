@@ -472,7 +472,7 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
 | Windows filesystem safety | Native valid-target tests remain DONE at 668ae5b. Actual 426 checkpoint restoration is RED: two exact SDDL mismatches after successful native readback. Codex retargeting has four failures; ReadData denial executes, but restoration has two typed errors. Reviewed b8808c6 tracks unobservable Windows reparse points and adds six mandatory control-file cases. Private restoration diagnostics in 55277df retain exact comparison. All new corrections await the next actual run. |
 | Windows child stdin | Actual 426 cold-start lifecycle and mailbox cases time out before READY with zero accepted bytes. Native duplex is RED; normal 60-second spawn/4 MB/EOF cases pass. Nested ACL diagnostics in 695bd91 preserve the two-second budget and fixed private phases. Separate 0a7b437 starts two writers with the normal timeout, proves private readiness and accepted/echoed bytes, then tests a third two-second write. Original 19-assertion cold case is unchanged. Retirement remains inactive pending actual evidence; D-019 remains open. |
-| Validation/merge | Completed 426/run38127752428 is RED. Linux: 1708 passes, two family-name failures, nine named OS guards. Windows: 1282 passes, 22 failed conditions including four raw errors, eight named guards; MCP and Claude have no final raw result after 300-second deadlines. Both hosts passed 1727 gate assertions, 12 Python tests and 49 lint paths; all 13 cleanup witnesses per host passed with zero marked survivors. Four Linux plan stages passed. Reviewed source through d1fafc8 nominates 35 full files, 145 required titles and 51 lint paths. Next run selects 13 full files and all four fresh plan stages. Merge WAITING strict GREEN. |
+| Validation/merge | Latest 9a3b965/run38131370576 stops before lint/install/preflight or the 13 integration bodies: both hosts pass 2130 gate assertions and 12 Python tests, with one stale Codex position assertion and zero warnings/skips. Reviewed 08a44c6 corrects only that selector; actual GREEN pending. Latest native evidence remains 426/run38127752428 RED, including two Linux family-name failures and Windows startup/restoration/timed-out files. All four Linux plan stages pass 9a3b965. Registry remains 35 full files, 145 required titles, 51 lint paths; next run keeps 13 complete files and fresh plan stages. Merge WAITING strict GREEN. |
 
 Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
@@ -508,8 +508,8 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest resource check at 03:09 PDT: load 47.80/50.63/57.57, CPU 25.5% idle,
-physical RAM 118 GiB used and 9014 MiB unused, swap 14,189.19 MiB used, and 38 GiB free disk.
+Latest resource check at 03:25 PDT: load 49.57/55.36/55.85, CPU 44.97% idle,
+physical RAM 123 GiB used and 4310 MiB unused, swap 16,366.25 MiB used, and 30 GiB free disk.
 The separate memory-pressure free metric is 51%; no thermal or performance warning was
 recorded. Swap occupancy does not prove active paging. Load and the minimum 200 GiB disk
 gate remain unsafe; the disk decline has no established cause. Keep all local R, install,

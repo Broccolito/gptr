@@ -715,3 +715,30 @@ formatting correction wraps only its opening; title, assertions, budgets and run
 unchanged. Status is ONGOING; no new native pass or retirement admission is inferred.
 Both hosted leases are occupied. Local jobs remain held under the 03:09 resource snapshot;
 shared Ollama remains untouched. Do not dispatch additional tests until a lease is free.
+
+## Actual gate failure and narrow correction — 2026-10-11 03:25 PDT
+
+Exact 9a3b965c40f00b70513d55e1c587f714dd14b475/run38131370576 completed RED on both hosts.
+Each passed 12 Python tests and 2130 R gate assertions, with one failure and zero warnings
+or skips. The old native Codex vector assertion selected the final three registry titles;
+appending six cases changed those positions. No scoped lint, package installation, preflight,
+selected integration body or native ACK ran. This establishes no retirement admission.
+
+Independent review cleared 08a44c6, which changes only that selector to the original positions
+4:6. Its three title literals and all missing/duplicate/raw-error/warning/skip/zero-assertion
+controls remain intact. Registry and runtime are unchanged. Corrected actual GREEN is pending.
+All four Linux plan stages passed the failed run: 39 equal source hashes, 25 plans,
+770 R blocks, zero parse/style problems or lints, 90 historical index warnings and zero
+index errors. The refreshed plan needs the same four stages on the next exact candidate.
+
+Verified Windows artifact SHA256
+29aed4e9d320c0d107c39902c0287624acb73c819670394cd6af6f1c795101a9;
+Linux 5a2e2b5bcd5d72fec60f0b3d3166d36e4cdb35cf464424b95f3520e4424aedbd.
+Actual summary SHA256 de53df65e14d23ef2ceef0c80a4e5a8d52de2359b05185cddadf53a29bf9b5ae.
+Large source/index members remain in the verified ZIP; only bounded JSON/log evidence was
+extracted. Latest completed native results remain 426 and retain all earlier failures.
+
+03:25 local gates remain unsafe: load 49.57/55.36/55.85, 44.97% CPU idle, 123 GiB used
+RAM/4310 MiB unused, 16,366.25 MiB swap occupancy and 30 GiB free disk. Local dependencies,
+imports/renders, GUI/kernel/model/build/CRAN remain held. Shared Ollama and unrelated files
+and processes are untouched. Both hosted leases are free before the corrective dispatch.

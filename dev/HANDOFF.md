@@ -1,16 +1,16 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 03:16 PDT
+## Optional integrations and Windows transport — 2026-10-11 03:25 PDT
 
 Use the attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, pushed through d1fafc84f977d74a3e5ba939f187d2eb9c222890.
+`codex/skipped-platform-tests`, pushed through reviewed unit correction 08a44c6.
 Primary main 718e81e, maintainer edits, old prepared chunks and secrets are preserved.
-Shared Ollama is untouched. At 03:09 PDT, load is 47.80/50.63/57.57, CPU 25.5% idle,
-RAM 118 GiB used/9014 MiB unused, swap 14,189.19 MiB used and free disk 38 GiB.
+Shared Ollama is untouched. At 03:25 PDT, load is 49.57/55.36/55.85, CPU 44.97% idle,
+RAM 123 GiB used/4310 MiB unused, swap 16,366.25 MiB used and free disk 30 GiB.
 All local heavy jobs remain held. Do not stop unrelated processes or delete user files.
 Hosted validation uses separate resources; at most two active jobs.
 
-Latest completed run 38127752428 used exact 426423ffef33716c6dbb43ce97707b5440bb666e
+Latest completed native run 38127752428 used exact 426423ffef33716c6dbb43ce97707b5440bb666e
 and is RED. Linux: all 12 raw files, 1708 passes/two family-name failures/nine OS guards.
 Windows: ten final raw files, 1282 passes/22 failed conditions (including four raw errors)/
 eight guards; MCP and Claude exceed 300 seconds without final raw results. Both hosts passed
@@ -18,6 +18,12 @@ eight guards; MCP and Claude exceed 300 seconds without final raw results. Both 
 zero; all 13 cleanup witnesses per host confirm stopped roots, settlement and zero marked
 survivors. Four Linux plan stages passed with 39 equal hashes, 25 plans, 770 R blocks,
 zero parse/style errors or lints, and 90 retained historical index warnings.
+
+Later exact 9a3b965/run38131370576 completed RED before lint/install/preflight or integration:
+both hosts passed 2130 R gate assertions and 12 Python tests, with one stale native Codex
+position assertion and zero warnings/skips. Reviewed 08a44c6 corrects only tail(..., 3L)
+to positions 4:6; runtime, registry and all failure gates remain unchanged. Actual GREEN
+pending; no native ACK evidence or retirement admission. Four Linux plan stages passed.
 
 Reviewed corrections are applied and pushed: 3fd20b1 removes only incidental family names;
 55277df diagnoses exact ACL restoration; 64237c2 privately diagnoses parent-environment
