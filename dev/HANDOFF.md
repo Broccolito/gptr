@@ -1,5 +1,43 @@
 # GPTR 1.0 implementation - handoff
 
+## Native callr strict regression proved; fresh repeat active — 2026-10-11
+
+Exact `cad776c0824b38525be9bb1be518d8e8c418c88f`
+[run38182026839](https://github.com/Broccolito/gptr/actions/runs/38182026839)
+is COMPLETE RED. Patched callr passes all six strict cases on BOTH hosts:
+187P/0F/0W/0S each. Linux stock also passes187P; Windows stock165P/22F retains the
+original worker/artifact failures24P/4F each. The private upstream installs retain
+callr3.8.0/processx3.9.0; shared dependencies and GPTR runtime are unchanged.
+
+Both nine-case patched-upstream packets remain35P/1F only in the empty R CMD
+output oracle. Compatibility's four unchanged files/20 titles DID NOT RUN because
+that core gate is fatal. A deterministic synthetic Rscript payload is now committed
+for the fresh repeat below; the prior failure's precise cause is not proved. Admissions remain
+RED: Linux stock/patched136P/4F; Windows stock99P/16F, patched135P/5F. Failed
+prelaunch seven-variable/Windows PATH seeds prevent attributing their dependent
+mismatches to callr restoration; Linux's valid-seed PATH absence boundary remains
+open. No admission is skipped or normalized.
+
+Both hosts pass scoped lint and five controller units. All seven owned families
+per host settle with0 survivors and0 controller warnings; raw warnings/skips and
+fixture errors are zero. Windows exact patched source/install now passes; the
+earlier failed hash check's precise cause remains unproved. Evidence is retained
+in ignored `dev/.validation/callr-native-env-20261011/native-cad776-evidence`.
+
+Resume in branch `codex/skipped-platform-tests`, pushed at
+`189e2025db66518d56c0eb8d22beb3338d04cd92`. Actual
+[run38182630356](https://github.com/Broccolito/gptr/actions/runs/38182630356)
+is IN PROGRESS with2 active hosted leases. The deterministic R CMD fixture is now
+committed; fresh scoped lint/controller units, strict6/upstream9 and all20 expected
+compatibility titles remain PENDING until this run's results. No new native pass
+is claimed. Primary main `718e81e`,69 dirty paths/0 staged remain preserved.
+
+At16:00:50PDT load21.49/50.85/63.11,RAM126GiB used/1736MiB unused,
+swap20459.5MiB with sampled paging0,259GiB disk and no thermal warning were
+observed. Local-heavy work remains HELD; shared Ollama is untouched. Admissions,
+upstream release/adoption, merge and broader native/security/CRAN closure remain
+OPEN. No plan content changed; the verified b984 four-stage plan evidence remains.
+
 ## Corrected plan checks complete — 2026-10-11 08:18 PDT
 
 The dependency correction is committed and pushed as

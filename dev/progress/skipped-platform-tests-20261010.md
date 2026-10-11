@@ -1617,3 +1617,73 @@ production adoption/merge and broader local/frontend/model/CRAN gates remain OPE
 Fresh15:48:53PDT resource witness:load64.65/75.27/58.56,51.46%CPUidle,95GiB RAM used/
 33GiB unused,20507.50MiB swap,259GiB disk free, no thermal/performance warning. CPU/load
 still fails the local gate; hosted-only execution and shared Ollama preservation continue.
+
+
+## Complete cad776 native outcomes; compatibility not run — 2026-10-11
+
+Exact source `cad776c0824b38525be9bb1be518d8e8c418c88f`,
+[run38182026839](https://github.com/Broccolito/gptr/actions/runs/38182026839), is
+COMPLETE RED with both jobs finished. Both scoped lint jobs and all five
+controller units pass. Independently retained raw packets report:
+
+| Packet | Linux stock | Linux patched | Windows stock | Windows patched |
+| --- | --- | --- | --- | --- |
+| Six strict native cases | 187P/0F | 187P/0F | 165P/22F | 187P/0F |
+| Four admission cases | 136P/4F | 136P/4F | 99P/16F | 135P/5F |
+| Nine upstream cases | Not selected | 35P/1F | Not selected | 35P/1F |
+| Four compatibility files/20 titles | Not run | Not run | Not run | Not run |
+
+Every executed packet has0 warnings/0 skips/0 fixture errors and passes the
+structural raw-result gates. Linux strict elapsed18.401/17.996s; Windows
+28.830/28.640s stock/patched. Windows's original worker and artifact controls each
+remain24P/4F under stock and pass under the private patch. All six patched strict
+cases prove parent environment preservation plus their positive value/Unicode,
+startup-error, cancellation, transport and exact owner-settlement oracles.
+
+Both upstream packets retain only the R CMD zero-element output failure, taking
+1.601s Linux/4.570s Windows. Its exact cause is not established. Pinned
+rcmd_process_options already defaults to piped stdout/stderr. The prepared
+test-only replacement explicitly pipes them and requires one exact synthetic
+environment value from an absolute Rscript command; it changes no production
+handoff. It is now committed for the fresh repeat below; its results are PENDING.
+The fatal cad776 core gate correctly prevented all compatibility execution;
+no SDK/exporter-free or compatibility pass is claimed.
+
+Admission failures remain separate. All three Linux seven-variable seeds fail
+before callr launch; Windows absent/empty seeds likewise fail, while its nonempty
+case passes. Dependent child mismatches with invalid seeds do not isolate a callr
+restoration defect. Linux PATH has a valid seed and a child-absence mismatch;
+Windows PATH's seed check fails. Patched parent construct/result/cleanup snapshots
+pass across the completed admissions. Startup/CRT and essential-variable removal
+boundaries remain OPEN on the hosts indicated by the witnesses, not silently
+skipped or normalized.
+
+Both hosts now pass stock and patched isolated installation:167 pinned upstream
+files plus the added test are exact against the expected168-file patched map.
+Per-command autocrlfFALSE/eolLF is applied without global Git configuration changes;
+the preceding Windows mismatch's precise cause is still not proved. All installs
+retain callr3.8.0/processx3.9.0, and no shared dependency or GPTR runtime changes.
+
+All seven owned families per host settle with stopped roots,0 marked survivors,
+0 cleanup errors and0 controller warnings. Sampled family RSS ranges153-591MiB
+Linux and184-655MiB Windows; these are sampled observations, not OS peak claims.
+The unchanged native-case bounds remain30s/60s,1GiB RSS,4MiB input/64MiB owned
+files. Per validation child,300s/2GiB RSS/1MiB watched files and the360s outer
+controller timeout remain strict; no larger cap, skip or warning allowance is added.
+Evidence remains under ignored callr-native-env-20261011/native-cad776-evidence,
+including all earlier RED artifacts. Current branch nomination
+`189e2025db66518d56c0eb8d22beb3338d04cd92` is pushed, and actual
+[run38182630356](https://github.com/Broccolito/gptr/actions/runs/38182630356)
+is IN PROGRESS with2 active hosted leases. The deterministic R CMD test is now
+committed. Fresh scoped lint and controller units, strict6/upstream9 and all20
+expected compatibility titles remain PENDING until this exact run's results;
+no prior pass is borrowed for that source. Primary main718e81e with69 dirty
+paths/0 staged remains preserved.
+
+At16:00:50PDT load21.49/50.85/63.11,RAM126GiB used/1736MiB unused,
+swap20459.5MiB and sampled paging0,259GiB free disk and no thermal warning were
+observed. Swap occupancy does not establish active paging; load and memory still
+hold local-heavy work. Shared Ollama is untouched. No plan bytes changed; all-four
+b984 plan evidence remains the current unchanged-plan checkpoint. Admissions,
+upstream release/adoption, production integration, merge and broader
+native/security/CRAN gates stay OPEN.
