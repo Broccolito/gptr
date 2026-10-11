@@ -346,8 +346,9 @@ idle_restart_child_case = function(case, root, failure) {
           started = fun("reactor_now")()
           fun("write_all")(targets[[i]], paste0("AGAIN-", i, "\n"))
           again_elapsed = c(again_elapsed, fun("reactor_now")() - started)
-          stopifnot(fun("reactor_pump")(until = function() paste0("AGAIN-", i) %in%
-            boxes[[i]]$out, timeout = 5))
+          stopifnot(fun("reactor_pump")(until = function() {
+            paste0("AGAIN-", i) %in% boxes[[i]]$out
+          }, timeout = 5))
           remember(targets[[i]])
           if (original_dead[[i]]) {
             replacement = fun("proc_writer_get")(targets[[i]])
@@ -364,9 +365,11 @@ idle_restart_child_case = function(case, root, failure) {
           isTRUE(fun("proc_identity")(record$pid, record$create_time)$alive)
         }, logical(1)))
         for (target in targets) fun("write_close")(target)
-        eof = fun("reactor_pump")(until = function() all(vapply(boxes, function(box) {
-          identical(box$status, 0L)
-        }, logical(1))), timeout = 5)
+        eof = fun("reactor_pump")(until = function() {
+          all(vapply(boxes, function(box) {
+            identical(box$status, 0L)
+          }, logical(1)))
+        }, timeout = 5)
         NULL
       }, error = identity)
     }
