@@ -776,3 +776,83 @@ Actual summary SHA256 1ed9df9b6048bc9d278328d72c82174b11e89c77f00476b15feaba2572
 No ACK/retirement evidence was produced; the conditional source-reviewed proposal remains
 inactive. Both hosted leases are free before dispatch. Local jobs remain held under the
 03:25 resource snapshot; shared Ollama and unrelated processes/files remain untouched.
+
+## Fixture-corrected native rerun — 2026-10-11 03:38 PDT
+
+[Run 38132656809](https://github.com/Broccolito/gptr/actions/runs/38132656809) nominates
+exact 6307a317559dcba3fb87ab20abb28ca3712ba022. The same 13 full files, 35-file registry,
+145 mandatory titles and 51 lint paths retain all original security/deadline/result gates.
+Four fresh plan stages are required on Linux even after an integration failure. Status is
+ONGOING, with both hosted leases occupied. No new native pass or retirement admission is
+inferred. Local jobs remain held under the 03:25 snapshot; shared Ollama stays untouched.
+
+## Linux native rerun verified — 2026-10-11 03:50 PDT
+
+Exact 6307a317559dcba3fb87ab20abb28ca3712ba022/run38132656809 Linux completed GREEN.
+All 13 full raw files contain 1953 passing assertions, zero failures or row/outside warnings,
+and ten exact named OS guards. All 14 cleanup records, including preflight, pass: settled,
+root stopped and no marked process remains. Native POSIX backpressure, fake CLI/MCP and
+subagent fixtures execute. The marker-family correction passes all 73 assertions. Both
+Windows-only idle fixtures are guard-only on Linux and provide no native Windows coverage.
+Result-gate units pass 2131 assertions; Python discovery units pass 12 tests; all 51 scoped
+lint paths are clean. All four plan stages completed successfully; independent artifact
+review is ongoing. Windows remains active and its prior native failures remain open.
+
+Linux artifact SHA256 6edf0df90755f1fc8a6df809db6b9d62375c744a6ca2ab13d131799445a19d94;
+canonical source archive 99955ffdb2ee6fc03f9aea572c96f1a8fc380bce866c5bd91bff16fa2524ec65;
+compact raw summary 85a77d94a64d6ce1abfdac903cd54ac36243ecb27545f6245b8b1bc16ade2614.
+At 03:46 PDT load was 32.48/57.73/68.84, CPU idle 45.71%, RAM 85 GiB used/43 GiB unused,
+swap 16238.25 MiB used and free disk 25 GiB. Thermal/performance warnings are absent.
+Local jobs remain held by load/disk gates; no shared model or unrelated process was touched.
+
+## Native Windows artifact review and corrective scope — 2026-10-11 04:19 PDT
+
+Exact 6307a317559dcba3fb87ab20abb28ca3712ba022/run38132656809 completed RED on Windows
+and GREEN on Linux. Both hosts pass 2131 result-gate assertions, 12 Python tests, preflight
+and all 51 scoped lint paths. Linux completes all 13 raw files: 1953 passes, zero failures
+or warnings, ten exact OS guards. Its 277 non-guard cases execute; all 66 mandatory
+representatives are unique and positive. All four plan stages pass with 39 unchanged source
+hashes, 25 plans, 770 R blocks, zero parse/style problems or lints, 90 historical index
+warnings and zero index errors. Expanded independently reviewed Linux summary SHA256
+9b5da66853c5a23c091b2a421dd567aa1120b33598e0c97448c6e2649f5ddd54.
+
+Windows completes 12 raw files: 1775 passes, 24 failed conditions (20 expectation failures
+and four raw errors), zero row/outside warnings and eight exact named OS guards. MCP has
+no final raw results: the owned 300-second file lease fails, with 312.12 seconds including
+controller teardown. Partial reporter markers never qualify as completed assertion counts.
+All 14 preflight/file cleanup witnesses per host pass: settled, root stopped, no marked
+survivors or cleanup errors. Controller warnings are zero. Windows resource witnesses stay
+below 1 GiB RSS/64 MiB output, maximum observed RSS 667.84 MiB, zero sampling errors.
+
+Native Codex retarget detection passes 33 assertions; fixed dangling SYSTEM/MCP handling
+passes 53. The remaining pure membership failure is a fixture path-spelling mismatch.
+Independent review clears 43db499: normalize that fixture root and remove trailing spaces
+from warm phase markers, without changing runtime, titles, assertions or any deadline.
+Independent review clears e5166b2: privately count missing empty/nonempty/pseudo environment
+entries and record ACL AutoInherited before/after plus bounded DACL equality. Four entries
+disappear immediately after callr startup, but their kinds remain unproved. Checkpoint
+restoration differs only in AutoInherited while ordered DACL bytes match; its direction and
+Codex equivalence remain unproved. Exact caller-state and restoration oracles remain fatal.
+Primary historical checkpoint and utils-paths files retain their exact hashes.
+
+Cold writer timeouts reach native PowerShell enter but not absent. Warm initialization
+verifies one real private seven-byte ACK and echo, then reaches ready-2 before the unchanged
+30-second case lease expires. It does not prove a second ACK or third-target starvation.
+Retirement remains inactive. A one-hunk native GetAttributes absence probe is a performance
+hypothesis under review, preserving typed missing-only handling and all private DACL checks.
+Peer review found fixture recovery/effective-denial blockers; the whole packet remains
+unapplied pending correction and strict native execution. Conditional owned startup files
+remain unapplied until actual missing-empty evidence. Next exact-source selection adds
+architecture, document/Quarto and language-bridge files to the original 13; all fresh plan
+stages are required. Missing/partial results, errors, warnings, zero assertions and unexpected
+skips remain fatal. Merge, D-019, local installs/frontends/models/full CRAN remain open.
+
+Verified Windows artifact SHA256 0ca73360d60302bacb059e169a28de413544b27585f4ec48de2e184da4e9ee4f;
+compact actual summary d58571d4161d0d3ceb0cbacff2abdeed4c98b206cd5f2fe867287575cb826f74.
+Both host identities retain canonical source archive SHA256
+99955ffdb2ee6fc03f9aea572c96f1a8fc380bce866c5bd91bff16fa2524ec65.
+At 04:14 PDT load is 138.30/79.23/62.26, RAM 123 GiB used/4339 MiB unused, swap
+17352.25 MiB used and free disk 22 GiB. No thermal/performance warning is recorded.
+All local jobs stay held; shared Ollama and unrelated processes/files remain untouched.
+At 04:16 remote main remains 718e81e and no open PR exists. Reviewed candidate commits are
+pushed through e5166b2; no merge or release is claimed.

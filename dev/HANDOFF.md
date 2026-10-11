@@ -1,56 +1,47 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 03:36 PDT
+## Optional integrations and Windows transport — 2026-10-11 04:19 PDT
 
-Use the attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, pushed through reviewed fixture correction a0e3e93.
-Primary main 718e81e, maintainer edits, old prepared chunks and secrets are preserved.
-Shared Ollama is untouched. At 03:25 PDT, load is 49.57/55.36/55.85, CPU 44.97% idle,
-RAM 123 GiB used/4310 MiB unused, swap 16,366.25 MiB used and free disk 30 GiB.
-All local heavy jobs remain held. Do not stop unrelated processes or delete user files.
-Hosted validation uses separate resources; at most two active jobs.
+Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`, pushed through e5166b2. Primary main and remote main remain
+718e81e; maintainer edits, old prepared chunks and secrets are preserved. No open PR exists.
+Shared Ollama is untouched. At 04:14 PDT load is 138.30/79.23/62.26, CPU 45.82% idle,
+RAM 123 GiB used/4339 MiB unused, swap 17,352.25 MiB used and free disk 22 GiB.
+All local jobs stay held. Do not stop unrelated processes or delete user files.
+Hosted validation uses separate resources, with at most two active jobs.
 
-Latest completed native run 38127752428 used exact 426423ffef33716c6dbb43ce97707b5440bb666e
-and is RED. Linux: all 12 raw files, 1708 passes/two family-name failures/nine OS guards.
-Windows: ten final raw files, 1282 passes/22 failed conditions (including four raw errors)/
-eight guards; MCP and Claude exceed 300 seconds without final raw results. Both hosts passed
-12 Python tests, 1727 result-gate assertions and all 49 lint paths. Controller warnings are
-zero; all 13 cleanup witnesses per host confirm stopped roots, settlement and zero marked
-survivors. Four Linux plan stages passed with 39 equal hashes, 25 plans, 770 R blocks,
-zero parse/style errors or lints, and 90 retained historical index warnings.
+Exact 6307a317559dcba3fb87ab20abb28ca3712ba022/run38132656809 completes GREEN on Linux
+and RED on Windows. Linux all 13 raw files: 1953 passes, zero failures/warnings, ten named
+OS guards. Windows 12 final raw files: 1775 passes/24 failed conditions, including four raw
+errors/zero warnings/eight guards. MCP's 300-second file lease fails without final raw
+results; 312.12 seconds includes teardown. Partial reporter markers do not count as passes.
+Both hosts pass 2131 result-gate assertions, 12 Python tests, preflight and all 51 lint paths.
+All 14 cleanup witnesses per host confirm settlement, stopped roots and no marked survivors.
+Controller warnings are zero. Four Linux plan stages pass with 39 equal hashes, 25 plans,
+770 R blocks, zero parse/style problems or lints and 90 retained historical index warnings.
 
-Later exact 9a3b965/run38131370576 completed RED before lint/install/preflight or integration:
-both hosts passed 2130 R gate assertions and 12 Python tests, with one stale native Codex
-position assertion and zero warnings/skips. Reviewed 08a44c6 corrects only tail(..., 3L)
-to positions 4:6; runtime, registry and all failure gates remain unchanged. Actual GREEN
-pending; no native ACK evidence or retirement admission. Four Linux plan stages passed.
+Native Codex retarget tests pass 33 assertions; fixed SYSTEM/MCP links pass 53. Checkpoint
+restoration differs only in AutoInherited while DACL bytes match; direction is unknown.
+Codex exact restoration still has two typed errors. Four environment entries disappear
+immediately after callr startup; empty/nonempty/pseudo kinds remain unproved. Reviewed
+43db499 corrects only fixture path/phase spelling; e5166b2 adds bounded private diagnostics.
+Their new source awaits actual tests. Primary old checkpoint and utils-paths files are intact.
+Reparse output's 128 KiB limit is post-decode acceptance, not an allocation cap.
 
-Latest b31dc9f/run38131986339 passed both result gates: 2131 assertions and 12 Python tests,
-zero failures/R warnings/skips. Scoped lint found three fixture issues in two paths; the
-other 49 of 51 paths are clean. Install/preflight/all 13 bodies remain unexecuted. Reviewed
-a0e3e93 fixes only callback braces and named mock argument capture, preserving all assertions,
-security/runtime/registry and bounds. Actual lint GREEN pending; four Linux plan stages pass.
-No native ACK or retirement admission is established by either pre-body run.
+Cold startup reaches PowerShell enter but not absent within the original two-second budget.
+Warm initialization proves the first private seven-byte ACK, then hits its 30-second case
+lease during the second initialization. No second ACK/third-target starvation is proved;
+retirement remains inactive. A native GetAttributes absence experiment is under source
+review; its utility fixture must resolve exact recovery/effective-denial blockers before
+application. Conditional owned startup files remain inactive pending actual empty-kind proof.
+Keep all original ACL, alias, identity, caller-state, exact SDDL and deadline/resource oracles.
 
-Reviewed corrections are applied and pushed: 3fd20b1 removes only incidental family names;
-55277df diagnoses exact ACL restoration; 64237c2 privately diagnoses parent-environment
-restoration; 695bd91 retains fixed nested ACL phases; b8808c6 detects unknown-stat Windows
-reparse changes and fixed dangling control files. Their actual outcomes remain pending.
-Native reparse output's 128 KiB limit is post-decode acceptance, not an allocation cap.
-Primary checkpoint 67-line suffix and utils-paths 75-line block remain intact.
-
-Separate 0a7b437 tests the third two-second write after two verified normal-budget ACKs.
-The original cold-start 19 assertions and watchdog/resource limits are unchanged. This
-cannot close cold-start failures. Idle retirement remains inactive until actual two-ACK
-starvation evidence and native continuation/timing proof justify a separately reviewed fix.
-Keep exact restoration, private DACL/inherited-rights, sentinel and caller-state oracles.
-
-Registry d1fafc8 nominates 35 full files, 145 required titles and 51 lint paths. Next dispatch
-selects 13 complete files and all four fresh plan stages on the exact candidate. Missing or
-partial raw results, warnings, raw errors, zero assertions and unexpected skips remain fatal.
-D-019 and merge remain open until strict relevant GREEN. Local child Quarto discovery is
-fixed; private pandas/NumPy installation, actual imports/local renders, installed history
-frontends, GUI/kernel/model/full CRAN and release checks remain WAITING for safe resources.
+Current registry is 35 files/145 titles/51 lint paths. The absence proposal adds two pure
+and one mandatory native title. Next exact-source run keeps all 13 files and adds architecture,
+document/Quarto and language bridges, plus four fresh plan stages for the updated plan.
+Missing/partial raw results, warnings, errors, zero assertions and unexpected skips stay fatal.
+Merge and D-019 remain open. Child Quarto discovery is fixed; private pandas/NumPy install,
+local renders, installed history frontends, GUI/kernel/model/full CRAN/release remain WAITING.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached

@@ -470,9 +470,9 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Quarto discovery | Actual record/replay/source-hash integration DONE on Windows and Linuxb6fff3d:71 assertions each/0 failures/warnings/skips. Quarto1.10.19 preflights passed. Child-only local PATH discovery DONE at38cc8dc: bundled RStudio Quarto is discoverable without changing the parent environment. Local rendering remains WAITING. Separate compact-history rendered frontend packet WAITING. |
 | Python/R dependencies | Both hostedb6fff3d preflights DONE: configuredPython3.12.10, pandas/NumPy import and actualsum6. Actual bridges DONE: Linux128 assertions/0 failures/warnings/skips; Windows118/0 failures/warnings with2 named OS guards. Private localPython lacks pandas/numpy; local wheel installation WAITING resource lease. |
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
-| Windows filesystem safety | Native valid-target tests remain DONE at 668ae5b. Actual 426 checkpoint restoration is RED: two exact SDDL mismatches after successful native readback. Codex retargeting has four failures; ReadData denial executes, but restoration has two typed errors. Reviewed b8808c6 tracks unobservable Windows reparse points and adds six mandatory control-file cases. Private restoration diagnostics in 55277df retain exact comparison. All new corrections await the next actual run. |
-| Windows child stdin | Actual 426 cold-start lifecycle and mailbox cases time out before READY with zero accepted bytes. Native duplex is RED; normal 60-second spawn/4 MB/EOF cases pass. Nested ACL diagnostics in 695bd91 preserve the two-second budget and fixed private phases. Separate 0a7b437 starts two writers with the normal timeout, proves private readiness and accepted/echoed bytes, then tests a third two-second write. Original 19-assertion cold case is unchanged. Retirement remains inactive pending actual evidence; D-019 remains open. |
-| Validation/merge | Latest b31dc9f/run38131986339 passes both result gates: 2131 assertions and 12 Python tests, zero failures/warnings/skips. Scoped lint finds three issues in two fixtures; 49 of 51 paths are clean. Install, preflight and all 13 integration bodies remain unexecuted. Reviewed a0e3e93 fixes only callback braces and mock argument capture; actual GREEN pending. Four Linux plan stages pass. Native 426 failures remain open. Registry is 35 full files/145 titles/51 lint paths; next exact-source run retains 13 complete files and fresh plan stages. Merge WAITING strict GREEN. |
+| Windows filesystem safety | Native valid-target tests retain their historical 668ae5b pass. Exact 6307a31 Windows retarget detection passes 33 assertions; fixed dangling SYSTEM/MCP control handling passes 53. Exact checkpoint restoration still has two raw errors, and Codex ReadData restoration has two typed errors. Checkpoint diagnostics isolate the AutoInherited flag while DACL bytes match; direction remains unknown. Reviewed 43db499 corrects only a fixture path spelling, and e5166b2 adds bounded direction evidence. Exact restoration remains mandatory; no flag canonicalization or permission relaxation. |
+| Windows child stdin | Exact 6307a31 remains RED for cold two-second startup, lifecycle/mailbox and duplex cases; normal-budget spawn/EOF cases execute. Nested diagnostics reach PowerShell enter but not absent before the cold deadlines. The warm test verifies the first private seven-byte ACK, then hits its 30-second case deadline during the second initialization. It proves neither two ACKs nor third-writer starvation, so retirement remains inactive. The native filesystem absence-probe experiment is under source review; original 2-second, 30/60-second, ACL and resource limits stay unchanged. D-019 remains open. |
+| Validation/merge | Exact 6307a31/run38132656809: Linux all 13 raw files GREEN, 1953 passes/zero failures or warnings/ten named OS guards. Windows 12 completed raw files: 1775 passes/24 failed conditions including four raw errors/zero warnings/eight named guards; MCP exceeds its 300-second file lease with no final raw results. Both hosts pass 2131 result-gate assertions, 12 Python tests, preflight and all 51 scoped lint paths. All 14 cleanup records per host pass with zero marked survivors. Four Linux plan stages pass. Applied fixture/diagnostic commits await native rerun. Current registry is 35 files/145 titles/51 lint paths; the proposed absence experiment adds three mandatory titles. Next exact-source scope is the same 13 full files plus architecture, Quarto/knitr and language bridges, with fresh plan stages. Merge WAITING strict relevant GREEN. |
 
 Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
@@ -483,7 +483,7 @@ limits; the same12-file Windows/Linux scope must rerun. All4 Linux cross-plan st
 39 equal hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index
 warnings remain. Fresh plan gates are required after this update.
 
-Latest completed exact426423f [run38127752428](https://github.com/Broccolito/gptr/actions/runs/38127752428)
+Historical completed exact426423f [run38127752428](https://github.com/Broccolito/gptr/actions/runs/38127752428)
 confirms the formatting correction on both hosts. Verified raw artifacts establish the
 failures in the table; two timed-out files cannot count as passes. All26 cleanup records
 confirm stopped owned roots, settlement and0 marked survivors; controller warnings are0.
@@ -492,7 +492,7 @@ assertions, add exact-family negative controls, and diagnose the Windows-only pa
 mismatch before the next run. All local jobs remain held; both hosted leases are now free.
 New plan edits require fresh4 exact-candidate cross-plan gates.
 
-The optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
+The historical optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
 The two-host39f3248 run actually passed the prior9 Python tests and21 R result-gate assertions
 with0 failures/warnings/skips. The new2 launcher regressions use mocks; actual Windows launch
@@ -508,9 +508,9 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest resource check at 03:25 PDT: load 49.57/55.36/55.85, CPU 44.97% idle,
-physical RAM 123 GiB used and 4310 MiB unused, swap 16,366.25 MiB used, and 30 GiB free disk.
-The separate memory-pressure free metric is 51%; no thermal or performance warning was
+Latest resource check at 04:14 PDT: load 138.30/79.23/62.26, CPU 45.82% idle,
+physical RAM 123 GiB used and 4339 MiB unused, swap 17,352.25 MiB used, and 22 GiB free disk.
+The separate memory-pressure free metric is 42%; no thermal or performance warning was
 recorded. Swap occupancy does not prove active paging. Load and the minimum 200 GiB disk
 gate remain unsafe; the disk decline has no established cause. Keep all local R, install,
 import, build, browser, kernel, model and CRAN jobs held. Preserve shared Ollama and unrelated
