@@ -1,50 +1,43 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 02:43 PDT
+## Optional integrations and Windows transport — 2026-10-11 03:16 PDT
 
-Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, pushed source3fd20b19d6eb30a3f5a4dc0809d328a24fd32359.
-Primary main718e81e, maintainer edits, old prepared chunks and secrets remain intact;
-shared Ollama preserved. Local02:43 load79.27/54.06/70.67/CPU9.15%idle/RAM91GiB used/
-36GiB unused/swap14,229.19MiB/disk47GiB keep all local heavy jobs held. No unrelated-process
-termination or file cleanup is authorized. Both hosted leases are now free; at most2.
+Use the attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`, pushed through d1fafc84f977d74a3e5ba939f187d2eb9c222890.
+Primary main 718e81e, maintainer edits, old prepared chunks and secrets are preserved.
+Shared Ollama is untouched. At 03:09 PDT, load is 47.80/50.63/57.57, CPU 25.5% idle,
+RAM 118 GiB used/9014 MiB unused, swap 14,189.19 MiB used and free disk 38 GiB.
+All local heavy jobs remain held. Do not stop unrelated processes or delete user files.
+Hosted validation uses separate resources; at most two active jobs.
 
-Completed exact426423ffef33716c6dbb43ce97707b5440bb666e/run38127752428 is RED:
-both Python12/unit1727/all49 lint paths pass; Linux all12 raw1708 passes/2 family-name
-fixture failures/0 warnings/9 named OS guards. Windows ten raw1282 passes/22 conditions
-(including4 raw errors)/0 warnings/8 guards; MCP307.27s/Claude308.14s exceed300s with no final
-raw results. Partial logs are not passes. Controller0 warnings each; all13 cleanup records
-each confirm owned roots stopped/settled/0 marked survivors. All4 Linux plan stages pass
-39 unchanged hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index
-warnings remain. New plan edits require fresh4 exact-candidate gates.
+Latest completed run 38127752428 used exact 426423ffef33716c6dbb43ce97707b5440bb666e
+and is RED. Linux: all 12 raw files, 1708 passes/two family-name failures/nine OS guards.
+Windows: ten final raw files, 1282 passes/22 failed conditions (including four raw errors)/
+eight guards; MCP and Claude exceed 300 seconds without final raw results. Both hosts passed
+12 Python tests, 1727 result-gate assertions and all 49 lint paths. Controller warnings are
+zero; all 13 cleanup witnesses per host confirm stopped roots, settlement and zero marked
+survivors. Four Linux plan stages passed with 39 equal hashes, 25 plans, 770 R blocks,
+zero parse/style errors or lints, and 90 retained historical index warnings.
 
-Writer startup still reaches acl_wait0.18-0.25s and times out at1.80-1.96s before READY/
-0 accepted bytes. The three native .NET calls in fafd181 did not fix startup. Idle stops
-before its first ACK; conditional idle retirement remains unapplied and needs actual two-ACK
-third-target starvation plus mandatory native continuity/timing proof. Native duplex RED;
-normal spawn4MB echo/EOF passes. Keep2s queue budget,9998-expression/12000-argv/native3/
-resource bounds and physical protected owner-DACL/inherited-file-rights oracle unchanged.
+Reviewed corrections are applied and pushed: 3fd20b1 removes only incidental family names;
+55277df diagnoses exact ACL restoration; 64237c2 privately diagnoses parent-environment
+restoration; 695bd91 retains fixed nested ACL phases; b8808c6 detects unknown-stat Windows
+reparse changes and fixed dangling control files. Their actual outcomes remain pending.
+Native reparse output's 128 KiB limit is post-decode acceptance, not an allocation cap.
+Primary checkpoint 67-line suffix and utils-paths 75-line block remain intact.
 
-Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards: new fixed phases prove exact
-restore-sddl-mismatch after native readback, not a getter failure. Source-only private
-structural comparison diagnostics are being prepared without weakening exact restoration.
-Primary ckpt67-line suffix/utils-paths75-line block must remain intact; reviewed variants
-stay candidate-only until GREEN. Native Codex316 passes/7 conditions/0 warnings/skips:
-retarget4 failures, ReadData-restore2 typed fixture errors, concurrency34.3s>=13s. Diagnose
-native path/link behavior and exact restoration; preserve sentinel/caller state.
+Separate 0a7b437 tests the third two-second write after two verified normal-budget ACKs.
+The original cold-start 19 assertions and watchdog/resource limits are unchanged. This
+cannot close cold-start failures. Idle retirement remains inactive until actual two-ACK
+starvation evidence and native continuation/timing proof justify a separately reviewed fix.
+Keep exact restoration, private DACL/inherited-rights, sentinel and caller-state oracles.
 
-Reviewed3fd20b1 fixes incidental list-name comparison in owned-family identity checks,
-preserving exact PIDs/cardinality/create-times and all41 original assertions;3 new live
-missing/extra/substituted-handle controls make44 prepared assertions. Unrun. Windows-only
-parent-env restoration assertion remains under source triage. Shipping GPTR_PROC marker
-format is unchanged; controller epoch-marker correction now has actual warning-clean cleanup
-proof. No migration or skip/deadline relaxation is proposed.
-
-Current registry34 full files/132 required titles/49 lint paths. Next: reviewed exact-candidate
-12-file Windows/Linux packet with all4 fresh plan stages; add conditional retirement only
-if its actual adoption gate is met. D-019/merge remain open until strict relevant GREEN.
-Local child Quarto discovery is fixed; pandas/NumPy wheels, real local imports/Quarto/bridge,
-installed history frontends, GUI/kernel/model/full CRAN/release remain WAITING resource gates.
+Registry d1fafc8 nominates 35 full files, 145 required titles and 51 lint paths. Next dispatch
+selects 13 complete files and all four fresh plan stages on the exact candidate. Missing or
+partial raw results, warnings, raw errors, zero assertions and unexpected skips remain fatal.
+D-019 and merge remain open until strict relevant GREEN. Local child Quarto discovery is
+fixed; private pandas/NumPy installation, actual imports/local renders, installed history
+frontends, GUI/kernel/model/full CRAN and release checks remain WAITING for safe resources.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached

@@ -670,3 +670,38 @@ Latest local02:43 gates remain unsafe: load79.27/54.06/70.67, CPU9.15%idle, RAM9
 build/CRAN run started. Shared Ollama and unrelated processes/files remain preserved.
 Both hosted leases are free; next exact-candidate run requires fresh4 plan gates after these
 updates. Runtime/fixture corrections need source review and actual native evidence.
+
+## Reviewed corrections ready for actual validation — 2026-10-11 03:16 PDT
+
+The isolated candidate is pushed through d1fafc84f977d74a3e5ba939f187d2eb9c222890.
+Independent source review cleared these additions; none is an executed pass:
+
+- 55277df distinguishes exact ACL-restoration operations and retains bounded private
+  structural comparison bits. Exact SDDL mismatches remain fatal.
+- 64237c2 records parent-environment restoration phases and aggregate differences without
+  printing names or values. The original raw equality assertion remains mandatory.
+- 695bd91 observes fixed nested ACL phases and native exit status after zero-time polling.
+  Diagnostics cannot grant readiness; startup, output and security bounds remain unchanged.
+- b8808c6 discovers fixed dangling Windows control files without following their targets.
+  An absolute native reparse query yields only a digest; uncertain inspection fails closed.
+  Its 128 KiB decoded-output limit is an acceptance check, not a preallocation cap.
+  Six new cases preserve the original 35-case Codex prefix and unchanged restoration helper.
+- 0a7b437 adds a separate native idle-boundary case. Two normal-budget writes must prove
+  private readiness, seven accepted and echoed bytes each, and unchanged live targets before
+  a third two-second write. Original cold-start tests remain byte-identical; retirement is
+  inactive. All 30/60-second watchdog, 1 GiB RSS and 64 MiB output bounds remain intact.
+- 1c16a3e and d1fafc8 require the new cases without weakening raw errors, warnings, missing
+  results, duplicates, zero-assertion or unexpected-skip gates. Registry nomination is
+  35 full files, 145 required titles and 51 lint paths; the next run selects 13 full files.
+
+Actual 426 results and artifact digests above remain the latest executed evidence. The next
+exact-source Windows/Linux run must execute all four fresh cross-plan stages after this plan
+update. Hosted leases are free before dispatch; max two jobs. No source-only correction
+closes D-019, exact restoration, timed-out files, current merge or full release/CRAN gates.
+
+At 03:09 PDT, load is 47.80/50.63/57.57 with 25.5% CPU idle, 118 GiB used RAM,
+9014 MiB unused RAM, 14,189.19 MiB swap occupancy and 38 GiB free disk. The separate
+memory-pressure free metric is 51%; no thermal/performance warning was recorded. Local
+R/import/install/browser/kernel/model/build/check jobs remain held. Shared Ollama and all
+unrelated processes/files remain untouched. Missing local pandas/NumPy wheels and actual
+local Quarto/bridge/history-render checks remain WAITING for safe resources.

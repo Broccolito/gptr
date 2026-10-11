@@ -470,11 +470,11 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Quarto discovery | Actual record/replay/source-hash integration DONE on Windows and Linuxb6fff3d:71 assertions each/0 failures/warnings/skips. Quarto1.10.19 preflights passed. Child-only local PATH discovery DONE at38cc8dc: bundled RStudio Quarto is discoverable without changing the parent environment. Local rendering remains WAITING. Separate compact-history rendered frontend packet WAITING. |
 | Python/R dependencies | Both hostedb6fff3d preflights DONE: configuredPython3.12.10, pandas/NumPy import and actualsum6. Actual bridges DONE: Linux128 assertions/0 failures/warnings/skips; Windows118/0 failures/warnings with2 named OS guards. Private localPython lacks pandas/numpy; local wheel installation WAITING resource lease. |
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
-| Windows filesystem safety | Native valid-target8 DONE668ae5b:207 assertions/pure5 policy21 each. Actual426 checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; both stop at restore-sddl-mismatch after successful readback, so exact restoration remains RED. Native Codex variants now execute: retarget4 failures and effective ReadData-denial restore2 typed fixture errors; no capability skips. Source triage ongoing; keep independent containment, denial and exact-restoration oracles. |
-| Windows child stdin | Actual426 five lifecycle/nativeACL cases time out before READY at1.80-1.96s/zero accepted bytes, last phase acl_wait0.18-0.25s. The three native .NET calls do not resolve startup. No-reader typed2s still proves startup only; idle stops before first ACK, so conditional retirement is unapplied. Normal60s spawn4MB/EOF cases pass. Native duplex remains RED; retain2s queue budget,9998-expression/12000-argv/native3/resource limits and physical mailbox DACL/file inheritance requirement. D-019 remains open. |
-| Validation/merge | Actual426/run38127752428 completed RED: Linux all12 files1708 passes/2 family-name fixture failures/0 warnings/9 named OS guards. Windows ten final raw files1282 passes/22 failed conditions (including4 raw errors)/0 warnings/8 named guards; MCP307.27s and Claude308.14s have no final raw result. Both hosts1727 unit assertions/12 Python tests/all49 lint paths clean; controller0 warnings and all13 owned-family cleanups confirmed per host. All4 Linux plan stages pass39 equal hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings. Reviewed3fd20b1 fixes list-name identity comparison and adds3 live-handle negative controls;44 assertions prepared, unrun. Windows parent-env assertion remains under source triage. Registry34 full files/132 titles/49 paths; next exact-candidate scope keeps relevant failures and fresh4 plan gates. Merge WAITING strict GREEN. |
+| Windows filesystem safety | Native valid-target tests remain DONE at 668ae5b. Actual 426 checkpoint restoration is RED: two exact SDDL mismatches after successful native readback. Codex retargeting has four failures; ReadData denial executes, but restoration has two typed errors. Reviewed b8808c6 tracks unobservable Windows reparse points and adds six mandatory control-file cases. Private restoration diagnostics in 55277df retain exact comparison. All new corrections await the next actual run. |
+| Windows child stdin | Actual 426 cold-start lifecycle and mailbox cases time out before READY with zero accepted bytes. Native duplex is RED; normal 60-second spawn/4 MB/EOF cases pass. Nested ACL diagnostics in 695bd91 preserve the two-second budget and fixed private phases. Separate 0a7b437 starts two writers with the normal timeout, proves private readiness and accepted/echoed bytes, then tests a third two-second write. Original 19-assertion cold case is unchanged. Retirement remains inactive pending actual evidence; D-019 remains open. |
+| Validation/merge | Completed 426/run38127752428 is RED. Linux: 1708 passes, two family-name failures, nine named OS guards. Windows: 1282 passes, 22 failed conditions including four raw errors, eight named guards; MCP and Claude have no final raw result after 300-second deadlines. Both hosts passed 1727 gate assertions, 12 Python tests and 49 lint paths; all 13 cleanup witnesses per host passed with zero marked survivors. Four Linux plan stages passed. Reviewed source through d1fafc8 nominates 35 full files, 145 required titles and 51 lint paths. Next run selects 13 full files and all four fresh plan stages. Merge WAITING strict GREEN. |
 
-Latest actual a03068e run38127051182 stopped before package installation, preflight or
+Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
 assertions with0 failures/warnings/skips, then failed the unchanged strict lint gate.
 Five formatting findings affect3 test files;46 of49 paths are clean. The source correction
@@ -508,12 +508,23 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest02:43 PDT load79.27/54.06/70.67, CPU9.15%idle, physical RAM91GiB used/36GiB
-unused, swap14,229.19MiB used and disk47GiB still prevent local compute. The separate
-memory-pressure free metric is78%; no thermal/performance warning was recorded. More unused
-RAM does not clear the CPU, swap or minimum200GiB disk gates; the disk decline has no established cause.
-Keep local R/build/install/browser/model jobs held. Hosted validation uses independent
-resources with at most two active jobs; recheck before granting a local compute lease.
+Latest resource check at 03:09 PDT: load 47.80/50.63/57.57, CPU 25.5% idle,
+physical RAM 118 GiB used and 9014 MiB unused, swap 14,189.19 MiB used, and 38 GiB free disk.
+The separate memory-pressure free metric is 51%; no thermal or performance warning was
+recorded. Swap occupancy does not prove active paging. Load and the minimum 200 GiB disk
+gate remain unsafe; the disk decline has no established cause. Keep all local R, install,
+import, build, browser, kernel, model and CRAN jobs held. Preserve shared Ollama and unrelated
+processes/files. Hosted jobs use separate resources, with at most two active jobs.
+
+Prepared follow-up at 03:16 PDT: family identity correction and private environment diagnostics,
+exact ACL-restoration diagnostics, fixed Windows control-file discovery, and bounded nested
+ACL phases are committed and pushed. The strict registry in d1fafc8 has 35 full files,
+145 required titles and 51 lint paths. Run 13 complete files: lint-rules, original cold idle,
+separate warm idle-boundary, marker-family, MCP, subagent-worker, CLI common/Claude/Codex,
+checkpoint, writer-runtime, native backpressure and spawn. Run all four plan gates on the same
+exact candidate after this update. No new Windows capability skip or timeout relaxation is
+accepted. The warm diagnostic cannot count as a cold-start pass or authorize retirement by
+itself. Quarto local rendering, private pandas/NumPy wheels and actual imports remain WAITING.
 
 The hold began at19:46 PDT and supersedes the earlier two-lane allowance: load was
 224.51/198.89/166.78, physical RAM127GiB used/94GiB wired/291MiB unused, swap31,460MiB
