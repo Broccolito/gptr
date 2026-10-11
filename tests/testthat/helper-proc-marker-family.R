@@ -110,8 +110,8 @@ pmf_child_case = function(case, root, failure) {
     if (!is.list(actual) || isTRUE(attr(actual, "unavailable"))) return(FALSE)
     got = identities(actual)
     want = identities(expected)
-    identical(vapply(got, function(x) x$pid, integer(1)),
-              vapply(want, function(x) x$pid, integer(1))) &&
+    identical(vapply(got, function(x) x$pid, integer(1), USE.NAMES = FALSE),
+              vapply(want, function(x) x$pid, integer(1), USE.NAMES = FALSE)) &&
       all(abs(vapply(got, function(x) x$create_time, numeric(1)) -
                 vapply(want, function(x) x$create_time, numeric(1))) < 0.01)
   }
@@ -175,6 +175,11 @@ pmf_child_case = function(case, root, failure) {
   tree = capture(function() fun("proc_tree")(marker))
   raw_match = matched(raw$value, st$owned)
   tree_match = matched(tree$value, st$owned)
+  # Exact-family controls use the independently held, live original handles.
+  rejects_missing = length(st$owned) >= 2L && !matched(st$owned[-1L], st$owned)
+  rejects_extra = length(st$foreign) >= 1L && !matched(c(st$owned, st$foreign), st$owned)
+  rejects_substitution = length(st$owned) >= 2L && length(st$foreign) >= 1L &&
+    !matched(c(st$owned[-1L], list(st$foreign[[1L]])), st$owned)
   foreign_ids = vapply(st$foreign, ps::ps_pid, integer(1))
   foreign_excluded = !any(foreign_ids %in% vapply(tree$value, ps::ps_pid, integer(1))) &&
     !any(foreign_ids %in% vapply(raw$value, ps::ps_pid, integer(1)))
@@ -205,6 +210,8 @@ pmf_child_case = function(case, root, failure) {
     raw_found = identities(raw$value), proc_found = identities(tree$value),
     raw_warnings = raw$warnings, proc_warnings = tree$warnings,
     raw_match = raw_match, proc_match = tree_match,
+    rejects_missing = rejects_missing, rejects_extra = rejects_extra,
+    rejects_substitution = rejects_substitution,
     proc_unavailable = isTRUE(attr(tree$value, "unavailable")),
     owned_env_exact = owned_env_exact, foreign_env_clear = foreign_env_clear,
     parent_marker_absent = parent_marker_absent, foreign_excluded = foreign_excluded,
