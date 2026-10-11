@@ -90,6 +90,30 @@ class DiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'fresh'):
             MODULE.isolated_environment(env, run)
 
+    def test_isolated_startup_uses_owned_empty_files_without_empty_environment_entries(self):
+        env = MODULE.child_environment({'PATH': '/old'}, self.tools)
+        original = dict(env)
+        run = self.root / 'owned-startup-state'
+        actual = MODULE.isolated_environment(env, run)
+        self.assertEqual(env, original)
+        startup = run / 'startup'
+        for name, filename in (
+                ('R_PROFILE', 'empty.Rprofile'), ('R_PROFILE_USER', 'empty.Rprofile'),
+                ('R_ENVIRON', 'empty.Renviron'), ('R_ENVIRON_USER', 'empty.Renviron')):
+            path = Path(actual[name])
+            self.assertEqual(path, startup / filename)
+            self.assertTrue(path.is_file())
+            self.assertFalse(path.is_symlink())
+            self.assertEqual(path.read_bytes(), b'')
+            if os.name != 'nt':
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        if os.name != 'nt':
+            self.assertEqual(startup.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(actual['GPTR_LIVE_TESTS'], 'false')
+        self.assertEqual(actual['RETICULATE_PYTHON'], self.tools['python'])
+        with self.assertRaisesRegex(RuntimeError, 'fresh'):
+            MODULE.isolated_environment(env, run)
+
     def test_windows_git_perl_discovery_uses_an_existing_owned_directory(self):
         git = self.root / 'Git'
         (git / 'usr/bin').mkdir(parents=True)

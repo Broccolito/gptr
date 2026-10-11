@@ -102,8 +102,18 @@ def isolated_environment(environment, run):
     run.mkdir(parents=True, mode=0o700)
     for name in ('home', 'config', 'cache', 'data', 'project', 'tmp'):
         (run / name).mkdir(mode=0o700)
+    # Windows R cannot restore true-empty entries after callr's temporary environment.
+    # Neutralize startup through fresh owned zero-byte files, before the R child starts.
+    startup = run / 'startup'
+    startup.mkdir(mode=0o700)
+    profile = startup / 'empty.Rprofile'
+    environ = startup / 'empty.Renviron'
+    profile.touch(mode=0o600, exist_ok=False)
+    environ.touch(mode=0o600, exist_ok=False)
     result = dict(environment)
-    result.update(HOME=str(run / 'home'), USERPROFILE=str(run / 'home'),
+    result.update(R_PROFILE=str(profile), R_PROFILE_USER=str(profile),
+        R_ENVIRON=str(environ), R_ENVIRON_USER=str(environ),
+        HOME=str(run / 'home'), USERPROFILE=str(run / 'home'),
         R_USER_CONFIG_DIR=str(run / 'config'), R_USER_CACHE_DIR=str(run / 'cache'),
         R_USER_DATA_DIR=str(run / 'data'), APPDATA=str(run / 'config'),
         LOCALAPPDATA=str(run / 'cache'), XDG_CONFIG_HOME=str(run / 'config'),
