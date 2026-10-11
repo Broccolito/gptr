@@ -20,6 +20,7 @@ paths = c(
   "tests/testthat/test-http-reactor.R", "tests/testthat/test-arch-layers.R",
   "tests/testthat/test-lint-rules.R",
   "tests/testthat/test-proc-writer-idle-slots.R",
+  "tests/testthat/helper-proc-marker-family.R", "tests/testthat/test-proc-marker-family.R",
   "tests/testthat/test-mcp-client.R", "tests/testthat/test-subagent-worker.R",
   "tests/testthat/test-cli-common.R", "tests/testthat/test-cli-claude.R",
   "tests/testthat/test-cli-codex.R", "tests/testthat/helper-cli-codex-capabilities.R",

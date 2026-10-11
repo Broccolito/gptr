@@ -962,3 +962,35 @@ testthat::test_that("controller markers pass the actual ps parser without coerci
   testthat::expect_no_warning(testthat::expect_identical(ps::ps_find_tree(marker), list()))
   testthat::expect_no_warning(testthat::expect_length(ps::ps_kill_tree(marker), 0L))
 })
+
+
+testthat::test_that("owned marker-family integration cannot omit or skip its native witness", {
+  file = "test-proc-marker-family.R"
+  title = "canonical markers enumerate an owned family and preserve unrelated processes"
+  testthat::expect_identical(optional_titles[[file]], title)
+  for (windows in c(FALSE, TRUE)) {
+    row = record(title)
+    testthat::expect_true(optional_gate(list(row), file, windows)$passed)
+    testthat::expect_false(optional_allowed_skip(file, title, windows))
+    testthat::expect_error(optional_gate(list(), file, windows), "No test cases")
+    testthat::expect_error(optional_gate(list(record("unrelated case")), file, windows),
+                          "Missing mandatory")
+    testthat::expect_error(optional_gate(list(row, row), file, windows), "Duplicate")
+    for (field in c("failed", "warnings", "skipped", "passed")) {
+      changed = row
+      changed[[field]] = if (field == "passed") 0L else 1L
+      testthat::expect_error(optional_gate(list(changed), file, windows))
+    }
+    raw = optional_result_rows(list(list(test = title, results = list(
+      structure(list(), class = "expectation_success"),
+      structure(list(message = "controlled marker family error"),
+        class = c("expectation_error", "condition"))))))[[1L]]
+    testthat::expect_error(optional_gate(list(raw), file, windows), "Failed")
+    raw$failed = 0L
+    raw$skipped = 1L
+    testthat::expect_error(optional_gate(list(raw), file, windows), "Skipped")
+    testthat::expect_false(optional_allowed_skip("test-proc-marker-family-other.R",
+                                               title, windows))
+    testthat::expect_false(optional_allowed_skip(file, "unrelated capability case", windows))
+  }
+})

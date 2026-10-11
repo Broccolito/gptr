@@ -162,7 +162,9 @@ optional_titles = list(
     "R/ follows the package lint rules (contract section 12.3, IC-72)",
     "each lint rule catches its violation (negative controls)"),
   "test-proc-writer-idle-slots.R" =
-    "two acknowledged idle Windows writers do not starve a third reading target"
+    "two acknowledged idle Windows writers do not starve a third reading target",
+  "test-proc-marker-family.R" =
+    "canonical markers enumerate an owned family and preserve unrelated processes"
 )
 
 optional_select = function(pattern, root) {
