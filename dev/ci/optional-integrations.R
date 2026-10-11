@@ -40,6 +40,12 @@ optional_titles = list(
     "Windows writes resolve links and edits refuse duplicate physical file operations",
     "Windows settings refresh after a same-size rewrite with unchanged file timestamps",
     "Windows same-size gated rewrites revoke trust even with unchanged file timestamps"),
+  "test-windows-link-policy.R" = c(
+    "Windows text reads canonical file bytes despite empty alias metadata",
+    "Windows writes use the canonical target when readlink reports no link",
+    "Windows direct link policy distinguishes a link from its ordinary descendants",
+    "Windows checkpoint walks list directory links without descending into them",
+    "Windows checkpoint capture refuses a direct file link"),
   "test-proc-windows-backpressure.R" = c(
     "real child duplex backpressure preserves every 4 MB stdout and stderr line",
     "a real no-reader child returns the typed stdin timeout under external bounds",

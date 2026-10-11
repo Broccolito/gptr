@@ -93,6 +93,37 @@ testthat::test_that("Windows security platform guards never excuse Windows cover
                                       "test-windows-security.R", TRUE), "Skipped")
 })
 
+testthat::test_that("injected Windows link policy cases are mandatory on both actual hosts", {
+  file = "test-windows-link-policy.R"
+  titles = c(
+    "Windows text reads canonical file bytes despite empty alias metadata",
+    "Windows writes use the canonical target when readlink reports no link",
+    "Windows direct link policy distinguishes a link from its ordinary descendants",
+    "Windows checkpoint walks list directory links without descending into them",
+    "Windows checkpoint capture refuses a direct file link")
+  testthat::expect_identical(optional_titles[[file]], titles)
+  rows = lapply(titles, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_identical(result$mandatory_cases, titles)
+    testthat::expect_identical(result$platform_guard_cases, character())
+    for (i in seq_along(rows)) {
+      testthat::expect_false(optional_allowed_skip(file, titles[[i]], windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      messages = c(failed = "Failed", warnings = "Warnings", skipped = "Skipped",
+        passed = "assertions")
+      for (field in names(messages)) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+      }
+    }
+  }
+})
+
 testthat::test_that("every approved writer prototype case must execute assertions on both hosts", {
   file = "test-proc-writer-prototype.R"
   titles = c(
