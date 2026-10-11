@@ -748,3 +748,75 @@ test_that("absence exit diagnostics retain numeric status without arbitrary cont
     expect_identical(rw_absence_status(status), "absence-main-status--1")
   }
 })
+
+
+test_that("writer accepts ordinary input published after its directory snapshot", {
+  x = rw_local_state()
+  path = file.path(x$st$dir, "in-000000000001")
+  bytes = charToRaw("PUBLIC-ATOMIC-INPUT")
+  owner = readBin(file.path(x$st$dir, "owner"), "raw", n = 128L)
+  seen = new.env(parent = emptyenv())
+  seen$published = FALSE
+  available = function(probe) {
+    if (identical(probe, path) && !seen$published) {
+      writeBin(bytes, path)
+      seen$published = TRUE
+    }
+    file.exists(probe)
+  }
+  link = function(probe) if (file.exists(probe)) "" else NA_character_
+  expect_true(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker, path,
+                                .readlink = link, .exists = available))
+  expect_true(seen$published)
+  expect_identical(readBin(path, "raw", n = 128L), bytes)
+  expect_identical(normalizePath(path, winslash = "/", mustWork = TRUE),
+                   paste0(x$st$canonical, "/", basename(path)))
+  expect_identical(readBin(file.path(x$st$dir, "owner"), "raw", n = 128L), owner)
+})
+
+test_that("writer refuses an alias published after its directory snapshot", {
+  x = rw_local_state()
+  path = file.path(x$st$dir, "in-000000000001")
+  owner = readBin(file.path(x$st$dir, "owner"), "raw", n = 128L)
+  seen = new.env(parent = emptyenv())
+  seen$published = FALSE
+  available = function(probe) {
+    if (identical(probe, path) && !seen$published) {
+      file.create(path)
+      seen$published = TRUE
+    }
+    file.exists(probe)
+  }
+  link = function(probe) {
+    if (identical(probe, path) && seen$published) return("FOREIGN-PUBLICATION-CANARY")
+    if (file.exists(probe)) "" else NA_character_
+  }
+  expect_false(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker, path,
+                                 .readlink = link, .exists = available))
+  expect_true(seen$published)
+  expect_true(file.exists(path))
+  expect_identical(readBin(path, "raw", n = 1L), raw())
+  expect_identical(readBin(file.path(x$st$dir, "owner"), "raw", n = 128L), owner)
+})
+
+test_that("writer refuses a directory published after its directory snapshot", {
+  x = rw_local_state()
+  path = file.path(x$st$dir, "in-000000000001")
+  owner = readBin(file.path(x$st$dir, "owner"), "raw", n = 128L)
+  seen = new.env(parent = emptyenv())
+  seen$published = FALSE
+  available = function(probe) {
+    if (identical(probe, path) && !seen$published) {
+      dir.create(path)
+      seen$published = TRUE
+    }
+    file.exists(probe)
+  }
+  link = function(probe) if (file.exists(probe)) "" else NA_character_
+  expect_false(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker, path,
+                                 .readlink = link, .exists = available))
+  expect_true(seen$published)
+  expect_true(dir.exists(path))
+  expect_identical(list.files(path, all.files = TRUE, no.. = TRUE), character())
+  expect_identical(readBin(file.path(x$st$dir, "owner"), "raw", n = 128L), owner)
+})
