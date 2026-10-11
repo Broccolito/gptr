@@ -50,6 +50,112 @@ rw_child_case = function(case, root) {
   same_writer = FALSE
   orphan_swept = FALSE
   error = NULL
+  acl = NULL
+  acl_readback = function(writer) {
+    literal = function(text) paste0("'", gsub("'", "''", text, fixed = TRUE), "'")
+    probe = file.path(writer$dir, "acl-created-file")
+    stopifnot(fun("proc_writer_valid")(writer$dir, writer$canonical, writer$marker, probe),
+      !file.exists(probe))
+    bytes = charToRaw("PUBLIC-ACL-SENTINEL")
+    utility = NULL
+    on.exit({
+      if (!is.null(utility)) fun("kill_all")(utility, grace = 0)
+      if (fun("proc_writer_valid")(writer$dir, writer$canonical, writer$marker, probe))
+        unlink(probe)
+    }, add = TRUE)
+    writeBin(bytes, probe)
+    script = paste(c(
+      "$ErrorActionPreference = 'Stop'",
+      paste0("$parent = ", literal(writer$dir)),
+      paste0("$file = ", literal(probe)),
+      "$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()",
+      "$sid = $identity.User",
+      "$fileOwner = $identity.Owner",
+      "if ($null -eq $fileOwner -or",
+      "    -not ($fileOwner -is [System.Security.Principal.SecurityIdentifier])) {",
+      "  throw 'Token owner' }",
+      "$fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl",
+      "$sections = [System.Security.AccessControl.AccessControlSections]::Access",
+      "$sections = $sections -bor [System.Security.AccessControl.AccessControlSections]::Owner",
+      "$attributes = [System.IO.File]::GetAttributes($parent)",
+      "if ($attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'Alias' }",
+      "$acl = [System.IO.Directory]::GetAccessControl($parent, $sections)",
+      "$rules = @($acl.GetAccessRules($true, $true,",
+      "  [System.Security.Principal.SecurityIdentifier]))",
+      "if (-not $acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or",
+      "    $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $sid.Value) {",
+      "  throw 'Parent ACL' }",
+      "$r = $rules[0]",
+      "if ($r.IdentityReference.Value -ne $sid.Value -or $r.IsInherited -or",
+      "    $r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or",
+      "    $r.FileSystemRights -ne $fullControl -or",
+      "    [int]$r.InheritanceFlags -ne 3 -or [int]$r.PropagationFlags -ne 0) {",
+      "  throw 'Parent rights' }",
+      "[Console]::WriteLine('GPTR-ACL-PARENT-OK')",
+      "$attributes = [System.IO.File]::GetAttributes($file)",
+      "if ($attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw 'File alias' }",
+      "$acl = [System.IO.File]::GetAccessControl($file, $sections)",
+      "$rules = @($acl.GetAccessRules($true, $true,",
+      "  [System.Security.Principal.SecurityIdentifier]))",
+      "if ($acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or",
+      "    $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne",
+      "    $fileOwner.Value) { throw 'File ACL' }",
+      "$r = $rules[0]",
+      "if ($r.IdentityReference.Value -ne $sid.Value -or -not $r.IsInherited -or",
+      "    $r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or",
+      "    $r.FileSystemRights -ne $fullControl -or",
+      "    [int]$r.InheritanceFlags -ne 0 -or [int]$r.PropagationFlags -ne 0) {",
+      "  throw 'File rights' }",
+      "[Console]::WriteLine('GPTR-ACL-FILE-OK')",
+      "$refused = $false",
+      "try { & {",
+      fun("proc_writer_acl")(writer$dir, "GPTR_PROC_ffffffffffffffff"),
+      "} } catch {",
+      "  if ($_.Exception.Message -ceq 'Existing writer directory') { $refused = $true }",
+      "  else { throw }",
+      "}",
+      "if (-not $refused) { throw 'Existing path not refused' }",
+      "[Console]::WriteLine('GPTR-ACL-EXISTING-REFUSED')"
+    ), collapse = "\n")
+    shell = file.path(Sys.getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0",
+      "powershell.exe")
+    seen = new.env(parent = emptyenv())
+    seen$out = character()
+    seen$status = NULL
+    started = fun("reactor_now")()
+    utility = fun("proc_spawn")(shell,
+      c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
+        fun("shell_ps_encode")(script)), env = fun("child_env")("helper"), stdin = NULL,
+      stdout = "|", stderr = NULL, supervise = FALSE)
+    record = fun("proc_record")(utility$get_pid(), utility)
+    stopifnot(is.list(record), is.finite(record$create_time))
+    fun("reactor_proc")(utility, on_line = function(line) {
+      seen$out = c(seen$out, line)
+      if (line %in% c("GPTR-ACL-PARENT-OK", "GPTR-ACL-FILE-OK", "GPTR-ACL-EXISTING-REFUSED"))
+        phase(line)
+    }, on_exit = function(status) {
+      seen$status = status
+      phase("acl-utility-exit")
+    })
+    complete = fun("reactor_pump")(until = function() !is.null(seen$status),
+      timeout = max(0, 5 - (fun("reactor_now")() - started)))
+    elapsed = fun("reactor_now")() - started
+    stopifnot(complete, identical(seen$status, 0L), elapsed <= 5)
+    settled = fun("kill_all")(utility, grace = 0)
+    if (isTRUE(settled)) utility = NULL
+    sentinel = identical(readBin(probe, "raw", n = length(bytes) + 1L), bytes)
+    owner = identical(readBin(file.path(writer$dir, "owner"), "raw", n = 27L),
+      charToRaw(writer$marker))
+    stopifnot(fun("proc_writer_valid")(writer$dir, writer$canonical, writer$marker, probe))
+    unlink(probe)
+    list(output = seen$out, elapsed = elapsed, status = seen$status,
+      sentinel_unchanged = sentinel, owner_unchanged = owner,
+      probe_removed = !(basename(probe) %in% list.files(writer$dir, all.files = TRUE,
+        no.. = TRUE)), utility_settled = isTRUE(settled),
+      utility_dead = !fun("pid_alive")(record$pid, record$create_time),
+      utility_marker_removed = !file.exists(file.path(fun("proc_dir")(),
+        paste0(record$marker, ".json"))))
+  }
   if (case %in% c("ordered", "binary")) {
     fun("write_all")(p, raw(0))
     fun("write_all")(p, second)
@@ -69,6 +175,13 @@ rw_child_case = function(case, root) {
     fun("write_atomic")(file.path(fun("proc_dir")(), paste0(saved$marker, ".json")),
       fun("json_encode")(saved))
     orphan_swept = fun("proc_sweep")() > 0L
+  } else if (case == "acl") {
+    phase("acl-readback")
+    acl = acl_readback(writer)
+    acl$writer_same = identical(fun("proc_writer_get")(p), writer) &&
+      isTRUE(writer$p$is_alive()) && isTRUE(p$is_alive())
+    fun("write_close")(p)
+    stopifnot(fun("reactor_pump")(until = function() !is.null(st$status), timeout = 10))
   } else {
     stop("Unknown owned writer runtime case.")
   }
@@ -81,8 +194,9 @@ rw_child_case = function(case, root) {
   fun("reactor_timer")(fun("reactor_now")(), function() st$tick = TRUE)
   responsive = fun("reactor_pump")(until = function() st$tick, timeout = 5)
   phase("complete")
-  list(complete = TRUE, input_bytes = length(first) + length(second), output = st$out,
-    same_writer = same_writer, orphan_swept = orphan_swept,
+  list(complete = TRUE, input_bytes = length(first) + if (case == "acl") 0L else length(second),
+    output = st$out,
+    same_writer = same_writer, orphan_swept = orphan_swept, acl = acl,
     expression_bytes = writer$expression_bytes, startup_elapsed = writer$startup_elapsed,
     private = writer$private, status = st$status, writer_identity = writer_record,
     stdin_empty = stdin_empty, watchers_empty = watchers_empty, reactor_responsive = responsive,
