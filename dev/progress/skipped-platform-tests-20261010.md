@@ -705,3 +705,13 @@ memory-pressure free metric is 51%; no thermal/performance warning was recorded.
 R/import/install/browser/kernel/model/build/check jobs remain held. Shared Ollama and all
 unrelated processes/files remain untouched. Missing local pandas/NumPy wheels and actual
 local Quarto/bridge/history-render checks remain WAITING for safe resources.
+
+## Exact-source rerun dispatched — 2026-10-11 03:17 PDT
+
+[Run 38131370576](https://github.com/Broccolito/gptr/actions/runs/38131370576) nominates
+exact 9a3b965c40f00b70513d55e1c587f714dd14b475. Windows and Linux run the 13 complete
+files above, followed by all four Linux plan stages even if integrations fail. The fixture
+formatting correction wraps only its opening; title, assertions, budgets and runtime remain
+unchanged. Status is ONGOING; no new native pass or retirement admission is inferred.
+Both hosted leases are occupied. Local jobs remain held under the 03:09 resource snapshot;
+shared Ollama remains untouched. Do not dispatch additional tests until a lease is free.
