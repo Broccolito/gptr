@@ -533,8 +533,7 @@ test_that("an oldText of only whitespace never matches between every two charact
   expect_identical(rd(g), "a b\n")
 })
 
-test_that("two operations on one file through a directory link or a folded name are refused", {
-  skip_on_os("windows")
+test_that("two operations on one file through a directory link are refused", {
   td = withr::local_tempdir()
   u = function(name) fs_path(file.path(td, name))
   env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
@@ -543,11 +542,29 @@ test_that("two operations on one file through a directory link or a folded name 
         paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
   }
   put_file(td, "D/a.R", "a = 1\nb = 2\n")
-  file.symlink(file.path(td, "D"), file.path(td, "L"))
+  if (.Platform$OS.type == "windows") {
+    wsec_link(file.path(td, "D"), file.path(td, "L"), .env = environment())
+  } else {
+    expect_true(file.symlink(file.path(td, "D"), file.path(td, "L")))
+  }
   expect_error(patch_apply(upd2("L/a.R", "D/a.R", "a = 1", "b = 2"), root = td),
                "more than one operation names D/a.R", fixed = TRUE,
                class = "gptr_error_invalid_argument")
   expect_identical(rd(u("D/a.R")), "a = 1\nb = 2\n")
+})
+
+test_that("patch additions respect the observed case-folding of the filesystem", {
+  td = withr::local_tempdir()
+  u = function(name) fs_path(file.path(td, name))
+  env = function(...) paste(c("*** Begin Patch", ..., "*** End Patch"), collapse = "\n")
+  upd2 = function(p1, p2, l1, l2) {
+    env(paste0("*** Update File: ", p1), "@@", paste0("-", l1), paste0("+", l1, "0"),
+        paste0("*** Update File: ", p2), "@@", paste0("-", l2), paste0("+", l2, "0"))
+  }
+  put_file(td, "case-probe.R", "probe\n")
+  folded = fs_case_insensitive(td)
+  expect_identical(file.exists(u("CASE-PROBE.R")), folded)
+  expect_true(requireNamespace("stringi", quietly = TRUE))
   put_file(td, fs_path("\u00e9t\u00e9.R"), "e = 1\nf = 2\n")
   if (file.exists(u("\u00c9T\u00c9.R"))) {
     expect_error(patch_apply(upd2("\u00e9t\u00e9.R", "\u00c9T\u00c9.R", "e = 1", "f = 2"),
@@ -560,9 +577,14 @@ test_that("two operations on one file through a directory link or a folded name 
                  "more than one operation names", fixed = TRUE)
     expect_identical(rd(u("caf\u00e9.R")), "c = 1\nd = 2\n")
   }
-  skip_if_not_installed("stringi")
-  skip_if_not(fs_case_insensitive(td), "a case-sensitive file system")
   adds = env("*** Add File: n\u00e9w.R", "+1", "*** Add File: N\u00c9W.R", "+2")
-  expect_error(patch_apply(adds, root = td), "more than one operation names", fixed = TRUE)
-  expect_false(file.exists(u("n\u00e9w.R")))
+  if (folded) {
+    expect_error(patch_apply(adds, root = td), "more than one operation names", fixed = TRUE)
+    expect_false(file.exists(u("n\u00e9w.R")))
+  } else {
+    patch_apply(adds, root = td)
+    expect_identical(rd(u("n\u00e9w.R")), "1\n")
+    expect_identical(rd(u("N\u00c9W.R")), "2\n")
+    expect_true(all(c("n\u00e9w.R", "N\u00c9W.R") %in% list.files(td)))
+  }
 })

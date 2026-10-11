@@ -6,6 +6,107 @@ blob_count = function() {
                     recursive = TRUE))
 }
 
+# Deny file creation only in the freshly owned bucket. The saved Windows Access descriptor
+# stays in an owner-only control directory; no SID or descriptor is returned or printed.
+ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
+  inside = isTRUE(path_inside(path, root))
+  lex = path_lexical(path)
+  if (is_windows() || is_macos()) lex = tolower(lex)
+  direct = !isTRUE(path_is_link(path)) && identical(path_key(path), lex)
+  expect_true(inside)
+  expect_true(direct)
+  if (!inside || !direct) stop("Refusing permission changes outside an owned direct bucket")
+  probe = tempfile("create-probe-", tmpdir = path)
+  expect_true(file.create(probe))
+  expect_true(file.remove(probe))
+  state = new.env(parent = emptyenv())
+  state$restored = FALSE
+  windows = .Platform$OS.type == "windows"
+  old_mode = file.mode(path)
+  invoke = NULL
+  backup = NULL
+  if (windows) {
+    control = tempfile("gptr-owned-acl-", tmpdir = root)
+    created = dir.create(control, mode = "0700")
+    expect_true(created)
+    if (!isTRUE(created)) stop("Refusing an existing ACL control directory")
+    script = file.path(control, "acl.ps1")
+    backup = file.path(control, "access.txt")
+    writeLines(c(
+      "param([string]$Path, [string]$Control, [string]$Backup, [string]$Action)",
+      "$ErrorActionPreference = 'Stop'",
+      "$section = [System.Security.AccessControl.AccessControlSections]::Access",
+      "if ($Action -eq 'deny') {",
+      "  $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User",
+      "  $private = New-Object System.Security.AccessControl.DirectorySecurity",
+      "  $private.SetAccessRuleProtection($true, $false)",
+      "  $inherit = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit",
+      "  $inherit = $inherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit",
+      "  $allow = [System.Security.AccessControl.FileSystemAccessRule]::new(",
+      "    $sid, 'FullControl', $inherit, 'None', 'Allow')",
+      "  $private.AddAccessRule($allow)",
+      "  [System.IO.Directory]::SetAccessControl($Control, $private)",
+      "  $acl = [System.IO.Directory]::GetAccessControl($Path, $section)",
+      "  $original = $acl.GetSecurityDescriptorSddlForm($section)",
+      "  $stream = [System.IO.File]::Open($Backup, 'CreateNew', 'Write', 'None')",
+      "  try {",
+      "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($original)",
+      "    $stream.Write($bytes, 0, $bytes.Length)",
+      "    $stream.Flush()",
+      "  } finally { $stream.Dispose() }",
+      "  $deny = [System.Security.AccessControl.FileSystemAccessRule]::new(",
+      "    $sid, 'CreateFiles', 'Deny')",
+      "  $acl.AddAccessRule($deny)",
+      "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
+      "} elseif ($Action -eq 'restore') {",
+      "  $original = [System.IO.File]::ReadAllText($Backup, [System.Text.Encoding]::UTF8)",
+      "  $acl = New-Object System.Security.AccessControl.DirectorySecurity",
+      "  $acl.SetSecurityDescriptorSddlForm($original, $section)",
+      "  [System.IO.Directory]::SetAccessControl($Path, $acl)",
+      "  $current = [System.IO.Directory]::GetAccessControl($Path, $section)",
+      "  if ($current.GetSecurityDescriptorSddlForm($section) -cne $original) {",
+      "    throw 'Owned bucket Access descriptor restoration did not match'",
+      "  }",
+      "} else { throw 'Unknown owned ACL action' }"), script)
+    shell = Sys.which("powershell.exe")
+    if (!nzchar(shell)) stop("Owned Windows permission test requires powershell.exe")
+    invoke = function(action) {
+      processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
+        "-Path", path, "-Control", control, "-Backup", backup, "-Action", action),
+        timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
+        cleanup_tree = TRUE, env = character())
+      invisible(NULL)
+    }
+  }
+  restore = function() {
+    if (state$restored) return(invisible(NULL))
+    if (windows) {
+      if (!file.exists(backup)) return(invisible(NULL))
+      invoke("restore")
+    } else {
+      expect_true(Sys.chmod(path, old_mode, use_umask = FALSE))
+      expect_identical(file.mode(path), old_mode)
+    }
+    restored_probe = tempfile("restored-probe-", tmpdir = path)
+    expect_true(file.create(restored_probe))
+    expect_true(file.remove(restored_probe))
+    state$restored = TRUE
+    invisible(NULL)
+  }
+  # Register before any denial attempt, so an error after changing permissions still restores.
+  withr::defer(restore(), envir = .env)
+  if (windows) {
+    invoke("deny")
+  } else {
+    expect_true(Sys.chmod(path, "0555", use_umask = FALSE))
+    expect_true(file.access(path, 2L) != 0L)
+  }
+  denied_probe = tempfile("denied-probe-", tmpdir = path)
+  expect_false(suppressWarnings(file.create(denied_probe)))
+  expect_false(file.exists(denied_probe))
+  restore
+}
+
 test_that("the blob store deduplicates, compresses small text and restores atomically", {
   proj = local_project()
   f = file.path(proj, "a.R")
@@ -37,14 +138,28 @@ test_that("already-compressed files are stored raw and come back byte for byte",
   out = file.path(proj, "restored", "d.rds")
   expect_true(ckpt_store_get(h, out))
   expect_identical(readBin(out, "raw", 1e4), readBin(f, "raw", 1e4))
+})
+
+test_that("the blob store reports effective create denial and restores its owned bucket", {
+  proj = local_project()
   g = file.path(proj, "e.rds")
   saveRDS(11:20, g)
-  blobs = dirname(ckpt_blob_path(hash_file(g), ""))
-  dir.create(blobs, showWarnings = FALSE)
-  Sys.chmod(blobs, "0555", use_umask = FALSE)
-  withr::defer(Sys.chmod(blobs, "0755", use_umask = FALSE))
-  skip_if(file.access(blobs, 2L) == 0L, "the directory stays writable")
+  hash = hash_file(g)
+  blobs = dirname(ckpt_blob_path(hash, ""))
+  expected = file.path(proj, ".gptr", "checkpoints", "blobs", substr(hash, 1L, 2L))
+  same = identical(path_norm(blobs), path_norm(expected))
+  expect_true(same)
+  if (!same) stop("Refusing an unexpected checkpoint bucket")
+  created = dir.create(blobs, recursive = TRUE, showWarnings = FALSE)
+  expect_true(created)
+  if (!isTRUE(created)) stop("Refusing permission changes on a preexisting bucket")
+  expect_identical(path_norm(blobs), path_norm(expected))
+  restore = ckpt_test_deny_create(blobs, proj)
   expect_error(suppressWarnings(ckpt_store_put(g)), class = "gptr_error_workspace")
+  expect_null(ckpt_blob_find(hash))
+  restore()
+  expect_identical(ckpt_store_put(g), hash)
+  expect_false(is.null(ckpt_blob_find(hash)))
 })
 
 test_that("without a workspace the store lives under tempdir(), never in the project", {
@@ -316,13 +431,15 @@ test_that("a file that cannot be written or read is an item and the undo goes on
   expect_identical(readLines(file.path(proj, "b.R")), "b = 1")
 })
 
-test_that("undo and redo of a case-only rename keep the file", {
+test_that("undo and redo of a case-only rename preserve bytes on the observed filesystem", {
   proj = local_project(files = list("readme.md" = "hello"))
-  skip_if_not(fs_case_insensitive(proj), "the file system is case-sensitive")
+  folded = fs_case_insensitive(proj)
+  expect_identical(file.exists(file.path(proj, "README.md")), folded)
   ck = ckpt_ck_new("s0000000032")
   call = list(id = "c1", name = "r", input = list(code = "file.rename('readme.md', 'README.md')"))
   tok = ckpt_files_before(ck, call, turn = 1L)
-  file.rename(file.path(proj, "readme.md"), file.path(proj, "README.md"))
+  expect_true(file.rename(file.path(proj, "readme.md"), file.path(proj, "README.md")))
+  expect_identical(file.exists(file.path(proj, "readme.md")), folded)
   frag = ckpt_files_after(ck, call, tok)
   expect_true(all(ckpt_files_undo(ck, frag)$ok))
   expect_identical(list.files(proj), "readme.md")
