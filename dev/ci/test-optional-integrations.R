@@ -1175,3 +1175,49 @@ testthat::test_that("fixed Codex control cases remain mandatory without capabili
     }
   }
 })
+
+
+testthat::test_that("warm idle writer boundary is mandatory on Windows with one exact Unix guard", {
+  file = "test-proc-writer-idle-boundary.R"
+  title = "two warm acknowledged Windows writers do not starve a third two-second write"
+  testthat::expect_identical(optional_titles[[file]], title)
+  rows = list(record(title))
+  result = optional_gate(rows, file, TRUE)
+  testthat::expect_true(result$passed)
+  testthat::expect_identical(result$mandatory_cases, title)
+  testthat::expect_false(result$platform_guard_only)
+  for (windows in c(FALSE, TRUE)) {
+    testthat::expect_error(optional_gate(list(), file, windows), "No test cases")
+    testthat::expect_error(optional_gate(list(record("unrelated native case")), file, windows),
+                          "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows), file, windows), "Duplicate")
+    for (field in c("failed", "warnings")) {
+      changed = rows
+      changed[[1L]][[field]] = 1L
+      testthat::expect_error(optional_gate(changed, file, windows))
+    }
+    raw = optional_result_rows(list(list(test = title, results = list(
+      structure(list(), class = "expectation_success"),
+      structure(list(message = "controlled warm writer boundary error"),
+        class = c("expectation_error", "condition"))))))
+    testthat::expect_error(optional_gate(raw, file, windows), "Failed")
+    testthat::expect_false(optional_allowed_skip("test-proc-writer-retirement.R", title, windows))
+    testthat::expect_false(optional_allowed_skip(file, "unrelated capability guard", windows))
+  }
+  testthat::expect_false(optional_allowed_skip(file, title, TRUE))
+  testthat::expect_true(optional_allowed_skip(file, title, FALSE))
+  empty = rows
+  empty[[1L]]$passed = 0L
+  testthat::expect_error(optional_gate(empty, file, TRUE), "assertions")
+  late = rows
+  late[[1L]]$passed = 3L
+  late[[1L]]$skipped = 1L
+  testthat::expect_error(optional_gate(late, file, TRUE), "Skipped")
+  guarded = list(record(title, passed = 0L, skipped = 1L))
+  result = optional_gate(guarded, file, FALSE)
+  testthat::expect_true(result$passed)
+  testthat::expect_identical(result$mandatory_cases, character())
+  testthat::expect_identical(result$platform_guard_cases, title)
+  testthat::expect_true(result$platform_guard_only)
+  testthat::expect_identical(sum(vapply(result$rows, function(row) row$passed, 0L)), 0L)
+})

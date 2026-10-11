@@ -177,7 +177,9 @@ optional_titles = list(
     "two acknowledged idle Windows writers do not starve a third reading target",
   "test-proc-marker-family.R" = c(
     "canonical markers enumerate an owned family and preserve unrelated processes",
-    "marker environment diagnostics distinguish casing from private value changes")
+    "marker environment diagnostics distinguish casing from private value changes"),
+  "test-proc-writer-idle-boundary.R" =
+    "two warm acknowledged Windows writers do not starve a third two-second write"
 )
 
 optional_select = function(pattern, root) {
@@ -221,6 +223,8 @@ optional_platform_guard = function(file, name, windows) {
     return(name %in% optional_titles[[file]])
   if (identical(file, "test-proc-writer-idle-slots.R")) return(identical(name,
     "two acknowledged idle Windows writers do not starve a third reading target"))
+  if (identical(file, "test-proc-writer-idle-boundary.R")) return(identical(name,
+    "two warm acknowledged Windows writers do not starve a third two-second write"))
   identical(file, "test-proc-writer-runtime.R") && name %in% c(
     "Windows production writer preserves ordered writes and idle EOF",
     "Windows production writer death is a typed IO failure",
