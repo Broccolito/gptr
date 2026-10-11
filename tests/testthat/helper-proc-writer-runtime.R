@@ -296,18 +296,20 @@ rw_absence_observation = function(line) {
   if (!is.character(line) || length(line) != 1L || is.na(line) ||
       nchar(line, type = "bytes") > 128L) bad()
   if (!startsWith(line, "GPTR_ABSENCE_PROBE") &&
-      !startsWith(line, "GPTR_ABSENCE_PARENT_")) return(NULL)
+      !startsWith(line, "GPTR_ABSENCE_PARENT_") &&
+      !startsWith(line, "GPTR_ABSENCE_FILE_")) return(NULL)
   integer = "(0|[1-9][0-9]*)"
-  pattern = paste0("^GPTR_ABSENCE_(PROBE ", integer, "|PARENT_(BEFORE|AFTER|COMPARE) ",
-    integer, " ", integer, " ", integer, ")$")
+  pattern = paste0("^GPTR_ABSENCE_(PROBE ", integer,
+    "|(PARENT|FILE)_(BEFORE|AFTER|COMPARE) ", integer, " ", integer, " ", integer, ")$")
   if (!grepl(pattern, line)) bad()
   parts = strsplit(line, " ", fixed = TRUE)[[1L]]
   key = switch(parts[[1L]], GPTR_ABSENCE_PROBE = "probe",
     GPTR_ABSENCE_PARENT_BEFORE = "parent-before", GPTR_ABSENCE_PARENT_AFTER = "parent-after",
-    GPTR_ABSENCE_PARENT_COMPARE = "parent-compare")
+    GPTR_ABSENCE_PARENT_COMPARE = "parent-compare", GPTR_ABSENCE_FILE_BEFORE = "file-before",
+    GPTR_ABSENCE_FILE_AFTER = "file-after", GPTR_ABSENCE_FILE_COMPARE = "file-compare")
   bounds = if (key == "probe") {
     4
-  } else if (key == "parent-compare") {
+  } else if (endsWith(key, "-compare")) {
     c(65535, 65536, 1)
   } else {
     c(65535, 128, 65536)
@@ -398,7 +400,9 @@ rw_absence_case = function(case, root) {
       paste0("[Console]::WriteLine('", proof, "')"))
   }
   observations = c(
-    "function ObserveParent([string]$label, [string]$descriptor) {",
+    "function ObserveParent([string]$label, [string]$descriptor,",
+    "    [string]$family = 'PARENT') {",
+    "  if (@('PARENT', 'FILE') -cnotcontains $family) { throw 'Invalid Access family' }",
     "  if (@('BEFORE', 'AFTER') -cnotcontains $label -or $descriptor.Length -gt 262144) {",
     "    throw 'Invalid parent observation' }",
     "  $raw = [System.Security.AccessControl.RawSecurityDescriptor]::new($descriptor)",
@@ -408,18 +412,19 @@ rw_absence_case = function(case, root) {
     "      $flags -lt 0 -or $flags -gt 65535) { throw 'Invalid parent observation' }",
     "  $bytes = [byte[]]::new($dacl.BinaryLength)",
     "  $dacl.GetBinaryForm($bytes, 0)",
-    "  [Console]::WriteLine('GPTR_ABSENCE_PARENT_' + $label + ' ' + $flags + ' ' +",
+    "  [Console]::WriteLine('GPTR_ABSENCE_' + $family + '_' + $label + ' ' + $flags + ' ' +",
     "    $dacl.Count + ' ' + $bytes.Length)",
     "  return @{ Flags = $flags; Bytes = $bytes; Descriptor = $descriptor }",
     "}",
-    "function CompareParent($before, $after) {",
+    "function CompareParent($before, $after, [string]$family = 'PARENT') {",
+    "  if (@('PARENT', 'FILE') -cnotcontains $family) { throw 'Invalid Access family' }",
     "  $different = [Math]::Abs($before.Bytes.Length - $after.Bytes.Length)",
     "  $length = [Math]::Min($before.Bytes.Length, $after.Bytes.Length)",
     "  for ($i = 0; $i -lt $length; $i++) {",
     "    if ($before.Bytes[$i] -ne $after.Bytes[$i]) { $different++ }",
     "  }",
     "  $equal = [int]($before.Descriptor -ceq $after.Descriptor)",
-    "  [Console]::WriteLine('GPTR_ABSENCE_PARENT_COMPARE ' +",
+    "  [Console]::WriteLine('GPTR_ABSENCE_' + $family + '_COMPARE ' +",
     "    ($before.Flags -bxor $after.Flags) + ' ' + $different + ' ' + $equal)",
     "}"
   )
@@ -592,7 +597,11 @@ rw_absence_case = function(case, root) {
     "      $restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "      [System.IO.File]::SetAccessControl($denied, $restore)",
     "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 14')",
+    "      $observedBefore = ObserveParent 'BEFORE' $descriptor 'FILE'",
     "      $got = [System.IO.File]::GetAccessControl($denied, $access)",
+    "      $actual = $got.GetSecurityDescriptorSddlForm($access)",
+    "      $observedAfter = ObserveParent 'AFTER' $actual 'FILE'",
+    "      CompareParent $observedBefore $observedAfter 'FILE'",
     "      if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "        throw 'File access not restored' }",
     "      [Console]::WriteLine('GPTR_ABSENCE_STAGE 15')",
@@ -650,13 +659,25 @@ rw_absence_case = function(case, root) {
       observation = rw_absence_observation(line)
       if (!is.null(observation)) {
         key = observation$key
-        stopifnot(!key %in% seen$observations, length(seen$observations) < 4L)
+        stopifnot(!key %in% seen$observations, length(seen$observations) < 7L)
         if (key == "probe") {
           stopifnot(identity, identical(seen$last_stage, 8L))
         } else {
-          stopifnot(identical(seen$last_stage, if (identity) 11L else 103L))
-          if (key == "parent-after") stopifnot("parent-before" %in% seen$observations)
-          if (key == "parent-compare") stopifnot("parent-after" %in% seen$observations)
+          parent = startsWith(key, "parent-")
+          stage = if (parent) {
+            if (identity) 11L else 103L
+          } else {
+            if (identity) 14L else 106L
+          }
+          family = if (parent) "parent" else "file"
+          stopifnot(identical(seen$last_stage, stage))
+          if (!parent) stopifnot("parent-compare" %in% seen$observations)
+          if (endsWith(key, "-after")) {
+            stopifnot(paste0(family, "-before") %in% seen$observations)
+          }
+          if (endsWith(key, "-compare")) {
+            stopifnot(paste0(family, "-after") %in% seen$observations)
+          }
         }
         seen$observations = c(seen$observations, key)
         phase(observation$label)
@@ -714,7 +735,11 @@ rw_absence_case = function(case, root) {
     "$restore.SetSecurityDescriptorSddlForm($descriptor, $access)",
     "[System.IO.File]::SetAccessControl($file, $restore)",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 106')",
+    "$observedBefore = ObserveParent 'BEFORE' $descriptor 'FILE'",
     "$got = [System.IO.File]::GetAccessControl($file, $access)",
+    "$actual = $got.GetSecurityDescriptorSddlForm($access)",
+    "$observedAfter = ObserveParent 'AFTER' $actual 'FILE'",
+    "CompareParent $observedBefore $observedAfter 'FILE'",
     "if ($got.GetSecurityDescriptorSddlForm($access) -cne $descriptor) {",
     "  throw 'File recovery mismatch' }",
     "[Console]::WriteLine('GPTR_ABSENCE_STAGE 107')",

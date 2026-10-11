@@ -856,3 +856,25 @@ test_that("absence observations retain only fixed probe and bounded parent ACL n
     expect_error(rw_absence_observation(line), "Invalid absence observation", fixed = TRUE)
   }
 })
+
+test_that("absence observations retain only fixed bounded file ACL differences", {
+  for (key in c("BEFORE", "AFTER", "COMPARE")) {
+    numbers = if (key == "COMPARE") "1024 0 0" else "37892 1 44"
+    x = rw_absence_observation(paste(paste0("GPTR_ABSENCE_FILE_", key), numbers))
+    expect_identical(x$key, paste0("file-", tolower(key)))
+    expect_identical(x$label, paste0("absence-file-", tolower(key), "-",
+      gsub(" ", "-", numbers, fixed = TRUE)))
+  }
+  expect_identical(rw_absence_observation("GPTR_ABSENCE_FILE_BEFORE 65535 128 65536")$label,
+    "absence-file-before-65535-128-65536")
+  expect_identical(rw_absence_observation("GPTR_ABSENCE_FILE_COMPARE 65535 65536 1")$label,
+    "absence-file-compare-65535-65536-1")
+  for (line in c("GPTR_ABSENCE_FILE_BEFORE 65536 1 44",
+    "GPTR_ABSENCE_FILE_BEFORE 37892 129 44", "GPTR_ABSENCE_FILE_AFTER 37892 1 65537",
+    "GPTR_ABSENCE_FILE_COMPARE 1024 65537 0", "GPTR_ABSENCE_FILE_COMPARE 1024 0 2",
+    "GPTR_ABSENCE_FILE_BEFORE 037892 1 44", "GPTR_ABSENCE_FILE_AFTER 37892 1 NaN",
+    "GPTR_ABSENCE_FILE_FOREIGN 37892 1 44", "GPTR_ABSENCE_FILE_AFTER 37892 1 44 SID-CANARY",
+    "GPTR_ABSENCE_FILE_COMPARE 1024 0 0\r")) {
+    expect_error(rw_absence_observation(line), "Invalid absence observation", fixed = TRUE)
+  }
+})
