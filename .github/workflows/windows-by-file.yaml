@@ -100,7 +100,7 @@ jobs:
           GITHUB_TOKEN: ''
         run: |
           python dev/ci/test-optional-dependencies.py
-          Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE)'
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE, stop_on_warning = TRUE)'
       - name: Lint the reviewed integration runtime, fixtures and result gates
         if: inputs.optional
         shell: bash
