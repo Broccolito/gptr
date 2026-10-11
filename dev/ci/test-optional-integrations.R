@@ -919,3 +919,46 @@ testthat::test_that("native Codex control variants never excuse capability skips
     }
   }
 })
+
+
+testthat::test_that(
+  "controller markers have a numeric second field without parent or RNG changes", {
+  environment = Sys.getenv()
+  seed_present = exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  seed = get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  markers = c(optional_marker(1791700000.9), optional_marker(1791700000.9))
+  testthat::expect_false(identical(markers[[1L]], markers[[2L]]))
+  testthat::expect_true(all(grepl("^GPTROPT[^_]+_1791700000$", markers)))
+  for (marker in markers) {
+    fields = strsplit(marker, "_", fixed = TRUE)[[1L]]
+    testthat::expect_length(fields, 2L)
+    testthat::expect_identical(as.numeric(fields[[2L]]), 1791700000)
+    testthat::expect_identical(Sys.getenv(marker, unset = NA_character_), NA_character_)
+  }
+  testthat::expect_true(identical(Sys.getenv(), environment),
+    info = "parent environment unchanged")
+  testthat::expect_identical(exists(".Random.seed", envir = globalenv(), inherits = FALSE),
+    seed_present)
+  testthat::expect_identical(get0(".Random.seed", envir = globalenv(), inherits = FALSE), seed)
+})
+
+testthat::test_that("controller markers reject unavailable or invalid creation-time bounds", {
+  for (time in list(NA_real_, Inf, -Inf, -1, numeric(), c(1, 2))) {
+    testthat::expect_error(optional_marker(time), "Invalid controller marker time")
+  }
+})
+
+testthat::test_that("controller markers pass the actual ps parser without coercion warnings", {
+  # Keep the real ps parser, but prohibit process enumeration or signalling in this unit control.
+  no_signal = function(processes, ...) {
+    if (length(processes)) stop("Unexpected process in marker parser control")
+    character()
+  }
+  testthat::local_mocked_bindings(ps_pids = function() integer(), ps_send_signal = no_signal,
+    ps_kill = no_signal, .package = "ps")
+  testthat::expect_warning(ps::ps_find_tree("GPTR_OPTIONAL_OWNER_control"),
+    class = "simpleWarning")
+  marker = optional_marker()
+  testthat::expect_no_warning(testthat::expect_identical(ps::ps_find_tree(marker), list()))
+  testthat::expect_no_warning(testthat::expect_length(ps::ps_kill_tree(marker), 0L))
+})

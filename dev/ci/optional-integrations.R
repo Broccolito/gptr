@@ -289,6 +289,15 @@ optional_result_rows = function(result) {
   })
 }
 
+# ps parses the second underscore-delimited field as a process creation-time lower bound.
+# Generate only a name: the parent never carries this marker, and R's RNG is untouched.
+optional_marker = function(time = Sys.time()) {
+  after = floor(as.numeric(time))
+  if (length(after) != 1L || !is.finite(after) || after < 0)
+    stop("Invalid controller marker time")
+  paste0(basename(tempfile("GPTROPT")), "_", sprintf("%.0f", after))
+}
+
 optional_wait_family = function(root_stopped, remaining, seconds = 5,
                                 now = function() proc.time()[["elapsed"]], pause = Sys.sleep) {
   started = now()
@@ -531,7 +540,7 @@ optional_integrations_main = function(controller) {
   invoke = function(action, label, file = NULL, timeout = 300) {
     log = file.path(output, paste0(label, ".log"))
     stdout_log = file.path(output, paste0(label, "-stdout.log"))
-    marker = basename(tempfile("GPTR_OPTIONAL_OWNER_"))
+    marker = optional_marker()
     stopifnot(!nzchar(Sys.getenv(marker)))
     process = NULL
     on.exit({
