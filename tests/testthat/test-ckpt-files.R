@@ -26,6 +26,8 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
   invoke = NULL
   backup = NULL
   stage = NULL
+  diagnostic = NULL
+  roundtrip = NULL
   if (windows) {
     control = tempfile("gptr-owned-acl-", tmpdir = root)
     created = dir.create(control, mode = "0700")
@@ -34,6 +36,8 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
     script = file.path(control, "acl.ps1")
     backup = file.path(control, "access.txt")
     stage = file.path(control, "stage.txt")
+    diagnostic = file.path(control, "access-diagnostic.txt")
+    roundtrip = file.path(control, "original-roundtrip.txt")
     writeLines(c(
       "param([string]$Path, [string]$Control, [string]$Backup,",
       "  [string]$Stage, [string]$Action)",
@@ -56,6 +60,20 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
       "  $acl = [System.IO.Directory]::GetAccessControl($Path, $section)",
       "  [System.IO.File]::WriteAllText($Stage, 'bucket-acl-read')",
       "  $original = $acl.GetSecurityDescriptorSddlForm($section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'original-roundtrip')",
+      "  $roundtrip = [System.IO.Path]::Combine($Control, 'original-roundtrip.txt')",
+      "  try {",
+      "    if ($original.Length -gt 262144) { throw 'Owned ACL diagnostic input bound' }",
+      "    $raw = [System.Security.AccessControl.RawSecurityDescriptor]::new($original)",
+      "    $rawEqual = ($raw.GetSddlForm($section) -ceq $original)",
+      "    $reconstructed = [System.Security.AccessControl.DirectorySecurity]::new()",
+      "    $reconstructed.SetSecurityDescriptorSddlForm($original, $section)",
+      "    $objectEqual = ($reconstructed.GetSecurityDescriptorSddlForm($section) -ceq $original)",
+      "    $bits = [int[]]@($rawEqual, $objectEqual)",
+      "    [System.IO.File]::WriteAllText($roundtrip, [string]::Join(',', [string[]]$bits))",
+      "  } catch {",
+      "    try { [System.IO.File]::WriteAllText($roundtrip, 'unavailable') } catch {}",
+      "  }",
       "  $stream = [System.IO.File]::Open($Backup, 'CreateNew', 'Write', 'None')",
       "  try {",
       "    $bytes = [System.Text.Encoding]::UTF8.GetBytes($original)",
@@ -80,6 +98,49 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
       "  $restored = $current.GetSecurityDescriptorSddlForm($section)",
       "  [System.IO.File]::WriteAllText($Stage, 'restore-sddl-read')",
       "  if ($restored -cne $original) {",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-diagnostic')",
+      "    $diag = [System.IO.Path]::Combine($Control, 'access-diagnostic.txt')",
+      "    try {",
+      "      if ($original.Length -gt 262144 -or $restored.Length -gt 262144) {",
+      "        throw 'Owned ACL diagnostic input bound'",
+      "      }",
+      "      $before = [System.Security.AccessControl.RawSecurityDescriptor]::new($original)",
+      "      $after = [System.Security.AccessControl.RawSecurityDescriptor]::new($restored)",
+      "      $af = [int]$before.ControlFlags",
+      "      $bf = [int]$after.ControlFlags",
+      "      $a = $before.DiscretionaryAcl",
+      "      $b = $after.DiscretionaryAcl",
+      "      $nullEqual = (($null -eq $a) -eq ($null -eq $b))",
+      "      $countEqual = $false",
+      "      $lengthEqual = $false",
+      "      $bytesEqual = $false",
+      "      if ($null -eq $a -and $null -eq $b) {",
+      "        $countEqual = $true",
+      "        $lengthEqual = $true",
+      "        $bytesEqual = $true",
+      "      } elseif ($null -ne $a -and $null -ne $b) {",
+      "        if ($a.Count -gt 128 -or $b.Count -gt 128 -or",
+      "            $a.BinaryLength -gt 65536 -or $b.BinaryLength -gt 65536) {",
+      "          throw 'Owned ACL diagnostic binary bound'",
+      "        }",
+      "        $countEqual = ($a.Count -eq $b.Count)",
+      "        $lengthEqual = ($a.BinaryLength -eq $b.BinaryLength)",
+      "        $ab = [byte[]]::new($a.BinaryLength)",
+      "        $bb = [byte[]]::new($b.BinaryLength)",
+      "        $a.GetBinaryForm($ab, 0)",
+      "        $b.GetBinaryForm($bb, 0)",
+      "        $bytesEqual = ([Convert]::ToBase64String($ab) -ceq",
+      "          [Convert]::ToBase64String($bb))",
+      "      }",
+      "      $bits = [int[]]@(($af -eq $bf), (($af -band 4) -eq ($bf -band 4)),",
+      "        (($af -band 4096) -eq ($bf -band 4096)),",
+      "        (($af -band 256) -eq ($bf -band 256)),",
+      "        (($af -band 1024) -eq ($bf -band 1024)),",
+      "        $nullEqual, $countEqual, $lengthEqual, $bytesEqual)",
+      "      [System.IO.File]::WriteAllText($diag, [string]::Join(',', [string[]]$bits))",
+      "    } catch {",
+      "      try { [System.IO.File]::WriteAllText($diag, 'unavailable') } catch {}",
+      "    }",
       "    [System.IO.File]::WriteAllText($Stage, 'restore-sddl-mismatch')",
       "    throw 'Owned bucket Access descriptor restoration did not match'",
       "  }",
@@ -89,6 +150,7 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
     if (!nzchar(shell)) stop("Owned Windows permission test requires powershell.exe")
     invoke = function(action) {
       writeBin(charToRaw("launch"), stage)
+      writeBin(charToRaw("pending"), diagnostic)
       tryCatch(processx::run(shell, c("-NoProfile", "-NonInteractive", "-File", script,
         "-Path", path, "-Control", control, "-Backup", backup, "-Stage", stage,
         "-Action", action), timeout = 5, error_on_status = TRUE, windows_hide_window = TRUE,
@@ -96,13 +158,38 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
           phase = tryCatch(rawToChar(readBin(stage, "raw", 128L)),
                            error = function(error) "unreadable-marker")
           allowed = c("launch", "script-entered", "token-read", "private-acl-built",
-            "private-acl-applied", "bucket-acl-read", "backup-saved", "deny-applied",
+            "private-acl-applied", "bucket-acl-read", "original-roundtrip",
+            "backup-saved", "deny-applied",
             "restore-read", "restore-applied", "restore-acl-read", "restore-sddl-read",
-            "restore-sddl-mismatch", "restore-verified")
+            "restore-sddl-mismatch", "restore-diagnostic", "restore-verified")
           if (!(phase %in% allowed)) phase = "invalid-marker"
           # Emit only fixed stage labels, then rethrow the original condition unchanged.
           tryCatch(cat("Owned checkpoint ACL action=", action, " stage=", phase, "\n",
                        sep = "", file = stdout()), error = function(error) NULL)
+          if (phase == "restore-sddl-mismatch") {
+            bits = tryCatch(rawToChar(readBin(diagnostic, "raw", 64L)),
+                            error = function(error) "unavailable")
+            fields = c("flags_equal", "present_equal", "protected_equal",
+              "auto_required_equal", "auto_inherited_equal", "null_equal",
+              "ace_count_equal", "binary_length_equal", "binary_equal")
+            if (grepl("^[01](,[01]){8}$", bits)) {
+              bits = strsplit(bits, ",", fixed = TRUE)[[1L]]
+              text = paste(paste0(fields, "=", bits), collapse = " ")
+            } else {
+              text = "unavailable"
+            }
+            original_bits = tryCatch(rawToChar(readBin(roundtrip, "raw", 64L)),
+                                     error = function(error) "unavailable")
+            if (grepl("^[01],[01]$", original_bits)) {
+              values = strsplit(original_bits, ",", fixed = TRUE)[[1L]]
+              labels = c("original_raw_parse_equal", "original_object_roundtrip_equal")
+              text = paste(text, paste(paste0(labels, "=", values), collapse = " "))
+            } else {
+              text = paste(text, "original_roundtrip=unavailable")
+            }
+            tryCatch(cat("Owned checkpoint ACL diagnostic ", text, "\n",
+                         sep = "", file = stdout()), error = function(error) NULL)
+          }
           stop(error)
         })
       invisible(NULL)

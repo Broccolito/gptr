@@ -242,14 +242,20 @@ codex_capability_deny_read = function(path, root, .env = parent.frame()) {
       "  [System.IO.File]::SetAccessControl($Path, $acl)",
       "  [System.IO.File]::WriteAllText($Stage, 'deny-applied')",
       "} elseif ($Action -eq 'restore' -or $Action -eq 'verify') {",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-backup-read')",
       "  $original = [System.IO.File]::ReadAllText($Backup, [System.Text.Encoding]::UTF8)",
       "  if ($Action -eq 'restore') {",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-sddl-set')",
       "    $acl = [System.Security.AccessControl.FileSecurity]::new()",
       "    $acl.SetSecurityDescriptorSddlForm($original, $section)",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-apply')",
       "    [System.IO.File]::SetAccessControl($Path, $acl)",
       "  }",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-acl-read')",
       "  $current = [System.IO.File]::GetAccessControl($Path, $section)",
+      "  [System.IO.File]::WriteAllText($Stage, 'restore-sddl-read')",
       "  if ($current.GetSecurityDescriptorSddlForm($section) -cne $original) {",
+      "    [System.IO.File]::WriteAllText($Stage, 'restore-sddl-mismatch')",
       "    throw 'Owned file Access descriptor restoration did not match'",
       "  }",
       "  [System.IO.File]::WriteAllText($Stage, 'restore-verified')",
@@ -264,7 +270,9 @@ codex_capability_deny_read = function(path, root, .env = parent.frame()) {
       }, error = function(error) {
         phase = tryCatch(rawToChar(readBin(stage, "raw", 128L)), error = function(error) "unknown")
         if (!(phase %in% c("launch", "script-entered", "private-control-verified", "backup-saved",
-            "deny-applied", "restore-verified"))) phase = "unknown"
+            "deny-applied", "restore-backup-read", "restore-sddl-set", "restore-apply",
+            "restore-acl-read", "restore-sddl-read", "restore-sddl-mismatch", "restore-verified")))
+          phase = "unknown"
         codex_capability_fail(paste0("file-access-", action, "/", phase))
       })
       invisible(NULL)
