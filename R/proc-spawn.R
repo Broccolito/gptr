@@ -650,7 +650,7 @@ proc_writer_main = function(meta) {
 #' Refuse Rscript's omitted-expression path before constructing a child
 #' @noRd
 proc_writer_code_bytes = function(code) {
-  bytes = nchar(enc2utf8(code), type = "bytes")
+  bytes = nchar(as_utf8(code), type = "bytes")
   if (bytes > 9998L) {
     gptr_abort(paste0("The trusted stdin expression exceeds Rscript's 9998-byte limit (",
                       bytes, " bytes)."), "io", operation = "write", path = NULL,
@@ -675,7 +675,7 @@ proc_writer_source = function(meta) {
 #' Compress trusted source within the actual one-line Rscript expression budget
 #' @noRd
 proc_writer_code = function(meta) {
-  source = charToRaw(enc2utf8(proc_writer_source(meta)))
+  source = charToRaw(as_utf8(proc_writer_source(meta)))
   encoded = gsub("\n", "", jsonlite::base64_enc(memCompress(source, type = "gzip")), fixed = TRUE)
   libraries = paste(deparse(.libPaths(), width.cutoff = 500L), collapse = "")
   out = paste0("local({.libPaths(", libraries, ");eval(parse(text=rawToChar(memDecompress(",
@@ -741,7 +741,7 @@ proc_writer_start = function(p, limit) {
   args = c("--vanilla", "-e", code)
   # UTF-8 bytes upper-bound UTF-16 code units; allow another 2x for argv quoting.
   # Only trusted bootstrap/paths/identities are passed here, never mailbox payloads.
-  if (sum(nchar(enc2utf8(c(command, args)), type = "bytes")) > 12000L) {
+  if (sum(nchar(as_utf8(c(command, args)), type = "bytes")) > 12000L) {
     gptr_abort("The trusted stdin bootstrap exceeds the Windows argument limit.",
                "io", operation = "write", path = NULL)
   }
