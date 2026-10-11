@@ -1,33 +1,40 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and owned stdin writer —2026-10-11 00:19 PDT
+## Optional integrations and Windows transport -2026-10-11 00:43 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`. Primary main718e81e/maintainer/old prepared files stay intact;
-shared Ollama preserved. Latest00:13 resources: load114.22/114.07/97.04, CPU0.64%idle,
-RAM111GiB used/16GiB unused, swap11,516MiB, disk160GiB. Hold local installs/R/browser/model/
-build jobs; at most two independent hosted jobs. No shared-model operation.
+`codex/skipped-platform-tests`. Primary main718e81e/maintainer/old preparations remain intact;
+shared Ollama preserved. Latest00:36:load167.01/100.52/96.23/CPU6.30%idle/RAM117GiBused/
+11GiBunused/swap11,476MiB/disk143GiB. Hold local R/install/browser/model/build jobs; at most
+2 independent hosted jobs. No shared-model operation.
 
-Earlier core63a2454: Linux1026/Windows1018 assertions across5 files,0 failures/warnings with
-3 named Windows guards. Native668ae5b Windows valid-target security8 cases207 assertions/pure
-policy21 each pass; missing targets/concurrent reparse races remain unproved. Original7 run85d
-has0 failed assertions, but strict RED for Windows16 link-teardown warnings/1 permission skip
-and Linux2 casefold trait skips. Reviewed fixturea49b75a preserves bytes/foreign canaries and
-adds real owned-bucket create denial/restoration, precise link teardown and both filesystem-trait
-oracles. Original primary prepared ckpt/utils-paths remain untouched. CIf6c3f65 adds5 mandatory
-both-host variants,31 suites/120 titles/44 lint paths,20 remaining literal Windows OS guards.
-No blanket capability/trait allowance or warning suppression; actual native variants WAITING.
+Actual combined15 run38120994420 exactf419fd6: Linux strict PASS1481 assertions/0failed
+conditions/warnings/5 named Windows lifecycle guards. Windows strict RED1587 passes/8failed
+conditions/0 test warnings/23 named OS guards.11 complete Windows files pass1166 assertions
+with17 guards. All16 owned-family cleanup witnesses pass per host/0 remaining marked processes.
+Main Windows controller reports32 uncaptured warnings; diagnosis pending. Artifact ZIPs verified:
+Windows174631522bfb0cca5ed7875d11402e1ebde1092492f27b45bbdbfff47aae2dfb;
+Linux9296360753fd5ac3d7a525e0e2be665a7479b937ee6efe4e52ceda287ab55081.
+Python12/R gate1326/all44 scoped paths pass each;4 Linux plan stages pass39 equal source hashes/
+770 R blocks/0 parse-style problems/0 lints.
 
-Production writer4b2f0ce independently source reviewed,25-case CIf0242c9. Actualfa20be5 stopped
-before test bodies on one diagnostic callback lint (other43 paths clean), now corrected and
-source reviewed98e4f63. Python12/R gate1247 pass each;4 Linux plan stages pass39 equal hashes/
-770 R blocks/0 parse-style problems/0 lints. Expected196 Windows/93 Linux writer assertions
-remain unexecuted. Last actual668 Linux native3 pass60/0 sampler errors/4.108-4.456s/
-RSS<=341,291,008; Windows RED43/4 (cancellation passes). Preserve original native3/prototype/
-sampler bytes, resource bounds,9998-expression/12000-argv caps and no payload/keys in argv.
-Next exact candidate: combined15 transport/original7 suites and fresh4-stage plan checks on
-Windows/Linux. D-019 stays open; no merge until relevant strict GREEN. Local pandas/NumPy,
-actual GUI/kernel/frontend replay, broad check/release remain waiting. See testing plan/ledger.
+Native valid-target207/pure-policy21 earlier pass. Actual original7: Linux693 assertions/0
+failed conditions/warnings/skips; Windows809 passes/1 PowerShell timeout/0 warnings/20 OS guards.
+Native link teardown, duplicate-link edit and measured casefold pass. Owned-bucket permission
+case stops after8 setup assertions at5s PowerShell bound; effective denial/restoration unproved.
+Primary prepared ckpt67-line suffix/utils-paths75-line block remain untouched. Apply reviewed
+fixture patches only by hunks after actual GREEN; no whole-file primary overwrite.
+
+All5 Windows production lifecycle cases and native duplex fail before READY, startup1.83-1.97s,
+4706-4722B expressions/zero accepted bytes. Typed2s no-reader result is startup, not delivery proof.
+4MB spawn echoes raise IO;2MB/EOF passes under normal60s setting. Preserve2s enqueue budget,
+9998-expression/12000-argv caps/native3 and resource bounds; bounded stage diagnosis pending.
+UTF8 helper correction714aad4/source gate3074e01 reviewed. Idle contention witness332324d and
+strict CI6f92d3c reviewed:33 files/123 titles/46 lint paths; Windows19 assertions mandatory,
+Linux one exact OS guard. An early startup failure makes this probe inconclusive. Native ACL fixture75dc9e9 source reviewed with unchanged5s/denial/restore assertions.
+Next actual8 files: lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker, cli-common, cli-claude,
+cli-codex, ckpt-files plus fresh4 Linux plan stages. D-019/merge stay open until relevant strict GREEN.
+Local pandas/NumPy, actual GUI/kernel replay, broad check/release remain waiting. See plan/ledger.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached

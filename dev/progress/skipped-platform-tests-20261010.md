@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At00:13 PDT October11, load was114.22/114.07/97.04, CPU0.64%idle, physical memory111GiB
-used/16GiB unused, swap11,516MiB, free disk160GiB, with no thermal/performance warning.
+At00:36 PDT October11, load was167.01/100.52/96.23, CPU6.30%idle, physical memory117GiB
+used/11GiB unused, swap11,476MiB, free disk143GiB, with no thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -43,12 +43,12 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | Native valid-target DONE668ae5b; original7 variant rerun WAITING | Native207/pure21 pass. Fixturea49b75a/CIf6c3f65 source reviewed, native permission/restoration +measured casefold +precise link teardown require actual evidence |
-| Actual Windows/Unix child baseline | Linux DONE60 assertions; Windows RED43/4 | Actual668ae5b: Linux0 sampler errors/4.108-4.456s/RSS<=341,291,008 bytes; Windows cancellation passes, duplex/typed timeout fail |
-| Strict optional workflow | Registry31/120/44 lints SOURCE-CLEARf6c3f65; combined15 WAITING | Actualfa20be5 Python12/R gate1247 pass; one scoped callback lint blocked bodies, fixed98e4f63. Fatal warnings/skips remain |
-| Index/extract/R-parse/lintr plan checks | DONE throughfa20be5; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
+| Actual Windows security | Native207/pure21 DONE; original7 f419 RED1 timeout | Windows809 passes/0 warnings/20 guards; Linux693/0 failures/warnings/skips. Link/casefold variants pass; denial/restoration stops after8 setup assertions at PowerShell5s bound |
+| Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | f419 native47 passes/1 failure, all5 production lifecycle cases time out before READY; no-reader2s startup timeout is not delivery proof |
+| Strict optional workflow | f419 Linux15 DONE; Windows RED8 conditions | 1481/1587 passes;0 test warnings;5/23 named OS guards. Controller32 Windows warnings under diagnosis. New strict33/123/46 source reviewed |
+| Index/extract/R-parse/lintr plan checks | DONE throughf419; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
-| Production owned-writer correction | Corrective source CLEAR4b2f0ce +scope98e4f63; actual rerun WAITING |25 cases preserved/registered; fa20 lint stopped bodies. No production pass or oracle/budget relaxation |
+| Production owned-writer correction | Actualf419 RED118 passes/5 failures | Five Windows lifecycle cases startup1.83-1.97s/zero accepted bytes, expression4706-4722B. Bounded stage diagnosis pending; no raised limits |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
 | App browser/search integrations | DONE actual63a2454 | Linux506 and Windows502 assertions across search/app/cleanup,0 failures/warnings; one named Windows app OS guard. Mandatory actual-browser cases executed, no unhandled close promise |
 | Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
@@ -405,3 +405,51 @@ Latest00:13 PDT resources: load114.22/114.07/97.04, CPU0.64%idle,111GiB physical
 11,516MiB swap and160GiB free disk. Local installs/R/browser/model/build jobs remain held;
 shared Ollama preserved. Source review does not establish Windows ACL/runtime behavior; merge
 and D-019 closure still WAITING actual strict GREEN.
+
+## Actual combined15 rerun and expanded source/process gates -2026-10-11 00:40 PDT
+
+Actual [run38120994420](https://github.com/Broccolito/gptr/actions/runs/38120994420) uses
+exactf419fd64ded7504e30bc70c53432c3e7ab21029e. Linux strict PASS:15 complete files,1481
+assertions,0 failed conditions/warnings,5 explicitly named Windows-only lifecycle guards.
+Windows strict RED:1587 passes,8 failed conditions,0 test/outside-test warnings and23 named
+OS guards.11 complete Windows files pass1166 assertions with17 named guards. All16 owned
+cleanup witnesses pass per host with0 remaining marked processes. Main Windows controller
+also reports32 uncaptured warnings; do not confuse0 row warnings with a clean controller.
+
+Production native5 lifecycle cases and native duplex stop before READY; bounded diagnostics
+record startup stage1.83-1.97s, expressions4706-4722B and0 accepted bytes. The typed no-reader
+2s result passes at startup, so delivery/no-progress coverage remains unproved. The separate
+4MB spawn echo case raises IO;2MB/EOF succeeds under its normal60s setting. Keep the
+2s enqueue budget and existing watchdog/size limits while diagnosing and optimizing startup.
+The native owned-bucket permission case has8 setup passes before its5s PowerShell timeout;
+no effective-denial or restoration assertions ran. Link teardown, measured casefold and
+duplicate-link-edit variants pass. Linux original7 has693 assertions/0 failures/warnings/skips;
+Windows original7 has809 passes/1 timeout/0 warnings/20 named OS guards.
+
+Artifacts were downloaded, SHA256 verified and safely extracted under ignored
+`dev/.validation/windows-security-20261010/combined-{windows,linux}-f419fd6-evidence/`.
+Windows ZIP174631522bfb0cca5ed7875d11402e1ebde1092492f27b45bbdbfff47aae2dfb;
+Linux ZIP9296360753fd5ac3d7a525e0e2be665a7479b937ee6efe4e52ceda287ab55081.
+Both hosts pass Python12/R result gate1326/all44 scoped lint paths. All4 Linux plan stages
+pass39 equal source hashes/770 selected R blocks/0 parse-style problems/0 lints.
+
+Separate source audit identified3 bare encoding calls;714aad4 replaces them with the existing
+UTF8 helper.3074e01 adds the full existing package-convention test with strict mandatory
+negative controls; actual result pending.332324d adds a bounded3-reader cross-pool case:
+2 acknowledged idle Windows writers must not starve the third target under the unchanged
+CRAN cap2.6f92d3c registers that exact case:33 suites/123 representatives/46 lint paths;
+Windows must execute19 assertions, Linux records only its named platform guard. Prior
+25 writer/native3 fixtures and strict gates stay intact. An early startup failure makes the
+idle-slot probe inconclusive; it cannot count as contention coverage.
+
+Next selected8 full files are lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker,
+cli-common, cli-claude, cli-codex and ckpt-files. Source conventions plus actual stdio, worker, permission,
+control-file and child cancellation tests remain fatal for unexpected capability skips.
+This diagnostic run does not close the current2s production failure. Latest00:36 resource
+snapshot keeps local R/install/browser/model/build jobs held; shared Ollama untouched.
+
+Native ACL fixture correction75dc9e9 is independently SOURCE-CLEAR:2 direct .NET constructors
+replace cmdlet discovery, and fixed allowlisted stage diagnostics preserve the original error.
+All test bodies/titles/guards,5s bound, minimal child environment, private backup, deny and
+exact restore oracles remain unchanged. The cmdlet-delay explanation is a hypothesis until
+actual hosted evidence. Candidate-only copy; primary67-line prepared suffix untouched.
