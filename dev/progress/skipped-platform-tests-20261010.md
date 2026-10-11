@@ -742,3 +742,37 @@ extracted. Latest completed native results remain 426 and retain all earlier fai
 RAM/4310 MiB unused, 16,366.25 MiB swap occupancy and 30 GiB free disk. Local dependencies,
 imports/renders, GUI/kernel/model/build/CRAN remain held. Shared Ollama and unrelated files
 and processes are untouched. Both hosted leases are free before the corrective dispatch.
+
+## Corrective exact-source run — 2026-10-11 03:27 PDT
+
+[Run 38131986339](https://github.com/Broccolito/gptr/actions/runs/38131986339) nominates
+exact b31dc9f52c178821e44e090a7b598b2512ea99bc, with the same 13 complete files, unchanged
+runtime/security/deadline gates and all four fresh Linux plan stages. Status is ONGOING;
+both hosted leases are occupied. The original primary storage fixture files match their
+previous full-file hashes; no old prepared block was replaced. Local jobs remain held
+under the 03:25 resource snapshot, and shared Ollama remains untouched.
+
+## Corrected result gate passes; fixture lint correction — 2026-10-11 03:36 PDT
+
+Exact b31dc9f52c178821e44e090a7b598b2512ea99bc/run38131986339 completed RED at scoped lint.
+Both hosts passed all 2131 result-gate assertions and 12 Python tests with zero failures,
+R warnings or skips. Lintr found three issues in two fixtures: one multiline callback needs
+braces, and two base argument names used as mock formals violate snake_case. All other
+49 of 51 paths are clean, including the Codex runtime, nested diagnostics and warm test.
+Package installation, preflight and all 13 integration bodies did not execute.
+
+Independently reviewed a0e3e93 wraps the identical Boolean predicate and captures the mock's
+named arguments without dotted formals. It still requires all.files/no.., preserves FALSE
+defaults only when absent, and rejects duplicate/unknown/unnamed extras. Explicit values,
+including NULL, stay visible to the unchanged exact-call assertion. Titles, assertions,
+runtime, registry, security and timeout/resource gates are intact. Actual lint GREEN pending.
+
+Four Linux plan stages passed: 39 equal hashes, 25 plans, 770 R blocks, zero parse/style
+problems or lints, 90 historical index warnings and zero errors. Next plan revision requires
+those fresh stages again. Verified Windows artifact SHA256
+967adc0059aec3b8cd53f6cdf8a0b8465731b8b39e19aacf83312132c4cda83c;
+Linux d81995b5e65eabc3843cfe17a8b7f345bfddd6a74250866f34c4dcd12329860a.
+Actual summary SHA256 1ed9df9b6048bc9d278328d72c82174b11e89c77f00476b15feaba25720882ae.
+No ACK/retirement evidence was produced; the conditional source-reviewed proposal remains
+inactive. Both hosted leases are free before dispatch. Local jobs remain held under the
+03:25 resource snapshot; shared Ollama and unrelated processes/files remain untouched.

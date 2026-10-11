@@ -1,9 +1,9 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 03:25 PDT
+## Optional integrations and Windows transport — 2026-10-11 03:36 PDT
 
 Use the attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, pushed through reviewed unit correction 08a44c6.
+`codex/skipped-platform-tests`, pushed through reviewed fixture correction a0e3e93.
 Primary main 718e81e, maintainer edits, old prepared chunks and secrets are preserved.
 Shared Ollama is untouched. At 03:25 PDT, load is 49.57/55.36/55.85, CPU 44.97% idle,
 RAM 123 GiB used/4310 MiB unused, swap 16,366.25 MiB used and free disk 30 GiB.
@@ -24,6 +24,13 @@ both hosts passed 2130 R gate assertions and 12 Python tests, with one stale nat
 position assertion and zero warnings/skips. Reviewed 08a44c6 corrects only tail(..., 3L)
 to positions 4:6; runtime, registry and all failure gates remain unchanged. Actual GREEN
 pending; no native ACK evidence or retirement admission. Four Linux plan stages passed.
+
+Latest b31dc9f/run38131986339 passed both result gates: 2131 assertions and 12 Python tests,
+zero failures/R warnings/skips. Scoped lint found three fixture issues in two paths; the
+other 49 of 51 paths are clean. Install/preflight/all 13 bodies remain unexecuted. Reviewed
+a0e3e93 fixes only callback braces and named mock argument capture, preserving all assertions,
+security/runtime/registry and bounds. Actual lint GREEN pending; four Linux plan stages pass.
+No native ACK or retirement admission is established by either pre-body run.
 
 Reviewed corrections are applied and pushed: 3fd20b1 removes only incidental family names;
 55277df diagnoses exact ACL restoration; 64237c2 privately diagnoses parent-environment
