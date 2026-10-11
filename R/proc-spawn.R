@@ -456,13 +456,14 @@ proc_writer_valid = function(dir, canonical, marker, paths = character(),
     for (path in unique(c(owner, paths))) {
       parent = normalizePath(dirname(path), winslash = "/", mustWork = TRUE)
       if (!identical(tolower(parent), tolower(canonical))) return(FALSE)
-      link = .readlink(path)
       present = basename(path) %in% entries
-      if (present) {
-        if (is.na(link) || nzchar(link) || !.exists(path) || dir.exists(path) ||
+      available = .exists(path)
+      link = .readlink(path)
+      if (present || available) {
+        if (is.na(link) || nzchar(link) || !available || dir.exists(path) ||
             !identical(tolower(normalizePath(path, winslash = "/", mustWork = TRUE)),
                        tolower(paste0(canonical, "/", basename(path))))) return(FALSE)
-      } else if (.exists(path) || dir.exists(path) || (!is.na(link) && nzchar(link))) {
+      } else if (dir.exists(path) || (!is.na(link) && nzchar(link))) {
         return(FALSE)
       }
     }
