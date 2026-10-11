@@ -890,3 +890,209 @@ test_that("a fake CLI joins two inline agents and two workers on one reactor (IN
   expect_identical(team$code$messages[[length(team$code$messages)]]$route, "plan-cli")
   expect_lt(elapsed, 13)
 })
+
+# These copies isolate leaf observations without changing base or package namespace bindings.
+codex_control_scope = function(fun, ...) {
+  scope = list2env(list(...), parent = environment(fun))
+  environment(fun) = scope
+  fun
+}
+
+test_that("Windows control entry listing refuses unreadable or uncertain parents", {
+  seen = new.env(parent = emptyenv())
+  seen$calls = list()
+  probe = codex_control_scope(pcli_control_entries, dir.exists = function(path) TRUE,
+    list.files = function(path, all.files, no.., recursive = FALSE, full.names = FALSE) {
+      seen$calls[[length(seen$calls) + 1L]] =
+        list(all.files = all.files, no.. = no.., recursive = recursive, full.names = full.names)
+      c(".", "..", "SYSTEM.md")
+    })
+  expect_identical(probe("C:/public/.gptr"), "SYSTEM.md")
+  expect_identical(seen$calls[[1L]],
+    list(all.files = TRUE, no.. = FALSE, recursive = FALSE, full.names = FALSE))
+  for (entries in list(character(), ".", c(".", "..", NA_character_))) {
+    bad = codex_control_scope(pcli_control_entries, dir.exists = function(path) TRUE,
+      list.files = function(...) entries)
+    expect_error(bad("C:/public/.gptr"), class = "gptr_error_io")
+  }
+  bad = codex_control_scope(pcli_control_entries, dir.exists = function(path) TRUE,
+    list.files = function(...) {
+      warning("synthetic private listing detail")
+      c(".", "..")
+    })
+  expect_no_warning(expect_error(bad("C:/public/.gptr"), class = "gptr_error_io"))
+  bad = codex_control_scope(pcli_control_entries, dir.exists = function(path) TRUE,
+    list.files = function(...) stop("synthetic private listing detail"))
+  e = tryCatch(bad("C:/public/.gptr"), error = identity)
+  expect_s3_class(e, "gptr_error_io")
+  expect_false(grepl("synthetic private", conditionMessage(e), fixed = TRUE))
+  missing = codex_control_scope(pcli_control_entries,
+    dir.exists = function(path) identical(path, "C:/public"),
+    list.files = function(...) c(".", "..", "canary.txt"))
+  expect_identical(missing("C:/public/.gptr"), character())
+  blocked = codex_control_scope(pcli_control_entries,
+    dir.exists = function(path) identical(path, "C:/public"),
+    list.files = function(...) c(".", "..", ".GPTR"))
+  expect_error(blocked("C:/public/.gptr"), class = "gptr_error_io")
+  no_relative = codex_control_scope(pcli_control_entries,
+    dir.exists = function(path) path %in% c("C:", "/", "."),
+    list.files = function(...) c(".", ".."))
+  expect_error(no_relative("C:/"), class = "gptr_error_io")
+  expect_error(no_relative("//public-server/share/.gptr"), class = "gptr_error_io")
+})
+
+test_that("Windows control entry membership retains fixed names without following targets", {
+  root = file.path(tempdir(), "codex-public-root")
+  g = file.path(root, ".gptr")
+  probe = codex_control_scope(pcli_control_paths, is_windows = function() TRUE,
+    pcli_control_entries = function(dir) {
+      if (identical(dir, g)) c("system.MD", "mcp.json", "settings.local.json") else character()
+    }, dir.exists = function(path) rep(FALSE, length(path)),
+    file.exists = function(path) rep(FALSE, length(path)),
+    pcli_control_link = function(path) rep("", length(path)))
+  expect_identical(probe(root), sort(path_norm(file.path(g,
+    c("SYSTEM.md", "mcp.json", "settings.local.json"))), method = "radix"))
+  broken = codex_control_scope(pcli_control_paths, is_windows = function() TRUE,
+    pcli_control_entries = function(dir) gptr_abort("Unreadable owned parent.", "io"))
+  expect_error(broken(root), class = "gptr_error_io")
+})
+
+test_that("Windows reparse digests use only the trusted query and stripped helper environment", {
+  withr::local_envvar(c(GPTR_TEST_API_KEY = "synthetic-control-secret"))
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  native = "Reparse Tag Value : 0xa000000c\nReparse Data Length : 16\n0000: 00 01 02 03\n"
+  probe = codex_control_scope(pcli_control_reparse,
+    Sys.getenv = function(name, unset = "") {
+      expect_identical(name, "SystemRoot")
+      "Z:\\Windows"
+    }, dir.exists = function(path) identical(path, "Z:/Windows"),
+    file.exists = function(path) identical(path, "Z:/Windows/System32/fsutil.exe"),
+    proc_run = function(command, args, input = NULL, timeout, env, wd = NULL, echo = FALSE) {
+      seen$calls = seen$calls + 1L
+      expect_identical(command, "Z:/Windows/System32/fsutil.exe")
+      expect_identical(args, c("reparsepoint", "query", "Z:/public/.gptr/SYSTEM.md"))
+      expect_null(input)
+      expect_identical(timeout, 5)
+      expect_null(wd)
+      expect_false(echo)
+      expect_false("GPTR_TEST_API_KEY" %in% names(env))
+      expect_identical(env[["NO_COLOR"]], "1")
+      list(status = 0L, timed_out = FALSE, stdout = native, stderr = "")
+    })
+  marker = probe("Z:/public/.gptr/SYSTEM.md")
+  expect_identical(marker, paste0("unreadable:reparse:", hash_sha256(native)))
+  expect_identical(probe("Z:/public/.gptr/SYSTEM.md"), marker)
+  expect_identical(seen$calls, 2L)
+  expect_false(grepl("0xa000000c", marker, fixed = TRUE))
+  expect_identical(Sys.getenv("GPTR_TEST_API_KEY"), "synthetic-control-secret")
+})
+
+test_that("Windows reparse probes reject unavailable executables and uncertain results", {
+  good = list(status = 0L, timed_out = FALSE,
+    stdout = "Reparse Tag Value : 0xa000000c\n0000: 00 01\n", stderr = "")
+  state = new.env(parent = emptyenv())
+  state$result = good
+  state$root = "Z:/Windows"
+  state$exists = TRUE
+  state$calls = 0L
+  probe = codex_control_scope(pcli_control_reparse,
+    Sys.getenv = function(name, unset = "") state$root,
+    dir.exists = function(path) identical(path, "Z:/Windows"),
+    file.exists = function(path) state$exists,
+    child_env = function(profile) character(),
+    proc_run = function(...) {
+      state$calls = state$calls + 1L
+      state$result
+    })
+  for (root in c("", "Windows", "../Windows", "Z:/Windows\n", "Z:/../Windows")) {
+    state$root = root
+    expect_error(probe("Z:/public/link"), class = "gptr_error_io")
+  }
+  expect_identical(state$calls, 0L)
+  state$root = "Z:/Windows"
+  state$exists = FALSE
+  expect_error(probe("Z:/public/link"), class = "gptr_error_io")
+  expect_identical(state$calls, 0L)
+  state$exists = TRUE
+  bad = list(NULL, list(status = 1L, timed_out = FALSE, stdout = good$stdout),
+    list(status = 0L, timed_out = TRUE, stdout = good$stdout),
+    list(status = NA_integer_, timed_out = FALSE, stdout = good$stdout),
+    list(status = 0L, stdout = good$stdout),
+    list(status = 0L, timed_out = FALSE, stdout = ""),
+    list(status = 0L, timed_out = FALSE, stdout = NA_character_),
+    list(status = 0L, timed_out = FALSE, stdout = c(good$stdout, good$stdout)),
+    list(status = 0L, timed_out = FALSE, stdout = "unexpected non-reparse output"),
+    list(status = 0L, timed_out = FALSE, stdout = strrep("x", 128L * 1024L + 1L)))
+  for (result in bad) {
+    state$result = result
+    expect_error(probe("Z:/public/link"), class = "gptr_error_io")
+  }
+  failure = codex_control_scope(probe,
+    proc_run = function(...) stop("synthetic private process detail"))
+  e = tryCatch(failure("Z:/public/link"), error = identity)
+  expect_s3_class(e, "gptr_error_io")
+  expect_false(grepl("synthetic private", conditionMessage(e), fixed = TRUE))
+})
+
+test_that("control digests query only unobservable Windows entries and retain POSIX markers", {
+  seen = new.env(parent = emptyenv())
+  seen$calls = 0L
+  probe = codex_control_scope(pcli_control_digest, is_windows = function() TRUE,
+    hash_file = function(path) stop("synthetic denied content"),
+    pcli_control_link = function(path) "",
+    file.info = function(...) {
+      data.frame(size = NA_real_, mtime = as.POSIXct(NA_real_, origin = "1970-01-01"))
+    },
+    pcli_control_reparse = function(path) {
+      seen$calls = seen$calls + 1L
+      "unreadable:reparse:public-digest"
+    })
+  expect_identical(probe("public-link"), "unreadable:reparse:public-digest")
+  expect_identical(seen$calls, 1L)
+  finite = codex_control_scope(probe,
+    file.info = function(...) data.frame(size = 12, mtime = as.POSIXct(1, origin = "1970-01-01")))
+  expect_identical(finite("public-file"), "unreadable:12 1")
+  expect_identical(seen$calls, 1L)
+  posix = codex_control_scope(probe, is_windows = function() FALSE,
+    pcli_control_link = function(path) "public-gone-target")
+  expect_identical(posix("public-link"), "link:public-gone-target")
+  expect_identical(seen$calls, 1L)
+  unknown = codex_control_scope(probe, is_windows = function() FALSE,
+    file.info = function(...) NULL)
+  expect_identical(unknown("public-file"), "unreadable")
+  expect_identical(seen$calls, 1L)
+  readable = codex_control_scope(probe, hash_file = function(path) "public-content-digest")
+  expect_identical(readable("public-file"), "public-content-digest")
+  expect_identical(seen$calls, 1L)
+  broken = codex_control_scope(probe,
+    pcli_control_reparse = function(path) gptr_abort("Uncertain owned query.", "io"))
+  expect_error(broken("public-link"), class = "gptr_error_io")
+})
+
+test_that("fixed dangling SYSTEM and MCP control links keep markers and detect retargeting", {
+  skip_on_cran()
+  codex_capability_local()
+  root = local_project(files = list(".gptr/settings.json" = "{}",
+    "capability-canary.txt" = "untouched sentinel"))
+  codex_capability_preserve(file.path(root, "capability-canary.txt"))
+  system = file.path(root, ".gptr", "SYSTEM.md")
+  mcp = file.path(root, ".gptr", "mcp.json")
+  system_link = codex_capability_link(system, root)
+  mcp_link = codex_capability_link(mcp, root)
+  system_first = system_link$make(file.path(root, "gone-system-1.md"))
+  mcp_first = mcp_link$make(file.path(root, "gone-mcp-1.json"))
+  before = pcli_control_hash(root)
+  expect_true(all(path_norm(c(system, mcp)) %in% names(before)))
+  expect_true(all(grepl("^(unreadable:reparse:|link:)", before[path_norm(c(system, mcp))])))
+  expect_identical(pcli_control_hash(root), before)
+  system_link$detach()
+  system_second = system_link$make(file.path(root, "gone-system-2.md"))
+  expect_false(identical(system_first, system_second), info = "native SYSTEM payload changed")
+  system_after = pcli_control_hash(root)
+  expect_identical(pcli_control_changed(before, system_after), path_norm(system))
+  mcp_link$detach()
+  mcp_second = mcp_link$make(file.path(root, "gone-mcp-2.json"))
+  expect_false(identical(mcp_first, mcp_second), info = "native MCP payload changed")
+  expect_identical(pcli_control_changed(system_after, pcli_control_hash(root)), path_norm(mcp))
+})
