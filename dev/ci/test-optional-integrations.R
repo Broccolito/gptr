@@ -907,7 +907,7 @@ testthat::test_that("native Codex control variants never excuse capability skips
     "retargeting a dangling control link warns after the Codex exec completes",
     "a control file gptr cannot read is marked by its size and time instead")
   rows = lapply(optional_titles[[file]], record)
-  testthat::expect_identical(tail(optional_titles[[file]], 3L), titles)
+  testthat::expect_identical(optional_titles[[file]][4:6], titles)
   for (windows in c(FALSE, TRUE)) {
     testthat::expect_true(optional_gate(rows, file, windows)$passed)
     for (title in titles) {
