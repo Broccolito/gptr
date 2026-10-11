@@ -20,6 +20,13 @@ lines_of = function(text) {
   l[nzchar(l) & !startsWith(l, "[")]
 }
 
+# ripgrep prints native Windows paths; compare the same relative file and line on each host.
+ripgrep_pairs = function(out, windows = .Platform$OS.type == "windows") {
+  if (windows) out = gsub("\\", "/", out, fixed = TRUE)
+  out = out[!grepl("^\\./\\.git/", out)]
+  sort(sub("^\\./", "", sub("^([^:]+:[0-9]+):.*$", "\\1", out)), method = "radix")
+}
+
 test_that("grep sorts by path and skips binary and .gitignore'd files", {
   td = grep_fixture()
   m = search_grep("alpha", td)
@@ -112,14 +119,24 @@ test_that("grep agrees with ripgrep on (file, line) pairs", {
     out = system2("rg", c("--line-number", "--no-heading", "--color=never", "--hidden", "--",
                           shQuote(p), "."),
                   stdout = TRUE, stderr = FALSE)
-    out = out[!grepl("^\\./\\.git/", out)]
-    sort(sub("^\\./", "", sub("^([^:]+:[0-9]+):.*$", "\\1", out)), method = "radix")
+    ripgrep_pairs(out)
   }
   withr::local_dir(td)
   for (p in c("alpha", "line [0-9]+", "TODO")) {
     m = search_grep(p, ".", limit = 10000L)
     expect_identical(sort(paste0(m$file, ":", m$line), method = "radix"), pairs(p), label = p)
   }
+})
+
+test_that("the ripgrep oracle normalizes native separators without changing file-line pairs", {
+  windows = c(".\\a.R:4: alpha", ".\\sub\\c.R:12: line", ".\\.git\\index:9: ignored",
+              ".\\a.R:1: alpha")
+  unix = c("./a.R:4: alpha", "./sub/c.R:12: line", "./.git/index:9: ignored", "./a.R:1: alpha")
+  expected = c("a.R:1", "a.R:4", "sub/c.R:12")
+  expect_identical(ripgrep_pairs(windows, windows = TRUE), expected)
+  expect_identical(ripgrep_pairs(unix, windows = FALSE), expected)
+  expect_identical(ripgrep_pairs("./back\\slash.R:7: literal", windows = FALSE),
+                   "back\\slash.R:7")
 })
 
 find_fixture = function() {
