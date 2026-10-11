@@ -520,21 +520,62 @@ proc_writer_remove = function(marker) {
   }, error = function(e) FALSE)
 }
 
-#' Stop the companion before closing the parent's copy of the target's stdin handle
+#' Only an acknowledged, unchanged other target may give up its idle actor
 #' @noRd
-proc_writer_stop = function(p) {
+proc_writer_idle = function(st, r) {
+  tryCatch({
+    if (!is.environment(st) || !isTRUE(st$private) || !is.null(st$pending) ||
+        !identical(st$closed, FALSE) || !identical(st$closing, FALSE) ||
+        !identical(st$stopping, FALSE) || !identical(st$retiring, FALSE)) return(FALSE)
+    key = as.character(st$target$get_pid())
+    if (!identical(proc_writer_table()[[key]], st) || !is.null(r$stdin[[key]]) ||
+        !identical(st$target$get_pid(), st$target_pid) ||
+        !identical(st$p$get_pid(), st$writer_pid) ||
+        !isTRUE(st$target$is_alive()) || !isTRUE(st$p$is_alive())) return(FALSE)
+    same = function(rec, pid, time, marker) {
+      is.list(rec) && proc_pid_valid(pid) && identical(as.integer(rec$pid), as.integer(pid)) &&
+        is.numeric(time) && length(time) == 1L && is.finite(time) && time > 0 &&
+        is.numeric(rec$create_time) && length(rec$create_time) == 1L &&
+        is.finite(rec$create_time) && abs(rec$create_time - time) < 0.01 &&
+        proc_marker_valid(marker) && identical(rec$marker, marker)
+    }
+    target = proc_record(st$target_pid, st$target)
+    actor = proc_record(st$writer_pid, st$p)
+    if (!same(target, st$target_pid, st$target_create, st$target_marker) ||
+        !same(actor, st$writer_pid, st$writer_create, st$marker)) return(FALSE)
+    target = proc_identity(st$target_pid, st$target_create)
+    actor = proc_identity(st$writer_pid, st$writer_create)
+    if (!isTRUE(target$alive) || is.null(target$handle) ||
+        !isTRUE(actor$alive) || is.null(actor$handle)) return(FALSE)
+    ready = file.path(st$dir, "ready")
+    entries = list.files(st$dir, all.files = TRUE, no.. = TRUE)
+    identical(entries, c("owner", "ready")) &&
+      proc_writer_valid(st$dir, st$canonical, st$marker, ready) &&
+      is.finite(file.size(ready)) && file.size(ready) == 0
+  }, error = function(error) FALSE)
+}
+
+#' Stop the companion; only verified idle retirement preserves the target's input handle
+#' @noRd
+proc_writer_stop = function(p, .close_target = TRUE) {
   st = proc_writer_get(p)
   if (is.null(st)) return(invisible(TRUE))
-  if (isTRUE(st$stopping)) return(invisible(FALSE))
+  if (isTRUE(st$stopping) || (!.close_target && !isTRUE(st$retiring)))
+    return(invisible(FALSE))
+  table = proc_writer_table()
+  key = as.character(p$get_pid())
+  if (!identical(table[[key]], st)) return(invisible(FALSE))
   st$stopping = TRUE
   on.exit({
     st$stopping = FALSE
   }, add = TRUE)
   settled = if (is.null(st$p)) TRUE else isTRUE(kill_all(st$p, grace = 0))
-  try(close(p$get_input_connection()), silent = TRUE)
+  if (.close_target) try(close(p$get_input_connection()), silent = TRUE)
   if (settled) settled = proc_writer_remove(st$marker)
-  if (settled) {
-    rm(list = as.character(p$get_pid()), envir = proc_writer_table())
+  if (settled && identical(table[[key]], st)) {
+    rm(list = key, envir = table)
+  } else {
+    settled = FALSE
   }
   invisible(settled)
 }
@@ -822,10 +863,27 @@ proc_writer_start = function(p, limit) {
       gptr_abort("The child stdin writer is closing or belongs to another process.",
                  "io", operation = "write", path = NULL)
     }
-    return(existing)
+    if (!isTRUE(existing$retiring)) return(existing)
+    if (!isTRUE(proc_writer_stop(p, .close_target = FALSE))) {
+      gptr_abort("The previous stdin writer retirement has not settled.",
+                 "io", operation = "write", path = NULL)
+    }
   }
   active = vapply(as.list(table), function(st) !isTRUE(st$closed), logical(1))
-  if (sum(active) >= proc_pool_cap(.Machine$integer.max)) return(NULL)
+  cap = proc_pool_cap(.Machine$integer.max)
+  if (sum(active) >= cap) {
+    r = reactor_get()
+    for (other in ls(table, sorted = TRUE)) {
+      idle = table[[other]]
+      if (!identical(idle$target, p) && proc_writer_idle(idle, r)) {
+        idle$retiring = TRUE
+        if (!isTRUE(proc_writer_stop(idle$target, .close_target = FALSE))) return(NULL)
+        break
+      }
+    }
+    active = vapply(as.list(table), function(st) !isTRUE(st$closed), logical(1))
+    if (sum(active) >= cap) return(NULL)
+  }
   marker = proc_marker_new()
   dir = proc_writer_dir(marker)
   if (!proc_writer_missing(dir)) {
@@ -871,7 +929,12 @@ proc_writer_start = function(p, limit) {
   }
   st = new.env(parent = emptyenv())
   st$target = p
+  st$target_pid = meta$target_pid
+  st$target_create = meta$target_create
+  st$target_marker = rec$marker
   st$p = NULL
+  st$writer_pid = NULL
+  st$writer_create = NA_real_
   st$dir = dir
   st$canonical = canonical
   st$marker = marker
@@ -886,6 +949,8 @@ proc_writer_start = function(p, limit) {
   st$limit = limit
   st$closed = FALSE
   st$closing = FALSE
+  st$stopping = FALSE
+  st$retiring = FALSE
   st$index = 1
   st$pending = NULL
   assign(key, st, envir = table)
@@ -899,6 +964,9 @@ proc_writer_start = function(p, limit) {
               !vapply(env, lits_present, NA, st = secrets_state(), USE.NAMES = FALSE)]
   st$p = proc_spawn(command, args, env = env,
     stdout = p$get_input_connection(), stderr = "|", .marker = marker)
+  st$writer_pid = st$p$get_pid()
+  writer = proc_record(st$writer_pid, st$p)
+  if (!is.null(writer)) st$writer_create = writer$create_time
   good = TRUE
   st
 }
