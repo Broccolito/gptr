@@ -27,7 +27,6 @@ jobs:
       GITHUB_PAT: ''
       GITHUB_TOKEN: ''
       R_ENVIRON_USER: /dev/null
-      R_PROFILE_USER: /dev/null
       OMP_NUM_THREADS: '1'
       OMP_THREAD_LIMIT: '1'
       OPENBLAS_NUM_THREADS: '1'
@@ -75,7 +74,7 @@ jobs:
               'source_sha': actual,
               'source_archive_sha256': hashlib.sha256(archive).hexdigest(),
               'event': os.environ['GITHUB_EVENT_NAME'],
-              'profile': 'jsonlite-lintr-required-dependencies-only'
+              'profile': 'integration-check-dependencies'
           }, indent=2) + '\n', encoding='utf-8')
           PY
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -87,36 +86,37 @@ jobs:
           r-version: release
           Ncpus: 1
           use-public-rspm: true
-      - name: Install and record the reduced plan-check dependency profile
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        timeout-minutes: 7
+        with:
+          extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
+          needs: check
+      - name: Record the integration plan-check dependency profile
         id: dependencies
         shell: bash
-        timeout-minutes: 7
-        env:
-          R_LIBS_USER: ${{ runner.temp }}/gptr-plan-library
+        timeout-minutes: 2
         run: |
           Rscript --vanilla - > plan-evidence/dependencies.log 2>&1 <<'RSCRIPT'
-          lib = Sys.getenv("R_LIBS_USER")
-          stopifnot(nzchar(lib))
-          if (dir.exists(lib)) {
-            stopifnot(!length(list.files(lib, all.files = TRUE, no.. = TRUE)))
-          } else {
-            dir.create(lib, recursive = TRUE, mode = "0700")
-          }
-          .libPaths(c(lib, .libPaths()))
-          options(Ncpus = 1L)
-          utils::install.packages(c("jsonlite", "lintr"), lib = lib,
-            dependencies = NA, repos = "https://cloud.r-project.org", Ncpus = 1L)
-          stopifnot(requireNamespace("jsonlite", quietly = TRUE),
+          stopifnot(requireNamespace("testthat", quietly = TRUE),
+            requireNamespace("jsonlite", quietly = TRUE),
             requireNamespace("lintr", quietly = TRUE))
+          dep_pkgs = c("jsonlite", "curl", "processx", "callr", "rlang", "cli", "yaml", "ps",
+            "testthat", "withr", "knitr", "rmarkdown", "later", "httpuv", "openssl", "shiny",
+            "bslib", "chromote", "ragg", "rstudioapi", "reticulate", "DBI", "duckdb", "RSQLite",
+            "data.table", "vctrs", "stringi", "magick", "keyring", "codetools", "R6", "pkgload",
+            "devtools", "roxygen2", "lintr", "styler")
           packages = utils::installed.packages()[, c("Package", "Version"), drop = FALSE]
           packages = packages[order(packages[, "Package"], packages[, "Version"]), , drop = FALSE]
           jsonlite::write_json(list(
-            profile = "jsonlite-lintr-required-dependencies-only",
+            profile = "integration-check-dependencies",
             external_api_coverage = "depends on the recorded installed namespace set",
             r_version = as.character(getRversion()),
             r_platform = R.version$platform,
+            testthat_version = as.character(utils::packageVersion("testthat")),
             jsonlite_version = as.character(utils::packageVersion("jsonlite")),
             lintr_version = as.character(utils::packageVersion("lintr")),
+            indexer_dependency_presence = data.frame(package = dep_pkgs,
+              installed = dep_pkgs %in% packages[, "Package"]),
             packages = as.data.frame(packages, stringsAsFactors = FALSE)
           ), "plan-evidence/dependency-profile.json", auto_unbox = TRUE, pretty = TRUE)
           RSCRIPT
@@ -131,8 +131,6 @@ jobs:
         if: ${{ !cancelled() && steps.identity.outcome == 'success' && steps.r_setup.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         shell: bash
         timeout-minutes: 42
-        env:
-          R_LIBS_USER: ${{ runner.temp }}/gptr-plan-library
         run: |
           python -I -B dev/ci/check-plans.py --out plan-evidence/checks \
             > plan-evidence/controller.log 2>&1
@@ -147,7 +145,7 @@ jobs:
           PLAN_CHECKS_OUTCOME: ${{ steps.checks.outcome }}
         run: |
           python3 -I -B - <<'PY'
-          import collections, hashlib, json, os, pathlib
+          import ast, collections, hashlib, json, os, pathlib
           source = pathlib.Path('plan-evidence')
           target = pathlib.Path('plan-artifact')
           target.mkdir(mode=0o700)
@@ -200,13 +198,33 @@ jobs:
           index = source / 'checks/index/index.json'
           if index.is_file():
               value = json.loads(index.read_text())
+              tree = ast.parse(pathlib.Path(
+                  'dev/research/assets/consolidation-tools/build_index.py').read_text())
+              categories = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                            and any(isinstance(name, ast.Name) and name.id == 'CATEGORY_HELP'
+                                    for name in node.targets)]
+              if len(categories) != 1:
+                  raise SystemExit('Require the indexer fixed category dictionary')
+              known = set(ast.literal_eval(categories[0]))
+              counts = collections.defaultdict(collections.Counter)
+              for finding in value['findings']:
+                  category = finding.get('category')
+                  severity = finding.get('severity')
+                  if category not in known:
+                      category = 'unknown_category'
+                  if severity not in ('error', 'warn', 'info'):
+                      severity = 'unknown_severity'
+                  counts[category][severity] += 1
               summary = {'plans': len(value['plans']), 'blocks': len(value['blocks']),
-                         'findings_by_severity': dict(collections.Counter(
-                             finding['severity'] for finding in value['findings']))}
+                         'findings_by_severity': {
+                             severity: sum(row[severity] for row in counts.values())
+                             for severity in ('error', 'warn', 'info', 'unknown_severity')},
+                         'findings_by_known_category_and_severity': {
+                             category: dict(row) for category, row in sorted(counts.items())}}
               (target / 'index-summary.json').write_text(
                   json.dumps(summary, indent=2) + '\n', encoding='utf-8')
           metadata = {'source_sha': os.environ['SOURCE_SHA'], 'outcomes': outcomes,
-                      'profile': 'jsonlite-lintr-required-dependencies-only',
+                      'profile': 'integration-check-dependencies',
                       'source_manifest_unchanged': unchanged, 'files': records,
                       'collection_failures': failures,
                       'excludes': ['source archive', 'index source', 'extracted blocks', 'lint R copies']}

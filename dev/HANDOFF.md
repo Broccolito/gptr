@@ -1,6 +1,6 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 07:48 PDT
+## Optional integrations and Windows transport — 2026-10-11 08:00 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
 `codex/skipped-platform-tests`. Reviewed fixes `892ac9e` and `c20df78` are pushed and
@@ -67,13 +67,25 @@ WAITING the disk/resource gate. No local inference/import/install/build/test was
 All four fresh broad-profile Linux plan stages pass on exact 3a27: 25 plans, 1523 blocks,
 770 R blocks, zero parse/style problems/lints and 39 equal before/after source hashes.
 Retain 90 historical index warnings, distinct from test/runtime warnings. Registry remains
-37 files/172 mandatory titles/55 lint paths with no new OS allowances. The new plan-only
-Linux workflow validates this final status edit on its exact pushed source with jsonlite+
-lintr, six controller units and the same four serial bounded tools. Record its actual reduced
-installed-package profile; this status-only check does not replace broad external-API,
-package/integration or CRAN coverage. Its result is ONGOING until retained evidence is read;
-latest result belongs in the companion progress/ignored execution ledger without another
-plan edit. Current Windows denial/warning/callr gates, merge, D-019 and release remain OPEN.
+37 files/172 mandatory titles/55 lint paths with no new OS allowances. The first plan-only job4910648/run38148828001 passes exact identity, dependency setup,
+six controller units and39 equal before/after hashes, but fails the strict index gate:
+25plans/1446blocks/4389definitions/28337calls with14135ERROR/878INFO/150WARN.
+Actual installed-profile metadata proves testthat absent. Source review shows bare assertion
+exports disappearing into undefined classifications; the exact per-category error distribution
+was not retained. Extraction/parse/lint were not reached. The actual RED remains recorded;
+it does not invalidate the broad3a plan GREEN or the separately proved runtime/native fixes.
+
+The reviewed plan-only correction uses the exact pinned integration needs:check R dependency
+action and six extra packages, inherits its effective libraries and requires testthat/jsonlite/
+lintr. It records actual package versions and36 availability booleans without requiring every
+optional research package. The same six units/all four bounded stages/zero index errors/
+parse-style/zero lint/source-hash gates remain strict. Numeric fixed-category diagnostics
+improve retained failure evidence without uploading arbitrary source/messages. The dependency action may provision Pandoc/Quarto automatically; no browser, Quarto render,
+Python module, gptr runtime or model is exercised by this status-only job.
+Corrected exact-source all4 outcome is ONGOING until evidence is read; record the latest
+result in companion progress/ignored ledger without another plan edit. This check does not
+replace package/integration, native or CRAN coverage. Current Windows denial/warning/callr
+gates, merge, D-019 and release remain OPEN.
 
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
