@@ -47,12 +47,32 @@ proc_time_valid = function(time) {
 }
 
 #' @noRd
-proc_record_valid = function(rec, path) {
+proc_record_shape = function(rec, path) {
   is.list(rec) && proc_marker_valid(rec$marker) &&
     identical(basename(path), paste0(rec$marker, ".json")) &&
     proc_pid_valid(rec$pid) && proc_pid_valid(rec$parent_pid) &&
-    rec$pid != rec$parent_pid && rec$pid != Sys.getpid() &&
+    rec$pid != rec$parent_pid &&
     proc_time_valid(rec$create_time) && proc_time_valid(rec$parent_create)
+}
+
+#' A structurally valid record eligible for ordinary orphan cleanup, never this R process
+#' @noRd
+proc_record_valid = function(rec, path) {
+  proc_record_shape(rec, path) && rec$pid != Sys.getpid()
+}
+
+#' Preserve a self record without making it eligible for signalling or deletion
+#'
+#' TRUE proves the current PID, creation time and carried marker. NA means the same-PID
+#' record's time cannot be verified: preserve recovery, without authorizing cleanup.
+#' @noRd
+proc_record_self = function(rec, path) {
+  if (!proc_record_shape(rec, path) || rec$pid != Sys.getpid()) return(FALSE)
+  if (!identical(Sys.getenv(rec$marker), "YES")) return(FALSE)
+  current = proc_create_time(Sys.getpid())
+  if (!is.numeric(rec$create_time) || is.na(rec$create_time) ||
+      !is.finite(current) || current <= 0) return(NA)
+  abs(rec$create_time - current) < 0.01
 }
 
 #' Recognize process absence without interpreting an arbitrary OS error as death
@@ -250,6 +270,8 @@ proc_sweep = function() {
   files = list.files(d, pattern = "^GPTR_PROC_[0-9a-f]{16}[.]json$", full.names = TRUE)
   for (path in files) {
     rec = tryCatch(json_decode(read_utf8(path)$text), error = function(e) NULL)
+    # A loading child retains its own recovery record written by its parent; no self signal.
+    if (!isFALSE(proc_record_self(rec, path))) next
     if (!proc_record_valid(rec, path)) {
       unlink(path)
       next
@@ -302,6 +324,9 @@ proc_kill_signalled = function(handles) {
 #' Clean one validated owned tree, retaining its recovery record until cleanup is confirmed
 #' @noRd
 proc_cleanup_record = function(rec) {
+  if (proc_pid_valid(rec$pid) && rec$pid == Sys.getpid()) {
+    return(list(killed = 0L, complete = FALSE))
+  }
   tree = proc_tree(rec$marker)
   signalled = proc_kill_signalled(tree)
   killed = 0L
