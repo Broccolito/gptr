@@ -568,3 +568,82 @@ archive and supported HTML Tidy. Both are still checking; Mac release and both L
 remain queued. No final consumer result or matrix pass is available. This nominated archive
 predates6501a64/ad4e6a9; its eventual result must not certify those newer changes. No hosted
 rerun, local R job or package installation was performed for this status read.
+
+### Exact `03963e0` Windows failures, read-only diagnosis
+
+Both consumers report Status1ERROR from tests, zero check-level warnings/notes;
+the test-warning counts below are separate. Original-byte verification, HTML/PDF
+manuals and vignette rebuilds passed. Both retained diagnostic archives contain
+the same2,248,584-byte source tarball, SHA256
+`3e2a57dc10be0fe44d2a77f0c4f341f41b08030bdbd778d8d5b0f940ae24e070`,
+with14 Rmd/14HTML guides. This is the hosted producer artifact, not the separately
+certified local normal039 archive.
+
+| Consumer job | Failed assertions | Test warnings | Skips | Passed assertions |
+|---|---:|---:|---:|---:|
+| Windows release114361569133, R4.6.1ucrt | 3 | 16 | 96 | 24,784 |
+| Windows devel114361569142, R-devel2026-10-09r90655ucrt | 4 | 16 | 96 | 24,783 |
+
+Shared failures: notebook fallback message-capture expectations at
+`test-doc-jupyter.R:151-152`, already corrected to actual stdout in current source,
+and the safe project-instruction link positive control at
+`test-storage-boundaries.R:147`, whose intermediate Windows path/readback state
+is absent from this artifact. User-level instruction and guarded/outside negative
+controls did not fail. Preserve all guards; first witness link existence, byte
+readback, normalized link/target/root keys, containment and guard classification.
+
+Devel additionally expected one delayed-abort fake request at
+`test-compaction-acceptance.R:137` and observed zero. Other status/charge/history/
+cleanup assertions passed. The timer is armed before the pump; reactor timers
+precede tasks and the fake stream checks cancellation before logging a request.
+That supports a fixture scheduling-race hypothesis rather than proving a charge
+defect. Schedule only after actual request start, with a bounded never-start
+failure; retain every accounting/cleanup oracle. No correction has executed.
+
+All16 warnings per consumer originate in withr/base recursive fixture teardown
+of owned Windows links, with reparse-tag mismatch messages. A source-supported
+symbolic-link versus mount-point deletion-tag hypothesis is recorded in ignored
+`dev/.validation/ci-windows-38102472275/TRIAGE.md`; it remains distinct from the
+unresolved safe-link filtering failure. Own-link detachment before directory
+cleanup needs actual Windows validation and unchanged-target checks. Do not
+suppress warnings globally or weaken negative controls.
+
+Raw job logs, two diagnostic ZIPs and extracted check/Rout/provenance files are
+retained beside `TRIAGE.md` with SHA256 manifest `hashes.json`. The final root
+status read had Mac/Linux-devel checking, Linux-release failed, producer passed
+and both Windows failed. Linux-release cause triage is ongoing. No complete
+matrix pass, current-head validation, rerun, dispatch or local R work is claimed.
+
+### Exact `03963e0` Linux release failures, read-only diagnosis
+
+Job114361569198 reports4 failed assertions, zero test warnings,38 skips and25,089
+passed assertions, Status1ERROR. Archive verification, manuals and vignette
+rebuilds passed. Two failures are the same old notebook stdout-capture oracles.
+The other two are `test-doc-io.R:1538` (missing legacy-pending notice) and1896
+(modern sidecar missing after Windows is mocked).
+
+Source inspection identifies a fixture identity mismatch: both write their
+sidecar before switching `is_windows()` to TRUE. `doc_sidecar_path()` hashes
+`path_key()`, which now lowercases Windows/macOS keys. On Linux the uppercase
+`.R` suffix and temporary-directory components change that hash when the mock
+switches, so the later read looks at a different path. Mac/real-Windows keys
+were already lowercased. This is not evidence that production same-platform
+sidecar recovery failed.
+
+The minimal candidate sets the Windows mock before creating the legacy fixture;
+the POSIX-owner test keeps its original modern/legacy sidecar paths in the final
+mocked-Windows branch. Preserve owner-negative cases, zero legacy reads on
+Windows, modern-file authority, retained-byte hashes and cache assertions.
+The ignored patch is preparation only: no application, R execution, GREEN/lint
+or fresh platform pass is claimed. Mac/Linux-devel consumers were still running
+at the last bounded status read. Older failure records remain failed.
+
+Frozen preparation: ignored
+`dev/.validation/ci-windows-38102472275/{LINUX-TRIAGE.md,doc-io-linux-mock-paths.patch}`.
+Patch SHA256`f317f29d231823dc83dd88c08ec6c121a3b780e83d2e4f8892ead4d491eb21cb`;
+Linux diagnostic artifact11690155986 SHA256
+`91026cb7b22094a7db22b806a4b505132aa6e8d54143b8486658c85ec1aac84b`.
+Root reviewed the narrow mock-order/fixed-path delta; no runtime/security change
+or local execution was made. At19:46 PDT load224.51, CPU3.57%idle, physical
+RAM127GiB used/291MiB unused, swap31,460MiB used and disk127GiB maintained the
+local resource hold. The shared Ollama model remains untouched as requested.
