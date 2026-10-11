@@ -602,7 +602,15 @@ artifact_browser = function() {
 artifact_browser_close = function() {
   b = artifact_state$browser
   artifact_state$browser = NULL
-  if (!is.null(b)) try(b$close(), silent = TRUE)
+  if (!is.null(b)) {
+    # Chromote closes its websocket immediately after an unobserved async Browser.close.
+    # End our local process first so the container closes only its websocket, not a promise.
+    try({
+      browser = b$get_browser()
+      if (isTRUE(browser$is_local())) browser$close(wait = TRUE)
+    }, silent = TRUE)
+    try(b$close(), silent = TRUE)
+  }
   invisible(NULL)
 }
 

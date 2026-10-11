@@ -3,7 +3,11 @@
 # an installed claude or codex CLI or the network. Everything below is restored when the test run
 # ends.
 local({
-  root = withr::local_tempdir("gptr-tests-", .local_envir = testthat::teardown_env())
+  linux = identical(Sys.info()[["sysname"]], "Linux")
+  # Chromium adds a Unix socket suffix; nested CI roots can exceed sun_path's 108-byte limit.
+  root = withr::local_tempdir("gptr-tests-", tmpdir = if (linux) "/tmp" else tempdir(),
+                            .local_envir = testthat::teardown_env())
+  if (linux) stopifnot(Sys.chmod(root, "0700"))
   dirs = c(
     config = "user-config", data = "user-data", cache = "user-cache", home = "home",
     appdata = "appdata", localappdata = "localappdata", xdg = "xdg-config", project = "project",
@@ -11,6 +15,10 @@ local({
   )
   paths = stats::setNames(file.path(root, dirs), names(dirs))
   for (path in paths) dir.create(path, recursive = TRUE, showWarnings = FALSE)
+  if (linux) {
+    socket = file.path(paths[["temp"]], "org.chromium.Chromium.XXXXXX", "SingletonSocket")
+    stopifnot(nchar(socket, type = "bytes") <= 107L)
+  }
   withr::local_envvar(
     R_USER_CONFIG_DIR = paths[["config"]],
     R_USER_DATA_DIR = paths[["data"]],
