@@ -444,19 +444,27 @@ proc_writer_dir = function(marker) {
 #' Base-only so the exact same check runs in the standalone actor. This checks stable
 #' pathname/owner changes; it does not isolate the R session from another same-SID process.
 #' @noRd
-proc_writer_valid = function(dir, canonical, marker, paths = character()) {
+proc_writer_valid = function(dir, canonical, marker, paths = character(),
+                             .readlink = Sys.readlink, .exists = file.exists) {
   tryCatch({
-    link = Sys.readlink(dir)
+    link = .readlink(dir)
     if (!dir.exists(dir) || is.na(link) || nzchar(link) ||
         !identical(tolower(normalizePath(dir, winslash = "/", mustWork = TRUE)),
                    tolower(canonical))) return(FALSE)
     owner = file.path(dir, "owner")
+    entries = list.files(dir, all.files = TRUE, no.. = TRUE)
     for (path in unique(c(owner, paths))) {
-      link = Sys.readlink(path)
-      if (!identical(dirname(path), dir) || is.na(link) || nzchar(link)) return(FALSE)
-      if (file.exists(path) && (dir.exists(path) ||
-          !identical(tolower(normalizePath(path, winslash = "/", mustWork = TRUE)),
-                     tolower(paste0(canonical, "/", basename(path)))))) return(FALSE)
+      parent = normalizePath(dirname(path), winslash = "/", mustWork = TRUE)
+      if (!identical(tolower(parent), tolower(canonical))) return(FALSE)
+      link = .readlink(path)
+      present = basename(path) %in% entries
+      if (present) {
+        if (is.na(link) || nzchar(link) || !.exists(path) || dir.exists(path) ||
+            !identical(tolower(normalizePath(path, winslash = "/", mustWork = TRUE)),
+                       tolower(paste0(canonical, "/", basename(path))))) return(FALSE)
+      } else if (.exists(path) || dir.exists(path) || (!is.na(link) && nzchar(link))) {
+        return(FALSE)
+      }
     }
     size = file.size(owner)
     is.finite(size) && size == nchar(marker, type = "bytes") &&
@@ -464,13 +472,27 @@ proc_writer_valid = function(dir, canonical, marker, paths = character()) {
   }, error = function(e) FALSE)
 }
 
+#' Injectable parent-side link probe; the standalone validator uses base directly
+#' @noRd
+proc_writer_readlink = function(path) Sys.readlink(path)
+
+#' Confirm absence by directory membership, including dangling entries
+#' @noRd
+proc_writer_missing = function(path) {
+  parent = dirname(path)
+  link = proc_writer_readlink(path)
+  dir.exists(parent) && !file.exists(path) && !dir.exists(path) &&
+    !(basename(path) %in% list.files(parent, all.files = TRUE, no.. = TRUE)) &&
+    (is.na(link) || !nzchar(link))
+}
+
 #' Delete an owned mailbox without following a resolved alias
 #' @noRd
 proc_writer_remove = function(marker) {
   tryCatch({
     dir = proc_writer_dir(marker)
-    link = Sys.readlink(dir)
-    if (!file.exists(dir)) return(!is.na(link) && !nzchar(link))
+    link = proc_writer_readlink(dir)
+    if (!file.exists(dir)) return(proc_writer_missing(dir))
     parent = normalizePath(dirname(dir), winslash = "/", mustWork = TRUE)
     actual = tryCatch(normalizePath(dir, winslash = "/", mustWork = TRUE),
                       error = function(e) "")
@@ -482,7 +504,7 @@ proc_writer_remove = function(marker) {
     for (path in entries) {
       child = tryCatch(normalizePath(path, winslash = "/", mustWork = TRUE),
                         error = function(e) "")
-      link = Sys.readlink(path)
+      link = proc_writer_readlink(path)
       if (dir.exists(path) || is.na(link) || nzchar(link) ||
           !identical(tolower(child), tolower(paste0(actual, "/", basename(path))))) return(FALSE)
     }
@@ -632,23 +654,32 @@ proc_writer_code_bytes = function(code) {
   if (bytes > 9998L) {
     gptr_abort(paste0("The trusted stdin expression exceeds Rscript's 9998-byte limit (",
                       bytes, " bytes)."), "io", operation = "write", path = NULL,
-               expression_bytes = bytes)
+               expression_bytes = bytes, writer_stage = "bootstrap")
   }
   bytes
 }
 
-#' Quote trusted source inside one physical argv line for Windows Rscript
+#' Serialize only the trusted actor and its ownership metadata, never queued payloads
 #' @noRd
-proc_writer_code = function(meta) {
-  code = paste(c(sprintf(".libPaths(%s)", paste(deparse(.libPaths()), collapse = "")),
-    paste0("tryCatch((function(meta) ", paste(deparse(body(proc_writer_main)), collapse = "\n"),
-      ")(", paste(deparse(meta), collapse = "\n"), "), error = function(e) quit(status = 1L))")),
-    collapse = "\n")
-  if (length(parse(text = code)) != 2L) {
+proc_writer_source = function(meta) {
+  code = paste0("tryCatch((function(meta) ",
+    paste(deparse(body(proc_writer_main)), collapse = "\n"), ")(",
+    paste(deparse(meta), collapse = "\n"), "), error = function(e) quit(status = 1L))")
+  if (length(parse(text = code)) != 1L) {
     gptr_abort("Could not parse the trusted stdin bootstrap.",
                "io", operation = "write", path = NULL)
   }
-  out = paste0("eval(parse(text = ", paste(deparse(code, width.cutoff = 500L), collapse = ""), "))")
+  code
+}
+
+#' Compress trusted source within the actual one-line Rscript expression budget
+#' @noRd
+proc_writer_code = function(meta) {
+  source = charToRaw(enc2utf8(proc_writer_source(meta)))
+  encoded = gsub("\n", "", jsonlite::base64_enc(memCompress(source, type = "gzip")), fixed = TRUE)
+  libraries = paste(deparse(.libPaths(), width.cutoff = 500L), collapse = "")
+  out = paste0("local({.libPaths(", libraries, ");eval(parse(text=rawToChar(memDecompress(",
+    "jsonlite::base64_dec(\"", encoded, "\"),type=\"gzip\")),encoding=\"UTF-8\"))})")
   if (grepl("[\r\n]", out) || length(parse(text = out)) != 1L) {
     gptr_abort("Could not encode the trusted stdin bootstrap.",
                "io", operation = "write", path = NULL)
@@ -674,8 +705,7 @@ proc_writer_start = function(p, limit) {
   if (sum(active) >= proc_pool_cap(.Machine$integer.max)) return(NULL)
   marker = proc_marker_new()
   dir = proc_writer_dir(marker)
-  link = Sys.readlink(dir)
-  if (file.exists(dir) || is.na(link) || nzchar(link)) {
+  if (!proc_writer_missing(dir)) {
     gptr_abort("A child stdin mailbox already exists.", "io", operation = "write", path = NULL)
   }
   parent = proc_self()
@@ -743,6 +773,22 @@ proc_writer_start = function(p, limit) {
     stdout = p$get_input_connection(), stderr = NULL, .marker = marker)
   good = TRUE
   st
+}
+
+#' Bounded construction/startup evidence, never native stderr or condition messages
+#' @noRd
+proc_writer_failure = function(p, error = NULL) {
+  st = proc_writer_get(p)
+  number = function(x) {
+    if (is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0) unname(x) else NULL
+  }
+  stage = if (is.null(st)) "construct" else if (!isTRUE(st$private)) "startup" else "delivery"
+  if (!is.null(error) && identical(error$writer_stage, "bootstrap")) stage = "bootstrap"
+  bytes = number(if (is.null(error)) NULL else error$expression_bytes)
+  if (is.null(bytes) && !is.null(st)) bytes = number(st$expression_bytes)
+  elapsed = if (is.null(st)) NULL else number(if (isTRUE(st$private)) st$startup_elapsed else
+    reactor_now() - st$startup_t0)
+  list(writer_stage = stage, expression_bytes = bytes, startup_elapsed = elapsed)
 }
 
 #' Collect cumulative acknowledgements, including those published immediately before exit

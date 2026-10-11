@@ -603,9 +603,12 @@ reactor_drain_stdin = function(r) {
 
 #' Fail one owned stdin buffer without exposing its bytes or an arbitrary process error
 #' @noRd
-reactor_stdin_fail = function(r, key, b, message, class = "io") {
+reactor_stdin_fail = function(r, key, b, message, class = "io", cause = NULL) {
   fields = if (class == "timeout") list(what = "stdin", seconds = b$limit) else
     list(operation = "write", path = NULL)
+  if (is_windows() && inherits(b$p, "process")) {
+    fields = c(fields, proc_writer_failure(b$p, cause), list(accepted_bytes = b$pos))
+  }
   b$failed = TRUE
   b$error = gptr_condition(message, class, fields = fields)
   if (identical(r$stdin[[key]], b)) rm(list = key, envir = r$stdin)
@@ -653,7 +656,8 @@ reactor_drain_child = function(r, key, b) {
   alive = tryCatch(p$is_alive(), error = function(e) NA)
   if (is_windows() && inherits(p, "process")) {
     done = tryCatch(proc_writer_drain(r, key, b), error = function(e) {
-      reactor_stdin_fail(r, key, b, "Could not deliver queued bytes through the stdin writer.")
+      reactor_stdin_fail(r, key, b, "Could not deliver queued bytes through the stdin writer.",
+                         cause = e)
       FALSE
     })
     if (!identical(r$stdin[[key]], b)) return(invisible(NULL))

@@ -91,7 +91,8 @@ bp_child_case = function(case, root) {
     }, error = identity)
     result = list(timeout_class = inherits(error, "gptr_error_timeout"),
       what = if (is.null(error)) NULL else error$what,
-      seconds = if (is.null(error)) NULL else error$seconds)
+      seconds = if (is.null(error)) NULL else error$seconds,
+      case_failure = if (is.null(error)) NULL else failure(error))
     fun("reactor_cancel")(watcher)
   } else {
     options(gptr.stdin_timeout = 20)
@@ -144,6 +145,20 @@ bp_sample_error = function(stage, error) {
     errno = number(error$errno), pid = number(error$pid))
 }
 
+# Only bounded structural fields from this owned synthetic case survive an early failure.
+bp_case_failure = function(error) {
+  number = function(x) {
+    if (is.numeric(x) && length(x) == 1L && is.finite(x)) unname(x) else NULL
+  }
+  classes = class(error)
+  classes = utils::head(classes[grepl("^[A-Za-z][A-Za-z0-9_.]{0,63}$", classes)], 8L)
+  stage = error$writer_stage
+  if (!is.character(stage) || length(stage) != 1L || is.na(stage) ||
+      !stage %in% c("construct", "bootstrap", "startup", "delivery")) stage = NULL
+  list(class = classes, stage = stage, expression_bytes = number(error$expression_bytes),
+    startup_elapsed = number(error$startup_elapsed), accepted_bytes = number(error$accepted_bytes))
+}
+
 bp_run = function(case) {
   root = withr::local_tempdir(paste0("gptr-backpressure-", case, "-"))
   dirs = stats::setNames(file.path(root, c("home", "config", "cache", "data", "project", "tmp")),
@@ -152,7 +167,12 @@ bp_run = function(case) {
   script = file.path(root, "case.R")
   call = paste0("(function(case, root) ", paste(deparse(body(bp_child_case)), collapse = "\n"),
     ")(", deparse(case), ", ", deparse(normalizePath(root, winslash = "/")), ")")
-  writeLines(c(bp_loader(), paste0("result = ", call),
+  failure_path = file.path(root, "case-failure.rds")
+  diagnostic = paste0("failure = function(error) ",
+    paste(deparse(body(bp_case_failure)), collapse = "\n"))
+  protected = paste0("result = tryCatch(", call, ", error = function(error) {\n",
+    "saveRDS(failure(error), ", deparse(failure_path), ")\nstop(error)\n})")
+  writeLines(c(bp_loader(), diagnostic, protected,
     sprintf("saveRDS(result, %s)", deparse(file.path(root, "result.rds")))), script)
   marker = proc_marker_new()
   env = child_env("helper", set = c(HOME = dirs[["home"]], USERPROFILE = dirs[["home"]],
@@ -255,6 +275,11 @@ bp_run = function(case) {
   result = if (finished && file.exists(result_path)) readRDS(result_path) else NULL
   inner_path = file.path(root, "inner-identity.rds")
   inner_record = if (file.exists(inner_path)) readRDS(inner_path) else NULL
+  case_failure = if (!p$is_alive() && file.exists(failure_path)) {
+    tryCatch(readRDS(failure_path), error = function(error) NULL)
+  } else {
+    NULL
+  }
   if (!is.null(inner_record)) {
     identity = proc_identity(inner_record$pid, inner_record$create_time)
     if (!is.null(identity$handle)) remember(identity$handle)
@@ -269,6 +294,7 @@ bp_run = function(case) {
     samples = samples, sampling_errors = sampling_errors, sample_error = sample_error,
     owned_family_stopped = stopped,
     outer_identity = outer_record, inner_identity = inner_record, phases = phases,
+    case_failure = case_failure,
     result = result)
   cat("GPTR-BACKPRESSURE-WITNESS ", json_encode(witness), "\n", sep = "")
   witness

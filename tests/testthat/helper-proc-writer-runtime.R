@@ -36,6 +36,7 @@ rw_child_case = function(case, root) {
   phase("ready")
   first = if (case == "binary") as.raw(c(0, 255, 195, 169)) else charToRaw("first\n")
   second = if (case == "binary") as.raw(c(10, 66, 0, 127)) else charToRaw("second\n")
+  phase("writer-start")
   fun("write_all")(p, first)
   if (case != "binary")
     stopifnot(fun("reactor_pump")(until = function() "first" %in% st$out, timeout = 10))

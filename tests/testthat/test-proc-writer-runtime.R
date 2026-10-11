@@ -149,7 +149,7 @@ test_that("writer requires the exact live recorded target before construction", 
   observe$checks = 0L
   testthat::local_mocked_bindings(proc_dir = function(...) root,
     # This fixture isolates the Windows helper's target identity gate on either host OS.
-    Sys.readlink = function(...) "",
+    proc_writer_readlink = function(...) "",
     proc_writer_table = function() table,
     proc_marker_new = function() "GPTR_PROC_0123456789abcdef",
     proc_self = function() list(pid = 1L, create_time = 10),
@@ -278,7 +278,94 @@ test_that("writer cleanup refuses a dangling mailbox link", {
   root = withr::local_tempdir()
   marker = "GPTR_PROC_0123456789abcdef"
   testthat::local_mocked_bindings(proc_dir = function(...) root,
-    Sys.readlink = function(...) "unavailable-target")
+    proc_writer_readlink = function(...) "unavailable-target")
   expect_false(proc_writer_remove(marker))
   expect_false(dir.exists(file.path(root, paste0(marker, ".stdin"))))
+})
+
+test_that("writer allows only confirmed fresh names inside its canonical mailbox", {
+  x = rw_local_state()
+  fresh = file.path(x$st$dir, "in-000000000001.part")
+  unreadable = function(path) if (file.exists(path)) "" else NA_character_
+  expect_true(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker, fresh,
+                                .readlink = unreadable))
+  expect_false(file.exists(fresh))
+  expect_false(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker, fresh,
+    .readlink = function(path) if (identical(path, fresh)) "foreign-canary" else ""))
+  file.create(fresh)
+  available = function(path) !identical(path, fresh) && file.exists(path)
+  expect_false(proc_writer_valid(x$st$dir, x$st$canonical, x$st$marker, fresh,
+    .readlink = function(...) "", .exists = available))
+  expect_true(file.exists(fresh))
+  expect_identical(readBin(file.path(x$st$dir, "owner"), "raw", n = 27L),
+                   charToRaw(x$st$marker))
+})
+
+test_that("writer canonical parent checks accept Windows separators and reject outside paths", {
+  x = rw_local_state()
+  dir = if (.Platform$OS.type == "windows") chartr("/", "\\", x$st$dir) else x$st$dir
+  fresh = file.path(dir, "close")
+  expect_true(proc_writer_valid(dir, x$st$canonical, x$st$marker, fresh))
+  outside = withr::local_tempfile()
+  expect_false(proc_writer_valid(dir, x$st$canonical, x$st$marker, outside))
+  expect_false(file.exists(outside))
+})
+
+test_that("writer compressed bootstrap preserves exact trusted source and binary literals", {
+  testthat::local_mocked_bindings(proc_writer_main = function(meta) {
+    list(text = meta$text, bytes = meta$bytes)
+  })
+  meta = list(text = "quotes '\"; \\path\n\u00e9", bytes = as.raw(c(0, 255, 195, 169)))
+  source = proc_writer_source(meta)
+  code = proc_writer_code(meta)
+  payload = sub("^.*base64_dec\\(\"([A-Za-z0-9+/=]+)\"\\).*$", "\\1", code)
+  expect_false(identical(payload, code))
+  decoded = memDecompress(jsonlite::base64_dec(payload), type = "gzip")
+  expect_identical(decoded, charToRaw(enc2utf8(source)))
+  expect_length(parse(text = rawToChar(decoded)), 1L)
+  expect_false(grepl("[\r\n]", code))
+  expect_lte(nchar(enc2utf8(code), type = "bytes"), 9998L)
+  old = .libPaths()
+  withr::defer(.libPaths(old))
+  expect_identical(eval(parse(text = code), new.env(parent = baseenv())),
+                   list(text = meta$text, bytes = meta$bytes))
+})
+
+test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
+  marker = "GPTR_PROC_0123456789abcdef"
+  dir = paste0("C:/Users/runneradmin/AppData/Local/Temp/", strrep("owned-segment/", 16L),
+               marker, ".stdin")
+  shell = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+  meta = list(dir = dir, canonical = dir, marker = marker, valid = proc_writer_valid,
+    parent_pid = 1234L, parent_create = 1728000000.125,
+    target_pid = 5678L, target_create = 1728000001.25, shell = shell,
+    args = c("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+             "-EncodedCommand", shell_ps_encode(proc_writer_acl(dir, marker))),
+    supervise = TRUE, timeout = 2)
+  code = proc_writer_code(meta)
+  bytes = nchar(enc2utf8(code), type = "bytes")
+  cat(json_encode(list(case = "long-production-bootstrap", expression_bytes = bytes)), "\n")
+  expect_lte(bytes, 9998L)
+  expect_lte(sum(nchar(enc2utf8(c(rscript_path(), "--vanilla", "-e", code)),
+                       type = "bytes")), 12000L)
+  expect_false(grepl("[\r\n]", code))
+  expect_length(parse(text = code), 1L)
+})
+
+test_that("writer early-case diagnostics retain only bounded structural evidence", {
+  error = gptr_condition("FAKE-writer-message-canary", "io", fields = list(
+    writer_stage = "bootstrap", expression_bytes = 1234L, startup_elapsed = 0.25,
+    accepted_bytes = 0L))
+  x = bp_case_failure(error)
+  expect_identical(x$stage, "bootstrap")
+  expect_identical(x$expression_bytes, 1234L)
+  expect_identical(x$accepted_bytes, 0L)
+  expect_false(any(grepl("FAKE-writer-message-canary", unlist(x), fixed = TRUE)))
+  error$writer_stage = "untrusted-stage-canary"
+  error$expression_bytes = c(1, 2)
+  error$startup_elapsed = NA_real_
+  x = bp_case_failure(error)
+  expect_null(x$stage)
+  expect_null(x$expression_bytes)
+  expect_null(x$startup_elapsed)
 })
