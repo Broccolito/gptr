@@ -467,46 +467,84 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 
 | Follow-up | Status and next evidence |
 |---|---|
-| Quarto discovery | Actual26dc518 record/replay/source-hash integration DONE:71 assertions per host/0 failures or R warnings, including two actual renders and zero replay requests. Bundled RStudio Quarto is discoverable through child-only PATH without changing caller PATH. Local rendering and installed compact-history frontends remain WAITING. |
-| Python/R dependencies | Actual26dc518 hosted preflights execute Python/pandas/NumPy sum6 and other required tools. Bridges128 Linux/118 Windows pass, with two named Windows OS guards. Private localPython pandas/NumPy wheels remain WAITING, with mandatory private-prefix/CPython3.12/arm64 witnesses before installation and actual reticulate use.13 mock-only Python units pass. Actual marker-family evidence locates loss of four empty caller variables at callr launch; e7daa08 uses a fresh owned processx Rscript watchdog without temporary parent environment mutation. Raw state checks remain unchanged; native rerun pending. Production callr empty-variable preservation remains OPEN. |
-| Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
-| Windows filesystem safety | Actual26dc518 owned checkpoint ACL baseline and119 assertions pass; Codex effective denial/full descriptor restoration pass, but its independent appended LF oracle catches text-mode CRLF. ff3a587 appends binary LF while preserving byte/hash/ACL checks; native rerun pending. Actual MCP167 passes. Native absence remains7P/1F/1W; fixed numeric stages locate an ambiguous parent restoration failure before denied-probe proof. 7c69690 adds numeric probe/parent-DACL observations and one mandatory decoder test, preserving exact restoration and denial; native evidence pending. Effective denial/exact restoration and metadata warnings remain fatal. Arbitrary caller AI0 restoration and junction/unknown-reparse native evidence remain OPEN. |
-| Windows child stdin | Actual26dc518 cold19, warm42 and native retirement180 assertions pass at unchanged2s deadlines. Original native3 now46P/1F: duplex delivery fails after1703936 accepted bytes. Exactbea8c67 reproduces the publication race on both hosts: ordinary input4P/1F, alias5P and directory5P. Minimal8bfa6da now accepts only freshly validated ordinary input; native/full integration rerun pending. Windows parent-death135P/1F fails before provider request/readiness proof, and Claude240P/3F starts only two turns. Reviewed57bebf1 captures bounded worker/Claude startup conditions while preserving original errors and warnings.10s parent-only proof, native limits, cleanup and all positive oracles remain unchanged; blocking-parent-death coverage and D-019 remain OPEN. |
-| Validation/merge | Actual26dc518/run38139096870 completed all17 full files: Linux2353P/0F/0R warnings/13 exact OS guards GREEN; Windows2550P/13 failed conditions (11 failures+2 errors)/1R warning/10 guards RED. Both pass53 scoped lint paths,13 Python units,2571 result-gate assertions and18 cleanup records with no marked survivors. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings.Exactbea8c67 baseline43-case run completes expected ordinary-publication RED on both hosts; all4 fresh Linux plan stages pass/39 equal hashes. Applied8bfa6da/7c69690/57bebf1 full17 nomination atf374daf stops before all bodies at one callback-binding lint;52 other paths,13 Python units and2721 result-gate assertions pass per host. All4 fresh Linux plan checks pass/39 equal hashes. eb55a5b binds the unchanged path; same17-file rerun and all4 fresh plan checks required. Registry36 files/165 titles/53 lint paths. Merge WAITING strict relevant GREEN. |
+| Quarto discovery | DONE hosted d768: 71 assertions per host, actual renders/replay/source hashes and zero replay requests. Child-only PATH discovers bundled RStudio Quarto; caller PATH unchanged. Local renders and installed frontends WAITING. |
+| Python/R dependencies | DONE hosted d768 preflights and bridges: 128 Linux/118 Windows, two exact Windows OS guards. Private local pandas/NumPy wheels WAITING resources; prefix/base-prefix/CPython 3.12/arm64 witnesses required before wheels and actual reticulate in each context. |
+| Browser/search prerequisites | DONE core 63a2454: actual Chrome/search/app cleanup on both hosts, zero failures/warnings, one named Windows app guard. No current local browser launch during hold. |
+| Windows filesystem safety | DONE d768 Codex 448/checkpoint 119/MCP 167, binary bytes/hash/full restoration intact. Native absence 7P/1F/1W: AI-only parent flag change observed; probe 2 is safe refusal, not effective denial. Reviewed stable owned-parent setup 1cb666a pending native execution. Warning and exact denial/restoration stay fatal; arbitrary caller ACL/junction/unknown-reparse gaps OPEN. |
+| Windows child stdin | DONE d768 native duplex/no-reader/cancel 60, cold 19/warm 42/retirement 180, marker-family 81 and Claude 243. Exact 4 MB streams, caller raw state, 2 s deadlines and cleanup pass. Worker parent-death 8P/1F stops before parent-only kill; fixed 20-predicate diagnostic c001b94 pending. Two native production callr environment baselines cbef2a6 mandatory on both hosts, pending. |
+| Validation/merge | DONE actual d768 full 17: Linux 2406P/0F/0W/13 exact guards GREEN; Windows 2626P/2F/1W/10 guards RED. Both 343 raw rows/18 cleanups/zero survivors and controller warnings; 13 Python units/2721 gate assertions/53 lint paths GREEN. All four Linux plan stages GREEN/39 equal hashes/770 R blocks/90 historical index warnings. Next three complete files use registry 37/167/55 and fresh all-four plan checks. Merge WAITING strict relevant GREEN. |
 
-Current follow-up checkpoint (2026-10-11 06:22 PDT): actualbea8c67/run38141027264 completes
-all43 writer cases. Linux308P/1F/0R warnings/8 exact OS guards; Windows469P/2F/1R warning/
-0 skips. Both reproduce the single ordinary-publication regression; alias/directory controls
-pass5 each. The separate Windows absence7P/1F/1W remains open. Two cleanup records per host
-pass with no marked survivors, and controller warnings0. Both pass2678 strict result-gate
-assertions and53 lint paths. All4 fresh Linux plan stages pass39 equal hashes/770 R blocks/
-0 parse-style problems/0 lints, retaining90 historical index warnings.
+## Optional integrations and Windows transport — 2026-10-11 06:53 PDT
 
-8bfa6da applies the source-reviewed minimal publication fix after actual RED.7c69690 appends
-one numeric absence decoder after the exact43-case prefix and adds bounded native probe/ACL
-observations.57bebf1 preserves worker startup and Claude cancellation conditions with guarded
-diagnostic publication and original-error rethrow. No denial/restore, timing, memory, cleanup,
-caller-state or skip oracle is relaxed. Next exact-source run selects all17 complete integration
-files on both hosts, with44 writer cases/36 files/165 titles/53 lint paths and all4 fresh Linux
-plan stages. Native bootstrap size, duplex/no-reader/cancel, cold/warm/retirement, Codex binary
-bytes, raw environment, worker parent-death and Claude starts must all pass independently.
+Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
+`codex/skipped-platform-tests`, with source fixes pushed through `1cb666a`. Primary main
+stays `718e81e`; maintainer dirt/staged chunks, historical tests, secrets and shared Ollama
+are preserved. At 06:52:54 PDT load 56.96/46.92/43.99, CPU 53.98% idle, RAM 119 GiB
+used/8382 MiB unused, swap 22,516.25 MiB used and disk 14 GiB hold all local heavy jobs.
+No thermal warning clears the load/disk gates. Do not stop unrelated work or delete user
+files. Hosted offline validation allows at most two jobs; completed d768 has zero leases.
 
-Exactf374daf/run38141881131 stops before installation/preflight/all17 test bodies at one
-strict object-usage lint: phase_path lacked a local callback binding.52 other lint paths,13
-Python units and2721 result-gate assertions pass per host. All4 fresh Linux plan stages
-pass39 equal source hashes/770 R blocks/0 parse-style problems/0 lints;90 historical index
-warnings remain. eb55a5b binds the same path before callback creation; assertions, limits,
-diagnostic guards and warning policy are unchanged. Actual new lint/integration GREEN is
-pending. Rerun the same17 complete files plus fresh all4 plan stages on the next source.
+Exact `d76821c83a9c7ac5fc37f6b52e3a2d793bc1aa78`, run 38142998537, completed all 17 full
+files (343 raw rows each): Linux 2406 passes/0 failures/0 R warnings/13 exact OS guards is
+GREEN; Windows 2626 passes/2 failures/1 R warning/10 exact guards remains RED. Both pass
+53 scoped lint paths, 13 Python units and 2721 strict result-gate assertions. All 18 cleanup
+records per host confirm settlement, stopped roots and zero marked survivors/errors;
+controller warnings are zero. Canonical archive SHA256 is
+`710021c129790031c1348137a803d0bc5cd67d5463ef770fbddea2dfa817f883`. Bounded raw ZIPs,
+compact summaries and source manifests are in ignored `dev/.validation/windows-security-20261010`.
+All four fresh Linux plan stages pass: 25 plans, 1523 extracted blocks, 770 R blocks,
+0 parse/style problems, 0 lints and 39 equal before/after source hashes. Retain 90 historical
+index warnings; they are distinct from test/runtime warnings.
 
-Local R, install/import, Quarto/render, GUI/kernel, build/check and model jobs remain WAITING:
-at06:22:30 PDT load22.24/44.99/63.01, CPU55.85%idle, RAM93GiB used/35GiB unused,
-swap23,951.75MiB used and disk13GiB. No thermal/performance warning is reported; load and
-disk gates remain unsafe. Preserve shared Ollama and unrelated work. Do not delete user files
-or stop models. Swap occupancy alone does not establish active paging. Owned process-family
-samples do not describe whole-job or model RAM. The nofollow observer remains inactive;
-current Windows dangling-link metadata warning stays fatal. Local dependency installation,
-installed frontend testing and current full CRAN/release checks remain pending.
+The publication regressions now pass 5 assertions each on both hosts after actual baseline
+RED and the minimal runtime correction. Windows original native duplex/no-reader/cancel
+passes 60 assertions with exact 4,000,000-byte output and 40,000 lines on each stream;
+peak family RSS 477,126,656 bytes, 29 samples, no sampling errors. Cold 19, warm 42,
+retirement 180, marker-family raw environment 81, Claude 243, Codex 448, checkpoint 119
+and MCP 167 assertions pass. Existing 2-second limits and all positive/restoration oracles
+remain unchanged. Passing the test watchdog does not prove production callr parent-state
+preservation or blocking-R parent-death behavior.
+
+Quarto record/replay/source hashes pass 71 assertions per host; bridges pass 128 Linux and
+118 Windows with two exact Windows guards. Hosted dependency preflights are actual. Child-only
+Quarto discovery finds the bundled RStudio executable without changing caller PATH. Private
+local pandas/NumPy wheels, local renders, installed frontends/GUI/kernels/models and full CRAN
+remain WAITING. Private-prefix/base-prefix/CPython 3.12/arm64/64-bit witnesses are mandatory
+before local wheel installation and separately before actual reticulate in each R context.
+
+Windows native absence remains 7 passes/1 failure/1 R warning. Fixed numeric observations
+prove an AI control-flag-only transition (0x9004 to 0x9404), with unchanged ordered DACL
+bytes; probe 2 proves safe existing-entry refusal, not effective UnauthorizedAccess denial.
+Exact restoration and the dangling-link metadata warning remain fatal. Reviewed `1cb666a`
+establishes a twice-verified stable owned-parent baseline before denial, preserving owner,
+ordered DACL and every subsequent denial/restoration gate. Native outcome is pending;
+arbitrary caller AI0 restoration and cross-identity ACL behavior remain unproved.
+
+Windows parent-death remains 8 passes/1 failure: provider request and ready publication now
+succeed, but an original pre-kill predicate fails before parent-only termination. Ten-second
+death was not observed. Reviewed `c001b94` adds fixed numeric statuses for the original 20
+predicates, evaluated once in order; warnings/errors, identity, readiness, marker and cleanup
+oracles and all deadlines remain unchanged. Actual diagnostic outcome is pending.
+
+Reviewed `cbef2a6` adds two mandatory native callr worker/artifact environment profiles on
+both Windows and Linux. Exact empty-variable preservation, transport, marker, key filtering,
+`r_process`/result behavior, state and cleanup checks remain strict. Registry is now 37 files,
+167 mandatory titles and 55 lint paths, with no new OS skip allowance. Both actual baseline
+cases are pending. Broader processx launcher proposals remain INACTIVE with watcher-order,
+failed-construction lifecycle, private ACL and parity blockers. No production fallback is adopted.
+
+Next exact-source selection is three COMPLETE files:
+`^test-(callr-parent-environment|subagent-worker|proc-writer-runtime)\.R$`.
+Run both new callr profiles, all 36 worker cases and all 44 writer cases, plus all four fresh
+Linux plan stages after this plan edit. Missing/partial/duplicate raw results, zero assertions,
+unexpected skips and any test/runtime warning remain fatal. Do not accept probe 2 as denial,
+normalize empty state, suppress metadata warnings or relax timing/resource/cleanup oracles.
+
+The optional nofollow observer/POSIX state correction remains SOURCE CLEAR but INACTIVE;
+7 R/10 Python actual cases and combined supervisor/family RSS proof are pending. Genuine
+junction and unknown-reparse native coverage remains a documented design gap. Merge,
+D-019, current full CRAN and release remain OPEN. No live inference, local import/install/
+render/test/build or unrelated process cleanup while resources are unsafe.
 
 Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
