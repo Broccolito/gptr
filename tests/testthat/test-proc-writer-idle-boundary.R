@@ -166,7 +166,8 @@ warm_idle_run = function() {
   runner("idle-warm-boundary")
 }
 
-testthat::test_that("two warm acknowledged Windows writers do not starve a third two-second write", {
+testthat::test_that(
+  "two warm acknowledged Windows writers do not starve a third two-second write", {
   testthat::skip_on_cran()
   testthat::skip_if(.Platform$OS.type != "windows", "requires actual Windows writer runtime")
   x = warm_idle_run()
