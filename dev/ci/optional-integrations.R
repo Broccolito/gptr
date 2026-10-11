@@ -104,11 +104,16 @@ optional_titles = list(
     "writer accepts ordinary input published after its directory snapshot",
     "writer refuses an alias published after its directory snapshot",
     "writer refuses a directory published after its directory snapshot",
-    "absence observations retain only fixed probe and bounded parent ACL numbers"),
+    "absence observations retain only fixed probe and bounded parent ACL numbers",
+    "absence observations retain only fixed bounded file ACL differences"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
-    "write_all() times out on a child that reads nothing and refuses one without a pipe"),
+    "write_all() times out on a child that reads nothing and refuses one without a pipe",
+    "an exact self marker survives the orphan sweep without process operations",
+    "unverifiable self creation time retains recovery without authorizing cleanup",
+    "self marker rejection preserves corrupt-record and foreign-parent policy",
+    "orphan cleanup refuses current-PID records before any process operation"),
   "test-proc-supervise.R" = c(
     "kill_all() leaves no descendant",
     "boundary: orphan cleanup waits for a kill that completes asynchronously",

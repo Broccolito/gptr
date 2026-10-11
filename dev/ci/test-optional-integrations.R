@@ -211,7 +211,8 @@ writer_runtime_titles = c(
   "writer accepts ordinary input published after its directory snapshot",
   "writer refuses an alias published after its directory snapshot",
   "writer refuses a directory published after its directory snapshot",
-  "absence observations retain only fixed probe and bounded parent ACL numbers")
+  "absence observations retain only fixed probe and bounded parent ACL numbers",
+  "absence observations retain only fixed bounded file ACL differences")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -300,7 +301,11 @@ writer_affected_titles = list(
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
-    "write_all() times out on a child that reads nothing and refuses one without a pipe"),
+    "write_all() times out on a child that reads nothing and refuses one without a pipe",
+    "an exact self marker survives the orphan sweep without process operations",
+    "unverifiable self creation time retains recovery without authorizing cleanup",
+    "self marker rejection preserves corrupt-record and foreign-parent policy",
+    "orphan cleanup refuses current-PID records before any process operation"),
   "test-proc-supervise.R" = c(
     "kill_all() leaves no descendant",
     "boundary: orphan cleanup waits for a kill that completes asynchronously",
@@ -1575,10 +1580,10 @@ testthat::test_that("absence numeric observations require a unique positive row 
   file = "test-proc-writer-runtime.R"
   title = "absence observations retain only fixed probe and bounded parent ACL numbers"
   expected = c(writer_runtime_titles[seq_len(43L)], title)
-  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(optional_titles[[file]][seq_len(44L)], expected)
   testthat::expect_identical(length(expected), 44L)
   testthat::expect_identical(anyDuplicated(expected), 0L)
-  rows = lapply(expected, record)
+  rows = lapply(writer_runtime_titles, record)
   i = match(title, expected)
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
@@ -1655,6 +1660,100 @@ testthat::test_that("native callr profiles require complete positive rows on bot
       }
     }
     unknown = record("unrelated callr parent capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+})
+
+testthat::test_that("bounded file ACL observations retain the complete mandatory writer vector", {
+  file = "test-proc-writer-runtime.R"
+  title = "absence observations retain only fixed bounded file ACL differences"
+  expected = c(writer_runtime_titles[seq_len(44L)], title)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(length(expected), 45L)
+  testthat::expect_identical(anyDuplicated(expected), 0L)
+  rows = lapply(expected, record)
+  i = 45L
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_true(title %in% result$mandatory_cases)
+    testthat::expect_false(optional_allowed_skip(file, title, windows))
+    testthat::expect_false(optional_allowed_skip("test-proc-spawn.R", title, windows))
+    testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+    testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+    messages = c(passed = "assertions", failed = "Failed", warnings = "Warnings")
+    for (field in names(messages)) {
+      changed = rows
+      changed[[i]][[field]] = if (field == "passed") 0L else 1L
+      testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+    }
+    late = rows
+    late[[i]]$passed = 3L
+    late[[i]]$skipped = 1L
+    testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+    for (kind in c("expectation_error", "expectation_warning")) {
+      raw = rows
+      raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+        structure(list(), class = "expectation_success"),
+        structure(list(message = "controlled bounded file ACL condition"),
+          class = c(kind, "condition"))))))[[1L]]
+      testthat::expect_error(optional_gate(raw, file, windows))
+    }
+    unknown = record("unrelated file ACL capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+})
+
+testthat::test_that("self marker cases retain the complete mandatory process vector", {
+  file = "test-proc-spawn.R"
+  original = c(
+    "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
+    "a 4 MB payload to a child that echoes each line completes without deadlock",
+    "write_all() times out on a child that reads nothing and refuses one without a pipe")
+  added = c(
+    "an exact self marker survives the orphan sweep without process operations",
+    "unverifiable self creation time retains recovery without authorizing cleanup",
+    "self marker rejection preserves corrupt-record and foreign-parent policy",
+    "orphan cleanup refuses current-PID records before any process operation")
+  expected = c(original, added)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(length(expected), 7L)
+  testthat::expect_identical(anyDuplicated(expected), 0L)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_identical(result$mandatory_cases, expected)
+    testthat::expect_length(result$platform_guard_cases, 0L)
+    testthat::expect_error(optional_gate(rows[seq_len(3L)], file, windows), "Missing mandatory")
+    for (i in 4:7) {
+      title = expected[[i]]
+      testthat::expect_false(optional_allowed_skip(file, title, windows))
+      testthat::expect_false(optional_allowed_skip("test-proc-writer-runtime.R", title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      messages = c(passed = "assertions", failed = "Failed", warnings = "Warnings")
+      for (field in names(messages)) {
+        changed = rows
+        changed[[i]][[field]] = if (field == "passed") 0L else 1L
+        testthat::expect_error(optional_gate(changed, file, windows), messages[[field]])
+      }
+      late = rows
+      late[[i]]$passed = 3L
+      late[[i]]$skipped = 1L
+      testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      for (kind in c("expectation_error", "expectation_warning")) {
+        raw = rows
+        raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+          structure(list(), class = "expectation_success"),
+          structure(list(message = "controlled self marker condition"),
+            class = c(kind, "condition"))))))[[1L]]
+        testthat::expect_error(optional_gate(raw, file, windows))
+      }
+    }
+    unknown = record("unrelated self marker capability guard", passed = 3L, skipped = 1L)
     testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
   }
 })
