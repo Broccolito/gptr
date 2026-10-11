@@ -656,3 +656,152 @@ testthat::test_that("idle writer omissions, raw errors and late skips cannot pas
   testthat::expect_error(optional_gate(list(record(name, passed = 3L, skipped = 1L)),
     file, TRUE), "Skipped")
 })
+
+testthat::test_that("controller warning diagnostics omit messages, arguments and custom classes", {
+  canary = "CONTROLLED_PRIVATE_WARNING_CANARY"
+  warning = structure(list(message = canary, call = call("ps_kill_tree", canary)),
+    class = c(canary, "simpleWarning", "warning", "condition"))
+  diagnostic = optional_controller_diagnostic(warning, "marker-kill", "dependency-preflight")
+  testthat::expect_identical(diagnostic$phase, "marker-kill")
+  testthat::expect_identical(diagnostic$label, "dependency-preflight")
+  testthat::expect_identical(diagnostic$classes, c("simpleWarning", "warning", "condition"))
+  testthat::expect_identical(diagnostic$other_class_count, 1L)
+  testthat::expect_identical(diagnostic$call_head, "ps_kill_tree")
+  testthat::expect_false(grepl(canary, jsonlite::toJSON(diagnostic), fixed = TRUE))
+  warning$call = call(canary, canary)
+  diagnostic = optional_controller_diagnostic(warning, "child-result", "dependency-preflight")
+  testthat::expect_identical(diagnostic$call_head, "other")
+  testthat::expect_false(grepl(canary, jsonlite::toJSON(diagnostic), fixed = TRUE))
+  state = optional_controller_state()
+  testthat::expect_error(optional_controller_phase(state, canary, "controller"),
+    "Unapproved controller phase")
+  testthat::expect_error(optional_controller_phase(state, "child-wait", canary),
+    "Unapproved controller label")
+})
+
+testthat::test_that("controller warnings include main cleanup and cannot leave a passing summary", {
+  output = withr::local_tempdir()
+  main = function(controller) {
+    controller$summary = list(passed = TRUE)
+    optional_controller_phase(controller, "child-result", "dependency-preflight")
+    warning("controlled body warning", call. = FALSE)
+    on.exit({
+      optional_controller_phase(controller, "marker-kill", "dependency-preflight")
+      warning("controlled cleanup warning", call. = FALSE)
+    })
+    invisible(NULL)
+  }
+  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output),
+    "Controller warnings captured"), "controlled")
+  witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
+  summary = jsonlite::read_json(file.path(output, "integration-summary.json"))
+  testthat::expect_false(witness$passed)
+  testthat::expect_identical(witness$warnings_total, 2L)
+  testthat::expect_false(witness$diagnostics_truncated)
+  testthat::expect_identical(vapply(witness$diagnostics, function(x) x$phase, ""),
+    c("child-result", "marker-kill"))
+  testthat::expect_false(summary$passed)
+  testthat::expect_identical(summary$controller_warnings$warnings_total, 2L)
+})
+
+testthat::test_that(
+  "controller warnings preserve an original error and bounded structural evidence", {
+  output = withr::local_tempdir()
+  original = structure(list(message = "controlled original error", call = NULL),
+    class = c("optional_fixture_error", "error", "condition"))
+  main = function(controller) {
+    on.exit(warning("controlled cleanup warning", call. = FALSE))
+    stop(original)
+  }
+  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output),
+    class = "optional_fixture_error"), "controlled")
+  witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
+  testthat::expect_false(witness$passed)
+  testthat::expect_true(witness$original_error)
+  testthat::expect_identical(witness$warnings_total, 1L)
+  testthat::expect_false(grepl("controlled original error",
+    jsonlite::toJSON(witness), fixed = TRUE))
+})
+
+testthat::test_that("controller warnings keep a complete count with at most 25 diagnostics", {
+  output = withr::local_tempdir()
+  main = function(controller) {
+    for (i in seq_len(27L)) warning("controlled repeated warning", call. = FALSE)
+  }
+  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output),
+    "Controller warnings captured"), "controlled")
+  witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
+  testthat::expect_identical(witness$warnings_total, 27L)
+  testthat::expect_length(witness$diagnostics, 25L)
+  testthat::expect_true(witness$diagnostics_truncated)
+  testthat::expect_false(witness$passed)
+})
+
+testthat::test_that("a warning-free controller writes an affirmative witness", {
+  output = withr::local_tempdir()
+  main = function(controller) {
+    controller$summary = list(passed = TRUE)
+    42L
+  }
+  testthat::expect_identical(optional_controller_run(main, output), 42L)
+  witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
+  summary = jsonlite::read_json(file.path(output, "integration-summary.json"))
+  testthat::expect_true(witness$passed)
+  testthat::expect_false(witness$original_error)
+  testthat::expect_identical(witness$warnings_total, 0L)
+  testthat::expect_length(witness$diagnostics, 0L)
+  testthat::expect_false(witness$diagnostics_truncated)
+  testthat::expect_true(summary$passed)
+})
+
+testthat::test_that("a late artifact-write warning fails after main has returned", {
+  output = withr::local_tempdir()
+  state = new.env(parent = emptyenv())
+  state$warned = FALSE
+  main = function(controller) {
+    controller$summary = list(passed = TRUE)
+    invisible(NULL)
+  }
+  write = function(value, path) {
+    if (!state$warned && basename(path) == "controller-warnings.json") {
+      state$warned = TRUE
+      warning("controlled late write warning", call. = FALSE)
+    }
+    optional_controller_write(value, path)
+  }
+  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output,
+    write = write), "Controller warnings captured"), "controlled")
+  witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
+  summary = jsonlite::read_json(file.path(output, "integration-summary.json"))
+  testthat::expect_false(witness$passed)
+  testthat::expect_identical(witness$warnings_total, 1L)
+  testthat::expect_identical(witness$diagnostics[[1L]]$phase, "controller-witness-json")
+  testthat::expect_false(summary$passed)
+  testthat::expect_identical(summary$controller_warnings$warnings_total, 1L)
+})
+
+testthat::test_that("a late summary-write warning revokes the summary's passing status", {
+  output = withr::local_tempdir()
+  state = new.env(parent = emptyenv())
+  state$warned = FALSE
+  main = function(controller) {
+    controller$summary = list(passed = TRUE)
+    invisible(NULL)
+  }
+  write = function(value, path) {
+    if (!state$warned && basename(path) == "integration-summary.json") {
+      state$warned = TRUE
+      warning("controlled late summary warning", call. = FALSE)
+    }
+    optional_controller_write(value, path)
+  }
+  testthat::expect_warning(testthat::expect_error(optional_controller_run(main, output,
+    write = write), "Controller warnings captured"), "controlled")
+  witness = jsonlite::read_json(file.path(output, "controller-warnings.json"))
+  summary = jsonlite::read_json(file.path(output, "integration-summary.json"))
+  testthat::expect_false(witness$passed)
+  testthat::expect_identical(witness$warnings_total, 1L)
+  testthat::expect_identical(witness$diagnostics[[1L]]$phase, "integration-summary-json")
+  testthat::expect_false(summary$passed)
+  testthat::expect_identical(summary$controller_warnings$warnings_total, 1L)
+})

@@ -308,6 +308,103 @@ optional_check_logs = function(paths) {
   invisible(NULL)
 }
 
+optional_controller_phases = c("controller", "child-launch", "child-wait", "child-result",
+  "raw-result-json", "child-warning-gate", "promise-log-gate", "test-result-gate",
+  "kill-tree", "marker-kill", "family-root-query", "family-marked-query", "cleanup-json",
+  "integration-summary-json", "integration-progress-json", "controller-witness-json")
+
+optional_controller_state = function() {
+  state = new.env(parent = emptyenv())
+  state$phase = "controller"
+  state$label = "controller"
+  state$total = 0L
+  state$diagnostics = list()
+  state$summary = NULL
+  state
+}
+
+optional_controller_phase = function(state, phase, label) {
+  if (!phase %in% optional_controller_phases) stop("Unapproved controller phase")
+  if (!label %in% c("controller", "dependency-preflight", names(optional_titles)))
+    stop("Unapproved controller label")
+  state$phase = phase
+  state$label = label
+  invisible(NULL)
+}
+
+optional_controller_diagnostic = function(condition, phase, label) {
+  if (!phase %in% optional_controller_phases) phase = "controller"
+  if (!label %in% c("controller", "dependency-preflight", names(optional_titles)))
+    label = "controller"
+  allowed_classes = c("simpleWarning", "warning", "condition", "rlang_warning", "rlang_condition")
+  classes = class(condition)
+  call = conditionCall(condition)
+  head = if (is.call(call)) call[[1L]] else NULL
+  name = if (is.name(head)) as.character(head) else "other"
+  if (is.call(head) && length(head) == 3L && is.name(head[[1L]]) &&
+      as.character(head[[1L]]) %in% c("$", "::", ":::")) {
+    name = if (is.name(head[[3L]])) as.character(head[[3L]]) else "other"
+  }
+  allowed_heads = c("wait", "get_result", "is_alive", "kill_tree", "ps_kill_tree",
+    "ps_find_tree", "ps_handle", "write_json", "optional_controller_write", "readLines")
+  if (!name %in% allowed_heads) name = "other"
+  list(phase = phase, label = label, classes = unname(intersect(classes, allowed_classes)),
+    other_class_count = as.integer(sum(!classes %in% allowed_classes)), call_head = name)
+}
+
+optional_controller_observe = function(state, condition) {
+  state$total = state$total + 1L
+  if (length(state$diagnostics) < 25L) {
+    state$diagnostics[[length(state$diagnostics) + 1L]] =
+      optional_controller_diagnostic(condition, state$phase, state$label)
+  }
+  invisible(NULL)
+}
+
+optional_controller_snapshot = function(state) {
+  list(warnings_total = state$total, diagnostics = state$diagnostics,
+    diagnostics_truncated = state$total > length(state$diagnostics))
+}
+
+optional_controller_write = function(value, path) {
+  jsonlite::write_json(value, path, pretty = TRUE, auto_unbox = TRUE, null = "null")
+}
+
+optional_controller_run = function(main = optional_integrations_main,
+                                    output = file.path(getwd(), "optional-evidence"),
+                                    write = optional_controller_write) {
+  state = optional_controller_state()
+  withCallingHandlers({
+    dir.create(output, showWarnings = FALSE, recursive = TRUE)
+    outcome = tryCatch(list(value = main(state), error = NULL),
+      error = function(e) list(value = NULL, error = e))
+    final_error = tryCatch({
+      for (attempt in seq_len(2L)) {
+        before_attempt = state$total
+        if (!is.null(state$summary)) {
+          optional_controller_phase(state, "integration-summary-json", "controller")
+          state$summary$controller_warnings = optional_controller_snapshot(state)
+          state$summary$passed = isTRUE(state$summary$passed) && state$total == 0L &&
+            is.null(outcome$error)
+          write(state$summary, file.path(output, "integration-summary.json"))
+        }
+        optional_controller_phase(state, "controller-witness-json", "controller")
+        witness = c(list(passed = is.null(outcome$error) && state$total == 0L,
+          original_error = !is.null(outcome$error), artifact_finalization_attempt = attempt,
+          observation_boundary = "before this artifact write; later warnings remain fatal"),
+          optional_controller_snapshot(state))
+        write(witness, file.path(output, "controller-warnings.json"))
+        if (state$total == before_attempt) break
+      }
+      NULL
+    }, error = identity)
+    if (!is.null(outcome$error)) stop(outcome$error)
+    if (!is.null(final_error)) stop(final_error)
+    if (state$total > 0L) stop("Controller warnings captured: ", state$total)
+    invisible(outcome$value)
+  }, warning = function(w) optional_controller_observe(state, w))
+}
+
 optional_preflight = function() {
   required = c("gptr", "reticulate", "repr", "chromote", "knitr", "rmarkdown",
                 "shiny", "httpuv", "later", "bslib", "DBI", "RSQLite", "duckdb")
@@ -374,7 +471,7 @@ optional_preflight = function() {
     request_observer_scope = "dependency preflight only; source suites use fake/replay assertions")
 }
 
-optional_integrations_main = function() {
+optional_integrations_main = function(controller) {
   root = normalizePath(getwd())
   output = file.path(root, "optional-evidence")
   dir.create(output, showWarnings = FALSE)
@@ -384,8 +481,13 @@ optional_integrations_main = function() {
   summary = list(passed = FALSE, source_sha = Sys.getenv("GPTR_EXPECTED_SOURCE"),
     filter = pattern, selected_files = basename(files), per_file_timeout_s = 300L,
     external_live_tests_enabled = FALSE, results = list())
-  on.exit(jsonlite::write_json(summary, file.path(output, "integration-summary.json"),
-    pretty = TRUE, auto_unbox = TRUE, null = "null"), add = TRUE)
+  on.exit({
+    optional_controller_phase(controller, "integration-summary-json", "controller")
+    summary$controller_warnings = optional_controller_snapshot(controller)
+    if (controller$total > 0L) summary$passed = FALSE
+    controller$summary = summary
+    optional_controller_write(summary, file.path(output, "integration-summary.json"))
+  }, add = TRUE)
   child = function(action, file = NULL) {
     source("dev/ci/optional-integrations.R", local = TRUE)
     conditions = new.env(parent = emptyenv())
@@ -426,13 +528,21 @@ optional_integrations_main = function() {
     process = NULL
     on.exit({
       cleanup_error = tryCatch({
+        optional_controller_phase(controller, "kill-tree", label)
         if (!is.null(process)) process$kill_tree()
+        optional_controller_phase(controller, "marker-kill", label)
         ps::ps_kill_tree(marker)
         NULL
       }, error = function(e) substr(conditionMessage(e), 1L, 2000L))
-      family = optional_wait_family(function() is.null(process) || !process$is_alive(),
-        function() ps::ps_find_tree(marker))
+      family = optional_wait_family(function() {
+        optional_controller_phase(controller, "family-root-query", label)
+        is.null(process) || !process$is_alive()
+      }, function() {
+        optional_controller_phase(controller, "family-marked-query", label)
+        ps::ps_find_tree(marker)
+      })
       settled = family$settled && is.null(cleanup_error)
+      optional_controller_phase(controller, "cleanup-json", label)
       jsonlite::write_json(c(list(passed = settled, settlement_bound_s = 5L,
         cleanup_error = cleanup_error, scope = "owned child and marker-inheriting descendants"),
         family),
@@ -440,16 +550,22 @@ optional_integrations_main = function() {
         auto_unbox = TRUE, null = "null")
       if (!settled) stop("Owned child family did not settle: ", label)
     }, add = TRUE)
+    optional_controller_phase(controller, "child-launch", label)
     process = callr::r_bg(child, list(action, file), stdout = stdout_log, stderr = log,
       cmdargs = c("--vanilla", "--slave"), user_profile = FALSE, system_profile = FALSE,
       cleanup_tree = TRUE, supervise = FALSE,
       env = c(callr::rcmd_safe_env(), stats::setNames("YES", marker)))
+    optional_controller_phase(controller, "child-wait", label)
     process$wait(timeout * 1000)
     if (process$is_alive()) stop("Owned child deadline exceeded: ", label)
+    optional_controller_phase(controller, "child-result", label)
     result = process$get_result()
+    optional_controller_phase(controller, "raw-result-json", label)
     jsonlite::write_json(result, file.path(output, paste0(label, "-results.json")),
       pretty = TRUE, auto_unbox = TRUE, null = "null")
+    optional_controller_phase(controller, "child-warning-gate", label)
     stopifnot(!length(result$outside_test_warning_classes))
+    optional_controller_phase(controller, "promise-log-gate", label)
     optional_check_logs(c(stdout_log, log))
     result
   }
@@ -474,6 +590,7 @@ optional_integrations_main = function() {
     cat("Starting ", name, " (300 s bound)\n", sep = "", file = stderr())
     value = tryCatch({
       res = invoke("test", name, file)
+      optional_controller_phase(controller, "test-result-gate", name)
       gate = optional_gate(res$result, name, .Platform$OS.type == "windows")
       list(passed = TRUE, gate = gate, known_build_advisories = res$known_build_advisories)
     }, error = function(e) {
@@ -484,14 +601,15 @@ optional_integrations_main = function() {
     value$elapsed_s = proc.time()[["elapsed"]] - started
     summary$results[[name]] = value
     if (!isTRUE(value$passed)) failures = c(failures, name)
+    optional_controller_phase(controller, "integration-progress-json", name)
     jsonlite::write_json(summary, file.path(output, "integration-progress.json"),
       pretty = TRUE, auto_unbox = TRUE, null = "null")
     cat("Finished ", name, ": ", if (value$passed) "PASS" else "FAIL", "\n",
         sep = "", file = stderr())
   }
-  summary$passed = !length(failures)
+  summary$passed = !length(failures) && controller$total == 0L
   if (length(failures))
     stop("Optional integration files failed: ", paste(failures, collapse = ", "))
 }
 
-if (sys.nframe() == 0L) optional_integrations_main()
+if (sys.nframe() == 0L) optional_controller_run()
