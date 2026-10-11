@@ -3,7 +3,9 @@ import importlib.util
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location('optional_dependencies',
     Path(__file__).with_name('optional-dependencies.py'))
@@ -97,6 +99,31 @@ class DiscoveryTests(unittest.TestCase):
                          [str(git / 'usr/bin')])
         self.assertEqual(MODULE.auxiliary_directories(env, platform='linux'), [])
         self.assertEqual(env, {'ProgramFiles': str(self.root)})
+
+    def test_windows_launch_preserves_argv_environment_and_exact_exit_status(self):
+        argv = ['C:\\space path\\Rscript.exe', '--vanilla', '-e', 'message("literal $value")']
+        env = {'PATH': 'owned-path', 'GPTR_LIVE_TESTS': 'false'}
+        original = dict(env)
+        with mock.patch.object(MODULE.sys, 'platform', 'win32'), \
+                mock.patch.object(MODULE.subprocess, 'run',
+                                  return_value=SimpleNamespace(returncode=7)) as run, \
+                mock.patch.object(MODULE.os, 'execvpe') as overlay:
+            with self.assertRaises(SystemExit) as result:
+                MODULE.launch_child(argv, env)
+            self.assertEqual(result.exception.code, 7)
+            run.assert_called_once_with(argv, shell=False, env=env)
+            overlay.assert_not_called()
+        self.assertEqual(env, original)
+
+    def test_posix_launch_preserves_existing_overlay_without_a_shell(self):
+        argv = ['/space path/Rscript', '--vanilla', '-e', '1 + 1']
+        env = {'PATH': 'owned-path', 'GPTR_LIVE_TESTS': 'false'}
+        with mock.patch.object(MODULE.sys, 'platform', 'linux'), \
+                mock.patch.object(MODULE.os, 'execvpe') as overlay, \
+                mock.patch.object(MODULE.subprocess, 'run') as run:
+            MODULE.launch_child(argv, env)
+            overlay.assert_called_once_with(argv[0], argv, env)
+            run.assert_not_called()
 
 
 if __name__ == '__main__':

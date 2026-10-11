@@ -26,7 +26,8 @@ Linux runners have separate resources and can exercise the offline cases without
   samples family RSS/output and terminates only processes whose owned identities were recorded.
   They run on both Windows and Unix; only the usual CRAN opt-in gate applies.
 - The optional-tool helper discovers executable paths without launching tools or importing
-  Python modules. Its eight stdlib unit tests passed in 0.023 seconds. The local bundled
+  Python modules. Its eleven stdlib unit tests now pass, including mocked Windows argv/env/
+  exact-exit propagation. The local bundled
   Quarto exists; the private Python environment still needs pandas/NumPy before local integration.
 
 New R cases were prepared before actual-platform execution. The unchanged Windows file runner
@@ -38,12 +39,12 @@ cross-plan checks passed on candidate `245de54`. Runtime implementation remains 
 
 | Item | State | Evidence |
 | --- | --- | --- |
-| Quarto/tool-path discovery helper | Source prepared; Python unit tests passed | Agent-owned 8-case stdlib run; no tools launched |
+| Quarto/tool-path discovery helper | Provisioning and prior9 Python tests passed on both hosts | New11-test source mock suite passed; actual Windows subprocess launch still pending |
 | Local pandas/NumPy install | Waiting for resources | Existing private Python 3.12 lacks both modules |
 | Actual Windows security baseline | Failed fixtures; corrected source ready | Run `38112622473`: raw 6 errors, 3 failed assertions, 6 warnings, 53 passes, 0 skips |
 | Actual Windows/Unix child-process baseline | Windows runtime RED; Unix pending | Same run: 3 watchdog failures, 24 passes, 0 skips, no observed process-test warnings |
-| Strict optional integration workflow | Corrected rerun running | `38113687980` at39f3248 corrects both setup failures; actual integration still pending |
-| Index/extract/R-parse/lintr plan checks | Passed exact `245de54`; rerun with plan updates | All four Linux stages succeeded and source hashes matched before/after |
+| Strict optional integration workflow | Launcher/lint RED; minimal correction ongoing | `38113687980` at39f3248: provisioning/Python9/Rgate21 passed both hosts, Windows launcher exit139, Linux two brace lints; integration did not run |
+| Index/extract/R-parse/lintr plan checks | Passed exact `245de54` and39f3248; rerun with plan updates | All four Linux stages succeeded twice and source hashes matched before/after |
 | Owned-writer transport prototype | Source prepared; independent peer review clear | Four bounded cases retain original native-runtime RED tests;92 expected assertions, no actual execution yet; not a production fix |
 | Shared Ollama model | Preserved | No model stop, unload or inference request |
 
@@ -77,7 +78,17 @@ and `test_file()` changes into `dev/ci`, making the unit helper's root-relative 
 invalid. The reviewed correction selects Python `3.12.10`, available for both hosts, and a
 helper path valid in either controlled working directory. Optional integration cases, their
 scoped R lint, and corrected Windows fixtures have not run yet. Source syntax and Python tests
-are preparation only; the corrected exact39f3248 hosted rerun38113687980 is running.
+are preparation only. The corrected exact39f3248 hosted rerun38113687980 completed:
+dependency provisioning succeeded and both hosts passed9 Python tests plus21 R gate assertions,
+with0 failures/warnings/skips. Windows then reported launcher exit139 before R lint; Linux
+reported exactly two brace-linter findings in the runner and0 in the pure R gate file. No
+optional integration or corrected security/prototype case ran. The minimal follow-up uses
+Windows `subprocess.run(..., shell=False, env=owned_environment)` with exact exit propagation,
+preserves POSIX exec, and adds the two missing function braces without disabling lint rules.
+Its two mock launcher tests were RED before the correction and GREEN afterwards; that does
+not prove actual Windows R launch. All four Linux plan stages again passed39f3248 (index164s,
+extraction0.5s, parse1.8s, lint101s), within their original bounds and with unchanged source
+manifests. The prototype packet is committed at3a17f9e and awaits the corrected nine-file run.
 
 The test-only owned writer keeps the actual target's ordinary processx stdin pipe and moves
 its potentially blocking write into a separately tracked child. Private atomic mailbox files

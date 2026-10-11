@@ -145,8 +145,9 @@ optional_preflight = function() {
     quarto_version = trimws(quarto$stdout), ripgrep_version = strsplit(rg$stdout, "\n")[[1L]][1L],
     perl_path = unname(Sys.which("perl")), perl_expression_value = perl$stdout,
     r_version = R.version.string,
-    package_versions = as.list(stats::setNames(vapply(required, function(name)
-      as.character(utils::packageVersion(name)), ""), required)),
+    package_versions = as.list(stats::setNames(vapply(required, function(name) {
+      as.character(utils::packageVersion(name))
+    }, ""), required)),
     before_request_events = counters$request, usage_events = counters$usage,
     fresh_native_usage_rows = nrow(gptr:::usage_log()) - native,
     request_observer_scope = "dependency preflight only; source suites use fake/replay assertions")
@@ -227,8 +228,10 @@ optional_integrations_main = function() {
     list(passed = isTRUE(observed$result$passed), witness = observed$result,
       known_build_advisories = observed$known_build_advisories)
   },
-    error = function(e) list(passed = FALSE, error_class = class(e)[1L],
-      reason = substr(conditionMessage(e), 1L, 2000L)))
+    error = function(e) {
+      list(passed = FALSE, error_class = class(e)[1L],
+        reason = substr(conditionMessage(e), 1L, 2000L))
+    })
   if (!isTRUE(summary$preflight$passed)) {
     reason = summary$preflight$reason
     if (is.null(reason)) reason = "Dependency preflight has no positive passing witness"

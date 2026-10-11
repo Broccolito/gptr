@@ -472,12 +472,16 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Browser/search prerequisites | Local Chrome/chromote/rg exist. ONGOING explicit hosted discovery/preflight; retain Chrome startup bound, actual render/screenshot proof and search comparison. |
 | Windows filesystem safety | Initial hosted38112622473 failed fixtures: raw6errors/3failures/6warnings/53passes/0skips. ONGOING corrected named temporary script/integer initial timestamps; eight strict actual-platform tests preserved, option-name diagnostic added. Link/cache runtime failures not yet established. |
 | Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. ONGOING owned-writer prototype review; four source-only probes retain fixed deadlines/RSS/output, byte/line oracles and identity-checked cleanup. Unix control pending. D-019 remains open. |
-| Validation/merge | Candidate `39f3248` pushed; corrected two-host38113687980 is RUNNING. Prior38113192422 at245de54 failed setup before integration: Windows Python3.12.12 unavailable, Linux unit helper source path invalid. WAITING strict integration GREEN/scoped lint/required-case counts, then integration. No skipped-case or zero-selection pass. |
+| Validation/merge | Candidate `3a17f9e` pushed with source-only writer probes. Two-host38113687980 at39f3248 passed provisioning/Python9/Rgate21, then failed before integration: Windows launcher exit139 and Linux two brace lints. ONGOING minimal launcher/braces correction. WAITING strict integration GREEN/scoped lint/required-case counts, then integration. No skipped-case or zero-selection pass. |
 
-The optional dependency helper's9 stdlib tests and plan diagnostic guard's6 stdlib tests
+The optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
+The two-host39f3248 run actually passed the prior9 Python tests and21 R result-gate assertions
+with0 failures/warnings/skips. The new2 launcher regressions use mocks; hosted Windows launch
+remains pending. Linux found2 brace lints in the runner; its pure R gate file had0 lints.
 All four mandatory index/extract/R-parse/lintr plan checks actually passed on Linux at
-exact245de54 in38113192422:25 plans,770 R blocks,0 parse/style problems and0 lints;
+exact245de54 in38113192422 and again at39f3248 in38113687980. Verified245de54 artifact:
+25 plans,770 R blocks,0 parse/style problems and0 lints;
 the index retained90 historical warning-level findings and0 error-level findings. Its
 39-file source manifests matched before/after; artifact SHA25675c33efa0c44799c1b7d9d231d6414114112e93fa18a08696663f7f854552466.
 Recheck the updated plan

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -112,6 +113,14 @@ def isolated_environment(environment, run):
     return result
 
 
+def launch_child(command, environment):
+    if sys.platform == 'win32':
+        # Windows cannot replace this Python process with the POSIX exec contract.
+        completed = subprocess.run(command, shell=False, env=environment)
+        raise SystemExit(completed.returncode)
+    os.execvpe(command[0], command, environment)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in NAMES:
@@ -137,7 +146,7 @@ def main():
         if args.state_dir is None:
             parser.error('--run requires a fresh --state-dir')
         environment = isolated_environment(environment, args.state_dir)
-        os.execvpe(args.run[0], args.run, environment)
+        launch_child(args.run, environment)
     print(json.dumps(manifest, indent=2))
 
 
