@@ -172,6 +172,10 @@ mcp_serve_call = function(target, name, args, id) {
   s = target$session
   live = session_live(s)
   if (is.null(live)) return(gptr_tool_result("This session is not live.", is_error = TRUE))
+  if (isTRUE(live$compacting)) {
+    return(gptr_tool_result("Tools are not available during conversation compaction.",
+                            is_error = TRUE))
+  }
   run = live$run
   ctx = live$ctx
   sid = session_data(s)$id

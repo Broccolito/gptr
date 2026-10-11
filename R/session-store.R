@@ -530,12 +530,26 @@ rebuild_own = function(entries, fork) {
   if (is.na(at)) entries else entries[-seq_len(at)]
 }
 
-#' Usage rows of a rebuilt session, from its assistant messages with their recorded request ids;
+#' Usage rows of a rebuilt session, from assistant messages and checkpoint attempt records;
 #' an unrecorded count stays unknown (`NA`, IC-74) and a recorded estimate stays `estimated`
 #' @noRd
 rebuild_usage = function(entries, d) {
   rows = list(usage_empty())
   for (e in entries) {
+    if (identical(e$type, "custom") && identical(e$custom_type, "gptr.compaction_usage")) {
+      check_list(e$data, "compaction usage data", named = TRUE)
+      row = e$data[["row"]]
+      check_list(row, "compaction usage row", named = TRUE)
+      check_string(row[["request_id"]], "compaction usage$request_id")
+      row = lapply(row, function(value) value %||% NA)
+      if (any(lengths(row) != 1L)) {
+        arg_abort(row, "compaction usage row", "one scalar value per field")
+      }
+      row$session = d$id
+      row$parent_id = d$parent_id %||% NA_character_
+      rows[[length(rows) + 1L]] = usage_rows_check(usage_conform(row), "compaction usage")
+      next
+    }
     if (!identical(e$type, "message") || !identical(e$message$role, "assistant")) next
     m = e$message
     if (is.null(m$usage)) next

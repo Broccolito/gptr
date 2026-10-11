@@ -229,11 +229,19 @@ cmd_compact = function(args, ctx) {
   s = ctx$session
   if (is.null(s)) return("There is no conversation to compact yet.")
   compact = ext_service_get("compact.run")
+  count = function() {
+    sum(vapply(session_data(s)$entries, function(e) identical(e$type, "compaction"), NA))
+  }
+  before = count()
   done = with_interrupt_policy(function() {
     compact(s, "manual", if (nzchar(args)) args)
-    TRUE
+    count() > before
   }, list(), mode = "repl")
-  if (isTRUE(done)) "Conversation compacted." else "Compaction was interrupted."
+  if (isTRUE(done)) "Conversation compacted." else if (identical(done, FALSE)) {
+    "Compaction was cancelled."
+  } else {
+    "Compaction was interrupted."
+  }
 }
 
 #' @noRd

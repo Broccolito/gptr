@@ -406,6 +406,46 @@ compact_request_text = function(focus = NULL) {
   sub("{focus}", f, prompt_text("compaction_request"), fixed = TRUE)
 }
 
+#' Charge and persist one checkpoint attempt, including an interrupted unknown observation
+#' The custom entry is accounting only: it is never projected into model context.
+#' @noRd
+compact_charge = function(s, target, context, msg, started, run, aborted = FALSE) {
+  d = session_data(s)
+  if (context$request_id %in% d$usage$request_id) return(invisible(NULL))
+  msg = msg %||% list()
+  msg$api = msg$api %||% target$api
+  msg$provider = msg$provider %||% target$provider
+  msg$model = msg$model %||% target$id
+  msg$request_id = context$request_id
+  msg$route = msg$route %||%
+    if (target$api %in% c("cli-claude", "cli-codex")) "plan-cli" else "api"
+  msg$stop_reason = msg$stop_reason %||% if (aborted) "aborted" else "error"
+  if (aborted) {
+    u = msg$usage %||% list()
+    for (name in setdiff(usage_fields, names(u))) u[[name]] = NA_real_
+    if (!("cost" %in% names(u))) u$cost = cost_unknown()
+    msg$usage = usage_as(u)
+  }
+  row = usage_conform(usage_row(
+    msg, session = d$id, agent = run[["opts"]][["agent"]] %||% "main",
+    parent_id = d$parent_id %||% NA_character_, started = started,
+    seconds = as.numeric(difftime(Sys.time(), started, units = "secs")),
+    multiplier = d$estimator$m %||% 1))
+  usage_add(s, row)
+  ledger_mark_cached(s, context$request_id, row$cache_read)
+  stored = as.list(row)
+  stored$started = as.numeric(row$started)
+  stored = lapply(stored, function(value) if (is.na(value)) NULL else value)
+  session_append(s, list(type = "custom", custom_type = "gptr.compaction_usage",
+                         data = list(row = stored)))
+  event = prompt_event(s, "usage", row = row)
+  # Keep the originating run's identity when settlement charges this nested request.
+  event$run = run[["id"]]
+  event$agent = run[["opts"]][["agent"]] %||% "main"
+  ev_dispatch("usage", event, session = s, ctx = session_live(s)$ctx)
+  invisible(row)
+}
+
 #' Send one checkpoint request in-conversation (a cache read); its reply or NULL
 #' Guarded, then the model's stored view is put back; the run's safety record goes along (IC-74);
 #' the nested pump runs no tool (IC-57) and ends on abort or settle, cancelling the transfer.
@@ -429,9 +469,24 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
   context = req$context
   context$params$max_tokens = 2048L
   context$params$returns = NULL
+  active = inherits(run, "gptr_run") && is.environment(run) && rlang::is_string(run$id)
+  estimate = if (is.finite(req$tokens_est)) req$tokens_est else 0
+  if (active && !is.null(budget_check(s, estimate))) return(NULL)
+  if (active) {
+    ev_dispatch("before_request", prompt_event(s, "before_request", provider = target$provider,
+                                                model = target$ref,
+                                                request_id = context$request_id,
+                                                view = req$view, tokens_est = req$tokens_est),
+                session = s, ctx = live$ctx)
+    if (compact_run_halted(run)) return(NULL)
+  }
   box = new.env(parent = emptyenv())
   box$msg = NULL
   box$done = FALSE
+  box$started = FALSE
+  box$charged = FALSE
+  box$cancelled = FALSE
+  box$usage = NULL
   signal = new.env(parent = emptyenv())
   signal$aborted = FALSE
   signal$reason = NULL
@@ -439,8 +494,51 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
               run = NULL)
   safety = run[["opts"]][["safety"]]
   if (!is.null(safety)) opts$safety = safety
+  prior = live$compacting
+  live$compacting = TRUE
   box$refused = FALSE
-  id = tryCatch(provider_stream(target, context, opts, emit = function(ev) NULL,
+  started = Sys.time()
+  id = NA_character_
+  mark_started = function() {
+    if (!isTRUE(box$started)) {
+      box$started = TRUE
+      ledger_add(s, context$request_id, req$components)
+    }
+    if (active && !(context$request_id %in% run$request_ids)) {
+      run$request_ids = c(run$request_ids, context$request_id)
+    }
+    invisible(NULL)
+  }
+  finish = function() {
+    if (!isTRUE(box$done)) {
+      signal$aborted = TRUE
+      if (rlang::is_string(id) && !isTRUE(box$cancelled)) {
+        box$cancelled = TRUE
+        reactor_cancel(id)
+      }
+    }
+    if (isTRUE(box$charged) || !isTRUE(box$started)) return(invisible(NULL))
+    box$charged = TRUE
+    msg = box$msg %||% list(usage = box$usage)
+    compact_charge(s, target, context, msg, started, run,
+                    aborted = isTRUE(signal$aborted) || compact_run_halted(run))
+    invisible(NULL)
+  }
+  previous_finish = if (active) run$compact_finish
+  if (active) run$compact_finish = finish
+  on.exit({
+    if (active && identical(run$compact_finish, finish)) {
+      run$compact_finish = if (!isTRUE(run$settled)) previous_finish
+    }
+    tryCatch(finish(), finally = {
+      live$compacting = prior
+    })
+  }, add = TRUE)
+  id = tryCatch(provider_stream(target, context, opts, emit = function(ev) {
+                                  if (identical(ev$type, "start")) mark_started()
+                                  if (is.list(ev$usage)) box$usage = ev$usage
+                                  invisible(NULL)
+                                },
                                 done = function(msg) {
                                   box$msg = msg
                                   box$done = TRUE
@@ -454,12 +552,7 @@ compact_ask_once = function(s, target, text, run = session_live(s)$run) {
                   NA_character_
                 })
   if (isTRUE(box$refused)) return(NULL)
-  on.exit({
-    if (!isTRUE(box$done) && rlang::is_string(id)) {
-      signal$aborted = TRUE
-      reactor_cancel(id)
-    }
-  }, add = TRUE)
+  if (rlang::is_string(id) && !is.na(id)) mark_started()
   reactor_pump(until = function() isTRUE(box$done) || compact_run_halted(run),
                allow_runs = character())
   box$msg
@@ -730,6 +823,15 @@ compact_run = function(s, reason, focus = NULL) {
                     session = s, ctx = ctx)
   if (!is.list(dec)) dec = NULL
   if (isTRUE(dec$cancel)) return(invisible(s))
+  notice = identical(reason, "manual") && !is.environment(run0) &&
+    is.null(session_live(s)$background) && is.null(run_current()) && verbosity() >= 1L
+  completed = FALSE
+  if (notice) {
+    gptr_inform("Compacting conversation...", "progress")
+    on.exit({
+      if (!completed) gptr_inform("Compaction did not finish.", "progress")
+    }, add = TRUE)
+  }
   res = dec$result
   strategy = "hook"
   if (!is.null(res) && !compact_result_ok(res)) {
@@ -817,6 +919,7 @@ compact_run = function(s, reason, focus = NULL) {
               prompt_event(s, "session_compact", strategy = strategy, tokens_before = tokens,
                            summary_tokens = prompt_est(summary, "prose", d$id)),
               session = s, ctx = ctx)
+  completed = TRUE
   invisible(s)
 }
 

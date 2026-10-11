@@ -58,6 +58,7 @@ run_new = function(s, opts, outer) {
   run$pending_operator = list()
   run$pending_model = NULL
   run$pending_compact = NULL
+  run$compact_finish = NULL
   run$blocked = NULL
   run$condition = NULL
   run$message = NULL
@@ -1414,6 +1415,16 @@ run_settle = function(run, reason) {
   live = session_live(s)
   status = switch(reason, aborted = "aborted", error = "error", max_turns = "max_turns",
                   blocked = "blocked", budget = "budget", "idle")
+  # A nested checkpoint has no ordinary message_end; charge it before persistence and agent_end.
+  finish = run$compact_finish
+  run$compact_finish = NULL
+  if (is.function(finish)) {
+    tryCatch(finish(), error = function(e) {
+      registry_diagnostic("session", "compaction_usage", class(e)[[1L]],
+                          paste0("the checkpoint charge could not be completed: ",
+                                 conditionMessage(e)))
+    })
+  }
   if (identical(status, "max_turns") && is.null(run$condition)) {
     run$condition = gptr_condition(
       paste0("the run stopped after ", run$max_turns, " turns (max_turns)"), "max_turns", "error",
