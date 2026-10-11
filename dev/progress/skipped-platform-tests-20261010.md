@@ -1474,3 +1474,34 @@ result in companion progress/ignored ledger without another plan edit. This chec
 replace package/integration, native or CRAN coverage. Current Windows denial/warning/callr
 gates, merge, D-019 and release remain OPEN.
 
+## Corrected plan checks complete — 2026-10-11 08:18 PDT
+
+The dependency correction is committed and pushed as
+`7685c00c829dd0f6de12994166558e5b365c6be7`. Its one-job
+[hosted run38150135957](https://github.com/Broccolito/gptr/actions/runs/38150135957)
+is COMPLETE GREEN. Verified artifacts prove all four plan stages pass:25 plans,
+1446 indexed/1523 extracted blocks,770 R blocks,0 parse/style problems and0 lints.
+All39 frozen source hashes match before/after; all six controller tests pass.
+The actual profile includes testthat3.3.2/jsonlite2.0.0/lintr3.4.0. Index findings
+remain822 INFO/90 historical WARN/0 ERROR. All15 bounded evidence files pass size/hash
+checks with no truncation or collection failures. Canonical source archive SHA256:
+`cc95541824e718766a19a17dfb743a42559899b920ba92050ec8926d065ce80d`.
+Artifact ZIP24609bytes/SHA256:
+`e40c3eb0122f4d91d0c58b109ec5880c5ed5371a028b63970bda0ecea0836ffe`.
+The earlier491 missing-testthat RED stays retained. This checkpoint updates the living
+plan's companion status as directed by TESTING_PLAN; no implementation plan changed.
+
+Runtime/tests remain identical to the actual3a four-file run:Linux859 passed/0 failed/
+0 warnings,Windows1040 passed/1 failed/2 warnings. Native Windows parent-death,
+self-marker preservation and exact owned FILE/PARENT ACL restoration are proved.
+Windows effective-denial/metadata warnings and the separate native callr empty-env
+failure remain OPEN; no merge/release or complete native-security claim is made.
+Quarto's child-only PATH fix and prior actual hosted Quarto/bridge checks remain recorded;
+private pandas/NumPy installation, local reruns/frontends/models and current full CRAN are
+WAITING. At08:10:48 PDT load48.65/46.55/55.82,CPU13.90%idle,RAM92GiB used/35GiB unused,
+swap22332.19MiB and15GiB disk fail the local resource gate. No local heavy job or shared
+Ollama stop/unload/reconfigure/inference occurred. Hosted active leases are now0.
+
+Evidence:ignored `dev/.validation/windows-security-20261010/plan-only-7685c00-summary.json`
+and `current-execution.json`. Resume from [the living plan](../TESTING_PLAN.md) and
+[task progress](skipped-platform-tests-20261010.md).
