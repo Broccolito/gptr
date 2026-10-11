@@ -468,21 +468,21 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Follow-up | Status and next evidence |
 |---|---|
 | Quarto discovery | DONE hosted d768: 71 assertions per host, actual renders/replay/source hashes and zero replay requests. Child-only PATH discovers bundled RStudio Quarto; caller PATH unchanged. Local renders and installed frontends WAITING. |
-| Python/R dependencies | DONE hosted d768 preflights and bridges: 128 Linux/118 Windows, two exact Windows OS guards. Private local pandas/NumPy wheels WAITING resources; prefix/base-prefix/CPython 3.12/arm64 witnesses required before wheels and actual reticulate in each context. |
-| Browser/search prerequisites | DONE core 63a2454: actual Chrome/search/app cleanup on both hosts, zero failures/warnings, one named Windows app guard. No current local browser launch during hold. |
-| Windows filesystem safety | DONE d768 Codex 448/checkpoint 119/MCP 167, binary bytes/hash/full restoration intact. Native absence 7P/1F/1W: AI-only parent flag change observed; probe 2 is safe refusal, not effective denial. Reviewed stable owned-parent setup 1cb666a pending native execution. Warning and exact denial/restoration stay fatal; arbitrary caller ACL/junction/unknown-reparse gaps OPEN. |
-| Windows child stdin | DONE d768 native duplex/no-reader/cancel 60, cold 19/warm 42/retirement 180, marker-family 81 and Claude 243. Exact 4 MB streams, caller raw state, 2 s deadlines and cleanup pass. Worker parent-death 8P/1F stops before parent-only kill; fixed 20-predicate diagnostic c001b94 pending. Two native production callr environment baselines cbef2a6 mandatory on both hosts, pending. |
-| Validation/merge | DONE actual d768 full 17: Linux 2406P/0F/0W/13 exact guards GREEN; Windows 2626P/2F/1W/10 guards RED. Both 343 raw rows/18 cleanups/zero survivors and controller warnings; 13 Python units/2721 gate assertions/53 lint paths GREEN. All four Linux plan stages GREEN/39 equal hashes/770 R blocks/90 historical index warnings. Next three complete files use registry 37/167/55 and fresh all-four plan checks. Merge WAITING strict relevant GREEN. |
+| Python/R dependencies | DONE hosted d768 preflights/bridges 128 Linux/118 Windows and d53 actual preflights. Private pandas/NumPy wheels WAITING resources; private prefix/base-prefix/CPython 3.12/arm64 gates required before wheels and reticulate in each context. |
+| Browser/search prerequisites | DONE core 63a2454 actual Chrome/search/app cleanup on both hosts, no failures/warnings; d53 preflight actual Chrome expression/close pass. No local browser launch during hold. |
+| Windows filesystem safety | DONE d768 Codex 448/checkpoint 119/MCP 167. d53 parent ACL restoration exact; file restore fails stage 14/106 and effective denial remains PROBE2. Two metadata warnings fatal. FILE numeric diagnostic 03469c9 applied, native proof pending. Arbitrary caller ACL/junction/unknown-reparse gaps OPEN. |
+| Windows child stdin | DONE d768 native3 60/cold19/warm42/retirement180/marker81/Claude243. d53 worker checks 1–18 TRUE, 19 missing parent marker; 20 and ten-second death unobserved. Four tests-first sweep regressions added; minimal runtime proposal INACTIVE until actual RED. Callr baselines execute: Linux56 GREEN, Windows48P/8F raw parent/child empty loss, clean bounded settlement. Production fix requires parity proof. |
+| Validation/merge | DONE d768 full17 Linux GREEN/Windows2F1W. Actual d53 complete3 Linux532P/0F/0W/9 guards GREEN; Windows691P/10F/2W/1 guard RED. Both82rows/4 cleanups/zero survivors or controller warnings; 13 Python/2775 gates/55 lint GREEN. All4 fresh plans39equal hashes/770R/0style0lint/90 historical warnings. Registry37/172/55; next complete2 tests-first baseline plus fresh all4 checks. Merge WAITING strict relevant GREEN. |
 
-## Optional integrations and Windows transport — 2026-10-11 06:53 PDT
+## Optional integrations and Windows transport — 2026-10-11 07:16 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, with source fixes pushed through `1cb666a`. Primary main
+`codex/skipped-platform-tests`, with source fixes pushed through `8216374`. Primary main
 stays `718e81e`; maintainer dirt/staged chunks, historical tests, secrets and shared Ollama
-are preserved. At 06:52:54 PDT load 56.96/46.92/43.99, CPU 53.98% idle, RAM 119 GiB
-used/8382 MiB unused, swap 22,516.25 MiB used and disk 14 GiB hold all local heavy jobs.
+are preserved. At 07:08:25 PDT load 32.37/53.36/50.85, CPU 13.98% idle, RAM 117 GiB
+used/10 GiB unused, swap 22,476.25 MiB used and disk 11 GiB hold all local heavy jobs.
 No thermal warning clears the load/disk gates. Do not stop unrelated work or delete user
-files. Hosted offline validation allows at most two jobs; completed d768 has zero leases.
+files. Hosted offline validation allows at most two jobs; completed d53 has zero leases.
 
 Exact `d76821c83a9c7ac5fc37f6b52e3a2d793bc1aa78`, run 38142998537, completed all 17 full
 files (343 raw rows each): Linux 2406 passes/0 failures/0 R warnings/13 exact OS guards is
@@ -526,25 +526,57 @@ death was not observed. Reviewed `c001b94` adds fixed numeric statuses for the o
 predicates, evaluated once in order; warnings/errors, identity, readiness, marker and cleanup
 oracles and all deadlines remain unchanged. Actual diagnostic outcome is pending.
 
-Reviewed `cbef2a6` adds two mandatory native callr worker/artifact environment profiles on
-both Windows and Linux. Exact empty-variable preservation, transport, marker, key filtering,
-`r_process`/result behavior, state and cleanup checks remain strict. Registry is now 37 files,
-167 mandatory titles and 55 lint paths, with no new OS skip allowance. Both actual baseline
-cases are pending. Broader processx launcher proposals remain INACTIVE with watcher-order,
-failed-construction lifecycle, private ACL and parity blockers. No production fallback is adopted.
+Actual `d53b313df5e2d384657e8c8ae7bcaa2b0879e9ca`, run 38145010850, completes the
+three full files (82 raw rows each). Linux 532P/0F/0 R warnings/9 exact OS guards is GREEN;
+Windows 691P/10F/2 R warnings/1 exact guard is RED. Both pass 55 scoped lint paths,
+13 Python units and 2775 strict gate assertions. All four cleanup records per host pass,
+with zero marked survivors/errors and controller warnings. Canonical archive SHA256 is
+`c0469fceb84ff006ed6e6867070cec05bb905fd81c272bde706c5021c87592dc`. All four fresh Linux
+plan stages pass 39 equal source hashes/770 R blocks/0 parse-style problems/0 lints,
+retaining 90 historical index warnings. Raw summaries/witnesses/ZIPs are retained.
 
-Next exact-source selection is three COMPLETE files:
-`^test-(callr-parent-environment|subagent-worker|proc-writer-runtime)\.R$`.
-Run both new callr profiles, all 36 worker cases and all 44 writer cases, plus all four fresh
-Linux plan stages after this plan edit. Missing/partial/duplicate raw results, zero assertions,
-unexpected skips and any test/runtime warning remain fatal. Do not accept probe 2 as denial,
-normalize empty state, suppress metadata warnings or relax timing/resource/cleanup oracles.
+Both mandatory native callr profiles actually execute: Linux 56P GREEN; Windows 48P/8F,
+no warnings/skips. Raw parent environment differs after construction, result and cleanup;
+the intended kept empty child variable is also absent. Key filtering, exact streams,
+startup-profile isolation, result class, options/cwd/RNG and owned settlement pass.
+Worker/artifact probes complete in 4.14/3.48 seconds, peak family RSS 356/256 MB and no
+sampling errors. Production parent-state preservation remains OPEN. Broader processx
+launcher proposals stay INACTIVE with watcher-order/lifecycle/private-ACL/API-parity gaps.
+A shared callr hook is not adopted; it is not a supported fail-closed per-call correction.
+
+The unchanged Windows worker test proves pre-kill checks 1–18 TRUE, then 19 FALSE: its
+parent's marker file is missing; check 20 was not evaluated. Source reviews identify
+startup proc_sweep() deleting the loading child's parent-written self record before parent
+liveness checking. The four new tests-first regressions preserve the original 35-case source
+prefix and cover exact-self retention, unknown identity, malformed/foreign records and no
+self signalling. Reviewed runtime proposal `4c4ef164` stays INACTIVE until actual RED;
+ordinary self rejection and current-PID cleanup refusal must remain strict. Native marker
+checks 19/20 and parent-only death within 10 seconds remain mandatory after correction.
+
+The stable owned-parent ACL setup now proves exact parent restoration: flags 37892 on
+both sides, XOR 0, ordered DACL difference 0, SDDL equality 1; main stage 12/recovery 104.
+The file fails after restoration stage 14/recovery 106 without numeric file differences;
+file AI transition is not yet proved. Probe 2 still fails effective denial and two sampled
+dangling-link metadata warnings remain fatal. Reviewed `03469c9` adds only fixed bounded
+FILE before/after/compare diagnostics and one pure case after the exact original 44-case
+source prefix. No file/caller normalization or PROBE2 acceptance is adopted.
+
+Current registry is 37 files/172 mandatory titles/55 lint paths, with no new OS allowances.
+Next tests-first exact-source selection is TWO COMPLETE files:
+`^test-(proc-spawn|proc-writer-runtime)\.R$`.
+Run all 39 spawn and 45 writer cases on both hosts against unchanged proc-supervise
+`e0627ca5`, plus all four fresh Linux plan stages after this plan edit. Only actual reviewed
+regression RED permits runtime adoption. Then rerun complete spawn/supervision/writer/worker
+files to prove preserved old behavior and native parent-death/cleanup. Missing/partial/
+duplicate results, zero assertions, unexpected skips and test/runtime warnings stay fatal.
+Do not normalize empty state, suppress metadata warnings or relax timing/resource oracles.
 
 The optional nofollow observer/POSIX state correction remains SOURCE CLEAR but INACTIVE;
 7 R/10 Python actual cases and combined supervisor/family RSS proof are pending. Genuine
 junction and unknown-reparse native coverage remains a documented design gap. Merge,
 D-019, current full CRAN and release remain OPEN. No live inference, local import/install/
 render/test/build or unrelated process cleanup while resources are unsafe.
+
 
 Historical a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
