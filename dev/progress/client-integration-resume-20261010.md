@@ -78,13 +78,34 @@ completion is not evidence for `!`/`!!` terminal completion, and vice versa.
 ## Prepared native resize probe
 
 Ignored `resume-68017d0/client/active-width.R` is prepared and R-parsed, not yet executed.
-It must run only in a coordinator-owned empty process with no gptr namespace loaded. It uses
+It must run only in a coordinator-owned process with no user objects and no gptr namespace
+loaded. A client-created `.Random.seed` is allowed; every other global name is rejected. It uses
 an offline fake provider, three requests, two real bounded R tools with eight-second sleeps,
 initial/renewed thinking waits, prose/bullets/fences/tables and tool-text-tool layout. The
 independent oracles are 32 rows, mean mpg 20.090625 and identical original `mtcars`. It writes
 event widths outside the R evaluator, safe summary and restoration witnesses in a fresh
 ignored run directory. Original cwd, library paths, options and nominated environment
-variables are restored; hooks and gptr namespace are removed. It reads no credentials.
+variables are restored; hooks and gptr namespace are removed. Its final cleanup restores the
+original RNG kind and exact seed presence/value, including removing a seed originally absent;
+only boolean witnesses are written. It reads no credentials.
+
+The same seed-only allowance and final RNG restoration now apply to the ignored
+`native-provider.R`: `frontend_setup()` already restores its other scoped state but does not
+restore the global seed, so the native wrapper snapshots it before setup and restores it after
+fixture cleanup, even on errors/interrupts. Successful parsing of both revised helpers was
+verified in a 0.2-second parse-only Rscript; no model/runtime execution occurred in this lane.
+Native runtime cleanup witnesses remain coordinator validation, not a parse-derived pass.
+
+The first coordinator VS Code width run failed before its first request because the prepared
+helper used an unsupported `.opts$transcript` field. This was a fixture bootstrap failure,
+not model inference or a hang. The failed run is retained separately. The helper now uses the
+supported settings-option layer (`gptr.record = "off"`, `gptr.transcript = "off"`,
+`gptr.checkpoint = "off"`) and `.opts = list(record = FALSE, context = "none",
+preset = "minimal")`. A fresh 0.21-second offline runtime smoke test created/cancelled the
+same deferred gateway call, verified all three setting values, made zero fake/external
+requests, kept the dataset identical and restored options/env/cwd/libs/RNG exactly. Evidence
+is `resume-68017d0/client/gateway-smoke.log` and its fresh `client-gateway-smoke-*` summary.
+The actual 50-second native width run remains coordinator validation; use a new run label.
 
 At the native R prompt, use a temporary environment wrapper for two public controls:
 `GPTR_CLIENT_RUN` = fresh absolute ignored directory and `GPTR_CLIENT_FRONTEND` = `RStudio`,
@@ -138,3 +159,54 @@ kernel interrupt cleanup separately from the terminal steering menu.
 Prepared controllers/helpers, current source inspection and the correction above do not
 establish the remaining GUI/provider cells. The coordinator must record actual UI witnesses,
 runtime SHA/versions, timings and owned-process cleanup before changing plan status.
+
+## Prepared true 4 GiB memory closure
+
+The ignored `resume-68017d0/client/four-gib.R`, `four-gib-controller.py` and
+`four-gib-instructions.md` prepare the explicitly authorized bounded large-memory probe.
+They have not allocated the vector, read a credential or run inference. R/Python syntax
+parsing is preparation only. The coordinator must grant the single high-memory slot and
+use the actual installed revision in a fresh evidence label before execution.
+
+The fixture materializes an ordinary 4 GiB double vector in a private locked binding, uses
+the same approved Versa deployment through an owned provider alias, and permits exactly
+three read-only builtin-R aggregate expressions. Independent full-scan numerical oracles,
+pointer/tracemem identity, successful tool results, final response markers and fresh usage
+events distinguish actual live execution from merely creating a request. The bounded wire
+wrapper records only request byte counts/cap/cache flags, never body or header contents.
+It rejects a request over 256 KiB or beyond nine builds before HTTP starts.
+
+Storage uses supported record/transcript/checkpoint off settings, history off, context none
+and no active document. A scoped no-anchor/key cache policy plus explicit cache mode off
+suppresses explicit hints; provider implicit caching is reported honestly. There is no
+invented `.opts$cache=FALSE` or `.opts$transcript` field. The controller samples numeric RSS/
+CPU/owned file metadata, bounds time/growth, and reuses timestamp-witnessed process-family
+cleanup. The fixture restores options, paths, changed public environment values and exact
+RNG state, removes hooks/registrations, cancels its session and releases the input. Limits of
+sampled RSS/tracemem and scoped file snapshots are explicit; no universal zero-copy or zero
+filesystem-I/O claim follows from a pass.
+
+## Independent console-notice review and notebook preparation
+
+The new `console_before_message()` / outer `with_interrupt_policy()` calling-handler change
+and `test-console-notice.R` were reviewed read-only, with no R jobs or native UI action.
+No concrete blocker was found: the handler matches only classed gptr messages, preserves
+condition delivery/muffling/redaction/metadata, clears only the tracked foreground spinner,
+and retains the pending request clock/task. The existing tool-stack marker, depth and
+background checks prevent captured R-tool clear bytes and nested/background redraws.
+Warnings have no new handler. SDK, synchronous foreground and background pumping use the
+same policy service. All three current source SHA256s matched the ignored
+`dev/.validation/console-notice-20261010/EVIDENCE.md`; focused42 and affected184 passes
+(one CI-only SIGINT skip), zero counted warnings/errors/failures and final lint exit0 are
+supported by their result JSON. Installed native confirmation remains coordinator work.
+
+The ignored client `prepare-notebook-gui.py` / `notebook-gui-instructions.md` prepare fresh
+owned notebook/kernel-spec pairs for representative GUI live/replay witnesses without
+starting a kernel, controlling a UI/server or reading credentials. Only the helper's Python
+AST was checked; embedded R and actual startup remain coordinator runtime validation.
+The helper copies only the expected vanilla R45 argv, sets public startup controls, blanks
+inherited direct API secrets, appends existing frontend cleanup plus exact RNG restoration
+proof, preserves retained runs/specs and leaves replay notebook bytes untouched. Live and
+replay use separate explicitly selected kernels; replay has no live bootstrap/key loading.
+Native resize/zoom/completion/interrupt observations must remain separate from headless
+IRkernel passes and saved-output inspection.

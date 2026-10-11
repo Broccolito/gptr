@@ -1,7 +1,8 @@
 # Living testing plan
 
-Updated 2026-10-10, with the 16:02 PDT resource checkpoint and subsequent bounded offline
-validation. This is the coverage ledger for the current package, documentation and
+Updated 2026-10-10 with resumed heavy-compute evidence and explicit storage, extension,
+file/network and compaction acceptance cases. New rows use ongoing/done/waiting notation.
+This is the coverage ledger for the current package, documentation and
 authorized live testing. Update a row after inspecting its evidence; retain failed runs and
 older revision results. It does not replace the numbered implementation plans or authorize a
 release, model download, account change or CRAN submission.
@@ -23,6 +24,47 @@ Machine access inventories and raw local evidence belong only in ignored `LOCAL_
 and `dev/.validation/`; do not copy credentials, account details or private inventory into
 this plan or public documentation.
 
+## Resumed execution
+
+The maintainer explicitly requested completion of the remaining local-heavy cases after
+freeing compute. At 16:37 PDT CPU idle was 49.55%, load 6.61/9.17/18.23 and physical RAM
+had 23 GiB unused. Swap remained 43,625.81 MiB used; free disk was only 12 GiB. Thermal and
+performance warnings were not recorded. Resume with two compute lanes, at most two workers
+per internally parallel check, BLAS one thread, one new GPU request at a time, fresh owned
+run directories, bounded deadlines and periodic resource checks. Keep small artifacts;
+preserve unrelated processes/models and all failed evidence. This authorization supersedes
+the earlier deferral; it does not authorize cleanup of user files or broad process killing.
+
+One lane performs exact-artifact/CRAN validation, after correcting any discovered package
+defects. The other performs live provider/frontends, team/fan-out, steering, native/local/
+emulated decisions and in-memory performance cases. Read-only agents audit current hosted CI,
+coverage and client integration. Native UI observations remain distinct from scripted stdin
+and headless renderers. Recheck the installed source manifest after every runtime change.
+
+Hosted `68017d0` exposed two forbidden IC-33 edges in the native MCP recording repair.
+The reviewed refactor `d136a9d` passed 642 affected assertions; spinner-width repair
+`3d92b05` passed 177 affected assertions. The normal `3d92b05` archive passed local
+`--as-cran` on R 4.5.0 with 22,603 assertions, zero errors/warnings/notes and 386 skips.
+Its compressed size is 2,216,695 bytes, SHA256
+`5ced56de6454cba771af7fff4a6459a22a5fb2258b351ee92ce678e0a9899d05`, with 14 built guides;
+normal installed size is 6,592 KiB. Installed-size INFO is retained, not suppressed. Docs,
+files, full lint, fresh examples and all-14 precompute checks also passed. This is a local
+R 4.5.0 diagnostic; current-release/devel/Windows exact-byte checks remain pending.
+
+Fresh `3d92b05` Azure emulated decisions/cache, Azure team/fan-out and native Jev typed
+source workflows passed live and fresh-process replay. Initial fan-out and empty-settings
+fixture failures remain preserved; context names and canonical empty settings resolved them
+without increasing budgets. Queued/background steering failed input discovery, and a
+simulation changed an input integer type after returning the correct result. Corrected
+input visibility/protected bindings are prepared for fresh repeats; no pass is inferred.
+Actual VS Code active streaming/tool resize passed with widths 73/92/37, two tools and all
+eight restoration checks true. Azure/Jev GUI live and same-process fresh-namespace replay
+passed; Claude CLI reported a session limit resetting at 18:00 PDT and its remaining cases
+are blocked until then. A notice printed into a thinking row is under separate review.
+See [artifact evidence](progress/artifact-resume-20261010.md),
+[coverage audit](progress/coverage-resume-20261010.md), and
+[client evidence](progress/client-integration-resume-20261010.md).
+
 | Verified installed revision | Actual scope | Evidence boundary |
 |---|---|---|
 | `4e66376` | Versa function/pipeline in native RStudio Source and console; independent coefficients/AIC; animated waiting indicator | Repeat passed with per-call recording disabled on both calls. This is older installed evidence. |
@@ -32,9 +74,67 @@ this plan or public documentation.
 | `5b772f3` | Installed default Markdown width refresh; install 17.45s, profiler wall 17.74s, family peak 391.6 MiB / 18 samples / zero sampling errors | O 7 focused / 349 affected assertions, one CI-only skip. Actual native resize during output remains P; already-emitted scrollback cannot be reflowed by gptr. |
 | `390485f` | LR Versa direct Rscript/Rmd/Quarto and native Jev recorded R/Rmd/Quarto; LGUI-O actual R.app streamed resize | Install 20.09s, profiler wall 20.52s, 399.6 MiB / 21 samples / zero sampling errors. Six document cells passed live/replay. Claude direct Rscript live passed, fresh replay failed with an empty recorded R body; retained F. |
 | `8d13b58` | Installed CLI MCP recording repair; LR all nine Claude CLI/Codex CLI/exact Qwen direct Rscript/Rmd/Quarto cells | Install 29.51s, 417.1 MiB / 31 samples / zero sampling errors. O 48 focused / 1,601 affected assertions, zero failures/warnings/skips, three-file lint clean. All 18 document phases passed with one nonempty block per cell and zero replay requests/fresh usage/native rows. GUI and other outstanding cells remain P. |
+| `3d92b05` | Verified normal archive installed; local CRAN check/source gates; LR Azure emulated decisions/team-fanout and native Jev typed source; VS Code active width and Azure/Jev live/replay | Exact archive/hash above. Native GUI replay uses a fresh namespace/vault in the same R process, distinct from LR. First post-install verifier incorrectly counted generated index.html; installation DONE and a separate 14-guide/loadability certificate passed without reinstalling. |
 
-The coordinator's latest verified installation checkpoint is `8d13b58`.
+The coordinator's latest verified installation checkpoint is `8952567`: normal archive
+SHA256 `e22172a337fe8efd6383aa570675061aae193fc7b1c7bff5680490e85550c6a8`,
+2,218,170 bytes, 14 built guides, install14.19s/421.5MiB sampled family peak/zero sampling
+errors. The notice fix passed42 focused/184 affected assertions, one CI-only skip and zero
+counted warnings. Exact local and hosted archive checks for this revision are ongoing.
 Do not retag older live rows with it: confirm the installed SHA at every new run.
+
+Resumed completions: native VS Code Codex/Qwen live and same-process fresh-namespace replay
+passed at `3d92b05`; native RStudio active resize passed widths199/122, two tools and all eight
+restoration checks. Native R.app's newer probe passed static layout/computation/restoration,
+but its automation call blocked through execution, so that run does not establish active
+resizing. Direct Jev Rscript passed live and fresh-child replay at `3d92b05`. Corrected Azure
+running-session and pumped-background steering passed at `8952567` (8.693s); protected seeded
+simulation passed (4.720s). The earlier failures remain retained. A canonical offline request
+spy proves the original queued-steer fixture omitted the initial prompt/context; no runtime
+queue-order change or budget increase was needed. Latest headless IRkernel and native RStudio
+provider/decision cells are ongoing; completed cell details belong in the resumed progress
+ledger. RStudio emitted repeated warnings despite numeric passes and requires diagnosis.
+
+The true4GiB fresh-Rscript Azure probe passed at `3d92b05`: three exact read-only R aggregate
+tools on the same ordinary536,870,912-double vector, unchanged identity/input, six bounded
+requests,17.261s controller elapsed,4,287.75MiB sampled family peak and all cleanup witnesses.
+No tracemem duplication was observed; retained owned files peaked27,290bytes. This closes the
+specific IM05 synthetic read-only case, not universal zero-copy or all GUI memory behavior.
+Qwen's separate17.945GiB server allocation expired naturally after its default keep-alive;
+R-family RSS and external model residency remain separate measurements.
+
+## Added file, extension, storage and compaction execution cases
+
+The maintainer requested these explicitly during resumed execution. `DONE` means only the
+scoped evidence stated here; `ONGOING` has an active investigation/run; `WAITING` has a concrete
+case awaiting its serial slot or a required capability. Run each case in its own disposable
+project/user root, preserving the real repository `.gptr`, caller objects and all failed
+evidence. Pair live file-producing cases with independent reopened-file oracles. Public
+network fixtures have bounded response/file sizes, timeouts and no confidential inputs.
+Skill upload means import/install into the owned local fixture registry unless a specific
+external destination is authorized. Never expose the test MCP server publicly.
+
+| Case | Required execution and independent oracle | State |
+|---|---|---|
+| FT01 load/write | Text/CSV/JSON/RDS and R/Rmd/qmd/ipynb: read public seeded inputs, write through approved tools, reopen and compare bytes/types/numeric content; check overwrite refusal, invalid format/path and interrupted write cleanup | WAITING live; earlier installed tiny file tests O |
+| FT02 web/data | Distinguish model-native web search from the gptr tool-catalog search; test available route, citations/URL provenance, bounded HTTPS public data download, parse and numerical oracle; failed/oversized download leaves no partial final file | ONGOING capability audit; unavailable native search is recorded N/A with the supported alternative |
+| EX01 skills/plugins | Discover and actually use a trusted skill, import a local skill, template and named agent; package/directory plugin lazy activation, unload/reload, changed-trust refusal; no protected registry replacement or persistent caller-state change | ONGOING fixture preparation; earlier installed local activation/import O |
+| EX02 MCP | Owned stdio and loopback HTTP server: list/lazy connect, real numerical/file tool use, progress/error, cancellation, disconnect/reconnect/remove; expiry/allow/deny with synthetic auth; exact child/server cleanup and no secret in generated contexts | ONGOING storage/transport review; earlier standalone stdio/bridge O |
+| EX03 named workers | Explicit agent definitions and roles, fan-out over named inputs, workflow reports/Peter/bare-R drafts, strict replay; shared-budget/depth refusal, worker cancellation/failure isolation and parent session remains usable | ONGOING notebook teams; Azure source team/fan-out LR at3d; draft fixtures O |
+| ST01 layout/deltas | Snapshot relative paths, file sizes/hashes/permissions in isolated `.gptr` after init, instruction/context/skill/plugin/MCP discovery, calls, tools, summaries, recording and cleanup; compare to expected ownership/schema/location | ONGOING independent source audit; live operation snapshots WAITING |
+| ST02 storage safety | Path traversal, secret includes, symlink targets, unsafe overwrite, private file permissions, atomic writes/recovery, concurrent writers, truncation/malformed records, sidecar trust and size limits; failure cannot corrupt originals or parent state | ONGOING independent source audit; reproducible issues need offline RED tests before fixes |
+| CP01 triggers | Forced manual and automatic threshold compaction; before/after prompt token counts, compaction event/usage/status, bounded latency and visible progress; no repeated compaction loop | WAITING source/offline then live |
+| CP02 continuity | Retain governing instructions, loaded-object references, recent steering, complete tool call/result pairs and unresolved approvals; continue a seeded multi-step task after compaction and independently verify final R value/input invariance | WAITING |
+| CP03 failure/cancel | Compactor unavailable, malformed summary, timeout, budget exhausted and interrupt: recover or return a clear error, preserve usable session/history and owned child cleanup; count actual charges honestly | WAITING |
+| CP04 persistence | Snapshot `.gptr` context/workflow/session/checkpoint deltas before/after compaction; restart/resume/rewind from each supported boundary; corruption is rejected and no secret/context content leaks | WAITING; connects ST01/ST02 and IM06 |
+| CP05 teams/replay | Child-only versus parent compaction, fan-out shared-budget attribution, cancellation and recorded summary/Peter/R documents; fresh strict replay has zero new provider requests/usage with stable fingerprints | WAITING |
+| CP06 frontends/resources | Representative PTY and native GUI progress/interrupt, Rscript/Rmd/Quarto/IRkernel execution; Claude/Codex native compaction scope distinguished from harness compaction, Qwen/Azure route capability stated; RSS/output growth bounded | WAITING; no universal model/client pass from one probe |
+
+Execute source/offline safety checks first, then serial live capability cases, then their
+fresh-process replay/cleanup checks. Update this table and the detailed progress ledgers after
+reviewing actual evidence. Completion must distinguish unsupported provider/client features
+from tests that remain waiting. All original G01–G14, A01–A08, D01–D07, IM01–IM06, UX01–UX03,
+X01–X14 and Q01–Q05 acceptance clauses remain in scope alongside these added cases.
 Native Unix prefix completion at `f0f3448` passed O 71 focused / 476 affected assertions,
 one CI-only skip, zero failures/warnings and two-file lint clean. Immutable installation
 passed in 13.89s (15 samples, 386.7 MiB peak, zero sampling errors). Actual native R readline
@@ -81,8 +181,8 @@ child and its exit finalizer. CLI provider names must remain CLI routes.
 | Claude CLI: selected `claude-cli/claude-haiku-4-5` | P | P | P | P | P | LR `8d13b58`; F `390485f` retained | L `d1887f2` | LR `8d13b58` | LR `8d13b58` | P |
 | Codex CLI: `codex/default` (retain actual CLI model metadata) | P | P | P | P | P | LR `8d13b58` | L `d1887f2` | LR `8d13b58` | LR `8d13b58` | P |
 | Ollama: exactly `ollama/qwen3.8:27b` | P | P | P | P | P | LR `8d13b58` | L `d1887f2` | LR `8d13b58` | LR `8d13b58` | P |
-| UCSF Versa Azure: selected Luna deployment | L `fc9f8d4` | P | P | L function `4e66376`; LR Knit `d1887f2`; L manual tool/listing `c722e6d` | P | LR `390485f` | L `4e66376` in IDE | LR `390485f`; older native Knit | LR `390485f` | LR `fc9f8d4`, actual GUI |
-| Native Jev: `typesafe/jev-latest` / `jev` alias | P typed | P typed | P typed | P typed | P typed | P typed child | P typed | LR `390485f` | LR `390485f` | P typed |
+| UCSF Versa Azure: selected Luna deployment | L `fc9f8d4` | P | P | L function `4e66376`; LR Knit `d1887f2`; L manual tool/listing `c722e6d` | L/replay same GUI process `3d92b05` | LR `390485f` | L `4e66376` in IDE | LR `390485f`; older native Knit | LR `390485f` | LR `fc9f8d4`, actual GUI |
+| Native Jev: `typesafe/jev-latest` / `jev` alias | P typed | P typed | P typed | P typed | L/replay same GUI process `3d92b05` | P typed child | P typed | LR `390485f` | LR `390485f` | P typed |
 
 The Jev recorded `.R` case at `390485f` also passed LR through `gptr_source()`; it does not
 establish an actual direct-Rscript child/exit-finalizer cell. Azure's three cells recorded one
@@ -95,10 +195,12 @@ not a full frontend/provider pass. Exact durations and retained runs are in the 
 
 R PTY evidence does not establish a native terminal-app window or R.app/VS Code behavior.
 VS Code 1.140.0 with R extension 3.0.1/syntax extension 0.1.4 and R.app R 4.5.0/GUI 1.81
-were inventoried read-only. VS Code's `sess` bridge is absent from the checked R libraries;
-its visible R session was unattached. `radian` was not found on the checked PATH/usual paths,
-which is not an exhaustive absence claim. Native attachment, completion and rendering remain
-P. Retain exact local setup in ignored `LOCAL_SETUP.md`: use the new `r.executablePath`,
+were inventoried read-only. The official bundled `sess` 3.0.1 bridge was subsequently installed
+in the private development library and attached in the disposable VS Code workspace, without
+sourcing user startup files. Active output-width rendering now has the observed scope above;
+native editor/prefix completion and its error/interrupt restoration remain P. `radian` was not
+found on the checked PATH/usual paths, which is not an exhaustive absence claim.
+Retain exact local setup in ignored `LOCAL_SETUP.md`: use the new `r.executablePath`,
 `r.consolePath` and `r.consoleArgs` settings in a disposable workspace if needed, and avoid
 sourcing an extension profile that also sources user startup files. External session attach
 may install the bundled bridge/dependencies without prompting. Native Terminal app control
@@ -118,10 +220,10 @@ Prepared ignored controllers/fixtures are under `dev/.validation/live-20261010/`
 `driver.R`, `matrix-serial.py`, `notebook-headless.py`, `setup.R`, `renderer-support.R`,
 `jupyter-support.R`, `timings.R`, regression/typed/team documents and the process-family
 profiler. `optional-smoke.R` and `workflow-summary.R` now have the scoped offline evidence
-above. `system-one-emulation.R` and its emulation plan remain prepared, not executed passes;
-their live lane is resource-deferred. Fixtures alone are execution aids, not evidence.
-Root coordinates runs and the sole local R
-slot. Headless notebook coverage supplements actual GUI observations.
+above. `system-one-emulation.R` now has actual Azure live/cache and fresh-process replay
+evidence at `3d92b05`; Qwen and unsupported CLI negative cases remain P. Fixtures alone are
+execution aids, not evidence. Root coordinates bounded compute lanes and GPU requests.
+Headless notebook coverage supplements actual GUI observations.
 
 ## All guides and tables
 
@@ -206,7 +308,7 @@ configured emulation route when opted in; separately test explicit native refere
 | D02 system-wide native default | Isolated user/process/options precedence, remove override, restart; decision service actually uses the role default; compare explicit typed calls and ensure their requested native reference is not silently replaced | P live; H offline semantics, current source inspected |
 | D03 no-key/local fallback | No new discovery/network; evidenced local decision model selected; absent/unsuitable model gives an honest actionable error | P installed/live witness; offline cases historical |
 | D04 native Ollama Clef/Clef Flash | Actual installed classifier and suitable server; local-only preflight; no cloud fallback; types/provenance/cache/replay | P, conditional on inventory/headroom; Qwen chat pass is not this pass |
-| D05 emulated chat decision | Explicit `system1 = "emulate:<provider>/<model>"`; structured response; `calibrated = FALSE`, emulated engine; no accidental native claim; uncertainty/cancel/budget/replay | P prepared Versa/Qwen runner, resource-deferred. Versa proposes same/fresh-process replay; Qwen same-process cache replay requires a real discovered digest. Fresh-process Qwen replay needs new discovery and is not claimed by this fixture. |
+| D05 emulated chat decision | Explicit `system1 = "emulate:<provider>/<model>"`; structured response; `calibrated = FALSE`, emulated engine; no accidental native claim; uncertainty/cancel/budget/replay | LR Azure `3d92b05`: logical/choice/score, provenance, unchanged settings and same/fresh-process strict cache replay with zero replay inference. P Qwen, CLI negatives and remaining failure/budget controls. Qwen same-process replay requires a discovered digest; fresh replay needs rediscovery and is not claimed by this fixture. |
 | D06 CLI/emulation boundaries | CLI catalog metadata currently advertises `structured_output = FALSE`; verify explicit unsupported failure without inference before any new capability-based scheduling | Source-unsupported inference for current Claude/Codex CLI routes; P prepared negative/no-call checks. No native probability or CLI emulation pass. |
 | D07 route composition | System 1 routes/judges a System 2 answer; intended model and data shape, no unnecessary call on cache hit, no recursion/deadlock | P live, bounded representative provider |
 
@@ -261,6 +363,10 @@ Native screenshots were unavailable for this probe; AX evidence does not certify
   A viewport set only before output does not satisfy this case; record capabilities/limits.
   Measure host width outside model R and `!`/`!!`: evaluation temporarily uses capture width
   100, so an inline width result does not establish native pane/window width.
+  LGUI-O VS Code `3d92b05` observed widths 73/92/37 during streaming and two R tools, with
+  readable prose/fences/table/results and clean exit; all eight cleanup witnesses true.
+  This uses an offline delayed provider. Other native clients, scale controls and live
+  provider progress/interrupt cases retain their separate pending clauses.
 - UX02: establish normal native R completion first, then test loaded object names, functions,
   `pkg::` namespaces, quoted file paths in a disposable directory and multiline expressions
   behind both `!` and `!!`. Observe actual completion suggestions and inserted text, not only
@@ -313,9 +419,9 @@ CLI does not expose every MCP tool event, actual R objects and numeric oracles r
 |---|---|---|
 | Q01 documentation | All 14 guide precomputes; README, function/configuration help and asset README in-memory wording; man aliases/examples, every options/command table row, source/output consistency and no live chunks; private-overlay generation preserves the maintainer's DESCRIPTION preference | O `82a7db3` help generation and final README/all14 fresh-process guide refresh, zero documentation/file problems; NAMESPACE unchanged, DESCRIPTION `8.1.0` preserved. H 58 example pages/71 assertions. Static-site refresh did not rerun reference examples or install. P current full artifact checks. |
 | Q02 site/branding | Homepage/quickstart/Why Peter prominent; all guide/reference links; canonical logo files unchanged; light/dark/auto; native menu/theme persistence; code/table overflow keyboard focus; representative 320–1920px layouts and doubled text | O refreshed 90-page site: all14 guides/63 exports, zero broken local links, all8 image assets hash-identical. Browser18 cases: light five pages and dark homepage at320/768/1440, no page overflow, white light background, matching logos; theme/viewport restored. H prior60 cases and doubled-text check. P actual browser zoom and expanded current-site accessibility. |
-| Q03 CRAN periodic | Focused isolated tests/lint then docs/files; examples/precompute when changed; current dependency metadata including optional `Enhances: repr`, absent-optional load/display, pure R/fixed Imports, source/archive exclusions and credential-free offline tests | O 7d structural/metadata/guide/asset audit and focused test/lint guards; no compiled paths, install hooks, forbidden dependencies or credential shipping candidates found. P current exact archive contents, sizes and checks. |
-| Q04 resource/size/timing | Record install/example/test/vignette timings, slowest pages, actual tarball bytes/hash, installed `du -k` and largest directories; watch source near 10 MB and docs/data near 5 MB; check at most two cores | P fresh artifact; prior static sizes/oldrel installed-size diagnostic are historical, not archive measurements. |
-| Q05 platform/current artifact | Existing hosted matrix with exact SHA; current R-release/R-devel exact-tarball `--as-cran`, Windows and reverse dependencies; force-killed child temp cleanup on Windows; manual/incoming/URL checks | Historical gates only; current Windows cleanup and final artifact validation P. Hosted checkout rebuilds do not prove byte-identical upload-tarball validation. |
+| Q03 CRAN periodic | Focused isolated tests/lint then docs/files; examples/precompute when changed; current dependency metadata including optional `Enhances: repr`, absent-optional load/display, pure R/fixed Imports, source/archive exclusions and credential-free offline tests | O normal `3d92b05` archive exclusions/14 guides, local R4.5 `--as-cran` 0 errors/warnings/notes, docs/files/full lint/fresh examples/all-14 precompute. P remaining optional-dependency and final platform clauses. |
+| Q04 resource/size/timing | Record install/example/test/vignette timings, slowest pages, actual tarball bytes/hash, installed `du -k` and largest directories; watch source near 10 MB and docs/data near 5 MB; check at most two cores | O normal `3d92b05`: 2,216,695-byte archive, installed 6,592 KiB, doc content 555,401 bytes; build19.955/install13.430/check437.603s with two workers and BLAS1; checker-family peak2,002.1MiB/472samples/0errors. Installed-size INFO retained. Large-object/live performance remains separate. |
+| Q05 platform/current artifact | Existing hosted matrix with exact SHA; current R-release/R-devel exact-tarball `--as-cran`, Windows and reverse dependencies; force-killed child temp cleanup on Windows; manual/incoming/URL checks | O local `3d92b05` archive/manual/incoming. Hosted `68017d0` Windows release/oldrel completion/temp checks settled, but sole IC-33 failure persisted; corrected `3d92b05` matrix pending. P build-once current-release archive with identical-byte consumers on release/devel Windows/Linux/macOS and local adoption; reverse dependencies pending. Checkout rebuilds do not prove identical bytes. |
 
 Reuse existing isolated tools sequentially: `dev/ci/isolated-check.R test <filter>` / `lint`,
 `dev/release/check-docs.R`, `check-files.R all`, `check-examples.R` and

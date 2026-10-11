@@ -176,7 +176,8 @@ That local build/check is coordinator evidence, not a build repeated by this lan
 Root explicitly rejected a release-based transfer: **no draft release, release asset or tag
 is authorized**. The active proposal instead creates one archive inside Actions and adopts
 those same bytes as a replacement local candidate. It does not claim equality with the
-preexisting local archive. No workflow or dispatch has been created or changed remotely.
+preexisting local archive. At that proposal checkpoint, no workflow or dispatch had been
+created or changed remotely; the later authorized dispatches are recorded below.
 
 Root authorized a concrete draft, then implementation only after independent review.
 The retained draft is in ignored
@@ -298,3 +299,75 @@ Logs: [red witness](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-202
 [green witness](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/archive-path-green.log),
 [static validation](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/workflow-pathfix-static.log).
 Root owns commit/push and redispatch with the same requested 3d92b05 package-source SHA.
+
+### Corrected producer uploaded verified replacement bytes
+
+Root committed the narrow assertion correction as
+`e3acf6d4b588a4d046b7bfff08d8a079eb486145` and dispatched
+[run 38097885912](https://github.com/Broccolito/gptr/actions/runs/38097885912)
+for the same full source SHA `3d92b05782ea17ac708cfa3494794d146920c4a1`.
+Producer job 114347505407 completed successfully and uploaded `exact-source-tarball`
+(artifact ID 11686381774) at **00:20:01 UTC on 2026-10-11**.
+
+This lane downloaded only that named artifact and verified the actual archive against the
+producer's printed manifest, not just against a locally supplied manifest:
+
+- Archive: [gptr_1.0.0.tar.gz](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/remote-38097885912/gptr_1.0.0.tar.gz).
+- Package-source SHA: `3d92b05782ea17ac708cfa3494794d146920c4a1`.
+- Actual bytes: **2,222,427**.
+- Actual SHA256: `b549b0952d5bab453aac189e00694500546704bf5e35cd9ab47e46c5ec905003`.
+- Producer R: **R 4.6.1 (2026-06-24)**.
+- Actual archive contents: **14 rendered Rmd guides and 14 HTML guides**, with required
+  DESCRIPTION/NAMESPACE/LICENSE and the corrected package-root/private path checks passing.
+
+The archive was inspected without extracting or executing package code. No install or
+local package check was run by this lane. The manifest and
+[local verification](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/remote-38097885912/local-verification.json)
+are retained beside the immutable downloaded archive. These are replacement bytes; they
+differ from the earlier local R 4.5 archive's digest and are not claimed to equal it.
+
+At the **00:21 UTC** snapshot, both Windows consumers had completed byte verification and
+were setting up dependencies; macOS and both Ubuntu consumers were queued under the
+two-job cap. No consumer package-check result is passed yet. The original 3d92b05 push run
+had four completed successes (copy-safety release/devel, token benchmark and Linux without
+Suggests), nine jobs still running, and no completed failure.
+
+The redundant e3acf6d push run 38097569106 was already **completed/cancelled** when this
+lane read it. This lane made no cancellation call for it. Read-only source comparison
+confirmed that 3d92b05..e3acf6d changed only the workflow and this report; the package R/test
+sources were identical. New notice-fix source `8952567` and its pending push checks remain
+separate from this 3d92b05 artifact proof and will need their own exact-archive checkpoint.
+
+### Latest notice-fix producer bytes and completed 3d92b05 checks
+
+Root dispatched [run 38098141085](https://github.com/Broccolito/gptr/actions/runs/38098141085)
+for `89525673ae4d9e8c76da0526a134e59de03615d1`. Producer job 114348259468 succeeded and
+uploaded artifact 11686673015 at **00:24:23 UTC**. This lane downloaded only
+`exact-source-tarball` and verified its archive against the producer's printed manifest:
+
+- [Archive path](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/remote-38098141085/gptr_1.0.0.tar.gz),
+  **2,223,937 actual bytes**, SHA256
+  `9907684a205ee21b48f667524151cec97a39c07dc1c78082a7798509ff4efe41`.
+- Full source SHA matched; producer **R 4.6.1**; actual **14 Rmd + 14 HTML** guides;
+  required package files and corrected path exclusions passed.
+- [Local verification](/Users/wgu/Desktop/gptr/dev/.validation/ci-exact-tarball-20261010/remote-38098141085/local-verification.json)
+  and original manifest retained. No package extraction, execution, install or local check.
+
+At **00:26 UTC**, Windows release/devel consumers were setting up, with the other three
+queued. These consumer checks and root's adoption/check of the downloaded 8952567 bytes
+remain pending; the prior local 8952567 build has separate R/digest provenance.
+
+New completed source-check outcomes from the original 3d92b05 push run:
+
+| Job | Actual completed check evidence |
+|---|---|
+| [macOS release](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344316022) | R 4.6.1, PASS 24,476 / FAIL 0 / WARN 0 / SKIP 31; temp detritus OK. `Status: 1 NOTE` solely five Apple-service directories outside the check. Size INFO 9.6Mb (R 8.3Mb), `R_KEEP_PKG_SOURCE=yes`. |
+| [Linux oldrel-4](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344316033) | R 4.2.3, PASS 24,445 / FAIL 0 / WARN 0 / SKIP 36; both directory checks OK. `Status: 1 NOTE` solely installed size 8.8Mb (R 7.4Mb), `R_KEEP_PKG_SOURCE=yes`. |
+| [Linux without Suggests](https://github.com/Broccolito/gptr/actions/runs/38096135973/job/114344315991) | R 4.6.1, PASS 24,441 / FAIL 0 / WARN 0 / SKIP 37; `Status: OK`; size INFO 6.0Mb (R 4.6Mb). |
+
+The five macOS directory names are `com.apple.intelligenceflow.intelligencecontextd`,
+`com.apple.proactiveeventtrackerd`, `com.apple.SafariLaunchAgent`,
+`com.apple.secureelementservice`, and `contentlinkingd`. No Chrome/Rscript detritus is
+reported by these completed checks. At **00:24 UTC**, the run had six successful jobs and
+seven still running, including both Windows versions. The previously witnessed IC-33
+failure was absent on the three completed package checks above; pending jobs are not passed.
