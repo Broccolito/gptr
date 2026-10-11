@@ -192,13 +192,18 @@ writer_runtime_titles = c(
   "writer canonical parent checks accept Windows separators and reject outside paths",
   "writer compressed bootstrap preserves exact trusted source and binary literals",
   "writer full compressed bootstrap fits a long Windows mailbox path",
-  "writer early-case diagnostics retain only bounded structural evidence")
+  "writer early-case diagnostics retain only bounded structural evidence",
+  "writer startup diagnostics accept only fixed monotonic stages and split lines",
+  "writer startup diagnostics fail closed without retaining arbitrary stderr",
+  "writer trusted bootstrap sends startup diagnostics only to its own stderr",
+  "Windows no-reader timeout proves writer readiness and delivery-stage backpressure")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
   testthat::expect_identical(optional_titles[[file]], writer_runtime_titles)
   rows = lapply(writer_runtime_titles, record)
-  for (i in seq_len(5L)) {
+  native = c(seq_len(5L), 29L)
+  for (i in native) {
     rows[[i]]$passed = 0L
     rows[[i]]$skipped = 1L
     testthat::expect_true(optional_allowed_skip(file, writer_runtime_titles[[i]], FALSE))
@@ -207,9 +212,9 @@ testthat::test_that("production writer platform guards are explicit and never co
   result = optional_gate(rows, file, FALSE)
   testthat::expect_true(result$passed)
   testthat::expect_false(result$platform_guard_only)
-  testthat::expect_identical(result$platform_guard_cases, writer_runtime_titles[1:5])
-  testthat::expect_identical(result$mandatory_cases, writer_runtime_titles[6:25])
-  testthat::expect_error(optional_gate(rows[1:5], file, FALSE), "Missing mandatory")
+  testthat::expect_identical(result$platform_guard_cases, writer_runtime_titles[native])
+  testthat::expect_identical(result$mandatory_cases, writer_runtime_titles[-native])
+  testthat::expect_error(optional_gate(rows[native], file, FALSE), "Missing mandatory")
   testthat::expect_error(optional_gate(c(rows, list(record("Windows unrelated writer guard",
     passed = 0L, skipped = 1L))), file, FALSE), "Skipped")
   testthat::expect_error(optional_gate(rows, file, TRUE), "Skipped")
@@ -218,6 +223,7 @@ testthat::test_that("production writer platform guards are explicit and never co
 testthat::test_that("production writer mandatory rows reject omissions, duplicates and errors", {
   file = "test-proc-writer-runtime.R"
   rows = lapply(writer_runtime_titles, record)
+  native = c(seq_len(5L), 29L)
   for (windows in c(FALSE, TRUE)) {
     testthat::expect_true(optional_gate(rows, file, windows)$passed)
     for (i in seq_along(rows)) {
@@ -229,7 +235,7 @@ testthat::test_that("production writer mandatory rows reject omissions, duplicat
       warned = rows
       warned[[i]]$warnings = 1L
       testthat::expect_error(optional_gate(warned, file, windows), "Warnings")
-      if (windows || i > 5L) {
+      if (windows || !i %in% native) {
         empty = rows
         empty[[i]]$passed = 0L
         testthat::expect_error(optional_gate(empty, file, windows), "assertions")
@@ -804,4 +810,53 @@ testthat::test_that("a late summary-write warning revokes the summary's passing 
   testthat::expect_identical(witness$diagnostics[[1L]]$phase, "integration-summary-json")
   testthat::expect_false(summary$passed)
   testthat::expect_identical(summary$controller_warnings$warnings_total, 1L)
+})
+
+testthat::test_that(
+  "startup diagnostic cases keep exact native guards and mandatory pure coverage", {
+  file = "test-proc-writer-runtime.R"
+  added = c(
+    "writer startup diagnostics accept only fixed monotonic stages and split lines",
+    "writer startup diagnostics fail closed without retaining arbitrary stderr",
+    "writer trusted bootstrap sends startup diagnostics only to its own stderr",
+    "Windows no-reader timeout proves writer readiness and delivery-stage backpressure")
+  expected = c(writer_runtime_titles[1:25], added)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  native = c(seq_len(5L), 29L)
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_identical(result$mandatory_cases, if (windows) expected else expected[-native])
+    for (i in 26:29) {
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      failed = rows
+      failed[[i]]$failed = 1L
+      testthat::expect_error(optional_gate(failed, file, windows), "Failed")
+      warned = rows
+      warned[[i]]$warnings = 1L
+      testthat::expect_error(optional_gate(warned, file, windows), "Warnings")
+      if (windows || i < 29L) {
+        testthat::expect_false(optional_allowed_skip(file, expected[[i]], windows))
+        empty = rows
+        empty[[i]]$passed = 0L
+        testthat::expect_error(optional_gate(empty, file, windows), "assertions")
+        skipped = rows
+        skipped[[i]]$passed = 3L
+        skipped[[i]]$skipped = 1L
+        testthat::expect_error(optional_gate(skipped, file, windows), "Skipped")
+      }
+    }
+  }
+  for (i in native) {
+    rows[[i]]$passed = 0L
+    rows[[i]]$skipped = 1L
+  }
+  result = optional_gate(rows, file, FALSE)
+  testthat::expect_identical(result$platform_guard_cases, expected[native])
+  testthat::expect_identical(result$mandatory_cases, expected[-native])
+  testthat::expect_false(result$platform_guard_only)
+  testthat::expect_error(optional_gate(rows, file, TRUE), "Skipped")
+  testthat::expect_true(optional_allowed_skip(file, added[[4L]], FALSE))
+  testthat::expect_false(optional_allowed_skip("test-proc-writer-idle-slots.R", added[[4L]], FALSE))
 })
