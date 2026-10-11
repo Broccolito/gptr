@@ -1,5 +1,33 @@
 # GPTR 1.0 implementation - handoff
 
+## Native callr required gates GREEN; admissions remain OPEN — 2026-10-11
+
+Exact `189e2025db66518d56c0eb8d22beb3338d04cd92`
+[run38182630356](https://github.com/Broccolito/gptr/actions/runs/38182630356)
+is COMPLETE GREEN on Windows and Linux. Each patched host passes six strict cases
+(187P/0F) and nine upstream cases (36P/0F). All four unchanged compatibility files,
+20 titles, run under stock AND patched callr on both hosts: 49P/0F each profile.
+All executed packets have 0 warnings/skips/fixture errors; both scoped lint jobs
+and five controller units pass. All 30 owned families settle with 0 survivors and
+0 controller warnings. Identical five-package dependency maps and actual
+`exporter_free = TRUE` witnesses are retained in native-189e202-evidence.
+
+CE01-03 and the selected CE04 provenance/lifecycle/API compatibility scope are
+proved. Admissions stay RED: Linux stock/patched 136P/4F; Windows stock 99P/16F,
+patched 135P/5F. Invalid prelaunch seeds prevent attributing every child mismatch
+to callr restoration. CE05/06 stay OPEN. The six reviewed upstream runtime diffs
+are unchanged and installed only in private libraries; CE07 publication/released
+dependency integration, GPTR production adoption and merge remain OPEN.
+
+Prepared from docs-only checkpoint `2acd6cb`; resume in branch
+`codex/skipped-platform-tests`. Actual CI source is 189e202 above. Hosted leases
+are 0. Primary main 718e81e with 69 dirty paths/0 staged and shared Ollama remain
+preserved. Local-heavy work stays HELD under the retained 16:00:50 PDT witness:
+load 21.49/50.85/63.11, RAM 126 GiB used/1736 MiB unused, swap 20459.5 MiB,
+sampled paging 0, 259 GiB disk and no recorded thermal/performance warning.
+Use companion progress for status under the living plan's policy; no plan bytes
+changed. Broader native/security/frontend/model/CRAN gates remain separate.
+
 ## Native callr strict regression proved; fresh repeat active — 2026-10-11
 
 Exact `cad776c0824b38525be9bb1be518d8e8c418c88f`

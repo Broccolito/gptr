@@ -1687,3 +1687,61 @@ hold local-heavy work. Shared Ollama is untouched. No plan bytes changed; all-fo
 b984 plan evidence remains the current unchanged-plan checkpoint. Admissions,
 upstream release/adoption, production integration, merge and broader
 native/security/CRAN gates stay OPEN.
+
+
+## Exact 189e202 required gates GREEN; admissions retained — 2026-10-11
+
+Exact source `189e2025db66518d56c0eb8d22beb3338d04cd92`,
+[run38182630356](https://github.com/Broccolito/gptr/actions/runs/38182630356), is
+COMPLETE GREEN on both hosts with 0 active hosted leases. Both scoped lint jobs
+report 0 lints and all five controller units pass. Actual raw results are:
+
+| Packet | Linux stock | Linux patched | Windows stock | Windows patched |
+| --- | --- | --- | --- | --- |
+| Six strict native cases | 187P/0F | 187P/0F | 165P/22F | 187P/0F |
+| Nine upstream cases | Not selected | 36P/0F | Not selected | 36P/0F |
+| Four compatibility files/20 titles | 49P/0F | 49P/0F | 49P/0F | 49P/0F |
+| Four separate admission cases | 136P/4F | 136P/4F | 99P/16F | 135P/5F |
+
+Every packet has 0 warnings/0 skips/0 fixture errors and passes structural raw
+gates. GREEN denotes the required patched strict/upstream and both-mode
+compatibility gates; it does not relabel stock Windows or admission failures.
+All original stock Windows failures remain retained. The new deterministic
+R CMD handoff oracle passes on both hosts, supplying the exact synthetic value;
+the earlier empty compiler-query cause is still not proved.
+
+The four complete pinned compatibility files remain unchanged: 9 r_bg/1 hook/
+1 timeout/9 tracing titles, all unique and carrying positive assertions in every
+host/mode. Their assertion totals are 13/4/2/30 respectively, 49 per profile.
+All 16 compatibility observations report `exporter_free = TRUE` and the same exact
+dependencies: callr 3.8.0, processx 3.9.0, testthat 3.3.2, withr 3.0.3, otelsdk 0.2.4.
+Child-only OTEL filtering and public in-memory tracing preflight actually ran;
+SDK-disabled before/after checks pass. No test was rewritten, skipped or waived.
+
+All 30 owned families, 15 per host, settle with stopped roots, 0 marked survivors,
+0 cleanup errors and 0 controller warnings. Sampled family RSS maxima are
+591.05 MiB Linux/643.59 MiB Windows, within the unchanged bounds; these are samples,
+not OS peak claims. Native 30s/60s, 1 GiB RSS, 4 MiB input/64 MiB owned-file caps remain.
+Validation 300s/2 GiB RSS/1 MiB watched-file and 360s outer bounds stay strict.
+Evidence is retained under ignored callr-native-env-20261011/native-189e202-evidence.
+
+CE01 provenance, CE02 original parent/child regression and CE03 value/lifecycle
+matrix are proved on the selected native hosts. Selected CE04 all-five-launcher
+handoff and these complete compatibility files are proved; this is not universal
+startup/essential-variable admission. CE05/06 stay OPEN: the admissions above
+retain failed prelaunch seeds, so their dependent child mismatches cannot all be
+attributed to callr restoration. Linux's valid-seed PATH absence boundary remains
+separate. The six reviewed upstream runtime diffs are unchanged from cad776 and
+installed only in private fork libraries. No shared dependency or GPTR runtime
+changed. CE07 upstream publication/released-compatible-dependency integration,
+GPTR production adoption and merge remain OPEN.
+
+These additions were prepared from docs-only checkpoint 2acd6cb; tested source is 189e202.
+Primary main 718e81e with 69 dirty paths/0 staged remains preserved. Local-heavy
+work stays HELD under the retained 16:00:50 PDT witness: load 21.49/50.85/63.11,
+RAM 126 GiB used/1736 MiB unused, swap 20459.5 MiB, sampled paging 0, 259 GiB free disk,
+no recorded thermal/performance warning. Shared Ollama is untouched. This status
+update follows the living plan's companion policy; no plan bytes changed, so the
+verified b984 four-stage plan evidence stays the unchanged-plan checkpoint.
+Broader native/security/frontend/model/CRAN gates and admission work are separate;
+earlier RED artifacts/checkpoints remain intact.
