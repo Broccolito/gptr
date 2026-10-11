@@ -788,7 +788,15 @@ test_that("an abort of three running CLI agents leaves no process tree (INFRA-19
     peter(paste("Wait", i), model = f$model, envir = new.env(), .run = FALSE)
   })
   for (s in runs) local_cli_cleanup(s)
-  expect_identical(wait_fake_log(f, "turn", n, runs), n)
+  started = wait_fake_log(f, "turn", n, runs)
+  diagnostics = lapply(runs, function(session) {
+    condition = session_data(session)$condition
+    list(status = session$status,
+         condition = if (is.null(condition)) NULL else bp_case_failure(condition))
+  })
+  cat("GPTR-CLAUDE-ABORT-DIAGNOSTIC ", json_encode(list(stage = "before-cancel",
+    expected_starts = n, observed_starts = started, sessions = diagnostics)), "\n", sep = "")
+  expect_identical(started, n)
   gptr_cancel(runs)
   expect_identical(vapply(runs, function(s) s$status, ""), rep("aborted", n))
   expect_length(fake_log(f, "interrupt"), n)
