@@ -136,7 +136,8 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
       "        (($af -band 4096) -eq ($bf -band 4096)),",
       "        (($af -band 256) -eq ($bf -band 256)),",
       "        (($af -band 1024) -eq ($bf -band 1024)),",
-      "        $nullEqual, $countEqual, $lengthEqual, $bytesEqual)",
+      "        $nullEqual, $countEqual, $lengthEqual, $bytesEqual,",
+      "        (($af -band 1024) -ne 0), (($bf -band 1024) -ne 0))",
       "      [System.IO.File]::WriteAllText($diag, [string]::Join(',', [string[]]$bits))",
       "    } catch {",
       "      try { [System.IO.File]::WriteAllText($diag, 'unavailable') } catch {}",
@@ -171,8 +172,9 @@ ckpt_test_deny_create = function(path, root, .env = parent.frame()) {
                             error = function(error) "unavailable")
             fields = c("flags_equal", "present_equal", "protected_equal",
               "auto_required_equal", "auto_inherited_equal", "null_equal",
-              "ace_count_equal", "binary_length_equal", "binary_equal")
-            if (grepl("^[01](,[01]){8}$", bits)) {
+              "ace_count_equal", "binary_length_equal", "binary_equal",
+              "auto_inherited_before", "auto_inherited_after")
+            if (grepl("^[01](,[01]){10}$", bits)) {
               bits = strsplit(bits, ",", fixed = TRUE)[[1L]]
               text = paste(paste0(fields, "=", bits), collapse = " ")
             } else {

@@ -7,6 +7,7 @@ pmf_env_diagnostic = function(before, after, marker = NULL,
   }
   out = list(raw_equal = identical(before, after), valid = FALSE,
     keys_equal = FALSE, values_equal = FALSE, added = NULL, missing = NULL, changed = NULL,
+    missing_empty = NULL, missing_nonempty = NULL, missing_pseudo = NULL,
     casing = NULL, order_equal = FALSE, attributes_equal = identical(attributes(before),
       attributes(after)), owned_marker_added = FALSE, other_marker_added = NULL)
   if (!valid(before) || !valid(after)) return(out)
@@ -33,6 +34,10 @@ pmf_env_diagnostic = function(before, after, marker = NULL,
   out$values_equal = out$keys_equal && changed == 0L
   out$added = as.integer(length(added))
   out$missing = as.integer(length(missing))
+  mi = match(missing, b)
+  out$missing_empty = as.integer(sum(!nzchar(before[mi])))
+  out$missing_nonempty = as.integer(sum(nzchar(before[mi])))
+  out$missing_pseudo = as.integer(sum(startsWith(names(before)[mi], "=")))
   out$changed = as.integer(changed)
   out$casing = as.integer(sum(names(before)[bi] != names(after)[ai]))
   out$order_equal = identical(b, a)

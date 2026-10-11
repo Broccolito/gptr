@@ -174,6 +174,7 @@ codex_capability_deny_read = function(path, root, .env = parent.frame()) {
   backup = file.path(control, "access.txt")
   reference = file.path(control, "expected.bin")
   stage = file.path(control, "stage.txt")
+  diagnostic = file.path(control, "access-diagnostic.txt")
   state = new.env(parent = emptyenv())
   state$restored = FALSE
   state$verified = FALSE
@@ -254,7 +255,51 @@ codex_capability_deny_read = function(path, root, .env = parent.frame()) {
       "  [System.IO.File]::WriteAllText($Stage, 'restore-acl-read')",
       "  $current = [System.IO.File]::GetAccessControl($Path, $section)",
       "  [System.IO.File]::WriteAllText($Stage, 'restore-sddl-read')",
-      "  if ($current.GetSecurityDescriptorSddlForm($section) -cne $original) {",
+      "  $restored = $current.GetSecurityDescriptorSddlForm($section)",
+      "  if ($restored -cne $original) {",
+      "    $diag = [System.IO.Path]::Combine($Control, 'access-diagnostic.txt')",
+      "    try {",
+      "      if ($original.Length -gt 262144 -or $restored.Length -gt 262144) {",
+      "        throw 'Owned ACL diagnostic input bound'",
+      "      }",
+      "      $before = [System.Security.AccessControl.RawSecurityDescriptor]::new($original)",
+      "      $after = [System.Security.AccessControl.RawSecurityDescriptor]::new($restored)",
+      "      $af = [int]$before.ControlFlags",
+      "      $bf = [int]$after.ControlFlags",
+      "      $a = $before.DiscretionaryAcl",
+      "      $b = $after.DiscretionaryAcl",
+      "      $nullEqual = (($null -eq $a) -eq ($null -eq $b))",
+      "      $countEqual = $false",
+      "      $lengthEqual = $false",
+      "      $bytesEqual = $false",
+      "      if ($null -eq $a -and $null -eq $b) {",
+      "        $countEqual = $true",
+      "        $lengthEqual = $true",
+      "        $bytesEqual = $true",
+      "      } elseif ($null -ne $a -and $null -ne $b) {",
+      "        if ($a.Count -gt 128 -or $b.Count -gt 128 -or",
+      "            $a.BinaryLength -gt 65536 -or $b.BinaryLength -gt 65536) {",
+      "          throw 'Owned ACL diagnostic binary bound'",
+      "        }",
+      "        $countEqual = ($a.Count -eq $b.Count)",
+      "        $lengthEqual = ($a.BinaryLength -eq $b.BinaryLength)",
+      "        $ab = [byte[]]::new($a.BinaryLength)",
+      "        $bb = [byte[]]::new($b.BinaryLength)",
+      "        $a.GetBinaryForm($ab, 0)",
+      "        $b.GetBinaryForm($bb, 0)",
+      "        $bytesEqual = ([Convert]::ToBase64String($ab) -ceq",
+      "          [Convert]::ToBase64String($bb))",
+      "      }",
+      "      $bits = [int[]]@(($af -eq $bf), (($af -band 4) -eq ($bf -band 4)),",
+      "        (($af -band 4096) -eq ($bf -band 4096)),",
+      "        (($af -band 256) -eq ($bf -band 256)),",
+      "        (($af -band 1024) -eq ($bf -band 1024)),",
+      "        $nullEqual, $countEqual, $lengthEqual, $bytesEqual,",
+      "        (($af -band 1024) -ne 0), (($bf -band 1024) -ne 0))",
+      "      [System.IO.File]::WriteAllText($diag, [string]::Join(',', [string[]]$bits))",
+      "    } catch {",
+      "      try { [System.IO.File]::WriteAllText($diag, 'unavailable') } catch {}",
+      "    }",
       "    [System.IO.File]::WriteAllText($Stage, 'restore-sddl-mismatch')",
       "    throw 'Owned file Access descriptor restoration did not match'",
       "  }",
@@ -262,6 +307,7 @@ codex_capability_deny_read = function(path, root, .env = parent.frame()) {
       "} else { throw 'Unknown owned file Access action' }"), script)
     invoke = function(action) {
       writeBin(charToRaw("launch"), stage)
+      writeBin(charToRaw("pending"), diagnostic)
       tryCatch({
         codex_capability_process(Sys.which("powershell.exe"),
           c("-NoProfile", "-NonInteractive", "-File", script, "-Path", path,
@@ -273,6 +319,22 @@ codex_capability_deny_read = function(path, root, .env = parent.frame()) {
             "deny-applied", "restore-backup-read", "restore-sddl-set", "restore-apply",
             "restore-acl-read", "restore-sddl-read", "restore-sddl-mismatch", "restore-verified")))
           phase = "unknown"
+        if (phase == "restore-sddl-mismatch") {
+          bits = tryCatch(rawToChar(readBin(diagnostic, "raw", 64L)),
+                          error = function(error) "unavailable")
+          fields = c("flags_equal", "present_equal", "protected_equal",
+            "auto_required_equal", "auto_inherited_equal", "null_equal",
+            "ace_count_equal", "binary_length_equal", "binary_equal",
+            "auto_inherited_before", "auto_inherited_after")
+          if (grepl("^[01](,[01]){10}$", bits)) {
+            bits = strsplit(bits, ",", fixed = TRUE)[[1L]]
+            text = paste(paste0(fields, "=", bits), collapse = " ")
+          } else {
+            text = "unavailable"
+          }
+          tryCatch(cat("Owned Codex file ACL diagnostic ", text, "\n",
+                       sep = "", file = stdout()), error = function(error) NULL)
+        }
         codex_capability_fail(paste0("file-access-", action, "/", phase))
       })
       invisible(NULL)
