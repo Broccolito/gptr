@@ -470,17 +470,22 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Quarto discovery | ONGOING child-only PATH/direct bundled executable; require actual initial fake requests2/replay0/source hashes and compact-history render. |
 | Python/R dependencies | Framework reticulate exists; private Python lacks pandas/numpy. ONGOING explicit hosted Python+pandas provisioning; local wheel installation WAITING resource lease. Verify actual bridge values, not only package directories. |
 | Browser/search prerequisites | Local Chrome/chromote/rg exist. ONGOING explicit hosted discovery/preflight; retain Chrome startup bound, actual render/screenshot proof and search comparison. |
-| Windows filesystem safety | ONGOING new actual-platform tests for safe/escaped/guarded links, unchanged foreign targets, scrubbing/checkpoint/edit/write and same-size config/trust changes; no mocked-Windows substitute. |
-| Windows child stdin | ONGOING externally supervised4MiB duplex, no-reader stdin timeout and queued cancellation; fixed deadlines/RSS/output and identity-checked child cleanup. D-019 remains open until actual Windows proof/fix. |
-| Validation/merge | WAITING source review, hosted RED, minimal fixes, hosted GREEN/scoped lint/required-case counts, then integrate exact reviewed changes. No skipped-case or zero-selection pass. |
+| Windows filesystem safety | Initial hosted38112622473 failed fixtures: raw6errors/3failures/6warnings/53passes/0skips. ONGOING corrected named temporary script/integer initial timestamps; eight strict actual-platform tests preserved, option-name diagnostic added. Link/cache runtime failures not yet established. |
+| Windows child stdin | Actual Windows RED:3 watchdog failures/24passes/0skips; owned families stopped, RSS348-374MB, no sampling errors. ONGOING asynchronous pipepair investigation; fixed deadlines/RSS/output and identity-checked child cleanup preserved. Unix control pending. D-019 remains open. |
+| Validation/merge | Initial test packet reviewed, committed and pushed to isolated candidate. ONGOING hosted RED; WAITING minimal fixes, strict hosted GREEN/scoped lint/required-case counts and four plan checks, then integration. No skipped-case or zero-selection pass. |
 
-At21:33 PDT load16.70/25.90/24.57, CPU19.80%idle, physical RAM119GiB used/8147MiB
-unused, swap22,949.81MiB used and disk115GiB still prevent expanding local compute.
+The optional dependency helper's9 stdlib tests and plan diagnostic guard's6 stdlib tests
+are GREEN. They launch no R/browser/model process and do not replace actual integration
+or the four mandatory plan checks. The strict hosted runner counts raw expectation errors,
+failures and warnings; the older file runner's numeric summary omits raw errors.
+
+Latest21:43 PDT load24.96/38.68/31.81, CPU39.92%idle, physical RAM123GiB used/4424MiB
+unused, swap22,675.94MiB used and disk114GiB still prevent expanding local compute.
 Memory-pressure free83% is a distinct metric; no thermal/performance warning was recorded.
 Keep local R/build/install/browser/model jobs held; bounded read/source work and hosted
 validation use independent resources. Recheck before granting any local compute lease.
 
-Current resource hold supersedes the earlier two-lane allowance: at19:46 PDT load was
+The hold began at19:46 PDT and supersedes the earlier two-lane allowance: load was
 224.51/198.89/166.78, physical RAM127GiB used/94GiB wired/291MiB unused, swap31,460MiB
 used and disk127GiB; CPU3.57%idle with no thermal warning. The distinct memory-pressure metric
 was14%free; it does not clear the CPU/swap/disk gates. All owned

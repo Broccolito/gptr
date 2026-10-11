@@ -9,7 +9,12 @@ wsec_local = function(.env = parent.frame()) {
   # Registered first, so this observes restoration after every owned cleanup callback.
   # Boolean assertions never print user option, environment or seed contents on failure.
   withr::defer({
-    testthat::expect_true(identical(options(), before$options), info = "options restored")
+    current = options()
+    keys = union(names(current), names(before$options))
+    same = function(key) identical(current[[key]], before$options[[key]])
+    changed = keys[!vapply(keys, same, NA)]
+    label = paste("options restored; changed names:", paste(changed, collapse = ", "))
+    testthat::expect_true(identical(current, before$options), info = label)
     testthat::expect_true(identical(Sys.getenv(), before$env), info = "environment restored")
     testthat::expect_true(identical(getwd(), before$cwd), info = "working directory restored")
     testthat::expect_true(identical(seed(), before$seed), info = "RNG unchanged")
@@ -78,7 +83,8 @@ wsec_link = function(target, link, .env = parent.frame()) {
   force(target)
   force(link)
   directory = dir.exists(target)
-  script = withr::local_tempfile("gptr-wsec-unlink-", fileext = ".ps1", .local_envir = .env)
+  script = withr::local_tempfile(pattern = "gptr-wsec-unlink-", fileext = ".ps1",
+                                 .local_envir = .env)
   writeLines(c("param([string]$Link, [string]$Directory, [string]$Action = 'remove')",
                "$ErrorActionPreference = 'Stop'",
                "if ($Action -eq 'inspect') {",
@@ -119,6 +125,14 @@ wsec_link = function(target, link, .env = parent.frame()) {
 wsec_stamp = function(path) {
   info = file.info(path, extra_cols = FALSE)
   list(size = unname(info$size), mtime = as.numeric(info$mtime), ctime = as.numeric(info$ctime))
+}
+
+# Start from an exactly representable mtime; fractional file times can lose precision on reset.
+wsec_mtime = function(path) {
+  time = floor(as.numeric(Sys.time())) - 10
+  testthat::expect_true(Sys.setFileTime(path, as.POSIXct(time, origin = "1970-01-01")))
+  testthat::expect_identical(wsec_stamp(path)$mtime, time)
+  invisible(time)
 }
 
 wsec_rewrite = function(path, text) {

@@ -41,8 +41,32 @@ the candidate's plan amendments. Runtime implementation is unchanged in the init
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | Source prepared; Python unit tests passed | Agent-owned 8-case stdlib run; no tools launched |
 | Local pandas/NumPy install | Waiting for resources | Existing private Python 3.12 lacks both modules |
-| Actual Windows security baseline | Ready to dispatch | Eight real-filesystem tests; no R run yet |
-| Actual Windows/Unix child-process baseline | Ready to dispatch | Three externally bounded cases; no R run yet |
+| Actual Windows security baseline | Failed fixtures; corrected source ready | Run `38112622473`: raw 6 errors, 3 failed assertions, 6 warnings, 53 passes, 0 skips |
+| Actual Windows/Unix child-process baseline | Windows runtime RED; Unix pending | Same run: 3 watchdog failures, 24 passes, 0 skips, no observed process-test warnings |
 | Strict optional integration workflow | In progress | Explicit dependencies, named coverage and bounded jobs |
 | Index/extract/R-parse/lintr plan checks | Pending hosted execution | New serial checker rejects soft diagnostic failures |
 | Shared Ollama model | Preserved | No model stop, unload or inference request |
+
+Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
+It uses the unchanged legacy file runner to collect failures, not to certify warning/skip coverage.
+All three process cases reached the 30-second case bound in about 32 seconds; owned families
+settled, peak family RSS was 348-374 MB, output about 10 KB, and sampling errors were zero.
+Cancellation reached the queued phase before hanging, consistent with the native write inside
+the drain preventing later output/timer/timeout handling. A public asynchronous pipepair is
+being investigated; no speculative runtime fix has been applied.
+
+Six security cases stopped before link creation because positional `local_tempfile()` used its
+deprecated binding mode rather than returning a path. The two timestamp fixtures lost fractional
+mtime precision in `Sys.setFileTime()`; settings also reported an options-restoration mismatch.
+The corrected fixtures name `pattern` explicitly and assert an exactly representable integer
+mtime before priming settings or recording trust. Strict stamp equality remains; changed option
+names will be diagnosed without exposing their values. Link/caching runtime failures are not yet
+established by this scaffold run. The legacy numeric summary misses raw expectation errors;
+the new strict runner counts raw error/failure/warning conditions independently.
+
+The plan-check diagnostic controller passed six stdlib regression tests after a test-first RED.
+This proves its parse-report guard, not execution of the four actual R/index/lint stages.
+The complete older exact-archive run `38102472275` has finished: all five consumers failed.
+Mac's two failures are the old notebook stdout assertion already corrected at `ad4e6a9`;
+Linux devel reports the same two plus the known mock-path fixture assertions. These older
+archives do not include this new packet or prove current-source regressions.

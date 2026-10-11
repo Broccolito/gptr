@@ -151,7 +151,7 @@ test_that("Windows settings refresh after a same-size rewrite with unchanged fil
   wsec_local()
   path = settings_path("user", create = TRUE)
   writeLines('{"mode":"plan"}', path)
-  Sys.setFileTime(path, Sys.time() - 10)
+  wsec_mtime(path)
   # Windows ctime is creation time: age the real file before priming the two-second cache.
   Sys.sleep(2.1)
   expect_identical(settings_read("user")$mode, "plan")
@@ -164,6 +164,7 @@ test_that("Windows same-size gated rewrites revoke trust even with unchanged fil
   project = wsec_local()
   path = file.path(project, ".gptr", "settings.json")
   writeLines('{"mode":"plan"}', path)
+  wsec_mtime(path)
   gptr_trust(project, trust = TRUE)
   expect_true(trust_get(project))
   before = trust_fingerprint(project)$fp

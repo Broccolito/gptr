@@ -13,27 +13,143 @@ on:
       minutes:
         description: Time limit per file in minutes
         default: '15'
+      optional:
+        description: Run the strict, provisioned optional-integration packet
+        type: boolean
+        default: false
+      source_sha:
+        description: Full lowercase commit SHA required by optional mode
+        type: string
+        default: ''
 
 permissions: read-all
 
 jobs:
   by-file:
-    runs-on: windows-latest
-    timeout-minutes: 300
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ inputs.optional && 45 || 300 }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: ${{ fromJSON(inputs.optional && '["windows-latest","ubuntu-latest"]' || '["windows-latest"]') }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       NOT_CRAN: 'true'
+      GPTR_LIVE_TESTS: 'false'
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      GPTR_EXPECTED_SOURCE: ${{ inputs.source_sha }}
+      GPTR_OPTIONAL_FILTER: ${{ inputs.filter }}
+      GPTR_LEGACY_FILTER: ${{ inputs.filter }}
+      GPTR_LEGACY_MINUTES: ${{ inputs.minutes }}
     steps:
+      - name: Validate optional source nomination
+        if: inputs.optional
+        shell: bash
+        run: '[[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]'
       - uses: actions/checkout@v6
+        if: '!inputs.optional'
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: inputs.optional
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Verify optional source identity and canonical checksum
+        if: inputs.optional
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert actual == os.environ['SOURCE_SHA']
+          folder = pathlib.Path('optional-evidence')
+          folder.mkdir()
+          archive = folder / 'source.tar'
+          with archive.open('wb') as output:
+              subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], stdout=output, check=True)
+          (folder / 'source-identity.json').write_text(json.dumps(
+              {'source_sha': actual, 'source_archive_sha256':
+               hashlib.sha256(archive.read_bytes()).hexdigest()}, indent=2))
+          PY
       - uses: r-lib/actions/setup-r@v2
+        if: '!inputs.optional'
         with:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
+        if: '!inputs.optional'
         with:
           extra-packages: any::pkgload
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        if: inputs.optional
+        with:
+          r-version: release
+          Ncpus: 1
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        if: inputs.optional
+        with:
+          extra-packages: any::pkgload any::testthat any::repr any::reticulate any::chromote any::lintr
+          needs: check
+      - uses: ./.github/actions/optional-dependencies
+        if: inputs.optional
+      - name: Test optional dependency and result gates
+        if: inputs.optional
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          python dev/ci/test-optional-dependencies.py
+          Rscript --vanilla -e 'testthat::test_file("dev/ci/test-optional-integrations.R", stop_on_failure = TRUE)'
+      - name: Lint the optional runner and its pure result tests
+        if: inputs.optional
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-lint
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla -e 'results = lapply(c("dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R"), lintr::lint); print(results); stopifnot(all(lengths(results) == 0L))'
       - name: Install the package
+        if: '!inputs.optional'
         shell: bash
         run: R CMD INSTALL .
-      - name: Offline tests file by file
+      - name: Install the optional source for real child fixtures
+        if: inputs.optional
         shell: bash
-        run: Rscript --vanilla dev/ci/test-by-file.R "${{ inputs.filter }}" "${{ inputs.minutes }}"
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: R CMD INSTALL .
+      - name: Offline tests file by file
+        if: '!inputs.optional'
+        shell: bash
+        run: Rscript --vanilla dev/ci/test-by-file.R "$GPTR_LEGACY_FILTER" "$GPTR_LEGACY_MINUTES"
+      - name: Mandatory optional tests with five-minute owned-child bounds
+        if: inputs.optional
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+          GPTR_OPTIONAL_STATE: ${{ runner.temp }}/gptr-optional-owned
+        run: |
+          python dev/ci/optional-dependencies.py --state-dir "$GPTR_OPTIONAL_STATE" \
+            --run Rscript --vanilla dev/ci/optional-integrations.R
+      - name: Run serial plan gates even after an optional test failure
+        if: always() && inputs.optional && runner.os == 'Linux'
+        shell: bash
+        env:
+          GITHUB_PAT: ''
+          GITHUB_TOKEN: ''
+        run: |
+          python dev/ci/test-check-plans.py
+          python dev/ci/check-plans.py --out optional-evidence/plan-checks
+      - name: Preserve optional source, preflight and each failed case
+        if: always() && inputs.optional
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: optional-${{ runner.os }}-${{ inputs.source_sha }}
+          path: optional-evidence/
+          if-no-files-found: error
+          retention-days: 14
