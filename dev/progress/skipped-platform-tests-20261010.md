@@ -936,3 +936,15 @@ model jobs held. No thermal/performance warning is recorded. Swap occupancy is n
 claim; sampled system pressure and owned child RSS are distinct. Shared Ollama, unrelated
 processes and user files are untouched. Private pandas/NumPy wheel installation, local
 Quarto/bridges, installed display/frontends and current full CRAN/release remain waiting.
+
+
+## Next strict17-file source nomination — 2026-10-11 05:09 PDT
+
+225326a registers36 files/161 titles/53 lint paths, retaining every prior strict control.
+4429c9f applies stable owned ACL setup: candidate checkpoint only, mirrored Codex helper,
+no case/title/runtime/Import additions. Native exact restoration remains pending; no caller
+AI0 remedy is claimed. f3f3aaa diagnostics retain exact original38-case prefix plus2 pure
+decoder cases. Next17 full files and all4 fresh plan stages must test the new plan/source.
+The known dangling metadata warning remains fatal; an existing-capability nofollow observer
+is under source review.05:06 resource gate stays held (load206.18/free disk13GiB); shared
+Ollama and all unrelated user state remain intact. No full CRAN or merge certificate.
