@@ -5,6 +5,16 @@ paths = c(
   "tests/testthat/test-tool-search.R", "tests/testthat/test-artifact-browser-cleanup.R",
   "tests/testthat/test-config-content-cache.R", "tests/testthat/test-gptr-config.R",
   "tests/testthat/helper-windows-security.R", "tests/testthat/test-windows-security.R",
+  "R/proc-spawn.R", "R/proc-supervise.R", "R/http-reactor.R",
+  "tests/testthat/helper-proc-backpressure.R", "tests/testthat/test-proc-windows-backpressure.R",
+  "tests/testthat/helper-proc-writer-prototype.R", "tests/testthat/test-proc-writer-prototype.R",
+  "tests/testthat/test-proc-backpressure-sampling.R",
+  "tests/testthat/helper-proc-writer-runtime.R", "tests/testthat/test-proc-writer-runtime.R",
+  "tests/testthat/test-proc-spawn.R", "tests/testthat/test-proc-supervise.R",
+  "tests/testthat/test-http-reactor.R", "tests/testthat/test-arch-layers.R",
+  "tests/testthat/test-mcp-client.R", "tests/testthat/test-subagent-worker.R",
+  "tests/testthat/test-cli-common.R", "tests/testthat/test-cli-claude.R",
+  "tests/testthat/test-cli-codex.R",
   "dev/ci/optional-integrations.R", "dev/ci/test-optional-integrations.R",
   "dev/ci/lint-optional.R")
 stopifnot(all(file.exists(paths)))

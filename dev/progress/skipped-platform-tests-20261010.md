@@ -9,8 +9,9 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At 22:45 PDT, load was345.73/290.05/184.73, CPU0%idle, physical memory100GiB used/27GiB
-unused, swap12,767.69MiB, free disk213GiB, with no recorded thermal/performance warning.
+At23:04 PDT, load was157.27/149.57/168.73, CPU0.7%idle, physical memory104GiB used/23GiB
+unused, swap12,679.62MiB, free disk246GiB, with no recorded thermal/performance warning.
+A23:15 partial probe still showed load185.09 and CPU3.99%idle.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -33,22 +34,25 @@ Linux runners have separate resources and can exercise the offline cases without
 New R cases were prepared before actual-platform execution. The unchanged Windows file runner
 collected the initial failures; the strict integration runner independently rejects warnings,
 missing mandatory cases and unexpected skips before any GREEN claim. All four mandatory
-cross-plan checks passed on candidate `245de54`. Runtime implementation remains unchanged.
+cross-plan checks passed through candidate `38cc8dc`. Initial RED baselines used unchanged
+production transport; its independently reviewed Windows correction is now source-only and
+requires actual production execution before integration.
 
 ## Execution ledger
 
 | Item | State | Evidence |
 | --- | --- | --- |
-| Quarto/tool-path discovery helper | Actual hosted Windows launch/preflight passed89f804d | Python11/Rgate41 and0 scoped lints; realQuarto/Python/Chrome/rg/Perl oracles passed, no model events |
-| Local pandas/NumPy install | Waiting for resources | Existing private Python 3.12 lacks both modules |
-| Actual Windows security baseline | Failed fixtures; corrected source ready | Run `38112622473`: raw 6 errors, 3 failed assertions, 6 warnings, 53 passes, 0 skips |
-| Actual Windows/Unix child-process baseline | Windows runtime RED; actual Unix control passed89f804d | Windows baseline:3 watchdog failures/24 passes/0 skips; Linux:60 passes/0 failures/warnings/skips |
-| Strict optional integration workflow | Controller lifecycle RED; correction ongoing | `38114220610` at89f804d: Windows setup/unit/lint/preflight passed, nine subsequent per-file children failed before test bodies with supervisor-pipe error |
-| Index/extract/R-parse/lintr plan checks | Passed exact245de54,39f3248 and89f804d; rerun with plan updates | All four Linux stages succeeded three times and source hashes matched before/after |
-| Owned-writer transport prototype | Linux3 cases passed; cancellation resource guard RED; Windows waiting | Actual Linux duplex25/timeout23/binary22 assertions passed; cancellation2 failures/4 passes and1 sampling error; owned families stopped. Not a production fix |
-| Quarto/Python/search/history integrations | Six complete Linux files passed89f804d |486 assertions/0 failures/warnings/skips; Quarto71, notebook protocol44, compact history58, bridge128, search125, Unix child60 |
-| App browser integrations | Linux2 mandatory cases skipped | HTTP200 controls and separate Chrome preflight passed; constructor error text was not retained. Diagnostics and actual rerun ongoing |
-| Shared Ollama model | Preserved | No model stop, unload or inference request |
+| Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
+| Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
+| Actual Windows security | REDb6fff3d; reviewed fixes pushed; rerun63a2454 ONGOING |92passes/6errors/4failures/0warnings/skips establish tag-fixture and exact-stamp cache/trust defects; unchanged eight native oracles |
+| Actual Windows/Unix child baseline | Windows production RED; Unix control retained | Original Windows3 watchdog failures/24passes/0skips; earlier Linux60passes; latest Linux sampler diagnostic must be recovered from distinct logs |
+| Strict optional workflow | Owned controller cleanup DONEb6fff3d; core63a2454 ONGOING | All11 exact marked families stopped per host.38cc8dc stopped before package tests on lint launch/fixture syntax; saved runner/braces corrected |
+| Index/extract/R-parse/lintr plan checks | DONE through38cc8dc; next plan edits require fresh gates | Five actual Linux runs, unchanged39-file manifests,25plans/770selectedRblocks/0parse-style/0lints |
+| Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
+| Production owned-writer correction | SOURCE-CLEAR; actual validation WAITING hosted lease |20prepared runtime/guard cases; native3/prototype/sampler byte-identical; ACL/startup/byte limits/Unix lifecycle/ownership/performance need execution |
+| Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
+| App browser/search integrations | Corrected source pushed63a2454; actual core rerun ONGOING | Short private Linux socket path, owned synchronous browser shutdown, native Windows search spelling and four pure cleanup cases |
+| Shared Ollama model | PRESERVED | No stop, unload, reconfiguration or inference request |
 
 Initial hosted baseline: [Windows run 38112622473](https://github.com/Broccolito/gptr/actions/runs/38112622473).
 It uses the unchanged legacy file runner to collect failures, not to certify warning/skip coverage.
@@ -224,3 +228,21 @@ Independent production source review also caught the Windows R Core9998-byte sin
 limit and Unix ENOENT marker-release behavior; both are being corrected before runtime
 execution. Stable root/owner/child-alias validation is included in both the parent and actor.
 Source review is not production validation; D-019 remains open.
+
+
+Saved lint-file launch and braced teardown corrections were pushed through
+`63a24543183ba00e236b6ee3a89d3daf42766617`. Actual six-file Windows/Linux rerun
+[38117605612](https://github.com/Broccolito/gptr/actions/runs/38117605612) is ONGOING;
+source review was clear, but actual raw results remain pending.
+
+The six-file production writer packet is now independently SOURCE-CLEAR and copied into
+the isolated candidate. It has20prepared cases (five actual-Windows lifecycle cases and
+fifteen pure guards), original native3/prototype/sampler remain byte-identical, and obsolete
+D-019 skips are removed from the existing proc-spawn tests. The separate actual Rscript
+expression guard is9998 UTF-8 bytes and the conservative overall argv cap stays12000.
+Mailbox root/owner/child-alias checks guard both parent and actor; Unix marker release retains
+its old path. No production parser/lint/ACL/bootstrap/lifecycle/performance pass is claimed.
+Strict final registry/gate and31-path lint packet also passed independent source review;
+unexpected capability skips (including existing Codex permission/link cases) remain fatal.
+Start production hosted tests only after the two current hosted jobs finish. Local resource
+hold and shared-model preservation remain unchanged.

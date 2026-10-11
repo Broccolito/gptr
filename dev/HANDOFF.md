@@ -1,21 +1,25 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integration rerun — 2026-10-10 23:17 PDT
+## Optional integrations and owned stdin writer — 2026-10-10 23:28 PDT
 
-Reviewed cache/browser/fixture fixes are pushed through38cc8dc on the isolated
-`codex/skipped-platform-tests` branch/worktree. Run38116814583 stopped before package tests:
-Windows multiline inline lint failed parsing; Linux caught an unbraced member assignment
-in the new browser cleanup fixture. Other10Linux scoped files lint-clean; all four
-plan checks passed38cc8dc with unchanged source bytes. Saved lint-file launch and braced
-teardown are now frozen/reviewed for a six-file actual Windows/Linux rerun.
+Core fixture/lint corrections are pushed through63a2454. Actual six-file Windows/Linux
+run38117605612 is ongoing; await raw results. Earlier38cc8dc stopped before package tests
+on Windows inline-lint parsing and Linux cleanup-fixture syntax; other10Linux scoped files
+were lint-clean and all four plan checks passed with unchanged sources.
 
-The production Windows stdin writer is still source-only and under independent review.
-Stable mailbox identity/owner/child-alias checks, the Windows9998-byte expression limit and
-Unix marker-release behavior require correction and actual hosted validation. Do not copy
-half-prepared primary runtime files or claim D-019 closed. Original native3 oracles remain
-unchanged. Local dependencies/frontend/model tests remain held:23:04 load157.27,0.7%idle,
-swap12,679.62MiB, disk246GiB;23:15 partial probe load185.09,3.99%idle. Shared Ollama is
-preserved. Main718e81e, maintainer edits, unrun primary regressions and stash remain intact.
+The six-file production Windows writer and20-case strict registry/31-path lint packet are
+independently SOURCE-CLEAR and copied into the isolated candidate. Production execution
+is still pending: verified DACL/startup, full-bootstrap size, lifecycle, original native3,
+Unix and affected transport tests. Original native/prototype/sampler oracles and limits are
+unchanged; obsolete blocking-stdin skips are removed. Unexpected capability/Codex skips
+remain fatal. Do not close D-019 or merge until actual production gates pass.
+
+Use the attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr` worktree and
+`codex/skipped-platform-tests` branch. Preserve main718e81e, maintainer edits, old unrun
+regressions and stash. Local jobs remain held:23:04 load157.27/0.7%idle/swap12,679.62MiB;
+23:15 partial load185.09/3.99%idle. Keep the shared Ollama model untouched. At most two hosted
+jobs run; release the next production packet only after current jobs finish. Local pandas/
+NumPy installation, rendered frontend/native UI and live model work remain waiting.
 
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated

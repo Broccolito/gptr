@@ -70,7 +70,11 @@ optional_titles = list(
     "writer requires the exact live recorded target before construction",
     "writer cleanup retains its original state until settlement is confirmed",
     "writer refuses a changed mailbox root or owner before payload access",
-    "writer validates child aliases and preserves a single-line bootstrap"),
+    "writer validates child aliases and preserves a single-line bootstrap",
+    "writer enforces the actual Rscript expression byte boundary",
+    "full production writer bootstrap fits the unchanged Rscript limits",
+    "Unix marker release does not consult the Windows mailbox",
+    "writer cleanup refuses a dangling mailbox link"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
