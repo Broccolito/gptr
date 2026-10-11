@@ -355,17 +355,119 @@ test_that("writer full compressed bootstrap fits a long Windows mailbox path", {
 test_that("writer early-case diagnostics retain only bounded structural evidence", {
   error = gptr_condition("FAKE-writer-message-canary", "io", fields = list(
     writer_stage = "bootstrap", expression_bytes = 1234L, startup_elapsed = 0.25,
-    accepted_bytes = 0L))
+    accepted_bytes = 0L, writer_phases = c(decode = 0.1, identity = 0.2)))
   x = bp_case_failure(error)
   expect_identical(x$stage, "bootstrap")
   expect_identical(x$expression_bytes, 1234L)
   expect_identical(x$accepted_bytes, 0L)
+  expect_identical(x$writer_phases, list(decode = 0.1, identity = 0.2))
   expect_false(any(grepl("FAKE-writer-message-canary", unlist(x), fixed = TRUE)))
   error$writer_stage = "untrusted-stage-canary"
   error$expression_bytes = c(1, 2)
   error$startup_elapsed = NA_real_
+  error$writer_phases = c(`FAKE-phase-canary` = 0.1)
   x = bp_case_failure(error)
   expect_null(x$stage)
   expect_null(x$expression_bytes)
   expect_null(x$startup_elapsed)
+  expect_null(x$writer_phases)
+})
+
+test_that("writer startup diagnostics accept only fixed monotonic stages and split lines", {
+  state = new.env(parent = emptyenv())
+  state$private = FALSE
+  state$diagnostic_tail = ""
+  state$diagnostic_bytes = 0L
+  state$phases = numeric()
+  observe = new.env(parent = emptyenv())
+  observe$reads = integer()
+  observe$events = character()
+  chunks = c("GPTR_STDIN_STAGE decode 0.100000\nGPTR_STDIN_STAGE ident",
+             "ity 0.110000\nGPTR_STDIN_STAGE acl_start 0.200000\n")
+  state$p = list(poll_io = function(timeout) {
+    observe$events = c(observe$events, paste0("poll:", timeout))
+  }, read_error = function(n) {
+    observe$events = c(observe$events, paste0("read:", n))
+    observe$reads = c(observe$reads, n)
+    chunks[[length(observe$reads)]]
+  })
+  proc_writer_diagnostics(state)
+  expect_identical(state$phases, c(decode = 0.1))
+  expect_identical(state$diagnostic_tail, "GPTR_STDIN_STAGE ident")
+  proc_writer_diagnostics(state)
+  expect_identical(state$phases, c(decode = 0.1, identity = 0.11, acl_start = 0.2))
+  expect_identical(state$diagnostic_tail, "")
+  expect_identical(observe$reads, c(1025L, 1025L))
+  expect_identical(observe$events, rep(c("poll:0", "read:1025"), 2L))
+  expect_false(state$private)
+  expect_lte(state$diagnostic_bytes, 1024L)
+  chunks = c("GPTR_STDIN_STAGE acl_wait 0.300000\r\nGPTR_STDIN_STAGE acl_done 0.400000\r",
+             "\nGPTR_STDIN_STAGE validated 0.500000\r\nGPTR_STDIN_STAGE ready 0.600000\r\n")
+  observe$reads = integer()
+  observe$events = character()
+  proc_writer_diagnostics(state)
+  expect_identical(state$phases,
+    c(decode = 0.1, identity = 0.11, acl_start = 0.2, acl_wait = 0.3))
+  expect_identical(state$diagnostic_tail, "GPTR_STDIN_STAGE acl_done 0.400000\r")
+  proc_writer_diagnostics(state)
+  expect_identical(state$phases, c(decode = 0.1, identity = 0.11, acl_start = 0.2,
+    acl_wait = 0.3, acl_done = 0.4, validated = 0.5, ready = 0.6))
+  expect_identical(state$diagnostic_tail, "")
+  expect_identical(observe$reads, c(1025L, 1025L))
+  expect_identical(observe$events, rep(c("poll:0", "read:1025"), 2L))
+  expect_false(state$private)
+  expect_lte(state$diagnostic_bytes, 1024L)
+})
+
+test_that("writer startup diagnostics fail closed without retaining arbitrary stderr", {
+  for (chunk in c("FAKE-writer-diagnostic-canary\n", strrep("x", 1025L),
+    "GPTR_STDIN_STAGE arbitrary 0.100000\n",
+    "GPTR_STDIN_STAGE decode 0.200000\nGPTR_STDIN_STAGE identity 0.100000\n",
+    "GPTR_STDIN_STAGE decode 0.100000\nGPTR_STDIN_STAGE decode 0.200000\n",
+    "GPTR_STDIN_STAGE ready 0.100000\n", "FAKE-writer-diagnostic-canary",
+    "GPTR_STDIN_STAGE de\rcode 0.100000\n", "GPTR_STDIN_STAGE decode 0.100000\r\r\n",
+    "GPTR_STDIN_STAGE de\r", "GPTR_STDIN_STAGE decode 0.100\r")) {
+    state = new.env(parent = emptyenv())
+    state$diagnostic_tail = ""
+    state$diagnostic_bytes = 0L
+    state$phases = numeric()
+    state$p = list(poll_io = function(timeout) NULL, read_error = function(n) chunk)
+    error = tryCatch(proc_writer_diagnostics(state), error = identity)
+    expect_s3_class(error, "gptr_error_io")
+    expect_false(grepl("FAKE-writer-diagnostic-canary", conditionMessage(error), fixed = TRUE))
+    expect_length(state$phases, 0L)
+    expect_identical(state$diagnostic_tail, "")
+  }
+  state$p = list(poll_io = function(timeout) stop("FAKE-writer-diagnostic-canary"),
+    read_error = function(n) stop("read must not run"))
+  error = tryCatch(proc_writer_diagnostics(state), error = identity)
+  expect_s3_class(error, "gptr_error_io")
+  expect_false(grepl("FAKE-writer-diagnostic-canary", conditionMessage(error), fixed = TRUE))
+  expect_length(state$phases, 0L)
+  expect_identical(state$diagnostic_tail, "")
+})
+
+test_that("writer trusted bootstrap sends startup diagnostics only to its own stderr", {
+  testthat::local_mocked_bindings(proc_writer_main = function(meta) meta$value)
+  code = proc_writer_code(list(value = "public-result"))
+  old = .libPaths()
+  withr::defer(.libPaths(old))
+  error_output = capture.output({
+    output = capture.output(value = eval(parse(text = code), new.env(parent = baseenv())))
+  }, type = "message")
+  expect_identical(value, "public-result")
+  expect_length(output, 0L)
+  expect_length(error_output, 1L)
+  expect_match(error_output, "^GPTR_STDIN_STAGE decode [0-9]{1,6}\\.[0-9]{6}$")
+})
+
+test_that("Windows no-reader timeout proves writer readiness and delivery-stage backpressure", {
+  skip_on_cran()
+  skip_if(.Platform$OS.type != "windows", "requires the actual Windows writer runtime")
+  x = bp_run("timeout")
+  if (!bp_expect_bounded(x)) return(invisible(NULL))
+  expect_true(x$result$timeout_class)
+  expect_identical(x$result$seconds, 2)
+  expect_identical(x$result$case_failure$stage, "delivery")
+  expect_true("ready" %in% names(x$result$case_failure$writer_phases))
 })

@@ -139,7 +139,11 @@ rw_local_state = function(.env = parent.frame()) {
   st$index = 1
   st$closing = FALSE
   st$closed = FALSE
-  st$p = list(is_alive = function() TRUE, get_exit_status = function() 0L)
+  st$diagnostic_tail = ""
+  st$diagnostic_bytes = 0L
+  st$phases = numeric()
+  st$p = list(is_alive = function() TRUE, get_exit_status = function() 0L,
+    poll_io = function(timeout) NULL, read_error = function(n) "")
   b = new.env(parent = emptyenv())
   b$p = list(is_alive = function() TRUE)
   b$bytes = charToRaw("abcdef")

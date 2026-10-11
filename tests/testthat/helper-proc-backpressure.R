@@ -155,8 +155,23 @@ bp_case_failure = function(error) {
   stage = error$writer_stage
   if (!is.character(stage) || length(stage) != 1L || is.na(stage) ||
       !stage %in% c("construct", "bootstrap", "startup", "delivery")) stage = NULL
+  phases = error$writer_phases
+  tokens = c("decode", "identity", "acl_start", "acl_wait", "acl_done", "validated", "ready")
+  positions = match(names(phases), tokens)
+  valid = (is.list(phases) || is.numeric(phases)) && all(vapply(phases, function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0
+  }, logical(1)))
+  values = if (valid) unlist(phases, use.names = FALSE) else numeric()
+  if (!valid || !length(phases) || length(phases) > length(tokens) ||
+      length(positions) != length(phases) || anyNA(positions) || anyDuplicated(positions) ||
+      any(diff(values) < 0) || any(diff(positions) <= 0)) {
+    phases = NULL
+  } else {
+    phases = as.list(phases)
+  }
   list(class = classes, stage = stage, expression_bytes = number(error$expression_bytes),
-    startup_elapsed = number(error$startup_elapsed), accepted_bytes = number(error$accepted_bytes))
+    startup_elapsed = number(error$startup_elapsed), accepted_bytes = number(error$accepted_bytes),
+    writer_phases = phases)
 }
 
 bp_run = function(case) {

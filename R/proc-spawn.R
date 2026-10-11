@@ -579,6 +579,11 @@ proc_writer_acl = function(dir, marker) {
 #' Standalone writer body: only this child can block in the native Windows WriteFile
 #' @noRd
 proc_writer_main = function(meta) {
+  stage = function(name) {
+    cat("GPTR_STDIN_STAGE ", name, " ", sprintf("%.6f", proc.time()[["elapsed"]]), "\n",
+        sep = "", file = stderr())
+    flush(stderr())
+  }
   safe = function(paths = character()) {
     stopifnot(meta$valid(meta$dir, meta$canonical, meta$marker, paths))
   }
@@ -595,23 +600,29 @@ proc_writer_main = function(meta) {
     stopifnot(abs(as.numeric(ps::ps_create_time(h)) - time) < 0.01)
     h
   }
+  stage("identity")
   parent = identity(meta$parent_pid, meta$parent_create)
   target = identity(meta$target_pid, meta$target_create)
   alive = function() isTRUE(ps::ps_is_running(parent)) && isTRUE(ps::ps_is_running(target))
   stopifnot(alive())
+  stage("acl_start")
   acl = processx::process$new(meta$shell, meta$args, stdin = NULL, stdout = NULL,
     stderr = NULL, env = Sys.getenv(), cleanup_tree = TRUE, supervise = meta$supervise,
     windows_hide_window = TRUE)
   on.exit(if (acl$is_alive()) acl$kill_tree(), add = TRUE)
+  stage("acl_wait")
   until = as.numeric(proc.time()[["elapsed"]]) + meta$timeout
   while (acl$is_alive()) {
     stopifnot(alive(), as.numeric(proc.time()[["elapsed"]]) < until)
     acl$wait(50L)
   }
   stopifnot(identical(acl$get_exit_status(), 0L), alive())
+  stage("acl_done")
   safe()
+  stage("validated")
   con = processx::conn_create_fd(1L, close = FALSE)
   atomic("ready")
+  stage("ready")
   index = 1
   repeat {
     stopifnot(alive())
@@ -678,7 +689,9 @@ proc_writer_code = function(meta) {
   source = charToRaw(as_utf8(proc_writer_source(meta)))
   encoded = gsub("\n", "", jsonlite::base64_enc(memCompress(source, type = "gzip")), fixed = TRUE)
   libraries = paste(deparse(.libPaths(), width.cutoff = 500L), collapse = "")
-  out = paste0("local({.libPaths(", libraries, ");eval(parse(text=rawToChar(memDecompress(",
+  out = paste0("local({.libPaths(", libraries, ");cat(\"GPTR_STDIN_STAGE decode \",",
+    "sprintf(\"%.6f\",proc.time()[[\"elapsed\"]]),\"\\n\",sep=\"\",file=stderr());",
+    "flush(stderr());eval(parse(text=rawToChar(memDecompress(",
     "jsonlite::base64_dec(\"", encoded, "\"),type=\"gzip\")),encoding=\"UTF-8\"))})")
   if (grepl("[\r\n]", out) || length(parse(text = out)) != 1L) {
     gptr_abort("Could not encode the trusted stdin bootstrap.",
@@ -755,6 +768,9 @@ proc_writer_start = function(p, limit) {
   st$expression_bytes = proc_writer_code_bytes(code)
   st$startup_t0 = reactor_now()
   st$startup_elapsed = NA_real_
+  st$diagnostic_tail = ""
+  st$diagnostic_bytes = 0L
+  st$phases = numeric()
   st$limit = limit
   st$closed = FALSE
   st$closing = FALSE
@@ -770,7 +786,7 @@ proc_writer_start = function(p, limit) {
   env = env[!is_secret_name(names(env)) &
               !vapply(env, lits_present, NA, st = secrets_state(), USE.NAMES = FALSE)]
   st$p = proc_spawn(command, args, env = env,
-    stdout = p$get_input_connection(), stderr = NULL, .marker = marker)
+    stdout = p$get_input_connection(), stderr = "|", .marker = marker)
   good = TRUE
   st
 }
@@ -779,6 +795,7 @@ proc_writer_start = function(p, limit) {
 #' @noRd
 proc_writer_failure = function(p, error = NULL) {
   st = proc_writer_get(p)
+  if (!is.null(st)) tryCatch(proc_writer_diagnostics(st), error = function(error) NULL)
   number = function(x) {
     if (is.numeric(x) && length(x) == 1L && is.finite(x) && x >= 0) unname(x) else NULL
   }
@@ -788,7 +805,59 @@ proc_writer_failure = function(p, error = NULL) {
   if (is.null(bytes) && !is.null(st)) bytes = number(st$expression_bytes)
   elapsed = if (is.null(st)) NULL else number(if (isTRUE(st$private)) st$startup_elapsed else
     reactor_now() - st$startup_t0)
-  list(writer_stage = stage, expression_bytes = bytes, startup_elapsed = elapsed)
+  list(writer_stage = stage, expression_bytes = bytes, startup_elapsed = elapsed,
+       writer_phases = if (is.null(st)) NULL else as.list(st$phases))
+}
+
+#' Read only a bounded structural protocol from the prompt-free actor's own stderr
+#' @noRd
+proc_writer_diagnostics = function(st) {
+  refuse = function() {
+    gptr_abort("Invalid owned stdin startup diagnostics.", "io", operation = "write", path = NULL)
+  }
+  chunk = tryCatch({
+    st$p$poll_io(0L)
+    st$p$read_error(1025L)
+  }, error = function(error) refuse())
+  if (!is.character(chunk) || length(chunk) != 1L || is.na(chunk)) refuse()
+  size = nchar(as_utf8(chunk), type = "bytes")
+  if (size + st$diagnostic_bytes > 1024L) refuse()
+  if (!size) return(invisible(NULL))
+  text = paste0(st$diagnostic_tail, chunk)
+  lines = strsplit(text, "\n", fixed = TRUE)[[1L]]
+  tail = if (endsWith(text, "\n")) "" else utils::tail(lines, 1L)
+  if (nzchar(tail)) lines = utils::head(lines, -1L)
+  tokens = c("decode", "identity", "acl_start", "acl_wait", "acl_done", "validated", "ready")
+  pattern = paste0("^GPTR_STDIN_STAGE (", paste(tokens, collapse = "|"),
+                   ") ([0-9]{1,6}\\.[0-9]{6})$")
+  phases = st$phases
+  for (line in lines) {
+    if (endsWith(line, "\r")) line = substr(line, 1L, nchar(line) - 1L)
+    captures = regmatches(line, regexec(pattern, line))[[1L]]
+    if (length(captures) != 3L) refuse()
+    name = captures[[2L]]
+    elapsed = as.numeric(captures[[3L]])
+    if (match(name, tokens) != length(phases) + 1L ||
+        (length(phases) && elapsed < utils::tail(phases, 1L))) refuse()
+    phases[name] = elapsed
+  }
+  if (nzchar(tail)) {
+    if (length(phases) >= length(tokens)) refuse()
+    prefix = paste0("GPTR_STDIN_STAGE ", tokens[[length(phases) + 1L]], " ")
+    if (endsWith(tail, "\r")) {
+      line = substr(tail, 1L, nchar(tail) - 1L)
+      captures = regmatches(line, regexec(pattern, line))[[1L]]
+      if (length(captures) != 3L || captures[[2L]] != tokens[[length(phases) + 1L]] ||
+          (length(phases) && as.numeric(captures[[3L]]) < utils::tail(phases, 1L))) refuse()
+    } else if (!startsWith(prefix, tail)) {
+      if (!startsWith(tail, prefix) ||
+          !grepl("^[0-9]{1,6}(\\.[0-9]{0,6})?$", substring(tail, nchar(prefix) + 1L))) refuse()
+    }
+  }
+  st$phases = phases
+  st$diagnostic_tail = tail
+  st$diagnostic_bytes = st$diagnostic_bytes + size
+  invisible(NULL)
 }
 
 #' Collect cumulative acknowledgements, including those published immediately before exit
@@ -828,6 +897,7 @@ proc_writer_ack = function(st, b) {
 proc_writer_drain = function(r, key, b) {
   st = proc_writer_start(b$p, b$limit)
   if (is.null(st)) return(FALSE)
+  proc_writer_diagnostics(st)
   if (!st$private) {
     ready = file.path(st$dir, "ready")
     if (!file.exists(ready)) {
