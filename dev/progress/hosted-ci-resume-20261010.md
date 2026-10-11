@@ -541,3 +541,30 @@ A serialized client cannot pass the barrier. Include failing oracle cases for se
 admission, delayed/batched delivery and mismatched identities, and record setup separately.
 Changing this measurement requires an explicit D-016/D-063/spec clarification. No test,
 fixture, source or plan was changed here; the historical Windows-devel failure remains failed.
+
+### Exact `3d92b05` matrix completed (01:32 UTC)
+
+The remaining Linux-devel consumer is now complete. Job
+[114348035701](https://github.com/Broccolito/gptr/actions/runs/38097885912/job/114348035701)
+used actual R-devel `2026-10-09 r90655` on Ubuntu 24.04.5 LTS and reports **Status: 1 NOTE**,
+errors 0, warnings 0, notes 1. Its sole NOTE is `Skipping checking HTML validation: no command
+'tidy' found.` Tests (11m CPU/15m elapsed), rebuilt vignettes, PDF manual and temp detritus
+checks are OK. Installed-size output is informational: 6.0 Mb total, R 4.6 Mb. The job log
+does not print a passing-assertion count; no checkout count is substituted.
+
+This closes the older exact-source matrix with **four successful consumers and one failed
+Windows-devel reactor timing consumer**. Mac and both Linux jobs retain their separately
+documented Tidy qualification; Windows-release remains Status OK. No historical NOTE or
+failed test is converted to a pass by the pending workflow setup repair. The source and
+archive digest remain the verified `3d92b05` values above; these bytes predate the current
+storage, compaction and console changes. The latest `8952567` matrix still had Linux-devel
+in progress at this snapshot, with its other four consumers complete as previously recorded.
+
+### Exact `03963e0` matrix snapshot (02:15 UTC)
+
+Read-only inspection of [38102472275](https://github.com/Broccolito/gptr/actions/runs/38102472275)
+confirms the producer succeeded and both Windows release/devel consumers verified the original
+archive and supported HTML Tidy. Both are still checking; Mac release and both Linux consumers
+remain queued. No final consumer result or matrix pass is available. This nominated archive
+predates6501a64/ad4e6a9; its eventual result must not certify those newer changes. No hosted
+rerun, local R job or package installation was performed for this status read.

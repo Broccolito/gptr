@@ -122,3 +122,53 @@ The mandatory cross-plan sequence after the added storage/compaction plan exited
 retained: OpenMP shared-memory initialization was denied before the analyzer ran;
 the authorized rerun used one BLAS/lint worker. Existing numbered-plan warning
 categories remain distinct from zero new parse/style/lint errors.
+
+## Fresh native sessions and expanded integrations
+
+Fresh RStudio PID60465 completed Azure/Jev/Codex live and fresh-namespace/vault replay
+at installed8952567. The warning observer includes every source cleanup/unload: six phases,
+13.826s outer, zero warnings/errors, matching archive SHA and five lazy-load/metadata hashes
+before/after. Numeric live timings: Azure4.040s, Jev0.466s, Codex7.594s. The earlier long-lived
+RStudio session emitted at least50 identical `R_decompress1 with libdeflate` warnings; its
+redacted diagnostic and initial SHA-class capture-helper failure are retained. A fresh process
+using the same immutable installation removed those warnings, supporting a stale lazy-load
+cache explanation rather than proving an intrinsic package decompression defect.
+
+Only the empty owned R.app test PID41427 was quit without saving, through a guarded UI command.
+Fresh R.app PID77953 then passed the same six phases with zero counted warnings and unchanged
+archive/database hashes. Numeric live timings: Azure3.910s, Jev0.378s, Codex6.130s; replay
+0.158/0.061/0.160s. CUA observed a residual long CLI-notice tail following the first short
+response in R.app; numerical success is not a clean-display pass. A fake native reproduction
+is prepared, with no external provider request. Native automation scroll/pipe interruptions
+were retained; process checks established that the GUI remained alive.
+
+The batch coordinator changes working directories outside the individual phase fixture and
+needs an outer restoration scope. Per-phase cleanup flags cover only those phase boundaries.
+Root explicitly restored the fresh R.app original home directory after detecting the leak.
+An idle post-batch diagnostic found only `.Random.seed`, absent at fresh startup, despite the
+per-phase RNG snapshots reporting restoration. An outer helper now captures/restores caller
+RNG and working directory after all provenance/JSON work; its offline/fresh GUI verification
+remains pending. No seed values or user objects were displayed or removed.
+
+Four actual installed895 integrations passed with zero warnings and all recorded fixture/
+wrapper restoration flags: CSV/TSV/JSON/RDS/RData reopen11.746s/177.08MiB; local skill/reference,
+directory plugin and owned stdio MCP11.156s/320.75MiB; one bounded public UCI GET200 with
+independently reopened150x5 iris data7.587s/183.25MiB; named file-defined agents and assigned
+serial fanout15.856s/172.03MiB. The initial directory-critical unzip-listing refusal was fixed
+by specifying the disposable `exdir` in both listing and extraction; permissions were not
+relaxed. The plugin workflow recovered from one wrong-arity tool call; it does not establish
+all crash/failure cleanup paths or HTTP/authenticated MCP. Detailed receipts are in the
+coverage lane report and ignored per-case evidence.
+
+Exact Qwen headless notebook teams/fan-out passed corrected live47.401s and fresh replay1.303s,
+eight real request/usage events inside the unchanged8turn/60k shared budget, max_active1;
+all four child numeric oracles/input/source/restoration checks pass, replayzero requests.
+Sampled R-family peak390.7MiB excludes the resident Ollama/GPU allocation. The original missing
+qualified-function trajectory and closed-stdin budget menu remain retained. The corrected
+headless UI uses the verified no-menu guard. This is a serialized team proof, not a parallel
+GPU throughput claim.
+
+Reviewed source repairs have been committed/pushed separately: storage containment2e4b709,
+non-UTF-8 spinner9ca143b, checked document writesb4a4ce0. These changes are not yet in the
+immutable895 installation used above. Compaction source TDD and plain-data sidecar/privacy
+work remain ongoing; a fresh normal archive, full gates and hosted checks are required afterward.

@@ -3,8 +3,8 @@
 2026-10-10. This is a static audit and bounded offline diagnosis, not a completed testing
 matrix. The living plan was not edited. Root nominated installed `8d13b58`, whose R sources
 match `68017d0`; older live rows retain their own revisions. Machine-specific inventories,
-request bodies and local logs remain ignored. No credentials were loaded and no new external
-model request was made by this lane.
+request bodies and local logs remain ignored. The initial audit loaded no credentials and
+made no external model request. Later dated sections record separately authorized live work.
 
 ## Remaining work organized
 
@@ -293,3 +293,214 @@ Ignored evidence: `resume-68017d0/steering-request-spy-8952567-complete/`,
 `runs/versa-steering-8952567-queue-started/` and
 `runs/versa-simulation-8952567-queue-started/`. No keys, raw credential logs,
 account changes, package source edits or Git operations occurred in this lane.
+
+## New integration preparation, not executed
+
+Four separate ignored sources and a fresh-process wrapper are now prepared under
+`resume-68017d0/`: file-format round trips; trusted local skill/directory-plugin
+import plus owned stdio MCP; a single bounded public-data download through a
+loaded caller R function; and trusted file-defined specialist/fan-out workflows.
+Each has independent numeric/file/actual-call oracles rather than relying on a
+model's summary. `LIVE_INTEGRATIONS.md` records the exact entry command, source
+contracts, resource limits and remaining conditional cases. No R parse, model
+request, installer, server or browser was run for these new sources.
+
+They are P until a root-supervised actual run succeeds on a certified installation.
+The wrapper reuses isolated `frontend_setup()` and requires an existing whole-case
+180s owned-process supervisor; its noninteractive setup label is not native Rmd
+rendering evidence. Local copy/activation is distinct from package installation
+and external upload. A caller-function download is not a new built-in member.
+Native web search is also separate: `peter$search()` searches the resource catalog;
+Claude disables its native tools, and the Codex adapter's current argv does not
+explicitly enable live search. HTTP/auth, native GUI discovery, broader formats,
+Shiny artifacts and crash/timeout recovery remain their own pending cases.
+
+## Actual serial integration results on installed 8952567
+
+2026-10-10, 17:34–17:40 PDT. Root certified the installed archive revision and held
+installation replacement throughout these cases. The wrapper checked the certified
+lazy-load hashes before and after each process. All five initial R sources parsed.
+The actual frontend is fresh `Rscript --vanilla` sourcing R, using Versa
+`gpt-5.6-luna-2026-07-09`; the reused setup's noninteractive "R Markdown" label does
+not establish native rendering or GUI coverage. Each case ran serially, BLAS1,
+under a 180s exact-owned-family supervisor and numeric process-family profiler.
+Keys were loaded only by the authorized quiet external bootstrap into the vault.
+Timing streams show at most one pending request ID before its usage event, with
+none pending at fixture end, in each case.
+
+| Case | Independent actual oracles | Requests / fresh usage events / tool starts and ends | R seconds / outer seconds / approximate sampled family peak |
+|---|---|---|---|
+| Files | CSV, TSV, JSON, RDS and RData reopened; each sum7/mean3.5, two original rows and correct saved RData name; original binding and input hashes unchanged | 3 / 3 / 2 and 2 | 11.336 / 11.746 / 177.1MiB, 12 samples |
+| Local resources | Skill content and reference markers; lazy directory plugin active and result7; actual owned stdio MCP `tools/call(a=2,b=5)` returned7; mean3.5; input/source bundle hashes unchanged | 5 / 5 / 6 and 6 | 10.782 / 11.156 / 320.8MiB, 12 samples |
+| Public download | Exactly one fixed UCI Iris GET, HTTP200, 3738-byte ZIP; traversal/1MiB checks; independently reopened150 rows/5 columns, first sepal5.1 and50 observations per species | 2 / 2 / 1 and 1 | 7.206 / 7.587 / 183.3MiB, 8 samples |
+| Named workflows | Trusted file-defined total/average specialists returned7/3.5; serial assigned fanout returned A4/B10; all four children idle; caller inputs and agent-definition hashes unchanged | 8 / 8 / 4 and 4 | 15.442 / 15.856 / 172.0MiB, 16 samples |
+
+All four final cases exited zero, without timeout, warning classes or profiler
+sampling errors. All six setup restoration checks and four wrapper checks passed;
+the supervisor ended the owned process families. Fresh disposable project roots
+have mode0700; intentional configuration, agent/skill/plugin/session/checkpoint
+files remain only there. The ignored evidence index records actual `.gptr` file
+paths/sizes for storage review, without credential contents. No production source,
+user configuration, account, package installation or Git operation changed in
+this lane.
+
+Failures remain preserved, with their original status:
+
+- The first syntax wrapper passed literal `--args` to `Rscript -e`. Its corrected
+  R parse succeeded for all five files; a subsequent Python reporting error was
+  bookkeeping, not a failed parse. Neither attempt made an integration request.
+- The first files run completed its numerical/file oracles but failed strict
+  all-options restoration. A key-free replay-setup probe found only the newly
+  imported `callr.condition_handler_cli_message` option, no changed prior value
+  and zero requests. The ignored wrapper now records introduced option names,
+  removes those names and restores every prior option before its strict check.
+  The fresh files rerun passed; its earlier failure is not relabeled.
+- The first download stopped before R execution with `gptr_error_permission`.
+  Public offline `gptr_risk()` reproduced level4 for `unzip(...,list=TRUE)`'s
+  default project-root destination, with secret_guard false and zero GETs.
+  Explicit `exdir=case_dir` on listing/extraction reduced the classification to
+  level2. The ignored fixture now states that bounded destination explicitly;
+  guards, one-GET bounds, budgets and numeric oracles stayed intact. The original
+  blocked run remains F, and the fresh explicit-path run passed.
+
+The resource run also witnessed limited tool-error recovery: the model first
+passed one vector to a two-argument plugin, received the missing-`b` R error,
+then corrected its call and completed all independent oracles. This establishes
+recovery from that tool error; it does not establish process-crash, timeout,
+server-loss or native interrupt recovery.
+
+Evidence: ignored `resume-68017d0/integration-evidence-8952567.json`,
+`run-integration.py`, the four `integration-*.R` cases and
+`runs/integration-{files-8952567-restored,resources-8952567-actual,download-8952567-explicit-path,agents-8952567-actual}/`.
+Original failure directories and the two key-free diagnostic probes remain intact.
+The live/R compute slot was released after the last case. These passes cover
+local directory import/use and caller-function HTTP interoperability; external
+upload/package installation, HTTP/auth MCP, broader formats, built-in web search,
+Shiny/browser work, native frontend repeats and integration strict replay remain
+separate pending or conditional cases. The direct HTTP helper would need a
+controlled replacement or cached-input recipe before promising offline replay.
+
+## ST01 disposable storage audit on installed 8952567
+
+2026-10-10, 17:58 PDT. The final bounded offline audit passed all11 stages in
+5.550s outer /4.265s profiled elapsed, with13 fake provider requests across the
+parent and fresh children, zero external requests, zero warnings, and zero
+sampling errors. Approximate sampled family RSS peaked at457MiB over5 samples;
+this is process RSS, not unified/GPU memory. Certified lazy-load hashes remained
+unchanged. The owned R compute slot was released immediately after completion.
+
+Actual public operations and independent oracles covered:
+
+- Explicit/idempotent `gptr_init()` without implying trust; actual project
+  instructions, skill reference discovery/read, lazy plugin activation/add7,
+  and an owned stdio MCP `tools/call(a=2,b=5)` returning numeric7.
+- `summary(session)` made zero requests. Two separate fake turns supplied a
+  clearly labeled synthetic narrative and ordinary R draft. The exact reviewed
+  draft ran in fresh `Rscript --vanilla` and returned sum7/mean3.5; neither output
+  is represented as a native workflow exporter.
+- Fresh-process ownership protection refused the still-attached parent session
+  with `gptr_error_split_brain`. A separate writer child computed7/3.5, exited,
+  and a second child rebuilt its stored session without a request or reexecuting
+  analysis R into the fresh environment.
+- Four checkpoint rows, a changed derived value/file, public preview/rewind,
+  restored total7/removed created file, unchanged input identity/value, and
+  append-only session JSONL with zero rewind requests.
+- A Peter-history R document recorded exactly one fresh block and replayed real
+  R to7/3.5 with zero new requests and an unchanged source hash. A separate
+  finite-stdin console (`Rscript -e`, prompt then `/summary` and `/exit`, EOF)
+  wrote an actual parseable transcript containing the executed R. This proves
+  scripted stdin; it does not establish native GUI/slash UX.
+- Actual S2 cache clearing retained both history and transcript documents;
+  four JSON files and four stored session JSONL files parsed. MCP removal and
+  cleanup removed owned session locks. Tree snapshots classify instructions,
+  control, conversation, checkpoints, cache, transcript, and support state.
+
+The empty workspace grew to24 files/79,944 bytes before cache clearing, then
+ended after cleanup at20 files/78,915 bytes, modes0600/0700, no symlinks. The
+supervisor deliberately set umask077; this is a scoped observation under that
+mask, not proof of every creation path under permissive user masks. All ten
+restoration checks passed: options, libraries, cwd, complete environment, seed,
+RNG kind, namespace, document binding, children, and cleanup errors. No real
+repository `.gptr`, credentials or user files were inspected.
+
+Earlier attempts remain F under their original labels. They exposed fixture
+assumptions: persisted `content` versus canonical `blocks` in the fake request
+spy; MCP JSON7 deserializing as integer rather than double; nonexistent
+processx input-close method; expected refusal while the parent still owns a
+session; intentionally persistent plan-mode protection; and a prompt function
+call incorrectly treated as a stdin console. The final fixture uses canonical
+request JSON, numeric value plus actual-type assertions, finite input files,
+exited-writer resume, explicit auto for the disposable mutation, and an actual
+no-prompt stdin console. No production behavior was relaxed or changed.
+
+Evidence: ignored `resume-68017d0/{st01-storage-audit.R,st01-storage-child.R,
+run-st01-storage.py}` and `runs/st01-storage-8952567-actual-stdin/` (11 tree CSVs,
+cleanup tree, `st01-storage.json`, controller/resource summaries, child outputs).
+Retained F labels: `actual`, `canonical`, `numeric`, `bounded-input`,
+`exited-writer`, and `mutation-mode`. Compaction/ST04 remains architecture-owned
+and unverified on installed895; HTTP/auth/progress/cancellation MCP and actual
+public web-search fixtures are preparation work, not passes.
+
+## HTTP MCP and actual public web search on installed 8952567
+
+2026-10-10,18:09 PDT. Root reviewed and authorized these two serial cases. All21
+owned R fixture files parsed successfully before execution. No production source,
+permission policy, account, package installation or Git operation changed. Both
+controllers verified the certified895 lazy-load hashes before and after their
+case. Their owned process families exited, and the compute slot was released.
+
+The loopback HTTP MCP case passed in4.218s outer /3.871s profiled elapsed,
+with four fake model requests, zero external model or web requests, zero warnings
+and zero sampling errors. Approximate family RSS peaked at184.2MiB over4 samples.
+It exercised actual modern HTTP against one owned127.0.0.1 server:
+
+- Missing synthetic auth returned `gptr_error_mcp_auth_required` and a named login
+  instruction. The successful header used only a synthetic fixture value; no
+  OAuth, browser flow or real account credential was used.
+- Add2/5 returned7, four actual streamed progress notifications completed in1.429s
+  despite a1s inactivity timeout, and a deliberate server isError became
+  `gptr_error_mcp_tool` in model R.
+- The no-progress call stopped in1.021s. Server-side metadata witnessed modern
+  response-stream closure and no late response, followed by a new successful add7.
+  Inside the nested tool dispatcher the ordinary transport failure is intentionally
+  exposed as `gptr_error_tool`, with the exact timeout message. Killing only the
+  owned server then yielded a caught server-loss error without a hang.
+- The original loaded survey stayed unchanged, mean3.5 was verified, and all ten
+  restoration/child-exit checks passed. This is fake-model/real-loopback HTTP
+  interoperability and timeout cancellation, not native Ctrl+C or GUI UX.
+
+The first HTTP attempt remains F at `runs/mcp-http-8952567-actual/`. Its transport
+and numerical operations already succeeded, but the fixture incorrectly expected
+the raw timeout condition class after nested dispatch and sampled child liveness
+immediately after asynchronous kill. Source review confirmed the documented
+dispatcher conversion. The fresh `nested-contract` case asserts that actual class
+plus exact message, elapsed limit and independent peer-close log, and waits for
+its owned child exit. It does not relax the transport/numeric/budget oracle.
+
+The public search case passed in7.824s R /9.272s outer, with three actual Versa
+requests and three fresh usage events, three paired tool starts/ends and zero tool
+errors or warnings. The process-family profiler sampled9 times, with256.6MiB
+approximate RSS peak and zero sampling errors. Its frontend was fresh
+`Rscript --vanilla` sourcing R; the reused timing label "R Markdown" is not a
+native renderer or GUI witness. All setup and caller-restoration checks passed.
+
+One actual owned stdio MCP `web_search()` used only the fixed public query
+`Iris flower data set`. Independent transport logs show exactly two direct
+MediaWiki GETs, both HTTP200,315 and488 bytes, within the8s/128KiB-per-response
+limits and with redirects/proxies disabled. Search returned three result rows,
+656 total hits and selected page ID10477224/wordcount1034; the second GET verified
+the canonical `https://en.wikipedia.org/wiki/Iris_flower_data_set` source. Loaded
+survey sum7/mean3.5, original data and copied server source hash were independently
+checked. Stdio EOF records exactly two attempted GETs. This proves a custom public
+web-search MCP integration, rather than `peter$search()` catalog lookup. General
+built-in web search, other hosted MCPs, native UI, OAuth and strict replay remain
+separate pending or conditional coverage.
+
+Evidence: ignored `resume-68017d0/{HTTP-AND-WEB-PLAN.md,mcp-http-smoke.R,
+mcp-loopback-server.py,web-search-mcp.py,integration-web.R}`;
+`runs/mcp-http-8952567-nested-contract/{mcp-http.json,http-server.jsonl,
+controller-summary.json,resources.json}`; and
+`runs/integration-web-8952567-reviewed/{integration-summary.json,
+integration-timings.csv,controller-summary.json,resources.json,
+integration-web-owned/web-result.json,integration-web-owned/public-search.jsonl}`.
+Compaction remains source-reviewed/owner-tested and unverified on installed895.
