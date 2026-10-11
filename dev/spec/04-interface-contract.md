@@ -175,7 +175,7 @@ by `options(gptr.quiet = TRUE)`. Untrusted text reaches the console only through
 ```r
 gptr_abort(message, class, ..., .data = NULL, call = NULL)
 gptr_warn(message, class, ..., .data = NULL, .once = NULL)
-gptr_inform(message, class, ..., .data = NULL, .once = NULL)
+gptr_inform(message, class, ..., .data = NULL, .once = NULL, .stream = NULL)
 ```
 
 | Argument | Type | Meaning |
@@ -189,12 +189,19 @@ gptr_inform(message, class, ..., .data = NULL, .once = NULL)
 Returns: `gptr_abort()` never returns; `gptr_warn()`/`gptr_inform()` return `invisible(NULL)`. `gptr_inform()`
 is a no-op when `getOption("gptr.quiet")` is `TRUE`. Warnings get class
 `c("gptr_warning_<cls>", "gptr_warning", "warning", "condition")`, messages
-`c("gptr_message_<cls>", "gptr_message", "message", "condition")`.
+`c("gptr_message_<cls>", "gptr_message", "message", "condition")`. Ordinary messages display on
+stdout after calling handlers, with the standard `muffleMessage` restart; quiet, once keys,
+redaction and metadata remain intact. Actual failure notices may set `.stream = "stderr"`.
+A private stack-scoped protocol binding reserves stdout for JSONL events without changing
+caller options or suppressing caller handlers. The built-in evaluator records a teed condition
+once and drains only its synchronous display bytes; console controls do not enter tool output.
+Ordinary `cat()` and printed objects remain captured. Base warning semantics, including
+`options(warn = 2)`, are unchanged.
 
 Also in P01: `redactor_set(fun)` [internal] (`aaa-state.R`; P03 installs `redact`; it replaces the earlier
 `condition_redactor_set()`, IC-34),
-`msg_verbatim(x, stream = c("stdout", "stderr"))` [internal] (prints untrusted text with `cli::cli_verbatim()`,
-or `cat()` to `stderr()`), `gptr_deprecated(what, since, instead = NULL)` [internal] (warning class
+`msg_verbatim(x, stream = c("stdout", "stderr"))` [internal] (prints literal text with `cat()` to the selected
+stream; the protocol scope reserves stdout for JSONL), `gptr_deprecated(what, since, instead = NULL)` [internal] (warning class
 `deprecated`, once per session per `what`; an error when `options(gptr.deprecations = "error")`).
 
 ### 2.2 Hierarchy
@@ -767,7 +774,7 @@ the valid names):
 | `values` | df `turn`, `mode`, `name`, `class`, `bytes` |
 | `usage` | a `gptr_usage` df (§5.12) of this session and its children |
 | `cost` | num(1) USD |
-| `history` | df `turn`, `role`, `preview` (60 chars), `tools` (chr, comma-joined), `tokens` |
+| `history` | `gptr_session_summary` data frame: `turn`, `role`, `preview` (60 chars), `tools` (chr, comma-joined), `tokens`; all rows retained, unknown assistant token counts stay `NA` |
 | `messages` | list of messages on the active branch (R shape, unprojected) |
 | `model`, `mode`, `status`, `reason`, `id`, `kind`, `file` | chr(1) |
 | `turns` | int(1) |
@@ -786,7 +793,9 @@ the valid names):
 |---|---|
 | `print(x, ...)` | the last answer through `msg_verbatim()` (rendered markdown when the console renderer is available), then a dim footer `status . model . turns . tokens . cost . id`; returns `invisible(x)`; never touches user objects |
 | `format(x, ...)`, `as.character(x, ...)` | `$text` |
-| `summary(object, ...)` | class `gptr_session_summary` (df of `history`) with a `print` method |
+| `summary(object, ...)` | complete `gptr_session_summary` table with a detached character-only metadata snapshot; no model request |
+| `print.gptr_session_summary(x, n = 8L, ...)` | recent messages, omitted count and session metadata at current console width; safe display copy; `n = Inf` shows all rows |
+| `as.data.frame.gptr_session_summary(x, ...)` | every row/column as an ordinary data frame, without display metadata |
 | `str(object, ...)` | one line: `<gptr_session s… \| chat \| idle \| 3 turns \| anthropic/claude-sonnet-5-5>` |
 | `$<-`, `[[<-` | refuse (`gptr_error_readonly`) |
 | `.DollarNames(x, pattern)` | accessor and child names |
@@ -4461,9 +4470,28 @@ headless. P15 fixture test with `jupyter.in_kernel` mocked.
   re-applies unapplied upserts of a dead pid through the normal md5 and re-locate path and reports conflicts
   instead of overwriting. Sidecars are never pruned automatically; `gptr_cache("info")` lists them. Under a
   document lock held by another live pid (array jobs) nothing is recorded and a notice is printed.
+- New sidecars use a versioned, closed plain-data JSON record at
+  `<root>/cache/tmp/pending-<sha1(path_key(doc path))>.json`. Required scalar/array/null fields,
+  nested anchors and notebook block metadata are validated before recovery. Modern records have
+  a fixed 16 MiB byte limit: readers reject oversize/missing/directory inputs and read at most
+  that limit plus one byte even if the file grows; writers reject oversize encoded records
+  before replacing a prior record. Nested plain metadata and finite numeric tokens are validated.
+  Call identity is
+  stored as text and parsed only for supported call/pipe matching; recovery never evaluates it.
+  PID/create-time liveness, deferred adoption, conflict reporting and open-notebook safety remain.
+  Legacy `pending-*.rds` files remain intact and discoverable. POSIX legacy reads require a
+  positively established effective UID matching the file owner, private mode and record validation;
+  Windows refuses legacy RDS before deserialization and reports
+  pending recovery. A present JSON record, including a dangling link, is authoritative even when
+  invalid; no legacy fallback
+  occurs. Successful legacy recovery retains an empty valid JSON settlement record so old upserts
+  cannot be adopted again. Neither legacy records nor settlement records are pruned automatically.
 - `write_atomic()` retries `file.rename()` 3 times with 100 ms sleeps, then writes in place with `writeBin()`
-  after an md5 re-check. `path_key(p)` (P01) lower-cases normalised paths on Windows and macOS; document bindings,
-  trust keys, locks and site matching use it.
+  after an md5 re-check. Checked document writes additionally compare the original document MD5
+  immediately before every rename and report a conflict if it changed during temporary preparation
+  or a retry; unconditional writes retain intentional replacement semantics. This narrows observed
+  races without promising OS-level atomic compare-and-replace. `path_key(p)` (P01) lower-cases
+  normalised paths on Windows and macOS; document bindings, trust keys, locks and site matching use it.
 
 ### 15.4 Safety
 

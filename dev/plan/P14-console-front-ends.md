@@ -5266,3 +5266,14 @@ Validation (scratch `scratchpad/work/consolidate/`):
 - All 20 fenced `r` blocks were re-extracted and parsed with `parse(file =)`. `getParseData()` finds no `<-` token (only `<<-`) and no `%>%`. Every block is ASCII, with no line over 100 characters.
 - The expectation counts come from the parse data: Task 2 tests 24 -> 28, Task 6 tests 52 -> 56 (+2 for the `/exit` loop), console-jsonl 35 -> 32, and the INFRA-27 block 3.
 - A stand-in script ran the revised artifact handlers. A line raised inside a tool is queued, a nested tool end keeps it, the outer tool end prints it once and empties the queue, and outside a tool it prints at once (as a progress message at verbosity 1).
+
+
+## Live validation amendment, 2026-10-10: concise ordinary display
+
+Normal replies, progress, setup menus, steering, cancellation and handled UI guidance use regular stdout. Actual errors explicitly use stderr. A shown R.app spinner row is terminated with LF after its clear before an ordinary notice, preventing residual overwritten text. Protocol frontends reserve stdout for JSONL. Validate actual channels, message handlers, quiet/once, nested/teed tool capture, user sinks, C-locale widths and native visual color; source/unit evidence alone does not close native UX.
+
+Native R.app testing additionally reproduced inherited error color when a CR progress row
+is cleared after stderr output. Start each newly shown native-GUI redraw cycle on a fresh,
+flushed stdout LF before its first CR; repeated/throttled ticks and nondynamic frontends
+must not receive extra boundaries. Verify this with actual error-to-progress-to-reply/history
+UI observation, alongside byte/flush-order tests. A computational pass is not a color pass.

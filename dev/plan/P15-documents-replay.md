@@ -9039,3 +9039,38 @@ re-extracted with the consolidation `extract.py` and linted with lintr 3.3.0.1 a
 Every block parses with `Rscript --vanilla`, `getParseData()` finds no `LEFT_ASSIGN` token and no `%>%`, every block
 is ASCII, and no line is longer than 100 characters. No expectation was added or removed, so the Step 2/Step 4 counts
 and acceptance row 1 (`PASS 786`/`792`) stand.
+
+## Live validation amendment (2026-10-10): durable plain-data sidecars
+
+IC-51 in interface-contract section15 takes precedence over the historical RDS sketches below.
+New deferred/pending records use closed, versioned JSON at the same hashed project-cache path,
+with the `.json` suffix. The codec validates and normalizes required scalars, arrays, nulls,
+PID/create-time fields, supported call/pipe anchors and notebook line metadata. Anchor source
+is parsed for identity only; it is never evaluated. Existing dead-writer recovery, adoption,
+conflicts and open-notebook safeguards are acceptance requirements.
+
+Legacy RDS bytes stay intact and visible. POSIX legacy reading requires existing private-owner
+provenance plus validation; Windows must refuse before `readRDS` and report pending recovery.
+A present JSON file is authoritative, including malformed records; no fallback may deserialize
+legacy data. Completed legacy recovery keeps an empty valid JSON settlement record, preventing
+repeat adoption without deleting legacy bytes. Cache cleanup preserves both suffixes and these
+settlement records. Reader spies use benign data and require zero RDS calls on Windows; no
+executable payload is needed. Pair negative cases with production-writer dead/live-PID,
+PID-reuse, repeated recovery, conflict, crash and notebook-metadata controls.
+
+The separately committed checked document writer passes the original MD5 through temporary
+preparation and retries; check=FALSE remains intentional replacement. This reduces observed
+edit windows without claiming an atomic compare-and-replace filesystem operation.
+
+Modern pending JSON records are bounded to 16 MiB before read/decode and before replacing a previous record. Read at most the cap plus one byte to handle growth after stat; reject missing paths, directories, invalid UTF-8 and NUL. Parent-directory presence makes modern JSON authoritative even when a dangling link cannot be detected by readlink on Windows. Legacy RDS provenance and refusal rules remain as stated above.
+
+## Live validation amendment (2026-10-10): bounded history in document frontends
+
+Optional notebook and document renderers must preserve the compact history preview instead
+of inheriting full data-frame rendering. Register summary-specific methods lazily through
+the existing optional-package hooks. Plain text, escaped HTML and literal fenced Markdown
+use one bounded/sanitized formatter; suppress inherited raw LaTeX tables. Document knitting
+delegates to the compact printer, including kable/paged renderers and Quarto HTML. Retain
+every underlying row and column; do not make requests, mutate session state, load optional
+packages eagerly or add imports. Shipping tests use declared optional packages only;
+actual kernel MIME bundles and native document rendering remain separate live acceptance.
