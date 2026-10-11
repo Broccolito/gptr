@@ -202,13 +202,16 @@ writer_runtime_titles = c(
   "nested ACL diagnostics reject arbitrary and unordered native output",
   "nested ACL diagnostics read only after zero-time polling",
   "writer nested ACL phases preserve exit failure without granting readiness",
-  "writer early failures retain only fixed numeric nested ACL phases")
+  "writer early failures retain only fixed numeric nested ACL phases",
+  "writer absence script accepts only two native missing-path exception types",
+  "writer absence script isolates quoted paths from control and privacy rules",
+  "Windows native absence probe refuses existing aliases and denied attributes")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
   testthat::expect_identical(optional_titles[[file]], writer_runtime_titles)
   rows = lapply(writer_runtime_titles, record)
-  native = c(seq_len(5L), 29L, 30L)
+  native = c(seq_len(5L), 29L, 30L, 38L)
   for (i in native) {
     rows[[i]]$passed = 0L
     rows[[i]]$skipped = 1L
@@ -229,7 +232,7 @@ testthat::test_that("production writer platform guards are explicit and never co
 testthat::test_that("production writer mandatory rows reject omissions, duplicates and errors", {
   file = "test-proc-writer-runtime.R"
   rows = lapply(writer_runtime_titles, record)
-  native = c(seq_len(5L), 29L, 30L)
+  native = c(seq_len(5L), 29L, 30L, 38L)
   for (windows in c(FALSE, TRUE)) {
     testthat::expect_true(optional_gate(rows, file, windows)$passed)
     for (i in seq_along(rows)) {
@@ -860,7 +863,7 @@ testthat::test_that(
     "Windows no-reader timeout proves writer readiness and delivery-stage backpressure")
   expected = c(writer_runtime_titles[1:25], added)
   testthat::expect_identical(optional_titles[[file]][seq_along(expected)], expected)
-  native = c(seq_len(5L), 29L, 30L)
+  native = c(seq_len(5L), 29L, 30L, 38L)
   rows = lapply(writer_runtime_titles, record)
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
@@ -1097,8 +1100,8 @@ testthat::test_that("nested ACL diagnostics remain mandatory on both hosts", {
     "writer nested ACL phases preserve exit failure without granting readiness",
     "writer early failures retain only fixed numeric nested ACL phases")
   expected = c(writer_runtime_titles[seq_len(30L)], added)
-  testthat::expect_identical(optional_titles[[file]], expected)
-  rows = lapply(expected, record)
+  testthat::expect_identical(optional_titles[[file]][seq_len(35L)], expected)
+  rows = lapply(writer_runtime_titles, record)
   for (windows in c(FALSE, TRUE)) {
     result = optional_gate(rows, file, windows)
     testthat::expect_true(result$passed)
@@ -1220,4 +1223,68 @@ testthat::test_that("warm idle writer boundary is mandatory on Windows with one 
   testthat::expect_identical(result$platform_guard_cases, title)
   testthat::expect_true(result$platform_guard_only)
   testthat::expect_identical(sum(vapply(result$rows, function(row) row$passed, 0L)), 0L)
+})
+
+
+testthat::test_that("absence policy and native probe retain exact mandatory coverage", {
+  file = "test-proc-writer-runtime.R"
+  added = c(
+    "writer absence script accepts only two native missing-path exception types",
+    "writer absence script isolates quoted paths from control and privacy rules",
+    "Windows native absence probe refuses existing aliases and denied attributes")
+  expected = c(writer_runtime_titles[seq_len(35L)], added)
+  testthat::expect_identical(optional_titles[[file]], expected)
+  testthat::expect_identical(optional_titles[[file]][[30L]],
+    "Windows production mailbox has a protected owner DACL and inherited file rights")
+  rows = lapply(expected, record)
+  for (windows in c(FALSE, TRUE)) {
+    result = optional_gate(rows, file, windows)
+    testthat::expect_true(result$passed)
+    testthat::expect_false(result$platform_guard_only)
+    testthat::expect_true(all(added[1:2] %in% result$mandatory_cases))
+    testthat::expect_identical(added[[3L]] %in% result$mandatory_cases, windows)
+    for (title in added) {
+      i = match(title, expected)
+      native = identical(title, added[[3L]])
+      testthat::expect_identical(optional_allowed_skip(file, title, windows),
+                                native && !windows)
+      testthat::expect_false(optional_allowed_skip("test-proc-writer-idle-boundary.R",
+                                                  title, windows))
+      testthat::expect_error(optional_gate(rows[-i], file, windows), "Missing mandatory")
+      testthat::expect_error(optional_gate(c(rows, rows[i]), file, windows), "Duplicate")
+      for (field in c("failed", "warnings")) {
+        changed = rows
+        changed[[i]][[field]] = 1L
+        testthat::expect_error(optional_gate(changed, file, windows))
+      }
+      if (windows || !native) {
+        empty = rows
+        empty[[i]]$passed = 0L
+        testthat::expect_error(optional_gate(empty, file, windows), "assertions")
+        late = rows
+        late[[i]]$passed = 3L
+        late[[i]]$skipped = 1L
+        testthat::expect_error(optional_gate(late, file, windows), "Skipped")
+      }
+      for (kind in c("expectation_error", "expectation_warning")) {
+        raw = rows
+        raw[[i]] = optional_result_rows(list(list(test = title, results = list(
+          structure(list(), class = "expectation_success"),
+          structure(list(message = "controlled absence gate condition"),
+            class = c(kind, "condition"))))))[[1L]]
+        testthat::expect_error(optional_gate(raw, file, windows))
+      }
+    }
+    unknown = record("unrelated absence capability guard", passed = 3L, skipped = 1L)
+    testthat::expect_error(optional_gate(c(rows, list(unknown)), file, windows), "Skipped")
+  }
+  guarded = rows
+  guarded[[38L]]$passed = 0L
+  guarded[[38L]]$skipped = 1L
+  result = optional_gate(guarded, file, FALSE)
+  testthat::expect_true(result$passed)
+  testthat::expect_identical(result$platform_guard_cases, added[[3L]])
+  testthat::expect_false(added[[3L]] %in% result$mandatory_cases)
+  testthat::expect_identical(sum(vapply(result$rows[38L], function(row) row$passed, 0L)), 0L)
+  testthat::expect_error(optional_gate(guarded, file, TRUE), "Skipped")
 })

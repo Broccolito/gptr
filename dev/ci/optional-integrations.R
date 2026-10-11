@@ -95,7 +95,10 @@ optional_titles = list(
     "nested ACL diagnostics reject arbitrary and unordered native output",
     "nested ACL diagnostics read only after zero-time polling",
     "writer nested ACL phases preserve exit failure without granting readiness",
-    "writer early failures retain only fixed numeric nested ACL phases"),
+    "writer early failures retain only fixed numeric nested ACL phases",
+    "writer absence script accepts only two native missing-path exception types",
+    "writer absence script isolates quoted paths from control and privacy rules",
+    "Windows native absence probe refuses existing aliases and denied attributes"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
@@ -232,7 +235,8 @@ optional_platform_guard = function(file, name, windows) {
     "Windows orphan sweep settles the exact production writer and mailbox",
     "Windows production writer preserves split binary NUL and UTF-8 bytes",
     "Windows no-reader timeout proves writer readiness and delivery-stage backpressure",
-    "Windows production mailbox has a protected owner DACL and inherited file rights")
+    "Windows production mailbox has a protected owner DACL and inherited file rights",
+    "Windows native absence probe refuses existing aliases and denied attributes")
 }
 
 optional_allowed_skip = function(file, name, windows) {
