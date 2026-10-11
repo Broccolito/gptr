@@ -58,7 +58,8 @@ test_that("spinner fitting counts display columns for styled and wide characters
   out = spinner_tick_output(sp)
   expect_length(out, 1L)
   expect_identical(cli::ansi_nchar(sub("^\r", "", out), type = "width"), 19L)
-  expect_true(grepl("\u8bfb\u53d6", cli::ansi_strip(out), fixed = TRUE))
+  retained = if (isTRUE(l10n_info()[["UTF-8"]])) "\u8bfb\u53d6" else enc2native("\u8bfb")
+  expect_true(grepl(retained, cli::ansi_strip(out), fixed = TRUE))
   expect_identical(utils::capture.output(invisible(sp$clear())),
     paste0("\r", strrep(" ", 19L), "\r"))
 })

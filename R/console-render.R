@@ -314,6 +314,8 @@ console_print_text = function(text) {
 #' @noRd
 console_spinner = function(label = "thinking") {
   frames = console_symbols()$frames
+  utf8 = isTRUE(l10n_info()[["UTF-8"]])
+  if (!utf8) frames = c("-", "\\", "|", "/")
   key = console_interrupt_key()
   action = if (console_menu_available()) "steer or stop" else "stop"
   sp = new.env(parent = emptyenv())
@@ -330,7 +332,9 @@ console_spinner = function(label = "thinking") {
     sp$i = sp$i %% length(frames) + 1L
     width = max(0L, as.integer(cli::console_width()) - 1L)
     text = sprintf("%s %s (%.0fs, %s to %s)", frames[[sp$i]], label, now - sp$t0, key, action)
-    text = if (width) cli::ansi_strtrim(text, width) else ""
+    if (!utf8) text = enc2native(text)
+    text = if (width) cli::ansi_strtrim(text, width,
+      ellipsis = if (utf8) cli::symbol$ellipsis else "...") else ""
     # Reserve the last column to avoid wrapping; padding erases the tail of a shorter frame.
     padding = strrep(" ", max(0L, width - cli::ansi_nchar(text, type = "width")))
     cat("\r", text, padding, sep = "")
