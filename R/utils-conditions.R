@@ -49,12 +49,47 @@ gptr_warn = function(message, class, ..., .data = NULL, .once = NULL) {
   invisible(NULL)
 }
 
-#' Signal a gptr message (silenced by options(gptr.quiet = TRUE))
+#' Signal an informational condition and display ordinary console output unless muffled
+#'
+#' Protocol frontends reserve stdout with a scoped `.gptr_message_stream` binding. Conditions
+#' still reach calling handlers with the standard muffleMessage restart before any display.
 #' @noRd
-gptr_inform = function(message, class, ..., .data = NULL, .once = NULL) {
+gptr_inform = function(message, class, ..., .data = NULL, .once = NULL, .stream = NULL) {
   if (isTRUE(getOption("gptr.quiet"))) return(invisible(NULL))
   if (!once_first(.once, "message")) return(invisible(NULL))
-  message(gptr_condition(message, class, "message", c(list(...), .data)))
+  cnd = gptr_condition(message, class, "message", c(list(...), .data))
+  stream = gptr_message_stream(.stream)
+  withRestarts({
+    signalCondition(cnd)
+    gptr_message_write(conditionMessage(cnd), stream)
+  }, muffleMessage = function() NULL)
+  invisible(NULL)
+}
+
+#' Resolve the display stream without changing options or suppressing caller handlers
+#' @noRd
+gptr_message_stream = function(stream = NULL) {
+  k = sys.nframe() - 1L
+  while (k >= 1L) {
+    scoped = get0(".gptr_message_stream", envir = sys.frame(k), inherits = FALSE)
+    if (identical(scoped, "stderr")) return("stderr")
+    k = k - 1L
+  }
+  if (is.null(stream)) "stdout" else check_choice(stream, c("stdout", "stderr"), ".stream")
+}
+
+#' Display a condition or console control through a scoped evaluator writer when present
+#' The evaluator records conditions separately and excludes control text from tool output.
+#' @noRd
+gptr_message_write = function(text, stream) {
+  k = sys.nframe() - 1L
+  while (k >= 1L) {
+    write = get0(".gptr_message_write", envir = sys.frame(k), inherits = FALSE)
+    if (is.function(write)) return(invisible(write(text, stream)))
+    k = k - 1L
+  }
+  cat(text, file = if (stream == "stderr") stderr() else stdout(), sep = "")
+  utils::flush.console()
   invisible(NULL)
 }
 
@@ -72,9 +107,11 @@ once_first = function(key, kind) {
 #' @noRd
 msg_verbatim = function(x, stream = c("stdout", "stderr")) {
   stream = check_choice(stream, c("stdout", "stderr"), "stream")
+  stream = gptr_message_stream(stream)
   x = as_utf8(as.character(x))
   if (identical(stream, "stdout")) {
-    cli::cli_verbatim(x)
+    if (length(x)) cat(paste0(x, "\n"), sep = "")
+    utils::flush.console()
   } else {
     cat(x, file = stderr(), sep = "\n")
   }

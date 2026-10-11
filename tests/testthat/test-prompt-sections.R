@@ -1201,9 +1201,7 @@ test_that("gptr_prompt() validates its arguments", {
 test_that("printing a prompt view shows each part and returns it invisibly", {
   v = gptr_prompt(preset = "minimal")
   vis = NULL
-  # print() writes through P01's msg_verbatim(), i.e. cli::cli_verbatim(), whose output
-  # utils::capture.output() does not see inside testthat; cli::cli_fmt() collects it
-  out = paste(cli::cli_fmt({
+  out = paste(utils::capture.output({
     vis = withVisible(print(v))
   }), collapse = "\n")
   expect_match(out, "system block T0", fixed = TRUE)

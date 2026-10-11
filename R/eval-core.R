@@ -313,6 +313,25 @@ eval_one = function(st, expr, i, sref) {
   force(expr)
   force(i)
   force(sref)
+  # Ordinary informational conditions are already recorded by eval_on_message(). Keep their
+  # teed display (and pause-menu controls) out of captured output without popping any sink.
+  .gptr_message_write = function(text, stream) {
+    eval_flush(st)
+    if (identical(stream, "stderr")) {
+      cat(text, file = stderr(), sep = "")
+    } else {
+      failed = tryCatch({
+        cat(text, sep = "")
+        NULL
+      }, error = identity, finally = {
+        tryCatch(eval_read_sink(st), error = function(e) invisible(NULL))
+      })
+      if (inherits(failed, "condition")) stop(failed)
+    }
+    utils::flush.console()
+    invisible(NULL)
+  }
+  force(.gptr_message_write)
   st$line = if (is.null(sref)) NA_integer_ else as.integer(sref[1L])
   eval_push(st, "source", text = paste(as.character(sref), collapse = "\n"), line = st$line)
   start = length(st$events)

@@ -200,7 +200,7 @@ test_that("unknown usage prints as unknown, never as zero (IC-74)", {
   expect_identical(attr(s$usage, "totals")[["cost"]], NA_real_)
   expect_identical(session_footer(s),
                    paste0("idle . fake/fake-1 . 1 turn . unknown tokens . unknown cost . ", id))
-  printed = testthat::capture_messages(print(s))
+  printed = utils::capture.output(print(s))
   expect_match(printed, "unknown tokens . unknown cost", fixed = TRUE, all = FALSE)
   expect_false(any(grepl("$NA", printed, fixed = TRUE)))
   # a known zero stays a known zero; a fresh session has made no request (known zeros)

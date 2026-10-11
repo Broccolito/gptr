@@ -2,7 +2,7 @@
 
     Code
       print(s)
-    Message
+    Output
       The data has 32 rows.
       idle . fake/fake-1 . 1 turn . 1.2k tokens . $0.0123 . s<id>
 
@@ -10,6 +10,6 @@
 
     Code
       str(s)
-    Message
+    Output
       <gptr_session s<id> | chat | idle | 1 turns | fake/fake-1>
 

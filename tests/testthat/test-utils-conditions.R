@@ -60,9 +60,8 @@ test_that("gptr_condition() creates an unsignalled condition object", {
 
 test_that("msg_verbatim() prints braces literally", {
   withr::local_envvar(GPTR_PWNED = NA)
-  expect_message(
-    msg_verbatim("reply {Sys.setenv(GPTR_PWNED = \"1\")}"), "Sys.setenv", fixed = TRUE
-  )
+  out = utils::capture.output(msg_verbatim("reply {Sys.setenv(GPTR_PWNED = \"1\")}"))
+  expect_match(out, "Sys.setenv", fixed = TRUE)
   err = capture.output(msg_verbatim("to stderr {x}", stream = "stderr"), type = "message")
   expect_identical(err, "to stderr {x}")
   expect_identical(Sys.getenv("GPTR_PWNED"), "")

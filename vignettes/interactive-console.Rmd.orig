@@ -47,8 +47,18 @@ R prompt without exporting and reloading a dataset. Model context is a separate,
 description of that workspace; see [Execution](execution-model.html) for copying and storage.
 
 For input piped to an R process, `peter(.stdin = TRUE)` explicitly reads standard input using
-the same syntax; end of input returns the session. This does not supply permission answers or
-credentials, so configure those before unattended work.
+the same syntax; end of input returns the session. The console UI can consume permission
+answers from that input too. Configure the model, credentials and permissions before
+unattended work.
+
+Ordinary responses, progress, setup and steering use normal console output. Actual failures
+use the error stream; handled guidance keeps a clear label without alarming error coloring.
+Reply and history formatting use the current console width; the client controls font size and zoom.
+
+For programmatic event streams, select `.opts = list(frontend = "jsonl")`. With `.stdin = TRUE`,
+that frontend treats every input line as a literal model prompt (or a JSON prompt record);
+`/exit` and `/quit` end the stream. Slash commands and `!` execution use the console frontend.
+JSONL stdout contains event records, with human-readable notices on stderr.
 
 An existing session can become a chat. This offline example creates one first:
 

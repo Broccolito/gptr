@@ -103,15 +103,15 @@ console_reader = function(stdin = FALSE, echo = stdin) {
     rd$con = console_stdin_open()
     rd$read = function(prompt = "", stream = "stdout", secret = FALSE) {
       if (is.null(rd$con)) return(NA_character_)
-      out = if (identical(stream, "stderr")) stderr() else stdout()
-      if (echo) cat(prompt, file = out, sep = "")
+      stream = gptr_message_stream(stream)
+      if (echo) gptr_message_write(prompt, stream)
       x = readLines(rd$con, n = 1L, warn = FALSE, encoding = "UTF-8")
       if (!length(x)) {
-        if (echo) cat("\n", file = out)
+        if (echo) gptr_message_write("\n", stream)
         return(NA_character_)
       }
       x = as_utf8(x)
-      if (echo) cat(if (!secret) console_escape(x, FALSE), "\n", file = out, sep = "")
+      if (echo) gptr_message_write(paste0(if (!secret) console_escape(x, FALSE), "\n"), stream)
       x
     }
   } else {
@@ -393,10 +393,13 @@ repl_passthrough = function(rs, text) {
   res = evaluate(code, repl_eval_env(rs), plots = "auto", tee = TRUE, guard = FALSE)
   for (e in res$events) {
     if (identical(e$type, "error")) {
-      console_notice("Error: ", console_escape(as.character(e$message %||% ""), FALSE))
+      console_notice("Error: ", console_escape(as.character(e$message %||% ""), FALSE),
+                     .error = TRUE)
     }
   }
-  if (res$status %in% c("interrupt", "timeout")) console_notice("[gptr] ", res$status)
+  if (res$status %in% c("interrupt", "timeout")) {
+    console_notice("[gptr] ", res$status, .error = identical(res$status, "timeout"))
+  }
   if (noted) rs$notes = utils::tail(c(rs$notes, repl_note(code, res)), 20L)
   data = list(code = code, output = as.character(unlist(res$outputs)), status = res$status,
               noted = noted)
@@ -545,7 +548,7 @@ repl_waiting_notice = function(rs) {
 #' Print an error on stderr: escaped, its line feeds kept
 #' @noRd
 repl_error = function(e) {
-  console_notice("Error: ", console_escape(conditionMessage(e)))
+  console_notice("Error: ", console_escape(conditionMessage(e)), .error = TRUE)
 }
 
 #' One prompt through console_send(); the answer is printed here when the renderer hooks did not
@@ -825,7 +828,7 @@ on_load(ext_declare_builtin("console", builtin_console))
 #' Options: `gptr.verbose` (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 #' knitr and testthat, 1 under Rscript, 2 at the console), `gptr.max_turns_console`
 #' (turns per console prompt, default 200) and `gptr.history` (console inputs to R's history,
-#' default `TRUE`). Ordinary progress uses stderr (stdout in an ordinary IRkernel cell).
+#' default `TRUE`). Ordinary progress uses normal output; actual errors use stderr.
 #' `vignette("interactive-console", package = "gptr")` gives input examples and the complete
 #' built-in command table.
 #' @name peter

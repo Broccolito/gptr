@@ -1,7 +1,7 @@
 # console-interrupt.R -- the interrupt policy of every blocking gptr call (P14, layer L5, area
 # console; INFRA-03, architecture 6.2, contract 7.14), the `console.interrupt_policy` service.
-# Report 18 sections 2.2.2 and 4.6 with G3's menu fixes: Ctrl-C opens a pause menu on stderr (it
-# may run inside a tool's stdout capture) that resumes through R's `resume` restart; only the
+# Report 18 sections 2.2.2 and 4.6 with G3's menu fixes: Ctrl-C opens an ordinary pause menu
+# (excluded from a tool's stdout capture) that resumes through R's `resume` restart; only the
 # outermost policy has handlers, so none sits between the menu and the interrupted code.
 
 #' Run `expr_fun()` under the console interrupt policy
@@ -103,7 +103,7 @@ console_ask = function(prompt) {
   rs = console_repl_find()
   tryCatch({
     x = if (isTRUE(rs$stdin) && !is.null(rs$reader)) {
-      rs$reader$read(prompt, stream = "stderr")
+      rs$reader$read(prompt, stream = "stdout")
     } else {
       gptr_readline(prompt)
     }
@@ -153,7 +153,7 @@ policy_menu = function(cnd, pol) {
         invokeRestart("resume")
       }, error = function(e) {
         console_notice("[gptr] cannot run in the background: ",
-                       console_escape(conditionMessage(e), FALSE))
+                       console_escape(conditionMessage(e), FALSE), .error = TRUE)
       })
       next
     }
@@ -204,7 +204,7 @@ policy_flush = function() {
       tryCatch(session_enqueue(it$s, it$text, as = it$as, source = "pause_menu"),
                error = function(e) {
                  console_notice("[gptr] the queued message could not be delivered: ",
-                                console_escape(conditionMessage(e), FALSE))
+                                console_escape(conditionMessage(e), FALSE), .error = TRUE)
                })
     }
   }

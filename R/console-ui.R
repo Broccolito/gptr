@@ -192,7 +192,7 @@ ui_console_select = function(title, choices, default = NULL, details = NULL, mul
   labels = as.character(unlist(choices))
   msg_verbatim(c("", console_escape(title),
                   ui_escape(if (length(details)) paste0("  | ", details)), "",
-                  ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""), "stderr")
+                  ui_escape(sprintf("  %d: %s", seq_along(labels), labels)), ""))
   hint = c(if (multiple) "numbers separated by commas" else "a number",
            if (allow_other) "or type your own answer",
            if (length(default)) paste0("Enter = ", paste(labels[default], collapse = ", ")))
@@ -284,7 +284,8 @@ ui_console_spec = function(read = ui_console_read, name = "console") {
             input = input,
             questions = function(qs) ui_questions_via(select, input, qs),
             notify = function(text, level = "info") {
-              msg_verbatim(paste0("[", level, "] ", ui_escape(text)), "stderr")
+              msg_verbatim(paste0("[", level, "] ", ui_escape(text)),
+                           if (identical(level, "error")) "stderr" else "stdout")
             },
             permission = function(request) ui_console_permission(request, read))
 }
@@ -293,7 +294,9 @@ ui_console_spec = function(read = ui_console_read, name = "console") {
 #' @noRd
 ui_none_spec = function() {
   gptr_spec("ui", "none", has_ui = function() FALSE, select = function(...) NA_integer_,
-            notify = function(text, level = "info") gptr_inform(text, "notice"))
+            notify = function(text, level = "info") {
+              gptr_inform(text, "notice", .stream = if (level == "error") "stderr" else "stdout")
+            })
 }
 
 #' The state of a scripted UI: its answer queue and log (tests; contract section 12.2)
@@ -391,7 +394,9 @@ ui_rstudio_spec = function() {
             select = select,
             input = input,
             questions = function(qs) ui_questions_via(select, input, qs),
-            notify = function(text, level = "info") gptr_inform(text, "notice"),
+            notify = function(text, level = "info") {
+              gptr_inform(text, "notice", .stream = if (level == "error") "stderr" else "stdout")
+            },
             permission = function(request) {
               if (!ui_rstudio()) return(ui_answer("deny"))
               ok = tryCatch(rstudioapi::showQuestion("gptr permission",

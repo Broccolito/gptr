@@ -99,13 +99,19 @@ test_that("console_lines() splits on any line end and console_out() prints escap
   expect_identical(utils::capture.output(console_out("x {y}\ny\033")), c("x {y}", "y<U+001B>"))
 })
 
-test_that("notices go to stderr, never to stdout", {
+test_that("ordinary notices use stdout and actual errors use stderr", {
   err = NULL
   out = utils::capture.output({
     err = utils::capture.output(console_notice("[gptr] ", "hello"), type = "message")
   })
+  expect_identical(out, "[gptr] hello")
+  expect_identical(err, character())
+  out = utils::capture.output({
+    err = utils::capture.output(console_notice("Error: failure", .error = TRUE),
+                                type = "message")
+  })
   expect_identical(out, character())
-  expect_identical(err, "[gptr] hello")
+  expect_identical(err, "Error: failure")
 })
 
 test_that("reset_line() ends a partial line and finish() closes it", {

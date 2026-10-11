@@ -154,13 +154,13 @@ test_that("the console menu consumes a CLI choice before normal chat input", {
   expect_match(text, "Welcome to Peter.\nChoose a default model provider.", fixed = TRUE)
   expect_false(grepl("<U+000A>", text, fixed = TRUE))
   expect_false(grepl("login:", text, fixed = TRUE))
-  rows = err[grepl("^[[:space:]]+[12]: ", err)]
+  rows = out[grepl("^[[:space:]]+[12]: ", out)]
   expect_length(rows, 2L)
   expect_true(all(grepl("Signed in", rows, fixed = TRUE)))
   expect_identical(regexpr("Signed in", rows, fixed = TRUE)[1L],
                    regexpr("Signed in", rows, fixed = TRUE)[2L])
-  first = which(grepl("^[[:space:]]+1: ", err))
-  expect_identical(err[first - 1L], "")
+  first = which(grepl("^[[:space:]]+1: ", out))
+  expect_identical(out[first - 1L], "")
   expect_match(text, "model claude-cli/default", fixed = TRUE)
   expect_identical(settings_read("user")$model, "claude-cli/default")
   expect_length(box$answers, 0L)
@@ -175,7 +175,7 @@ for (choice in 1:2) {
     result = NULL
     out = utils::capture.output({
       result = repl_setup(rs)
-    }, type = "message")
+    })
     expect_false(result)
     command = c("codex login", "claude auth login")[choice]
     expect_match(paste(out, collapse = "\n"), command, fixed = TRUE)
@@ -192,7 +192,7 @@ test_that("unknown CLI login warns but allows the user to choose it", {
   result = NULL
   out = utils::capture.output({
     result = repl_setup(rs)
-  }, type = "message")
+  })
   expect_true(result)
   expect_match(paste(out, collapse = "\n"), "Login status is unknown", fixed = TRUE)
   expect_identical(settings_read("user")$model, "claude-cli/default")
@@ -215,7 +215,7 @@ for (choice in 1:2) {
       box$answers = box$answers[-1L]
       a
     })
-    out = utils::capture.output(peter(), type = "message")
+    out = utils::capture.output(peter())
     expect_null(gptr_config()$model)
     expect_match(paste(out, collapse = "\n"), "not a CLI provider", fixed = TRUE)
     expect_false(any(grepl("^[[:space:]]+[12]: .*\\bNA\\b", out)))

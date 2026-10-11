@@ -126,7 +126,7 @@ or the end of piped input return the session invisibly, so \code{s = peter()} ke
 Options: \code{gptr.verbose} (0 silent, 1 progress, 2 streamed console, 3 debug; default 0 in
 knitr and testthat, 1 under Rscript, 2 at the console), \code{gptr.max_turns_console}
 (turns per console prompt, default 200) and \code{gptr.history} (console inputs to R's history,
-default \code{TRUE}). Ordinary progress uses stderr (stdout in an ordinary IRkernel cell).
+default \code{TRUE}). Ordinary progress uses normal output; actual errors use stderr.
 \code{vignette("interactive-console", package = "gptr")} gives input examples and the complete
 built-in command table.
 }

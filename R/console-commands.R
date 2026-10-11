@@ -80,13 +80,13 @@ console_command = function(text, session = NULL, send = NULL) {
   }
   if (is.null(spec)) {
     console_notice("Unknown command /", console_escape(cmd$full, FALSE),
-                   ". Type /help for the list.")
+                   ". Type /help for the list.", .error = TRUE)
     return(invisible("unknown"))
   }
   ctx = (if (!is.null(session)) session_live(session)$ctx) %||% ctx_new(session)
   out = tryCatch(spec$handler(args, ctx), error = function(e) {
     console_notice("Error in /", console_escape(spec$name, FALSE), ": ",
-                   console_escape(conditionMessage(e), FALSE))
+                   console_escape(conditionMessage(e), FALSE), .error = TRUE)
     e
   })
   if (inherits(out, "error")) return(invisible("error"))

@@ -65,7 +65,11 @@ local_tracked = function(run, s, .env = parent.frame()) {
 }
 
 notices = function(expr) {
-  utils::capture.output(expr, type = "message")
+  out = NULL
+  err = utils::capture.output({
+    out = utils::capture.output(expr)
+  }, type = "message")
+  c(out, err)
 }
 
 test_that("continue resumes the interrupted computation", {

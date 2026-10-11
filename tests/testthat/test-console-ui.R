@@ -18,7 +18,7 @@ console_try = function(fun, answers) {
   res = NULL
   shown = utils::capture.output({
     res = fun()
-  }, type = "message")
+  })
   list(result = res, shown = shown, asked = i)
 }
 

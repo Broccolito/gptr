@@ -371,16 +371,16 @@ test_that("the stdin UI answers selections and approvals from the reader", {
   pick = NULL
   a1 = NULL
   a2 = NULL
-  err = utils::capture.output({
+  out = utils::capture.output({
     pick = ui$select("Which?", c("Table", "Plot"))
     a1 = ui$permission(list(tool = "r", input = list(code = "y = 2"), risk = list(level = 1L)))
     a2 = ui$permission(list(tool = "r", input = list(code = "unlink('x')"),
                             risk = list(level = 3L)))
-  }, type = "message")
+  })
   expect_identical(pick, 2L)
   expect_identical(a1$decision, "allow")
   expect_identical(a2, list(decision = "deny", remember = NULL, feedback = "use base R"))
-  expect_true(any(grepl("Answer [y]es", err, fixed = TRUE)))
+  expect_true(any(grepl("Answer [y]es", out, fixed = TRUE)))
   expect_s3_class(ui, "gptr_ui")
 })
 
@@ -476,11 +476,11 @@ test_that("Ctrl-C at the prompt prints a hint; twice in a row leaves", {
   }
   local_mocked_bindings(gptr_readline = ctrl_c)
   res = "not set"
-  err = utils::capture.output(invisible(utils::capture.output({
+  out = utils::capture.output({
     res = console_run(NULL, new.env())
-  })), type = "message")
+  })
   expect_null(res)
-  expect_length(grep("again to leave gptr", err, fixed = TRUE), 1L)
+  expect_length(grep("again to leave gptr", out, fixed = TRUE), 1L)
 })
 
 test_that("a line at the readline limit is reported at once and not sent", {
@@ -493,11 +493,11 @@ test_that("a line at the readline limit is reported at once and not sent", {
     a
   })
   res = "not set"
-  err = utils::capture.output(invisible(utils::capture.output({
+  out = utils::capture.output({
     res = console_run(NULL, new.env())
-  })), type = "message")
+  })
   expect_null(res)
-  expect_true(any(grepl("^Warning: That line was [0-9]+ bytes long", err)))
+  expect_true(any(grepl("^Warning: That line was [0-9]+ bytes long", out)))
 })
 
 test_that("background sessions that wait for approval are announced once (IC-57)", {
@@ -506,11 +506,11 @@ test_that("background sessions that wait for approval are announced once (IC-57)
                     stringsAsFactors = FALSE)
   local_mocked_bindings(job_list = function(kind = NULL) rows)
   rs = repl_state(NULL, new.env())
-  err = utils::capture.output({
+  out = utils::capture.output({
     repl_waiting_notice(rs)
     repl_waiting_notice(rs)
-  }, type = "message")
-  expect_identical(err, paste("[gptr] 1 background session waits for approval;",
+  })
+  expect_identical(out, paste("[gptr] 1 background session waits for approval;",
                               "the next prompt or gptr_wait() asks."))
   expect_identical(rs$waiting, 1L)
 })
@@ -545,7 +545,7 @@ test_that("approvals of a .stdin session are answered from the same stdin", {
   expect_identical(e$y, 2)
   expect_identical(res$text, "made y")
   expect_true(any(grepl("allow? [y]es", out, fixed = TRUE)))
-  expect_true("  r  y = 2" %in% err)
+  expect_true("  r  y = 2" %in% out)
   expect_null(getOption("gptr.ui"))
   expect_null(getOption("gptr.interactive"))
 })

@@ -88,6 +88,8 @@ jsonl_value = function(x) {
 #' every session are written, and a failed prompt gives an `error` line.
 #' @noRd
 jsonl_frontend_run = function(session, ..., call = NULL, con = stdout()) {
+  .gptr_message_stream = "stderr"
+  force(.gptr_message_stream)
   old = options(gptr.verbose = 0L)
   on.exit(options(old), add = TRUE)
   if (!isTRUE(call$args$stdin)) {

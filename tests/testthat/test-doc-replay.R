@@ -1738,7 +1738,7 @@ test_that("gptr_source() validates its arguments and runs plain scripts", {
   rmd = file.path(getwd(), "r.Rmd")
   writeLines("x", rmd)
   expect_error(gptr_source(rmd), class = "gptr_error_invalid_argument")
-  echoed = cli::cli_fmt(gptr_source(f, envir = e, echo = TRUE))
+  echoed = utils::capture.output(gptr_source(f, envir = e, echo = TRUE))
   expect_identical(echoed, c("> x = 1", "> y = x + 1"))
 })
 
@@ -2278,7 +2278,7 @@ test_that("an open notebook is never written; gptr_doc(sync = TRUE) applies it (
   withr::local_options(jupyter.in_kernel = TRUE)
   withr::local_envvar(JPY_SESSION_NAME = nb)
   e = new.env(parent = globalenv())
-  out = cli::cli_fmt(eval(doc_e2e_call(prompt = paste("summarise the", "mpg column")), e))
+  out = utils::capture.output(eval(doc_e2e_call(prompt = paste("summarise the", "mpg column")), e))
   expect_true("m = mean(mtcars$mpg)" %in% out)
   expect_identical(readBin(nb, "raw", n = file.info(nb)$size), bytes)
   withr::local_options(jupyter.in_kernel = NULL)

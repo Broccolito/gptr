@@ -51,9 +51,10 @@ test_that("a CLI notice clears before delivery and the pending spinner resumes",
     }, type = "message")
   })
   expect_false(observed$shown)
-  expect_identical(out, paste0("\r", strrep(" ", 79L), "\r"))
-  expect_length(err, 1L)
-  expect_true(startsWith(err, "The claude-cli route is experimental:"))
+  expect_length(out, 1L)
+  expect_true(startsWith(out,
+    paste0("\r", strrep(" ", 79L), "\rThe claude-cli route is experimental:")))
+  expect_identical(err, character())
   expect_s3_class(observed$condition, "gptr_message_notice")
   expect_identical(observed$value, 17L)
   expect_identical(w$rec$spinner, sp)
@@ -88,6 +89,40 @@ test_that("once and quiet notices do not clear an otherwise pending redraw", {
   }, list(w$run))))
   expect_identical(out, character())
   expect_true(w$rec$spinner$shown)
+})
+
+test_that("native R GUI notices close the redraw row before ordinary message delivery", {
+  testthat::local_reproducible_output(width = 40, crayon = FALSE, unicode = FALSE)
+  local_gptr_options(verbose = 2L, quiet = FALSE)
+  withr::local_options(cli.dynamic = TRUE)
+  local_mocked_bindings(front_end = function() "rgui")
+  w = notice_record()
+  utils::capture.output(notice_request(w))
+  sp = w$rec$spinner
+  observed = new.env(parent = emptyenv())
+  out = utils::capture.output({
+    err = utils::capture.output(withCallingHandlers(with_interrupt_policy(function() {
+      gptr_inform(strrep("long notice ", 12L), "notice")
+    }, list(w$run)), gptr_message_notice = function(cnd) {
+      observed$condition = cnd
+      observed$shown = sp$shown
+    }), type = "message")
+  })
+  expect_identical(out, c(paste0("\r", strrep(" ", 39L), "\r"),
+                          strrep("long notice ", 12L)))
+  expect_identical(err, character())
+  expect_s3_class(observed$condition, "gptr_message_notice")
+  expect_false(observed$shown)
+  expect_true(w$rec$request_pending)
+  # The row must end with LF even though capture.output() strips its final line terminator.
+  bytes = rawConnection(raw(), "w")
+  on.exit(close(bytes), add = TRUE)
+  sp$last = 0
+  utils::capture.output(invisible(sp$tick()))
+  sink(bytes)
+  tryCatch(console_before_message(list(w$run)), finally = sink())
+  expect_identical(tail(rawConnectionValue(bytes), 2L), charToRaw("\r\n"))
+  expect_identical(utils::capture.output(console_before_message(list(w$run))), character())
 })
 
 test_that("messages keep redaction, metadata and caller handlers", {
@@ -155,8 +190,8 @@ test_that("real R-tool capture contains no spinner clear bytes or altered warnin
       }, class = "gptr_warning_notice")
     }, type = "message")
   })
-  expect_identical(out, "tool output")
-  expect_identical(err, "tool notice")
+  expect_identical(out, c("tool output", "tool notice"))
+  expect_identical(err, character())
   expect_false(result$is_error)
   expect_identical(result$details$warnings, "tool warning")
   expect_false(grepl("[\r\033]", tool_result_text(result)))

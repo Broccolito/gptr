@@ -71,11 +71,12 @@ console_write = function(lines) {
   invisible(NULL)
 }
 
-#' A console notice on stderr (the pause menu can run inside a tool's stdout capture); callers
-#' escape untrusted parts with console_escape()
+#' Ordinary console notices on stdout; actual errors on stderr. The scoped evaluator writer
+#' keeps pause-menu controls out of tool output. Callers escape parts with console_escape().
 #' @noRd
-console_notice = function(...) {
-  msg_verbatim(paste0(...), "stderr")
+console_notice = function(..., .error = FALSE) {
+  stream = gptr_message_stream(if (.error) "stderr" else "stdout")
+  gptr_message_write(paste0(paste0(...), "\n"), stream)
 }
 
 #' Chunk-invariant markdown stream renderer (contract 7.14)
@@ -355,7 +356,8 @@ console_spinner = function(label = "thinking") {
 
 # ---- renderer hooks ---------------------------------------------------------------------------
 # Rendering subscribes to events (INFRA-27): process-wide notify hooks render runs of foreground
-# sessions at verbosity() >= 2 and report progress on stderr at verbosity 1. `the$console$active`
+# sessions at verbosity() >= 2 and report ordinary progress on stdout at verbosity 1.
+# `the$console$active`
 # maps a run id to its session from agent_start to agent_end, at any verbosity, because the
 # interrupt policy needs the session of a run (04 gives no accessor from a run to its session).
 
@@ -449,12 +451,20 @@ console_spinner_stop = function(rec) {
 console_before_message = function(runs) {
   for (run in runs) {
     rec = console_record(list(run = run$id))
-    if (!is.null(rec) && console_foreground(rec) && !is.null(rec$spinner)) rec$spinner$clear()
+    if (!is.null(rec) && console_foreground(rec) && !is.null(rec$spinner)) {
+      shown = isTRUE(rec$spinner$shown)
+      rec$spinner$clear()
+      # Native R GUIs retain a CR overwrite range until LF; close it before ordinary notices.
+      if (shown && identical(front_end(), "rgui")) {
+        cat("\n")
+        utils::flush.console()
+      }
+    }
   }
   invisible(NULL)
 }
 
-#' Normal progress: stdout in an IRkernel cell, else the usual stderr message. Callers keep
+#' Normal progress: ordinary stdout display. Callers keep
 #' their verbosity/foreground gates and escape untrusted parts; failures do not use this path.
 #' @noRd
 console_progress = function(text) {
@@ -589,8 +599,7 @@ console_result_lines = function(call, result) {
   if (identical(call$name, "edit") && is.character(d$diff) && length(d$diff)) {
     shown = utils::head(d$diff, 12L)
     lines = paste0("    ", console_escape(shown, FALSE))
-    lines = ifelse(startsWith(shown, "+"), cli::col_green(lines),
-                   ifelse(startsWith(shown, "-"), cli::col_red(lines), lines))
+    lines = ifelse(startsWith(shown, "+"), cli::col_green(lines), lines)
     more = length(d$diff) - 12L
     return(c(lines, if (more > 0L) paste0("    (+", more, " more lines)")))
   }
@@ -776,7 +785,7 @@ console_on_tool_end = function(event, ctx) {
   }
   if (verbosity() == 1L && isTRUE(event$is_error) && console_foreground(rec)) {
     gptr_inform(paste0("gptr: ", console_escape(event$tool_name %||% "?", FALSE), " failed"),
-                "progress")
+                "progress", .stream = "stderr")
   }
   NULL
 }
@@ -815,7 +824,11 @@ console_on_agent_end = function(event, ctx) {
   v = verbosity()
   if (v == 1L) {
     text = paste0("gptr:", sub("^ +", " ", line))
-    if (identical(event$status, "idle")) console_progress(text) else gptr_inform(text, "progress")
+    if (identical(event$status, "idle")) {
+      console_progress(text)
+    } else {
+      gptr_inform(text, "progress", .stream = if (event$status == "error") "stderr" else "stdout")
+    }
   }
   if (v < 2L) return(NULL)
   if (!is.null(rec$think)) rec$think$finish()
@@ -841,7 +854,7 @@ console_on_artifact_start = function(event, ctx) {
   NULL
 }
 
-#' Print NS-8 lines: on stdout at verbosity 2 or 3, as progress on stderr at verbosity 1
+#' Print NS-8 lines: on stdout at verbosity 2 or 3, as ordinary progress at verbosity 1
 #' @noRd
 console_artifact_emit = function(lines) {
   v = verbosity()
