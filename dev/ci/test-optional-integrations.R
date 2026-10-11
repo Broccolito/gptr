@@ -187,7 +187,12 @@ writer_runtime_titles = c(
   "writer enforces the actual Rscript expression byte boundary",
   "full production writer bootstrap fits the unchanged Rscript limits",
   "Unix marker release does not consult the Windows mailbox",
-  "writer cleanup refuses a dangling mailbox link")
+  "writer cleanup refuses a dangling mailbox link",
+  "writer allows only confirmed fresh names inside its canonical mailbox",
+  "writer canonical parent checks accept Windows separators and reject outside paths",
+  "writer compressed bootstrap preserves exact trusted source and binary literals",
+  "writer full compressed bootstrap fits a long Windows mailbox path",
+  "writer early-case diagnostics retain only bounded structural evidence")
 
 testthat::test_that("production writer platform guards are explicit and never count as coverage", {
   file = "test-proc-writer-runtime.R"
@@ -203,7 +208,7 @@ testthat::test_that("production writer platform guards are explicit and never co
   testthat::expect_true(result$passed)
   testthat::expect_false(result$platform_guard_only)
   testthat::expect_identical(result$platform_guard_cases, writer_runtime_titles[1:5])
-  testthat::expect_identical(result$mandatory_cases, writer_runtime_titles[6:20])
+  testthat::expect_identical(result$mandatory_cases, writer_runtime_titles[6:25])
   testthat::expect_error(optional_gate(rows[1:5], file, FALSE), "Missing mandatory")
   testthat::expect_error(optional_gate(c(rows, list(record("Windows unrelated writer guard",
     passed = 0L, skipped = 1L))), file, FALSE), "Skipped")

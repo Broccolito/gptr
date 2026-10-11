@@ -80,7 +80,12 @@ optional_titles = list(
     "writer enforces the actual Rscript expression byte boundary",
     "full production writer bootstrap fits the unchanged Rscript limits",
     "Unix marker release does not consult the Windows mailbox",
-    "writer cleanup refuses a dangling mailbox link"),
+    "writer cleanup refuses a dangling mailbox link",
+    "writer allows only confirmed fresh names inside its canonical mailbox",
+    "writer canonical parent checks accept Windows separators and reject outside paths",
+    "writer compressed bootstrap preserves exact trusted source and binary literals",
+    "writer full compressed bootstrap fits a long Windows mailbox path",
+    "writer early-case diagnostics retain only bounded structural evidence"),
   "test-proc-spawn.R" = c(
     "write_all() delivers 2 MB through a pipe and write_close() sends EOF",
     "a 4 MB payload to a child that echoes each line completes without deadlock",
