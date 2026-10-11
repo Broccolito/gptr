@@ -1,12 +1,12 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 05:09 PDT
+## Optional integrations and Windows transport — 2026-10-11 05:26 PDT
 
 Use `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, repairs pushed through4429c9f. Primary main remains718e81e;
+`codex/skipped-platform-tests`, repairs pushed through74bb226. Primary main remains718e81e;
 maintainer edits, old prepared chunks, secrets and shared Ollama are preserved. No merge
-is claimed. At05:06:58 PDT load206.18/160.34/115.11, CPU20.10%idle, RAM91GiB used/
-37GiB unused, swap24,775.75MiB used and disk13GiB keep all local heavy jobs held.
+is claimed. At05:21:17 PDT load52.19/98.49/110.80, CPU18.1%idle, RAM124GiB used/
+3197MiB unused, swap24,719.75MiB used and disk13GiB keep all local heavy jobs held.
 No reported thermal/performance warning clears those gates. Do not stop unrelated work or
 delete user files. Hosted offline validation has at most two jobs; both prior leases are free.
 
@@ -38,6 +38,14 @@ ACL/SID/path/error bytes and weakening no denial/restore/settlement oracle. Its 
 dangling link is followed by Windows file.info; this warning remains fatal. A safe nofollow
 test-observer capability is under source review, not applied. No blanket suppression,
 stat-failure-to-zero bypass, per-poll PowerShell, package dependency or budget increase.
+
+Exact2a6da1a/run38138272422 completed on both hosts.13 pure Python units and2571 result-
+gate assertions per host pass. Two brace_linter findings in the retirement test stop both
+jobs before installation, preflight or any of the17 integration bodies; other52 paths are
+clean.74bb226 adds braces to those two predicates only; independent source review confirms
+unchanged assertions, titles and limits. Four fresh Linux plan stages pass25 plans/1523
+blocks/770 R blocks/0 parse-style problems/0 lints/39 equal hashes, with90 historical index
+warnings retained. Both leases are free. The same17 full files must rerun corrected source.
 
 Current registry225326a:36 files/161 titles/53 lint paths. Next exact-source scope retains
 all16 complete files and adds retirement, plus all4 fresh Linux plan stages after this plan

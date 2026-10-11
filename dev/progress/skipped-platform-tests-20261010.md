@@ -948,3 +948,29 @@ decoder cases. Next17 full files and all4 fresh plan stages must test the new pl
 The known dangling metadata warning remains fatal; an existing-capability nofollow observer
 is under source review.05:06 resource gate stays held (load206.18/free disk13GiB); shared
 Ollama and all unrelated user state remain intact. No full CRAN or merge certificate.
+
+## Actual2a6da1a lint stop and corrected rerun — 2026-10-11 05:26 PDT
+
+Run38138272422 completed both hosts on exact2a6da1a3556e6aa2a7f9a1a4098d74e07cb6f84c.
+Each passed13 pure Python dependency units and2571 result-gate assertions with no test
+failures/warnings/skips. Two brace_linter findings, retirement lines349 and367, stopped
+installation/preflight and all17 integration bodies; the other52 scoped lint paths were
+clean. Native progress is not inferred from these unit results. Both hosted leases are free.
+
+Four fresh Linux plan stages passed:25 plans/1446 indexed blocks/4389 definitions/28337
+calls/912 findings (822 info/90 historical warnings/0 errors),1523 extracted blocks/770 R
+blocks,0 parse/style problems/0 lints and39 identical before/after source hashes. Bounded
+artifact extraction retains only seven plan metadata/log files; ZIP SHA256
+67964c8d39fb00bfbc73e296e4f9c53bdc8a756b1a2fd3946e5fa3631a6771d0.
+
+74bb226 braces the two multiline predicates only. Independent source review confirms no
+assertion/title/skip/timer/cap changes and source parity with the primary files. The same17
+complete files/36-file161-title registry/53 lint paths must rerun on an exact new source;
+all4 plan checks repeat after this plan update. Nofollow observer remains ignored and under
+peer source review; the old absence metadata warning stays fatal and OPEN.
+
+05:21:17 PDT load52.19/98.49/110.80, CPU18.1%idle, RAM124GiB used/3197MiB unused,
+swap24,719.75MiB used and disk13GiB continue holding all local heavy jobs. No thermal warning
+is recorded. Shared Ollama, unrelated processes/files and primary historical checkpoint/
+utils hashes remain intact. Current full CRAN, local dependencies/frontends and merge gates
+remain pending. No model inference, local imports/render/install/test or arbitrary cleanup.

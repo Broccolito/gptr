@@ -472,9 +472,9 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
 | Windows filesystem safety | Actual679f5d6 Codex retarget and SYSTEM/MCP controls pass. Checkpoint two raw restoration errors and Codex two typed errors expose only AutoInherited0-to1; ordered DACL and other tested flags match. Reviewed4429c9f establishes a stable actual descriptor on fresh owned targets before denial, preserving owner/DACL and requiring a second exact roundtrip. All effective-denial/data/hash and exact full restoration oracles remain mandatory; native rerun pending. Arbitrary caller AI0 restoration is unproved. |
 | Windows child stdin | Actual679f5d6 original native3 pass60 assertions/0 failures or R warnings. Two cold/warm private ACKs prove third-writer starvation at the unchanged2s deadline. Reviewed0e666a6 retires only an exact acknowledged idle actor while preserving target input; new native restart/FIFO/EOF/callback/identity/cleanup and timing proofs pending. New parent-only Windows worker death witness2e71d17 requires exit within10s before cleanup; Job Object contribution is qualified. Native absence remains7P/1F/1W; f3f3aaa adds fixed numeric stages/status, keeping exact denial/restore/settlement and the metadata warning fatal. D-019 remains open. |
-| Validation/merge | Exact679f5d6/run38135856469: all16 final raw files on both hosts. Linux2188P/0F/W/11 exact OS guards; Windows2341P/13 failed conditions (9 failures+4 errors)/1 R warning/10 guards. Both2242 gate assertions,12 Python tests,51 lint paths and17 cleanup records pass; controller warnings0. Four fresh Linux plan stages pass, retaining90 historical index warnings. Current225326a registry36 files/161 titles/53 lint paths. Next exact-source17 full files retain the16 and add retirement; all4 fresh plan stages required after this update. Merge WAITING strict relevant GREEN. |
+| Validation/merge | Actual679f5d6 native outcomes remain the last complete integration evidence. Exact2a6da1a/run38138272422 completed:13 Python units and2571 result-gate assertions pass per host; two retirement brace lint findings stop both jobs before all17 integration bodies, with52 other paths clean. All4 fresh Linux plan stages pass/39 equal hashes/90 historical index warnings. Formatting-only74bb226 is source-reviewed; unchanged17 full files and all4 fresh stages must rerun. Registry36 files/161 titles/53 lint paths. Merge WAITING strict relevant GREEN. |
 
-Current follow-up checkpoint (2026-10-11 05:09 PDT): candidate source repairs through4429c9f are pushed;
+Current follow-up checkpoint (2026-10-11 05:26 PDT): candidate source repairs through74bb226 are pushed;
 only the primary historical checkpoint fixture remains deliberately unmirrored. Original
 cold/warm/native3 tests and primary old checkpoint/utils files are preserved. The next17-file
 source run uses fake providers, unchanged5-minute file leases, native2s/30s/60s limits and
@@ -483,8 +483,8 @@ errors/warnings, zero assertions and unexpected skips remain fatal. Source-only 
 not substitute for actual native acceptance.
 
 Local R, install/import, Quarto/render, GUI/kernel, build/check and model jobs remain WAITING:
-at05:06:58 PDT load206.18/160.34/115.11, CPU20.10%idle, RAM91GiB used/37GiB unused,
-swap24,775.75MiB used and disk13GiB. No thermal/performance warning is reported. Preserve
+at05:21:17 PDT load52.19/98.49/110.80, CPU18.1%idle, RAM124GiB used/3197MiB unused,
+swap24,719.75MiB used and disk13GiB. No thermal/performance warning is reported. Preserve
 the shared Ollama and unrelated work; do not free resources by stopping models or deleting
 user files. Owned process-family samples do not describe whole-job or model RAM. The current
 Windows dangling-link sampler warning remains an explicit open fixture gap; investigate an
