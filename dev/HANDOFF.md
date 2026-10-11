@@ -1,11 +1,11 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport -2026-10-11 00:52 PDT
+## Optional integrations and Windows transport -2026-10-11 01:05 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
 `codex/skipped-platform-tests`. Primary main718e81e/maintainer/old preparations remain intact;
-shared Ollama preserved. Latest00:49:load22.60/64.67/93.89/CPU37.76%idle/RAM123GiBused/
-4009MiBunused/swap11,388MiB/disk122GiB. Hold local R/install/browser/model/build jobs; at most
+shared Ollama preserved. Latest01:05:load111.72/101.63/99.13/CPU12.11%idle/RAM126GiBused/
+1701MiBunused/swap11,364MiB/disk89GiB. Hold local R/install/browser/model/build jobs; at most
 2 independent hosted jobs. No shared-model operation.
 
 Actual combined15 run38120994420 exactf419fd6: Linux strict PASS1481 assertions/0failed
@@ -35,6 +35,14 @@ Linux one exact OS guard. An early startup failure makes this probe inconclusive
 Warning observer44cff6c and bounded actor stages6e096c3 reviewed; no startup-speed fix.
 Strict CI3ffecab reviewed:33 full files/127 titles/46 lint paths; all29 writer titles mandatory
 on Windows,23 pure on Linux plus6 exact native guards. Actual READY/delivery proof mandatory.
+Latesta135 run38122876440: both hosts stopped before bodies on one idle capture lint;
+45 scoped paths clean. Both actualunit gates1559 passes/0 failures/skips but27 synthetic
+control warnings, not the earlier1456 clean prefix. Callbackb4ca857 source-clear; explicit
+expected-warning capture5b3f5bb/fatal unexpected-unit-warning gate10dc59a source-clear,
+committed; actual clean unit/lint and platform bodies pending. Four Linux plan
+stages pass39 unchanged hashes/770 blocks/0 parse-style issues/0 lints. Verified artifacts:
+Windows45f0057f7c802557191ba6137ab0c4c5276f4c895293467e8a55bf2281a138e0;
+Linux28895a547e50e3a008177a63c57c374dc8063bef2fecfcbececb5b5aeffa79bc.
 Next actual11 files: lint-rules, proc-writer-idle-slots, mcp-client, subagent-worker, cli-common, cli-claude,
 cli-codex, ckpt-files, proc-writer-runtime, proc-windows-backpressure, proc-spawn plus fresh4 Linux plan stages. D-019/merge stay open until relevant strict GREEN.
 Local pandas/NumPy, actual GUI/kernel replay, broad check/release remain waiting. See plan/ledger.

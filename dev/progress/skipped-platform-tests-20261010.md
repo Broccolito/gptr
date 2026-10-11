@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At00:49 PDT October11, load was22.60/64.67/93.89, CPU37.76%idle, physical memory123GiB
-used/4009MiB unused, swap11,388MiB, free disk122GiB, with no thermal/performance warning.
+At01:05 PDT October11, load was111.72/101.63/99.13, CPU12.11%idle, physical memory126GiB
+used/1701MiB unused, swap11,364MiB, free disk89GiB, with no thermal/performance warning.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
 Linux runners have separate resources and can exercise the offline cases without model access.
 
@@ -44,9 +44,9 @@ requires actual production execution before integration.
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
 | Actual Windows security | Native207/pure21 DONE; original7 f419 RED1 timeout | Windows809 passes/0 warnings/20 guards; Linux693/0 failures/warnings/skips. Link/casefold variants pass; denial/restoration stops after8 setup assertions at PowerShell5s bound |
-| Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | f419 native47 passes/1 failure, all5 production lifecycle cases time out before READY; no-reader2s startup timeout is not delivery proof |
-| Strict optional workflow | f419 Linux15 DONE; Windows RED8 conditions | 1481/1587 passes;0 test warnings;5/23 named OS guards. Controller32 Windows warnings under diagnosis. New strict33/123/46 source reviewed |
-| Index/extract/R-parse/lintr plan checks | DONE throughf419; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
+| Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | f419 native46 passes/1 failure, all5 production lifecycle cases time out before READY; no-reader2s startup timeout is not delivery proof |
+| Strict optional workflow | f419 Linux15 DONE; Windows RED8 conditions | 1481/1587 passes;0 test warnings;5/23 named OS guards. Controller32 Windows warnings under diagnosis. New strict33/127/46 source reviewed; a135 stopped before bodies on one scoped lint |
+| Index/extract/R-parse/lintr plan checks | DONE througha135; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
 | Production owned-writer correction | Actualf419 RED118 passes/5 failures | Five Windows lifecycle cases startup1.83-1.97s/zero accepted bytes, expression4706-4722B. Bounded stage diagnosis pending; no raised limits |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
@@ -481,3 +481,31 @@ mandatory on Linux, with6 exact Windows-only guards. Missing/duplicate/raw error
 zero assertions and passing-prefix capability skips remain fatal. Actual11-file source/
 protocol/checkpoint/transport execution is next; all4 cross-plan gates must run on this
 updated exact candidate.57 required titles across the11 full files were source-verified once.
+
+
+## Actual diagnostic gate and callback correction -2026-10-11 01:05 PDT
+
+Actual [run38122876440](https://github.com/Broccolito/gptr/actions/runs/38122876440),
+exacta135f84e1bef1d11fb6e6c1407a019024f7596a6, completed on both hosts with a scoped-lint
+failure before any of the11 platform file bodies.45 paths are clean; idle-fixture line33
+reports a captured local variable as possibly unused. Independently reviewed one-line
+`force(own)` correctionb4ca857 makes the existing callback capture explicit and preserves
+its19 assertions, guards, deadlines and resource bounds. No lint suppression.
+
+Both hosts actually pass12 Python tests and1559 R unit assertions/0 failures/skips, but27
+synthetic warnings escape the warning-controller negative controls. Earlier1456 clean-prefix
+counts are incomplete and must not replace this final1559/27 result. The test expectation
+captures only the first warning. Source-reviewed5b3f5bb captures only exact synthetic
+class/message vectors after inner observation;10dc59a makes unexpected unit warnings fatal.
+All original unit expectations and production warning semantics stay intact. Actual clean
+unit/lint and platform bodies remain pending. Production warnings remain visible and fatal; no platform
+body or startup/idle/ACL result is established by this gate-only run.
+
+Both artifact ZIP checksums are verified:
+Windows45f0057f7c802557191ba6137ab0c4c5276f4c895293467e8a55bf2281a138e0;
+Linux28895a547e50e3a008177a63c57c374dc8063bef2fecfcbececb5b5aeffa79bc.
+All4 Linux plan stages pass with39 unchanged source hashes,770 R blocks,0 parse/style
+problems/0 lints and90 retained historical index warnings. The next exact candidate must
+repeat the same11 files plus all4 plan gates. Both hosted leases are now free; at most2
+jobs remain allowed. Local installation/compute stays held by the01:05 snapshot above.
+No shared Ollama action occurred.
