@@ -9,8 +9,8 @@ keep the testing plan current, and preserve the shared Ollama model.
 The candidate starts from `718e81e4bf54f1d265cac19112ff71cea26511bf` on
 `codex/skipped-platform-tests` in the attached managed worktree. The primary checkout,
 maintainer DESCRIPTION edit, old prepared regression edits, secrets and shared model stay intact.
-At02:06 PDT October11, load was66.91/60.38/59.80, CPU38.47%idle, physical memory93GiB
-used/35GiB unused, swap14,325.19MiB, free disk45GiB, with no thermal/performance warning.
+At02:43 PDT October11, load was79.27/54.06/70.67, CPU9.15%idle, physical memory91GiB
+used/36GiB unused, swap14,229.19MiB, free disk47GiB, with no thermal/performance warning.
 The memory-pressure free metric is78%; it does not clear CPU/swap/disk gates. Disk decline
 has no established cause and is not permission to stop unrelated work or delete files.
 Local R, browser, model, build and dependency-install jobs remain waiting. Hosted Windows and
@@ -45,10 +45,10 @@ requires actual production execution before integration.
 | --- | --- | --- |
 | Quarto/tool-path discovery helper | DONE hostedb6fff3d; local child discovery DONE38cc8dc | Actual Quarto/Python/Chrome/rg/Perl preflights and record/replay71 on both hosts; local parent environment unchanged/no child started |
 | Local pandas/NumPy install | WAITING resources | Existing private Python lacks both modules; no dependency installation during resource hold |
-| Actual Windows security | Native207/pure21 DONE; e3 checkpoint restore RED | Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; effective create denial/store refusal pass. Failure follows restore-applied; native ACL readback versus exact Access SDDL mismatch remains unconfirmed. Reviewed63e9ace adds fixed-phase diagnostics without changing the oracle. Native Codex link/read-denial replacements are source-ready, unrun |
+| Actual Windows security | Native207/pure21 DONE;426 exact restore RED | Checkpoint115 passes/2 raw errors/0 warnings/5 guards; fixed phases prove restore-sddl-mismatch after successful ACL readback. Native Codex retarget4 failures/ReadData-restore2 typed errors; no capability skips. Independent oracles unchanged. |
 | Actual Windows/Unix child baseline | Linux native60 DONE; Windows startup RED | e3 native46 passes/1 failure; fixed phases reach acl_wait then time out before READY. Idle stops before first ACK; normal60s spawn4MB/EOF passes; startup timeout is not delivery proof |
-| Strict optional workflow | a030 completed lint RED before12 bodies | Both Python12/R gates1727 clean;46 of49 lint paths clean,5 formatting findings in3 fixture files. Prior e3 actual native failures remain open. Registry34 full files/132 titles/49 paths, warning/skip/deadline gates unchanged; same12-file actual rerun required |
-| Index/extract/R-parse/lintr plan checks | DONE througha030; updated plan needs fresh gates |39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings |
+| Strict optional workflow | 426 actual RED; source corrections ongoing | Both Python12/R gates1727/all49 lint paths clean. Linux12 raw1708 passes/2 fixture failures/0 warnings/9 guards; Windows10 raw1282 passes/22 conditions/0 warnings/8 guards and2 timed-out files. Controller0 warnings/13 owned cleanups confirmed each; registry34/132/49. |
+| Index/extract/R-parse/lintr plan checks | DONE through426; updated plan needs fresh gates | 39 equal source hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings. |
 | Owned-writer prototype | DONE actual Windows AND Linuxb6fff3d | Four cases92assertions each/0failures/warnings/skips; pure sampler21each. Does not certify production transport |
 | Production owned-writer correction | Actuale3 startup RED; reviewed source applied, actual proof pending | Five Windows lifecycle cases startup1.84-1.85s/zero accepted bytes, expression4965-4977B, acl_wait0.20-0.25s with no acl_done. Reviewed fafd181 uses native .NET permission APIs; reviewed58184c5/b0130c7 require physical mailbox/file permissions and same-path refusal. All startup, byte, ACK, EOF, cleanup and resource limits remain unchanged |
 | Quarto/Python/search/history integrations | DONE complete subsetsb6fff3d | Windows6files404passes+2namedOSguards; Linux7files539passes/0failures/warnings/skips. Protocol notebook is not actual IRkernel |
@@ -621,3 +621,52 @@ local Quarto/bridge execution and the distinct installed six-frontend history pa
 The02:06 resource snapshot keeps all local work held; no installs, imports, R, browser,
 kernel or model runs were started. Shared Ollama remains untouched. Next12 hosted files and
 fresh4 plan stages use unchanged native security, byte/ACK/EOF and cleanup oracles.
+
+## Same-scope actual rerun — ongoing at2026-10-11 02:27 PDT
+
+Exact426423ffef33716c6dbb43ce97707b5440bb666e is pushed. Both scoped lint steps pass in
+[run38127752428](https://github.com/Broccolito/gptr/actions/runs/38127752428); Windows is
+executing the12 complete files, while Linux reported an integration failure and is finishing
+plan stages. Retained raw results are not yet collected, so no native/security success or
+specific root cause is asserted. Both hosted leases remain occupied; no additional dispatch.
+The02:21 local snapshot shows load252.74/CPU7.24%idle/RAM98GiB used/29GiB unused/
+swap14,285.19MiB/free disk44GiB. A read-only executable-name resource snapshot shows busy
+Node workers, Rust and system services; it does not attribute the disk decline. All unrelated
+processes and shared Ollama remain preserved. Local installs/GUI/model/kernel/CRAN held.
+
+## Completed actual12-file rerun — 2026-10-11 02:43 PDT
+
+Exact426423ffef33716c6dbb43ce97707b5440bb666e/run38127752428 completed RED on both hosts.
+Python12, unit gate1727 and all49 scoped lint paths pass on each host, with0 warnings/skips.
+Linux all12 full raw files1708 passes/2 failed assertions/0 raw errors or warnings/9 named
+OS guards. Windows ten final raw files1282 passes/22 failed conditions, including4 raw errors,
+0 warnings/8 named guards. MCP307.27s and Claude308.14s exceed300s without final raw results.
+Both controller warning totals are0 and all13 cleanup witnesses each confirm original owned
+roots stopped, settled, and0 marked survivors. All4 Linux plan stages pass39 equal hashes/
+25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings remain.
+
+Writer startup remains last-phase acl_wait0.18-0.25s,0 accepted bytes, before READY; the
+reviewed three native .NET calls did not close the failure. Five lifecycle cases fail at
+1.83-1.96s; new nativeACL at1.80s. Idle stops before its first ACK at1.97s, so the conditional
+idle-retirement proposal remains unapplied. Normal spawn4MB echo/EOF passes; native duplex
+fails, and the no-reader typed timeout is still startup rather than delivery proof.
+Checkpoint diagnostics now prove two restore-sddl-mismatch failures after successful native
+ACL readback; exact restoration is unresolved. Codex native dangling/read-denial fixtures
+actually execute with0 skips: retarget4 failures, restore2 typed fixture errors, plus the
+existing concurrency34.3s versus13s failure. Source-only triage is split across agents.
+
+Family enumeration lists contain the expected exact PIDs/create-times; vapply preserved names
+on the independently held handles and compared them with unnamed found lists. Reviewed
+3fd20b1 removes only those incidental vector names and adds missing/extra/substituted live
+handle negative controls. All41 original assertions remain plus3 new controls;44 prepared
+assertions are unrun. Windows-only parent-env-restored failure remains separately under
+review; do not weaken environment restoration. No shipping marker migration is proposed.
+
+Verified Windows artifact SHA256aba6a7c0af5087255894b9f3d2dd0edc619ace69fc80857676b112673d0c921c;
+Linux49ab6caba714c31252068b302907b0a5b4638a63b7de426ebc781d52644090ca.
+Actual summary SHA256070b977892b4761eafe2d9bfd41294508ba43e56cfd03fe05968b7b5f3268949.
+Latest local02:43 gates remain unsafe: load79.27/54.06/70.67, CPU9.15%idle, RAM91GiB used/
+36GiB unused, swap14,229.19MiB/disk47GiB. No local R/import/install/browser/kernel/model/
+build/CRAN run started. Shared Ollama and unrelated processes/files remain preserved.
+Both hosted leases are free; next exact-candidate run requires fresh4 plan gates after these
+updates. Runtime/fixture corrections need source review and actual native evidence.

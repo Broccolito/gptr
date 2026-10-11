@@ -1,63 +1,50 @@
 # GPTR 1.0 implementation - handoff
 
-## Optional integrations and Windows transport — 2026-10-11 02:14 PDT
+## Optional integrations and Windows transport — 2026-10-11 02:43 PDT
 
 Use attached `/Users/wgu/.codex/worktrees/skipped-platform-tests/gptr`, branch
-`codex/skipped-platform-tests`, source extends a03068e with reviewed6a2fb2a. Primary main718e81e,
-maintainer edits, old prepared chunks and secrets remain intact; shared Ollama preserved.
-Latest 02:06 load66.91/60.38/59.80, CPU38.47%idle, RAM93GiB used/35GiB unused,
-swap14,325.19MiB and disk45GiB keep all local R/install/browser/model/build jobs held.
-At most2 independent hosted jobs; no unrelated-process action or disk cleanup authorized.
+`codex/skipped-platform-tests`, pushed source3fd20b19d6eb30a3f5a4dc0809d328a24fd32359.
+Primary main718e81e, maintainer edits, old prepared chunks and secrets remain intact;
+shared Ollama preserved. Local02:43 load79.27/54.06/70.67/CPU9.15%idle/RAM91GiB used/
+36GiB unused/swap14,229.19MiB/disk47GiB keep all local heavy jobs held. No unrelated-process
+termination or file cleanup is authorized. Both hosted leases are now free; at most2.
 
-Actual a03068e run38127051182 is completed RED before package install/preflight or any
-selected native body: both Python12/R gates1727 pass with0 failures/warnings/skips. Five
-formatting lints in3 fixture files stop the strict gate;46 of49 paths are clean. The exact
-three-file correction6a2fb2a is source-reviewed and applied: braces/newlines only, with
-strings, assertions, titles, strict warnings/skips and budgets preserved. The same12-file
-two-host rerun is next. All4 Linux plan stages pass39 equal hashes/25 plans/770 R blocks/
-0 parse-style problems/0 lints;90 historical index warnings remain. New plan edits need
-fresh4 gates on the next exact candidate. Both hosted leases are free.
+Completed exact426423ffef33716c6dbb43ce97707b5440bb666e/run38127752428 is RED:
+both Python12/unit1727/all49 lint paths pass; Linux all12 raw1708 passes/2 family-name
+fixture failures/0 warnings/9 named OS guards. Windows ten raw1282 passes/22 conditions
+(including4 raw errors)/0 warnings/8 guards; MCP307.27s/Claude308.14s exceed300s with no final
+raw results. Partial logs are not passes. Controller0 warnings each; all13 cleanup records
+each confirm owned roots stopped/settled/0 marked survivors. All4 Linux plan stages pass
+39 unchanged hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index
+warnings remain. New plan edits require fresh4 exact-candidate gates.
 
-Prior actual e3f4b47 run38123918333 completed RED both hosts: Linux1596 passes/1 fixture error/
-0 test warnings/8 named OS guards; Windows nine completed raw files1172 passes/13 conditions/
-0 test warnings/10 skips. MCP307.55s/Claude308.67s exceed300s without final raw results;
-partial logs are not passes. Both Python12/R gate1559 clean/all46 scoped paths clean.
-Whole-package convention cases6 pass each. All4 Linux plan stages pass39 unchanged hashes/
-25 plans/770 blocks/0 parse-style problems/0 lints;90 historical index warnings remain.
-Verified Windows ZIP5836d6e0dc74cd1e2708ec55a23b3f1b953946c8438d1a89779c88d9cacaeb82;
-Linux887940c93793268d6c009a9330719d3cf84812607fe3787cc4c07a4fd4ee91f0.
+Writer startup still reaches acl_wait0.18-0.25s and times out at1.80-1.96s before READY/
+0 accepted bytes. The three native .NET calls in fafd181 did not fix startup. Idle stops
+before its first ACK; conditional idle retirement remains unapplied and needs actual two-ACK
+third-target starvation plus mandatory native continuity/timing proof. Native duplex RED;
+normal spawn4MB echo/EOF passes. Keep2s queue budget,9998-expression/12000-argv/native3/
+resource bounds and physical protected owner-DACL/inherited-file-rights oracle unchanged.
 
-Windows five writer lifecycle cases reach acl_wait0.20-0.25s then startup timeout1.84-1.85s/
-zero accepted bytes. No-reader remains startup; idle stops before first ACK, not a starvation
-result. Native duplex RED; normal60s spawn4MB echo/EOF now pass. Source-reviewed fafd181
-applies three native .NET ACL calls. Reviewed58184c5/b0130c7 require independent physical
-protected owner DACL/inherited-file rights, unchanged sentinel bytes and same-path refusal,
-then EOF/status/owned cleanup. These are source changes awaiting actual native execution.
-Preserve2s enqueue budget,9998-expression/12000-argv/native3/resource limits. Conditional
-idle retirement remains design-only until actual two-ACK contention evidence exists.
+Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards: new fixed phases prove exact
+restore-sddl-mismatch after native readback, not a getter failure. Source-only private
+structural comparison diagnostics are being prepared without weakening exact restoration.
+Primary ckpt67-line suffix/utils-paths75-line block must remain intact; reviewed variants
+stay candidate-only until GREEN. Native Codex316 passes/7 conditions/0 warnings/skips:
+retarget4 failures, ReadData-restore2 typed fixture errors, concurrency34.3s>=13s. Diagnose
+native path/link behavior and exact restoration; preserve sentinel/caller state.
 
-Checkpoint115 passes/2 raw restore errors/0 warnings/5 guards: create denial/store refusal
-pass. Failure follows restore-applied; native readback versus exact SDDL mismatch remains
-unconfirmed. Reviewed63e9ace adds only fixed phases to distinguish those operations; exact
-restoration remains required. Primary ckpt67-line suffix/utils-paths75-line block must stay
-intact; reviewed fixture variants remain candidate-only until GREEN.
-Codex253 passes/1 concurrency failure/two unaccepted capability skips. Reviewed09f9ea1/
-df16cde replace them with owned native dangling-link and effective ReadData-denial witnesses;
-all3 relevant titles are mandatory. These fixtures remain unexecuted.
+Reviewed3fd20b1 fixes incidental list-name comparison in owned-family identity checks,
+preserving exact PIDs/cardinality/create-times and all41 original assertions;3 new live
+missing/extra/substituted-handle controls make44 prepared assertions. Unrun. Windows-only
+parent-env restoration assertion remains under source triage. Shipping GPTR_PROC marker
+format is unchanged; controller epoch-marker correction now has actual warning-clean cleanup
+proof. No migration or skip/deadline relaxation is proposed.
 
-Controller24 ps_find_tree warnings each are fatal. Twelve cleanup records report settled
-roots/zero marked survivors, but valid-marker queries must rerun before accepting absence
-proof. Reviewedc751889 corrects the controller epoch field without suppressing warnings.
-Reviewed76b6cfa adds a mandatory both-host nonvacuous owned-parent/descendant enumeration,
-identity refusal, cleanup and unrelated-process survival test. Shipping GPTR_PROC format
-and its documented narrow diagnostic handling remain unchanged; no migration is proposed.
-
-Reviewed44b24db fixes pure bootstrap capture; actual unit/lint corrections5b3f5bb/10dc59a
-and callbackb4ca857 already pass e3 gates. Current source registry is34 full files/
-132 required titles/49 lint paths. Next: exact-candidate12-file Windows/Linux run and all4
-fresh Linux plan stages. D-019/merge remain open
-until relevant strict GREEN. Local child PATH discovery is fixed; pandas/NumPy installation,
-native frontends, actual kernels, model inference and full CRAN/release remain WAITING.
+Current registry34 full files/132 required titles/49 lint paths. Next: reviewed exact-candidate
+12-file Windows/Linux packet with all4 fresh plan stages; add conditional retirement only
+if its actual adoption gate is met. D-019/merge remain open until strict relevant GREEN.
+Local child Quarto discovery is fixed; pandas/NumPy wheels, real local imports/Quarto/bridge,
+installed history frontends, GUI/kernel/model/full CRAN/release remain WAITING resource gates.
 
 **2026-10-10 optional/Windows checkpoint:** primary `main` remains718e81e; isolated
 candidate branch `codex/skipped-platform-tests` is pushed throughb6fff3d in the attached

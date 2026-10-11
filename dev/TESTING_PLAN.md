@@ -1,6 +1,6 @@
 # Living testing plan
 
-Updated 2026-10-10 with resumed heavy-compute evidence and explicit storage, extension,
+Updated 2026-10-11 with resumed heavy-compute evidence and explicit storage, extension,
 file/network and compaction acceptance cases. New rows use ongoing/done/waiting notation.
 This is the coverage ledger for the current package, documentation and
 authorized live testing. Update a row after inspecting its evidence; retain failed runs and
@@ -470,9 +470,9 @@ Unrun prior tests and maintainer edits in the primary checkout must remain intac
 | Quarto discovery | Actual record/replay/source-hash integration DONE on Windows and Linuxb6fff3d:71 assertions each/0 failures/warnings/skips. Quarto1.10.19 preflights passed. Child-only local PATH discovery DONE at38cc8dc: bundled RStudio Quarto is discoverable without changing the parent environment. Local rendering remains WAITING. Separate compact-history rendered frontend packet WAITING. |
 | Python/R dependencies | Both hostedb6fff3d preflights DONE: configuredPython3.12.10, pandas/NumPy import and actualsum6. Actual bridges DONE: Linux128 assertions/0 failures/warnings/skips; Windows118/0 failures/warnings with2 named OS guards. Private localPython lacks pandas/numpy; local wheel installation WAITING resource lease. |
 | Browser/search prerequisites | DONE core63a2454: Linux search128, app358 and cleanup20 assertions; Windows search128, app357 and cleanup17. No failures/warnings; one named Windows app OS guard. Both mandatory actual-browser cases executed on both hosts. Owned synchronous shutdown eliminated the unhandled close promise; short private Linux fixture paths avoid the socket limit. |
-| Windows filesystem safety | Native valid-target8 DONE668ae5b:207 assertions/pure5 policy21 each. Earlierf419fd6 original7: Linux693 clean; Windows809 passes/1 raw PowerShell timeout/0 warnings/20 guards. Latest e3 checkpoint115 passes/2 raw restore errors/0 warnings/5 guards: effective create denial and store refusal pass; restoration fails after restore-applied; native readback versus exact SDDL mismatch is not yet distinguished, so full restoration remains RED. Codex native dangling-link and ReadData-denial fixtures replace two unaccepted capability skips in reviewed09f9ea1/df16cde source; actual execution WAITING. |
-| Windows child stdin | Actuale3 fixed diagnostics reach acl_wait at0.18-0.25s, then five lifecycle cases time out before READY at1.84-1.85s/zero accepted bytes. Native duplex remains RED; no-reader typed2s is startup, not delivery proof. Idle probe stops before its first ACK, so starvation is unproved. Normal60s spawn4MB/EOF cases now pass. Source-reviewed fafd181 applies the smaller native .NET permission setup; actual execution remains pending. Reviewed58184c5/b0130c7 require an independent physical protected-DACL, owner and inherited-file-rights witness on Windows. Rerun native security/bytes/ACK/EOF/deadline cases with the unchanged2s queue budget,9998-expression/12000-argv caps/native3/resource limits. D-019 remains open. |
-| Validation/merge | Actuale3f4b47 run38123918333: Linux1596 passes/1 raw fixture error/0 test warnings/8 named OS guards. Windows nine completed raw files1172 passes/13 failed conditions/0 test warnings/10 skips; MCP and Claude exceed300s without final raw results, so partial logs are not passes. Both hosts1559 warning-clean unit assertions/all46 scoped paths clean; whole-package convention cases6 passes each. Four Linux plan stages pass39 unchanged hashes/770 R blocks/0 parse-style problems/0 lints. Controller24 ps marker warnings each remain fatal; valid-marker cleanup proof must rerun. Reviewed44b24db fixes bootstrap capture;09f9ea1/df16cde replace two Codex capability skips with native witnesses; c751889 corrects controller timestamps without suppressing warnings. Reviewed76b6cfa requires a both-host owned-family/foreign-sentinel witness;58184c5/b0130c7 require the native mailbox DACL/file-inheritance witness. Current source registry34 full files/132 required titles/49 lint paths is unexecuted. Diagnostic63e9ace distinguishes checkpoint ACL readback from exact SDDL mismatch without changing the restoration oracle. Next:12 full files on Windows/Linux plus fresh4-stage plan gates at the exact candidate; merge WAITING strict GREEN. |
+| Windows filesystem safety | Native valid-target8 DONE668ae5b:207 assertions/pure5 policy21 each. Actual426 checkpoint115 passes/2 raw restore errors/0 warnings/5 guards; both stop at restore-sddl-mismatch after successful readback, so exact restoration remains RED. Native Codex variants now execute: retarget4 failures and effective ReadData-denial restore2 typed fixture errors; no capability skips. Source triage ongoing; keep independent containment, denial and exact-restoration oracles. |
+| Windows child stdin | Actual426 five lifecycle/nativeACL cases time out before READY at1.80-1.96s/zero accepted bytes, last phase acl_wait0.18-0.25s. The three native .NET calls do not resolve startup. No-reader typed2s still proves startup only; idle stops before first ACK, so conditional retirement is unapplied. Normal60s spawn4MB/EOF cases pass. Native duplex remains RED; retain2s queue budget,9998-expression/12000-argv/native3/resource limits and physical mailbox DACL/file inheritance requirement. D-019 remains open. |
+| Validation/merge | Actual426/run38127752428 completed RED: Linux all12 files1708 passes/2 family-name fixture failures/0 warnings/9 named OS guards. Windows ten final raw files1282 passes/22 failed conditions (including4 raw errors)/0 warnings/8 named guards; MCP307.27s and Claude308.14s have no final raw result. Both hosts1727 unit assertions/12 Python tests/all49 lint paths clean; controller0 warnings and all13 owned-family cleanups confirmed per host. All4 Linux plan stages pass39 equal hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index warnings. Reviewed3fd20b1 fixes list-name identity comparison and adds3 live-handle negative controls;44 assertions prepared, unrun. Windows parent-env assertion remains under source triage. Registry34 full files/132 titles/49 paths; next exact-candidate scope keeps relevant failures and fresh4 plan gates. Merge WAITING strict GREEN. |
 
 Latest actual a03068e run38127051182 stopped before package installation, preflight or
 any of the12 selected test bodies: both hosts passed12 Python tests and1727 R result-gate
@@ -482,6 +482,15 @@ only expands braces/newlines, preserving assertions, utility strings, titles, ga
 limits; the same12-file Windows/Linux scope must rerun. All4 Linux cross-plan stages pass
 39 equal hashes/25 plans/770 R blocks/0 parse-style problems/0 lints;90 historical index
 warnings remain. Fresh plan gates are required after this update.
+
+Latest completed exact426423f [run38127752428](https://github.com/Broccolito/gptr/actions/runs/38127752428)
+confirms the formatting correction on both hosts. Verified raw artifacts establish the
+failures in the table; two timed-out files cannot count as passes. All26 cleanup records
+confirm stopped owned roots, settlement and0 marked survivors; controller warnings are0.
+The family-name correction3fd20b1 is committed/pushed but not yet rerun. Preserve all original
+assertions, add exact-family negative controls, and diagnose the Windows-only parent-env
+mismatch before the next run. All local jobs remain held; both hosted leases are now free.
+New plan edits require fresh4 exact-candidate cross-plan gates.
 
 The optional dependency helper's11 stdlib tests and plan diagnostic guard's6 stdlib tests
 are GREEN. They launch no R/browser/model process and do not replace actual integration.
@@ -499,8 +508,8 @@ Recheck the updated plan
 on each next candidate. The strict hosted runner counts raw expectation errors,
 failures and warnings; the older file runner's numeric summary omits raw errors.
 
-Latest02:06 PDT load66.91/60.38/59.80, CPU38.47%idle, physical RAM93GiB used/35GiB
-unused, swap14,325.19MiB used and disk45GiB still prevent local compute. The separate
+Latest02:43 PDT load79.27/54.06/70.67, CPU9.15%idle, physical RAM91GiB used/36GiB
+unused, swap14,229.19MiB used and disk47GiB still prevent local compute. The separate
 memory-pressure free metric is78%; no thermal/performance warning was recorded. More unused
 RAM does not clear the CPU, swap or minimum200GiB disk gates; the disk decline has no established cause.
 Keep local R/build/install/browser/model jobs held. Hosted validation uses independent
