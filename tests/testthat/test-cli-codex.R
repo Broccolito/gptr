@@ -534,7 +534,9 @@ test_that("a control file gptr cannot read is marked by its size and time instea
   expect_match(h[[path_norm(locked)]], "^unreadable:[0-9]+ [0-9.]+$")
   before_size = file.info(locked, extra_cols = FALSE)$size
   access$set_expected(c(access$bytes, charToRaw("a longer secret agent\n")))
-  cat("a longer secret agent\n", file = locked, append = TRUE)
+  connection = file(locked, open = "ab")
+  tryCatch(writeBin(charToRaw("a longer secret agent\n"), connection),
+    finally = close(connection))
   expect_gt(file.info(locked, extra_cols = FALSE)$size, before_size)
   expect_identical(pcli_control_changed(h, pcli_control_hash(root)), path_norm(locked))
   access$restore()
